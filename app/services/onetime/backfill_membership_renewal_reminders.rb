@@ -3,37 +3,46 @@
 # One-time backfill: schedule the pre-renewal reminder email for subscriptions that
 # were already active when `membership_renewal_reminders` was turned on globally.
 #
-# Subscription#schedule_renewal_reminder is only ever called from the purchase flow,
-# so it fires when a subscription is created or rebilled. Turning the flag on
-# therefore covers new subscriptions immediately, but not the renewal a subscription
-# was already heading into — that reminder was never scheduled, because the flag was
-# off the last time a purchase touched it. This walks the existing population once and
-# schedules that reminder; every later cycle is handled by the normal purchase path.
+# Subscription#schedule_renewal_reminder is only ever called from the purchase flow, so
+# it fires when a subscription is created or rebilled. Turning the flag on therefore
+# covers new subscriptions immediately, but not the renewal a subscription was already
+# heading into — that reminder was never scheduled, because the flag was off the last
+# time a purchase touched it. This walks the existing population once and schedules that
+# reminder; every later cycle is handled by the normal purchase path.
 #
-# Safe by construction rather than by inspection: Subscription#schedule_renewal_reminder
-# enqueues a future-dated job whose run time is derived from the subscription's own
-# renewal date, so a subscription renewing far out is not emailed now — the reminder
-# lands at its usual lead time (BasePrice::Recurrence.renewal_reminder_email_days).
+# So the run is limited to subscriptions whose last purchase predates the flag flip
+# (`enabled_before`): anything purchased after it already got a reminder scheduled, and
+# scheduling a second one would email that buyer twice for the same renewal. Subscriptions
+# that rebill between the flip and this run are covered by their own rebill, so skipping
+# them here loses nothing.
 #
-# Not idempotent: a second live run would enqueue a second reminder per subscription,
-# and the set of scheduled jobs can't be queried per subscription cheaply enough to
-# make that safe. The run claims a Redis key on the way in, so a rerun fails loudly
-# instead of double-emailing buyers. `dry_run: true` reports the numbers without
-# claiming the key or scheduling anything.
+# Nothing is emailed early: Subscription#schedule_renewal_reminder enqueues a future-dated
+# job derived from the subscription's own renewal date, so a reminder lands at its usual
+# lead time (BasePrice::Recurrence.renewal_reminder_email_days) whenever this is run.
+#
+# Not idempotent: the set of scheduled jobs can't be queried per subscription cheaply
+# enough to inspect for one, so a second live run would enqueue a second reminder per
+# subscription. The run claims a Redis key on the way in, so a rerun fails loudly instead
+# of double-emailing buyers. `dry_run: true` reports the numbers without claiming the key
+# or scheduling anything.
 module Onetime
   class BackfillMembershipRenewalReminders
     BATCH_SIZE = 500
     LOCK_KEY = "onetime:backfill_membership_renewal_reminders:v1"
     LOCK_TTL = 90.days
+    # When membership_renewal_reminders was enabled globally in production. Only needed
+    # for this one run; if the flag is ever cycled off and on again, pass the new moment.
+    FLAG_ENABLED_AT = Time.utc(2026, 9, 26, 15, 0, 24).freeze
 
-    def self.process(dry_run: false, batch_size: BATCH_SIZE, limit: nil)
-      new(dry_run:, batch_size:, limit:).process
+    def self.process(dry_run: false, batch_size: BATCH_SIZE, limit: nil, enabled_before: FLAG_ENABLED_AT)
+      new(dry_run:, batch_size:, limit:, enabled_before:).process
     end
 
-    def initialize(dry_run: false, batch_size: BATCH_SIZE, limit: nil)
+    def initialize(dry_run: false, batch_size: BATCH_SIZE, limit: nil, enabled_before: FLAG_ENABLED_AT)
       @dry_run = dry_run
       @batch_size = batch_size
       @limit = limit
+      @enabled_before = enabled_before
     end
 
     def process
@@ -63,8 +72,8 @@ module Onetime
             counts[:scheduled] += 1
           end
         rescue => e
-          # One malformed row (nil last purchase, dead link, legacy data) must not abort
-          # the run; the rest of the population still needs its reminder.
+          # One malformed row (legacy data, a dead link) must not abort the run; the rest
+          # of the population still needs its reminder.
           counts[:errors] += 1
           Rails.logger.warn("[BackfillMembershipRenewalReminders] skipped subscription #{subscription.id}: #{e.class}: #{e.message}")
         end
@@ -78,10 +87,15 @@ module Onetime
     end
 
     private
-      # Mirrors the guards in RecurringChargeReminderWorker#perform, so this only
-      # schedules reminders that would actually send a mail.
+      # Mirrors the guards in RecurringChargeReminderWorker#perform, so this only schedules
+      # reminders that would actually send. The purchase cutoff is the part the worker can't
+      # see: a purchase after the flip already scheduled its own reminder, and a subscription
+      # with no last purchase has nothing to derive one from (end_time_of_subscription
+      # dereferences the last purchase and raises).
       def eligible?(subscription)
         subscription.send_renewal_reminders? &&
+          subscription.last_purchase_at.present? &&
+          subscription.last_purchase_at < @enabled_before &&
           subscription.alive?(include_pending_cancellation: false) &&
           !subscription.in_free_trial? &&
           !subscription.charges_completed? &&

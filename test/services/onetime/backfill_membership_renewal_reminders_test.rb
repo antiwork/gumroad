@@ -26,11 +26,17 @@ class Onetime::BackfillMembershipRenewalRemindersTest < ActiveSupport::TestCase
     assert_in_delta at.to_f, job["at"], 1 if at
   end
 
-  # A membership subscription with its original purchase, which is what the
-  # population being backfilled looks like (the reminder only exists alongside a
-  # purchase — Subscription#end_time_of_subscription dereferences the last one).
-  # Creating the purchase enqueues the reminder itself when the flag is on, so the
-  # queue is cleared afterwards and the tests count only what the backfill adds.
+  # The purchase below is created "now", so each test pins the flag flip relative to it:
+  # in the future means the subscription predates the flip and is the backfill's business,
+  # in the past means its own purchase already scheduled the reminder.
+  def run_backfill(dry_run: false, enabled_before: 1.minute.from_now)
+    Onetime::BackfillMembershipRenewalReminders.process(dry_run:, enabled_before:)
+  end
+
+  # A membership subscription with its original purchase, which is what the population
+  # being backfilled looks like. Creating the purchase enqueues the reminder itself when
+  # the flag is on, so the queue is cleared afterwards and the tests count only what the
+  # backfill adds.
   def create_eligible_subscription
     seller = create_user
     product = create_membership_product(user: seller)
@@ -40,35 +46,46 @@ class Onetime::BackfillMembershipRenewalRemindersTest < ActiveSupport::TestCase
     subscription.reload
   end
 
-  test "schedules the renewal reminder for an eligible subscription" do
+  test "schedules the renewal reminder for a subscription that predates the flag flip" do
     subscription = create_eligible_subscription
 
-    summary = Onetime::BackfillMembershipRenewalReminders.process
+    summary = run_backfill
 
     assert_sidekiq_enqueued(RecurringChargeReminderWorker, args: [subscription.id], at: subscription.send_renewal_reminder_at)
     assert_equal 1, summary[:eligible]
     assert_equal 1, summary[:scheduled]
   end
 
+  test "skips a subscription that already got a reminder from its own purchase" do
+    create_eligible_subscription
+
+    summary = run_backfill(enabled_before: 1.minute.ago)
+
+    assert_equal 1, summary[:considered]
+    assert_equal 0, summary[:eligible]
+    assert_equal 1, summary[:skipped]
+    assert_equal 0, summary[:scheduled]
+  end
+
   test "a dry run reports the population without scheduling or claiming the lock" do
     subscription = create_eligible_subscription
 
-    summary = Onetime::BackfillMembershipRenewalReminders.process(dry_run: true)
+    summary = run_backfill(dry_run: true)
 
     assert_equal 0, RecurringChargeReminderWorker.jobs.size
     assert_equal 1, summary[:eligible]
     assert_equal 0, summary[:scheduled]
 
     # The claim is what makes a rerun safe, so a dry run must leave it takeable.
-    Onetime::BackfillMembershipRenewalReminders.process
+    run_backfill
     assert_sidekiq_enqueued(RecurringChargeReminderWorker, args: [subscription.id])
   end
 
   test "refuses a second live run instead of double emailing the same buyer" do
     create_eligible_subscription
-    Onetime::BackfillMembershipRenewalReminders.process
+    run_backfill
 
-    error = assert_raises(RuntimeError) { Onetime::BackfillMembershipRenewalReminders.process }
+    error = assert_raises(RuntimeError) { run_backfill }
 
     assert_match(/already ran or is running/, error.message)
   end
@@ -77,7 +94,7 @@ class Onetime::BackfillMembershipRenewalRemindersTest < ActiveSupport::TestCase
     create_eligible_subscription
     Feature.deactivate(:membership_renewal_reminders)
 
-    summary = Onetime::BackfillMembershipRenewalReminders.process(dry_run: true)
+    summary = run_backfill(dry_run: true)
 
     assert_equal 1, summary[:considered]
     assert_equal 0, summary[:eligible]
@@ -88,7 +105,7 @@ class Onetime::BackfillMembershipRenewalRemindersTest < ActiveSupport::TestCase
     subscription = create_eligible_subscription
     subscription.update!(failed_at: Time.current)
 
-    summary = Onetime::BackfillMembershipRenewalReminders.process(dry_run: true)
+    summary = run_backfill(dry_run: true)
 
     assert_equal 1, summary[:considered]
     assert_equal 0, summary[:eligible]
@@ -99,7 +116,7 @@ class Onetime::BackfillMembershipRenewalRemindersTest < ActiveSupport::TestCase
     subscription = create_eligible_subscription
     subscription.update!(cancelled_at: 1.hour.from_now)
 
-    summary = Onetime::BackfillMembershipRenewalReminders.process(dry_run: true)
+    summary = run_backfill(dry_run: true)
 
     assert_equal 0, summary[:considered]
   end
@@ -108,7 +125,7 @@ class Onetime::BackfillMembershipRenewalRemindersTest < ActiveSupport::TestCase
     create_eligible_subscription
     Subscription.any_instance.stubs(:send_renewal_reminder_at).raises(NoMethodError)
 
-    summary = Onetime::BackfillMembershipRenewalReminders.process
+    summary = run_backfill
 
     assert_equal 1, summary[:considered]
     assert_equal 0, summary[:scheduled]
