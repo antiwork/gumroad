@@ -1,4 +1,4 @@
-import { CheckCircle, DotsHorizontalRounded, Instagram, Tiktok, TwitterX, Youtube } from "@boxicons/react";
+import { AlertCircle, CheckCircle, DotsHorizontalRounded, Instagram, Tiktok, TwitterX, Youtube } from "@boxicons/react";
 import { router, usePage } from "@inertiajs/react";
 import * as React from "react";
 import typia from "typia";
@@ -9,6 +9,7 @@ import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 
 import { BrandName, Button } from "$app/components/Button";
+import { Modal } from "$app/components/Modal";
 import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Layout as SettingsLayout } from "$app/components/Settings/Layout";
@@ -23,6 +24,7 @@ type SocialConnectionsPageProps = {
   social_connect_return?: string | null;
   twitter_connected: boolean;
   twitter_handle: string | null;
+  twitter_write_permission_missing: boolean;
   youtube_connect_enabled: boolean;
   youtube_connected: boolean;
   youtube_handle: string | null;
@@ -42,6 +44,9 @@ type Provider = {
   handle: string | null;
   // X only: a hand-typed handle that predates OAuth. Still public, so it stays removable.
   legacyHandle?: string | null;
+  // X only: the stored token can read the profile but not post, so the row has to give
+  // the seller a reason to reconnect.
+  writePermissionMissing?: boolean;
   connectHref: string;
   disconnect: () => void;
 };
@@ -57,6 +62,7 @@ export default function SocialConnectionsPage() {
     social_connect_return,
     twitter_connected,
     twitter_handle,
+    twitter_write_permission_missing,
     youtube_connect_enabled,
     youtube_connected,
     youtube_handle,
@@ -79,6 +85,22 @@ export default function SocialConnectionsPage() {
       }
     });
 
+  // Disconnect sits a click away from Reconnect, and it clears twitter_user_id — the identity a
+  // seller who signed up with X signs in with — so it is confirmed before it goes.
+  const [pendingDisconnect, setPendingDisconnect] = React.useState<Provider | null>(null);
+
+  const confirmDisconnect = () => {
+    const provider = pendingDisconnect;
+    setPendingDisconnect(null);
+    provider?.disconnect();
+  };
+
+  const disconnectConsequences = ({ key, name, handle }: Provider) => {
+    const account = formatHandle(handle) ?? name;
+    const signIn = key === "twitter" ? ` If you sign in with ${name}, connect it again to keep signing in.` : "";
+    return `Gumroad will forget ${account} and the access it stored. You can connect ${name} again at any time.${signIn}`;
+  };
+
   const providers: Provider[] = [
     {
       key: "twitter",
@@ -87,6 +109,7 @@ export default function SocialConnectionsPage() {
       connected: twitter_connected,
       handle: twitter_connected ? twitter_handle : null,
       legacyHandle: twitter_connected ? null : twitter_handle,
+      writePermissionMissing: twitter_connected && twitter_write_permission_missing,
       // x_auth_access_type caps the OAuth grant, so sending "read" here yields a token that
       // cannot post. The sign-in button in SocialAuth.tsx still sends it, and should.
       connectHref: Routes.user_twitter_omniauth_authorize_path({
@@ -154,7 +177,18 @@ export default function SocialConnectionsPage() {
         {/* FormSection puts the header in the other column and sizes the row to the taller of
             the two, so without this the card stretches to the header's height. */}
         <Rows role="list" className="self-start">
-          {providers.map(({ key, name, Icon, connected, handle, legacyHandle, connectHref, disconnect }) => {
+          {providers.map((provider) => {
+            const {
+              key,
+              name,
+              Icon,
+              connected,
+              handle,
+              legacyHandle,
+              writePermissionMissing,
+              connectHref,
+              disconnect,
+            } = provider;
             const displayHandle = formatHandle(handle);
             const displayLegacyHandle = formatHandle(legacyHandle ?? null);
             const accountLabel = displayHandle ? `${displayHandle} from ${name}` : name;
@@ -169,7 +203,15 @@ export default function SocialConnectionsPage() {
                     {connected ? (
                       <FieldsetDescription className="flex items-center gap-1">
                         <span className="truncate">{displayHandle ?? "Connected"}</span>
-                        <CheckCircle pack="filled" className="size-4 shrink-0 text-success" aria-label="Connected" />
+                        {writePermissionMissing ? (
+                          <AlertCircle
+                            pack="filled"
+                            className="size-4 shrink-0 text-warning"
+                            aria-label="Cannot post"
+                          />
+                        ) : (
+                          <CheckCircle pack="filled" className="size-4 shrink-0 text-success" aria-label="Connected" />
+                        )}
                       </FieldsetDescription>
                     ) : displayLegacyHandle ? (
                       <FieldsetDescription>
@@ -178,6 +220,11 @@ export default function SocialConnectionsPage() {
                     ) : (
                       <FieldsetDescription>Not connected</FieldsetDescription>
                     )}
+                    {writePermissionMissing ? (
+                      <FieldsetDescription className="text-warning">
+                        This connection can't post launch posts. Reconnect to fix it.
+                      </FieldsetDescription>
+                    ) : null}
                   </div>
                 </RowContent>
                 <RowActions>
@@ -189,16 +236,30 @@ export default function SocialConnectionsPage() {
                       <SocialAuthButton provider={key} href={connectHref} aria-label={`Reconnect ${accountLabel}`}>
                         Reconnect
                       </SocialAuthButton>
+                      {/* Phone width has no room for a second full-size button — the handle column
+                          collapses a character per line — so the row menu keeps Disconnect there. */}
+                      <Button
+                        type="button"
+                        aria-label={`Disconnect ${accountLabel}`}
+                        onClick={() => setPendingDisconnect(provider)}
+                        className="hidden sm:inline-flex"
+                      >
+                        Disconnect
+                      </Button>
                       <Popover>
                         <PopoverTrigger
                           aria-label={`Open ${name} connection menu`}
-                          className="flex size-11 cursor-pointer items-center justify-center all-unset"
+                          className="flex size-11 cursor-pointer items-center justify-center all-unset sm:hidden"
                         >
                           <DotsHorizontalRounded className="size-5" />
                         </PopoverTrigger>
                         <PopoverContent className="border-0 p-0 shadow-none">
                           <Menu>
-                            <MenuItem variant="danger" aria-label={`Disconnect ${accountLabel}`} onClick={disconnect}>
+                            <MenuItem
+                              variant="danger"
+                              aria-label={`Disconnect ${accountLabel}`}
+                              onClick={() => setPendingDisconnect(provider)}
+                            >
                               Disconnect
                             </MenuItem>
                           </Menu>
@@ -232,6 +293,25 @@ export default function SocialConnectionsPage() {
           })}
         </Rows>
       </FormSection>
+      {pendingDisconnect ? (
+        <Modal
+          open
+          onClose={() => setPendingDisconnect(null)}
+          title={`Disconnect ${pendingDisconnect.name}?`}
+          footer={
+            <>
+              <Button type="button" onClick={() => setPendingDisconnect(null)}>
+                Cancel
+              </Button>
+              <Button type="button" color="danger" onClick={confirmDisconnect}>
+                Disconnect
+              </Button>
+            </>
+          }
+        >
+          <p>{disconnectConsequences(pendingDisconnect)}</p>
+        </Modal>
+      ) : null}
     </SettingsLayout>
   );
 }

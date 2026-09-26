@@ -39,8 +39,8 @@ describe "Settings social connections page", type: :system, js: true do
     expect(page).to have_text("@squidarth")
     expect(page).not_to have_text("Not connected")
     expect(seller.reload.twitter_handle).not_to be_nil
-    click_on "Open X connection menu"
-    find("[role=menuitem]", text: "Disconnect").click
+    click_on "Disconnect @squidarth from X"
+    within("[role=dialog]") { click_on "Disconnect" }
     wait_for_ajax
     expect(seller.reload.twitter_handle).to be_nil
     expect(page).to have_button("Connect to X")
@@ -71,16 +71,57 @@ describe "Settings social connections page", type: :system, js: true do
     expect(seller.reload.twitter_oauth_token).to eq("token")
   end
 
+  # Every other signal on the row says the connection is healthy, so the row itself has to
+  # give the seller a reason to reconnect.
+  it "says a connected X account cannot post while its token is read-only" do
+    seller.update!(twitter_user_id: "123", twitter_handle: "squidarth",
+                   twitter_oauth_token: "token", twitter_oauth_secret: "secret")
+    create(:marketing_action, user: seller, link: create(:product, user: seller),
+                              error_code: Marketing::Action::X_WRITE_PERMISSION_MISSING)
+    visit settings_social_connections_path
+
+    expect(page).to have_text("This connection can't post launch posts. Reconnect to fix it.")
+    expect(page).to have_css("[aria-label='Cannot post']")
+  end
+
   # Disconnect is destructive and, for a seller who signed up with X, removes the identity
-  # they log in with. It stays reachable but out of the way.
-  it "keeps Disconnect one level in, behind the connection menu" do
+  # they log in with. It is reachable from the row but confirmed before it goes.
+  it "confirms before disconnecting a connected X account" do
     seller.update!(twitter_user_id: "123", twitter_handle: "squidarth",
                    twitter_oauth_token: "token", twitter_oauth_secret: "secret")
     visit settings_social_connections_path
 
-    expect(page).not_to have_selector("[role=menuitem]", text: "Disconnect")
+    click_on "Disconnect @squidarth from X"
+    within("[role=dialog]") do
+      expect(page).to have_text("Gumroad will forget @squidarth and the access it stored.")
+      expect(page).to have_text("If you sign in with X, connect it again to keep signing in.")
+      click_on "Cancel"
+    end
+    expect(seller.reload.twitter_oauth_token).to eq("token")
+
+    click_on "Disconnect @squidarth from X"
+    within("[role=dialog]") { click_on "Disconnect" }
+    wait_for_ajax
+
+    expect(seller.reload.twitter_oauth_token).to be_nil
+    expect(page).to have_button("Connect to X")
+  end
+
+  # Above the wrapping breakpoint the row has room for a labeled Disconnect; below it the
+  # control collapses into the connection menu so the handle column keeps its width.
+  it "keeps Disconnect in the connection menu below the wrapping breakpoint", :mobile_view do
+    # The mobile driver starts Chrome with no window size — an 800px viewport, above the 640px
+    # wrapping breakpoint — so pin a phone-sized one here and let the assertion test the layout.
+    page.driver.browser.manage.window.resize_to(375, 667)
+
+    seller.update!(twitter_user_id: "123", twitter_handle: "squidarth",
+                   twitter_oauth_token: "token", twitter_oauth_secret: "secret")
+    visit settings_social_connections_path
+
+    expect(page).not_to have_button("Disconnect @squidarth from X")
     click_on "Open X connection menu"
     find("[role=menuitem]", text: "Disconnect").click
+    within("[role=dialog]") { click_on "Disconnect" }
     wait_for_ajax
 
     expect(seller.reload.twitter_oauth_token).to be_nil

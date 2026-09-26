@@ -405,6 +405,24 @@ describe SettingsPresenter do
       expect(presenter.social_connections_props[:twitter_connected]).to eq(true)
     end
 
+    # A read-only token reads as connected, so the row would show a healthy connection with no
+    # reason for the Reconnect it offers.
+    it "reports a missing X write permission while an action is still blocked on it" do
+      expect(presenter.social_connections_props[:twitter_write_permission_missing]).to eq(false)
+
+      create(:marketing_action, user: seller, link: create(:product, user: seller),
+                                error_code: Marketing::Action::X_WRITE_PERMISSION_MISSING)
+
+      expect(described_class.new(pundit_user:).social_connections_props[:twitter_write_permission_missing]).to eq(true)
+    end
+
+    it "stops reporting a missing X write permission once the action closes" do
+      create(:marketing_action, user: seller, link: create(:product, user: seller), status: "posted",
+                                error_code: Marketing::Action::X_WRITE_PERMISSION_MISSING)
+
+      expect(presenter.social_connections_props[:twitter_write_permission_missing]).to eq(false)
+    end
+
     it "includes the YouTube handle only when connected" do
       expect(presenter.social_connections_props[:youtube_connected]).to eq(false)
       create(:user_youtube_identity, user: seller, channel_id: "UC123", handle: "googledevelopers")
