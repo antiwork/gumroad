@@ -535,14 +535,10 @@ export const scalarSettingsForSave = (
     settings.custom_permalink = null;
     settings.custom_permalink_changed = true;
   }
-  // Blank description is unspecified unless this session edited the field.
-  // Content-tab saves can carry an empty description without that edit, and the
-  // editor's empty document is markup (`<p><br></p>`), not "". A non-blank
-  // description is only this session's to write when it differs from the copy
-  // last saved here: an identical one is a stale snapshot re-post, and two
-  // editor instances can hold divergent copies of the same field. An undefined
-  // baseline means the caller does not track the last-saved value, so send it
-  // through unchanged (the pre-#7811 always-submit behavior).
+  // Blank description is unspecified unless this session edited the field: the
+  // editor's empty document is markup (`<p><br></p>`), not "". A non-blank one
+  // is this session's to write only when it differs from the copy last saved
+  // here — an identical one is a stale snapshot from another editor.
   if (!isBlankDescription(product.description)) {
     if (lastSaved.description === undefined || product.description !== lastSaved.description) {
       settings.description = product.description;
