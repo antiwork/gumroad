@@ -259,6 +259,30 @@ describe PayoutsHelper do
       expect(self.payout_period_data(user)[:minimum_payout_amount_cents]).to eq(10000)
     end
 
+    it "flags the current period so its destination line reads in the future tense" do
+      user = create(:user)
+      create(:balance, user:, amount_cents: 100_00, date: Date.current)
+
+      expect(self.payout_period_data(user)[:is_current_period]).to eq(true)
+    end
+
+    it "keeps the current period flagged while payouts are paused" do
+      user = create(:user)
+      create(:balance, user:, amount_cents: 100_00, date: Date.current)
+      user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+
+      data = self.payout_period_data(user)
+      expect(data[:status]).to eq("paused")
+      expect(data[:is_current_period]).to eq(true)
+    end
+
+    it "does not flag a period that already has a payment" do
+      user = create(:user)
+      payment = create(:payment, user:, amount_cents: 10_00)
+
+      expect(self.payout_period_data(user, payment)[:is_current_period]).to eq(false)
+    end
+
     describe "below-minimum payout notes" do
       let(:user) { create(:user) }
 

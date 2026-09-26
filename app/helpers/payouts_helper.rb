@@ -29,7 +29,11 @@ module PayoutsHelper
 
   def payout_period_data(user, payment = nil)
     payout_period_data = {
-      should_be_shown_currencies_always: user.should_be_shown_currencies_always?
+      should_be_shown_currencies_always: user.should_be_shown_currencies_always?,
+      # A period's status can't say whether its payout has gone out: while payouts are paused the
+      # current period reports "paused" too, so the destination line would claim the unpaid balance
+      # was already sent.
+      is_current_period: payment.nil?
     }
     if payment.nil?
       # Current payout period
