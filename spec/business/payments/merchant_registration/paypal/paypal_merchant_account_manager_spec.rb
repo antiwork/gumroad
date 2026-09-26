@@ -296,6 +296,24 @@ describe PaypalMerchantAccountManager, :vcr do
 
         expect(result).to eq("PayPal reports that your account cannot receive payments right now. Please resolve the restriction or outstanding requirement on your PayPal account, then try connecting again.")
       end
+
+      it "keeps the permissions notice when PayPal omits the capability entirely" do
+        allow_any_instance_of(MerchantAccount).to receive(:paypal_account_details).and_return(
+          "country" => "US",
+          "primary_currency" => "USD",
+          "primary_email_confirmed" => true,
+          "primary_email" => "seller@example.com",
+          "oauth_integrations" => [{
+            "integration_type" => "OAUTH_THIRD_PARTY",
+            "integration_method" => "PAYPAL",
+            "oauth_third_party" => [{ "partner_client_id" => PAYPAL_PARTNER_CLIENT_ID }]
+          }]
+        )
+
+        result = subject.update_merchant_account(user: creator, paypal_merchant_id:)
+
+        expect(result).to eq("Your PayPal account connect with Gumroad is incomplete because of missing permissions. Please try connecting again and grant the requested permissions.")
+      end
     end
 
     context "when the PayPal OAuth grant belongs to another partner" do

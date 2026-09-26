@@ -132,7 +132,7 @@ class PaypalMerchantAccountManager
           ma.delete_charge_processor_account!
         end
         "You have successfully connected your PayPal account with Gumroad."
-      elsif parsed_response["primary_email_confirmed"] && !parsed_response["payments_receivable"]
+      elsif parsed_response["primary_email_confirmed"] && parsed_response["payments_receivable"] == false
         merchant_account.charge_processor_alive_at = nil
         merchant_account.charge_processor_verified_at = nil
         merchant_account.save!
