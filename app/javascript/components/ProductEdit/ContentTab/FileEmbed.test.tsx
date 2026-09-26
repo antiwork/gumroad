@@ -502,9 +502,13 @@ it("shows the download switch off and says why when the server says the file is 
   });
 
   const downloadSwitch = screen.getByRole<HTMLInputElement>("switch", {
-    name: /too large for the in-browser reader/u,
+    name: /^Disable file downloads$/u,
   });
   expect(downloadSwitch.disabled).toBe(true);
+  // The reason is what the switch is for, so it must stay outside the dimmed control's label.
+  const reason = screen.getByText("This file is too large for the in-browser reader");
+  expect(downloadSwitch.closest("label")?.contains(reason)).toBe(false);
+  expect(downloadSwitch.getAttribute("aria-describedby")).toBe(reason.id);
   expect(screen.queryByText(/buyers read it in the browser instead/u)).toBeNull();
 });
 
@@ -520,7 +524,8 @@ it("shows the same switch off for an oversized EPUB picked but not yet saved", a
   });
 
   const downloadSwitch = screen.getByRole<HTMLInputElement>("switch", {
-    name: /too large for the in-browser reader/u,
+    name: /^Disable file downloads$/u,
   });
   expect(downloadSwitch.disabled).toBe(true);
+  expect(screen.getByText("This file is too large for the in-browser reader")).toBeTruthy();
 });
