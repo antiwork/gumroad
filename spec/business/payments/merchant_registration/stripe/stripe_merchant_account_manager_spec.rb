@@ -10983,6 +10983,50 @@ describe StripeMerchantAccountManager, :vcr do
         expect(Stripe::Account).not_to have_received(:update_external_account)
       end
     end
+    context "when Stripe no longer has the linked external account" do
+      before do
+        allow(Stripe::Account).to receive(:retrieve_external_account).with("acct_ec", "ba_ec").and_raise(
+          Stripe::InvalidRequestError.new("No such external account: 'ba_ec'", "id", code: "resource_missing", http_status: 404)
+        )
+      end
+
+      it "does not resubmit bank details for a name-only edit" do
+        allow(ErrorNotifier).to receive(:notify)
+
+        expect(subject.update_bank_account(user, passphrase: "1234", holder_name_only: true)).to eq(:external_account_mismatch)
+        expect(Stripe::Account).not_to have_received(:update)
+        expect(Stripe::Account).not_to have_received(:update_external_account)
+      end
+
+      it "sends the saved bank details on a full sync" do
+        allow(stripe_account).to receive(:refresh).and_return(stripe_account)
+        allow(subject).to receive(:save_stripe_bank_account_info)
+        allow(subject).to receive(:clear_stale_bank_sync_failure_notes)
+
+        expect(subject.update_bank_account(user, passphrase: "1234")).to eq(:synced)
+        expect(Stripe::Account).to have_received(:update)
+        expect(Stripe::Account).not_to have_received(:update_external_account)
+      end
+    end
+
+    context "when metadata does not name the bank and only visible details match" do
+      let(:stripe_metadata_bank_account_id) { nil }
+      let(:stripe_match_details) do
+        { last4: "6789", routing_number: "AAAAECE1XXX", currency: "usd", country: "EC", fingerprint: "synthetic_ec_fingerprint" }
+      end
+
+      before { bank_account.update_columns(stripe_bank_account_id: nil, stripe_connect_account_id: nil) }
+
+      it "does not link a name-only edit from the last four and routing number" do
+        allow(ErrorNotifier).to receive(:notify)
+
+        expect(subject.update_bank_account(user, passphrase: "1234", holder_name_only: true)).to eq(:external_account_mismatch)
+        expect(bank_account.reload.stripe_external_account_id).to be_nil
+        expect(Stripe::Account).not_to have_received(:update)
+        expect(Stripe::Account).not_to have_received(:update_external_account)
+      end
+    end
+
     context "when a name-only job is stale" do
       it "does not sync after the seller submits a newer bank" do
         create(:ecuador_bank_account, user:)
