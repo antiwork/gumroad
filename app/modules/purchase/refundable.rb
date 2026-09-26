@@ -145,7 +145,9 @@ class Purchase
                                                 reverse_transfer: !chargedback? || !chargeback_reversed,
                                                 paypal_order_purchase_unit_refund:,
                                                 is_for_fraud:,
-                                                purchase: self)
+                                                purchase: self,
+                                                # Presentment refunds book a pinned canonical amount, so only USD ones may be resized.
+                                                cap_to_unrefunded_amount: is_part_of_combined_charge? && presentment_refund.nil?)
         logger.info("Refunding purchase: #{id} completed with ID: #{charge_refund.id}, Flow of Funds: #{charge_refund.flow_of_funds.to_h}")
         purchase_event = Event.where(purchase_id: id, event_name: "purchase").last
         unless purchase_event.nil?
@@ -164,6 +166,10 @@ class Purchase
                                     canonical_gross_refund_cents: (presentment_refund ? (gross_amount_cents.presence || gross_amount_refundable_cents) : nil),
                                     presentment_refund:,
                                     note: reason)
+        unless refunded
+          ErrorNotifier.notify("Processor refund succeeded but no local refund was recorded",
+                               context: { purchase_id: id, processor_refund_id: charge_refund.id })
+        end
         # When a Gumroad team member (support/admin) refunds a sale on the creator's
         # behalf, tell the creator by email — otherwise they only discover the refund by
         # stumbling on the refunded row in their dashboard. Creator-initiated refunds stay
@@ -193,6 +199,14 @@ class Purchase
         logger.error "Charge processor unavailable in purchase: #{external_id}. Response: #{e.message}"
         errors.add :base, "There is a temporary problem. Try to refund later."
         false
+      rescue StandardError => e
+        # The caller's rollback will discard this purchase's Refund row while the processor refund
+        # stands, so this report is the only record tying the money back to the purchase.
+        if charge_refund
+          ErrorNotifier.notify(e, context: { purchase_id: id, charge_id: stripe_transaction_id, processor_refund_id: charge_refund.id,
+                                             **reported_processor_refund_amount(charge_refund) })
+        end
+        raise
       end
     end
 
@@ -653,6 +667,20 @@ class Purchase
   end
 
   private
+    # Stripe reports the refunded amount in minor units; a PayPal order refund returns a money
+    # object instead (`value` is a decimal string), so scale it and report the currency it was
+    # refunded in rather than passing the object off as cents.
+    def reported_processor_refund_amount(charge_refund)
+      reported_amount = charge_refund.refund.try(:amount)
+      if reported_amount.respond_to?(:value) && reported_amount.value.present?
+        { processor_refund_amount_cents: (BigDecimal(reported_amount.value.to_s) * unit_scaling_factor(reported_amount.currency_code)).to_i,
+          processor_refund_currency: reported_amount.currency_code.to_s.downcase }
+      else
+        { processor_refund_amount_cents: reported_amount || processor_refund_amount_cents,
+          processor_refund_currency: charge_refund.refund.try(:currency)&.to_s&.downcase }
+      end
+    end
+
     def refundable_amounts
       amounts_query = "COALESCE(SUM(total_transaction_cents), 0) AS tt_cents, COALESCE(SUM(amount_cents), 0) AS p_cents, " \
                         "COALESCE(SUM(creator_tax_cents), 0) AS ct_cents, COALESCE(SUM(gumroad_tax_cents), 0) as gt_cents," \
