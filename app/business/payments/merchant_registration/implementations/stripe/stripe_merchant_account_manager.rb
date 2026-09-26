@@ -1319,8 +1319,10 @@ module StripeMerchantAccountManager
     stripe_account = Stripe::Account.retrieve(user.stripe_account.charge_processor_merchant_id)
     if ecuador_company?(user) && bank_account.is_a?(EcuadorBankAccount)
       if bank_account.stripe_external_account_id.blank?
-        metadata_names_this_bank = stripe_account["metadata"]["bank_account_id"] == bank_account.external_id
-        detail_match = holder_name_only && matching_stripe_external_account(bank_account, stripe_account)
+        metadata_bank_id = stripe_account["metadata"]["bank_account_id"]
+        metadata_names_this_bank = metadata_bank_id == bank_account.external_id
+        metadata_names_another_bank = metadata_bank_id.present? && !metadata_names_this_bank
+        detail_match = holder_name_only && !metadata_names_another_bank && matching_stripe_external_account(bank_account, stripe_account)
         if metadata_names_this_bank || detail_match
           repair_result = restore_local_bank_link!(bank_account, stripe_account)
           return repair_result unless repair_result == :synced
@@ -2860,6 +2862,8 @@ module StripeMerchantAccountManager
     return if bank_account.user.has_stripe_account_connected?
     ApplicationRecord.connected_to(role: :writing) do
       return unless user_has_stripe_connect_merchant_account?(bank_account.user)
+      # A name-only job is for the row that was queued. A newer bank has its own sync.
+      return if holder_name_only && bank_account.user.active_bank_account&.id != bank_account.id
 
       update_bank_account(bank_account.user, passphrase: GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"), holder_name_only:)
     end

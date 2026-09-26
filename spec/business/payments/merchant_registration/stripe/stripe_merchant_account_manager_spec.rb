@@ -10940,12 +10940,13 @@ describe StripeMerchantAccountManager, :vcr do
           { last4: "6789", routing_number: "AAAAECE1XXX", currency: "usd", country: "EC", fingerprint: "synthetic_ec_fingerprint" }
         end
 
-        it "restores the local link and updates the holder name without replacing bank details" do
-          expect(subject.update_bank_account(user, passphrase: "1234", holder_name_only: true)).to eq(:synced)
-          expect(bank_account.reload.stripe_external_account_id).to eq("ba_ec")
-          expect(bank_account.stripe_connect_account_id).to eq("acct_ec")
-          expect(Stripe::Account).to have_received(:update_external_account).with("acct_ec", "ba_ec", { account_holder_name: "Personal Name" })
+        it "does not link a name-only edit when Stripe metadata names another bank" do
+          allow(ErrorNotifier).to receive(:notify)
+
+          expect(subject.update_bank_account(user, passphrase: "1234", holder_name_only: true)).to eq(:external_account_mismatch)
+          expect(bank_account.reload.stripe_external_account_id).to be_nil
           expect(Stripe::Account).not_to have_received(:update)
+          expect(Stripe::Account).not_to have_received(:update_external_account)
         end
 
         it "does not treat a new bank with the same last four as the existing payout account" do
@@ -10961,6 +10962,17 @@ describe StripeMerchantAccountManager, :vcr do
       end
     end
 
+    context "when a name-only job is stale" do
+      it "does not sync after the seller submits a newer bank" do
+        create(:ecuador_bank_account, user:)
+        bank_account.mark_deleted!
+
+        expect(subject).not_to receive(:update_bank_account)
+        expect(Stripe::Account).not_to receive(:update)
+
+        subject.handle_new_bank_account(bank_account, holder_name_only: true)
+      end
+    end
     context "when the Ecuador seller is an individual" do
       before { user_compliance_info.update_columns(is_business: false) }
 
