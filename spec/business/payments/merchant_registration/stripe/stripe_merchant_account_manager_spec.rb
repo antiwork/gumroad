@@ -13905,6 +13905,55 @@ describe StripeMerchantAccountManager, :vcr do
         expect(captured_attributes[:nationality]).to eq("JP")
       end
 
+      it "refills the address leaves Stripe is missing when the seller changed one of them" do
+        user_compliance_info.mark_deleted!
+        changed = create(:user_compliance_info_business, user:, city: "Portland")
+        marker = create(:user_compliance_info_business, user:, city: "Oakland",
+                                                        street_address: changed.street_address,
+                                                        state: changed.state,
+                                                        zip_code: changed.zip_code,
+                                                        country: changed.country)
+        marker.mark_deleted!
+        held_line = Stripe::Person.construct_from(
+          id: "person_recreated_blank",
+          object: "person",
+          account: stripe_account.id,
+          address: { line1: "Kept By Stripe" },
+          relationship: { representative: true }
+        )
+        allow(Stripe::Account).to receive(:list_persons)
+          .with(stripe_account.id, relationship: { representative: true }, limit: 1)
+          .and_return("data" => [held_line])
+
+        captured_attributes = captured_refill(marker)
+
+        expect(captured_attributes[:address]).to include(city: "Portland", state: changed.state)
+        expect(captured_attributes[:address]).not_to have_key(:line1)
+      end
+
+      it "sends the seller's new address line when Stripe already holds the old one" do
+        user_compliance_info.mark_deleted!
+        changed = create(:user_compliance_info_business, user:, street_address: "100 New Street", city: "Portland")
+        marker = create(:user_compliance_info_business, user:, street_address: "1 Old Street", city: changed.city,
+                                                        state: changed.state, zip_code: changed.zip_code,
+                                                        country: changed.country)
+        marker.mark_deleted!
+        held_line = Stripe::Person.construct_from(
+          id: "person_recreated_blank",
+          object: "person",
+          account: stripe_account.id,
+          address: { line1: "1 Old Street" },
+          relationship: { representative: true }
+        )
+        allow(Stripe::Account).to receive(:list_persons)
+          .with(stripe_account.id, relationship: { representative: true }, limit: 1)
+          .and_return("data" => [held_line])
+
+        captured_attributes = captured_refill(marker)
+
+        expect(captured_attributes[:address]).to include(line1: "100 New Street", city: "Portland")
+      end
+
       it "seeds only what Stripe's person is missing, leaving the values it holds alone" do
         partially_populated = Stripe::Person.construct_from(
           id: "person_recreated_partial",

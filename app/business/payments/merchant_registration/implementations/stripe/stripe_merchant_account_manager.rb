@@ -1100,11 +1100,18 @@ module StripeMerchantAccountManager
   def self.seed_attributes_missing_from_stripe_person!(diff_attributes, current_attributes, stripe_person)
     live_person = stripe_person.to_h
     (current_attributes.keys - PERSON_REFILL_EXCLUDED_KEYS).each do |key|
-      next if diff_attributes[key].present?
-      next if current_attributes[key].blank?
+      current = current_attributes[key]
+      next if current.blank?
 
-      refill = refill_values_for(key, stripe_value_at(live_person, key), current_attributes[key])
-      diff_attributes[key] = refill if refill.present?
+      existing = diff_attributes[key]
+      # A changed address leaf is already a non-empty hash. Skipping the key would leave the other
+      # blank leaves unsent. A scalar already in the diff is the whole value.
+      next if existing.present? && (!existing.is_a?(Hash) || PERSON_REFILL_WHOLE_VALUE_KEYS.include?(key))
+
+      refill = refill_values_for(key, stripe_value_at(live_person, key), current)
+      next if refill.blank?
+
+      diff_attributes[key] = existing.is_a?(Hash) ? refill.merge(existing) : refill
     end
   end
 
