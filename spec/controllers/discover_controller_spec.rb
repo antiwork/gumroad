@@ -550,6 +550,34 @@ describe DiscoverController, type: :controller, inertia: true do
         expect(meta_tags["title"][:inner_content]).to eq("some tag | Software Development » Programming » C# | Gumroad")
       end
 
+      it "sets the tag description, not the site-wide boilerplate, when tags and taxonomy are both present" do
+        get :index, params: { tags: "3d models", taxonomy: "3d" }
+
+        description = "Browse over 0 3D assets including 3D models, CG textures, HDRI environments & more" \
+                      " for VFX, game development, AR/VR, architecture, and animation."
+        expect(meta_tags["meta-property-og-description"][:content]).to eq(description)
+        expect(meta_tags["meta-name-description"][:content]).to eq(description)
+      end
+
+      it "uses the filtered result count, not a fixed marketplace-wide number, in curated tag copy" do
+        get :index, params: { tags: "photos", taxonomy: "3d" }
+
+        expect(meta_tags["meta-name-description"][:content]).to start_with("Browse over 0 photos")
+      end
+
+      it "falls back to the generic tag template when a taxonomy page carries a tag with no curated description" do
+        get :index, params: { tags: "some-tag", taxonomy: "3d" }
+
+        expect(meta_tags["meta-name-description"][:content]).to include("unique some tag products published by independent creators on Gumroad")
+        expect(meta_tags["meta-property-og-description"][:content]).to eq(meta_tags["meta-name-description"][:content])
+      end
+
+      it "keeps the boilerplate description when a search query is present alongside a tag and taxonomy" do
+        get :index, params: { query: "dragons", tags: "3d models", taxonomy: "3d" }
+
+        expect(meta_tags["meta-name-description"][:content]).to eq(default_description)
+      end
+
       it "sets the proper meta tags when a specific tag has been selected" do
         get :index, params: { tags: "3d models" }
 

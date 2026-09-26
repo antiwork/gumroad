@@ -231,7 +231,8 @@ class DiscoverController < ApplicationController
       set_meta_tag(property: "og:site_name", content: "Gumroad")
       set_meta_tag(tag_name: "link", rel: "canonical", href: Discover::CanonicalUrlPresenter.canonical_url(params), head_key: "canonical")
 
-      if !params[:taxonomy].present? && !params[:query].present? && params[:tags].present?
+      # Taxonomy + tags pages self-canonicalize with their tags, so they get the tag copy too.
+      if !params[:query].present? && params[:tags].present?
         presenter = Discover::TagPageMetaPresenter.new(params[:tags], search_results[:total])
         set_meta_tag(name: "description", content: presenter.meta_description)
         set_meta_tag(property: "og:description", content: presenter.meta_description)

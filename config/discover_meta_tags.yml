@@ -23,7 +23,7 @@ descriptions:
     skills training & more ways to make money online."
   marketing: "Marketing training: videos, ebooks, guides, templates, and more to help you grow your business and
     brand. Learn from growth experts on topics such as Twitter, landing pages, email, affiliates, SEO, ads, & more."
-  stock-reference-photos: "Browse over 587,000 photos featuring high-resolution stock and reference photos of people,
+  stock-reference-photos: "Browse over %{result_count} photos featuring high-resolution stock and reference photos of people,
     places, animals, and objects: perfect for projects ranging from print media to social graphics and digital art."
   comics-graphic-novels: "Browse thousands of comics, novels and other assets available for download by professional
     designers and creators."
@@ -65,7 +65,7 @@ descriptions:
     learn directly from experts across fields."
   unreal-engine-4: "The best free & paid assets for your next Unreal Engine project: from architecture visualizaton
     and blueprints to characters and animation rigs"
-  lightroom: "Explore over 2080 Lightroom presets for desktop & mobile: effortlessly add a professional touch to your
+  lightroom: "Explore over %{result_count} Lightroom presets for desktop & mobile: effortlessly add a professional touch to your
     next photography project. Use these high-quality presets & actions to create minimal looks, cinematographic styles,
     black & white or vintage effects and more"
   kdp: "Over %{result_count} templates & tutorials for KDP Amazon Sellers including book covers, interiors, and more.
@@ -141,7 +141,7 @@ descriptions:
     & more — perfect for apparel designers of all experience levels"
   ui-kit: "Over %{result_count} UI Kits for mobile or web apps & wireframes. Top-rated design systems (ie. Eva, Ant)
     and template screens for Figma, Adobe XD, Sketch & more. Prototype a stunning iOS, Android, or web app."
-  stock-photos: "Browse over 587,000 photos featuring high-resolution stock and reference photos of people, places,
+  stock-photos: "Browse over %{result_count} photos featuring high-resolution stock and reference photos of people, places,
     animals, and objects: perfect for projects ranging from print media to social graphics and digital art."
   book: "Discover the best online courses & resources for writers: learn & improve your writing skills — from
     storytelling & professional development, to scriptwriting, fiction/nonfiction, poetry, comedy, lyrics, & more."
@@ -188,7 +188,7 @@ descriptions:
     your Procreate projects. These sets include sketching effects & more."
   entrepreneurship: "Learn how to grow & expand your business: passive income, side hustles, freelancing, skills
     training & more ways to make money online."
-  presets: "Explore over 2080 Lightroom presets for desktop & mobile: effortlessly add a professional touch to your next
+  presets: "Explore over %{result_count} Lightroom presets for desktop & mobile: effortlessly add a professional touch to your next
     photography project. Use these high-quality presets & actions to create minimal looks, cinematographic styles, black
     & white or vintage effects and more"
   after-effects: "A diverse selection of %{result_count} templates for motion graphics: animated text & illustrations,
@@ -206,7 +206,7 @@ descriptions:
   c4d: "Over %{result_count} Cinema4D tutorials, presets, templates & more to jumpstart your next C4D animation project."
   ux: "Over %{result_count} UI Kits for mobile or web apps & wireframes. Top-rated design systems (ie. Eva, Ant) and
     template screens for Figma, Adobe XD, Sketch & more. Prototype a stunning iOS, Android, or web app."
-  photo-reference: "Browse over 587,000 photos featuring high-resolution stock and reference photos of people, places,
+  photo-reference: "Browse over %{result_count} photos featuring high-resolution stock and reference photos of people, places,
     animals, and objects: perfect for projects ranging from print media to social graphics and digital art."
   web-design: "Over %{result_count} UI Kits for mobile or web apps & wireframes. Top-rated design systems (ie. Eva, Ant)
     and template screens for Figma, Adobe XD, Sketch & more. Prototype a stunning iOS, Android, or web app."
@@ -222,7 +222,7 @@ descriptions:
     income with dropshipping "
   maya-rig: "Over %{result_count} high-quality 3D Models, scripts/plugins, textures, shaders, & tutorials for Autodesk's
     Maya visual FX software."
-  photos: "Browse over 587,000 photos featuring high-resolution stock and reference photos of people, places, animals,
+  photos: "Browse over %{result_count} photos featuring high-resolution stock and reference photos of people, places, animals,
     and objects: perfect for projects ranging from print media to social graphics and digital art."
   kdp-digital-design: "Over %{result_count} templates & tutorials for KDP Amazon Sellers including book covers,
     interiors, and more. Get started with Kindle Publishing in no time!"
@@ -242,7 +242,7 @@ descriptions:
     resources and training from 3DSMax experts"
   3dprinting: "The digital marketplace for sharing high-quality 3D printable models such as tabletop gaming and toys:
     free & premium templates for 3d printing."
-  lightroom-presets: "Explore over 2080 Lightroom presets for desktop & mobile: effortlessly add a professional touch
+  lightroom-presets: "Explore over %{result_count} Lightroom presets for desktop & mobile: effortlessly add a professional touch
     to your next photography project. Use these high-quality presets & actions to create minimal looks, cinematographic
     styles, black & white or vintage effects and more"
   vj-loops: "Browse our growing library of %{result_count} unique & high-quality stock videos, motion backgrounds and
@@ -265,7 +265,7 @@ descriptions:
     your life. Browse %{result_count} self-help resources from experts."
   stock-market: "Learn how to grow & expand your finances: passive income, investing, side hustles, freelancing, skills
     training & more ways to make money online."
-  lightroom-mobile: "Explore over 2080 Lightroom presets for desktop & mobile: effortlessly add a professional touch to
+  lightroom-mobile: "Explore over %{result_count} Lightroom presets for desktop & mobile: effortlessly add a professional touch to
     your next photography project. Use these high-quality presets & actions to create minimal looks, cinematographic
     styles, black & white or vintage effects and more"
   twitch-graphics: "Social media marketing courses, resources & downloads. Learn how to master social media from top
@@ -352,9 +352,9 @@ descriptions:
     guides, UI & icon kits, coded HTML templates & more"
   vector: "Over %{result_count} unique custom-designed vectors — from icons to infographics: perfect for graphic design
     or presentations & posters."
-  4k: "Browse over 587,000 photos featuring high-resolution stock and reference photos of people, places, animals, and
+  4k: "Browse over %{result_count} photos featuring high-resolution stock and reference photos of people, places, animals, and
     objects: perfect for projects ranging from print media to social graphics and digital art."
-  royalty-free: "Browse over 587,000 photos featuring high-resolution stock and reference photos of people, places,
+  royalty-free: "Browse over %{result_count} photos featuring high-resolution stock and reference photos of people, places,
     animals, and objects: perfect for projects ranging from print media to social graphics and digital art."
   icon-set: "Over %{result_count} unique custom-designed icon packs — from minimal vector to hand-drawn images: perfect
     for UI design, iOS personalization, or presentations & posters."
