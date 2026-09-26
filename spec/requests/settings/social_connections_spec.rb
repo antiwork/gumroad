@@ -110,6 +110,10 @@ describe "Settings social connections page", type: :system, js: true do
   # Above the wrapping breakpoint the row has room for a labeled Disconnect; below it the
   # control collapses into the connection menu so the handle column keeps its width.
   it "keeps Disconnect in the connection menu below the wrapping breakpoint", :mobile_view do
+    # The mobile driver starts Chrome with no window size — an 800px viewport, above the 640px
+    # wrapping breakpoint — so pin a phone-sized one here and let the assertion test the layout.
+    page.driver.browser.manage.window.resize_to(375, 667)
+
     seller.update!(twitter_user_id: "123", twitter_handle: "squidarth",
                    twitter_oauth_token: "token", twitter_oauth_secret: "secret")
     visit settings_social_connections_path
