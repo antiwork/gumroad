@@ -13887,13 +13887,13 @@ describe StripeMerchantAccountManager, :vcr do
       it "refills the Japanese name fields and a recorded nationality" do
         user_compliance_info.mark_deleted!
         create(:user_compliance_info_business, user:, country: "Japan", business_country: "Japan",
-                                              first_name_kanji: "太郎", last_name_kanji: "山田",
-                                              first_name_kana: "タロウ", last_name_kana: "ヤマダ",
-                                              nationality: "JP")
+                                               first_name_kanji: "太郎", last_name_kanji: "山田",
+                                               first_name_kana: "タロウ", last_name_kana: "ヤマダ",
+                                               nationality: "JP")
         last_jp_info = create(:user_compliance_info_business, user:, country: "Japan", business_country: "Japan",
-                                                             first_name_kanji: "太郎", last_name_kanji: "山田",
-                                                             first_name_kana: "タロウ", last_name_kana: "ヤマダ",
-                                                             nationality: "JP")
+                                                              first_name_kanji: "太郎", last_name_kanji: "山田",
+                                                              first_name_kana: "タロウ", last_name_kana: "ヤマダ",
+                                                              nationality: "JP")
         last_jp_info.mark_deleted!
 
         captured_attributes = captured_refill(last_jp_info)
