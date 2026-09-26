@@ -13990,6 +13990,17 @@ describe StripeMerchantAccountManager, :vcr do
           described_class.update_person(user, stripe_account, last_synced_user_compliance_info.external_id, "1234")
         ).to be false
       end
+
+      it "leaves a previously rejected postal code to force_address_resync" do
+        user.add_payout_note(
+          content: "#{StripeMerchantAccountManager::POSTAL_CODE_FAILURE_NOTE_PREFIX}: postal_code_invalid — The postal code you entered is not valid."
+        )
+
+        captured_attributes = captured_refill(last_synced_user_compliance_info)
+
+        expect(captured_attributes).not_to have_key(:address)
+        expect(captured_attributes[:first_name]).to eq(user_compliance_info.first_name)
+      end
     end
 
     context "when Stripe returns no persons for the account" do

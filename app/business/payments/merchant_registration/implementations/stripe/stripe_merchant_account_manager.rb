@@ -1012,7 +1012,7 @@ module StripeMerchantAccountManager
     # Stripe can replace the person outright (its KYC pass, or our ownership editor) with a blank
     # record while the metadata still names the last version we synced, so the diff above stays
     # unchanged and the requirements are never met. Refill what the live person is missing.
-    seed_attributes_missing_from_stripe_person!(diff_attributes, current_attributes, stripe_person)
+    seed_attributes_missing_from_stripe_person!(diff_attributes, current_attributes, stripe_person, user)
 
     if diff_attributes[:dob].present?
       # Re-add the full DOB field if any part of it is being kept. Stripe handles this field inconsistently and the full DOB
@@ -1100,9 +1100,13 @@ module StripeMerchantAccountManager
   private_class_method
   # Refills a person record Stripe replaced with a blank one, from our compliance record. Only blanks
   # are filled: a value Stripe already holds is never overwritten.
-  def self.seed_attributes_missing_from_stripe_person!(diff_attributes, current_attributes, stripe_person)
+  def self.seed_attributes_missing_from_stripe_person!(diff_attributes, current_attributes, stripe_person, user)
     live_person = stripe_person.to_h
-    (current_attributes.keys - PERSON_REFILL_EXCLUDED_KEYS).each do |key|
+    excluded = PERSON_REFILL_EXCLUDED_KEYS
+    # A postal code Stripe rejected is retried by `force_address_resync` alone; refilling it here would
+    # fail the whole person update on the same code and take the name/DOB refill down with it.
+    excluded += ADDRESS_SUBHASH_KEYS if postal_code_failure_note_outstanding?(user)
+    (current_attributes.keys - excluded).each do |key|
       current = current_attributes[key]
       next if current.blank?
 
@@ -1871,6 +1875,16 @@ module StripeMerchantAccountManager
     # rejection: the seller's error message matters more than our diagnostics.
     Rails.logger.error "Failed to record Stripe account-rejection payout-note breadcrumb for user #{user&.id}: #{e.class}: #{e.message}"
     ErrorNotifier.notify(e)
+  end
+
+  private_class_method
+  def self.postal_code_failure_note_outstanding?(user)
+    user.comments
+        .with_type_payout_note
+        .alive
+        .where(author_id: GUMROAD_ADMIN_ID)
+        .where("content LIKE ?", "#{POSTAL_CODE_FAILURE_NOTE_PREFIX}%")
+        .exists?
   end
 
   private_class_method
