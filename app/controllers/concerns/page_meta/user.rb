@@ -6,17 +6,22 @@ module PageMeta::User
   include PageMeta::Base
 
   private
+    # The custom-HTML profile wrapper builds its own <head> and can't use
+    # set_meta_tag, so both render sites read this to stay in sync.
+    def profile_meta_description(user)
+      user.bio.present? ? user.bio.squish.first(300) : "On Gumroad"
+    end
+
     def set_user_page_meta(user)
       set_meta_tag(property: "og:site_name", content: "Gumroad")
       set_meta_tag(property: "og:type", content: "website")
 
       if user.bio.present?
         title = "Subscribe to #{user.name_or_username} on Gumroad"
-        description = user.bio.squish.first(300)
       else
         title = "Subscribe to #{user.name_or_username}"
-        description = "On Gumroad"
       end
+      description = profile_meta_description(user)
       set_meta_tag(property: "og:title", content: title)
       set_meta_tag(name: "description", content: description)
       set_meta_tag(property: "og:description", content: description)

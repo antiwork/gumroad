@@ -279,6 +279,7 @@ class UsersController < ApplicationController
       iframe_src = ERB::Util.h(profile_landing_src(user, "embed"))
       title = ERB::Util.h(user.name_or_username.to_s)
       canonical = ERB::Util.h(user.profile_url(custom_domain_url: seller_custom_domain_url).to_s)
+      description = ERB::Util.h(profile_meta_description(user))
       store_hostnames_json = ERB::Util.json_escape(profile_store_hostnames(user).to_json)
       nonce = SecureHeaders.content_security_policy_script_nonce(request)
       # Share-card chain (PageMeta::User): subscribe-preview, then uploaded
@@ -343,6 +344,8 @@ class UsersController < ApplicationController
             <meta property="og:title" content="#{title}">
             <meta property="og:type" content="profile">
             <meta property="og:url" content="#{canonical}">
+            <meta name="description" content="#{description}">
+            <meta property="og:description" content="#{description}">
             #{share_image_tags}
             #{fb_verification_tag}
             #{profile_custom_html_analytics_head(user)}
