@@ -98,11 +98,8 @@ class SalesRelatedProductsInfo < ApplicationRecord
   # because a deadlocked (or lock-wait-timed-out) statement rolls back its own one-statement
   # transaction whole: nothing was counted, so nothing can double-count.
   def self.execute_upsert_with_contention_retry(query)
-    # Inside a caller's transaction (refunds and disputes enqueue the job inside theirs, which
-    # runs it there under Sidekiq::Testing.inline!), run once and let a deadlock propagate:
-    # InnoDB rolls back the caller's whole transaction, so a retry would commit this slice alone.
-    # Non-joinable callers (transactional fixtures, console sandbox, joinable: false) count too:
-    # nested below another transaction they reject the isolation, and a retry autocommits.
+    # A deadlock rolls back the caller's whole transaction, even if it is non-joinable.
+    # Retrying here could commit a slice independently after that rollback.
     return ApplicationRecord.connection.execute(query) if ApplicationRecord.connection.transaction_open?
 
     attempts = 0
