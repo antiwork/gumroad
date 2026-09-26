@@ -181,6 +181,9 @@ class SettingsPresenter
     {
       twitter_connected: seller.twitter_user_id.present?,
       twitter_handle: seller.twitter_handle,
+      # A read-only token still reads as connected, so the row would show a green check for a
+      # connection that cannot post. Reconnecting is the fix, and only the seller can do it.
+      twitter_write_permission_missing: Marketing::Action.awaiting_reconnect.where(user: seller).exists?,
       youtube_connect_enabled: Feature.active?(:youtube_connect, seller),
       youtube_connected: seller.youtube_identity.present?,
       youtube_handle: seller.youtube_identity&.handle,

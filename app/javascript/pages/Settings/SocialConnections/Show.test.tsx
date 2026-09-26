@@ -49,6 +49,7 @@ const renderPage = (overrides: Record<string, unknown> = {}) => {
       social_connect_return: null,
       twitter_connected: false,
       twitter_handle: null,
+      twitter_write_permission_missing: false,
       youtube_connect_enabled: false,
       youtube_connected: false,
       youtube_handle: null,
@@ -103,6 +104,38 @@ describe("SocialConnectionsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open X connection menu" }));
 
     expect(await screen.findByRole("menuitem", { name: "Disconnect @gumroad from X" })).toBeTruthy();
+  });
+
+  // The token can read the profile but not post, which every other signal on the row hides.
+  it("says a connected X account cannot post while its token is read-only", () => {
+    renderPage({ twitter_connected: true, twitter_handle: "gumroad", twitter_write_permission_missing: true });
+
+    expect(screen.getByText("This connection can't post launch posts. Reconnect to fix it.")).toBeTruthy();
+    expect(screen.getByLabelText("Cannot post")).toBeTruthy();
+    expect(screen.queryByLabelText("Connected")).toBeNull();
+  });
+
+  it("shows a writable X connection as simply connected", () => {
+    renderPage({ twitter_connected: true, twitter_handle: "gumroad" });
+
+    expect(screen.getByLabelText("Connected")).toBeTruthy();
+    expect(screen.queryByText("This connection can't post launch posts. Reconnect to fix it.")).toBeNull();
+  });
+
+  // Disconnecting clears twitter_user_id, so it is confirmed rather than one click away.
+  it("confirms before disconnecting", async () => {
+    renderPage({ twitter_connected: true, twitter_handle: "gumroad" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Disconnect @gumroad from X" }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog.textContent).toContain("Disconnect X?");
+    expect(dialog.textContent).toContain("Gumroad will forget @gumroad and the access it stored.");
+    expect(dialog.textContent).toContain("If you sign in with X, connect it again to keep signing in.");
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
   it("points the Reconnect button at the same write-enabled connect flow", () => {
