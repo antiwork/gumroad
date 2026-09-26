@@ -30,9 +30,10 @@ RUN sed -r 's/(name="memory" value=")[^"]+"/\11GiB"/' -i /etc/ImageMagick-6/poli
   && sed -r 's/(name="height" value=")[^"]+"/\150KP"/' -i /etc/ImageMagick-6/policy.xml \
   # Restrict the coders to the formats the app handles (see FILE_REGEX, web_image_content_types).
   # Every alias needs listing: IM6 matches on the alias, so dropping JPG blocks `.jpg` writes
-  # while `identify` still works. The grep fails the build if the splice ever stops matching.
+  # while `identify` still works. The grep pins the whole line, not a prefix: Debian's file
+  # mentions a read|write policy in a comment, so a prefix match passes even when the splice misses.
   && sed -i 's@</policymap>@  <policy domain="coder" rights="none" pattern="*" />\n  <policy domain="coder" rights="read|write" pattern="{GIF,JPEG,JPG,PNG,PNG8,PNG24,PNG32,WEBP,TIFF,TIF,BMP,BMP2,BMP3,PSD}" />\n</policymap>@' /etc/ImageMagick-6/policy.xml \
-  && grep -q '<policy domain="coder" rights="read|write"' /etc/ImageMagick-6/policy.xml
+  && grep -Fq '<policy domain="coder" rights="read|write" pattern="{GIF,JPEG,JPG,PNG,PNG8,PNG24,PNG32,WEBP,TIFF,TIF,BMP,BMP2,BMP3,PSD}" />' /etc/ImageMagick-6/policy.xml
 
 # Install gems using only the dependency manifests so this (slow) layer is
 # cached unless the Gemfile/lockfile changes.
