@@ -165,7 +165,16 @@ module StripeMerchantAccountManager
 
   def self.account_holder_name_synced_to_stripe?(user)
     country_code = user.alive_user_compliance_info&.legal_entity_country_code
-    ACCOUNT_HOLDER_NAME_SYNC_COUNTRIES.include?(country_code)
+    ACCOUNT_HOLDER_NAME_SYNC_COUNTRIES.include?(country_code) || ecuador_company?(user)
+  end
+
+  # EC company holder-name changes go to the existing external account in place rather than
+  # re-attaching the bank like JP/VN/ID. Scoped to EC companies only (gumroad-private#2994).
+  private_class_method
+  def self.ecuador_company?(user)
+    compliance_info = user.alive_user_compliance_info
+    compliance_info.present? && compliance_info.is_business? &&
+      compliance_info.legal_entity_country_code == Compliance::Countries::ECU.alpha2
   end
 
   # Use "CEO" as the default title for all Stripe custom connect account owners for now.
@@ -1308,6 +1317,20 @@ module StripeMerchantAccountManager
     raise MerchantRegistrationUserNotReadyError.new(user.id, "does not have a bank account") if bank_account.nil?
 
     stripe_account = Stripe::Account.retrieve(user.stripe_account.charge_processor_merchant_id)
+    if ecuador_company?(user) && bank_account.is_a?(EcuadorBankAccount) && bank_account.stripe_external_account_id.present?
+      return report_external_account_mismatch(bank_account, stripe_account) unless stripe_account["business_type"] == "company" && bank_account.stripe_connect_account_id == stripe_account.id
+
+      stripe_external_account = Stripe::Account.retrieve_external_account(stripe_account.id, bank_account.stripe_external_account_id)
+      return report_external_account_mismatch(bank_account, stripe_account) unless stripe_external_account["id"] == bank_account.stripe_external_account_id && stripe_external_account["object"] == "bank_account"
+      return :noop_metadata_match if stripe_external_account["account_holder_name"] == bank_account.account_holder_full_name
+
+      return update_external_account_holder_name(bank_account, stripe_account, stripe_external_account)
+    end
+
+    if ecuador_company?(user) && bank_account.is_a?(EcuadorBankAccount)
+      return report_external_account_mismatch(bank_account, stripe_account) if bank_account.stripe_connect_account_id.present? || stripe_account["metadata"]["bank_account_id"] == bank_account.external_id
+    end
+
     if stripe_account["metadata"]["bank_account_id"] == bank_account.external_id
       # A metadata match does not prove the local row is linked, so the no-op must not be reported
       # before the link is checked. A holder-name mismatch in a sync country still owes an
@@ -1370,6 +1393,36 @@ module StripeMerchantAccountManager
     Rails.logger.error "Stripe error (#{e.class.name}) request ID #{e.request_id} when updating bank account #{bank_account&.id} for stripe account #{stripe_account&.inspect}"
     ErrorNotifier.notify(e)
     :stripe_unknown_error
+  end
+
+  private_class_method
+  def self.report_external_account_mismatch(bank_account, stripe_account)
+    ErrorNotifier.notify("Skipped Stripe account_holder_name update for bank_account=#{bank_account.id}: local external account does not match Stripe account #{stripe_account.id}")
+    :external_account_mismatch
+  end
+
+  # Only account_holder_name is sent: Stripe accepts it on an existing Custom-account external
+  # account, but not the other bank details. The identity guard keeps the rename from landing on
+  # an external account our local record doesn't point at. Stripe errors propagate to
+  # update_bank_account's rescues.
+  private_class_method
+  def self.update_external_account_holder_name(bank_account, stripe_account, stripe_external_account)
+    external_account_id = bank_account.stripe_external_account_id
+    unless bank_account.is_a?(EcuadorBankAccount) &&
+        stripe_account["business_type"] == "company" &&
+        bank_account.stripe_connect_account_id == stripe_account.id &&
+        external_account_id.present? &&
+        stripe_external_account&.[]("id") == external_account_id
+      return report_external_account_mismatch(bank_account, stripe_account)
+    end
+
+    Stripe::Account.update_external_account(
+      stripe_account.id,
+      external_account_id,
+      force_utf8_encoding({ account_holder_name: bank_account.account_holder_full_name })
+    )
+    clear_stale_bank_sync_failure_notes(bank_account.user)
+    :synced
   end
 
   private_class_method

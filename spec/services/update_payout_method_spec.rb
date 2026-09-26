@@ -101,6 +101,39 @@ describe UpdatePayoutMethod do
         end
       end
 
+      context "when the seller is an Ecuador company" do
+        let!(:bank_account) { create(:ecuador_bank_account, user:, account_holder_full_name: "Old Name") }
+        let!(:compliance_info) do
+          create(:user_compliance_info_business, user:, country: "Ecuador", business_country: "Ecuador",
+                                                 business_state: nil, business_zip_code: "170102", business_city: "Quito")
+        end
+
+        it "saves the name and enqueues HandleNewBankAccountWorker" do
+          params = ActionController::Parameters.new(
+            bank_account: { type: EcuadorBankAccount.name, account_holder_full_name: "Personal Name" }
+          )
+
+          expect do
+            result = described_class.new(user_params: params, seller: user).process
+            expect(result).to eq(success: true)
+          end.to change { HandleNewBankAccountWorker.jobs.size }.by(1)
+
+          expect(bank_account.reload.account_holder_full_name).to eq("Personal Name")
+        end
+
+        it "does not enqueue HandleNewBankAccountWorker when the seller is an individual" do
+          compliance_info.update_columns(is_business: false)
+          params = ActionController::Parameters.new(
+            bank_account: { type: EcuadorBankAccount.name, account_holder_full_name: "Personal Name" }
+          )
+
+          expect do
+            result = described_class.new(user_params: params, seller: user).process
+            expect(result).to eq(success: true)
+          end.not_to change { HandleNewBankAccountWorker.jobs.size }
+        end
+      end
+
       context "when the seller is in a country that does NOT sync holder name to Stripe" do
         let!(:bank_account) { create(:ach_account, user:, account_holder_full_name: "Old Name") }
 

@@ -10786,6 +10786,165 @@ describe StripeMerchantAccountManager, :vcr do
     end
   end
 
+  describe "#update_bank_account account holder name for an Ecuador company" do
+    let(:user) { create(:named_user) }
+    let!(:user_compliance_info) do
+      create(:user_compliance_info_business, user:, country: "Ecuador", business_country: "Ecuador",
+                                             business_state: nil, business_zip_code: "170102", business_city: "Quito")
+    end
+    let!(:merchant_account) { create(:merchant_account, user:, charge_processor_merchant_id: "acct_ec") }
+    let!(:bank_account) do
+      create(:ecuador_bank_account, user:, account_holder_full_name: "Personal Name",
+                                    stripe_connect_account_id: "acct_ec", stripe_bank_account_id: "ba_ec")
+    end
+    let(:stripe_holder_name) { nil }
+    let(:stripe_external_account_id) { "ba_ec" }
+    let(:stripe_metadata_bank_account_id) { bank_account.external_id }
+    let(:stripe_account) do
+      Stripe::Account.construct_from(
+        id: "acct_ec",
+        business_type: "company",
+        metadata: { bank_account_id: stripe_metadata_bank_account_id },
+        external_accounts: { object: "list", data: [
+          { id: "ba_other", object: "bank_account", account_holder_name: "Someone Else" },
+          { id: "ba_ec", object: "bank_account", account_holder_name: stripe_holder_name }
+        ] }
+      )
+    end
+    let(:retrieved_external_account) do
+      Stripe::BankAccount.construct_from(id: stripe_external_account_id, object: "bank_account", account_holder_name: stripe_holder_name)
+    end
+
+    before do
+      allow(Stripe::Account).to receive(:retrieve).with("acct_ec").and_return(stripe_account)
+      allow(Stripe::Account).to receive(:retrieve_external_account).with("acct_ec", "ba_ec").and_return(retrieved_external_account)
+      allow(Stripe::Account).to receive(:update)
+      allow(Stripe::Account).to receive(:update_external_account)
+    end
+
+    it "updates only account_holder_name on the existing external account when Stripe has none" do
+      expect(subject.update_bank_account(user, passphrase: "1234")).to eq(:synced)
+
+      expect(Stripe::Account).to have_received(:update_external_account).with("acct_ec", "ba_ec", { account_holder_name: "Personal Name" })
+      expect(Stripe::Account).not_to have_received(:update)
+    end
+
+    context "when the name changed from a different one already on Stripe" do
+      let(:stripe_holder_name) { "Buy More, LLC" }
+
+      it "sends the local holder name without replacing the bank account" do
+        expect(subject.update_bank_account(user, passphrase: "1234")).to eq(:synced)
+
+        expect(Stripe::Account).to have_received(:update_external_account).with("acct_ec", "ba_ec", { account_holder_name: "Personal Name" })
+        expect(Stripe::Account).not_to have_received(:update)
+      end
+    end
+
+    context "when Stripe already has the local holder name" do
+      let(:stripe_holder_name) { "Personal Name" }
+
+      it "does not call Stripe" do
+        expect(subject.update_bank_account(user, passphrase: "1234")).to eq(:noop_metadata_match)
+
+        expect(Stripe::Account).not_to have_received(:update_external_account)
+        expect(Stripe::Account).not_to have_received(:update)
+      end
+    end
+
+    context "when Stripe's metadata is stale but the local external account exists" do
+      let(:stripe_metadata_bank_account_id) { "older-bank-record" }
+
+      it "updates that external account without reattaching bank details" do
+        expect(subject.update_bank_account(user, passphrase: "1234")).to eq(:synced)
+        expect(Stripe::Account).to have_received(:update_external_account).with("acct_ec", "ba_ec", { account_holder_name: "Personal Name" })
+        expect(Stripe::Account).not_to have_received(:update)
+      end
+    end
+
+    context "when Stripe's connected account is not a company" do
+      before { stripe_account["business_type"] = "individual" }
+
+      it "does not update the external account" do
+        allow(ErrorNotifier).to receive(:notify)
+
+        expect(subject.update_bank_account(user, passphrase: "1234")).to eq(:external_account_mismatch)
+        expect(Stripe::Account).not_to have_received(:update_external_account)
+        expect(Stripe::Account).not_to have_received(:update)
+      end
+    end
+
+    context "when Stripe's external account is not the one the local record points at" do
+      let(:stripe_external_account_id) { "ba_other" }
+
+      it "leaves Stripe untouched and reports the mismatch" do
+        allow(ErrorNotifier).to receive(:notify)
+
+        expect(subject.update_bank_account(user, passphrase: "1234")).to eq(:external_account_mismatch)
+
+        expect(Stripe::Account).not_to have_received(:update_external_account)
+        expect(Stripe::Account).not_to have_received(:update)
+        expect(ErrorNotifier).to have_received(:notify).with(a_string_including("bank_account=#{bank_account.id}"))
+      end
+    end
+
+    context "when the local record has no Stripe external account id" do
+      before { bank_account.update_columns(stripe_bank_account_id: nil) }
+
+      it "leaves Stripe untouched" do
+        allow(ErrorNotifier).to receive(:notify)
+
+        expect(subject.update_bank_account(user, passphrase: "1234")).to eq(:external_account_mismatch)
+
+        expect(Stripe::Account).not_to have_received(:update_external_account)
+        expect(Stripe::Account).not_to have_received(:update)
+      end
+    end
+
+    context "when the Ecuador seller is an individual" do
+      before { user_compliance_info.update_columns(is_business: false) }
+
+      it "does not sync the holder name" do
+        expect(subject.update_bank_account(user, passphrase: "1234")).to eq(:noop_metadata_match)
+
+        expect(Stripe::Account).not_to have_received(:update_external_account)
+        expect(Stripe::Account).not_to have_received(:update)
+      end
+    end
+
+    context "when the company is in another country outside the holder name sync list" do
+      before { user_compliance_info.update_columns(business_country: "Colombia") }
+
+      it "does not sync the holder name" do
+        expect(subject.update_bank_account(user, passphrase: "1234")).to eq(:noop_metadata_match)
+
+        expect(Stripe::Account).not_to have_received(:update_external_account)
+        expect(Stripe::Account).not_to have_received(:update)
+      end
+    end
+  end
+
+  describe ".bank_account_hash account holder name" do
+    let(:user) { create(:named_user) }
+    let(:bank_account) { create(:ecuador_bank_account, user:, account_holder_full_name: "Personal Name") }
+
+    it "includes the holder name for an Ecuador company so new accounts are created with it" do
+      create(:user_compliance_info_business, user:, country: "Ecuador", business_country: "Ecuador",
+                                             business_state: nil, business_zip_code: "170102", business_city: "Quito")
+
+      hash = described_class.send(:bank_account_hash, bank_account, passphrase: "1234")
+
+      expect(hash[:bank_account]).to include(account_holder_name: "Personal Name")
+    end
+
+    it "omits the holder name for an Ecuador individual" do
+      create(:user_compliance_info, user:, country: "Ecuador", state: nil, zip_code: "170102", city: "Quito")
+
+      hash = described_class.send(:bank_account_hash, bank_account, passphrase: "1234")
+
+      expect(hash[:bank_account]).not_to have_key(:account_holder_name)
+    end
+  end
+
   describe ".save_stripe_bank_account_info" do
     let(:user) { create(:named_user) }
     let(:bank_account) { create(:japan_bank_account, user:) }
