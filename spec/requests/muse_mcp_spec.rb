@@ -140,6 +140,31 @@ describe "Muse MCP" do
     expect(response.parsed_body["error"]).to eq("invalid_client_metadata")
   end
 
+  it "rejects a wildcard redirect host at registration without creating a client" do
+    expect do
+      post "/claude/v1/oauth2/register",
+           params: { redirect_uris: ["https://*.example.org/cb"] }.to_json,
+           headers: { "HOST" => DOMAIN, "CONTENT_TYPE" => "application/json" }
+    end.not_to change(OauthApplication, :count)
+
+    expect(response).to have_http_status(:bad_request)
+    expect(response.parsed_body).to eq(
+      "error" => "invalid_client_metadata",
+      "error_description" => "redirect_uris must not contain wildcards"
+    )
+  end
+
+  it "rejects a wildcard outside the host at registration without creating a client" do
+    expect do
+      post "/claude/v1/oauth2/register",
+           params: { redirect_uris: ["https://example.org/*"] }.to_json,
+           headers: { "HOST" => DOMAIN, "CONTENT_TYPE" => "application/json" }
+    end.not_to change(OauthApplication, :count)
+
+    expect(response).to have_http_status(:bad_request)
+    expect(response.parsed_body["error_description"]).to eq("redirect_uris must not contain wildcards")
+  end
+
   it "stores the real Claude and ChatGPT callbacks without truncation" do
     redirect_uris = %w[https://claude.ai/api/mcp/auth_callback https://chatgpt.com/connector_platform_oauth_redirect]
 

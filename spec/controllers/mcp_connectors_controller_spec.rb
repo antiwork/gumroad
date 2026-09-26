@@ -22,6 +22,13 @@ describe McpConnectorsController do
     expect(response.body).not_to include("Connect your store", "1. Add the connector", "Select the connector in your chat")
   end
 
+  it "documents how to revoke connector access" do
+    get :show, params: { client: "claude" }
+
+    expect(response.body).to include("Revoke the connection any time under", "does not revoke its access token")
+    expect(Nokogiri::HTML(response.body).at_css('a[href="/settings/authorized_applications"]')).to be_present
+  end
+
   before { allow(GithubStarsController).to receive(:cached_count).and_return(1234) }
 
   {

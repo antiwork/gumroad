@@ -88,6 +88,10 @@ module Muse
       end
 
       def validate_redirect_uri!(value)
+        # Doorkeeper matches a requested redirect_uri against this list by URI equality, so a
+        # wildcard can only register a callback that never resolves.
+        raise Error, "redirect_uris must not contain wildcards" if value.include?("*")
+
         uri = URI.parse(value)
         raise Error, "redirect_uris must be absolute http(s) URLs" if uri.host.blank?
         raise Error, "redirect_uris must not include a fragment" if uri.fragment.present?

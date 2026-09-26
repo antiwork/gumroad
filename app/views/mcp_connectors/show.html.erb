@@ -115,6 +115,10 @@
           <h3 class="text-2xl font-medium">How do customers buy?</h3>
           <p>Share your product’s Gumroad link. Customers pay through Gumroad checkout. The MCP server does not take payments in your chat.</p>
         </div>
+        <div class="space-y-3">
+          <h3 class="text-2xl font-medium">How do I revoke access?</h3>
+          <p>Revoke the connection any time under <%= link_to "Authorized Applications", settings_authorized_applications_path %> in your Gumroad settings. Disconnecting the connector in your chat app does not revoke its access token, so revoke it here to end the connection.</p>
+        </div>
       </div>
     </div>
   </section>
