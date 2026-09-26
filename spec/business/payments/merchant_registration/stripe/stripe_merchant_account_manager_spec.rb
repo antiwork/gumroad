@@ -10824,6 +10824,8 @@ describe StripeMerchantAccountManager, :vcr do
     end
 
     it "updates only account_holder_name on the existing external account when Stripe has none" do
+      expect(subject).not_to receive(:clear_stale_bank_sync_failure_notes)
+
       expect(subject.update_bank_account(user, passphrase: "1234", holder_name_only: true)).to eq(:synced)
 
       expect(Stripe::Account).to have_received(:update_external_account).with("acct_ec", "ba_ec", { account_holder_name: "Personal Name" })

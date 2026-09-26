@@ -1440,7 +1440,6 @@ module StripeMerchantAccountManager
       external_account_id,
       force_utf8_encoding({ account_holder_name: bank_account.account_holder_full_name })
     )
-    clear_stale_bank_sync_failure_notes(bank_account.user)
     :synced
   end
 
