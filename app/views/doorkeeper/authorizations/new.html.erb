@@ -9,12 +9,12 @@
       to use your account?
     </h2>
   </header>
-  <% if (destination_host = URI.parse(@pre_auth.redirect_uri).host).present? %>
-    <div class="flex flex-col gap-4 p-4">
+  <div class="flex flex-col gap-4 p-4">
+    <% if (destination_host = URI.parse(@pre_auth.redirect_uri).host).present? %>
       <p>Your authorization code will be sent to <strong><%= destination_host %></strong>. Only authorize if you recognize this destination.</p>
-      <p class="text-sm">You can revoke access any time under <%= link_to "Authorized Applications", settings_authorized_applications_path %>.</p>
-    </div>
-  <% end %>
+    <% end %>
+    <p class="text-sm">You can revoke access any time under <%= link_to "Authorized Applications", settings_authorized_applications_path %>.</p>
+  </div>
   <% if @pre_auth.scopes.present? %>
     <div class="flex flex-col gap-4 p-4">
       <h4 class="font-bold">This application will be able to:</h4>

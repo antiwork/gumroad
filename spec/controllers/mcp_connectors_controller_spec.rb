@@ -25,7 +25,7 @@ describe McpConnectorsController do
   it "documents how to revoke connector access" do
     get :show, params: { client: "claude" }
 
-    expect(response.body).to include("Disconnect the connector in your MCP client")
+    expect(response.body).to include("Revoke the connection any time under", "does not revoke its access token")
     expect(Nokogiri::HTML(response.body).at_css('a[href="/settings/authorized_applications"]')).to be_present
   end
 
