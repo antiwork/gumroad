@@ -232,9 +232,9 @@ describe("scalarSettingsForSave", () => {
       scalarSettingsForSave(product({ description: "<p>Old</p>" }), lastSaved({ description: "<p>New</p>" })),
     ).toEqual({ description: "<p>Old</p>" });
     // A caller that does not track a baseline keeps the always-submit behavior.
-    expect(
-      scalarSettingsForSave(product({ description: "<p>Hi</p>" }), lastSaved({ description: undefined })),
-    ).toEqual({ description: "<p>Hi</p>" });
+    expect(scalarSettingsForSave(product({ description: "<p>Hi</p>" }), lastSaved({ description: undefined }))).toEqual(
+      { description: "<p>Hi</p>" },
+    );
   });
 
   it("treats the editor's empty document as blank", () => {
