@@ -14265,7 +14265,10 @@ describe StripeMerchantAccountManager, :vcr do
         id: "person_representative",
         object: "person",
         account: "acct_stuck_migration",
-        relationship: { representative: true, owner: false }
+        # A title Stripe already holds, so a heal on this account sends the minimal payload these
+        # examples pin. The blank-title case (a person Stripe re-created) is covered in the
+        # `.update_person` describe.
+        relationship: { representative: true, owner: false, title: "COO" }
       )
     end
 
