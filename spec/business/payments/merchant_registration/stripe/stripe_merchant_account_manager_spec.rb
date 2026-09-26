@@ -10851,6 +10851,31 @@ describe StripeMerchantAccountManager, :vcr do
         expect(Stripe::Account).to have_received(:update_external_account).with("acct_ec", "ba_ec", { account_holder_name: "Personal Name" })
         expect(Stripe::Account).not_to have_received(:update)
       end
+
+      it "updates the linked account in place on a full sync when only the holder name differs" do
+        retrieved_external_account["last4"] = "6789"
+        retrieved_external_account["routing_number"] = "AAAAECE1XXX"
+        retrieved_external_account["currency"] = "usd"
+        retrieved_external_account["country"] = "EC"
+
+        expect(subject.update_bank_account(user, passphrase: "1234")).to eq(:synced)
+        expect(Stripe::Account).to have_received(:update_external_account).with("acct_ec", "ba_ec", { account_holder_name: "Personal Name" })
+        expect(Stripe::Account).not_to have_received(:update)
+      end
+
+      it "replaces the linked bank on a full sync when the account details changed" do
+        retrieved_external_account["last4"] = "0000"
+        retrieved_external_account["routing_number"] = "AAAAECE1XXX"
+        retrieved_external_account["currency"] = "usd"
+        retrieved_external_account["country"] = "EC"
+        allow(stripe_account).to receive(:refresh).and_return(stripe_account)
+        allow(subject).to receive(:save_stripe_bank_account_info)
+        allow(subject).to receive(:clear_stale_bank_sync_failure_notes)
+
+        expect(subject.update_bank_account(user, passphrase: "1234")).to eq(:synced)
+        expect(Stripe::Account).to have_received(:update)
+        expect(Stripe::Account).not_to have_received(:update_external_account)
+      end
     end
 
     context "when Stripe already has the local holder name" do
@@ -10930,6 +10955,17 @@ describe StripeMerchantAccountManager, :vcr do
           expect(bank_account.reload.stripe_external_account_id).to eq("ba_ec")
           expect(Stripe::Account).to have_received(:update_external_account).with("acct_ec", "ba_ec", { account_holder_name: "Personal Name" })
           expect(Stripe::Account).not_to have_received(:update)
+        end
+
+        it "does not report success when the restored account is gone before retrieval" do
+          allow(Stripe::Account).to receive(:retrieve_external_account).with("acct_ec", "ba_ec").and_raise(
+            Stripe::InvalidRequestError.new("No such external account: 'ba_ec'", "id", code: "resource_missing", http_status: 404)
+          )
+          expect(subject).not_to receive(:clear_stale_bank_sync_failure_notes)
+
+          expect(subject.update_bank_account(user, passphrase: "1234")).to eq(:bank_link_not_restored)
+          expect(Stripe::Account).not_to have_received(:update)
+          expect(Stripe::Account).not_to have_received(:update_external_account)
         end
       end
     end

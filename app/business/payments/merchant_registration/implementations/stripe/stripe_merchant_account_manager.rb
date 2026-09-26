@@ -1348,23 +1348,32 @@ module StripeMerchantAccountManager
     if ecuador_company?(user) && bank_account.is_a?(EcuadorBankAccount) && bank_account.stripe_external_account_id.blank?
       metadata_bank_id = stripe_account["metadata"]["bank_account_id"]
       if metadata_bank_id == bank_account.external_id
-        repair_result = restore_local_bank_link!(bank_account, stripe_account)
+        repair_result = restore_local_bank_link!(bank_account, stripe_account, clear_failure_notes: false)
         if repair_result == :synced && stripe_account["business_type"] == "company" && bank_account.stripe_connect_account_id == stripe_account.id
           stripe_external_account = retrieve_linked_external_account(stripe_account, bank_account)
-          if stripe_external_account && stripe_external_account["id"] == bank_account.stripe_external_account_id && stripe_external_account["object"] == "bank_account"
+          if retrieved_linked_bank?(bank_account, stripe_external_account)
+            clear_stale_bank_sync_failure_notes(bank_account.user)
             return :noop_metadata_match if stripe_external_account["account_holder_name"] == bank_account.account_holder_full_name
 
-            return update_external_account_holder_name(bank_account, stripe_account, stripe_external_account)
+            return update_identified_ecuador_holder_name(bank_account, stripe_account, stripe_external_account, notify:)
           end
+
+          return :bank_link_not_restored
         end
+        clear_stale_bank_sync_failure_notes(bank_account.user) if repair_result == :synced
         return repair_result unless repair_result == :synced
       end
     end
 
     if stripe_account["metadata"]["bank_account_id"] == bank_account.external_id
-      # A metadata match does not prove the local row is linked, so the no-op must not be reported
-      # before the link is checked. A holder-name mismatch in a sync country still owes an
-      # Account.update, so the restore only runs when no Stripe write is owed.
+      if identified_ecuador_company_bank?(user, bank_account, stripe_account)
+        stripe_external_account = retrieve_linked_external_account(stripe_account, bank_account)
+        if retrieved_linked_bank?(bank_account, stripe_external_account) && !linked_bank_details_replaced?(bank_account, stripe_external_account)
+          return update_identified_ecuador_holder_name(bank_account, stripe_account, stripe_external_account, notify:)
+        end
+      end
+
+      # A metadata match does not prove the local row is linked.
       name_out_of_sync = false
       if account_holder_name_synced_to_stripe?(bank_account.user)
         stripe_external_account = stripe_account["external_accounts"]&.first
@@ -1457,6 +1466,55 @@ module StripeMerchantAccountManager
       force_utf8_encoding({ account_holder_name: bank_account.account_holder_full_name })
     )
     :synced
+  end
+
+  private_class_method
+  def self.identified_ecuador_company_bank?(user, bank_account, stripe_account)
+    ecuador_company?(user) &&
+      bank_account.is_a?(EcuadorBankAccount) &&
+      bank_account.stripe_external_account_id.present? &&
+      stripe_account["business_type"] == "company" &&
+      bank_account.stripe_connect_account_id == stripe_account.id
+  end
+
+  private_class_method
+  def self.retrieved_linked_bank?(bank_account, stripe_external_account)
+    stripe_external_account &&
+      stripe_external_account["id"] == bank_account.stripe_external_account_id &&
+      stripe_external_account["object"] == "bank_account"
+  end
+
+  private_class_method
+  def self.update_identified_ecuador_holder_name(bank_account, stripe_account, stripe_external_account, notify:)
+    return :noop_metadata_match if stripe_external_account["account_holder_name"] == bank_account.account_holder_full_name
+
+    update_external_account_holder_name(bank_account, stripe_account, stripe_external_account)
+  rescue Stripe::InvalidRequestError => e
+    if e.code == "incorrect_account_holder_name"
+      ContactingCreatorMailer.invalid_account_holder_name(bank_account.user.id).deliver_later(queue: "critical") if notify
+      return :invalid_account_holder_name
+    end
+
+    ErrorNotifier.notify(e)
+    :stripe_invalid_request
+  rescue Stripe::StripeError => e
+    Rails.logger.error "Stripe error (#{e.class.name}) request ID #{e.request_id} when updating holder name for bank account #{bank_account&.id}"
+    ErrorNotifier.notify(e)
+    :stripe_unknown_error
+  end
+
+  private_class_method
+  def self.linked_bank_details_replaced?(bank_account, stripe_external_account)
+    remote_last4 = stripe_external_account["last4"].to_s
+    remote_routing = stripe_external_account["routing_number"].to_s
+    remote_currency = stripe_external_account["currency"].to_s
+    remote_country = stripe_external_account["country"].to_s
+    return false if remote_last4.blank? || remote_routing.blank? || remote_currency.blank? || remote_country.blank?
+
+    remote_last4 != bank_account.account_number_last_four.to_s ||
+      remote_routing != bank_account.stripe_external_account_routing_number.to_s ||
+      !remote_currency.casecmp?(bank_account.stripe_external_account_currency.to_s) ||
+      !remote_country.casecmp?(bank_account.stripe_external_account_country.to_s)
   end
 
   private_class_method
@@ -1949,7 +2007,7 @@ module StripeMerchantAccountManager
   # Stripe can name this row in metadata while the local link is missing, and re-sending the details
   # cannot repair that. Links the external account Stripe already holds, never guessing one: last4,
   # routing number, currency and country must each match, or :bank_link_not_restored keeps the failure note.
-  def self.restore_local_bank_link!(bank_account, stripe_account)
+  def self.restore_local_bank_link!(bank_account, stripe_account, clear_failure_notes: true)
     return :noop_metadata_match if bank_account.stripe_bank_account_id.present?
 
     stripe_external_account = matching_stripe_external_account(bank_account, stripe_account)
@@ -1967,7 +2025,7 @@ module StripeMerchantAccountManager
 
     bank_account.reload
     CheckPaymentAddressWorker.perform_async(bank_account.user_id)
-    clear_stale_bank_sync_failure_notes(bank_account.user)
+    clear_stale_bank_sync_failure_notes(bank_account.user) if clear_failure_notes
     :synced
   end
 
