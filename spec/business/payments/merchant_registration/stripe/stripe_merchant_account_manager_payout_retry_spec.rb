@@ -918,6 +918,15 @@ describe StripeMerchantAccountManager do
     end
   end
 
+  # The default stub's representative is blank, which the refill would populate (address included).
+  # These examples are about the diff, so Stripe's person holds what we last synced.
+  def stub_representative_holding_synced_details
+    synced = described_class.send(:person_hash, user.alive_user_compliance_info, passphrase)
+    allow(Stripe::Account).to receive(:list_persons).and_return(
+      "data" => [Stripe::Person.construct_from(synced.merge(id: "person_synced", object: "person"))]
+    )
+  end
+
   describe "forcing an address resync on an automated retry" do
     let(:zip_code) { "94107" }
     let!(:business_compliance_info) { create(:user_compliance_info_business, user:) }
@@ -925,6 +934,7 @@ describe StripeMerchantAccountManager do
     before do
       described_class.create_account(user, passphrase:)
       user.reload
+      stub_representative_holding_synced_details
     end
 
     def captured_address_postal_codes
@@ -973,6 +983,7 @@ describe StripeMerchantAccountManager do
     before do
       described_class.create_account(user, passphrase:)
       user.reload
+      stub_representative_holding_synced_details
     end
 
     it "keeps the postal-code note when the account update succeeds but a later person update fails for an unrelated reason" do

@@ -13767,7 +13767,9 @@ describe StripeMerchantAccountManager, :vcr do
         id: "person_representative",
         object: "person",
         account: stripe_account.id,
-        relationship: { representative: true, owner: true, percent_ownership: 33.33 }
+        # A title Stripe already holds — set through the beneficial-owners UI — which a resync must
+        # leave alone: only a blank one is filled (see the re-created-person context below).
+        relationship: { representative: true, owner: true, percent_ownership: 33.33, title: "COO" }
       )
     end
     let(:co_director_owner) do
@@ -13817,6 +13819,206 @@ describe StripeMerchantAccountManager, :vcr do
         described_class.update_person(user, stripe_account, nil, "1234")
 
         expect(captured_attributes[:relationship]).to eq(representative: true)
+      end
+    end
+
+    context "when Stripe has replaced the representative person with a blank record" do
+      # Stripe's own KYC pass re-verifies an account and replaces the representative person; the
+      # version in the account metadata still names the last version we synced, so the diff comes out
+      # empty and the blank record is never refilled (gumroad-private#2990).
+      let(:blank_representative) do
+        Stripe::Person.construct_from(
+          id: "person_recreated_blank",
+          object: "person",
+          account: stripe_account.id,
+          relationship: { representative: true }
+        )
+      end
+
+      # Same values as the alive record, which is exactly what makes the diff empty.
+      let(:last_synced_user_compliance_info) do
+        info = create(:user_compliance_info_business, user:)
+        info.mark_deleted!
+        info
+      end
+
+      before do
+        allow(Stripe::Account).to receive(:list_persons)
+          .with(stripe_account.id, relationship: { representative: true }, limit: 1)
+          .and_return("data" => [blank_representative])
+      end
+
+      def captured_refill(last_synced_info)
+        captured_attributes = nil
+        expect(Stripe::Account).to receive(:update_person) do |_account_id, _person_id, attributes|
+          captured_attributes = attributes
+          true
+        end
+
+        described_class.update_person(user, stripe_account, last_synced_info.external_id, "1234")
+        captured_attributes
+      end
+
+      it "refills the name, date of birth and address from the seller's compliance record" do
+        captured_attributes = captured_refill(last_synced_user_compliance_info)
+
+        expect(captured_attributes[:first_name]).to eq(user_compliance_info.first_name)
+        expect(captured_attributes[:last_name]).to eq(user_compliance_info.last_name)
+        expect(captured_attributes[:dob]).to eq(
+          day: user_compliance_info.birthday.day,
+          month: user_compliance_info.birthday.month,
+          year: user_compliance_info.birthday.year
+        )
+        expect(captured_attributes[:address]).to include(
+          line1: user_compliance_info.street_address,
+          city: user_compliance_info.city
+        )
+      end
+
+      it "sends the representative title, which no other update path carried" do
+        captured_attributes = captured_refill(last_synced_user_compliance_info)
+
+        expect(captured_attributes[:relationship]).to eq(
+          representative: true,
+          title: user_compliance_info.job_title.presence || StripeMerchantAccountManager::DEFAULT_RELATIONSHIP_TITLE
+        )
+      end
+
+      it "refills the Japanese name fields and a recorded nationality" do
+        user_compliance_info.mark_deleted!
+        create(:user_compliance_info_business, user:, country: "Japan", business_country: "Japan",
+                                               first_name_kanji: "太郎", last_name_kanji: "山田",
+                                               first_name_kana: "タロウ", last_name_kana: "ヤマダ",
+                                               nationality: "JP")
+        last_jp_info = create(:user_compliance_info_business, user:, country: "Japan", business_country: "Japan",
+                                                              first_name_kanji: "太郎", last_name_kanji: "山田",
+                                                              first_name_kana: "タロウ", last_name_kana: "ヤマダ",
+                                                              nationality: "JP")
+        last_jp_info.mark_deleted!
+
+        captured_attributes = captured_refill(last_jp_info)
+
+        expect(captured_attributes[:first_name_kanji]).to eq("太郎")
+        expect(captured_attributes[:last_name_kanji]).to eq("山田")
+        expect(captured_attributes[:first_name_kana]).to eq("タロウ")
+        expect(captured_attributes[:last_name_kana]).to eq("ヤマダ")
+        expect(captured_attributes[:nationality]).to eq("JP")
+      end
+
+      it "refills the address leaves Stripe is missing when the seller changed one of them" do
+        user_compliance_info.mark_deleted!
+        changed = create(:user_compliance_info_business, user:, city: "Portland")
+        marker = create(:user_compliance_info_business, user:, city: "Oakland",
+                                                        street_address: changed.street_address,
+                                                        state: changed.state,
+                                                        zip_code: changed.zip_code,
+                                                        country: changed.country)
+        marker.mark_deleted!
+        held_line = Stripe::Person.construct_from(
+          id: "person_recreated_blank",
+          object: "person",
+          account: stripe_account.id,
+          address: { line1: "Kept By Stripe" },
+          relationship: { representative: true }
+        )
+        allow(Stripe::Account).to receive(:list_persons)
+          .with(stripe_account.id, relationship: { representative: true }, limit: 1)
+          .and_return("data" => [held_line])
+
+        captured_attributes = captured_refill(marker)
+
+        expect(captured_attributes[:address]).to include(city: "Portland", state: changed.state)
+        expect(captured_attributes[:address]).not_to have_key(:line1)
+      end
+
+      it "sends the seller's new address line when Stripe already holds the old one" do
+        user_compliance_info.mark_deleted!
+        changed = create(:user_compliance_info_business, user:, street_address: "100 New Street", city: "Portland")
+        marker = create(:user_compliance_info_business, user:, street_address: "1 Old Street", city: changed.city,
+                                                        state: changed.state, zip_code: changed.zip_code,
+                                                        country: changed.country)
+        marker.mark_deleted!
+        held_line = Stripe::Person.construct_from(
+          id: "person_recreated_blank",
+          object: "person",
+          account: stripe_account.id,
+          address: { line1: "1 Old Street" },
+          relationship: { representative: true }
+        )
+        allow(Stripe::Account).to receive(:list_persons)
+          .with(stripe_account.id, relationship: { representative: true }, limit: 1)
+          .and_return("data" => [held_line])
+
+        captured_attributes = captured_refill(marker)
+
+        expect(captured_attributes[:address]).to include(line1: "100 New Street", city: "Portland")
+      end
+
+      it "seeds only what Stripe's person is missing, leaving the values it holds alone" do
+        partially_populated = Stripe::Person.construct_from(
+          id: "person_recreated_partial",
+          object: "person",
+          account: stripe_account.id,
+          first_name: "Kept By Stripe",
+          dob: { day: 1, month: 1 },
+          address: { line1: "Kept By Stripe", country: "US" },
+          relationship: { representative: true, title: "COO" }
+        )
+        allow(Stripe::Account).to receive(:list_persons)
+          .with(stripe_account.id, relationship: { representative: true }, limit: 1)
+          .and_return("data" => [partially_populated])
+
+        captured_attributes = captured_refill(last_synced_user_compliance_info)
+
+        expect(captured_attributes).not_to have_key(:first_name)
+        expect(captured_attributes[:last_name]).to eq(user_compliance_info.last_name)
+        # `dob` is one value to Stripe, so a missing year sends the whole date.
+        expect(captured_attributes[:dob]).to eq(
+          day: user_compliance_info.birthday.day,
+          month: user_compliance_info.birthday.month,
+          year: user_compliance_info.birthday.year
+        )
+        expect(captured_attributes[:address]).to include(city: user_compliance_info.city)
+        expect(captured_attributes[:address]).not_to have_key(:line1)
+        expect(captured_attributes[:relationship]).to eq(representative: true)
+      end
+
+      it "does not treat the refilled address as a postal re-validation" do
+        allow(Stripe::Account).to receive(:update_person).and_return(true)
+
+        expect(
+          described_class.update_person(user, stripe_account, last_synced_user_compliance_info.external_id, "1234")
+        ).to be false
+      end
+
+      context "with a postal-code rejection outstanding" do
+        before do
+          user.add_payout_note(
+            content: "#{StripeMerchantAccountManager::POSTAL_CODE_FAILURE_NOTE_PREFIX}: postal_code_invalid — The postal code you entered is not valid."
+          )
+        end
+
+        it "refills the rest of the address but leaves the postal code to force_address_resync" do
+          captured_attributes = captured_refill(last_synced_user_compliance_info)
+
+          expect(captured_attributes[:address]).to include(line1: user_compliance_info.street_address, city: user_compliance_info.city)
+          expect(captured_attributes[:address]).not_to have_key(:postal_code)
+          expect(captured_attributes[:first_name]).to eq(user_compliance_info.first_name)
+        end
+
+        it "does not report a postal re-validation when the seller changed only another address field" do
+          user_compliance_info.mark_deleted!
+          changed = create(:user_compliance_info_business, user:, city: "Portland")
+          marker = create(:user_compliance_info_business, user:, city: "Oakland",
+                                                          street_address: changed.street_address,
+                                                          state: changed.state,
+                                                          zip_code: changed.zip_code,
+                                                          country: changed.country)
+          marker.mark_deleted!
+          allow(Stripe::Account).to receive(:update_person).and_return(true)
+
+          expect(described_class.update_person(user, stripe_account, marker.external_id, "1234")).to be false
+        end
       end
     end
 
@@ -14113,7 +14315,12 @@ describe StripeMerchantAccountManager, :vcr do
 
         described_class.update_person(user, stripe_account, nil, "1234", seed_representative_ownership: false)
 
-        expect(captured_attributes[:relationship]).to eq(representative: true)
+        # The title is filled because this person has none (gumroad-private#2990); ownership is what
+        # this example is about and stays untouched.
+        expect(captured_attributes[:relationship]).to eq(
+          representative: true,
+          title: StripeMerchantAccountManager::DEFAULT_RELATIONSHIP_TITLE
+        )
       end
     end
 
@@ -14174,7 +14381,10 @@ describe StripeMerchantAccountManager, :vcr do
         id: "person_representative",
         object: "person",
         account: "acct_stuck_migration",
-        relationship: { representative: true, owner: false }
+        # A title Stripe already holds, so a heal on this account sends the minimal payload these
+        # examples pin. The blank-title case (a person Stripe re-created) is covered in the
+        # `.update_person` describe.
+        relationship: { representative: true, owner: false, title: "COO" }
       )
     end
 
