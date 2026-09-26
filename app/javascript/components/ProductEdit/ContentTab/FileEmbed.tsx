@@ -851,7 +851,7 @@ const FileEmbedNodeView = ({
                     <span>Disable file downloads</span>
                   </div>
                   <small id={`${uid}downloads-disabled`} className="block text-muted">
-                    This file is too large for the in-browser reader
+                    This file is too large for the in-browser reader, so downloads can&apos;t be turned off
                   </small>
                 </div>
               ) : canDisableDownloads ? (
