@@ -13911,6 +13911,8 @@ describe StripeMerchantAccountManager, :vcr do
           object: "person",
           account: stripe_account.id,
           first_name: "Kept By Stripe",
+          dob: { day: 1, month: 1 },
+          address: { line1: "Kept By Stripe", country: "US" },
           relationship: { representative: true, title: "COO" }
         )
         allow(Stripe::Account).to receive(:list_persons)
@@ -13921,6 +13923,15 @@ describe StripeMerchantAccountManager, :vcr do
 
         expect(captured_attributes).not_to have_key(:first_name)
         expect(captured_attributes[:last_name]).to eq(user_compliance_info.last_name)
+        # `dob` is one value to Stripe, so a missing year sends the whole date.
+        expect(captured_attributes[:dob]).to eq(
+          day: user_compliance_info.birthday.day,
+          month: user_compliance_info.birthday.month,
+          year: user_compliance_info.birthday.year
+        )
+        # An address is filled per subfield: the line Stripe holds is not resent.
+        expect(captured_attributes[:address]).to include(city: user_compliance_info.city)
+        expect(captured_attributes[:address]).not_to have_key(:line1)
         expect(captured_attributes[:relationship]).to eq(representative: true)
       end
     end

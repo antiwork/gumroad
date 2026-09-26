@@ -761,6 +761,11 @@ module StripeMerchantAccountManager
   PERSON_REFILL_EXCLUDED_KEYS = (IDENTITY_SUBHASH_KEYS + [:relationship]).freeze
   private_constant :PERSON_REFILL_EXCLUDED_KEYS
 
+  # `dob` is one value to Stripe, so a missing part refills the whole date instead of a partial one
+  # Stripe rejects.
+  PERSON_REFILL_WHOLE_VALUE_KEYS = %i[dob].freeze
+  private_constant :PERSON_REFILL_WHOLE_VALUE_KEYS
+
   # Prefix distinct from the service-agreement note: support needs to tell "we withheld your
   # address" from "Stripe has not taken your tax ID", because only the second is the seller's to
   # fix. Worded around acceptance rather than rejection because the same note also marks an
@@ -1097,20 +1102,30 @@ module StripeMerchantAccountManager
     (current_attributes.keys - PERSON_REFILL_EXCLUDED_KEYS).each do |key|
       next if diff_attributes[key].present?
       next if current_attributes[key].blank?
-      next unless person_field_missing_on_stripe?(stripe_value_at(live_person, key), current_attributes[key])
 
-      diff_attributes[key] = current_attributes[key]
+      refill = refill_values_for(key, stripe_value_at(live_person, key), current_attributes[key])
+      diff_attributes[key] = refill if refill.present?
     end
   end
 
   private_class_method
-  # Missing means Stripe's person carries no value for it. Nested payloads (`dob`, `address`) count as
-  # missing when any part we hold a value for is blank on Stripe's side.
-  def self.person_field_missing_on_stripe?(live_value, current_value)
-    return stripe_value_blank?(live_value) unless current_value.is_a?(Hash)
+  # What Stripe's person is missing, for one payload key, or `{}` when it holds it all. Addresses are
+  # filled per subfield, so a value Stripe already holds is never resent.
+  def self.refill_values_for(key, live_value, current_value)
+    return stripe_value_blank?(live_value) ? current_value : {} unless current_value.is_a?(Hash)
 
-    current_value.any? do |key, nested|
-      nested.present? && person_field_missing_on_stripe?(stripe_value_at(live_value, key), nested)
+    if PERSON_REFILL_WHOLE_VALUE_KEYS.include?(key)
+      missing = current_value.any? do |nested_key, nested|
+        nested.present? && stripe_value_blank?(stripe_value_at(live_value, nested_key))
+      end
+      return missing ? current_value : {}
+    end
+
+    current_value.each_with_object({}) do |(nested_key, nested), refill|
+      next if nested.blank?
+
+      missing = refill_values_for(nested_key, stripe_value_at(live_value, nested_key), nested)
+      refill[nested_key] = missing if missing.present?
     end
   end
 
