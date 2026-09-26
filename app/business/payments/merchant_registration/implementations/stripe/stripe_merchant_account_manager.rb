@@ -165,7 +165,15 @@ module StripeMerchantAccountManager
 
   def self.account_holder_name_synced_to_stripe?(user)
     country_code = user.alive_user_compliance_info&.legal_entity_country_code
-    ACCOUNT_HOLDER_NAME_SYNC_COUNTRIES.include?(country_code)
+    ACCOUNT_HOLDER_NAME_SYNC_COUNTRIES.include?(country_code) || ecuador_company?(user)
+  end
+
+  # EC company holder-name changes go to the existing external account in place rather than
+  # re-attaching the bank like JP/VN/ID. Scoped to EC companies only.
+  def self.ecuador_company?(user)
+    compliance_info = user.alive_user_compliance_info
+    compliance_info.present? && compliance_info.is_business? &&
+      compliance_info.legal_entity_country_code == Compliance::Countries::ECU.alpha2
   end
 
   # Use "CEO" as the default title for all Stripe custom connect account owners for now.
@@ -1301,25 +1309,85 @@ module StripeMerchantAccountManager
     end
   end
 
-  def self.update_bank_account(user, passphrase:, notify: true)
+  def self.update_bank_account(user, passphrase:, notify: true, holder_name_only: false)
     validate_for_update(user)
 
     bank_account = user.active_bank_account
     raise MerchantRegistrationUserNotReadyError.new(user.id, "does not have a bank account") if bank_account.nil?
 
+    if holder_name_only
+      begin
+        stripe_account = Stripe::Account.retrieve(user.stripe_account.charge_processor_merchant_id)
+        if ecuador_company?(user) && bank_account.is_a?(EcuadorBankAccount) && bank_account.stripe_external_account_id.present? && stripe_account["business_type"] == "company" && bank_account.stripe_connect_account_id == stripe_account.id
+          stripe_external_account = retrieve_linked_external_account(stripe_account, bank_account)
+          if stripe_external_account && stripe_external_account["id"] == bank_account.stripe_external_account_id && stripe_external_account["object"] == "bank_account"
+            return :noop_metadata_match if stripe_external_account["account_holder_name"] == bank_account.account_holder_full_name
+
+            return update_external_account_holder_name(bank_account, stripe_account, stripe_external_account)
+          end
+        end
+
+        return report_external_account_mismatch(bank_account, stripe_account)
+      rescue Stripe::InvalidRequestError => e
+        if e.code == "incorrect_account_holder_name"
+          ContactingCreatorMailer.invalid_account_holder_name(user.id).deliver_later(queue: "critical") if notify
+          return :invalid_account_holder_name
+        end
+
+        ErrorNotifier.notify(e)
+        return :stripe_invalid_request
+      rescue Stripe::StripeError => e
+        Rails.logger.error "Stripe error (#{e.class.name}) request ID #{e.request_id} when updating holder name for bank account #{bank_account&.id}"
+        ErrorNotifier.notify(e)
+        return :stripe_unknown_error
+      end
+    end
+
     stripe_account = Stripe::Account.retrieve(user.stripe_account.charge_processor_merchant_id)
+
+    if ecuador_company?(user) && bank_account.is_a?(EcuadorBankAccount) && bank_account.stripe_external_account_id.blank?
+      metadata_bank_id = stripe_account["metadata"]["bank_account_id"]
+      if metadata_bank_id == bank_account.external_id
+        repair_result = restore_local_bank_link!(bank_account, stripe_account, clear_failure_notes: false)
+        if repair_result == :synced && stripe_account["business_type"] == "company" && bank_account.stripe_connect_account_id == stripe_account.id
+          stripe_external_account = retrieve_linked_external_account(stripe_account, bank_account)
+          if retrieved_linked_bank?(bank_account, stripe_external_account)
+            return update_identified_ecuador_holder_name(bank_account, stripe_account, stripe_external_account, notify:)
+          end
+
+          return :bank_link_not_restored
+        end
+        clear_stale_bank_sync_failure_notes(bank_account.user) if repair_result == :synced
+        return repair_result unless repair_result == :synced
+      end
+    end
+
     if stripe_account["metadata"]["bank_account_id"] == bank_account.external_id
-      # A metadata match does not prove the local row is linked, so the no-op must not be reported
-      # before the link is checked. A holder-name mismatch in a sync country still owes an
-      # Account.update, so the restore only runs when no Stripe write is owed.
-      name_out_of_sync = false
-      if account_holder_name_synced_to_stripe?(bank_account.user)
-        stripe_external_account = stripe_account["external_accounts"]&.first
-        stripe_holder_name = stripe_external_account && stripe_external_account["account_holder_name"]
-        name_out_of_sync = stripe_holder_name != bank_account.account_holder_full_name
+      skip_metadata_noop = false
+      if identified_ecuador_company_bank?(user, bank_account, stripe_account)
+        stripe_external_account = retrieve_linked_external_account(stripe_account, bank_account)
+        if retrieved_linked_bank?(bank_account, stripe_external_account)
+          if linked_bank_details_replaced?(bank_account, stripe_external_account)
+            skip_metadata_noop = true
+          else
+            return update_identified_ecuador_holder_name(bank_account, stripe_account, stripe_external_account, notify:)
+          end
+        else
+          skip_metadata_noop = true
+        end
       end
 
-      return restore_local_bank_link!(bank_account, stripe_account) unless name_out_of_sync
+      # A metadata match does not prove the local row is linked.
+      unless skip_metadata_noop
+        name_out_of_sync = false
+        if account_holder_name_synced_to_stripe?(bank_account.user)
+          stripe_external_account = stripe_account["external_accounts"]&.first
+          stripe_holder_name = stripe_external_account && stripe_external_account["account_holder_name"]
+          name_out_of_sync = stripe_holder_name != bank_account.account_holder_full_name
+        end
+
+        return restore_local_bank_link!(bank_account, stripe_account) unless name_out_of_sync
+      end
     end
 
     attributes = bank_account_hash(bank_account, stripe_account:, passphrase:)
@@ -1370,6 +1438,96 @@ module StripeMerchantAccountManager
     Rails.logger.error "Stripe error (#{e.class.name}) request ID #{e.request_id} when updating bank account #{bank_account&.id} for stripe account #{stripe_account&.inspect}"
     ErrorNotifier.notify(e)
     :stripe_unknown_error
+  end
+
+  private_class_method
+  def self.retrieve_linked_external_account(stripe_account, bank_account)
+    Stripe::Account.retrieve_external_account(stripe_account.id, bank_account.stripe_external_account_id)
+  rescue Stripe::InvalidRequestError => e
+    raise unless e.code.to_s == "resource_missing" || e.http_status == 404
+
+    nil
+  end
+
+  private_class_method
+  def self.report_external_account_mismatch(bank_account, stripe_account)
+    ErrorNotifier.notify("Skipped Stripe account_holder_name update for bank_account=#{bank_account.id}: local external account does not match Stripe account #{stripe_account.id}")
+    :external_account_mismatch
+  end
+
+  private_class_method
+  def self.update_external_account_holder_name(bank_account, stripe_account, stripe_external_account)
+    external_account_id = bank_account.stripe_external_account_id
+    unless bank_account.is_a?(EcuadorBankAccount) &&
+        stripe_account["business_type"] == "company" &&
+        bank_account.stripe_connect_account_id == stripe_account.id &&
+        external_account_id.present? &&
+        stripe_external_account&.[]("id") == external_account_id
+      return report_external_account_mismatch(bank_account, stripe_account)
+    end
+
+    Stripe::Account.update_external_account(
+      stripe_account.id,
+      external_account_id,
+      force_utf8_encoding({ account_holder_name: bank_account.account_holder_full_name })
+    )
+    :synced
+  end
+
+  private_class_method
+  def self.identified_ecuador_company_bank?(user, bank_account, stripe_account)
+    ecuador_company?(user) &&
+      bank_account.is_a?(EcuadorBankAccount) &&
+      bank_account.stripe_external_account_id.present? &&
+      stripe_account["business_type"] == "company" &&
+      bank_account.stripe_connect_account_id == stripe_account.id
+  end
+
+  private_class_method
+  def self.retrieved_linked_bank?(bank_account, stripe_external_account)
+    stripe_external_account &&
+      stripe_external_account["id"] == bank_account.stripe_external_account_id &&
+      stripe_external_account["object"] == "bank_account"
+  end
+
+  private_class_method
+  def self.update_identified_ecuador_holder_name(bank_account, stripe_account, stripe_external_account, notify:)
+    if stripe_external_account["account_holder_name"] == bank_account.account_holder_full_name
+      clear_stale_bank_sync_failure_notes(bank_account.user)
+      return :noop_metadata_match
+    end
+
+    result = update_external_account_holder_name(bank_account, stripe_account, stripe_external_account)
+    clear_stale_bank_sync_failure_notes(bank_account.user) if result == :synced
+    result
+  rescue Stripe::InvalidRequestError => e
+    if e.code == "incorrect_account_holder_name"
+      ContactingCreatorMailer.invalid_account_holder_name(bank_account.user.id).deliver_later(queue: "critical") if notify
+      return :invalid_account_holder_name
+    end
+
+    ErrorNotifier.notify(e)
+    :stripe_invalid_request
+  rescue Stripe::StripeError => e
+    Rails.logger.error "Stripe error (#{e.class.name}) request ID #{e.request_id} when updating holder name for bank account #{bank_account&.id}"
+    ErrorNotifier.notify(e)
+    :stripe_unknown_error
+  end
+
+  private_class_method
+  def self.linked_bank_details_replaced?(bank_account, stripe_external_account)
+    [
+      [stripe_external_account["last4"], bank_account.account_number_last_four, false],
+      [stripe_external_account["routing_number"], bank_account.stripe_external_account_routing_number, false],
+      [stripe_external_account["currency"], bank_account.stripe_external_account_currency, true],
+      [stripe_external_account["country"], bank_account.stripe_external_account_country, true]
+    ].any? do |remote, local, case_insensitive|
+      remote = remote.to_s
+      next false if remote.blank?
+
+      local = local.to_s
+      case_insensitive ? !remote.casecmp?(local) : remote != local
+    end
   end
 
   private_class_method
@@ -1862,7 +2020,7 @@ module StripeMerchantAccountManager
   # Stripe can name this row in metadata while the local link is missing, and re-sending the details
   # cannot repair that. Links the external account Stripe already holds, never guessing one: last4,
   # routing number, currency and country must each match, or :bank_link_not_restored keeps the failure note.
-  def self.restore_local_bank_link!(bank_account, stripe_account)
+  def self.restore_local_bank_link!(bank_account, stripe_account, clear_failure_notes: true)
     return :noop_metadata_match if bank_account.stripe_bank_account_id.present?
 
     stripe_external_account = matching_stripe_external_account(bank_account, stripe_account)
@@ -1880,7 +2038,7 @@ module StripeMerchantAccountManager
 
     bank_account.reload
     CheckPaymentAddressWorker.perform_async(bank_account.user_id)
-    clear_stale_bank_sync_failure_notes(bank_account.user)
+    clear_stale_bank_sync_failure_notes(bank_account.user) if clear_failure_notes
     :synced
   end
 
@@ -2779,12 +2937,14 @@ module StripeMerchantAccountManager
     end
   end
 
-  def self.handle_new_bank_account(bank_account)
+  def self.handle_new_bank_account(bank_account, holder_name_only: false)
     return if bank_account.user.has_stripe_account_connected?
     ApplicationRecord.connected_to(role: :writing) do
       return unless user_has_stripe_connect_merchant_account?(bank_account.user)
+      # A name-only job is for the row that was queued. A newer bank has its own sync.
+      return if holder_name_only && bank_account.user.active_bank_account&.id != bank_account.id
 
-      update_bank_account(bank_account.user, passphrase: GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))
+      update_bank_account(bank_account.user, passphrase: GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"), holder_name_only:)
     end
   end
 

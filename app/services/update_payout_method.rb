@@ -240,7 +240,15 @@ class UpdatePayoutMethod
       return { success: true } if current_active.previous_changes["account_holder_full_name"].nil?
 
       if StripeMerchantAccountManager.account_holder_name_synced_to_stripe?(user)
-        after_commit { HandleNewBankAccountWorker.perform_in(5.seconds, current_active.id) }
+        after_commit do
+          # JP/VN/ID keep their existing bank resubmit. Only Ecuador companies update the holder name in place.
+          args = if StripeMerchantAccountManager.ecuador_company?(user)
+            [current_active.id, true]
+          else
+            [current_active.id]
+          end
+          HandleNewBankAccountWorker.perform_in(5.seconds, *args)
+        end
       end
       { success: true }
     end
