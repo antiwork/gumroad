@@ -1427,7 +1427,6 @@ module StripeMerchantAccountManager
     :external_account_mismatch
   end
 
-  # Stripe errors propagate to update_bank_account's rescues.
   private_class_method
   def self.update_external_account_holder_name(bank_account, stripe_account, stripe_external_account)
     external_account_id = bank_account.stripe_external_account_id
