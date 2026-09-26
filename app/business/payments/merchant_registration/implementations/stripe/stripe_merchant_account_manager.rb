@@ -1310,7 +1310,7 @@ module StripeMerchantAccountManager
     end
   end
 
-  def self.update_bank_account(user, passphrase:, notify: true)
+  def self.update_bank_account(user, passphrase:, notify: true, holder_name_only: false)
     validate_for_update(user)
 
     bank_account = user.active_bank_account
@@ -1336,8 +1336,13 @@ module StripeMerchantAccountManager
         return update_external_account_holder_name(bank_account, stripe_account, stripe_external_account)
       end
 
-      # Full bank details would replace a payout account we could not identify.
-      return report_external_account_mismatch(bank_account, stripe_account) if ecuador_bank_replacement_unsafe?(bank_account, stripe_account)
+      # Name-only edits must not replace an unidentified payout account. An empty
+      # Stripe list can still be attached; a new bank row keeps the replacement update.
+      if bank_account.stripe_external_account_id.blank? && ecuador_name_sync_must_not_replace_bank?(bank_account, stripe_account, holder_name_only:)
+        return report_external_account_mismatch(bank_account, stripe_account)
+      end
+    elsif ecuador_company?(user) && holder_name_only && ecuador_name_sync_must_not_replace_bank?(bank_account, stripe_account, holder_name_only:)
+      return report_external_account_mismatch(bank_account, stripe_account)
     end
 
     if stripe_account["metadata"]["bank_account_id"] == bank_account.external_id
@@ -1405,11 +1410,12 @@ module StripeMerchantAccountManager
   end
 
   private_class_method
-  def self.ecuador_bank_replacement_unsafe?(bank_account, stripe_account)
-    return true if bank_account.stripe_connect_account_id.present?
-
+  def self.ecuador_name_sync_must_not_replace_bank?(bank_account, stripe_account, holder_name_only:)
     external_accounts = external_accounts_for_link_match(stripe_account)
-    external_accounts.nil? || external_accounts.any?
+    stripe_holds_unidentified_bank = external_accounts.nil? || external_accounts.any?
+    return false unless stripe_holds_unidentified_bank
+
+    holder_name_only || bank_account.stripe_connect_account_id.present?
   end
 
   private_class_method
@@ -2849,12 +2855,12 @@ module StripeMerchantAccountManager
     end
   end
 
-  def self.handle_new_bank_account(bank_account)
+  def self.handle_new_bank_account(bank_account, holder_name_only: false)
     return if bank_account.user.has_stripe_account_connected?
     ApplicationRecord.connected_to(role: :writing) do
       return unless user_has_stripe_connect_merchant_account?(bank_account.user)
 
-      update_bank_account(bank_account.user, passphrase: GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))
+      update_bank_account(bank_account.user, passphrase: GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"), holder_name_only:)
     end
   end
 

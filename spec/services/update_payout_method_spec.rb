@@ -119,6 +119,7 @@ describe UpdatePayoutMethod do
           end.to change { HandleNewBankAccountWorker.jobs.size }.by(1)
 
           expect(bank_account.reload.account_holder_full_name).to eq("Personal Name")
+          expect(HandleNewBankAccountWorker.jobs.last["args"]).to eq([bank_account.id, true])
         end
 
         it "does not enqueue HandleNewBankAccountWorker when the seller is an individual" do

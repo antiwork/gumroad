@@ -19,9 +19,9 @@ class HandleNewBankAccountWorker
     end
   end
 
-  def perform(bank_account_id)
+  def perform(bank_account_id, holder_name_only = false)
     bank_account = BankAccount.find(bank_account_id)
-    result = StripeMerchantAccountManager.handle_new_bank_account(bank_account)
+    result = StripeMerchantAccountManager.handle_new_bank_account(bank_account, holder_name_only:)
     raise "Stripe bank sync failed with unknown error for bank_account=#{bank_account_id}" if result == :stripe_unknown_error
   end
 end

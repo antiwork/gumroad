@@ -10920,8 +10920,18 @@ describe StripeMerchantAccountManager, :vcr do
       it "does not replace the payout account" do
         allow(ErrorNotifier).to receive(:notify)
 
-        expect(subject.update_bank_account(user, passphrase: "1234")).to eq(:external_account_mismatch)
+        expect(subject.update_bank_account(user, passphrase: "1234", holder_name_only: true)).to eq(:external_account_mismatch)
         expect(Stripe::Account).not_to have_received(:update)
+        expect(Stripe::Account).not_to have_received(:update_external_account)
+      end
+
+      it "still replaces the bank when the seller submits a new account" do
+        allow(stripe_account).to receive(:refresh).and_return(stripe_account)
+        allow(subject).to receive(:save_stripe_bank_account_info)
+        allow(subject).to receive(:clear_stale_bank_sync_failure_notes)
+
+        expect(subject.update_bank_account(user, passphrase: "1234")).to eq(:synced)
+        expect(Stripe::Account).to have_received(:update)
         expect(Stripe::Account).not_to have_received(:update_external_account)
       end
 

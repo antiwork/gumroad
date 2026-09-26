@@ -240,7 +240,7 @@ class UpdatePayoutMethod
       return { success: true } if current_active.previous_changes["account_holder_full_name"].nil?
 
       if StripeMerchantAccountManager.account_holder_name_synced_to_stripe?(user)
-        after_commit { HandleNewBankAccountWorker.perform_in(5.seconds, current_active.id) }
+        after_commit { HandleNewBankAccountWorker.perform_in(5.seconds, current_active.id, true) }
       end
       { success: true }
     end
