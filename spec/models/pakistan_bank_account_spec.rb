@@ -117,6 +117,17 @@ describe PakistanBankAccount do
       end
     end
 
+    it "rejects every unroutable bank code, in either case" do
+      %w[CLRB FMFB FNJA JAZZ JCMA MMBL NAYA NRSP SADA TMFB TRWI UMBL UMFB ZTBL].each do |code|
+        [pk_iban(code), pk_iban(code).downcase].each do |iban|
+          bank_account = build(:pakistan_bank_account, account_number: iban)
+
+          expect(bank_account).not_to be_valid
+          expect(bank_account.errors.full_messages.to_sentence).to start_with("We can't send payouts to this IBAN."), iban
+        end
+      end
+    end
+
     it "accepts a bank IBAN whose BIC names a different bank" do
       expect(build(:pakistan_bank_account, account_number: pk_iban("BAHL"), bank_code: "HABBPKKA")).to be_valid
     end

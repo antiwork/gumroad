@@ -8,7 +8,8 @@ class PakistanBankAccount < BankAccount
 
   # IBAN bank codes (characters 5-8) that Stripe's PK directory cannot route: mobile wallets and
   # microfinance banks. Stripe picks the bank from this segment, not from the BIC, so no BIC the
-  # seller enters can make one of these attach.
+  # seller enters can make one of these attach. Verified with live Stripe tokens 2026-09; recheck
+  # before adding a code, and drop one if Stripe starts routing it.
   UNROUTABLE_IBAN_BANK_CODES = %w[CLRB FMFB FNJA JAZZ JCMA MMBL NAYA NRSP SADA TMFB TRWI UMBL UMFB ZTBL].freeze
   private_constant :UNROUTABLE_IBAN_BANK_CODES
 
