@@ -486,7 +486,7 @@ const oversizedEpub: FileEntry = {
   file_size: 40 * 1024 * 1024,
 };
 
-it("offers no download switch when the server says the file is not eligible", async () => {
+it("shows the download switch off and says why when the server says the file is not eligible", async () => {
   const file: FileEntry = {
     ...oversizedEpub,
     can_disable_downloads: false,
@@ -501,10 +501,12 @@ it("offers no download switch when the server says the file is not eligible", as
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
   });
 
-  expect(screen.queryByText(/Disable file downloads/u)).toBeNull();
+  const downloadSwitch = screen.getByRole("switch", { name: /too large for the in-browser reader/u });
+  expect((downloadSwitch as HTMLInputElement).disabled).toBe(true);
+  expect(screen.queryByText(/buyers read it in the browser instead/u)).toBeNull();
 });
 
-it("holds the download switch back for an oversized EPUB picked but not yet saved", async () => {
+it("shows the same switch off for an oversized EPUB picked but not yet saved", async () => {
   // Unsaved files carry no server answer, so the editor has to apply the reader's size limit itself.
   context.filesById = new Map<string, FileEntry>([[FILE_ID, oversizedEpub]]);
 
@@ -515,5 +517,7 @@ it("holds the download switch back for an oversized EPUB picked but not yet save
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
   });
 
-  expect(screen.queryByText(/Disable file downloads/u)).toBeNull();
+  const downloadSwitch = screen.getByRole("switch", { name: /too large for the in-browser reader/u });
+  expect((downloadSwitch as HTMLInputElement).disabled).toBe(true);
 });
+
