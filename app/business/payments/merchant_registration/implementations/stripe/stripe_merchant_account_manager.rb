@@ -170,7 +170,6 @@ module StripeMerchantAccountManager
 
   # EC company holder-name changes go to the existing external account in place rather than
   # re-attaching the bank like JP/VN/ID. Scoped to EC companies only.
-  private_class_method
   def self.ecuador_company?(user)
     compliance_info = user.alive_user_compliance_info
     compliance_info.present? && compliance_info.is_business? &&
