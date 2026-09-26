@@ -9,8 +9,13 @@ class HandleNewBankAccountWorker
     bank_account = BankAccount.find_by(id: bank_account_id)
     next unless bank_account
 
-    content = "Stripe bank sync failed and exhausted Sidekiq retries for bank_account_id=" \
-              "#{bank_account_id}. See Sentry for the underlying Stripe error."
+    holder_name_only = msg["args"][1]
+    content = if holder_name_only
+      "Stripe holder-name sync exhausted retries for bank_account_id=#{bank_account_id}. See Sentry for the underlying Stripe error."
+    else
+      "Stripe bank sync failed and exhausted Sidekiq retries for bank_account_id=" \
+        "#{bank_account_id}. See Sentry for the underlying Stripe error."
+    end
     begin
       bank_account.user.add_payout_note(content:, seller_visible: false)
     rescue => e

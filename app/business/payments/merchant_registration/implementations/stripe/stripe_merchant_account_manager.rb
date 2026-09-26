@@ -1315,9 +1315,9 @@ module StripeMerchantAccountManager
     bank_account = user.active_bank_account
     raise MerchantRegistrationUserNotReadyError.new(user.id, "does not have a bank account") if bank_account.nil?
 
-    stripe_account = Stripe::Account.retrieve(user.stripe_account.charge_processor_merchant_id)
     if holder_name_only
       begin
+        stripe_account = Stripe::Account.retrieve(user.stripe_account.charge_processor_merchant_id)
         if ecuador_company?(user) && bank_account.is_a?(EcuadorBankAccount) && bank_account.stripe_external_account_id.present? && stripe_account["business_type"] == "company" && bank_account.stripe_connect_account_id == stripe_account.id
           stripe_external_account = retrieve_linked_external_account(stripe_account, bank_account)
           if stripe_external_account && stripe_external_account["id"] == bank_account.stripe_external_account_id && stripe_external_account["object"] == "bank_account"
@@ -1342,6 +1342,8 @@ module StripeMerchantAccountManager
         return :stripe_unknown_error
       end
     end
+
+    stripe_account = Stripe::Account.retrieve(user.stripe_account.charge_processor_merchant_id)
 
     if ecuador_company?(user) && bank_account.is_a?(EcuadorBankAccount) && bank_account.stripe_external_account_id.blank?
       metadata_bank_id = stripe_account["metadata"]["bank_account_id"]
