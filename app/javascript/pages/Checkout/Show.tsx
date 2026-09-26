@@ -31,6 +31,7 @@ import {
   buildBuyerCurrencyQuoteRecoveryDeps,
   recoverFromInvalidBuyerCurrencyQuote as recoverBuyerCurrencyQuote,
   useLatestCartGetter,
+  withRefreshedOfferCodes,
 } from "$app/components/Checkout/buyerCurrencyQuoteRecovery";
 import {
   type CartItem,
@@ -66,6 +67,7 @@ import {
   createReducer,
   getConfiguredDirectListedCurrency,
   getCustomFieldKey,
+  getLoadedDirectListedAmountToken,
   getSelectableDirectListedCurrency,
   getTotalPriceFromProducts,
   type Gift,
@@ -461,6 +463,7 @@ const CheckoutIndexPage = () => {
         // The server renders the recurring UPI Element from the selected listed amount before
         // discounts. Keep that basis stable when a limited discount changes only today's charge.
         listedPriceCents: item.price * item.quantity,
+        listedChargePriceCents: price,
         renewalPriceCents: item.recurrence ? Math.round(convertToUSD(item, renewalPrice)) : null,
         payInInstallments: item.pay_in_installments,
         installmentPlan: item.product.installment_plan
@@ -499,11 +502,11 @@ const CheckoutIndexPage = () => {
 
   // Recovers a checkout whose local-currency quote the server refused at charge time. The
   // reasoning lives with the helper in buyerCurrencyQuoteRecovery.ts.
-  function recoverFromInvalidBuyerCurrencyQuote(lineItems: CartPurchaseResult["lineItems"]) {
+  function recoverFromInvalidBuyerCurrencyQuote(lineItems: CartPurchaseResult["lineItems"], cart = getLatestCart()) {
     recoverBuyerCurrencyQuote({
       lineItems,
       ...buildBuyerCurrencyQuoteRecoveryDeps({
-        getLatestCart,
+        getLatestCart: () => cart,
         setCart: (cart) => cartForm.setData({ cart }),
         getProducts,
         dispatchUpdateProducts: (products) => dispatch({ type: "update-products", products }),
@@ -572,6 +575,7 @@ const CheckoutIndexPage = () => {
                 willSaveCard: state.willSaveCard,
                 paymentMethod: state.paymentMethod,
               }),
+        directListedAmountToken: getLoadedDirectListedAmountToken(state),
         lineItems: (() => {
           // Precompute each line's discounted price bases once so the tip can be allocated
           // across the whole cart in a single pass. The per-line tips must sum exactly to
@@ -697,7 +701,9 @@ const CheckoutIndexPage = () => {
       ) {
         showAlert(BUYER_CURRENCY_QUOTE_INVALID_MESSAGE, "warning");
         dispatch({ type: "cancel" });
-        recoverFromInvalidBuyerCurrencyQuote(result.lineItems);
+        const refreshedCart = withRefreshedOfferCodes(getLatestCart(), result.offerCodes);
+        cartForm.setData({ cart: refreshedCart });
+        recoverFromInvalidBuyerCurrencyQuote(result.lineItems, refreshedCart);
         return;
       }
 

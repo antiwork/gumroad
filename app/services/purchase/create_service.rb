@@ -140,7 +140,7 @@ class Purchase::CreateService < Purchase::BaseService
         raise Purchase::PurchaseInvalid, purchase.upsell_purchase.errors.first.message unless purchase.upsell_purchase.valid?
       end
 
-      quoted_listed_rate = buyer_currency_quote_rate_hint(purchase)
+      locked_listed_rate = listed_currency_rate_hint(purchase)
 
       if params[:tip_cents].present? && params[:tip_cents] > 0
         raise Purchase::PurchaseInvalid, "Tip is not allowed for this product" unless purchase.seller.tipping_enabled? && product.not_is_tiered_membership?
@@ -153,14 +153,14 @@ class Purchase::CreateService < Purchase::BaseService
         # buyer_currency_quote_invalid.
         purchase.build_tip(
           value_cents: params[:tip_cents],
-          value_usd_cents: get_usd_cents(product.price_currency_type, params[:tip_cents], rate: quoted_listed_rate)
+          value_usd_cents: get_usd_cents(product.price_currency_type, params[:tip_cents], rate: locked_listed_rate)
         )
       end
       purchase.buyer_currency_quote_canonical_components = buyer_currency_quote_canonical_components_hint(purchase)
 
       validate_bundle_products
 
-      purchase.prepare_for_charge!(locked_rate: quoted_listed_rate)
+      purchase.prepare_for_charge!(locked_rate: locked_listed_rate)
 
       purchase.build_purchase_wallet_type(wallet_type: params[:wallet_type]) if params[:wallet_type].present?
 
@@ -219,6 +219,10 @@ class Purchase::CreateService < Purchase::BaseService
     # Only the Stripe-verified path may lock listed conversion to the leftover quote rate.
     # PayPal/Braintree discard the signed components, so a rate hint here would reprice
     # those charges at Stripe's stale FX instead of the legacy live conversion.
+    def listed_currency_rate_hint(purchase)
+      buyer_currency_quote_rate_hint(purchase) || direct_listed_currency_rate_hint(purchase)
+    end
+
     def buyer_currency_quote_rate_hint(purchase)
       return if params[:buyer_currency_quote].blank?
       return unless buyer_currency_quote_components_verified_path?
@@ -230,6 +234,17 @@ class Purchase::CreateService < Purchase::BaseService
         permalink: purchase.link.unique_permalink,
         currency: purchase.link.price_currency_type
       )
+    end
+
+    def direct_listed_currency_rate_hint(purchase)
+      return if params[:buyer_currency_quote].present?
+      return unless params[:payment_details_source] == PurchasePaymentFlow::PAYMENT_ELEMENT
+      return unless purchase.link.price_currency_type.to_s.downcase != Currency::USD
+
+      # Order::CreateService only supplies this as a BigDecimal after verifying the signed
+      # payment-method-list token; a raw string here is client input and must not set the rate.
+      rate = params[:direct_listed_currency_rate]
+      rate.to_s("F") if rate.is_a?(BigDecimal) && rate.positive?
     end
 
     def buyer_currency_quote_canonical_components_hint(purchase)
