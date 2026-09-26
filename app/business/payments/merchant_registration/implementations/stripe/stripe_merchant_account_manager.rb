@@ -757,14 +757,11 @@ module StripeMerchantAccountManager
   private_constant :IDENTITY_SUBHASH_KEYS
 
   # Person-payload keys a refill must never seed: the identifiers are gated on the account country
-  # further down `update_person`, and `relationship` carries ownership/title, which the caller sets.
-  PERSON_REFILL_EXCLUDED_KEYS = (IDENTITY_SUBHASH_KEYS + [:relationship]).freeze
+  # further down `update_person`, `relationship` carries ownership/title which the caller sets, and
+  # the address is held back for everything except `force_address_resync` — that hold-back is what
+  # keeps a rejected postal code's note honest (`update_account`'s `address_submitted?`).
+  PERSON_REFILL_EXCLUDED_KEYS = (IDENTITY_SUBHASH_KEYS + ADDRESS_SUBHASH_KEYS + [:relationship]).freeze
   private_constant :PERSON_REFILL_EXCLUDED_KEYS
-
-  # `dob` is one value to Stripe, so a missing part refills the whole date instead of a partial one
-  # Stripe rejects.
-  PERSON_REFILL_WHOLE_VALUE_KEYS = %i[dob].freeze
-  private_constant :PERSON_REFILL_WHOLE_VALUE_KEYS
 
   # Prefix distinct from the service-agreement note: support needs to tell "we withheld your
   # address" from "Stripe has not taken your tax ID", because only the second is the seller's to
@@ -1100,40 +1097,24 @@ module StripeMerchantAccountManager
   def self.seed_attributes_missing_from_stripe_person!(diff_attributes, current_attributes, stripe_person)
     live_person = stripe_person.to_h
     (current_attributes.keys - PERSON_REFILL_EXCLUDED_KEYS).each do |key|
-      current = current_attributes[key]
-      next if current.blank?
+      next if diff_attributes[key].present?
+      next if current_attributes[key].blank?
 
-      existing = diff_attributes[key]
-      # A changed address leaf is already a non-empty hash. Skipping the key would leave the other
-      # blank leaves unsent. A scalar already in the diff is the whole value.
-      next if existing.present? && (!existing.is_a?(Hash) || PERSON_REFILL_WHOLE_VALUE_KEYS.include?(key))
-
-      refill = refill_values_for(key, stripe_value_at(live_person, key), current)
-      next if refill.blank?
-
-      diff_attributes[key] = existing.is_a?(Hash) ? refill.merge(existing) : refill
+      refill = refill_values_for(stripe_value_at(live_person, key), current_attributes[key])
+      diff_attributes[key] = refill if refill.present?
     end
   end
 
   private_class_method
-  # What Stripe's person is missing, for one payload key, or `{}` when it holds it all. Addresses are
-  # filled per subfield, so a value Stripe already holds is never resent.
-  def self.refill_values_for(key, live_value, current_value)
+  # What Stripe's person is missing, or `{}` when it holds it. A nested payload (`dob`) is one value
+  # to Stripe, so a missing part refills the whole date rather than a partial one it rejects.
+  def self.refill_values_for(live_value, current_value)
     return stripe_value_blank?(live_value) ? current_value : {} unless current_value.is_a?(Hash)
 
-    if PERSON_REFILL_WHOLE_VALUE_KEYS.include?(key)
-      missing = current_value.any? do |nested_key, nested|
-        nested.present? && stripe_value_blank?(stripe_value_at(live_value, nested_key))
-      end
-      return missing ? current_value : {}
+    missing = current_value.any? do |nested_key, nested|
+      nested.present? && stripe_value_blank?(stripe_value_at(live_value, nested_key))
     end
-
-    current_value.each_with_object({}) do |(nested_key, nested), refill|
-      next if nested.blank?
-
-      missing = refill_values_for(nested_key, stripe_value_at(live_value, nested_key), nested)
-      refill[nested_key] = missing if missing.present?
-    end
+    missing ? current_value : {}
   end
 
   private_class_method
