@@ -728,8 +728,6 @@ Rails.application.routes.draw do
       resource :billing, only: %i[show update], controller: "billing"
       resources :authorized_applications, only: :index
       resource :payments, only: %i[show update] do
-        resource :verify_document, only: :create, controller: "payments/verify_document"
-        resource :verify_identity, only: %i[show create], controller: "payments/verify_identity"
         get :remediation
         get :verify_stripe_remediation
         post :set_country
@@ -830,16 +828,6 @@ Rails.application.routes.draw do
       end
     end
 
-    # service charges
-    resources :service_charges, only: :create do
-      member do
-        post :confirm
-        get :generate_service_charge_invoice
-        post :resend_receipt
-        post :send_invoice
-      end
-    end
-
     # Two-Factor Authentication
     resource :two_factor_authentication, path: "two-factor", controller: "two_factor_authentication", only: [:show, :create] do
       get :verify
@@ -891,8 +879,6 @@ Rails.application.routes.draw do
     resources :licenses, only: [:update]
 
     post "/preorders/:id/charge_preorder", to: "purchases#charge_preorder", as: "charge_preorder"
-
-    resources :attachments, only: [:create]
 
     # users
     get "/users/current_user_data", to: "users#current_user_data", as: :current_user_data
@@ -1254,7 +1240,8 @@ Rails.application.routes.draw do
             resource :recipient_count, only: [:show], controller: "installments/recipient_counts", as: :installment_recipient_count
           end
         end
-        resources :products, only: [:show] do
+        # No product CRUD: this only namespaces the product-scoped endpoints below.
+        resources :products, only: [] do
           resources :product_posts, only: [:index]
           resources :existing_product_files, only: [:index]
           resource :receipt_preview, only: [:show]
@@ -1345,7 +1332,6 @@ Rails.application.routes.draw do
     get "/:username/landing/products", to: "users#landing_products", as: :user_landing_products, format: false
     get "/:username/follow", to: "followers#new", as: "follow_user_page"
     get "/:username/p/:slug", to: "posts#show", as: :view_post
-    get "/:username/posts_paginated", to: "users/posts#paginated", as: "user_posts_paginated"
     get "/:username/posts", to: redirect("/%{username}")
     get "/:username/subscribe_preview", to: "users#subscribe_preview", as: :user_subscribe_preview
     get "/:username/updates", to: redirect("/%{username}/posts")
@@ -1414,7 +1400,6 @@ Rails.application.routes.draw do
     end
     post "/posts/:id/increment_post_views", to: "posts#increment_post_views"
     get "/p/:slug", to: "posts#show", as: :custom_domain_view_post
-    get "/:username/posts_paginated", to: "users/posts#paginated"
     get "/posts", to: redirect("/")
     get "/posts/:post_id/comments", to: "comments#index", as: :custom_domain_post_comments
     post "/posts/:post_id/comments", to: "comments#create", as: :custom_domain_create_post_comment
