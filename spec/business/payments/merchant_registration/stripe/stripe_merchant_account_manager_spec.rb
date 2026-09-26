@@ -13982,6 +13982,14 @@ describe StripeMerchantAccountManager, :vcr do
         expect(captured_attributes[:address]).not_to have_key(:line1)
         expect(captured_attributes[:relationship]).to eq(representative: true)
       end
+
+      it "does not treat the refilled address as a postal re-validation" do
+        allow(Stripe::Account).to receive(:update_person).and_return(true)
+
+        expect(
+          described_class.update_person(user, stripe_account, last_synced_user_compliance_info.external_id, "1234")
+        ).to be false
+      end
     end
 
     context "when Stripe returns no persons for the account" do

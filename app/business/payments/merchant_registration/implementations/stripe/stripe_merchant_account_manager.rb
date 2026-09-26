@@ -1008,6 +1008,7 @@ module StripeMerchantAccountManager
       diff_attributes = get_diff_attributes(current_attributes, last_attributes)
     end
 
+    address_submitted_before_refill = ADDRESS_SUBHASH_KEYS.any? { |address_key| diff_attributes[address_key].present? }
     # Stripe can replace the person outright (its KYC pass, or our ownership editor) with a blank
     # record while the metadata still names the last version we synced, so the diff above stays
     # unchanged and the requirements are never met. Refill what the live person is missing.
@@ -1072,7 +1073,9 @@ module StripeMerchantAccountManager
     end
     clear_identity_rejection_notes(user, note_ids: resolved_note_ids)
     submit_person_identity_fields_in_isolation(user, stripe_account, stripe_person, person_identity_attributes, account_country)
-    ADDRESS_SUBHASH_KEYS.any? { |address_key| diff_attributes[address_key].present? }
+    # A refill must not clear a postal-code note. Only an address the seller changed, or a forced resync, did.
+    ADDRESS_SUBHASH_KEYS.any? { |address_key| diff_attributes[address_key].present? } &&
+      (address_submitted_before_refill || force_address_resync)
   end
 
   # The `update_person` counterpart of `submit_identity_fields_in_isolation`. Same contract: the
