@@ -356,6 +356,18 @@ describe UrlRedirect do
       redirect.product_files_archives.alive.each { _1.update_columns(updated_at: 8.days.ago) }
       expect { redirect.bundle_archive }.to change { entity_archive_count }.by(1)
     end
+
+    it "follows the failed-archive retry rules when the latest attempt failed after an older too-large one" do
+      add_member_files
+      bundle_purchase.create_artifacts_and_send_receipt!
+      redirect = bundle_purchase.url_redirect
+      bundle_files = redirect.bundle_archive_product_files
+      3.times { redirect.product_files_archives.create!(product_files: bundle_files).mark_too_large! }
+      redirect.product_files_archives.alive.each { _1.update_columns(updated_at: 2.days.ago) }
+      redirect.product_files_archives.create!(product_files: bundle_files).mark_failed!
+
+      expect { redirect.bundle_archive }.to change { entity_archive_count }.by(1)
+    end
   end
 
   describe "streaming" do

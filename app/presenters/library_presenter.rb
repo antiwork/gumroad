@@ -233,7 +233,7 @@ class LibraryPresenter
           if matching.any? && matching.none? { |existing| existing.queueing? || existing.in_progress? }
             # Retrying is over, so name the reason instead of dropping the row: a vanished ZIP block
             # reads to the buyer as a missing file.
-            zip_unavailable_reason = matching.any?(&:too_large?) ? "too_large" : "failed"
+            zip_unavailable_reason = matching.max_by(&:id).too_large? ? "too_large" : "failed"
           end
         end
 

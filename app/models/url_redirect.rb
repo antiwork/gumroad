@@ -220,12 +220,13 @@ class UrlRedirect < ApplicationRecord
       return if failed_archives.size >= BUNDLE_ARCHIVE_MAX_FAILED_ATTEMPTS
 
       # Too-large archives stay off the failure budget so a raised cap can heal the bundle, but their
-      # retry window doubles per attempt up to a week: the same file set gives the same rejection, so a
-      # page visit must not re-enqueue a doomed build.
+      # retry window doubles per attempt up to a week. Only a too-large LATEST attempt picks that window,
+      # so an old oversized row cannot hold back a later build that failed for another reason.
       too_large_archives = matching_archives.select(&:too_large?)
+      latest_attempt = (failed_archives + too_large_archives).max_by(&:id)
       latest_attempt_at = (failed_archives + too_large_archives).map(&:updated_at).compact.max
       if latest_attempt_at.present?
-        retry_cooldown_seconds = if too_large_archives.any?
+        retry_cooldown_seconds = if latest_attempt&.too_large?
           [BUNDLE_ARCHIVE_FAILED_RETRY_COOLDOWN.to_i * 2**(too_large_archives.size - 1), BUNDLE_ARCHIVE_MAX_TOO_LARGE_RETRY_COOLDOWN.to_i].min
         elsif failed_archives.size >= 2
           BUNDLE_ARCHIVE_FAILED_RETRY_COOLDOWN.to_i
