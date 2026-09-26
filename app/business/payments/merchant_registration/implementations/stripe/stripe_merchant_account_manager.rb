@@ -1318,37 +1318,39 @@ module StripeMerchantAccountManager
 
     stripe_account = Stripe::Account.retrieve(user.stripe_account.charge_processor_merchant_id)
     linked_external_account_missing = false
-    if ecuador_company?(user) && bank_account.is_a?(EcuadorBankAccount)
-      if bank_account.stripe_external_account_id.blank?
-        metadata_bank_id = stripe_account["metadata"]["bank_account_id"]
-        if metadata_bank_id == bank_account.external_id
-          repair_result = restore_local_bank_link!(bank_account, stripe_account)
-          return repair_result unless repair_result == :synced
-        end
-      end
-
-      if bank_account.stripe_external_account_id.present?
-        return report_external_account_mismatch(bank_account, stripe_account) unless stripe_account["business_type"] == "company" && bank_account.stripe_connect_account_id == stripe_account.id
-
+    if ecuador_company?(user) && bank_account.is_a?(EcuadorBankAccount) && holder_name_only
+      if bank_account.stripe_external_account_id.present? && stripe_account["business_type"] == "company" && bank_account.stripe_connect_account_id == stripe_account.id
         stripe_external_account = retrieve_linked_external_account(stripe_account, bank_account)
-        if stripe_external_account
-          return report_external_account_mismatch(bank_account, stripe_account) unless stripe_external_account["id"] == bank_account.stripe_external_account_id && stripe_external_account["object"] == "bank_account"
+        if stripe_external_account && stripe_external_account["id"] == bank_account.stripe_external_account_id && stripe_external_account["object"] == "bank_account"
           return :noop_metadata_match if stripe_external_account["account_holder_name"] == bank_account.account_holder_full_name
 
           return update_external_account_holder_name(bank_account, stripe_account, stripe_external_account)
-        elsif holder_name_only
-          return report_external_account_mismatch(bank_account, stripe_account)
-        else
-          linked_external_account_missing = true
         end
       end
 
-      # A name-only edit never sends full bank details. A new bank row still uses the replacement update.
-      if bank_account.stripe_external_account_id.blank? && ecuador_name_sync_must_not_replace_bank?(bank_account, stripe_account, holder_name_only:)
-        return report_external_account_mismatch(bank_account, stripe_account)
-      end
-    elsif ecuador_company?(user) && holder_name_only && ecuador_name_sync_must_not_replace_bank?(bank_account, stripe_account, holder_name_only:)
       return report_external_account_mismatch(bank_account, stripe_account)
+    end
+
+    if ecuador_company?(user) && bank_account.is_a?(EcuadorBankAccount) && bank_account.stripe_external_account_id.blank?
+      metadata_bank_id = stripe_account["metadata"]["bank_account_id"]
+      if metadata_bank_id == bank_account.external_id
+        repair_result = restore_local_bank_link!(bank_account, stripe_account)
+        return repair_result unless repair_result == :synced
+      end
+    end
+
+    if ecuador_company?(user) && bank_account.is_a?(EcuadorBankAccount) && bank_account.stripe_external_account_id.present?
+      return report_external_account_mismatch(bank_account, stripe_account) unless stripe_account["business_type"] == "company" && bank_account.stripe_connect_account_id == stripe_account.id
+
+      stripe_external_account = retrieve_linked_external_account(stripe_account, bank_account)
+      if stripe_external_account
+        return report_external_account_mismatch(bank_account, stripe_account) unless stripe_external_account["id"] == bank_account.stripe_external_account_id && stripe_external_account["object"] == "bank_account"
+        return :noop_metadata_match if stripe_external_account["account_holder_name"] == bank_account.account_holder_full_name
+
+        return update_external_account_holder_name(bank_account, stripe_account, stripe_external_account)
+      else
+        linked_external_account_missing = true
+      end
     end
 
     if !linked_external_account_missing && stripe_account["metadata"]["bank_account_id"] == bank_account.external_id
@@ -1413,16 +1415,6 @@ module StripeMerchantAccountManager
     Rails.logger.error "Stripe error (#{e.class.name}) request ID #{e.request_id} when updating bank account #{bank_account&.id} for stripe account #{stripe_account&.inspect}"
     ErrorNotifier.notify(e)
     :stripe_unknown_error
-  end
-
-  private_class_method
-  def self.ecuador_name_sync_must_not_replace_bank?(bank_account, stripe_account, holder_name_only:)
-    return true if holder_name_only
-
-    external_accounts = external_accounts_for_link_match(stripe_account)
-    return false if external_accounts&.empty?
-
-    bank_account.stripe_connect_account_id.present?
   end
 
   private_class_method

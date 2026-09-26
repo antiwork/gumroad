@@ -11025,6 +11025,17 @@ describe StripeMerchantAccountManager, :vcr do
         expect(Stripe::Account).not_to have_received(:update)
         expect(Stripe::Account).not_to have_received(:update_external_account)
       end
+
+      it "does not link a name-only edit when metadata names the row but not a Stripe account" do
+        allow(ErrorNotifier).to receive(:notify)
+        bank_account.update_columns(stripe_bank_account_id: nil)
+        stripe_account["metadata"]["bank_account_id"] = bank_account.external_id
+
+        expect(subject.update_bank_account(user, passphrase: "1234", holder_name_only: true)).to eq(:external_account_mismatch)
+        expect(bank_account.reload.stripe_external_account_id).to be_nil
+        expect(Stripe::Account).not_to have_received(:update)
+        expect(Stripe::Account).not_to have_received(:update_external_account)
+      end
     end
 
     context "when a name-only job is stale" do
