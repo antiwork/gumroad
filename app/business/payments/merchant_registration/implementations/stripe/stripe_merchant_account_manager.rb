@@ -756,6 +756,12 @@ module StripeMerchantAccountManager
   IDENTITY_SUBHASH_KEYS = %i[id_number ssn_last_4 tax_id].freeze
   private_constant :IDENTITY_SUBHASH_KEYS
 
+  # Fields on the representative person whose values our own compliance record owns, used to refill a
+  # person record Stripe re-created empty. Deliberately excludes `IDENTITY_SUBHASH_KEYS`: those are
+  # gated on the account country further down `update_person` and must not be re-seeded here.
+  PERSON_FIELDS_OWNED_BY_COMPLIANCE_RECORD = %i[first_name last_name dob address].freeze
+  private_constant :PERSON_FIELDS_OWNED_BY_COMPLIANCE_RECORD
+
   # Prefix distinct from the service-agreement note: support needs to tell "we withheld your
   # address" from "Stripe has not taken your tax ID", because only the second is the seller's to
   # fix. Worded around acceptance rather than rejection because the same note also marks an
@@ -965,6 +971,15 @@ module StripeMerchantAccountManager
 
     current_attributes = person_hash(user_compliance_info, passphrase)
     current_attributes.deep_merge!(relationship: { representative: true })
+    # `relationship.title` has no other sync path: account creation sends a title, an ordinary update
+    # only ever carried `representative: true`, so once Stripe lists
+    # `person.<id>.relationship.title` as due on a person whose title is missing — which is what a
+    # record Stripe re-created looks like — no seller action can satisfy it and the requirement loops
+    # (gumroad-private#2990). Send our title only when Stripe's own person has none, so a title the
+    # seller set through the beneficial-owners UI is never overwritten.
+    if stripe_relationship_title(stripe_person).blank?
+      current_attributes[:relationship][:title] = user_compliance_info.job_title.presence || DEFAULT_RELATIONSHIP_TITLE
+    end
     seed_representative_ownership = last_user_compliance_info&.is_individual? && user_compliance_info.is_business? if seed_representative_ownership.nil?
     if seed_representative_ownership
       # Switching a seller from individual to business normally means one person who owns the whole
@@ -991,6 +1006,16 @@ module StripeMerchantAccountManager
       last_attributes[:phone] = nil
       diff_attributes = get_diff_attributes(current_attributes, last_attributes)
     end
+
+    # Stripe owns the representative person's lifecycle: its own KYC pass can re-verify the account
+    # and replace the person with a blank one, and our ownership editor replaces it too. The version
+    # id in the account metadata still names the last version we synced and the seller's record has
+    # not changed, so the diff above keeps coming out unchanged and the blank record is never
+    # refilled. Stripe then lists the seller's own name/DOB/address as due, re-entering identical
+    # details cannot change the diff, and verification loops forever while the account stays enabled
+    # and nothing alerts (gumroad-private#2990). Seed the fields our alive record owns that the live
+    # person is missing — blanks only, so a value Stripe already holds is never overwritten.
+    seed_attributes_missing_from_stripe_person!(diff_attributes, current_attributes, stripe_person)
 
     if diff_attributes[:dob].present?
       # Re-add the full DOB field if any part of it is being kept. Stripe handles this field inconsistently and the full DOB
@@ -1071,6 +1096,62 @@ module StripeMerchantAccountManager
                       "#{account_country.inspect} account: #{e.class}: #{e.message}"
     raise unless e.is_a?(Stripe::InvalidRequestError) && marker_recorded
     false
+  end
+
+  private_class_method
+  # Refills the representative person from our compliance record when Stripe's own copy of it is
+  # missing values we hold. See the call site in `update_person` for why this exists; the contract is
+  # that only blanks are filled, so a value Stripe already has (name, DOB, address, or an ownership
+  # share/title set through the beneficial-owners UI) is never overwritten by a resync.
+  def self.seed_attributes_missing_from_stripe_person!(diff_attributes, current_attributes, stripe_person)
+    live_person = stripe_person.to_h
+    PERSON_FIELDS_OWNED_BY_COMPLIANCE_RECORD.each do |key|
+      next if diff_attributes[key].present?
+      next if current_attributes[key].blank?
+      next unless person_field_missing_on_stripe?(stripe_value_at(live_person, key), current_attributes[key])
+
+      diff_attributes[key] = current_attributes[key]
+    end
+  end
+
+  private_class_method
+  # A field is missing only when Stripe's person carries no value for it. Nested payloads (`dob`,
+  # `address`) count as missing when any part we hold a value for is blank on Stripe's side, so a
+  # half-populated record is refilled too — the failure this guards (gumroad-private#2990) shows up
+  # as requirements on individual subfields.
+  def self.person_field_missing_on_stripe?(live_value, current_value)
+    return stripe_value_blank?(live_value) unless current_value.is_a?(Hash)
+
+    current_value.any? do |key, nested|
+      nested.present? && person_field_missing_on_stripe?(stripe_value_at(live_value, key), nested)
+    end
+  end
+
+  private_class_method
+  # Stripe hands back plain hashes for some payloads and StripeObject instances for others (nested
+  # entities keep their own subclass), and BOTH answer `[]` for a missing key with nil — the existing
+  # `person.to_h[:relationship]` reads rely on the same shape. `dig` is not available on
+  # StripeObject, which is why this is hand-rolled.
+  def self.stripe_value_at(container, key)
+    return nil if container.nil?
+    return nil unless container.respond_to?(:[])
+
+    container[key] || container[key.to_s]
+  end
+
+  private_class_method
+  def self.stripe_value_blank?(value)
+    return true if value.nil?
+    return value.empty? if value.respond_to?(:empty?)
+
+    value.to_s.strip.empty?
+  end
+
+  private_class_method
+  # The representative's title as Stripe currently has it, or nil when the person carries no
+  # relationship object at all (which `person.to_h` can return — see `owner_relationships_on`).
+  def self.stripe_relationship_title(stripe_person)
+    stripe_value_at(stripe_value_at(stripe_person.to_h, :relationship), :title)
   end
 
   private_class_method

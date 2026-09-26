@@ -13767,7 +13767,9 @@ describe StripeMerchantAccountManager, :vcr do
         id: "person_representative",
         object: "person",
         account: stripe_account.id,
-        relationship: { representative: true, owner: true, percent_ownership: 33.33 }
+        # A title Stripe already holds — set through the beneficial-owners UI — which a resync must
+        # leave alone: only a blank one is filled (see the re-created-person context below).
+        relationship: { representative: true, owner: true, percent_ownership: 33.33, title: "COO" }
       )
     end
     let(:co_director_owner) do
@@ -13816,6 +13818,90 @@ describe StripeMerchantAccountManager, :vcr do
 
         described_class.update_person(user, stripe_account, nil, "1234")
 
+        expect(captured_attributes[:relationship]).to eq(representative: true)
+      end
+    end
+
+    context "when Stripe has replaced the representative person with a blank record" do
+      # Stripe's own KYC pass re-verifies an account and replaces the representative person; the
+      # version id in the account metadata still names the last version we synced and the seller has
+      # changed nothing, so the diff comes out empty and the blank record is never refilled. Stripe
+      # then keeps listing the seller's own name/DOB/address/title as due and re-entering the same
+      # details can never change the diff (gumroad-private#2990).
+      let(:blank_representative) do
+        Stripe::Person.construct_from(
+          id: "person_recreated_blank",
+          object: "person",
+          account: stripe_account.id,
+          relationship: { representative: true }
+        )
+      end
+
+      # Same values as the alive record, which is exactly what makes the diff empty.
+      let(:last_synced_user_compliance_info) do
+        info = create(:user_compliance_info_business, user:)
+        info.mark_deleted!
+        info
+      end
+
+      before do
+        allow(Stripe::Account).to receive(:list_persons)
+          .with(stripe_account.id, relationship: { representative: true }, limit: 1)
+          .and_return("data" => [blank_representative])
+      end
+
+      def captured_refill(last_synced_info)
+        captured_attributes = nil
+        expect(Stripe::Account).to receive(:update_person) do |_account_id, _person_id, attributes|
+          captured_attributes = attributes
+          true
+        end
+
+        described_class.update_person(user, stripe_account, last_synced_info.external_id, "1234")
+        captured_attributes
+      end
+
+      it "refills the name, date of birth and address from the seller's compliance record" do
+        captured_attributes = captured_refill(last_synced_user_compliance_info)
+
+        expect(captured_attributes[:first_name]).to eq(user_compliance_info.first_name)
+        expect(captured_attributes[:last_name]).to eq(user_compliance_info.last_name)
+        expect(captured_attributes[:dob]).to eq(
+          day: user_compliance_info.birthday.day,
+          month: user_compliance_info.birthday.month,
+          year: user_compliance_info.birthday.year
+        )
+        expect(captured_attributes[:address]).to include(
+          line1: user_compliance_info.street_address,
+          city: user_compliance_info.city
+        )
+      end
+
+      it "sends the representative title, which no other update path carried" do
+        captured_attributes = captured_refill(last_synced_user_compliance_info)
+
+        expect(captured_attributes[:relationship]).to eq(
+          representative: true,
+          title: user_compliance_info.job_title.presence || StripeMerchantAccountManager::DEFAULT_RELATIONSHIP_TITLE
+        )
+      end
+
+      it "seeds only what Stripe's person is missing, leaving the values it holds alone" do
+        partially_populated = Stripe::Person.construct_from(
+          id: "person_recreated_partial",
+          object: "person",
+          account: stripe_account.id,
+          first_name: "Kept By Stripe",
+          relationship: { representative: true, title: "COO" }
+        )
+        allow(Stripe::Account).to receive(:list_persons)
+          .with(stripe_account.id, relationship: { representative: true }, limit: 1)
+          .and_return("data" => [partially_populated])
+
+        captured_attributes = captured_refill(last_synced_user_compliance_info)
+
+        expect(captured_attributes).not_to have_key(:first_name)
+        expect(captured_attributes[:last_name]).to eq(user_compliance_info.last_name)
         expect(captured_attributes[:relationship]).to eq(representative: true)
       end
     end
@@ -14113,7 +14199,12 @@ describe StripeMerchantAccountManager, :vcr do
 
         described_class.update_person(user, stripe_account, nil, "1234", seed_representative_ownership: false)
 
-        expect(captured_attributes[:relationship]).to eq(representative: true)
+        # The title is filled because this person has none (gumroad-private#2990); ownership is what
+        # this example is about and stays untouched.
+        expect(captured_attributes[:relationship]).to eq(
+          representative: true,
+          title: StripeMerchantAccountManager::DEFAULT_RELATIONSHIP_TITLE
+        )
       end
     end
 
