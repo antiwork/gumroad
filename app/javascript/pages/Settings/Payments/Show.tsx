@@ -447,8 +447,10 @@ export default function PaymentsPage() {
 
   // Mirrors PoBoxAddress.match? in app/services/po_box_address.rb — the two have to stay in step.
   const isStreetAddressPOBox = (input: string) =>
-    input.replace(/[^\w]*/gu, "").toLocaleLowerCase().includes("pobox") ||
-    /post[^a-z0-9]*office[^a-z0-9]*box(?![a-z])/iu.test(input);
+    input
+      .replace(/[^\w]*/gu, "")
+      .toLocaleLowerCase()
+      .includes("pobox") || /post[^a-z0-9]*office[^a-z0-9]*box(?![a-z])/iu.test(input);
 
   const poBoxAddressErrorMessage = (countryCode: CountryCode) => {
     if (countryCode === "US") {
