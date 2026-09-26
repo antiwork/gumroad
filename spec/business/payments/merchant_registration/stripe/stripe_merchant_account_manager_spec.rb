@@ -13824,10 +13824,8 @@ describe StripeMerchantAccountManager, :vcr do
 
     context "when Stripe has replaced the representative person with a blank record" do
       # Stripe's own KYC pass re-verifies an account and replaces the representative person; the
-      # version id in the account metadata still names the last version we synced and the seller has
-      # changed nothing, so the diff comes out empty and the blank record is never refilled. Stripe
-      # then keeps listing the seller's own name/DOB/address/title as due and re-entering the same
-      # details can never change the diff (gumroad-private#2990).
+      # version in the account metadata still names the last version we synced, so the diff comes out
+      # empty and the blank record is never refilled (gumroad-private#2990).
       let(:blank_representative) do
         Stripe::Person.construct_from(
           id: "person_recreated_blank",
@@ -13884,6 +13882,27 @@ describe StripeMerchantAccountManager, :vcr do
           representative: true,
           title: user_compliance_info.job_title.presence || StripeMerchantAccountManager::DEFAULT_RELATIONSHIP_TITLE
         )
+      end
+
+      it "refills the Japanese name fields and a recorded nationality" do
+        user_compliance_info.mark_deleted!
+        create(:user_compliance_info_business, user:, country: "Japan", business_country: "Japan",
+                                              first_name_kanji: "太郎", last_name_kanji: "山田",
+                                              first_name_kana: "タロウ", last_name_kana: "ヤマダ",
+                                              nationality: "JP")
+        last_jp_info = create(:user_compliance_info_business, user:, country: "Japan", business_country: "Japan",
+                                                             first_name_kanji: "太郎", last_name_kanji: "山田",
+                                                             first_name_kana: "タロウ", last_name_kana: "ヤマダ",
+                                                             nationality: "JP")
+        last_jp_info.mark_deleted!
+
+        captured_attributes = captured_refill(last_jp_info)
+
+        expect(captured_attributes[:first_name_kanji]).to eq("太郎")
+        expect(captured_attributes[:last_name_kanji]).to eq("山田")
+        expect(captured_attributes[:first_name_kana]).to eq("タロウ")
+        expect(captured_attributes[:last_name_kana]).to eq("ヤマダ")
+        expect(captured_attributes[:nationality]).to eq("JP")
       end
 
       it "seeds only what Stripe's person is missing, leaving the values it holds alone" do

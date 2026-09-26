@@ -756,11 +756,10 @@ module StripeMerchantAccountManager
   IDENTITY_SUBHASH_KEYS = %i[id_number ssn_last_4 tax_id].freeze
   private_constant :IDENTITY_SUBHASH_KEYS
 
-  # Fields on the representative person whose values our own compliance record owns, used to refill a
-  # person record Stripe re-created empty. Deliberately excludes `IDENTITY_SUBHASH_KEYS`: those are
-  # gated on the account country further down `update_person` and must not be re-seeded here.
-  PERSON_FIELDS_OWNED_BY_COMPLIANCE_RECORD = %i[first_name last_name dob address].freeze
-  private_constant :PERSON_FIELDS_OWNED_BY_COMPLIANCE_RECORD
+  # Person-payload keys a refill must never seed: the identifiers are gated on the account country
+  # further down `update_person`, and `relationship` carries ownership/title, which the caller sets.
+  PERSON_REFILL_EXCLUDED_KEYS = (IDENTITY_SUBHASH_KEYS + [:relationship]).freeze
+  private_constant :PERSON_REFILL_EXCLUDED_KEYS
 
   # Prefix distinct from the service-agreement note: support needs to tell "we withheld your
   # address" from "Stripe has not taken your tax ID", because only the second is the seller's to
@@ -971,12 +970,9 @@ module StripeMerchantAccountManager
 
     current_attributes = person_hash(user_compliance_info, passphrase)
     current_attributes.deep_merge!(relationship: { representative: true })
-    # `relationship.title` has no other sync path: account creation sends a title, an ordinary update
-    # only ever carried `representative: true`, so once Stripe lists
-    # `person.<id>.relationship.title` as due on a person whose title is missing — which is what a
-    # record Stripe re-created looks like — no seller action can satisfy it and the requirement loops
-    # (gumroad-private#2990). Send our title only when Stripe's own person has none, so a title the
-    # seller set through the beneficial-owners UI is never overwritten.
+    # `relationship.title` is otherwise unsent on an update (only creation sets it), so a person whose
+    # title Stripe lost can never satisfy `person.<id>.relationship.title`. Fill it only when Stripe
+    # has none — a title set through the beneficial-owners UI stays.
     if stripe_relationship_title(stripe_person).blank?
       current_attributes[:relationship][:title] = user_compliance_info.job_title.presence || DEFAULT_RELATIONSHIP_TITLE
     end
@@ -1007,14 +1003,9 @@ module StripeMerchantAccountManager
       diff_attributes = get_diff_attributes(current_attributes, last_attributes)
     end
 
-    # Stripe owns the representative person's lifecycle: its own KYC pass can re-verify the account
-    # and replace the person with a blank one, and our ownership editor replaces it too. The version
-    # id in the account metadata still names the last version we synced and the seller's record has
-    # not changed, so the diff above keeps coming out unchanged and the blank record is never
-    # refilled. Stripe then lists the seller's own name/DOB/address as due, re-entering identical
-    # details cannot change the diff, and verification loops forever while the account stays enabled
-    # and nothing alerts (gumroad-private#2990). Seed the fields our alive record owns that the live
-    # person is missing — blanks only, so a value Stripe already holds is never overwritten.
+    # Stripe can replace the person outright (its KYC pass, or our ownership editor) with a blank
+    # record while the metadata still names the last version we synced, so the diff above stays
+    # unchanged and the requirements are never met. Refill what the live person is missing.
     seed_attributes_missing_from_stripe_person!(diff_attributes, current_attributes, stripe_person)
 
     if diff_attributes[:dob].present?
@@ -1099,13 +1090,11 @@ module StripeMerchantAccountManager
   end
 
   private_class_method
-  # Refills the representative person from our compliance record when Stripe's own copy of it is
-  # missing values we hold. See the call site in `update_person` for why this exists; the contract is
-  # that only blanks are filled, so a value Stripe already has (name, DOB, address, or an ownership
-  # share/title set through the beneficial-owners UI) is never overwritten by a resync.
+  # Refills a person record Stripe replaced with a blank one, from our compliance record. Only blanks
+  # are filled: a value Stripe already holds is never overwritten.
   def self.seed_attributes_missing_from_stripe_person!(diff_attributes, current_attributes, stripe_person)
     live_person = stripe_person.to_h
-    PERSON_FIELDS_OWNED_BY_COMPLIANCE_RECORD.each do |key|
+    (current_attributes.keys - PERSON_REFILL_EXCLUDED_KEYS).each do |key|
       next if diff_attributes[key].present?
       next if current_attributes[key].blank?
       next unless person_field_missing_on_stripe?(stripe_value_at(live_person, key), current_attributes[key])
@@ -1115,10 +1104,8 @@ module StripeMerchantAccountManager
   end
 
   private_class_method
-  # A field is missing only when Stripe's person carries no value for it. Nested payloads (`dob`,
-  # `address`) count as missing when any part we hold a value for is blank on Stripe's side, so a
-  # half-populated record is refilled too — the failure this guards (gumroad-private#2990) shows up
-  # as requirements on individual subfields.
+  # Missing means Stripe's person carries no value for it. Nested payloads (`dob`, `address`) count as
+  # missing when any part we hold a value for is blank on Stripe's side.
   def self.person_field_missing_on_stripe?(live_value, current_value)
     return stripe_value_blank?(live_value) unless current_value.is_a?(Hash)
 
@@ -1128,10 +1115,8 @@ module StripeMerchantAccountManager
   end
 
   private_class_method
-  # Stripe hands back plain hashes for some payloads and StripeObject instances for others (nested
-  # entities keep their own subclass), and BOTH answer `[]` for a missing key with nil — the existing
-  # `person.to_h[:relationship]` reads rely on the same shape. `dig` is not available on
-  # StripeObject, which is why this is hand-rolled.
+  # Nested payloads arrive as plain hashes or StripeObject instances alike; both answer `[]` for a
+  # missing key with nil, and StripeObject has no `dig`.
   def self.stripe_value_at(container, key)
     return nil if container.nil?
     return nil unless container.respond_to?(:[])
