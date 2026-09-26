@@ -501,8 +501,10 @@ it("shows the download switch off and says why when the server says the file is 
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
   });
 
-  const downloadSwitch = screen.getByRole("switch", { name: /too large for the in-browser reader/u });
-  expect((downloadSwitch as HTMLInputElement).disabled).toBe(true);
+  const downloadSwitch = screen.getByRole<HTMLInputElement>("switch", {
+    name: /too large for the in-browser reader/u,
+  });
+  expect(downloadSwitch.disabled).toBe(true);
   expect(screen.queryByText(/buyers read it in the browser instead/u)).toBeNull();
 });
 
@@ -517,7 +519,8 @@ it("shows the same switch off for an oversized EPUB picked but not yet saved", a
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
   });
 
-  const downloadSwitch = screen.getByRole("switch", { name: /too large for the in-browser reader/u });
-  expect((downloadSwitch as HTMLInputElement).disabled).toBe(true);
+  const downloadSwitch = screen.getByRole<HTMLInputElement>("switch", {
+    name: /too large for the in-browser reader/u,
+  });
+  expect(downloadSwitch.disabled).toBe(true);
 });
-
