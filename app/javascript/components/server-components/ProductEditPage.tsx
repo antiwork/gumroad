@@ -668,6 +668,7 @@ const ProductEditPage = (props: Props) => {
         lastSavedHasPaidVariantPricing: hasPaidVariantPricing(lastSavedProductRef.current),
         lastSavedInstallmentPlan: lastSavedProductRef.current.installment_plan,
         lastSavedAllowInstallmentPlan: lastSavedProductRef.current.allow_installment_plan,
+        lastSavedDescription: lastSavedProductRef.current.description,
       });
       saved = true;
       setInstallmentPlanClearConflict(null);
