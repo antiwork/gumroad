@@ -1366,22 +1366,29 @@ module StripeMerchantAccountManager
     end
 
     if stripe_account["metadata"]["bank_account_id"] == bank_account.external_id
+      details_replaced = false
       if identified_ecuador_company_bank?(user, bank_account, stripe_account)
         stripe_external_account = retrieve_linked_external_account(stripe_account, bank_account)
-        if retrieved_linked_bank?(bank_account, stripe_external_account) && !linked_bank_details_replaced?(bank_account, stripe_external_account)
-          return update_identified_ecuador_holder_name(bank_account, stripe_account, stripe_external_account, notify:)
+        if retrieved_linked_bank?(bank_account, stripe_external_account)
+          if linked_bank_details_replaced?(bank_account, stripe_external_account)
+            details_replaced = true
+          else
+            return update_identified_ecuador_holder_name(bank_account, stripe_account, stripe_external_account, notify:)
+          end
         end
       end
 
       # A metadata match does not prove the local row is linked.
-      name_out_of_sync = false
-      if account_holder_name_synced_to_stripe?(bank_account.user)
-        stripe_external_account = stripe_account["external_accounts"]&.first
-        stripe_holder_name = stripe_external_account && stripe_external_account["account_holder_name"]
-        name_out_of_sync = stripe_holder_name != bank_account.account_holder_full_name
-      end
+      unless details_replaced
+        name_out_of_sync = false
+        if account_holder_name_synced_to_stripe?(bank_account.user)
+          stripe_external_account = stripe_account["external_accounts"]&.first
+          stripe_holder_name = stripe_external_account && stripe_external_account["account_holder_name"]
+          name_out_of_sync = stripe_holder_name != bank_account.account_holder_full_name
+        end
 
-      return restore_local_bank_link!(bank_account, stripe_account) unless name_out_of_sync
+        return restore_local_bank_link!(bank_account, stripe_account) unless name_out_of_sync
+      end
     end
 
     attributes = bank_account_hash(bank_account, stripe_account:, passphrase:)
@@ -1486,9 +1493,14 @@ module StripeMerchantAccountManager
 
   private_class_method
   def self.update_identified_ecuador_holder_name(bank_account, stripe_account, stripe_external_account, notify:)
-    return :noop_metadata_match if stripe_external_account["account_holder_name"] == bank_account.account_holder_full_name
+    if stripe_external_account["account_holder_name"] == bank_account.account_holder_full_name
+      clear_stale_bank_sync_failure_notes(bank_account.user)
+      return :noop_metadata_match
+    end
 
-    update_external_account_holder_name(bank_account, stripe_account, stripe_external_account)
+    result = update_external_account_holder_name(bank_account, stripe_account, stripe_external_account)
+    clear_stale_bank_sync_failure_notes(bank_account.user) if result == :synced
+    result
   rescue Stripe::InvalidRequestError => e
     if e.code == "incorrect_account_holder_name"
       ContactingCreatorMailer.invalid_account_holder_name(bank_account.user.id).deliver_later(queue: "critical") if notify

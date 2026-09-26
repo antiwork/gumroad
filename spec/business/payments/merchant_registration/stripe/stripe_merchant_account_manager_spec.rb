@@ -10857,13 +10857,16 @@ describe StripeMerchantAccountManager, :vcr do
         retrieved_external_account["routing_number"] = "AAAAECE1XXX"
         retrieved_external_account["currency"] = "usd"
         retrieved_external_account["country"] = "EC"
+        allow(subject).to receive(:clear_stale_bank_sync_failure_notes).and_call_original
 
         expect(subject.update_bank_account(user, passphrase: "1234")).to eq(:synced)
         expect(Stripe::Account).to have_received(:update_external_account).with("acct_ec", "ba_ec", { account_holder_name: "Personal Name" })
         expect(Stripe::Account).not_to have_received(:update)
+        expect(subject).to have_received(:clear_stale_bank_sync_failure_notes).with(user)
       end
 
       it "replaces the linked bank on a full sync when the account details changed" do
+        stripe_account["external_accounts"]["data"].first["account_holder_name"] = "Personal Name"
         retrieved_external_account["last4"] = "0000"
         retrieved_external_account["routing_number"] = "AAAAECE1XXX"
         retrieved_external_account["currency"] = "usd"
@@ -10886,6 +10889,14 @@ describe StripeMerchantAccountManager, :vcr do
 
         expect(Stripe::Account).not_to have_received(:update_external_account)
         expect(Stripe::Account).not_to have_received(:update)
+      end
+
+      it "clears a stale bank failure note on a full sync when the holder name already matches" do
+        allow(subject).to receive(:clear_stale_bank_sync_failure_notes).and_call_original
+
+        expect(subject.update_bank_account(user, passphrase: "1234")).to eq(:noop_metadata_match)
+        expect(Stripe::Account).not_to have_received(:update)
+        expect(subject).to have_received(:clear_stale_bank_sync_failure_notes).with(user)
       end
     end
 
