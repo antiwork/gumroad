@@ -11059,6 +11059,15 @@ describe StripeMerchantAccountManager, :vcr do
         expect(Stripe::Account).not_to have_received(:update_external_account)
         expect(Stripe::Account).not_to have_received(:update)
       end
+
+      it "does not resubmit bank details for a queued name-only edit" do
+        allow(ErrorNotifier).to receive(:notify)
+        stripe_account["metadata"]["bank_account_id"] = "older-bank-record"
+
+        expect(subject.update_bank_account(user, passphrase: "1234", holder_name_only: true)).to eq(:external_account_mismatch)
+        expect(Stripe::Account).not_to have_received(:update)
+        expect(Stripe::Account).not_to have_received(:update_external_account)
+      end
     end
 
     context "when the company is in another country outside the holder name sync list" do

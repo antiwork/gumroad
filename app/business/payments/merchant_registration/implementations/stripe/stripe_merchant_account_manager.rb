@@ -1318,8 +1318,8 @@ module StripeMerchantAccountManager
 
     stripe_account = Stripe::Account.retrieve(user.stripe_account.charge_processor_merchant_id)
     linked_external_account_missing = false
-    if ecuador_company?(user) && bank_account.is_a?(EcuadorBankAccount) && holder_name_only
-      if bank_account.stripe_external_account_id.present? && stripe_account["business_type"] == "company" && bank_account.stripe_connect_account_id == stripe_account.id
+    if holder_name_only
+      if ecuador_company?(user) && bank_account.is_a?(EcuadorBankAccount) && bank_account.stripe_external_account_id.present? && stripe_account["business_type"] == "company" && bank_account.stripe_connect_account_id == stripe_account.id
         stripe_external_account = retrieve_linked_external_account(stripe_account, bank_account)
         if stripe_external_account && stripe_external_account["id"] == bank_account.stripe_external_account_id && stripe_external_account["object"] == "bank_account"
           return :noop_metadata_match if stripe_external_account["account_holder_name"] == bank_account.account_holder_full_name
