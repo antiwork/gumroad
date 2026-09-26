@@ -125,6 +125,7 @@ describe("saveProduct with a failed upload", () => {
 describe("scalarSettingsForSave", () => {
   const product = (overrides = {}) => ({
     custom_permalink: null,
+    description: "",
     customizable_price: false,
     price_cents: 100,
     hasPaidVariantPricing: false,
@@ -134,6 +135,7 @@ describe("scalarSettingsForSave", () => {
   });
   const lastSaved = (overrides = {}) => ({
     custom_permalink: null,
+    description: null,
     customizable_price: false,
     price_cents: 100,
     hasPaidVariantPricing: false,
@@ -204,6 +206,35 @@ describe("scalarSettingsForSave", () => {
     expect(scalarSettingsForSave(product({ description: "<p>Hi</p>" }), lastSaved())).toEqual({
       description: "<p>Hi</p>",
     });
+  });
+
+  it("omits a description unchanged from the last-saved one", () => {
+    // Two editor instances can hold divergent copies of this field. The one
+    // whose copy still matches what it last saved must not re-post it, or an
+    // unrelated save reverts the copy the other instance already stored.
+    expect(
+      scalarSettingsForSave(product({ description: "<p>Hi</p>" }), lastSaved({ description: "<p>Hi</p>" })),
+    ).toEqual({});
+    expect(
+      scalarSettingsForSave(
+        product({ description: "<p>Hi</p>", description_changed: true }),
+        lastSaved({ description: "<p>Hi</p>" }),
+      ),
+    ).toEqual({});
+  });
+
+  it("sends a description that differs from the last-saved one", () => {
+    expect(
+      scalarSettingsForSave(product({ description: "<p>New</p>" }), lastSaved({ description: "<p>Old</p>" })),
+    ).toEqual({ description: "<p>New</p>" });
+    // A seller who empties the field and retypes is a change in both directions.
+    expect(
+      scalarSettingsForSave(product({ description: "<p>Old</p>" }), lastSaved({ description: "<p>New</p>" })),
+    ).toEqual({ description: "<p>Old</p>" });
+    // A caller that does not track a baseline keeps the always-submit behavior.
+    expect(scalarSettingsForSave(product({ description: "<p>Hi</p>" }), lastSaved({ description: undefined }))).toEqual(
+      { description: "<p>Hi</p>" },
+    );
   });
 
   it("treats the editor's empty document as blank", () => {
