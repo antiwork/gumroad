@@ -10824,7 +10824,7 @@ describe StripeMerchantAccountManager, :vcr do
     end
 
     it "updates only account_holder_name on the existing external account when Stripe has none" do
-      expect(subject.update_bank_account(user, passphrase: "1234")).to eq(:synced)
+      expect(subject.update_bank_account(user, passphrase: "1234", holder_name_only: true)).to eq(:synced)
 
       expect(Stripe::Account).to have_received(:update_external_account).with("acct_ec", "ba_ec", { account_holder_name: "Personal Name" })
       expect(Stripe::Account).not_to have_received(:update)
@@ -10834,7 +10834,7 @@ describe StripeMerchantAccountManager, :vcr do
       let(:stripe_holder_name) { "Buy More, LLC" }
 
       it "sends the local holder name without replacing the bank account" do
-        expect(subject.update_bank_account(user, passphrase: "1234")).to eq(:synced)
+        expect(subject.update_bank_account(user, passphrase: "1234", holder_name_only: true)).to eq(:synced)
 
         expect(Stripe::Account).to have_received(:update_external_account).with("acct_ec", "ba_ec", { account_holder_name: "Personal Name" })
         expect(Stripe::Account).not_to have_received(:update)
@@ -10845,7 +10845,7 @@ describe StripeMerchantAccountManager, :vcr do
       let(:stripe_holder_name) { "Personal Name" }
 
       it "does not call Stripe" do
-        expect(subject.update_bank_account(user, passphrase: "1234")).to eq(:noop_metadata_match)
+        expect(subject.update_bank_account(user, passphrase: "1234", holder_name_only: true)).to eq(:noop_metadata_match)
 
         expect(Stripe::Account).not_to have_received(:update_external_account)
         expect(Stripe::Account).not_to have_received(:update)
@@ -10856,9 +10856,19 @@ describe StripeMerchantAccountManager, :vcr do
       let(:stripe_metadata_bank_account_id) { "older-bank-record" }
 
       it "updates that external account without reattaching bank details" do
-        expect(subject.update_bank_account(user, passphrase: "1234")).to eq(:synced)
+        expect(subject.update_bank_account(user, passphrase: "1234", holder_name_only: true)).to eq(:synced)
         expect(Stripe::Account).to have_received(:update_external_account).with("acct_ec", "ba_ec", { account_holder_name: "Personal Name" })
         expect(Stripe::Account).not_to have_received(:update)
+      end
+
+      it "still syncs bank details on a full retry" do
+        allow(stripe_account).to receive(:refresh).and_return(stripe_account)
+        allow(subject).to receive(:save_stripe_bank_account_info)
+        allow(subject).to receive(:clear_stale_bank_sync_failure_notes)
+
+        expect(subject.update_bank_account(user, passphrase: "1234")).to eq(:synced)
+        expect(Stripe::Account).to have_received(:update)
+        expect(Stripe::Account).not_to have_received(:update_external_account)
       end
     end
 
@@ -10868,7 +10878,7 @@ describe StripeMerchantAccountManager, :vcr do
       it "does not update the external account" do
         allow(ErrorNotifier).to receive(:notify)
 
-        expect(subject.update_bank_account(user, passphrase: "1234")).to eq(:external_account_mismatch)
+        expect(subject.update_bank_account(user, passphrase: "1234", holder_name_only: true)).to eq(:external_account_mismatch)
         expect(Stripe::Account).not_to have_received(:update_external_account)
         expect(Stripe::Account).not_to have_received(:update)
       end
@@ -10880,7 +10890,7 @@ describe StripeMerchantAccountManager, :vcr do
       it "leaves Stripe untouched and reports the mismatch" do
         allow(ErrorNotifier).to receive(:notify)
 
-        expect(subject.update_bank_account(user, passphrase: "1234")).to eq(:external_account_mismatch)
+        expect(subject.update_bank_account(user, passphrase: "1234", holder_name_only: true)).to eq(:external_account_mismatch)
 
         expect(Stripe::Account).not_to have_received(:update_external_account)
         expect(Stripe::Account).not_to have_received(:update)

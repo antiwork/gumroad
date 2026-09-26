@@ -1316,7 +1316,6 @@ module StripeMerchantAccountManager
     raise MerchantRegistrationUserNotReadyError.new(user.id, "does not have a bank account") if bank_account.nil?
 
     stripe_account = Stripe::Account.retrieve(user.stripe_account.charge_processor_merchant_id)
-    linked_external_account_missing = false
     if holder_name_only
       if ecuador_company?(user) && bank_account.is_a?(EcuadorBankAccount) && bank_account.stripe_external_account_id.present? && stripe_account["business_type"] == "company" && bank_account.stripe_connect_account_id == stripe_account.id
         stripe_external_account = retrieve_linked_external_account(stripe_account, bank_account)
@@ -1334,25 +1333,19 @@ module StripeMerchantAccountManager
       metadata_bank_id = stripe_account["metadata"]["bank_account_id"]
       if metadata_bank_id == bank_account.external_id
         repair_result = restore_local_bank_link!(bank_account, stripe_account)
+        if repair_result == :synced && stripe_account["business_type"] == "company" && bank_account.stripe_connect_account_id == stripe_account.id
+          stripe_external_account = retrieve_linked_external_account(stripe_account, bank_account)
+          if stripe_external_account && stripe_external_account["id"] == bank_account.stripe_external_account_id && stripe_external_account["object"] == "bank_account"
+            return :noop_metadata_match if stripe_external_account["account_holder_name"] == bank_account.account_holder_full_name
+
+            return update_external_account_holder_name(bank_account, stripe_account, stripe_external_account)
+          end
+        end
         return repair_result unless repair_result == :synced
       end
     end
 
-    if ecuador_company?(user) && bank_account.is_a?(EcuadorBankAccount) && bank_account.stripe_external_account_id.present?
-      return report_external_account_mismatch(bank_account, stripe_account) unless stripe_account["business_type"] == "company" && bank_account.stripe_connect_account_id == stripe_account.id
-
-      stripe_external_account = retrieve_linked_external_account(stripe_account, bank_account)
-      if stripe_external_account
-        return report_external_account_mismatch(bank_account, stripe_account) unless stripe_external_account["id"] == bank_account.stripe_external_account_id && stripe_external_account["object"] == "bank_account"
-        return :noop_metadata_match if stripe_external_account["account_holder_name"] == bank_account.account_holder_full_name
-
-        return update_external_account_holder_name(bank_account, stripe_account, stripe_external_account)
-      else
-        linked_external_account_missing = true
-      end
-    end
-
-    if !linked_external_account_missing && stripe_account["metadata"]["bank_account_id"] == bank_account.external_id
+    if stripe_account["metadata"]["bank_account_id"] == bank_account.external_id
       # A metadata match does not prove the local row is linked, so the no-op must not be reported
       # before the link is checked. A holder-name mismatch in a sync country still owes an
       # Account.update, so the restore only runs when no Stripe write is owed.
