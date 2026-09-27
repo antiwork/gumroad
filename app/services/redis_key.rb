@@ -134,6 +134,9 @@ class RedisKey
     # the seller was told. See ContactingCreatorMailer#review_submitted.
     def product_review_seller_notified(review_id) = "product_review_seller_notified:#{review_id}"
     def workflow_seller_fanout_lock(seller_id) = "workflow_seller_fanout_lock:#{seller_id}"
+    # One sitemap generation at a time: SitemapGenerator::Sitemap keeps its output path on
+    # the class, so two runs in one process write into each other's path. See SitemapService.
+    def sitemap_generation_lock = "sitemap_generation_lock"
     def workflow_seller_fanout_lock_ttl_seconds = "workflow_seller_fanout_lock_ttl_seconds"
     def workflow_seller_fanout_retry_seconds = "workflow_seller_fanout_retry_seconds"
     def workflow_immediate_fanout_threshold = "workflow_immediate_fanout_threshold"

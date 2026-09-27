@@ -180,4 +180,68 @@ describe SitemapService do
       expect(redis_namespace.get(cache_key)).to eq nil
     end
   end
+
+  # Two generations in one process share SitemapGenerator::Sitemap's class-level output path,
+  # so an overlapping run writes its own links into the other run's file.
+  describe "generation lock" do
+    let(:lock_key) { RedisKey.sitemap_generation_lock }
+
+    after { $redis.del(lock_key) }
+
+    it "refuses to generate products while another generation holds the lock" do
+      product = create(:product, created_at: Time.current)
+      date = product.created_at
+      sitemap_file_path = "#{Rails.public_path}/sitemap/products/monthly/#{date.year}/#{date.month}/sitemap.xml.gz"
+      FileUtils.rm_f(sitemap_file_path) # earlier examples' output persists on disk
+      $redis.set(lock_key, "another-run", nx: true, ex: 60)
+
+      expect { service.generate(date) }.to raise_error(SitemapService::GenerationInProgress)
+      expect(File.exist?(sitemap_file_path)).to be false
+    end
+
+    it "refuses to generate wishlists or categories while another generation holds the lock" do
+      $redis.set(lock_key, "another-run", nx: true, ex: 60)
+
+      expect { service.generate_wishlists }.to raise_error(SitemapService::GenerationInProgress)
+      expect { service.generate_categories }.to raise_error(SitemapService::GenerationInProgress)
+    end
+
+    it "releases the lock after a run so the next run can write its own file" do
+      create(:product, created_at: Time.current)
+
+      service.generate(Date.current)
+      expect($redis.get(lock_key)).to be_nil
+
+      service.generate_wishlists
+      expect($redis.get(lock_key)).to be_nil
+    end
+
+    it "releases the lock when a run raises" do
+      allow(SitemapGenerator::Sitemap).to receive(:create).and_raise("boom")
+
+      expect { service.generate_categories }.to raise_error("boom")
+
+      expect($redis.get(lock_key)).to be_nil
+    end
+
+    # The release runs in an `ensure`, so it must not replace the result of the generation.
+    it "keeps a generation error when the release also fails" do
+      allow(SitemapGenerator::Sitemap).to receive(:create).and_raise("boom")
+      allow($redis).to receive(:eval).and_raise(Redis::BaseError.new("redis down"))
+      allow(Rails.logger).to receive(:error)
+
+      expect { service.generate_categories }.to raise_error("boom")
+      expect(Rails.logger).to have_received(:error).with(/could not release the sitemap generation lock/)
+    end
+
+    it "warns when a run outlived its own lock" do
+      allow(SitemapGenerator::Sitemap).to receive(:create)
+      allow($redis).to receive(:eval).and_return(0) # our token was already gone
+      allow(Rails.logger).to receive(:warn)
+
+      service.generate_categories
+
+      expect(Rails.logger).to have_received(:warn).with(/outlived its/)
+    end
+  end
 end
