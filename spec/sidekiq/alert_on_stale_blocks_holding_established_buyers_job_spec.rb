@@ -437,7 +437,7 @@ describe AlertOnStaleBlocksHoldingEstablishedBuyersJob do
       expect(card_block.reload.blocked_at).to be_nil
     end
 
-    it "keeps a card when fraud-coded failures exceed the decline scan limit" do
+    it "clears the email when unrelated renewal declines would have filled the scan" do
       stub_const("#{described_class}::RENEWAL_DECLINE_WORK_LIMIT", described_class::SUBSCRIPTION_CARD_LOOKUP_LIMIT)
       saved = "fp-over-scan"
       charged = CreditCard.new(stripe_fingerprint: saved, card_type: "visa", visual: "**** **** **** 4242")
@@ -454,10 +454,27 @@ describe AlertOnStaleBlocksHoldingEstablishedBuyersJob do
         decline.update_columns(credit_card_id: charged.id, subscription_id:, created_at: 1.hour.ago)
       end
       at = Time.current
-      block_email(blocked_at: at)
+      email_block = block_email(blocked_at: at)
       card_block = block_value(:charge_processor_fingerprint, saved, blocked_at: at)
 
       message
+      expect(email_block.reload.blocked_at).to be_nil
+      expect(card_block.reload.blocked_at).to be_nil
+    end
+
+    it "keeps the email when the renewal scan cannot finish" do
+      saved = "fp-unfinished-scan"
+      create(:purchase, email:, stripe_fingerprint: saved, purchase_state: "successful", price_cents: 500, created_at: history_starts_at)
+      at = 2.years.ago
+      email_block = block_email(blocked_at: at)
+      card_block = block_value(:charge_processor_fingerprint, saved, blocked_at: at)
+      allow_any_instance_of(described_class).to receive(:renewal_decline_still_blocks?).and_wrap_original do |original, *args|
+        original.receiver.instance_variable_set(:@decline_scan_incomplete, true)
+        true
+      end
+
+      described_class.new.perform
+      expect(email_block.reload.blocked_at).to be_present
       expect(card_block.reload.blocked_at).to be_present
     end
 
@@ -598,7 +615,7 @@ describe AlertOnStaleBlocksHoldingEstablishedBuyersJob do
       expect(card_block.reload.blocked_at).to be_present
     end
 
-    it "clears no sibling when successful-purchase browsers exceed the lookup cap" do
+    it "clears a card when extra browsers are not blocked in the burst" do
       stub_const("#{described_class}::MAX_SIBLING_VALUES", 1)
       create(:purchase, email:, purchase_state: "successful", price_cents: 500, browser_guid: "guid-over-cap",
                         stripe_fingerprint: fingerprint, created_at: history_starts_at)
@@ -606,11 +623,9 @@ describe AlertOnStaleBlocksHoldingEstablishedBuyersJob do
       email_block = block_email(blocked_at: at)
       card_block = block_value(:charge_processor_fingerprint, fingerprint, blocked_at: at)
 
-      body = message
-      expect(card_block.reload.blocked_at).to be_present
-      expect(email_block.reload.blocked_at).to be_present
-      expect(body).to include("sibling lookup was truncated")
-      expect(body).not_to include("#{email} — #{established_count} settled purchases, held — linked to a suspended account")
+      message
+      expect(card_block.reload.blocked_at).to be_nil
+      expect(email_block.reload.blocked_at).to be_nil
     end
 
     it "retries a sibling clear that raises while the email block is still active" do
@@ -668,7 +683,7 @@ describe AlertOnStaleBlocksHoldingEstablishedBuyersJob do
       card_block = block_value(:charge_processor_fingerprint, fingerprint, blocked_at: at)
 
       message
-      expect(email_block.reload.blocked_at).to be_nil
+      expect(email_block.reload.blocked_at).to be_present
       expect(card_block.reload.blocked_at).to be_present
     end
 
@@ -731,7 +746,7 @@ describe AlertOnStaleBlocksHoldingEstablishedBuyersJob do
       expect(card_block.reload.blocked_at).to be_present
     end
 
-    it "holds the email when the browser list is truncated" do
+    it "clears the email when extra browsers are not blocked in the burst" do
       stub_const("#{described_class}::MAX_SIBLING_VALUES", 1)
       create(:purchase, email:, browser_guid: "second-browser", purchase_state: "successful", price_cents: 500, created_at: history_starts_at)
       at = 2.years.ago
@@ -739,8 +754,26 @@ describe AlertOnStaleBlocksHoldingEstablishedBuyersJob do
       card_block = block_value(:charge_processor_fingerprint, fingerprint, blocked_at: at)
 
       message
+      expect(email_block.reload.blocked_at).to be_nil
+      expect(card_block.reload.blocked_at).to be_nil
+    end
+
+    it "finishes a truncated burst on the next sweep" do
+      stub_const("#{described_class}::MAX_SIBLING_VALUES", 1)
+      create(:purchase, email:, browser_guid: "second-browser", purchase_state: "successful", price_cents: 500, created_at: history_starts_at)
+      at = 2.years.ago
+      email_block = block_email(blocked_at: at)
+      card_block = block_value(:charge_processor_fingerprint, fingerprint, blocked_at: at)
+      browser_block = block_value(:browser_guid, "second-browser", blocked_at: at)
+      other_browser = block_value(:browser_guid, guid, blocked_at: at)
+
+      described_class.new.perform
       expect(email_block.reload.blocked_at).to be_present
-      expect(card_block.reload.blocked_at).to be_present
+      described_class.new.perform
+      expect(email_block.reload.blocked_at).to be_nil
+      expect(card_block.reload.blocked_at).to be_nil
+      expect(browser_block.reload.blocked_at).to be_nil
+      expect(other_browser.reload.blocked_at).to be_nil
     end
 
     it "clears no sibling when the email block is held" do

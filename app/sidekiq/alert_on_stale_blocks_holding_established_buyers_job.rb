@@ -111,12 +111,12 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
             still_active = block.blocked_at.present? && (block.expires_at.nil? || block.expires_at > Time.current)
             if still_active && block.blocked_by.nil? && !newly_disputed_or_suspended?(email)
               window = burst_window(block)
-              siblings = burst_siblings(email, window)
+              siblings, sibling_truncated = burst_siblings(email, window)
               if siblings.nil?
                 held << entry.merge(reason: :sibling_lookup_truncated)
                 next
               end
-              clear_burst(block, window, siblings, entry, cleared, held)
+              clear_burst(block, window, siblings, entry, cleared, held, clear_email: !sibling_truncated)
             else
               held << entry.merge(reason: :changed_since_scan)
             end
@@ -179,7 +179,7 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
 
     # Siblings are only reachable through this email row. If the email is held, roll the sibling
     # writes back so a later sweep can still find them.
-    def clear_burst(block, window, siblings, entry, cleared, held)
+    def clear_burst(block, window, siblings, entry, cleared, held, clear_email:)
       cleared_siblings = 0
       email_held = false
       PlatformBlock.transaction(requires_new: true) do
@@ -200,30 +200,38 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
         end
 
         block.lock!
-        if unattended_in_window?(block, window)
+        if unattended_in_window?(block, window) && clear_email
           block.unblock!
+        elsif unattended_in_window?(block, window)
+          email_held = true
         else
           email_held = true
           raise ActiveRecord::Rollback
         end
       end
 
-      if email_held
+      if email_held && clear_email
         held << entry.merge(reason: :changed_since_scan)
+      elsif email_held
+        held << entry.merge(reason: :sibling_lookup_truncated, siblings: cleared_siblings)
       else
         cleared << entry.merge(siblings: cleared_siblings)
       end
     end
 
-    # Anyone can type this email into a failed attempt, so sibling values come from successful purchases only.
+    # Sibling values are blocks in this burst that the buyer successfully used. A long purchase
+    # history must not hold the email when the burst itself is small. A truncated burst clears the
+    # page it could check and keeps the email, so the next sweep continues.
     def burst_siblings(email, window)
       @decline_scan_incomplete = false
       purchases = Purchase.successful.where(email:)
-      stripe_fingerprints, other_visuals = card_sibling_values(purchases)
-      guids = purchases.where.not(browser_guid: [nil, ""]).distinct.limit(MAX_SIBLING_VALUES + 1).pluck(:browser_guid)
-      # A truncated list can omit a sibling the 7-day rule still counts. Leave the email blocked so
-      # a later run can retry; clearing it would strand the rows this burst cannot see.
-      return nil if truncated_sibling_list?(guids, stripe_fingerprints, other_visuals)
+      guids = owned_blocked_values(purchases, :browser_guid, PlatformBlock::TYPES[:browser_guid], window)
+      stripe_fingerprints, other_visuals = owned_card_values(purchases, window)
+      browser_truncated = guids.size > MAX_SIBLING_VALUES
+      card_truncated = truncated_sibling_list?(stripe_fingerprints, other_visuals)
+      guids = guids.first(MAX_SIBLING_VALUES)
+      stripe_fingerprints = stripe_fingerprints.first(MAX_SIBLING_VALUES)
+      other_visuals = other_visuals.first(MAX_SIBLING_VALUES)
 
       values = {
         PlatformBlock::TYPES[:browser_guid] => guids,
@@ -235,23 +243,32 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
         PlatformBlock.active.where(object_type:, object_value: values[object_type], blocked_by: nil, blocked_at: window).to_a
       end
       browser_guids = siblings.filter_map { |sibling| sibling.object_value if sibling.object_type == PlatformBlock::TYPES[:browser_guid] }
-      return [] if recent_velocity_still_fires?(email, browser_guids)
+      return [nil, true] if recent_velocity_still_fires?(email, browser_guids)
 
       siblings = siblings.reject { |sibling| velocity_protected_browser?(sibling) || fraud_rule_still_wants_card?(sibling, stripe_values: stripe_fingerprints) }
-      return nil if @decline_scan_incomplete
-
-      siblings
+      # An unfinished fraud scan must keep the email. Clearing it would leave the card with no later retry.
+      return [nil, true] if @decline_scan_incomplete
+      # An unseen browser can still trip the 7-day rule. Clear only browsers until that list fits.
+      siblings = siblings.select { |sibling| sibling.object_type == PlatformBlock::TYPES[:browser_guid] } if browser_truncated
+      [siblings, browser_truncated || card_truncated]
     end
 
-    # Same split as Purchase#charge_processor_fingerprint for the visual: a Stripe masked visual is
-    # not a block key. Fingerprints are kept from every processor, because a block can also be
-    # written from recent_stripe_fingerprint.
-    def card_sibling_values(purchases)
+    def owned_blocked_values(purchases, column, object_type, window)
+      blocked = PlatformBlock.active.where(object_type:, blocked_by: nil, blocked_at: window).select(:object_value)
+      purchases.where(column => blocked).where.not(column => [nil, ""]).distinct.limit(MAX_SIBLING_VALUES + 1).pluck(column)
+    end
+
+    def owned_card_values(purchases, window)
+      # Same split as Purchase#charge_processor_fingerprint: a Stripe masked visual is not a block key.
+      blocked = PlatformBlock.active.where(
+        object_type: PlatformBlock::TYPES[:charge_processor_fingerprint],
+        blocked_by: nil,
+        blocked_at: window
+      ).select(:object_value)
       stripe_id = StripeChargeProcessor.charge_processor_id
-      stripe_fingerprints = purchases.where.not(stripe_fingerprint: [nil, ""])
-                                      .distinct.limit(MAX_SIBLING_VALUES + 1)
-                                      .pluck(:stripe_fingerprint)
+      stripe_fingerprints = purchases.where(stripe_fingerprint: blocked).where.not(stripe_fingerprint: [nil, ""]).distinct.limit(MAX_SIBLING_VALUES + 1).pluck(:stripe_fingerprint)
       other_visuals = purchases.where("charge_processor_id IS NULL OR charge_processor_id != ?", stripe_id)
+                               .where(card_visual: blocked)
                                .where.not(card_visual: [nil, ""])
                                .distinct.limit(MAX_SIBLING_VALUES + 1)
                                .pluck(:card_visual)
@@ -316,6 +333,7 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
                       .where(created_at: window, credit_card_id: card_ids)
                       .where.not(subscription_id: nil)
                       .where(fraud_decline_sql, codes: PurchaseErrorCode::AUTO_BLOCK_ERROR_CODES)
+                      .where(charged_on_subscription_sql)
       last = nil
       loop do
         batch_scope = scope
@@ -338,6 +356,19 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
 
         last = batch.last
       end
+    end
+
+    def charged_on_subscription_sql
+      <<~SQL.squish
+        EXISTS (
+          SELECT 1 FROM purchases charged
+          WHERE charged.subscription_id = purchases.subscription_id
+            AND charged.credit_card_id = purchases.credit_card_id
+            AND charged.id != purchases.id
+            AND charged.purchase_state = 'successful'
+            AND charged.price_cents != 0
+        )
+      SQL
     end
 
     def renewal_still_blocks_card?(purchase, value)
