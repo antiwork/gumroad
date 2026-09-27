@@ -36,6 +36,14 @@ describe("PoweredByFooter", () => {
     expect(screen.getByLabelText("Currency")).toBeTruthy();
   });
 
+  it("keeps the reservation out of the sm+ row so it stacks below the currency selector", () => {
+    render(<PoweredByFooter currencySelector />);
+
+    const row = document.querySelector("footer .sm\\:flex-row");
+    expect(row?.contains(screen.getByLabelText("Currency"))).toBe(true);
+    expect(row?.querySelector("[aria-hidden]")).toBeNull();
+  });
+
   it("renders the reservation without the currency selector, which stays opt-in", () => {
     render(<PoweredByFooter />);
 
