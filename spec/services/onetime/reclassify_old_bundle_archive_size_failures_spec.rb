@@ -56,10 +56,12 @@ describe Onetime::ReclassifyOldBundleArchiveSizeFailures do
     not_a_bundle = failed_archive(product, [create(:product_file, link: product, size: 600.megabytes)])
     link_only = failed_archive(bundle, [create(:product_file, link: members.first, size: 1.megabyte),
                                         create(:product_file, link: members.last, filetype: "link", url: "https://example.com", size: nil)])
+    deleted = failed_archive(bundle, bundle_files(300.megabytes, 300.megabytes)).tap { _1.update_columns(deleted_at: before_cutoff) }
+    folder = failed_archive(bundle, bundle_files(300.megabytes, 300.megabytes)).tap { _1.update_columns(folder_id: "folder") }
 
     described_class.process
 
-    expect([small, recent, not_a_bundle, link_only].map { _1.reload.product_files_archive_state }).to all(eq("failed"))
+    expect([small, recent, not_a_bundle, link_only, deleted, folder].map { _1.reload.product_files_archive_state }).to all(eq("failed"))
   end
 
   it "changes nothing on a dry run and nothing more on a rerun" do
