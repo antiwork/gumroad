@@ -375,6 +375,12 @@ export const Product = ({
       />
     ) : null;
 
+  const membershipSoldOut = Boolean(
+    product.is_tiered_membership &&
+      product.options.length > 0 &&
+      product.options.every((option) => option.quantity_left === 0),
+  );
+
   const showPrice =
     !product.recurrences &&
     product.options.length === 0 &&
@@ -413,11 +419,7 @@ export const Product = ({
                 url={product.long_url}
                 isPayWhatYouWant={!!product.pwyw}
                 isSalesLimited={product.is_sales_limited}
-                isSoldOut={
-                  product.is_tiered_membership &&
-                  product.options.length > 0 &&
-                  product.options.every((option) => option.quantity_left === 0)
-                }
+                isSoldOut={membershipSoldOut}
                 creatorName={product.seller?.name}
                 buyerCurrency={product.buyer_currency}
                 buyerLocalCurrencyRate={product.buyer_local_currency_rate}
