@@ -137,6 +137,31 @@ RSpec.describe "External Stripe refund accounting" do
       end
     end
 
+    context "on a combined charge where refund_purchase! refuses one purchase" do
+      let(:refund) { stripe(id: "re_ambiguous", amount: 1500, charge: "ch_ambiguous", status: "succeeded", currency: "usd", transfer_reversal: nil, balance_transaction: stripe(amount: -1500, currency: "usd")) }
+      let(:charge) { stripe(id: "ch_ambiguous", amount: 1500, destination: merchant.charge_processor_merchant_id, transfer: "tr_ambiguous", application_fee: fee, on_behalf_of: nil) }
+
+      it "books no purchase, and alerts with the refused one" do
+        purchase.update!(is_part_of_combined_charge: true)
+        sibling = create(:purchase_with_balance, link: create(:product, user: seller, price_cents: 500), seller:, merchant_account: merchant,
+                                                 price_cents: 500, total_transaction_cents: 500, is_part_of_combined_charge: true,
+                                                 stripe_transaction_id: "ch_ambiguous")
+        combined = create(:charge, processor_transaction_id: "ch_ambiguous", amount_cents: 1500, merchant_account: merchant, purchases: [purchase, sibling])
+        event.extras[:refunded_amount_cents] = 1500
+        allow_any_instance_of(Purchase).to receive(:refund_purchase!).and_wrap_original do |method, *args, **kwargs|
+          method.receiver.id == sibling.id ? false : method.call(*args, **kwargs)
+        end
+
+        combined.handle_event_refund_updated!(event)
+
+        expect(Refund.where(processor_refund_id: "re_ambiguous")).to be_empty
+        expect(purchase.reload.stripe_refunded?).to eq(false)
+        expect(ErrorNotifier).to have_received(:notify).with(
+          Charge::Refundable::EXTERNAL_REFUND_ALERT, hash_including(refused_purchase_ids: [sibling.id], recorded: false)
+        )
+      end
+    end
+
     context "on a combined charge where one purchase cannot take its share" do
       let(:refund) { stripe(id: "re_ambiguous", amount: 1500, charge: "ch_ambiguous", status: "succeeded", currency: "usd", transfer_reversal: nil, balance_transaction: stripe(amount: -1500, currency: "usd")) }
       let(:charge) { stripe(id: "ch_ambiguous", amount: 1500, destination: merchant.charge_processor_merchant_id, transfer: "tr_ambiguous", application_fee: fee, on_behalf_of: nil) }

@@ -562,6 +562,22 @@ describe Charge::Refundable do
         )
       end
 
+      it "debits the seller and reverses the dispute-win transfer when the purchase won a dispute" do
+        purchase.update!(chargeback_date: Time.current, chargeback_reversed: true)
+        # The dispute reversed the original transfer, so nothing is left on it.
+        transfer.amount_reversed = 8_50
+        expect(Stripe::Transfer).not_to receive(:create_reversal)
+        expect_any_instance_of(Purchase).to receive(:reverse_the_transfer_made_for_dispute_win!)
+
+        purchase.handle_event_refund_updated!(build_external_event)
+
+        refund = purchase.reload.refunds.sole
+        expect(refund.gumroad_funded).to be_nil
+        expect(seller_refund_debits.count).to eq(1)
+        expect(ErrorNotifier).to have_received(:notify).with(Charge::Refundable::EXTERNAL_REFUND_ALERT,
+                                                             hash_including(transfer_outcome: :dispute_won, recorded: true))
+      end
+
       it "books the refund as Gumroad-funded when Stripe refuses the reversal" do
         allow(Stripe::Transfer).to receive(:list_reversals).and_return([])
         allow(Stripe::Transfer).to receive(:create_reversal).and_raise(Stripe::InvalidRequestError.new("Transfer already paid out", nil))

@@ -112,6 +112,7 @@ module Charge::Refundable
       purchases = refundable.charged_purchases.select { _1.successful? && !_1.stripe_refunded? }.sort_by(&:id)
       unrecorded = []
       blocked_purchase_ids = []
+      refused_purchase_ids = []
       flow_of_funds_for = lambda do |purchase, refund|
         next refund.flow_of_funds unless purchase.is_part_of_combined_charge?
 
@@ -134,24 +135,44 @@ module Charge::Refundable
 
         if charge_refund.is_a?(StripeChargeRefund) && charge_refund.charge[:destination].present? &&
             merchant_account&.holder_of_funds == HolderOfFunds::STRIPE
-          charge_refund, transfer_outcome = processor.reverse_transfer_for_external_refund(charge_refund, merchant_account:)
+          # A won dispute already reversed the transfer and sent the seller's share back in a separate
+          # transfer. refund_purchase! reverses that one and debits the seller, as for an app refund.
+          dispute_won_ids = unrecorded.select { _1.chargedback? && _1.chargeback_reversed }.map(&:id)
+          if dispute_won_ids.any?
+            # The charge-level reversal cannot be split between the two kinds of purchase.
+            if dispute_won_ids.size < unrecorded.size
+              blocked_purchase_ids = dispute_won_ids
+              transfer_outcome = :dispute_won_mixed
+              next []
+            end
+            transfer_outcome = :dispute_won
+          else
+            charge_refund, transfer_outcome = processor.reverse_transfer_for_external_refund(charge_refund, merchant_account:)
+          end
         end
         # An unpaired refund is still booked, so the sale shows as refunded, but it changes no seller
         # balance: its seller legs could belong to a different refund on the charge.
         gumroad_funded = %i[not_reversible fee_refund_unpaired].include?(transfer_outcome)
         balance_reconciliation_needed = transfer_outcome == :reversal_unpaired
 
-        unrecorded.select do |purchase|
+        booked = unrecorded.select do |purchase|
           purchase.refund_purchase!(flow_of_funds_for.(purchase, charge_refund), GUMROAD_ADMIN_ID, charge_refund.refund,
                                     event.extras[:refund_reason] == "fraudulent",
                                     gumroad_funded:, balance_reconciliation_needed:, defer_notifications_until_commit: true)
         end
-      end
+        # refund_purchase! can refuse a purchase the check above passed; a partial booking would stay
+        # partial on every redelivery, so book none.
+        refused_purchase_ids = (unrecorded - booked).map(&:id)
+        raise ActiveRecord::Rollback if refused_purchase_ids.any?
+
+        booked
+      end || []
       return if unrecorded.empty?
 
       alert_context = { stripe_refund_id:, stripe_charge_id:, refunded_amount_cents:, transfer_outcome:,
                         refunded_purchase_ids: refunded_purchases.map(&:id),
-                        unrecorded_purchase_ids: (unrecorded - refunded_purchases).map(&:id), blocked_purchase_ids: }
+                        unrecorded_purchase_ids: (unrecorded - refunded_purchases).map(&:id), blocked_purchase_ids:,
+                        refused_purchase_ids: }
       notify_external_refund_alert(EXTERNAL_REFUND_ALERT, **alert_context, recorded: refunded_purchases.size == unrecorded.size)
       if transfer_outcome == :not_reversible
         notify_external_refund_alert("Refund created outside the app booked as Gumroad-funded: seller transfer not reversible", **alert_context)
@@ -207,6 +228,7 @@ module Charge::Refundable
       "refunded_purchase_ids: #{context[:refunded_purchase_ids].inspect} " \
       "unrecorded_purchase_ids: #{context[:unrecorded_purchase_ids].inspect} " \
       "blocked_purchase_ids: #{context[:blocked_purchase_ids].inspect} " \
+      "refused_purchase_ids: #{context[:refused_purchase_ids].inspect} " \
       "recorded: #{context[:recorded].inspect}"
     )
   end
