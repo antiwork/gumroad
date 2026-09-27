@@ -1944,6 +1944,18 @@ describe StripeChargeProcessor, :vcr do
             expect(stripe_charge.transfer.reversed).to eq(true)
           end
 
+          it "reads an earlier partial refund with its own destination refund after a later refund" do
+            charge_id = create_stripe_charge(payment_method_id, amount: amount_cents, currency:, confirm: true,
+                                                                transfer_data: { destination: stripe_account }, on_behalf_of: stripe_account).id
+            first_refund = subject.refund!(charge_id, amount_cents: 3_00)
+            subject.refund!(charge_id, amount_cents: 5_00)
+
+            reread = subject.get_refund(first_refund.id)
+
+            expect(reread.flow_of_funds.merchant_account_gross_amount.cents).to eq(first_refund.flow_of_funds.merchant_account_gross_amount.cents)
+            expect(reread.flow_of_funds.merchant_account_net_amount.cents).to eq(first_refund.flow_of_funds.merchant_account_net_amount.cents)
+          end
+
           describe "return value" do
             let(:charge_refund) { subject.refund!(charge_id) }
 
