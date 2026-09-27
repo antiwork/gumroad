@@ -586,6 +586,32 @@ describe Charge::Refundable do
         expect(ErrorNotifier).to have_received(:notify).with(Charge::Refundable::EXTERNAL_REFUND_ALERT, anything).once
       end
 
+      it "adopts its own reversal on the retry after booking failed, and books the refund once" do
+        reversals = []
+        allow(Stripe::Transfer).to receive(:list_reversals) { reversals.dup }
+        expect(Stripe::Transfer).to receive(:create_reversal).once do |_transfer_id, params, _options|
+          Stripe::StripeObject.construct_from(id: "trr_1", destination_payment_refund: "pyr_1", metadata: params[:metadata]).tap { reversals << _1 }
+        end
+        attempts = 0
+        allow_any_instance_of(Purchase).to receive(:refund_purchase!).and_wrap_original do |original, *args, **kwargs|
+          attempts += 1
+          raise ActiveRecord::Deadlocked if attempts == 1
+
+          original.call(*args, **kwargs)
+        end
+
+        expect { purchase.handle_event_refund_updated!(build_external_event) }.to raise_error(ActiveRecord::Deadlocked)
+        expect(purchase.reload.refunds).to be_empty
+        expect(seller_refund_debits).to be_empty
+
+        purchase.handle_event_refund_updated!(build_external_event)
+
+        expect(purchase.reload.refunds.count).to eq(1)
+        expect(seller_refund_debits.count).to eq(1)
+        expect(ErrorNotifier).to have_received(:notify).with(Charge::Refundable::EXTERNAL_REFUND_ALERT,
+                                                             hash_including(transfer_outcome: :reversed_by_gumroad, recorded: true))
+      end
+
       context "when the charge already has an application-fee refund" do
         let(:stripe_charge) do
           Stripe::StripeObject.construct_from(id: purchase.stripe_transaction_id, amount: 10_00, amount_refunded: 10_00,
