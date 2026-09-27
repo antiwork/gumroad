@@ -135,6 +135,10 @@ describe "Closing a membership tier to new purchases" do
       expect(product.display_price_cents).to be > 0
     end
 
+    it "does not publish a fully closed membership as in stock" do
+      expect(product.structured_data.dig("offers", "availability")).to eq("https://schema.org/SoldOut")
+    end
+
     it "asks Discover to refresh when the close setting changes" do
       expect(tier.link).to receive(:enqueue_index_update_for).with(["available_price_cents"])
       tier.update!(closed_to_new_purchases: false)
