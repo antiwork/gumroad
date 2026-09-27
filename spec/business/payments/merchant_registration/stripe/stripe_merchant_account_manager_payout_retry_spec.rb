@@ -779,6 +779,38 @@ describe StripeMerchantAccountManager do
         expect(MerchantAccount.alive.stripe.find_by(charge_processor_merchant_id: "acct_old_country")).to be_present
       end
 
+      it "does not delete a soft-deleted linked account or open a second one" do
+        user_compliance_info.update_columns(deleted_at: Time.current)
+        create(:user_compliance_info_canada, user:)
+        linked = create(:merchant_account, user:, charge_processor_merchant_id: "acct_old_country")
+        linked.delete_charge_processor_account!
+        user.add_payout_note(
+          content: "#{StripeMerchantAccountManager::NO_VERDICT_FAILURE_NOTE_PREFIX}: lost",
+          json_data: {
+            "no_verdict" => true,
+            "abandoned_at" => 1.hour.ago.iso8601,
+            StripeMerchantAccountManager::ACCOUNT_CREATION_IDEMPOTENCY_KEY => "old-country-key",
+            StripeMerchantAccountManager::ACCOUNT_CREATION_ATTEMPTED_AT => 25.hours.ago.iso8601
+          }
+        )
+        old_account = Stripe::Account.construct_from(
+          id: "acct_old_country", object: "account", type: "custom", country: "US",
+          metadata: { "user_id" => user.external_id }
+        )
+        allow(Stripe::Account).to receive(:list).and_return(
+          Stripe::ListObject.construct_from(object: "list", data: [old_account], has_more: false)
+        )
+        expect(Stripe::Account).not_to receive(:delete)
+        expect(Stripe::Account).not_to receive(:create)
+        allow(ErrorNotifier).to receive(:notify)
+
+        expect { described_class.create_account(user, passphrase:) }.to raise_error(
+          Stripe::APIError, "Uncertain Stripe account creation could not be reconciled"
+        )
+        expect(MerchantAccount.alive.stripe.find_by(charge_processor_merchant_id: "acct_old_country")).to be_nil
+        expect(MerchantAccount.unscoped.find(linked.id).charge_processor_merchant_id).to eq("acct_old_country")
+      end
+
       it "adopts the matching-country account when an older country is in the same window" do
         user_compliance_info.update_columns(deleted_at: Time.current)
         create(:user_compliance_info_canada, user:)

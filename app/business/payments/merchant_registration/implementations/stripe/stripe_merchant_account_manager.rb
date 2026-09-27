@@ -2071,8 +2071,9 @@ module StripeMerchantAccountManager
     compatible = matches.reject do |account|
       account_country_conflicts_with_legal_entity?(stripe_account_country(account), country)
     end
-    # Stripe will not change an account's country. Delete the unlinked old account so the
-    # next create can open one for the current country. A failed delete must not open a second.
+    # Stripe will not change an account's country. Delete an old account only when no local
+    # row has linked it. A soft-deleted link can still receive a returned payout, so that
+    # mismatch stays unreconciled instead of opening a second account.
     if compatible.empty? && matches.any?
       return nil if release_country_mismatched_accounts!(matches, country)
 
@@ -2103,7 +2104,11 @@ module StripeMerchantAccountManager
       account_country_conflicts_with_legal_entity?(stripe_account_country(account), country)
     end
     return false if mismatched.empty?
-    return false if mismatched.any? { |account| MerchantAccount.alive.stripe.exists?(charge_processor_merchant_id: account["id"]) }
+    # Country change soft-deletes the local row and keeps the Stripe id. alive would miss it.
+    return false if mismatched.any? do |account|
+      stripe_id = account["id"]
+      stripe_id.present? && MerchantAccount.unscoped.stripe.exists?(charge_processor_merchant_id: stripe_id)
+    end
 
     mismatched.each do |account|
       Stripe::Account.delete(account["id"])
