@@ -2005,8 +2005,6 @@ module StripeMerchantAccountManager
   private_class_method
   def self.create_or_recover_stripe_account(user, account_params, idempotency_key)
     recovered = recover_uncertain_stripe_account(user, country: account_params[:country])
-    replacement = replace_country_mismatched_recovery(user, recovered, account_params)
-    return replacement if replacement
     return [recovered, true] if recovered.is_a?(Stripe::Account)
     raise Stripe::APIError.new("Uncertain Stripe account creation could not be reconciled") if recovered == :unreconciled
 
@@ -2022,42 +2020,12 @@ module StripeMerchantAccountManager
     # The stored key was used with different parameters, so Stripe will not replay it. Adopt the
     # account if the first request created one; do not open a second one to get past the error.
     recovered = list_matching_uncertain_account(user, country: account_params[:country])
-    replacement = replace_country_mismatched_recovery(user, recovered, account_params)
-    return replacement if replacement
     return [recovered, true] if recovered.is_a?(Stripe::Account)
     raise Stripe::APIError.new("Uncertain Stripe account creation could not be reconciled") if recovered == :unreconciled
 
     replacement_key = SecureRandom.uuid
     raise Stripe::APIError.new("Uncertain Stripe account creation could not be reconciled") unless remember_account_creation_idempotency_key(user, replacement_key)
     [Stripe::Account.create(force_utf8_encoding(account_params), { idempotency_key: replacement_key }), false]
-  end
-
-  # Stripe will not change an account's country. Adopting the old account would save the new
-  # country locally against an account that can never pay out there.
-  private_class_method
-  def self.replace_country_mismatched_recovery(user, account, account_params)
-    return nil unless account.is_a?(Stripe::Account)
-    return nil unless account_country_conflicts_with_legal_entity?(stripe_account_country(account), account_params[:country])
-
-    drop_abandoned_account_creation_keys!(user)
-    key = SecureRandom.uuid
-    raise Stripe::APIError.new("Uncertain Stripe account creation could not be reconciled") unless remember_account_creation_idempotency_key(user, key)
-
-    [Stripe::Account.create(force_utf8_encoding(account_params), { idempotency_key: key }), false]
-  end
-
-  private_class_method
-  def self.drop_abandoned_account_creation_keys!(user)
-    user.comments
-      .with_type_payout_note
-      .alive
-      .where(author_id: GUMROAD_ADMIN_ID)
-      .where("content LIKE ?", "#{NO_VERDICT_FAILURE_NOTE_PREFIX}%")
-      .select { |note| note.json_data["abandoned_at"].present? && note.json_data[ACCOUNT_CREATION_IDEMPOTENCY_KEY].present? }
-      .each do |note|
-        note.json_data.delete(ACCOUNT_CREATION_IDEMPOTENCY_KEY)
-        note.save!
-      end
   end
 
   private_class_method
@@ -2118,6 +2086,7 @@ module StripeMerchantAccountManager
   def self.uncertain_account_match?(account, user, country: nil)
     return false if account["id"].blank? || account["deleted"]
     return false if account["type"].present? && account["type"] != "custom"
+    # Stripe will not change an account's country, so an older account must not count as a match.
     return false if account_country_conflicts_with_legal_entity?(stripe_account_country(account), country)
 
     linked_user_id = MerchantAccount.alive.stripe.find_by(charge_processor_merchant_id: account["id"])&.user_id
