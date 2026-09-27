@@ -11,8 +11,9 @@
 module Onetime
   class ReclassifyOldBundleArchiveSizeFailures
     OLD_SIZE_LIMIT = 500.megabytes
-    # After #7977 deployed; a failure after this was not a size bail.
-    FAILED_BEFORE = Time.utc(2026, 9, 26, 12).freeze
+    # When #7977's deploy finished (release v2026.09.26.1). Later failures come from a worker that
+    # marks a size bail too_large, so they are not size bails.
+    FAILED_BEFORE = Time.utc(2026, 9, 26, 0, 6, 22).freeze
     BATCH_SIZE = 500
 
     def self.process(dry_run: false)
