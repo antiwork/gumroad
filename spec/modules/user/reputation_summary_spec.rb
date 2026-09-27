@@ -219,17 +219,32 @@ describe User::ReputationSummary do
       expect(WarmSellerReputationSummaryJob.jobs).to be_empty
     end
 
-    it "keeps serving the previous snapshot after a review write and queues a refresh" do
+    it "renders nothing after a review write until the refresh lands" do
       WarmSellerReputationSummaryJob.new.perform(seller.id)
       Sidekiq::Job.clear_all
+      ProductReviewStat.find_by(link_id: product_one.id).update_with_added_rating(5)
       seller.bump_reputation_summary_version
 
-      expect(seller.seller_reputation_summary(snapshot_only: true)).to eq(average: 4.7, count: 12, products_count: 2)
+      expect(seller.seller_reputation_summary(exclude_product: product_two, snapshot_only: true)).to be_nil
       expect(WarmSellerReputationSummaryJob).to have_enqueued_sidekiq_job(seller.id)
 
-      ProductReviewStat.find_by(link_id: product_one.id).update_with_added_rating(5)
       WarmSellerReputationSummaryJob.new.perform(seller.id)
       expect(seller.seller_reputation_summary(snapshot_only: true)[:count]).to eq(13)
+    end
+
+    it "invalidates the snapshot when a counted product is drafted or hides its reviews" do
+      third = create(:product, user: seller)
+      create_stat(third, five: 1)
+      WarmSellerReputationSummaryJob.new.perform(seller.id)
+      expect(seller.seller_reputation_summary(snapshot_only: true)[:count]).to eq(13)
+
+      third.update!(draft: true)
+      expect(seller.seller_reputation_summary(snapshot_only: true)).to be_nil
+      WarmSellerReputationSummaryJob.new.perform(seller.id)
+      expect(seller.seller_reputation_summary(snapshot_only: true)[:count]).to eq(12)
+
+      product_two.update!(display_product_reviews: false)
+      expect(seller.seller_reputation_summary(snapshot_only: true)).to be_nil
     end
 
     it "refreshes a snapshot older than CACHE_TTL" do

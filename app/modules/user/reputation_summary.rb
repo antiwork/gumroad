@@ -19,8 +19,12 @@ module User::ReputationSummary
   # funnel bump that is lost to a network partition cannot pin a stale rollup
   # forever.
   CACHE_TTL = 10.minutes
-  # How long a stale snapshot may still be rendered while its refresh is queued.
+  # How long a snapshot may still be rendered while its refresh is queued.
   SNAPSHOT_TTL = 30.days
+  # Link columns the rollup's WHERE clause reads; a change to any of them must
+  # move the version, or a product page keeps serving a snapshot that still
+  # counts a drafted/deleted/review-hidden product.
+  ROLLUP_LINK_COLUMNS = %w[deleted_at purchase_disabled_at banned_at draft flags user_id].freeze
 
   # Called from the review-stat write funnel, which runs inside the review's
   # transaction — defer the INCR to commit so a concurrent reader cannot fill
@@ -59,10 +63,8 @@ module User::ReputationSummary
   # not meet the display gate. exclude_product keeps a product page's rollup
   # from silently counting that product's own reviews.
   #
-  # snapshot_only: serve the last computed rollup from Redis and never run SQL
-  # on the request. A missing or stale snapshot queues WarmSellerReputationSummaryJob
-  # and renders the stale value (or none). For public pages a crawler can fan
-  # out across thousands of cold sellers.
+  # snapshot_only never runs SQL, so a crawler across cold sellers costs Redis
+  # reads only; a missing snapshot, or one behind the version, renders nil.
   def seller_reputation_summary(exclude_product: nil, snapshot_only: false)
     return nil unless reputation_summary_enabled?
 
@@ -82,12 +84,15 @@ module User::ReputationSummary
   end
 
   private
+    # A version mismatch means review counts or product lifecycle moved since the
+    # snapshot, so exclude_product would subtract current counts from old totals:
+    # render nothing until the refresh lands. Age alone only schedules a refresh.
     def snapshot_reputation_aggregate
       raw, version = $redis.mget(reputation_snapshot_key, reputation_version_key)
       snapshot = raw && JSON.parse(raw)
-      fresh = snapshot && snapshot["signature"] == version.to_i && snapshot["computed_at"] > CACHE_TTL.ago.to_i
-      WarmSellerReputationSummaryJob.perform_async(id) unless fresh
-      snapshot&.dig("aggregate")
+      current = snapshot && snapshot["signature"] == version.to_i
+      WarmSellerReputationSummaryJob.perform_async(id) unless current && snapshot["computed_at"] > CACHE_TTL.ago.to_i
+      current ? snapshot["aggregate"] : nil
     rescue Redis::BaseError, RedisClient::Error, JSON::ParserError => e
       ErrorNotifier.notify(e, user_id: id)
       nil
