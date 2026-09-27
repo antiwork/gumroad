@@ -620,7 +620,8 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
 
             expect(response).to redirect_to(settings_payments_path)
             expect(response).to have_http_status :found
-            expect(session[:inertia_errors][:base]).to eq(["An unknown error occurred"])
+            expect(session[:inertia_errors][:base]).to eq([StripeMerchantAccountManager.no_verdict_seller_message(Stripe::APIError.new("An unknown error occurred"))])
+            expect(session[:inertia_errors][:base].first).to include("Nothing you entered was rejected")
           end
 
           it "handles MerchantRegistrationUserNotReadyError gracefully instead of raising a 500" do

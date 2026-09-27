@@ -180,7 +180,7 @@ describe StripeMerchantAccountManager do
           notes = payout_notes(StripeMerchantAccountManager::NO_VERDICT_FAILURE_NOTE_PREFIX)
           expect(notes.count).to eq(1)
           expect(notes.first.json_data).to include("no_verdict" => true, "error_class" => build_error.call.class.name)
-          expect(user.comments.alive.with_type_payout_note.where(seller_visible: true)).to be_empty
+          expect(user.reload.latest_seller_visible_payout_note).to be_nil
           expect(RetryStripeRejectedPayoutSetupForSellerJob).to have_enqueued_sidekiq_job(user.id)
         end
       end
