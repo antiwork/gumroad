@@ -49,6 +49,13 @@ describe "Closing a membership tier to new purchases" do
       expect(tier.closed_to_new_purchases?).to be(true)
       expect(tier.available?).to be(false)
       expect(product.reload.options.find { _1[:id] == tier.external_id }[:quantity_left]).to eq(0)
+      buyer_payload = tier.as_json(for_views: true)
+      expect(buyer_payload["quantity_left"]).to eq(0)
+      expect(buyer_payload["sold_out"]).to be(true)
+      expect(product.variant_list[:categories].first[:options].find { _1["id"] == tier.external_id }).to include("quantity_left" => 0, "sold_out" => true)
+      seller_payload = tier.as_json(for_views: true, for_seller: true)
+      expect(seller_payload["quantity_left"]).to eq(tier.quantity_left)
+      expect(seller_payload["sold_out"]).to be(false)
 
       purchase = new_purchase_of(tier)
       expect(purchase.error_code).to eq(PurchaseErrorCode::VARIANT_SOLD_OUT)

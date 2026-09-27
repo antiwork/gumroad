@@ -105,6 +105,8 @@ class BaseVariant < ApplicationRecord
   def as_json(options = {})
     if options[:for_views]
       variant_quantity_left = quantity_left
+      # A close is not inventory. A lapse frees capacity, and this payload must not offer the tier again.
+      variant_quantity_left = 0 if options[:for_seller] != true && closed_to_new_buyers?
       variant_json = {
         "option" => name,
         "name" => name == "Untitled" ? link.name : name,
