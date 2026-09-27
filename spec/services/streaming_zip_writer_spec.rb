@@ -104,6 +104,18 @@ describe StreamingZipWriter do
     expect { writer.close }.to raise_error(described_class::FailedError)
   end
 
+  it "refuses an entry started inside another entry and fails the archive" do
+    writer = described_class.new(StringIO.new)
+
+    expect do
+      writer.write_entry("outer.txt", size: 1) do |entry_data|
+        writer.write_entry("inner.txt", size: 1) { _1.write("b") }
+        entry_data.write("a")
+      end
+    end.to raise_error(RuntimeError, /already open/)
+    expect { writer.close }.to raise_error(described_class::FailedError)
+  end
+
   it "stores the modification time in UTC and leaves the given time unchanged" do
     local_header_time = lambda do |modified_at|
       sink = StringIO.new

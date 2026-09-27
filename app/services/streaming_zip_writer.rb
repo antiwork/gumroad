@@ -55,6 +55,8 @@ class StreamingZipWriter
   def write_entry(name, size:, compressed_size: nil)
     raise FailedError, "an earlier entry failed" if @failed
     raise ClosedError, "the archive is closed" if @closed
+    # A nested entry's bytes would land inside the open entry's deflate stream, which no check sees.
+    raise "an entry is already open" if @entry_open
     # The name length is a 16-bit field; a longer name would silently misplace every later byte.
     raise ArgumentError, "#{name[0, 40]}...: name is over #{TWO_BYTE_MAX} bytes" if name.b.bytesize > TWO_BYTE_MAX
     if compressed_size.nil? && self.class.compressed_size_needed?(size)
@@ -63,6 +65,7 @@ class StreamingZipWriter
 
     entry = Entry.new(name: name.b, size:, offset: @bytes_written,
                       zip64_local: size > FOUR_BYTE_MAX || compressed_size.to_i > FOUR_BYTE_MAX)
+    @entry_open = true
     begin
       write_local_header(entry)
       data = EntryData.new(self)
@@ -86,6 +89,8 @@ class StreamingZipWriter
     rescue Exception
       @failed = true
       raise
+    ensure
+      @entry_open = false
     end
     @entries << entry
   end
