@@ -4078,6 +4078,10 @@ class Purchase < ApplicationRecord
     # the original/upgrade flags. Passing nil recurrence here registers a sporadic
     # mandate, which RBI issuers then refuse for the same monthly membership.
     recurrence = subscription_duration if is_original_subscription_purchase? || is_upgrade_purchase? || setup_future_charges
+    # An installment plan's price carries no recurrence, the plan does (Subscription#recurrence).
+    # Passing nil registers a sporadic mandate for a plan that bills monthly, which RBI issuers
+    # refuse, so the reauth fix above is a no-op for this product class.
+    recurrence = subscription.recurrence if recurrence.blank? && subscription&.is_installment_plan?
     interval, interval_count = StripeChargeProcessor.indian_card_mandate_interval(recurrence)
 
     mandate_options = {
