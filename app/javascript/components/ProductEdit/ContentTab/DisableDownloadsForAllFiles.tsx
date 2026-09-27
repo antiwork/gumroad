@@ -6,15 +6,13 @@ import { request, ResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import { Modal } from "$app/components/Modal";
-import { PopoverClose } from "$app/components/Popover";
 import { useProductEditContext } from "$app/components/ProductEdit/state";
-import { PopoverMenuItem } from "$app/components/RichTextEditor";
-import { showAlert } from "$app/components/server-components/Alert";
-import { Menu, MenuItem } from "$app/components/ui/Menu";
+
+export type DisableDownloadsResult = { message: string; status: "success" | "info" | "danger" };
 
 // Writes through the server: the editor save carries only the files embedded in the version
 // being edited, so flipping local state would miss the rest of the product's files.
-export const DisableDownloadsForAllFiles = () => {
+export const DisableDownloadsForAllFiles = ({ onResult }: { onResult: (result: DisableDownloadsResult) => void }) => {
   const { updateProduct, uniquePermalink } = useProductEditContext();
   const [confirming, setConfirming] = React.useState(false);
   const [working, setWorking] = React.useState(false);
@@ -50,9 +48,9 @@ export const DisableDownloadsForAllFiles = () => {
           ? `${fileCount(ineligible_count)} stay${ineligible_count === 1 ? "s" : ""} downloadable, because the browser can't open ${ineligible_count === 1 ? "it" : "them"} for your buyers.`
           : null,
       ].filter((detail) => detail !== null);
-      showAlert(details.join(" "), disabled_count > 0 ? "success" : "info");
+      onResult({ message: details.join(" "), status: disabled_count > 0 ? "success" : "info" });
     } catch (error) {
-      showAlert(error instanceof Error ? error.message : "Could not disable downloads.", "error");
+      onResult({ message: error instanceof Error ? error.message : "Could not disable downloads.", status: "danger" });
     } finally {
       setWorking(false);
       setConfirming(false);
@@ -61,15 +59,14 @@ export const DisableDownloadsForAllFiles = () => {
 
   return (
     <>
-      <PopoverMenuItem name="File downloads" icon={<ArrowInDownSquareHalf className="size-5" />}>
-        <Menu aria-label="File download settings">
-          <PopoverClose asChild>
-            <MenuItem onClick={() => setConfirming(true)}>
-              <span>Disable downloads for all files</span>
-            </MenuItem>
-          </PopoverClose>
-        </Menu>
-      </PopoverMenuItem>
+      <button
+        type="button"
+        className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 all-unset hover:bg-active-bg"
+        onClick={() => setConfirming(true)}
+      >
+        <ArrowInDownSquareHalf className="size-5" />
+        <span>Disable all downloads</span>
+      </button>
       {confirming ? (
         <Modal
           open
