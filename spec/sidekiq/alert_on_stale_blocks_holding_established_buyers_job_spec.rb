@@ -246,6 +246,43 @@ describe AlertOnStaleBlocksHoldingEstablishedBuyersJob do
       expect(guid_block.reload.blocked_at).to be_present
     end
 
+    it "leaves a card that only reached this email on a failed attempt" do
+      create(:purchase, purchase_state: "failed", email:, stripe_fingerprint: "fp-tester")
+      at = 2.years.ago
+      block_email(blocked_at: at)
+      tester_card = block_value(:charge_processor_fingerprint, "fp-tester", blocked_at: at)
+
+      message
+      expect(tester_card.reload.blocked_at).to be_present
+    end
+
+    it "clears no sibling while the 7-day email velocity rule would still fire" do
+      Purchase::Blockable::MAX_NUMBER_OF_FAILED_FINGERPRINTS.times do |index|
+        create(:purchase, purchase_state: "failed", email:, browser_guid: "other-#{index}", stripe_fingerprint: "tested-#{index}")
+      end
+      at = 2.years.ago
+      email_block = block_email(blocked_at: at)
+      card_block = block_value(:charge_processor_fingerprint, fingerprint, blocked_at: at)
+
+      message
+      expect(email_block.reload.blocked_at).to be_nil
+      expect(card_block.reload.blocked_at).to be_present
+    end
+
+    it "keeps a sibling an admin re-blocked after the lookup" do
+      at = 2.years.ago
+      email_block = block_email(blocked_at: at)
+      card_block = block_value(:charge_processor_fingerprint, fingerprint, blocked_at: at)
+      admin = create(:admin_user)
+      allow_any_instance_of(PlatformBlock).to receive(:unblock!).and_wrap_original do |original, *args|
+        PlatformBlock.add!(object_type: card_block.object_type, object_value: fingerprint, by: admin.id) if original.receiver.id == email_block.id
+        original.call(*args)
+      end
+
+      message
+      expect(card_block.reload).to have_attributes(blocked_by: admin.id, blocked_at: be_present)
+    end
+
     it "clears no sibling when the email block is held" do
       create(:user, email:, user_risk_state: "suspended_for_fraud")
       at = 2.years.ago

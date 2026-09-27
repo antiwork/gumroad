@@ -106,8 +106,12 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
             block.reload
             still_active = block.blocked_at.present? && (block.expires_at.nil? || block.expires_at > Time.current)
             if still_active && block.blocked_by.nil? && !newly_disputed_or_suspended?(email)
-              siblings = burst_siblings(block, email)
+              window = burst_window(block)
+              siblings = burst_siblings(email, window)
               block.unblock!
+              # Re-read at the write for the same reason as the email row: an admin re-block since
+              # the lookup rewrites blocked_by and blocked_at, and must survive.
+              siblings = siblings.select { |sibling| unattended_in_window?(sibling.reload, window) }
               siblings.each(&:unblock!)
               cleared << entry.merge(siblings: siblings.size)
             else
@@ -165,25 +169,43 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
       ErrorNotifier.notify(e)
     end
 
-    # The unattended browser/card rows written in this email block's own burst, restricted to values
-    # this buyer's purchases carry so a stranger blocked in the same two minutes is never matched.
     # blocked_at, not created_at: PlatformBlock.add! reuses the row, so created_at is first sighting.
-    # A browser the card-testing velocity rule still wants is kept.
-    def burst_siblings(block, email)
-      purchases = Purchase.where(email:)
+    def burst_window(block)
+      (block.blocked_at - SIBLING_BURST_WINDOW)..(block.blocked_at + SIBLING_BURST_WINDOW)
+    end
+
+    # The unattended browser/card rows written in this email block's own burst, restricted to values
+    # on this buyer's SUCCESSFUL purchases: anyone can type this email into a failed attempt, so a
+    # card tester's card or browser must not ride along. Nothing is cleared while the 7-day
+    # email-or-browser velocity rule would still fire, and a browser the all-time rule wants is kept.
+    def burst_siblings(email, window)
+      purchases = Purchase.successful.where(email:)
       values = {
         PlatformBlock::TYPES[:browser_guid] => purchases.where.not(browser_guid: [nil, ""]).distinct.limit(MAX_SIBLING_VALUES).pluck(:browser_guid),
         PlatformBlock::TYPES[:charge_processor_fingerprint] =>
           (purchases.where.not(stripe_fingerprint: [nil, ""]).distinct.limit(MAX_SIBLING_VALUES).pluck(:stripe_fingerprint) +
            purchases.where.not(card_visual: [nil, ""]).distinct.limit(MAX_SIBLING_VALUES).pluck(:card_visual)).uniq,
       }
-      window = (block.blocked_at - SIBLING_BURST_WINDOW)..(block.blocked_at + SIBLING_BURST_WINDOW)
+      return [] if recent_velocity_still_fires?(email, values[PlatformBlock::TYPES[:browser_guid]])
 
       SIBLING_TYPES.flat_map do |object_type|
         next [] if values[object_type].empty?
 
         PlatformBlock.active.where(object_type:, object_value: values[object_type], blocked_by: nil, blocked_at: window).to_a
       end.reject { |sibling| velocity_protected_browser?(sibling) }
+    end
+
+    def unattended_in_window?(sibling, window)
+      sibling.blocked_by.nil? && sibling.blocked_at.present? && window.cover?(sibling.blocked_at) &&
+        (sibling.expires_at.nil? || sibling.expires_at > Time.current)
+    end
+
+    # Same scope as Purchase::Blockable#block_buyer_based_on_recent_failures!, which writes this set.
+    def recent_velocity_still_fires?(email, guids)
+      failures = Purchase.countable_card_testing_failures
+                         .where(created_at: Purchase::Blockable::CARD_TESTING_WATCH_PERIOD.ago..)
+                         .where("purchases.email = ? OR purchases.browser_guid IN (?)", email, guids.presence || [nil])
+      Purchase.distinct_card_count(failures) >= Purchase::Blockable::MAX_NUMBER_OF_FAILED_FINGERPRINTS
     end
 
     def velocity_protected_browser?(sibling)
