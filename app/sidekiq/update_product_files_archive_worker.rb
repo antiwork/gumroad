@@ -114,7 +114,9 @@ class UpdateProductFilesArchiveWorker
     product_files_archive.mark_in_progress!
 
     # Recorded sizes rule out an oversize archive before any request; the HEAD sizes below decide.
-    bundle = product_files_archive.bundle_purchase_archive?
+    # A bundle whose members have no files still gets the bundle ZIP, built from the bundle's own
+    # files, so this cannot use bundle_purchase_archive?.
+    bundle = product_files_archive.link&.is_bundle? && !product_files_archive.folder_archive?
     # Counted before archive_entries, which names every file. The scope drops more stream-only files
     # than archive_entries does, so the entry check below still applies.
     if bundle && product_files_archive.product_files.archivable.count > MAX_ARCHIVE_ENTRIES

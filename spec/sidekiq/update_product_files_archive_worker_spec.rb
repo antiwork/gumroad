@@ -681,6 +681,38 @@ describe UpdateProductFilesArchiveWorker, :vcr do
           expect(zip_entries(archive).keys).to eq(["Bundle Product 1/Part.bin", "Bundle Product 2/Part.bin"])
         end
 
+        def embed_in_bundle(files, folder_id: nil)
+          embeds = files.map { { "type" => "fileEmbed", "attrs" => { "id" => _1.external_id, "uid" => SecureRandom.uuid } } }
+          embeds = [{ "type" => "fileEmbedGroup", "attrs" => { "name" => "Folder", "uid" => folder_id }, "content" => embeds }] if folder_id
+          create(:rich_content, entity: bundle, description: embeds)
+        end
+
+        it "gives a bundle whose files are all its own the bundle limit" do
+          files = [add_file(bundle, "one", display_name: "One"), add_file(bundle, "two", display_name: "Two")]
+          embed_in_bundle(files)
+          archive = archive_for(bundle, files)
+          files.each { _1.update_columns(size: described_class::PRODUCT_FILES_ARCHIVE_FILE_SIZE_LIMIT) }
+
+          described_class.new.perform(archive.id)
+
+          expect(archive.reload).to be_ready
+          expect(zip_entries(archive).values.map(&:last)).to contain_exactly("one", "two")
+        end
+
+        it "keeps the product limit for a folder archive of a bundle" do
+          folder_id = SecureRandom.uuid
+          files = [add_file(bundle, "one", display_name: "One")]
+          embed_in_bundle(files, folder_id:)
+          archive = bundle.product_files_archives.create!(folder_id:, product_files: files)
+          archive.set_url_if_not_present
+          archive.save!
+          files.each { _1.update_columns(size: described_class::PRODUCT_FILES_ARCHIVE_FILE_SIZE_LIMIT + 1) }
+
+          described_class.new.perform(archive.id)
+
+          expect(archive.reload).to be_too_large
+        end
+
         it "enforces the bundle limit on the sizes S3 reports when none are recorded" do
           stub_const("#{described_class}::BUNDLE_ARCHIVE_FILE_SIZE_LIMIT", 1.megabyte)
           archive = bundle_archive([Random.new(5).bytes(700.kilobytes), Random.new(6).bytes(700.kilobytes)])
