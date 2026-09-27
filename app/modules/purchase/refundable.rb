@@ -634,8 +634,9 @@ class Purchase
     true
   end
 
-  # refund_purchase!'s fail-closed amount checks, without writing or alerting. Both use
-  # presentment_refund_from_flow_of_funds and partial_refund_amount_acceptable?, so they cannot drift.
+  # refund_purchase!'s fail-closed amount checks, without writing or alerting. It shares the
+  # buyer-currency derivation and build_partial_refund's amount rule; build_refund's full-refund
+  # branches do not check the amount, so a full refund can pass there and fail here.
   def refund_recordable_from?(flow_of_funds)
     issued_amount = flow_of_funds&.issued_amount
     return false if issued_amount.nil?
