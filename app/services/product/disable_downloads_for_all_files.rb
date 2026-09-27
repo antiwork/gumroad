@@ -41,31 +41,30 @@ class Product::DisableDownloadsForAllFiles
   end
 
   private
+    def flip_files
+      disabled_file_ids = []
+      already_disabled_count = 0
+      ineligible_count = 0
 
-  def flip_files
-    disabled_file_ids = []
-    already_disabled_count = 0
-    ineligible_count = 0
-
-    @product.product_files.alive.in_order.each do |file|
-      if !file.can_disable_downloads?
-        ineligible_count += 1
-      elsif file.stream_only?
-        already_disabled_count += 1
-      else
-        file.update!(stream_only: true)
-        disabled_file_ids << file.external_id
+      @product.product_files.alive.in_order.each do |file|
+        if !file.can_disable_downloads?
+          ineligible_count += 1
+        elsif file.stream_only?
+          already_disabled_count += 1
+        else
+          file.update!(stream_only: true)
+          disabled_file_ids << file.external_id
+        end
       end
+
+      Result.new(disabled_file_ids:, already_disabled_count:, ineligible_count:)
     end
 
-    Result.new(disabled_file_ids:, already_disabled_count:, ineligible_count:)
-  end
-
-  # Best-effort: the flag writes are committed, so a queue outage must not answer a successful
-  # action with an error. Same reporting shape as the editor save's archive enqueue.
-  def enqueue_archive_rebuild
-    GenerateProductFilesArchivesJob.perform_async(@product.id)
-  rescue StandardError => e
-    ErrorNotifier.notify(e, product_id: @product.id, seller_id: @product.user_id, archive_generation_enqueue_failed: true)
-  end
+    # Best-effort: the flag writes are committed, so a queue outage must not answer a successful
+    # action with an error. Same reporting shape as the editor save's archive enqueue.
+    def enqueue_archive_rebuild
+      GenerateProductFilesArchivesJob.perform_async(@product.id)
+    rescue StandardError => e
+      ErrorNotifier.notify(e, product_id: @product.id, seller_id: @product.user_id, archive_generation_enqueue_failed: true)
+    end
 end
