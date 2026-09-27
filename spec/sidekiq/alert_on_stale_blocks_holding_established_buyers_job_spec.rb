@@ -436,6 +436,20 @@ describe AlertOnStaleBlocksHoldingEstablishedBuyersJob do
       expect(email_block.reload.blocked_at).to be_present
     end
 
+    it "keeps an email an admin re-blocked while siblings were clearing" do
+      at = 2.years.ago
+      email_block = block_email(blocked_at: at)
+      card_block = block_value(:charge_processor_fingerprint, fingerprint, blocked_at: at)
+      admin = create(:admin_user)
+      allow_any_instance_of(PlatformBlock).to receive(:unblock!).and_wrap_original do |original, *args|
+        PlatformBlock.add!(object_type: email_block.object_type, object_value: email, by: admin.id) if original.receiver.id == card_block.id
+        original.call(*args)
+      end
+
+      described_class.new.perform
+      expect(email_block.reload).to have_attributes(blocked_by: admin.id, blocked_at: be_present)
+    end
+
     it "clears no sibling when the email block is held" do
       create(:user, email:, user_risk_state: "suspended_for_fraud")
       at = 2.years.ago

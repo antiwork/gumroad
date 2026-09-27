@@ -117,8 +117,14 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
               # Re-read at the write too: an admin re-block since the lookup rewrites both columns.
               siblings = siblings.select { |sibling| unattended_in_window?(sibling.reload, window) }
               siblings.each(&:unblock!)
-              block.unblock!
-              cleared << entry.merge(siblings: siblings.size)
+              # The email row loaded above is stale once siblings have been written.
+              block.reload
+              if unattended_in_window?(block, window)
+                block.unblock!
+                cleared << entry.merge(siblings: siblings.size)
+              else
+                held << entry.merge(reason: :changed_since_scan)
+              end
             else
               held << entry.merge(reason: :changed_since_scan)
             end
