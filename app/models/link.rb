@@ -769,12 +769,11 @@ class Link < ApplicationRecord
     return unless description.present?
 
     fragment = Loofah.html4_fragment(sanitize(description, scrubber: description_scrubber))
-    fragment.css("a[href], img[src], iframe[src], script[src]").each do |node|
-      attribute = node.name == "a" ? "href" : "src"
-      node.remove_attribute(attribute) unless crawl_safe_description_url?(node[attribute])
-    end
+    drop_markup_description_urls(fragment)
     linked = Rinku.auto_link(fragment.to_s, :all, 'target="_blank" rel="noopener noreferrer nofollow"')
-    Loofah.html4_fragment(separate_description_urls_from_following_tags(linked)).to_s.html_safe
+    linked_fragment = Loofah.html4_fragment(linked)
+    drop_markup_description_urls(linked_fragment)
+    linked_fragment.to_s.html_safe
   end
 
   def to_param
@@ -2015,15 +2014,19 @@ class Link < ApplicationRecord
     end
 
     # A crawler that allows "<" inside a URL will request the following markup
-    # when a URL or root-relative path sits against the next tag. The slash in
-    # a closing tag is not a path, and text already inside a link is left alone.
-    DESCRIPTION_URL_BEFORE_TAG = %r{(?:(?:https?://|www\.)[^\s<>]+|(?<!<)/[^\s<>]+)(?=<)}
-    DESCRIPTION_MARKUP_OR_URL_BEFORE_TAG = %r{(?:<a\b[^>]*>.*?</a>|<[^>]+>)|#{DESCRIPTION_URL_BEFORE_TAG}}m
-    private_constant :DESCRIPTION_URL_BEFORE_TAG, :DESCRIPTION_MARKUP_OR_URL_BEFORE_TAG
+    # when link text sits against its closing tag. Only the visible link text
+    # is separated. Attribute values and ordinary words that contain a slash
+    # are left alone.
+    DESCRIPTION_LINK_TEXT_BEFORE_CLOSE = %r{(?<=>)(?:(?:https?://|www\.)[^\s<>]+|/[^\s<>]+)(?=</a>)}
+    private_constant :DESCRIPTION_LINK_TEXT_BEFORE_CLOSE
 
-    def separate_description_urls_from_following_tags(html)
-      html.gsub(DESCRIPTION_MARKUP_OR_URL_BEFORE_TAG) do |token|
-        token.start_with?("<") ? token : "#{token} "
+    def drop_markup_description_urls(fragment)
+      fragment.css("a[href], img[src], iframe[src], script[src]").each do |node|
+        attribute = node.name == "a" ? "href" : "src"
+        node.remove_attribute(attribute) unless crawl_safe_description_url?(node[attribute])
+      end
+      fragment.css("a").each do |node|
+        node.replace(node.to_html.gsub(DESCRIPTION_LINK_TEXT_BEFORE_CLOSE) { |token| "#{token} " })
       end
     end
 
