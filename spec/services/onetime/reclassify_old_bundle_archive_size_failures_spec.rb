@@ -27,6 +27,21 @@ describe Onetime::ReclassifyOldBundleArchiveSizeFailures do
     expect(archive.updated_at).to be_within(1.second).of(before_cutoff)
   end
 
+  it "lets a bundle whose old size failures used up its retry budget build a ZIP again" do
+    files = bundle_files(300.megabytes, 300.megabytes)
+    purchase = create(:purchase, link: bundle)
+    purchase.create_artifacts_and_send_receipt!
+    UrlRedirect::BUNDLE_ARCHIVE_MAX_FAILED_ATTEMPTS.times { failed_archive(bundle, files) }
+    archive_count = -> { bundle.product_files_archives.alive.entity_archives.count }
+    travel_to(before_cutoff + UrlRedirect::BUNDLE_ARCHIVE_MAX_TOO_LARGE_RETRY_COOLDOWN + 1.hour)
+
+    expect { UrlRedirect.find(purchase.url_redirect.id).bundle_archive }.not_to change { archive_count.call }
+
+    described_class.process
+
+    expect { UrlRedirect.find(purchase.url_redirect.id).bundle_archive }.to change { archive_count.call }.by(1)
+  end
+
   it "reads an unrecorded size from S3, as the old worker did" do
     large = failed_archive(bundle, bundle_files(1.megabyte, nil))
     small = failed_archive(bundle, bundle_files(1.megabyte, nil))
