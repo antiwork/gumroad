@@ -1094,22 +1094,41 @@ describe UrlRedirectsController, inertia: true do
         cookies.encrypted[:confirmed_redirect] = @token
       end
 
-      it "sends a visitor to log in even with the confirmation cookie and the purchase IP" do
+      it "sends a visitor to app-domain login even with the confirmation cookie and the purchase IP" do
         get :download_page, params: { id: @token }
-        expect(response).to redirect_to(login_path(next: request.fullpath))
+        expect(response).to redirect_to(login_url(next: request.fullpath, host: DOMAIN, protocol: PROTOCOL))
       end
 
-      it "sends another signed-in user to the purchaser check" do
+      it "404s for another signed-in user instead of offering the purchase claim" do
         sign_in create(:user)
-        get :download_page, params: { id: @token }
-        expect(response).to redirect_to(url_redirect_check_purchaser_path(@token, next: request.path))
+        expect { get :download_page, params: { id: @token } }.to raise_error(ActionController::RoutingError)
       end
 
-      it "does not let a mobile API token for another user in" do
+      it "404s for a mobile API token belonging to another user" do
         other = create(:user)
         token = create("doorkeeper/access_token", application: create(:oauth_application, owner: other), resource_owner_id: other.id, scopes: "mobile_api")
-        get :download_page, params: { id: @token, access_token: token.token, mobile_token: Api::Mobile::BaseController::MOBILE_TOKEN }
-        expect(response).to redirect_to(url_redirect_check_purchaser_path(@token, next: request.path))
+        expect do
+          get :download_page, params: { id: @token, access_token: token.token, mobile_token: Api::Mobile::BaseController::MOBILE_TOKEN }
+        end.to raise_error(ActionController::RoutingError)
+      end
+
+      it "lets a team member in" do
+        sign_in create(:admin_user)
+        get :download_page, params: { id: @token }
+        expect(response).to be_successful
+      end
+
+      it "does not let another user claim the purchase with the seller's email" do
+        sign_in create(:user)
+        expect do
+          post :change_purchaser, params: { id: @token, email: seller.email }
+        end.to raise_error(ActionController::RoutingError)
+        expect(@url_redirect.purchase.reload.purchaser).to eq(seller)
+      end
+
+      it "does not return media URLs to a visitor" do
+        get :media_urls, params: { id: @token, file_ids: [@product.product_files.first.external_id] }, format: :json
+        expect(response).to have_http_status(:not_found)
       end
 
       it "lets the signed-in seller in" do
@@ -2575,7 +2594,7 @@ describe UrlRedirectsController, inertia: true do
 
       post :confirm, params: { id: @token, email: seller.email, destination: "download_page" }
 
-      expect(response).to redirect_to(login_path(next: confirm_page_path(id: @token, destination: "download_page")))
+      expect(response).to redirect_to(login_url(next: confirm_page_path(id: @token, destination: "download_page"), host: DOMAIN, protocol: PROTOCOL))
       expect(cookies.encrypted[:confirmed_redirect]).to be_nil
 
       sign_in seller
