@@ -315,6 +315,16 @@ fi
 
 >&2 echo "Connecting to $instance_ip via $PROD_BASTION..."
 
+# The guard rides inside the query itself so both the runner loop and the
+# one-shot path get it, and a stale loop.rb on the host cannot skip it.
+script_dir=$(cd "$(dirname "$0")" && pwd)
+redis_guard="$script_dir/redis_command_guard.rb"
+if [ ! -f "$redis_guard" ]; then
+  echo "Error: $redis_guard is missing; refusing to run without the Redis command guard." >&2
+  exit 1
+fi
+ruby_code="$(grep -v '^# frozen_string_literal' "$redis_guard")
+$ruby_code"
 encoded=$(printf '%s\n' "$ruby_code" | base64 | tr -d '\n')
 
 record_success() {
@@ -344,7 +354,6 @@ record_failure() {
 # Replica-only: a non-default DB host var (i.e. a primary write session) must
 # never ride a loop that was booted pointing at the replica, so it always
 # takes the one-shot path below. PROD_NO_RUNNER_LOOP=1 opts out entirely.
-script_dir=$(cd "$(dirname "$0")" && pwd)
 runner_loop_ok=1
 [ -n "${PROD_NO_RUNNER_LOOP:-}" ] && runner_loop_ok=
 [ "$PROD_DB_HOST_VAR" != "DATABASE_WORKER_REPLICA1_HOST" ] && runner_loop_ok=
