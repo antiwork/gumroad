@@ -1448,7 +1448,8 @@ module StripeMerchantAccountManager
         name_out_of_sync = stripe_holder_name != bank_account.account_holder_full_name
       end
 
-      return restore_local_bank_link!(bank_account, stripe_account) unless name_out_of_sync
+      restored = restore_local_bank_link!(bank_account, stripe_account) unless name_out_of_sync
+      return restored if restored && restored != :bank_link_on_other_account
     end
 
     attributes = bank_account_hash(bank_account, stripe_account:, passphrase:)
@@ -1973,7 +1974,7 @@ module StripeMerchantAccountManager
   # would open a second account when the first response was lost.
   private_class_method
   def self.account_creation_idempotency_key(user)
-    stored = oldest_outstanding_no_verdict_note(user)&.json_data&.[](ACCOUNT_CREATION_IDEMPOTENCY_KEY)
+    stored = recovery_note(user)&.json_data&.[](ACCOUNT_CREATION_IDEMPOTENCY_KEY)
     return stored if stored.present?
 
     SecureRandom.uuid
@@ -1983,12 +1984,19 @@ module StripeMerchantAccountManager
   # returns the deleted account instead of opening a new one.
   private_class_method
   def self.clear_account_creation_idempotency_key(user)
-    note = oldest_outstanding_no_verdict_note(user)
-    return if note.nil? || note.json_data[ACCOUNT_CREATION_IDEMPOTENCY_KEY].blank?
+    notes = user.comments
+      .with_type_payout_note
+      .alive
+      .where(author_id: GUMROAD_ADMIN_ID)
+      .where("content LIKE ?", "#{NO_VERDICT_FAILURE_NOTE_PREFIX}%")
+      .select { |note| note.json_data[ACCOUNT_CREATION_IDEMPOTENCY_KEY].present? }
+    return if notes.empty?
 
-    note.json_data.delete(ACCOUNT_CREATION_IDEMPOTENCY_KEY)
-    note.json_data.delete(ACCOUNT_CREATION_ATTEMPTED_AT)
-    note.save!
+    notes.each do |note|
+      note.json_data.delete(ACCOUNT_CREATION_IDEMPOTENCY_KEY)
+      note.json_data.delete(ACCOUNT_CREATION_ATTEMPTED_AT)
+      note.save!
+    end
   rescue => e
     Rails.logger.error "Failed to clear Stripe account-creation idempotency key for user #{user&.id}: #{e.class}: #{e.message}"
     ErrorNotifier.notify(e)
@@ -2023,7 +2031,7 @@ module StripeMerchantAccountManager
   # nil: no account to adopt, so Account.create is safe. :unreconciled: do not create.
   private_class_method
   def self.recover_uncertain_stripe_account(user)
-    note = oldest_outstanding_no_verdict_note(user)
+    note = recovery_note(user)
     return nil if note.nil?
 
     stored_key = note.json_data[ACCOUNT_CREATION_IDEMPOTENCY_KEY]
@@ -2157,7 +2165,7 @@ module StripeMerchantAccountManager
 
   private_class_method
   def self.stale_stored_account_creation_key?(user)
-    note = oldest_outstanding_no_verdict_note(user)
+    note = recovery_note(user)
     return false if note.nil? || note.json_data[ACCOUNT_CREATION_IDEMPOTENCY_KEY].blank?
 
     account_creation_attempted_at(note) <= STRIPE_IDEMPOTENCY_RETENTION.ago
@@ -2175,6 +2183,8 @@ module StripeMerchantAccountManager
       return true
     end
 
+    source = abandoned_keyed_no_verdict_note(user)
+    attempted_at = source && source.json_data[ACCOUNT_CREATION_IDEMPOTENCY_KEY] == key ? account_creation_attempted_at(source).iso8601 : Time.current.iso8601
     user.add_payout_note(
       content: "#{NO_VERDICT_FAILURE_NOTE_PREFIX}: awaiting Stripe account creation",
       seller_visible: false,
@@ -2182,7 +2192,7 @@ module StripeMerchantAccountManager
         "no_verdict" => true,
         "pending_create" => true,
         ACCOUNT_CREATION_IDEMPOTENCY_KEY => key,
-        ACCOUNT_CREATION_ATTEMPTED_AT => Time.current.iso8601
+        ACCOUNT_CREATION_ATTEMPTED_AT => attempted_at
       }
     )
     true
@@ -2216,6 +2226,29 @@ module StripeMerchantAccountManager
     Rails.logger.error "Failed to update Stripe account-creation idempotency key for user #{user&.id}: #{e.class}: #{e.message}"
     ErrorNotifier.notify(e)
     false
+  end
+
+  private_class_method
+  def self.recovery_note(user)
+    outstanding = oldest_outstanding_no_verdict_note(user)
+    return outstanding if outstanding&.json_data&.[](ACCOUNT_CREATION_IDEMPOTENCY_KEY).present?
+
+    # An abandoned note still names the create whose response was lost. Use it only when no
+    # current attempt has a key, so a newer replacement key is not overridden.
+    return abandoned_keyed_no_verdict_note(user) if outstanding.nil?
+
+    outstanding
+  end
+
+  private_class_method
+  def self.abandoned_keyed_no_verdict_note(user)
+    user.comments
+      .with_type_payout_note
+      .alive
+      .where(author_id: GUMROAD_ADMIN_ID)
+      .where("content LIKE ?", "#{NO_VERDICT_FAILURE_NOTE_PREFIX}%")
+      .select { |note| note.json_data["abandoned_at"].present? && note.json_data[ACCOUNT_CREATION_IDEMPOTENCY_KEY].present? }
+      .max_by { |note| account_creation_attempted_at(note) }
   end
 
   private_class_method
@@ -2337,7 +2370,12 @@ module StripeMerchantAccountManager
   # cannot repair that. Links the external account Stripe already holds, never guessing one: last4,
   # routing number, currency and country must each match, or :bank_link_not_restored keeps the failure note.
   def self.restore_local_bank_link!(bank_account, stripe_account)
-    return :noop_metadata_match if bank_account.stripe_bank_account_id.present?
+    if bank_account.stripe_bank_account_id.present?
+      return :noop_metadata_match if bank_account.stripe_connect_account_id == stripe_account.id
+
+      # The row still names a destination on an older account. Re-sending the bank is the repair.
+      return :bank_link_on_other_account
+    end
 
     stripe_external_account = matching_stripe_external_account(bank_account, stripe_account)
     return :bank_link_not_restored if stripe_external_account.nil?

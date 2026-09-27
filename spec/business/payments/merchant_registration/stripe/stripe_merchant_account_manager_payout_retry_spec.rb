@@ -571,6 +571,87 @@ describe StripeMerchantAccountManager do
         expect(user.reload.stripe_account).to be_nil
       end
 
+      it "reuses an abandoned note's key so a later create does not open a second account" do
+        user.add_payout_note(
+          content: "#{StripeMerchantAccountManager::NO_VERDICT_FAILURE_NOTE_PREFIX}: lost",
+          json_data: {
+            "no_verdict" => true,
+            "abandoned_at" => 1.hour.ago.iso8601,
+            StripeMerchantAccountManager::ACCOUNT_CREATION_IDEMPOTENCY_KEY => "abandoned-key",
+            StripeMerchantAccountManager::ACCOUNT_CREATION_ATTEMPTED_AT => 2.hours.ago.iso8601
+          }
+        )
+        keys = []
+        allow(Stripe::Account).to receive(:create) do |_params, opts = nil|
+          keys << opts[:idempotency_key]
+          raise Stripe::APIConnectionError.new("lost")
+        end
+
+        expect { described_class.create_account(user, passphrase:) }.to raise_error(Stripe::APIConnectionError)
+
+        expect(keys).to eq(["abandoned-key"])
+      end
+
+      it "does not replay an abandoned key after that account is deleted" do
+        user.add_payout_note(
+          content: "#{StripeMerchantAccountManager::NO_VERDICT_FAILURE_NOTE_PREFIX}: lost",
+          json_data: {
+            "no_verdict" => true,
+            "abandoned_at" => 1.hour.ago.iso8601,
+            StripeMerchantAccountManager::ACCOUNT_CREATION_IDEMPOTENCY_KEY => "abandoned-key",
+            StripeMerchantAccountManager::ACCOUNT_CREATION_ATTEMPTED_AT => 2.hours.ago.iso8601
+          }
+        )
+        created = Stripe::Account.construct_from(id: "acct_abandoned", object: "account", type: "custom", external_accounts: { object: "list", data: [] })
+        keys = []
+        calls = 0
+        allow(Stripe::Account).to receive(:create) do |_params, opts = nil|
+          keys << opts[:idempotency_key]
+          calls += 1
+          calls == 1 ? created : Stripe::Account.construct_from(id: "acct_fresh", object: "account", type: "custom", external_accounts: { object: "list", data: [] })
+        end
+        allow(Stripe::Account).to receive(:create_person).and_raise(Stripe::APIConnectionError.new("person lost"))
+        allow(Stripe::Account).to receive(:delete)
+        allow(Stripe::Account).to receive(:list).and_return(Stripe::ListObject.construct_from(object: "list", data: [], has_more: false))
+        allow_any_instance_of(UserComplianceInfo).to receive(:is_business?).and_return(true)
+        user_compliance_info.update_columns(deleted_at: Time.current)
+        create(:user_compliance_info_business, user:, zip_code: "94107")
+
+        expect { described_class.create_account(user, passphrase:) }.to raise_error(Stripe::APIConnectionError)
+        expect { described_class.create_account(user, passphrase:) }.to raise_error(Stripe::APIConnectionError)
+
+        expect(keys.last).not_to eq("abandoned-key")
+      end
+
+      it "replaces a bank link that still points at an older Stripe account" do
+        create(:merchant_account_stripe, user:, charge_processor_merchant_id: "acct_new")
+        bank_account.update!(stripe_bank_account_id: "ba_old", stripe_connect_account_id: "acct_old")
+        refreshed = Stripe::Account.construct_from(
+          id: "acct_new",
+          object: "account",
+          metadata: { "bank_account_id" => bank_account.external_id },
+          external_accounts: {
+            object: "list",
+            data: [{
+              id: "ba_new",
+              object: "bank_account",
+              fingerprint: "fp_new",
+              last4: bank_account.account_number_last_four,
+              routing_number: bank_account.stripe_external_account_routing_number,
+              currency: bank_account.stripe_external_account_currency,
+              country: bank_account.stripe_external_account_country
+            }]
+          }
+        )
+        allow(Stripe::Account).to receive(:retrieve).and_return(refreshed)
+        allow(Stripe::Account).to receive(:update).and_return(refreshed)
+        allow(refreshed).to receive(:refresh).and_return(refreshed)
+
+        expect(described_class.update_bank_account(user, passphrase:)).to eq(:synced)
+        expect(bank_account.reload.stripe_connect_account_id).to eq("acct_new")
+        expect(bank_account.stripe_bank_account_id).to eq("ba_new")
+      end
+
       it "does not replay a key after a later failure deletes the created account" do
         user_compliance_info.update_columns(deleted_at: Time.current)
         create(:user_compliance_info_business, user:, zip_code: "94107")
