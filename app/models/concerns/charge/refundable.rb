@@ -104,12 +104,10 @@ module Charge::Refundable
       begin
         charge_refund = processor.get_refund(stripe_refund_id, merchant_account:, for_external_refund: true)
       rescue StripeChargeProcessor::UnmatchedApplicationFeeRefundError
-        stripe_refund = Stripe::Refund.retrieve(stripe_refund_id)
+        stripe_refund = Stripe::Refund.retrieve(id: stripe_refund_id, expand: %w[balance_transaction])
         # A reversal on the refund means the seller already paid, so the debit is not Gumroad's to forgive.
         transfer_outcome = stripe_refund[:transfer_reversal].present? ? :reversal_unpaired : :fee_refund_unpaired
-        charge_refund = UnpairedExternalRefund.new(
-          stripe_refund, FlowOfFunds.build_simple_flow_of_funds(stripe_refund[:currency], -stripe_refund[:amount]), nil
-        )
+        charge_refund = UnpairedExternalRefund.new(stripe_refund, unpaired_external_refund_flow_of_funds(stripe_refund), nil)
       end
       purchases = refundable.charged_purchases.select { _1.successful? && !_1.stripe_refunded? }.sort_by(&:id)
       unrecorded = []
@@ -180,6 +178,17 @@ module Charge::Refundable
                                                   recording_outcome: :unknown, error_class: error.class.name)
     end
     raise
+  end
+
+  # The settled amount comes from the refund's balance transaction, in the platform currency; the
+  # issued amount is in the charge currency, which on a buyer-currency charge is the buyer's.
+  private def unpaired_external_refund_flow_of_funds(stripe_refund)
+    issued_amount = FlowOfFunds::Amount.new(currency: stripe_refund[:currency], cents: -stripe_refund[:amount])
+    balance_transaction = stripe_refund[:balance_transaction]
+    settled_amount = if balance_transaction.is_a?(Stripe::StripeObject)
+      FlowOfFunds::Amount.new(currency: balance_transaction[:currency], cents: balance_transaction[:amount])
+    end
+    FlowOfFunds.new(issued_amount:, settled_amount:, gumroad_amount: settled_amount || issued_amount)
   end
 
   # The refund is committed by the time these alerts run, and a redelivered event returns early on

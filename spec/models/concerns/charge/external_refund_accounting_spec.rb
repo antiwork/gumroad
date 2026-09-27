@@ -144,6 +144,24 @@ RSpec.describe "External Stripe refund accounting" do
       end
     end
 
+    context "for a buyer-currency purchase" do
+      let(:refund) { stripe(id: "re_ambiguous", amount: 1350, charge: "ch_ambiguous", status: "succeeded", currency: "cad", transfer_reversal: nil, balance_transaction: stripe(amount: -1000, currency: "usd")) }
+      let(:charge) { stripe(id: "ch_ambiguous", amount: 1350, destination: merchant.charge_processor_merchant_id, transfer: "tr_ambiguous", application_fee: fee, on_behalf_of: nil) }
+
+      it "stores the amount Stripe settled in the platform currency, not the buyer-currency amount" do
+        create(:purchase_presentment, purchase:, presentment_currency: Currency::CAD, presentment_price_cents: 1350,
+                                      presentment_gumroad_tax_cents: 0, presentment_total_cents: 1350)
+        purchase.reload
+        event.extras[:refunded_amount_cents] = 1350
+
+        purchase.handle_event_refund_updated!(event)
+
+        refund_row = purchase.reload.refunds.sole
+        expect(refund_row.gumroad_funded).to eq(true)
+        expect([refund_row.presentment_settled_currency, refund_row.presentment_settled_amount_cents]).to eq([Currency::USD, -1000])
+      end
+    end
+
     context "when only the destination payment exposes the fee" do
       let(:fee) { nil }
       let(:destination_fee) { stripe(id: "fee_ambiguous", refunds: fee_refunds(fee_refund("fr_unrelated", 30))) }
