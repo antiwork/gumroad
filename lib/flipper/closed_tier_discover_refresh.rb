@@ -20,9 +20,23 @@ module Flipper
       def refresh_closed_tier_discover_prices(thing)
         return unless name.to_s == FEATURE_NAME
 
+        Link.refresh_discover_prices_for_closed_tiers(user: seller_for(thing))
+      end
+
+      def seller_for(thing)
         actor = thing.respond_to?(:actor) ? thing.actor : thing
-        user = actor if actor.is_a?(User)
-        Link.refresh_discover_prices_for_closed_tiers(user:)
+        return actor if actor.is_a?(User)
+
+        flipper_id = if actor.respond_to?(:flipper_id)
+          actor.flipper_id
+        elsif actor.respond_to?(:value)
+          actor.value
+        else
+          actor
+        end
+        return unless flipper_id.to_s.start_with?("User;")
+
+        User.find_by(id: flipper_id.to_s.split(";", 2).last)
       end
   end
 end
