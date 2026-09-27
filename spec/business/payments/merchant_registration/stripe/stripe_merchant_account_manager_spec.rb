@@ -10557,11 +10557,10 @@ describe StripeMerchantAccountManager, :vcr do
     describe "all info provided previously, bank account not changed" do
       it "does not update an account at stripe with all the params" do
         expect(Stripe::Account).to receive(:retrieve).with(merchant_account.charge_processor_merchant_id) do
-          stripe_account = {
-            "metadata" => {
-              "bank_account_id" => bank_account_1.external_id
-            }
-          }
+          stripe_account = Stripe::Account.construct_from(
+            id: merchant_account.charge_processor_merchant_id,
+            metadata: { bank_account_id: bank_account_1.external_id }
+          )
           expect(Stripe::Account).not_to receive(:update)
           stripe_account
         end
