@@ -227,7 +227,7 @@ describe AlertOnStaleBlocksHoldingEstablishedBuyersJob do
     it "leaves the IP row, which is shared and expires on its own" do
       at = 2.years.ago
       block_email(blocked_at: at)
-      ip_block = block_value(:ip_address, "203.0.113.9", blocked_at: at)
+      ip_block = block_value(:ip_address, "203.0.113.9", blocked_at: at, expires_in: 10.years)
 
       message
       expect(ip_block.reload.blocked_at).to be_present
