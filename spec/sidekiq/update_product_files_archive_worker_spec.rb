@@ -534,6 +534,19 @@ describe UpdateProductFilesArchiveWorker, :vcr do
         expect(archive.reload).to be_failed
       end
 
+      it "leaves an archive in progress when another run takes its lock just as its retries run out" do
+        archive = archive_for(installment, [add_file(installment, "bytes", display_name: "Notes")])
+        archive.mark_in_progress!
+        allow_any_instance_of(ProductFilesArchive).to receive(:with_lock).and_wrap_original do |original, *args, &block|
+          $redis.set(described_class.lock_key(archive.id), "other-run")
+          original.call(*args, &block)
+        end
+
+        described_class.sidekiq_retries_exhausted_block.call({ "args" => [archive.id] }, described_class::LockLostError.new)
+
+        expect(archive.reload).to be_in_progress
+      end
+
       it "leaves an archive in progress when its retries run out while another run holds its lock" do
         archive = archive_for(installment, [add_file(installment, "bytes", display_name: "Notes")])
         archive.mark_in_progress!
@@ -649,6 +662,7 @@ describe UpdateProductFilesArchiveWorker, :vcr do
           stub_const("#{described_class}::MAX_ARCHIVE_ENTRIES", 1)
           archive = bundle_archive(["one", "two"])
           expect_any_instance_of(Aws::S3::Client).not_to receive(:head_object)
+          expect_any_instance_of(described_class).not_to receive(:archive_entries)
 
           described_class.new.perform(archive.id)
 
