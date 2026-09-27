@@ -31,7 +31,8 @@ vi.mock("$app/components/DomainSettings", () => ({
   useAppDomain: () => "example.com",
   useDomains: () => ({ scheme: "https", rootDomain: "example.com" }),
 }));
-vi.mock("$app/components/useIsAboveBreakpoint", () => ({ useIsAboveBreakpoint: () => false }));
+const breakpoint = vi.hoisted(() => ({ above: false }));
+vi.mock("$app/components/useIsAboveBreakpoint", () => ({ useIsAboveBreakpoint: () => breakpoint.above }));
 vi.mock("$app/components/Product/ShareSection", () => ({ ShareSection: () => null }));
 vi.mock("$app/components/server-components/Alert", () => ({ showAlert: vi.fn() }));
 
@@ -46,6 +47,7 @@ const resizeObservers: {
 
 beforeEach(() => {
   session.loggedIn = false;
+  breakpoint.above = false;
   resizeObservers.length = 0;
   notifyResize = () => resizeObservers.forEach((observer) => observer.notify());
   vi.stubGlobal(
@@ -301,4 +303,23 @@ it("updates sticky height after selecting a SKU and resizing, then disconnects o
   unmount();
   expect(observer?.disconnect).toHaveBeenCalledTimes(1);
   expect(disconnectIntersection).toHaveBeenCalledTimes(1);
+});
+
+it("reserves the bar's height at the end of the document on mobile, so the footer clears it", () => {
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 0, 117));
+  renderLayout(product);
+  expect(document.body.style.paddingBottom).toBe("117px");
+
+  act(() => setInlineVisible(true));
+  expect(document.body.style.paddingBottom).toBe("");
+
+  act(() => setInlineVisible(false));
+  expect(document.body.style.paddingBottom).toBe("117px");
+});
+
+it("reserves nothing on desktop, where the bar is fixed to the top of the viewport", () => {
+  breakpoint.above = true;
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 0, 117));
+  renderLayout(product);
+  expect(document.body.style.paddingBottom).toBe("");
 });

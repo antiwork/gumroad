@@ -268,6 +268,18 @@ const CtaBar = ({
     return () => observer.disconnect();
   }, []);
 
+  // On mobile the bar is fixed to the bottom of the viewport, so the document has to end below it
+  // or the footer's links land underneath the bar and cannot be tapped.
+  React.useEffect(() => {
+    if (isDesktop || !visible) return;
+    const { style } = document.body;
+    const previous = style.paddingBottom;
+    style.paddingBottom = `${height}px`;
+    return () => {
+      style.paddingBottom = previous;
+    };
+  }, [isDesktop, visible, height]);
+
   // Paid bundle tiers have no standalone price comparison.
   const bundleComparisonPriceCents = getBundleComparisonPriceCents(product, selectedOption);
   if (bundleComparisonPriceCents !== null) priceCents = bundleComparisonPriceCents;
