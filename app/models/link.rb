@@ -380,7 +380,10 @@ class Link < ApplicationRecord
   def self.refresh_discover_prices_for_closed_tiers(user: nil)
     products = is_tiered_membership.joins(:tiers).merge(Variant.alive.closed_to_new_purchases).distinct
     products = products.where(user_id: user.id) if user
-    products.find_each { |product| product.enqueue_index_update_for(["available_price_cents"]) }
+    products.find_each do |product|
+      product.touch
+      product.enqueue_index_update_for(["available_price_cents"])
+    end
   end
   scope :with_min_price, ->(min_price) { min_price.present? ? distinct.joins(:prices).where("prices.deleted_at IS NULL AND prices.price_cents >= ?", min_price) : where("1 = 1") }
 
@@ -1413,11 +1416,9 @@ class Link < ApplicationRecord
 
   def has_customizable_price_option?
     return customizable_price? unless is_tiered_membership?
-    if association(:tiers).loaded?
-      tiers.any? { |t| t.alive? && t.customizable_price? }
-    else
-      tiers.alive.exists?(customizable_price: true)
-    end
+
+    candidates = association(:tiers).loaded? ? tiers : nil
+    tiers_for_displayed_price(candidates).any?(&:customizable_price?)
   end
 
   def recurrence_price_enabled?(recurrence)

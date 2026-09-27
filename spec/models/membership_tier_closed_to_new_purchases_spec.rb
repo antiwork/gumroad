@@ -140,8 +140,18 @@ describe "Closing a membership tier to new purchases" do
       tier.update!(closed_to_new_purchases: false)
     end
 
-    it "asks Discover to refresh when the feature is turned off for the seller" do
-      tier.update!(closed_to_new_purchases: true)
+    it "does not advertise a closed customizable tier as a choice for new buyers" do
+      tier.update!(customizable_price: true)
+      open_tier = create(:variant, variant_category: product.tier_category, name: "Open", customizable_price: false)
+      recurrence = tier.prices.alive.is_buy.first.recurrence
+      open_tier.save_recurring_prices!(recurrence => { enabled: true, price: "20" })
+
+      expect(product.reload.has_customizable_price_option?).to be(false)
+      expect(product.send(:show_customizable_price_indicator?)).to be(false)
+    end
+
+    it "asks the profile cache to refresh when the feature is turned off for the seller" do
+      expect_any_instance_of(Link).to receive(:touch).at_least(:once)
       expect_any_instance_of(Link).to receive(:enqueue_index_update_for).with(["available_price_cents"]).at_least(:once)
       Feature.deactivate_user(:close_membership_tier_to_new_buyers, seller)
     end

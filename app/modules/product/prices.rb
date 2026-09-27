@@ -410,31 +410,18 @@ module Product::Prices
     def show_customizable_price_indicator?
       return customizable_price unless is_tiered_membership
 
-      # for tiered products, show `+` in formatted price if:
-      # 1. there are multiple tiers, or
-      # 2. any tiers have PWYW enabled, or
-      # 3. there's only 1 tier but it has multiple prices
+      # The + follows the price a new buyer sees. A closed customizable tier must not add it.
       if (preloaded_tiers = preloaded_membership_tiers_with_prices)
-        any_customizable = preloaded_tiers.any?(&:customizable_price?)
-        # With one tier, that tier is the default; only then do multiple buy prices matter.
-        multiple_tier_prices = preloaded_tiers.size == 1 &&
-          preloaded_tiers.first.alive_prices.count(&:is_buy?) > 1
-        return preloaded_tiers.size > 1 || any_customizable || multiple_tier_prices
+        offered = tiers_for_displayed_price(preloaded_tiers)
+        any_customizable = offered.any?(&:customizable_price?)
+        multiple_tier_prices = offered.size == 1 && offered.first.alive_prices.count(&:is_buy?) > 1
+        return offered.size > 1 || any_customizable || multiple_tier_prices
       end
 
-      any_customizable =
-        if association(:tiers).loaded?
-          tiers.any?(&:customizable_price?)
-        else
-          tiers.where(customizable_price: true).exists?
-        end
-      multiple_tier_prices =
-        if default_tier.present? && default_tier.association(:alive_prices).loaded?
-          default_tier.alive_prices.count(&:is_buy?) > 1
-        else
-          default_tier.present? && default_tier.prices.alive.is_buy.size > 1
-        end
-      tiers.size > 1 || any_customizable || multiple_tier_prices
+      offered = tiers_for_displayed_price
+      any_customizable = offered.any?(&:customizable_price?)
+      multiple_tier_prices = offered.size == 1 && offered.first.prices.alive.is_buy.size > 1
+      offered.size > 1 || any_customizable || multiple_tier_prices
     end
 
     # Alive tiers a new buyer can purchase. No fallback: Discover must not treat a fully closed membership as priced.
