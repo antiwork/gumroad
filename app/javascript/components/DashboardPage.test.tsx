@@ -21,6 +21,7 @@ vi.mock("$app/components/Stats", () => ({ Stats: () => null }));
 // The dashboard builds its getting-started links at module scope, so Routes has to be on globalThis
 // before the component is imported.
 vi.hoisted(() => {
+  Reflect.set(process.env, "TZ", "UTC");
   const url = (path: string) => () => path;
   Object.assign(globalThis, {
     Routes: {
@@ -42,7 +43,10 @@ vi.hoisted(() => {
   });
 });
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 const loggedInUser: LoggedInUser = {
   id: "1",
@@ -205,5 +209,37 @@ describe("processing sales", () => {
     expect(screen.getByText(/not included in these totals/iu)).toBeTruthy();
     expect(screen.getByText(sellerTime)).toBeTruthy();
     expect(screen.getByText(sellerTime).textContent).toContain("12:14 AM");
+  });
+
+  it("uses the seller year at the year boundary, not the viewer clock", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2027-01-01T03:00:00.000Z"));
+    const timestamp = "2026-12-31T20:00:00.000Z";
+    // UTC is pinned above. The viewer clock is 2027. Los Angeles is still in 2026.
+    expect(new Date().getFullYear()).toBe(2027);
+    expect(new Date(timestamp).getFullYear()).toBe(2026);
+
+    renderDashboard(
+      { ...minor, timeZone: { name: "America/Los_Angeles", offset: -480 } },
+      {
+        processing_sales_count: 1,
+        activity_items: [
+          {
+            type: "processing_sale",
+            timestamp,
+            details: {
+              price_cents: 2900,
+              email: "buyer@example.com",
+              full_name: "Buyer",
+              product_name: "Figma UI Kit",
+              product_unique_permalink: "figma",
+            },
+          },
+        ],
+      },
+    );
+
+    const visible = screen.getByText(/Dec 31/u).textContent.replaceAll("\u202f", " ");
+    expect(visible).toBe("Dec 31, 12:00 PM");
   });
 });

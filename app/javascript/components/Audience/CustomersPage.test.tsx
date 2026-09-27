@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { cleanup, render, screen } from "@testing-library/react";
 import * as React from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { type Customer } from "$app/data/customers";
 
@@ -31,6 +31,10 @@ vi.mock("@inertiajs/react", () => ({
 }));
 
 vi.hoisted(() => {
+  // Pin UTC and 2027 before the page module loads. A module-level viewer year would then be 2027.
+  Reflect.set(process.env, "TZ", "UTC");
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2027-01-01T03:00:00.000Z"));
   Object.assign(globalThis, {
     Routes: new Proxy(
       {},
@@ -41,7 +45,14 @@ vi.hoisted(() => {
   });
 });
 
-afterEach(cleanup);
+beforeEach(() => {
+  vi.useRealTimers();
+});
+
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 const seller: CurrentSeller = {
   id: "seller-1",
@@ -210,6 +221,25 @@ describe("Email these customers", () => {
     expect(await screen.findByText("No completed buyer to email. This sale is still processing.")).toBeTruthy();
     expect(screen.getByText(time)).toBeTruthy();
     expect(screen.getByText(time).textContent).toContain("12:14 AM");
+  });
+
+  it("uses the seller year at the year boundary, not the viewer clock", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2027-01-01T03:00:00.000Z"));
+    const timestamp = "2026-12-31T20:00:00.000Z";
+    // UTC and the 2027 import clock are pinned above. Los Angeles is still in 2026.
+    expect(new Date().getFullYear()).toBe(2027);
+    expect(new Date(timestamp).getFullYear()).toBe(2026);
+    recipientCount.current = 0;
+
+    renderPage({
+      customers: [],
+      processingCustomers: [{ ...customer("proc-1", "processing@example.com"), created_at: timestamp }],
+      count: 0,
+    });
+
+    const texts = screen.getAllByText(/Dec 31/u).map((node: HTMLElement) => node.textContent.replaceAll("\u202f", " "));
+    expect(texts.some((text: string) => text.includes("Dec 31, 12:00 PM") && !/202[67]/u.test(text))).toBe(true);
   });
 
   it("stays available when the recipient count cannot be loaded", async () => {
