@@ -905,6 +905,18 @@ describe UsersController do
       expect(@purchase.reload.purchaser).to be(nil)
     end
 
+    it "does not move a seller's own test purchase onto another signed-in user" do
+      seller = @purchase.link.user
+      @purchase.update!(purchaser: seller, email: seller.email, purchase_state: "test_successful")
+      @params["user"]["purchase_email"] = seller.email
+
+      sign_in(create(:user))
+      post :add_purchase_to_library, params: @params
+
+      expect(@purchase.reload.purchaser).to eq(seller)
+      expect(response.parsed_body["success"]).to eq(false)
+    end
+
     it "doesn't associate a reassignment-locked purchase with the signed_in user even when the email matches" do
       @purchase.update!(is_reassignment_locked: true)
 

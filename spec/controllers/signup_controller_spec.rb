@@ -539,6 +539,16 @@ describe SignupController, type: :controller, inertia: true do
         expect(user.email).to eq @purchase.email
       end
 
+      it "does not move a seller's own test purchase onto the new account" do
+        seller = @purchase.link.user
+        @purchase.update!(purchaser: seller, email: seller.email, purchase_state: "test_successful")
+
+        post :save_to_library, params: { user: { email: "new-buyer@example.com", password: "blah123", purchase_id: @purchase.external_id } }
+
+        expect(response.parsed_body["success"]).to be(true)
+        expect(@purchase.reload.purchaser).to eq(seller)
+      end
+
       it "assigns them the correct purchase" do
         expect { post :save_to_library, params: { user: { email: @purchase.email, password: "blah123", purchase_id: @purchase.external_id } } }
           .to change { @purchase.reload.purchaser.nil? }.from(true).to(false)

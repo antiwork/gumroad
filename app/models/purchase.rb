@@ -3330,6 +3330,13 @@ class Purchase < ApplicationRecord
       return false
     end
 
+    # Signup can pass the purchase id from the confirm page with no email check.
+    # A seller's own purchase must stay with the seller, or the delivery guard stops applying.
+    if is_test_purchase?
+      logger.info("Attaching user to purchase #{id}: skipped because the purchase belongs to its seller")
+      return false
+    end
+
     self.purchaser = user
 
     if chargeable.present? && successful? && chargeable.fingerprint == stripe_fingerprint
