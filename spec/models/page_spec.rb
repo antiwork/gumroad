@@ -65,6 +65,15 @@ describe Page do
       expect(page.errors[:base].first).to include("About")
     end
 
+    it "tells a seller with no published product to list one when a spam flag blocks their page" do
+      stub_strategies(prompt: "flagged", reasons: ["spam: brand links only"])
+
+      page = described_class.new(pageable: user, custom_html: "<p>Anything</p>")
+
+      expect(page).not_to be_valid
+      expect(page.errors[:base].first).to include("Publish a product first")
+    end
+
     it "saves a page whose content passes" do
       page = described_class.new(pageable: user, slug: "about", title: "About", custom_html: "<p>Hand-lettered posters</p>")
 

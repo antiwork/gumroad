@@ -1219,7 +1219,7 @@ class Installment < ApplicationRecord
       # name the flagged one — otherwise the seller has no way to tell which
       # of their emails to fix.
       noun = workflow_id.present? ? "email" : "post"
-      errors.add(:base, ContentModeration::ModerateRecordService.seller_message(result.reasons, noun, title: name))
+      errors.add(:base, ContentModeration::ModerateRecordService.seller_message(result.reasons, noun, title: name, empty_storefront: result.empty_storefront))
     end
 
     def normalize_tag(raw)
