@@ -88,6 +88,7 @@ describe "RenderingExtension" do
                 # payout setup that could be carried over to a new brand account.
                 has_payout_setup_to_port: true,
                 can_port_bank_payout_setup: true,
+                will_copy_bank_payout: false,
                 policies: {
                   affiliate_requests_onboarding_form: {
                     update: true,
@@ -189,10 +190,57 @@ describe "RenderingExtension" do
           expect(custom_context[:logged_in_user][:has_payout_setup_to_port]).to eq(false)
         end
 
-        it "is true when the user has a regular bank account" do
+        it "is true when the user has compliance info and a regular bank account" do
+          create(:user_compliance_info, user:)
           create(:ach_account, user:)
 
           expect(custom_context[:logged_in_user][:has_payout_setup_to_port]).to eq(true)
+          expect(custom_context[:logged_in_user][:will_copy_bank_payout]).to eq(true)
+        end
+
+        it "is false when a regular bank account has no compliance info" do
+          create(:ach_account, user:)
+
+          expect(custom_context[:logged_in_user][:has_payout_setup_to_port]).to eq(false)
+          expect(custom_context[:logged_in_user][:will_copy_bank_payout]).to eq(false)
+        end
+
+        it "is false when the user has compliance info but no payout destination" do
+          create(:user_compliance_info, user:)
+
+          expect(custom_context[:logged_in_user][:has_payout_setup_to_port]).to eq(false)
+          expect(custom_context[:logged_in_user][:will_copy_bank_payout]).to eq(false)
+        end
+
+        it "is false when the only payout method is a bank in a country that blocks new Connect accounts" do
+          create(:user_compliance_info, user:, country: "India")
+          create(:indian_bank_account, user:)
+
+          expect(custom_context[:logged_in_user][:has_payout_setup_to_port]).to eq(false)
+        end
+
+        it "is false when an Indian bank exists without compliance info" do
+          create(:indian_bank_account, user:)
+
+          expect(custom_context[:logged_in_user][:has_payout_setup_to_port]).to eq(false)
+        end
+
+        it "is true when a blocked-country creator has a PayPal address" do
+          create(:user_compliance_info, user:, country: "India")
+          user.update!(payment_address: "paypal@example.com")
+
+          expect(custom_context[:logged_in_user][:has_payout_setup_to_port]).to eq(true)
+          expect(custom_context[:logged_in_user][:will_copy_bank_payout]).to eq(false)
+        end
+
+        it "does not promise to copy a blocked-country bank when the legal country allows Connect accounts" do
+          create(:user_compliance_info, user:)
+          create(:indian_bank_account, user:)
+          user.update!(payment_address: "paypal@example.com")
+
+          expect(custom_context[:logged_in_user][:has_payout_setup_to_port]).to eq(true)
+          expect(custom_context[:logged_in_user][:can_port_bank_payout_setup]).to eq(true)
+          expect(custom_context[:logged_in_user][:will_copy_bank_payout]).to eq(false)
         end
       end
 
