@@ -1220,6 +1220,7 @@ describe("Download Page – Rich Text Editor Content", type: :system, js: true) 
         create(:creator_contacting_customers_email_info_sent, purchase: sub_purchase, installment: post)
         @url_redirect = post.generate_url_redirect_for_purchase(sub_purchase)
 
+        sign_in @user
         visit @url_redirect.download_page_url
 
         expect(page).to have_text(sub_purchase.link.name)
@@ -1243,6 +1244,7 @@ describe("Download Page – Rich Text Editor Content", type: :system, js: true) 
         create(:creator_contacting_customers_email_info_sent, purchase: sub_purchase, installment: post)
         url_redirect = post.generate_url_redirect_for_purchase(sub_purchase)
 
+        sign_in @user
         visit url_redirect.download_page_url
 
         expect(page).to have_text(sub_purchase.link.name)
@@ -1265,6 +1267,7 @@ describe("Download Page – Rich Text Editor Content", type: :system, js: true) 
         create(:product_file, installment: post, link: nil)
         url_redirect = post.generate_url_redirect_for_purchase(sub_purchase)
 
+        sign_in @user
         visit url_redirect.download_page_url
         expect(page).to have_text(sub_purchase.link.name)
         expect(page).to_not have_selector("[aria-label='Posts']")
