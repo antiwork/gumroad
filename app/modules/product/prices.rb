@@ -434,13 +434,18 @@ module Product::Prices
       return unless is_tiered_membership
 
       if (preloaded_tiers = preloaded_membership_tiers_with_prices)
-        candidates = preloaded_tiers.flat_map(&:alive_prices).select(&:is_buy?)
+        offered = preloaded_tiers.reject(&:closed_to_new_buyers?)
+        # Every tier closed: $0 would quote a price checkout cannot charge.
+        offered = preloaded_tiers if offered.empty?
+        candidates = offered.flat_map(&:alive_prices).select(&:is_buy?)
         candidates = candidates.select { |p| p.recurrence == subscription_duration } if for_default_duration
         return candidates.min_by(&:price_cents) ||
                VariantPrice.new(price_cents: 0, recurrence: subscription_duration)
       end
 
-      relation = VariantPrice.where(variant_id: tiers.map(&:id)).alive.is_buy
+      offered_ids = tiers.reject(&:closed_to_new_buyers?).map(&:id)
+      offered_ids = tiers.map(&:id) if offered_ids.empty?
+      relation = VariantPrice.where(variant_id: offered_ids).alive.is_buy
       relation = relation.where(recurrence: subscription_duration) if for_default_duration
       lowest = relation.order("price_cents asc").take
 

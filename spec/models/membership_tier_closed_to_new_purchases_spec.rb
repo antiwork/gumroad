@@ -107,6 +107,15 @@ describe "Closing a membership tier to new purchases" do
       expect(product.cart_item({})[:option][:id]).to eq(open_tier.external_id)
     end
 
+    it "advertises the cheapest tier a new buyer can purchase" do
+      recurrence = tier.prices.alive.is_buy.first.recurrence
+      tier.prices.alive.is_buy.update_all(price_cents: 500)
+      open_tier = create(:variant, variant_category: product.tier_category, name: "Open")
+      open_tier.save_recurring_prices!(recurrence => { enabled: true, price: "20" })
+
+      expect(product.reload.display_price_cents).to eq(2_000)
+    end
+
     it "keeps the subscriber's own tier selectable in the subscription manager" do
       props = CheckoutPresenter.new(logged_in_user: nil, ip: nil).subscription_manager_props(subscription: remaining_purchase.subscription)
       own_tier = props[:product][:options].find { _1[:id] == tier.external_id }
