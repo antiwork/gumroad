@@ -617,7 +617,13 @@ class StripeChargeProcessor
         stripe_destination_payment = Stripe::Charge.retrieve({ id: destination_transfer.destination_payment,
                                                                expand: %w[refunds.data.balance_transaction application_fee.refunds] },
                                                              { stripe_account: destination_transfer.destination })
-        destination_payment_refund = destination_payment_refund_for(refund, destination_transfer, stripe_destination_payment)
+        # Stripe does not link a fee refund to its refund, so with an application fee both legs come
+        # from the newest refunds, as before: pairing only the destination refund would mix two refunds.
+        destination_payment_refund = if charge.application_fee
+          stripe_destination_payment.refunds.first
+        else
+          destination_payment_refund_for(refund, destination_transfer, stripe_destination_payment)
+        end
         if destination_payment_refund
           balance_transaction_id = destination_payment_refund.balance_transaction
           if balance_transaction_id.is_a?(String)
