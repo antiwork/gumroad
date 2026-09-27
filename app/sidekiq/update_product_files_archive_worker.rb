@@ -8,10 +8,14 @@ class UpdateProductFilesArchiveWorker
   # in_progress, which UrlRedirect reads as a build still running. Mark it failed unless a run holds the lock.
   sidekiq_retries_exhausted do |message, _error|
     product_files_archive_id = message.fetch("args").first
-    next if $redis.exists?(lock_key(product_files_archive_id))
-
     product_files_archive = ProductFilesArchive.find_by(id: product_files_archive_id)
-    product_files_archive&.with_lock { product_files_archive.mark_failed! if product_files_archive.in_progress? }
+    # A run takes the lock before it touches the row, so a lock seen under the row lock belongs to a
+    # run that may still mark this row ready.
+    product_files_archive&.with_lock do
+      next if $redis.exists?(lock_key(product_files_archive_id))
+
+      product_files_archive.mark_failed! if product_files_archive.in_progress?
+    end
   end
 
   PRODUCT_FILES_ARCHIVE_FILE_SIZE_LIMIT = 500.megabytes
@@ -112,10 +116,15 @@ class UpdateProductFilesArchiveWorker
 
     # Recorded sizes rule out an oversize archive before any request; the HEAD sizes below decide.
     bundle = product_files_archive.bundle_purchase_archive?
+    # Counted before archive_entries, which names every file.
+    if bundle && product_files_archive.product_files.not_external_link.count > MAX_ARCHIVE_ENTRIES
+      mark_too_large(product_files_archive)
+      return
+    end
     size_limit = bundle ? BUNDLE_ARCHIVE_FILE_SIZE_LIMIT : PRODUCT_FILES_ARCHIVE_FILE_SIZE_LIMIT
     entries = archive_entries(product_files_archive)
     recorded_size = entries.sum { |product_file, _| product_file.size.to_i }
-    if (bundle && entries.size > MAX_ARCHIVE_ENTRIES) || recorded_size > size_limit
+    if recorded_size > size_limit
       mark_too_large(product_files_archive)
       return
     end
@@ -196,7 +205,7 @@ class UpdateProductFilesArchiveWorker
     attr_reader :used_file_paths
 
     def archive_entries(product_files_archive)
-      @used_file_paths = []
+      @used_file_paths = Set.new
       bundle_purchase_archive = product_files_archive.bundle_purchase_archive?
       rich_content_files_and_folders_mapping = product_files_archive.rich_content_provider&.map_rich_content_files_and_folders
       # Ordered so a retry or rebuild hands out the same collision suffixes.
