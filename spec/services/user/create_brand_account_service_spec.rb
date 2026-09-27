@@ -195,6 +195,17 @@ describe User::CreateBrandAccountService do
         expect(CreateStripeMerchantAccountWorker.jobs.map { _1["args"] }).not_to include([service.brand_user.id])
       end
 
+      it "does not copy a bank account when the creator has no compliance record" do
+        create(:ach_account, user: creator)
+        creator.update!(payment_address: "")
+
+        service = build_service_with_port
+
+        expect(service.perform).to eq(true)
+        expect(service.brand_user.active_bank_account).to be_nil
+        expect(CreateStripeMerchantAccountWorker.jobs.map { _1["args"] }).not_to include([service.brand_user.id])
+      end
+
       it "does not copy an Indian bank when the creator has no compliance record" do
         create(:indian_bank_account, user: creator)
         creator.update!(payment_address: "")

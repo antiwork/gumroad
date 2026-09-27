@@ -6,7 +6,9 @@ import { afterEach, describe, expect, it } from "vitest";
 import { CreateBrandAccountModal } from "$app/components/CreateBrandAccountModal";
 import { LoggedInUserProvider, type LoggedInUser } from "$app/components/LoggedInUser";
 
-const user = (flags: Pick<LoggedInUser, "hasPayoutSetupToPort" | "canPortBankPayoutSetup" | "willCopyBankPayout">): LoggedInUser => ({
+type PayoutFlags = Pick<LoggedInUser, "hasPayoutSetupToPort" | "canPortBankPayoutSetup" | "willCopyBankPayout">;
+
+const user = (flags: PayoutFlags): LoggedInUser => ({
   id: "1",
   email: "seller@example.com",
   name: "Seller",
@@ -41,7 +43,7 @@ const user = (flags: Pick<LoggedInUser, "hasPayoutSetupToPort" | "canPortBankPay
   ...flags,
 });
 
-const renderModal = (flags: Pick<LoggedInUser, "hasPayoutSetupToPort" | "canPortBankPayoutSetup" | "willCopyBankPayout">) => {
+const renderModal = (flags: PayoutFlags) => {
   render(
     <LoggedInUserProvider value={user(flags)}>
       <CreateBrandAccountModal open onClose={() => undefined} />

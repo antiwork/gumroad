@@ -109,6 +109,9 @@ class User::CreateBrandAccountService
   end
 
   def self.bank_details_will_be_copied?(creator)
+    # A blank legal country cannot create a Connect account, so a bank row
+    # without compliance info is not a portable payout.
+    return false if creator.alive_user_compliance_info&.legal_entity_country_code.blank?
     return false unless bank_account_portable?(creator)
 
     bank = creator.active_bank_account

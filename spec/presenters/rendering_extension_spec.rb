@@ -190,10 +190,19 @@ describe "RenderingExtension" do
           expect(custom_context[:logged_in_user][:has_payout_setup_to_port]).to eq(false)
         end
 
-        it "is true when the user has a regular bank account" do
+        it "is true when the user has compliance info and a regular bank account" do
+          create(:user_compliance_info, user:)
           create(:ach_account, user:)
 
           expect(custom_context[:logged_in_user][:has_payout_setup_to_port]).to eq(true)
+          expect(custom_context[:logged_in_user][:will_copy_bank_payout]).to eq(true)
+        end
+
+        it "is false when a regular bank account has no compliance info" do
+          create(:ach_account, user:)
+
+          expect(custom_context[:logged_in_user][:has_payout_setup_to_port]).to eq(false)
+          expect(custom_context[:logged_in_user][:will_copy_bank_payout]).to eq(false)
         end
 
         it "is false when the user has compliance info but no payout destination" do
