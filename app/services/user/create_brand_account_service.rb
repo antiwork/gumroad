@@ -93,6 +93,11 @@ class User::CreateBrandAccountService
 
   attr_reader :error_message
 
+  def self.bank_account_portable?(creator)
+    country_code = creator.alive_user_compliance_info&.legal_entity_country_code
+    !StripeMerchantAccountManager::NEW_ACCOUNT_CREATION_BLOCKED_COUNTRIES.include?(country_code)
+  end
+
   private
     def port_payout_setup!
       copy_compliance_info!
@@ -120,6 +125,9 @@ class User::CreateBrandAccountService
       # neither can be shared with or cloned onto another user. Creators paying
       # out to a debit card set that up fresh on the new account.
       return if source.nil? || source.is_a?(CardBankAccount)
+      # No Connect account can be created for these countries, so a copied bank
+      # row would never sync and would keep the dead bank form on the new account.
+      return unless self.class.bank_account_portable?(creator)
 
       copy = source.dup
       copy.user = brand_user

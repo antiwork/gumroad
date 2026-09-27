@@ -15,6 +15,7 @@ export type LoggedInUser = {
   team_memberships: TeamMembership[];
   can_create_brand_account: boolean;
   has_payout_setup_to_port: boolean;
+  can_port_bank_payout_setup: boolean;
   policies: Record<string, Record<string, boolean>>;
 };
 

@@ -55,6 +55,7 @@ module RenderingExtension
         has_payout_setup_to_port: user.alive_user_compliance_info.present? ||
           (user.active_bank_account.present? && !user.active_bank_account.is_a?(CardBankAccount)) ||
           user.payment_address.present?,
+        can_port_bank_payout_setup: User::CreateBrandAccountService.bank_account_portable?(user),
         policies: policies_props(pundit_user),
         promoted_nav_items: user.promoted_nav_item_keys,
         lazy_load_offscreen_discover_images: Feature.active?(:lazy_load_offscreen_discover_images, user),

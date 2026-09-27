@@ -195,6 +195,20 @@ describe User::CreateBrandAccountService do
         expect(CreateStripeMerchantAccountWorker.jobs.map { _1["args"] }).not_to include([service.brand_user.id])
       end
 
+      it "does not copy the bank account when the creator's country blocks new Connect accounts" do
+        create(:user_compliance_info, user: creator, country: "India")
+        create(:indian_bank_account, user: creator)
+        creator.update!(payment_address: "paypal@example.com")
+
+        service = build_service_with_port
+
+        expect(service.perform).to eq(true)
+        expect(service.brand_user.alive_user_compliance_info.legal_entity_country_code).to eq("IN")
+        expect(service.brand_user.payment_address).to eq("paypal@example.com")
+        expect(service.brand_user.active_bank_account).to be_nil
+        expect(CreateStripeMerchantAccountWorker.jobs.map { _1["args"] }).not_to include([service.brand_user.id])
+      end
+
       it "does not enqueue Connect account creation when there is no bank account to port" do
         create(:user_compliance_info, user: creator)
 
