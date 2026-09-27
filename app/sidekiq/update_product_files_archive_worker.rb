@@ -36,7 +36,8 @@ class UpdateProductFilesArchiveWorker
   # much smaller.
   MAX_FILENAME_BYTESIZE = 150
 
-  # Bounds the HEAD requests and the central directory the build keeps in memory.
+  # Bounds the HEAD requests and the central directory a bundle build keeps in memory. Other
+  # archives are held to PRODUCT_FILES_ARCHIVE_FILE_SIZE_LIMIT, and too_large is final for them.
   MAX_ARCHIVE_ENTRIES = 10_000
   # Each upload thread buffers one part, so upload memory is about UPLOAD_CONCURRENCY * UPLOAD_PART_SIZE.
   UPLOAD_PART_SIZE = 16.megabytes
@@ -107,10 +108,11 @@ class UpdateProductFilesArchiveWorker
     product_files_archive.mark_in_progress!
 
     # Recorded sizes rule out an oversize archive before any request; the HEAD sizes below decide.
-    size_limit = product_files_archive.bundle_purchase_archive? ? BUNDLE_ARCHIVE_FILE_SIZE_LIMIT : PRODUCT_FILES_ARCHIVE_FILE_SIZE_LIMIT
+    bundle = product_files_archive.bundle_purchase_archive?
+    size_limit = bundle ? BUNDLE_ARCHIVE_FILE_SIZE_LIMIT : PRODUCT_FILES_ARCHIVE_FILE_SIZE_LIMIT
     entries = archive_entries(product_files_archive)
     recorded_size = entries.sum { |product_file, _| product_file.size.to_i }
-    if entries.size > MAX_ARCHIVE_ENTRIES || recorded_size > size_limit
+    if (bundle && entries.size > MAX_ARCHIVE_ENTRIES) || recorded_size > size_limit
       mark_too_large(product_files_archive)
       return
     end
@@ -122,9 +124,8 @@ class UpdateProductFilesArchiveWorker
 
     sources = entries.map do |product_file, file_path|
       renew_lock!
-      source = product_file.s3_object
-      head = source.client.head_object(bucket: source.bucket_name, key: source.key)
-      [source, file_path, head.content_length, head.etag]
+      head = source_client.head_object(bucket: S3_BUCKET, key: product_file.s3_key)
+      [product_file.s3_key, file_path, head.content_length, head.etag]
     rescue Aws::S3::Errors::NotFound
       # If the file does not exist on S3 for any reason, abandon this job without raising an error.
       product_files_archive.mark_failed!
@@ -147,13 +148,13 @@ class UpdateProductFilesArchiveWorker
       # The SDK's pipe is in text mode, where Rails' UTF-8 default_internal transcodes each write.
       pipe.binmode
       zip = StreamingZipWriter.new(pipe)
-      sources.each do |source, file_path, size, etag|
+      sources.each do |source_key, file_path, size, etag|
         renew_lock!
         # Only inputs just under 4 GiB can deflate past it, so only they are read twice.
         compressed_size = if StreamingZipWriter.compressed_size_needed?(size)
-          zip.deflated_size { |counter| stream_source(source, size, etag, counter) }
+          zip.deflated_size { |counter| stream_source(source_key, size, etag, counter) }
         end
-        zip.write_entry(file_path, size:, compressed_size:) { |entry_data| stream_source(source, size, etag, entry_data) }
+        zip.write_entry(file_path, size:, compressed_size:) { |entry_data| stream_source(source_key, size, etag, entry_data) }
       end
       zip.close
     end
@@ -221,17 +222,16 @@ class UpdateProductFilesArchiveWorker
     # Reads the object in one streamed GET, resuming at the last byte received after a dropped
     # connection. A completed read that adds no bytes counts as a failed attempt. If-Match pins
     # every request to the ETag the size came from, so a replaced source cannot mix two versions.
-    def stream_source(source, size, etag, entry_data)
+    def stream_source(key, size, etag, entry_data)
       received = 0
       failed_reads = 0
       while received < size
         before = received
         error = nil
         begin
-          source.client.get_object(bucket: source.bucket_name, key: source.key, if_match: etag,
-                                   range: "bytes=#{received}-#{size - 1}") do |chunk|
+          source_client.get_object(bucket: S3_BUCKET, key:, if_match: etag, range: "bytes=#{received}-#{size - 1}") do |chunk|
             received += chunk.bytesize
-            raise SourceChangedError, "#{source.key} sent more than #{size} bytes" if received > size
+            raise SourceChangedError, "#{key} sent more than #{size} bytes" if received > size
 
             write_to_upload(entry_data, chunk)
             renew_lock! if lock_renewal_due?
@@ -256,6 +256,11 @@ class UpdateProductFilesArchiveWorker
       entry_data.write(chunk)
     rescue IOError, Errno::EPIPE => e
       raise UploadClosedError, e.message
+    end
+
+    # One client for every source; S3Retrievable#s3_object builds a new one per call.
+    def source_client
+      @source_client ||= Aws::S3::Client.new
     end
 
     def lock_renewal_due?

@@ -578,13 +578,14 @@ describe UpdateProductFilesArchiveWorker, :vcr do
         expect(archive.s3_object.exists?).to be(false)
       end
 
-      it "marks an archive with more files than the entry limit too large" do
+      it "builds a non-bundle archive with more files than the bundle entry limit" do
         stub_const("#{described_class}::MAX_ARCHIVE_ENTRIES", 1)
         archive = archive_for(installment, [add_file(installment, "a", display_name: "A"), add_file(installment, "b", display_name: "B")])
 
         described_class.new.perform(archive.id)
 
-        expect(archive.reload).to be_too_large
+        expect(archive.reload).to be_ready
+        expect(zip_entries(archive).transform_values(&:last)).to eq("A.bin" => "a", "B.bin" => "b")
       end
 
       context "for a bundle purchase" do
@@ -605,6 +606,16 @@ describe UpdateProductFilesArchiveWorker, :vcr do
 
           expect(archive.reload).to be_ready
           expect(zip_entries(archive).transform_values(&:last)).to eq("Bundle Product 1/Part.bin" => "one", "Bundle Product 2/Part.bin" => "two")
+        end
+
+        it "marks a bundle archive with more files than the entry limit too large" do
+          stub_const("#{described_class}::MAX_ARCHIVE_ENTRIES", 1)
+          archive = bundle_archive(["one", "two"])
+          expect_any_instance_of(Aws::S3::Client).not_to receive(:head_object)
+
+          described_class.new.perform(archive.id)
+
+          expect(archive.reload).to be_too_large
         end
 
         it "enforces the bundle limit on the sizes S3 reports when none are recorded" do
