@@ -476,121 +476,106 @@ const CustomersPage = ({
                 {[
                   ...processing_customers.map((customer) => ({ customer, processing: true })),
                   ...customers.map((customer) => ({ customer, processing: false })),
-                ]
-                  .sort((left, right) => {
-                    const direction = sort?.direction === "asc" ? 1 : -1;
-                    const value = (row: { customer: Customer }) =>
-                      sort?.key === "price_cents"
-                        ? row.customer.price.cents
-                        : sort?.key === "product_name"
-                          ? row.customer.product.name.toLowerCase()
-                          : row.customer.created_at;
-                    const leftValue = value(left);
-                    const rightValue = value(right);
-                    if (leftValue < rightValue) return -1 * direction;
-                    if (leftValue > rightValue) return 1 * direction;
-                    return 0;
-                  })
-                  .map(({ customer, processing }) => {
-                    const price = formatPrice(
-                      customer.price.cents,
-                      customer.price.currency_type,
-                      customer.price.recurrence,
-                    );
-                    const createdAt = new Date(customer.created_at);
-                    return (
-                      <TableRow
-                        key={customer.id}
-                        onClick={() => {
-                          window.sessionStorage.setItem("CustomersPage:canGoBack", "1");
-                          router.visit(Routes.customer_sale_path(customer.id));
-                        }}
-                        style={{ cursor: "pointer" }}
-                      >
-                        <TableCell>
-                          {customer.shipping?.tracking && !customer.shipping.tracking.shipped ? (
-                            <WithTooltip tip="Not Shipped">
-                              <Truck
-                                style={{ marginRight: "var(--spacer-2)" }}
-                                aria-label="Not Shipped"
-                                className="size-5"
-                              />
-                            </WithTooltip>
-                          ) : null}
-                          {customer.email.length <= 30 ? customer.email : `${customer.email.slice(0, 27)}...`}
-                        </TableCell>
-                        {showNameColumn ? <TableCell>{customer.name}</TableCell> : null}
-                        <TableCell>
-                          {customer.product.name}
-                          {processing ? (
+                ].map(({ customer, processing }) => {
+                  const price = formatPrice(
+                    customer.price.cents,
+                    customer.price.currency_type,
+                    customer.price.recurrence,
+                  );
+                  const createdAt = new Date(customer.created_at);
+                  return (
+                    <TableRow
+                      key={customer.id}
+                      onClick={() => {
+                        window.sessionStorage.setItem("CustomersPage:canGoBack", "1");
+                        router.visit(Routes.customer_sale_path(customer.id));
+                      }}
+                      style={{ cursor: "pointer" }}
+                    >
+                      <TableCell>
+                        {customer.shipping?.tracking && !customer.shipping.tracking.shipped ? (
+                          <WithTooltip tip="Not Shipped">
+                            <Truck
+                              style={{ marginRight: "var(--spacer-2)" }}
+                              aria-label="Not Shipped"
+                              className="size-5"
+                            />
+                          </WithTooltip>
+                        ) : null}
+                        {customer.email.length <= 30 ? customer.email : `${customer.email.slice(0, 27)}...`}
+                      </TableCell>
+                      {showNameColumn ? <TableCell>{customer.name}</TableCell> : null}
+                      <TableCell>
+                        {customer.product.name}
+                        {processing ? (
+                          <Pill size="small" className="ml-2">
+                            Processing
+                          </Pill>
+                        ) : null}
+                        {customer.subscription?.is_installment_plan ? (
+                          <Pill size="small" className="ml-2">
+                            Installments
+                          </Pill>
+                        ) : null}
+                        {customer.is_bundle_purchase ? (
+                          <Pill size="small" className="ml-2">
+                            Bundle
+                          </Pill>
+                        ) : null}
+                        {customer.subscription ? (
+                          !customer.subscription.is_installment_plan && customer.subscription.status !== "alive" ? (
                             <Pill size="small" className="ml-2">
-                              Processing
+                              {customer.subscription.status === "payment_method_update_required"
+                                ? "Payment update required"
+                                : "Inactive"}
                             </Pill>
-                          ) : null}
-                          {customer.subscription?.is_installment_plan ? (
-                            <Pill size="small" className="ml-2">
-                              Installments
-                            </Pill>
-                          ) : null}
-                          {customer.is_bundle_purchase ? (
-                            <Pill size="small" className="ml-2">
-                              Bundle
-                            </Pill>
-                          ) : null}
-                          {customer.subscription ? (
-                            !customer.subscription.is_installment_plan && customer.subscription.status !== "alive" ? (
+                          ) : null
+                        ) : (
+                          <>
+                            {customer.partially_refunded ? (
                               <Pill size="small" className="ml-2">
-                                {customer.subscription.status === "payment_method_update_required"
-                                  ? "Payment update required"
-                                  : "Inactive"}
+                                Partially refunded
                               </Pill>
-                            ) : null
-                          ) : (
-                            <>
-                              {customer.partially_refunded ? (
-                                <Pill size="small" className="ml-2">
-                                  Partially refunded
-                                </Pill>
-                              ) : null}
-                              {customer.refunded ? (
-                                <Pill size="small" className="ml-2">
-                                  Refunded
-                                </Pill>
-                              ) : null}
-                              {customer.chargedback ? (
-                                <Pill size="small" className="ml-2">
-                                  Chargedback
-                                </Pill>
-                              ) : null}
-                            </>
-                          )}
-                          {customer.utm_link ? (
-                            <Pill size="small" className="ml-2">
-                              UTM
-                            </Pill>
-                          ) : null}
-                        </TableCell>
-                        <TableCell>
-                          {createdAt.toLocaleDateString(userAgentInfo.locale, {
-                            day: "numeric",
-                            month: "short",
-                            year: createdAt.getFullYear() !== year ? "numeric" : undefined,
-                            hour: "numeric",
-                            minute: "numeric",
-                            hour12: true,
-                            timeZone: currentSeller.timeZone.name,
-                          })}
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap">
-                          {customer.transaction_url_for_seller ? (
-                            <a href={customer.transaction_url_for_seller}>{price}</a>
-                          ) : (
-                            price
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
+                            ) : null}
+                            {customer.refunded ? (
+                              <Pill size="small" className="ml-2">
+                                Refunded
+                              </Pill>
+                            ) : null}
+                            {customer.chargedback ? (
+                              <Pill size="small" className="ml-2">
+                                Chargedback
+                              </Pill>
+                            ) : null}
+                          </>
+                        )}
+                        {customer.utm_link ? (
+                          <Pill size="small" className="ml-2">
+                            UTM
+                          </Pill>
+                        ) : null}
+                      </TableCell>
+                      <TableCell>
+                        {createdAt.toLocaleDateString(userAgentInfo.locale, {
+                          day: "numeric",
+                          month: "short",
+                          year: createdAt.getFullYear() !== year ? "numeric" : undefined,
+                          hour: "numeric",
+                          minute: "numeric",
+                          hour12: true,
+                          timeZone: currentSeller.timeZone.name,
+                        })}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        {customer.transaction_url_for_seller ? (
+                          <a href={customer.transaction_url_for_seller}>{price}</a>
+                        ) : (
+                          price
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
             {pagination && pagination.pages > 1 ? (
