@@ -705,9 +705,8 @@ class StripeChargeProcessor
     raise ChargeProcessorUnavailableError.new("Stripe error while refunding a charge: #{e.message}", original_error: e)
   end
 
-  # Reverses the seller's transfer for a refund created outside the app, which (unlike refund!)
-  # may not have passed reverse_transfer. Returns [charge_refund, outcome]; the returned
-  # charge_refund's flow of funds reads the matching destination refund, so the seller debit equals the reversal.
+  # Unlike refund!, an external refund may not have passed reverse_transfer.
+  # Pair the destination refund with the reversal before the seller debit uses its flow of funds.
   def reverse_transfer_for_external_refund(charge_refund, merchant_account:)
     charge_refund, outcome = find_or_create_external_refund_reversal(charge_refund, merchant_account:)
     # get_refund pairs the destination refund by id but reads the newest application-fee refund,
