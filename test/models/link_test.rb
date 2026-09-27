@@ -3054,6 +3054,8 @@ class LinkTest < ActiveSupport::TestCase
                   "<pre>GET /api/users</pre>" \
                   "<p>Call /api/users</p><p>next</p>" \
                   "<p>Go to&nbsp;/settings/billing</p><p>x</p>" \
+                  "<p>Visit WWW.EXAMPLE.COM</p><p>next</p>" \
+                  "<p>Wait /settings...</p><p>more</p>" \
                   "<a href=\"/settings.</p><p>It\">label</a>" \
                   "<a href=\"https://en.wikipedia.org/wiki/Schindler&#39;s_List\">film</a>"
     result = create_product(description:).html_safe_description
@@ -3069,6 +3071,8 @@ class LinkTest < ActiveSupport::TestCase
     assert_includes result, "and/or<strong>more</strong>"
     assert_includes result, "Call /api/users </p>"
     assert_includes result, "/settings/billing </p>"
+    assert_includes result, ">WWW.EXAMPLE.COM </a>"
+    assert_includes result, "/settings... </p>"
     assert_includes result, "<pre>GET /api/users</pre>"
     assert_includes result, "It saves."
     assert_includes published_urls, "https://en.wikipedia.org/wiki/Schindler's_List"
