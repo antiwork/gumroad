@@ -57,7 +57,6 @@ afterEach(cleanup);
 
 const onResult = (result: { message: string; status: string }) => state.results.push(result);
 
-// The toolbar item is the action itself — one click, plus the confirmation it opens.
 const openConfirmation = async () => {
   render(<DisableDownloadsForAllFiles onResult={onResult} />);
   fireEvent.click(screen.getByRole("button", { name: "Disable all downloads" }));
