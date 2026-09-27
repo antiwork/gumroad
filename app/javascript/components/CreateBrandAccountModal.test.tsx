@@ -59,6 +59,8 @@ describe("CreateBrandAccountModal payout copy", () => {
 
     expect(screen.getByText("Use my existing payout setup")).toBeTruthy();
     expect(document.body.textContent).toContain("The new account will use this account's PayPal address.");
+    expect(document.body.textContent).toContain("A legal identity on this account will be copied when one exists.");
+    expect(document.body.textContent).toContain("Bank details from this account will not be copied.");
     expect(document.body.textContent).not.toContain("same legal identity and bank details");
   });
 

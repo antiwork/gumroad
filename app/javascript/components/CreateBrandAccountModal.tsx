@@ -30,7 +30,7 @@ export const CreateBrandAccountModal = ({ open, onClose }: { open: boolean; onCl
     if (!canPortBankPayoutSetup) {
       return "The new account will use the same legal identity as this one. Bank payouts can't be set up on new accounts in your country yet, so it will need to pay out through PayPal.";
     }
-    return "The new account will use this account's PayPal address. Bank details from this account will not be copied.";
+    return "The new account will use this account's PayPal address. A legal identity on this account will be copied when one exists. Bank details from this account will not be copied.";
   };
   const [name, setName] = React.useState("");
   const [username, setUsername] = React.useState("");
