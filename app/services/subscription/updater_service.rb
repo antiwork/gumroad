@@ -51,7 +51,8 @@ class Subscription::UpdaterService
       return { success: false, error_message: "This product is no longer available, so this membership can't be restarted." }
     end
 
-    if is_resubscribing && restart_tiers.any?(&:closed_to_new_buyers?)
+    # A pending cancellation is still the member's current term. Only an ended membership is a restart.
+    if is_resubscribing && !is_pending_cancellation && restart_tiers.any?(&:closed_to_new_buyers?)
       return { success: false, error_message: "Sold out, please go back and pick another option." }
     end
 

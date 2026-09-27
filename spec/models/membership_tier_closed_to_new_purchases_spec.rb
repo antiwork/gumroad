@@ -162,8 +162,10 @@ describe "Closing a membership tier to new purchases" do
     end
 
     it "does not let a lapsed supporter restart a closed tier" do
+      subscription = lapsing_purchase.subscription
+      subscription.update!(cancelled_at: 1.day.ago, cancelled_by_buyer: true)
       lapse(lapsing_purchase)
-      subscription = lapsing_purchase.subscription.reload
+      subscription.reload
       props = CheckoutPresenter.new(logged_in_user: nil, ip: nil).subscription_manager_props(subscription:)
       own_tier = props[:product][:options].find { _1[:id] == tier.external_id }
 
@@ -171,14 +173,45 @@ describe "Closing a membership tier to new purchases" do
 
       result = Subscription::UpdaterService.new(
         subscription:,
-        params: { variants: [tier.external_id], price_id: tier.prices.alive.is_buy.first.external_id },
+        params: {
+          variants: [tier.external_id],
+          price_id: subscription.price.external_id,
+          perceived_price_cents: lapsing_purchase.price_cents,
+          perceived_upgrade_price_cents: 0,
+          quantity: lapsing_purchase.quantity,
+          use_existing_card: true
+        },
         logged_in_user: nil,
         gumroad_guid: "close-tier-restart",
         remote_ip: "127.0.0.1"
       ).perform
 
       expect(result[:success]).to be(false)
+      expect(result[:error_message]).to eq("Sold out, please go back and pick another option.")
       expect(subscription.reload.deactivated_at).to be_present
+    end
+
+    it "lets an active supporter undo a scheduled cancellation on a closed tier" do
+      subscription = lapsing_purchase.subscription
+      subscription.update!(cancelled_at: 1.month.from_now, user_requested_cancellation_at: Time.current, cancelled_by_buyer: true)
+      expect(subscription.pending_cancellation?).to be(true)
+
+      result = Subscription::UpdaterService.new(
+        subscription:,
+        params: {
+          variants: [tier.external_id],
+          price_id: subscription.price.external_id,
+          perceived_price_cents: lapsing_purchase.price_cents,
+          perceived_upgrade_price_cents: 0,
+          quantity: lapsing_purchase.quantity,
+          use_existing_card: true
+        },
+        logged_in_user: nil,
+        gumroad_guid: "close-tier-undo-cancel",
+        remote_ip: "127.0.0.1"
+      ).perform
+
+      expect(result[:error_message]).not_to eq("Sold out, please go back and pick another option.")
     end
 
     it "keeps the subscriber's own tier selectable in the subscription manager" do
