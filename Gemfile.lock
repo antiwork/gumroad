@@ -721,7 +721,7 @@ GEM
       eventmachine_httpserver
       http_parser.rb (~> 0.6.0)
       multi_json
-    puma (6.4.3)
+    puma (6.6.0)
       nio4r (~> 2.0)
     pundit (2.3.2)
       activesupport (>= 3.0.0)
@@ -1215,7 +1215,7 @@ DEPENDENCIES
   psych (~> 5.2.3)
   public_suffix (~> 5.0)
   puffing-billy (~> 4.0.0)
-  puma (= 6.4.3)
+  puma (= 6.6.0)
   pundit (~> 2.3)
   rack-attack (~> 6.6)
   rack-cors (~> 2.0)
