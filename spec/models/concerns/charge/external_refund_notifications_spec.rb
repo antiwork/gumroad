@@ -117,15 +117,23 @@ describe Charge::Refundable, "external refund notifications" do
       expect(notification_counts(purchases)).to eq([[1, 1], [1, 1]])
     end
 
-    it "surfaces an enqueue failure after commit without rolling back the booked refunds" do
+    it "alerts and still emails the creator when a deferred enqueue fails after commit" do
       allow(PostToPingEndpointsWorker).to receive(:perform_in).and_raise(RedisClient::CannotConnectError, "queue unavailable")
 
-      expect { charge.handle_event_refund_updated!(event) }.to raise_error(RedisClient::CannotConnectError, "queue unavailable")
+      expect { charge.handle_event_refund_updated!(event) }.not_to raise_error
 
       expect(refund_rows.call.size).to eq(2)
       expect(purchases.map { _1.reload.stripe_refunded? }).to eq([true, true])
       expect(ErrorNotifier).to have_received(:notify).with(Charge::Refundable::EXTERNAL_REFUND_ALERT,
-                                                           hash_including(recording_outcome: :unknown, error_class: "RedisClient::CannotConnectError"))
+                                                           hash_including(recording_outcome: :recorded, notification: :webhook,
+                                                                          error_class: "RedisClient::CannotConnectError")).twice
+      expect(buyer_mails(purchases.first).size).to eq(1)
+      expect(buyer_mails(purchases.last).size).to eq(1)
+      creator_mails = ActiveJob::Base.queue_adapter.enqueued_jobs.select do |job|
+        job[:args][0] == "ContactingCreatorMailer" && job[:args][1] == "purchase_refunded" &&
+          purchases.map(&:id).include?(job.dig(:args, 3, "args", 0))
+      end
+      expect(creator_mails.size).to eq(2)
     end
   end
 
@@ -149,6 +157,17 @@ describe Charge::Refundable, "external refund notifications" do
       expect(notification_counts([purchase])).to eq([[1, 1]])
       raise ActiveRecord::Rollback
     end
+
+    expect(purchase.refunds.reload).to be_empty
+  end
+
+  it "still raises an enqueue failure for an app-initiated refund" do
+    purchase = create_purchase(10_00)
+    allow(PostToPingEndpointsWorker).to receive(:perform_in).and_raise(RedisClient::CannotConnectError, "queue unavailable")
+
+    expect do
+      purchase.refund_purchase!(FlowOfFunds.build_simple_flow_of_funds(Currency::USD, -10_00), seller.id)
+    end.to raise_error(RedisClient::CannotConnectError, "queue unavailable")
 
     expect(purchase.refunds.reload).to be_empty
   end

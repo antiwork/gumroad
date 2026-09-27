@@ -355,13 +355,24 @@ class Purchase
         CustomerMailer.refund(email, link.id, id)
       end
       webhook_url_parameters = url_parameters
-      notify = lambda do
-        send_refunded_notification_webhook(webhook_url_parameters)
-        buyer_mail.deliver_later(queue: "critical")
+      enqueue_refund_notifications = lambda do |best_effort|
+        [[:webhook, -> { send_refunded_notification_webhook(webhook_url_parameters) }],
+         [:buyer_mail, -> { buyer_mail.deliver_later(queue: "critical") }]].each do |notification, enqueue|
+          enqueue.call
+        rescue StandardError => error
+          raise unless best_effort
+
+          # The refund is already committed. Raising here skips the creator emails, and a
+          # redelivered event will not send them again.
+          ErrorNotifier.notify(Charge::Refundable::EXTERNAL_REFUND_ALERT,
+                               purchase_id: id, recording_outcome: :recorded, notification:, error_class: error.class.name)
+        end
       end
-      # A caller refunding several purchases in one transaction defers, so a later purchase's
-      # rollback cannot leave this one's notifications queued for a refund that never committed.
-      defer_notifications_until_commit ? AfterCommitEverywhere.after_commit(&notify) : notify.call
+      if defer_notifications_until_commit
+        AfterCommitEverywhere.after_commit { enqueue_refund_notifications.call(true) }
+      else
+        enqueue_refund_notifications.call(false)
+      end
       # Those callbacks are manually invoked because of a rails issue: https://github.com/rails/rails/issues/39972
       update_creator_analytics_cache(force: true)
       # Refunding impacts many of the ES document fields,
