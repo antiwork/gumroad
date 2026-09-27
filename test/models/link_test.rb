@@ -3044,10 +3044,23 @@ class LinkTest < ActiveSupport::TestCase
 
   # --- #html_safe_description ------------------------------------------------
 
+  test "html_safe_description does not publish description markup as a crawlable URL" do
+    description = "<p>Open /settings.</p><p>It saves.</p>" \
+                  "<p>See https://example.com/settings.</p><p>It continues.</p>" \
+                  "<a href=\"/settings.</p><p>It\">label</a>"
+    result = create_product(description:).html_safe_description
+
+    assert_not_includes result, "/settings.</"
+    assert_no_match(%r{https://example\.com/settings\.<}, result)
+    assert_no_match(/href=(["'])[^"']*[<>]/, result)
+    assert_includes result, "/settings. "
+    assert_includes result, "It saves."
+  end
+
   test "html_safe_description turns bare URLs into anchor tags" do
     product = create_product(description: "Check it out at https://gumroad.com")
     result = product.html_safe_description
-    assert_equal "Check it out at <a href=\"https://gumroad.com\" target=\"_blank\" rel=\"noopener noreferrer nofollow\">https://gumroad.com</a>", result
+    assert_equal "Check it out at <a href=\"https://gumroad.com\" target=\"_blank\" rel=\"noopener noreferrer nofollow\">https://gumroad.com </a>", result
     assert result.html_safe?
   end
 

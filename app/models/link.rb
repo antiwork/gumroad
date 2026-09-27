@@ -768,7 +768,8 @@ class Link < ApplicationRecord
   def html_safe_description
     return unless description.present?
 
-    Rinku.auto_link(sanitize(description, scrubber: description_scrubber), :all, 'target="_blank" rel="noopener noreferrer nofollow"').html_safe
+    linked = Rinku.auto_link(sanitize(description, scrubber: description_scrubber), :all, 'target="_blank" rel="noopener noreferrer nofollow"')
+    crawl_safe_description_html(linked).html_safe
   end
 
   def to_param
@@ -2006,6 +2007,27 @@ class Link < ApplicationRecord
 
     def custom_permalink_or_is_licensed_changed?
       custom_permalink_changed? || is_licensed_changed?
+    end
+
+    # A crawler that allows "<" inside a URL will request the following markup
+    # when a URL or root-relative path sits against the next tag. The slash in
+    # a closing tag is not a path.
+    DESCRIPTION_URL_BEFORE_TAG = %r{(?:(?:https?://|www\.)[^\s<"'>]+|(?<!<)/[A-Za-z0-9][^\s<"'>]*)(?=<)}
+    private_constant :DESCRIPTION_URL_BEFORE_TAG
+
+    def crawl_safe_description_html(html)
+      without_unsafe_urls = html.gsub(/\s(?:href|src)=(["'])(.*?)\1/m) do
+        safe_description_url?($2) ? $& : ""
+      end
+      without_unsafe_urls.gsub(DESCRIPTION_URL_BEFORE_TAG) { |token| "#{token} " }
+    end
+
+    def safe_description_url?(value)
+      return false if value.blank?
+      return false if value.match?(/[<>\s"'\\\u0000-\u001f\u007f]/)
+      return false if value.match?(/\A(?:javascript|data):/i)
+
+      true
     end
 
     def description_scrubber
