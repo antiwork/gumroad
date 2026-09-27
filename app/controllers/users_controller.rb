@@ -195,6 +195,9 @@ class UsersController < ApplicationController
       # enough to move it into another account. Deny before changing the
       # purchaser or signing anyone in.
       return render json: { success: false } if purchase.is_reassignment_locked?
+      # The confirm page exposes this id, and a seller's own purchase email is public.
+      # Moving the purchase makes is_test_purchase? false, so the delivery guard stops applying.
+      return render json: { success: false } if purchase.is_test_purchase?
 
       if logged_in_user.present?
         purchase.purchaser = logged_in_user
