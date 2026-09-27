@@ -232,8 +232,7 @@ class Purchase
     end
 
     def build_partial_refund(gross_refund_amount: nil, refunding_user_id:)
-      return nil if gross_refund_amount <= 0
-      return nil if gross_refund_amount > gross_amount_refundable_cents
+      return nil unless partial_refund_amount_acceptable?(gross_refund_amount)
 
       creator_tax_cents_refunded = 0
       gumroad_tax_cents_refunded = 0
@@ -274,8 +273,8 @@ class Purchase
   # consistent derivation is possible the refund fails closed rather than booking buyer-currency
   # cents as canonical USD.
   def refund_purchase!(flow_of_funds, refunding_user_id, stripe_refund = nil, is_for_fraud = false,
-                       canonical_gross_refund_cents: nil, presentment_refund: nil, note: nil,
-                       defer_notifications_until_commit: false)
+                       canonical_gross_refund_cents: nil, presentment_refund: nil, note: nil, gumroad_funded: false,
+                       balance_reconciliation_needed: false, defer_notifications_until_commit: false)
     if buyer_presentment? && canonical_gross_refund_cents.nil?
       derived = derive_presentment_refund_from_flow_of_funds(flow_of_funds)
       return false if derived.blank?
@@ -331,6 +330,9 @@ class Purchase
         end
       end
       refund.is_for_fraud = is_for_fraud
+      refund.gumroad_funded = true if gumroad_funded
+      refund.balance_reconciliation_needed = true if balance_reconciliation_needed
+      skip_seller_balance = gumroad_funded || balance_reconciliation_needed
       # Free-text explanation of why the refund happened (e.g. "Buyer was charged twice").
       # Shown to the creator in the notification email when a team member issued the refund.
       refund.note = note if note.present?
@@ -338,13 +340,15 @@ class Purchase
       self.is_refund_chargeback_fee_waived = !charged_using_gumroad_merchant_account? || is_for_fraud
       mark_giftee_purchase_as_refunded(is_partially_refunded: self.stripe_partially_refunded?) if is_gift_sender_purchase
       subscription.cancel_immediately_if_pending_cancellation! if subscription.present?
-      decrement_balance_for_refund_or_chargeback!(flow_of_funds, refund:) unless chargedback_not_reversed?
+      decrement_balance_for_refund_or_chargeback!(flow_of_funds, refund:) unless chargedback_not_reversed? || skip_seller_balance
       mark_product_purchases_as_refunded!(is_partially_refunded: self.stripe_partially_refunded?)
       save!
-      reverse_the_transfer_made_for_dispute_win! if chargedback? && chargeback_reversed
-      reverse_excess_amount_from_stripe_transfer(refund:) if stripe_partially_refunded && vat_already_refunded
-      debit_processor_fee_from_merchant_account!(refund) unless is_refund_chargeback_fee_waived || chargedback_not_reversed?
-      Credit.create_for_vat_exclusive_refund!(refund:) if (paypal_order_id.present? || merchant_account&.is_a_stripe_connect_account?) && !chargedback_not_reversed?
+      # skip_seller_balance means this refund must not move the seller's money. The dispute-win
+      # transfer is a seller debit, so it stays with the paths that already debit the seller.
+      reverse_the_transfer_made_for_dispute_win! if chargedback? && chargeback_reversed && !skip_seller_balance
+      reverse_excess_amount_from_stripe_transfer(refund:) if stripe_partially_refunded && vat_already_refunded && !skip_seller_balance
+      debit_processor_fee_from_merchant_account!(refund) unless is_refund_chargeback_fee_waived || chargedback_not_reversed? || skip_seller_balance
+      Credit.create_for_vat_exclusive_refund!(refund:) if (paypal_order_id.present? || merchant_account&.is_a_stripe_connect_account?) && !chargedback_not_reversed? && !skip_seller_balance
       subscription.original_purchase.update!(should_exclude_product_review: true) if subscription&.should_exclude_product_review_on_charge_reversal?
       # Pass the refund's buyer-currency amount as plain values (not the Refund id):
       # without deferral this enqueue happens inside the transaction, so the mailer job
@@ -633,16 +637,35 @@ class Purchase
     true
   end
 
+  # refund_purchase!'s fail-closed amount checks, without writing or alerting. It shares the
+  # buyer-currency derivation and build_partial_refund's amount rule; build_refund's full-refund
+  # branches do not check the amount, so a full refund can pass there and fail here.
+  def refund_recordable_from?(flow_of_funds)
+    issued_amount = flow_of_funds&.issued_amount
+    return false if issued_amount.nil?
+
+    gross_cents = buyer_presentment? ? presentment_refund_from_flow_of_funds(flow_of_funds)&.canonical_gross_refund_cents : issued_amount.cents.abs
+    gross_cents.present? && partial_refund_amount_acceptable?(gross_cents)
+  end
+
+  def partial_refund_amount_acceptable?(gross_refund_cents)
+    gross_refund_cents.positive? && gross_refund_cents <= gross_amount_refundable_cents
+  end
+
+  def presentment_refund_from_flow_of_funds(flow_of_funds)
+    issued_amount = flow_of_funds&.issued_amount
+    return unless issued_amount&.currency.to_s.downcase == purchase_presentment.presentment_currency.to_s.downcase
+
+    Purchase::PresentmentRefund.from_presentment_amount(purchase: self, presentment_amount_cents: issued_amount.cents.abs)
+  end
+
   # Derives the canonical refund amount + presentment snapshot for a refund that arrived with
   # only a buyer-currency flow of funds (refund webhooks, settlement declines). Returns nil —
   # and notifies — when the flow of funds is not in the presentment currency or no consistent
   # derivation is possible, so the caller fails closed.
   def derive_presentment_refund_from_flow_of_funds(flow_of_funds)
     issued_amount = flow_of_funds&.issued_amount
-    derived = if issued_amount&.currency.to_s.downcase == purchase_presentment.presentment_currency.to_s.downcase
-      Purchase::PresentmentRefund.from_presentment_amount(purchase: self,
-                                                          presentment_amount_cents: issued_amount.cents.abs)
-    end
+    derived = presentment_refund_from_flow_of_funds(flow_of_funds)
     return derived if derived.present?
 
     errors.add :base, BUYER_PRESENTMENT_REFUND_ERROR_MESSAGE

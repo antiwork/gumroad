@@ -108,6 +108,12 @@ class Refund < ApplicationRecord
   # returned by the buyer's bank) and Purchase::HandleFailedRefundService has offset
   # the balance debits this refund created. Guards the reversal against re-delivered
   # refund.failed webhooks.
+  # Gumroad paid this refund without debiting the seller: it was created outside the app
+  # and the seller's transfer could not be reversed.
+  attr_json_data_accessor :gumroad_funded
+  # The seller's transfer was reversed for this refund, but the reversal could not be paired, so no
+  # seller balance was changed: someone has to reconcile it by hand.
+  attr_json_data_accessor :balance_reconciliation_needed
   attr_json_data_accessor :balance_reversed_on_failure
   # UTC time (ISO 8601 string) at which the balance reversal above was recorded.
   # The finance event ledger books the reversal as its own dated event on this day;

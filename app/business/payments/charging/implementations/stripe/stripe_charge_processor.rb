@@ -7,6 +7,7 @@ class StripeChargeProcessor
   DISPLAY_NAME = "Stripe"
 
   class NoRefundFeeTransferError < StandardError; end
+  class UnmatchedApplicationFeeRefundError < StandardError; end
 
   # https://stripe.com/docs/api/charges/object#charge_object-status
   VALID_TRANSACTION_STATUSES = %w(succeeded pending).freeze
@@ -23,6 +24,7 @@ class StripeChargeProcessor
 
   # https://stripe.com/docs/api/refunds/create#create_refund-reason
   REFUND_REASON_FRAUDULENT = "fraudulent"
+  EXTERNAL_REFUND_REVERSAL_METADATA_KEY = "external_refund_id"
 
   MANDATE_PREFIX = "Mandate-"
   INDIA_CARD_MANDATE_RELIABILITY_FEATURE = :india_card_mandate_reliability
@@ -578,13 +580,15 @@ class StripeChargeProcessor
 
   # The newest destination refund on the seller's charge belongs to this refund only when no other
   # refund landed after it, so a refund that reversed the transfer is paired through its reversal.
-  private def destination_payment_refund_for(refund, destination_transfer, stripe_destination_payment)
-    return stripe_destination_payment.refunds.first if refund[:transfer_reversal].blank?
+  private def destination_payment_refund_for(refund, destination_transfer, stripe_destination_payment, destination_payment_refund_id = nil)
+    if destination_payment_refund_id.nil?
+      return stripe_destination_payment.refunds.first if refund[:transfer_reversal].blank?
 
-    reversal_id = self.class.transfer_reversal_id(refund)
-    reversal = destination_transfer[:reversals]&.find { _1.id == reversal_id } ||
-      Stripe::Transfer.retrieve_reversal(destination_transfer.id, reversal_id)
-    destination_payment_refund_id = reversal[:destination_payment_refund]
+      reversal_id = self.class.transfer_reversal_id(refund)
+      reversal = destination_transfer[:reversals]&.find { _1.id == reversal_id } ||
+        Stripe::Transfer.retrieve_reversal(destination_transfer.id, reversal_id)
+      destination_payment_refund_id = reversal[:destination_payment_refund]
+    end
     destination_payment_refund_id = destination_payment_refund_id.id if destination_payment_refund_id.respond_to?(:id)
     return stripe_destination_payment.refunds.first if destination_payment_refund_id.blank?
 
@@ -593,7 +597,7 @@ class StripeChargeProcessor
                               { stripe_account: destination_transfer.destination })
   end
 
-  def get_refund(refund_id, merchant_account: nil)
+  def get_refund(refund_id, merchant_account: nil, destination_payment_refund_id: nil, for_external_refund: false)
     with_stripe_error_handler do
       if merchant_migrated? merchant_account
         begin
@@ -612,12 +616,15 @@ class StripeChargeProcessor
 
       destination = charge.destination
       if destination
+        check_external_refund_fee!(charge) if for_external_refund
         application_fee_refund = charge.application_fee.refunds.first if charge.application_fee
         destination_transfer = Stripe::Transfer.retrieve(id: charge.transfer)
         stripe_destination_payment = Stripe::Charge.retrieve({ id: destination_transfer.destination_payment,
                                                                expand: %w[refunds.data.balance_transaction application_fee.refunds] },
                                                              { stripe_account: destination_transfer.destination })
-        destination_payment_refund = destination_payment_refund_for(refund, destination_transfer, stripe_destination_payment)
+        check_external_refund_fee!(stripe_destination_payment) if for_external_refund
+        destination_payment_refund = destination_payment_refund_for(refund, destination_transfer, stripe_destination_payment,
+                                                                    destination_payment_refund_id)
         if destination_payment_refund
           balance_transaction_id = destination_payment_refund.balance_transaction
           if balance_transaction_id.is_a?(String)
@@ -702,6 +709,92 @@ class StripeChargeProcessor
     raise ChargeProcessorInvalidRequestError.new(original_error: e)
   rescue Stripe::APIConnectionError, Stripe::APIError => e
     raise ChargeProcessorUnavailableError.new("Stripe error while refunding a charge: #{e.message}", original_error: e)
+  end
+
+  # Reverses the seller's transfer for a refund created outside the app, which (unlike refund!)
+  # may not have passed reverse_transfer. Returns [charge_refund, outcome]; the returned
+  # charge_refund's flow of funds reads the matching destination refund, so the seller debit equals the reversal.
+  def reverse_transfer_for_external_refund(charge_refund, merchant_account:)
+    charge_refund, outcome = find_or_create_external_refund_reversal(charge_refund, merchant_account:)
+    # get_refund pairs the destination refund by id but reads the newest application-fee refund,
+    # so with more than one the seller debit could come from an unrelated fee refund.
+    if %i[reversed_by_stripe reversed_by_gumroad].include?(outcome) && self.class.application_fee_refund_count(charge_refund.charge) > 1
+      outcome = :reversal_unpaired
+    end
+    [charge_refund, outcome]
+  end
+
+  def self.application_fee_refund_count(charge)
+    fee = charge[:application_fee]
+    fee.is_a?(Stripe::StripeObject) ? Array(fee[:refunds]&.data).size : 0
+  end
+
+  def find_or_create_external_refund_reversal(charge_refund, merchant_account:)
+    charge = charge_refund.charge
+    return [charge_refund, :no_transfer] if charge[:destination].blank? || charge[:transfer].blank?
+
+    # Stripe reversed the transfer with this refund. Re-read its destination refund: the newest refund on
+    # the seller's charge may belong to a different refund.
+    if charge_refund.refund[:transfer_reversal].present?
+      reversal = Stripe::Transfer.retrieve_reversal(charge[:transfer], self.class.transfer_reversal_id(charge_refund.refund))
+      return [charge_refund, :reversal_unpaired] if reversal[:destination_payment_refund].blank?
+
+      return [get_refund(charge_refund.id, merchant_account:, destination_payment_refund_id: reversal[:destination_payment_refund], for_external_refund: true), :reversed_by_stripe]
+    end
+
+    refund_id = charge_refund.id
+    transfer = Stripe::Transfer.retrieve(charge[:transfer])
+    reversal = nil
+    outcome = :reversed_by_gumroad
+    self.class.each_refund_fee_reversal(Stripe::Transfer.list_reversals(transfer.id, { limit: 100 })) do |existing|
+      if existing[:source_refund] == refund_id
+        reversal = existing
+        outcome = :reversed_by_stripe
+        break
+      end
+      reversal ||= existing if self.class.external_refund_reversal_for?(existing, refund_id)
+    end
+
+    unless reversal
+      remaining = transfer.amount - transfer.amount_reversed
+      # Stripe's own reverse_transfer is proportional to the refunded share of the charge.
+      amount = (charge_refund.refund[:amount] * transfer.amount / charge.amount.to_r).round
+      amount = remaining if amount - remaining == 1
+      return [charge_refund, :not_reversible] unless amount.positive? && amount <= remaining
+      # A second fee refund could not be paired with this reversal, so do not move money.
+      return [charge_refund, :fee_refund_unpaired] if self.class.application_fee_refund_count(charge) > 0
+
+      begin
+        reversal = Stripe::Transfer.create_reversal(
+          transfer.id,
+          { amount:, refund_application_fee: true, metadata: { EXTERNAL_REFUND_REVERSAL_METADATA_KEY => refund_id } },
+          { idempotency_key: "external_refund_reversal_#{refund_id}" }
+        )
+      rescue Stripe::InvalidRequestError => e
+        Rails.logger.error("External refund #{refund_id}: reversal of transfer #{transfer.id} refused: #{e.message}")
+        return [charge_refund, :not_reversible]
+      end
+    end
+
+    # The seller debit has to come from this refund's own reversal; a reversal that does not name its
+    # destination refund would resolve to the newest one on the charge, so book nothing and alert.
+    return [charge_refund, :reversal_unpaired] if reversal[:destination_payment_refund].blank?
+
+    [get_refund(refund_id, merchant_account:, destination_payment_refund_id: reversal[:destination_payment_refund], for_external_refund: true), outcome]
+  end
+
+  private def check_external_refund_fee!(charge)
+    # Stripe exposes no refund-to-fee-refund identity, even for a singleton fee-refund list.
+    return if charge[:application_fee].blank? && charge[:application_fee_amount].to_i.zero?
+
+    raise UnmatchedApplicationFeeRefundError, "Application fee refund requires manual reconciliation"
+  end
+
+  def self.external_refund_reversal_for?(reversal, refund_id)
+    metadata = reversal[:metadata]
+    return false if metadata.blank?
+
+    (metadata[EXTERNAL_REFUND_REVERSAL_METADATA_KEY.to_sym] || metadata[EXTERNAL_REFUND_REVERSAL_METADATA_KEY]).to_s == refund_id
   end
 
   def self.transfer_reversal_id(refund)
