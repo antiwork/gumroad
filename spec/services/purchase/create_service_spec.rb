@@ -4223,6 +4223,51 @@ describe Purchase::CreateService, :vcr do
         expect(error).to eq "You have already paid for this product. It has been emailed to you. Do you want to buy it again?"
       end.not_to change { Purchase.count }
     end
+
+    context "when an earlier attempt is unfinished with no processor status" do
+      def create_prior(purchase_state:, created_at:)
+        create(:purchase, link: product, email:, ip_address: "0.0.0.0", purchase_state:, stripe_status: nil, created_at:)
+      end
+
+      it "blocks a retry past the 3-minute window" do
+        create_prior(purchase_state: "in_progress", created_at: 5.minutes.ago)
+
+        expect do
+          _, error = Purchase::CreateService.new(product:, params:).perform
+
+          expect(error).to eq "You have already attempted to purchase this product. We will email you shortly if the purchase is successful."
+        end.not_to change { Purchase.successful.count }
+      end
+
+      it "still blocks it when the buyer confirms a repeat purchase" do
+        create_prior(purchase_state: "in_progress", created_at: 14.minutes.ago)
+        params[:purchase][:confirmed_duplicate_purchase] = true
+
+        _, error = Purchase::CreateService.new(product:, params:).perform
+
+        expect(error).to eq "You have already attempted to purchase this product. We will email you shortly if the purchase is successful."
+      end
+
+      it "allows the purchase once #{"15 minutes"} have passed" do
+        create_prior(purchase_state: "in_progress", created_at: 16.minutes.ago)
+
+        expect do
+          _, error = Purchase::CreateService.new(product:, params:).perform
+
+          expect(error).to be_nil
+        end.to change { Purchase.successful.count }.by(1)
+      end
+
+      it "keeps the 3-minute window for a successful prior" do
+        create_prior(purchase_state: "successful", created_at: 5.minutes.ago)
+
+        expect do
+          _, error = Purchase::CreateService.new(product:, params:).perform
+
+          expect(error).to be_nil
+        end.to change { Purchase.successful.count }.by(1)
+      end
+    end
   end
 
   context "when max price in non-USD" do
