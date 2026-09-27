@@ -2016,15 +2016,16 @@ class Link < ApplicationRecord
     # when a URL or root-relative path sits against the next tag. Attribute
     # values are not text, and the slash in a closing tag is not a path.
     DESCRIPTION_URL_BEFORE_TAG = %r{((?:\A|>|\s|\(|\[|\{|:)(?:(?:https?://|ftp://|www\.)[^\s<>]+|/[^\s<>]*[^\s<>.]\.*))(?=<)}i
-    private_constant :DESCRIPTION_URL_BEFORE_TAG
+    DESCRIPTION_MARKUP_OR_URL_BEFORE_TAG = %r{<(pre|code)\b[^>]*>.*?</\1>|#{DESCRIPTION_URL_BEFORE_TAG}}m
+    private_constant :DESCRIPTION_URL_BEFORE_TAG, :DESCRIPTION_MARKUP_OR_URL_BEFORE_TAG
 
     def drop_markup_description_urls(fragment)
       fragment.css("a[href], img[src], iframe[src], script[src]").each do |node|
         attribute = node.name == "a" ? "href" : "src"
         node.remove_attribute(attribute) unless crawl_safe_description_url?(node[attribute])
       end
-      separated = fragment.to_html.gsub(%r{<(?:pre|code)\b[^>]*>.*?</(?:pre|code)>|#{DESCRIPTION_URL_BEFORE_TAG.source}}m) do |token|
-        token.start_with?("<") ? token : "#{Regexp.last_match(1)} "
+      separated = fragment.to_html.gsub(DESCRIPTION_MARKUP_OR_URL_BEFORE_TAG) do |token|
+        token.start_with?("<") ? token : "#{Regexp.last_match(2)} "
       end
       separated == fragment.to_html ? fragment : Loofah.html4_fragment(separated)
     end
