@@ -136,8 +136,9 @@ class ContentModeration::ModerateRecordService
       subject = title.present? ? "The #{noun} \"#{title}\"" : "This #{noun}"
       message = "#{subject} can’t be saved yet. It reads as promotional, and your account doesn’t have a published product " \
                 "or a sale yet, so we can’t publish promotional #{noun}s for it. Publish a product first, then save this #{noun} again."
+      # Other reasons get their own message so an image block keeps its "replace the image" fix.
       others = rs.reject { |r| r.to_s.start_with?("spam:") }
-      others.any? ? "#{message} It also looks like this #{noun} contains #{humanize_reasons(others)}." : message
+      others.any? ? "#{message} #{seller_message(others, noun)}" : message
     else
       subject = title.present? ? "The #{noun} \"#{title}\"" : "This #{noun}"
       "#{subject} can’t be saved because it looks like it contains #{humanize_reasons(reasons)}. Please update the content to follow our content guidelines."

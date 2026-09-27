@@ -1130,7 +1130,18 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
       message = described_class.seller_message(["spam: link farm", "adult_content: explicit"], "post", title: "Launch", empty_storefront: true)
 
       expect(message).to start_with("The post \"Launch\" can’t be saved yet.")
-      expect(message).to end_with("It also looks like this post contains adult content.")
+      expect(message).to include("This post can’t be saved because it looks like it contains adult content.")
+    end
+
+    it "keeps the replace-the-image fix when an unreviewable image is flagged alongside an empty-storefront spam block" do
+      message = described_class.seller_message(
+        ["spam: link farm", ContentModeration::Strategies::ClassifierStrategy::UNFETCHABLE_IMAGE_REASON],
+        "page",
+        empty_storefront: true
+      )
+
+      expect(message).to include("Publish a product first")
+      expect(message).to include("Replace that image with a new upload")
     end
 
     it "keeps the reword copy for a spam flag when the storefront was not the reason" do
