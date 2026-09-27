@@ -156,7 +156,7 @@ it("puts the close switch right after the supporter cap and round-trips the bool
   const view = render(<StatefulTiersEditor initial={[closedTier]} onChange={onChange} />);
 
   const supporterCap = view.getByLabelText("Maximum number of active supporters").closest("fieldset");
-  const closeSwitch = view.getByRole("switch", { name: "Close to new supporters" });
+  const closeSwitch = view.getByRole("switch", { name: "Stop accepting new supporters" });
   expect(supporterCap?.nextElementSibling).toBe(closeSwitch.closest("label"));
   expect(closeSwitch).toHaveProperty("checked", true);
 
@@ -173,11 +173,11 @@ it("hides the close switch and leaves the setting off new tiers when the seller 
   const onChange = vi.fn<(tiers: Tier[]) => void>();
   const view = render(<StatefulTiersEditor initial={[tier]} onChange={onChange} />);
 
-  expect(view.queryByRole("switch", { name: "Close to new supporters" })).toBeNull();
+  expect(view.queryByRole("switch", { name: "Stop accepting new supporters" })).toBeNull();
 
   fireEvent.click(view.getByText("Add tier"));
   expect(onChange.mock.lastCall?.[0]?.[1]).not.toHaveProperty("closed_to_new_purchases");
-  expect(view.queryByRole("switch", { name: "Close to new supporters" })).toBeNull();
+  expect(view.queryByRole("switch", { name: "Stop accepting new supporters" })).toBeNull();
 });
 
 it("starts a tier added alongside a closed tier as open", () => {
@@ -187,7 +187,7 @@ it("starts a tier added alongside a closed tier as open", () => {
 
   fireEvent.click(view.getByText("Add tier"));
   expect(onChange.mock.lastCall?.[0]?.[1]?.closed_to_new_purchases).toBe(false);
-  const [closedSwitch, addedSwitch] = view.getAllByRole("switch", { name: "Close to new supporters" });
+  const [closedSwitch, addedSwitch] = view.getAllByRole("switch", { name: "Stop accepting new supporters" });
   expect(closedSwitch).toHaveProperty("checked", true);
   expect(addedSwitch).toHaveProperty("checked", false);
 });
@@ -200,13 +200,13 @@ it("keeps the close switch on a tier added after every tier was removed", () => 
   fireEvent.click(view.getByLabelText("Remove"));
   fireEvent.click(view.getByText("Yes, remove"));
   expect(onChange).toHaveBeenLastCalledWith([]);
-  expect(view.queryByRole("switch", { name: "Close to new supporters" })).toBeNull();
+  expect(view.queryByRole("switch", { name: "Stop accepting new supporters" })).toBeNull();
 
   fireEvent.click(view.getByText("Add tier"));
   expect(onChange.mock.lastCall?.[0]).toHaveLength(1);
   expect(onChange.mock.lastCall?.[0]?.[0]?.closed_to_new_purchases).toBe(false);
 
-  const closeSwitch = view.getByRole("switch", { name: "Close to new supporters" });
+  const closeSwitch = view.getByRole("switch", { name: "Stop accepting new supporters" });
   expect(closeSwitch).toHaveProperty("checked", false);
   fireEvent.click(closeSwitch);
   expect(onChange.mock.lastCall?.[0]?.[0]?.closed_to_new_purchases).toBe(true);

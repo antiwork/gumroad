@@ -286,7 +286,7 @@ const TierEditor = ({
               <Switch
                 checked={tier.closed_to_new_purchases === true}
                 onChange={(e) => updateTier({ closed_to_new_purchases: e.target.checked })}
-                label="Close to new supporters"
+                label="Stop accepting new supporters"
               />
             ) : null}
             <Fieldset

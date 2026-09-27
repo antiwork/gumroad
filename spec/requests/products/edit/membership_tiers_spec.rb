@@ -272,15 +272,15 @@ describe("Product Edit Memberships", type: :system, js: true) do
         visit edit_link_path(@product.unique_permalink)
 
         within tier_rows[0] do
-          check "Close to new supporters"
+          check "Stop accepting new supporters"
         end
         save_change
         expect(tier.reload.closed_to_new_purchases?).to be(true)
 
         refresh
         within tier_rows[0] do
-          expect(page).to have_checked_field("Close to new supporters")
-          uncheck "Close to new supporters"
+          expect(page).to have_checked_field("Stop accepting new supporters")
+          uncheck "Stop accepting new supporters"
         end
         save_change
         expect(tier.reload.closed_to_new_purchases?).to be(false)
@@ -299,7 +299,7 @@ describe("Product Edit Memberships", type: :system, js: true) do
         click_on "Add tier"
 
         within tier_rows[0] do
-          expect(page).to have_unchecked_field("Close to new supporters")
+          expect(page).to have_unchecked_field("Stop accepting new supporters")
         end
       end
     end
