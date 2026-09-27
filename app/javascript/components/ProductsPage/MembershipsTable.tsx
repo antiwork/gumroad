@@ -134,6 +134,11 @@ export const ProductsPageMembershipsTable = (props: {
 
               <TableCell className="whitespace-nowrap">
                 {membership.successful_sales_count.toLocaleString(userAgentInfo.locale)}
+                {membership.processing_sales_count ? (
+                  <small className="block">
+                    {membership.processing_sales_count.toLocaleString(userAgentInfo.locale)} processing
+                  </small>
+                ) : null}
 
                 {membership.remaining_for_sale_count ? (
                   <small className="block">

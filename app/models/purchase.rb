@@ -686,6 +686,18 @@ class Purchase < ApplicationRecord
   # purchase keeps stripe_status but is no longer in flight. Pix is included so double-charge
   # guards catch a second payment while the QR is still live.
   scope :payment_settling, -> { in_progress.where.not(stripe_status: nil) }
+  # Seller-visible unfinished sale. stripe_status or a charge id means the processor
+  # accepted a payment. A prepared PaymentIntent or PayPal order id alone is not confirmation.
+  scope :seller_visible_in_flight, -> {
+    in_progress
+      .not_is_gift_receiver_purchase
+      .not_is_bundle_product_purchase
+      .not_is_commission_completion_purchase
+      .where(<<~SQL.squish)
+        (purchases.stripe_status IS NOT NULL
+        OR NULLIF(purchases.stripe_transaction_id, '') IS NOT NULL)
+      SQL
+  }
   # Unconfirmed attempts hold a short lease; a processor status means the payment can still settle
   # after that lease expires.
   scope :active_once_per_cart_offer_code_reservations, lambda {
@@ -1161,10 +1173,17 @@ class Purchase < ApplicationRecord
     end
 
     json[:receipt_url] = receipt_url if options[:include_receipt_url]
+    if seller_visible_in_flight?
+      json[:processing] = true
+      json[:paid] = false
+      json[:invoice_url] = nil
+      json[:amount_refundable_in_currency] = MoneyFormatter.format(0, displayed_price_currency_type, no_cents_if_whole: true, symbol: false)
+    end
 
     if options[:include_ping]
       cached_value = options[:include_ping][:value] if options[:include_ping].is_a? Hash
       json[:can_ping] = cached_value != nil ? cached_value : seller.urls_for_ping_notification(ResourceSubscription::SALE_RESOURCE_NAME).size > 0
+      json[:can_ping] = false if seller_visible_in_flight?
     end
 
     json.merge!(license_json)
@@ -1691,6 +1710,15 @@ class Purchase < ApplicationRecord
 
   def pending_buyer_presentment_settlement?
     pending_processor_settlement?
+  end
+
+  # True only while this row is an unfinished payment the seller should see.
+  # Completed sales return before any association load.
+  def seller_visible_in_flight?
+    return false unless in_progress?
+    return false if is_gift_receiver_purchase? || is_bundle_product_purchase? || is_commission_completion_purchase?
+
+    stripe_status.present? || stripe_transaction_id.present?
   end
 
   def processor_settlement_deferrable?
@@ -2956,7 +2984,8 @@ class Purchase < ApplicationRecord
     json_data[:full_name] = full_name.try(:strip).presence || purchaser&.name
 
     json_data[:currency_symbol] = symbol_for(displayed_price_currency_type)
-    json_data[:amount_refundable_in_currency] = amount_refundable_in_currency
+    json_data[:amount_refundable_in_currency] = seller_visible_in_flight? ? MoneyFormatter.format(0, displayed_price_currency_type, no_cents_if_whole: true, symbol: false) : amount_refundable_in_currency
+    json_data[:processing] = true if seller_visible_in_flight?
     json_data[:refund_fee_notice_shown] = seller&.refund_fee_notice_shown? || false
     json_data[:product_rating] = original_product_review.try(:rating)
 
@@ -4789,13 +4818,15 @@ class Purchase < ApplicationRecord
     end
 
     def additional_fields_for_creator_app_api
-      alert_string = if self.price_cents == 0 && !link.is_physical
+      alert_string = if seller_visible_in_flight?
+        "Processing sale of #{link.name}"
+      elsif self.price_cents == 0 && !link.is_physical
         "New download of #{link.name}"
       else
         "New sale of #{link.name} for #{formatted_total_price}"
       end
 
-      {
+      fields = {
         alert: alert_string,
         product_thumbnail_url: link.thumbnail&.alive&.url.presence,
         formatted_total_price:,
@@ -4803,6 +4834,8 @@ class Purchase < ApplicationRecord
         partially_refunded: stripe_partially_refunded,
         chargedback: chargedback_not_reversed?,
       }
+      fields[:processing] = true if seller_visible_in_flight?
+      fields
     end
 
     def determine_affiliate_balance_cents

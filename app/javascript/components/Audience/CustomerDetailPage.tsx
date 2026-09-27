@@ -209,6 +209,7 @@ const CustomerDetailPage = ({
           Chargedback
         </Pill>
       ) : null}
+      {customer.processing ? <Pill size="small">Processing</Pill> : null}
       {customer.is_preorder ? <Pill size="small">Pre-order</Pill> : null}
       {customer.is_additional_contribution ? <Pill size="small">Additional contribution</Pill> : null}
       {customer.is_bundle_purchase ? <Pill size="small">Bundle</Pill> : null}
@@ -729,7 +730,7 @@ const CustomerDetailPage = ({
             />
           </div>
         ) : null}
-        {canPing && !subscription ? (
+        {canPing && !subscription && !customer.processing ? (
           <Card asChild>
             <section className="break-inside-avoid">
               <CardContent>

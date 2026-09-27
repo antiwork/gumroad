@@ -112,6 +112,7 @@ class CreatorHomePresenter
         total: formatted_dollar_amount(balances.fetch(:sales_cents_total), with_currency: seller.should_be_shown_currencies_always?),
       },
       sales:,
+      processing_sales_count: SellerInFlightSales.new(seller).matching_count(exclude_recurring_charges: true),
       activity_items:,
       stripe_verification_message:,
       email_confirmation:,
@@ -147,19 +148,23 @@ class CreatorHomePresenter
 
     def sales_activity_items
       sales = seller.sales.successful.not_is_bundle_product_purchase.includes(:link).order(created_at: :desc).limit(ACTIVITY_ITEMS_LIMIT).load
-      sales.map do |sale|
-        {
-          "type" => "new_sale",
-          "timestamp" => sale.created_at.iso8601,
-          "details" => {
-            "price_cents" => sale.price_cents,
-            "email" => sale.email,
-            "full_name" => sale.full_name,
-            "product_name" => sale.link.name,
-            "product_unique_permalink" => sale.link.unique_permalink,
-          }
+      processing = SellerInFlightSales.new(seller).records.first(ACTIVITY_ITEMS_LIMIT)
+      ActiveRecord::Associations::Preloader.new(records: processing, associations: :link).call if processing.any?
+      (sales.map { sale_activity_item(_1, "new_sale") } + processing.map { sale_activity_item(_1, "processing_sale") })
+    end
+
+    def sale_activity_item(sale, type)
+      {
+        "type" => type,
+        "timestamp" => sale.created_at.iso8601,
+        "details" => {
+          "price_cents" => sale.price_cents,
+          "email" => sale.email,
+          "full_name" => sale.full_name,
+          "product_name" => sale.link.name,
+          "product_unique_permalink" => sale.link.unique_permalink,
         }
-      end
+      }
     end
 
     def followers_activity_items

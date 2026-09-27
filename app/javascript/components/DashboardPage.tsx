@@ -71,6 +71,7 @@ export type DashboardPageProps = {
     total: string;
   };
   activity_items: ActivityItem[];
+  processing_sales_count: number;
   stripe_verification_message?: string | null;
   email_confirmation?: EmailConfirmation | null;
   tax_forms: Record<number, string>;
@@ -313,6 +314,7 @@ export const DashboardPage = ({
   social_connections,
   sales,
   activity_items,
+  processing_sales_count,
   balances,
   stripe_verification_message,
   email_confirmation,
@@ -554,6 +556,14 @@ export const DashboardPage = ({
             value={balances.total}
           />
         </div>
+
+        {processing_sales_count > 0 ? (
+          <p>
+            {processing_sales_count.toLocaleString()} {processing_sales_count === 1 ? "sale is" : "sales are"} still
+            processing and {processing_sales_count === 1 ? "is" : "are"} not included in these totals.{" "}
+            <a href={Routes.customers_path()}>View customers</a>
+          </p>
+        ) : null}
 
         <ActivityFeed items={activity_items} />
       </div>

@@ -18,6 +18,7 @@ class Api::V2::SalesSummary
 
   def as_json(*)
     result = summary_from_search
+    result.merge!(processing_summary)
     result.merge!(
       currency: Currency::USD,
       from: @from.to_s,
@@ -28,6 +29,16 @@ class Api::V2::SalesSummary
   end
 
   private
+    def processing_summary
+      range_start = CreatorAnalytics::DateQuery.day_start(@from, timezone: @seller.timezone)
+      range_end = CreatorAnalytics::DateQuery.day_start(@to + 1.day, timezone: @seller.timezone)
+      in_flight = SellerInFlightSales.new(@seller)
+      {
+        processing_units: in_flight.count(created_after: range_start, created_before: range_end),
+        processing_gross_cents: in_flight.gross_cents(created_after: range_start, created_before: range_end),
+      }
+    end
+
     def summary_from_search
       search_result = PurchaseSearchService.search(base_search_options.merge(track_total_hits: true, aggs: metric_aggs))
       summary_from_result(search_result.results.total, search_result.aggregations)

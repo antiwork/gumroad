@@ -172,6 +172,9 @@ export const ProductsPageProductsTable = (props: {
                 <Link href={Routes.customers_link_id_path(product.permalink)}>
                   {product.successful_sales_count.toLocaleString(locale)}
                 </Link>
+                {product.processing_sales_count ? (
+                  <small className="block">{product.processing_sales_count.toLocaleString(locale)} processing</small>
+                ) : null}
 
                 {product.remaining_for_sale_count ? (
                   <small className="block">{product.remaining_for_sale_count.toLocaleString(locale)} remaining</small>

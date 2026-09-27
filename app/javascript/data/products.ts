@@ -10,6 +10,7 @@ export type Membership = {
   is_duplicating: boolean;
   has_duration: boolean;
   successful_sales_count: number;
+  processing_sales_count?: number;
   remaining_for_sale_count: number | null;
   monthly_recurring_revenue: number;
   name: string;
@@ -39,6 +40,7 @@ export type Product = {
   revenue: number;
   display_price_cents: number;
   successful_sales_count: number;
+  processing_sales_count?: number;
   remaining_for_sale_count: number | null;
   status: "preorder" | "published" | "unpublished";
   thumbnail: { url: string } | null;

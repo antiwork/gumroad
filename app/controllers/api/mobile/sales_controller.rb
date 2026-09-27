@@ -33,11 +33,18 @@ class Api::Mobile::SalesController < Api::Mobile::BaseController
       track_total_hits: true,
     )
     sales_count = search_result.results.total
-    pages = (sales_count / SALES_PER_PAGE.to_f).ceil
+    processing_service = SellerInFlightSales.new(current_resource_owner)
+    processing_total = processing_service.matching_count(query: params[:query].presence, exclude_recurring_charges: true)
+    pages = [(sales_count / SALES_PER_PAGE.to_f).ceil, (processing_total / SALES_PER_PAGE.to_f).ceil].max
     purchases_json = search_result.records
       .includes(:seller, :purchaser, link: [:variant_categories_alive, { thumbnail: { file_attachment: :blob } }])
       .in_order_of(:id, search_result.records.ids)
       .as_json(creator_app_api: true)
+    processing = processing_service.records(query: params[:query].presence, exclude_recurring_charges: true, offset: (page - 1) * SALES_PER_PAGE, limit: SALES_PER_PAGE)
+    if processing.any?
+      processing_json = processing.map { _1.as_json(creator_app_api: true) }
+      purchases_json = (processing_json + purchases_json).uniq { _1[:id] }
+    end
     render json: {
       success: true,
       purchases: purchases_json,
@@ -159,6 +166,8 @@ class Api::Mobile::SalesController < Api::Mobile::BaseController
   end
 
   def resend_ping
+    return render json: { success: false, message: "This sale is still processing." }, status: :unprocessable_entity if @purchase.seller_visible_in_flight?
+
     @purchase.send_notification_webhook_from_ui
     render json: { success: true }
   end
@@ -292,7 +301,7 @@ class Api::Mobile::SalesController < Api::Mobile::BaseController
     end
 
     def build_charges(purchase)
-      if purchase.is_original_subscription_purchase?
+      if purchase.is_original_subscription_purchase? && purchase.subscription.present?
         purchase.subscription.purchases.successful.map { CustomerPresenter.new(purchase: _1).charge }
       elsif purchase.is_commission_deposit_purchase?
         [purchase, purchase.commission.completion_purchase].compact.map { CustomerPresenter.new(purchase: _1).charge }
@@ -308,7 +317,9 @@ class Api::Mobile::SalesController < Api::Mobile::BaseController
         [original_purchase]
       end
 
-      receipts = all_purchases.map do |purchase|
+      receipts = all_purchases.filter_map do |purchase|
+        next if purchase.seller_visible_in_flight?
+
         receipt_email_info = purchase.receipt_email_info
         {
           type: "receipt",

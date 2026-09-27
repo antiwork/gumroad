@@ -143,4 +143,8 @@ module Product::Stats
       aggs: { unique_email_count: { cardinality: { field: "email.raw" } } }
     ).aggregations.unique_email_count.value
   end
+
+  def processing_sales_count
+    SellerInFlightSales.new(user).count(product_id: id)
+  end
 end

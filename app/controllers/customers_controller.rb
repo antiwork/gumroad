@@ -19,11 +19,13 @@ class CustomersController < Sellers::BaseController
   def index
     product = Link.fetch(params[:link_id]) if params[:link_id].present?
     sales = fetch_sales(products: [product].compact)
+    processing_customers = processing_sales(products: [product].compact)
     customers_presenter = CustomersPresenter.new(
       pundit_user:,
       product:,
       customers: load_sales(sales),
-      pagination: { page: 1, pages: total_pages(sales.results.total), next: nil },
+      processing_customers:,
+      pagination: { page: 1, pages: customer_pages(sales.results.total, @processing_total), next: nil },
       count: sales.results.total
     )
     create_user_event("customers_view")
@@ -78,10 +80,26 @@ class CustomersController < Sellers::BaseController
       active_customers_only: ActiveModel::Type::Boolean.new.cast(params[:active_customers_only]),
       minimum_license_uses: Feature.active?(:license_uses_sales_filter, current_seller) ? params[:minimum_license_uses] : nil,
     )
+    processing_customers = processing_sales(
+      query: params[:query],
+      products: Link.by_external_ids(params[:products]),
+      variants: BaseVariant.by_external_ids(params[:variants]),
+      excluded_products: Link.by_external_ids(params[:excluded_products]),
+      excluded_variants: BaseVariant.by_external_ids(params[:excluded_variants]),
+      minimum_amount_cents: params[:minimum_amount_cents],
+      maximum_amount_cents: params[:maximum_amount_cents],
+      created_after: params[:created_after],
+      created_before: params[:created_before],
+      country: params[:country],
+      minimum_license_uses: Feature.active?(:license_uses_sales_filter, current_seller) ? params[:minimum_license_uses] : nil,
+      sort_key: params.dig(:sort, :key),
+      sort_direction: params.dig(:sort, :direction),
+    )
     customers_presenter = CustomersPresenter.new(
       pundit_user:,
       customers: load_sales(sales),
-      pagination: { page: page_offset / CUSTOMERS_PER_PAGE + 1, pages: total_pages(sales.results.total), next: nil },
+      processing_customers:,
+      pagination: { page: page_offset / CUSTOMERS_PER_PAGE + 1, pages: customer_pages(sales.results.total, @processing_total), next: nil },
       count: sales.results.total
     )
 
@@ -129,6 +147,10 @@ class CustomersController < Sellers::BaseController
   end
 
   private
+    def customer_pages(completed_total, processing_total)
+      [total_pages(completed_total), total_pages(processing_total)].max
+    end
+
     # `from` is 0-indexed; page 500 (1-indexed) is the last legal ES window (9980). Clamp
     # requests past it to that window so a deep page renders the last page rather than
     # an ES "Result window is too large" rejection.
@@ -186,6 +208,43 @@ class CustomersController < Sellers::BaseController
       PurchaseSearchService.search(search_options)
     end
 
+    def processing_sales(query: nil, products: nil, variants: nil, excluded_products: nil, excluded_variants: nil, minimum_amount_cents: nil, maximum_amount_cents: nil, created_after: nil, created_before: nil, country: nil, minimum_license_uses: nil, offset: page_offset, limit: CUSTOMERS_PER_PAGE, sort_key: nil, sort_direction: nil)
+      created_on_or_after = nil
+      created_before_time = nil
+      if created_after || created_before
+        timezone = ActiveSupport::TimeZone[current_seller.timezone]
+        created_on_or_after = timezone.parse(created_after) if created_after
+        created_before_time = timezone.parse(created_before).tomorrow if created_before
+        if created_on_or_after && created_before_time && created_on_or_after > created_before_time
+          created_on_or_after = nil
+          created_before_time = nil
+        end
+      end
+
+      filters = {
+        query: query || params[:query],
+        products:,
+        variants:,
+        excluded_products:,
+        excluded_variants:,
+        minimum_amount_cents: minimum_amount_cents.present? ? get_usd_cents(current_seller.currency_type, minimum_amount_cents) : nil,
+        maximum_amount_cents: maximum_amount_cents.present? ? get_usd_cents(current_seller.currency_type, maximum_amount_cents) : nil,
+        created_after: created_on_or_after,
+        created_before: created_before_time,
+        country: Compliance::Countries.historical_names(country || params[:bought_from]).presence,
+        minimum_license_uses:,
+        exclude_recurring_charges: true,
+        sort_key:,
+        sort_direction:,
+      }
+      # Active customers only excludes refunded, chargedback, and cancelled subscriptions.
+      # An unfinished sale is none of those, so that filter does not hide it.
+      # An unfinished sale is not refunded, chargedback, or a cancelled subscription.
+      service = SellerInFlightSales.new(current_seller)
+      @processing_total = service.matching_count(**filters)
+      service.records(**filters, offset:, limit:)
+    end
+
     def load_sales(sales)
       sales.records
         .includes(
@@ -231,7 +290,7 @@ class CustomersController < Sellers::BaseController
     end
 
     def build_charges(purchase)
-      if purchase.is_original_subscription_purchase?
+      if purchase.is_original_subscription_purchase? && purchase.subscription.present?
         purchase.subscription.purchases.successful.map { CustomerPresenter.new(purchase: _1).charge }
       elsif purchase.is_commission_deposit_purchase?
         [purchase, purchase.commission.completion_purchase].compact.map { CustomerPresenter.new(purchase: _1).charge }
@@ -247,7 +306,9 @@ class CustomersController < Sellers::BaseController
         [original_purchase]
       end
 
-      receipts = all_purchases.map do |purchase|
+      receipts = all_purchases.filter_map do |purchase|
+        next if purchase.seller_visible_in_flight?
+
         receipt_email_info = purchase.receipt_email_info
         {
           type: "receipt",

@@ -6,6 +6,8 @@ class Purchases::PingsController < Sellers::BaseController
   def create
     authorize [:audience, @purchase], :create_ping?
 
+    return head :unprocessable_entity if @purchase.seller_visible_in_flight?
+
     @purchase.send_notification_webhook_from_ui
 
     head :no_content

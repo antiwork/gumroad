@@ -117,6 +117,7 @@ export type Customer = {
   refunded: boolean;
   partially_refunded: boolean;
   chargedback: boolean;
+  processing?: boolean;
   paypal_refund_expired: boolean;
   has_options: boolean;
   option: Option | null;
@@ -188,7 +189,7 @@ export const getPagedCustomers = ({
     abortSignal: abort.signal,
   })
     .then((res) => res.json())
-    .then((json) => typia.assert<{ customers: Customer[]; pagination: PaginationProps | null; count: number }>(json));
+    .then((json) => typia.assert<{ customers: Customer[]; processing_customers: Customer[]; pagination: PaginationProps | null; count: number }>(json));
 
   return {
     response,

@@ -25,6 +25,7 @@ describe CustomersPresenter do
       expect(presenter.customers_props).to eq(
         {
           customers: [purchase1, purchase2].map { CustomerPresenter.new(purchase: _1).customer(pundit_user:) },
+          processing_customers: [],
           count: 2,
           pagination: nil,
           product_id: nil,

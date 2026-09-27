@@ -19,6 +19,7 @@ type FollowItemDetails = { email: string; name: string | null };
 
 export type ActivityItem =
   | { type: "new_sale"; timestamp: string; details: SaleItemDetails }
+  | { type: "processing_sale"; timestamp: string; details: SaleItemDetails }
   | { type: "follower_added" | "follower_removed"; timestamp: string; details: FollowItemDetails };
 
 const Sale = ({ details: { price_cents, product_name, product_unique_permalink } }: { details: SaleItemDetails }) => (
@@ -31,6 +32,16 @@ const Sale = ({ details: { price_cents, product_name, product_unique_permalink }
   </>
 );
 
+const ProcessingSale = ({ details: { price_cents, product_name, product_unique_permalink } }: { details: SaleItemDetails }) => (
+  <>
+    <Dollar className="size-5" />
+    <span>
+      Processing sale of <a href={Routes.short_link_path({ id: product_unique_permalink })}>{product_name}</a> for{" "}
+      {formatPriceCentsWithCurrencySymbol("usd", price_cents, { symbolFormat: "short", noCentsIfWhole: true })}. This
+      is not in your earnings yet.
+    </span>
+  </>
+);
 const Follow = ({ details: { email, name } }: { details: FollowItemDetails }) => (
   <>
     <UserCircle pack="filled" className="size-5" />
@@ -72,6 +83,7 @@ export const ActivityFeed = ({ items }: { items: ActivityItem[] }) => {
         <CardContent key={i}>
           <span className="flex grow gap-3">
             {type === "new_sale" && <Sale details={details} />}
+            {type === "processing_sale" && <ProcessingSale details={details} />}
             {type === "follower_added" && <Follow details={details} />}
             {type === "follower_removed" && <FollowRemoved details={details} />}
           </span>

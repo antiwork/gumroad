@@ -207,6 +207,8 @@ class PurchasesController < ApplicationController
     # so no presentment preloads are needed here.
     purchases_records = PurchaseSearchService.search(search_options).records.
       includes(:refunds).load
+    in_flight = SellerInFlightSales.new(current_seller).records(query:, exclude_recurring_charges: true, offset:, limit: per_page)
+    purchases_records = (in_flight + purchases_records.to_a).uniq(&:id)
 
     imported_customers_records = current_seller.imported_customers.alive.
       where("email LIKE ?", "%#{query}%").
@@ -217,7 +219,13 @@ class PurchasesController < ApplicationController
 
     can_ping = current_seller.urls_for_ping_notification(ResourceSubscription::SALE_RESOURCE_NAME).size > 0
 
-    render json: result.as_json(include_receipt_url: true, include_ping: { value: can_ping }, version: 2, include_variant_details: true, query:, pundit_user:)
+    payload = result.map do |record|
+      json = record.as_json(include_receipt_url: true, include_ping: { value: can_ping }, version: 2, include_variant_details: true, query:, pundit_user:)
+      json.delete("receipt_url") if record.is_a?(Purchase) && record.seller_visible_in_flight?
+      json.delete(:receipt_url) if record.is_a?(Purchase) && record.seller_visible_in_flight?
+      json
+    end
+    render json: payload
   end
 
   def update

@@ -26,6 +26,8 @@ describe Api::V2::SalesSummary do
         units: 4,
         refunded_cents: 45_00,
         refunded_units: 2,
+        processing_units: 0,
+        processing_gross_cents: 0,
         currency: "usd",
         from: "2026-01-01",
         to: "2026-01-31",
@@ -202,6 +204,28 @@ describe Api::V2::SalesSummary do
       result = described_class.new(seller:, from: Date.new(2026, 1, 1), to: Date.new(2026, 1, 31), group_by: "week").as_json
 
       expect(result[:breakdown].pluck(:key)).to eq(["2026-01-05", "2026-01-12"])
+    end
+
+    it "reports an unfinished sale separately from completed revenue" do
+      seller = create(:user, timezone: "UTC")
+      product = create(:product, user: seller, price_cents: 10_00)
+      create(:purchase, link: product, price_cents: 10_00, created_at: Time.utc(2026, 1, 2, 12))
+      create(
+        :purchase_in_progress,
+        link: product,
+        seller:,
+        price_cents: 25_00,
+        stripe_status: "processing",
+        created_at: Time.utc(2026, 1, 2, 13)
+      )
+      index_model_records(Purchase)
+
+      result = described_class.new(seller:, from: Date.new(2026, 1, 1), to: Date.new(2026, 1, 31)).as_json
+
+      expect(result[:gross_cents]).to eq(10_00)
+      expect(result[:units]).to eq(1)
+      expect(result[:processing_units]).to eq(1)
+      expect(result[:processing_gross_cents]).to eq(25_00)
     end
   end
 end

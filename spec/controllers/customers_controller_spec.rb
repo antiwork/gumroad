@@ -37,6 +37,27 @@ describe CustomersController, :vcr, type: :controller, inertia: true do
       expect(inertia.props[:customers_presenter][:count]).to eq(2)
     end
 
+    it "shows an unfinished sale as processing and leaves it out of the completed count" do
+      pending = create(
+        :purchase_in_progress,
+        link: product1,
+        seller:,
+        email: "pending@gumroad.com",
+        full_name: "Pending Buyer",
+        stripe_status: "processing",
+        price_cents: 100
+      )
+
+      get :index
+
+      presenter = inertia.props[:customers_presenter]
+      expect(presenter[:customers].map { _1[:id] }).not_to include(pending.external_id)
+      expect(presenter[:count]).to eq(2)
+      expect(presenter[:processing_customers]).to contain_exactly(
+        hash_including(id: pending.external_id, processing: true, price: hash_including(cents_refundable: 0))
+      )
+    end
+
     context "for a specific product" do
       it "renders the correct inertia component and props" do
         get :index, params: { link_id: product1.unique_permalink }

@@ -1,14 +1,15 @@
 # frozen_string_literal: true
 
 class CustomersPresenter
-  attr_reader :pundit_user, :customers, :pagination, :product, :count
+  attr_reader :pundit_user, :customers, :pagination, :product, :count, :processing_customers
 
-  def initialize(pundit_user:, customers: [], pagination: nil, product: nil, count: 0)
+  def initialize(pundit_user:, customers: [], pagination: nil, product: nil, count: 0, processing_customers: [])
     @pundit_user = pundit_user
     @customers = customers
     @pagination = pagination
     @product = product
     @count = count
+    @processing_customers = processing_customers
   end
 
   def customers_props
@@ -17,6 +18,7 @@ class CustomersPresenter
       pagination:,
       product_id: product&.external_id,
       customers: customers.map { CustomerPresenter.new(purchase: _1).customer(pundit_user:) },
+      processing_customers: processing_customers.map { CustomerPresenter.new(purchase: _1).customer(pundit_user:) },
       count:,
       products: user_presenter.products_for_filter_box.map do |product|
         {

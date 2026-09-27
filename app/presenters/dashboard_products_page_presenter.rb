@@ -147,15 +147,22 @@ class DashboardProductsPagePresenter
     end
 
     def memberships_data(memberships)
-      Product::Caching.dashboard_collection_data(memberships, cache: true) do |membership|
+      rows = Product::Caching.dashboard_collection_data(memberships, cache: true) do |membership|
         product_base_data(membership, pundit_user:)
       end
+      with_processing_counts(rows)
     end
 
     def products_data(products)
-      Product::Caching.dashboard_collection_data(products, cache: true) do |product|
+      rows = Product::Caching.dashboard_collection_data(products, cache: true) do |product|
         product_base_data(product, pundit_user:)
       end
+      with_processing_counts(rows)
+    end
+
+    def with_processing_counts(rows)
+      counts = SellerInFlightSales.new(@pundit_user.seller).counts_by_product(rows.map { _1["id"] })
+      rows.each { |row| row["processing_sales_count"] = counts[row["id"]] || 0 }
     end
 
     def product_base_data(product, pundit_user:)

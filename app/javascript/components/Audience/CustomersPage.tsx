@@ -44,6 +44,7 @@ type Product = { id: string; permalink: string; name: string; variants: { id: st
 
 export type CustomerPageProps = {
   customers: Customer[];
+  processing_customers: Customer[];
   pagination: PaginationProps | null;
   product_id: string | null;
   products: Product[];
@@ -78,10 +79,11 @@ const CustomersPage = ({
   const userAgentInfo = useUserAgentInfo();
 
   const sellerKey = currentSeller?.id ?? "anonymous";
-  const [{ customers, pagination, count }, setState] = useRemember<{
+  const [{ customers, pagination, count, processing_customers = [] }, setState] = useRemember<{
     customers: Customer[];
     pagination: PaginationProps | null;
     count: number;
+    processing_customers?: Customer[];
   }>(initialState, `CustomersPage:state:${sellerKey}`);
   const [isLoading, setIsLoading] = React.useState(false);
   const activeRequest = React.useRef<{ cancel: () => void } | null>(null);
@@ -453,10 +455,14 @@ const CustomersPage = ({
         }
       />
       <section className="p-4 md:p-8">
-        {customers.length > 0 ? (
+        {customers.length > 0 || processing_customers.length > 0 ? (
           <section className="flex flex-col gap-4">
             <Table aria-live="polite" className={cx(isLoading && "pointer-events-none opacity-50")}>
-              <TableCaption>{`All sales (${count.toLocaleString()})`}</TableCaption>
+              <TableCaption>
+                {processing_customers.length > 0
+                  ? `All sales (${count.toLocaleString()}). Processing sales are not included in this count.`
+                  : `All sales (${count.toLocaleString()})`}
+              </TableCaption>
               <TableHeader>
                 <TableRow>
                   <TableHead>Email</TableHead>
@@ -467,7 +473,10 @@ const CustomersPage = ({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {customers.map((customer) => {
+                {[
+                  ...processing_customers.map((customer) => ({ customer, processing: true })),
+                  ...customers.map((customer) => ({ customer, processing: false })),
+                ].map(({ customer, processing }) => {
                   const price = formatPrice(
                     customer.price.cents,
                     customer.price.currency_type,
@@ -498,6 +507,11 @@ const CustomersPage = ({
                       {showNameColumn ? <TableCell>{customer.name}</TableCell> : null}
                       <TableCell>
                         {customer.product.name}
+                        {processing ? (
+                          <Pill size="small" className="ml-2">
+                            Processing
+                          </Pill>
+                        ) : null}
                         {customer.subscription?.is_installment_plan ? (
                           <Pill size="small" className="ml-2">
                             Installments

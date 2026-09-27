@@ -68,7 +68,7 @@ class CustomerPresenter
         {
           cents: listed_price_cents,
           cents_before_offer_code: listed_price_cents_before_offer_code,
-          cents_refundable: purchase.amount_refundable_cents_in_currency,
+          cents_refundable: purchase.seller_visible_in_flight? ? 0 : purchase.amount_refundable_cents_in_currency,
           currency_type: purchase.displayed_price_currency_type.to_s,
           recurrence: (purchase.subscription || purchase.price)&.recurrence,
           tip_cents: listed_tip_cents,
@@ -142,6 +142,7 @@ class CustomerPresenter
       refunded: purchase.stripe_refunded?,
       partially_refunded: purchase.stripe_partially_refunded?,
       chargedback: purchase.chargedback? && !purchase.chargeback_reversed? && !purchase.stripe_refunded?,
+      processing: purchase.seller_visible_in_flight?,
       has_options: variant.present? || purchase.link.alive_variants.any?,
       option: variant.present? ?
         (variant.is_a?(Sku) ? variant.to_option_for_product : variant.to_option) :
@@ -173,7 +174,7 @@ class CustomerPresenter
       created_at: purchase.created_at.iso8601,
       partially_refunded: purchase.stripe_partially_refunded?,
       refunded: purchase.stripe_refunded?,
-      amount_refundable: purchase.amount_refundable_cents_in_currency,
+      amount_refundable: purchase.seller_visible_in_flight? ? 0 : purchase.amount_refundable_cents_in_currency,
       currency_type: purchase.displayed_price_currency_type.to_s,
       transaction_url_for_seller: purchase.transaction_url_for_seller,
       is_upgrade_purchase: purchase.is_upgrade_purchase?,

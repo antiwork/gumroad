@@ -77,9 +77,9 @@ class Api::V2::SalesController < Api::V2::BaseController
           has_next_page = paginated_sales.size > RESULTS_PER_PAGE
           paginated_sales = paginated_sales.first(RESULTS_PER_PAGE)
           if has_next_page
-            success_with_object(:sales, sales_json(paginated_sales), pagination_info(paginated_sales.last))
+            success_with_object(:sales, sales_json(paginated_sales), pagination_info(paginated_sales.last).merge(processing_sales_payload(start_date:, end_date:, email:, product_id:, purchase_id:, name:, license_key:)))
           else
-            success_with_object(:sales, sales_json(paginated_sales))
+            success_with_object(:sales, sales_json(paginated_sales), processing_sales_payload(start_date:, end_date:, email:, product_id:, purchase_id:, name:, license_key:))
           end
         end
       rescue WithMaxExecutionTime::QueryTimeoutError
@@ -115,6 +115,7 @@ class Api::V2::SalesController < Api::V2::BaseController
         has_next_page = paginated_sales.size > RESULTS_PER_PAGE
         paginated_sales = paginated_sales.first(RESULTS_PER_PAGE)
         additional_response = has_next_page ? pagination_info(paginated_sales.last) : {}
+        additional_response = additional_response.merge(processing_sales_payload(start_date:, end_date:, email:, product_id:, purchase_id:, name:, license_key:))
         success_with_object(:sales, sales_json(paginated_sales), additional_response)
       end
     rescue WithMaxExecutionTime::QueryTimeoutError
@@ -246,6 +247,30 @@ class Api::V2::SalesController < Api::V2::BaseController
 
     def success_with_sale(sale = nil)
       success_with_object(:sale, sale)
+    end
+
+    def processing_sales_payload(start_date:, end_date:, email:, product_id:, purchase_id:, name:, license_key:)
+      return {} if params[:page_key].present? && params[:processing_page].blank?
+
+      page = (params[:processing_page].presence || params[:page].presence || 1).to_i
+      page = 1 if page < 1
+      offset = (page - 1) * RESULTS_PER_PAGE
+      filters = {
+        email:,
+        name:,
+        product_id:,
+        purchase_id:,
+        created_after: start_date,
+        created_before: end_date,
+        license_key:,
+      }
+      service = SellerInFlightSales.new(current_resource_owner)
+      processing = service.records(**filters, offset:, limit: RESULTS_PER_PAGE)
+      return {} if processing.empty?
+
+      payload = { processing_sales: sales_json(processing) }
+      payload[:processing_next_page] = page + 1 if service.matching_count(**filters) > offset + processing.size
+      payload
     end
 
     def sales_json(sales)
