@@ -1667,6 +1667,34 @@ describe "PurchaseRefunds", :vcr do
       purchase.send(:reverse_excess_amount_from_stripe_transfer, refund:)
     end
 
+    it "counts the reversal the refund webhook made for a refund created outside the app" do
+      purchase = create(:purchase, link: @product, merchant_account: @merchant_account, stripe_transaction_id: "ch_external_vat")
+      allow_any_instance_of(Purchase).to receive(:gumroad_tax_cents).and_return 200
+      allow_any_instance_of(Purchase).to receive(:gumroad_tax_refunded_cents).and_return 200
+      refund = create(:refund, purchase:, processor_refund_id: "re_external_vat")
+      BalanceTransaction.create!(
+        user: purchase.seller,
+        merchant_account: purchase.merchant_account,
+        refund:,
+        dispute: nil,
+        issued_amount: BalanceTransaction::Amount.new(currency: "usd", gross_cents: -500, net_cents: -416),
+        holding_amount: BalanceTransaction::Amount.new(currency: "cad", gross_cents: -400, net_cents: -366),
+        update_user_balance: purchase.charged_using_gumroad_merchant_account?
+      )
+      webhook_reversal = Stripe::StripeObject.construct_from(
+        id: "trr_webhook", amount: 366, source_refund: nil,
+        metadata: { StripeChargeProcessor::EXTERNAL_REFUND_REVERSAL_METADATA_KEY => "re_external_vat" }
+      )
+      transfer = double("transfer", id: "tr_external_vat", currency: "cad", amount: 700, amount_reversed: 366,
+                                    reversals: double("reversals", data: [webhook_reversal]))
+      allow(Stripe::Charge).to receive(:retrieve).and_return(double("charge", transfer: "tr_external_vat"))
+      allow(Stripe::Transfer).to receive(:retrieve).and_return(transfer)
+
+      expect(Stripe::Transfer).not_to receive(:create_reversal)
+
+      purchase.send(:reverse_excess_amount_from_stripe_transfer, refund:)
+    end
+
     it "reverses the holding-currency amount when the transfer is denominated in the merchant account's currency" do
       # Regression test for the buyer-currency (presentment) case. When a charge settles in the
       # buyer's currency the resulting transfer is in that currency too, so reversing the
@@ -1725,7 +1753,7 @@ describe "PurchaseRefunds", :vcr do
       )
 
       transfer = double("transfer", id: "tr_partial_capacity", currency: "cad", amount: 700, amount_reversed: 600,
-                                    reversals: double("reversals", data: [double("reversal", source_refund: nil, amount: 600)]))
+                                    reversals: double("reversals", data: [Stripe::StripeObject.construct_from(source_refund: nil, amount: 600)]))
       allow(Stripe::Charge).to receive(:retrieve).and_return(double("charge", transfer: transfer.id))
       allow(Stripe::Transfer).to receive(:retrieve).and_return(transfer)
       expect(Stripe::Transfer).to receive(:create_reversal).with(transfer.id, { amount: 100 })
@@ -1788,7 +1816,7 @@ describe "PurchaseRefunds", :vcr do
       )
 
       transfer = double("transfer", id: "tr_dispute_reversed", currency: "cad", amount: 366, amount_reversed: 366,
-                                    reversals: double("reversals", data: [double("reversal", source_refund: nil, amount: 366)]))
+                                    reversals: double("reversals", data: [Stripe::StripeObject.construct_from(source_refund: nil, amount: 366)]))
       allow(Stripe::Charge).to receive(:retrieve).and_return(double("charge", transfer: "tr_dispute_reversed"))
       allow(Stripe::Transfer).to receive(:retrieve).and_return(transfer)
 
