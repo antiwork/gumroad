@@ -34,6 +34,7 @@ Persistent runner: the first replica-default query on a host boots a long-lived 
 ## Safety
 
 - **Read-only.** Never write, update, or delete.
+- **No Redis `KEYS` or `FLUSH*`.** `prod_query.sh` prepends `scripts/redis_command_guard.rb`, which refuses them: one `KEYS` over the ~4.6M-key primary blocks it for seconds and 500s the site. Use `$redis.scan_each(match:, count: 1000).first(n)`.
 - Always `.limit()` / `.first()` / `.take()` — never unbounded result sets.
 - Prefer `.pluck(:col, :col)` over loading full AR objects.
 - Mask PII in output (truncate emails, addresses, payment details).
