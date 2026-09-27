@@ -49,6 +49,7 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
   # A shared address can carry thousands of purchases; past this many distinct values the rest stay
   # blocked rather than turning one clear into an unbounded lookup.
   MAX_SIBLING_VALUES = 200
+  SUBSCRIPTION_CARD_LOOKUP_LIMIT = 20
 
   def perform
     scan = scan_for_stale_blocks
@@ -178,13 +179,13 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
     # on this buyer's SUCCESSFUL purchases: anyone can type this email into a failed attempt, so a
     # card tester's card or browser must not ride along. Nothing is cleared while the 7-day
     # email-or-browser velocity rule would still fire, and a browser the all-time rule wants is kept.
+    # A card the issuer fraud rule still wants stays too.
     def burst_siblings(email, window)
       purchases = Purchase.successful.where(email:)
+      stripe_fingerprints, other_visuals = card_sibling_values(purchases)
       values = {
         PlatformBlock::TYPES[:browser_guid] => purchases.where.not(browser_guid: [nil, ""]).distinct.limit(MAX_SIBLING_VALUES).pluck(:browser_guid),
-        PlatformBlock::TYPES[:charge_processor_fingerprint] =>
-          (purchases.where.not(stripe_fingerprint: [nil, ""]).distinct.limit(MAX_SIBLING_VALUES).pluck(:stripe_fingerprint) +
-           purchases.where.not(card_visual: [nil, ""]).distinct.limit(MAX_SIBLING_VALUES).pluck(:card_visual)).uniq,
+        PlatformBlock::TYPES[:charge_processor_fingerprint] => (stripe_fingerprints + other_visuals).uniq,
       }
       return [] if recent_velocity_still_fires?(email, values[PlatformBlock::TYPES[:browser_guid]])
 
@@ -192,7 +193,110 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
         next [] if values[object_type].empty?
 
         PlatformBlock.active.where(object_type:, object_value: values[object_type], blocked_by: nil, blocked_at: window).to_a
-      end.reject { |sibling| velocity_protected_browser?(sibling) }
+      end.reject { |sibling| velocity_protected_browser?(sibling) || fraud_rule_still_wants_card?(sibling, stripe_values: stripe_fingerprints) }
+    end
+
+    # Same split as Purchase#charge_processor_fingerprint for the visual: a Stripe masked visual is
+    # not a block key. Fingerprints are kept from every processor, because a block can also be
+    # written from recent_stripe_fingerprint.
+    def card_sibling_values(purchases)
+      stripe_id = StripeChargeProcessor.charge_processor_id
+      stripe_fingerprints = purchases.where.not(stripe_fingerprint: [nil, ""])
+                                      .distinct.limit(MAX_SIBLING_VALUES)
+                                      .pluck(:stripe_fingerprint)
+      other_visuals = purchases.where("charge_processor_id IS NULL OR charge_processor_id != ?", stripe_id)
+                               .where.not(card_visual: [nil, ""])
+                               .distinct.limit(MAX_SIBLING_VALUES)
+                               .pluck(:card_visual)
+      [stripe_fingerprints, other_visuals]
+    end
+
+    # ban_buyer_on_fraud_related_error_code! blocks the card, not the person, until that card has
+    # its own settled history. One indexed decline is enough for a Stripe fingerprint: failed rows
+    # are outside that count. A renewal can block the card on file when the failed row has no
+    # fingerprint of its own. Other processors are keyed by visual, so each known card type is a
+    # separate lookup on index_purchases_on_card_type_visual_fingerprint.
+    def fraud_rule_still_wants_card?(sibling, stripe_values:)
+      return false unless sibling.object_type == PlatformBlock::TYPES[:charge_processor_fingerprint]
+
+      value = sibling.object_value
+      return false if value.blank?
+
+      if stripe_values.include?(value)
+        return true if subscription_card_fraud_decline?(value)
+
+        decline = stripe_fraud_decline(value)
+        return !decline.buyer_has_clean_payment_history? if decline
+
+        return false
+      end
+
+      other_processor_fraud_still_wants?(value)
+    end
+
+    def stripe_fraud_decline(value)
+      Purchase.failed
+              .where(charge_processor_id: StripeChargeProcessor.charge_processor_id, stripe_fingerprint: value)
+              .where(fraud_decline_sql, codes: PurchaseErrorCode::AUTO_BLOCK_ERROR_CODES)
+              .limit(1)
+              .first
+    end
+
+    # A renewal blocks the card it charged only when that charge is recurring and an earlier
+    # settled purchase of the same subscription used that card. Reuse those methods. Past the
+    # lookup cap the card stays, rather than clearing on an incomplete set.
+    def subscription_card_fraud_decline?(value)
+      card_ids = CreditCard.where(stripe_fingerprint: value).limit(SUBSCRIPTION_CARD_LOOKUP_LIMIT).pluck(:id)
+      return true if card_ids.size == SUBSCRIPTION_CARD_LOOKUP_LIMIT
+      return false if card_ids.empty?
+
+      declines = Purchase.failed
+                         .where(credit_card_id: card_ids)
+                         .where.not(subscription_id: nil)
+                         .where(fraud_decline_sql, codes: PurchaseErrorCode::AUTO_BLOCK_ERROR_CODES)
+                         .limit(SUBSCRIPTION_CARD_LOOKUP_LIMIT)
+                         .to_a
+      return true if declines.size == SUBSCRIPTION_CARD_LOOKUP_LIMIT
+
+      declines.any? do |purchase|
+        purchase.is_recurring_subscription_charge &&
+          purchase.send(:subscription_card_fingerprint) == value &&
+          !purchase.buyer_has_clean_payment_history?
+      end
+    end
+
+    def other_processor_fraud_still_wants?(value)
+      stripe_id = StripeChargeProcessor.charge_processor_id
+      known_types = fraud_lookup_card_types
+      return true if visual_fraud_still_wants?(value, stripe_id, card_types: known_types)
+      return true if visual_fraud_still_wants?(value, stripe_id, card_types: [nil])
+
+      visual_fraud_still_wants?(value, stripe_id, excluded_card_types: known_types)
+    end
+
+    def visual_fraud_still_wants?(value, stripe_id, card_types: nil, excluded_card_types: nil)
+      scope = Purchase.failed
+                      .where(card_visual: value)
+                      .where("charge_processor_id IS NULL OR charge_processor_id != ?", stripe_id)
+                      .where(fraud_decline_sql, codes: PurchaseErrorCode::AUTO_BLOCK_ERROR_CODES)
+      scope = scope.where(card_type: card_types) if card_types
+      scope = scope.where.not(card_type: excluded_card_types) if excluded_card_types
+      declines = scope.limit(SUBSCRIPTION_CARD_LOOKUP_LIMIT).to_a
+      return false if declines.empty?
+      return true if declines.size == SUBSCRIPTION_CARD_LOOKUP_LIMIT
+
+      declines.any? { |purchase| purchase.charge_processor_fingerprint == value && !purchase.buyer_has_clean_payment_history? }
+    end
+
+    def fraud_lookup_card_types
+      CardType.constants(false).filter_map do |name|
+        value = CardType.const_get(name)
+        value if value.is_a?(String)
+      end
+    end
+
+    def fraud_decline_sql
+      "stripe_error_code IN (:codes) OR (stripe_error_code IS NULL AND error_code IN (:codes))"
     end
 
     def unattended_in_window?(sibling, window)

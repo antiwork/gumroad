@@ -246,6 +246,98 @@ describe AlertOnStaleBlocksHoldingEstablishedBuyersJob do
       expect(guid_block.reload.blocked_at).to be_present
     end
 
+    it "keeps a browser the all-time card-testing rule still wants after the 7-day window" do
+      Purchase::Blockable::MAX_NUMBER_OF_FAILED_FINGERPRINTS.times do |index|
+        create(:purchase, purchase_state: "failed", browser_guid: guid, stripe_fingerprint: "old-tested-#{index}",
+                          email: "old-tester#{index}@example.com",
+                          charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                          created_at: (Purchase::Blockable::CARD_TESTING_WATCH_PERIOD + 1.day).ago)
+      end
+      at = 2.years.ago
+      block_email(blocked_at: at)
+      guid_block = block_value(:browser_guid, guid, blocked_at: at)
+
+      message
+      expect(guid_block.reload.blocked_at).to be_present
+    end
+
+    it "keeps the card sibling while the 7-day rule still fires on the buyer's browser alone" do
+      Purchase::Blockable::MAX_NUMBER_OF_FAILED_FINGERPRINTS.times do |index|
+        create(:purchase, purchase_state: "failed", browser_guid: guid, stripe_fingerprint: "browser-tested-#{index}",
+                          email: "other#{index}@example.com",
+                          charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                          created_at: (Purchase::Blockable::CARD_TESTING_WATCH_PERIOD - 1.day).ago)
+      end
+      at = 2.years.ago
+      block_email(blocked_at: at)
+      card_block = block_value(:charge_processor_fingerprint, fingerprint, blocked_at: at)
+
+      message
+      expect(card_block.reload.blocked_at).to be_present
+    end
+
+    it "leaves a stranger's card block that only matches a Stripe masked visual" do
+      visual = "**** **** **** 4062"
+      Purchase.successful.where(email:).update_all(card_visual: visual, charge_processor_id: StripeChargeProcessor.charge_processor_id)
+      at = 2.years.ago
+      block_email(blocked_at: at)
+      stranger = block_value(:charge_processor_fingerprint, visual, blocked_at: at)
+
+      message
+      expect(stranger.reload.blocked_at).to be_present
+    end
+
+    it "keeps a card the issuer fraud rule still wants" do
+      stolen = "fp-stolen"
+      create(:purchase, email:, stripe_fingerprint: stolen, purchase_state: "successful", price_cents: 500,
+                        created_at: history_starts_at)
+      create(:purchase, purchase_state: "failed", stripe_fingerprint: stolen, email: "thief@example.com",
+                        stripe_error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD,
+                        charge_processor_id: StripeChargeProcessor.charge_processor_id)
+      at = 2.years.ago
+      block_email(blocked_at: at)
+      card_block = block_value(:charge_processor_fingerprint, stolen, blocked_at: at)
+
+      message
+      expect(card_block.reload.blocked_at).to be_present
+    end
+
+    it "keeps a card a fraud-coded renewal blocked on the charged card, not the failed row" do
+      saved = "fp-saved-card"
+      charged = CreditCard.new(stripe_fingerprint: saved, card_type: "visa", visual: "**** **** **** 4242")
+      charged.save!(validate: false)
+      prior = create(:purchase, email:, stripe_fingerprint: saved, purchase_state: "successful", price_cents: 500,
+                                created_at: history_starts_at)
+      renewal = create(:purchase, email: "renewal@example.com", stripe_fingerprint: "fp-other-row", purchase_state: "failed",
+                                  stripe_error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD)
+      now = Time.current
+      subscription_id = Subscription.connection.insert(
+        Subscription.sanitize_sql_array(["INSERT INTO subscriptions (link_id, created_at, updated_at, flags) VALUES (?, ?, ?, 0)", create(:product).id, now, now])
+      )
+      prior.update_columns(credit_card_id: charged.id, subscription_id:)
+      renewal.update_columns(credit_card_id: charged.id, subscription_id:)
+      at = 2.years.ago
+      block_email(blocked_at: at)
+      card_block = block_value(:charge_processor_fingerprint, saved, blocked_at: at)
+
+      message
+      expect(card_block.reload.blocked_at).to be_present
+    end
+
+    it "clears a fraud-coded card once that card has the settled history the fraud rule requires" do
+      settled = "fp-stolen-settled"
+      settled_purchases(established_count, stripe_fingerprint: settled)
+      create(:purchase, purchase_state: "failed", stripe_fingerprint: settled, email: "thief@example.com",
+                        stripe_error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD,
+                        charge_processor_id: StripeChargeProcessor.charge_processor_id)
+      at = 2.years.ago
+      block_email(blocked_at: at)
+      card_block = block_value(:charge_processor_fingerprint, settled, blocked_at: at)
+
+      message
+      expect(card_block.reload.blocked_at).to be_nil
+    end
+
     it "leaves a card that only reached this email on a failed attempt" do
       create(:purchase, purchase_state: "failed", email:, stripe_fingerprint: "fp-tester")
       at = 2.years.ago
