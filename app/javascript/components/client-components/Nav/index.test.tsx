@@ -117,6 +117,7 @@ const buildUser = (promotedNavItems: string[]): LoggedInUser => ({
   canCreateBrandAccount: false,
   hasPayoutSetupToPort: false,
   canPortBankPayoutSetup: true,
+  willCopyBankPayout: false,
   promotedNavItems,
   lazyLoadOffscreenDiscoverImages: false,
   policies: {
