@@ -1794,6 +1794,25 @@ describe StripeChargeProcessor, :vcr do
       Stripe::StripeObject.construct_from(attrs)
     end
 
+    it "keeps both legs from the newest refunds when the charge has an application fee" do
+      fee = stripe(id: "fee_test", refunds: { object: "list", data: [stripe(id: "fr_new", amount: 30, balance_transaction: stripe(amount: -30, currency: "usd"))], has_more: false, url: "/v1/application_fees/fee_test/refunds" })
+      refund = stripe(id: "re_old", charge: "ch_test", amount: 200, currency: "usd", transfer_reversal: "trr_old", balance_transaction: stripe(amount: -200, currency: "usd"))
+      charge = stripe(id: "ch_test", destination: "acct_test", transfer: "tr_test", application_fee: fee, on_behalf_of: nil)
+      transfer = stripe(id: "tr_test", destination: "acct_test", destination_payment: "py_test",
+                        reversals: [stripe(id: "trr_old", destination_payment_refund: "pyr_old")])
+      destination_new = stripe(id: "pyr_new", amount: 300, balance_transaction: stripe(amount: -300, currency: "usd"))
+      destination_old = stripe(id: "pyr_old", amount: 200, balance_transaction: stripe(amount: -200, currency: "usd"))
+      payment = stripe(id: "py_test", refunds: [destination_new, destination_old], application_fee: nil, balance_transaction: "txn_credit")
+      allow(Stripe::Refund).to receive(:retrieve).with(id: "re_old", expand: %w[balance_transaction]).and_return(refund)
+      allow(Stripe::Charge).to receive(:retrieve).with(id: "ch_test", expand: %w[balance_transaction application_fee.refunds.data.balance_transaction]).and_return(charge)
+      allow(Stripe::Transfer).to receive(:retrieve).with(id: "tr_test").and_return(transfer)
+      allow(Stripe::Charge).to receive(:retrieve).with({ id: "py_test", expand: %w[refunds.data.balance_transaction application_fee.refunds] }, { stripe_account: "acct_test" }).and_return(payment)
+
+      result = StripeChargeProcessor.new.get_refund("re_old")
+
+      expect(result.destination_payment_refund.id).to eq("pyr_new")
+    end
+
     [false, true].product([false, true]).each do |paginated, expanded|
       it "reads the exact older destination refund (paginated: #{paginated}, expanded: #{expanded})" do
         refund = stripe(id: "re_old", charge: "ch_test", amount: 200, currency: "usd", transfer_reversal: expanded ? stripe(id: "trr_old") : "trr_old", balance_transaction: stripe(amount: -200, currency: "usd"))
