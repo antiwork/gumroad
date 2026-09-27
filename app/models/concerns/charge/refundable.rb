@@ -4,6 +4,9 @@ module Charge::Refundable
   extend ActiveSupport::Concern
 
   EXTERNAL_REFUND_ALERT = "Stripe refund created outside the app"
+  # Read of a refund whose seller legs cannot be paired: only its issued amount is used, and no
+  # seller balance changes.
+  UnpairedExternalRefund = Struct.new(:refund, :flow_of_funds, :charge)
 
   # A refund reached a terminal unsuccessful status after Stripe had accepted it.
   # "failed" means the buyer's bank returned an asynchronous bank-transfer refund
@@ -97,8 +100,17 @@ module Charge::Refundable
 
       processor = StripeChargeProcessor.new
       merchant_account = refundable.merchant_account
-      charge_refund = processor.get_refund(stripe_refund_id, merchant_account:, for_external_refund: true)
       transfer_outcome = nil
+      begin
+        charge_refund = processor.get_refund(stripe_refund_id, merchant_account:, for_external_refund: true)
+      rescue StripeChargeProcessor::UnmatchedApplicationFeeRefundError
+        stripe_refund = Stripe::Refund.retrieve(stripe_refund_id)
+        # A reversal on the refund means the seller already paid, so the debit is not Gumroad's to forgive.
+        transfer_outcome = stripe_refund[:transfer_reversal].present? ? :reversal_unpaired : :fee_refund_unpaired
+        charge_refund = UnpairedExternalRefund.new(
+          stripe_refund, FlowOfFunds.build_simple_flow_of_funds(stripe_refund[:currency], -stripe_refund[:amount]), nil
+        )
+      end
       purchases = refundable.charged_purchases.select { _1.successful? && !_1.stripe_refunded? }.sort_by(&:id)
       unrecorded = []
       blocked_purchase_ids = []
@@ -125,15 +137,15 @@ module Charge::Refundable
 
           charge_refund, transfer_outcome = processor.reverse_transfer_for_external_refund(charge_refund, merchant_account:)
         end
-        # Nothing was moved or paired for this refund, so do not book it: an unpaired reversal or fee
-        # refund would debit the seller by an amount that belongs to a different refund on the charge.
-        next [] if %i[fee_refund_unpaired reversal_unpaired].include?(transfer_outcome)
-        gumroad_funded = transfer_outcome == :not_reversible
+        # An unpaired refund is still booked, so the sale shows as refunded, but it changes no seller
+        # balance: its seller legs could belong to a different refund on the charge.
+        gumroad_funded = %i[not_reversible fee_refund_unpaired].include?(transfer_outcome)
+        balance_reconciliation_needed = transfer_outcome == :reversal_unpaired
 
         unrecorded.select do |purchase|
           purchase.refund_purchase!(flow_of_funds_for.(purchase, charge_refund), GUMROAD_ADMIN_ID, charge_refund.refund,
                                     event.extras[:refund_reason] == "fraudulent",
-                                    gumroad_funded:, defer_notifications_until_commit: true)
+                                    gumroad_funded:, balance_reconciliation_needed:, defer_notifications_until_commit: true)
         end
       end
       return if unrecorded.empty?
@@ -144,6 +156,10 @@ module Charge::Refundable
       notify_external_refund_alert(EXTERNAL_REFUND_ALERT, **alert_context, recorded: refunded_purchases.size == unrecorded.size)
       if transfer_outcome == :not_reversible
         notify_external_refund_alert("Refund created outside the app booked as Gumroad-funded: seller transfer not reversible", **alert_context)
+      elsif transfer_outcome == :fee_refund_unpaired
+        notify_external_refund_alert("Refund created outside the app booked as Gumroad-funded: application fee refund cannot be paired", **alert_context)
+      elsif transfer_outcome == :reversal_unpaired
+        notify_external_refund_alert("Refund created outside the app booked without a seller balance change: reconcile the seller balance", **alert_context)
       end
 
       refunded_purchases.each do |purchase|

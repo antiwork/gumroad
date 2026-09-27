@@ -80,19 +80,20 @@ RSpec.describe "External Stripe refund accounting" do
     end
 
     shared_examples "pending reconciliation" do
-      it "alerts on each delivery without reversing or recording a seller debit" do
+      it "books the refund once as Gumroad-funded, without reversing or changing a seller balance" do
         balances = seller.balances.order(:id).pluck(:id, :amount_cents)
         expect(Stripe::Transfer).not_to receive(:create_reversal)
         expect do
           2.times { purchase.handle_event_refund_updated!(event) }
-        end.not_to change(Refund, :count)
+        end.to change(Refund, :count).by(1)
         expect(seller.balances.order(:id).pluck(:id, :amount_cents)).to eq(balances)
-        expect(purchase.reload.stripe_refunded?).to eq(false)
+        expect(purchase.reload.stripe_refunded?).to eq(true)
+        expect(purchase.refunds.sole.gumroad_funded).to eq(true)
         expect(ErrorNotifier).to have_received(:notify).with(
           Charge::Refundable::EXTERNAL_REFUND_ALERT,
           hash_including(stripe_refund_id: "re_ambiguous", stripe_charge_id: "ch_ambiguous", refunded_amount_cents: 1000,
-                         transfer_outcome: :fee_refund_unpaired, recorded: false)
-        ).twice
+                         transfer_outcome: :fee_refund_unpaired, recorded: true)
+        ).once
       end
     end
 
@@ -125,7 +126,22 @@ RSpec.describe "External Stripe refund accounting" do
 
     context "when Stripe already reversed the transfer" do
       before { refund[:transfer_reversal] = "trr_already_reversed" }
-      include_examples "pending reconciliation"
+
+      it "books the refund once for reconciliation, without changing a seller balance" do
+        balances = seller.balances.order(:id).pluck(:id, :amount_cents)
+        expect(Stripe::Transfer).not_to receive(:create_reversal)
+
+        2.times { purchase.handle_event_refund_updated!(event) }
+
+        refund_row = purchase.reload.refunds.sole
+        expect(purchase.stripe_refunded?).to eq(true)
+        expect(refund_row.balance_reconciliation_needed).to eq(true)
+        expect(refund_row.gumroad_funded).to be_nil
+        expect(seller.balances.order(:id).pluck(:id, :amount_cents)).to eq(balances)
+        expect(ErrorNotifier).to have_received(:notify).with(
+          Charge::Refundable::EXTERNAL_REFUND_ALERT, hash_including(transfer_outcome: :reversal_unpaired, recorded: true)
+        ).once
+      end
     end
 
     context "when only the destination payment exposes the fee" do

@@ -713,7 +713,7 @@ class StripeChargeProcessor
     # get_refund pairs the destination refund by id but reads the newest application-fee refund,
     # so with more than one the seller debit could come from an unrelated fee refund.
     if %i[reversed_by_stripe reversed_by_gumroad].include?(outcome) && self.class.application_fee_refund_count(charge_refund.charge) > 1
-      outcome = :fee_refund_unpaired
+      outcome = :reversal_unpaired
     end
     [charge_refund, outcome]
   end

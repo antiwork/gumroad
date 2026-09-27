@@ -511,7 +511,7 @@ describe Charge::Refundable do
                                                              hash_including(transfer_outcome: :reversed_by_stripe, recorded: true))
       end
 
-      it "books nothing when the refund's own reversal does not name its destination refund" do
+      it "books the refund for reconciliation, with no seller debit, when the refund's own reversal does not name its destination refund" do
         allow(Stripe::Transfer).to receive(:retrieve_reversal).with(transfer.id, "trr_1").and_return(
           Stripe::StripeObject.construct_from(id: "trr_1")
         )
@@ -520,10 +520,14 @@ describe Charge::Refundable do
 
         purchase.handle_event_refund_updated!(build_external_event)
 
-        expect(purchase.reload.refunds).to be_empty
+        refund = purchase.reload.refunds.sole
+        expect(purchase.stripe_refunded?).to be(true)
+        expect(refund.balance_reconciliation_needed).to be(true)
+        expect(refund.gumroad_funded).to be_nil
         expect(seller_refund_debits).to be_empty
         expect(ErrorNotifier).to have_received(:notify).with(Charge::Refundable::EXTERNAL_REFUND_ALERT,
-                                                             hash_including(transfer_outcome: :reversal_unpaired, recorded: false))
+                                                             hash_including(transfer_outcome: :reversal_unpaired, recorded: true))
+        expect(ErrorNotifier).to have_received(:notify).with(/reconcile the seller balance/, hash_including(stripe_refund_id: refund_id))
       end
 
       it "reads the flow of funds from Stripe's reversal when the refund already reversed the transfer" do
@@ -619,28 +623,28 @@ describe Charge::Refundable do
                                               application_fee: { id: "fee_1", refunds: { data: [{ id: "fr_earlier", amount: 50 }] } })
         end
 
-        it "does not reverse or book the refund, and alerts, because the new fee refund cannot be paired" do
+        it "does not reverse the transfer, and books the refund as Gumroad-funded, because the new fee refund cannot be paired" do
           allow(Stripe::Transfer).to receive(:list_reversals).and_return([])
           expect(Stripe::Transfer).not_to receive(:create_reversal)
 
           purchase.handle_event_refund_updated!(build_external_event)
 
-          expect(purchase.reload.refunds).to be_empty
+          expect(purchase.reload.refunds.sole.gumroad_funded).to be(true)
           expect(seller_refund_debits).to be_empty
           expect(ErrorNotifier).to have_received(:notify).with(Charge::Refundable::EXTERNAL_REFUND_ALERT,
-                                                               hash_including(transfer_outcome: :fee_refund_unpaired, recorded: false))
+                                                               hash_including(transfer_outcome: :fee_refund_unpaired, recorded: true))
         end
 
-        it "does not book Stripe's own reversal when more than one fee refund exists" do
+        it "books Stripe's own reversal for reconciliation, with no seller debit, when more than one fee refund exists" do
           stripe_charge.application_fee.refunds.data << Stripe::StripeObject.construct_from(id: "fr_this", amount: 1_50)
           allow_any_instance_of(StripeChargeProcessor).to receive(:get_refund).and_return(charge_refund_with(merchant_cents: 8_50, transfer_reversal: "trr_1"))
 
           purchase.handle_event_refund_updated!(build_external_event)
 
-          expect(purchase.reload.refunds).to be_empty
+          expect(purchase.reload.refunds.sole.balance_reconciliation_needed).to be(true)
           expect(seller_refund_debits).to be_empty
           expect(ErrorNotifier).to have_received(:notify).with(Charge::Refundable::EXTERNAL_REFUND_ALERT,
-                                                               hash_including(transfer_outcome: :fee_refund_unpaired, recorded: false))
+                                                               hash_including(transfer_outcome: :reversal_unpaired, recorded: true))
         end
       end
 

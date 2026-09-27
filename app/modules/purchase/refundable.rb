@@ -273,7 +273,7 @@ class Purchase
   # cents as canonical USD.
   def refund_purchase!(flow_of_funds, refunding_user_id, stripe_refund = nil, is_for_fraud = false,
                        canonical_gross_refund_cents: nil, presentment_refund: nil, note: nil, gumroad_funded: false,
-                       defer_notifications_until_commit: false)
+                       balance_reconciliation_needed: false, defer_notifications_until_commit: false)
     if buyer_presentment? && canonical_gross_refund_cents.nil?
       derived = derive_presentment_refund_from_flow_of_funds(flow_of_funds)
       return false if derived.blank?
@@ -330,6 +330,8 @@ class Purchase
       end
       refund.is_for_fraud = is_for_fraud
       refund.gumroad_funded = true if gumroad_funded
+      refund.balance_reconciliation_needed = true if balance_reconciliation_needed
+      skip_seller_balance = gumroad_funded || balance_reconciliation_needed
       # Free-text explanation of why the refund happened (e.g. "Buyer was charged twice").
       # Shown to the creator in the notification email when a team member issued the refund.
       refund.note = note if note.present?
@@ -337,13 +339,13 @@ class Purchase
       self.is_refund_chargeback_fee_waived = !charged_using_gumroad_merchant_account? || is_for_fraud
       mark_giftee_purchase_as_refunded(is_partially_refunded: self.stripe_partially_refunded?) if is_gift_sender_purchase
       subscription.cancel_immediately_if_pending_cancellation! if subscription.present?
-      decrement_balance_for_refund_or_chargeback!(flow_of_funds, refund:) unless chargedback_not_reversed? || gumroad_funded
+      decrement_balance_for_refund_or_chargeback!(flow_of_funds, refund:) unless chargedback_not_reversed? || skip_seller_balance
       mark_product_purchases_as_refunded!(is_partially_refunded: self.stripe_partially_refunded?)
       save!
       reverse_the_transfer_made_for_dispute_win! if chargedback? && chargeback_reversed
-      reverse_excess_amount_from_stripe_transfer(refund:) if stripe_partially_refunded && vat_already_refunded && !gumroad_funded
-      debit_processor_fee_from_merchant_account!(refund) unless is_refund_chargeback_fee_waived || chargedback_not_reversed? || gumroad_funded
-      Credit.create_for_vat_exclusive_refund!(refund:) if (paypal_order_id.present? || merchant_account&.is_a_stripe_connect_account?) && !chargedback_not_reversed? && !gumroad_funded
+      reverse_excess_amount_from_stripe_transfer(refund:) if stripe_partially_refunded && vat_already_refunded && !skip_seller_balance
+      debit_processor_fee_from_merchant_account!(refund) unless is_refund_chargeback_fee_waived || chargedback_not_reversed? || skip_seller_balance
+      Credit.create_for_vat_exclusive_refund!(refund:) if (paypal_order_id.present? || merchant_account&.is_a_stripe_connect_account?) && !chargedback_not_reversed? && !skip_seller_balance
       subscription.original_purchase.update!(should_exclude_product_review: true) if subscription&.should_exclude_product_review_on_charge_reversal?
       # Pass the refund's buyer-currency amount as plain values (not the Refund id):
       # without deferral this enqueue happens inside the transaction, so the mailer job
