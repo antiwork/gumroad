@@ -231,8 +231,7 @@ class Purchase
     end
 
     def build_partial_refund(gross_refund_amount: nil, refunding_user_id:)
-      return nil if gross_refund_amount <= 0
-      return nil if gross_refund_amount > gross_amount_refundable_cents
+      return nil unless partial_refund_amount_acceptable?(gross_refund_amount)
 
       creator_tax_cents_refunded = 0
       gumroad_tax_cents_refunded = 0
@@ -635,20 +634,25 @@ class Purchase
     true
   end
 
-  # refund_purchase!'s fail-closed amount checks, without writing or alerting.
+  # refund_purchase!'s fail-closed amount checks, without writing or alerting. Both use
+  # presentment_refund_from_flow_of_funds and partial_refund_amount_acceptable?, so they cannot drift.
   def refund_recordable_from?(flow_of_funds)
     issued_amount = flow_of_funds&.issued_amount
     return false if issued_amount.nil?
 
-    gross_cents = if buyer_presentment?
-      return false unless issued_amount.currency.to_s.downcase == purchase_presentment.presentment_currency.to_s.downcase
+    gross_cents = buyer_presentment? ? presentment_refund_from_flow_of_funds(flow_of_funds)&.canonical_gross_refund_cents : issued_amount.cents.abs
+    gross_cents.present? && partial_refund_amount_acceptable?(gross_cents)
+  end
 
-      Purchase::PresentmentRefund.from_presentment_amount(purchase: self, presentment_amount_cents: issued_amount.cents.abs)
-        &.canonical_gross_refund_cents
-    else
-      issued_amount.cents.abs
-    end
-    gross_cents.to_i.positive? && gross_cents <= gross_amount_refundable_cents
+  def partial_refund_amount_acceptable?(gross_refund_cents)
+    gross_refund_cents.positive? && gross_refund_cents <= gross_amount_refundable_cents
+  end
+
+  def presentment_refund_from_flow_of_funds(flow_of_funds)
+    issued_amount = flow_of_funds&.issued_amount
+    return unless issued_amount&.currency.to_s.downcase == purchase_presentment.presentment_currency.to_s.downcase
+
+    Purchase::PresentmentRefund.from_presentment_amount(purchase: self, presentment_amount_cents: issued_amount.cents.abs)
   end
 
   # Derives the canonical refund amount + presentment snapshot for a refund that arrived with
@@ -657,10 +661,7 @@ class Purchase
   # derivation is possible, so the caller fails closed.
   def derive_presentment_refund_from_flow_of_funds(flow_of_funds)
     issued_amount = flow_of_funds&.issued_amount
-    derived = if issued_amount&.currency.to_s.downcase == purchase_presentment.presentment_currency.to_s.downcase
-      Purchase::PresentmentRefund.from_presentment_amount(purchase: self,
-                                                          presentment_amount_cents: issued_amount.cents.abs)
-    end
+    derived = presentment_refund_from_flow_of_funds(flow_of_funds)
     return derived if derived.present?
 
     errors.add :base, BUYER_PRESENTMENT_REFUND_ERROR_MESSAGE
