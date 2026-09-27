@@ -116,20 +116,7 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
                 held << entry.merge(reason: :sibling_lookup_truncated)
                 next
               end
-              # Siblings first, the email row last: they are only reachable through this block, so a
-              # write that raises mid-burst has to leave the anchor active or the retry has no
-              # candidate to re-anchor on and the sibling rows stay blocked forever.
-              # Re-read at the write too: an admin re-block since the lookup rewrites both columns.
-              siblings = siblings.select { |sibling| unattended_in_window?(sibling.reload, window) }
-              siblings.each(&:unblock!)
-              # The email row loaded above is stale once siblings have been written.
-              block.reload
-              if unattended_in_window?(block, window)
-                block.unblock!
-                cleared << entry.merge(siblings: siblings.size)
-              else
-                held << entry.merge(reason: :changed_since_scan)
-              end
+              clear_burst(block, window, siblings, entry, cleared, held)
             else
               held << entry.merge(reason: :changed_since_scan)
             end
@@ -188,6 +175,44 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
     # blocked_at, not created_at: PlatformBlock.add! reuses the row, so created_at is first sighting.
     def burst_window(block)
       (block.blocked_at - SIBLING_BURST_WINDOW)..(block.blocked_at + SIBLING_BURST_WINDOW)
+    end
+
+    # Siblings are only reachable through this email row. If the email is held, roll the sibling
+    # writes back so a later sweep can still find them.
+    def clear_burst(block, window, siblings, entry, cleared, held)
+      cleared_siblings = 0
+      email_held = false
+      PlatformBlock.transaction(requires_new: true) do
+        browsers, cards = siblings.partition { |sibling| sibling.object_type == PlatformBlock::TYPES[:browser_guid] }
+        browsers.each(&:lock!)
+        block.lock!
+        cards.each(&:lock!)
+        unless unattended_in_window?(block, window)
+          email_held = true
+          next
+        end
+
+        siblings.each do |sibling|
+          next unless unattended_in_window?(sibling, window)
+
+          sibling.unblock!
+          cleared_siblings += 1
+        end
+
+        block.lock!
+        if unattended_in_window?(block, window)
+          block.unblock!
+        else
+          email_held = true
+          raise ActiveRecord::Rollback
+        end
+      end
+
+      if email_held
+        held << entry.merge(reason: :changed_since_scan)
+      else
+        cleared << entry.merge(siblings: cleared_siblings)
+      end
     end
 
     # Anyone can type this email into a failed attempt, so sibling values come from successful purchases only.

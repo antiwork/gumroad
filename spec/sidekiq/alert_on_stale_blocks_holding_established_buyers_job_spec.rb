@@ -700,18 +700,47 @@ describe AlertOnStaleBlocksHoldingEstablishedBuyersJob do
       expect(email_block.reload.blocked_at).to be_present
     end
 
-    it "keeps an email an admin re-blocked while siblings were clearing" do
+    it "keeps siblings when an admin re-blocked the email before the clear" do
       at = 2.years.ago
       email_block = block_email(blocked_at: at)
       card_block = block_value(:charge_processor_fingerprint, fingerprint, blocked_at: at)
       admin = create(:admin_user)
-      allow_any_instance_of(PlatformBlock).to receive(:unblock!).and_wrap_original do |original, *args|
-        PlatformBlock.add!(object_type: email_block.object_type, object_value: email, by: admin.id) if original.receiver.id == card_block.id
-        original.call(*args)
-      end
+      PlatformBlock.add!(object_type: email_block.object_type, object_value: email, by: admin.id)
 
       described_class.new.perform
       expect(email_block.reload).to have_attributes(blocked_by: admin.id, blocked_at: be_present)
+      expect(card_block.reload.blocked_at).to be_present
+    end
+
+    it "rolls sibling clears back when the email is held at the write" do
+      at = 2.years.ago
+      email_block = block_email(blocked_at: at)
+      card_block = block_value(:charge_processor_fingerprint, fingerprint, blocked_at: at)
+      email_checks = 0
+      allow_any_instance_of(described_class).to receive(:unattended_in_window?).and_wrap_original do |original, record, window|
+        result = original.call(record, window)
+        if record.id == email_block.id
+          email_checks += 1
+          result = false if email_checks > 1
+        end
+        result
+      end
+
+      described_class.new.perform
+      expect(email_block.reload.blocked_at).to be_present
+      expect(card_block.reload.blocked_at).to be_present
+    end
+
+    it "holds the email when the browser list is truncated" do
+      stub_const("#{described_class}::MAX_SIBLING_VALUES", 1)
+      create(:purchase, email:, browser_guid: "second-browser", purchase_state: "successful", price_cents: 500, created_at: history_starts_at)
+      at = 2.years.ago
+      email_block = block_email(blocked_at: at)
+      card_block = block_value(:charge_processor_fingerprint, fingerprint, blocked_at: at)
+
+      message
+      expect(email_block.reload.blocked_at).to be_present
+      expect(card_block.reload.blocked_at).to be_present
     end
 
     it "clears no sibling when the email block is held" do
