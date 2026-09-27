@@ -654,18 +654,55 @@ describe StripeMerchantAccountManager do
           Stripe::ListObject.construct_from(object: "list", data: [old_account], has_more: false)
         )
         allow(Stripe::Account).to receive(:retrieve).and_return(old_account)
+        expect(Stripe::Account).not_to receive(:create)
+        allow(ErrorNotifier).to receive(:notify)
+
+        expect { described_class.create_account(user, passphrase:) }.to raise_error(
+          Stripe::APIError, "Uncertain Stripe account creation could not be reconciled"
+        )
+
+        expect(MerchantAccount.alive.stripe.find_by(charge_processor_merchant_id: "acct_old_country")).to be_nil
+        expect(user.reload.stripe_account).to be_nil
+      end
+
+      it "leaves an abandoned create unreconciled when the seller changes country" do
+        user_compliance_info.update_columns(deleted_at: Time.current)
+        create(:user_compliance_info_canada, user:)
+        user.add_payout_note(
+          content: "#{StripeMerchantAccountManager::NO_VERDICT_FAILURE_NOTE_PREFIX}: lost",
+          json_data: {
+            "no_verdict" => true,
+            "abandoned_at" => 1.hour.ago.iso8601,
+            StripeMerchantAccountManager::ACCOUNT_CREATION_IDEMPOTENCY_KEY => "old-country-key",
+            StripeMerchantAccountManager::ACCOUNT_CREATION_ATTEMPTED_AT => 2.hours.ago.iso8601
+          }
+        )
+        old_account = Stripe::Account.construct_from(
+          id: "acct_old_country",
+          object: "account",
+          type: "custom",
+          country: "US",
+          metadata: { "user_id" => user.external_id },
+          external_accounts: { object: "list", data: [] }
+        )
+        allow(Stripe::Account).to receive(:list).and_return(
+          Stripe::ListObject.construct_from(object: "list", data: [old_account], has_more: false)
+        )
+        allow(Stripe::Account).to receive(:retrieve).and_return(old_account)
         keys = []
         allow(Stripe::Account).to receive(:create) do |_params, opts = nil|
           keys << opts[:idempotency_key]
-          raise Stripe::APIConnectionError.new("lost")
+          raise Stripe::IdempotencyError.new("Keys for idempotent requests can only be used with the same parameters")
         end
         allow(ErrorNotifier).to receive(:notify)
 
-        expect { described_class.create_account(user, passphrase:) }.to raise_error(Stripe::APIConnectionError)
+        expect { described_class.create_account(user, passphrase:) }.to raise_error(
+          Stripe::APIError, "Uncertain Stripe account creation could not be reconciled"
+        )
 
-        expect(keys.first).to be_present
-        expect(keys.first).not_to eq("old-country-key")
+        expect(keys).to eq(["old-country-key"])
         expect(MerchantAccount.alive.stripe.find_by(charge_processor_merchant_id: "acct_old_country")).to be_nil
+        expect(user.reload.stripe_account).to be_nil
       end
 
       it "adopts the matching-country account when an older country is in the same window" do

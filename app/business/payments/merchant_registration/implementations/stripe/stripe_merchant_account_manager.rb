@@ -2059,7 +2059,7 @@ module StripeMerchantAccountManager
         starting_after: starting_after
       }.compact)
       data = page.respond_to?(:data) ? Array(page.data) : Array(page)
-      matches.concat(data.select { |account| uncertain_account_match?(account, user, country:) })
+      matches.concat(data.select { |account| uncertain_account_match?(account, user) })
       has_more = page.respond_to?(:has_more) && page.has_more && data.any?
       incomplete = has_more
       break unless has_more
@@ -2068,7 +2068,13 @@ module StripeMerchantAccountManager
     end
     return :unreconciled if incomplete
 
-    ids = matches.map { |account| account["id"] }.uniq
+    # Stripe will not change an account's country. Skipping it would open a second account.
+    compatible = matches.reject do |account|
+      account_country_conflicts_with_legal_entity?(stripe_account_country(account), country)
+    end
+    return :unreconciled if compatible.empty? && matches.any?
+
+    ids = compatible.map { |account| account["id"] }.uniq
     return :unreconciled if ids.size > 1
     return nil if ids.empty?
 
@@ -2077,17 +2083,15 @@ module StripeMerchantAccountManager
     # must not be adopted; the next create opens a new one.
     account = Stripe::Account.retrieve(ids.first)
     return nil if account["deleted"]
-    return nil if account_country_conflicts_with_legal_entity?(stripe_account_country(account), country)
+    return :unreconciled if account_country_conflicts_with_legal_entity?(stripe_account_country(account), country)
 
     account
   end
 
   private_class_method
-  def self.uncertain_account_match?(account, user, country: nil)
+  def self.uncertain_account_match?(account, user)
     return false if account["id"].blank? || account["deleted"]
     return false if account["type"].present? && account["type"] != "custom"
-    # Stripe will not change an account's country, so an older account must not count as a match.
-    return false if account_country_conflicts_with_legal_entity?(stripe_account_country(account), country)
 
     linked_user_id = MerchantAccount.alive.stripe.find_by(charge_processor_merchant_id: account["id"])&.user_id
     return false if linked_user_id.present? && linked_user_id != user.id
