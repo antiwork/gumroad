@@ -9044,6 +9044,7 @@ describe StripeMerchantAccountManager, :vcr do
 
       it "still marks the merchant account as deleted when Stripe account deletion fails" do
         allow(Stripe::Account).to receive(:delete).and_raise(Stripe::APIError.new("cleanup failed"))
+        allow(Stripe::Account).to receive(:retrieve).and_return(fake_stripe_account)
 
         expect do
           subject.create_account(user, passphrase: "1234")
