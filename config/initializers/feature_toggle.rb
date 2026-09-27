@@ -32,3 +32,5 @@ class FlipperCSP
     @app.call(env)
   end
 end
+
+require_relative "../../lib/flipper/closed_tier_discover_refresh"

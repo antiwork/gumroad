@@ -375,6 +375,13 @@ class Link < ApplicationRecord
   }
   scope :membership, -> { is_recurring_billing }
   scope :non_membership, -> { not_is_recurring_billing }
+
+  # A flag change can make a closed tier purchasable again. Discover keeps the old price until this runs.
+  def self.refresh_discover_prices_for_closed_tiers(user: nil)
+    products = is_tiered_membership.joins(:tiers).merge(Variant.closed_to_new_purchases).distinct
+    products = products.where(user_id: user.id) if user
+    products.find_each { |product| product.enqueue_index_update_for(["available_price_cents"]) }
+  end
   scope :with_min_price, ->(min_price) { min_price.present? ? distinct.joins(:prices).where("prices.deleted_at IS NULL AND prices.price_cents >= ?", min_price) : where("1 = 1") }
 
   # !! MySQL ONLY !! Retrieves products in the order specified by the ids array. Relies on MySQL FIELD.

@@ -293,7 +293,7 @@ module Product::Prices
   def available_price_cents
     available_prices =
       if is_tiered_membership?
-        VariantPrice.where(variant_id: tiers_for_new_buyers.map(&:id)).alive.is_buy.pluck(:price_cents)
+        VariantPrice.where(variant_id: tiers.pluck(:id)).alive.is_buy.pluck(:price_cents)
       elsif current_base_variants.present?
         base_price = default_price_cents
         current_base_variants.pluck(:price_difference_cents).map { |difference| base_price + difference.to_i }
@@ -306,6 +306,13 @@ module Product::Prices
       end
 
     available_prices.uniq
+  end
+
+  # Discover filters on this. Discount checks keep available_price_cents, which includes closed tiers.
+  def discover_price_cents
+    return available_price_cents unless is_tiered_membership?
+
+    VariantPrice.where(variant_id: tiers_for_new_buyers.map(&:id)).alive.is_buy.pluck(:price_cents).uniq
   end
 
   private
