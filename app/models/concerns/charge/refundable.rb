@@ -120,7 +120,8 @@ module Charge::Refundable
           if Refund.where(processor_refund_id: stripe_refund_id, purchase_id: purchase.id).exists? || purchase.stripe_refunded?
             false
           else
-            purchase.refund_purchase!(flow_of_funds, GUMROAD_ADMIN_ID, charge_refund.refund, event.extras[:refund_reason] == "fraudulent")
+            purchase.refund_purchase!(flow_of_funds, GUMROAD_ADMIN_ID, charge_refund.refund, event.extras[:refund_reason] == "fraudulent",
+                                      defer_notifications_until_commit: true)
           end
         end
         next unless refunded
