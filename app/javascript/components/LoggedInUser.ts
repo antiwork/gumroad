@@ -90,6 +90,7 @@ export type LoggedInUser = {
   canCreateBrandAccount: boolean;
   hasPayoutSetupToPort: boolean;
   canPortBankPayoutSetup: boolean;
+  willCopyBankPayout: boolean;
   policies: Policies;
   /**
    * Dashboard nav destinations this user has earned (see DashboardNav). Anything not listed here and
@@ -115,6 +116,7 @@ export const parseLoggedInUser = (data: unknown): LoggedInUser | null => {
     can_create_brand_account: boolean;
     has_payout_setup_to_port: boolean;
     can_port_bank_payout_setup: boolean;
+    will_copy_bank_payout: boolean;
     policies: Policies;
     promoted_nav_items: string[];
     confirmed: boolean;
@@ -131,6 +133,7 @@ export const parseLoggedInUser = (data: unknown): LoggedInUser | null => {
     canCreateBrandAccount: parsed.can_create_brand_account,
     hasPayoutSetupToPort: parsed.has_payout_setup_to_port,
     canPortBankPayoutSetup: parsed.can_port_bank_payout_setup,
+    willCopyBankPayout: parsed.will_copy_bank_payout,
     policies: parsed.policies,
     promotedNavItems: parsed.promoted_nav_items,
     lazyLoadOffscreenDiscoverImages: parsed.lazy_load_offscreen_discover_images,

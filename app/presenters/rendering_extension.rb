@@ -45,17 +45,12 @@ module RenderingExtension
         # this too) — checking it here hides the menu item instead of letting an
         # unconfirmed creator fill in the form and get rejected on submit.
         can_create_brand_account: user.confirmed? && Feature.active?(:brand_accounts, user),
-        # Whether the user has any payout configuration worth carrying over to a
-        # new brand account (compliance info, a bank account, or a PayPal
-        # address). The create-brand-account modal only offers the "use my
-        # existing payout setup" option when there is something to port. Debit
-        # card payout accounts are excluded here because the create service
-        # skips them when copying — offering the option to a card-only creator
-        # would port nothing but the payout currency.
-        has_payout_setup_to_port: user.alive_user_compliance_info.present? ||
-          (user.active_bank_account.present? && !user.active_bank_account.is_a?(CardBankAccount)) ||
-          user.payment_address.present?,
+        # The create-brand-account modal only offers "use my existing payout
+        # setup" when payout_setup_portable? is true. will_copy_bank_payout is
+        # separate so the description does not promise a bank that will not be copied.
+        has_payout_setup_to_port: User::CreateBrandAccountService.payout_setup_portable?(user),
         can_port_bank_payout_setup: User::CreateBrandAccountService.bank_account_portable?(user),
+        will_copy_bank_payout: User::CreateBrandAccountService.bank_details_will_be_copied?(user),
         policies: policies_props(pundit_user),
         promoted_nav_items: user.promoted_nav_item_keys,
         lazy_load_offscreen_discover_images: Feature.active?(:lazy_load_offscreen_discover_images, user),

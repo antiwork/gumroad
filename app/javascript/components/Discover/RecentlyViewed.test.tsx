@@ -25,6 +25,7 @@ const asUser = (id: string): LoggedInUser => ({
   canCreateBrandAccount: false,
   hasPayoutSetupToPort: false,
   canPortBankPayoutSetup: true,
+  willCopyBankPayout: false,
   policies: {
     affiliate_requests_onboarding_form: { update: false },
     direct_affiliate: { create: false, update: false },
