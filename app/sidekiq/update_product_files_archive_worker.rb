@@ -39,7 +39,8 @@ class UpdateProductFilesArchiveWorker
   # Bounds the HEAD requests and the central directory a bundle build keeps in memory. Other
   # archives are held to PRODUCT_FILES_ARCHIVE_FILE_SIZE_LIMIT, and too_large is final for them.
   MAX_ARCHIVE_ENTRIES = 10_000
-  # Each upload thread buffers one part, so upload memory is about UPLOAD_CONCURRENCY * UPLOAD_PART_SIZE.
+  # Each upload thread buffers one part in a tempfile, so upload disk use is about
+  # UPLOAD_CONCURRENCY * UPLOAD_PART_SIZE. With in-memory parts, a 660 MB build grew the process by 700 MB.
   UPLOAD_PART_SIZE = 16.megabytes
   UPLOAD_CONCURRENCY = 4
   SOURCE_READ_ATTEMPTS = 3
@@ -287,7 +288,7 @@ class UpdateProductFilesArchiveWorker
     # re-raise the error that started it, which keeps its handling here. An Interrupt
     # (Sidekiq::Shutdown) skips that abort; the requeued run's abort_unfinished_uploads clears it.
     def upload_archive(archive_object, &block)
-      archive_object.upload_stream(part_size: UPLOAD_PART_SIZE, thread_count: UPLOAD_CONCURRENCY,
+      archive_object.upload_stream(part_size: UPLOAD_PART_SIZE, thread_count: UPLOAD_CONCURRENCY, tempfile: true,
                                    content_type: "application/zip", checksum_algorithm: "CRC32", &block)
     rescue Aws::S3::MultipartUploadError => e
       raise(e.errors.find { !_1.is_a?(IOError) && !_1.is_a?(Errno::EPIPE) && !_1.is_a?(UploadClosedError) } || e)

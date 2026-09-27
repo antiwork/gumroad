@@ -187,12 +187,14 @@ describe UpdateProductFilesArchiveWorker, :vcr do
         ]
         archive = archive_for(installment, files)
         part_sizes = []
+        part_body_classes = []
         in_flight = 0
         max_in_flight = 0
         lock = Mutex.new
         allow_any_instance_of(Aws::S3::Client).to receive(:upload_part).and_wrap_original do |original, params|
           lock.synchronize do
             part_sizes << params[:body].size
+            part_body_classes << params[:body].class
             in_flight += 1
             max_in_flight = [max_in_flight, in_flight].max
           end
@@ -213,6 +215,8 @@ describe UpdateProductFilesArchiveWorker, :vcr do
         expect(part_sizes.first(2)).to eq([5.megabytes, 5.megabytes])
         expect(part_sizes.size).to eq(3)
         expect(max_in_flight).to eq(2)
+        # In-memory parts were not reused, so process memory grew with the archive.
+        expect(part_body_classes.uniq).to eq([Tempfile])
         stored = s3_client.head_object(bucket: S3_BUCKET, key: archive.s3_key, part_number: 1)
         expect(stored.parts_count).to eq(3)
         expect(stored.content_type).to eq("application/zip")
