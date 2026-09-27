@@ -295,8 +295,20 @@ class RetryStripeRejectedPayoutSetupForSellerJob
     def attempt_remediation(user, note)
       passphrase = GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD")
 
-      # The seller got an account some other way since the outage; nothing is left to retry.
-      return true if no_verdict_note?(note) && user.stripe_account.present?
+      # A live account is not a finished setup while the bank row is still unlinked. Resolving
+      # here would delete the only note that brings the retry back.
+      if no_verdict_note?(note) && user.stripe_account.present?
+        if no_verdict_bank_link_complete?(user)
+          # A missing local bank is not proof Stripe has no payout destination. Clear a bank left
+          # behind by a lost create before the note is deleted.
+          StripeMerchantAccountManager.clear_removed_bank_destination!(user)
+          return true
+        end
+
+        result = StripeMerchantAccountManager.update_bank_account(user, passphrase:, notify: false)
+        return :account_blocked if result == :account_blocked_by_platform
+        return [:synced, :noop_metadata_match].include?(result)
+      end
 
       if user.stripe_account.present?
         if bank_note?(note)
@@ -334,6 +346,16 @@ class RetryStripeRejectedPayoutSetupForSellerJob
 
     def no_verdict_note?(note)
       note.content.start_with?(StripeMerchantAccountManager::NO_VERDICT_FAILURE_NOTE_PREFIX)
+    end
+
+    # Card payouts are linked later, from the account.updated event. A missing id there is expected.
+    def no_verdict_bank_link_complete?(user)
+      bank_account = user.active_bank_account
+      return true if bank_account.nil? || bank_account.is_a?(CardBankAccount)
+
+      bank_account.stripe_bank_account_id.present? &&
+        bank_account.stripe_connect_account_id.present? &&
+        bank_account.stripe_connect_account_id == user.stripe_account&.charge_processor_merchant_id
     end
 
     def resolve!(user, note)
