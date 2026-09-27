@@ -21,7 +21,8 @@ module Onetime
           ReplicaLagWatcher.watch
           archives.each do |archive|
             counts[:considered] += 1
-            next unless archive.bundle_purchase_archive? && size_bail?(archive)
+            # Matches the worker's bundle test, so a bundle ZIP of the bundle's own files counts too.
+            next unless archive.link&.is_bundle? && size_bail?(archive)
 
             counts[:reclassified] += 1
             archive.update_columns(product_files_archive_state: "too_large") unless dry_run

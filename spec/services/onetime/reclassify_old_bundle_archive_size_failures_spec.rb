@@ -27,6 +27,14 @@ describe Onetime::ReclassifyOldBundleArchiveSizeFailures do
     expect(archive.updated_at).to be_within(1.second).of(before_cutoff)
   end
 
+  it "marks an old failed bundle archive of the bundle's own files too large" do
+    archive = failed_archive(bundle, [create(:product_file, link: bundle, size: 600.megabytes)])
+
+    described_class.process
+
+    expect(archive.reload).to be_too_large
+  end
+
   it "lets a bundle whose old size failures used up its retry budget build a ZIP again" do
     files = bundle_files(300.megabytes, 300.megabytes)
     purchase = create(:purchase, link: bundle)
