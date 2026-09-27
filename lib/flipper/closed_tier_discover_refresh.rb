@@ -20,7 +20,16 @@ module Flipper
       def refresh_closed_tier_discover_prices(thing)
         return unless name.to_s == FEATURE_NAME
 
-        Link.refresh_discover_prices_for_closed_tiers(user: seller_for(thing))
+        seller = seller_for(thing)
+        if seller
+          Link.refresh_discover_prices_for_closed_tiers(user: seller)
+        elsif broad_rollout?(thing)
+          RefreshClosedTierDiscoverPricesJob.perform_async
+        end
+      end
+
+      def broad_rollout?(thing)
+        thing == true || thing == false || thing.is_a?(Flipper::Types::Percentage) || thing.is_a?(Flipper::Types::Boolean) || thing.is_a?(Flipper::Types::Group)
       end
 
       def seller_for(thing)

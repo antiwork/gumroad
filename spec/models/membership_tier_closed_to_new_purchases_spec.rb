@@ -161,6 +161,12 @@ describe "Closing a membership tier to new purchases" do
       Flipper[:close_membership_tier_to_new_buyers].enable_actor(Flipper::Actor.new("User;#{seller.id}"))
     end
 
+    it "moves a percentage rollout refresh off the request" do
+      expect(Link).not_to receive(:refresh_discover_prices_for_closed_tiers)
+      expect(RefreshClosedTierDiscoverPricesJob).to receive(:perform_async)
+      Flipper[:close_membership_tier_to_new_buyers].enable_percentage_of_actors(10)
+    end
+
     it "does not let a lapsed supporter restart a closed tier" do
       subscription = lapsing_purchase.subscription
       subscription.update!(cancelled_at: 1.day.ago, cancelled_by_buyer: true)
