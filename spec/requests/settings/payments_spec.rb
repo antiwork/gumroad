@@ -2278,6 +2278,8 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "barnabas ngagy")
+        expect(page).to have_field("Bank Identifier Code (BIC)", placeholder: "BOPIPHMM")
+        expect(page).to have_content("Your bank's 8 or 11 character SWIFT/BIC code, using letters and numbers.")
         fill_in("Bank Identifier Code (BIC)", with: "BCDEPHM1123")
         fill_in("Account #", with: "01567890123456789")
         fill_in("Confirm account #", with: "01567890123456789")
