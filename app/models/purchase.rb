@@ -37,6 +37,7 @@ class Purchase < ApplicationRecord
 
   MAX_PRICE_RANGE = (-2_147_483_647..2_147_483_647)
   BUYER_CURRENCY_QUOTE_ROUNDING_SLACK_CENTS = 5
+  UNFINISHED_PURCHASE_RETRY_BLOCK = 15.minutes
 
   CHARGED_SUCCESS_STATES = %w[preorder_authorization_successful successful]
   NON_GIFT_SUCCESS_STATES = CHARGED_SUCCESS_STATES.dup.push("not_charged")
@@ -5855,13 +5856,22 @@ class Purchase < ApplicationRecord
         3.minutes.ago
       end
 
+      # An unfinished prior gets a longer window: when its processor status is still nil the
+      # settling check below cannot see it, and finalization can lag well past 3 minutes.
+      last_allowed_in_progress_at = if is_upgrade_purchase?
+        last_allowed_purchase_at
+      else
+        [last_allowed_purchase_at, UNFINISHED_PURCHASE_RETRY_BLOCK.ago].min
+      end
+      outside_window = ->(purchase) { !purchase.in_progress? && purchase.created_at <= last_allowed_purchase_at }
+
       recipient_email = is_gift_sender_purchase ? giftee_email : email
       already = self.class.where(
         email: recipient_email,
         ip_address:,
         link_id: link.id,
         purchase_state: limiting_purchase_states
-      ).where("purchases.created_at > ?", last_allowed_purchase_at)
+      ).where("purchases.created_at > ?", last_allowed_in_progress_at)
 
       already = already.where("purchases.id != ?", id) if id
       already = already.not_is_gift_sender_purchase unless is_gift_sender_purchase
@@ -5877,10 +5887,12 @@ class Purchase < ApplicationRecord
           gifts: { giftee_email: recipient_email },
           link:,
           purchase_state: limiting_purchase_states
-        ).where("purchases.created_at > ?", last_allowed_purchase_at)
+        ).where("purchases.created_at > ?", last_allowed_in_progress_at)
         already_gifted = already_gifted.where("purchases.id != ?", id) if id
         already += already_gifted
       end
+
+      already = already.reject(&outside_window)
 
       if variant_attributes.present?
         already = already.select do |purchase|
