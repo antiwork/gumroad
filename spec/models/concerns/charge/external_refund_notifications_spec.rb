@@ -66,6 +66,13 @@ describe Charge::Refundable, "external refund notifications" do
     end
   end
 
+  def creator_mails(purchases)
+    ActiveJob::Base.queue_adapter.enqueued_jobs.select do |job|
+      job[:args][0] == "ContactingCreatorMailer" && job[:args][1] == "purchase_refunded" &&
+        purchases.map(&:id).include?(job.dig(:args, 3, "args", 0))
+    end
+  end
+
   def notification_counts(purchases)
     purchases.map { [refund_webhooks(_1).size, buyer_mails(_1).size] }
   end
@@ -129,11 +136,7 @@ describe Charge::Refundable, "external refund notifications" do
                                                                           error_class: "RedisClient::CannotConnectError")).twice
       expect(buyer_mails(purchases.first).size).to eq(1)
       expect(buyer_mails(purchases.last).size).to eq(1)
-      creator_mails = ActiveJob::Base.queue_adapter.enqueued_jobs.select do |job|
-        job[:args][0] == "ContactingCreatorMailer" && job[:args][1] == "purchase_refunded" &&
-          purchases.map(&:id).include?(job.dig(:args, 3, "args", 0))
-      end
-      expect(creator_mails.size).to eq(2)
+      expect(creator_mails(purchases).size).to eq(2)
     end
 
     it "still emails the creator when the deferred enqueue alert itself fails" do
@@ -146,11 +149,19 @@ describe Charge::Refundable, "external refund notifications" do
 
       expect { charge.handle_event_refund_updated!(event) }.not_to raise_error
 
-      creator_mails = ActiveJob::Base.queue_adapter.enqueued_jobs.select do |job|
-        job[:args][0] == "ContactingCreatorMailer" && job[:args][1] == "purchase_refunded" &&
-          purchases.map(&:id).include?(job.dig(:args, 3, "args", 0))
+      expect(creator_mails(purchases).size).to eq(2)
+    end
+
+    it "still emails the creator when the post-commit alert itself fails" do
+      allow(ErrorNotifier).to receive(:notify).and_wrap_original do |method, *args, **kwargs|
+        raise "notifier down" if args.first == Charge::Refundable::EXTERNAL_REFUND_ALERT
+
+        method.call(*args, **kwargs)
       end
-      expect(creator_mails.size).to eq(2)
+
+      expect { charge.handle_event_refund_updated!(event) }.not_to raise_error
+
+      expect(creator_mails(purchases).size).to eq(2)
     end
   end
 

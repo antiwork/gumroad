@@ -141,9 +141,9 @@ module Charge::Refundable
       alert_context = { stripe_refund_id:, stripe_charge_id:, refunded_amount_cents:, transfer_outcome:,
                         refunded_purchase_ids: refunded_purchases.map(&:id),
                         unrecorded_purchase_ids: (unrecorded - refunded_purchases).map(&:id), blocked_purchase_ids: }
-      ErrorNotifier.notify(EXTERNAL_REFUND_ALERT, **alert_context, recorded: refunded_purchases.size == unrecorded.size)
+      notify_external_refund_alert(EXTERNAL_REFUND_ALERT, **alert_context, recorded: refunded_purchases.size == unrecorded.size)
       if transfer_outcome == :not_reversible
-        ErrorNotifier.notify("Refund created outside the app booked as Gumroad-funded: seller transfer not reversible", **alert_context)
+        notify_external_refund_alert("Refund created outside the app booked as Gumroad-funded: seller transfer not reversible", **alert_context)
       end
 
       refunded_purchases.each do |purchase|
@@ -164,5 +164,13 @@ module Charge::Refundable
                                                   recording_outcome: :unknown, error_class: error.class.name)
     end
     raise
+  end
+
+  # The refund is committed by the time these alerts run, and a redelivered event returns early on
+  # the existing Refund rows, so a failing alert must not skip the creator emails queued after it.
+  private def notify_external_refund_alert(message, **context)
+    ErrorNotifier.notify(message, **context)
+  rescue StandardError => error
+    Rails.logger.warn("External refund alert failed: #{error.class}: #{error.message}")
   end
 end
