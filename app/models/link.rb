@@ -768,8 +768,13 @@ class Link < ApplicationRecord
   def html_safe_description
     return unless description.present?
 
-    linked = Rinku.auto_link(sanitize(description, scrubber: description_scrubber), :all, 'target="_blank" rel="noopener noreferrer nofollow"')
-    crawl_safe_description_html(linked).html_safe
+    fragment = Loofah.html4_fragment(sanitize(description, scrubber: description_scrubber))
+    fragment.css("a[href], img[src], iframe[src], script[src]").each do |node|
+      attribute = node.name == "a" ? "href" : "src"
+      node.remove_attribute(attribute) unless crawl_safe_description_url?(node[attribute])
+    end
+    linked = Rinku.auto_link(fragment.to_s, :all, 'target="_blank" rel="noopener noreferrer nofollow"')
+    Loofah.html4_fragment(separate_description_urls_from_following_tags(linked)).to_s.html_safe
   end
 
   def to_param
@@ -2011,23 +2016,22 @@ class Link < ApplicationRecord
 
     # A crawler that allows "<" inside a URL will request the following markup
     # when a URL or root-relative path sits against the next tag. The slash in
-    # a closing tag is not a path.
-    DESCRIPTION_URL_BEFORE_TAG = %r{(?:(?:https?://|www\.)[^\s<"'>]+|(?<!<)/[A-Za-z0-9][^\s<"'>]*)(?=<)}
-    private_constant :DESCRIPTION_URL_BEFORE_TAG
+    # a closing tag is not a path, and text already inside a link is left alone.
+    DESCRIPTION_URL_BEFORE_TAG = %r{(?:(?:https?://|www\.)[^\s<>]+|(?<!<)/[^\s<>]+)(?=<)}
+    DESCRIPTION_MARKUP_OR_URL_BEFORE_TAG = %r{(?:<a\b[^>]*>.*?</a>|<[^>]+>)|#{DESCRIPTION_URL_BEFORE_TAG}}m
+    private_constant :DESCRIPTION_URL_BEFORE_TAG, :DESCRIPTION_MARKUP_OR_URL_BEFORE_TAG
 
-    def crawl_safe_description_html(html)
-      without_unsafe_urls = html.gsub(/\s(?:href|src)=(["'])(.*?)\1/m) do
-        safe_description_url?($2) ? $& : ""
+    def separate_description_urls_from_following_tags(html)
+      html.gsub(DESCRIPTION_MARKUP_OR_URL_BEFORE_TAG) do |token|
+        token.start_with?("<") ? token : "#{token} "
       end
-      without_unsafe_urls.gsub(DESCRIPTION_URL_BEFORE_TAG) { |token| "#{token} " }
     end
 
-    def safe_description_url?(value)
+    def crawl_safe_description_url?(value)
       return false if value.blank?
-      return false if value.match?(/[<>\s"'\\\u0000-\u001f\u007f]/)
-      return false if value.match?(/\A(?:javascript|data):/i)
 
-      true
+      decoded = CGI.unescapeHTML(value)
+      decoded.exclude?("<") && decoded.exclude?(">")
     end
 
     def description_scrubber

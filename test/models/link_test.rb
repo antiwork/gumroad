@@ -3047,20 +3047,27 @@ class LinkTest < ActiveSupport::TestCase
   test "html_safe_description does not publish description markup as a crawlable URL" do
     description = "<p>Open /settings.</p><p>It saves.</p>" \
                   "<p>See https://example.com/settings.</p><p>It continues.</p>" \
-                  "<a href=\"/settings.</p><p>It\">label</a>"
+                  "<p>Also /~me</p><p>and /@seller</p>" \
+                  "<a href=\"/settings.</p><p>It\">label</a>" \
+                  "<a href=\"https://en.wikipedia.org/wiki/Schindler&#39;s_List\">film</a>"
     result = create_product(description:).html_safe_description
+    published_urls = Nokogiri::HTML.fragment(result).css("[href], [src]").flat_map do |node|
+      [node["href"], node["src"]]
+    end.compact.map { CGI.unescapeHTML(_1) }
 
     assert_not_includes result, "/settings.</"
     assert_no_match(%r{https://example\.com/settings\.<}, result)
-    assert_no_match(/href=(["'])[^"']*[<>]/, result)
+    assert published_urls.none? { |url| url.include?("<") || url.include?(">") }
     assert_includes result, "/settings. "
+    assert_includes result, "/~me "
     assert_includes result, "It saves."
+    assert_includes published_urls, "https://en.wikipedia.org/wiki/Schindler's_List"
   end
 
   test "html_safe_description turns bare URLs into anchor tags" do
     product = create_product(description: "Check it out at https://gumroad.com")
     result = product.html_safe_description
-    assert_equal "Check it out at <a href=\"https://gumroad.com\" target=\"_blank\" rel=\"noopener noreferrer nofollow\">https://gumroad.com </a>", result
+    assert_equal "Check it out at <a href=\"https://gumroad.com\" target=\"_blank\" rel=\"noopener noreferrer nofollow\">https://gumroad.com</a>", result
     assert result.html_safe?
   end
 
