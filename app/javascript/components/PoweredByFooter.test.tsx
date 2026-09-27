@@ -22,7 +22,7 @@ afterEach(() => {
 // resolved geometry is verified in the browser instead (see the PR's mobile evidence).
 const reservation = () => {
   const footer = document.querySelector("footer");
-  const element = footer?.lastElementChild as HTMLElement | null;
+  const element = footer?.lastElementChild instanceof HTMLElement ? footer.lastElementChild : null;
   expect(element?.getAttribute("aria-hidden")).toBe("true");
   return element?.className ?? "";
 };
