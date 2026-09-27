@@ -1,11 +1,8 @@
 # frozen_string_literal: true
 
 # Append-only S3 multipart upload: `write` fills one part at a time and hands each full part to at
-# most `concurrency` upload threads, so memory stays near (concurrency + 1) * part_size whatever the
-# object or write size. Nothing is visible at the key until #complete!.
-#
-# Aws::S3::Object#upload_stream was the obvious fit, but it hides the upload id and only aborts on
-# StandardError, so a Sidekiq::Shutdown mid-build would leave the parts stored.
+# most `concurrency` upload threads, so memory stays near (concurrency + 1) * part_size. Nothing is
+# visible until #complete!, and the upload id stays here so Sidekiq::Shutdown can abort the parts.
 class S3MultipartStream
   class SizeMismatchError < StandardError; end
   # Raised in place of a part's own error, which stays as #cause, so a caller streaming from

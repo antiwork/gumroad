@@ -108,6 +108,7 @@ class UpdateProductFilesArchiveWorker
     end
 
     sources = entries.map do |product_file, file_path|
+      renew_lock!
       source = product_file.s3_object
       head = source.client.head_object(bucket: source.bucket_name, key: source.key)
       [source, file_path, head.content_length, head.etag]
@@ -123,6 +124,9 @@ class UpdateProductFilesArchiveWorker
       return
     end
 
+    # The HEAD pass can outlast the lock. Confirm this run still owns it before aborting every
+    # unfinished upload at the key, or a newer run's upload is destroyed.
+    renew_lock!
     abort_unfinished_uploads(product_files_archive)
     upload = S3MultipartStream.new(product_files_archive.s3_object,
                                    part_size: UPLOAD_PART_SIZE, concurrency: UPLOAD_CONCURRENCY, content_type: "application/zip")
@@ -202,12 +206,13 @@ class UpdateProductFilesArchiveWorker
     end
 
     # Reads the object in one streamed GET, resuming at the last byte received after a dropped
-    # connection. If-Match pins every request to the ETag the size came from, so a source replaced
-    # mid-build fails with PreconditionFailed instead of mixing two versions into one entry.
+    # connection. A completed read that adds no bytes counts as a failed attempt. If-Match pins
+    # every request to the ETag the size came from, so a replaced source cannot mix two versions.
     def stream_source(source, size, etag, entry_data)
       received = 0
       failed_reads = 0
       while received < size
+        before = received
         begin
           source.client.get_object(bucket: source.bucket_name, key: source.key, if_match: etag,
                                    range: "bytes=#{received}-#{size - 1}") do |chunk|
@@ -220,7 +225,12 @@ class UpdateProductFilesArchiveWorker
         rescue Seahorse::Client::NetworkingError => e
           failed_reads += 1
           raise e if failed_reads >= SOURCE_READ_ATTEMPTS
+          next
         end
+        next if received > before
+
+        failed_reads += 1
+        raise Seahorse::Client::NetworkingError.new(Errno::ECONNRESET.new) if failed_reads >= SOURCE_READ_ATTEMPTS
       end
     end
 

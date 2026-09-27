@@ -388,7 +388,47 @@ describe UrlRedirect do
         bundle_purchase.create_artifacts_and_send_receipt!
         redirect = bundle_purchase.url_redirect
         record_bundle_size(redirect, described_class::BUNDLE_ARCHIVE_OLD_SIZE_LIMIT - 1.megabyte)
+        redirect.bundle_archive_product_files.each { _1.update_columns(updated_at: old_failure_time) }
         create_failed_archives(redirect, described_class::BUNDLE_ARCHIVE_MAX_FAILED_ATTEMPTS, updated_at: old_failure_time)
+
+        expect { redirect.bundle_archive }.not_to change { entity_archive_count }
+      end
+
+      it "does not count old failures after the same files are replaced with a smaller bundle" do
+        add_member_files
+        bundle_purchase.create_artifacts_and_send_receipt!
+        redirect = bundle_purchase.url_redirect
+        record_bundle_size(redirect, described_class::BUNDLE_ARCHIVE_OLD_SIZE_LIMIT)
+        create_failed_archives(redirect, described_class::BUNDLE_ARCHIVE_MAX_FAILED_ATTEMPTS, updated_at: old_failure_time)
+        files = redirect.bundle_archive_product_files.to_a
+        files.each do |file|
+          previous_size = file.size
+          file.update_columns(size: 1.megabyte, updated_at: Time.current)
+          PaperTrail::Version.create!(
+            item_type: "ProductFile",
+            item_id: file.id,
+            event: "update",
+            object_changes: PaperTrail.serializer.dump("size" => [previous_size, 1.megabyte])
+          )
+        end
+
+        expect { redirect.bundle_archive }.to change { entity_archive_count }.by(1)
+      end
+
+      it "keeps counting old failures when a later edit does not replace the file" do
+        add_member_files
+        bundle_purchase.create_artifacts_and_send_receipt!
+        redirect = bundle_purchase.url_redirect
+        record_bundle_size(redirect, described_class::BUNDLE_ARCHIVE_OLD_SIZE_LIMIT - 1.megabyte)
+        redirect.bundle_archive_product_files.each { _1.update_columns(updated_at: Time.current) }
+        create_failed_archives(redirect, described_class::BUNDLE_ARCHIVE_MAX_FAILED_ATTEMPTS, updated_at: old_failure_time)
+        file = redirect.bundle_archive_product_files.first
+        PaperTrail::Version.create!(
+          item_type: "ProductFile",
+          item_id: file.id,
+          event: "update",
+          object_changes: PaperTrail.serializer.dump("description" => ["Notes", "Updated notes"])
+        )
 
         expect { redirect.bundle_archive }.not_to change { entity_archive_count }
       end

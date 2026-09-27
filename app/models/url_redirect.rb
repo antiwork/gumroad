@@ -568,10 +568,30 @@ class UrlRedirect < ApplicationRecord
       self.token ||= self.class.generate_new_token
     end
 
+    # Current size cannot prove an old failure was unrelated to the cap. A later recorded size
+    # change is a replacement; other edits to the same row are not, and must not clear the budget.
     def old_size_limit_failure?(archive)
       return false unless archive.updated_at < BUNDLE_ARCHIVE_OLD_SIZE_FAILURES_BEFORE
 
-      archive.product_files.any? { _1.size.nil? } || archive.product_files.sum(&:size) > BUNDLE_ARCHIVE_OLD_SIZE_LIMIT
+      files = archive.product_files.to_a
+      return true if files.any? { _1.size.nil? } || files.sum(&:size) > BUNDLE_ARCHIVE_OLD_SIZE_LIMIT
+
+      size_replaced_after?(archive, files)
+    end
+
+    def size_replaced_after?(archive, files)
+      file_ids = files.map(&:id)
+      return false if file_ids.empty?
+
+      PaperTrail::Version.where(item_type: "ProductFile", item_id: file_ids, event: "update")
+        .where("created_at > ?", archive.updated_at)
+        .pluck(:object_changes)
+        .any? do |raw|
+          next false if raw.blank?
+
+          size = PaperTrail.serializer.load(raw)["size"]
+          size.is_a?(Array) && size.first != size.last
+        end
     end
 
     # Only when no alive row exists: queued rows stay the worker's and failed keeps its no-retry

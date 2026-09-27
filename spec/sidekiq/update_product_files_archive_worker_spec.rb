@@ -264,6 +264,48 @@ describe UpdateProductFilesArchiveWorker, :vcr do
         expect(archive.s3_object.exists?).to be(false)
       end
 
+      it "fails and aborts the upload when a source read completes without bytes" do
+        archive = archive_for(installment, [add_file(installment, Random.new(8).bytes(2.megabytes), display_name: "Video")])
+        reads = 0
+        allow_any_instance_of(Aws::S3::Client).to receive(:get_object).and_wrap_original do |original, params, &block|
+          next original.call(params, &block) if block.nil?
+
+          reads += 1
+          original.call(params) { |_chunk| }
+        end
+
+        expect { described_class.new.perform(archive.id) }.to raise_error(Seahorse::Client::NetworkingError)
+
+        expect(reads).to eq(described_class::SOURCE_READ_ATTEMPTS)
+        expect(archive.reload).to be_failed
+        expect(aborted_upload_ids.size).to eq(1)
+        expect(open_uploads(archive)).to be_empty
+        expect(archive.s3_object.exists?).to be(false)
+      end
+
+      it "does not abort another run's upload after losing the lock during source checks" do
+        archive = archive_for(installment, [add_file(installment, "bytes", display_name: "Notes")])
+        other_upload_id = nil
+        allow_any_instance_of(Aws::S3::Client).to receive(:head_object).and_wrap_original do |original, params|
+          unless other_upload_id
+            other_upload_id = s3_client.create_multipart_upload(bucket: S3_BUCKET, key: archive.s3_key).upload_id
+            $redis.set(described_class.lock_key(archive.id), "other-run")
+          end
+          original.call(params)
+        end
+
+        described_class.new.perform(archive.id)
+
+        expect(archive.reload).to be_in_progress
+        expect($redis.get(described_class.lock_key(archive.id))).to eq("other-run")
+        expect(aborted_upload_ids).not_to include(other_upload_id)
+        expect(open_uploads(archive).map(&:upload_id)).to include(other_upload_id)
+      ensure
+        if other_upload_id
+          s3_client.abort_multipart_upload(bucket: S3_BUCKET, key: archive.s3_key, upload_id: other_upload_id) rescue nil
+        end
+      end
+
       it "fails instead of mixing two versions when a source is replaced mid-build" do
         file = add_file(installment, "original bytes", display_name: "Notes")
         archive = archive_for(installment, [file])
