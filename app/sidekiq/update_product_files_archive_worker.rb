@@ -4,6 +4,16 @@ class UpdateProductFilesArchiveWorker
   include Sidekiq::Job
   sidekiq_options retry: 5, queue: :low
 
+  # A run that lost its lock re-raises without touching the row, so the last retry can leave it
+  # in_progress, which UrlRedirect reads as a build still running. Mark it failed unless a run holds the lock.
+  sidekiq_retries_exhausted do |message, _error|
+    product_files_archive_id = message.fetch("args").first
+    next if $redis.exists?(lock_key(product_files_archive_id))
+
+    product_files_archive = ProductFilesArchive.find_by(id: product_files_archive_id)
+    product_files_archive&.with_lock { product_files_archive.mark_failed! if product_files_archive.in_progress? }
+  end
+
   PRODUCT_FILES_ARCHIVE_FILE_SIZE_LIMIT = 500.megabytes
   # Only bundle ZIPs go past the old limit. Product and folder ZIPs are rebuilt on every content
   # change, and the download page hides their buttons above 500 MB (RichContent.tsx).
@@ -38,6 +48,8 @@ class UpdateProductFilesArchiveWorker
   # Raised so Sidekiq retries: the key vanished (expiry, eviction, failover) and no run owns the row.
   class LockLostError < StandardError; end
   class LockTakenError < StandardError; end
+  # The upload closed its pipe after a part failed; the SDK reports that part's error.
+  class UploadClosedError < StandardError; end
 
   # Renewed before each file and every LOCK_RENEWAL_INTERVAL while one streams; a crashed run
   # delays the next rebuild by at most the TTL.
@@ -214,25 +226,36 @@ class UpdateProductFilesArchiveWorker
       failed_reads = 0
       while received < size
         before = received
+        error = nil
         begin
           source.client.get_object(bucket: source.bucket_name, key: source.key, if_match: etag,
                                    range: "bytes=#{received}-#{size - 1}") do |chunk|
             received += chunk.bytesize
             raise SourceChangedError, "#{source.key} sent more than #{size} bytes" if received > size
 
-            entry_data.write(chunk)
+            write_to_upload(entry_data, chunk)
             renew_lock! if lock_renewal_due?
           end
         rescue Seahorse::Client::NetworkingError => e
-          failed_reads += 1
-          raise e if failed_reads >= SOURCE_READ_ATTEMPTS
+          error = e
+        end
+        # Progress resets the count, so it bounds consecutive failed reads, not all of them.
+        if received > before
+          failed_reads = 0
           next
         end
-        next if received > before
 
         failed_reads += 1
-        raise Seahorse::Client::NetworkingError.new(Errno::ECONNRESET.new) if failed_reads >= SOURCE_READ_ATTEMPTS
+        raise(error || Seahorse::Client::NetworkingError.new(Errno::ECONNRESET.new)) if failed_reads >= SOURCE_READ_ATTEMPTS
       end
+    end
+
+    # Seahorse reports an error raised in the get_object block as a dropped read (IOError and EPIPE
+    # are network errors to it), which stream_source would retry against a pipe that stays closed.
+    def write_to_upload(entry_data, chunk)
+      entry_data.write(chunk)
+    rescue IOError, Errno::EPIPE => e
+      raise UploadClosedError, e.message
     end
 
     def lock_renewal_due?
@@ -254,7 +277,7 @@ class UpdateProductFilesArchiveWorker
       archive_object.upload_stream(part_size: UPLOAD_PART_SIZE, thread_count: UPLOAD_CONCURRENCY,
                                    content_type: "application/zip", checksum_algorithm: "CRC32", &block)
     rescue Aws::S3::MultipartUploadError => e
-      raise(e.errors.find { !_1.is_a?(IOError) && !_1.is_a?(Errno::EPIPE) } || e)
+      raise(e.errors.find { !_1.is_a?(IOError) && !_1.is_a?(Errno::EPIPE) && !_1.is_a?(UploadClosedError) } || e)
     end
 
     # A killed or interrupted build never aborts its upload, so its parts stay stored until the bucket

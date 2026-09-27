@@ -229,8 +229,10 @@ describe UpdateProductFilesArchiveWorker, :vcr do
           next original.call(params, &block) if ranges.size > 1 || block.nil?
 
           original.call(params) do |chunk|
-            delivered = 1.megabyte + 5
-            block.call(chunk.byteslice(0, delivered))
+            # Net::HTTP yields about 16 KiB per chunk, so measure what was handed over.
+            partial = chunk.byteslice(0, 1.megabyte + 5)
+            delivered = partial.bytesize
+            block.call(partial)
             raise Errno::ECONNRESET
           end
         end
@@ -242,17 +244,14 @@ describe UpdateProductFilesArchiveWorker, :vcr do
         expect(zip_entries(archive)).to eq("Video.bin" => [Zlib.crc32(source), source])
       end
 
-      it "fails and aborts the upload when a source keeps dropping" do
+      it "fails and aborts the upload when a source keeps dropping before any byte arrives" do
         archive = archive_for(installment, [add_file(installment, Random.new(3).bytes(2.megabytes), display_name: "Video")])
         reads = 0
         allow_any_instance_of(Aws::S3::Client).to receive(:get_object).and_wrap_original do |original, params, &block|
           next original.call(params, &block) if block.nil?
 
           reads += 1
-          original.call(params) do |chunk|
-            block.call(chunk.byteslice(0, 1.kilobyte))
-            raise Errno::ECONNRESET
-          end
+          original.call(params) { raise Errno::ECONNRESET }
         end
 
         expect { described_class.new.perform(archive.id) }.to raise_error(Seahorse::Client::NetworkingError)
@@ -262,6 +261,27 @@ describe UpdateProductFilesArchiveWorker, :vcr do
         expect(aborted_upload_ids.size).to eq(1)
         expect(open_uploads(archive)).to be_empty
         expect(archive.s3_object.exists?).to be(false)
+      end
+
+      it "keeps reading a source that drops more often than the attempt limit, as long as each read makes progress" do
+        source = Random.new(8).bytes(1.megabyte)
+        archive = archive_for(installment, [add_file(installment, source, display_name: "Video")])
+        drops = 0
+        allow_any_instance_of(Aws::S3::Client).to receive(:get_object).and_wrap_original do |original, params, &block|
+          next original.call(params, &block) if block.nil? || drops > described_class::SOURCE_READ_ATTEMPTS + 1
+
+          original.call(params) do |chunk|
+            block.call(chunk.byteslice(0, 1.kilobyte))
+            drops += 1
+            raise Errno::ECONNRESET
+          end
+        end
+
+        described_class.new.perform(archive.id)
+
+        expect(drops).to be > described_class::SOURCE_READ_ATTEMPTS
+        expect(archive.reload).to be_ready
+        expect(zip_entries(archive)).to eq("Video.bin" => [Zlib.crc32(source), source])
       end
 
       it "fails and aborts the upload when a source read completes without bytes" do
@@ -447,8 +467,11 @@ describe UpdateProductFilesArchiveWorker, :vcr do
         archive = archive_for(installment, files)
         reads = []
         allow_any_instance_of(Aws::S3::Client).to receive(:get_object).and_wrap_original do |original, params, &block|
-          reads << params[:key] if block
-          original.call(params, &block)
+          next original.call(params, &block) if block.nil?
+
+          reads << params[:key]
+          # Delivered in pieces, as Net::HTTP does, so writes continue after the upload closes its pipe.
+          original.call(params) { |chunk| (0...chunk.bytesize).step(64.kilobytes) { block.call(chunk.byteslice(_1, 64.kilobytes)) } }
         end
         allow_any_instance_of(Aws::S3::Client).to receive(:upload_part).and_wrap_original do |original, params|
           raise Seahorse::Client::NetworkingError.new(Errno::ECONNRESET.new, "part lost") if params[:part_number] == 1
@@ -463,6 +486,25 @@ describe UpdateProductFilesArchiveWorker, :vcr do
         expect(aborted_upload_ids.size).to eq(1)
         expect(open_uploads(archive)).to be_empty
         expect(archive.s3_object.exists?).to be(false)
+      end
+
+      it "marks an archive left in progress failed once its retries run out and no run holds its lock" do
+        archive = archive_for(installment, [add_file(installment, "bytes", display_name: "Notes")])
+        archive.mark_in_progress!
+
+        described_class.sidekiq_retries_exhausted_block.call({ "args" => [archive.id] }, described_class::LockLostError.new)
+
+        expect(archive.reload).to be_failed
+      end
+
+      it "leaves an archive in progress when its retries run out while another run holds its lock" do
+        archive = archive_for(installment, [add_file(installment, "bytes", display_name: "Notes")])
+        archive.mark_in_progress!
+        $redis.set(described_class.lock_key(archive.id), "other-run")
+
+        described_class.sidekiq_retries_exhausted_block.call({ "args" => [archive.id] }, described_class::LockLostError.new)
+
+        expect(archive.reload).to be_in_progress
       end
 
       it "aborts an unfinished upload a killed run left on the archive key, and no other" do
