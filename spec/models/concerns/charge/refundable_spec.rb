@@ -562,20 +562,36 @@ describe Charge::Refundable do
         )
       end
 
-      it "debits the seller and reverses the dispute-win transfer when the purchase won a dispute" do
+      it "records a won-dispute refund for reconciliation, with no seller debit and no Stripe reversal" do
         purchase.update!(chargeback_date: Time.current, chargeback_reversed: true)
         # The dispute reversed the original transfer, so nothing is left on it.
         transfer.amount_reversed = 8_50
         expect(Stripe::Transfer).not_to receive(:create_reversal)
-        expect_any_instance_of(Purchase).to receive(:reverse_the_transfer_made_for_dispute_win!)
+        expect_any_instance_of(Purchase).not_to receive(:reverse_the_transfer_made_for_dispute_win!)
 
         purchase.handle_event_refund_updated!(build_external_event)
 
         refund = purchase.reload.refunds.sole
+        expect(purchase.stripe_refunded?).to be(true)
+        expect(refund.balance_reconciliation_needed).to be(true)
         expect(refund.gumroad_funded).to be_nil
-        expect(seller_refund_debits.count).to eq(1)
-        expect(ErrorNotifier).to have_received(:notify).with(Charge::Refundable::EXTERNAL_REFUND_ALERT,
-                                                             hash_including(transfer_outcome: :dispute_won, recorded: true))
+        expect(seller_refund_debits).to be_empty
+        expect(ErrorNotifier).to have_received(:notify).with(/reconcile the seller balance/, hash_including(transfer_outcome: :dispute_won))
+      end
+
+      it "alerts that the seller transfer was reversed when booking then refuses the refund" do
+        allow(Stripe::Transfer).to receive(:list_reversals).and_return([])
+        allow(Stripe::Transfer).to receive(:create_reversal)
+          .and_return(Stripe::StripeObject.construct_from(id: "trr_1", destination_payment_refund: "pyr_1"))
+        allow_any_instance_of(Purchase).to receive(:refund_purchase!).and_return(false)
+
+        purchase.handle_event_refund_updated!(build_external_event)
+
+        expect(purchase.reload.refunds).to be_empty
+        expect(ErrorNotifier).to have_received(:notify).with(
+          /Seller transfer reversed .* but the refund was not booked/,
+          hash_including(refused_purchase_ids: [purchase.id], transfer_outcome: :reversed_by_gumroad)
+        )
       end
 
       it "books the refund as Gumroad-funded when Stripe refuses the reversal" do

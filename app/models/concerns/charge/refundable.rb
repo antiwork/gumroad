@@ -136,7 +136,7 @@ module Charge::Refundable
         if charge_refund.is_a?(StripeChargeRefund) && charge_refund.charge[:destination].present? &&
             merchant_account&.holder_of_funds == HolderOfFunds::STRIPE
           # A won dispute already reversed the transfer and sent the seller's share back in a separate
-          # transfer. refund_purchase! reverses that one and debits the seller, as for an app refund.
+          # transfer, which cannot be reversed safely here: record the refund for reconciliation.
           dispute_won_ids = unrecorded.select { _1.chargedback? && _1.chargeback_reversed }.map(&:id)
           if dispute_won_ids.any?
             # The charge-level reversal cannot be split between the two kinds of purchase.
@@ -153,7 +153,7 @@ module Charge::Refundable
         # An unpaired refund is still booked, so the sale shows as refunded, but it changes no seller
         # balance: its seller legs could belong to a different refund on the charge.
         gumroad_funded = %i[not_reversible fee_refund_unpaired].include?(transfer_outcome)
-        balance_reconciliation_needed = transfer_outcome == :reversal_unpaired
+        balance_reconciliation_needed = %i[reversal_unpaired dispute_won].include?(transfer_outcome)
 
         booked = unrecorded.select do |purchase|
           purchase.refund_purchase!(flow_of_funds_for.(purchase, charge_refund), GUMROAD_ADMIN_ID, charge_refund.refund,
@@ -174,11 +174,15 @@ module Charge::Refundable
                         unrecorded_purchase_ids: (unrecorded - refunded_purchases).map(&:id), blocked_purchase_ids:,
                         refused_purchase_ids: }
       notify_external_refund_alert(EXTERNAL_REFUND_ALERT, **alert_context, recorded: refunded_purchases.size == unrecorded.size)
-      if transfer_outcome == :not_reversible
+      if refused_purchase_ids.any?
+        if %i[reversed_by_gumroad reversed_by_stripe].include?(transfer_outcome)
+          notify_external_refund_alert("Seller transfer reversed for a refund created outside the app, but the refund was not booked: reconcile the seller balance", **alert_context)
+        end
+      elsif transfer_outcome == :not_reversible
         notify_external_refund_alert("Refund created outside the app booked as Gumroad-funded: seller transfer not reversible", **alert_context)
       elsif transfer_outcome == :fee_refund_unpaired
         notify_external_refund_alert("Refund created outside the app booked as Gumroad-funded: application fee refund cannot be paired", **alert_context)
-      elsif transfer_outcome == :reversal_unpaired
+      elsif %i[reversal_unpaired dispute_won].include?(transfer_outcome)
         notify_external_refund_alert("Refund created outside the app booked without a seller balance change: reconcile the seller balance", **alert_context)
       end
 
