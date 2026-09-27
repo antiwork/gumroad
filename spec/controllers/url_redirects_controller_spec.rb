@@ -1131,6 +1131,27 @@ describe UrlRedirectsController, inertia: true do
         expect(response).to have_http_status(:not_found)
       end
 
+      it "does not start a rental when a visitor requests the stream manifest" do
+        @url_redirect.update!(is_rental: true)
+
+        expect do
+          get :smil, params: { id: @token, product_file_id: @product.product_files.first.external_id }
+        end.to raise_error(ActionController::RoutingError)
+
+        expect(@url_redirect.reload.rental_first_viewed_at).to be_nil
+      end
+
+      it "starts a rental when the signed-in seller requests the stream manifest" do
+        @url_redirect.update!(is_rental: true)
+        sign_in seller
+        allow_any_instance_of(UrlRedirect).to receive(:smil_xml_for_product_file).and_return("<smil/>")
+
+        get :smil, params: { id: @token, product_file_id: @product.product_files.first.external_id }
+
+        expect(response).to be_successful
+        expect(@url_redirect.reload.rental_first_viewed_at).to be_present
+      end
+
       it "lets the signed-in seller in" do
         sign_in seller
         get :download_page, params: { id: @token }
