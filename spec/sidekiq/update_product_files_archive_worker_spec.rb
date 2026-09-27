@@ -68,6 +68,8 @@ describe UpdateProductFilesArchiveWorker, :vcr do
       end
 
       it "defers instead of overlapping a run already building the same archive" do
+        # perform_in and the matcher each read the clock, and a second can pass between them.
+        freeze_time
         $redis.set(described_class.lock_key(@product_files_archive.id), "other-run")
         described_class.jobs.clear
 
