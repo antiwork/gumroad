@@ -261,7 +261,7 @@ describe AlertOnStaleBlocksHoldingEstablishedBuyersJob do
       expect(guid_block.reload.blocked_at).to be_present
     end
 
-    it "keeps the card sibling while the 7-day rule still fires on the buyer's browser alone" do
+    it "keeps the card sibling while the burst's own browser holds the 7-day rule" do
       Purchase::Blockable::MAX_NUMBER_OF_FAILED_FINGERPRINTS.times do |index|
         create(:purchase, purchase_state: "failed", browser_guid: guid, stripe_fingerprint: "browser-tested-#{index}",
                           email: "other#{index}@example.com",
@@ -270,10 +270,32 @@ describe AlertOnStaleBlocksHoldingEstablishedBuyersJob do
       end
       at = 2.years.ago
       block_email(blocked_at: at)
+      guid_block = block_value(:browser_guid, guid, blocked_at: at)
       card_block = block_value(:charge_processor_fingerprint, fingerprint, blocked_at: at)
 
       message
+      expect(guid_block.reload.blocked_at).to be_present
       expect(card_block.reload.blocked_at).to be_present
+    end
+
+    it "clears the burst when the failures are spread over browsers no single attempt counted" do
+      shared_guid = "guid-shared"
+      settled_purchases(1, browser_guid: shared_guid)
+      2.times do |index|
+        create(:purchase, purchase_state: "failed", browser_guid: guid, stripe_fingerprint: "spread-a#{index}",
+                          email: "a#{index}@example.com",
+                          created_at: (Purchase::Blockable::CARD_TESTING_WATCH_PERIOD - 1.day).ago)
+        create(:purchase, purchase_state: "failed", browser_guid: shared_guid, stripe_fingerprint: "spread-b#{index}",
+                          email: "b#{index}@example.com",
+                          created_at: (Purchase::Blockable::CARD_TESTING_WATCH_PERIOD - 1.day).ago)
+      end
+      at = 2.years.ago
+      email_block = block_email(blocked_at: at)
+      guid_block = block_value(:browser_guid, guid, blocked_at: at)
+      card_block = block_value(:charge_processor_fingerprint, fingerprint, blocked_at: at)
+
+      message
+      expect([email_block, guid_block, card_block].map { _1.reload.blocked_at }).to all(be_nil)
     end
 
     it "leaves a stranger's card block that only matches a Stripe masked visual" do
@@ -326,6 +348,29 @@ describe AlertOnStaleBlocksHoldingEstablishedBuyersJob do
       expect(card_block.reload.blocked_at).to be_present
     end
 
+    it "clears a card whose fraud-coded renewals were on subscriptions that never paid with it" do
+      saved = "fp-unproven-card"
+      charged = CreditCard.new(stripe_fingerprint: saved, card_type: "visa", visual: "**** **** **** 4311")
+      charged.save!(validate: false)
+      create(:purchase, email:, stripe_fingerprint: saved, purchase_state: "successful", price_cents: 500,
+                        created_at: history_starts_at)
+      now = Time.current
+      subscription_id = Subscription.connection.insert(
+        Subscription.sanitize_sql_array(["INSERT INTO subscriptions (link_id, created_at, updated_at, flags) VALUES (?, ?, ?, 0)", create(:product).id, now, now])
+      )
+      at = 2.years.ago
+      described_class::SUBSCRIPTION_CARD_LOOKUP_LIMIT.times do
+        renewal = create(:purchase, email: "renewal@example.com", stripe_fingerprint: "fp-other-row", purchase_state: "failed",
+                                    stripe_error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD)
+        renewal.update_columns(credit_card_id: charged.id, subscription_id:, created_at: at)
+      end
+      block_email(blocked_at: at)
+      card_block = block_value(:charge_processor_fingerprint, saved, blocked_at: at)
+
+      message
+      expect(card_block.reload.blocked_at).to be_nil
+    end
+
     it "clears a fraud-coded card once that card has the settled history the fraud rule requires" do
       settled = "fp-stolen-settled"
       settled_purchases(established_count, stripe_fingerprint: settled)
@@ -375,6 +420,20 @@ describe AlertOnStaleBlocksHoldingEstablishedBuyersJob do
 
       message
       expect(card_block.reload).to have_attributes(blocked_by: admin.id, blocked_at: be_present)
+    end
+
+    it "leaves the email block for the next run when a sibling write raises" do
+      at = 2.years.ago
+      email_block = block_email(blocked_at: at)
+      card_block = block_value(:charge_processor_fingerprint, fingerprint, blocked_at: at)
+      allow_any_instance_of(PlatformBlock).to receive(:unblock!).and_wrap_original do |original, *args|
+        raise ActiveRecord::ActiveRecordError, "sibling write failed" if original.receiver.id == card_block.id
+
+        original.call(*args)
+      end
+
+      expect { described_class.new.perform }.to raise_error(ActiveRecord::ActiveRecordError)
+      expect(email_block.reload.blocked_at).to be_present
     end
 
     it "clears no sibling when the email block is held" do
