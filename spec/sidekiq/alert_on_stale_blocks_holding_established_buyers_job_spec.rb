@@ -371,6 +371,210 @@ describe AlertOnStaleBlocksHoldingEstablishedBuyersJob do
       expect(card_block.reload.blocked_at).to be_nil
     end
 
+    it "keeps a renewal card after a later block refreshes blocked_at" do
+      saved = "fp-refreshed-card"
+      charged = CreditCard.new(stripe_fingerprint: saved, card_type: "visa", visual: "**** **** **** 4242")
+      charged.save!(validate: false)
+      create(:purchase, email:, stripe_fingerprint: saved, purchase_state: "successful", price_cents: 500,
+                        created_at: history_starts_at)
+      first_write = 10.days.ago
+      renewal = create(:purchase, email: "renewal@example.com", stripe_fingerprint: "fp-other-row", purchase_state: "failed",
+                                  stripe_error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD)
+      now = Time.current
+      subscription_id = Subscription.connection.insert(
+        Subscription.sanitize_sql_array(["INSERT INTO subscriptions (link_id, created_at, updated_at, flags) VALUES (?, ?, ?, 0)", create(:product).id, now, now])
+      )
+      prior = create(:purchase, email:, stripe_fingerprint: "fp-column-differs", purchase_state: "successful", price_cents: 500,
+                                created_at: history_starts_at)
+      prior.update_columns(credit_card_id: charged.id, subscription_id:)
+      renewal.update_columns(credit_card_id: charged.id, subscription_id:, created_at: first_write)
+      refreshed = Time.current
+      block_email(blocked_at: refreshed)
+      card_block = block_value(:charge_processor_fingerprint, saved, blocked_at: first_write)
+      card_block.update_columns(blocked_at: refreshed)
+
+      message
+      expect(card_block.reload.blocked_at).to be_present
+    end
+
+    it "clears a card when fraud-coded failures in the window do not meet the fraud rule" do
+      saved = "fp-unrelated-window"
+      charged = CreditCard.new(stripe_fingerprint: saved, card_type: "visa", visual: "**** **** **** 4242")
+      charged.save!(validate: false)
+      create(:purchase, email:, stripe_fingerprint: saved, purchase_state: "successful", price_cents: 500,
+                        created_at: history_starts_at)
+      now = Time.current
+      subscription_id = Subscription.connection.insert(
+        Subscription.sanitize_sql_array(["INSERT INTO subscriptions (link_id, created_at, updated_at, flags) VALUES (?, ?, ?, 0)", create(:product).id, now, now])
+      )
+      described_class::SUBSCRIPTION_CARD_LOOKUP_LIMIT.times do |index|
+        decline = create(:purchase, email: "noise#{index}@example.com", stripe_fingerprint: "fp-noise-#{index}",
+                                    purchase_state: "failed", stripe_error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD)
+        decline.update_columns(credit_card_id: charged.id, subscription_id:, created_at: 1.hour.ago)
+      end
+      at = Time.current
+      block_email(blocked_at: at)
+      card_block = block_value(:charge_processor_fingerprint, saved, blocked_at: at)
+
+      message
+      expect(card_block.reload.blocked_at).to be_nil
+    end
+
+    it "keeps a card when fraud-coded failures exceed the decline scan limit" do
+      stub_const("#{described_class}::RENEWAL_DECLINE_WORK_LIMIT", described_class::SUBSCRIPTION_CARD_LOOKUP_LIMIT)
+      saved = "fp-over-scan"
+      charged = CreditCard.new(stripe_fingerprint: saved, card_type: "visa", visual: "**** **** **** 4242")
+      charged.save!(validate: false)
+      create(:purchase, email:, stripe_fingerprint: saved, purchase_state: "successful", price_cents: 500,
+                        created_at: history_starts_at)
+      now = Time.current
+      subscription_id = Subscription.connection.insert(
+        Subscription.sanitize_sql_array(["INSERT INTO subscriptions (link_id, created_at, updated_at, flags) VALUES (?, ?, ?, 0)", create(:product).id, now, now])
+      )
+      (described_class::SUBSCRIPTION_CARD_LOOKUP_LIMIT + 1).times do |index|
+        decline = create(:purchase, email: "over-scan#{index}@example.com", stripe_fingerprint: "fp-over-scan-#{index}",
+                                    purchase_state: "failed", stripe_error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD)
+        decline.update_columns(credit_card_id: charged.id, subscription_id:, created_at: 1.hour.ago)
+      end
+      at = Time.current
+      block_email(blocked_at: at)
+      card_block = block_value(:charge_processor_fingerprint, saved, blocked_at: at)
+
+      message
+      expect(card_block.reload.blocked_at).to be_present
+    end
+
+    it "keeps a renewal the fraud rule wants when unrelated failures fill the lookup page" do
+      saved = "fp-page-past-noise"
+      charged = CreditCard.new(stripe_fingerprint: saved, card_type: "visa", visual: "**** **** **** 4242")
+      charged.save!(validate: false)
+      create(:purchase, email:, stripe_fingerprint: saved, purchase_state: "successful", price_cents: 500,
+                        created_at: history_starts_at)
+      now = Time.current
+      noise_subscription_id = Subscription.connection.insert(
+        Subscription.sanitize_sql_array(["INSERT INTO subscriptions (link_id, created_at, updated_at, flags) VALUES (?, ?, ?, 0)", create(:product).id, now, now])
+      )
+      described_class::SUBSCRIPTION_CARD_LOOKUP_LIMIT.times do |index|
+        decline = create(:purchase, email: "page-noise#{index}@example.com", stripe_fingerprint: "fp-page-noise-#{index}",
+                                    purchase_state: "failed", stripe_error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD)
+        decline.update_columns(credit_card_id: charged.id, subscription_id: noise_subscription_id, created_at: 1.hour.ago)
+      end
+      renewal = create(:purchase, email: "renewal-page@example.com", stripe_fingerprint: "fp-page-other-row", purchase_state: "failed",
+                                  stripe_error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD)
+      paid_subscription_id = Subscription.connection.insert(
+        Subscription.sanitize_sql_array(["INSERT INTO subscriptions (link_id, created_at, updated_at, flags) VALUES (?, ?, ?, 0)", create(:product).id, now, now])
+      )
+      prior = create(:purchase, email:, stripe_fingerprint: "fp-page-column-differs", purchase_state: "successful", price_cents: 500,
+                                created_at: history_starts_at)
+      prior.update_columns(credit_card_id: charged.id, subscription_id: paid_subscription_id)
+      renewal.update_columns(credit_card_id: charged.id, subscription_id: paid_subscription_id, created_at: 1.hour.ago)
+      at = Time.current
+      block_email(blocked_at: at)
+      card_block = block_value(:charge_processor_fingerprint, saved, blocked_at: at)
+
+      message
+      expect(card_block.reload.blocked_at).to be_present
+    end
+
+    it "clears a card when failures are split across browsers the writer would not combine" do
+      other_guid = "guid-other-browser"
+      create(:purchase, email:, purchase_state: "successful", price_cents: 500, browser_guid: other_guid,
+                        stripe_fingerprint: fingerprint, created_at: history_starts_at)
+      2.times do |index|
+        create(:purchase, purchase_state: "failed", browser_guid: guid, stripe_fingerprint: "split-a-#{index}",
+                          email: "split-a#{index}@example.com", charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                          created_at: 1.day.ago)
+        create(:purchase, purchase_state: "failed", browser_guid: other_guid, stripe_fingerprint: "split-b-#{index}",
+                          email: "split-b#{index}@example.com", charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                          created_at: 1.day.ago)
+      end
+      at = 2.years.ago
+      block_email(blocked_at: at)
+      card_block = block_value(:charge_processor_fingerprint, fingerprint, blocked_at: at)
+
+      message
+      expect(card_block.reload.blocked_at).to be_nil
+    end
+
+    it "keeps a renewal that sits only in the original window after a later block overlaps it" do
+      saved = "fp-overlap-card"
+      charged = CreditCard.new(stripe_fingerprint: saved, card_type: "visa", visual: "**** **** **** 4242")
+      charged.save!(validate: false)
+      create(:purchase, email:, stripe_fingerprint: saved, purchase_state: "successful", price_cents: 500,
+                        created_at: history_starts_at)
+      first_write = 3.days.ago
+      renewal = create(:purchase, email: "renewal-overlap@example.com", stripe_fingerprint: "fp-overlap-row",
+                                  purchase_state: "failed", stripe_error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD)
+      now = Time.current
+      subscription_id = Subscription.connection.insert(
+        Subscription.sanitize_sql_array(["INSERT INTO subscriptions (link_id, created_at, updated_at, flags) VALUES (?, ?, ?, 0)", create(:product).id, now, now])
+      )
+      prior = create(:purchase, email:, stripe_fingerprint: "fp-overlap-column", purchase_state: "successful", price_cents: 500,
+                                created_at: history_starts_at)
+      prior.update_columns(credit_card_id: charged.id, subscription_id:)
+      renewal.update_columns(credit_card_id: charged.id, subscription_id:, created_at: first_write - 36.hours)
+      refreshed = first_write + 1.day
+      block_email(blocked_at: refreshed)
+      card_block = block_value(:charge_processor_fingerprint, saved, blocked_at: first_write)
+      card_block.update_columns(blocked_at: refreshed)
+
+      message
+      expect(card_block.reload.blocked_at).to be_present
+    end
+
+    it "keeps a card when this email and one browser together still trip the 7-day rule" do
+      half = Purchase::Blockable::MAX_NUMBER_OF_FAILED_FINGERPRINTS / 2
+      half.times do |index|
+        create(:purchase, purchase_state: "failed", email:, browser_guid: "guid-other-email-failures",
+                          stripe_fingerprint: "union-email-#{index}",
+                          charge_processor_id: StripeChargeProcessor.charge_processor_id, created_at: 1.day.ago)
+        create(:purchase, purchase_state: "failed", browser_guid: guid, stripe_fingerprint: "union-guid-#{index}",
+                          email: "union-other#{index}@example.com",
+                          charge_processor_id: StripeChargeProcessor.charge_processor_id, created_at: 1.day.ago)
+      end
+      at = 2.years.ago
+      block_email(blocked_at: at)
+      block_value(:browser_guid, guid, blocked_at: at)
+      card_block = block_value(:charge_processor_fingerprint, fingerprint, blocked_at: at)
+
+      message
+      expect(card_block.reload.blocked_at).to be_present
+    end
+
+    it "clears no sibling when successful-purchase browsers exceed the lookup cap" do
+      stub_const("#{described_class}::MAX_SIBLING_VALUES", 1)
+      create(:purchase, email:, purchase_state: "successful", price_cents: 500, browser_guid: "guid-over-cap",
+                        stripe_fingerprint: fingerprint, created_at: history_starts_at)
+      at = 2.years.ago
+      block_email(blocked_at: at)
+      card_block = block_value(:charge_processor_fingerprint, fingerprint, blocked_at: at)
+
+      message
+      expect(card_block.reload.blocked_at).to be_present
+    end
+
+    it "retries a sibling clear that raises while the email block is still active" do
+      at = 2.years.ago
+      email_block = block_email(blocked_at: at)
+      card_block = block_value(:charge_processor_fingerprint, fingerprint, blocked_at: at)
+      raised = false
+      allow_any_instance_of(PlatformBlock).to receive(:unblock!).and_wrap_original do |original, *args|
+        if !raised && original.receiver.id == card_block.id
+          raised = true
+          raise "sibling clear failed"
+        end
+        original.call(*args)
+      end
+
+      expect { described_class.new.perform }.to raise_error("sibling clear failed")
+      expect(email_block.reload.blocked_at).to be_present
+      expect(card_block.reload.blocked_at).to be_present
+
+      message
+      expect(email_block.reload.blocked_at).to be_nil
+      expect(card_block.reload.blocked_at).to be_nil
+    end
+
     it "clears a fraud-coded card once that card has the settled history the fraud rule requires" do
       settled = "fp-stolen-settled"
       settled_purchases(established_count, stripe_fingerprint: settled)

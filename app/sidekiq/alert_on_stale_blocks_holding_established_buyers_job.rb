@@ -50,6 +50,7 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
   # blocked rather than turning one clear into an unbounded lookup.
   MAX_SIBLING_VALUES = 200
   SUBSCRIPTION_CARD_LOOKUP_LIMIT = 20
+  RENEWAL_DECLINE_WORK_LIMIT = SUBSCRIPTION_CARD_LOOKUP_LIMIT * 5
   # Indian-card renewals can stay in progress for 26 hours before the failure webhook writes the block.
   RENEWAL_DECLINE_LOOKBACK = 2.days
 
@@ -185,14 +186,16 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
       (block.blocked_at - SIBLING_BURST_WINDOW)..(block.blocked_at + SIBLING_BURST_WINDOW)
     end
 
-    # The unattended browser/card rows written in this email block's own burst, restricted to values
-    # on this buyer's SUCCESSFUL purchases: anyone can type this email into a failed attempt, so a
-    # card tester's card or browser must not ride along. A row a live rule still wants stays.
+    # Anyone can type this email into a failed attempt, so sibling values come from successful purchases only.
     def burst_siblings(email, window)
       purchases = Purchase.successful.where(email:)
       stripe_fingerprints, other_visuals = card_sibling_values(purchases)
+      guids = purchases.where.not(browser_guid: [nil, ""]).distinct.limit(MAX_SIBLING_VALUES + 1).pluck(:browser_guid)
+      # A truncated list can omit a guid the 7-day rule still counts, so nothing is cleared.
+      return [] if guids.size > MAX_SIBLING_VALUES
+
       values = {
-        PlatformBlock::TYPES[:browser_guid] => purchases.where.not(browser_guid: [nil, ""]).distinct.limit(MAX_SIBLING_VALUES).pluck(:browser_guid),
+        PlatformBlock::TYPES[:browser_guid] => guids,
         PlatformBlock::TYPES[:charge_processor_fingerprint] => (stripe_fingerprints + other_visuals).uniq,
       }
       siblings = SIBLING_TYPES.flat_map do |object_type|
@@ -200,7 +203,8 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
 
         PlatformBlock.active.where(object_type:, object_value: values[object_type], blocked_by: nil, blocked_at: window).to_a
       end
-      return [] if velocity_still_fires?(email, siblings)
+      browser_guids = siblings.filter_map { |sibling| sibling.object_value if sibling.object_type == PlatformBlock::TYPES[:browser_guid] }
+      return [] if recent_velocity_still_fires?(email, browser_guids)
 
       siblings.reject { |sibling| velocity_protected_browser?(sibling) || fraud_rule_still_wants_card?(sibling, stripe_values: stripe_fingerprints) }
     end
@@ -220,9 +224,8 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
       [stripe_fingerprints, other_visuals]
     end
 
-    # ban_buyer_on_fraud_related_error_code! blocks the card, not the person, so only a card that
-    # rule would still block may stay: one indexed decline is enough for a Stripe fingerprint, a
-    # renewal can block the card it charged, and other processors are keyed by visual.
+    # A renewal can block the charged card when the failed row's fingerprint differs. Other
+    # processors are keyed by visual, one card type per lookup.
     def fraud_rule_still_wants_card?(sibling, stripe_values:)
       return false unless sibling.object_type == PlatformBlock::TYPES[:charge_processor_fingerprint]
 
@@ -230,7 +233,7 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
       return false if value.blank?
 
       if stripe_values.include?(value)
-        return true if subscription_card_fraud_decline?(value, sibling.blocked_at)
+        return true if subscription_card_fraud_decline?(value, sibling)
 
         decline = stripe_fraud_decline(value)
         return !decline.buyer_has_clean_payment_history? if decline
@@ -249,27 +252,56 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
               .first
     end
 
-    # A renewal blocks the card it charged only when that charge is recurring and an earlier settled
-    # purchase of the same subscription used that card id — the writer's own condition
-    # (#subscription_card_fingerprint), which a count of fraud-coded failures cannot stand in for.
-    # purchases.credit_card_id has no index, so the created_at window has to drive the lookup.
-    def subscription_card_fraud_decline?(value, blocked_at)
-      return false if blocked_at.blank?
+    # add! rewrites blocked_at and leaves created_at, so a later block moves the failure window
+    # off the renewal that first blocked this card. Search both, each on purchase_state, created_at.
+    # credit_card_id has no index and must not drive the lookup.
+    def subscription_card_fraud_decline?(value, block)
+      return false if block.blocked_at.blank?
 
-      declines = Purchase.failed
-                         .where(created_at: (blocked_at - RENEWAL_DECLINE_LOOKBACK)..(blocked_at + Onetime::ClearMistakenBuyerBlocks::BLOCK_CREATION_WINDOW))
-                         .where(credit_card_id: CreditCard.where(stripe_fingerprint: value).select(:id))
-                         .where.not(subscription_id: nil)
-                         .where(fraud_decline_sql, codes: PurchaseErrorCode::AUTO_BLOCK_ERROR_CODES)
-                         .order(created_at: :desc)
-                         .limit(SUBSCRIPTION_CARD_LOOKUP_LIMIT)
-                         .to_a
-
-      declines.any? do |purchase|
-        purchase.is_recurring_subscription_charge &&
-          purchase.send(:subscription_card_fingerprint) == value &&
-          !purchase.buyer_has_clean_payment_history?
+      card_ids = CreditCard.where(stripe_fingerprint: value).select(:id)
+      decline_windows(block).any? do |window|
+        renewal_decline_still_blocks?(card_ids, window, value)
       end
+    end
+
+    def decline_windows(block)
+      windows = [decline_window(block.blocked_at)]
+      return windows if block.created_at.blank?
+
+      created = decline_window(block.created_at)
+      windows << created unless windows.first == created
+      windows
+    end
+
+    def decline_window(time)
+      (time - RENEWAL_DECLINE_LOOKBACK)..(time + Onetime::ClearMistakenBuyerBlocks::BLOCK_CREATION_WINDOW)
+    end
+
+    def renewal_decline_still_blocks?(card_ids, window, value)
+      scope = Purchase.failed
+                      .where(created_at: window, credit_card_id: card_ids)
+                      .where.not(subscription_id: nil)
+                      .where(fraud_decline_sql, codes: PurchaseErrorCode::AUTO_BLOCK_ERROR_CODES)
+                      .order(:id)
+      last_id = 0
+      checked = 0
+      loop do
+        batch = scope.where("purchases.id > ?", last_id).limit(SUBSCRIPTION_CARD_LOOKUP_LIMIT).to_a
+        return false if batch.empty?
+        return true if batch.any? { |purchase| renewal_still_blocks_card?(purchase, value) }
+
+        checked += batch.size
+        return false if batch.size < SUBSCRIPTION_CARD_LOOKUP_LIMIT
+        return true if checked >= RENEWAL_DECLINE_WORK_LIMIT
+
+        last_id = batch.last.id
+      end
+    end
+
+    def renewal_still_blocks_card?(purchase, value)
+      purchase.is_recurring_subscription_charge &&
+        purchase.send(:subscription_card_fingerprint) == value &&
+        !purchase.buyer_has_clean_payment_history?
     end
 
     def other_processor_fraud_still_wants?(value)
@@ -311,25 +343,40 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
         (sibling.expires_at.nil? || sibling.expires_at > Time.current)
     end
 
-    # The 7-day card-testing rule, re-run against the history it saw. It counts the union for ONE
-    # attempt — this email, or one browser — so each of the burst's browsers is checked against the
-    # email on its own: pooling them would read four cards spread over two browsers as one attempt,
-    # and the pool's cap could hide a browser that really does trip it.
-    def velocity_still_fires?(email, siblings)
-      browsers = siblings.filter_map { |sibling| sibling.object_value if sibling.object_type == PlatformBlock::TYPES[:browser_guid] }
-      return email_or_browser_velocity_fires?(email, nil) if browsers.empty?
+    # The writer unions this email with one browser from the burst, not every browser on an old purchase.
+    def recent_velocity_still_fires?(email, guids)
+      window = (Purchase::Blockable::CARD_TESTING_WATCH_PERIOD.ago..)
+      failures = Purchase.countable_card_testing_failures.where(created_at: window)
+      threshold = Purchase::Blockable::MAX_NUMBER_OF_FAILED_FINGERPRINTS
+      email_cards = card_identities(failures.where(email:), threshold)
+      return true if email_cards.size >= threshold
 
-      browsers.any? { |guid| email_or_browser_velocity_fires?(email, guid) }
+      guids = Array(guids).compact_blank
+      return false if guids.empty?
+
+      guid_adds_enough_cards?(failures, guids, email_cards, threshold - email_cards.size)
     end
 
-    def email_or_browser_velocity_fires?(email, browser_guid)
-      failures = Purchase.countable_card_testing_failures.where(created_at: Purchase::Blockable::CARD_TESTING_WATCH_PERIOD.ago..)
-      failures = if browser_guid.present?
-        failures.where("purchases.email = ? OR purchases.browser_guid = ?", email, browser_guid)
-      else
-        failures.where(email:)
-      end
-      Purchase.distinct_card_count(failures) >= Purchase::Blockable::MAX_NUMBER_OF_FAILED_FINGERPRINTS
+    def guid_adds_enough_cards?(failures, guids, email_cards, needed)
+      identity = card_identity_sql
+      scope = failures.where(browser_guid: guids)
+      scope = scope.where("#{identity} NOT IN (?)", email_cards) if email_cards.any?
+      scope.group(:browser_guid).having("COUNT(DISTINCT #{identity}) >= ?", needed).pick(:browser_guid).present?
+    end
+
+    def card_identities(relation, limit)
+      relation.distinct.limit(limit).pluck(Arel.sql(card_identity_sql))
+    end
+
+    # Same card identity as Purchase.distinct_card_count.
+    def card_identity_sql
+      paypal_id = ActiveRecord::Base.connection.quote(PaypalChargeProcessor.charge_processor_id)
+      <<~SQL.squish
+        CASE WHEN charge_processor_id = #{paypal_id}
+             THEN CONCAT('wallet:', COALESCE(NULLIF(card_visual, ''), CONCAT('token:', stripe_fingerprint)))
+             ELSE CONCAT('card:', stripe_fingerprint)
+        END
+      SQL
     end
 
     def velocity_protected_browser?(sibling)
