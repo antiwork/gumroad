@@ -163,6 +163,45 @@ describe StripeMerchantAccountManager do
           end
         end
       end
+
+      {
+        "an unknown Stripe API error" => -> { Stripe::APIError.new("An unknown error occurred") },
+        "a connection failure" => -> { Stripe::APIConnectionError.new("Unexpected error communicating with Stripe") },
+        "rate limiting" => -> { Stripe::RateLimitError.new("Too many requests") },
+      }.each do |description, build_error|
+        it "records one internal no-verdict note and schedules an early retry on #{description}" do
+          allow(Stripe::Account).to receive(:create).and_raise(build_error.call)
+          allow(ErrorNotifier).to receive(:notify)
+
+          2.times do
+            expect { described_class.create_account(user, passphrase:) }.to raise_error(build_error.call.class)
+          end
+
+          notes = payout_notes(StripeMerchantAccountManager::NO_VERDICT_FAILURE_NOTE_PREFIX)
+          expect(notes.count).to eq(1)
+          expect(notes.first.json_data).to include("no_verdict" => true, "error_class" => build_error.call.class.name)
+          expect(user.comments.alive.with_type_payout_note.where(seller_visible: true)).to be_empty
+          expect(RetryStripeRejectedPayoutSetupForSellerJob).to have_enqueued_sidekiq_job(user.id)
+        end
+      end
+
+      it "records no no-verdict note for a bad API key, which is ours to fix and not retryable" do
+        allow(Stripe::Account).to receive(:create).and_raise(Stripe::AuthenticationError.new("Invalid API Key provided"))
+        allow(ErrorNotifier).to receive(:notify)
+
+        expect { described_class.create_account(user, passphrase:) }.to raise_error(Stripe::AuthenticationError)
+
+        expect(payout_notes(StripeMerchantAccountManager::NO_VERDICT_FAILURE_NOTE_PREFIX)).to be_empty
+      end
+
+      it "records nothing when notify is false, so the retry job's own attempts don't stack notes" do
+        allow(Stripe::Account).to receive(:create).and_raise(Stripe::APIError.new("An unknown error occurred"))
+        allow(ErrorNotifier).to receive(:notify)
+
+        expect { described_class.create_account(user, passphrase:, notify: false) }.to raise_error(Stripe::APIError)
+
+        expect(payout_notes(StripeMerchantAccountManager::NO_VERDICT_FAILURE_NOTE_PREFIX)).to be_empty
+      end
     end
 
     context "when the breadcrumb itself fails to save" do

@@ -43,9 +43,10 @@ class RetryStripeRejectedPayoutSetupsJob
              .with_type_payout_note
              .where(commentable_type: "User", author_id: GUMROAD_ADMIN_ID)
              .where(
-               "content LIKE ? OR content LIKE ?",
+               "content LIKE ? OR content LIKE ? OR content LIKE ?",
                "#{StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX}%",
-               "#{StripeMerchantAccountManager::POSTAL_CODE_FAILURE_NOTE_PREFIX}%"
+               "#{StripeMerchantAccountManager::POSTAL_CODE_FAILURE_NOTE_PREFIX}%",
+               "#{StripeMerchantAccountManager::NO_VERDICT_FAILURE_NOTE_PREFIX}%"
              )
     end
 end

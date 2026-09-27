@@ -71,6 +71,11 @@ module StripeMerchantAccountManager
   # Prefix for the breadcrumb left when Stripe rejects account creation or an account update
   # for a reason we do not handle specifically. See record_account_rejection_note below.
   ACCOUNT_REJECTION_NOTE_PREFIX = "Stripe rejected payout setup"
+  # Breadcrumb for an account-creation failure where Stripe never ruled on the seller's details
+  # (an outage, not a rejection). RetryStripeRejectedPayoutSetupsJob re-attempts these.
+  NO_VERDICT_FAILURE_NOTE_PREFIX = "Stripe payout setup failed without a verdict"
+  NO_VERDICT_ERROR_CLASSES = [Stripe::APIError, Stripe::APIConnectionError, Stripe::RateLimitError].freeze
+  NO_VERDICT_FIRST_RETRY_DELAY = 1.hour
 
   # Marks the seller-facing half of an account-rejection breadcrumb, so the publish block can point
   # at that specific note rather than whatever seller-visible payout note happens to be newest.
@@ -296,6 +301,7 @@ module StripeMerchantAccountManager
       clear_stale_postal_code_failure_notes(user)
       clear_stale_bank_sync_failure_notes(user)
       clear_stale_payout_setup_rejection_notes(user)
+      clear_stale_no_verdict_failure_notes(user)
 
       merchant_account
     end
@@ -318,6 +324,7 @@ module StripeMerchantAccountManager
       # Record which field Stripe objected to unless the rejection already has its own dedicated
       # breadcrumb above, so support can read the cause off the account instead of reproducing it.
       record_account_rejection_note(user, e) if notify && undiagnosed_stripe_rejection?(e)
+      record_no_verdict_failure_note(user, e) if notify && no_verdict_stripe_error?(e)
       raise
     end
   end
@@ -1600,6 +1607,17 @@ module StripeMerchantAccountManager
   # Stripe's string is handed to the seller verbatim today, and on its own it is unactionable: it
   # names no value, no field, and no next step. Prefix it with our own account of what we sent and
   # what to do about it.
+  def self.no_verdict_stripe_error?(error)
+    NO_VERDICT_ERROR_CLASSES.any? { |klass| error.is_a?(klass) }
+  end
+
+  def self.no_verdict_seller_message(error)
+    return unless no_verdict_stripe_error?(error)
+
+    "Our payment partner had a temporary problem and couldn't set up your payouts. Nothing you entered was rejected. " \
+      "Please try saving again in a few minutes. We'll also retry it for you automatically."
+  end
+
   def self.bank_directory_miss_seller_message(error, bank_account)
     return unless error.is_a?(Stripe::InvalidRequestError)
     return unless bank_details_directory_miss?(error)
@@ -1874,6 +1892,49 @@ module StripeMerchantAccountManager
     # A missing breadcrumb must never turn into a second failure on top of the original
     # rejection: the seller's error message matters more than our diagnostics.
     Rails.logger.error "Failed to record Stripe account-rejection payout-note breadcrumb for user #{user&.id}: #{e.class}: #{e.message}"
+    ErrorNotifier.notify(e)
+  end
+
+  # Internal only: the seller already saw no_verdict_seller_message inline, and a seller-visible
+  # payout note would read as a rejection on the Payouts page. One outstanding note per seller, so
+  # repeated saves during the same outage don't reset the weekly retry's bookkeeping.
+  private_class_method
+  def self.record_no_verdict_failure_note(user, error)
+    return if user.blank?
+    return if outstanding_no_verdict_failure_notes(user).any?
+
+    user.add_payout_note(
+      content: "#{NO_VERDICT_FAILURE_NOTE_PREFIX}: #{error.class.name} — #{error.message.to_s.truncate(300)}",
+      seller_visible: false,
+      json_data: { "no_verdict" => true, "error_class" => error.class.name, "request_id" => error.try(:request_id) }.compact
+    )
+    # Outages clear in minutes; don't make the seller wait for the weekly sweep.
+    RetryStripeRejectedPayoutSetupForSellerJob.perform_in(NO_VERDICT_FIRST_RETRY_DELAY, user.id)
+  rescue => e
+    Rails.logger.error "Failed to record no-verdict payout-setup note for user #{user&.id}: #{e.class}: #{e.message}"
+    ErrorNotifier.notify(e)
+  end
+
+  private_class_method
+  def self.outstanding_no_verdict_failure_notes(user)
+    user.comments
+        .with_type_payout_note
+        .alive
+        .where(author_id: GUMROAD_ADMIN_ID)
+        .where("content LIKE ?", "#{NO_VERDICT_FAILURE_NOTE_PREFIX}%")
+        .select { |note| note.json_data["abandoned_at"].blank? }
+  end
+
+  private_class_method
+  def self.clear_stale_no_verdict_failure_notes(user)
+    user.comments
+        .with_type_payout_note
+        .alive
+        .where(author_id: GUMROAD_ADMIN_ID)
+        .where("content LIKE ?", "#{NO_VERDICT_FAILURE_NOTE_PREFIX}%")
+        .update_all(deleted_at: Time.current)
+  rescue => e
+    Rails.logger.error "Failed to clear stale no-verdict payout-setup notes for user #{user&.id}: #{e.class}: #{e.message}"
     ErrorNotifier.notify(e)
   end
 

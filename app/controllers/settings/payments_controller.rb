@@ -159,6 +159,8 @@ class Settings::PaymentsController < Settings::BaseController
         # "Thanks! You're all set." page with no payout rail behind it (gumroad-private#1777).
         rejection_message = StripeMerchantAccountManager.payout_setup_rejection_seller_message(e, current_seller)
         return redirect_with_error(rejection_message) if rejection_message
+        no_verdict_message = StripeMerchantAccountManager.no_verdict_seller_message(e)
+        return redirect_with_error(no_verdict_message) if no_verdict_message
         return redirect_with_error(e.try(:message) || "Something went wrong.")
       end
     end

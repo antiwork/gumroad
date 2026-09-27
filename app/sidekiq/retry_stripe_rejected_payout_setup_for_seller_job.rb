@@ -31,6 +31,8 @@ class RetryStripeRejectedPayoutSetupForSellerJob
                                  "so re-sending the same saved details can never succeed. The seller has been " \
                                  "emailed and has to nominate a different bank account."
   ABANDONED_REASON_BANK_TERMINAL_REJECTION = "bank_details_terminally_rejected"
+  NO_VERDICT_GAVE_UP_NOTE = "Automated retries of a payout setup that Stripe failed without a verdict were exhausted. " \
+                            "Manual follow-up is needed."
   # How long one run's "I am sending this email right now" claim holds off other runs. Long
   # enough that two overlapping runs cannot both send, short enough that a run killed mid-send
   # does not delay the seller past the next weekly pass.
@@ -122,9 +124,10 @@ class RetryStripeRejectedPayoutSetupForSellerJob
           .with_type_payout_note
           .where(author_id: GUMROAD_ADMIN_ID)
           .where(
-            "content LIKE ? OR content LIKE ?",
+            "content LIKE ? OR content LIKE ? OR content LIKE ?",
             "#{StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX}%",
-            "#{StripeMerchantAccountManager::POSTAL_CODE_FAILURE_NOTE_PREFIX}%"
+            "#{StripeMerchantAccountManager::POSTAL_CODE_FAILURE_NOTE_PREFIX}%",
+            "#{StripeMerchantAccountManager::NO_VERDICT_FAILURE_NOTE_PREFIX}%"
           )
     end
 
@@ -292,6 +295,9 @@ class RetryStripeRejectedPayoutSetupForSellerJob
     def attempt_remediation(user, note)
       passphrase = GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD")
 
+      # The seller got an account some other way since the outage; nothing is left to retry.
+      return true if no_verdict_note?(note) && user.stripe_account.present?
+
       if user.stripe_account.present?
         if bank_note?(note)
           result = StripeMerchantAccountManager.update_bank_account(user, passphrase:, notify: false)
@@ -326,6 +332,10 @@ class RetryStripeRejectedPayoutSetupForSellerJob
       note.content.start_with?(StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX)
     end
 
+    def no_verdict_note?(note)
+      note.content.start_with?(StripeMerchantAccountManager::NO_VERDICT_FAILURE_NOTE_PREFIX)
+    end
+
     def resolve!(user, note)
       note.mark_deleted! if note.reload.alive?
       user.add_payout_note(content: RESOLVED_NOTE, seller_visible: false)
@@ -338,6 +348,17 @@ class RetryStripeRejectedPayoutSetupForSellerJob
     end
 
     def give_up!(user, note)
+      # The exhausted-retries email only has bank and postal-code copy, and a seller whose setup
+      # failed on Stripe's side has nothing to correct, so this one is left to support.
+      if no_verdict_note?(note)
+        ActiveRecord::Base.transaction do
+          note.json_data["abandoned_at"] = Time.current.iso8601
+          note.save!
+          user.add_payout_note(content: NO_VERDICT_GAVE_UP_NOTE, seller_visible: false)
+        end
+        return
+      end
+
       # Tell the seller before the abandonment below, and outside its transaction. Abandonment is
       # terminal — once abandoned_at commits, no later run looks at this note again, and this is
       # the only place the exhausted-retries email is sent — so an enqueue downstream of that

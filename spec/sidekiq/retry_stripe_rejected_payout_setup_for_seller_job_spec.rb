@@ -405,6 +405,49 @@ describe RetryStripeRejectedPayoutSetupForSellerJob do
     end
   end
 
+  describe "no-verdict account creation failure" do
+    let(:no_verdict_prefix) { StripeMerchantAccountManager::NO_VERDICT_FAILURE_NOTE_PREFIX }
+    let!(:note) { add_note(no_verdict_prefix) }
+
+    it "re-attempts account creation quietly and resolves on success" do
+      expect(StripeMerchantAccountManager).to receive(:create_account).with(user, hash_including(notify: false))
+
+      described_class.new.perform(user.id)
+
+      expect(note.reload).not_to be_alive
+    end
+
+    it "resolves without calling Stripe when the seller already has an account" do
+      create(:merchant_account, user:)
+      expect(StripeMerchantAccountManager).not_to receive(:create_account)
+      expect(StripeMerchantAccountManager).not_to receive(:handle_new_user_compliance_info)
+
+      described_class.new.perform(user.id)
+
+      expect(note.reload).not_to be_alive
+    end
+
+    it "records an attempt when creation fails again" do
+      allow(StripeMerchantAccountManager).to receive(:create_account).and_raise(Stripe::APIError.new("An unknown error occurred"))
+
+      described_class.new.perform(user.id)
+
+      expect(note.reload.json_data["retry_count"]).to eq(1)
+    end
+
+    it "abandons for support without sending the bank/postal exhausted email" do
+      note.json_data["retry_count"] = RetryStripeRejectedPayoutSetupsJob::MAX_RETRIES
+      note.save!
+
+      expect(ContactingCreatorMailer).not_to receive(:payout_setup_retry_exhausted)
+
+      described_class.new.perform(user.id)
+
+      expect(note.reload.json_data["abandoned_at"]).to be_present
+      expect(user.comments.alive.with_type_payout_note.last.content).to eq(described_class::NO_VERDICT_GAVE_UP_NOTE)
+    end
+  end
+
   describe "postal code remediation" do
     context "when the seller already has an alive Stripe account" do
       let!(:merchant_account) { create(:merchant_account, user:) }
