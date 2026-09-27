@@ -141,6 +141,7 @@ describe Charge::Refundable, "external refund notifications" do
 
     it "still emails the creator when the deferred enqueue alert itself fails" do
       allow(PostToPingEndpointsWorker).to receive(:perform_in).and_raise(RedisClient::CannotConnectError, "queue unavailable")
+      allow(Rails.logger).to receive(:warn)
       allow(ErrorNotifier).to receive(:notify).and_wrap_original do |method, *args, **kwargs|
         raise "notifier down" if kwargs[:notification]
 
@@ -150,6 +151,7 @@ describe Charge::Refundable, "external refund notifications" do
       expect { charge.handle_event_refund_updated!(event) }.not_to raise_error
 
       expect(creator_mails(purchases).size).to eq(2)
+      expect(Rails.logger).to have_received(:warn).with(/Refund notification alert failed/).at_least(:once)
     end
 
     it "still emails the creator when the post-commit alert itself fails" do

@@ -367,8 +367,10 @@ class Purchase
           begin
             ErrorNotifier.notify(Charge::Refundable::EXTERNAL_REFUND_ALERT,
                                  purchase_id: id, recording_outcome: :recorded, notification:, error_class: error.class.name)
-          rescue StandardError
-            nil
+          rescue StandardError => alert_error
+            # The notifier is the thing that failed, so the missed notification still has to be
+            # visible somewhere: log it rather than dropping the report with the alert.
+            Rails.logger.warn("Refund notification alert failed: #{alert_error.class}: #{alert_error.message}")
           end
         end
       end
