@@ -114,6 +114,12 @@ describe "Closing a membership tier to new purchases" do
       open_tier.save_recurring_prices!(recurrence => { enabled: true, price: "20" })
 
       expect(product.reload.display_price_cents).to eq(2_000)
+      expect(product.available_price_cents).to eq([2_000])
+    end
+
+    it "asks Discover to refresh when the close setting changes" do
+      expect(tier.link).to receive(:enqueue_index_update_for).with(["available_price_cents"])
+      tier.update!(closed_to_new_purchases: false)
     end
 
     it "keeps the subscriber's own tier selectable in the subscription manager" do

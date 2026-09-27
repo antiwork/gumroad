@@ -238,9 +238,10 @@ class BaseVariant < ApplicationRecord
     end
 
     def update_product_search_index
-      if link.present? && saved_change_to_price_difference_cents?
-        link.enqueue_index_update_for(["available_price_cents"])
-      end
+      return if link.blank?
+      return unless saved_change_to_price_difference_cents? || saved_change_to_closed_to_new_purchases?
+
+      link.enqueue_index_update_for(["available_price_cents"])
     end
 
     def strip_subscription_price_change_message

@@ -293,7 +293,7 @@ module Product::Prices
   def available_price_cents
     available_prices =
       if is_tiered_membership?
-        VariantPrice.where(variant_id: tiers.pluck(:id)).alive.is_buy.pluck(:price_cents)
+        VariantPrice.where(variant_id: tiers_for_new_buyers.map(&:id)).alive.is_buy.pluck(:price_cents)
       elsif current_base_variants.present?
         base_price = default_price_cents
         current_base_variants.pluck(:price_difference_cents).map { |difference| base_price + difference.to_i }
@@ -430,21 +430,24 @@ module Product::Prices
       tiers.size > 1 || any_customizable || multiple_tier_prices
     end
 
+    # A fully closed membership has no new-buyer price. Falling back avoids a false $0 quote.
+    def tiers_for_new_buyers(candidates = tiers)
+      open_tiers = candidates.reject(&:closed_to_new_buyers?)
+      open_tiers.presence || candidates
+    end
+
     def lowest_tier_price(for_default_duration: false)
       return unless is_tiered_membership
 
       if (preloaded_tiers = preloaded_membership_tiers_with_prices)
-        offered = preloaded_tiers.reject(&:closed_to_new_buyers?)
-        # Every tier closed: $0 would quote a price checkout cannot charge.
-        offered = preloaded_tiers if offered.empty?
+        offered = tiers_for_new_buyers(preloaded_tiers)
         candidates = offered.flat_map(&:alive_prices).select(&:is_buy?)
         candidates = candidates.select { |p| p.recurrence == subscription_duration } if for_default_duration
         return candidates.min_by(&:price_cents) ||
                VariantPrice.new(price_cents: 0, recurrence: subscription_duration)
       end
 
-      offered_ids = tiers.reject(&:closed_to_new_buyers?).map(&:id)
-      offered_ids = tiers.map(&:id) if offered_ids.empty?
+      offered_ids = tiers_for_new_buyers.map(&:id)
       relation = VariantPrice.where(variant_id: offered_ids).alive.is_buy
       relation = relation.where(recurrence: subscription_duration) if for_default_duration
       lowest = relation.order("price_cents asc").take
