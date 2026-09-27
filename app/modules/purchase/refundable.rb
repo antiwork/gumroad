@@ -342,7 +342,9 @@ class Purchase
       decrement_balance_for_refund_or_chargeback!(flow_of_funds, refund:) unless chargedback_not_reversed? || skip_seller_balance
       mark_product_purchases_as_refunded!(is_partially_refunded: self.stripe_partially_refunded?)
       save!
-      reverse_the_transfer_made_for_dispute_win! if chargedback? && chargeback_reversed
+      # skip_seller_balance means this refund must not move the seller's money. The dispute-win
+      # transfer is a seller debit, so it stays with the paths that already debit the seller.
+      reverse_the_transfer_made_for_dispute_win! if chargedback? && chargeback_reversed && !skip_seller_balance
       reverse_excess_amount_from_stripe_transfer(refund:) if stripe_partially_refunded && vat_already_refunded && !skip_seller_balance
       debit_processor_fee_from_merchant_account!(refund) unless is_refund_chargeback_fee_waived || chargedback_not_reversed? || skip_seller_balance
       Credit.create_for_vat_exclusive_refund!(refund:) if (paypal_order_id.present? || merchant_account&.is_a_stripe_connect_account?) && !chargedback_not_reversed? && !skip_seller_balance

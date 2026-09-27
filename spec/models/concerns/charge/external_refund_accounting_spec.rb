@@ -185,6 +185,44 @@ RSpec.describe "External Stripe refund accounting" do
       end
     end
 
+    context "when the purchase won a dispute" do
+      before do
+        purchase.update!(chargeback_date: Time.current, chargeback_reversed: true)
+        create(:dispute, purchase:, state: "won", won_at: Time.current, charge_processor_dispute_id: "dp_won")
+        allow(Stripe::Transfer).to receive(:list).and_return([stripe(id: "tr_dispute_won", description: "Dispute dp_won won")])
+        allow(Stripe::Transfer).to receive(:create_reversal).and_raise(StandardError, "dispute reversal should not run")
+      end
+
+      it "books a full refund without reversing the dispute-win transfer" do
+        balances = seller.balances.order(:id).pluck(:id, :amount_cents)
+
+        purchase.handle_event_refund_updated!(event)
+
+        expect(Stripe::Transfer).not_to have_received(:list)
+        expect(Stripe::Transfer).not_to have_received(:create_reversal)
+        expect(purchase.reload.stripe_refunded?).to eq(true)
+        expect(purchase.refunds.sole.total_transaction_cents).to eq(1000)
+        expect(seller.balances.order(:id).pluck(:id, :amount_cents)).to eq(balances)
+      end
+
+      context "for a partial refund" do
+        let(:refund) { stripe(id: "re_ambiguous", amount: 400, charge: "ch_ambiguous", status: "succeeded", currency: "usd", transfer_reversal: nil, balance_transaction: stripe(amount: -400, currency: "usd")) }
+
+        it "books the partial refund without reversing the leftover price" do
+          event.extras[:refunded_amount_cents] = 400
+          balances = seller.balances.order(:id).pluck(:id, :amount_cents)
+
+          purchase.handle_event_refund_updated!(event)
+
+          expect(Stripe::Transfer).not_to have_received(:list)
+          expect(Stripe::Transfer).not_to have_received(:create_reversal)
+          expect(purchase.reload.stripe_partially_refunded?).to eq(true)
+          expect(purchase.refunds.sole.total_transaction_cents).to eq(400)
+          expect(seller.balances.order(:id).pluck(:id, :amount_cents)).to eq(balances)
+        end
+      end
+    end
+
     context "when only the destination payment exposes the fee" do
       let(:fee) { nil }
       let(:destination_fee) { stripe(id: "fee_ambiguous", refunds: fee_refunds(fee_refund("fr_unrelated", 30))) }
