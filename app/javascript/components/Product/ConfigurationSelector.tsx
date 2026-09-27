@@ -859,6 +859,10 @@ export const ConfigurationSelector = React.forwardRef<
     );
   }
 
+  const purchasableOptionPrices = product.options
+    .filter((option) => option.quantity_left !== 0)
+    .map((option) => basePriceCents + computeOptionPrice(option, selection.recurrence));
+
   return (
     <div ref={rootRef} className="contents">
       {hasMultipleRecurrences && product.recurrences ? (
@@ -957,16 +961,13 @@ export const ConfigurationSelector = React.forwardRef<
                 />
               ))}
             <div itemProp="offerCount" className="hidden">
-              {product.options.length}
+              {product.options.filter((option) => option.quantity_left !== 0).length}
             </div>
-            <div itemProp="lowPrice" className="hidden">
-              {formatPriceCentsWithoutCurrencySymbol(
-                product.currency_code,
-                Math.min(
-                  ...product.options.map((option) => basePriceCents + computeOptionPrice(option, selection.recurrence)),
-                ),
-              )}
-            </div>
+            {purchasableOptionPrices.length > 0 ? (
+              <div itemProp="lowPrice" className="hidden">
+                {formatPriceCentsWithoutCurrencySymbol(product.currency_code, Math.min(...purchasableOptionPrices))}
+              </div>
+            ) : null}
             <div itemProp="priceCurrency" className="hidden">
               {product.currency_code}
             </div>
