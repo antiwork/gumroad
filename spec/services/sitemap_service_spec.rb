@@ -181,9 +181,8 @@ describe SitemapService do
     end
   end
 
-  # Two generations in one process share SitemapGenerator::Sitemap's class-level output
-  # path, so an overlapping run writes its own links into the other run's file. The 2026-08
-  # monthly product index was replaced by a 49,685-URL wishlist file exactly this way.
+  # Two generations in one process share SitemapGenerator::Sitemap's class-level output path,
+  # so an overlapping run writes its own links into the other run's file.
   describe "generation lock" do
     let(:lock_key) { RedisKey.sitemap_generation_lock }
 
@@ -223,6 +222,26 @@ describe SitemapService do
       expect { service.generate_categories }.to raise_error("boom")
 
       expect($redis.get(lock_key)).to be_nil
+    end
+
+    # The release runs in an `ensure`, so it must not replace the result of the generation.
+    it "keeps a generation error when the release also fails" do
+      allow(SitemapGenerator::Sitemap).to receive(:create).and_raise("boom")
+      allow($redis).to receive(:eval).and_raise(Redis::BaseError.new("redis down"))
+      allow(Rails.logger).to receive(:error)
+
+      expect { service.generate_categories }.to raise_error("boom")
+      expect(Rails.logger).to have_received(:error).with(/could not release the sitemap generation lock/)
+    end
+
+    it "warns when a run outlived its own lock" do
+      allow(SitemapGenerator::Sitemap).to receive(:create)
+      allow($redis).to receive(:eval).and_return(0) # our token was already gone
+      allow(Rails.logger).to receive(:warn)
+
+      service.generate_categories
+
+      expect(Rails.logger).to have_received(:warn).with(/outlived its/)
     end
   end
 end

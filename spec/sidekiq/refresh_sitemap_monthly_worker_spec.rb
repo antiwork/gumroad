@@ -29,8 +29,8 @@ describe RefreshSitemapMonthlyWorker do
       expect(RefreshSitemapDailyWorker.jobs.size).to eq(0)
     end
 
-    # retry is 0 here, and the product chain this worker enqueues starts immediately, so a
-    # lost race for the shared SitemapGenerator config must re-enqueue the categories pass.
+    # Retry is 0 here, and the product chain this worker enqueues starts immediately, so a lost
+    # race for the shared lock must re-enqueue the categories step rather than drop it.
     it "re-enqueues the categories step when it has to wait for another run", :freeze_time do
       service = instance_double(SitemapService)
       allow(SitemapService).to receive(:new).and_return(service)
@@ -42,9 +42,8 @@ describe RefreshSitemapMonthlyWorker do
         .in(SitemapService::GENERATION_RETRY_DELAY)
     end
 
-    # Re-running the full pass on retry would enqueue the product chain again, and the chain's
-    # first job runs immediately — so it would rebuild the conflict it just lost, one duplicate
-    # chain per pass, while the categories sitemap might never land.
+    # Re-running the full pass would re-enqueue the product chain, rebuilding the conflict it
+    # just lost, one duplicate chain per retry.
     it "retries the categories step alone, without enqueueing the product chain again", :freeze_time do
       product = create(:product, created_at: 3.months.ago)
       product.update_columns(updated_at: 1.month.ago)

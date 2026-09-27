@@ -4,14 +4,13 @@ class RefreshSitemapMonthlyWorker
   include Sidekiq::Job
   sidekiq_options retry: 0, queue: :low
 
-  # A retry must not re-run #perform: that would enqueue the whole product chain again, and
-  # since the chain's first job runs immediately it is the likeliest holder of the very lock
-  # the categories step lost — so every pass would rebuild its own conflict and add another
-  # duplicate chain. The retry therefore carries this step marker and skips the loop.
+  # A retry must not re-run #perform: that re-enqueues the product chain, whose first job runs
+  # immediately — the likeliest holder of the lock the categories step just lost — so each pass
+  # would rebuild its own conflict. Retried with this marker, the step skips the loop.
   CATEGORIES_ONLY = "categories_only"
-  # 15 minutes apart, so 8 attempts span two hours: longer than any single generation, and a
-  # stop on the retry tail if the lock is somehow never released.
-  CATEGORIES_MAX_ATTEMPTS = 8
+  # 15 minutes apart, so 24 attempts span six hours: longer than the product chain that causes
+  # the contention, while still stopping a retry tail that can never land.
+  CATEGORIES_MAX_ATTEMPTS = 24
 
   def perform(step = nil, attempt = 1)
     unless step == CATEGORIES_ONLY

@@ -7,26 +7,15 @@ class SitemapService
   SITEMAP_PATH_CATEGORIES = "sitemap/categories/"
   SITEMAP_PATH_WISHLISTS = "sitemap/wishlists"
 
-  # SitemapGenerator::Sitemap keeps its configuration (sitemaps_path, filename,
-  # include_index, public_path, adapter) on the class rather than per call, so whichever
-  # run sets it last decides where BOTH runs' links are written. The dailies are 30 minutes
-  # apart (products 00:00 UTC, wishlists 00:30) and a product run walks a whole month, so an
-  # overlap is reachable — and on 2026-08-23 the 2026-08 monthly product index was
-  # overwritten at 00:33:54 UTC, three minutes after that day's wishlist run, with a
-  # 49,685-URL wishlist file. The 81,175 August product URLs in sitemap1/sitemap2 beside it
-  # then had no index pointing at them. Every entry point therefore writes under this one
-  # lock, which also covers a one-off run from the console.
-  #
-  # The TTL is a safety valve, not a heartbeat: it only has to outlive a legitimate run
-  # (a month is ~200k products) so that a worker killed mid-run cannot block the next run
-  # forever.
+  # SitemapGenerator::Sitemap holds its output configuration on the class, not per call, so a
+  # run starting mid-write sends its own links into the run in flight's path — which is why
+  # every generation shares this one lock. The TTL only has to outlive a legitimate run.
   GENERATION_LOCK_TTL = 1.hour.to_i
-  # A loser waits for the run in flight rather than writing into it; the product chain the
-  # monthly worker enqueues is spaced 30 minutes apart, so 15 clears a single run without
-  # starving it.
+  # A loser waits for the run in flight rather than writing into it; the monthly worker spaces
+  # its product jobs 30 minutes apart, so 15 clears a run without starving the next.
   GENERATION_RETRY_DELAY = 15.minutes
-  # Release only if we still own the key: a run that outlived its TTL must not delete the
-  # lock a later run has since taken.
+  # Release only if we still own the key, so a run that outlived its TTL cannot delete the lock
+  # a later run has taken.
   RELEASE_GENERATION_LOCK_SCRIPT = <<~LUA
     if redis.call("GET", KEYS[1]) == ARGV[1] then
       return redis.call("DEL", KEYS[1])
@@ -34,9 +23,8 @@ class SitemapService
     return 0
   LUA
 
-  # Raised instead of writing while another generation holds the lock. The sitemap workers
-  # rescue this and re-enqueue themselves, so a loser never holds a Sidekiq thread for
-  # minutes waiting.
+  # Raised instead of writing while another generation holds the lock; the sitemap workers
+  # rescue it and come back later rather than holding a Sidekiq thread for minutes.
   class GenerationInProgress < StandardError; end
 
   def generate_categories
@@ -109,9 +97,8 @@ class SitemapService
   end
 
   private
-    # Held across the config + write of one generation. Without it a run that starts while
-    # another is mid-flight inherits the other's sitemaps_path and writes its own links
-    # there (see GENERATION_LOCK_TTL above for the 2026-08 file that proves it).
+    # Held across the config + write of one generation: a run that starts mid-flight would
+    # otherwise inherit the other run's sitemaps_path and write its own links there.
     def with_generation_lock
       token = SecureRandom.uuid
       unless $redis.set(RedisKey.sitemap_generation_lock, token, nx: true, ex: GENERATION_LOCK_TTL)
@@ -121,8 +108,27 @@ class SitemapService
       begin
         yield
       ensure
-        $redis.eval(RELEASE_GENERATION_LOCK_SCRIPT, keys: [RedisKey.sitemap_generation_lock], argv: [token])
+        release_generation_lock(token)
       end
+    end
+
+    # Runs in an `ensure`, so nothing here may raise: a Redis error must not replace the result
+    # of the generation that just ran.
+    def release_generation_lock(token)
+      released = $redis.eval(
+        RELEASE_GENERATION_LOCK_SCRIPT,
+        keys: [RedisKey.sitemap_generation_lock],
+        argv: [token]
+      )
+      if released.to_i.zero?
+        # Our token was already gone, so this run outlived GENERATION_LOCK_TTL — another run may
+        # have been writing alongside it.
+        Rails.logger.warn("SitemapService: sitemap generation outlived its #{GENERATION_LOCK_TTL}-second lock")
+      end
+    rescue Redis::BaseError, RedisClient::Error => e
+      Rails.logger.error(
+        "SitemapService: could not release the sitemap generation lock (#{e.class}: #{e.message})"
+      )
     end
 
     def create_sitemap(period, filename, path, include_index: false)

@@ -12,9 +12,7 @@ describe RefreshWishlistSitemapDailyWorker do
       described_class.new.perform
     end
 
-    # A run that starts while another sitemap generation holds the shared
-    # SitemapGenerator::Sitemap config would write wishlist URLs into that run's path —
-    # which is how the 2026-08 monthly product index became a wishlist file.
+    # A loser must come back later rather than write into the run in flight's file.
     it "re-enqueues itself when another sitemap generation is already running" do
       service = instance_double(SitemapService)
       allow(SitemapService).to receive(:new).and_return(service)
