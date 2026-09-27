@@ -87,6 +87,7 @@ describe "RenderingExtension" do
                 # The user factory sets a payment address, so this user has a
                 # payout setup that could be carried over to a new brand account.
                 has_payout_setup_to_port: true,
+                can_port_bank_payout_setup: true,
                 policies: {
                   affiliate_requests_onboarding_form: {
                     update: true,
@@ -192,6 +193,24 @@ describe "RenderingExtension" do
           create(:ach_account, user:)
 
           expect(custom_context[:logged_in_user][:has_payout_setup_to_port]).to eq(true)
+        end
+      end
+
+      describe "can_port_bank_payout_setup" do
+        let(:seller) { create(:named_seller) }
+        let(:user) { seller }
+        let(:pundit_user) { SellerContext.new(user:, seller:) }
+
+        it "is true when the user's country allows new Connect accounts" do
+          create(:user_compliance_info, user:)
+
+          expect(custom_context[:logged_in_user][:can_port_bank_payout_setup]).to eq(true)
+        end
+
+        it "is false when the user's country blocks new Connect accounts" do
+          create(:user_compliance_info, user:, country: "India")
+
+          expect(custom_context[:logged_in_user][:can_port_bank_payout_setup]).to eq(false)
         end
       end
     end
