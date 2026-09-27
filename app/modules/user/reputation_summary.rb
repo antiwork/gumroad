@@ -19,6 +19,12 @@ module User::ReputationSummary
   # funnel bump that is lost to a network partition cannot pin a stale rollup
   # forever.
   CACHE_TTL = 10.minutes
+  # How long a snapshot may still be rendered while its refresh is queued.
+  SNAPSHOT_TTL = 30.days
+  # Link columns the rollup's WHERE clause reads; a change to any of them must
+  # move the version, or a product page keeps serving a snapshot that still
+  # counts a drafted/deleted/review-hidden product.
+  ROLLUP_LINK_COLUMNS = %w[deleted_at purchase_disabled_at banned_at draft flags user_id].freeze
 
   # Called from the review-stat write funnel, which runs inside the review's
   # transaction — defer the INCR to commit so a concurrent reader cannot fill
@@ -56,15 +62,46 @@ module User::ReputationSummary
   # Returns { average:, count:, products_count: } or nil when the seller does
   # not meet the display gate. exclude_product keeps a product page's rollup
   # from silently counting that product's own reviews.
-  def seller_reputation_summary(exclude_product: nil)
+  #
+  # snapshot_only never runs SQL, so a crawler across cold sellers costs Redis
+  # reads only; a missing snapshot, or one behind the version, renders nil.
+  def seller_reputation_summary(exclude_product: nil, snapshot_only: false)
     return nil unless reputation_summary_enabled?
 
-    aggregate = reputation_aggregate
+    aggregate = snapshot_only ? snapshot_reputation_aggregate : reputation_aggregate
+    return nil if aggregate.nil?
+
     aggregate = subtract_product(aggregate, exclude_product) if exclude_product
     build_summary(aggregate)
   end
 
+  def warm_reputation_snapshot
+    signature = reputation_summary_cache_signature
+    return unless signature.is_a?(Integer)
+
+    aggregate = reputation_aggregate(signature)
+    $redis.set(reputation_snapshot_key, { "aggregate" => aggregate, "signature" => signature, "computed_at" => Time.current.to_i }.to_json, ex: SNAPSHOT_TTL.to_i)
+  end
+
   private
+    # A version mismatch means review counts or product lifecycle moved since the
+    # snapshot, so exclude_product would subtract current counts from old totals:
+    # render nothing until the refresh lands. Age alone only schedules a refresh.
+    def snapshot_reputation_aggregate
+      raw, version = $redis.mget(reputation_snapshot_key, reputation_version_key)
+      snapshot = raw && JSON.parse(raw)
+      current = snapshot && snapshot["signature"] == version.to_i
+      WarmSellerReputationSummaryJob.perform_async(id) unless current && snapshot["computed_at"] > CACHE_TTL.ago.to_i
+      current ? snapshot["aggregate"] : nil
+    rescue Redis::BaseError, RedisClient::Error, JSON::ParserError => e
+      ErrorNotifier.notify(e, user_id: id)
+      nil
+    end
+
+    def reputation_snapshot_key
+      "#{CACHE_PREFIX}/#{CACHE_VERSION}/snapshot/#{id}"
+    end
+
     # One-row SQL aggregate over the seller's eligible, non-zero-review
     # products — bounded regardless of catalogue size (gumroad-private#2384).
     # display_product_reviews is a Link flag bit, not a column, so it is
@@ -76,8 +113,8 @@ module User::ReputationSummary
     # STRAIGHT_JOIN hint is what pins links as the driving table.
     # FORCE INDEX pins the links access path: the production primary chose a
     # full-table scan even with STRAIGHT_JOIN, timing out large catalogues.
-    def reputation_aggregate
-      Rails.cache.fetch(reputation_cache_key, expires_in: CACHE_TTL) do
+    def reputation_aggregate(signature = reputation_summary_cache_signature)
+      Rails.cache.fetch(reputation_cache_key(signature), expires_in: CACHE_TTL) do
         products_count, total, weighted = Link.alive.not_draft
           .from("`links` FORCE INDEX (index_links_on_user_id)")
           .where(user_id: id)
@@ -95,9 +132,9 @@ module User::ReputationSummary
     # not links). Both are cheap reads; neither scans the review-stat join.
     # Redis being unreadable yields a never-matching version, so the read falls
     # through to the (bounded) SQL aggregate rather than a possibly stale entry.
-    def reputation_cache_key
+    def reputation_cache_key(signature)
       lifecycle = products.cache_key_with_version
-      "#{CACHE_PREFIX}/#{CACHE_VERSION}/#{id}/#{lifecycle}/#{reputation_summary_cache_signature}"
+      "#{CACHE_PREFIX}/#{CACHE_VERSION}/#{id}/#{lifecycle}/#{signature}"
     end
 
     def reputation_version_key

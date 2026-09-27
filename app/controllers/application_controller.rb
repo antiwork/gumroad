@@ -20,6 +20,8 @@ class ApplicationController < ActionController::Base
   include PromotesDashboardNavItems
   include PageMeta::Base, PageMeta::Analytics
 
+  MINTED_GUMROAD_GUID_ENV_KEY = "gumroad.minted_gumroad_guid"
+
   before_action :set_default_page_title
   before_action :set_csrf_meta_tags
   before_action :set_default_meta_tags
@@ -346,6 +348,7 @@ class ApplicationController < ActionController::Base
     def set_gumroad_guid
       return unless cookies[:_gumroad_guid].nil?
 
+      request.env[MINTED_GUMROAD_GUID_ENV_KEY] = true
       cookies[:_gumroad_guid] = {
         value: SecureRandom.uuid,
         expires: 10.years.from_now,

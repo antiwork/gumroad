@@ -36,7 +36,7 @@ class ProductPresenter::ProductProps
         ratings: product.display_product_reviews? ? product.rating_stats : nil,
         # Excludes this product so its own reviews never inflate the seller
         # rollup shown on its page (gumroad-private#1669).
-        **(seller.reputation_summary_enabled? ? { seller_reputation: seller.seller_reputation_summary(exclude_product: product) } : {}),
+        **(seller.reputation_summary_enabled? ? { seller_reputation: seller.seller_reputation_summary(exclude_product: product, snapshot_only: true) } : {}),
         custom_button_text_option: product.custom_button_text_option,
         is_compliance_blocked: product.compliance_blocked(request.remote_ip),
         is_published: !product.draft && product.alive?,
@@ -83,7 +83,7 @@ class ProductPresenter::ProductProps
         public_files: product.alive_public_files.attached.map { PublicFilePresenter.new(public_file: _1).props },
       },
       discount_code: discount_code_result,
-      purchase: purchase_props(product.purchase_info_for_product_page(pundit_user&.user, request.cookie_jar[:_gumroad_guid], purchase_id:, purchase_email_digest:)),
+      purchase: purchase_props(product.purchase_info_for_product_page(pundit_user&.user, incoming_browser_guid(request), purchase_id:, purchase_email_digest:)),
       wishlists: pundit_user&.seller.present? ? (
         pundit_user.seller.wishlists.alive.includes(:alive_wishlist_products).map { |wishlist| WishlistPresenter.new(wishlist:).listing_props(product:) }
       ) : [],
@@ -92,6 +92,14 @@ class ProductPresenter::ProductProps
 
   private
     attr_reader :product, :seller
+
+    # A guid ApplicationController#set_gumroad_guid minted for this response cannot
+    # be on any purchase, so skip the purchases lookup for it.
+    def incoming_browser_guid(request)
+      return if request.try(:env)&.[](ApplicationController::MINTED_GUMROAD_GUID_ENV_KEY)
+
+      request.cookie_jar[:_gumroad_guid]
+    end
 
     def discount_code_props(discount_code_from_url, quantity, buyer)
       BestOfferCodeService.new(

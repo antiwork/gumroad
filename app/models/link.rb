@@ -290,6 +290,7 @@ class Link < ApplicationRecord
   after_save :clear_detached_default_offer_code, if: -> { saved_change_to_deleted_at?(to: nil) || (!previously_new_record? && saved_change_to_price_currency_type?) }
   after_save :set_customizable_price
   after_update :invalidate_cache, if: ->(link) { (link.saved_changes.keys - PURCHASE_PROPERTIES).present? }
+  after_update :bump_seller_reputation_version_for_rollup_change, if: -> { saved_changes.keys.intersect?(User::ReputationSummary::ROLLUP_LINK_COLUMNS) }
   after_save :note_default_offer_code_assignment
   after_commit :repair_detached_default_offer_code, if: -> { @default_offer_code_assignment_pending }
   after_rollback :forget_default_offer_code_assignment
