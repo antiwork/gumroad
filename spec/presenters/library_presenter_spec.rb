@@ -707,6 +707,8 @@ describe LibraryPresenter do
       end
 
       it "allows another retry when the previous bundle ZIP failures are stale" do
+        # Failures dated before the old-limit cutoff can be exempt from the budget; keep these after it.
+        travel_to(UrlRedirect::BUNDLE_ARCHIVE_OLD_SIZE_FAILURES_BEFORE + 1.week)
         library_props(bundle_ids: [purchase1.link.external_id])
         archive = purchase1.link.product_files_archives.alive.entity_archives.sole
         archive.mark_failed!
@@ -724,6 +726,8 @@ describe LibraryPresenter do
       end
 
       it "stops retrying after the stale-failure recovery attempt also fails" do
+        # Failures dated before the old-limit cutoff can be exempt from the budget; keep these after it.
+        travel_to(UrlRedirect::BUNDLE_ARCHIVE_OLD_SIZE_FAILURES_BEFORE + 1.week)
         library_props(bundle_ids: [purchase1.link.external_id])
         archive = purchase1.link.product_files_archives.alive.entity_archives.sole
         archive.mark_failed!

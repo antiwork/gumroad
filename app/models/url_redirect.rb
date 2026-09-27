@@ -42,6 +42,12 @@ class UrlRedirect < ApplicationRecord
   BUNDLE_ARCHIVE_FAILED_RETRY_COOLDOWN = 24.hours
   BUNDLE_ARCHIVE_MAX_TOO_LARGE_RETRY_COOLDOWN = 1.week
   BUNDLE_ARCHIVE_MAX_FAILED_ATTEMPTS = 3
+  # Until the too_large state existed, the worker marked a bundle over the then 500 MB limit failed.
+  # Those rows are frozen before this time and say nothing about a build under the current limit,
+  # so they do not spend the failure budget; every later failure does. That worker filled unrecorded
+  # sizes from S3, so a row with any unrecorded size may have been a size bail too.
+  BUNDLE_ARCHIVE_OLD_SIZE_LIMIT = 500.megabytes
+  BUNDLE_ARCHIVE_OLD_SIZE_FAILURES_BEFORE = Time.utc(2026, 9, 26, 12)
   # Bounds buyer-poll enqueues per product once the job's until_executing lock is released at start.
   # Kept below the job's LOCK_TTL so a stranded lock, not this window, is the recovery bound.
   FOLDER_ARCHIVE_REBUILD_COOLDOWN = 5.minutes
@@ -216,7 +222,7 @@ class UrlRedirect < ApplicationRecord
       matching_archives = matching_bundle_archives(bundle_files)
       return if matching_archives.any? { |archive| !archive.failed? && !archive.too_large? }
 
-      failed_archives = matching_archives.select(&:failed?)
+      failed_archives = matching_archives.select { |archive| archive.failed? && !old_size_limit_failure?(archive) }
       return if failed_archives.size >= BUNDLE_ARCHIVE_MAX_FAILED_ATTEMPTS
 
       # Too-large archives stay off the failure budget so a raised cap can heal the bundle, but their
@@ -560,6 +566,12 @@ class UrlRedirect < ApplicationRecord
   private
     def set_token
       self.token ||= self.class.generate_new_token
+    end
+
+    def old_size_limit_failure?(archive)
+      return false unless archive.updated_at < BUNDLE_ARCHIVE_OLD_SIZE_FAILURES_BEFORE
+
+      archive.product_files.any? { _1.size.nil? } || archive.product_files.sum(&:size) > BUNDLE_ARCHIVE_OLD_SIZE_LIMIT
     end
 
     # Only when no alive row exists: queued rows stay the worker's and failed keeps its no-retry

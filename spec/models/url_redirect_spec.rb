@@ -357,6 +357,88 @@ describe UrlRedirect do
       expect { redirect.bundle_archive }.to change { entity_archive_count }.by(1)
     end
 
+    describe "failures recorded under the old size limit" do
+      let(:old_failure_time) { described_class::BUNDLE_ARCHIVE_OLD_SIZE_FAILURES_BEFORE - 1.day }
+
+      def create_failed_archives(redirect, count, updated_at:)
+        bundle_files = redirect.bundle_archive_product_files
+        count.times do
+          redirect.product_files_archives.create!(product_files: bundle_files).tap(&:mark_failed!).update_columns(updated_at:)
+        end
+      end
+
+      def record_bundle_size(redirect, total)
+        files = redirect.bundle_archive_product_files
+        files.each { _1.update_columns(size: total / files.size + 1) }
+      end
+
+      it "queues a new ZIP for a bundle whose failures were all old size-limit bails" do
+        add_member_files
+        bundle_purchase.create_artifacts_and_send_receipt!
+        redirect = bundle_purchase.url_redirect
+        record_bundle_size(redirect, described_class::BUNDLE_ARCHIVE_OLD_SIZE_LIMIT)
+        create_failed_archives(redirect, described_class::BUNDLE_ARCHIVE_MAX_FAILED_ATTEMPTS, updated_at: old_failure_time)
+
+        expect { redirect.bundle_archive }.to change { entity_archive_count }.by(1)
+        expect(bundle.product_files_archives.alive.order(:id).last).to be_queueing
+      end
+
+      it "keeps counting failures of a bundle that fit the old limit" do
+        add_member_files
+        bundle_purchase.create_artifacts_and_send_receipt!
+        redirect = bundle_purchase.url_redirect
+        record_bundle_size(redirect, described_class::BUNDLE_ARCHIVE_OLD_SIZE_LIMIT - 1.megabyte)
+        create_failed_archives(redirect, described_class::BUNDLE_ARCHIVE_MAX_FAILED_ATTEMPTS, updated_at: old_failure_time)
+
+        expect { redirect.bundle_archive }.not_to change { entity_archive_count }
+      end
+
+      it "keeps counting failures recorded after the old limit was replaced" do
+        add_member_files
+        bundle_purchase.create_artifacts_and_send_receipt!
+        redirect = bundle_purchase.url_redirect
+        record_bundle_size(redirect, described_class::BUNDLE_ARCHIVE_OLD_SIZE_LIMIT)
+        create_failed_archives(redirect, described_class::BUNDLE_ARCHIVE_MAX_FAILED_ATTEMPTS,
+                               updated_at: described_class::BUNDLE_ARCHIVE_OLD_SIZE_FAILURES_BEFORE)
+
+        expect { redirect.bundle_archive }.not_to change { entity_archive_count }
+      end
+
+      it "queues a new ZIP when old failures cover a file whose size was never recorded" do
+        add_member_files
+        bundle_purchase.create_artifacts_and_send_receipt!
+        redirect = bundle_purchase.url_redirect
+        record_bundle_size(redirect, 1.megabyte)
+        redirect.bundle_archive_product_files.first.update_columns(size: nil)
+        create_failed_archives(redirect, described_class::BUNDLE_ARCHIVE_MAX_FAILED_ATTEMPTS, updated_at: old_failure_time)
+
+        expect { redirect.bundle_archive }.to change { entity_archive_count }.by(1)
+      end
+
+      it "keeps counting failures with an unrecorded size once the old limit was replaced" do
+        add_member_files
+        bundle_purchase.create_artifacts_and_send_receipt!
+        redirect = bundle_purchase.url_redirect
+        record_bundle_size(redirect, 1.megabyte)
+        redirect.bundle_archive_product_files.first.update_columns(size: nil)
+        create_failed_archives(redirect, described_class::BUNDLE_ARCHIVE_MAX_FAILED_ATTEMPTS,
+                               updated_at: described_class::BUNDLE_ARCHIVE_OLD_SIZE_FAILURES_BEFORE)
+
+        expect { redirect.bundle_archive }.not_to change { entity_archive_count }
+      end
+
+      it "stops retrying once new failures spend the budget the old ones did not" do
+        add_member_files
+        bundle_purchase.create_artifacts_and_send_receipt!
+        redirect = bundle_purchase.url_redirect
+        record_bundle_size(redirect, described_class::BUNDLE_ARCHIVE_OLD_SIZE_LIMIT)
+        create_failed_archives(redirect, described_class::BUNDLE_ARCHIVE_MAX_FAILED_ATTEMPTS, updated_at: old_failure_time)
+        create_failed_archives(redirect, described_class::BUNDLE_ARCHIVE_MAX_FAILED_ATTEMPTS, updated_at: Time.current)
+
+        expect { redirect.bundle_archive }.not_to change { entity_archive_count }
+      end
+    end
+
     it "follows the failed-archive retry rules when the latest attempt failed after an older too-large one" do
       add_member_files
       bundle_purchase.create_artifacts_and_send_receipt!
