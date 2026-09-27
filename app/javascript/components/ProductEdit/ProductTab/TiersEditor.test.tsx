@@ -29,6 +29,7 @@ const productEditContext = vi.hoisted(() => ({
       ) => void
     >(),
   earliestMembershipPriceChangeDate: new Date("2026-08-12T00:00:00.000Z"),
+  canCloseMembershipTiers: false,
 }));
 
 vi.mock("$app/components/ProductEdit/Layout", async (importOriginal) => ({
@@ -54,7 +55,10 @@ afterAll(() => {
   vi.unstubAllEnvs();
 });
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  productEditContext.canCloseMembershipTiers = false;
+});
 
 const tier: Tier = {
   id: "tier-id",
@@ -126,4 +130,84 @@ it("keeps the membership price-change date stable across rerenders", () => {
   fireEvent.click(view.getByLabelText("Apply price changes to existing customers"));
 
   expect(onChange.mock.lastCall?.[0]?.[0]?.subscription_price_change_effective_date).toMatch(/^2026-08-12/u);
+});
+
+const closedTier: Tier = { ...tier, closed_to_new_purchases: true };
+
+// Feeds each onChange back in as the next tiers, like the product tab does.
+const StatefulTiersEditor = ({ initial, onChange }: { initial: Tier[]; onChange: (tiers: Tier[]) => void }) => {
+  const [tiers, setTiers] = React.useState(initial);
+  return (
+    <CurrentSellerProvider value={null}>
+      <TiersEditor
+        tiers={tiers}
+        onChange={(next) => {
+          onChange(next);
+          setTiers(next);
+        }}
+      />
+    </CurrentSellerProvider>
+  );
+};
+
+it("puts the close switch right after the supporter cap and round-trips the boolean", () => {
+  productEditContext.canCloseMembershipTiers = true;
+  const onChange = vi.fn<(tiers: Tier[]) => void>();
+  const view = render(<StatefulTiersEditor initial={[closedTier]} onChange={onChange} />);
+
+  const supporterCap = view.getByLabelText("Maximum number of active supporters").closest("fieldset");
+  const closeSwitch = view.getByRole("switch", { name: "Close to new supporters" });
+  expect(supporterCap?.nextElementSibling).toBe(closeSwitch.closest("label"));
+  expect(closeSwitch).toHaveProperty("checked", true);
+
+  fireEvent.click(closeSwitch);
+  expect(onChange.mock.lastCall?.[0]?.[0]?.closed_to_new_purchases).toBe(false);
+  expect(closeSwitch).toHaveProperty("checked", false);
+
+  fireEvent.click(closeSwitch);
+  expect(onChange.mock.lastCall?.[0]?.[0]?.closed_to_new_purchases).toBe(true);
+  expect(closeSwitch).toHaveProperty("checked", true);
+});
+
+it("hides the close switch and leaves the setting off new tiers when the seller may not close tiers", () => {
+  const onChange = vi.fn<(tiers: Tier[]) => void>();
+  const view = render(<StatefulTiersEditor initial={[tier]} onChange={onChange} />);
+
+  expect(view.queryByRole("switch", { name: "Close to new supporters" })).toBeNull();
+
+  fireEvent.click(view.getByText("Add tier"));
+  expect(onChange.mock.lastCall?.[0]?.[1]).not.toHaveProperty("closed_to_new_purchases");
+  expect(view.queryByRole("switch", { name: "Close to new supporters" })).toBeNull();
+});
+
+it("starts a tier added alongside a closed tier as open", () => {
+  productEditContext.canCloseMembershipTiers = true;
+  const onChange = vi.fn<(tiers: Tier[]) => void>();
+  const view = render(<StatefulTiersEditor initial={[closedTier]} onChange={onChange} />);
+
+  fireEvent.click(view.getByText("Add tier"));
+  expect(onChange.mock.lastCall?.[0]?.[1]?.closed_to_new_purchases).toBe(false);
+  const [closedSwitch, addedSwitch] = view.getAllByRole("switch", { name: "Close to new supporters" });
+  expect(closedSwitch).toHaveProperty("checked", true);
+  expect(addedSwitch).toHaveProperty("checked", false);
+});
+
+it("keeps the close switch on a tier added after every tier was removed", () => {
+  productEditContext.canCloseMembershipTiers = true;
+  const onChange = vi.fn<(tiers: Tier[]) => void>();
+  const view = render(<StatefulTiersEditor initial={[closedTier]} onChange={onChange} />);
+
+  fireEvent.click(view.getByLabelText("Remove"));
+  fireEvent.click(view.getByText("Yes, remove"));
+  expect(onChange).toHaveBeenLastCalledWith([]);
+  expect(view.queryByRole("switch", { name: "Close to new supporters" })).toBeNull();
+
+  fireEvent.click(view.getByText("Add tier"));
+  expect(onChange.mock.lastCall?.[0]).toHaveLength(1);
+  expect(onChange.mock.lastCall?.[0]?.[0]?.closed_to_new_purchases).toBe(false);
+
+  const closeSwitch = view.getByRole("switch", { name: "Close to new supporters" });
+  expect(closeSwitch).toHaveProperty("checked", false);
+  fireEvent.click(closeSwitch);
+  expect(onChange.mock.lastCall?.[0]?.[0]?.closed_to_new_purchases).toBe(true);
 });

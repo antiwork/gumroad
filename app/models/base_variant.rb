@@ -13,6 +13,7 @@ class BaseVariant < ApplicationRecord
   include TouchesProductForPriceCache
 
   MINIMUM_DAYS_TIL_EXISTING_MEMBERSHIP_PRICE_CHANGE = 7
+  CLOSE_TO_NEW_BUYERS_FEATURE = :close_membership_tier_to_new_buyers
 
   has_and_belongs_to_many :purchases
   has_many :subscriptions, through: :purchases
@@ -34,6 +35,7 @@ class BaseVariant < ApplicationRecord
 
   has_flags 1 => :is_default_sku,
             2 => :apply_price_changes_to_existing_memberships,
+            3 => :closed_to_new_purchases,
             :column => "flags",
             :flag_query_mode => :bit_operator,
             check_for_column: false
@@ -75,6 +77,7 @@ class BaseVariant < ApplicationRecord
 
   def available?
     return false if deleted?
+    return false if closed_to_new_buyers?
     return true if max_purchase_count.nil?
 
     quantity_left > 0
@@ -84,6 +87,15 @@ class BaseVariant < ApplicationRecord
     return false if max_purchase_count.nil?
 
     quantity_left == 0
+  end
+
+  # Checked apart from quantity_left: a lapse frees inventory, and that must not reopen the tier.
+  def closed_to_new_buyers?
+    closed_to_new_purchases? && can_close_to_new_buyers?
+  end
+
+  def can_close_to_new_buyers?
+    is_a?(Variant) && link.is_tiered_membership? && Feature.active?(CLOSE_TO_NEW_BUYERS_FEATURE, link.user)
   end
 
   def free?
@@ -136,11 +148,12 @@ class BaseVariant < ApplicationRecord
     end
   end
 
-  def to_option(subscription_attrs: nil)
+  # +subscribed+: the viewer already holds this tier, so a close doesn't apply to them.
+  def to_option(subscription_attrs: nil, subscribed: false)
     {
       id: external_id,
       name: name == "Untitled" ? link.name : name || "",
-      quantity_left:,
+      quantity_left: !subscribed && closed_to_new_buyers? ? 0 : quantity_left,
       description: description || "",
       price_difference_cents:,
       recurrence_price_values: link.is_tiered_membership ? recurrence_price_values(subscription_attrs:) : nil,

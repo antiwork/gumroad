@@ -49,7 +49,7 @@ const areAllEnabledPricesZero = (recurrencePriceValues: Record<string, Recurrenc
 };
 
 export const TiersEditor = ({ tiers, onChange }: { tiers: Tier[]; onChange: (tiers: Tier[]) => void }) => {
-  const { updateProduct } = useProductEditContext();
+  const { updateProduct, canCloseMembershipTiers } = useProductEditContext();
   const updateVersion = (id: string, update: Partial<Tier>) => {
     onChange(tiers.map((version) => (version.id === id ? { ...version, ...update } : version)));
   };
@@ -90,6 +90,7 @@ export const TiersEditor = ({ tiers, onChange }: { tiers: Tier[]; onChange: (tie
             max_purchase_count: null,
             customizable_price: false,
             apply_price_changes_to_existing_memberships: false,
+            ...(canCloseMembershipTiers && { closed_to_new_purchases: false }),
             subscription_price_change_effective_date: null,
             subscription_price_change_message: null,
             recurrence_price_values: {
@@ -147,6 +148,7 @@ export const TiersEditor = ({ tiers, onChange }: { tiers: Tier[]; onChange: (tie
           <TierEditor
             key={version.id}
             tier={version}
+            canCloseTiers={canCloseMembershipTiers}
             updateTier={(update) => updateVersion(version.id, update)}
             onDelete={() => setDeletionModalVersionId(version.id)}
           />
@@ -161,10 +163,12 @@ const PLACEHOLDER_VALUES = { monthly: "5", quarterly: "15", biannually: "30", ye
 
 const TierEditor = ({
   tier,
+  canCloseTiers,
   updateTier,
   onDelete,
 }: {
   tier: Tier;
+  canCloseTiers: boolean;
   updateTier: (update: Partial<Tier>) => void;
   onDelete: () => void;
 }) => {
@@ -278,6 +282,13 @@ const TierEditor = ({
                 )}
               </NumberInput>
             </Fieldset>
+            {canCloseTiers ? (
+              <Switch
+                checked={tier.closed_to_new_purchases === true}
+                onChange={(e) => updateTier({ closed_to_new_purchases: e.target.checked })}
+                label="Close to new supporters"
+              />
+            ) : null}
             <Fieldset
               style={{
                 display: "grid",

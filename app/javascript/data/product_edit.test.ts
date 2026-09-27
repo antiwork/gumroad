@@ -122,6 +122,45 @@ describe("saveProduct with a failed upload", () => {
   });
 });
 
+describe("saveProduct with membership tiers", () => {
+  it("sends an explicit close setting and leaves an unserved one out", async () => {
+    Object.assign(globalThis, { Routes: { link_path: () => "/p/demo" } });
+    requestMock.mockReset().mockResolvedValue({ ok: true, status: 204 });
+    const tier = { id: "tier", name: "Tier", rich_content: [] };
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- fixture only carries the fields the save reads
+    const product = {
+      files: [],
+      public_files: [],
+      rich_content: [],
+      variants: [
+        { ...tier, closed_to_new_purchases: false },
+        { ...tier, id: "legacy-tier" },
+      ],
+      has_same_rich_content_for_all_variants: false,
+      covers: [],
+      availabilities: [],
+      confirmed_removed_variant_ids: [],
+      confirmed_removed_rich_content_ids: [],
+      preserved_rich_content_ids: [],
+      editor_revision: null,
+      allow_installment_plan: false,
+    } as unknown as Parameters<typeof saveProduct>[2];
+
+    await saveProduct("demo", "product-id", product, "usd");
+
+    expect(requestMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          variants: [
+            { ...tier, closed_to_new_purchases: false },
+            { ...tier, id: "legacy-tier" },
+          ],
+        }),
+      }),
+    );
+  });
+});
+
 describe("scalarSettingsForSave", () => {
   const product = (overrides = {}) => ({
     custom_permalink: null,
