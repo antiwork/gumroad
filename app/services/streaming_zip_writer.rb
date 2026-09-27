@@ -66,6 +66,7 @@ class StreamingZipWriter
     entry = Entry.new(name: name.b, size:, offset: @bytes_written,
                       zip64_local: size > FOUR_BYTE_MAX || compressed_size.to_i > FOUR_BYTE_MAX)
     @entry_open = true
+    completed = false
     begin
       write_local_header(entry)
       data = EntryData.new(self)
@@ -86,13 +87,13 @@ class StreamingZipWriter
       entry.crc32 = data.crc32
       entry.compressed_size = data.compressed_size
       write_data_descriptor(entry)
-    rescue Exception
-      @failed = true
-      raise
+      @entries << entry
+      completed = true
     ensure
+      # Also catches a break or return out of the block, which rescue does not see.
+      @failed = true unless completed
       @entry_open = false
     end
-    @entries << entry
   end
 
   # Deflates what the block writes with #write_entry's settings and returns the compressed length,
@@ -109,6 +110,7 @@ class StreamingZipWriter
   def close
     raise FailedError, "an earlier entry failed" if @failed
     raise ClosedError, "the archive is already closed" if @closed
+    raise "an entry is still open" if @entry_open
 
     @closed = true
     central_directory_offset = @bytes_written

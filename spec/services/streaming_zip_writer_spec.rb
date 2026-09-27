@@ -116,6 +116,28 @@ describe StreamingZipWriter do
     expect { writer.close }.to raise_error(described_class::FailedError)
   end
 
+  it "fails the archive when the entry block exits early" do
+    writer = described_class.new(StringIO.new)
+    stream_part = lambda do
+      writer.write_entry("partial.bin", size: 100) do |entry_data|
+        entry_data.write("x" * 50)
+        break
+      end
+    end
+
+    stream_part.call
+
+    expect { writer.write_entry("next.bin", size: 1) { _1.write("x") } }.to raise_error(described_class::FailedError)
+    expect { writer.close }.to raise_error(described_class::FailedError)
+  end
+
+  it "refuses to close inside an entry" do
+    writer = described_class.new(StringIO.new)
+
+    expect { writer.write_entry("open.txt", size: 1) { writer.close } }.to raise_error(RuntimeError, /still open/)
+    expect { writer.close }.to raise_error(described_class::FailedError)
+  end
+
   it "stores the modification time in UTC and leaves the given time unchanged" do
     local_header_time = lambda do |modified_at|
       sink = StringIO.new
