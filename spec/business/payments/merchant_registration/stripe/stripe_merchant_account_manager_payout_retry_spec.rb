@@ -618,8 +618,15 @@ describe StripeMerchantAccountManager do
         create(:user_compliance_info_business, user:, zip_code: "94107")
 
         expect { described_class.create_account(user, passphrase:) }.to raise_error(Stripe::APIConnectionError)
+        user.comments.with_type_payout_note.alive.each do |note|
+          next if note.json_data["abandoned_at"].present?
+
+          note.json_data["abandoned_at"] = Time.current.iso8601
+          note.save!
+        end
         expect { described_class.create_account(user, passphrase:) }.to raise_error(Stripe::APIConnectionError)
 
+        expect(keys.first).to eq("abandoned-key")
         expect(keys.last).not_to eq("abandoned-key")
       end
 
