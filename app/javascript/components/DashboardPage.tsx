@@ -561,7 +561,7 @@ export const DashboardPage = ({
           <p>
             {processing_sales_count.toLocaleString()} {processing_sales_count === 1 ? "sale is" : "sales are"} still
             processing and {processing_sales_count === 1 ? "is" : "are"} not included in these totals.{" "}
-            <a href={Routes.customers_path()}>View customers</a>
+            <a href={Routes.customers_path()}>View sales</a>
           </p>
         ) : null}
 

@@ -301,4 +301,26 @@ RSpec.describe Purchase::AudienceMember, defer_audience_refresh: true do
       expect(RefreshAudienceMemberJob).to have_enqueued_sidekiq_job(purchase.email, seller.id)
     end
   end
+
+  describe "a processing-only buyer" do
+    it "is not in the customer email audience" do
+      product = create(:product, user: seller)
+      processing = create(
+        :purchase_in_progress,
+        link: product,
+        seller:,
+        email: "processing-only@example.com",
+        stripe_status: "processing",
+        can_contact: true,
+      )
+      completed = create(:purchase, link: product, seller:, email: "completed@example.com")
+      drain_audience_refreshes
+
+      expect(processing.reload.seller_visible_in_flight?).to be(true)
+      expect(processing.should_be_audience_member?).to be(false)
+      expect(AudienceMember.filter(seller_id: seller.id, params: { type: "customer" }).map(&:email))
+        .to eq([completed.email])
+      expect(AudienceMember.where(seller:, email: processing.email).where(customer: true)).to be_empty
+    end
+  end
 end

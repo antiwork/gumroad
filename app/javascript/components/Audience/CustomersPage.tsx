@@ -6,6 +6,7 @@ import { format } from "date-fns-tz";
 import * as React from "react";
 
 import { Customer, Query, SortKey, getPagedCustomers } from "$app/data/customers";
+import { getRecipientCount } from "$app/data/installments";
 import { CurrencyCode, formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 import { asyncVoid } from "$app/utils/promise";
 import { RecurrenceId, recurrenceLabels } from "$app/utils/recurringPricing";
@@ -239,6 +240,71 @@ const CustomersPage = ({
     minimumLicenseUses,
   ]);
 
+  const [emailAudience, setEmailAudience] = React.useState<"unknown" | "empty" | "present">("unknown");
+  React.useEffect(() => {
+    if (!can_send_emails || !hasActiveFilters) {
+      setEmailAudience("unknown");
+      return;
+    }
+
+    setEmailAudience("unknown");
+
+    const permalinks = (items: Item[], type: Item["type"]) =>
+      items.flatMap((item) => {
+        if (item.type !== type) return [];
+        if (type === "variant") return [item.id];
+        const product = products.find(({ id }) => id === item.id);
+        return product ? [product.permalink] : [];
+      });
+    const boughtProducts = permalinks(includedItems, "product");
+    const boughtVariants = permalinks(includedItems, "variant");
+    const boughtCount = boughtProducts.length + boughtVariants.length;
+    const request = getRecipientCount({
+      paid_more_than_cents: minimumAmount,
+      paid_less_than_cents: maximumAmount,
+      bought_from: country,
+      active_customers_only: activeCustomersOnly,
+      minimum_license_uses: minimumLicenseUses,
+      installment_type: boughtCount === 1 ? (boughtVariants.length === 1 ? "variant" : "product") : "seller",
+      created_after: createdAfter ? lightFormat(createdAfter, "yyyy-MM-dd") : "",
+      created_before: createdBefore ? lightFormat(createdBefore, "yyyy-MM-dd") : "",
+      bought_products: boughtProducts,
+      bought_variants: boughtVariants,
+      not_bought_products: permalinks(excludedItems, "product"),
+      not_bought_variants: permalinks(excludedItems, "variant"),
+      affiliate_products: null,
+    });
+    let cancelled = false;
+    void request.response
+      .then((response) => {
+        if (!cancelled) setEmailAudience(response.recipient_count > 0 ? "present" : "empty");
+      })
+      .catch((error: unknown) => {
+        if (cancelled || error instanceof AbortError) return;
+        setEmailAudience("unknown");
+      });
+    return () => {
+      cancelled = true;
+      request.cancel();
+    };
+  }, [
+    can_send_emails,
+    hasActiveFilters,
+    includedItems,
+    excludedItems,
+    products,
+    minimumAmount,
+    maximumAmount,
+    country,
+    activeCustomersOnly,
+    minimumLicenseUses,
+    createdAfter,
+    createdBefore,
+  ]);
+  const processingOnly = count === 0 && processing_customers.length > 0;
+  // Unknown is not empty: a failed count must not hide a bundle-component audience.
+  const noCompletedBuyerToEmail = emailAudience === "empty";
+
   if (!currentSeller) return null;
   const timeZoneAbbreviation = format(new Date(), "z", { timeZone: currentSeller.timeZone.name });
   const showNameColumn = customers.some((customer) => customer.name);
@@ -446,10 +512,28 @@ const CustomersPage = ({
               </PopoverContent>
             </Popover>
             {can_send_emails && hasActiveFilters ? (
-              <NavigationButton color="accent" href={Routes.new_email_path(emailFilterParams)}>
-                <Envelope aria-hidden="true" className="size-5" />
-                Email these customers
-              </NavigationButton>
+              noCompletedBuyerToEmail ? (
+                <div className="flex flex-col gap-1">
+                  <Button color="accent" disabled>
+                    <Envelope aria-hidden="true" className="size-5" />
+                    Email these customers
+                  </Button>
+                  <p className="text-sm text-muted">
+                    {processingOnly
+                      ? `No completed buyer to email. ${
+                          processing_customers.length === 1
+                            ? "This sale is still processing."
+                            : "These sales are still processing."
+                        }`
+                      : "No completed buyer to email."}
+                  </p>
+                </div>
+              ) : (
+                <NavigationButton color="accent" href={Routes.new_email_path(emailFilterParams)}>
+                  <Envelope aria-hidden="true" className="size-5" />
+                  Email these customers
+                </NavigationButton>
+              )
             ) : null}
           </div>
         }

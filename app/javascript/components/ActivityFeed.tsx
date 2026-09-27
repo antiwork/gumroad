@@ -3,6 +3,7 @@ import * as React from "react";
 
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 
+import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { Placeholder } from "$app/components/ui/Placeholder";
@@ -41,8 +42,7 @@ const ProcessingSale = ({
     <Dollar className="size-5" />
     <span>
       Processing sale of <a href={Routes.short_link_path({ id: product_unique_permalink })}>{product_name}</a> for{" "}
-      {formatPriceCentsWithCurrencySymbol("usd", price_cents, { symbolFormat: "short", noCentsIfWhole: true })}. This is
-      not in your earnings yet.
+      {formatPriceCentsWithCurrencySymbol("usd", price_cents, { symbolFormat: "short", noCentsIfWhole: true })}
     </span>
   </>
 );
@@ -60,8 +60,23 @@ const FollowRemoved = ({ details: { email, name } }: { details: FollowItemDetail
   </>
 );
 
+const formatProcessingSaleTime = (timestamp: string, locale: string, timeZone: string) => {
+  const createdAt = new Date(timestamp);
+  // The sales row uses the viewer's current year for this choice. Keep the same rule so the two times match.
+  return createdAt.toLocaleDateString(locale, {
+    day: "numeric",
+    month: "short",
+    year: createdAt.getFullYear() !== new Date().getFullYear() ? "numeric" : undefined,
+    hour: "numeric",
+    minute: "numeric",
+    hour12: true,
+    timeZone,
+  });
+};
+
 export const ActivityFeed = ({ items }: { items: ActivityItem[] }) => {
   const loggedInUser = useLoggedInUser();
+  const currentSeller = useCurrentSeller();
   const userAgentInfo = useUserAgentInfo();
 
   if (!items.length) {
@@ -92,7 +107,9 @@ export const ActivityFeed = ({ items }: { items: ActivityItem[] }) => {
             {type === "follower_removed" && <FollowRemoved details={details} />}
           </span>
           <span className="text-muted" suppressHydrationWarning>
-            {new Date(timestamp).toLocaleString(userAgentInfo.locale, { dateStyle: "medium", timeStyle: "short" })}
+            {type === "processing_sale" && currentSeller
+              ? formatProcessingSaleTime(timestamp, userAgentInfo.locale, currentSeller.timeZone.name)
+              : new Date(timestamp).toLocaleString(userAgentInfo.locale, { dateStyle: "medium", timeStyle: "short" })}
           </span>
         </CardContent>
       ))}

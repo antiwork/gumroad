@@ -32,7 +32,9 @@ vi.hoisted(() => {
       new_product_path: url("/products/new"),
       posts_path: url("/posts"),
       profile_path: url("/profile"),
+      customers_path: url("/customers"),
       sales_dashboard_path: url("/sales"),
+      short_link_path: url("/l/figma"),
       settings_payments_path: url("/settings/payments"),
       settings_social_connections_path: url("/settings/social_connections"),
       tax_center_path: url("/tax_center"),
@@ -112,7 +114,7 @@ const props: DashboardPageProps = {
   processing_sales_count: 0,
 };
 
-const renderDashboard = (currentSeller: CurrentSeller) =>
+const renderDashboard = (currentSeller: CurrentSeller, overrides: Partial<DashboardPageProps> = {}) =>
   render(
     <LoggedInUserProvider value={loggedInUser}>
       <CurrentSellerProvider value={currentSeller}>
@@ -128,7 +130,7 @@ const renderDashboard = (currentSeller: CurrentSeller) =>
           }}
         >
           <UserAgentProvider value={{ isMobile: false, locale: "en-US" }}>
-            <DashboardPage {...props} />
+            <DashboardPage {...props} {...overrides} />
           </UserAgentProvider>
         </DomainSettingsProvider>
       </CurrentSellerProvider>
@@ -156,5 +158,48 @@ describe("DashboardPage under-18 banner", () => {
     expect(screen.getByText(/a parent or guardian needs to be added to your account/u)).toBeTruthy();
     expect(screen.getByRole("link", { name: "Add a guardian" }).getAttribute("href")).toBe("/settings/payments");
     expect(screen.queryByText(/cannot verify a seller under 18/u)).toBeNull();
+  });
+});
+
+describe("processing sales", () => {
+  it("links to Sales and shows the processing sale in the seller timezone", () => {
+    const timestamp = "2026-09-27T07:14:00.000Z";
+    const createdAt = new Date(timestamp);
+    const sellerTime = createdAt.toLocaleDateString("en-US", {
+      day: "numeric",
+      month: "short",
+      year: createdAt.getFullYear() !== new Date().getFullYear() ? "numeric" : undefined,
+      hour: "numeric",
+      minute: "numeric",
+      hour12: true,
+      timeZone: "America/Los_Angeles",
+    });
+
+    renderDashboard(
+      { ...minor, timeZone: { name: "America/Los_Angeles", offset: -420 } },
+      {
+        processing_sales_count: 1,
+        activity_items: [
+          {
+            type: "processing_sale",
+            timestamp,
+            details: {
+              price_cents: 2900,
+              email: "buyer@example.com",
+              full_name: "Buyer",
+              product_name: "Figma UI Kit",
+              product_unique_permalink: "figma",
+            },
+          },
+        ],
+      },
+    );
+
+    expect(screen.getByRole("link", { name: "View sales" }).getAttribute("href")).toBe("/customers");
+    expect(screen.queryByRole("link", { name: "View customers" })).toBeNull();
+    expect(screen.queryByText(/not in your earnings yet/iu)).toBeNull();
+    expect(screen.getByText(/not included in these totals/iu)).toBeTruthy();
+    expect(screen.getByText(sellerTime)).toBeTruthy();
+    expect(screen.getByText(sellerTime).textContent).toContain("12:14 AM");
   });
 });
