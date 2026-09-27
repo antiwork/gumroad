@@ -2407,7 +2407,10 @@ module StripeMerchantAccountManager
   # routing number, currency and country must each match, or :bank_link_not_restored keeps the failure note.
   def self.restore_local_bank_link!(bank_account, stripe_account)
     if bank_account.stripe_bank_account_id.present?
-      return :noop_metadata_match if bank_account.stripe_connect_account_id == stripe_account.id
+      account_id = stripe_account["id"].presence
+      account_id ||= stripe_account.id if account_id.nil? && stripe_account.respond_to?(:id)
+      # A metadata match with no readable account id cannot prove the link is stale.
+      return :noop_metadata_match if account_id.blank? || bank_account.stripe_connect_account_id == account_id
 
       # The row still names a destination on an older account. Re-sending the bank is the repair.
       return :bank_link_on_other_account
