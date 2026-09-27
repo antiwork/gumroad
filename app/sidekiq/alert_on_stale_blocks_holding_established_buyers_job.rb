@@ -225,7 +225,7 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
     def burst_siblings(email, window)
       @decline_scan_incomplete = false
       purchases = Purchase.successful.where(email:)
-      guids = owned_blocked_values(purchases, :browser_guid, PlatformBlock::TYPES[:browser_guid], window)
+      guids = clearable_browser_guids(purchases, window)
       stripe_fingerprints, other_visuals = owned_card_values(purchases, window)
       browser_truncated = guids.size > MAX_SIBLING_VALUES
       card_truncated = truncated_sibling_list?(stripe_fingerprints, other_visuals)
@@ -243,7 +243,7 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
         PlatformBlock.active.where(object_type:, object_value: values[object_type], blocked_by: nil, blocked_at: window).to_a
       end
       browser_guids = siblings.filter_map { |sibling| sibling.object_value if sibling.object_type == PlatformBlock::TYPES[:browser_guid] }
-      return [nil, true] if recent_velocity_still_fires?(email, browser_guids)
+      return [nil, true] if recent_velocity_still_fires?(email, browser_guids) || protected_browser_velocity?(email, purchases, window)
 
       siblings = siblings.reject { |sibling| velocity_protected_browser?(sibling) || fraud_rule_still_wants_card?(sibling, stripe_values: stripe_fingerprints) }
       # An unfinished fraud scan must keep the email. Clearing it would leave the card with no later retry.
@@ -253,9 +253,32 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
       [siblings, browser_truncated || card_truncated]
     end
 
-    def owned_blocked_values(purchases, column, object_type, window)
-      blocked = PlatformBlock.active.where(object_type:, blocked_by: nil, blocked_at: window).select(:object_value)
-      purchases.where(column => blocked).where.not(column => [nil, ""]).distinct.limit(MAX_SIBLING_VALUES + 1).pluck(column)
+    # All-time protected browsers stay blocked, but they must not fill the page. Otherwise every
+    # later sweep sees the same cap and never reaches a sibling it could clear.
+    def clearable_browser_guids(purchases, window)
+      blocked = burst_block_values(PlatformBlock::TYPES[:browser_guid], window)
+      owned = purchases.where(browser_guid: blocked).where.not(browser_guid: [nil, ""])
+      owned.where.not(browser_guid: all_time_protected_scope(purchases, window))
+           .distinct.limit(MAX_SIBLING_VALUES + 1).pluck(:browser_guid)
+    end
+
+    def all_time_protected_scope(purchases, window)
+      blocked = burst_block_values(PlatformBlock::TYPES[:browser_guid], window)
+      guid_scope = purchases.where(browser_guid: blocked).where.not(browser_guid: [nil, ""]).select(:browser_guid)
+      threshold = Purchase::Blockable::MAX_NUMBER_OF_FAILED_FINGERPRINTS
+      Purchase.countable_card_testing_failures
+              .where(browser_guid: guid_scope)
+              .group(:browser_guid)
+              .having("COUNT(DISTINCT #{card_identity_sql}) >= ?", threshold)
+              .select(:browser_guid)
+    end
+
+    def protected_browser_velocity?(email, purchases, window)
+      recent_velocity_still_fires?(email, all_time_protected_scope(purchases, window))
+    end
+
+    def burst_block_values(object_type, window)
+      PlatformBlock.active.where(object_type:, blocked_by: nil, blocked_at: window).select(:object_value)
     end
 
     def owned_card_values(purchases, window)
@@ -442,9 +465,7 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
       threshold = Purchase::Blockable::MAX_NUMBER_OF_FAILED_FINGERPRINTS
       email_cards = card_identities(failures.where(email:), threshold)
       return true if email_cards.size >= threshold
-
-      guids = Array(guids).compact_blank
-      return false if guids.empty?
+      return false if guids.is_a?(Array) && guids.compact_blank.empty?
 
       guid_adds_enough_cards?(failures, guids, email_cards, threshold - email_cards.size)
     end

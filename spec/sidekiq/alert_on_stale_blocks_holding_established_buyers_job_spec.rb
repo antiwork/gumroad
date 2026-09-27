@@ -776,6 +776,28 @@ describe AlertOnStaleBlocksHoldingEstablishedBuyersJob do
       expect(other_browser.reload.blocked_at).to be_nil
     end
 
+    it "clears past a protected browser that would fill the lookup cap" do
+      stub_const("#{described_class}::MAX_SIBLING_VALUES", 1)
+      Purchase::Blockable::MAX_NUMBER_OF_FAILED_FINGERPRINTS.times do |index|
+        create(:purchase, purchase_state: "failed", browser_guid: guid, stripe_fingerprint: "capped-old-#{index}",
+                          email: "capped-old#{index}@example.com",
+                          charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                          created_at: (Purchase::Blockable::CARD_TESTING_WATCH_PERIOD + 1.day).ago)
+      end
+      create(:purchase, email:, browser_guid: "second-browser", purchase_state: "successful", price_cents: 500, created_at: history_starts_at)
+      at = 2.years.ago
+      email_block = block_email(blocked_at: at)
+      card_block = block_value(:charge_processor_fingerprint, fingerprint, blocked_at: at)
+      protected_browser = block_value(:browser_guid, guid, blocked_at: at)
+      clearable_browser = block_value(:browser_guid, "second-browser", blocked_at: at)
+
+      described_class.new.perform
+      expect(protected_browser.reload.blocked_at).to be_present
+      expect(email_block.reload.blocked_at).to be_nil
+      expect(card_block.reload.blocked_at).to be_nil
+      expect(clearable_browser.reload.blocked_at).to be_nil
+    end
+
     it "clears no sibling when the email block is held" do
       create(:user, email:, user_risk_state: "suspended_for_fraud")
       at = 2.years.ago
