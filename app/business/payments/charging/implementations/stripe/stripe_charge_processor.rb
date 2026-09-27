@@ -576,6 +576,23 @@ class StripeChargeProcessor
     end
   end
 
+  # The newest destination refund on the seller's charge belongs to this refund only when no other
+  # refund landed after it, so a refund that reversed the transfer is paired through its reversal.
+  private def destination_payment_refund_for(refund, destination_transfer, stripe_destination_payment)
+    return stripe_destination_payment.refunds.first if refund[:transfer_reversal].blank?
+
+    reversal_id = self.class.transfer_reversal_id(refund)
+    reversal = destination_transfer[:reversals]&.find { _1.id == reversal_id } ||
+      Stripe::Transfer.retrieve_reversal(destination_transfer.id, reversal_id)
+    destination_payment_refund_id = reversal[:destination_payment_refund]
+    destination_payment_refund_id = destination_payment_refund_id.id if destination_payment_refund_id.respond_to?(:id)
+    return stripe_destination_payment.refunds.first if destination_payment_refund_id.blank?
+
+    stripe_destination_payment.refunds.find { _1.id == destination_payment_refund_id } ||
+      Stripe::Refund.retrieve({ id: destination_payment_refund_id, expand: %w[balance_transaction] },
+                              { stripe_account: destination_transfer.destination })
+  end
+
   def get_refund(refund_id, merchant_account: nil)
     with_stripe_error_handler do
       if merchant_migrated? merchant_account
@@ -600,7 +617,7 @@ class StripeChargeProcessor
         stripe_destination_payment = Stripe::Charge.retrieve({ id: destination_transfer.destination_payment,
                                                                expand: %w[refunds.data.balance_transaction application_fee.refunds] },
                                                              { stripe_account: destination_transfer.destination })
-        destination_payment_refund = stripe_destination_payment.refunds.first
+        destination_payment_refund = destination_payment_refund_for(refund, destination_transfer, stripe_destination_payment)
         if destination_payment_refund
           balance_transaction_id = destination_payment_refund.balance_transaction
           if balance_transaction_id.is_a?(String)
@@ -685,6 +702,11 @@ class StripeChargeProcessor
     raise ChargeProcessorInvalidRequestError.new(original_error: e)
   rescue Stripe::APIConnectionError, Stripe::APIError => e
     raise ChargeProcessorUnavailableError.new("Stripe error while refunding a charge: #{e.message}", original_error: e)
+  end
+
+  def self.transfer_reversal_id(refund)
+    transfer_reversal = refund[:transfer_reversal]
+    transfer_reversal.respond_to?(:id) ? transfer_reversal.id : transfer_reversal.to_s
   end
 
   def self.debit_stripe_account_for_refund_fee(credit:, collect: true)
