@@ -161,4 +161,20 @@ describe("version selector accessibility", () => {
 
     expect(document.activeElement).toBe(screen.getByRole("radio", { name: "Collector's Edition" }));
   });
+
+  it("leaves a sold-out cheaper option out of the advertised low price", () => {
+    render(
+      <ConfigurationSelector
+        product={{
+          ...versionedProduct,
+          options: [{ ...versionedOption(0), quantity_left: 0 }, versionedOption(1)],
+        }}
+        selection={initialSelection}
+        setSelection={() => {}}
+        discount={null}
+      />,
+    );
+
+    expect(document.querySelector("[itemprop='lowPrice']")?.textContent).toBe("14.99");
+  });
 });

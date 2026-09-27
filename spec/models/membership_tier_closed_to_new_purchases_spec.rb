@@ -156,6 +156,11 @@ describe "Closing a membership tier to new purchases" do
       Feature.deactivate_user(:close_membership_tier_to_new_buyers, seller)
     end
 
+    it "scopes a Flipper UI seller toggle to that seller" do
+      expect(Link).to receive(:refresh_discover_prices_for_closed_tiers).with(user: seller)
+      Flipper[:close_membership_tier_to_new_buyers].enable_actor(Flipper::Actor.new("User;#{seller.id}"))
+    end
+
     it "does not let a lapsed supporter restart a closed tier" do
       lapse(lapsing_purchase)
       subscription = lapsing_purchase.subscription.reload
