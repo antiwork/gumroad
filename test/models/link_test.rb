@@ -3051,7 +3051,9 @@ class LinkTest < ActiveSupport::TestCase
                   "<p>See https://example.com/settings.&lt;/p&gt;&lt;p&gt;It</p>" \
                   "<a href=\"/x\">/settings</a>" \
                   "<p>and/or<strong>more</strong></p>" \
-                  "<pre>/usr/bin</pre>" \
+                  "<pre>GET /api/users</pre>" \
+                  "<p>Call /api/users</p><p>next</p>" \
+                  "<p>Wait /settings...</p><p>more</p>" \
                   "<a href=\"/settings.</p><p>It\">label</a>" \
                   "<a href=\"https://en.wikipedia.org/wiki/Schindler&#39;s_List\">film</a>"
     result = create_product(description:).html_safe_description
@@ -3065,7 +3067,9 @@ class LinkTest < ActiveSupport::TestCase
     assert_includes result, ">https://example.com/x </b>"
     assert_includes result, ">/settings </a>"
     assert_includes result, "and/or<strong>more</strong>"
-    assert_includes result, "<pre>/usr/bin</pre>"
+    assert_includes result, "Call /api/users </p>"
+    assert_includes result, "/settings... </p>"
+    assert_includes result, "<pre>GET /api/users</pre>"
     assert_includes result, "It saves."
     assert_includes published_urls, "https://en.wikipedia.org/wiki/Schindler's_List"
   end

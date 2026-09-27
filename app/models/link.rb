@@ -2015,7 +2015,7 @@ class Link < ApplicationRecord
     # A crawler that allows "<" inside a URL will request the following markup
     # when a URL or root-relative path sits against the next tag. Attribute
     # values are not text, and the slash in a closing tag is not a path.
-    DESCRIPTION_URL_BEFORE_TAG = %r{(?<=>|\s)(?:(?:https?://|www\.)[^\s<>]+|/[^\s<>]*[^\s<>.]\.?)(?=<)}i
+    DESCRIPTION_URL_BEFORE_TAG = %r{((?:\A|>|\s|\(|\[|\{|:)(?:(?:https?://|ftp://|www\.)[^\s<>]+|/[^\s<>]*[^\s<>.]\.*))(?=<)}i
     private_constant :DESCRIPTION_URL_BEFORE_TAG
 
     def drop_markup_description_urls(fragment)
@@ -2023,10 +2023,8 @@ class Link < ApplicationRecord
         attribute = node.name == "a" ? "href" : "src"
         node.remove_attribute(attribute) unless crawl_safe_description_url?(node[attribute])
       end
-      separated = fragment.to_html.gsub(DESCRIPTION_URL_BEFORE_TAG) do |token|
-        next token if token.start_with?("/") && fragment.css("pre, code").any? { |node| node.text.include?(token) }
-
-        "#{token} "
+      separated = fragment.to_html.gsub(%r{<(?:pre|code)\b[^>]*>.*?</(?:pre|code)>|#{DESCRIPTION_URL_BEFORE_TAG.source}}m) do |token|
+        token.start_with?("<") ? token : "#{Regexp.last_match(1)} "
       end
       separated == fragment.to_html ? fragment : Loofah.html4_fragment(separated)
     end
