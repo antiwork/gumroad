@@ -236,12 +236,12 @@ class CheckoutPresenter
     show_current_prices = subscription.deactivated? ||
       (current_recurrence_alive && (subscription.alive? || subscription.overdue_for_charge?))
     options = (variant_category = product.variant_categories_alive.first) ? variant_category.variants.in_order.alive.map do |variant|
-      subscribed = tier_attrs[:variants].include?(variant)
+      subscribed = !subscription.deactivated? && tier_attrs[:variants].include?(variant)
       show_current_prices ? variant.to_option(subscribed:) : variant.to_option(subscription_attrs: tier_attrs, subscribed:)
     end : []
     tier = subscription.original_purchase.variant_attributes.first
     if tier.present? && !options.any? { |option| option[:id] == tier.external_id }
-      options << tier.to_option(subscription_attrs: tier_attrs, subscribed: true)
+      options << tier.to_option(subscription_attrs: tier_attrs, subscribed: !subscription.deactivated?)
     end
     discount = subscription_discount_for_next_charge(subscription, buyer: logged_in_user)
     subscription_price = subscription.current_subscription_price_cents(authenticated_offer_code_buyer: logged_in_user)

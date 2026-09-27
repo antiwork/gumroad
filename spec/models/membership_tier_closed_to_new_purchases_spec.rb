@@ -156,6 +156,26 @@ describe "Closing a membership tier to new purchases" do
       Feature.deactivate_user(:close_membership_tier_to_new_buyers, seller)
     end
 
+    it "does not let a lapsed supporter restart a closed tier" do
+      lapse(lapsing_purchase)
+      subscription = lapsing_purchase.subscription.reload
+      props = CheckoutPresenter.new(logged_in_user: nil, ip: nil).subscription_manager_props(subscription:)
+      own_tier = props[:product][:options].find { _1[:id] == tier.external_id }
+
+      expect(own_tier[:quantity_left]).to eq(0)
+
+      result = Subscription::UpdaterService.new(
+        subscription:,
+        params: { variants: [tier.external_id], price_id: tier.prices.alive.is_buy.first.external_id },
+        logged_in_user: nil,
+        gumroad_guid: "close-tier-restart",
+        remote_ip: "127.0.0.1"
+      ).perform
+
+      expect(result[:success]).to be(false)
+      expect(subscription.reload.deactivated_at).to be_present
+    end
+
     it "keeps the subscriber's own tier selectable in the subscription manager" do
       props = CheckoutPresenter.new(logged_in_user: nil, ip: nil).subscription_manager_props(subscription: remaining_purchase.subscription)
       own_tier = props[:product][:options].find { _1[:id] == tier.external_id }
