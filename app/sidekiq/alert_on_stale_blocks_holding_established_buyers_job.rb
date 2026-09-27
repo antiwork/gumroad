@@ -50,6 +50,8 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
   # blocked rather than turning one clear into an unbounded lookup.
   MAX_SIBLING_VALUES = 200
   SUBSCRIPTION_CARD_LOOKUP_LIMIT = 20
+  # Indian-card renewals can stay in progress for 26 hours before the failure webhook writes the block.
+  RENEWAL_DECLINE_LOOKBACK = 2.days
 
   def perform
     scan = scan_for_stale_blocks
@@ -223,7 +225,7 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
       return false if value.blank?
 
       if stripe_values.include?(value)
-        return true if subscription_card_fraud_decline?(value)
+        return true if subscription_card_fraud_decline?(value, sibling.blocked_at)
 
         decline = stripe_fraud_decline(value)
         return !decline.buyer_has_clean_payment_history? if decline
@@ -243,24 +245,21 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
     end
 
     # A renewal blocks the card it charged only when that charge is recurring and an earlier
-    # settled purchase of the same subscription used that card id. The purchase fingerprint can
-    # differ from the card, so the card id is the provenance. Failed rows are then read by
-    # subscription_id. Past the lookup cap the card stays.
-    def subscription_card_fraud_decline?(value)
+    # settled purchase of the same subscription used that card id. purchases.credit_card_id has
+    # no index and must not be the driving lookup. A renewal can stay in progress for 26 hours
+    # before the failure webhook, so the decline is in that lookback on the purchase_state,
+    # created_at index.
+    def subscription_card_fraud_decline?(value, blocked_at)
+      return false if blocked_at.blank?
+
       card_ids = CreditCard.where(stripe_fingerprint: value).limit(SUBSCRIPTION_CARD_LOOKUP_LIMIT).pluck(:id)
       return true if card_ids.size == SUBSCRIPTION_CARD_LOOKUP_LIMIT
       return false if card_ids.empty?
 
-      subscription_ids = Purchase.successful.non_free
-                                 .where(credit_card_id: card_ids)
-                                 .where.not(subscription_id: nil)
-                                 .distinct.limit(SUBSCRIPTION_CARD_LOOKUP_LIMIT)
-                                 .pluck(:subscription_id)
-      return true if subscription_ids.size == SUBSCRIPTION_CARD_LOOKUP_LIMIT
-      return false if subscription_ids.empty?
-
       declines = Purchase.failed
-                         .where(subscription_id: subscription_ids, credit_card_id: card_ids)
+                         .where(created_at: (blocked_at - RENEWAL_DECLINE_LOOKBACK)..(blocked_at + Onetime::ClearMistakenBuyerBlocks::BLOCK_CREATION_WINDOW))
+                         .where(credit_card_id: card_ids)
+                         .where.not(subscription_id: nil)
                          .where(fraud_decline_sql, codes: PurchaseErrorCode::AUTO_BLOCK_ERROR_CODES)
                          .limit(SUBSCRIPTION_CARD_LOOKUP_LIMIT)
                          .to_a

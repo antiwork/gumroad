@@ -316,9 +316,9 @@ describe AlertOnStaleBlocksHoldingEstablishedBuyersJob do
       subscription_id = Subscription.connection.insert(
         Subscription.sanitize_sql_array(["INSERT INTO subscriptions (link_id, created_at, updated_at, flags) VALUES (?, ?, ?, 0)", create(:product).id, now, now])
       )
-      prior.update_columns(credit_card_id: charged.id, subscription_id:, stripe_fingerprint: "fp-column-differs")
-      renewal.update_columns(credit_card_id: charged.id, subscription_id:)
       at = 2.years.ago
+      prior.update_columns(credit_card_id: charged.id, subscription_id:, stripe_fingerprint: "fp-column-differs")
+      renewal.update_columns(credit_card_id: charged.id, subscription_id:, created_at: at)
       block_email(blocked_at: at)
       card_block = block_value(:charge_processor_fingerprint, saved, blocked_at: at)
 
