@@ -1084,6 +1084,41 @@ describe UrlRedirectsController, inertia: true do
       end
     end
 
+    describe "seller's own test purchase" do
+      let(:seller) { @product.user }
+
+      before do
+        @url_redirect.purchase.update!(purchaser: seller, email: seller.email, purchase_state: "test_successful")
+        @url_redirect.update!(has_been_seen: true)
+        @request.remote_ip = @url_redirect.purchase.ip_address
+        cookies.encrypted[:confirmed_redirect] = @token
+      end
+
+      it "sends a visitor to log in even with the confirmation cookie and the purchase IP" do
+        get :download_page, params: { id: @token }
+        expect(response).to redirect_to(login_path(next: request.fullpath))
+      end
+
+      it "sends another signed-in user to the purchaser check" do
+        sign_in create(:user)
+        get :download_page, params: { id: @token }
+        expect(response).to redirect_to(url_redirect_check_purchaser_path(@token, next: request.path))
+      end
+
+      it "does not let a mobile API token for another user in" do
+        other = create(:user)
+        token = create("doorkeeper/access_token", application: create(:oauth_application, owner: other), resource_owner_id: other.id, scopes: "mobile_api")
+        get :download_page, params: { id: @token, access_token: token.token, mobile_token: Api::Mobile::BaseController::MOBILE_TOKEN }
+        expect(response).to redirect_to(url_redirect_check_purchaser_path(@token, next: request.path))
+      end
+
+      it "lets the signed-in seller in" do
+        sign_in seller
+        get :download_page, params: { id: @token }
+        expect(response).to be_successful
+      end
+    end
+
     describe "coffee product" do
       let(:url_redirect) { create(:url_redirect, purchase: create(:purchase, link: create(:coffee_product))) }
 
@@ -2533,6 +2568,20 @@ describe UrlRedirectsController, inertia: true do
       expect { post :confirm, params: { id: @token, email: nil } }.not_to raise_error
       expect(response).to redirect_to confirm_page_path(id: @url_redirect.token)
     end
+
+    it "does not accept the purchase email for the seller's own test purchase" do
+      seller = @product.user
+      @url_redirect.purchase.update!(purchaser: seller, email: seller.email, purchase_state: "test_successful")
+
+      post :confirm, params: { id: @token, email: seller.email, destination: "download_page" }
+
+      expect(response).to redirect_to(login_path(next: confirm_page_path(id: @token, destination: "download_page")))
+      expect(cookies.encrypted[:confirmed_redirect]).to be_nil
+
+      sign_in seller
+      post :confirm, params: { id: @token, email: seller.email, destination: "download_page" }
+      expect(response).to redirect_to(url_redirect_download_page_path(@token))
+    end
   end
 
   describe "GET send_to_kindle" do
@@ -2540,6 +2589,18 @@ describe UrlRedirectsController, inertia: true do
     let(:purchase) { create(:purchase, link: product) }
     let!(:url_redirect) { create(:url_redirect, link: product, purchase:) }
     let(:product_file) { product.product_files.alive.last }
+
+    it "refuses the seller's own test purchase unless the seller is signed in" do
+      purchase.update!(purchaser: product.user, email: product.user.email, purchase_state: "test_successful")
+      params = { id: url_redirect.token, file_external_id: product_file.external_id, email: "dude@kindle.com" }
+
+      post(:send_to_kindle, params:)
+      expect(response).to have_http_status(:not_found)
+
+      sign_in product.user
+      post(:send_to_kindle, params:)
+      expect(response.parsed_body["success"]).to eq(true)
+    end
 
     it "queues send_to_kindle for a valid kindle email and creates consumption event" do
       expect do

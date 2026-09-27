@@ -300,6 +300,10 @@ class UrlRedirectsController < ApplicationController
   def confirm
     forwardable_query_params = {}
     forwardable_query_params[:display] = params[:display] if params[:display].present?
+    if @url_redirect.purchase&.is_test_purchase? && @url_redirect.purchase.purchaser != logged_in_user
+      return redirect_to login_path(next: confirm_page_path(id: @url_redirect.token, destination: params[:destination], **forwardable_query_params))
+    end
+
     if @url_redirect.purchase.email.casecmp(params[:email].to_s.strip.downcase).zero?
       set_confirmed_redirect_cookie
       if params[:destination] == "download_page"
@@ -323,6 +327,7 @@ class UrlRedirectsController < ApplicationController
       return e404_json
     end
     return e404_json if @url_redirect.rental_expired?
+    return e404_json if purchase&.is_test_purchase? && purchase.purchaser != logged_in_user && !logged_in_user&.is_team_member?
     return e404_json if purchase&.subscription && !purchase.subscription.grant_access_to_product?
     if purchase && user_signed_in? && purchase.purchaser.present? && logged_in_user != purchase.purchaser && !viewer_owns_subscription?(purchase) && !logged_in_user.is_team_member?
       return e404_json
@@ -537,6 +542,14 @@ class UrlRedirectsController < ApplicationController
           sign_in current_api_user
           return if purchase && purchase.purchaser && purchase.purchaser == logged_in_user
         end
+      end
+
+      # A seller's own purchase carries the seller's public email, so the email/cookie/IP checks
+      # below prove nothing about who holds the link; only the signed-in seller gets in.
+      if purchase&.is_test_purchase?
+        return if purchase.purchaser == logged_in_user || logged_in_user&.is_team_member?
+        return redirect_to url_redirect_check_purchaser_path(@url_redirect.token, next: request.path) if user_signed_in?
+        return redirect_to login_path(next: request.fullpath)
       end
 
       # Confirmation asks for the purchase's own email, which a transferred membership's new owner
