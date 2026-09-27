@@ -18,8 +18,8 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
   # Only `email` blocks. Their object_value IS the buyer's identity, so history joins to the block
   # directly. The other types cannot be resolved from a block alone: a browser_guid or card
   # fingerprint names a device rather than a person, and an email_domain covers everyone on that
-  # domain, so "the buyer behind this block" is not a question those rows can answer without a
-  # failure row to anchor on — which is exactly what the failure-keyed job already has.
+  # domain, so "the buyer behind this block" is not a question those rows can answer on their own.
+  # Browser and card rows are cleared only as siblings of a cleared email block (#burst_siblings).
   BLOCK_TYPE = PlatformBlock::TYPES[:email]
 
   # The account-side veto: a suspension is a decision about this person, independent of whether
@@ -39,6 +39,16 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
 
   # Blocks are counted in batches to keep each grouped query's IN list bounded.
   HISTORY_COUNT_BATCH = 500
+
+  # Purchase#block_buyer! writes the browser and card rows in the same synchronous burst as the email
+  # row. Clearing only the email leaves the buyer refused on the card or device, and no other job
+  # clears those once the buyer stops retrying. IP rows are left alone: they are shared and expire.
+  SIBLING_TYPES = [PlatformBlock::TYPES[:browser_guid], PlatformBlock::TYPES[:charge_processor_fingerprint]].freeze
+  SIBLING_BURST_WINDOW = 2.minutes
+
+  # A shared address can carry thousands of purchases; past this many distinct values the rest stay
+  # blocked rather than turning one clear into an unbounded lookup.
+  MAX_SIBLING_VALUES = 200
 
   def perform
     scan = scan_for_stale_blocks
@@ -96,8 +106,10 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
             block.reload
             still_active = block.blocked_at.present? && (block.expires_at.nil? || block.expires_at > Time.current)
             if still_active && block.blocked_by.nil? && !newly_disputed_or_suspended?(email)
+              siblings = burst_siblings(block, email)
               block.unblock!
-              cleared << entry
+              siblings.each(&:unblock!)
+              cleared << entry.merge(siblings: siblings.size)
             else
               held << entry.merge(reason: :changed_since_scan)
             end
@@ -151,6 +163,34 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
       $redis.set(RedisKey.stale_block_sweep_cursor, cursor_id)
     rescue => e
       ErrorNotifier.notify(e)
+    end
+
+    # The unattended browser/card rows written in this email block's own burst, restricted to values
+    # this buyer's purchases carry so a stranger blocked in the same two minutes is never matched.
+    # blocked_at, not created_at: PlatformBlock.add! reuses the row, so created_at is first sighting.
+    # A browser the card-testing velocity rule still wants is kept.
+    def burst_siblings(block, email)
+      purchases = Purchase.where(email:)
+      values = {
+        PlatformBlock::TYPES[:browser_guid] => purchases.where.not(browser_guid: [nil, ""]).distinct.limit(MAX_SIBLING_VALUES).pluck(:browser_guid),
+        PlatformBlock::TYPES[:charge_processor_fingerprint] =>
+          (purchases.where.not(stripe_fingerprint: [nil, ""]).distinct.limit(MAX_SIBLING_VALUES).pluck(:stripe_fingerprint) +
+           purchases.where.not(card_visual: [nil, ""]).distinct.limit(MAX_SIBLING_VALUES).pluck(:card_visual)).uniq,
+      }
+      window = (block.blocked_at - SIBLING_BURST_WINDOW)..(block.blocked_at + SIBLING_BURST_WINDOW)
+
+      SIBLING_TYPES.flat_map do |object_type|
+        next [] if values[object_type].empty?
+
+        PlatformBlock.active.where(object_type:, object_value: values[object_type], blocked_by: nil, blocked_at: window).to_a
+      end.reject { |sibling| velocity_protected_browser?(sibling) }
+    end
+
+    def velocity_protected_browser?(sibling)
+      return false unless sibling.object_type == PlatformBlock::TYPES[:browser_guid]
+
+      failures = Purchase.countable_card_testing_failures.where(browser_guid: sibling.object_value)
+      Purchase.distinct_card_count(failures) >= Purchase::Blockable::MAX_NUMBER_OF_FAILED_FINGERPRINTS
     end
 
     # Downcased email => settled non-free purchase count, using the same constants and veto scopes as
@@ -253,6 +293,7 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
 
     def line_for(entry, cleared:)
       verb = cleared ? "cleared" : "held — linked to a suspended account"
+      verb += " with #{entry[:siblings]} card/browser block#{"s" if entry[:siblings] != 1} from the same burst" if cleared && entry[:siblings].to_i.positive?
       "• #{entry[:email]} — #{entry[:settled_purchases]} settled purchases, #{verb}, " \
         "blocked by email since #{entry[:blocked_at].to_date}"
     end

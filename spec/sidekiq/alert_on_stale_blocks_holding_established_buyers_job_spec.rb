@@ -178,6 +178,85 @@ describe AlertOnStaleBlocksHoldingEstablishedBuyersJob do
     expect(lines.second).to include("newer@example.com")
   end
 
+  describe "clearing the card and browser rows from the email block's burst" do
+    let(:guid) { "guid-established" }
+    let(:fingerprint) { "fp-established" }
+
+    def block_value(type, value, blocked_at: 2.years.ago, **attrs)
+      travel_to(blocked_at) { PlatformBlock.add!(object_type: PlatformBlock::TYPES[type], object_value: value, **attrs) }
+    end
+
+    before { settled_purchases(established_count, browser_guid: guid, stripe_fingerprint: fingerprint) }
+
+    it "clears the buyer's own browser and card rows written in the same burst" do
+      at = 2.years.ago
+      email_block = block_email(blocked_at: at)
+      guid_block = block_value(:browser_guid, guid, blocked_at: at + 1.second)
+      card_block = block_value(:charge_processor_fingerprint, fingerprint, blocked_at: at + 1.second)
+
+      expect(message).to include(email, "cleared with 2 card/browser blocks from the same burst")
+      expect([email_block, guid_block, card_block].map { _1.reload.blocked_at }).to all(be_nil)
+    end
+
+    it "leaves a row of the buyer's written outside the burst" do
+      block_email(blocked_at: 2.years.ago)
+      card_block = block_value(:charge_processor_fingerprint, fingerprint, blocked_at: 1.year.ago)
+
+      message
+      expect(card_block.reload.blocked_at).to be_present
+    end
+
+    it "leaves a stranger's row written in the same burst" do
+      at = 2.years.ago
+      block_email(blocked_at: at)
+      stranger = block_value(:charge_processor_fingerprint, "fp-stranger", blocked_at: at)
+
+      message
+      expect(stranger.reload.blocked_at).to be_present
+    end
+
+    it "leaves a row a human wrote" do
+      at = 2.years.ago
+      block_email(blocked_at: at)
+      card_block = block_value(:charge_processor_fingerprint, fingerprint, blocked_at: at, by: create(:admin_user).id)
+
+      message
+      expect(card_block.reload.blocked_at).to be_present
+    end
+
+    it "leaves the IP row, which is shared and expires on its own" do
+      at = 2.years.ago
+      block_email(blocked_at: at)
+      ip_block = block_value(:ip_address, "203.0.113.9", blocked_at: at)
+
+      message
+      expect(ip_block.reload.blocked_at).to be_present
+    end
+
+    it "keeps a browser the card-testing velocity rule still wants" do
+      Purchase::Blockable::MAX_NUMBER_OF_FAILED_FINGERPRINTS.times do |index|
+        create(:purchase, purchase_state: "failed", browser_guid: guid, stripe_fingerprint: "tested-#{index}",
+                          email: "tester#{index}@example.com")
+      end
+      at = 2.years.ago
+      block_email(blocked_at: at)
+      guid_block = block_value(:browser_guid, guid, blocked_at: at)
+
+      message
+      expect(guid_block.reload.blocked_at).to be_present
+    end
+
+    it "clears no sibling when the email block is held" do
+      create(:user, email:, user_risk_state: "suspended_for_fraud")
+      at = 2.years.ago
+      block_email(blocked_at: at)
+      card_block = block_value(:charge_processor_fingerprint, fingerprint, blocked_at: at)
+
+      message
+      expect(card_block.reload.blocked_at).to be_present
+    end
+  end
+
   describe "the account-suspension veto (Sahil, gumroad-private#1746)" do
     # The whole reason this job holds rather than clears: a block tied to a suspended account is a
     # fraud call, not staleness, even though the block row itself carries blocked_by: nil.
