@@ -623,9 +623,10 @@ class StripeChargeProcessor
                                                                expand: %w[refunds.data.balance_transaction application_fee.refunds] },
                                                              { stripe_account: destination_transfer.destination })
         check_external_refund_fee!(stripe_destination_payment) if for_external_refund
-        # Stripe does not link a fee refund to its refund, so with an application fee both legs come
-        # from the newest refunds, as before: pairing only the destination refund would mix two refunds.
-        destination_payment_refund = if charge.application_fee
+        destination_payment_application_fee_refund = stripe_destination_payment.application_fee.refunds.first if stripe_destination_payment.application_fee
+        # Stripe does not link a fee refund to its refund. Pairing the destination refund while both
+        # fee legs are used mixes the older seller amount with the newer fee credit.
+        destination_payment_refund = if application_fee_refund.try(:balance_transaction) && destination_payment_application_fee_refund
           stripe_destination_payment.refunds.first
         else
           destination_payment_refund_for(refund, destination_transfer, stripe_destination_payment, destination_payment_refund_id)
@@ -638,7 +639,6 @@ class StripeChargeProcessor
             destination_payment_refund_balance_transaction = balance_transaction_id
           end
         end
-        destination_payment_application_fee_refund = stripe_destination_payment.application_fee.refunds.first if stripe_destination_payment.application_fee
 
         # Reverse the same way the charge was recorded. The account's currency is only needed for
         # that case, so pay for the lookup exactly then.
