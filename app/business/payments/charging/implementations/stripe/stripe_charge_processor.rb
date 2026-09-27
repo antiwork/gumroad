@@ -727,10 +727,8 @@ class StripeChargeProcessor
     charge = charge_refund.charge
     return [charge_refund, :no_transfer] if charge[:destination].blank? || charge[:transfer].blank?
 
-    # Stripe reversed the transfer when it created this refund, so there is nothing to create. Read that
-    # reversal out rather than keeping the flow of funds as first read: get_refund pairs the destination
-    # refund by id, and without one it takes the newest destination refund on the seller's charge, which
-    # belongs to this refund only when no other refund landed after it.
+    # Stripe reversed the transfer with this refund. Re-read its destination refund: the newest refund on
+    # the seller's charge may belong to a different refund.
     if charge_refund.refund[:transfer_reversal].present?
       reversal = Stripe::Transfer.retrieve_reversal(charge[:transfer], self.class.transfer_reversal_id(charge_refund.refund))
       return [charge_refund, :reversal_unpaired] if reversal[:destination_payment_refund].blank?

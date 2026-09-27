@@ -127,12 +127,13 @@ module Charge::Refundable
         end
         next [] if unrecorded.empty?
 
+        # Book the refund for every purchase or for none: the reversal takes the seller's money for the
+        # whole charge, and a partial booking would stay partial on every redelivery.
+        blocked_purchase_ids = unrecorded.reject { _1.refund_recordable_from?(flow_of_funds_for.(_1, charge_refund)) }.map(&:id)
+        next [] if blocked_purchase_ids.any?
+
         if charge_refund.is_a?(StripeChargeRefund) && charge_refund.charge[:destination].present? &&
             merchant_account&.holder_of_funds == HolderOfFunds::STRIPE
-          # The reversal takes the seller's money for the whole charge, so make it only when every purchase can be booked.
-          blocked_purchase_ids = unrecorded.reject { _1.refund_recordable_from?(flow_of_funds_for.(_1, charge_refund)) }.map(&:id)
-          next [] if blocked_purchase_ids.any?
-
           charge_refund, transfer_outcome = processor.reverse_transfer_for_external_refund(charge_refund, merchant_account:)
         end
         # An unpaired refund is still booked, so the sale shows as refunded, but it changes no seller

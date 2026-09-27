@@ -162,6 +162,29 @@ RSpec.describe "External Stripe refund accounting" do
       end
     end
 
+    context "on a combined charge where one purchase cannot take its share" do
+      let(:refund) { stripe(id: "re_ambiguous", amount: 1500, charge: "ch_ambiguous", status: "succeeded", currency: "usd", transfer_reversal: nil, balance_transaction: stripe(amount: -1500, currency: "usd")) }
+      let(:charge) { stripe(id: "ch_ambiguous", amount: 1500, destination: merchant.charge_processor_merchant_id, transfer: "tr_ambiguous", application_fee: fee, on_behalf_of: nil) }
+
+      it "books no purchase, and alerts with the one that cannot be booked" do
+        purchase.update!(is_part_of_combined_charge: true, stripe_partially_refunded: true)
+        create(:refund, purchase:, amount_cents: 400, total_transaction_cents: 400, status: "succeeded", processor_refund_id: "re_prior")
+        sibling = create(:purchase_with_balance, link: create(:product, user: seller, price_cents: 500), seller:, merchant_account: merchant,
+                                                 price_cents: 500, total_transaction_cents: 500, is_part_of_combined_charge: true,
+                                                 stripe_transaction_id: "ch_ambiguous")
+        combined = create(:charge, processor_transaction_id: "ch_ambiguous", amount_cents: 1500, merchant_account: merchant, purchases: [purchase, sibling])
+        event.extras[:refunded_amount_cents] = 1500
+
+        combined.handle_event_refund_updated!(event)
+
+        expect(Refund.where(processor_refund_id: "re_ambiguous")).to be_empty
+        expect([purchase.reload.stripe_refunded?, sibling.reload.stripe_refunded?]).to eq([false, false])
+        expect(ErrorNotifier).to have_received(:notify).with(
+          Charge::Refundable::EXTERNAL_REFUND_ALERT, hash_including(blocked_purchase_ids: [purchase.id], recorded: false)
+        )
+      end
+    end
+
     context "when only the destination payment exposes the fee" do
       let(:fee) { nil }
       let(:destination_fee) { stripe(id: "fee_ambiguous", refunds: fee_refunds(fee_refund("fr_unrelated", 30))) }
