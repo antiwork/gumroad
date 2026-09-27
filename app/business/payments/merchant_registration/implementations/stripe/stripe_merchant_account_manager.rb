@@ -2068,11 +2068,16 @@ module StripeMerchantAccountManager
     end
     return :unreconciled if incomplete
 
-    # Stripe will not change an account's country. Skipping it would open a second account.
     compatible = matches.reject do |account|
       account_country_conflicts_with_legal_entity?(stripe_account_country(account), country)
     end
-    return :unreconciled if compatible.empty? && matches.any?
+    # Stripe will not change an account's country. Delete the unlinked old account so the
+    # next create can open one for the current country. A failed delete must not open a second.
+    if compatible.empty? && matches.any?
+      return nil if release_country_mismatched_accounts!(matches, country)
+
+      return :unreconciled
+    end
 
     ids = compatible.map { |account| account["id"] }.uniq
     return :unreconciled if ids.size > 1
@@ -2083,9 +2088,29 @@ module StripeMerchantAccountManager
     # must not be adopted; the next create opens a new one.
     account = Stripe::Account.retrieve(ids.first)
     return nil if account["deleted"]
-    return :unreconciled if account_country_conflicts_with_legal_entity?(stripe_account_country(account), country)
+    if account_country_conflicts_with_legal_entity?(stripe_account_country(account), country)
+      return nil if release_country_mismatched_accounts!([account], country)
+
+      return :unreconciled
+    end
 
     account
+  end
+
+  private_class_method
+  def self.release_country_mismatched_accounts!(accounts, country)
+    mismatched = accounts.select do |account|
+      account_country_conflicts_with_legal_entity?(stripe_account_country(account), country)
+    end
+    return false if mismatched.empty?
+    return false if mismatched.any? { |account| MerchantAccount.alive.stripe.exists?(charge_processor_merchant_id: account["id"]) }
+
+    mismatched.each do |account|
+      Stripe::Account.delete(account["id"])
+    rescue Stripe::StripeError
+      return false
+    end
+    true
   end
 
   private_class_method
