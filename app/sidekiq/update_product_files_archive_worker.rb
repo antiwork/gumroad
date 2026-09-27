@@ -43,6 +43,8 @@ class UpdateProductFilesArchiveWorker
   UPLOAD_PART_SIZE = 16.megabytes
   UPLOAD_CONCURRENCY = 4
   SOURCE_READ_ATTEMPTS = 3
+  # Bounds all reads of one source, so a connection that keeps dropping after a few bytes ends the build.
+  MAX_SOURCE_READS = 50
 
   class SourceChangedError < StandardError; end
   class ArchiveSizeMismatchError < StandardError; end
@@ -173,14 +175,14 @@ class UpdateProductFilesArchiveWorker
     Rails.logger.info("UpdateProductFilesArchive Job #{product_files_archive.id} stopped - another run holds the lock")
   rescue NoMemoryError, Aws::S3::Errors::NoSuchKey, Seahorse::Client::NetworkingError, Aws::S3::Errors::ServiceError,
          Aws::S3::MultipartUploadError, SourceChangedError, StreamingZipWriter::SizeMismatchError, ArchiveSizeMismatchError => e
-    ErrorNotifier.notify(e)
     Rails.logger.info("UpdateProductFilesArchive Job #{product_files_archive.id} failed - #{e.class.name}: #{e.message}")
-    # Only the lock holder may change the row: with no holder, Sidekiq's retry rebuilds it.
+    # Only the lock holder may change the row: with no holder, Sidekiq's retry rebuilds it. A run
+    # that took the lock aborts this run's upload, so that failure is expected and not reported.
     holder = $redis.get(@lock_key)
-    if holder != @lock_token
-      raise e if holder.nil?
-      return
-    end
+    return if holder && holder != @lock_token
+
+    ErrorNotifier.notify(e)
+    raise e if holder.nil?
     reset_for_rebuild = product_files_archive.with_lock do
       product_files_archive.mark_failed! if product_files_archive.in_progress?
       product_files_archive.queueing?
@@ -225,7 +227,13 @@ class UpdateProductFilesArchiveWorker
     def stream_source(key, size, etag, entry_data)
       received = 0
       failed_reads = 0
+      reads = 0
       while received < size
+        if reads >= MAX_SOURCE_READS
+          raise Seahorse::Client::NetworkingError.new(Errno::ECONNRESET.new, "#{key} needed more than #{MAX_SOURCE_READS} reads")
+        end
+
+        reads += 1
         before = received
         error = nil
         begin

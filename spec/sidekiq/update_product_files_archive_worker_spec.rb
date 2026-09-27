@@ -284,6 +284,26 @@ describe UpdateProductFilesArchiveWorker, :vcr do
         expect(zip_entries(archive)).to eq("Video.bin" => [Zlib.crc32(source), source])
       end
 
+      it "fails a source that needs more reads than the read limit, even when each read makes progress" do
+        stub_const("#{described_class}::MAX_SOURCE_READS", 5)
+        archive = archive_for(installment, [add_file(installment, Random.new(8).bytes(1.megabyte), display_name: "Video")])
+        reads = 0
+        allow_any_instance_of(Aws::S3::Client).to receive(:get_object).and_wrap_original do |original, params, &block|
+          next original.call(params, &block) if block.nil?
+
+          reads += 1
+          original.call(params) do |chunk|
+            block.call(chunk.byteslice(0, 1.kilobyte))
+            raise Errno::ECONNRESET
+          end
+        end
+
+        expect { described_class.new.perform(archive.id) }.to raise_error(Seahorse::Client::NetworkingError, /more than 5 reads/)
+
+        expect(reads).to eq(5)
+        expect(archive.reload).to be_failed
+      end
+
       it "fails and aborts the upload when a source read completes without bytes" do
         archive = archive_for(installment, [add_file(installment, Random.new(8).bytes(2.megabytes), display_name: "Video")])
         reads = 0
@@ -457,6 +477,19 @@ describe UpdateProductFilesArchiveWorker, :vcr do
 
         expect(archive.reload).to be_in_progress
         expect($redis.get(described_class.lock_key(archive.id))).to eq("other-run")
+      end
+
+      it "does not report a failure that another run's lock takeover caused" do
+        archive = archive_for(installment, [add_file(installment, "bytes", display_name: "Notes")])
+        allow_any_instance_of(Aws::S3::Client).to receive(:upload_part).and_wrap_original do |_original, _params|
+          $redis.set(described_class.lock_key(archive.id), "other-run")
+          raise Aws::S3::Errors::NoSuchUpload.new(nil, "aborted by the other run")
+        end
+        expect(ErrorNotifier).not_to receive(:notify)
+
+        described_class.new.perform(archive.id)
+
+        expect(archive.reload).to be_in_progress
       end
 
       it "stops reading sources as soon as an upload part fails" do
