@@ -7,5 +7,9 @@ class RefreshWishlistSitemapDailyWorker
 
   def perform
     SitemapService.new.generate_wishlists
+  rescue SitemapService::GenerationInProgress
+    # A product or category run owns the shared SitemapGenerator config; writing now would
+    # land this run's links in that run's path (and vice versa). Come back once it's done.
+    self.class.perform_in(SitemapService::GENERATION_RETRY_DELAY)
   end
 end

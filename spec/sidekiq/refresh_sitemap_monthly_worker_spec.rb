@@ -28,5 +28,17 @@ describe RefreshSitemapMonthlyWorker do
 
       expect(RefreshSitemapDailyWorker.jobs.size).to eq(0)
     end
+
+    # retry is 0 here, and the product chain this worker enqueues starts immediately, so a
+    # lost race for the shared SitemapGenerator config must re-enqueue the categories pass.
+    it "re-enqueues itself when the categories generation has to wait for another run" do
+      service = instance_double(SitemapService)
+      allow(SitemapService).to receive(:new).and_return(service)
+      expect(service).to receive(:generate_categories).and_raise(SitemapService::GenerationInProgress)
+
+      described_class.new.perform
+
+      expect(described_class).to have_enqueued_sidekiq_job.in(SitemapService::GENERATION_RETRY_DELAY)
+    end
   end
 end

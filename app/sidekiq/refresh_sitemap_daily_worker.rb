@@ -8,5 +8,9 @@ class RefreshSitemapDailyWorker
 
   def perform(date = Date.current.to_s)
     SitemapService.new.generate(date)
+  rescue SitemapService::GenerationInProgress
+    # The wishlist/category job owns the shared SitemapGenerator config right now, so these
+    # links would be written into its path. Regenerating a month is idempotent — come back.
+    self.class.perform_in(SitemapService::GENERATION_RETRY_DELAY, date)
   end
 end

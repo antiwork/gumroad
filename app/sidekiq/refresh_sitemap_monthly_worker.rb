@@ -22,5 +22,10 @@ class RefreshSitemapMonthlyWorker
     # After the product enqueue loop: retry is 0, so a category failure must not
     # cost the product sitemaps their refresh.
     SitemapService.new.generate_categories
+  rescue SitemapService::GenerationInProgress
+    # retry is 0 here, so losing the race to the product chain this worker just enqueued
+    # (its first job runs immediately) must re-enqueue rather than drop the categories
+    # sitemap for a month. Re-running the loop is idempotent: months regenerate wholesale.
+    self.class.perform_in(SitemapService::GENERATION_RETRY_DELAY)
   end
 end

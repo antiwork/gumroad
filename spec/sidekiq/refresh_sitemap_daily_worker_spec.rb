@@ -27,5 +27,17 @@ describe RefreshSitemapDailyWorker do
     it "retries a failed run" do
       expect(described_class.sidekiq_options["retry"]).to eq(3)
     end
+
+    # A run that starts while another sitemap generation holds the shared
+    # SitemapGenerator::Sitemap config would write its products into that run's path.
+    it "re-enqueues itself when another sitemap generation is already running" do
+      service = instance_double(SitemapService)
+      allow(SitemapService).to receive(:new).and_return(service)
+      expect(service).to receive(:generate).with("2026-08-01").and_raise(SitemapService::GenerationInProgress)
+
+      described_class.new.perform("2026-08-01")
+
+      expect(described_class).to have_enqueued_sidekiq_job("2026-08-01").in(SitemapService::GENERATION_RETRY_DELAY)
+    end
   end
 end

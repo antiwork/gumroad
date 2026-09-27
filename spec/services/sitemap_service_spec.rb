@@ -180,4 +180,49 @@ describe SitemapService do
       expect(redis_namespace.get(cache_key)).to eq nil
     end
   end
+
+  # Two generations in one process share SitemapGenerator::Sitemap's class-level output
+  # path, so an overlapping run writes its own links into the other run's file. The 2026-08
+  # monthly product index was replaced by a 49,685-URL wishlist file exactly this way.
+  describe "generation lock" do
+    let(:lock_key) { RedisKey.sitemap_generation_lock }
+
+    after { $redis.del(lock_key) }
+
+    it "refuses to generate products while another generation holds the lock" do
+      product = create(:product, created_at: Time.current)
+      date = product.created_at
+      sitemap_file_path = "#{Rails.public_path}/sitemap/products/monthly/#{date.year}/#{date.month}/sitemap.xml.gz"
+      FileUtils.rm_f(sitemap_file_path) # earlier examples' output persists on disk
+      $redis.set(lock_key, "another-run", nx: true, ex: 60)
+
+      expect { service.generate(date) }.to raise_error(SitemapService::GenerationInProgress)
+      expect(File.exist?(sitemap_file_path)).to be false
+    end
+
+    it "refuses to generate wishlists or categories while another generation holds the lock" do
+      $redis.set(lock_key, "another-run", nx: true, ex: 60)
+
+      expect { service.generate_wishlists }.to raise_error(SitemapService::GenerationInProgress)
+      expect { service.generate_categories }.to raise_error(SitemapService::GenerationInProgress)
+    end
+
+    it "releases the lock after a run so the next run can write its own file" do
+      create(:product, created_at: Time.current)
+
+      service.generate(Date.current)
+      expect($redis.get(lock_key)).to be_nil
+
+      service.generate_wishlists
+      expect($redis.get(lock_key)).to be_nil
+    end
+
+    it "releases the lock when a run raises" do
+      allow(SitemapGenerator::Sitemap).to receive(:create).and_raise("boom")
+
+      expect { service.generate_categories }.to raise_error("boom")
+
+      expect($redis.get(lock_key)).to be_nil
+    end
+  end
 end
