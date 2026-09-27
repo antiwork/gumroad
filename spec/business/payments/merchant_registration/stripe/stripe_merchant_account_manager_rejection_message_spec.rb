@@ -96,4 +96,10 @@ describe StripeMerchantAccountManager, ".payout_setup_rejection_seller_message" 
       )
     ).to be_nil
   end
+
+  it "tells the seller a no-verdict failure was not a rejection of their details" do
+    expect(described_class.no_verdict_seller_message(Stripe::APIError.new("An unknown error occurred")))
+      .to include("Nothing you entered was rejected")
+    expect(described_class.no_verdict_seller_message(rejection("Invalid value", "individual[id_number]"))).to be_nil
+  end
 end

@@ -80,7 +80,7 @@ describe StripeMerchantAccountManager, :vcr do
         allow_any_instance_of(UserComplianceInfo).to receive(:external_id).and_return("G_-mnBf9b1j9A7a4ub4nFQ==")
         allow_any_instance_of(TosAgreement).to receive(:external_id).and_return("G_-mnBf9b1j9A7a4ub4nFQ==")
         allow_any_instance_of(BankAccount).to receive(:external_id).and_return("G_-mnBf9b1j9A7a4ub4nFQ==")
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
         merchant_account = subject.create_account(user, passphrase: "1234")
         stripe_account = Stripe::Account.retrieve(merchant_account.charge_processor_merchant_id)
         expect(stripe_account["metadata"]["user_id"]).to eq(user.external_id)
@@ -163,7 +163,7 @@ describe StripeMerchantAccountManager, :vcr do
         end
 
         it "strips out params whitespaces" do
-          expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+          expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
           merchant_account = subject.create_account(user, passphrase: "1234")
           expect(merchant_account.charge_processor_id).to eq(StripeChargeProcessor.charge_processor_id)
           expect(merchant_account.charge_processor_merchant_id).to be_present
@@ -262,7 +262,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the account params" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
         subject.create_account(user, passphrase: "1234")
       end
 
@@ -371,7 +371,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
         subject.create_account(user, passphrase: "1234")
       end
 
@@ -492,7 +492,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
         expect(Stripe::Account).to receive(:create_person).with(anything, expected_person_params).and_call_original
         subject.create_account(user, passphrase: "1234")
       end
@@ -526,9 +526,9 @@ describe StripeMerchantAccountManager, :vcr do
           end
         end
 
-        allow(Stripe::Account).to receive(:create).and_wrap_original do |original, params|
+        allow(Stripe::Account).to receive(:create).and_wrap_original do |original, params, opts = nil|
           collect_binary.call(params)
-          original.call(params)
+          original.call(params, opts)
         end
         allow(Stripe::Account).to receive(:create_person).and_wrap_original do |original, account_id, params|
           collect_binary.call(params)
@@ -872,7 +872,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
         subject.create_account(user, passphrase: "1234")
       end
 
@@ -1000,7 +1000,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
         expect(Stripe::Account).to receive(:create_person).with(anything, expected_person_params).and_call_original
         subject.create_account(user, passphrase: "1234")
       end
@@ -1078,7 +1078,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
         subject.create_account(user, passphrase: "1234")
       end
 
@@ -1203,7 +1203,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
         expect(Stripe::Account).to receive(:create_person).with(anything, expected_person_params).and_call_original
         subject.create_account(user, passphrase: "1234")
       end
@@ -1282,7 +1282,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -1383,7 +1383,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -1511,7 +1511,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -1613,7 +1613,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
         expect(Stripe::Account).to receive(:update_person).with(anything, anything, hash_including(full_name_aliases: [""])).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
@@ -1713,7 +1713,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -1823,7 +1823,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -1924,7 +1924,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -2006,7 +2006,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -2087,7 +2087,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -2168,7 +2168,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -2249,7 +2249,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -2342,7 +2342,7 @@ describe StripeMerchantAccountManager, :vcr do
         before { stub_const("StripeMerchantAccountManager::NEW_ACCOUNT_CREATION_BLOCKED_COUNTRIES", []) }
 
         it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-          expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+          expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
           merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -2424,7 +2424,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -2506,7 +2506,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -2587,7 +2587,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -2668,7 +2668,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -2749,7 +2749,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -2830,7 +2830,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -2911,7 +2911,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -2992,7 +2992,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -3075,7 +3075,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -3157,7 +3157,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -3237,7 +3237,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -3319,7 +3319,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -3401,7 +3401,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -3483,7 +3483,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -3501,7 +3501,7 @@ describe StripeMerchantAccountManager, :vcr do
 
         it "constructs an IBAN from the SWIFT/BIC and account number before sending to Stripe" do
           captured_params = nil
-          allow(Stripe::Account).to receive(:create) do |params|
+          allow(Stripe::Account).to receive(:create) do |params, _opts = nil|
             captured_params = params
             raise Stripe::APIError, "stop_here"
           end
@@ -3581,7 +3581,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -3662,7 +3662,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -3744,7 +3744,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -3825,7 +3825,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -3905,7 +3905,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -3988,7 +3988,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -4069,7 +4069,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -4149,7 +4149,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -4251,7 +4251,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
         expect(Stripe::Account).to receive(:create_person).with(anything, expected_person_params).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
@@ -4329,7 +4329,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -4410,7 +4410,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -4490,7 +4490,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -4571,7 +4571,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -4652,7 +4652,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -4733,7 +4733,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -4814,7 +4814,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -4895,7 +4895,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -4976,7 +4976,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -5055,7 +5055,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -5136,7 +5136,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -5217,7 +5217,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -5299,7 +5299,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -5380,7 +5380,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -5462,7 +5462,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -5543,7 +5543,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -5641,7 +5641,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
         expect(Stripe::Account).to receive(:create_person).with(anything, expected_person_params).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
@@ -5718,7 +5718,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -5799,7 +5799,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -5881,7 +5881,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -5962,7 +5962,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -6042,7 +6042,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -6123,7 +6123,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -6206,7 +6206,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -6286,7 +6286,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -6367,7 +6367,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -6448,7 +6448,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -6529,7 +6529,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -6610,7 +6610,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -6691,7 +6691,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -6772,7 +6772,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -6853,7 +6853,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -6934,7 +6934,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -7014,7 +7014,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -7095,7 +7095,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -7176,7 +7176,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -7259,7 +7259,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -7340,7 +7340,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -7421,7 +7421,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -7503,7 +7503,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -7584,7 +7584,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -7665,7 +7665,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -7746,7 +7746,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -7827,7 +7827,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -7908,7 +7908,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -7989,7 +7989,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -8070,7 +8070,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -8151,7 +8151,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -8232,7 +8232,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -8313,7 +8313,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -8393,7 +8393,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -8474,7 +8474,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -8555,7 +8555,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -8636,7 +8636,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -8717,7 +8717,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -8798,7 +8798,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -8878,7 +8878,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -8958,7 +8958,7 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "creates an account at stripe with all the params and returns the corresponding merchant account" do
-        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+        expect(Stripe::Account).to receive(:create).with(expected_account_params, hash_including(idempotency_key: a_kind_of(String))).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
 
@@ -9044,6 +9044,7 @@ describe StripeMerchantAccountManager, :vcr do
 
       it "still marks the merchant account as deleted when Stripe account deletion fails" do
         allow(Stripe::Account).to receive(:delete).and_raise(Stripe::APIError.new("cleanup failed"))
+        allow(Stripe::Account).to receive(:retrieve).and_return(fake_stripe_account)
 
         expect do
           subject.create_account(user, passphrase: "1234")
@@ -10556,11 +10557,10 @@ describe StripeMerchantAccountManager, :vcr do
     describe "all info provided previously, bank account not changed" do
       it "does not update an account at stripe with all the params" do
         expect(Stripe::Account).to receive(:retrieve).with(merchant_account.charge_processor_merchant_id) do
-          stripe_account = {
-            "metadata" => {
-              "bank_account_id" => bank_account_1.external_id
-            }
-          }
+          stripe_account = Stripe::Account.construct_from(
+            id: merchant_account.charge_processor_merchant_id,
+            metadata: { bank_account_id: bank_account_1.external_id }
+          )
           expect(Stripe::Account).not_to receive(:update)
           stripe_account
         end
@@ -10640,7 +10640,8 @@ describe StripeMerchantAccountManager, :vcr do
             country: "BG",
             default_currency: "eur",
             bank_account: hash_including(country: "LT", currency: "eur", account_number: "LT121000011101001000")
-          )
+          ),
+          hash_including(idempotency_key: a_kind_of(String))
         ).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
@@ -10704,7 +10705,8 @@ describe StripeMerchantAccountManager, :vcr do
             country: "DK",
             default_currency: "dkk",
             bank_account: hash_including(country: "LT", currency: "eur", account_number: "LT121000011101001000")
-          )
+          ),
+          hash_including(idempotency_key: a_kind_of(String))
         ).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
@@ -10734,7 +10736,8 @@ describe StripeMerchantAccountManager, :vcr do
             country: "BG",
             default_currency: "eur",
             bank_account: hash_including(country: "BG", currency: "eur", account_number: "BG80BNBG96611020345678")
-          )
+          ),
+          hash_including(idempotency_key: a_kind_of(String))
         ).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")
@@ -10763,7 +10766,8 @@ describe StripeMerchantAccountManager, :vcr do
             country: "DK",
             default_currency: "dkk",
             bank_account: hash_including(country: "DK", currency: "dkk", account_number: "DK5000400440116243")
-          )
+          ),
+          hash_including(idempotency_key: a_kind_of(String))
         ).and_call_original
 
         merchant_account = subject.create_account(user, passphrase: "1234")

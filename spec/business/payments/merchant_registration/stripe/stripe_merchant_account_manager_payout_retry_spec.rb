@@ -25,6 +25,7 @@ describe StripeMerchantAccountManager do
         end.to raise_error(Stripe::InvalidRequestError)
 
         expect(payout_notes(StripeMerchantAccountManager::POSTAL_CODE_FAILURE_NOTE_PREFIX).count).to eq(1)
+        expect(payout_notes(StripeMerchantAccountManager::NO_VERDICT_FAILURE_NOTE_PREFIX)).to be_empty
       end
 
       it "does not record a payout note when notify is false" do
@@ -163,6 +164,762 @@ describe StripeMerchantAccountManager do
           end
         end
       end
+
+      {
+        "an unknown Stripe API error" => -> { Stripe::APIError.new("An unknown error occurred") },
+        "a connection failure" => -> { Stripe::APIConnectionError.new("Unexpected error communicating with Stripe") },
+        "rate limiting" => -> { Stripe::RateLimitError.new("Too many requests") },
+      }.each do |description, build_error|
+        it "records one internal no-verdict note and schedules an early retry on #{description}" do
+          allow(Stripe::Account).to receive(:create).and_raise(build_error.call)
+          allow(ErrorNotifier).to receive(:notify)
+
+          2.times do
+            expect { described_class.create_account(user, passphrase:) }.to raise_error(build_error.call.class)
+          end
+
+          notes = payout_notes(StripeMerchantAccountManager::NO_VERDICT_FAILURE_NOTE_PREFIX)
+          expect(notes.count).to eq(1)
+          expect(notes.first.json_data).to include("no_verdict" => true, "error_class" => build_error.call.class.name)
+          expect(user.reload.latest_seller_visible_payout_note).to be_nil
+          expect(RetryStripeRejectedPayoutSetupForSellerJob).to have_enqueued_sidekiq_job(user.id)
+        end
+      end
+
+      it "records no no-verdict note for a bad API key, which is ours to fix and not retryable" do
+        allow(Stripe::Account).to receive(:create).and_raise(Stripe::AuthenticationError.new("Invalid API Key provided"))
+        allow(ErrorNotifier).to receive(:notify)
+
+        expect { described_class.create_account(user, passphrase:) }.to raise_error(Stripe::AuthenticationError)
+
+        expect(payout_notes(StripeMerchantAccountManager::NO_VERDICT_FAILURE_NOTE_PREFIX)).to be_empty
+      end
+
+      it "stores the idempotency key before calling Stripe" do
+        allow(Stripe::Account).to receive(:create) do
+          note = payout_notes(StripeMerchantAccountManager::NO_VERDICT_FAILURE_NOTE_PREFIX).first
+          expect(note&.json_data&.[](StripeMerchantAccountManager::ACCOUNT_CREATION_IDEMPOTENCY_KEY)).to be_present
+          raise Stripe::APIConnectionError.new("lost")
+        end
+        allow(ErrorNotifier).to receive(:notify)
+
+        expect { described_class.create_account(user, passphrase:) }.to raise_error(Stripe::APIConnectionError)
+      end
+
+      it "stores the idempotency key on a quiet retry, so the next attempt does not open a second account" do
+        keys = []
+        allow(Stripe::Account).to receive(:create) do |_params, opts = nil|
+          keys << opts[:idempotency_key]
+          raise Stripe::APIError.new("An unknown error occurred")
+        end
+        allow(ErrorNotifier).to receive(:notify)
+
+        2.times do
+          expect { described_class.create_account(user, passphrase:, notify: false) }.to raise_error(Stripe::APIError)
+        end
+
+        expect(keys.uniq).to eq([keys.first])
+        expect(payout_notes(StripeMerchantAccountManager::NO_VERDICT_FAILURE_NOTE_PREFIX).count).to eq(1)
+      end
+
+      it "records one internal note on a quiet retry and does not add another on the next attempt" do
+        allow(Stripe::Account).to receive(:create).and_raise(Stripe::APIError.new("An unknown error occurred"))
+        allow(ErrorNotifier).to receive(:notify)
+
+        2.times do
+          expect { described_class.create_account(user, passphrase:, notify: false) }.to raise_error(Stripe::APIError)
+        end
+
+        expect(payout_notes(StripeMerchantAccountManager::NO_VERDICT_FAILURE_NOTE_PREFIX).count).to eq(1)
+      end
+
+      it "replays one idempotency key when the create response is lost" do
+        keys = []
+        allow(Stripe::Account).to receive(:create) do |_params, opts = nil|
+          keys << opts[:idempotency_key]
+          raise Stripe::APIConnectionError.new("Unexpected error communicating with Stripe")
+        end
+        allow(ErrorNotifier).to receive(:notify)
+        expect(Stripe::Account).not_to receive(:list)
+
+        2.times do
+          expect { described_class.create_account(user, passphrase:) }.to raise_error(Stripe::APIConnectionError)
+        end
+
+        expect(keys.size).to eq(2)
+        expect(keys.uniq).to eq([keys.first])
+        note = payout_notes(StripeMerchantAccountManager::NO_VERDICT_FAILURE_NOTE_PREFIX).first
+        expect(note.json_data[StripeMerchantAccountManager::ACCOUNT_CREATION_IDEMPOTENCY_KEY]).to eq(keys.first)
+      end
+
+      it "adopts the account from the lost response instead of creating another after the idempotency window" do
+        allow(Stripe::Account).to receive(:create).and_raise(Stripe::APIConnectionError.new("Unexpected error communicating with Stripe"))
+        allow(ErrorNotifier).to receive(:notify)
+        expect { described_class.create_account(user, passphrase:) }.to raise_error(Stripe::APIConnectionError)
+
+        note = payout_notes(StripeMerchantAccountManager::NO_VERDICT_FAILURE_NOTE_PREFIX).first
+        note.update!(
+          created_at: 25.hours.ago,
+          json_data: note.json_data.merge(
+            StripeMerchantAccountManager::ACCOUNT_CREATION_ATTEMPTED_AT => 25.hours.ago.iso8601
+          )
+        )
+        listed = Stripe::Account.construct_from(
+          id: "acct_recovered",
+          object: "account",
+          type: "custom",
+          metadata: { "user_id" => user.external_id }
+        )
+        recovered = Stripe::Account.construct_from(
+          id: "acct_recovered",
+          object: "account",
+          type: "custom",
+          metadata: { "user_id" => user.external_id },
+          external_accounts: {
+            object: "list",
+            data: [{
+              id: "ba_recovered",
+              object: "bank_account",
+              fingerprint: "fp_recovered",
+              last4: bank_account.account_number_last_four,
+              routing_number: bank_account.stripe_external_account_routing_number,
+              currency: bank_account.stripe_external_account_currency,
+              country: bank_account.stripe_external_account_country
+            }]
+          }
+        )
+        allow(Stripe::Account).to receive(:list).and_return(
+          Stripe::ListObject.construct_from(object: "list", data: [listed], has_more: false)
+        )
+        allow(Stripe::Account).to receive(:retrieve).with("acct_recovered").and_return(recovered)
+        expect(Stripe::Account).not_to receive(:create)
+
+        merchant_account = described_class.create_account(user, passphrase:, notify: false)
+
+        expect(merchant_account.charge_processor_merchant_id).to eq("acct_recovered")
+        expect(bank_account.reload.stripe_bank_account_id).to eq("ba_recovered")
+      end
+
+      it "does not create a second account when recovery finds more than one match" do
+        allow(Stripe::Account).to receive(:create).and_raise(Stripe::APIConnectionError.new("Unexpected error communicating with Stripe"))
+        allow(ErrorNotifier).to receive(:notify)
+        expect { described_class.create_account(user, passphrase:) }.to raise_error(Stripe::APIConnectionError)
+
+        note = payout_notes(StripeMerchantAccountManager::NO_VERDICT_FAILURE_NOTE_PREFIX).first
+        note.update!(
+          created_at: 25.hours.ago,
+          json_data: note.json_data.merge(
+            StripeMerchantAccountManager::ACCOUNT_CREATION_ATTEMPTED_AT => 25.hours.ago.iso8601
+          )
+        )
+        matches = 2.times.map do |index|
+          Stripe::Account.construct_from(
+            id: "acct_match_#{index}",
+            object: "account",
+            type: "custom",
+            metadata: { "user_id" => user.external_id }
+          )
+        end
+        allow(Stripe::Account).to receive(:list).and_return(
+          Stripe::ListObject.construct_from(object: "list", data: matches, has_more: false)
+        )
+        expect(Stripe::Account).not_to receive(:create)
+
+        expect { described_class.create_account(user, passphrase:, notify: false) }.to raise_error(Stripe::APIError)
+        expect(user.reload.stripe_account).to be_nil
+      end
+
+      it "updates the bank on a recovered account instead of linking the old payout destination" do
+        allow(Stripe::Account).to receive(:create).and_raise(Stripe::IdempotencyError.new("Keys for idempotent requests can only be used with the same parameters"))
+        allow(ErrorNotifier).to receive(:notify)
+        user.add_payout_note(
+          content: "#{StripeMerchantAccountManager::NO_VERDICT_FAILURE_NOTE_PREFIX}: Stripe::APIConnectionError — lost",
+          seller_visible: false,
+          json_data: {
+            "no_verdict" => true,
+            StripeMerchantAccountManager::ACCOUNT_CREATION_IDEMPOTENCY_KEY => "stored-key",
+            StripeMerchantAccountManager::ACCOUNT_CREATION_ATTEMPTED_AT => 25.hours.ago.iso8601
+          }
+        )
+        old_account = Stripe::Account.construct_from(
+          id: "acct_old_bank",
+          object: "account",
+          type: "custom",
+          metadata: { "user_id" => user.external_id },
+          external_accounts: {
+            object: "list",
+            has_more: false,
+            data: [{
+              id: "ba_old",
+              object: "bank_account",
+              last4: "9999",
+              routing_number: bank_account.stripe_external_account_routing_number,
+              currency: bank_account.stripe_external_account_currency,
+              country: bank_account.stripe_external_account_country
+            }]
+          }
+        )
+        refreshed = Stripe::Account.construct_from(
+          id: "acct_old_bank",
+          object: "account",
+          type: "custom",
+          external_accounts: {
+            object: "list",
+            data: [{ id: "ba_current", object: "bank_account", fingerprint: "fp_current" }]
+          }
+        )
+        allow(Stripe::Account).to receive(:list).and_return(
+          Stripe::ListObject.construct_from(object: "list", data: [old_account], has_more: false)
+        )
+        allow(Stripe::Account).to receive(:retrieve).with("acct_old_bank").and_return(old_account)
+        allow(old_account).to receive(:refresh).and_return(refreshed)
+        expect(Stripe::Account).to receive(:update).with("acct_old_bank", hash_including(:bank_account)).and_return(refreshed)
+
+        merchant_account = described_class.create_account(user, passphrase:, notify: false)
+
+        expect(merchant_account.charge_processor_merchant_id).to eq("acct_old_bank")
+        expect(bank_account.reload.stripe_bank_account_id).to eq("ba_current")
+      end
+
+      it "searches around the later create attempt, not the original note" do
+        attempted_at = 25.hours.ago
+        user.add_payout_note(
+          content: "#{StripeMerchantAccountManager::NO_VERDICT_FAILURE_NOTE_PREFIX}: Stripe::APIConnectionError — lost",
+          seller_visible: false,
+          json_data: {
+            "no_verdict" => true,
+            StripeMerchantAccountManager::ACCOUNT_CREATION_ATTEMPTED_AT => attempted_at.iso8601
+          }
+        ).update!(created_at: 30.hours.ago)
+        listed_filters = nil
+        allow(Stripe::Account).to receive(:list) do |filters|
+          listed_filters = filters
+          Stripe::ListObject.construct_from(object: "list", data: [], has_more: false)
+        end
+        allow(Stripe::Account).to receive(:create).and_raise(Stripe::APIConnectionError.new("Unexpected error communicating with Stripe"))
+        allow(ErrorNotifier).to receive(:notify)
+
+        expect { described_class.create_account(user, passphrase:, notify: false) }.to raise_error(Stripe::APIConnectionError)
+
+        expect(listed_filters[:created][:gte]).to eq((attempted_at - StripeMerchantAccountManager::ACCOUNT_RECOVERY_WINDOW).to_i)
+        expect(listed_filters[:created][:lte]).to eq((attempted_at + StripeMerchantAccountManager::ACCOUNT_RECOVERY_WINDOW).to_i)
+      end
+
+      it "mints a new key after an empty search, so a cached Stripe error is not replayed" do
+        user.add_payout_note(
+          content: "#{StripeMerchantAccountManager::NO_VERDICT_FAILURE_NOTE_PREFIX}: Stripe::APIError — lost",
+          seller_visible: false,
+          json_data: {
+            "no_verdict" => true,
+            StripeMerchantAccountManager::ACCOUNT_CREATION_IDEMPOTENCY_KEY => "cached-error-key",
+            StripeMerchantAccountManager::ACCOUNT_CREATION_ATTEMPTED_AT => 25.hours.ago.iso8601
+          }
+        )
+        keys = []
+        allow(Stripe::Account).to receive(:list).and_return(
+          Stripe::ListObject.construct_from(object: "list", data: [], has_more: false)
+        )
+        allow(Stripe::Account).to receive(:create) do |_params, opts = nil|
+          keys << opts[:idempotency_key]
+          raise Stripe::APIError.new("An unknown error occurred")
+        end
+        allow(ErrorNotifier).to receive(:notify)
+
+        expect { described_class.create_account(user, passphrase:, notify: false) }.to raise_error(Stripe::APIError)
+
+        expect(keys).to eq([keys.first])
+        expect(keys.first).to be_present
+        expect(keys.first).not_to eq("cached-error-key")
+      end
+
+      it "does not create when the replacement key cannot be saved" do
+        user.add_payout_note(
+          content: "#{StripeMerchantAccountManager::NO_VERDICT_FAILURE_NOTE_PREFIX}: Stripe::APIError — lost",
+          seller_visible: false,
+          json_data: {
+            "no_verdict" => true,
+            StripeMerchantAccountManager::ACCOUNT_CREATION_IDEMPOTENCY_KEY => "cached-error-key",
+            StripeMerchantAccountManager::ACCOUNT_CREATION_ATTEMPTED_AT => 25.hours.ago.iso8601
+          }
+        )
+        allow(Stripe::Account).to receive(:list).and_return(
+          Stripe::ListObject.construct_from(object: "list", data: [], has_more: false)
+        )
+        allow_any_instance_of(Comment).to receive(:save!).and_raise(ActiveRecord::RecordNotSaved)
+        allow(ErrorNotifier).to receive(:notify)
+        expect(Stripe::Account).not_to receive(:create)
+
+        expect { described_class.create_account(user, passphrase:, notify: false) }.to raise_error(Stripe::APIError)
+      end
+
+      it "does not link a replacement bank that only shares the last four digits" do
+        user.add_payout_note(
+          content: "#{StripeMerchantAccountManager::NO_VERDICT_FAILURE_NOTE_PREFIX}: Stripe::APIConnectionError — lost",
+          seller_visible: false,
+          json_data: {
+            "no_verdict" => true,
+            StripeMerchantAccountManager::ACCOUNT_CREATION_IDEMPOTENCY_KEY => "stored-key",
+            StripeMerchantAccountManager::ACCOUNT_CREATION_ATTEMPTED_AT => 25.hours.ago.iso8601
+          }
+        )
+        old_account = Stripe::Account.construct_from(
+          id: "acct_same_last4",
+          object: "account",
+          type: "custom",
+          metadata: { "user_id" => user.external_id, "bank_account_id" => "old-bank-row" },
+          external_accounts: {
+            object: "list",
+            has_more: false,
+            data: [{
+              id: "ba_old",
+              object: "bank_account",
+              last4: bank_account.account_number_last_four,
+              routing_number: bank_account.stripe_external_account_routing_number,
+              currency: bank_account.stripe_external_account_currency,
+              country: bank_account.stripe_external_account_country
+            }]
+          }
+        )
+        refreshed = Stripe::Account.construct_from(
+          id: "acct_same_last4",
+          object: "account",
+          type: "custom",
+          external_accounts: {
+            object: "list",
+            data: [{ id: "ba_current", object: "bank_account", fingerprint: "fp_current" }]
+          }
+        )
+        allow(Stripe::Account).to receive(:list).and_return(
+          Stripe::ListObject.construct_from(object: "list", data: [old_account], has_more: false)
+        )
+        allow(Stripe::Account).to receive(:retrieve).with("acct_same_last4").and_return(old_account)
+        allow(old_account).to receive(:refresh).and_return(refreshed)
+        expect(Stripe::Account).to receive(:update).with("acct_same_last4", hash_including(:bank_account)).and_return(refreshed)
+        allow(ErrorNotifier).to receive(:notify)
+
+        merchant_account = described_class.create_account(user, passphrase:, notify: false)
+
+        expect(merchant_account.charge_processor_merchant_id).to eq("acct_same_last4")
+        expect(bank_account.reload.stripe_bank_account_id).to eq("ba_current")
+      end
+
+      it "removes a recovered bank when the seller no longer has a bank row" do
+        bank_account.mark_deleted!
+        user.add_payout_note(
+          content: "#{StripeMerchantAccountManager::NO_VERDICT_FAILURE_NOTE_PREFIX}: Stripe::APIConnectionError — lost",
+          seller_visible: false,
+          json_data: {
+            "no_verdict" => true,
+            StripeMerchantAccountManager::ACCOUNT_CREATION_IDEMPOTENCY_KEY => "stored-key",
+            StripeMerchantAccountManager::ACCOUNT_CREATION_ATTEMPTED_AT => 25.hours.ago.iso8601
+          }
+        )
+        recovered = Stripe::Account.construct_from(
+          id: "acct_removed_bank",
+          object: "account",
+          type: "custom",
+          metadata: { "user_id" => user.external_id },
+          external_accounts: {
+            object: "list",
+            has_more: false,
+            data: [{ id: "ba_removed", object: "bank_account" }]
+          }
+        )
+        allow(Stripe::Account).to receive(:list).and_return(
+          Stripe::ListObject.construct_from(object: "list", data: [recovered], has_more: false)
+        )
+        allow(Stripe::Account).to receive(:retrieve).with("acct_removed_bank").and_return(recovered)
+        expect(Stripe::Account).to receive(:delete_external_account).with("acct_removed_bank", "ba_removed")
+        allow(ErrorNotifier).to receive(:notify)
+
+        merchant_account = described_class.create_account(user, passphrase:, notify: false)
+
+        expect(merchant_account.charge_processor_merchant_id).to eq("acct_removed_bank")
+      end
+
+      it "does not finish recovery while Stripe still holds the removed default bank" do
+        bank_account.mark_deleted!
+        user.add_payout_note(
+          content: "#{StripeMerchantAccountManager::NO_VERDICT_FAILURE_NOTE_PREFIX}: Stripe::APIConnectionError — lost",
+          seller_visible: false,
+          json_data: {
+            "no_verdict" => true,
+            StripeMerchantAccountManager::ACCOUNT_CREATION_IDEMPOTENCY_KEY => "stored-key",
+            StripeMerchantAccountManager::ACCOUNT_CREATION_ATTEMPTED_AT => 25.hours.ago.iso8601
+          }
+        )
+        recovered = Stripe::Account.construct_from(
+          id: "acct_default_bank",
+          object: "account",
+          type: "custom",
+          metadata: { "user_id" => user.external_id },
+          external_accounts: {
+            object: "list",
+            has_more: false,
+            data: [{ id: "ba_default", object: "bank_account", default_for_currency: true }]
+          }
+        )
+        allow(Stripe::Account).to receive(:list).and_return(
+          Stripe::ListObject.construct_from(object: "list", data: [recovered], has_more: false)
+        )
+        allow(Stripe::Account).to receive(:retrieve).with("acct_default_bank").and_return(recovered)
+        expect(Stripe::Account).not_to receive(:delete_external_account)
+        expect(Stripe::Account).not_to receive(:create)
+        allow(ErrorNotifier).to receive(:notify)
+
+        expect { described_class.create_account(user, passphrase:, notify: false) }.to raise_error(Stripe::APIError)
+        expect(user.reload.stripe_account).to be_nil
+      end
+
+      it "reuses an abandoned note's key so a later create does not open a second account" do
+        user.add_payout_note(
+          content: "#{StripeMerchantAccountManager::NO_VERDICT_FAILURE_NOTE_PREFIX}: lost",
+          json_data: {
+            "no_verdict" => true,
+            "abandoned_at" => 1.hour.ago.iso8601,
+            StripeMerchantAccountManager::ACCOUNT_CREATION_IDEMPOTENCY_KEY => "abandoned-key",
+            StripeMerchantAccountManager::ACCOUNT_CREATION_ATTEMPTED_AT => 2.hours.ago.iso8601
+          }
+        )
+        keys = []
+        allow(Stripe::Account).to receive(:create) do |_params, opts = nil|
+          keys << opts[:idempotency_key]
+          raise Stripe::APIConnectionError.new("lost")
+        end
+
+        expect { described_class.create_account(user, passphrase:) }.to raise_error(Stripe::APIConnectionError)
+
+        expect(keys).to eq(["abandoned-key"])
+      end
+
+      it "does not replay an abandoned key after that account is deleted" do
+        user.add_payout_note(
+          content: "#{StripeMerchantAccountManager::NO_VERDICT_FAILURE_NOTE_PREFIX}: lost",
+          json_data: {
+            "no_verdict" => true,
+            "abandoned_at" => 1.hour.ago.iso8601,
+            StripeMerchantAccountManager::ACCOUNT_CREATION_IDEMPOTENCY_KEY => "abandoned-key",
+            StripeMerchantAccountManager::ACCOUNT_CREATION_ATTEMPTED_AT => 2.hours.ago.iso8601
+          }
+        )
+        created = Stripe::Account.construct_from(id: "acct_abandoned", object: "account", type: "custom", external_accounts: { object: "list", data: [] })
+        keys = []
+        calls = 0
+        allow(Stripe::Account).to receive(:create) do |_params, opts = nil|
+          keys << opts[:idempotency_key]
+          calls += 1
+          calls == 1 ? created : Stripe::Account.construct_from(id: "acct_fresh", object: "account", type: "custom", external_accounts: { object: "list", data: [] })
+        end
+        allow(Stripe::Account).to receive(:create_person).and_raise(Stripe::APIConnectionError.new("person lost"))
+        allow(Stripe::Account).to receive(:delete)
+        allow(Stripe::Account).to receive(:list).and_return(Stripe::ListObject.construct_from(object: "list", data: [], has_more: false))
+        allow_any_instance_of(UserComplianceInfo).to receive(:is_business?).and_return(true)
+        user_compliance_info.update_columns(deleted_at: Time.current)
+        create(:user_compliance_info_business, user:, zip_code: "94107")
+
+        expect { described_class.create_account(user, passphrase:) }.to raise_error(Stripe::APIConnectionError)
+        user.comments.with_type_payout_note.alive.each do |note|
+          next if note.json_data["abandoned_at"].present?
+
+          note.json_data["abandoned_at"] = Time.current.iso8601
+          note.save!
+        end
+        expect { described_class.create_account(user, passphrase:) }.to raise_error(Stripe::APIConnectionError)
+
+        expect(keys.first).to eq("abandoned-key")
+        expect(keys.last).not_to eq("abandoned-key")
+      end
+
+      it "does not adopt a recovered account whose country no longer matches" do
+        user_compliance_info.update_columns(deleted_at: Time.current)
+        create(:user_compliance_info_canada, user:)
+        user.add_payout_note(
+          content: "#{StripeMerchantAccountManager::NO_VERDICT_FAILURE_NOTE_PREFIX}: lost",
+          json_data: {
+            "no_verdict" => true,
+            "abandoned_at" => 1.hour.ago.iso8601,
+            StripeMerchantAccountManager::ACCOUNT_CREATION_IDEMPOTENCY_KEY => "old-country-key",
+            StripeMerchantAccountManager::ACCOUNT_CREATION_ATTEMPTED_AT => 25.hours.ago.iso8601
+          }
+        )
+        old_account = Stripe::Account.construct_from(
+          id: "acct_old_country",
+          object: "account",
+          type: "custom",
+          country: "US",
+          metadata: { "user_id" => user.external_id },
+          external_accounts: { object: "list", data: [] }
+        )
+        allow(Stripe::Account).to receive(:list).and_return(
+          Stripe::ListObject.construct_from(object: "list", data: [old_account], has_more: false)
+        )
+        allow(Stripe::Account).to receive(:retrieve).and_return(old_account)
+        deleted = []
+        allow(Stripe::Account).to receive(:delete) { |id| deleted << id }
+        keys = []
+        allow(Stripe::Account).to receive(:create) do |_params, opts = nil|
+          keys << opts[:idempotency_key]
+          raise Stripe::APIConnectionError.new("lost")
+        end
+        allow(ErrorNotifier).to receive(:notify)
+
+        expect { described_class.create_account(user, passphrase:) }.to raise_error(Stripe::APIConnectionError)
+
+        expect(deleted).to eq(["acct_old_country"])
+        expect(keys.first).to be_present
+        expect(keys.first).not_to eq("old-country-key")
+        expect(MerchantAccount.alive.stripe.find_by(charge_processor_merchant_id: "acct_old_country")).to be_nil
+      end
+
+      it "deletes an old-country account and opens one for the current country" do
+        user_compliance_info.update_columns(deleted_at: Time.current)
+        create(:user_compliance_info_canada, user:)
+        user.add_payout_note(
+          content: "#{StripeMerchantAccountManager::NO_VERDICT_FAILURE_NOTE_PREFIX}: lost",
+          json_data: {
+            "no_verdict" => true,
+            "abandoned_at" => 1.hour.ago.iso8601,
+            StripeMerchantAccountManager::ACCOUNT_CREATION_IDEMPOTENCY_KEY => "old-country-key",
+            StripeMerchantAccountManager::ACCOUNT_CREATION_ATTEMPTED_AT => 2.hours.ago.iso8601
+          }
+        )
+        old_account = Stripe::Account.construct_from(
+          id: "acct_old_country",
+          object: "account",
+          type: "custom",
+          country: "US",
+          metadata: { "user_id" => user.external_id },
+          external_accounts: { object: "list", data: [] }
+        )
+        allow(Stripe::Account).to receive(:list).and_return(
+          Stripe::ListObject.construct_from(object: "list", data: [old_account], has_more: false)
+        )
+        allow(Stripe::Account).to receive(:retrieve).and_return(old_account)
+        keys = []
+        allow(Stripe::Account).to receive(:create) do |_params, opts = nil|
+          keys << opts[:idempotency_key]
+          raise Stripe::IdempotencyError.new("Keys for idempotent requests can only be used with the same parameters") if keys.size == 1
+
+          raise Stripe::APIConnectionError.new("lost")
+        end
+        deleted = []
+        allow(Stripe::Account).to receive(:delete) { |id| deleted << id }
+        allow(ErrorNotifier).to receive(:notify)
+
+        expect { described_class.create_account(user, passphrase:) }.to raise_error(Stripe::APIConnectionError)
+
+        expect(deleted).to eq(["acct_old_country"])
+        expect(keys.first).to eq("old-country-key")
+        expect(keys.last).not_to eq("old-country-key")
+        expect(MerchantAccount.alive.stripe.find_by(charge_processor_merchant_id: "acct_old_country")).to be_nil
+      end
+
+      it "does not open a second account when the old-country account cannot be deleted" do
+        user_compliance_info.update_columns(deleted_at: Time.current)
+        create(:user_compliance_info_canada, user:)
+        user.add_payout_note(
+          content: "#{StripeMerchantAccountManager::NO_VERDICT_FAILURE_NOTE_PREFIX}: lost",
+          json_data: {
+            "no_verdict" => true,
+            "abandoned_at" => 1.hour.ago.iso8601,
+            StripeMerchantAccountManager::ACCOUNT_CREATION_IDEMPOTENCY_KEY => "old-country-key",
+            StripeMerchantAccountManager::ACCOUNT_CREATION_ATTEMPTED_AT => 25.hours.ago.iso8601
+          }
+        )
+        old_account = Stripe::Account.construct_from(
+          id: "acct_old_country", object: "account", type: "custom", country: "US",
+          metadata: { "user_id" => user.external_id }
+        )
+        allow(Stripe::Account).to receive(:list).and_return(
+          Stripe::ListObject.construct_from(object: "list", data: [old_account], has_more: false)
+        )
+        allow(Stripe::Account).to receive(:delete).and_raise(Stripe::APIConnectionError.new("delete lost"))
+        expect(Stripe::Account).not_to receive(:create)
+        allow(ErrorNotifier).to receive(:notify)
+
+        expect { described_class.create_account(user, passphrase:) }.to raise_error(
+          Stripe::APIError, "Uncertain Stripe account creation could not be reconciled"
+        )
+      end
+
+      it "does not delete a linked old-country account or open a second one" do
+        user_compliance_info.update_columns(deleted_at: Time.current)
+        create(:user_compliance_info_canada, user:)
+        # A seller retry stops once any local Stripe row exists. An admin retry still
+        # reaches recovery, and must not delete that linked account or open another.
+        create(
+          :merchant_account,
+          user:,
+          charge_processor_merchant_id: "acct_old_country",
+          charge_processor_alive_at: nil
+        )
+        user.add_payout_note(
+          content: "#{StripeMerchantAccountManager::NO_VERDICT_FAILURE_NOTE_PREFIX}: lost",
+          json_data: {
+            "no_verdict" => true,
+            "abandoned_at" => 1.hour.ago.iso8601,
+            StripeMerchantAccountManager::ACCOUNT_CREATION_IDEMPOTENCY_KEY => "old-country-key",
+            StripeMerchantAccountManager::ACCOUNT_CREATION_ATTEMPTED_AT => 25.hours.ago.iso8601
+          }
+        )
+        old_account = Stripe::Account.construct_from(
+          id: "acct_old_country", object: "account", type: "custom", country: "US",
+          metadata: { "user_id" => user.external_id }
+        )
+        allow(Stripe::Account).to receive(:list).and_return(
+          Stripe::ListObject.construct_from(object: "list", data: [old_account], has_more: false)
+        )
+        expect(Stripe::Account).not_to receive(:delete)
+        expect(Stripe::Account).not_to receive(:create)
+        allow(ErrorNotifier).to receive(:notify)
+
+        expect { described_class.create_account(user, passphrase:, from_admin: true) }.to raise_error(
+          Stripe::APIError, "Uncertain Stripe account creation could not be reconciled"
+        )
+        expect(MerchantAccount.alive.stripe.find_by(charge_processor_merchant_id: "acct_old_country")).to be_present
+      end
+
+      it "does not delete a soft-deleted linked account or open a second one" do
+        user_compliance_info.update_columns(deleted_at: Time.current)
+        create(:user_compliance_info_canada, user:)
+        linked = create(:merchant_account, user:, charge_processor_merchant_id: "acct_old_country")
+        linked.delete_charge_processor_account!
+        user.add_payout_note(
+          content: "#{StripeMerchantAccountManager::NO_VERDICT_FAILURE_NOTE_PREFIX}: lost",
+          json_data: {
+            "no_verdict" => true,
+            "abandoned_at" => 1.hour.ago.iso8601,
+            StripeMerchantAccountManager::ACCOUNT_CREATION_IDEMPOTENCY_KEY => "old-country-key",
+            StripeMerchantAccountManager::ACCOUNT_CREATION_ATTEMPTED_AT => 25.hours.ago.iso8601
+          }
+        )
+        old_account = Stripe::Account.construct_from(
+          id: "acct_old_country", object: "account", type: "custom", country: "US",
+          metadata: { "user_id" => user.external_id }
+        )
+        allow(Stripe::Account).to receive(:list).and_return(
+          Stripe::ListObject.construct_from(object: "list", data: [old_account], has_more: false)
+        )
+        expect(Stripe::Account).not_to receive(:delete)
+        expect(Stripe::Account).not_to receive(:create)
+        allow(ErrorNotifier).to receive(:notify)
+
+        expect { described_class.create_account(user, passphrase:) }.to raise_error(
+          Stripe::APIError, "Uncertain Stripe account creation could not be reconciled"
+        )
+        expect(MerchantAccount.alive.stripe.find_by(charge_processor_merchant_id: "acct_old_country")).to be_nil
+        expect(MerchantAccount.unscoped.find(linked.id).charge_processor_merchant_id).to eq("acct_old_country")
+      end
+
+      it "adopts the matching-country account when an older country is in the same window" do
+        user_compliance_info.update_columns(deleted_at: Time.current)
+        create(:user_compliance_info_canada, user:)
+        user.add_payout_note(
+          content: "#{StripeMerchantAccountManager::NO_VERDICT_FAILURE_NOTE_PREFIX}: lost",
+          json_data: {
+            "no_verdict" => true,
+            "abandoned_at" => 1.hour.ago.iso8601,
+            StripeMerchantAccountManager::ACCOUNT_CREATION_IDEMPOTENCY_KEY => "old-country-key",
+            StripeMerchantAccountManager::ACCOUNT_CREATION_ATTEMPTED_AT => 25.hours.ago.iso8601
+          }
+        )
+        old_account = Stripe::Account.construct_from(
+          id: "acct_old_country", object: "account", type: "custom", country: "US",
+          metadata: { "user_id" => user.external_id }
+        )
+        current = Stripe::Account.construct_from(
+          id: "acct_ca", object: "account", type: "custom", country: "CA",
+          metadata: { "user_id" => user.external_id, "bank_account_id" => bank_account.external_id },
+          external_accounts: {
+            object: "list",
+            data: [{
+              id: "ba_ca", object: "bank_account", fingerprint: "fp_ca",
+              last4: bank_account.account_number_last_four,
+              routing_number: bank_account.stripe_external_account_routing_number,
+              currency: bank_account.stripe_external_account_currency,
+              country: bank_account.stripe_external_account_country
+            }]
+          }
+        )
+        allow(Stripe::Account).to receive(:list).and_return(
+          Stripe::ListObject.construct_from(object: "list", data: [old_account, current], has_more: false)
+        )
+        allow(Stripe::Account).to receive(:retrieve).with("acct_ca").and_return(current)
+        expect(Stripe::Account).not_to receive(:create)
+
+        merchant_account = described_class.create_account(user, passphrase:, notify: false)
+
+        expect(merchant_account.charge_processor_merchant_id).to eq("acct_ca")
+      end
+
+      it "replaces a bank link that still points at an older Stripe account" do
+        create(:merchant_account_stripe, user:, charge_processor_merchant_id: "acct_new")
+        bank_account.update!(stripe_bank_account_id: "ba_old", stripe_connect_account_id: "acct_old")
+        refreshed = Stripe::Account.construct_from(
+          id: "acct_new",
+          object: "account",
+          metadata: { "bank_account_id" => bank_account.external_id },
+          external_accounts: {
+            object: "list",
+            data: [{
+              id: "ba_new",
+              object: "bank_account",
+              fingerprint: "fp_new",
+              last4: bank_account.account_number_last_four,
+              routing_number: bank_account.stripe_external_account_routing_number,
+              currency: bank_account.stripe_external_account_currency,
+              country: bank_account.stripe_external_account_country
+            }]
+          }
+        )
+        allow(Stripe::Account).to receive(:retrieve).and_return(refreshed)
+        allow(Stripe::Account).to receive(:update).and_return(refreshed)
+        allow(refreshed).to receive(:refresh).and_return(refreshed)
+
+        expect(described_class.update_bank_account(user, passphrase:)).to eq(:synced)
+        expect(bank_account.reload.stripe_connect_account_id).to eq("acct_new")
+        expect(bank_account.stripe_bank_account_id).to eq("ba_new")
+      end
+
+      it "does not replay a key after a later failure deletes the created account" do
+        user_compliance_info.update_columns(deleted_at: Time.current)
+        create(:user_compliance_info_business, user:, zip_code: "94107")
+        keys = []
+        creates = 0
+        allow(Stripe::Account).to receive(:create) do |_params, opts = nil|
+          keys << opts[:idempotency_key]
+          creates += 1
+          raise Stripe::APIConnectionError.new("Unexpected error communicating with Stripe") if creates == 1
+
+          Stripe::Account.construct_from(
+            id: "acct_attempt_#{creates}",
+            object: "account",
+            type: "custom",
+            external_accounts: { object: "list", data: [] }
+          )
+        end
+        allow(Stripe::Account).to receive(:create_person).and_raise(
+          Stripe::APIConnectionError.new("Unexpected error communicating with Stripe")
+        )
+        allow(Stripe::Account).to receive(:delete)
+        allow(Stripe::Account).to receive(:list).and_return(
+          Stripe::ListObject.construct_from(object: "list", data: [], has_more: false)
+        )
+        allow(ErrorNotifier).to receive(:notify)
+
+        expect { described_class.create_account(user, passphrase:) }.to raise_error(Stripe::APIConnectionError)
+        note = payout_notes(StripeMerchantAccountManager::NO_VERDICT_FAILURE_NOTE_PREFIX).first
+        expect(note.json_data[StripeMerchantAccountManager::ACCOUNT_CREATION_IDEMPOTENCY_KEY]).to eq(keys.first)
+
+        expect { described_class.create_account(user, passphrase:) }.to raise_error(Stripe::APIConnectionError)
+        expect(Stripe::Account).to have_received(:delete).with("acct_attempt_2")
+        expect(note.reload.json_data).not_to have_key(StripeMerchantAccountManager::ACCOUNT_CREATION_IDEMPOTENCY_KEY)
+
+        expect { described_class.create_account(user, passphrase:) }.to raise_error(Stripe::APIConnectionError)
+        expect(keys.size).to eq(3)
+        expect(keys.last).to be_present
+        expect(keys.last).not_to eq(keys.first)
+      end
     end
 
     context "when the breadcrumb itself fails to save" do
@@ -170,7 +927,13 @@ describe StripeMerchantAccountManager do
         allow(Stripe::Account).to receive(:create).and_raise(
           Stripe::InvalidRequestError.new("Invalid value for individual[id_number]", "individual[id_number]")
         )
-        allow_any_instance_of(User).to receive(:add_payout_note).and_raise(StandardError, "note write failed")
+        writes = 0
+        allow_any_instance_of(User).to receive(:add_payout_note).and_wrap_original do |method, *args, **kwargs|
+          writes += 1
+          raise StandardError, "note write failed" if writes > 1
+
+          method.call(*args, **kwargs)
+        end
       end
 
       it "still raises Stripe's error rather than ours" do
@@ -216,9 +979,8 @@ describe StripeMerchantAccountManager do
       end
 
       it "carries the attribution from the note's first save, never a follow-up write" do
-        # The note is readable the moment it is inserted, so an id written by a second save leaves
-        # a window in which the banner treats it as unattributed. Assert the shape, not the odds:
-        # one INSERT and no UPDATE means there is no such window.
+        # The bank note is inserted once, with the bank id. The earlier insert is the idempotency
+        # key, and the update discards that pending row after Stripe returns a verdict.
         statements = []
         subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |*, payload|
           statements << payload[:sql] if payload[:sql]&.match?(/\A(INSERT INTO|UPDATE) `comments`/)
@@ -232,8 +994,8 @@ describe StripeMerchantAccountManager do
           ActiveSupport::Notifications.unsubscribe(subscriber)
         end
 
-        expect(statements.grep(/\AINSERT INTO `comments`/).count).to eq(1)
-        expect(statements.grep(/\AUPDATE `comments`/)).to be_empty
+        expect(statements.grep(/\AINSERT INTO `comments`/).count).to eq(2)
+        expect(statements.grep(/\AUPDATE `comments`/).count).to eq(1)
         # Asserted here too, so this example pins atomic ATTRIBUTION rather than just "no comment
         # updates happened".
         expect(payout_notes(StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX).last.json_data["bank_account_id"]).to eq(bank_account.id)
