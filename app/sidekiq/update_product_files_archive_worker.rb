@@ -43,8 +43,7 @@ class UpdateProductFilesArchiveWorker
   # Bounds the HEAD requests and the central directory a bundle build keeps in memory. Other
   # archives are held to PRODUCT_FILES_ARCHIVE_FILE_SIZE_LIMIT, and too_large is final for them.
   MAX_ARCHIVE_ENTRIES = 10_000
-  # Each upload thread buffers one part in a tempfile, so upload disk use is about
-  # UPLOAD_CONCURRENCY * UPLOAD_PART_SIZE. With in-memory parts, a 660 MB build grew the process by 700 MB.
+  # Parts go to tempfiles: the SDK does not reuse in-memory part buffers, so memory grew with the archive.
   UPLOAD_PART_SIZE = 16.megabytes
   UPLOAD_CONCURRENCY = 4
   SOURCE_READ_ATTEMPTS = 3
@@ -116,15 +115,16 @@ class UpdateProductFilesArchiveWorker
 
     # Recorded sizes rule out an oversize archive before any request; the HEAD sizes below decide.
     bundle = product_files_archive.bundle_purchase_archive?
-    # Counted before archive_entries, which names every file.
-    if bundle && product_files_archive.product_files.not_external_link.count > MAX_ARCHIVE_ENTRIES
+    # Counted before archive_entries, which names every file. The scope drops more stream-only files
+    # than archive_entries does, so the entry check below still applies.
+    if bundle && product_files_archive.product_files.archivable.count > MAX_ARCHIVE_ENTRIES
       mark_too_large(product_files_archive)
       return
     end
     size_limit = bundle ? BUNDLE_ARCHIVE_FILE_SIZE_LIMIT : PRODUCT_FILES_ARCHIVE_FILE_SIZE_LIMIT
     entries = archive_entries(product_files_archive)
     recorded_size = entries.sum { |product_file, _| product_file.size.to_i }
-    if recorded_size > size_limit
+    if (bundle && entries.size > MAX_ARCHIVE_ENTRIES) || recorded_size > size_limit
       mark_too_large(product_files_archive)
       return
     end
