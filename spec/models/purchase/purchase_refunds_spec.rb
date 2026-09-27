@@ -2885,6 +2885,33 @@ describe "PurchaseRefunds", :vcr do
     end
   end
 
+  describe "refund of a won dispute" do
+    let(:merchant_account) { create(:merchant_account) }
+    let(:purchase) do
+      create(:purchase,
+             link: create(:product, user: merchant_account.user, price_cents: 1_000),
+             seller: merchant_account.user,
+             merchant_account:,
+             price_cents: 1_000,
+             total_transaction_cents: 1_000)
+    end
+
+    before do
+      purchase.update!(chargeback_date: Time.current, chargeback_reversed: true)
+      create(:dispute, purchase:, state: "won", won_at: Time.current, charge_processor_dispute_id: "dp_won_refund")
+    end
+
+    it "still reverses the dispute-win transfer when the seller pays" do
+      transfer = Stripe::StripeObject.construct_from(id: "tr_dispute_win", description: "Dispute dp_won_refund won")
+      allow(Stripe::Transfer).to receive(:list).and_return([transfer])
+      expect(Stripe::Transfer).to receive(:create_reversal)
+
+      flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::USD, 400)
+      expect(purchase.refund_purchase!(flow_of_funds, purchase.seller_id)).to eq(true)
+      expect(purchase.reload.stripe_partially_refunded?).to eq(true)
+    end
+  end
+
   describe "refunded amount sums with terminal-failure refunds" do
     # All four refunded sums must use the same effective-refund semantics: a failed
     # refund whose balance debits were reversed never delivered money, so it must
