@@ -189,7 +189,14 @@ export const getPagedCustomers = ({
     abortSignal: abort.signal,
   })
     .then((res) => res.json())
-    .then((json) => typia.assert<{ customers: Customer[]; processing_customers: Customer[]; pagination: PaginationProps | null; count: number }>(json));
+    .then((json) =>
+      typia.assert<{
+        customers: Customer[];
+        processing_customers: Customer[];
+        pagination: PaginationProps | null;
+        count: number;
+      }>(json),
+    );
 
   return {
     response,

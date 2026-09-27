@@ -32,13 +32,17 @@ const Sale = ({ details: { price_cents, product_name, product_unique_permalink }
   </>
 );
 
-const ProcessingSale = ({ details: { price_cents, product_name, product_unique_permalink } }: { details: SaleItemDetails }) => (
+const ProcessingSale = ({
+  details: { price_cents, product_name, product_unique_permalink },
+}: {
+  details: SaleItemDetails;
+}) => (
   <>
     <Dollar className="size-5" />
     <span>
       Processing sale of <a href={Routes.short_link_path({ id: product_unique_permalink })}>{product_name}</a> for{" "}
-      {formatPriceCentsWithCurrencySymbol("usd", price_cents, { symbolFormat: "short", noCentsIfWhole: true })}. This
-      is not in your earnings yet.
+      {formatPriceCentsWithCurrencySymbol("usd", price_cents, { symbolFormat: "short", noCentsIfWhole: true })}. This is
+      not in your earnings yet.
     </span>
   </>
 );

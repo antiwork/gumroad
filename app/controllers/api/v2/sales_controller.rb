@@ -252,7 +252,9 @@ class Api::V2::SalesController < Api::V2::BaseController
     def processing_sales_payload(start_date:, end_date:, email:, product_id:, purchase_id:, name:, license_key:)
       return {} if params[:page_key].present? && params[:processing_page].blank?
 
-      page = (params[:processing_page].presence || params[:page].presence || 1).to_i
+      page_param = params[:processing_page].presence
+      page_param ||= params[:page] if params[:page].is_a?(String) || params[:page].is_a?(Integer)
+      page = (page_param.presence || 1).to_i
       page = 1 if page < 1
       offset = (page - 1) * RESULTS_PER_PAGE
       filters = {

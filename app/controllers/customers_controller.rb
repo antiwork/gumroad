@@ -239,7 +239,6 @@ class CustomersController < Sellers::BaseController
       }
       # Active customers only excludes refunded, chargedback, and cancelled subscriptions.
       # An unfinished sale is none of those, so that filter does not hide it.
-      # An unfinished sale is not refunded, chargedback, or a cancelled subscription.
       service = SellerInFlightSales.new(current_seller)
       @processing_total = service.matching_count(**filters)
       service.records(**filters, offset:, limit:)

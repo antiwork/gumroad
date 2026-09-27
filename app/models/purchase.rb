@@ -694,7 +694,7 @@ class Purchase < ApplicationRecord
       .not_is_bundle_product_purchase
       .not_is_commission_completion_purchase
       .where(<<~SQL.squish)
-        (purchases.stripe_status IS NOT NULL
+        ((purchases.stripe_status IS NOT NULL AND purchases.stripe_status <> 'requires_action')
         OR NULLIF(purchases.stripe_transaction_id, '') IS NOT NULL)
       SQL
   }
@@ -1717,6 +1717,8 @@ class Purchase < ApplicationRecord
   def seller_visible_in_flight?
     return false unless in_progress?
     return false if is_gift_receiver_purchase? || is_bundle_product_purchase? || is_commission_completion_purchase?
+
+    return false if stripe_status == StripeIntentStatus::REQUIRES_ACTION && stripe_transaction_id.blank?
 
     stripe_status.present? || stripe_transaction_id.present?
   end

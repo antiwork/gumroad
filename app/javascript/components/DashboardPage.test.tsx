@@ -109,6 +109,7 @@ const props: DashboardPageProps = {
   tax_forms: {},
   show_1099_download_notice: false,
   tax_center_enabled: false,
+  processing_sales_count: 0,
 };
 
 const renderDashboard = (currentSeller: CurrentSeller) =>

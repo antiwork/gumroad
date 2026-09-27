@@ -77,4 +77,19 @@ describe SellerInFlightSales do
     expect(purchase.seller_visible_in_flight?).to eq(false)
     expect(service.count).to eq(0)
   end
+
+  it "does not show a payment that still requires buyer action" do
+    waiting = create(
+      :purchase,
+      link: product,
+      seller:,
+      purchase_state: "in_progress",
+      charge_intent: nil,
+      stripe_status: "requires_action",
+      stripe_transaction_id: nil
+    )
+
+    expect(waiting.seller_visible_in_flight?).to eq(false)
+    expect(service.records).to eq([])
+  end
 end

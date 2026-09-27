@@ -46,7 +46,7 @@ class SellerInFlightSales
                   when "price_cents" then "purchases.price_cents #{direction}, purchases.id #{direction}"
                   when "product_name" then "links.name #{direction}, purchases.id #{direction}"
                   else "purchases.created_at #{direction}, purchases.id #{direction}"
-                  end
+      end
       relation.order(Arel.sql(order_sql)).offset(offset).limit(limit).to_a
     end
   end
@@ -115,7 +115,10 @@ class SellerInFlightSales
       scope = scope.where("purchases.price_cents < ?", maximum_amount_cents) if maximum_amount_cents.present?
       scope = scope.where("purchases.created_at >= ?", created_after) if created_after.present?
       scope = scope.where("purchases.created_at < ?", created_before) if created_before.present?
-      scope = scope.where(country:) if country.present?
+      scope = scope.where(
+        "purchases.country IN (:names) OR (NULLIF(purchases.country, '') IS NULL AND purchases.ip_country IN (:names))",
+        names: Array(country)
+      ) if country.present?
       scope = scope.where(id: license_purchase_ids(license_key)) if license_key.present?
       scope
     end
