@@ -151,10 +151,21 @@ describe Charge::Refundable, "external refund notifications" do
       expect { charge.handle_event_refund_updated!(event) }.not_to raise_error
 
       expect(creator_mails(purchases).size).to eq(2)
-      expect(Rails.logger).to have_received(:warn).with(/Refund notification alert failed/).at_least(:once)
+      purchases.each do |purchase|
+        expect(Rails.logger).to have_received(:warn).with(
+          a_string_including(
+            "Refund notification alert failed",
+            "RuntimeError: notifier down",
+            "purchase_id: #{purchase.id}",
+            "notification: webhook",
+            "error_class: RedisClient::CannotConnectError"
+          )
+        )
+      end
     end
 
-    it "still emails the creator when the post-commit alert itself fails" do
+    it "still emails the creator and logs the refund report when the post-commit alert itself fails" do
+      allow(Rails.logger).to receive(:warn)
       allow(ErrorNotifier).to receive(:notify).and_wrap_original do |method, *args, **kwargs|
         raise "notifier down" if args.first == Charge::Refundable::EXTERNAL_REFUND_ALERT
 
@@ -164,6 +175,21 @@ describe Charge::Refundable, "external refund notifications" do
       expect { charge.handle_event_refund_updated!(event) }.not_to raise_error
 
       expect(creator_mails(purchases).size).to eq(2)
+      expect(Rails.logger).to have_received(:warn).with(
+        a_string_including(
+          "External refund alert failed",
+          "RuntimeError: notifier down",
+          "message: #{Charge::Refundable::EXTERNAL_REFUND_ALERT.inspect}",
+          "stripe_refund_id: #{refund_id.inspect}",
+          "stripe_charge_id: #{event.charge_id.inspect}",
+          "refunded_amount_cents: #{event.extras[:refunded_amount_cents].inspect}",
+          "transfer_outcome: nil",
+          "refunded_purchase_ids: #{purchases.map(&:id).sort.inspect}",
+          "unrecorded_purchase_ids: []",
+          "blocked_purchase_ids: []",
+          "recorded: true"
+        )
+      )
     end
   end
 

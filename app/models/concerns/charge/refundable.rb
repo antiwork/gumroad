@@ -171,6 +171,17 @@ module Charge::Refundable
   private def notify_external_refund_alert(message, **context)
     ErrorNotifier.notify(message, **context)
   rescue StandardError => error
-    Rails.logger.warn("External refund alert failed: #{error.class}: #{error.message}")
+    Rails.logger.warn(
+      "External refund alert failed: #{error.class}: #{error.message} " \
+      "message: #{message.inspect} " \
+      "stripe_refund_id: #{context[:stripe_refund_id].inspect} " \
+      "stripe_charge_id: #{context[:stripe_charge_id].inspect} " \
+      "refunded_amount_cents: #{context[:refunded_amount_cents].inspect} " \
+      "transfer_outcome: #{context[:transfer_outcome].inspect} " \
+      "refunded_purchase_ids: #{context[:refunded_purchase_ids].inspect} " \
+      "unrecorded_purchase_ids: #{context[:unrecorded_purchase_ids].inspect} " \
+      "blocked_purchase_ids: #{context[:blocked_purchase_ids].inspect} " \
+      "recorded: #{context[:recorded].inspect}"
+    )
   end
 end

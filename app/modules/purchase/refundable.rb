@@ -370,7 +370,10 @@ class Purchase
           rescue StandardError => alert_error
             # The notifier is the thing that failed, so the missed notification still has to be
             # visible somewhere: log it rather than dropping the report with the alert.
-            Rails.logger.warn("Refund notification alert failed: #{alert_error.class}: #{alert_error.message}")
+            Rails.logger.warn(
+              "Refund notification alert failed: #{alert_error.class}: #{alert_error.message} " \
+              "purchase_id: #{id} notification: #{notification} error_class: #{error.class.name}"
+            )
           end
         end
       end
