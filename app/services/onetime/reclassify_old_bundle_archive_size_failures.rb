@@ -3,8 +3,8 @@
 # Before the too_large state (#7977), the archive worker marked a bundle ZIP over the then 500 MB
 # limit as failed. Those rows still spend the bundle's retry budget in
 # UrlRedirect#ensure_bundle_archive_for, so a bundle that now fits the 8 GB limit may never be
-# retried. This marks them too_large. That worker filled a missing size from S3, so an S3 file with
-# no recorded size may have been a size bail too; external links counted as zero bytes.
+# retried. This marks them too_large. It sums sizes the way that worker did: a missing size comes
+# from S3, and external links count as zero bytes.
 #
 # update_columns keeps updated_at, so the too-large retry window counts from the original failure.
 # Idempotent: a rerun finds no matching failed rows.
@@ -37,8 +37,10 @@ module Onetime
     end
 
     def self.size_bail?(archive)
-      files = archive.product_files
-      files.any? { _1.s3? && _1.size.nil? } || files.sum { _1.size.to_i } > OLD_SIZE_LIMIT
+      archive.product_files.sum { _1.size || (_1.s3? ? _1.s3_object.content_length : 0) } > OLD_SIZE_LIMIT
+    rescue Aws::S3::Errors::NotFound
+      # That worker failed on a missing source before it could compare sizes.
+      false
     end
     private_class_method :size_bail?
   end
