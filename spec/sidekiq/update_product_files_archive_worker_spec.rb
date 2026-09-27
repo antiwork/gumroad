@@ -669,6 +669,18 @@ describe UpdateProductFilesArchiveWorker, :vcr do
           expect(archive.reload).to be_too_large
         end
 
+        it "leaves stream-only files out of the entry count" do
+          stub_const("#{described_class}::MAX_ARCHIVE_ENTRIES", 2)
+          archive = bundle_archive(["one", "two"])
+          stream_only = create(:streamable_video, link: bundle.bundle_products.first.product, stream_only: true)
+          archive.product_files << stream_only
+
+          described_class.new.perform(archive.id)
+
+          expect(archive.reload).to be_ready
+          expect(zip_entries(archive).keys).to eq(["Bundle Product 1/Part.bin", "Bundle Product 2/Part.bin"])
+        end
+
         it "enforces the bundle limit on the sizes S3 reports when none are recorded" do
           stub_const("#{described_class}::BUNDLE_ARCHIVE_FILE_SIZE_LIMIT", 1.megabyte)
           archive = bundle_archive([Random.new(5).bytes(700.kilobytes), Random.new(6).bytes(700.kilobytes)])
