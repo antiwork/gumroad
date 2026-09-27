@@ -75,16 +75,24 @@ describe StreamingZipWriter do
 
   it "keeps every byte when signals interrupt deflate" do
     input = Random.new(3).bytes(16.megabytes)
+    max_signals = 20_000
     stop = false
-    spawner = Thread.new { system("true") until stop }
+    signaler = Thread.new do
+      max_signals.times do
+        break if stop
+
+        Process.kill(:CHLD, Process.pid)
+        Thread.pass
+      end
+    end
     archive, = write_archive("signals.bin" => input)
     stop = true
-    spawner.join
+    signaler.join
 
     expect(read_forward_only(archive.path)).to eq("signals.bin" => [input.bytesize, Zlib.crc32(input)])
   ensure
     stop = true
-    spawner&.join
+    signaler&.join
     archive&.close!
   end
 
@@ -246,10 +254,12 @@ describe StreamingZipWriter do
 
     _, version, _, _, _, _, _, compressed_field, size_field, _, extra_length = File.binread(archive.path, 30).unpack("VvvvvvVVVvv")
     expect([version, compressed_field, size_field, extra_length]).to eq([20, 0, 0, 0])
-    crc = Object.new.tap { |o| o.instance_variable_set(:@crc, Zlib.crc32) }
-    def crc.write(bytes) = @crc = Zlib.crc32(bytes, @crc)
-    feed.call(crc)
-    expect(read_forward_only(archive.path)).to eq("zeros.bin" => [size, crc.instance_variable_get(:@crc)])
+    # Combines the CRC of one zero chunk, so the expected CRC needs no third pass over 4 GiB.
+    full_chunks, tail = size.divmod(zeros.bytesize)
+    zeros_crc = Zlib.crc32(zeros)
+    crc = full_chunks.times.reduce(Zlib.crc32) { |acc, _| Zlib.crc32_combine(acc, zeros_crc, zeros.bytesize) }
+    crc = Zlib.crc32_combine(crc, Zlib.crc32(zeros.byteslice(0, tail)), tail)
+    expect(read_forward_only(archive.path)).to eq("zeros.bin" => [size, crc])
   ensure
     archive&.close!
   end
