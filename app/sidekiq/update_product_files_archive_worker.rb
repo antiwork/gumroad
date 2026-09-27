@@ -5,6 +5,9 @@ class UpdateProductFilesArchiveWorker
   sidekiq_options retry: 5, queue: :low
 
   PRODUCT_FILES_ARCHIVE_FILE_SIZE_LIMIT = 500.megabytes
+  # Only bundle ZIPs go past the old limit. Product and folder ZIPs are rebuilt on every content
+  # change, and the download page hides their buttons above 500 MB (RichContent.tsx).
+  BUNDLE_ARCHIVE_FILE_SIZE_LIMIT = 8.gigabytes
   UNTITLED_FILENAME = "Untitled"
 
   # On an EXT4 file system, the command "getconf PATH_MAX /" returns 255 which
@@ -23,13 +26,23 @@ class UpdateProductFilesArchiveWorker
   # much smaller.
   MAX_FILENAME_BYTESIZE = 150
 
-  def initialize
-    @used_file_paths = []
-  end
+  # Bounds the HEAD requests and the central directory the build keeps in memory.
+  MAX_ARCHIVE_ENTRIES = 10_000
+  # Each upload thread buffers one part, so upload memory is about UPLOAD_CONCURRENCY * UPLOAD_PART_SIZE.
+  UPLOAD_PART_SIZE = 16.megabytes
+  UPLOAD_CONCURRENCY = 4
+  SOURCE_READ_ATTEMPTS = 3
 
-  # Renewed before each download and the upload, so it only has to outlast one transfer; a
-  # crashed run delays the next rebuild by at most this much.
+  class SourceChangedError < StandardError; end
+  class ArchiveSizeMismatchError < StandardError; end
+  # Raised so Sidekiq retries: the key vanished (expiry, eviction, failover) and no run owns the row.
+  class LockLostError < StandardError; end
+  class LockTakenError < StandardError; end
+
+  # Renewed before each file and every LOCK_RENEWAL_INTERVAL while one streams; a crashed run
+  # delays the next rebuild by at most the TTL.
   LOCK_TTL = 30.minutes
+  LOCK_RENEWAL_INTERVAL = 1.minute
   LOCKED_RETRY_DELAY = 1.minute
   RELEASE_LOCK_SCRIPT = <<~LUA
     if redis.call("get", KEYS[1]) == ARGV[1] then return redis.call("del", KEYS[1]) end
@@ -81,23 +94,100 @@ class UpdateProductFilesArchiveWorker
     Rails.logger.info("Beginning UpdateProductFilesArchive Job for #{product_files_archive.id}")
     product_files_archive.mark_in_progress!
 
-    estimated_size = calculate_estimated_size(product_files_archive)
-    if estimated_size > PRODUCT_FILES_ARCHIVE_FILE_SIZE_LIMIT
-      product_files_archive.mark_too_large!
-      Rails.logger.info("UpdateProductFilesArchive Job #{product_files_archive.id} failed - Archive is too large.")
+    # Recorded sizes rule out an oversize archive before any request; the HEAD sizes below decide.
+    size_limit = product_files_archive.bundle_purchase_archive? ? BUNDLE_ARCHIVE_FILE_SIZE_LIMIT : PRODUCT_FILES_ARCHIVE_FILE_SIZE_LIMIT
+    entries = archive_entries(product_files_archive)
+    recorded_size = entries.sum { |product_file, _| product_file.size.to_i }
+    if entries.size > MAX_ARCHIVE_ENTRIES || recorded_size > size_limit
+      mark_too_large(product_files_archive)
+      return
+    end
+    if entries.empty?
+      product_files_archive.mark_failed!
+      Rails.logger.info("UpdateProductFilesArchive Job #{product_files_archive.id} failed - No files to archive.")
       return
     end
 
-    zip_archive_filename = File.join(Dir.tmpdir, "#{product_files_archive.external_id}.zip")
-    product_files = product_files_archive.product_files.not_external_link
-    rich_content_files_and_folders_mapping = product_files_archive.rich_content_provider&.map_rich_content_files_and_folders
-    Zip::File.open(zip_archive_filename, Zip::File::CREATE) do |zip_file|
-      product_files.each do |product_file|
+    sources = entries.map do |product_file, file_path|
+      renew_lock!
+      source = product_file.s3_object
+      head = source.client.head_object(bucket: source.bucket_name, key: source.key)
+      [source, file_path, head.content_length, head.etag]
+    rescue Aws::S3::Errors::NotFound
+      # If the file does not exist on S3 for any reason, abandon this job without raising an error.
+      product_files_archive.mark_failed!
+      Rails.logger.info("UpdateProductFilesArchive Job #{product_files_archive.id} failed - missing file #{product_file.id}")
+      return
+    end
+
+    if sources.sum { |_, _, size, _| size } > size_limit
+      mark_too_large(product_files_archive)
+      return
+    end
+
+    # The HEAD pass can outlast the lock. Confirm this run still owns it before aborting every
+    # unfinished upload at the key, or a newer run's upload is destroyed.
+    renew_lock!
+    abort_unfinished_uploads(product_files_archive)
+    archive_object = product_files_archive.s3_object
+    zip = nil
+    upload_archive(archive_object) do |pipe|
+      # The SDK's pipe is in text mode, where Rails' UTF-8 default_internal transcodes each write.
+      pipe.binmode
+      zip = StreamingZipWriter.new(pipe)
+      sources.each do |source, file_path, size, etag|
+        renew_lock!
+        # Only inputs just under 4 GiB can deflate past it, so only they are read twice.
+        compressed_size = if StreamingZipWriter.compressed_size_needed?(size)
+          zip.deflated_size { |counter| stream_source(source, size, etag, counter) }
+        end
+        zip.write_entry(file_path, size:, compressed_size:) { |entry_data| stream_source(source, size, etag, entry_data) }
+      end
+      zip.close
+    end
+    renew_lock!
+    stored_size = archive_object.client.head_object(bucket: archive_object.bucket_name, key: archive_object.key).content_length
+    raise ArchiveSizeMismatchError, "stored #{stored_size} bytes, wrote #{zip.bytes_written}" if stored_size != zip.bytes_written
+
+    # A file rewritten mid-build resets the archive to queueing and enqueues a rebuild; this ZIP
+    # may hold its old bytes, so leave it hidden for that rebuild.
+    product_files_archive.with_lock do
+      product_files_archive.mark_ready! if product_files_archive.in_progress?
+    end
+    Rails.logger.info("UpdateProductFilesArchive job completed for id #{product_files_archive.id} " \
+                      "(#{entries.size} files, #{zip.bytes_written} bytes).")
+  rescue LockTakenError
+    Rails.logger.info("UpdateProductFilesArchive Job #{product_files_archive.id} stopped - another run holds the lock")
+  rescue NoMemoryError, Aws::S3::Errors::NoSuchKey, Seahorse::Client::NetworkingError, Aws::S3::Errors::ServiceError,
+         Aws::S3::MultipartUploadError, SourceChangedError, StreamingZipWriter::SizeMismatchError, ArchiveSizeMismatchError => e
+    ErrorNotifier.notify(e)
+    Rails.logger.info("UpdateProductFilesArchive Job #{product_files_archive.id} failed - #{e.class.name}: #{e.message}")
+    # Only the lock holder may change the row: with no holder, Sidekiq's retry rebuilds it.
+    holder = $redis.get(@lock_key)
+    if holder != @lock_token
+      raise e if holder.nil?
+      return
+    end
+    reset_for_rebuild = product_files_archive.with_lock do
+      product_files_archive.mark_failed! if product_files_archive.in_progress?
+      product_files_archive.queueing?
+    end
+    # The reset already enqueued the rebuild, so a retry here would only build the archive twice.
+    raise e unless reset_for_rebuild
+  end
+
+  private
+    attr_reader :used_file_paths
+
+    def archive_entries(product_files_archive)
+      @used_file_paths = []
+      bundle_purchase_archive = product_files_archive.bundle_purchase_archive?
+      rich_content_files_and_folders_mapping = product_files_archive.rich_content_provider&.map_rich_content_files_and_folders
+      # Ordered so a retry or rebuild hands out the same collision suffixes.
+      product_files_archive.product_files.not_external_link.order(:id).filter_map do |product_file|
         next if product_file.stream_only?
 
-        $redis.eval(RENEW_LOCK_SCRIPT, keys: [@lock_key], argv: [@lock_token, LOCK_TTL.to_i])
-
-        if product_files_archive.bundle_purchase_archive?
+        if bundle_purchase_archive
           file_path_parts = [product_file.link.name, product_file.folder&.name, product_file.name_displayable]
         elsif rich_content_files_and_folders_mapping.nil?
           file_path_parts = [product_file.folder&.name, product_file.name_displayable]
@@ -107,81 +197,76 @@ class UpdateProductFilesArchiveWorker
           directory_info = product_files_archive.folder_archive? ? [] : [file_info[:page_title], file_info[:folder_name]]
           file_path_parts = directory_info.concat([file_info[:file_name]])
         end
-        file_path = compose_file_path(file_path_parts, product_file.s3_extension)
-        zip_file.get_output_stream(file_path) do |output_stream|
-          temp_file = Tempfile.new
-          begin
-            product_file.s3_object.download_file(temp_file.path)
-          rescue Aws::S3::Errors::NotFound
-            # If the file does not exist on S3 for any reason, abandon this job without raising an error.
-            product_files_archive.mark_failed!
-            Rails.logger.info("UpdateProductFilesArchive Job #{product_files_archive.id} failed - missing file #{product_file.id}")
-            return
+        [product_file, compose_file_path(file_path_parts, product_file.s3_extension)]
+      end
+    end
+
+    def mark_too_large(product_files_archive)
+      product_files_archive.mark_too_large!
+      Rails.logger.info("UpdateProductFilesArchive Job #{product_files_archive.id} failed - Archive is too large.")
+    end
+
+    # Reads the object in one streamed GET, resuming at the last byte received after a dropped
+    # connection. A completed read that adds no bytes counts as a failed attempt. If-Match pins
+    # every request to the ETag the size came from, so a replaced source cannot mix two versions.
+    def stream_source(source, size, etag, entry_data)
+      received = 0
+      failed_reads = 0
+      while received < size
+        before = received
+        begin
+          source.client.get_object(bucket: source.bucket_name, key: source.key, if_match: etag,
+                                   range: "bytes=#{received}-#{size - 1}") do |chunk|
+            received += chunk.bytesize
+            raise SourceChangedError, "#{source.key} sent more than #{size} bytes" if received > size
+
+            entry_data.write(chunk)
+            renew_lock! if lock_renewal_due?
           end
-          temp_file.rewind
-          output_stream.write(temp_file.read)
+        rescue Seahorse::Client::NetworkingError => e
+          failed_reads += 1
+          raise e if failed_reads >= SOURCE_READ_ATTEMPTS
+          next
         end
+        next if received > before
+
+        failed_reads += 1
+        raise Seahorse::Client::NetworkingError.new(Errno::ECONNRESET.new) if failed_reads >= SOURCE_READ_ATTEMPTS
       end
     end
 
-    unless File.exist?(zip_archive_filename)
-      product_files_archive.mark_failed!
-      Rails.logger.info("UpdateProductFilesArchive Job #{product_files_archive.id} failed - Zip file was not written.")
-      return
+    def lock_renewal_due?
+      Process.clock_gettime(Process::CLOCK_MONOTONIC) - @lock_renewed_at >= LOCK_RENEWAL_INTERVAL
     end
 
-    # NOTE: Probably better to not have to reopen this file, but couldn't get a
-    # variable to hold the zip file, so had to do it this way.
-    file = File.open(zip_archive_filename, "rb")
-    archive_s3_object = product_files_archive.s3_object
-    $redis.eval(RENEW_LOCK_SCRIPT, keys: [@lock_key], argv: [@lock_token, LOCK_TTL.to_i])
-    archive_s3_object.upload_file(file, content_type: "application/zip")
-    # A file rewritten mid-build resets the archive to queueing and enqueues a rebuild; this ZIP
-    # may hold its old bytes, so leave it hidden for that rebuild.
-    product_files_archive.with_lock do
-      product_files_archive.mark_ready! if product_files_archive.in_progress?
+    def renew_lock!
+      renewed = $redis.eval(RENEW_LOCK_SCRIPT, keys: [@lock_key], argv: [@lock_token, LOCK_TTL.to_i])
+      raise($redis.get(@lock_key).nil? ? LockLostError : LockTakenError) if renewed != 1
+
+      @lock_renewed_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
     end
-    Rails.logger.info("UpdateProductFilesArchive job completed for id #{product_files_archive.id}.")
-  rescue NoMemoryError, Aws::S3::Errors::NoSuchKey, Errno::ENOENT, Seahorse::Client::NetworkingError, Aws::S3::Errors::ServiceError => e
-    file&.close
-    delete_temp_zip_file_if_exists(zip_archive_filename)
 
-    product_files_archive.mark_failed!
-    ErrorNotifier.notify(e)
-    Rails.logger.info("UpdateProductFilesArchive Job #{product_files_archive.id} failed - #{e.class.name}: #{e.message}")
-    raise e
-  ensure
-    file&.close
-    delete_temp_zip_file_if_exists(zip_archive_filename)
-  end
-
-  # Helper method to delete any zip files that might get left around
-  def delete_temp_zip_file_if_exists(zip_archive_filename)
-    if zip_archive_filename && File.exist?(zip_archive_filename)
-      if File.delete(zip_archive_filename)
-        Rails.logger.info("Temporary zip file deleted.")
-      else
-        Rails.logger.info("Zip file was not deleted.")
-      end
+    # The SDK aborts the upload on any StandardError from the block or a part and raises
+    # MultipartUploadError. Closing its pipe makes the other side fail too (IOError, EPIPE), so
+    # re-raise the error that started it, which keeps its handling here. An Interrupt
+    # (Sidekiq::Shutdown) skips that abort; the requeued run's abort_unfinished_uploads clears it.
+    def upload_archive(archive_object, &block)
+      archive_object.upload_stream(part_size: UPLOAD_PART_SIZE, thread_count: UPLOAD_CONCURRENCY,
+                                   content_type: "application/zip", checksum_algorithm: "CRC32", &block)
+    rescue Aws::S3::MultipartUploadError => e
+      raise(e.errors.find { !_1.is_a?(IOError) && !_1.is_a?(Errno::EPIPE) } || e)
     end
-  end
 
-  def calculate_estimated_size(product_files_archive)
-    Rails.logger.info("Calculating estimated archive size.")
-    estimated_size = 0
-    product_files_archive.product_files.each do |product_file|
-      if product_file.size
-        estimated_size += product_file.size
-      else
-        Rails.logger.info("Fetching product file size from S3.")
-        estimated_size += product_file.s3_object.content_length if product_file.s3?
-      end
+    # A killed or interrupted build never aborts its upload, so its parts stay stored until the bucket
+    # expires them. Best effort: a build that cannot list uploads (missing permission, S3 error) still runs.
+    def abort_unfinished_uploads(product_files_archive)
+      object = product_files_archive.s3_object
+      uploads = object.client.list_multipart_uploads(bucket: object.bucket_name, prefix: object.key).uploads.select { _1.key == object.key }
+      uploads.each { object.client.abort_multipart_upload(bucket: object.bucket_name, key: object.key, upload_id: _1.upload_id) }
+      Rails.logger.info("UpdateProductFilesArchive Job #{product_files_archive.id} aborted #{uploads.size} unfinished uploads") if uploads.any?
+    rescue Aws::S3::Errors::ServiceError, Seahorse::Client::NetworkingError => e
+      ErrorNotifier.notify(e)
     end
-    estimated_size
-  end
-
-  private
-    attr_reader :used_file_paths
 
     def compose_file_path(file_path_parts, extension)
       file_path_parts = file_path_parts.map { |name| sanitize_filename(name || "") }.compact_blank
@@ -190,7 +275,7 @@ class UpdateProductFilesArchiveWorker
       # approx 255 bytes (Reference: https://serverfault.com/a/9548/122209).
       # Since the file name can be a multibyte unicode string, we must
       # truncate the string by multibyte characters (graphemes).
-      path_without_extension = truncate_path(file_path_parts)
+      path_without_extension = truncate_path(file_path_parts).presence || UNTITLED_FILENAME
       file_path = "#{path_without_extension}#{extension}"
 
       # Make sure each entry in the zip file has a unique path. If entry names are not unique the zip file will be corrupted.
