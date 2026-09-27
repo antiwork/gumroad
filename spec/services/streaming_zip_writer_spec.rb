@@ -96,6 +96,36 @@ describe StreamingZipWriter do
     end.to raise_error(described_class::SizeMismatchError, /declared 10 bytes, wrote 3/)
   end
 
+  it "refuses further entries and the central directory once an entry has failed" do
+    writer = described_class.new(StringIO.new)
+
+    expect { writer.write_entry("short.bin", size: 10) { _1.write("123") } }.to raise_error(described_class::SizeMismatchError)
+    expect { writer.write_entry("next.bin", size: 1) { _1.write("x") } }.to raise_error(described_class::FailedError)
+    expect { writer.close }.to raise_error(described_class::FailedError)
+  end
+
+  it "leaves the modification time it is given unchanged" do
+    modified_at = Time.new(2026, 9, 27, 10, 0, 0, "-05:00")
+
+    described_class.new(StringIO.new, modified_at:)
+
+    expect(modified_at.utc_offset).to eq(-5.hours)
+  end
+
+  it "writes the ZIP64 end records once the entry count outgrows its 16-bit field" do
+    archive = Tempfile.new(["many", ".zip"], binmode: true)
+    writer = described_class.new(archive)
+    described_class::TWO_BYTE_MAX.times { |index| writer.write_entry("entry-#{index}", size: 0) { } }
+    writer.close
+    archive.flush
+
+    bytes = File.binread(archive.path)
+    expect(bytes).to include([0x06064b50].pack("V"), [0x07064b50].pack("V"))
+    Zip::File.open(archive.path) { |zip| expect(zip.size).to eq(described_class::TWO_BYTE_MAX) }
+  ensure
+    archive&.close!
+  end
+
   it "asks for the compressed size only where deflate can cross 4 GiB while the input does not" do
     expect(described_class.compressed_size_needed?(0)).to be(false)
     expect(described_class.compressed_size_needed?(0xFFFF_FFFF - 2.megabytes)).to be(false)

@@ -10,6 +10,8 @@
 # might cross 4 GiB when its input does not (see .compressed_size_needed?) needs that size up front.
 class StreamingZipWriter
   class SizeMismatchError < StandardError; end
+  # Raised once an entry has failed: its bytes are already in the sink, so the archive is unusable.
+  class FailedError < StandardError; end
 
   FOUR_BYTE_MAX = 0xFFFF_FFFF
   TWO_BYTE_MAX = 0xFFFF
@@ -21,6 +23,9 @@ class StreamingZipWriter
   DEFLATED = 8
   UNIX_FILE_ATTRIBUTES = 0o100644 << 16
   ZIP64_END_OF_CENTRAL_DIRECTORY_SIZE = 56
+  # Fixed: #deflated_size predicts #write_entry's output only while deflate ignores how the input is
+  # split, and at level 0 it does not.
+  DEFLATE_LEVEL = Zlib::DEFAULT_COMPRESSION
 
   Entry = Struct.new(:name, :size, :compressed_size, :crc32, :offset, :zip64_local, keyword_init: true)
 
@@ -36,9 +41,8 @@ class StreamingZipWriter
 
   attr_reader :bytes_written
 
-  def initialize(sink, modified_at: Time.current, level: Zlib::DEFAULT_COMPRESSION)
+  def initialize(sink, modified_at: Time.current)
     @sink = sink
-    @level = level
     @bytes_written = 0
     @entries = []
     @dos_time, @dos_date = dos_time_and_date(modified_at)
@@ -47,39 +51,44 @@ class StreamingZipWriter
   # Yields a writer for the entry's uncompressed bytes. `size`, and `compressed_size` when
   # .compressed_size_needed?, must match what is written: the local header is sent before any data.
   def write_entry(name, size:, compressed_size: nil)
+    raise FailedError, "an earlier entry failed" if @failed
     if compressed_size.nil? && self.class.compressed_size_needed?(size)
       raise ArgumentError, "#{name}: #{size} bytes may deflate past 4 GiB, so its compressed size is needed"
     end
 
     entry = Entry.new(name: name.b, size:, offset: @bytes_written,
                       zip64_local: size > FOUR_BYTE_MAX || compressed_size.to_i > FOUR_BYTE_MAX)
-    write_local_header(entry)
-
-    data = EntryData.new(self, @level)
     begin
-      yield data
-      data.finish
-    ensure
-      data.close
-    end
-    raise SizeMismatchError, "#{name}: declared #{size} bytes, wrote #{data.size}" if data.size != size
-    if compressed_size && data.compressed_size != compressed_size
-      raise SizeMismatchError, "#{name}: expected #{compressed_size} compressed bytes, wrote #{data.compressed_size}"
-    end
-    if !entry.zip64_local && data.compressed_size > FOUR_BYTE_MAX
-      raise SizeMismatchError, "#{name}: compressed past 4 GiB without a ZIP64 local header"
-    end
+      write_local_header(entry)
+      data = EntryData.new(self)
+      begin
+        yield data
+        data.finish
+      ensure
+        data.close
+      end
+      raise SizeMismatchError, "#{name}: declared #{size} bytes, wrote #{data.size}" if data.size != size
+      if compressed_size && data.compressed_size != compressed_size
+        raise SizeMismatchError, "#{name}: expected #{compressed_size} compressed bytes, wrote #{data.compressed_size}"
+      end
+      if !entry.zip64_local && data.compressed_size > FOUR_BYTE_MAX
+        raise SizeMismatchError, "#{name}: compressed past 4 GiB without a ZIP64 local header"
+      end
 
-    entry.crc32 = data.crc32
-    entry.compressed_size = data.compressed_size
-    write_data_descriptor(entry)
+      entry.crc32 = data.crc32
+      entry.compressed_size = data.compressed_size
+      write_data_descriptor(entry)
+    rescue Exception
+      @failed = true
+      raise
+    end
     @entries << entry
   end
 
   # Deflates what the block writes with #write_entry's settings and returns the compressed length,
   # discarding the output.
   def deflated_size
-    data = EntryData.new(DISCARD, @level)
+    data = EntryData.new(DISCARD)
     yield data
     data.finish
     data.compressed_size
@@ -88,6 +97,8 @@ class StreamingZipWriter
   end
 
   def close
+    raise FailedError, "an earlier entry failed" if @failed
+
     central_directory_offset = @bytes_written
     @entries.each { write_central_header(_1) }
     central_directory_size = @bytes_written - central_directory_offset
@@ -112,9 +123,9 @@ class StreamingZipWriter
   class EntryData
     attr_reader :size, :compressed_size, :crc32
 
-    def initialize(writer, level)
+    def initialize(writer)
       @writer = writer
-      @deflate = Zlib::Deflate.new(level, -Zlib::MAX_WBITS)
+      @deflate = Zlib::Deflate.new(DEFLATE_LEVEL, -Zlib::MAX_WBITS)
       @size = 0
       @compressed_size = 0
       @crc32 = Zlib.crc32
@@ -191,7 +202,7 @@ class StreamingZipWriter
     end
 
     def dos_time_and_date(time)
-      time = time.utc
+      time = time.getutc
       year = time.year.clamp(1980, 2107)
       [(time.hour << 11) | (time.min << 5) | (time.sec / 2), ((year - 1980) << 9) | (time.month << 5) | time.day]
     end
