@@ -20,7 +20,7 @@ The rest of the guidelines below apply too, with the obvious substitutions for w
 
 A fork PR that skips the evidence gets the same answer as one of ours that skips it: it isn't ready. If your change is good and documented well, the fork is not a barrier — it's just where the work lives until we pull it in.
 
-**Issues and bug reports are still welcome here.** This is about pull requests only — [file issues](https://github.com/antiwork/gumroad/issues) and bug reports on this repo as normal.
+**Bug reports and questions are still welcome** — [email support@gumroad.com](mailto:support@gumroad.com). The fork route above is for pull requests.
 
 Merged fork commits keep your authorship, so contributions show up under your name in the history. Emailing us a link to your fork PR counts as contributing under the [license terms](#license) at the bottom of this guide.
 
@@ -219,10 +219,6 @@ A great bug report includes:
 - What you expected would happen
 - What actually happens
 - Notes (possibly including why you think this might be happening, or stuff you tried that didn't work)
-
-## Help
-
-- Any issue with label `help wanted` is one we'd welcome a fix for - [view open issues](https://github.com/antiwork/gumroad/issues?q=state%3Aopen%20label%3A%22help%20wanted%22). Work it on your fork and email [support@gumroad.com](mailto:support@gumroad.com) with the link, per [the route at the top of this guide](#contributing-from-a-fork).
 
 ## When you're corrected, fix the docs
 
