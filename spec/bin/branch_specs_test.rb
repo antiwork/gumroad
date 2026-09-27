@@ -984,16 +984,22 @@ check(
 # One check per block, so a name that stops matching the mapping fails on its own.
 %w[LicenseKey ShortAnswer LongAnswer TextInputNodeView FileUpload Posts MoreLikeThis].each do |block|
   check(
-    "content-only editor block #{block} selects the product editor and download page specs",
+    "content-only editor block #{block} selects the product and download specs",
     base_files: {
       "spec/requests/products/edit/rich_text_editor_spec.rb" => SPEC_STUB,
+      "spec/requests/products/show/show_spec.rb" => SPEC_STUB,
       "spec/requests/download_page/download_page_spec.rb" => SPEC_STUB,
+      "spec/requests/reading_spec.rb" => SPEC_STUB,
+      "spec/requests/video_streaming_spec.rb" => SPEC_STUB,
       "app/javascript/components/TiptapExtensions/#{block}.tsx" => "old",
     },
     head_files: { "app/javascript/components/TiptapExtensions/#{block}.tsx" => "new" },
     expect_specs: %w[
       spec/requests/download_page/download_page_spec.rb
       spec/requests/products/edit/rich_text_editor_spec.rb
+      spec/requests/products/show/show_spec.rb
+      spec/requests/reading_spec.rb
+      spec/requests/video_streaming_spec.rb
     ],
   )
 end
