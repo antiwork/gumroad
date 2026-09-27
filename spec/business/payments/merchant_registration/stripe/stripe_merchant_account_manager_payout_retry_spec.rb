@@ -630,6 +630,85 @@ describe StripeMerchantAccountManager do
         expect(keys.last).not_to eq("abandoned-key")
       end
 
+      it "does not adopt a recovered account whose country no longer matches" do
+        user_compliance_info.update_columns(deleted_at: Time.current)
+        create(:user_compliance_info_canada, user:)
+        user.add_payout_note(
+          content: "#{StripeMerchantAccountManager::NO_VERDICT_FAILURE_NOTE_PREFIX}: lost",
+          json_data: {
+            "no_verdict" => true,
+            "abandoned_at" => 1.hour.ago.iso8601,
+            StripeMerchantAccountManager::ACCOUNT_CREATION_IDEMPOTENCY_KEY => "old-country-key",
+            StripeMerchantAccountManager::ACCOUNT_CREATION_ATTEMPTED_AT => 25.hours.ago.iso8601
+          }
+        )
+        old_account = Stripe::Account.construct_from(
+          id: "acct_old_country",
+          object: "account",
+          type: "custom",
+          country: "US",
+          metadata: { "user_id" => user.external_id },
+          external_accounts: { object: "list", data: [] }
+        )
+        allow(Stripe::Account).to receive(:list).and_return(
+          Stripe::ListObject.construct_from(object: "list", data: [old_account], has_more: false)
+        )
+        allow(Stripe::Account).to receive(:retrieve).and_return(old_account)
+        keys = []
+        allow(Stripe::Account).to receive(:create) do |_params, opts = nil|
+          keys << opts[:idempotency_key]
+          raise Stripe::APIConnectionError.new("lost")
+        end
+        allow(ErrorNotifier).to receive(:notify)
+
+        expect { described_class.create_account(user, passphrase:) }.to raise_error(Stripe::APIConnectionError)
+
+        expect(keys.first).to be_present
+        expect(keys.first).not_to eq("old-country-key")
+        expect(MerchantAccount.alive.stripe.find_by(charge_processor_merchant_id: "acct_old_country")).to be_nil
+      end
+
+      it "adopts the matching-country account when an older country is in the same window" do
+        user_compliance_info.update_columns(deleted_at: Time.current)
+        create(:user_compliance_info_canada, user:)
+        user.add_payout_note(
+          content: "#{StripeMerchantAccountManager::NO_VERDICT_FAILURE_NOTE_PREFIX}: lost",
+          json_data: {
+            "no_verdict" => true,
+            "abandoned_at" => 1.hour.ago.iso8601,
+            StripeMerchantAccountManager::ACCOUNT_CREATION_IDEMPOTENCY_KEY => "old-country-key",
+            StripeMerchantAccountManager::ACCOUNT_CREATION_ATTEMPTED_AT => 25.hours.ago.iso8601
+          }
+        )
+        old_account = Stripe::Account.construct_from(
+          id: "acct_old_country", object: "account", type: "custom", country: "US",
+          metadata: { "user_id" => user.external_id }
+        )
+        current = Stripe::Account.construct_from(
+          id: "acct_ca", object: "account", type: "custom", country: "CA",
+          metadata: { "user_id" => user.external_id, "bank_account_id" => bank_account.external_id },
+          external_accounts: {
+            object: "list",
+            data: [{
+              id: "ba_ca", object: "bank_account", fingerprint: "fp_ca",
+              last4: bank_account.account_number_last_four,
+              routing_number: bank_account.stripe_external_account_routing_number,
+              currency: bank_account.stripe_external_account_currency,
+              country: bank_account.stripe_external_account_country
+            }]
+          }
+        )
+        allow(Stripe::Account).to receive(:list).and_return(
+          Stripe::ListObject.construct_from(object: "list", data: [old_account, current], has_more: false)
+        )
+        allow(Stripe::Account).to receive(:retrieve).with("acct_ca").and_return(current)
+        expect(Stripe::Account).not_to receive(:create)
+
+        merchant_account = described_class.create_account(user, passphrase:, notify: false)
+
+        expect(merchant_account.charge_processor_merchant_id).to eq("acct_ca")
+      end
+
       it "replaces a bank link that still points at an older Stripe account" do
         create(:merchant_account_stripe, user:, charge_processor_merchant_id: "acct_new")
         bank_account.update!(stripe_bank_account_id: "ba_old", stripe_connect_account_id: "acct_old")

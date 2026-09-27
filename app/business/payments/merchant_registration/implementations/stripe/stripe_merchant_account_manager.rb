@@ -2004,7 +2004,9 @@ module StripeMerchantAccountManager
 
   private_class_method
   def self.create_or_recover_stripe_account(user, account_params, idempotency_key)
-    recovered = recover_uncertain_stripe_account(user)
+    recovered = recover_uncertain_stripe_account(user, country: account_params[:country])
+    replacement = replace_country_mismatched_recovery(user, recovered, account_params)
+    return replacement if replacement
     return [recovered, true] if recovered.is_a?(Stripe::Account)
     raise Stripe::APIError.new("Uncertain Stripe account creation could not be reconciled") if recovered == :unreconciled
 
@@ -2019,7 +2021,9 @@ module StripeMerchantAccountManager
   rescue Stripe::IdempotencyError
     # The stored key was used with different parameters, so Stripe will not replay it. Adopt the
     # account if the first request created one; do not open a second one to get past the error.
-    recovered = list_matching_uncertain_account(user)
+    recovered = list_matching_uncertain_account(user, country: account_params[:country])
+    replacement = replace_country_mismatched_recovery(user, recovered, account_params)
+    return replacement if replacement
     return [recovered, true] if recovered.is_a?(Stripe::Account)
     raise Stripe::APIError.new("Uncertain Stripe account creation could not be reconciled") if recovered == :unreconciled
 
@@ -2028,9 +2032,36 @@ module StripeMerchantAccountManager
     [Stripe::Account.create(force_utf8_encoding(account_params), { idempotency_key: replacement_key }), false]
   end
 
-  # nil: no account to adopt, so Account.create is safe. :unreconciled: do not create.
+  # Stripe will not change an account's country. Adopting the old account would save the new
+  # country locally against an account that can never pay out there.
   private_class_method
-  def self.recover_uncertain_stripe_account(user)
+  def self.replace_country_mismatched_recovery(user, account, account_params)
+    return nil unless account.is_a?(Stripe::Account)
+    return nil unless account_country_conflicts_with_legal_entity?(stripe_account_country(account), account_params[:country])
+
+    drop_abandoned_account_creation_keys!(user)
+    key = SecureRandom.uuid
+    raise Stripe::APIError.new("Uncertain Stripe account creation could not be reconciled") unless remember_account_creation_idempotency_key(user, key)
+
+    [Stripe::Account.create(force_utf8_encoding(account_params), { idempotency_key: key }), false]
+  end
+
+  private_class_method
+  def self.drop_abandoned_account_creation_keys!(user)
+    user.comments
+      .with_type_payout_note
+      .alive
+      .where(author_id: GUMROAD_ADMIN_ID)
+      .where("content LIKE ?", "#{NO_VERDICT_FAILURE_NOTE_PREFIX}%")
+      .select { |note| note.json_data["abandoned_at"].present? && note.json_data[ACCOUNT_CREATION_IDEMPOTENCY_KEY].present? }
+      .each do |note|
+        note.json_data.delete(ACCOUNT_CREATION_IDEMPOTENCY_KEY)
+        note.save!
+      end
+  end
+
+  private_class_method
+  def self.recover_uncertain_stripe_account(user, country: nil)
     note = recovery_note(user)
     return nil if note.nil?
 
@@ -2038,11 +2069,11 @@ module StripeMerchantAccountManager
     attempted_at = account_creation_attempted_at(note)
     return :replay if attempted_at > STRIPE_IDEMPOTENCY_RETENTION.ago && stored_key.present?
 
-    list_matching_uncertain_account(user, note:)
+    list_matching_uncertain_account(user, note:, country:)
   end
 
   private_class_method
-  def self.list_matching_uncertain_account(user, note: nil)
+  def self.list_matching_uncertain_account(user, note: nil, country: nil)
     note ||= oldest_outstanding_no_verdict_note(user)
     return nil if note.nil?
 
@@ -2060,7 +2091,7 @@ module StripeMerchantAccountManager
         starting_after: starting_after
       }.compact)
       data = page.respond_to?(:data) ? Array(page.data) : Array(page)
-      matches.concat(data.select { |account| uncertain_account_match?(account, user) })
+      matches.concat(data.select { |account| uncertain_account_match?(account, user, country:) })
       has_more = page.respond_to?(:has_more) && page.has_more && data.any?
       incomplete = has_more
       break unless has_more
@@ -2078,14 +2109,16 @@ module StripeMerchantAccountManager
     # must not be adopted; the next create opens a new one.
     account = Stripe::Account.retrieve(ids.first)
     return nil if account["deleted"]
+    return nil if account_country_conflicts_with_legal_entity?(stripe_account_country(account), country)
 
     account
   end
 
   private_class_method
-  def self.uncertain_account_match?(account, user)
+  def self.uncertain_account_match?(account, user, country: nil)
     return false if account["id"].blank? || account["deleted"]
     return false if account["type"].present? && account["type"] != "custom"
+    return false if account_country_conflicts_with_legal_entity?(stripe_account_country(account), country)
 
     linked_user_id = MerchantAccount.alive.stripe.find_by(charge_processor_merchant_id: account["id"])&.user_id
     return false if linked_user_id.present? && linked_user_id != user.id
