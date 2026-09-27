@@ -97,11 +97,12 @@ describe "Closing a membership tier to new purchases" do
       expect(Rails.logger).not_to have_received(:info).with(a_string_including(purchase.email))
     end
 
-    it "shows the tier as sold out on a direct link and keeps the fallback off it" do
+    it "keeps a direct link off a closed tier and falls back to an open one" do
       open_tier = create(:variant, variant_category: product.tier_category, name: "Open")
 
       direct = product.reload.cart_item(option: tier.external_id)
-      expect(direct[:option]).to include(id: tier.external_id, quantity_left: 0)
+      expect(direct[:option][:id]).to eq(open_tier.external_id)
+      expect(direct[:option][:quantity_left]).not_to eq(0)
 
       expect(product.cart_item({})[:option][:id]).to eq(open_tier.external_id)
     end

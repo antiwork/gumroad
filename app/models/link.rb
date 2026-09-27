@@ -1440,7 +1440,10 @@ class Link < ApplicationRecord
     attrs = {}
     attrs[:rental] = !!params[:rent] && purchase_type != "buy_only"
     attrs[:options] = options
-    attrs[:option] = attrs[:options].find { |o| o[:id] == params[:option] } || (native_type != NATIVE_TYPE_COFFEE ? attrs[:options].find { |o| o[:quantity_left] != 0 } : nil)
+    requested = attrs[:options].find { |o| o[:id] == params[:option] }
+    # A closed tier reports quantity 0. Selecting it here makes checkout add a zero-quantity item.
+    requested = nil if requested && Variant.find_by_external_id(requested[:id])&.closed_to_new_buyers?
+    attrs[:option] = requested || (native_type != NATIVE_TYPE_COFFEE ? attrs[:options].find { |o| o[:quantity_left] != 0 } : nil)
     variant = attrs[:option] ? Variant.find_by_external_id(attrs[:option][:id]) : nil
     prices = (is_tiered_membership && variant ? variant : self).prices.is_buy.alive
     recurrence = if is_recurring_billing
