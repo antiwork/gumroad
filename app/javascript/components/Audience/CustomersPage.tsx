@@ -58,7 +58,8 @@ export type CustomerPageProps = {
   can_send_emails: boolean;
 };
 
-const year = new Date().getFullYear();
+const yearInTimeZone = (date: Date, timeZone: string) =>
+  new Intl.DateTimeFormat("en-US", { timeZone, year: "numeric" }).format(date);
 
 const formatPrice = (priceCents: number, currencyType: CurrencyCode, recurrence?: RecurrenceId | null) =>
   `${formatPriceCentsWithCurrencySymbol(currencyType, priceCents, { symbolFormat: "long" })}${
@@ -643,7 +644,11 @@ const CustomersPage = ({
                         {createdAt.toLocaleDateString(userAgentInfo.locale, {
                           day: "numeric",
                           month: "short",
-                          year: createdAt.getFullYear() !== year ? "numeric" : undefined,
+                          year:
+                            yearInTimeZone(createdAt, currentSeller.timeZone.name) !==
+                            yearInTimeZone(new Date(), currentSeller.timeZone.name)
+                              ? "numeric"
+                              : undefined,
                           hour: "numeric",
                           minute: "numeric",
                           hour12: true,

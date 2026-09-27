@@ -168,7 +168,11 @@ describe("processing sales", () => {
     const sellerTime = createdAt.toLocaleDateString("en-US", {
       day: "numeric",
       month: "short",
-      year: createdAt.getFullYear() !== new Date().getFullYear() ? "numeric" : undefined,
+      year:
+        new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", year: "numeric" }).format(createdAt) !==
+        new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", year: "numeric" }).format(new Date())
+          ? "numeric"
+          : undefined,
       hour: "numeric",
       minute: "numeric",
       hour12: true,

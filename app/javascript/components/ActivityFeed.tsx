@@ -60,13 +60,16 @@ const FollowRemoved = ({ details: { email, name } }: { details: FollowItemDetail
   </>
 );
 
+const yearInTimeZone = (date: Date, timeZone: string) =>
+  new Intl.DateTimeFormat("en-US", { timeZone, year: "numeric" }).format(date);
+
 const formatProcessingSaleTime = (timestamp: string, locale: string, timeZone: string) => {
   const createdAt = new Date(timestamp);
-  // The sales row uses the viewer's current year for this choice. Keep the same rule so the two times match.
+  const showYear = yearInTimeZone(createdAt, timeZone) !== yearInTimeZone(new Date(), timeZone);
   return createdAt.toLocaleDateString(locale, {
     day: "numeric",
     month: "short",
-    year: createdAt.getFullYear() !== new Date().getFullYear() ? "numeric" : undefined,
+    year: showYear ? "numeric" : undefined,
     hour: "numeric",
     minute: "numeric",
     hour12: true,
