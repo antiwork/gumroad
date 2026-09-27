@@ -112,6 +112,7 @@ import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { useRefToLatest } from "$app/components/useRefToLatest";
 import { WithTooltip } from "$app/components/WithTooltip";
 
+import { DisableDownloadsForAllFiles } from "./DisableDownloadsForAllFiles";
 import { FileEmbed, FileEmbedConfig } from "./FileEmbed";
 import { Page, PageTab, titleWithFallback } from "./PageTab";
 import { resolveCopiedFileEmbeds } from "./resolveCopiedFileEmbeds";
@@ -869,6 +870,7 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
                     onUploadFromDropbox={uploadFromDropbox}
                   />
                 </PopoverMenuItem>
+                <DisableDownloadsForAllFiles />
                 {selectingExistingFiles ? (
                   <Modal
                     open
