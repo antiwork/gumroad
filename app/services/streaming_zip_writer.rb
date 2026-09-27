@@ -1,13 +1,9 @@
 # frozen_string_literal: true
 
-# Writes a deflated ZIP to an append-only sink (anything with `write`), so an archive never has to
-# exist as a file or a String. rubyzip cannot do this: it seeks back to patch each local header.
-#
-# The CRC and compressed size follow each entry in a data descriptor, which forward-only readers
-# accept only for deflated entries. They disagree on how wide it is: Java 17 goes by the actual
-# sizes, while libarchive and Java 21+ go by a ZIP64 extra in the local header. Both agree only when
-# that extra appears exactly when an actual size passes 4 GiB, so an entry whose compressed size
-# might cross 4 GiB when its input does not (see .compressed_size_needed?) needs that size up front.
+# Writes a deflated ZIP to an append-only sink. Forward-only readers size the data descriptor from
+# the actual sizes (Java 17) or from the local header's ZIP64 extra (libarchive, Java 21+), so that
+# extra must appear exactly when a size passes 4 GiB. An entry that may deflate past 4 GiB (see
+# .compressed_size_needed?) therefore needs its compressed size up front.
 class StreamingZipWriter
   class SizeMismatchError < StandardError; end
   # Raised once an entry has failed: its bytes are already in the sink, so the archive is unusable.
