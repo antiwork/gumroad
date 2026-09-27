@@ -928,18 +928,25 @@ module Purchase::Blockable
       max_number_of_failed_purchases_in_a_row = max_number_of_failed_purchases_in_a_row.try(:to_i) || 10
       failed_purchases_in_a_row_watch_days = failed_purchases_in_a_row_watch_days.try(:to_i) || 2
 
-      failed_purchase_attempts_count = link.sales
-                                           .failed
-                                           .not_recurring_charge
-                                           .where("price_cents > 0")
-                                           .where("error_code NOT IN (?) OR error_code IS NULL", IGNORED_ERROR_CODES)
-                                           .where(created_at: card_testing_product_watch_minutes.minutes.ago..).count
+      countable_failures = link.sales
+                               .failed
+                               .not_recurring_charge
+                               .where("price_cents > 0")
+                               .where("error_code NOT IN (?) OR error_code IS NULL", IGNORED_ERROR_CODES)
+      failed_purchase_attempts_count = countable_failures.where(created_at: card_testing_product_watch_minutes.minutes.ago..).count
 
       recent_purchases_failed_in_a_row = failed_purchases_count_redis_namespace.incr(failed_purchases_count_redis_key)
       failed_purchases_count_redis_namespace.expire(failed_purchases_count_redis_key, failed_purchases_in_a_row_watch_days.days.to_i)
 
-      return if failed_purchase_attempts_count < max_number_of_failed_purchases \
-             && recent_purchases_failed_in_a_row < max_number_of_failed_purchases_in_a_row
+      burst_tripped = failed_purchase_attempts_count >= max_number_of_failed_purchases
+      streak_tripped = recent_purchases_failed_in_a_row >= max_number_of_failed_purchases_in_a_row
+      return unless burst_tripped || streak_tripped
+
+      # One buyer retrying one card their bank keeps declining is not card testing, and a product
+      # block refuses every other buyer of the seller's product. A tester cycling cards under one
+      # email still trips this through the second fingerprint.
+      window_start = streak_tripped ? failed_purchases_in_a_row_watch_days.days.ago : card_testing_product_watch_minutes.minutes.ago
+      return if sole_buyer_failures?(countable_failures.where(created_at: window_start..))
 
       PlatformBlock.add!(
         object_type: PlatformBlock::TYPES[:product],
@@ -1017,6 +1024,11 @@ module Purchase::Blockable
 
     def free_product_ip_address_block_value
       "#{link_id}:#{ip_address}"
+    end
+
+    def sole_buyer_failures?(failures)
+      failures.distinct.limit(2).pluck(:email).size < 2 &&
+        failures.with_stripe_fingerprint.distinct.limit(2).pluck(:stripe_fingerprint).size < 2
     end
 
     def delete_failed_purchases_count

@@ -1378,6 +1378,17 @@ describe Purchase::Blockable do
         end
       end
 
+      context "when a burst over the threshold comes from one buyer and one card" do
+        before do
+          9.times { create(:failed_purchase, link: @product, email: "buyer@example.com") }
+          @purchase = create(:purchase, link: @product, email: "buyer@example.com", purchase_state: "in_progress")
+        end
+
+        it "doesn't block purchases on product" do
+          expect { @purchase.mark_failed! }.not_to change { PlatformBlock.count }
+        end
+      end
+
       context "when number of failed purchases doesn't exceed the threshold" do
         before do
           create(:failed_purchase, link: @product)
@@ -1451,6 +1462,30 @@ describe Purchase::Blockable do
                 @purchase.mark_failed!
               end.not_to change { PlatformBlock.count }
             end
+          end
+        end
+
+        context "when every failure is one buyer retrying one card" do
+          before do
+            2.times { create(:purchase, link: @product, email: "buyer@example.com", stripe_fingerprint: nil, purchase_state: "in_progress").mark_failed! }
+            @purchase = create(:purchase, link: @product, email: "buyer@example.com", stripe_fingerprint: nil, purchase_state: "in_progress")
+          end
+
+          it "doesn't block purchases on product" do
+            expect { @purchase.mark_failed! }.not_to change { PlatformBlock.count }
+          end
+
+          it "blocks once a second card appears under that email" do
+            @purchase.update!(stripe_fingerprint: "second-card")
+            create(:purchase, link: @product, email: "buyer@example.com", stripe_fingerprint: "first-card", purchase_state: "in_progress").mark_failed!
+
+            expect { @purchase.mark_failed! }.to change { PlatformBlock.product.count }.by(1)
+          end
+
+          it "blocks once a second buyer email appears" do
+            @purchase.update!(email: "other@example.com")
+
+            expect { @purchase.mark_failed! }.to change { PlatformBlock.product.count }.by(1)
           end
         end
 
