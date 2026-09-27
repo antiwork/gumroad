@@ -55,6 +55,16 @@ describe CustomDomainRouteBuilder, type: :controller do
 
         expect(controller.seller_custom_domain_url).to eq "http://#{custom_domain}/"
       end
+
+      # The origin receives the request over http behind the edge, so the scheme has to come
+      # from the app's PROTOCOL rather than from the request that happened to arrive.
+      it "pins the scheme to PROTOCOL when the request arrives over http" do
+        stub_const("PROTOCOL", "https")
+
+        get :action
+
+        expect(controller.seller_custom_domain_url).to eq "https://#{custom_domain}/"
+      end
     end
 
     context "when the request is through a product custom domain" do
