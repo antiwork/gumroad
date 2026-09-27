@@ -112,6 +112,10 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
             if still_active && block.blocked_by.nil? && !newly_disputed_or_suspended?(email)
               window = burst_window(block)
               siblings = burst_siblings(email, window)
+              if siblings.nil?
+                held << entry.merge(reason: :sibling_lookup_truncated)
+                next
+              end
               # Siblings first, the email row last: they are only reachable through this block, so a
               # write that raises mid-burst has to leave the anchor active or the retry has no
               # candidate to re-anchor on and the sibling rows stay blocked forever.
@@ -188,11 +192,13 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
 
     # Anyone can type this email into a failed attempt, so sibling values come from successful purchases only.
     def burst_siblings(email, window)
+      @decline_scan_incomplete = false
       purchases = Purchase.successful.where(email:)
       stripe_fingerprints, other_visuals = card_sibling_values(purchases)
       guids = purchases.where.not(browser_guid: [nil, ""]).distinct.limit(MAX_SIBLING_VALUES + 1).pluck(:browser_guid)
-      # A truncated list can omit a guid the 7-day rule still counts, so nothing is cleared.
-      return [] if guids.size > MAX_SIBLING_VALUES
+      # A truncated list can omit a sibling the 7-day rule still counts. Leave the email blocked so
+      # a later run can retry; clearing it would strand the rows this burst cannot see.
+      return nil if truncated_sibling_list?(guids, stripe_fingerprints, other_visuals)
 
       values = {
         PlatformBlock::TYPES[:browser_guid] => guids,
@@ -206,7 +212,10 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
       browser_guids = siblings.filter_map { |sibling| sibling.object_value if sibling.object_type == PlatformBlock::TYPES[:browser_guid] }
       return [] if recent_velocity_still_fires?(email, browser_guids)
 
-      siblings.reject { |sibling| velocity_protected_browser?(sibling) || fraud_rule_still_wants_card?(sibling, stripe_values: stripe_fingerprints) }
+      siblings = siblings.reject { |sibling| velocity_protected_browser?(sibling) || fraud_rule_still_wants_card?(sibling, stripe_values: stripe_fingerprints) }
+      return nil if @decline_scan_incomplete
+
+      siblings
     end
 
     # Same split as Purchase#charge_processor_fingerprint for the visual: a Stripe masked visual is
@@ -215,13 +224,17 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
     def card_sibling_values(purchases)
       stripe_id = StripeChargeProcessor.charge_processor_id
       stripe_fingerprints = purchases.where.not(stripe_fingerprint: [nil, ""])
-                                      .distinct.limit(MAX_SIBLING_VALUES)
+                                      .distinct.limit(MAX_SIBLING_VALUES + 1)
                                       .pluck(:stripe_fingerprint)
       other_visuals = purchases.where("charge_processor_id IS NULL OR charge_processor_id != ?", stripe_id)
                                .where.not(card_visual: [nil, ""])
-                               .distinct.limit(MAX_SIBLING_VALUES)
+                               .distinct.limit(MAX_SIBLING_VALUES + 1)
                                .pluck(:card_visual)
       [stripe_fingerprints, other_visuals]
+    end
+
+    def truncated_sibling_list?(*lists)
+      lists.any? { |list| list.size > MAX_SIBLING_VALUES }
     end
 
     # A renewal can block the charged card when the failed row's fingerprint differs. Other
@@ -252,49 +265,52 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
               .first
     end
 
-    # add! rewrites blocked_at and leaves created_at, so a later block moves the failure window
-    # off the renewal that first blocked this card. Search both, each on purchase_state, created_at.
-    # credit_card_id has no index and must not drive the lookup.
+    # add! rewrites blocked_at and leaves created_at. One created_at range covers the span, so a
+    # long gap can still finish and clear. credit_card_id has no index and must not drive the lookup.
     def subscription_card_fraud_decline?(value, block)
       return false if block.blocked_at.blank?
 
       card_ids = CreditCard.where(stripe_fingerprint: value).select(:id)
-      decline_windows(block).any? do |window|
-        renewal_decline_still_blocks?(card_ids, window, value)
-      end
+      renewal_decline_still_blocks?(card_ids, decline_span(block), value, { checked: 0 })
     end
 
-    def decline_windows(block)
-      windows = [decline_window(block.blocked_at)]
-      return windows if block.created_at.blank?
+    def decline_span(block)
+      return decline_window(block.blocked_at) if block.created_at.blank?
 
-      created = decline_window(block.created_at)
-      windows << created unless windows.first == created
-      windows
+      earlier, later = [block.created_at, block.blocked_at].minmax
+      (earlier - RENEWAL_DECLINE_LOOKBACK)..(later + Onetime::ClearMistakenBuyerBlocks::BLOCK_CREATION_WINDOW)
     end
 
     def decline_window(time)
       (time - RENEWAL_DECLINE_LOOKBACK)..(time + Onetime::ClearMistakenBuyerBlocks::BLOCK_CREATION_WINDOW)
     end
 
-    def renewal_decline_still_blocks?(card_ids, window, value)
+    def renewal_decline_still_blocks?(card_ids, window, value, budget)
       scope = Purchase.failed
                       .where(created_at: window, credit_card_id: card_ids)
                       .where.not(subscription_id: nil)
                       .where(fraud_decline_sql, codes: PurchaseErrorCode::AUTO_BLOCK_ERROR_CODES)
-                      .order(:id)
-      last_id = 0
-      checked = 0
+      last = nil
       loop do
-        batch = scope.where("purchases.id > ?", last_id).limit(SUBSCRIPTION_CARD_LOOKUP_LIMIT).to_a
+        batch_scope = scope
+        if last
+          batch_scope = batch_scope.where(
+            "purchases.created_at > ? OR (purchases.created_at = ? AND purchases.id > ?)",
+            last.created_at, last.created_at, last.id
+          )
+        end
+        batch = batch_scope.order(:created_at, :id).limit(SUBSCRIPTION_CARD_LOOKUP_LIMIT).to_a
         return false if batch.empty?
         return true if batch.any? { |purchase| renewal_still_blocks_card?(purchase, value) }
 
-        checked += batch.size
+        budget[:checked] += batch.size
         return false if batch.size < SUBSCRIPTION_CARD_LOOKUP_LIMIT
-        return true if checked >= RENEWAL_DECLINE_WORK_LIMIT
+        if budget[:checked] >= RENEWAL_DECLINE_WORK_LIMIT
+          @decline_scan_incomplete = true
+          return true
+        end
 
-        last_id = batch.last.id
+        last = batch.last
       end
     end
 
@@ -471,8 +487,8 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
         "",
         "Cleared lines were unblocked automatically: settled history, no unreversed chargeback, " \
           "and the email is not linked to a suspended account (Sahil, gumroad-private#1746). Held " \
-          "lines qualified on history but are linked to a suspended account, or changed underneath " \
-          "this run, so they were left blocked for a human to judge — remember `unblock_buyer!` " \
+          "lines qualified on history but are linked to a suspended account, changed underneath " \
+          "this run, or the sibling lookup was truncated, so they were left blocked for a human to judge — remember `unblock_buyer!` " \
           "clears the buyer's whole identifier set rather than one row (see gumroad-private#1746).",
       ].compact.join("\n")
     end
@@ -485,10 +501,21 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
     end
 
     def line_for(entry, cleared:)
-      verb = cleared ? "cleared" : "held — linked to a suspended account"
+      verb = cleared ? "cleared" : hold_reason(entry[:reason])
       verb += " with #{entry[:siblings]} card/browser block#{"s" if entry[:siblings] != 1} from the same burst" if cleared && entry[:siblings].to_i.positive?
       "• #{entry[:email]} — #{entry[:settled_purchases]} settled purchases, #{verb}, " \
         "blocked by email since #{entry[:blocked_at].to_date}"
+    end
+
+    def hold_reason(reason)
+      case reason
+      when :sibling_lookup_truncated
+        "held — sibling lookup was truncated"
+      when :changed_since_scan
+        "held — changed underneath this run"
+      else
+        "held — linked to a suspended account"
+      end
     end
 
     def headline(cleared_count, held_count, truncated)

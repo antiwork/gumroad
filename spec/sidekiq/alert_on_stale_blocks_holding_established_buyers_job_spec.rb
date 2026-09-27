@@ -522,6 +522,46 @@ describe AlertOnStaleBlocksHoldingEstablishedBuyersJob do
       expect(card_block.reload.blocked_at).to be_present
     end
 
+    it "keeps a card when a renewal sits between the first block and a later rewrite" do
+      saved = "fp-gap-card"
+      charged = CreditCard.new(stripe_fingerprint: saved, card_type: "visa", visual: "**** **** **** 4242")
+      charged.save!(validate: false)
+      create(:purchase, email:, stripe_fingerprint: saved, purchase_state: "successful", price_cents: 500,
+                        created_at: history_starts_at)
+      first_write = 40.days.ago
+      renewal_at = 20.days.ago
+      renewal = create(:purchase, email: "renewal-gap@example.com", stripe_fingerprint: "fp-gap-row",
+                                  purchase_state: "failed", stripe_error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD)
+      now = Time.current
+      subscription_id = Subscription.connection.insert(
+        Subscription.sanitize_sql_array(["INSERT INTO subscriptions (link_id, created_at, updated_at, flags) VALUES (?, ?, ?, 0)", create(:product).id, now, now])
+      )
+      prior = create(:purchase, email:, stripe_fingerprint: "fp-gap-column", purchase_state: "successful", price_cents: 500,
+                                created_at: history_starts_at)
+      prior.update_columns(credit_card_id: charged.id, subscription_id:)
+      renewal.update_columns(credit_card_id: charged.id, subscription_id:, created_at: renewal_at)
+      refreshed = Time.current
+      block_email(blocked_at: refreshed)
+      card_block = block_value(:charge_processor_fingerprint, saved, blocked_at: first_write)
+      card_block.update_columns(blocked_at: refreshed)
+
+      message
+      expect(card_block.reload.blocked_at).to be_present
+    end
+
+    it "clears a card when the gap between block writes has no fraud renewal" do
+      saved = "fp-gap-clear"
+      create(:purchase, email:, stripe_fingerprint: saved, purchase_state: "successful", price_cents: 500,
+                        created_at: history_starts_at)
+      first_write = 30.days.ago
+      block_email(blocked_at: Time.current)
+      card_block = block_value(:charge_processor_fingerprint, saved, blocked_at: first_write)
+      card_block.update_columns(blocked_at: Time.current)
+
+      message
+      expect(card_block.reload.blocked_at).to be_nil
+    end
+
     it "keeps a card when this email and one browser together still trip the 7-day rule" do
       half = Purchase::Blockable::MAX_NUMBER_OF_FAILED_FINGERPRINTS / 2
       half.times do |index|
@@ -546,11 +586,14 @@ describe AlertOnStaleBlocksHoldingEstablishedBuyersJob do
       create(:purchase, email:, purchase_state: "successful", price_cents: 500, browser_guid: "guid-over-cap",
                         stripe_fingerprint: fingerprint, created_at: history_starts_at)
       at = 2.years.ago
-      block_email(blocked_at: at)
+      email_block = block_email(blocked_at: at)
       card_block = block_value(:charge_processor_fingerprint, fingerprint, blocked_at: at)
 
-      message
+      body = message
       expect(card_block.reload.blocked_at).to be_present
+      expect(email_block.reload.blocked_at).to be_present
+      expect(body).to include("sibling lookup was truncated")
+      expect(body).not_to include("#{email} — #{established_count} settled purchases, held — linked to a suspended account")
     end
 
     it "retries a sibling clear that raises while the email block is still active" do
