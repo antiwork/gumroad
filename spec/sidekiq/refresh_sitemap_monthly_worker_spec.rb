@@ -31,14 +31,44 @@ describe RefreshSitemapMonthlyWorker do
 
     # retry is 0 here, and the product chain this worker enqueues starts immediately, so a
     # lost race for the shared SitemapGenerator config must re-enqueue the categories pass.
-    it "re-enqueues itself when the categories generation has to wait for another run" do
+    it "re-enqueues the categories step when it has to wait for another run", :freeze_time do
       service = instance_double(SitemapService)
       allow(SitemapService).to receive(:new).and_return(service)
       expect(service).to receive(:generate_categories).and_raise(SitemapService::GenerationInProgress)
 
       described_class.new.perform
 
-      expect(described_class).to have_enqueued_sidekiq_job.in(SitemapService::GENERATION_RETRY_DELAY)
+      expect(described_class).to have_enqueued_sidekiq_job(described_class::CATEGORIES_ONLY, 2)
+        .in(SitemapService::GENERATION_RETRY_DELAY)
+    end
+
+    # Re-running the full pass on retry would enqueue the product chain again, and the chain's
+    # first job runs immediately — so it would rebuild the conflict it just lost, one duplicate
+    # chain per pass, while the categories sitemap might never land.
+    it "retries the categories step alone, without enqueueing the product chain again", :freeze_time do
+      product = create(:product, created_at: 3.months.ago)
+      product.update_columns(updated_at: 1.month.ago)
+      service = instance_double(SitemapService)
+      allow(SitemapService).to receive(:new).and_return(service)
+      expect(service).to receive(:generate_categories).and_raise(SitemapService::GenerationInProgress)
+
+      described_class.new.perform(described_class::CATEGORIES_ONLY, 2)
+
+      expect(RefreshSitemapDailyWorker.jobs.size).to eq(0)
+      expect(described_class).to have_enqueued_sidekiq_job(described_class::CATEGORIES_ONLY, 3)
+        .in(SitemapService::GENERATION_RETRY_DELAY)
+    end
+
+    it "stops retrying after CATEGORIES_MAX_ATTEMPTS and reports it" do
+      service = instance_double(SitemapService)
+      allow(SitemapService).to receive(:new).and_return(service)
+      expect(service).to receive(:generate_categories).and_raise(SitemapService::GenerationInProgress)
+      allow(Rails.logger).to receive(:error)
+
+      described_class.new.perform(described_class::CATEGORIES_ONLY, described_class::CATEGORIES_MAX_ATTEMPTS)
+
+      expect(described_class.jobs.size).to eq(0)
+      expect(Rails.logger).to have_received(:error).with(/gave up on the categories sitemap/)
     end
   end
 end
