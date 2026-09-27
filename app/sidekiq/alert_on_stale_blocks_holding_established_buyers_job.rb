@@ -266,7 +266,8 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
     end
 
     # add! rewrites blocked_at and leaves created_at. One created_at range covers the span, so a
-    # long gap can still finish and clear. credit_card_id has no index and must not drive the lookup.
+    # long gap can still finish and clear. A window cap would hold that email forever, because
+    # these timestamps do not move. credit_card_id has no index and must not drive the lookup.
     def subscription_card_fraud_decline?(value, block)
       return false if block.blocked_at.blank?
 
@@ -305,7 +306,7 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
 
         budget[:checked] += batch.size
         return false if batch.size < SUBSCRIPTION_CARD_LOOKUP_LIMIT
-        if budget[:checked] >= RENEWAL_DECLINE_WORK_LIMIT
+        if budget[:checked] >= RENEWAL_DECLINE_WORK_LIMIT || batch.last.created_at.nil?
           @decline_scan_incomplete = true
           return true
         end
@@ -336,11 +337,30 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
                       .where(fraud_decline_sql, codes: PurchaseErrorCode::AUTO_BLOCK_ERROR_CODES)
       scope = scope.where(card_type: card_types) if card_types
       scope = scope.where.not(card_type: excluded_card_types) if excluded_card_types
-      declines = scope.limit(SUBSCRIPTION_CARD_LOOKUP_LIMIT).to_a
-      return false if declines.empty?
-      return true if declines.size == SUBSCRIPTION_CARD_LOOKUP_LIMIT
+      declines = scope.order(:created_at, :id).limit(SUBSCRIPTION_CARD_LOOKUP_LIMIT)
+      last = nil
+      checked = 0
+      loop do
+        batch_scope = declines
+        if last
+          batch_scope = batch_scope.where(
+            "purchases.created_at > ? OR (purchases.created_at = ? AND purchases.id > ?)",
+            last.created_at, last.created_at, last.id
+          )
+        end
+        batch = batch_scope.limit(SUBSCRIPTION_CARD_LOOKUP_LIMIT).to_a
+        return false if batch.empty?
+        return true if batch.any? { |purchase| purchase.charge_processor_fingerprint == value && !purchase.buyer_has_clean_payment_history? }
 
-      declines.any? { |purchase| purchase.charge_processor_fingerprint == value && !purchase.buyer_has_clean_payment_history? }
+        checked += batch.size
+        return false if batch.size < SUBSCRIPTION_CARD_LOOKUP_LIMIT
+        if checked >= RENEWAL_DECLINE_WORK_LIMIT || batch.last.created_at.nil?
+          @decline_scan_incomplete = true
+          return true
+        end
+
+        last = batch.last
+      end
     end
 
     def fraud_lookup_card_types

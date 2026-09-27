@@ -298,6 +298,23 @@ describe AlertOnStaleBlocksHoldingEstablishedBuyersJob do
       expect([email_block, guid_block, card_block].map { _1.reload.blocked_at }).to all(be_nil)
     end
 
+    it "clears a non-Stripe card when a full page of visual declines does not meet the fraud rule" do
+      visual = "paypal-payer@example.com"
+      Purchase.successful.where(email:).update_all(card_visual: visual, charge_processor_id: nil)
+      allow_any_instance_of(Purchase).to receive(:buyer_has_clean_payment_history?).and_return(true)
+      described_class::SUBSCRIPTION_CARD_LOOKUP_LIMIT.times do |index|
+        create(:purchase, email: "visual-noise#{index}@example.com", purchase_state: "failed",
+                          card_visual: visual, charge_processor_id: nil,
+                          stripe_error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD)
+      end
+      at = 2.years.ago
+      block_email(blocked_at: at)
+      card_block = block_value(:charge_processor_fingerprint, visual, blocked_at: at)
+
+      message
+      expect(card_block.reload.blocked_at).to be_nil
+    end
+
     it "leaves a stranger's card block that only matches a Stripe masked visual" do
       visual = "**** **** **** 4062"
       Purchase.successful.where(email:).update_all(card_visual: visual, charge_processor_id: StripeChargeProcessor.charge_processor_id)
