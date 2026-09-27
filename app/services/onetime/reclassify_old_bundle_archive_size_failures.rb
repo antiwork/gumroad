@@ -1,13 +1,8 @@
 # frozen_string_literal: true
 
-# Before the too_large state (#7977), the archive worker marked a bundle ZIP over the then 500 MB
-# limit as failed. Those rows still spend the bundle's retry budget in
-# UrlRedirect#ensure_bundle_archive_for, so a bundle that now fits the 8 GB limit may never be
-# retried. This marks them too_large. It sums sizes the way that worker did: a missing size comes
-# from S3, and external links count as zero bytes.
-#
-# update_columns keeps updated_at, so the too-large retry window counts from the original failure.
-# Idempotent: a rerun finds no matching failed rows.
+# Old size failures spend the bundle's failed-attempt budget in UrlRedirect#ensure_bundle_archive_for,
+# so a bundle that fits the new limit may never retry. update_columns keeps updated_at, so the
+# too-large retry window counts from the original failure.
 module Onetime
   class ReclassifyOldBundleArchiveSizeFailures
     OLD_SIZE_LIMIT = 500.megabytes
