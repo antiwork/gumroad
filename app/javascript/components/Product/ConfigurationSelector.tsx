@@ -317,6 +317,7 @@ export const OptionRadioButton = ({
   product,
   quantity = 1,
   hidePrice,
+  includeInOffer = true,
 }: {
   disabled?: boolean;
   selected: boolean;
@@ -333,6 +334,7 @@ export const OptionRadioButton = ({
   product: Product;
   quantity?: number;
   hidePrice?: boolean | undefined;
+  includeInOffer?: boolean;
 }) => {
   priceCents ??= 0;
   const { value: discountedPriceCents } = computeSelectionDiscountedPrice(priceCents, discount, product, quantity);
@@ -354,9 +356,7 @@ export const OptionRadioButton = ({
         aria-label={name}
         aria-describedby={describedBy}
         onClick={onClick}
-        itemProp="offer"
-        itemType="https://schema.org/Offer"
-        itemScope
+        {...(includeInOffer ? { itemProp: "offer", itemType: "https://schema.org/Offer", itemScope: true } : {})}
         className="items-start justify-start text-left"
       >
         {status ? (
@@ -378,12 +378,16 @@ export const OptionRadioButton = ({
                 // once, so "a year" would wrongly suggest a recurring charge.
                 ` ${isSingleChargeDuration(recurrence, product.duration_in_months ?? null) ? "once" : recurrenceLabels[recurrence]}`
               : null}
-            <div itemProp="price" className="hidden">
-              {formatPriceCentsWithoutCurrencySymbolAndComma(currencyCode, discountedPriceCents)}
-            </div>
-            <div itemProp="priceCurrency" className="hidden">
-              {currencyCode}
-            </div>
+            {includeInOffer ? (
+              <>
+                <div itemProp="price" className="hidden">
+                  {formatPriceCentsWithoutCurrencySymbolAndComma(currencyCode, discountedPriceCents)}
+                </div>
+                <div itemProp="priceCurrency" className="hidden">
+                  {currencyCode}
+                </div>
+              </>
+            ) : null}
           </Pill>
         )}
         <div>
@@ -859,9 +863,21 @@ export const ConfigurationSelector = React.forwardRef<
     );
   }
 
-  const purchasableOptionPrices = product.options
-    .filter((option) => option.quantity_left !== 0)
-    .map((option) => basePriceCents + computeOptionPrice(option, selection.recurrence));
+  const optionPurchasable = (option: Option) =>
+    option.quantity_left !== 0 &&
+    !(
+      product.is_tiered_membership &&
+      !!selection.recurrence &&
+      !option.recurrence_price_values?.[selection.recurrence]
+    );
+  const purchasableOptions = product.options.filter(optionPurchasable);
+  const purchasableOptionPrices = purchasableOptions.map(
+    (option) => basePriceCents + computeOptionPrice(option, selection.recurrence),
+  );
+  const membershipSoldOut =
+    product.is_tiered_membership &&
+    product.options.length > 0 &&
+    product.options.every((option) => option.quantity_left === 0);
 
   return (
     <div ref={rootRef} className="contents">
@@ -957,12 +973,23 @@ export const ConfigurationSelector = React.forwardRef<
                   recurrence={selection.recurrence}
                   product={product}
                   quantity={selection.quantity}
-                  hidePrice={hidePrices}
+                  hidePrice={
+                    hidePrices ||
+                    (product.is_tiered_membership &&
+                      !!selection.recurrence &&
+                      !option.recurrence_price_values?.[selection.recurrence])
+                  }
+                  includeInOffer={optionPurchasable(option)}
                 />
               ))}
             <div itemProp="offerCount" className="hidden">
-              {product.options.filter((option) => option.quantity_left !== 0).length}
+              {purchasableOptions.length}
             </div>
+            {membershipSoldOut ? (
+              <div itemProp="availability" className="hidden">
+                https://schema.org/SoldOut
+              </div>
+            ) : null}
             {purchasableOptionPrices.length > 0 ? (
               <div itemProp="lowPrice" className="hidden">
                 {formatPriceCentsWithoutCurrencySymbol(product.currency_code, Math.min(...purchasableOptionPrices))}

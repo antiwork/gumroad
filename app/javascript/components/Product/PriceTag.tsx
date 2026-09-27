@@ -21,7 +21,6 @@ type Props = {
     | undefined;
   isPayWhatYouWant: boolean;
   isSalesLimited: boolean;
-  isSoldOut?: boolean;
   creatorName?: string | undefined;
   buyerCurrency?: string | null | undefined;
   buyerLocalCurrencyRate?: number | null | undefined;
@@ -38,7 +37,6 @@ export const PriceTag = ({
   recurrence,
   isPayWhatYouWant,
   isSalesLimited,
-  isSoldOut = false,
   creatorName,
   buyerCurrency,
   buyerLocalCurrencyRate,
@@ -83,7 +81,7 @@ export const PriceTag = ({
       </div>
       <link itemProp="url" href={url} />
       <div itemProp="availability" className="hidden">
-        {`https://schema.org/${isSoldOut ? "SoldOut" : isSalesLimited ? "LimitedAvailability" : "InStock"}`}
+        {`https://schema.org/${isSalesLimited ? "LimitedAvailability" : "InStock"}`}
       </div>
       <div itemProp="priceCurrency" className="hidden">
         {currencyCode.toUpperCase()}
