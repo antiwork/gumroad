@@ -221,6 +221,22 @@ RSpec.describe "External Stripe refund accounting" do
           expect(seller.balances.order(:id).pluck(:id, :amount_cents)).to eq(balances)
         end
       end
+
+      context "when the seller transfer was already reversed" do
+        before { refund[:transfer_reversal] = "trr_already_reversed" }
+
+        it "books the refund without reversing the dispute-win transfer" do
+          balances = seller.balances.order(:id).pluck(:id, :amount_cents)
+
+          purchase.handle_event_refund_updated!(event)
+
+          expect(Stripe::Transfer).not_to have_received(:list)
+          expect(Stripe::Transfer).not_to have_received(:create_reversal)
+          expect(purchase.reload.stripe_refunded?).to eq(true)
+          expect(purchase.refunds.sole.balance_reconciliation_needed).to eq(true)
+          expect(seller.balances.order(:id).pluck(:id, :amount_cents)).to eq(balances)
+        end
+      end
     end
 
     context "when only the destination payment exposes the fee" do
