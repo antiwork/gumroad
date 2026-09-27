@@ -56,6 +56,10 @@ class LinkPolicy < ApplicationPolicy
     update?
   end
 
+  def disable_downloads_for_all_files?
+    update?
+  end
+
   def update_purchases_content?
     update?
   end

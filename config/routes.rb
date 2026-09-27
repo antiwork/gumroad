@@ -936,6 +936,9 @@ Rails.application.routes.draw do
         get :increment_views
         post :track_user_action
         put :sections, action: :update_sections
+        # One explicit action for the whole file set; the editor's save cannot do it,
+        # because it submits only the files embedded in the version being edited.
+        post :disable_downloads_for_all_files
       end
     end
 

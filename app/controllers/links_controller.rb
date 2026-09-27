@@ -60,7 +60,7 @@ class LinksController < ApplicationController
   before_action :render_custom_html_if_present, only: [:show]
   before_action :prepare_product_page, only: %i[show]
   before_action :fetch_product_and_enforce_ownership, only: %i[destroy]
-  before_action :fetch_product_and_enforce_access, only: %i[update publish unpublish release_preorder update_sections]
+  before_action :fetch_product_and_enforce_access, only: %i[update publish unpublish release_preorder update_sections disable_downloads_for_all_files]
 
   # Declared after #show's other before_actions on purpose: this keeps the boundary the old
   # in-action pin drew, leaving the product and seller lookups above on the replica.
@@ -813,6 +813,24 @@ class LinksController < ApplicationController
 
     @product.delete!
     render json: { success: true }
+  end
+
+  # Its own action because the editor save carries only the files embedded in the version
+  # being edited, so a bulk flip riding on it would cover a subset of the product.
+  def disable_downloads_for_all_files
+    authorize @product
+
+    result = Product::DisableDownloadsForAllFiles.new(@product).perform
+
+    render json: {
+      success: true,
+      disabled_count: result.disabled_count,
+      # The editor flips these in its own file state so a later save cannot send the
+      # old stream_only: false back and silently re-enable downloads.
+      disabled_file_ids: result.disabled_file_ids,
+      already_disabled_count: result.already_disabled_count,
+      ineligible_count: result.ineligible_count,
+    }
   end
 
   def update_sections
