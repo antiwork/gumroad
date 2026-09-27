@@ -306,7 +306,9 @@ describe AlertOnStaleBlocksHoldingEstablishedBuyersJob do
       saved = "fp-saved-card"
       charged = CreditCard.new(stripe_fingerprint: saved, card_type: "visa", visual: "**** **** **** 4242")
       charged.save!(validate: false)
-      prior = create(:purchase, email:, stripe_fingerprint: saved, purchase_state: "successful", price_cents: 500,
+      create(:purchase, email:, stripe_fingerprint: saved, purchase_state: "successful", price_cents: 500,
+                        created_at: history_starts_at)
+      prior = create(:purchase, email:, stripe_fingerprint: "fp-column-differs", purchase_state: "successful", price_cents: 500,
                                 created_at: history_starts_at)
       renewal = create(:purchase, email: "renewal@example.com", stripe_fingerprint: "fp-other-row", purchase_state: "failed",
                                   stripe_error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD)
@@ -314,7 +316,7 @@ describe AlertOnStaleBlocksHoldingEstablishedBuyersJob do
       subscription_id = Subscription.connection.insert(
         Subscription.sanitize_sql_array(["INSERT INTO subscriptions (link_id, created_at, updated_at, flags) VALUES (?, ?, ?, 0)", create(:product).id, now, now])
       )
-      prior.update_columns(credit_card_id: charged.id, subscription_id:)
+      prior.update_columns(credit_card_id: charged.id, subscription_id:, stripe_fingerprint: "fp-column-differs")
       renewal.update_columns(credit_card_id: charged.id, subscription_id:)
       at = 2.years.ago
       block_email(blocked_at: at)

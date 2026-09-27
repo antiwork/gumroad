@@ -243,16 +243,24 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
     end
 
     # A renewal blocks the card it charged only when that charge is recurring and an earlier
-    # settled purchase of the same subscription used that card. Reuse those methods. Past the
-    # lookup cap the card stays, rather than clearing on an incomplete set.
+    # settled purchase of the same subscription used that card id. The purchase fingerprint can
+    # differ from the card, so the card id is the provenance. Failed rows are then read by
+    # subscription_id. Past the lookup cap the card stays.
     def subscription_card_fraud_decline?(value)
       card_ids = CreditCard.where(stripe_fingerprint: value).limit(SUBSCRIPTION_CARD_LOOKUP_LIMIT).pluck(:id)
       return true if card_ids.size == SUBSCRIPTION_CARD_LOOKUP_LIMIT
       return false if card_ids.empty?
 
+      subscription_ids = Purchase.successful.non_free
+                                 .where(credit_card_id: card_ids)
+                                 .where.not(subscription_id: nil)
+                                 .distinct.limit(SUBSCRIPTION_CARD_LOOKUP_LIMIT)
+                                 .pluck(:subscription_id)
+      return true if subscription_ids.size == SUBSCRIPTION_CARD_LOOKUP_LIMIT
+      return false if subscription_ids.empty?
+
       declines = Purchase.failed
-                         .where(credit_card_id: card_ids)
-                         .where.not(subscription_id: nil)
+                         .where(subscription_id: subscription_ids, credit_card_id: card_ids)
                          .where(fraud_decline_sql, codes: PurchaseErrorCode::AUTO_BLOCK_ERROR_CODES)
                          .limit(SUBSCRIPTION_CARD_LOOKUP_LIMIT)
                          .to_a
