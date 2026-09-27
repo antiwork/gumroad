@@ -2015,7 +2015,7 @@ class Link < ApplicationRecord
     # A crawler that allows "<" inside a URL will request the following markup
     # when a URL or root-relative path sits against the next tag. Attribute
     # values are not text, and the slash in a closing tag is not a path.
-    DESCRIPTION_URL_BEFORE_TAG = %r{((?:\A|>|\s|\(|\[|\{|:)(?:(?:https?://|ftp://|www\.)[^\s<>]+|/[^\s<>]*[^\s<>.]\.*))(?=<)}i
+    DESCRIPTION_URL_BEFORE_TAG = %r{((?:\A|>|[[:space:]]|\(|\[|\{|:)(?:(?:https?://|ftp://|www\.)[^\s<>]+|/[^\s<>]*[^\s<>.]\.*))(?=<)}i
     DESCRIPTION_MARKUP_OR_URL_BEFORE_TAG = %r{<(pre|code)\b[^>]*>.*?</\1>|#{DESCRIPTION_URL_BEFORE_TAG}}m
     private_constant :DESCRIPTION_URL_BEFORE_TAG, :DESCRIPTION_MARKUP_OR_URL_BEFORE_TAG
 
