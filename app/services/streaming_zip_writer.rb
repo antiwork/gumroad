@@ -12,6 +12,8 @@ class StreamingZipWriter
   class SizeMismatchError < StandardError; end
   # Raised once an entry has failed: its bytes are already in the sink, so the archive is unusable.
   class FailedError < StandardError; end
+  # A second close would append another central directory.
+  class ClosedError < StandardError; end
 
   FOUR_BYTE_MAX = 0xFFFF_FFFF
   TWO_BYTE_MAX = 0xFFFF
@@ -52,6 +54,9 @@ class StreamingZipWriter
   # .compressed_size_needed?, must match what is written: the local header is sent before any data.
   def write_entry(name, size:, compressed_size: nil)
     raise FailedError, "an earlier entry failed" if @failed
+    raise ClosedError, "the archive is closed" if @closed
+    # The name length is a 16-bit field; a longer name would silently misplace every later byte.
+    raise ArgumentError, "#{name[0, 40]}...: name is over #{TWO_BYTE_MAX} bytes" if name.b.bytesize > TWO_BYTE_MAX
     if compressed_size.nil? && self.class.compressed_size_needed?(size)
       raise ArgumentError, "#{name}: #{size} bytes may deflate past 4 GiB, so its compressed size is needed"
     end
@@ -98,7 +103,9 @@ class StreamingZipWriter
 
   def close
     raise FailedError, "an earlier entry failed" if @failed
+    raise ClosedError, "the archive is already closed" if @closed
 
+    @closed = true
     central_directory_offset = @bytes_written
     @entries.each { write_central_header(_1) }
     central_directory_size = @bytes_written - central_directory_offset

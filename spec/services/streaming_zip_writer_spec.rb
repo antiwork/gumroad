@@ -104,12 +104,33 @@ describe StreamingZipWriter do
     expect { writer.close }.to raise_error(described_class::FailedError)
   end
 
-  it "leaves the modification time it is given unchanged" do
-    modified_at = Time.new(2026, 9, 27, 10, 0, 0, "-05:00")
+  it "stores the modification time in UTC and leaves the given time unchanged" do
+    local_header_time = lambda do |modified_at|
+      sink = StringIO.new
+      described_class.new(sink, modified_at:).write_entry("a.txt", size: 1) { _1.write("a") }
+      dos_time, dos_date = sink.string.byteslice(10, 4).unpack("vv")
+      [1980 + (dos_date >> 9), (dos_date >> 5) & 0xF, dos_date & 0x1F, dos_time >> 11, (dos_time >> 5) & 0x3F, (dos_time & 0x1F) * 2]
+    end
+    modified_at = Time.new(2026, 9, 27, 10, 4, 7, "-05:00")
 
-    described_class.new(StringIO.new, modified_at:)
-
+    expect(local_header_time.call(modified_at)).to eq([2026, 9, 27, 15, 4, 6])
     expect(modified_at.utc_offset).to eq(-5.hours)
+    expect(local_header_time.call(Time.utc(1970, 1, 2)).first).to eq(1980)
+  end
+
+  it "refuses a second close and entries after close" do
+    writer = described_class.new(StringIO.new)
+    writer.close
+
+    expect { writer.close }.to raise_error(described_class::ClosedError)
+    expect { writer.write_entry("late.txt", size: 0) { } }.to raise_error(described_class::ClosedError)
+  end
+
+  it "refuses a name too long for the 16-bit name length field" do
+    sink = StringIO.new
+
+    expect { described_class.new(sink).write_entry("a" * 65_536, size: 0) { } }.to raise_error(ArgumentError, /name is over/)
+    expect(sink.string).to be_empty
   end
 
   it "writes the ZIP64 end records once the entry count outgrows its 16-bit field" do
