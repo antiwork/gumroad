@@ -135,6 +135,23 @@ describe Charge::Refundable, "external refund notifications" do
       end
       expect(creator_mails.size).to eq(2)
     end
+
+    it "still emails the creator when the deferred enqueue alert itself fails" do
+      allow(PostToPingEndpointsWorker).to receive(:perform_in).and_raise(RedisClient::CannotConnectError, "queue unavailable")
+      allow(ErrorNotifier).to receive(:notify).and_wrap_original do |method, *args, **kwargs|
+        raise "notifier down" if kwargs[:notification]
+
+        method.call(*args, **kwargs)
+      end
+
+      expect { charge.handle_event_refund_updated!(event) }.not_to raise_error
+
+      creator_mails = ActiveJob::Base.queue_adapter.enqueued_jobs.select do |job|
+        job[:args][0] == "ContactingCreatorMailer" && job[:args][1] == "purchase_refunded" &&
+          purchases.map(&:id).include?(job.dig(:args, 3, "args", 0))
+      end
+      expect(creator_mails.size).to eq(2)
+    end
   end
 
   it "captures the partial-refund mail arguments when the refund is booked" do

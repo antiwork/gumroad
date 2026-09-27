@@ -362,10 +362,14 @@ class Purchase
         rescue StandardError => error
           raise unless best_effort
 
-          # The refund is already committed. Raising here skips the creator emails, and a
-          # redelivered event will not send them again.
-          ErrorNotifier.notify(Charge::Refundable::EXTERNAL_REFUND_ALERT,
-                               purchase_id: id, recording_outcome: :recorded, notification:, error_class: error.class.name)
+          # The refund is already committed. Raising here, including from the alert,
+          # skips the creator emails, and a redelivered event will not send them again.
+          begin
+            ErrorNotifier.notify(Charge::Refundable::EXTERNAL_REFUND_ALERT,
+                                 purchase_id: id, recording_outcome: :recorded, notification:, error_class: error.class.name)
+          rescue StandardError
+            nil
+          end
         end
       end
       if defer_notifications_until_commit
