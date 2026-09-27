@@ -769,10 +769,9 @@ class Link < ApplicationRecord
     return unless description.present?
 
     fragment = Loofah.html4_fragment(sanitize(description, scrubber: description_scrubber))
-    drop_markup_description_urls(fragment)
+    fragment = drop_markup_description_urls(fragment)
     linked = Rinku.auto_link(fragment.to_s, :all, 'target="_blank" rel="noopener noreferrer nofollow"')
-    linked_fragment = Loofah.html4_fragment(linked)
-    drop_markup_description_urls(linked_fragment)
+    linked_fragment = drop_markup_description_urls(Loofah.html4_fragment(linked))
     linked_fragment.to_s.html_safe
   end
 
@@ -2014,20 +2013,22 @@ class Link < ApplicationRecord
     end
 
     # A crawler that allows "<" inside a URL will request the following markup
-    # when link text sits against its closing tag. Only the visible link text
-    # is separated. Attribute values and ordinary words that contain a slash
-    # are left alone.
-    DESCRIPTION_LINK_TEXT_BEFORE_CLOSE = %r{(?<=>)(?:(?:https?://|www\.)[^\s<>]+|/[^\s<>]+)(?=</a>)}
-    private_constant :DESCRIPTION_LINK_TEXT_BEFORE_CLOSE
+    # when a URL or root-relative path sits against the next tag. Attribute
+    # values are not text, and the slash in a closing tag is not a path.
+    DESCRIPTION_URL_BEFORE_TAG = %r{(?<=>|\s)(?:(?:https?://|www\.)[^\s<>]+|/[^\s<>]*[^\s<>.]\.?)(?=<)}i
+    private_constant :DESCRIPTION_URL_BEFORE_TAG
 
     def drop_markup_description_urls(fragment)
       fragment.css("a[href], img[src], iframe[src], script[src]").each do |node|
         attribute = node.name == "a" ? "href" : "src"
         node.remove_attribute(attribute) unless crawl_safe_description_url?(node[attribute])
       end
-      fragment.css("a").each do |node|
-        node.replace(node.to_html.gsub(DESCRIPTION_LINK_TEXT_BEFORE_CLOSE) { |token| "#{token} " })
+      separated = fragment.to_html.gsub(DESCRIPTION_URL_BEFORE_TAG) do |token|
+        next token if token.start_with?("/") && fragment.css("pre, code").any? { |node| node.text.include?(token) }
+
+        "#{token} "
       end
+      separated == fragment.to_html ? fragment : Loofah.html4_fragment(separated)
     end
 
     def crawl_safe_description_url?(value)

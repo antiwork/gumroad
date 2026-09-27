@@ -3046,6 +3046,8 @@ class LinkTest < ActiveSupport::TestCase
 
   test "html_safe_description does not publish description markup as a crawlable URL" do
     description = "<p>Open /settings.</p><p>It saves.</p>" \
+                  "<a href=\"/a\">see /settings</a>" \
+                  "<a href=\"/a\"><b>https://example.com/x</b></a>" \
                   "<p>See https://example.com/settings.&lt;/p&gt;&lt;p&gt;It</p>" \
                   "<a href=\"/x\">/settings</a>" \
                   "<p>and/or<strong>more</strong></p>" \
@@ -3059,7 +3061,8 @@ class LinkTest < ActiveSupport::TestCase
 
     assert published_urls.none? { |url| url.include?("<") || url.include?(">") }
     assert_not_includes published_urls.join, "/settings.</"
-    assert_includes result, ">https://example.com/settings.&lt;/p&gt;&lt;p&gt;It </a>"
+    assert_includes result, "Open /settings. </p>"
+    assert_includes result, ">https://example.com/x </b>"
     assert_includes result, ">/settings </a>"
     assert_includes result, "and/or<strong>more</strong>"
     assert_includes result, "<pre>/usr/bin</pre>"
