@@ -21,7 +21,7 @@ describe Onetime::ReclassifyOldBundleArchiveSizeFailures do
   it "marks an old failed bundle archive over the old limit too large, keeping its failure time" do
     archive = failed_archive(bundle, bundle_files(300.megabytes, 300.megabytes))
 
-    expect(described_class.process).to eq(considered: 1, reclassified: 1)
+    expect(described_class.process).to eq(considered: 1, reclassified: 1, skipped: 0)
 
     expect(archive.reload).to be_too_large
     expect(archive.updated_at).to be_within(1.second).of(before_cutoff)
@@ -31,22 +31,24 @@ describe Onetime::ReclassifyOldBundleArchiveSizeFailures do
     large = failed_archive(bundle, bundle_files(1.megabyte, nil))
     small = failed_archive(bundle, bundle_files(1.megabyte, nil))
     missing = failed_archive(bundle, bundle_files(1.megabyte, nil))
+    forbidden = failed_archive(bundle, bundle_files(1.megabyte, nil))
     s3_sizes = { large => 600.megabytes, small => 2.megabytes }
-    s3_objects = [large, small, missing].to_h do |archive|
+    s3_errors = { missing => Aws::S3::Errors::NotFound.new(nil, "missing"), forbidden => Aws::S3::Errors::Forbidden.new(nil, "denied") }
+    s3_objects = [large, small, missing, forbidden].to_h do |archive|
       file = archive.product_files.find { _1.size.nil? }
       object = instance_double(Aws::S3::Object)
       if s3_sizes.key?(archive)
         allow(object).to receive(:content_length).and_return(s3_sizes[archive])
       else
-        allow(object).to receive(:content_length).and_raise(Aws::S3::Errors::NotFound.new(nil, "missing"))
+        allow(object).to receive(:content_length).and_raise(s3_errors.fetch(archive))
       end
       [file.id, object]
     end
     allow_any_instance_of(ProductFile).to receive(:s3_object) { |file| s3_objects.fetch(file.id) }
 
-    described_class.process
+    expect(described_class.process).to eq(considered: 4, reclassified: 1, skipped: 1)
 
-    expect([large, small, missing].map { _1.reload.product_files_archive_state }).to eq(%w[too_large failed failed])
+    expect([large, small, missing, forbidden].map { _1.reload.product_files_archive_state }).to eq(%w[too_large failed failed failed])
   end
 
   it "leaves failures the old limit cannot explain" do
@@ -67,11 +69,11 @@ describe Onetime::ReclassifyOldBundleArchiveSizeFailures do
   it "changes nothing on a dry run and nothing more on a rerun" do
     archive = failed_archive(bundle, bundle_files(300.megabytes, 300.megabytes))
 
-    expect(described_class.process(dry_run: true)).to eq(considered: 1, reclassified: 1)
+    expect(described_class.process(dry_run: true)).to eq(considered: 1, reclassified: 1, skipped: 0)
     expect(archive.reload).to be_failed
 
     described_class.process
-    expect(described_class.process).to eq(considered: 0, reclassified: 0)
+    expect(described_class.process).to eq(considered: 0, reclassified: 0, skipped: 0)
     expect(archive.reload).to be_too_large
   end
 end

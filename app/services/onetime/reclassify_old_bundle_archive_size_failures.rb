@@ -17,7 +17,7 @@ module Onetime
     BATCH_SIZE = 500
 
     def self.process(dry_run: false)
-      counts = { considered: 0, reclassified: 0 }
+      counts = { considered: 0, reclassified: 0, skipped: 0 }
       ProductFilesArchive.alive.entity_archives
         .where(product_files_archive_state: "failed")
         .where("updated_at < ?", FAILED_BEFORE)
@@ -30,6 +30,10 @@ module Onetime
 
             counts[:reclassified] += 1
             archive.update_columns(product_files_archive_state: "too_large") unless dry_run
+          rescue Aws::S3::Errors::ServiceError, Seahorse::Client::NetworkingError => e
+            # The archive stays failed, so a rerun tries it again.
+            counts[:skipped] += 1
+            Rails.logger.warn("[ReclassifyOldBundleArchiveSizeFailures] skipped archive #{archive.id}: #{e.class}")
           end
         end
       Rails.logger.info("[ReclassifyOldBundleArchiveSizeFailures] #{dry_run ? 'dry run ' : ''}finished: #{counts.inspect}")
