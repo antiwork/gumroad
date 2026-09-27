@@ -12,10 +12,8 @@ import { PopoverMenuItem } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Menu, MenuItem } from "$app/components/ui/Menu";
 
-// One explicit action that turns downloads off for a product's whole file set
-// (gumroad-private#3010). It writes through the server rather than flipping local file state:
-// the editor's save carries only the files embedded in the version being edited, and a change
-// that reaches every stored row has to be applied to the stored rows.
+// Writes through the server: the editor save carries only the files embedded in the version
+// being edited, so flipping local state would miss the rest of the product's files.
 export const DisableDownloadsForAllFiles = () => {
   const { updateProduct, uniquePermalink } = useProductEditContext();
   const [confirming, setConfirming] = React.useState(false);

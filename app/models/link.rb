@@ -1530,13 +1530,13 @@ class Link < ApplicationRecord
 
   # Deletion half of generate_product_files_archives!, run inside the save transaction so a
   # stale ready archive dies with the commit; GenerateProductFilesArchivesJob rebuilds afterwards.
-  def invalidate_stale_product_files_archives!
+  def invalidate_stale_product_files_archives!(for_files: [])
     if has_product_level_rich_content?
-      invalidate_stale_folder_archives!
+      invalidate_stale_folder_archives!(for_files:)
 
       alive_variants.find_each { _1.product_files_archives.alive.each(&:mark_deleted!) }
     else
-      alive_variants.find_each(&:invalidate_stale_folder_archives!)
+      alive_variants.find_each { _1.invalidate_stale_folder_archives!(for_files:) }
 
       product_files_archives.alive.each(&:mark_deleted!)
     end

@@ -2,9 +2,6 @@
 
 require "spec_helper"
 
-# The bulk "disable downloads for all files" action (gumroad-private#3010). It has to run on the
-# server: the editor's own save carries only the files embedded in the version being edited, so a
-# client-side flip would silently cover a subset of the product.
 describe LinksController, type: :controller do
   let(:seller) { create(:user) }
   let(:product) { create(:product, user: seller) }
@@ -70,6 +67,23 @@ describe LinksController, type: :controller do
     disable_downloads
 
     expect(GenerateProductFilesArchivesJob).to have_enqueued_sidekiq_job(product.id)
+  end
+
+  it "deletes a ready folder archive that holds a flipped file" do
+    folder_id = SecureRandom.uuid
+    create(:rich_content, entity: product, description: [
+             { "type" => "fileEmbedGroup", "attrs" => { "name" => "folder", "uid" => folder_id }, "content" => [
+               { "type" => "fileEmbed", "attrs" => { "id" => video.external_id, "uid" => SecureRandom.uuid } },
+               { "type" => "fileEmbed", "attrs" => { "id" => text.external_id, "uid" => SecureRandom.uuid } },
+             ] }
+           ])
+    archive = product.product_files_archives.create!(folder_id:, product_files: [video, text])
+    archive.mark_in_progress!
+    archive.mark_ready!
+
+    disable_downloads
+
+    expect(archive.reload.deleted?).to eq(true)
   end
 
   it "does nothing when no file can change" do

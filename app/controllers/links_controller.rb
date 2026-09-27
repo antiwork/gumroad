@@ -815,10 +815,8 @@ class LinksController < ApplicationController
     render json: { success: true }
   end
 
-  # Turns downloads off for every eligible file of this product in one step
-  # (gumroad-private#3010). Product-wide on purpose: the editor's save carries only the
-  # files embedded in the version being edited, so a bulk flip there would silently act
-  # on a subset — and files that can't be opened in the browser keep their download.
+  # Its own action because the editor save carries only the files embedded in the version
+  # being edited, so a bulk flip riding on it would cover a subset of the product.
   def disable_downloads_for_all_files
     authorize @product
 
