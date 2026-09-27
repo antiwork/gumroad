@@ -268,15 +268,14 @@ const CtaBar = ({
     return () => observer.disconnect();
   }, []);
 
-  // On mobile the bar is fixed to the bottom of the viewport, so the document has to end below it
-  // or the footer's links land underneath the bar and cannot be tapped.
+  // On mobile the bar is fixed to the bottom of the viewport, so the page has to reserve its height
+  // at the end of the document or the footer's links sit underneath it. Desktop has the bar at the
+  // top, so nothing is reserved there. The footer consumes this variable.
   React.useEffect(() => {
-    if (isDesktop || !visible) return;
-    const { style } = document.body;
-    const previous = style.paddingBottom;
-    style.paddingBottom = `${height}px`;
+    const { style } = document.documentElement;
+    style.setProperty("--product-cta-bar-height", visible && !isDesktop ? `${height}px` : "0px");
     return () => {
-      style.paddingBottom = previous;
+      style.removeProperty("--product-cta-bar-height");
     };
   }, [isDesktop, visible, height]);
 

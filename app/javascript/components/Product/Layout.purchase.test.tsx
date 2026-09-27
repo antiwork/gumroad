@@ -305,21 +305,21 @@ it("updates sticky height after selecting a SKU and resizing, then disconnects o
   expect(disconnectIntersection).toHaveBeenCalledTimes(1);
 });
 
-it("reserves the bar's height at the end of the document on mobile, so the footer clears it", () => {
+it("publishes the bar's height for the page to reserve while the mobile bar is visible", () => {
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 0, 117));
   renderLayout(product);
-  expect(document.body.style.paddingBottom).toBe("117px");
+  expect(document.documentElement.style.getPropertyValue("--product-cta-bar-height")).toBe("117px");
 
   act(() => setInlineVisible(true));
-  expect(document.body.style.paddingBottom).toBe("");
+  expect(document.documentElement.style.getPropertyValue("--product-cta-bar-height")).toBe("0px");
 
   act(() => setInlineVisible(false));
-  expect(document.body.style.paddingBottom).toBe("117px");
+  expect(document.documentElement.style.getPropertyValue("--product-cta-bar-height")).toBe("117px");
 });
 
 it("reserves nothing on desktop, where the bar is fixed to the top of the viewport", () => {
   breakpoint.above = true;
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 0, 117));
   renderLayout(product);
-  expect(document.body.style.paddingBottom).toBe("");
+  expect(document.documentElement.style.getPropertyValue("--product-cta-bar-height")).toBe("0px");
 });
