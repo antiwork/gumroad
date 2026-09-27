@@ -4,6 +4,8 @@
 // @vitest-environment-options {"settings": {"disableIframePageLoading": true, "disableJavaScriptFileLoading": true, "disableCSSFileLoading": true}}
 import { describe, expect, it } from "vitest";
 
+// Order matters: this patches the Node.prototype.nodeName read before dompurify captures it.
+import "$app/utils/happyDomNodeNameShim";
 import { sanitizeHtml } from "$app/utils/sanitize";
 
 // Extracts the single iframe from sanitized output so assertions can inspect attributes
@@ -64,5 +66,13 @@ describe("sanitizeHtml", () => {
     const sanitized = sanitizeHtml("<p>plain text</p>");
     expect(sanitized).toBe("<p>plain text</p>");
     expect(sanitized).not.toContain("allowfullscreen");
+  });
+
+  it("keeps the wrapping element while dropping handlers on embedded media", () => {
+    // The shape the shim import above guards: on a DOM whose Node.prototype.nodeName read is wrong,
+    // the wrapper is removed and the handler survives.
+    expect(sanitizeHtml('<p>Before <img src="x" onerror="alert(1)"> after.</p>')).toBe(
+      '<p>Before <img src="x"> after.</p>',
+    );
   });
 });
