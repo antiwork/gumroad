@@ -437,24 +437,30 @@ module Product::Prices
       tiers.size > 1 || any_customizable || multiple_tier_prices
     end
 
-    # A fully closed membership has no new-buyer price. Falling back avoids a false $0 quote.
-    def tiers_for_new_buyers(candidates = tiers)
-      open_tiers = candidates.reject(&:closed_to_new_buyers?)
-      open_tiers.presence || candidates
+    # Alive tiers a new buyer can purchase. No fallback: Discover must not treat a fully closed membership as priced.
+    def tiers_for_new_buyers(candidates = nil)
+      list = Array(candidates || tiers.alive)
+      list.select(&:alive?).reject(&:closed_to_new_buyers?)
+    end
+
+    # Card quote only. A fully closed membership still shows its price instead of a false $0.
+    def tiers_for_displayed_price(candidates = nil)
+      list = Array(candidates || tiers.alive)
+      tiers_for_new_buyers(list).presence || list.select(&:alive?)
     end
 
     def lowest_tier_price(for_default_duration: false)
       return unless is_tiered_membership
 
       if (preloaded_tiers = preloaded_membership_tiers_with_prices)
-        offered = tiers_for_new_buyers(preloaded_tiers)
+        offered = tiers_for_displayed_price(preloaded_tiers)
         candidates = offered.flat_map(&:alive_prices).select(&:is_buy?)
         candidates = candidates.select { |p| p.recurrence == subscription_duration } if for_default_duration
         return candidates.min_by(&:price_cents) ||
                VariantPrice.new(price_cents: 0, recurrence: subscription_duration)
       end
 
-      offered_ids = tiers_for_new_buyers.map(&:id)
+      offered_ids = tiers_for_displayed_price.map(&:id)
       relation = VariantPrice.where(variant_id: offered_ids).alive.is_buy
       relation = relation.where(recurrence: subscription_duration) if for_default_duration
       lowest = relation.order("price_cents asc").take

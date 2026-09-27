@@ -118,6 +118,23 @@ describe "Closing a membership tier to new purchases" do
       expect(product.available_price_cents).to include(500, 2_000)
     end
 
+    it "does not advertise a deleted tier to a new buyer" do
+      recurrence = tier.prices.alive.is_buy.first.recurrence
+      deleted_tier = create(:variant, variant_category: product.tier_category, name: "Gone")
+      deleted_tier.save_recurring_prices!(recurrence => { enabled: true, price: "10" })
+      deleted_tier.mark_deleted!
+      open_tier = create(:variant, variant_category: product.tier_category, name: "Open")
+      open_tier.save_recurring_prices!(recurrence => { enabled: true, price: "20" })
+
+      expect(product.reload.display_price_cents).to eq(2_000)
+      expect(product.discover_price_cents).to eq([2_000])
+    end
+
+    it "does not index a price when every tier is closed" do
+      expect(product.reload.discover_price_cents).to eq([])
+      expect(product.display_price_cents).to be > 0
+    end
+
     it "asks Discover to refresh when the close setting changes" do
       expect(tier.link).to receive(:enqueue_index_update_for).with(["available_price_cents"])
       tier.update!(closed_to_new_purchases: false)

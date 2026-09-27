@@ -378,7 +378,7 @@ class Link < ApplicationRecord
 
   # A flag change can make a closed tier purchasable again. Discover keeps the old price until this runs.
   def self.refresh_discover_prices_for_closed_tiers(user: nil)
-    products = is_tiered_membership.joins(:tiers).merge(Variant.closed_to_new_purchases).distinct
+    products = is_tiered_membership.joins(:tiers).merge(Variant.alive.closed_to_new_purchases).distinct
     products = products.where(user_id: user.id) if user
     products.find_each { |product| product.enqueue_index_update_for(["available_price_cents"]) }
   end
