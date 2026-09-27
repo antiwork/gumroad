@@ -21,6 +21,7 @@ import {
   Rename,
   Star,
   TwitterX,
+  X,
 } from "@boxicons/react";
 import { type Editor, findChildren, generateJSON, Node as TiptapNode } from "@tiptap/core";
 import { DOMSerializer } from "@tiptap/pm/model";
@@ -97,6 +98,7 @@ import { MoveNode } from "$app/components/TiptapExtensions/MoveNode";
 import { Posts, PostsProvider } from "$app/components/TiptapExtensions/Posts";
 import { ShortAnswer } from "$app/components/TiptapExtensions/ShortAnswer";
 import { UpsellCard } from "$app/components/TiptapExtensions/UpsellCard";
+import { Alert } from "$app/components/ui/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { Checkbox } from "$app/components/ui/Checkbox";
 import { Details, DetailsToggle } from "$app/components/ui/Details";
@@ -112,7 +114,7 @@ import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { useRefToLatest } from "$app/components/useRefToLatest";
 import { WithTooltip } from "$app/components/WithTooltip";
 
-import { DisableDownloadsForAllFiles } from "./DisableDownloadsForAllFiles";
+import { DisableDownloadsForAllFiles, type DisableDownloadsResult } from "./DisableDownloadsForAllFiles";
 import { FileEmbed, FileEmbedConfig } from "./FileEmbed";
 import { Page, PageTab, titleWithFallback } from "./PageTab";
 import { resolveCopiedFileEmbeds } from "./resolveCopiedFileEmbeds";
@@ -760,6 +762,7 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
   }, [editor]);
 
   const [showUpsellModal, setShowUpsellModal] = React.useState(false);
+  const [disableDownloadsResult, setDisableDownloadsResult] = React.useState<DisableDownloadsResult | null>(null);
   const [showReviewModal, setShowReviewModal] = React.useState(false);
   const [copyFromOpen, setCopyFromOpen] = React.useState(false);
 
@@ -849,6 +852,23 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
         onChange={(e) => uploadFileInput(e.target)}
       />
       <div className="h-screen sm:h-full md:flex md:flex-col">
+        {disableDownloadsResult ? (
+          <div className="p-4 pb-0 md:p-8 md:pb-0">
+            <Alert role="status" variant={disableDownloadsResult.status}>
+              <div className="flex flex-1 items-start gap-2">
+                <span className="flex-1">{disableDownloadsResult.message}</span>
+                <button
+                  type="button"
+                  aria-label="Dismiss"
+                  className="relative flex size-[1lh] shrink-0 cursor-pointer items-center justify-center text-muted all-unset before:absolute before:-inset-2 before:content-[''] hover:text-primary"
+                  onClick={() => setDisableDownloadsResult(null)}
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
+            </Alert>
+          </div>
+        ) : null}
         {editor ? (
           <RichTextEditorToolbar
             color="ghost"
@@ -870,7 +890,7 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
                     onUploadFromDropbox={uploadFromDropbox}
                   />
                 </PopoverMenuItem>
-                <DisableDownloadsForAllFiles />
+                <DisableDownloadsForAllFiles onResult={setDisableDownloadsResult} />
                 {selectingExistingFiles ? (
                   <Modal
                     open

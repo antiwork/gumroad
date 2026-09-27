@@ -19,7 +19,7 @@ Object.assign(globalThis, {
 const state = vi.hoisted(() => ({
   requests: new Array<{ url: string; method?: string }>(),
   responses: new Array<unknown>(),
-  alerts: new Array<{ message: string; status: string }>(),
+  results: new Array<{ message: string; status: string }>(),
   product: {
     files: new Array<{ id: string; stream_only: boolean }>(),
   },
@@ -33,10 +33,6 @@ vi.mock("$app/utils/request", () => ({
   ResponseError: class ResponseError extends Error {},
 }));
 
-vi.mock("$app/components/server-components/Alert", () => ({
-  showAlert: (message: string, status: string) => state.alerts.push({ message, status }),
-}));
-
 vi.mock("$app/components/ProductEdit/state", () => ({
   useProductEditContext: () => ({
     uniquePermalink: "demo",
@@ -44,23 +40,10 @@ vi.mock("$app/components/ProductEdit/state", () => ({
   }),
 }));
 
-// The real toolbar item needs the toolbar's own tooltip context, which isn't exported. What is
-// under test is the menu item and the confirmation behind it, not the toolbar chrome.
-vi.mock("$app/components/RichTextEditor", () => ({
-  PopoverMenuItem: ({ name, children }: { name: string; children: React.ReactNode }) => (
-    <div aria-label={name}>{children}</div>
-  ),
-}));
-
-// Stands in for the popover the real toolbar item opens around its menu.
-vi.mock("$app/components/Popover", () => ({
-  PopoverClose: ({ children }: { children: React.ReactNode }) => children,
-}));
-
 beforeEach(() => {
   state.requests = [];
   state.responses = [];
-  state.alerts = [];
+  state.results = [];
   state.product = {
     files: [
       { id: "file-a", stream_only: false },
@@ -72,9 +55,11 @@ beforeEach(() => {
 
 afterEach(cleanup);
 
-const openMenu = async () => {
-  render(<DisableDownloadsForAllFiles />);
-  fireEvent.click(screen.getByRole("menuitem", { name: "Disable downloads for all files" }));
+const onResult = (result: { message: string; status: string }) => state.results.push(result);
+
+const openConfirmation = async () => {
+  render(<DisableDownloadsForAllFiles onResult={onResult} />);
+  fireEvent.click(screen.getByRole("button", { name: "Disable all downloads" }));
   return screen.findByRole("button", { name: "Yes, disable downloads" });
 };
 
@@ -87,7 +72,7 @@ it("turns downloads off for the whole product and mirrors the changed files into
     ineligible_count: 1,
   });
 
-  fireEvent.click(await openMenu());
+  fireEvent.click(await openConfirmation());
 
   await waitFor(() => expect(state.requests).toHaveLength(1));
   expect(state.requests[0]).toMatchObject({
@@ -104,7 +89,7 @@ it("turns downloads off for the whole product and mirrors the changed files into
     ]),
   );
 
-  expect(state.alerts).toEqual([
+  expect(state.results).toEqual([
     {
       message:
         "Downloads are now off for 2 files. 1 file stays downloadable, because the browser can't open it for your buyers.",
@@ -122,10 +107,10 @@ it("says which files keep their download when some can't have it turned off", as
     ineligible_count: 3,
   });
 
-  fireEvent.click(await openMenu());
+  fireEvent.click(await openConfirmation());
 
   await waitFor(() =>
-    expect(state.alerts).toEqual([
+    expect(state.results).toEqual([
       {
         message:
           "Every file that can have downloads off already does. 3 files stay downloadable, because the browser can't open them for your buyers.",
@@ -136,10 +121,11 @@ it("says which files keep their download when some can't have it turned off", as
 });
 
 it("does not touch the product when the seller cancels the confirmation", async () => {
-  await openMenu();
+  await openConfirmation();
   fireEvent.click(screen.getByRole("button", { name: "No, cancel" }));
 
   await waitFor(() => expect(screen.queryByRole("button", { name: "Yes, disable downloads" })).toBeNull());
   expect(state.requests).toHaveLength(0);
   expect(state.product.files.every((file) => !file.stream_only)).toBe(true);
+  expect(state.results).toEqual([]);
 });
