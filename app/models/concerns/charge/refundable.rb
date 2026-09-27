@@ -105,8 +105,9 @@ module Charge::Refundable
         charge_refund = processor.get_refund(stripe_refund_id, merchant_account:, for_external_refund: true)
       rescue StripeChargeProcessor::UnmatchedApplicationFeeRefundError
         stripe_refund = Stripe::Refund.retrieve(id: stripe_refund_id, expand: %w[balance_transaction])
-        # A reversal on the refund means the seller already paid, so the debit is not Gumroad's to forgive.
-        transfer_outcome = stripe_refund[:transfer_reversal].present? ? :reversal_unpaired : :fee_refund_unpaired
+        # If the seller's transfer was reversed at all, the seller may have paid, so the debit is not
+        # Gumroad's to forgive. A reversal made apart from the refund cannot be matched to it.
+        transfer_outcome = seller_transfer_reversed?(stripe_refund) ? :reversal_unpaired : :fee_refund_unpaired
         charge_refund = UnpairedExternalRefund.new(stripe_refund, unpaired_external_refund_flow_of_funds(stripe_refund), nil)
       end
       purchases = refundable.charged_purchases.select { _1.successful? && !_1.stripe_refunded? }.sort_by(&:id)
@@ -136,15 +137,9 @@ module Charge::Refundable
         if charge_refund.is_a?(StripeChargeRefund) && charge_refund.charge[:destination].present? &&
             merchant_account&.holder_of_funds == HolderOfFunds::STRIPE
           # A won dispute already reversed the transfer and sent the seller's share back in a separate
-          # transfer, which cannot be reversed safely here: record the refund for reconciliation.
-          dispute_won_ids = unrecorded.select { _1.chargedback? && _1.chargeback_reversed }.map(&:id)
-          if dispute_won_ids.any?
-            # The charge-level reversal cannot be split between the two kinds of purchase.
-            if dispute_won_ids.size < unrecorded.size
-              blocked_purchase_ids = dispute_won_ids
-              transfer_outcome = :dispute_won_mixed
-              next []
-            end
+          # transfer, which cannot be reversed safely here. The charge-level reversal cannot be split
+          # either, so every purchase on the charge is recorded for reconciliation.
+          if unrecorded.any? { _1.chargedback? && _1.chargeback_reversed }
             transfer_outcome = :dispute_won
           else
             charge_refund, transfer_outcome = processor.reverse_transfer_for_external_refund(charge_refund, merchant_account:)
@@ -215,6 +210,13 @@ module Charge::Refundable
       FlowOfFunds::Amount.new(currency: balance_transaction[:currency], cents: balance_transaction[:amount])
     end
     FlowOfFunds.new(issued_amount:, settled_amount:, gumroad_amount: settled_amount || issued_amount)
+  end
+
+  private def seller_transfer_reversed?(stripe_refund)
+    return true if stripe_refund[:transfer_reversal].present?
+
+    transfer_id = Stripe::Charge.retrieve(stripe_refund[:charge])[:transfer]
+    transfer_id.present? && Stripe::Transfer.retrieve(transfer_id)[:amount_reversed].to_i.positive?
   end
 
   # The refund is committed by the time these alerts run, and a redelivered event returns early on

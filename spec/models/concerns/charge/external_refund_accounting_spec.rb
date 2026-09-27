@@ -99,6 +99,18 @@ RSpec.describe "External Stripe refund accounting" do
       include_examples "pending reconciliation"
     end
 
+    context "when the seller's transfer was reversed apart from the refund" do
+      before { transfer[:amount_reversed] = 300 }
+
+      it "books the refund for reconciliation, not as Gumroad-funded" do
+        purchase.handle_event_refund_updated!(event)
+
+        refund_row = purchase.reload.refunds.sole
+        expect(refund_row.balance_reconciliation_needed).to eq(true)
+        expect(refund_row.gumroad_funded).to be_nil
+      end
+    end
+
     context "when Stripe already reversed the transfer" do
       before { refund[:transfer_reversal] = "trr_already_reversed" }
 

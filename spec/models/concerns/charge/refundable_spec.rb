@@ -579,6 +579,26 @@ describe Charge::Refundable do
         expect(ErrorNotifier).to have_received(:notify).with(/reconcile the seller balance/, hash_including(transfer_outcome: :dispute_won))
       end
 
+      it "records every purchase for reconciliation when a combined charge mixes a won dispute with another purchase" do
+        purchase.update!(is_part_of_combined_charge: true, chargeback_date: Time.current, chargeback_reversed: true)
+        sibling = create(:purchase_with_balance, link: create(:product, user: seller, price_cents: 5_00), seller:, price_cents: 5_00,
+                                                 total_transaction_cents: 5_00, merchant_account:, is_part_of_combined_charge: true,
+                                                 stripe_transaction_id: purchase.stripe_transaction_id)
+        combined = create(:charge, processor_transaction_id: purchase.stripe_transaction_id, amount_cents: 15_00, merchant_account:,
+                                   purchases: [purchase, sibling])
+        combined_refund = charge_refund_with
+        combined_refund.flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::USD, -15_00)
+        allow_any_instance_of(StripeChargeProcessor).to receive(:get_refund).and_return(combined_refund)
+        expect(Stripe::Transfer).not_to receive(:create_reversal)
+        event = build_external_event.tap { _1.extras[:refunded_amount_cents] = 15_00 }
+
+        combined.handle_event_refund_updated!(event)
+
+        expect([purchase, sibling].map { _1.reload.refunds.sole.balance_reconciliation_needed }).to eq([true, true])
+        expect(ErrorNotifier).to have_received(:notify).with(Charge::Refundable::EXTERNAL_REFUND_ALERT,
+                                                             hash_including(transfer_outcome: :dispute_won, recorded: true))
+      end
+
       it "alerts that the seller transfer was reversed when booking then refuses the refund" do
         allow(Stripe::Transfer).to receive(:list_reversals).and_return([])
         allow(Stripe::Transfer).to receive(:create_reversal)
