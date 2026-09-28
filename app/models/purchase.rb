@@ -653,6 +653,7 @@ class Purchase < ApplicationRecord
             34 => :indian_card_mandate_missing,
             35 => :indian_card_mandate_inactive,
             36 => :indian_card_mandate_pending,
+            37 => :is_restart_authentication_purchase,
             :column => "flags",
             :flag_query_mode => :bit_operator,
             check_for_column: false

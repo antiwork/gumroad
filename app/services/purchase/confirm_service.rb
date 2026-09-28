@@ -100,14 +100,18 @@ class Purchase::ConfirmService < Purchase::BaseService
       return
     end
 
-    pending_restart = purchase.subscription&.is_resubscription_pending_confirmation?
-    if purchase.is_upgrade_purchase? || pending_restart
+    owns_pending_restart = purchase.subscription&.pending_restart_owned_by?(purchase)
+    if purchase.is_upgrade_purchase? || purchase.subscription&.is_resubscription_pending_confirmation?
       purchase.subscription.handle_purchase_success(purchase)
-      if pending_restart
+      owns_pending_restart &&= purchase.subscription.purchases.where("purchases.id > ?", purchase.id).where(purchase_state: %w[in_progress successful]).none?
+      if owns_pending_restart
         purchase.subscription.send_restart_notifications!
-        purchase.subscription.update_flag!(:is_resubscription_pending_confirmation, false, true)
+        newer_attempt = purchase.subscription.purchases.where("purchases.id > ?", purchase.id).where(purchase_state: %w[in_progress successful]).exists?
+        purchase.subscription.update_flag!(:is_resubscription_pending_confirmation, false, true) unless newer_attempt
       end
-      UpdateIntegrationsOnTierChangeWorker.perform_async(purchase.subscription.id)
+      if purchase.is_upgrade_purchase? || owns_pending_restart || purchase.is_restart_authentication_purchase?
+        UpdateIntegrationsOnTierChangeWorker.perform_async(purchase.subscription.id)
+      end
     else
       handle_purchase_success
     end

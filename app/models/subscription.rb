@@ -436,6 +436,9 @@ class Subscription < ApplicationRecord
   end
 
   def handle_purchase_success(purchase, succeeded_at: nil)
+    owns_pending_restart = pending_restart_owned_by?(purchase)
+    supersedes_pending_restart = is_resubscription_pending_confirmation? &&
+      purchases.in_progress.where("purchases.id > ?", purchase.id).none?
     purchase.succeeded_at = succeeded_at if succeeded_at.present?
     purchase.update_balance_and_mark_successful!
     original_purchase.update!(should_exclude_product_review: false) if original_purchase.should_exclude_product_review?
@@ -443,7 +446,10 @@ class Subscription < ApplicationRecord
     self.credit_card_id = purchase.credit_card_id
     self.renewal_disabled_due_to_indian_card_mandate = false unless indian_card_mandate_requires_reauthorization?
     save!
-    update_flag!(:is_resubscription_pending_confirmation, false, true) if is_resubscription_pending_confirmation?
+    # Recheck immediately before the clear. Do not lock the subscription first;
+    # purchase finalization already locks the purchase.
+    newer_attempt = purchases.where("purchases.id > ?", purchase.id).where(purchase_state: %w[in_progress successful]).exists?
+    update_flag!(:is_resubscription_pending_confirmation, false, true) if (owns_pending_restart || supersedes_pending_restart) && !newer_attempt
     create_purchase_event(purchase)
     if purchase.was_product_recommended
       recommendation_type = original_purchase.recommended_purchase_info.try(:recommendation_type)
@@ -1438,6 +1444,24 @@ class Subscription < ApplicationRecord
                                                  .take
                                                  &.occurred_at
     end
+  end
+
+  # The pending flag is on the subscription. Only the latest open restart purchase
+  # may send its emails, so an older attempt cannot clear a newer one.
+  def pending_restart_owned_by?(purchase)
+    return false unless is_resubscription_pending_confirmation?
+    return false if purchase.blank? || !purchase.in_progress?
+    return false if purchases.in_progress.where("purchases.id > ?", purchase.id).exists?
+    return false if purchases.where("purchases.id > ?", purchase.id).where(purchase_state: "successful").exists?
+
+    marked_restarts = purchases.is_restart_authentication_purchase
+    if marked_restarts.exists?
+      return false unless purchase.is_restart_authentication_purchase?
+
+      return purchases.in_progress.is_restart_authentication_purchase.order(id: :desc).pick(:id) == purchase.id
+    end
+
+    purchases.in_progress.order(id: :desc).pick(:id) == purchase.id
   end
 
   def send_restart_notifications!(reason = nil)
