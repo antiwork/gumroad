@@ -16,7 +16,7 @@ module Onetime
       ProductFilesArchive.alive.entity_archives
         .where(product_files_archive_state: "failed")
         .where("updated_at < ?", FAILED_BEFORE)
-        .includes(:link, :product_files)
+        .includes(:link)
         .find_in_batches(batch_size: BATCH_SIZE) do |archives|
           ReplicaLagWatcher.watch
           archives.each do |archive|
@@ -36,8 +36,11 @@ module Onetime
       counts
     end
 
+    # Sums in SQL: preloading the files of a whole batch exceeds the statement timeout on some batches.
     def self.size_bail?(archive)
-      archive.product_files.sum { _1.size || (_1.s3? ? _1.s3_object.content_length : 0) } > OLD_SIZE_LIMIT
+      files = archive.product_files
+      unrecorded = files.where(size: nil).sum { _1.s3? ? _1.s3_object.content_length : 0 }
+      files.where.not(size: nil).sum(:size) + unrecorded > OLD_SIZE_LIMIT
     rescue Aws::S3::Errors::NotFound
       # That worker failed on a missing source before it could compare sizes.
       false

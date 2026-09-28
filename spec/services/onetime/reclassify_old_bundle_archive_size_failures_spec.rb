@@ -35,6 +35,18 @@ describe Onetime::ReclassifyOldBundleArchiveSizeFailures do
     expect(archive.reload).to be_too_large
   end
 
+  it "loads no product files for an archive of a product that is not a bundle" do
+    product = create(:product)
+    failed_archive(product, [create(:product_file, link: product, size: 600.megabytes)])
+    queries = []
+    subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") { |*, payload| queries << payload[:sql] }
+
+    described_class.process
+  ensure
+    ActiveSupport::Notifications.unsubscribe(subscriber)
+    expect(queries.grep(/FROM `product_files`/)).to be_empty
+  end
+
   it "lets a bundle whose old size failures used up its retry budget build a ZIP again" do
     files = bundle_files(300.megabytes, 300.megabytes)
     purchase = create(:purchase, link: bundle)
