@@ -574,6 +574,20 @@ describe("Discover", js: true, type: :system) do
         expect(page).to have_selector("[aria-label='Breadcrumbs']", text: "Business & Money")
       end
 
+      it "keeps a shorter child list open when the pointer that opened it ends up below the list" do
+        visit discover_url(host: discover_host)
+
+        find("[role=menuitem]", text: "More").hover
+        click_on "Software Development"
+        click_on "Programming"
+        page.driver.browser.action.move_by(0, -10).perform
+        sleep 0.6
+
+        click_on "C#"
+
+        expect(page).to have_selector("[aria-label='Breadcrumbs']", text: "Software Development\n/Programming\n/C#")
+      end
+
       it "places categories that didn't fit the screen under 'More', which becomes aria-current if one of those categories is selected" do
         visit discover_url(host: discover_host)
 
