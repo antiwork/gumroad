@@ -2995,6 +2995,26 @@ describe "PurchaseRefunds", :vcr do
         purchase.send(:reverse_the_transfer_made_for_dispute_win!, refund:)
       end
 
+      it "leaves the share of an earlier Gumroad-funded refund on the transfer" do
+        create(:refund, purchase:, total_transaction_cents: 4_00, amount_cents: 4_00, gumroad_funded: true, processor_refund_id: "re_funded")
+        purchase.update!(stripe_refunded: true)
+        refund = create(:refund, purchase:, total_transaction_cents: 6_00, amount_cents: 6_00, processor_refund_id: "re_last")
+
+        expect(Stripe::Transfer).to receive(:create_reversal).with("tr_dispute_win", { amount: 5_10 }, anything)
+
+        purchase.send(:reverse_the_transfer_made_for_dispute_win!, refund:)
+      end
+
+      it "reverses the tax-free share after a tax-only refund" do
+        purchase.update_columns(gumroad_tax_cents: 1_00)
+        create(:refund, purchase:, total_transaction_cents: 1_00, amount_cents: 0, gumroad_tax_cents: 1_00, processor_refund_id: "re_tax")
+        refund = create(:refund, purchase:, total_transaction_cents: 4_50, amount_cents: 4_50, gumroad_tax_cents: 0, processor_refund_id: "re_half")
+
+        expect(Stripe::Transfer).to receive(:create_reversal).with("tr_dispute_win", { amount: 4_25 }, anything)
+
+        purchase.send(:reverse_the_transfer_made_for_dispute_win!, refund:)
+      end
+
       it "reverses no more than is left on the transfer" do
         transfer.amount_reversed = 8_00
         refund = create(:refund, purchase:, total_transaction_cents: 10_00, amount_cents: 10_00, processor_refund_id: "re_rest")

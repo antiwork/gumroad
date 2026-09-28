@@ -728,17 +728,22 @@ class Purchase
       transfer = transfers.select { |tr| tr["description"]&.include?("Dispute #{dispute.charge_processor_dispute_id} won") }.first
       return if transfer.blank?
 
-      # The dispute-win transfer sent back the seller's share of the whole charge, so reverse this
-      # refund's share of it. It runs after the refund is saved, so it cannot read what is left to refund.
-      remaining = transfer.amount - transfer.amount_reversed.to_i
-      # A tax-only refund reverses nothing and each share rounds, so the refund that completes the
-      # charge takes whatever is left.
-      charge_fully_refunded = stripe_refunded && (charge.nil? || charge.successful_purchases.where.not(id:).all?(&:stripe_refunded?))
-      amount = if charge_fully_refunded
-        remaining
+      # The dispute-win transfer holds the seller's share of the whole charge. Reverse the share of
+      # every refund that debited the seller, less what is already reversed: tax-only refunds and
+      # refunds that did not debit the seller then add nothing, and each refund corrects rounding.
+      purchases = charge ? charge.successful_purchases.to_a : [self]
+      refunds = Refund.where(purchase_id: purchases.map(&:id)).reject(&:terminally_failed?)
+      exempt, debited = refunds.partition { _1.gumroad_funded || _1.balance_reconciliation_needed }
+      debited_cents = debited.sum { _1.total_transaction_cents - _1.gumroad_tax_cents.to_i }
+      base_cents = purchases.sum { _1.total_transaction_cents - _1.gumroad_tax_cents.to_i }
+      return unless base_cents.positive?
+
+      target = if exempt.empty? && purchases.all?(&:stripe_refunded?)
+        transfer.amount
       else
-        [(transfer.amount * refund.total_transaction_cents / (charge || self).charged_amount_cents.to_r).round, remaining].min
+        [(transfer.amount * debited_cents / base_cents.to_r).round, transfer.amount].min
       end
+      amount = target - transfer.amount_reversed.to_i
       return unless amount.positive?
 
       Stripe::Transfer.create_reversal(transfer.id, { amount: }, { idempotency_key: "dispute_win_reversal_#{refund.processor_refund_id || refund.id}" })
