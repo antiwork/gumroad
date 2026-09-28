@@ -23,5 +23,8 @@ declare module "react" {
     "--color-primary-foreground"?: string;
     "--color-active-bg"?: string;
     "--color-muted"?: string;
+    "--radius"?: string;
+    "--radius-sm"?: string;
+    "--button-hover-offset"?: string;
   }
 }

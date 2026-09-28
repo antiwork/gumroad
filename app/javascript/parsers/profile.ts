@@ -28,6 +28,8 @@ export type ProfileSettings = {
   font: string;
   background_color: string;
   highlight_color: string;
+  border_radius: string;
+  button_hover: string;
   profile_picture_blob_id: string | null;
   product_page_storefront_enabled: boolean;
   hide_follow_form: boolean;

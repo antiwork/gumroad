@@ -14,6 +14,8 @@ const settings = (overrides: Partial<ProfileSettingsForm> = {}): ProfileSettings
   font: "ABC Favorit",
   background_color: "#ffffff",
   highlight_color: "#ff90e8",
+  border_radius: "small",
+  button_hover: "lift",
   product_page_storefront_enabled: false,
   hide_follow_form: false,
   ...overrides,
@@ -52,6 +54,24 @@ describe("profile settings synchronization", () => {
     const current = settings({ hide_follow_form: true });
 
     expect(changedProfileSettings(current, baseline)).toEqual({ hide_follow_form: true });
+  });
+
+  it("includes the corner and button hover choices among dirty settings", () => {
+    const baseline = settings();
+    const current = settings({ border_radius: "none", button_hover: "none" });
+
+    expect(changedProfileSettings(current, baseline)).toEqual({ border_radius: "none", button_hover: "none" });
+  });
+
+  it("keeps a local corner choice while adopting a refreshed button hover", () => {
+    const baseline = settings();
+    const current = settings({ border_radius: "large" });
+    const incoming = settings({ button_hover: "none" });
+
+    expect(rebaseProfileSettings(current, baseline, incoming)).toEqual({
+      ...incoming,
+      border_radius: "large",
+    });
   });
 
   it("submits only fields that remain changed after a rebase", () => {
