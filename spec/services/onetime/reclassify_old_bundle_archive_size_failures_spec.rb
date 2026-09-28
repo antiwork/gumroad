@@ -35,6 +35,32 @@ describe Onetime::ReclassifyOldBundleArchiveSizeFailures do
     expect(archive.reload).to be_too_large
   end
 
+  it "loads no product files for an archive of a product that is not a bundle" do
+    product = create(:product)
+    failed_archive(product, [create(:product_file, link: product, size: 600.megabytes)])
+    queries = []
+
+    ActiveSupport::Notifications.subscribed(->(*, payload) { queries << payload[:sql] }, "sql.active_record") do
+      described_class.process
+    end
+
+    expect(queries.grep(/FROM `product_files`/)).to be_empty
+  end
+
+  it "sums the recorded sizes of a bundle archive in SQL, without loading its files" do
+    archive = failed_archive(bundle, bundle_files(300.megabytes, 300.megabytes))
+    queries = []
+
+    ActiveSupport::Notifications.subscribed(->(*, payload) { queries << payload[:sql] }, "sql.active_record") do
+      described_class.process
+    end
+
+    expect(archive.reload).to be_too_large
+    expect(queries.grep(/SUM\(`product_files`\.`size`\)/)).not_to be_empty
+    loaded_files = queries.grep(/SELECT `product_files`\.\* FROM `product_files`/)
+    expect(loaded_files).to all(include("`size` IS NULL"))
+  end
+
   it "lets a bundle whose old size failures used up its retry budget build a ZIP again" do
     files = bundle_files(300.megabytes, 300.megabytes)
     purchase = create(:purchase, link: bundle)
@@ -51,11 +77,11 @@ describe Onetime::ReclassifyOldBundleArchiveSizeFailures do
   end
 
   it "reads an unrecorded size from S3, as the old worker did" do
-    large = failed_archive(bundle, bundle_files(1.megabyte, nil))
+    large = failed_archive(bundle, bundle_files(300.megabytes, nil))
     small = failed_archive(bundle, bundle_files(1.megabyte, nil))
     missing = failed_archive(bundle, bundle_files(1.megabyte, nil))
     forbidden = failed_archive(bundle, bundle_files(1.megabyte, nil))
-    s3_sizes = { large => 600.megabytes, small => 2.megabytes }
+    s3_sizes = { large => 300.megabytes, small => 2.megabytes }
     s3_errors = { missing => Aws::S3::Errors::NotFound.new(nil, "missing"), forbidden => Aws::S3::Errors::Forbidden.new(nil, "denied") }
     s3_objects = [large, small, missing, forbidden].to_h do |archive|
       file = archive.product_files.find { _1.size.nil? }

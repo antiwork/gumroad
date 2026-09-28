@@ -36,6 +36,33 @@ describe PushNotificationService::Android do
       end
     end
 
+    describe "sale channel by app version" do
+      def channel_for(app_version)
+        captured = nil
+        notification = instance_double(Rpush::Fcm::Notification)
+        allow(Rpush::Fcm::Notification).to receive(:new).and_return(notification)
+        allow(PushNotificationService::Android).to receive(:consumer_app).and_return(double("fcm_app"))
+        allow(notification).to receive_messages(:app= => nil, :alert= => nil, :device_token= => nil, :content_available= => nil, :sound= => nil, :data= => nil, :save! => true)
+        allow(notification).to receive(:notification=) { |args| captured = args[:channel_id] }
+
+        PushNotificationService::Android.new(device_token: "ABC", title: "Sale", body: nil, data: { "purchase_id" => "p1" },
+                                             app_type: Device::APP_TYPES[:consumer], sound: Device::NOTIFICATION_SOUNDS[:sale], app_version:).process
+        captured
+      end
+
+      it "targets the sales channel on builds that create it" do
+        expect(channel_for("2026.09.29")).to eq("sales")
+        expect(channel_for("2026.10.02")).to eq("sales")
+      end
+
+      it "keeps the Purchases channel on older, unknown, or missing versions" do
+        expect(channel_for("2026.09.28")).to eq("Purchases")
+        expect(channel_for("2025.06.14")).to eq("Purchases")
+        expect(channel_for("unknown")).to eq("Purchases")
+        expect(channel_for(nil)).to eq("Purchases")
+      end
+    end
+
     context "when notification sound is not passed" do
       it "creates a FCM notification without sound and the default channel" do
         app = double("fcm_app")
