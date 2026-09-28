@@ -42,6 +42,12 @@ class RefundPolicy < ApplicationRecord
   }.freeze
   OPENROUTER_URI_BASE = "https://openrouter.ai/api/v1"
   FINE_PRINT_CLASSIFICATION_MODEL = "openai/gpt-5.6-luna"
+  # The classifier answers after a reasoning pass, so the cap has to cover both
+  # that pass and the ~18-token JSON answer. At 20 every non-trivial fine print
+  # came back truncated (content nil, finish_reason "length"), which the parser
+  # read as a denial.
+  FINE_PRINT_CLASSIFICATION_MAX_TOKENS = 2_000
+  FINE_PRINT_CLASSIFICATION_ATTEMPTS = 2
 
   # Skip when the selected window is already "No refunds allowed" — the title
   # matches. A positive window plus "all sales are final" is the contradiction.
@@ -62,13 +68,21 @@ class RefundPolicy < ApplicationRecord
     }
   end
 
-  # A completed-but-unparseable response fails closed. Transport/outage
-  # errors still fail open so an OpenRouter blip never blocks saves. Do not
-  # rescue StandardError here: a nil/scalar completed body raises
-  # NoMethodError on #dig, and treating that as an outage fail-opens.
-  # Faraday::ParsingError is a completed body we could not read — fail closed.
+  # A completed-but-unreadable body (truncated, provider error wrapped in a 200,
+  # malformed JSON, non-Hash return) is retried once and then fails closed, so a
+  # single unreadable answer never accuses a seller of a claim the model did not
+  # make. Transport errors still fail open so an OpenRouter blip never blocks
+  # saves, and this must not widen to StandardError: a nil/scalar body raises
+  # NoMethodError on #dig, which is that same fail-open bug.
   def fine_print_claims_no_refunds?
-    parse_no_refunds_classification(ask_ai_fine_print_classification)
+    FINE_PRINT_CLASSIFICATION_ATTEMPTS.times do
+      classification = parse_no_refunds_classification(ask_ai_fine_print_classification)
+      return classification unless classification.nil?
+
+      Rails.logger.warn("Unreadable fine print classification for refund policy #{id}")
+    end
+
+    true
   rescue Faraday::TimeoutError, Faraday::ConnectionFailed, Faraday::ServerError, Net::ReadTimeout => e
     Rails.logger.warn("Error moderating fine print for refund policy #{id}: #{e.message}")
     false
@@ -87,11 +101,17 @@ class RefundPolicy < ApplicationRecord
       errors.add(:fine_print, "cannot state that refunds are not allowed")
     end
 
+    # nil means "no answer to read" — truncated, or a provider error delivered
+    # as a 200 — which the caller retries. A body that parsed but carries no
+    # usable boolean stays a denial.
     def parse_no_refunds_classification(response)
-      raise TypeError unless response.is_a?(Hash)
+      return nil unless response.is_a?(Hash)
 
-      parsed = JSON.parse(response.dig("choices", 0, "message", "content"))
-      raise TypeError unless parsed.is_a?(Hash)
+      content = response.dig("choices", 0, "message", "content")
+      return nil if content.blank?
+
+      parsed = JSON.parse(content)
+      return true unless parsed.is_a?(Hash)
 
       value = parsed.fetch("no_refunds")
       return value if value == true || value == false
@@ -124,7 +144,7 @@ class RefundPolicy < ApplicationRecord
           ],
           model: FINE_PRINT_CLASSIFICATION_MODEL,
           temperature: 0.0,
-          max_tokens: 20,
+          max_tokens: FINE_PRINT_CLASSIFICATION_MAX_TOKENS,
           response_format: FINE_PRINT_NO_REFUNDS_RESPONSE_FORMAT,
         }
       )
