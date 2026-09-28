@@ -59,6 +59,18 @@ describe StripeMerchantAccountManager, ".payout_setup_rejection_seller_message" 
     expect(message).not_to include("US number")
   end
 
+  # Stripe names this field `ssn_last_4`, not `id_number`, and its own wording for the two
+  # differs — so the label lookup has to know both spellings.
+  it "names a rejected SSN last 4 as the Tax ID the seller typed" do
+    create(:user_compliance_info, user:, country: "United States")
+
+    message = described_class.payout_setup_rejection_seller_message(
+      rejection("Invalid SSN last 4. 0000 is not an allowed value.", "individual[ssn_last_4]"), user
+    )
+
+    expect(message).to include("couldn't accept the Tax ID you entered")
+  end
+
   it "falls back to a generic sentence for a rejection carrying no param" do
     create(:user_compliance_info, user:)
 
