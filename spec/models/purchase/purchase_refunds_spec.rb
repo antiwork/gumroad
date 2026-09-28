@@ -3015,6 +3015,15 @@ describe "PurchaseRefunds", :vcr do
         purchase.send(:reverse_the_transfer_made_for_dispute_win!, refund:)
       end
 
+      it "counts a failed refund whose seller debit was not reversed" do
+        create(:refund, purchase:, total_transaction_cents: 4_00, amount_cents: 4_00, status: "failed", processor_refund_id: "re_failed")
+        refund = create(:refund, purchase:, total_transaction_cents: 2_00, amount_cents: 2_00, processor_refund_id: "re_after_failed")
+
+        expect(Stripe::Transfer).to receive(:create_reversal).with("tr_dispute_win", { amount: 5_10 }, anything)
+
+        purchase.send(:reverse_the_transfer_made_for_dispute_win!, refund:)
+      end
+
       it "reverses no more than is left on the transfer" do
         transfer.amount_reversed = 8_00
         refund = create(:refund, purchase:, total_transaction_cents: 10_00, amount_cents: 10_00, processor_refund_id: "re_rest")

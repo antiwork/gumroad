@@ -732,7 +732,7 @@ class Purchase
       # every refund that debited the seller, less what is already reversed: tax-only refunds and
       # refunds that did not debit the seller then add nothing, and each refund corrects rounding.
       purchases = charge ? charge.successful_purchases.to_a : [self]
-      refunds = Refund.where(purchase_id: purchases.map(&:id)).reject(&:terminally_failed?)
+      refunds = Refund.where(purchase_id: purchases.map(&:id)).select(&:effective?)
       exempt, debited = refunds.partition { _1.gumroad_funded || _1.balance_reconciliation_needed }
       debited_cents = debited.sum { _1.total_transaction_cents - _1.gumroad_tax_cents.to_i }
       base_cents = purchases.sum { _1.total_transaction_cents - _1.gumroad_tax_cents.to_i }
