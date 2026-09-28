@@ -29,7 +29,7 @@ export const buttonVariants = cva(
   // The default `shadow` token resolves to `currentColor`, which flips to near-white in dark
   // mode (text color becomes rgb(221 221 221)) and renders a strange white button shadow.
   // Matching light mode's black keeps the neobrutalist look consistent across color schemes.
-  "inline-flex items-center justify-center gap-2 cursor-pointer border border-border rounded text-current font-[inherit] no-underline transition-transform hover:-translate-1 hover:shadow-[0.25rem_0.25rem_0_var(--color-black)] active:translate-0 active:shadow-none data-[state=open]:translate-0! data-[state=open]:shadow-none!",
+  "inline-flex items-center justify-center gap-2 cursor-pointer border border-border rounded text-current font-[inherit] no-underline transition-transform hover:-translate-(--button-hover-offset) hover:shadow-[var(--button-hover-offset)_var(--button-hover-offset)_0_var(--color-black)] active:translate-0 active:shadow-none data-[state=open]:translate-0! data-[state=open]:shadow-none!",
   {
     variants: {
       variant: {

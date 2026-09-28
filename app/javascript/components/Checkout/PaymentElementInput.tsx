@@ -409,6 +409,7 @@ const StripePaymentElementProvider = ({
   const fontFamily =
     checkoutTheme?.font_family ?? `${font.name}, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
   const stripeFonts = useCheckoutStripeFonts(font);
+  const borderRadius = checkoutTheme?.border_radius ?? "4px";
 
   const options = React.useMemo<StripeElementsOptions>(
     () => ({
@@ -436,7 +437,7 @@ const StripePaymentElementProvider = ({
           colorBackground: colors.background,
           colorDanger: colors.danger,
           colorPrimary: colors.text,
-          borderRadius: "4px",
+          borderRadius,
           focusOutline: `2px solid ${colors.indicator}`,
           focusBoxShadow: "none",
         },
@@ -450,7 +451,7 @@ const StripePaymentElementProvider = ({
                 ".AccordionItem": {
                   borderColor: colors.border,
                   boxShadow: "none",
-                  borderRadius: "4px",
+                  borderRadius,
                   // Match the flat PayPal row appended below the element (p-4 in
                   // FlatPayPalRow), so every payment-method row has the same height.
                   padding: "1rem",
@@ -492,7 +493,17 @@ const StripePaymentElementProvider = ({
         },
       },
     }),
-    [colors, currency, elementsOptions, flatLayout, fontFamily, initialAmount, setupFutureUsage, stripeFonts],
+    [
+      borderRadius,
+      colors,
+      currency,
+      elementsOptions,
+      flatLayout,
+      fontFamily,
+      initialAmount,
+      setupFutureUsage,
+      stripeFonts,
+    ],
   );
 
   return (

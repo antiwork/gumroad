@@ -160,6 +160,7 @@ class CheckoutController < ApplicationController
           text_color: profile.text_color_on_background,
           danger_color: profile.danger_color,
           font_family: profile.font_family,
+          border_radius: profile.border_radius_css,
         },
       }
     rescue SassC::SyntaxError

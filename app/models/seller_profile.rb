@@ -3,6 +3,10 @@
 class SellerProfile < ApplicationRecord
   FONT_CHOICES = ["ABC Favorit", "Inter", "Domine", "Merriweather", "Roboto Slab", "Roboto Mono"]
   DANGER_COLOR_CHOICES = ["#dc341e", "#9b1c12", "#ffb4ab"]
+  # "small" matches Gumroad's stock radius. Checkout also passes these values to Stripe's
+  # Appearance API, which cannot read CSS variables, so keep them literal lengths.
+  BORDER_RADIUS_CHOICES = { "none" => "0rem", "small" => "0.25rem", "medium" => "0.5rem", "large" => "1rem" }.freeze
+  BUTTON_HOVER_OFFSETS = { "lift" => "0.25rem", "none" => "0rem" }.freeze
 
   def self.google_fonts_css_source(fonts)
     families = fonts.sort.map { "family=#{_1}:wght@400;600" }.join("&")
@@ -18,15 +22,19 @@ class SellerProfile < ApplicationRecord
   validates :font, inclusion: { in: FONT_CHOICES }
   validates :background_color, hex_color: true
   validates :highlight_color, hex_color: true
+  validates :border_radius, inclusion: { in: BORDER_RADIUS_CHOICES.keys }
+  validates :button_hover, inclusion: { in: BUTTON_HOVER_OFFSETS.keys }
   validate :validate_json_data, if: -> { self[:json_data].present? }
 
   before_validation :normalize_colors
-  after_commit :clear_custom_style_cache, if: -> { %w[highlight_color background_color font].any? { |prop| send(:"saved_change_to_#{prop}?") } }
+  after_commit :clear_custom_style_cache, if: -> { %w[highlight_color background_color font border_radius button_hover].any? { |prop| send(:"saved_change_to_#{prop}?") } }
 
   after_initialize do
     self.font ||= "ABC Favorit"
     self.background_color ||= "#ffffff"
     self.highlight_color ||= "#ff90e8"
+    self.border_radius ||= "small"
+    self.button_hover ||= "lift"
   end
 
   # Fingerprint only the pages/sections editor's state. Theme saves update this row too, so using
@@ -116,6 +124,14 @@ class SellerProfile < ApplicationRecord
     %("#{font}", "ABC Favorit", #{fallback})
   end
 
+  def border_radius_css
+    BORDER_RADIUS_CHOICES.fetch(border_radius)
+  end
+
+  def button_hover_offset_css
+    BUTTON_HOVER_OFFSETS.fetch(button_hover)
+  end
+
   def font_css_source
     return if font == "ABC Favorit"
 
@@ -152,7 +168,9 @@ class SellerProfile < ApplicationRecord
     def custom_style_attributes_safe?
       HexColorValidator.safe_for_css?(highlight_color) &&
         HexColorValidator.safe_for_css?(background_color) &&
-        font.in?(FONT_CHOICES)
+        font.in?(FONT_CHOICES) &&
+        BORDER_RADIUS_CHOICES.key?(border_radius) &&
+        BUTTON_HOVER_OFFSETS.key?(button_hover)
     end
 
     def clear_custom_style_cache

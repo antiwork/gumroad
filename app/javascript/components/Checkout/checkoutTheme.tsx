@@ -14,6 +14,7 @@ export type CheckoutTheme = {
   text_color: string;
   danger_color: string;
   font_family: string;
+  border_radius: string;
 };
 
 export type CheckoutStyle = {

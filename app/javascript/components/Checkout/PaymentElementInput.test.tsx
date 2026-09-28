@@ -152,6 +152,7 @@ const sellerTheme: CheckoutTheme = {
   text_color: "#000000",
   danger_color: "#9b1c12",
   font_family: '"Roboto Mono", "ABC Favorit", monospace',
+  border_radius: "0.25rem",
 };
 let prefersDark = false;
 
@@ -250,6 +251,19 @@ describe("PaymentElementInput", () => {
       ".RadioIconOuter--checked": { stroke: "rgb(148,148,148)" },
       ".RadioIconInner--checked": { fill: "rgb(148,148,148)" },
     });
+  });
+
+  it("rounds the inputs and payment-method rows with the seller's radius", () => {
+    render(
+      <CheckoutThemeProvider
+        value={{ theme: { ...sellerTheme, border_radius: "1rem" }, stripe_fonts_css_source: stripeFontsCssSource }}
+      >
+        <PaymentElementInput {...props} flatLayout amount={1_625} mountCurrency="usd" />
+      </CheckoutThemeProvider>,
+    );
+
+    expect(elementsRender.options?.appearance?.variables?.borderRadius).toBe("1rem");
+    expect(elementsRender.options?.appearance?.rules?.[".AccordionItem"]?.borderRadius).toBe("1rem");
   });
 
   it("loads seller fonts before a cart-driven theme change without remounting", () => {
