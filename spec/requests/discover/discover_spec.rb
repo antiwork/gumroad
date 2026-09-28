@@ -585,6 +585,10 @@ describe("Discover", js: true, type: :system) do
         page.driver.browser.action.move_to_location((row.x + row.width / 2).round, (row.y + row.height / 2 - 10).round).perform
         sleep 0.6
 
+        expect(page).to have_selector("[role=menu][aria-label='Hardware']")
+        find("[role=menu] [role=menuitem]", text: "Raspberry Pi").hover
+        expect(find("[role=menu][aria-label='Hardware']").rect.height).to be < row.y
+
         click_on "Raspberry Pi"
 
         expect(page).to have_selector("[aria-label='Breadcrumbs']", text: "Software Development\n/Hardware\n/Raspberry Pi")
