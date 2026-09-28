@@ -1790,12 +1790,9 @@ module StripeMerchantAccountManager
     postal_code
   end
 
-  # Stripe validates the tax IDs we pass on account creation (individual `id_number` or its
-  # 4-digit `ssn_last_4`, business `tax_id`) and rejects placeholder values (all-same digits,
-  # sequential digits) with an InvalidRequestError like `Invalid Tax ID. 123456789 is not an
-  # allowed value.` / `Invalid SSN last 4. 0000 is not an allowed value.` We don't pre-validate
-  # that denylist, so these are expected seller-input errors the seller fixes from the message
-  # Stripe shows inline. Stripe doesn't always populate `code`/`param`, so also match the message.
+  # Stripe's placeholder denylist covers individual `id_number`, its 4-digit `ssn_last_4` and
+  # business `tax_id`; it rejects those as seller input to fix, not as an incident. `code`/`param`
+  # are not always populated, so the message spellings are matched too.
   private_class_method
   def self.tax_id_invalid_error?(error)
     return false unless error.is_a?(Stripe::InvalidRequestError)
