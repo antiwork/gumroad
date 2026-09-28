@@ -935,18 +935,21 @@ module Purchase::Blockable
                                .where("error_code NOT IN (?) OR error_code IS NULL", IGNORED_ERROR_CODES)
       failed_purchase_attempts_count = countable_failures.where(created_at: card_testing_product_watch_minutes.minutes.ago..).count
 
-      recent_purchases_failed_in_a_row = failed_purchases_count_redis_namespace.incr(failed_purchases_count_redis_key)
-      failed_purchases_count_redis_namespace.expire(failed_purchases_count_redis_key, failed_purchases_in_a_row_watch_days.days.to_i)
+      recent_purchases_failed_in_a_row = record_product_failure_streak!(failed_purchases_in_a_row_watch_days)
 
       burst_tripped = failed_purchase_attempts_count >= max_number_of_failed_purchases
       streak_tripped = recent_purchases_failed_in_a_row >= max_number_of_failed_purchases_in_a_row
       return unless burst_tripped || streak_tripped
 
-      # One buyer retrying one card their bank keeps declining is not card testing, and a product
-      # block refuses every other buyer of the seller's product. A tester cycling cards under one
-      # email still trips this through the second fingerprint.
-      window_start = streak_tripped ? failed_purchases_in_a_row_watch_days.days.ago : card_testing_product_watch_minutes.minutes.ago
-      return if sole_buyer_failures?(countable_failures.where(created_at: window_start..))
+      # Skip only when every tripped count is one buyer on one card. A second email or fingerprint
+      # still blocks. The streak records each counted purchase as it fails: a success clears that
+      # set, and a later failure of an older purchase is still included.
+      return if sole_product_block?(
+        countable_failures,
+        burst_tripped:,
+        streak_tripped:,
+        watch_minutes: card_testing_product_watch_minutes
+      )
 
       PlatformBlock.add!(
         object_type: PlatformBlock::TYPES[:product],
@@ -1028,11 +1031,74 @@ module Purchase::Blockable
 
     def sole_buyer_failures?(failures)
       failures.distinct.limit(2).pluck(:email).size < 2 &&
-        failures.with_stripe_fingerprint.distinct.limit(2).pluck(:stripe_fingerprint).size < 2
+        distinct_card_count(failures.with_stripe_fingerprint) < 2
+    end
+
+    def sole_product_block?(countable_failures, burst_tripped:, streak_tripped:, watch_minutes:)
+      sole = true
+      if burst_tripped
+        sole &&= sole_buyer_failures?(countable_failures.where(created_at: watch_minutes.minutes.ago..))
+      end
+      if streak_tripped
+        # A missing purchase set means this counter started before recording, or a clear split
+        # the set from the count. Do not skip: a fixed window can hide a buyer the counter still holds.
+        sole &&= sole_buyer_product_streak?(countable_failures) == true
+      end
+      sole
+    end
+
+    PRODUCT_STREAK_RECORD_SCRIPT = <<~LUA
+      local count_key, ids_key, flag_key = KEYS[1], KEYS[2], KEYS[3]
+      local purchase_id = ARGV[1]
+      local ttl = tonumber(ARGV[2])
+      if purchase_id ~= "" then
+        redis.call("SADD", ids_key, purchase_id)
+      end
+      local count = redis.call("INCR", count_key)
+      if count == 1 and purchase_id ~= "" then
+        redis.call("SET", flag_key, "1")
+      end
+      redis.call("EXPIRE", count_key, ttl)
+      redis.call("EXPIRE", ids_key, ttl)
+      redis.call("EXPIRE", flag_key, ttl)
+      return count
+    LUA
+
+    PRODUCT_STREAK_CLEAR_SCRIPT = <<~LUA
+      return redis.call("DEL", KEYS[1], KEYS[2], KEYS[3])
+    LUA
+
+    def record_product_failure_streak!(watch_days)
+      failed_purchases_count_redis_namespace.eval(
+        PRODUCT_STREAK_RECORD_SCRIPT,
+        [failed_purchases_count_redis_key, product_streak_purchase_ids_key, product_streak_identities_complete_key],
+        [id.to_s, watch_days.days.to_i]
+      ).to_i
+    end
+
+    def sole_buyer_product_streak?(countable_failures)
+      return if failed_purchases_count_redis_namespace.get(product_streak_identities_complete_key).blank?
+
+      purchase_ids = failed_purchases_count_redis_namespace.smembers(product_streak_purchase_ids_key)
+      return false if purchase_ids.blank?
+
+      sole_buyer_failures?(countable_failures.where(id: purchase_ids))
     end
 
     def delete_failed_purchases_count
-      failed_purchases_count_redis_namespace.del(failed_purchases_count_redis_key)
+      failed_purchases_count_redis_namespace.eval(
+        PRODUCT_STREAK_CLEAR_SCRIPT,
+        [failed_purchases_count_redis_key, product_streak_purchase_ids_key, product_streak_identities_complete_key],
+        []
+      )
+    end
+
+    def product_streak_purchase_ids_key
+      "#{failed_purchases_count_redis_key}:purchase_ids"
+    end
+
+    def product_streak_identities_complete_key
+      "#{failed_purchases_count_redis_key}:identities_complete"
     end
 
     def failed_purchases_count_redis_key
