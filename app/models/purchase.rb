@@ -6187,7 +6187,11 @@ class Purchase < ApplicationRecord
       return true if country.nil?
       return true if link.is_physical || link.require_shipping
       return true if card_country.nil? && country == ip_country
-      return true if ip_country == link.user.compliance_country_code
+      # `ip_country` holds a country NAME (see Order::CreateService: `GeoIp.lookup(ip).country_name`)
+      # while `compliance_country_code` is an ISO alpha2, so the two must be normalized before they
+      # can be compared — otherwise this short-circuit is dead and a buyer sitting in the seller's
+      # own country fails validation whenever their selected country disagrees with their IP.
+      return true if Compliance::Countries.find_by_name(ip_country)&.alpha2 == link.user.compliance_country_code
 
       country_code = Compliance::Countries.find_by_name(country)&.alpha2
       ip_country_code = Compliance::Countries.find_by_name(ip_country)&.alpha2
