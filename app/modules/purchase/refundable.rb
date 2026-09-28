@@ -731,8 +731,10 @@ class Purchase
       # The dispute-win transfer sent back the seller's share of the whole charge, so reverse this
       # refund's share of it. It runs after the refund is saved, so it cannot read what is left to refund.
       remaining = transfer.amount - transfer.amount_reversed.to_i
-      amount = if charge.nil? && stripe_refunded
-        # A tax-only refund reverses nothing, so the last refund takes whatever is left.
+      # A tax-only refund reverses nothing and each share rounds, so the refund that completes the
+      # charge takes whatever is left.
+      charge_fully_refunded = stripe_refunded && (charge.nil? || charge.purchases.where.not(id:).all?(&:stripe_refunded?))
+      amount = if charge_fully_refunded
         remaining
       else
         [(transfer.amount * refund.total_transaction_cents / (charge || self).charged_amount_cents.to_r).round, remaining].min
