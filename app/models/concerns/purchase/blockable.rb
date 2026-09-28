@@ -942,8 +942,7 @@ module Purchase::Blockable
       return unless burst_tripped || streak_tripped
 
       # Skip only when every tripped count is one buyer on one card. A second email or fingerprint
-      # still blocks. The streak records each counted purchase as it fails: a success clears that
-      # set, and a later failure of an older purchase is still included.
+      # still blocks. The streak's buyers are recorded as each failure is counted and cleared with it.
       return if sole_product_block?(
         countable_failures,
         burst_tripped:,
@@ -1039,66 +1038,71 @@ module Purchase::Blockable
       if burst_tripped
         sole &&= sole_buyer_failures?(countable_failures.where(created_at: watch_minutes.minutes.ago..))
       end
-      if streak_tripped
-        # A missing purchase set means this counter started before recording, or a clear split
-        # the set from the count. Do not skip: a fixed window can hide a buyer the counter still holds.
-        sole &&= sole_buyer_product_streak?(countable_failures) == true
-      end
+      sole &&= @product_streak_sole_buyer == true if streak_tripped
       sole
     end
 
+    # Identities are recorded with the count in one script, so a concurrent success clears all of
+    # them together. Each set stops growing at two members: two already means "not one buyer".
+    # The flag is set only when this script started the streak; a counter without it predates
+    # recording, so the streak is never treated as one buyer.
     PRODUCT_STREAK_RECORD_SCRIPT = <<~LUA
-      local count_key, ids_key, flag_key = KEYS[1], KEYS[2], KEYS[3]
-      local purchase_id = ARGV[1]
-      local ttl = tonumber(ARGV[2])
-      if purchase_id ~= "" then
-        redis.call("SADD", ids_key, purchase_id)
-      end
+      local count_key, emails_key, cards_key, flag_key = KEYS[1], KEYS[2], KEYS[3], KEYS[4]
+      local email, card = ARGV[1], ARGV[2]
+      local ttl = tonumber(ARGV[3])
       local count = redis.call("INCR", count_key)
-      if count == 1 and purchase_id ~= "" then
+      if count == 1 then
         redis.call("SET", flag_key, "1")
       end
-      redis.call("EXPIRE", count_key, ttl)
-      redis.call("EXPIRE", ids_key, ttl)
-      redis.call("EXPIRE", flag_key, ttl)
-      return count
+      if redis.call("SCARD", emails_key) < 2 then
+        redis.call("SADD", emails_key, email)
+      end
+      if card ~= "" and redis.call("SCARD", cards_key) < 2 then
+        redis.call("SADD", cards_key, card)
+      end
+      for _, key in ipairs(KEYS) do
+        redis.call("EXPIRE", key, ttl)
+      end
+      return {count, redis.call("EXISTS", flag_key), redis.call("SCARD", emails_key), redis.call("SCARD", cards_key)}
     LUA
 
     PRODUCT_STREAK_CLEAR_SCRIPT = <<~LUA
-      return redis.call("DEL", KEYS[1], KEYS[2], KEYS[3])
+      return redis.call("DEL", unpack(KEYS))
     LUA
 
     def record_product_failure_streak!(watch_days)
-      failed_purchases_count_redis_namespace.eval(
+      count, flagged, emails, cards = failed_purchases_count_redis_namespace.eval(
         PRODUCT_STREAK_RECORD_SCRIPT,
-        [failed_purchases_count_redis_key, product_streak_purchase_ids_key, product_streak_identities_complete_key],
-        [id.to_s, watch_days.days.to_i]
-      ).to_i
+        product_streak_redis_keys,
+        [product_streak_email_identity, product_streak_card_identity.to_s, watch_days.days.to_i]
+      ).map(&:to_i)
+      @product_streak_sole_buyer = flagged == 1 && emails < 2 && cards < 2
+      count
     end
 
-    def sole_buyer_product_streak?(countable_failures)
-      return if failed_purchases_count_redis_namespace.get(product_streak_identities_complete_key).blank?
+    # Mirrors sole_buyer_failures?: emails compare case-insensitively like the column, and a PayPal
+    # wallet is one card however many billing-agreement tokens it produced.
+    def product_streak_email_identity
+      "email:#{email.to_s.strip.downcase}"
+    end
 
-      purchase_ids = failed_purchases_count_redis_namespace.smembers(product_streak_purchase_ids_key)
-      return false if purchase_ids.blank?
+    def product_streak_card_identity
+      return if stripe_fingerprint.blank?
 
-      sole_buyer_failures?(countable_failures.where(id: purchase_ids))
+      if charge_processor_id == PaypalChargeProcessor.charge_processor_id
+        "wallet:#{card_visual.presence || "token:#{stripe_fingerprint}"}"
+      else
+        "card:#{stripe_fingerprint}"
+      end
     end
 
     def delete_failed_purchases_count
-      failed_purchases_count_redis_namespace.eval(
-        PRODUCT_STREAK_CLEAR_SCRIPT,
-        [failed_purchases_count_redis_key, product_streak_purchase_ids_key, product_streak_identities_complete_key],
-        []
-      )
+      failed_purchases_count_redis_namespace.eval(PRODUCT_STREAK_CLEAR_SCRIPT, product_streak_redis_keys, [])
     end
 
-    def product_streak_purchase_ids_key
-      "#{failed_purchases_count_redis_key}:purchase_ids"
-    end
-
-    def product_streak_identities_complete_key
-      "#{failed_purchases_count_redis_key}:identities_complete"
+    def product_streak_redis_keys
+      base = failed_purchases_count_redis_key
+      [base, "#{base}:emails", "#{base}:cards", "#{base}:identities_complete"]
     end
 
     def failed_purchases_count_redis_key

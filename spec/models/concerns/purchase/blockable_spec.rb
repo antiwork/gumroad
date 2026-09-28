@@ -1489,6 +1489,20 @@ describe Purchase::Blockable do
           end
         end
 
+        context "when a concurrent success clears the streak after this failure is counted" do
+          before do
+            2.times { create(:purchase, link: @product, email: "buyer@example.com", stripe_fingerprint: nil, purchase_state: "in_progress").mark_failed! }
+            @purchase = create(:purchase, link: @product, email: "buyer@example.com", stripe_fingerprint: nil, purchase_state: "in_progress")
+            allow(@purchase).to receive(:record_product_failure_streak!).and_wrap_original do |original, *args|
+              original.call(*args).tap { create(:purchase, link: @product, purchase_state: "in_progress").mark_successful! }
+            end
+          end
+
+          it "doesn't block purchases on product" do
+            expect { @purchase.mark_failed! }.not_to change { PlatformBlock.product.count }
+          end
+        end
+
         context "when one buyer retries one PayPal wallet" do
           before do
             2.times do |n|
