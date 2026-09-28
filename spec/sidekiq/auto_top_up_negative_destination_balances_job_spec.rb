@@ -911,7 +911,7 @@ describe AutoTopUpNegativeDestinationBalancesJob do
         expect($redis.get(dedupe_key)).to be_nil
         expect($redis.get("#{dedupe_key}:unresolved")).to eq("10000")
         expect($redis.ttl(transfer_key)).to eq(-1)
-        expect(InternalNotificationWorker).to have_received(:perform_async).with(anything, /ALL FAILED/, /#{10000 - delivered_cents} destination cents unfunded/)
+        expect(InternalNotificationWorker).to have_received(:perform_async).with(anything, "NEEDS HUMAN: Negative destination balance top-ups", /#{10000 - delivered_cents} destination cents unfunded/)
       end
     end
 
@@ -930,7 +930,7 @@ describe AutoTopUpNegativeDestinationBalancesJob do
         expect($redis.get(transfer_key)).to eq("1")
         expect($redis.ttl(transfer_key)).to eq(-1)
         expect($redis.get("#{dedupe_key}:unresolved")).to eq("10000")
-        expect(InternalNotificationWorker).to have_received(:perform_async).with(anything, /ALL FAILED/, /destination funding is incomplete or unverified/)
+        expect(InternalNotificationWorker).to have_received(:perform_async).with(anything, "NEEDS HUMAN: Negative destination balance top-ups", /destination funding is incomplete or unverified/)
       end
     end
 
@@ -1390,11 +1390,55 @@ describe AutoTopUpNegativeDestinationBalancesJob do
       allow(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).and_raise(Stripe::RateLimitError, "rate limited")
       described_class.new.perform
 
-      counts = retired ? "1 withheld, 0 errored" : "0 withheld, 1 errored"
+      subject = retired ? "NEEDS HUMAN: Negative destination balance top-ups" : "ALL FAILED: Negative destination balance top-ups"
+      counts = retired ? "all 2 are withheld for a human, 0 errored" : "1 withheld, 1 errored"
       reason = retired ? "RETIRED" : "rate limited"
-      expect(InternalNotificationWorker).to have_received(:perform_async).with(anything, /ALL FAILED/, a_string_including(counts, "already topped up", reason)).once
+      expect(InternalNotificationWorker).to have_received(:perform_async).with(anything, subject, a_string_including(counts, "already topped up", reason)).once
     ensure
       Feature.deactivate(:auto_topup_negative_destination_balances)
     end
+  end
+
+  it "counts a funded entry awaiting reconciliation as withheld in the headline and the body alike" do
+    residue_row(-100_00)
+    make_payable
+    Feature.activate(:auto_topup_negative_destination_balances)
+    described_class.new.perform
+    other_account = create(:merchant_account, user: seller, charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                                              charge_processor_merchant_id: "acct_other", currency: Currency::PHP, country: "PH")
+    create(:balance, user: seller, merchant_account: other_account, date: in_cycle_date,
+                     amount_cents: 0, holding_currency: Currency::PHP, holding_amount_cents: -50_00)
+    other_account.mark_deleted!
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async).with(
+      anything, "NEEDS HUMAN: Negative destination balance top-ups",
+      a_string_including("all 2 are withheld for a human, 0 errored", "2 withheld for a human, 0 errored")
+    ).once
+  ensure
+    Feature.deactivate(:auto_topup_negative_destination_balances)
+  end
+
+  it "withholds a reused idempotency key for a human instead of reporting a transfer error" do
+    row = residue_row(-100_00)
+    make_payable
+    Feature.activate(:auto_topup_negative_destination_balances)
+    dedupe_key = RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id)
+    transfer_key = "#{dedupe_key}:#{fingerprint_for(row.id)}:0:10000"
+    allow(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account)
+      .and_raise(Stripe::IdempotencyError.new("Keys for idempotent requests can only be used with the same parameters they were first used with."))
+
+    described_class.new.perform
+    described_class.new.perform
+
+    expect(StripeTransferInternallyToCreator).to have_received(:transfer_funds_to_account).once
+    expect($redis.get("#{dedupe_key}:unresolved")).to eq("10000")
+    expect($redis.ttl(transfer_key)).to eq(-1)
+    expect(InternalNotificationWorker).to have_received(:perform_async).with(
+      anything, "NEEDS HUMAN: Negative destination balance top-ups", a_string_including("ESCALATE #{seller.email} — Stripe refused #{transfer_key}")
+    ).once
+    expect(InternalNotificationWorker).not_to have_received(:perform_async).with(anything, /ALL FAILED/, anything)
+  ensure
+    Feature.deactivate(:auto_topup_negative_destination_balances)
   end
 end
