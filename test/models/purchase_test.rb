@@ -6285,6 +6285,52 @@ class PurchaseTest < ActiveSupport::TestCase
     assert_equal 1, mandate_options[:payment_method_options][:card][:mandate_options][:interval_count]
   end
 
+  test "#mandate_options_for_stripe sizes an installment restart cap from the original purchase, not this charge" do
+    original = create_installment_plan_purchase(card_country: "IN")
+    snapshot = original.subscription.last_payment_option.installment_plan_snapshot
+    snapshot.update!(total_price_cents: 36_31 * snapshot.number_of_installments)
+    original.update_columns(displayed_price_cents: 36_31, price_cents: 36_31, total_transaction_cents: 36_31)
+    original.reload
+    restart = create_purchase(charge_processor_id: StripeChargeProcessor.charge_processor_id, link: original.link,
+                              purchase_state: "in_progress", card_country: "IN", subscription: original.subscription,
+                              is_original_subscription_purchase: false, is_installment_payment: true,
+                              price_cents: 31_75, total_transaction_cents: 31_75, displayed_price_cents: 31_75)
+    restart.setup_future_charges = true
+    chargeable = mock("chargeable")
+    chargeable.stubs(:requires_mandate?).returns(true)
+    restart.stubs(:chargeable).returns(chargeable)
+
+    mandate_options = restart.mandate_options_for_stripe
+    terms = original.subscription.indian_card_mandate_terms
+
+    # This attempt charges 3175. The registered cap stays on the original purchase's 3631,
+    # which is also the subscription terms amount.
+    assert_equal 36_31, terms[:amount]
+    assert_equal 36_31, mandate_options[:payment_method_options][:card][:mandate_options][:amount]
+    assert_equal 31_75, restart.total_transaction_cents
+  end
+
+  test "#mandate_options_for_stripe keeps the installment restart charge as the cap when it exceeds the original" do
+    original = create_installment_plan_purchase(card_country: "IN")
+    snapshot = original.subscription.last_payment_option.installment_plan_snapshot
+    snapshot.update!(total_price_cents: 20_00 * snapshot.number_of_installments)
+    original.update_columns(displayed_price_cents: 20_00, price_cents: 20_00, total_transaction_cents: 20_00)
+    original.reload
+    restart = create_purchase(charge_processor_id: StripeChargeProcessor.charge_processor_id, link: original.link,
+                              purchase_state: "in_progress", card_country: "IN", subscription: original.subscription,
+                              is_original_subscription_purchase: false, is_installment_payment: true,
+                              price_cents: 31_75, total_transaction_cents: 31_75, displayed_price_cents: 31_75)
+    restart.setup_future_charges = true
+    chargeable = mock("chargeable")
+    chargeable.stubs(:requires_mandate?).returns(true)
+    restart.stubs(:chargeable).returns(chargeable)
+
+    mandate_options = restart.mandate_options_for_stripe
+
+    # A cap below this PaymentIntent would be rejected by Stripe, so the charge-sized cap remains.
+    assert_equal 31_75, mandate_options[:payment_method_options][:card][:mandate_options][:amount]
+  end
+
   # ---- #is_an_async_off_session_charge_in_india? ----------------------------
 
   test "#is_an_async_off_session_charge_in_india? when card country is not India returns false if it is a regular purchase" do
