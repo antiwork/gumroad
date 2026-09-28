@@ -2975,6 +2975,15 @@ describe "PurchaseRefunds", :vcr do
         purchase.send(:reverse_the_transfer_made_for_dispute_win!, refund:)
       end
 
+      it "reverses what is left on the transfer when the refund completes the purchase after a tax-only refund" do
+        purchase.update!(stripe_refunded: true)
+        refund = create(:refund, purchase:, total_transaction_cents: 9_00, amount_cents: 9_00, processor_refund_id: "re_after_tax")
+
+        expect(Stripe::Transfer).to receive(:create_reversal).with("tr_dispute_win", { amount: 8_50 }, anything)
+
+        purchase.send(:reverse_the_transfer_made_for_dispute_win!, refund:)
+      end
+
       it "reverses no more than is left on the transfer" do
         transfer.amount_reversed = 8_00
         refund = create(:refund, purchase:, total_transaction_cents: 10_00, amount_cents: 10_00, processor_refund_id: "re_rest")

@@ -730,9 +730,13 @@ class Purchase
 
       # The dispute-win transfer sent back the seller's share of the whole charge, so reverse this
       # refund's share of it. It runs after the refund is saved, so it cannot read what is left to refund.
-      chargeable = charge || self
-      amount = (transfer.amount * refund.total_transaction_cents / chargeable.charged_amount_cents.to_r).round
-      amount = [amount, transfer.amount - transfer.amount_reversed.to_i].min
+      remaining = transfer.amount - transfer.amount_reversed.to_i
+      amount = if charge.nil? && stripe_refunded
+        # A tax-only refund reverses nothing, so the last refund takes whatever is left.
+        remaining
+      else
+        [(transfer.amount * refund.total_transaction_cents / (charge || self).charged_amount_cents.to_r).round, remaining].min
+      end
       return unless amount.positive?
 
       Stripe::Transfer.create_reversal(transfer.id, { amount: }, { idempotency_key: "dispute_win_reversal_#{refund.processor_refund_id || refund.id}" })
