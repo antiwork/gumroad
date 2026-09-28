@@ -733,7 +733,7 @@ class Purchase
       remaining = transfer.amount - transfer.amount_reversed.to_i
       # A tax-only refund reverses nothing and each share rounds, so the refund that completes the
       # charge takes whatever is left.
-      charge_fully_refunded = stripe_refunded && (charge.nil? || charge.purchases.where.not(id:).all?(&:stripe_refunded?))
+      charge_fully_refunded = stripe_refunded && (charge.nil? || charge.successful_purchases.where.not(id:).all?(&:stripe_refunded?))
       amount = if charge_fully_refunded
         remaining
       else

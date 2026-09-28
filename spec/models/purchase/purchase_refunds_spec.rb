@@ -2984,8 +2984,9 @@ describe "PurchaseRefunds", :vcr do
         purchase.send(:reverse_the_transfer_made_for_dispute_win!, refund:)
       end
 
-      it "reverses what is left on the transfer when the refund completes a purchase on a charge" do
-        create(:charge, purchases: [purchase], processor_transaction_id: "ch_dispute_win")
+      it "reverses what is left on the transfer when the refund completes the successful purchases on a charge" do
+        failed = create(:failed_purchase, link: purchase.link)
+        create(:charge, purchases: [purchase, failed], processor_transaction_id: "ch_dispute_win")
         purchase.reload.update!(stripe_refunded: true)
         refund = create(:refund, purchase:, total_transaction_cents: 9_00, amount_cents: 9_00, processor_refund_id: "re_on_charge")
 
