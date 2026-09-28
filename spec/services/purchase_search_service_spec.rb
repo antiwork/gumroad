@@ -516,16 +516,17 @@ describe PurchaseSearchService do
     end
 
     it "does not widen an untracked search, whose response carries no total to compare" do
-      purchase = create(:purchase, email: "longpartialbuyername@example.com")
+      exact = create(:purchase, email: "rebecca.test@victoria.com")
+      create(:purchase, email: "rebecca.test@victoria.com.au")
       index_model_records(Purchase)
 
       # SellerMobileAnalyticsService searches with track_total_hits: false when it does not ask for
-      # :sales_count, and Elasticsearch then omits hits.total. The fallback decision must not read a
-      # total that is not in the response, and must not fall back on a result set it cannot read.
-      result = described_class.search(seller_query: "longpartialbuyername@example", track_total_hits: false, size: 0)
+      # :sales_count, so the response carries no total to compare. The address only the prefix
+      # clause reaches is what proves the fallback did not run.
+      result = described_class.search(seller_query: "rebecca.test@victoria.com", track_total_hits: false)
 
       expect(result.results.total).to be_nil
-      expect(result.records.load).to eq([])
+      expect(result.records.load).to match_array([exact])
     end
 
     it "does not widen a complete address to another buyer whose address starts with it" do

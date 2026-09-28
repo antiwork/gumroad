@@ -490,10 +490,9 @@ class PurchaseSearchService
       @options[:seller_query].to_s.strip.downcase.split.select { |token| token.length > EMAIL_AUTOCOMPLETE_MAX_GRAM }
     end
 
-    # A nil total means the caller searched with track_total_hits: false (SellerMobileAnalyticsService
-    # does when it does not ask for :sales_count), so the response cannot say whether the typed query
-    # matched. The fallback below widens a result set that reached nothing, so widening one that cannot
-    # be read is worse than leaving the caller's own results alone.
+    # A nil total means the caller passed track_total_hits: false, so the response cannot say
+    # whether the query matched. The fallback below widens a result set that reached nothing,
+    # and widening one that cannot be read is worse than leaving the caller's results alone.
     def seller_query_matched?(response)
       total = response.results.total
       total.nil? || total.positive?
