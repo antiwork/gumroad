@@ -337,6 +337,11 @@ class AutoTopUpNegativeDestinationBalancesJob
       if transfer_claimed && !persist_with_retries(transfer_key)
         return { entry:, verdict: :escalate, reason: "Stripe's outcome for #{to_transfer_cents} cents to this account is ambiguous (#{e.class}: #{e.message}) and the durable hold on #{transfer_key} could not be confirmed in Redis — a human must verify with Stripe and clear #{unresolved_key} before this account tops up again" }
       end
+      # Stripe sent nothing for this request, but the key's first request (other parameters) may
+      # have run, so the hold stays. It is a human check, not a transfer error.
+      if e.is_a?(Stripe::IdempotencyError)
+        return { entry:, verdict: :escalate, reason: "Stripe refused #{transfer_key} because it was first used with different parameters — a human must check whether that first request moved money before clearing #{transfer_key}, #{unresolved_key} and #{request_key}: a retry reuses the saved request under the same key, so it repeats this refusal until Stripe's 24h idempotency window has lapsed" }
+      end
       { entry:, verdict: :error, reason: "#{e.class}: #{e.message}" }
     ensure
       $redis.eval(LOCK_RELEASE_SCRIPT, keys: [lock_key], argv: [lock_token]) if lock_token
@@ -412,12 +417,14 @@ class AutoTopUpNegativeDestinationBalancesJob
       escalations = outcomes.select { _1[:verdict] == :escalate || _1[:verdict] == :awaiting_reconciliation }
       errors = outcomes.select { _1[:verdict] == :error }
       funded = outcomes.select { _1[:verdict] == :topped_up || _1[:verdict] == :dry_run }
+      withheld = counts[:escalate].to_i + counts[:awaiting_reconciliation].to_i
 
       [
-        ("ALL FAILED: a live run processed #{outcomes.size} payable candidates and topped up none — #{counts[:escalate].to_i} withheld, #{counts[:error].to_i} errored. This has been happening silently; check the error lines below (gumroad-private#2622)." if all_failed?(outcomes, live:)),
+        ("ALL FAILED: a live run processed #{outcomes.size} payable candidates and topped up none — #{withheld} withheld, #{counts[:error].to_i} errored. Check the error lines below (gumroad-private#2622)." if all_failed?(outcomes, live:)),
+        ("NEEDS HUMAN: a live run processed #{outcomes.size} payable candidates and topped up none — all #{withheld} are withheld for a human, 0 errored. Each line below says why it is held." if needs_human?(outcomes, live:)),
         "#{live ? "Topped up" : "DRY RUN (auto_topup_negative_destination_balances off) — would top up"} " \
           "#{counts[:topped_up].to_i + counts[:dry_run].to_i} of #{outcomes.size} candidates processed " \
-          "(#{total} payable total): #{counts[:escalate].to_i + counts[:awaiting_reconciliation].to_i} withheld for a human, #{counts[:error].to_i} errored. " \
+          "(#{total} payable total): #{withheld} withheld for a human, #{counts[:error].to_i} errored. " \
           "Transfers are sent in USD (the local hole is converted at the current rate and rounded up; retries reuse the original request). " \
           "Live transfers require confirmed destination credit; remaining shortfalls require human reconciliation. " \
           "Reminder: this only closes the Stripe-side gap — the internal Balance row(s) still need a human " \
@@ -432,9 +439,17 @@ class AutoTopUpNegativeDestinationBalancesJob
     end
 
     # A live run that funded none of its payable candidates goes in the subject, where a reader
-    # cannot miss it.
+    # cannot miss it. Errors and designed human gates get different prefixes: only errors mean
+    # the automation itself is broken.
     def subject_for(outcomes, live:)
-      prefix = all_failed?(outcomes, live:) ? "ALL FAILED: " : ""
+      prefix =
+        if all_failed?(outcomes, live:)
+          "ALL FAILED: "
+        elsif needs_human?(outcomes, live:)
+          "NEEDS HUMAN: "
+        else
+          ""
+        end
       "#{prefix}Negative destination balance top-ups"
     end
 
@@ -443,7 +458,17 @@ class AutoTopUpNegativeDestinationBalancesJob
       return false unless live
       return false if outcomes.any? { _1[:verdict] == :topped_up }
 
-      outcomes.any? { _1[:verdict] == :error || _1[:verdict] == :escalate }
+      outcomes.any? { _1[:verdict] == :error }
+    end
+
+    # Every candidate held for a person gets the prefix, whether an escalation or the leg-two
+    # reconciliation gate holds it: a live run that funded none of them is not routine, but it is
+    # also not a failure. The withheld count in the headline counts both verdicts, so this has to.
+    def needs_human?(outcomes, live:)
+      return false unless live
+      return false if outcomes.any? { _1[:verdict] == :topped_up || _1[:verdict] == :error }
+
+      outcomes.any? { _1[:verdict] == :escalate || _1[:verdict] == :awaiting_reconciliation }
     end
 
     def no_rate_escalation(entry, local_cents)
