@@ -5,6 +5,7 @@ require "timeout"
 
 describe("Successful purchases from a product page with SCA (Strong Customer Authentication)", type: :system, js: true) do
   before do
+    use_united_states_buyer_ip
     @creator = create(:named_user)
     @product = create(:product, user: @creator)
   end
