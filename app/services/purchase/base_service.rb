@@ -104,7 +104,10 @@ class Purchase::BaseService
       purchase.fail_gift_legs! if purchase.is_gift_sender_purchase
 
       if subscription&.is_resubscription_pending_confirmation?
-        return if subscription.open_purchase_blocks_restart_clear?(purchase)
+        if subscription.open_purchase_blocks_restart_clear?(purchase)
+          rollback_failed_upgrade!(subscription) if purchase.is_upgrade_purchase?
+          return
+        end
 
         if paid_during_restart?(purchase)
           subscription.update_flag!(:is_resubscription_pending_confirmation, false, true)
@@ -113,13 +116,21 @@ class Purchase::BaseService
           subscription.update_flag!(:is_resubscription_pending_confirmation, false, true)
         end
       elsif purchase.is_upgrade_purchase?
-        new_original_purchase = subscription.original_purchase
-        previous_original_purchase = subscription.purchases.is_archived_original_subscription_purchase.last
-        new_original_purchase.update_flag!(:is_archived_original_subscription_purchase, true, true)
-        previous_original_purchase.update_flag!(:is_archived_original_subscription_purchase, false, true)
-        subscription.last_payment_option.update!(price: previous_original_purchase.price) if previous_original_purchase.price.present?
-        subscription.restore_indian_card_mandate_after_failed_reauthorization!(expected_credit_card_id: purchase.credit_card_id)
+        rollback_failed_upgrade!(subscription)
       end
+    end
+
+    def rollback_failed_upgrade!(subscription)
+      return if subscription.purchases.where("id > ?", purchase.id).is_upgrade_purchase.where(purchase_state: %w[in_progress successful]).exists?
+
+      new_original_purchase = subscription.original_purchase
+      previous_original_purchase = subscription.purchases.is_archived_original_subscription_purchase.last
+      new_original_purchase.update_flag!(:is_archived_original_subscription_purchase, true, true)
+      previous_original_purchase.update_flag!(:is_archived_original_subscription_purchase, false, true)
+      subscription.last_payment_option.update!(price: previous_original_purchase.price) if previous_original_purchase.price.present?
+      return if subscription.purchases.in_progress.is_restart_authentication_purchase.exists?
+
+      subscription.restore_indian_card_mandate_after_failed_reauthorization!(expected_credit_card_id: purchase.credit_card_id)
     end
 
     def mark_preorder_authorized

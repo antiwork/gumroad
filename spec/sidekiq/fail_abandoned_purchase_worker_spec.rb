@@ -504,6 +504,22 @@ describe FailAbandonedPurchaseWorker, :vcr do
             expect(@subscription.reload.alive?).to be true
             expect(@subscription.is_resubscription_pending_confirmation?).to be true
           end
+
+          it "rolls back an ordinary upgrade without cancelling the open restart" do
+            current = @subscription.original_purchase
+            previous = create(:purchase, subscription: @subscription, link: @subscription.link, purchase_state: "successful", is_original_subscription_purchase: true, is_archived_original_subscription_purchase: true, price: current.price)
+            @subscription.last_payment_option.update_column(:price_id, nil)
+            upgrade = create(:purchase, subscription: @subscription, link: @subscription.link, purchase_state: "in_progress", is_upgrade_purchase: true)
+            expect(@subscription).not_to receive(:unsubscribe_and_fail!)
+
+            Purchase::MarkFailedService.new(upgrade).perform
+
+            expect(previous.reload.is_archived_original_subscription_purchase?).to be false
+            expect(current.reload.is_archived_original_subscription_purchase?).to be true
+            expect(@subscription.last_payment_option.reload.price_id).to eq(previous.price_id)
+            expect(@subscription.reload.alive?).to be true
+            expect(@subscription.is_resubscription_pending_confirmation?).to be true
+          end
         end
       end
 
