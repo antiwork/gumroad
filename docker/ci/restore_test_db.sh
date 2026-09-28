@@ -22,7 +22,7 @@ set -euo pipefail
 NETWORK=$1
 IMAGE=$2
 
-MYSQL_IMAGE=mysql:8.0.32
+MYSQL_IMAGE=mysql:8.4.11
 DUMP_PATH_IN_IMAGE=/app/db/prepared_test_db.sql.gz
 
 # Register the cleanup trap before creating anything it needs to clean up, so

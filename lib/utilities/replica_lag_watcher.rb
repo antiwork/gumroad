@@ -43,14 +43,15 @@ class ReplicaLagWatcher
       self.last_checked_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
 
       connections.each do |connection|
-        status = connection.query("SHOW SLAVE STATUS").to_a[0]
+        # MySQL 8.4 removed SHOW SLAVE STATUS; the REPLICA form and its *_Source columns exist from 8.0.22.
+        status = connection.query("SHOW REPLICA STATUS").to_a[0]
         if status.nil?
           raise("#{connection.query_options[:host]} is in REPLICAS_HOSTS but is not replicating — it is likely the primary. " \
                 "This happens when the process boots with DATABASE_HOST set to a read replica (e.g. the read-only console): " \
                 "the replica is subtracted from REPLICAS_HOSTS, leaving the primary in the list. " \
                 "Run ReplicaLagWatcher from a process connected to the primary.")
         end
-        lag = status["Seconds_Behind_Master"]
+        lag = status["Seconds_Behind_Source"]
         raise("#{connection.query_options[:host]} lag = null. Is this replica available and replicating?") if lag.nil?
         if lag > options.fetch(:max_lag_allowed)
           puts("#{connection.query_options[:host]} lag = #{lag} #{"second".pluralize(lag)}") unless options[:silence]
