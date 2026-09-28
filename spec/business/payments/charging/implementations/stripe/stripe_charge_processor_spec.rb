@@ -2769,24 +2769,38 @@ describe StripeChargeProcessor, :vcr do
         end
 
         it "refunds the purchases corresponding to the Stripe charge in case of combined charge" do
+          stripe_account = create_verified_stripe_account(country: "CA")
+          merchant_account = create(:merchant_account, charge_processor_merchant_id: stripe_account.id)
+          stripe_charge = create_stripe_charge(StripePaymentMethodHelper.build(token: "tok_mastercard").to_stripejs_payment_method_id,
+                                               amount: 17_00, currency: "usd", confirm: true,
+                                               transfer_data: { destination: stripe_account.id, amount: 15_00 })
+          # Made outside the app, as a Dashboard refund with "reverse transfer" would be. The reason is set
+          # only on the event: a live fraudulent refund puts the test card on the account's Radar block list.
+          stripe_refund = Stripe::Refund.create(charge: stripe_charge.id, reverse_transfer: true)
+          stripe_event["data"]["object"] = stripe_refund.to_hash.deep_stringify_keys.merge("reason" => "fraudulent")
           expect(ChargeProcessor).to(receive(:handle_event)).with(an_instance_of(ChargeEvent)).and_call_original
 
           purchase = create(:purchase,
+                            link: create(:product, user: merchant_account.user),
+                            merchant_account:,
                             price_cents: 1000,
                             total_transaction_cents: 1000,
                             is_part_of_combined_charge: true,
-                            stripe_transaction_id: "ch_2Q7bRK9e1RjUNIyY1SMUhNqu")
+                            stripe_transaction_id: stripe_charge.id)
           purchase_2 = create(:purchase,
+                              link: create(:product, user: merchant_account.user),
+                              merchant_account:,
                               price_cents: 700,
                               total_transaction_cents: 700,
                               is_part_of_combined_charge: true,
-                              stripe_transaction_id: "ch_2Q7bRK9e1RjUNIyY1SMUhNqu")
-          charge = create(:charge, amount_cents: 1700, processor_transaction_id: "ch_2Q7bRK9e1RjUNIyY1SMUhNqu")
+                              stripe_transaction_id: stripe_charge.id)
+          charge = create(:charge, amount_cents: 1700, processor_transaction_id: stripe_charge.id, merchant_account:)
           charge.purchases << purchase
           charge.purchases << purchase_2
           # Refund events on a combined charge resolve to the canonical Charge, not an
           # arbitrary member purchase (see Charge::Chargeable.find_by_stripe_event).
           expect_any_instance_of(Charge).to receive(:handle_event_refund_updated!).and_call_original
+          expect(Stripe::Transfer).not_to receive(:create_reversal)
 
           expect do
             StripeChargeProcessor.handle_stripe_event(stripe_event)
@@ -2802,6 +2816,7 @@ describe StripeChargeProcessor, :vcr do
           expect(purchase_2.refunds.count).to eq 1
           expect(purchase_2.refunds.last.amount_cents).to eq 700
           expect(purchase_2.refunds.last.total_transaction_cents).to eq 700
+          expect(purchase.refunds.last.gumroad_funded).to be_nil
         end
 
         it "updates the corresponding refund statuses if purchases are already refunded" do
