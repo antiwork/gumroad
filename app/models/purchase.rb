@@ -4179,7 +4179,15 @@ class Purchase < ApplicationRecord
     # original purchase's total with the upgrade's small prorated price (wildly
     # inflating the cap) or miss a temporary discount that only exists on the original
     # purchase (undersizing the cap so renewals fail).
-    reference_purchase = is_upgrade_purchase? ? subscription.original_purchase : self
+    #
+    # An installment restart must use that same original purchase. The subscription's
+    # mandate terms and the post-auth amount check already do; the restart's own total
+    # is often a later, smaller installment and would register a cap that cannot match.
+    reference_purchase = if use_subscription_original_for_mandate_cap?(fixed_rate:)
+      subscription.original_purchase
+    else
+      self
+    end
     base_cents = reference_purchase.total_transaction_cents
     if reference_purchase.is_free_trial_purchase?
       renewal_price_cents = if reference_purchase.subscription.present?
@@ -4214,6 +4222,27 @@ class Purchase < ApplicationRecord
     pre_discount_cents = discount.pre_discount_displayed_price_cents ||
       discount.pre_discount_minimum_price_cents * reference_purchase.quantity
     [(Rational(base_cents * pre_discount_cents, reference_purchase.displayed_price_cents)).ceil, base_cents].max
+  end
+
+  # Upgrades always bill later from the original purchase. An installment restart does too,
+  # unless that cap is below the amount this PaymentIntent will charge — Stripe rejects a
+  # mandate maximum smaller than the charge, so that case keeps the charge-sized cap.
+  # Compare the US-cent cap this charge will register. The subscription terms amount can be
+  # in rupees, and a larger rupee number must not hide a US-cent cap below the charge.
+  private def use_subscription_original_for_mandate_cap?(fixed_rate: nil)
+    original = subscription&.original_purchase
+    return false if original.nil?
+    return true if is_upgrade_purchase?
+    return false unless installment_plan_restart_mandate?
+
+    original.mandate_maximum_amount_cents(fixed_rate:) >= total_transaction_cents.to_i
+  end
+
+  private def installment_plan_restart_mandate?
+    setup_future_charges &&
+      is_installment_payment &&
+      !is_original_subscription_purchase? &&
+      subscription&.is_installment_plan?
   end
 
   def name_or_email
