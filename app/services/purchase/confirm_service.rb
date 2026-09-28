@@ -21,10 +21,6 @@ class Purchase::ConfirmService < Purchase::BaseService
     # Example 2: user has purchased the same product in another tab and we canceled this purchase as potential duplicate.
     return "There is a temporary problem, please try again (your card was not charged)." unless purchase.in_progress?
 
-    # The browser can report an error while Stripe is still on the fingerprint step.
-    # Failing here cancels the restart and leaves the PaymentIntent in requires_action.
-    # Keep that restart alive only when Stripe still shows an open check with no payment error.
-    # A missed lookup is not proof the check is open, so it keeps the existing failure path.
     if resubscription_authentication_state == :open
       FailAbandonedPurchaseWorker.perform_in(ChargeProcessor::TIME_TO_COMPLETE_SCA, purchase.id)
       return "Your bank is still verifying this card. Please try again (your card was not charged)."
@@ -106,7 +102,8 @@ class Purchase::ConfirmService < Purchase::BaseService
       owns_pending_restart &&= !purchase.subscription.newer_restart_attempt?(purchase)
       if owns_pending_restart
         purchase.subscription.send_restart_notifications!
-        purchase.subscription.update_flag!(:is_resubscription_pending_confirmation, false, true) unless purchase.subscription.newer_restart_attempt?(purchase)
+        other_open = purchase.subscription.open_purchase_blocks_restart_clear?(purchase)
+        purchase.subscription.update_flag!(:is_resubscription_pending_confirmation, false, true) unless other_open || purchase.subscription.newer_restart_attempt?(purchase)
       end
       if purchase.is_upgrade_purchase? || owns_pending_restart || purchase.is_restart_authentication_purchase?
         UpdateIntegrationsOnTierChangeWorker.perform_async(purchase.subscription.id)
@@ -125,7 +122,7 @@ class Purchase::ConfirmService < Purchase::BaseService
       intent = ChargeProcessor.get_charge_intent(purchase.merchant_account, purchase.processor_payment_intent_id)
       intent&.authentication_still_open? ? :open : :not_open
     rescue ChargeProcessorError
-      :not_open
+      :not_open # a missed lookup is not an open check
     end
 
     def check_for_card_handling_error

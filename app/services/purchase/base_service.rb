@@ -93,6 +93,8 @@ class Purchase::BaseService
     end
 
     def mark_items_failed
+      subscription = purchase.subscription
+
       if purchase.is_preorder_authorization?
         mark_preorder_failed
       else
@@ -101,10 +103,12 @@ class Purchase::BaseService
 
       purchase.fail_gift_legs! if purchase.is_gift_sender_purchase
 
-      subscription = purchase.subscription
       if subscription&.is_resubscription_pending_confirmation?
-        # A later restart owns the membership. Timing out this attempt must not cancel that one.
-        unless later_restart_attempt?(purchase)
+        return if subscription.open_purchase_blocks_restart_clear?(purchase)
+
+        if paid_during_restart?(purchase)
+          subscription.update_flag!(:is_resubscription_pending_confirmation, false, true)
+        else
           subscription.unsubscribe_and_fail!(preserve_access_for_mandate_failure: false)
           subscription.update_flag!(:is_resubscription_pending_confirmation, false, true)
         end
@@ -138,9 +142,18 @@ class Purchase::BaseService
       end
     end
 
-    def later_restart_attempt?(purchase)
+    def paid_during_restart?(purchase)
       return false if purchase.subscription_id.blank?
 
-      purchase.subscription.purchases.where("id > ?", purchase.id).where(purchase_state: %w[in_progress successful]).exists?
+      subscription = purchase.subscription
+      anchor = subscription.purchases.is_restart_authentication_purchase.where(purchase_state: %w[in_progress failed]).order(id: :desc).first
+      anchor ||= purchase
+      latest_marked = subscription.purchases.is_restart_authentication_purchase.order(id: :desc).first
+      return true if latest_marked&.successful?
+
+      paid = subscription.purchases.successful.where.not(id: purchase.id)
+      return true if paid.where("purchases.id > :id OR succeeded_at > :started_at", id: anchor.id, started_at: anchor.created_at).exists?
+
+      Event.where(purchase_id: paid.select(:id), purchase_state: "successful").where("created_at > ?", anchor.created_at).exists?
     end
 end

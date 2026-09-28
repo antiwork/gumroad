@@ -360,10 +360,6 @@ class Subscription < ApplicationRecord
     purchase.ensure_completion do
       purchase.process!(off_session:)
       error_messages = purchase.errors.messages.dup
-      # An open 3DS fingerprint is not a declined charge. Classifying it as one
-      # emails charge_failed and cancels the restart before the buyer can finish.
-      # A requires_action intent with any payment error is a decline, even when
-      # the charge call did not copy that error onto the purchase.
       stripe_intent = purchase.charge_intent if purchase.in_progress? && purchase.charge_intent.is_a?(StripeChargeIntent)
       open_authentication = stripe_intent&.authentication_still_open?
       declined_authentication = stripe_intent&.requires_action? && !open_authentication
@@ -446,7 +442,12 @@ class Subscription < ApplicationRecord
     save!
     # Recheck immediately before the clear. Do not lock the subscription first;
     # purchase finalization already locks the purchase.
-    update_flag!(:is_resubscription_pending_confirmation, false, true) if owns_pending_restart && !newer_restart_attempt?(purchase)
+    other_open = open_purchase_blocks_restart_clear?(purchase)
+    if !other_open && owns_pending_restart && !newer_restart_attempt?(purchase)
+      update_flag!(:is_resubscription_pending_confirmation, false, true)
+    elsif !other_open && is_resubscription_pending_confirmation?
+      update_flag!(:is_resubscription_pending_confirmation, false, true)
+    end
     create_purchase_event(purchase)
     if purchase.was_product_recommended
       recommendation_type = original_purchase.recommended_purchase_info.try(:recommendation_type)
@@ -1468,6 +1469,13 @@ class Subscription < ApplicationRecord
       purchases
     end
     scope.where("purchases.id > ?", purchase.id).where(purchase_state: %w[in_progress successful]).exists?
+  end
+
+  def open_purchase_blocks_restart_clear?(purchase)
+    return false if purchase.blank?
+
+    open_purchases = purchases.in_progress.where.not(id: purchase.id)
+    open_purchases.is_restart_authentication_purchase.exists? || open_purchases.where("purchases.id > ?", purchase.id).exists?
   end
 
   def send_restart_notifications!(reason = nil)

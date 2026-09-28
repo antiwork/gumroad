@@ -483,6 +483,27 @@ describe FailAbandonedPurchaseWorker, :vcr do
             expect(@subscription.is_resubscription_pending_confirmation?).to be false
             expect(@subscription.reload.alive?).to be false
           end
+
+          it "clears the pending flag without cancelling when a later charge already succeeded" do
+            create(:purchase, subscription: @subscription, link: @subscription.link, purchase_state: "successful")
+            expect(@subscription).not_to receive(:unsubscribe_and_fail!)
+
+            Purchase::MarkFailedService.new(@membership_restart_purchase).perform
+
+            expect(@membership_restart_purchase.reload.purchase_state).to eq("failed")
+            expect(@subscription.reload.is_resubscription_pending_confirmation?).to be false
+            expect(@subscription.alive?).to be true
+          end
+
+          it "does not cancel the membership when a later ordinary charge fails" do
+            ordinary = create(:purchase, subscription: @subscription, link: @subscription.link, purchase_state: "in_progress")
+            expect(@subscription).not_to receive(:unsubscribe_and_fail!)
+
+            Purchase::MarkFailedService.new(ordinary).perform
+
+            expect(@subscription.reload.alive?).to be true
+            expect(@subscription.is_resubscription_pending_confirmation?).to be true
+          end
         end
       end
 

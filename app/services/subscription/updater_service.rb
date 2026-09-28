@@ -258,8 +258,9 @@ class Subscription::UpdaterService
       result = { success: false, error_message: e.message }
     end
 
-    if is_resubscribing && upgrade_purchase&.successful? && subscription.is_resubscription_pending_confirmation?
-      subscription.update_flag!(:is_resubscription_pending_confirmation, false, true) unless subscription.newer_restart_attempt?(upgrade_purchase)
+    if upgrade_purchase&.successful? && subscription.is_resubscription_pending_confirmation?
+      other_open = subscription.open_purchase_blocks_restart_clear?(upgrade_purchase)
+      subscription.update_flag!(:is_resubscription_pending_confirmation, false, true) unless other_open || subscription.newer_restart_attempt?(upgrade_purchase)
     end
     if is_resubscribing && result[:requires_card_action]
       subscription.update_flag!(:is_resubscription_pending_confirmation, true, true)
