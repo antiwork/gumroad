@@ -421,7 +421,7 @@ class AutoTopUpNegativeDestinationBalancesJob
 
       [
         ("ALL FAILED: a live run processed #{outcomes.size} payable candidates and topped up none — #{withheld} withheld, #{counts[:error].to_i} errored. Check the error lines below (gumroad-private#2622)." if all_failed?(outcomes, live:)),
-        ("NEEDS HUMAN: a live run processed #{outcomes.size} payable candidates and topped up none — all #{withheld} are withheld for a human, 0 errored. Each line below names what to clear." if needs_human?(outcomes, live:)),
+        ("NEEDS HUMAN: a live run processed #{outcomes.size} payable candidates and topped up none — all #{withheld} are withheld for a human, 0 errored. Each line below says why it is held." if needs_human?(outcomes, live:)),
         "#{live ? "Topped up" : "DRY RUN (auto_topup_negative_destination_balances off) — would top up"} " \
           "#{counts[:topped_up].to_i + counts[:dry_run].to_i} of #{outcomes.size} candidates processed " \
           "(#{total} payable total): #{withheld} withheld for a human, #{counts[:error].to_i} errored. " \

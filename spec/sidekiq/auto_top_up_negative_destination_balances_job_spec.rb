@@ -1372,7 +1372,7 @@ describe AutoTopUpNegativeDestinationBalancesJob do
     expect(StripeTransferInternallyToCreator).to have_received(:transfer_funds_to_account).once
     expect(InternalNotificationWorker).to have_received(:perform_async).with(
       anything, "NEEDS HUMAN: Negative destination balance top-ups",
-      a_string_including("all 1 are withheld for a human, 0 errored", "already topped up")
+      a_string_including("all 1 are withheld for a human, 0 errored. Each line below says why it is held.", "already topped up")
     ).once
     expect(InternalNotificationWorker).not_to have_received(:perform_async).with(anything, /ALL FAILED/, anything)
   ensure
