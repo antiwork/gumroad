@@ -55,9 +55,106 @@ describe SslCertificates::Generate do
 
   describe "#can_order_certificates?" do
     context "with a valid certificate" do
+      before do
+        allow_any_instance_of(CustomDomainVerificationService).to receive(:domains_resolving_to_gumroad).and_return([])
+      end
+
       it "returns false when the domain already has a valid certificate" do
         @custom_domain.set_ssl_certificate_issued_at!
         expect(@obj.send(:can_order_certificates?)).to eq [false, "Has valid certificate"]
+      end
+    end
+
+    # A name that started resolving after the row's certificate was issued (www
+    # CNAME added later) has no certificate of its own, and the row's timestamp
+    # cannot show that — ordering for it has to stay possible.
+    context "when the row's certificate is fresh but a resolving name has none" do
+      before do
+        @custom_domain.set_ssl_certificate_issued_at!
+        allow_any_instance_of(CustomDomainVerificationService)
+          .to receive(:domains_resolving_to_gumroad)
+          .and_return(["example.com", "www.example.com"])
+        allow_any_instance_of(CustomDomainVerificationService)
+          .to receive(:has_valid_ssl_certificate_for?)
+          .with("example.com").and_return(true)
+        allow_any_instance_of(CustomDomainVerificationService)
+          .to receive(:has_valid_ssl_certificate_for?)
+          .with("www.example.com").and_return(false)
+      end
+
+      it "orders a certificate instead of reporting a valid one" do
+        expect(@obj.send(:can_order_certificates?)).to eq true
+      end
+    end
+
+    context "when the row's certificate is fresh and every resolving name has one" do
+      before do
+        @custom_domain.set_ssl_certificate_issued_at!
+        allow_any_instance_of(CustomDomainVerificationService)
+          .to receive(:domains_resolving_to_gumroad)
+          .and_return(["example.com", "www.example.com"])
+        allow_any_instance_of(CustomDomainVerificationService)
+          .to receive(:has_valid_ssl_certificate_for?)
+          .and_return(true)
+      end
+
+      it "returns false when the domain already has a valid certificate" do
+        expect(@obj.send(:can_order_certificates?)).to eq [false, "Has valid certificate"]
+      end
+    end
+
+    context "when the row's certificate is due for renewal" do
+      before do
+        @custom_domain.ssl_certificate_issued_at = (@obj.renew_in + 1.day).ago
+        @custom_domain.save!
+        allow_any_instance_of(CustomDomainVerificationService)
+          .to receive(:domains_resolving_to_gumroad)
+          .and_return(["example.com", "www.example.com"])
+        # An unexpired certificate on every name must not suppress the renewal:
+        # the fanout only reaches here once the row is older than renew_in.
+        allow_any_instance_of(CustomDomainVerificationService)
+          .to receive(:has_valid_ssl_certificate_for?)
+          .and_return(true)
+      end
+
+      it "still orders certificates" do
+        expect(@obj.send(:can_order_certificates?)).to eq true
+      end
+    end
+
+    context "when the certificate state of a resolving name cannot be read" do
+      before do
+        @custom_domain.set_ssl_certificate_issued_at!
+        allow_any_instance_of(CustomDomainVerificationService)
+          .to receive(:domains_resolving_to_gumroad)
+          .and_return(["example.com", "www.example.com"])
+        allow_any_instance_of(CustomDomainVerificationService)
+          .to receive(:has_valid_ssl_certificate_for?)
+          .and_raise(Seahorse::Client::NetworkingError.new(StandardError.new("s3 unavailable")))
+      end
+
+      it "keeps the no-op instead of ordering blind" do
+        expect(@obj.send(:can_order_certificates?)).to eq [false, "Has valid certificate"]
+      end
+    end
+
+    context "when one resolving name cannot be read and another definitely has no certificate" do
+      before do
+        @custom_domain.set_ssl_certificate_issued_at!
+        allow_any_instance_of(CustomDomainVerificationService)
+          .to receive(:domains_resolving_to_gumroad)
+          .and_return(["example.com", "www.example.com"])
+        allow_any_instance_of(CustomDomainVerificationService)
+          .to receive(:has_valid_ssl_certificate_for?)
+          .with("example.com")
+          .and_raise(Seahorse::Client::NetworkingError.new(StandardError.new("s3 unavailable")))
+        allow_any_instance_of(CustomDomainVerificationService)
+          .to receive(:has_valid_ssl_certificate_for?)
+          .with("www.example.com").and_return(false)
+      end
+
+      it "still orders for the name that has none" do
+        expect(@obj.send(:can_order_certificates?)).to eq true
       end
     end
 
@@ -205,6 +302,31 @@ describe SslCertificates::Generate do
         expect(@obj)
           .to receive(:log_message)
           .with(@custom_domain.domain, "Domain changed before SSL certificate activation.")
+
+        @obj.process
+      end
+    end
+
+    context "when a name started resolving after the row's certificate was issued" do
+      before do
+        @custom_domain.set_ssl_certificate_issued_at!
+        allow_any_instance_of(CustomDomainVerificationService)
+          .to receive(:domains_resolving_to_gumroad)
+          .and_return(["example.com", "www.example.com"])
+        allow_any_instance_of(CustomDomainVerificationService)
+          .to receive(:has_valid_ssl_certificate_for?)
+          .with("example.com").and_return(true)
+        allow_any_instance_of(CustomDomainVerificationService)
+          .to receive(:has_valid_ssl_certificate_for?)
+          .with("www.example.com").and_return(false)
+
+        ["example.com", "www.example.com"].each do |domain|
+          allow(@obj).to receive(:generate_certificate).with(domain).and_return(true)
+        end
+      end
+
+      it "orders a certificate despite the fresh row timestamp" do
+        expect(@obj).to receive(:generate_certificate).with("www.example.com")
 
         @obj.process
       end

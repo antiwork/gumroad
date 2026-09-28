@@ -161,7 +161,7 @@ class Page < ApplicationRecord
       # the page, so an attribute prefix from `full_message` would read wrong.
       # The dry-run preview endpoints therefore have to read :base too, or a page
       # the real write rejects would preview as publishable.
-      errors.add(:base, ContentModeration::ModerateRecordService.seller_message(result.reasons, "page", title: title))
+      errors.add(:base, ContentModeration::ModerateRecordService.seller_message(result.reasons, "page", title: title, empty_storefront: result.empty_storefront))
     end
 
     def only_one_root_page

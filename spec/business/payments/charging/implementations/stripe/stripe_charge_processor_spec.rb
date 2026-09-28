@@ -1789,6 +1789,88 @@ describe StripeChargeProcessor, :vcr do
     end
   end
 
+  describe "#get_refund" do
+    def stripe(**attrs)
+      Stripe::StripeObject.construct_from(attrs)
+    end
+
+    it "pairs the destination refund when the seller charge has no fee refund" do
+      fee = stripe(id: "fee_test", refunds: { object: "list", data: [stripe(id: "fr_new", amount: 30, balance_transaction: stripe(amount: -30, currency: "usd"))], has_more: false, url: "/v1/application_fees/fee_test/refunds" })
+      refund = stripe(id: "re_old", charge: "ch_test", amount: 200, currency: "usd", transfer_reversal: "trr_old", balance_transaction: stripe(amount: -200, currency: "usd"))
+      charge = stripe(id: "ch_test", destination: "acct_test", transfer: "tr_test", application_fee: fee, on_behalf_of: nil)
+      transfer = stripe(id: "tr_test", destination: "acct_test", destination_payment: "py_test",
+                        reversals: [stripe(id: "trr_old", destination_payment_refund: "pyr_old")])
+      destination_new = stripe(id: "pyr_new", amount: 300, balance_transaction: stripe(amount: -300, currency: "usd"))
+      destination_old = stripe(id: "pyr_old", amount: 200, balance_transaction: stripe(amount: -200, currency: "usd"))
+      payment = stripe(id: "py_test", refunds: [destination_new, destination_old], application_fee: nil, balance_transaction: "txn_credit")
+      allow(Stripe::Refund).to receive(:retrieve).with(id: "re_old", expand: %w[balance_transaction]).and_return(refund)
+      allow(Stripe::Charge).to receive(:retrieve).with(id: "ch_test", expand: %w[balance_transaction application_fee.refunds.data.balance_transaction]).and_return(charge)
+      allow(Stripe::Transfer).to receive(:retrieve).with(id: "tr_test").and_return(transfer)
+      allow(Stripe::Charge).to receive(:retrieve).with({ id: "py_test", expand: %w[refunds.data.balance_transaction application_fee.refunds] }, { stripe_account: "acct_test" }).and_return(payment)
+
+      result = StripeChargeProcessor.new.get_refund("re_old")
+
+      expect(result.destination_payment_refund.id).to eq("pyr_old")
+      expect(result.flow_of_funds.merchant_account_gross_amount.cents).to eq(-200)
+      expect(result.flow_of_funds.merchant_account_net_amount.cents).to eq(-200)
+      expect(result.flow_of_funds.gumroad_amount.cents).to eq(0)
+    end
+
+    it "keeps both legs on the newest refunds when both fee refunds are used" do
+      fee = stripe(id: "fee_test", refunds: { object: "list", data: [
+                     stripe(id: "fr_new", amount: 30, balance_transaction: stripe(amount: -30, currency: "usd")),
+                     stripe(id: "fr_old", amount: 50, balance_transaction: stripe(amount: -50, currency: "usd"))
+                   ], has_more: false, url: "/v1/application_fees/fee_test/refunds" })
+      seller_fee = stripe(id: "fee_seller", refunds: { object: "list", data: [
+                            stripe(id: "sfr_new", amount: 30, currency: "usd"),
+                            stripe(id: "sfr_old", amount: 50, currency: "usd")
+                          ], has_more: false, url: "/v1/application_fees/fee_seller/refunds" })
+      refund = stripe(id: "re_old", charge: "ch_test", amount: 200, currency: "usd", transfer_reversal: "trr_old", balance_transaction: stripe(amount: -200, currency: "usd"))
+      charge = stripe(id: "ch_test", destination: "acct_test", transfer: "tr_test", application_fee: fee, on_behalf_of: nil)
+      transfer = stripe(id: "tr_test", destination: "acct_test", destination_payment: "py_test",
+                        reversals: [stripe(id: "trr_old", destination_payment_refund: "pyr_old")])
+      destination_new = stripe(id: "pyr_new", amount: 300, balance_transaction: stripe(amount: -300, currency: "usd"))
+      destination_old = stripe(id: "pyr_old", amount: 200, balance_transaction: stripe(amount: -200, currency: "usd"))
+      payment = stripe(id: "py_test", refunds: [destination_new, destination_old], application_fee: seller_fee, balance_transaction: "txn_credit")
+      allow(Stripe::Refund).to receive(:retrieve).with(id: "re_old", expand: %w[balance_transaction]).and_return(refund)
+      allow(Stripe::Charge).to receive(:retrieve).with(id: "ch_test", expand: %w[balance_transaction application_fee.refunds.data.balance_transaction]).and_return(charge)
+      allow(Stripe::Transfer).to receive(:retrieve).with(id: "tr_test").and_return(transfer)
+      allow(Stripe::Charge).to receive(:retrieve).with({ id: "py_test", expand: %w[refunds.data.balance_transaction application_fee.refunds] }, { stripe_account: "acct_test" }).and_return(payment)
+
+      result = StripeChargeProcessor.new.get_refund("re_old")
+
+      expect(result.destination_payment_refund.id).to eq("pyr_new")
+      expect(result.flow_of_funds.gumroad_amount.cents).to eq(-30)
+      expect(result.flow_of_funds.merchant_account_gross_amount.cents).to eq(-300)
+      expect(result.flow_of_funds.merchant_account_net_amount.cents).to eq(-270)
+    end
+
+    [false, true].product([false, true]).each do |paginated, expanded|
+      it "reads the exact older destination refund (paginated: #{paginated}, expanded: #{expanded})" do
+        refund = stripe(id: "re_old", charge: "ch_test", amount: 200, currency: "usd", transfer_reversal: expanded ? stripe(id: "trr_old") : "trr_old", balance_transaction: stripe(amount: -200, currency: "usd"))
+        charge = stripe(id: "ch_test", destination: "acct_test", transfer: "tr_test", application_fee: nil, on_behalf_of: nil)
+        reversal = stripe(id: "trr_old", destination_payment_refund: expanded ? stripe(id: "pyr_old") : "pyr_old")
+        transfer = stripe(id: "tr_test", destination: "acct_test", destination_payment: "py_test", reversals: paginated ? [] : [reversal])
+        destination_old = stripe(id: "pyr_old", amount: 200, balance_transaction: stripe(amount: -200, currency: "usd"))
+        destination_new = stripe(id: "pyr_new", amount: 300, balance_transaction: stripe(amount: -300, currency: "usd"))
+        payment = stripe(id: "py_test", refunds: paginated ? [destination_new] : [destination_new, destination_old], application_fee: nil, balance_transaction: "txn_credit")
+        allow(Stripe::Refund).to receive(:retrieve).with(id: "re_old", expand: %w[balance_transaction]).and_return(refund)
+        allow(Stripe::Charge).to receive(:retrieve).with(id: "ch_test", expand: %w[balance_transaction application_fee.refunds.data.balance_transaction]).and_return(charge)
+        allow(Stripe::Transfer).to receive(:retrieve).with(id: "tr_test").and_return(transfer)
+        allow(Stripe::Charge).to receive(:retrieve).with({ id: "py_test", expand: %w[refunds.data.balance_transaction application_fee.refunds] }, { stripe_account: "acct_test" }).and_return(payment)
+        if paginated
+          expect(Stripe::Transfer).to receive(:retrieve_reversal).with("tr_test", "trr_old").and_return(reversal)
+          expect(Stripe::Refund).to receive(:retrieve).with({ id: "pyr_old", expand: %w[balance_transaction] }, { stripe_account: "acct_test" }).and_return(destination_old)
+        else
+          expect(Stripe::Transfer).not_to receive(:retrieve_reversal)
+        end
+        result = StripeChargeProcessor.new.get_refund("re_old")
+        expect(result.destination_payment_refund.id).to eq("pyr_old")
+        expect(result.flow_of_funds.merchant_account_net_amount.cents).to eq(-200)
+      end
+    end
+  end
+
   describe "#refund!" do
     let(:currency) { Currency::USD }
     let(:amount_cents) { 10_00 }
@@ -1942,6 +2024,18 @@ describe StripeChargeProcessor, :vcr do
             subject.refund!(charge_id)
             stripe_charge = Stripe::Charge.retrieve(id: charge_id, expand: %w[transfer])
             expect(stripe_charge.transfer.reversed).to eq(true)
+          end
+
+          it "reads an earlier partial refund with its own destination refund after a later refund" do
+            charge_id = create_stripe_charge(payment_method_id, amount: amount_cents, currency:, confirm: true,
+                                                                transfer_data: { destination: stripe_account }, on_behalf_of: stripe_account).id
+            first_refund = subject.refund!(charge_id, amount_cents: 3_00)
+            subject.refund!(charge_id, amount_cents: 5_00)
+
+            reread = subject.get_refund(first_refund.id)
+
+            expect(reread.flow_of_funds.merchant_account_gross_amount.cents).to eq(first_refund.flow_of_funds.merchant_account_gross_amount.cents)
+            expect(reread.flow_of_funds.merchant_account_net_amount.cents).to eq(first_refund.flow_of_funds.merchant_account_net_amount.cents)
           end
 
           describe "return value" do
@@ -2675,24 +2769,38 @@ describe StripeChargeProcessor, :vcr do
         end
 
         it "refunds the purchases corresponding to the Stripe charge in case of combined charge" do
+          stripe_account = create_verified_stripe_account(country: "CA")
+          merchant_account = create(:merchant_account, charge_processor_merchant_id: stripe_account.id)
+          stripe_charge = create_stripe_charge(StripePaymentMethodHelper.build(token: "tok_mastercard").to_stripejs_payment_method_id,
+                                               amount: 17_00, currency: "usd", confirm: true,
+                                               transfer_data: { destination: stripe_account.id, amount: 15_00 })
+          # Made outside the app, as a Dashboard refund with "reverse transfer" would be. The reason is set
+          # only on the event: a live fraudulent refund puts the test card on the account's Radar block list.
+          stripe_refund = Stripe::Refund.create(charge: stripe_charge.id, reverse_transfer: true)
+          stripe_event["data"]["object"] = stripe_refund.to_hash.deep_stringify_keys.merge("reason" => "fraudulent")
           expect(ChargeProcessor).to(receive(:handle_event)).with(an_instance_of(ChargeEvent)).and_call_original
 
           purchase = create(:purchase,
+                            link: create(:product, user: merchant_account.user),
+                            merchant_account:,
                             price_cents: 1000,
                             total_transaction_cents: 1000,
                             is_part_of_combined_charge: true,
-                            stripe_transaction_id: "ch_2Q7bRK9e1RjUNIyY1SMUhNqu")
+                            stripe_transaction_id: stripe_charge.id)
           purchase_2 = create(:purchase,
+                              link: create(:product, user: merchant_account.user),
+                              merchant_account:,
                               price_cents: 700,
                               total_transaction_cents: 700,
                               is_part_of_combined_charge: true,
-                              stripe_transaction_id: "ch_2Q7bRK9e1RjUNIyY1SMUhNqu")
-          charge = create(:charge, amount_cents: 1700, processor_transaction_id: "ch_2Q7bRK9e1RjUNIyY1SMUhNqu")
+                              stripe_transaction_id: stripe_charge.id)
+          charge = create(:charge, amount_cents: 1700, processor_transaction_id: stripe_charge.id, merchant_account:)
           charge.purchases << purchase
           charge.purchases << purchase_2
           # Refund events on a combined charge resolve to the canonical Charge, not an
           # arbitrary member purchase (see Charge::Chargeable.find_by_stripe_event).
           expect_any_instance_of(Charge).to receive(:handle_event_refund_updated!).and_call_original
+          expect(Stripe::Transfer).not_to receive(:create_reversal)
 
           expect do
             StripeChargeProcessor.handle_stripe_event(stripe_event)
@@ -2708,6 +2816,7 @@ describe StripeChargeProcessor, :vcr do
           expect(purchase_2.refunds.count).to eq 1
           expect(purchase_2.refunds.last.amount_cents).to eq 700
           expect(purchase_2.refunds.last.total_transaction_cents).to eq 700
+          expect(purchase.refunds.last.gumroad_funded).to be_nil
         end
 
         it "updates the corresponding refund statuses if purchases are already refunded" do

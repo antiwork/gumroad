@@ -56,6 +56,10 @@ class LinkPolicy < ApplicationPolicy
     update?
   end
 
+  def disable_downloads_for_all_files?
+    update?
+  end
+
   def update_purchases_content?
     update?
   end
@@ -141,6 +145,7 @@ class LinkPolicy < ApplicationPolicy
         :duration_in_minutes,
         :customizable_price,
         :apply_price_changes_to_existing_memberships,
+        :closed_to_new_purchases,
         :subscription_price_change_effective_date,
         :subscription_price_change_message,
         recurrence_price_values: BasePrice::Recurrence::PERMITTED_PARAMS,

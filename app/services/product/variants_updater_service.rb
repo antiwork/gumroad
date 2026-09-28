@@ -236,7 +236,7 @@ class Product::VariantsUpdaterService
           title: variant[:name],
           id: variant[:id],
           options: options&.map do |option|
-            new_option = option.slice(:id, :temp_id, :client_id, :name, :description, :url, :customizable_price, :recurrence_price_values, :max_purchase_count, :integrations, :rich_content, :apply_price_changes_to_existing_memberships, :subscription_price_change_effective_date, :subscription_price_change_message, :duration_in_minutes)
+            new_option = option.slice(:id, :temp_id, :client_id, :name, :description, :url, :customizable_price, :recurrence_price_values, :max_purchase_count, :integrations, :rich_content, :apply_price_changes_to_existing_memberships, :closed_to_new_purchases, :subscription_price_change_effective_date, :subscription_price_change_message, :duration_in_minutes)
 
             # TODO: :product_edit_react cleanup
             if option[:price_difference_cents].present?

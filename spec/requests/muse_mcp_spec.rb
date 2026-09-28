@@ -55,7 +55,7 @@ describe "Muse MCP" do
     expect(body["mcp"]).to eq("#{PROTOCOL}://#{DOMAIN}/muse/v1/mcp")
     expect(body["oauth"]["authorization_endpoint"]).to eq("#{PROTOCOL}://#{DOMAIN}/muse/v1/oauth2/authorize")
     expect(body["oauth"]["registration_endpoint"]).to eq("#{PROTOCOL}://#{DOMAIN}/muse/v1/oauth2/register")
-    expect(body["oauth"]["scopes"]).to include("view_sales", "edit_products")
+    expect(body["oauth"]["scopes"]).to match_array(Muse::OauthClientRegistration::MCP_SCOPES)
     expect(body["clients"]).to include(
       "muse" => "#{PROTOCOL}://#{DOMAIN}/muse/v1/mcp",
       "claude" => "#{PROTOCOL}://#{DOMAIN}/claude/v1/mcp",
@@ -69,11 +69,13 @@ describe "Muse MCP" do
     expect(response).to be_successful
     expect(response.parsed_body["resource"]).to eq("#{PROTOCOL}://#{DOMAIN}/muse/v1/mcp")
     expect(response.parsed_body["authorization_servers"]).to eq(["#{PROTOCOL}://#{DOMAIN}"])
+    expect(response.parsed_body["scopes_supported"]).to match_array(Muse::OauthClientRegistration::MCP_SCOPES)
 
     get "/.well-known/oauth-protected-resource/claude/v1/mcp", headers: { "HOST" => DOMAIN }
 
     expect(response).to be_successful
     expect(response.parsed_body["resource"]).to eq("#{PROTOCOL}://#{DOMAIN}/claude/v1/mcp")
+    expect(response.parsed_body["scopes_supported"]).to match_array(Muse::OauthClientRegistration::MCP_SCOPES)
   end
 
   it "registers a public OAuth client for MCP" do
@@ -223,6 +225,67 @@ describe "Muse MCP" do
     expect(body["code_challenge_methods_supported"]).to include("S256")
     expect(body["registration_endpoint"]).to end_with("/muse/v1/oauth2/register")
     expect(body["token_endpoint_auth_methods_supported"]).to include("none")
+    expect(body["scopes_supported"]).to match_array(Muse::OauthClientRegistration::MCP_SCOPES)
+  end
+
+  it "issues a Claude token with every scope discovered from the MCP metadata" do
+    host! DOMAIN
+    stub_vite_layout_helpers
+    Rails.application.reload_routes!
+    sign_in @seller
+
+    get "/.well-known/oauth-protected-resource/claude/v1/mcp"
+    resource = response.parsed_body.fetch("resource")
+    scopes = response.parsed_body.fetch("scopes_supported")
+
+    get "/.well-known/oauth-authorization-server"
+    metadata = response.parsed_body
+    expect(metadata.fetch("scopes_supported")).to match_array(scopes)
+
+    redirect_uri = "https://example.com/callback"
+    post URI(metadata.fetch("registration_endpoint")).path,
+         params: { client_name: "Claude", redirect_uris: [redirect_uri], token_endpoint_auth_method: "none", scope: scopes.join(" ") }.to_json,
+         headers: { "CONTENT_TYPE" => "application/json" }
+
+    expect(response).to have_http_status(:created)
+    client_id = response.parsed_body.fetch("client_id")
+    expect(response.parsed_body.fetch("scope").split).to match_array(scopes)
+
+    code_verifier = SecureRandom.urlsafe_base64(48)
+    code_challenge = Base64.urlsafe_encode64(Digest::SHA256.digest(code_verifier), padding: false)
+    authorization_params = {
+      response_type: "code", client_id:, redirect_uri:, scope: scopes.join(" "),
+      state: "discovered-scopes", code_challenge:, code_challenge_method: "S256", resource:
+    }
+    get URI(metadata.fetch("authorization_endpoint")).path, params: authorization_params
+
+    expect(response).to have_http_status(:ok)
+    expect(response.body).to include("MCP Claude")
+    doc = Nokogiri::HTML(response.body)
+    expect(doc.at_css("input[name='scope']")["value"].split).to match_array(scopes)
+
+    post "/oauth/authorize", params: authorization_params.merge(authenticity_token: authenticity_token(doc))
+
+    expect(response).to have_http_status(:found)
+    location = URI.parse(response.location)
+    expect("#{location.scheme}://#{location.host}#{location.path}").to eq(redirect_uri)
+    query = Rack::Utils.parse_query(location.query)
+    expect(query.fetch("state")).to eq("discovered-scopes")
+    grant = OauthApplication.find_by!(uid: client_id).access_grants.last
+    expect(grant.scopes.to_a).to match_array(scopes)
+    expect(grant.resource).to eq(resource)
+
+    post URI(metadata.fetch("token_endpoint")).path, params: {
+      grant_type: "authorization_code", code: query.fetch("code"), redirect_uri:,
+      client_id:, code_verifier:, resource:
+    }
+
+    expect(response).to have_http_status(:ok)
+    token_response = response.parsed_body
+    expect(token_response.fetch("scope").split).to match_array(scopes)
+    issued = Doorkeeper::AccessToken.by_token(token_response.fetch("access_token"))
+    expect(issued.scopes.to_a).to match_array(scopes)
+    expect(issued.resource).to eq(resource)
   end
 
   it "returns 401 without a token" do

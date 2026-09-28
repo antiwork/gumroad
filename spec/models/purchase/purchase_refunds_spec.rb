@@ -713,7 +713,7 @@ describe "PurchaseRefunds", :vcr do
         expect(ChargeProcessor).to receive(:refund!).with(purchase.charge_processor_id, purchase.stripe_transaction_id,
                                                           amount_cents: nil, merchant_account: purchase.merchant_account,
                                                           reverse_transfer: false, paypal_order_purchase_unit_refund: nil,
-                                                          is_for_fraud: false, purchase:).and_call_original
+                                                          is_for_fraud: false, purchase:, cap_to_unrefunded_amount: false).and_call_original
         expect(purchase).to receive(:debit_processor_fee_from_merchant_account!)
 
         purchase.refund_and_save!(create(:admin_user).id, reason: "Refund requested by the buyer")
@@ -1667,6 +1667,66 @@ describe "PurchaseRefunds", :vcr do
       purchase.send(:reverse_excess_amount_from_stripe_transfer, refund:)
     end
 
+    it "counts the reversal the refund webhook made for a refund created outside the app" do
+      purchase = create(:purchase, link: @product, merchant_account: @merchant_account, stripe_transaction_id: "ch_external_vat")
+      allow_any_instance_of(Purchase).to receive(:gumroad_tax_cents).and_return 200
+      allow_any_instance_of(Purchase).to receive(:gumroad_tax_refunded_cents).and_return 200
+      refund = create(:refund, purchase:, processor_refund_id: "re_external_vat")
+      BalanceTransaction.create!(
+        user: purchase.seller,
+        merchant_account: purchase.merchant_account,
+        refund:,
+        dispute: nil,
+        issued_amount: BalanceTransaction::Amount.new(currency: "usd", gross_cents: -500, net_cents: -416),
+        holding_amount: BalanceTransaction::Amount.new(currency: "cad", gross_cents: -400, net_cents: -366),
+        update_user_balance: purchase.charged_using_gumroad_merchant_account?
+      )
+      webhook_reversal = Stripe::StripeObject.construct_from(
+        id: "trr_webhook", amount: 366, source_refund: nil,
+        metadata: { StripeChargeProcessor::EXTERNAL_REFUND_REVERSAL_METADATA_KEY => "re_external_vat" }
+      )
+      transfer = double("transfer", id: "tr_external_vat", currency: "cad", amount: 700, amount_reversed: 366,
+                                    reversals: Stripe::ListObject.construct_from(object: "list", data: [webhook_reversal], has_more: false))
+      allow(Stripe::Charge).to receive(:retrieve).and_return(double("charge", transfer: "tr_external_vat"))
+      allow(Stripe::Transfer).to receive(:retrieve).and_return(transfer)
+
+      expect(Stripe::Transfer).not_to receive(:create_reversal)
+
+      purchase.send(:reverse_excess_amount_from_stripe_transfer, refund:)
+    end
+
+    it "does not repeat an external refund reversal beyond the embedded page" do
+      purchase = create(:purchase, link: @product, merchant_account: @merchant_account, stripe_transaction_id: "ch_external_vat")
+      allow_any_instance_of(Purchase).to receive(:gumroad_tax_cents).and_return 200
+      allow_any_instance_of(Purchase).to receive(:gumroad_tax_refunded_cents).and_return 200
+      refund = create(:refund, purchase:, processor_refund_id: "re_external_vat")
+      BalanceTransaction.create!(
+        user: purchase.seller,
+        merchant_account: purchase.merchant_account,
+        refund:,
+        dispute: nil,
+        issued_amount: BalanceTransaction::Amount.new(currency: "usd", gross_cents: -500, net_cents: -416),
+        holding_amount: BalanceTransaction::Amount.new(currency: "cad", gross_cents: -400, net_cents: -366),
+        update_user_balance: purchase.charged_using_gumroad_merchant_account?
+      )
+      webhook_reversal = Stripe::StripeObject.construct_from(
+        id: "trr_webhook", amount: 366, source_refund: nil,
+        metadata: { StripeChargeProcessor::EXTERNAL_REFUND_REVERSAL_METADATA_KEY => "re_external_vat" }
+      )
+      newer_reversals = Array.new(10) do |i|
+        Stripe::StripeObject.construct_from(id: "trr_new_#{i}", source_refund: "re_new_#{i}", amount: 1, metadata: {})
+      end
+      first_page = Stripe::ListObject.construct_from(object: "list", data: newer_reversals, has_more: true)
+      second_page = Stripe::ListObject.construct_from(object: "list", data: [webhook_reversal], has_more: false)
+      transfer = double("transfer", id: "tr_external_vat", currency: "cad", amount: 700, amount_reversed: 376, reversals: first_page)
+      allow(Stripe::Charge).to receive(:retrieve).and_return(double("charge", transfer: "tr_external_vat"))
+      allow(Stripe::Transfer).to receive(:retrieve).and_return(transfer)
+      expect(first_page).to receive(:list).with({ starting_after: "trr_new_9" }, {}).and_return(second_page)
+      expect(Stripe::Transfer).not_to receive(:create_reversal)
+
+      purchase.send(:reverse_excess_amount_from_stripe_transfer, refund:)
+    end
+
     it "reverses the holding-currency amount when the transfer is denominated in the merchant account's currency" do
       # Regression test for the buyer-currency (presentment) case. When a charge settles in the
       # buyer's currency the resulting transfer is in that currency too, so reversing the
@@ -1692,7 +1752,7 @@ describe "PurchaseRefunds", :vcr do
       # The transfer this charge points at is CAD in the fixture below, so the CAD (holding) leg
       # is the one that must reach Stripe — not the 416 USD cents.
       transfer = double("transfer", id: "tr_cad_presentment", currency: "cad", amount: 700, amount_reversed: 0,
-                                    reversals: double("reversals", data: []))
+                                    reversals: Stripe::ListObject.construct_from(object: "list", data: [], has_more: false))
       allow(Stripe::Charge).to receive(:retrieve).and_return(double("charge", transfer: "tr_cad_presentment"))
       allow(Stripe::Transfer).to receive(:retrieve).and_return(transfer)
 
@@ -1725,7 +1785,7 @@ describe "PurchaseRefunds", :vcr do
       )
 
       transfer = double("transfer", id: "tr_partial_capacity", currency: "cad", amount: 700, amount_reversed: 600,
-                                    reversals: double("reversals", data: [double("reversal", source_refund: nil, amount: 600)]))
+                                    reversals: Stripe::ListObject.construct_from(object: "list", data: [Stripe::StripeObject.construct_from(source_refund: nil, amount: 600)], has_more: false))
       allow(Stripe::Charge).to receive(:retrieve).and_return(double("charge", transfer: transfer.id))
       allow(Stripe::Transfer).to receive(:retrieve).and_return(transfer)
       expect(Stripe::Transfer).to receive(:create_reversal).with(transfer.id, { amount: 100 })
@@ -1758,7 +1818,7 @@ describe "PurchaseRefunds", :vcr do
       )
 
       transfer = double("transfer", id: "tr_gbp", currency: "gbp", amount: 700, amount_reversed: 0,
-                                    reversals: double("reversals", data: []))
+                                    reversals: Stripe::ListObject.construct_from(object: "list", data: [], has_more: false))
       allow(Stripe::Charge).to receive(:retrieve).and_return(double("charge", transfer: "tr_gbp"))
       allow(Stripe::Transfer).to receive(:retrieve).and_return(transfer)
 
@@ -1788,7 +1848,7 @@ describe "PurchaseRefunds", :vcr do
       )
 
       transfer = double("transfer", id: "tr_dispute_reversed", currency: "cad", amount: 366, amount_reversed: 366,
-                                    reversals: double("reversals", data: [double("reversal", source_refund: nil, amount: 366)]))
+                                    reversals: Stripe::ListObject.construct_from(object: "list", data: [Stripe::StripeObject.construct_from(source_refund: nil, amount: 366)], has_more: false))
       allow(Stripe::Charge).to receive(:retrieve).and_return(double("charge", transfer: "tr_dispute_reversed"))
       allow(Stripe::Transfer).to receive(:retrieve).and_return(transfer)
 
@@ -1818,7 +1878,7 @@ describe "PurchaseRefunds", :vcr do
       )
 
       transfer = double("transfer", id: "tr_race", currency: "cad", amount: 700, amount_reversed: 0,
-                                    reversals: double("reversals", data: []))
+                                    reversals: Stripe::ListObject.construct_from(object: "list", data: [], has_more: false))
       allow(Stripe::Charge).to receive(:retrieve).and_return(double("charge", transfer: "tr_race"))
       allow(Stripe::Transfer).to receive(:retrieve).and_return(transfer)
       allow(Stripe::Transfer).to receive(:create_reversal).and_raise(
@@ -1883,7 +1943,7 @@ describe "PurchaseRefunds", :vcr do
       flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::USD, -500)
       processor_refund = double("processor refund", id: "re_partial_after_tax", status: "succeeded")
       transfer = double("transfer", id: "tr_race", currency: "usd", amount: 700, amount_reversed: 0,
-                                    reversals: double("reversals", data: []))
+                                    reversals: Stripe::ListObject.construct_from(object: "list", data: [], has_more: false))
       allow(Stripe::Charge).to receive(:retrieve).and_return(double("charge", transfer: transfer.id))
       allow(Stripe::Transfer).to receive(:retrieve).and_return(transfer)
       error = Stripe::InvalidRequestError.new("The transfer tr_race is already fully reversed.", nil)

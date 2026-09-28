@@ -87,6 +87,7 @@ type Props = {
   refund_policies: OtherRefundPolicy[];
   currency_type: CurrencyCode;
   is_tiered_membership: boolean;
+  can_close_membership_tiers: boolean;
   is_listed_on_discover: boolean;
   is_physical: boolean;
   profile_sections: ProfileSection[];
@@ -129,6 +130,7 @@ const createContextValue = (props: Props) => ({
   thumbnail: props.thumbnail,
   currencyType: props.currency_type,
   isTieredMembership: props.is_tiered_membership,
+  canCloseMembershipTiers: props.can_close_membership_tiers,
   isListedOnDiscover: props.is_listed_on_discover,
   isPhysical: props.is_physical,
   profileSections: props.profile_sections,

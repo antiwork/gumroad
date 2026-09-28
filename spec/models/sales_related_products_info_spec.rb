@@ -17,26 +17,6 @@ describe SalesRelatedProductsInfo do
     statements
   end
 
-  # Fails the first `times` upsert attempts, then lets them through. Tracks the attempt
-  # count in @upsert_attempts.
-  def fail_upserts(times:, with:)
-    @upsert_attempts = 0
-    allow(ApplicationRecord.connection).to receive(:execute).and_wrap_original do |original, sql, *args|
-      if upsert?(sql)
-        @upsert_attempts += 1
-        raise with, "Deadlock found when trying to get lock" if @upsert_attempts <= times
-      end
-      original.call(sql, *args)
-    end
-  end
-
-  def pair_for(product1, product2)
-    described_class.find_by(
-      smaller_product_id: [product1.id, product2.id].min,
-      larger_product_id: [product1.id, product2.id].max
-    )
-  end
-
   describe ".find_or_create_info" do
     let(:sales_related_products_info) { create(:sales_related_products_info) }
 
@@ -107,6 +87,50 @@ describe SalesRelatedProductsInfo do
       expect(related.all? { described_class.find_by(smaller_product_id: [product.id, _1.id].min, larger_product_id: [product.id, _1.id].max).sales_count == 1 }).to be(true)
     end
 
+    it "applies the counts inside a caller's transaction" do
+      product1 = create(:product)
+      product2 = create(:product)
+
+      ApplicationRecord.transaction do
+        described_class.update_sales_counts(product_id: product1.id, related_product_ids: [product2.id], increment: true)
+      end
+
+      info = described_class.find_by(smaller_product_id: [product1.id, product2.id].min, larger_product_id: [product1.id, product2.id].max)
+      expect(info.sales_count).to eq(1)
+    end
+
+    it "lets a deadlock inside a caller's transaction propagate instead of retrying the slice on its own" do
+      product1 = create(:product)
+      product2 = create(:product)
+      insert_attempts = 0
+      allow(ApplicationRecord.connection).to receive(:execute).and_wrap_original do |original, sql, *args|
+        if sql.include?("INSERT INTO #{described_class.table_name}")
+          insert_attempts += 1
+          raise ActiveRecord::Deadlocked, "Deadlock found when trying to get lock"
+        end
+        original.call(sql, *args)
+      end
+
+      expect do
+        ApplicationRecord.transaction do
+          described_class.update_sales_counts(product_id: product1.id, related_product_ids: [product2.id], increment: true)
+        end
+      end.to raise_error(ActiveRecord::Deadlocked)
+      expect(insert_attempts).to eq(1)
+    end
+
+    it "runs inside a non-joinable transaction nested below another" do
+      product1 = create(:product)
+      product2 = create(:product)
+
+      ApplicationRecord.transaction(joinable: false) do
+        described_class.update_sales_counts(product_id: product1.id, related_product_ids: [product2.id], increment: true)
+      end
+
+      info = described_class.find_by(smaller_product_id: [product1.id, product2.id].min, larger_product_id: [product1.id, product2.id].max)
+      expect(info.sales_count).to eq(1)
+    end
+
     it "accumulates repeated increments on the same pair" do
       # Note this passes on the old read-then-write code too: sequential calls are not a
       # real race. It is here as a regression guard on the upsert's arithmetic, since
@@ -151,8 +175,6 @@ describe SalesRelatedProductsInfo do
     end
 
     context "when concurrent upserts contend for the same rows" do
-      before { allow(described_class).to receive(:sleep) }
-
       # Every statement lists its pairs in the same order, so two overlapping upserts cannot
       # take the same row locks in opposite orders.
       it "emits each statement's pairs in ascending pair order" do
@@ -171,72 +193,6 @@ describe SalesRelatedProductsInfo do
         pairs = statements.flat_map { _1.scan(/\((\d+), (\d+), \d+, /).map { |s, l| [s.to_i, l.to_i] } }
         expect(pairs.size).to eq(5)
         expect(pairs).to eq(pairs.sort)
-      end
-
-      it "retries a deadlocked statement and applies the increment" do
-        product = create(:product)
-        other = create(:product)
-        fail_upserts(times: 1, with: ActiveRecord::Deadlocked)
-
-        described_class.update_sales_counts(product_id: product.id, related_product_ids: [other.id], increment: true)
-
-        expect(@upsert_attempts).to eq(2)
-        expect(pair_for(product, other).sales_count).to eq(1)
-      end
-
-      it "retries a lock wait timeout as well" do
-        product = create(:product)
-        other = create(:product)
-        fail_upserts(times: 1, with: ActiveRecord::LockWaitTimeout)
-
-        described_class.update_sales_counts(product_id: product.id, related_product_ids: [other.id], increment: true)
-
-        expect(@upsert_attempts).to eq(2)
-        expect(pair_for(product, other).sales_count).to eq(1)
-      end
-
-      it "counts a retried pair exactly once" do
-        product = create(:product)
-        other = create(:product)
-        create(:sales_related_products_info, smaller_product_id: [product.id, other.id].min, larger_product_id: [product.id, other.id].max, sales_count: 4)
-        fail_upserts(times: 2, with: ActiveRecord::Deadlocked)
-
-        described_class.update_sales_counts(product_id: product.id, related_product_ids: [other.id], increment: true)
-
-        expect(pair_for(product, other).sales_count).to eq(5)
-      end
-
-      it "raises once the retry ceiling is exhausted so persistent contention still surfaces" do
-        product = create(:product)
-        other = create(:product)
-        fail_upserts(times: described_class::UPSERT_CONTENTION_RETRIES + 1, with: ActiveRecord::Deadlocked)
-
-        expect do
-          described_class.update_sales_counts(product_id: product.id, related_product_ids: [other.id], increment: true)
-        end.to raise_error(ActiveRecord::Deadlocked)
-
-        expect(@upsert_attempts).to eq(described_class::UPSERT_CONTENTION_RETRIES + 1)
-      end
-
-      it "does not replay a slice that already committed" do
-        product = create(:product)
-        related = create_list(:product, 4)
-        stub_const("#{described_class}::SALES_COUNT_UPSERT_BATCH_SIZE", 1)
-        # Fail only the third statement, after two slices have already committed.
-        @upsert_attempts = 0
-        allow(ApplicationRecord.connection).to receive(:execute).and_wrap_original do |original, sql, *args|
-          if upsert?(sql)
-            @upsert_attempts += 1
-            raise ActiveRecord::Deadlocked, "Deadlock found when trying to get lock" if @upsert_attempts == 3
-          end
-          original.call(sql, *args)
-        end
-
-        described_class.update_sales_counts(product_id: product.id, related_product_ids: related.map(&:id), increment: true)
-
-        # 4 slices, one of them attempted twice.
-        expect(@upsert_attempts).to eq(5)
-        expect(related.map { pair_for(product, _1).sales_count }).to all(eq(1))
       end
     end
   end

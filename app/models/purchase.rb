@@ -37,6 +37,7 @@ class Purchase < ApplicationRecord
 
   MAX_PRICE_RANGE = (-2_147_483_647..2_147_483_647)
   BUYER_CURRENCY_QUOTE_ROUNDING_SLACK_CENTS = 5
+  UNFINISHED_PURCHASE_RETRY_BLOCK = 15.minutes
 
   CHARGED_SUCCESS_STATES = %w[preorder_authorization_successful successful]
   NON_GIFT_SUCCESS_STATES = CHARGED_SUCCESS_STATES.dup.push("not_charged")
@@ -3330,6 +3331,13 @@ class Purchase < ApplicationRecord
       return false
     end
 
+    # Signup can pass the purchase id from the confirm page with no email check.
+    # A seller's own purchase must stay with the seller, or the delivery guard stops applying.
+    if is_test_purchase?
+      logger.info("Attaching user to purchase #{id}: skipped because the purchase belongs to its seller")
+      return false
+    end
+
     self.purchaser = user
 
     if chargeable.present? && successful? && chargeable.fingerprint == stripe_fingerprint
@@ -4078,6 +4086,10 @@ class Purchase < ApplicationRecord
     # the original/upgrade flags. Passing nil recurrence here registers a sporadic
     # mandate, which RBI issuers then refuse for the same monthly membership.
     recurrence = subscription_duration if is_original_subscription_purchase? || is_upgrade_purchase? || setup_future_charges
+    # An installment plan's price carries no recurrence, the plan does. A new checkout's
+    # subscription is only created after this charge succeeds, so fall back to the plan itself.
+    recurrence = subscription.recurrence if recurrence.blank? && subscription&.is_installment_plan?
+    recurrence = installment_plan.recurrence if recurrence.blank? && is_installment_payment && installment_plan
     interval, interval_count = StripeChargeProcessor.indian_card_mandate_interval(recurrence)
 
     mandate_options = {
@@ -4167,7 +4179,15 @@ class Purchase < ApplicationRecord
     # original purchase's total with the upgrade's small prorated price (wildly
     # inflating the cap) or miss a temporary discount that only exists on the original
     # purchase (undersizing the cap so renewals fail).
-    reference_purchase = is_upgrade_purchase? ? subscription.original_purchase : self
+    #
+    # An installment restart must use that same original purchase. The subscription's
+    # mandate terms and the post-auth amount check already do; the restart's own total
+    # is often a later, smaller installment and would register a cap that cannot match.
+    reference_purchase = if use_subscription_original_for_mandate_cap?(fixed_rate:)
+      subscription.original_purchase
+    else
+      self
+    end
     base_cents = reference_purchase.total_transaction_cents
     if reference_purchase.is_free_trial_purchase?
       renewal_price_cents = if reference_purchase.subscription.present?
@@ -4202,6 +4222,24 @@ class Purchase < ApplicationRecord
     pre_discount_cents = discount.pre_discount_displayed_price_cents ||
       discount.pre_discount_minimum_price_cents * reference_purchase.quantity
     [(Rational(base_cents * pre_discount_cents, reference_purchase.displayed_price_cents)).ceil, base_cents].max
+  end
+
+  # Stripe rejects a mandate maximum below this charge, so when the original cap is
+  # smaller, the cap stays on the charge. Compare that US-cent cap, not a rupee terms amount.
+  private def use_subscription_original_for_mandate_cap?(fixed_rate: nil)
+    original = subscription&.original_purchase
+    return false if original.nil?
+    return true if is_upgrade_purchase?
+    return false unless installment_plan_restart_mandate?
+
+    original.mandate_maximum_amount_cents(fixed_rate:) >= total_transaction_cents.to_i
+  end
+
+  private def installment_plan_restart_mandate?
+    setup_future_charges &&
+      is_installment_payment &&
+      !is_original_subscription_purchase? &&
+      subscription&.is_installment_plan?
   end
 
   def name_or_email
@@ -5747,6 +5785,8 @@ class Purchase < ApplicationRecord
     end
 
     def variants_available
+      closed_variants = closed_new_variants
+      return reject_closed_variants(closed_variants) if closed_variants.any?
       return if does_not_count_towards_max_purchases
       return if link.variant_categories_alive.empty?
       new_variants_available = new_variants.empty? || new_variants.map(&:available?).reduce { |a, e| a && e }
@@ -5760,6 +5800,28 @@ class Purchase < ApplicationRecord
         self.error_code = PurchaseErrorCode::EXCEEDING_VARIANT_QUANTITY
         errors.add :base, "You have chosen a quantity that exceeds what is available."
       end
+    end
+
+    # Unlike the inventory checks, a plan change onto a closed tier is rejected, so
+    # is_updated_original_subscription_purchase is not exempt. new_variants leaves out
+    # a stored current tier. Older memberships stored none and are on the default tier
+    # (Purchase#tiers). A scheduled plan change being applied was accepted before the close.
+    def closed_new_variants
+      return [] if is_recurring_subscription_charge || is_additional_contribution || is_preorder_charge? ||
+                   is_gift_receiver_purchase || is_commission_completion_purchase || is_applying_plan_change ||
+                   (is_installment_payment && !is_original_subscription_purchase)
+
+      candidates = new_variants
+      if is_updated_original_subscription_purchase && link.is_tiered_membership? && original_variant_attributes.blank?
+        candidates -= [link.default_tier]
+      end
+      candidates.select(&:closed_to_new_buyers?)
+    end
+
+    def reject_closed_variants(variants)
+      Rails.logger.info("[Purchase] new purchase rejected reason=tier_closed_to_new_purchases product_id=#{link.external_id} variant_ids=#{variants.map(&:external_id).join(",")}")
+      self.error_code = PurchaseErrorCode::VARIANT_SOLD_OUT
+      errors.add :base, "Sold out, please go back and pick another option."
     end
 
     def variants_available_for_quantity?
@@ -5844,13 +5906,22 @@ class Purchase < ApplicationRecord
         3.minutes.ago
       end
 
+      # An unfinished prior gets a longer window: when its processor status is still nil the
+      # settling check below cannot see it, and finalization can lag well past 3 minutes.
+      last_allowed_in_progress_at = if is_upgrade_purchase?
+        last_allowed_purchase_at
+      else
+        [last_allowed_purchase_at, UNFINISHED_PURCHASE_RETRY_BLOCK.ago].min
+      end
+      outside_window = ->(purchase) { !purchase.in_progress? && purchase.created_at <= last_allowed_purchase_at }
+
       recipient_email = is_gift_sender_purchase ? giftee_email : email
       already = self.class.where(
         email: recipient_email,
         ip_address:,
         link_id: link.id,
         purchase_state: limiting_purchase_states
-      ).where("purchases.created_at > ?", last_allowed_purchase_at)
+      ).where("purchases.created_at > ?", last_allowed_in_progress_at)
 
       already = already.where("purchases.id != ?", id) if id
       already = already.not_is_gift_sender_purchase unless is_gift_sender_purchase
@@ -5866,10 +5937,12 @@ class Purchase < ApplicationRecord
           gifts: { giftee_email: recipient_email },
           link:,
           purchase_state: limiting_purchase_states
-        ).where("purchases.created_at > ?", last_allowed_purchase_at)
+        ).where("purchases.created_at > ?", last_allowed_in_progress_at)
         already_gifted = already_gifted.where("purchases.id != ?", id) if id
         already += already_gifted
       end
+
+      already = already.reject(&outside_window)
 
       if variant_attributes.present?
         already = already.select do |purchase|

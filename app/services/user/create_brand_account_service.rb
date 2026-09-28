@@ -93,6 +93,31 @@ class User::CreateBrandAccountService
 
   attr_reader :error_message
 
+  def self.bank_account_portable?(creator)
+    !blocked_payout_country?(creator.alive_user_compliance_info&.legal_entity_country_code)
+  end
+
+  def self.blocked_payout_country?(country_code)
+    StripeMerchantAccountManager::NEW_ACCOUNT_CREATION_BLOCKED_COUNTRIES.include?(country_code)
+  end
+
+  # Offer the checkbox only when the copy can produce a payout the new account
+  # can use. Legal identity alone is not one. A blocked-country bank is not one,
+  # even when the legal country could create a Connect account.
+  def self.payout_setup_portable?(creator)
+    creator.payment_address.present? || bank_details_will_be_copied?(creator)
+  end
+
+  def self.bank_details_will_be_copied?(creator)
+    # A blank legal country cannot create a Connect account, so a bank row
+    # without compliance info is not a portable payout.
+    return false if creator.alive_user_compliance_info&.legal_entity_country_code.blank?
+    return false unless bank_account_portable?(creator)
+
+    bank = creator.active_bank_account
+    bank.present? && !bank.is_a?(CardBankAccount) && !blocked_payout_country?(bank.country)
+  end
+
   private
     def port_payout_setup!
       copy_compliance_info!
@@ -115,11 +140,11 @@ class User::CreateBrandAccountService
 
     def copy_bank_account!
       source = creator.active_bank_account
-      # Debit-card payout "bank accounts" are backed by a stored credit card
-      # record and a Stripe card token that belong to the creator's account;
-      # neither can be shared with or cloned onto another user. Creators paying
-      # out to a debit card set that up fresh on the new account.
-      return if source.nil? || source.is_a?(CardBankAccount)
+      # Debit-card payout accounts belong to the creator's card record and cannot
+      # be cloned. A blocked-country bank never gets a Connect account, including
+      # when there is no compliance record, so copying it would leave the dead
+      # bank form on the new account.
+      return unless self.class.bank_details_will_be_copied?(creator)
 
       copy = source.dup
       copy.user = brand_user

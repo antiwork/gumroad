@@ -188,6 +188,91 @@ describe User::ReputationSummary do
     end
   end
 
+  describe "snapshot_only reads" do
+    before do
+      Feature.activate_user(:seller_reputation_summary, seller)
+      create_stat(product_one, five: 8)
+      create_stat(product_two, four: 4)
+    end
+
+    def review_stat_queries(&block)
+      queries = []
+      callback = ->(_name, _started, _finished, _id, payload) { queries << payload[:sql] }
+      ::ActiveSupport::Notifications.subscribed(callback, "sql.active_record", &block)
+      queries.grep(/product_review_stats/i)
+    end
+
+    it "runs no aggregate on a cold seller and queues the warm job instead" do
+      result = nil
+      expect(review_stat_queries { result = seller.seller_reputation_summary(snapshot_only: true) }).to be_empty
+      expect(result).to be_nil
+      expect(WarmSellerReputationSummaryJob).to have_enqueued_sidekiq_job(seller.id)
+    end
+
+    it "serves the warmed snapshot without SQL or a new job" do
+      WarmSellerReputationSummaryJob.new.perform(seller.id)
+      Sidekiq::Job.clear_all
+
+      result = nil
+      expect(review_stat_queries { result = seller.seller_reputation_summary(snapshot_only: true) }).to be_empty
+      expect(result).to eq(average: 4.7, count: 12, products_count: 2)
+      expect(WarmSellerReputationSummaryJob.jobs).to be_empty
+    end
+
+    it "renders nothing after a review write until the refresh lands" do
+      WarmSellerReputationSummaryJob.new.perform(seller.id)
+      Sidekiq::Job.clear_all
+      ProductReviewStat.find_by(link_id: product_one.id).update_with_added_rating(5)
+      seller.bump_reputation_summary_version
+
+      expect(seller.seller_reputation_summary(exclude_product: product_two, snapshot_only: true)).to be_nil
+      expect(WarmSellerReputationSummaryJob).to have_enqueued_sidekiq_job(seller.id)
+
+      WarmSellerReputationSummaryJob.new.perform(seller.id)
+      expect(seller.seller_reputation_summary(snapshot_only: true)[:count]).to eq(13)
+    end
+
+    it "invalidates the snapshot when a counted product is drafted or hides its reviews" do
+      third = create(:product, user: seller)
+      create_stat(third, five: 1)
+      WarmSellerReputationSummaryJob.new.perform(seller.id)
+      expect(seller.seller_reputation_summary(snapshot_only: true)[:count]).to eq(13)
+
+      third.update!(draft: true)
+      expect(seller.seller_reputation_summary(snapshot_only: true)).to be_nil
+      WarmSellerReputationSummaryJob.new.perform(seller.id)
+      expect(seller.seller_reputation_summary(snapshot_only: true)[:count]).to eq(12)
+
+      product_two.update!(display_product_reviews: false)
+      expect(seller.seller_reputation_summary(snapshot_only: true)).to be_nil
+    end
+
+    it "refreshes a snapshot older than CACHE_TTL" do
+      WarmSellerReputationSummaryJob.new.perform(seller.id)
+      Sidekiq::Job.clear_all
+
+      travel_to((described_class::CACHE_TTL + 1.minute).from_now) do
+        expect(seller.seller_reputation_summary(snapshot_only: true)).to eq(average: 4.7, count: 12, products_count: 2)
+      end
+      expect(WarmSellerReputationSummaryJob).to have_enqueued_sidekiq_job(seller.id)
+    end
+
+    it "subtracts the viewed product from the snapshot" do
+      third = create(:product, user: seller)
+      create_stat(third, five: 1)
+      WarmSellerReputationSummaryJob.new.perform(seller.id)
+
+      expect(seller.seller_reputation_summary(exclude_product: third, snapshot_only: true)).to eq(average: 4.7, count: 12, products_count: 2)
+    end
+
+    it "renders without the rollup when Redis is unreadable" do
+      allow($redis).to receive(:mget).and_raise(Redis::BaseError)
+      expect(ErrorNotifier).to receive(:notify).with(kind_of(Redis::BaseError), user_id: seller.id)
+
+      expect(seller.seller_reputation_summary(snapshot_only: true)).to be_nil
+    end
+  end
+
   describe "#bump_reputation_summary_version" do
     before { Feature.activate_user(:seller_reputation_summary, seller) }
 

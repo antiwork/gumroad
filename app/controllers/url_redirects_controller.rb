@@ -19,6 +19,9 @@ class UrlRedirectsController < ApplicationController
   before_action :hide_layouts, only: %i[
     show download_product_files smil hls_playlist download_subtitle_file subtitle_file_vtt
   ]
+  # smil does not run check_permissions, so this must precede the rental stamp.
+  # Otherwise a leaked token starts the viewing window and the request still 404s.
+  before_action :require_seller_for_test_purchase, only: %i[media_urls smil change_purchaser]
   before_action :mark_rental_as_viewed, only: %i[smil hls_playlist]
   after_action :register_that_user_has_downloaded_product, only: %i[download_page show stream read]
   after_action -> { create_consumption_event!(ConsumptionEvent::EVENT_TYPE_READ) }, only: [:read]
@@ -300,6 +303,10 @@ class UrlRedirectsController < ApplicationController
   def confirm
     forwardable_query_params = {}
     forwardable_query_params[:display] = params[:display] if params[:display].present?
+    if @url_redirect.purchase&.is_test_purchase? && !test_purchase_viewer?
+      return redirect_to_app_login(confirm_page_path(id: @url_redirect.token, destination: params[:destination], **forwardable_query_params))
+    end
+
     if @url_redirect.purchase.email.casecmp(params[:email].to_s.strip.downcase).zero?
       set_confirmed_redirect_cookie
       if params[:destination] == "download_page"
@@ -323,6 +330,7 @@ class UrlRedirectsController < ApplicationController
       return e404_json
     end
     return e404_json if @url_redirect.rental_expired?
+    return e404_json if purchase&.is_test_purchase? && !test_purchase_viewer?
     return e404_json if purchase&.subscription && !purchase.subscription.grant_access_to_product?
     if purchase && user_signed_in? && purchase.purchaser.present? && logged_in_user != purchase.purchaser && !viewer_owns_subscription?(purchase) && !logged_in_user.is_team_member?
       return e404_json
@@ -521,7 +529,7 @@ class UrlRedirectsController < ApplicationController
 
       viewer_owns_subscription = viewer_owns_subscription?(purchase)
 
-      return redirect_to url_redirect_check_purchaser_path(@url_redirect.token, next: request.path) if purchase && user_signed_in? && purchase.purchaser.present? && logged_in_user != purchase.purchaser && !viewer_owns_subscription && !logged_in_user.is_team_member?
+      return redirect_to url_redirect_check_purchaser_path(@url_redirect.token, next: request.path) if purchase && user_signed_in? && purchase.purchaser.present? && logged_in_user != purchase.purchaser && !viewer_owns_subscription && !logged_in_user.is_team_member? && !purchase.is_test_purchase?
 
       return redirect_to url_redirect_rental_expired_page_path(@url_redirect.token) if @url_redirect.rental_expired?
 
@@ -537,6 +545,14 @@ class UrlRedirectsController < ApplicationController
           sign_in current_api_user
           return if purchase && purchase.purchaser && purchase.purchaser == logged_in_user
         end
+      end
+
+      # A seller's own purchase carries the seller's public email, so the email/cookie/IP checks
+      # below prove nothing about who holds the link; only the signed-in seller gets in.
+      if purchase&.is_test_purchase?
+        return if test_purchase_viewer?
+        return e404 if user_signed_in?
+        return redirect_to_app_login(request.fullpath)
       end
 
       # Confirmation asks for the purchase's own email, which a transferred membership's new owner
@@ -568,6 +584,23 @@ class UrlRedirectsController < ApplicationController
         folder_id: params[:folder_id],
         ip_address: request.remote_ip,
       )
+    end
+
+    def test_purchase_viewer?
+      logged_in_user.present? && (@url_redirect.purchase.purchaser == logged_in_user || logged_in_user.is_team_member?)
+    end
+
+    # Also covers the delivery actions that skip check_permissions, and blocks claiming the purchase
+    # with the seller's public email, which would otherwise turn it into an ordinary purchase.
+    def require_seller_for_test_purchase
+      return unless @url_redirect.purchase&.is_test_purchase?
+      return if test_purchase_viewer?
+
+      request.format.json? ? e404_json : e404
+    end
+
+    def redirect_to_app_login(next_path)
+      redirect_to login_url(next: next_path, host: DOMAIN, protocol: PROTOCOL), allow_other_host: true
     end
 
     def set_confirmed_redirect_cookie

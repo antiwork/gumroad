@@ -549,6 +549,44 @@ describe User::OmniauthCallbacksController do
       end
     end
 
+    context "when the Google identity is parked on a deleted account whose address moved to a live account with its own identity" do
+      let(:google_auth) { fetch_json("google").tap { |auth| auth["info"]["image"] = nil } }
+      let!(:deleted_user) { create(:user, google_uid: "101656774483284362141", email: "pdragunas-freed-1@deleted.invalid", deleted_at: Time.current) }
+      let!(:live_user) { create(:user, email: "pdragunas@example.com", google_uid: "202020202020") }
+
+      before { request.env["omniauth.auth"] = google_auth }
+
+      it "signs in the live account and keeps both identities", :aggregate_failures do
+        expect { post :google_oauth2 }.not_to change { User.count }
+
+        expect(flash[:alert]).to be_nil
+        expect(controller.current_user).to eq(live_user)
+        expect(response).to redirect_to dashboard_path
+        expect(live_user.reload.google_uid).to eq("202020202020")
+        expect(deleted_user.reload.google_uid).to eq("101656774483284362141")
+        expect(deleted_user.email).to eq("pdragunas-freed-1@deleted.invalid")
+      end
+
+      it "keeps signing in the live account without applying its pending email change", :aggregate_failures do
+        live_user.update!(email: "pdragunas-pending@example.com")
+        expect(live_user.reload.unconfirmed_email).to eq("pdragunas-pending@example.com")
+
+        post :google_oauth2
+        expect(controller.current_user).to eq(live_user)
+
+        sign_out :user
+        request.env["omniauth.auth"] = google_auth
+        post :google_oauth2
+
+        expect(flash[:alert]).to be_nil
+        expect(controller.current_user).to eq(live_user)
+        expect(live_user.reload.email).to eq("pdragunas@example.com")
+        expect(live_user.unconfirmed_email).to eq("pdragunas-pending@example.com")
+        expect(live_user.google_uid).to eq("202020202020")
+        expect(deleted_user.reload.google_uid).to eq("101656774483284362141")
+      end
+    end
+
     context "when user has 2FA" do
       let!(:user) { create(:user, google_uid: "101656774483284362141", email: "pdragunas@example.com", two_factor_authentication_enabled: true) }
 

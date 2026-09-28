@@ -268,6 +268,17 @@ const CtaBar = ({
     return () => observer.disconnect();
   }, []);
 
+  // On mobile the bar is fixed to the bottom of the viewport, so the page has to reserve its height
+  // at the end of the document or the footer's links sit underneath it. Desktop has the bar at the
+  // top, so nothing is reserved there. The footer consumes this variable.
+  React.useEffect(() => {
+    const { style } = document.documentElement;
+    style.setProperty("--product-cta-bar-height", visible && !isDesktop ? `${height}px` : "0px");
+    return () => {
+      style.removeProperty("--product-cta-bar-height");
+    };
+  }, [isDesktop, visible, height]);
+
   // Paid bundle tiers have no standalone price comparison.
   const bundleComparisonPriceCents = getBundleComparisonPriceCents(product, selectedOption);
   if (bundleComparisonPriceCents !== null) priceCents = bundleComparisonPriceCents;

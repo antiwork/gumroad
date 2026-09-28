@@ -8,5 +8,9 @@ class RefreshSitemapDailyWorker
 
   def perform(date = Date.current.to_s)
     SitemapService.new.generate(date)
+  rescue SitemapService::GenerationInProgress
+    # Another run owns the shared SitemapGenerator config, so these links would be written
+    # into its path. Regenerating a month is idempotent — come back.
+    self.class.perform_in(SitemapService::GENERATION_RETRY_DELAY, date)
   end
 end

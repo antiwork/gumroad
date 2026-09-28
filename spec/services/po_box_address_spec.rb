@@ -5,13 +5,16 @@ require "spec_helper"
 describe PoBoxAddress do
   describe ".match?" do
     it "matches the unmistakable post office box spellings" do
-      ["PO Box 65", "P.O. Box 65", "p o box 65", "PO BOX 65, Rural Route 2", "Unit 3, PO Box 65"].each do |address|
+      ["PO Box 65", "P.O. Box 65", "p o box 65", "PO BOX 65, Rural Route 2", "Unit 3, PO Box 65",
+       "Post Office Box 65", "post office box 95", "123 North street, Post Office Box 95",
+       "Post-Office-Box95", "Post Office Box, 12 Main Street"].each do |address|
         expect(described_class.match?(address)).to be(true), "expected #{address.inspect} to match"
       end
     end
 
     it "does not match a street address that merely mentions a box" do
-      ["Box 65, RR 2", "12 Mailbox Road", "4 Boxwood Lane", "65 Post Road", "1 Boxing Club Street"].each do |address|
+      ["Box 65, RR 2", "12 Mailbox Road", "4 Boxwood Lane", "65 Post Road", "1 Boxing Club Street",
+       "65 Post Office Road", "12 Post Office Boxwood Lane"].each do |address|
         expect(described_class.match?(address)).to be(false), "expected #{address.inspect} not to match"
       end
     end
@@ -64,7 +67,8 @@ describe PoBoxAddress do
     it "accepts every address the checks match" do
       [
         "PO Box 65", "P.O. Box 65", "p o box 65", "PO BOX 65, Rural Route 2", "Unit 3, PO Box 65",
-        "Box 65, RR 2", "Box 65", "box65", "Box #65", "BOX 65 RR 2 Site 4", "Post Office Box 65"
+        "Post Office Box 65", "123 North street, Post Office Box 95",
+        "Box 65, RR 2", "Box 65", "box65", "Box #65", "BOX 65 RR 2 Site 4"
       ].each do |address|
         expect(address).to match(hint), "expected #{address.inspect} to survive the SQL pre-filter"
       end

@@ -46,7 +46,7 @@ RSpec.shared_context "with Stripe API stubs" do
     stripe_accounts_metadata = {}
     stripe_accounts_country = {}
 
-    allow(Stripe::Account).to receive(:create) do |params|
+    allow(Stripe::Account).to receive(:create) do |params, _opts = nil|
       postal_code = params.dig(:individual, :address, :postal_code) || params.dig(:company, :address, :postal_code)
       country_code = params[:country]
 

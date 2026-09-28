@@ -113,4 +113,10 @@ module Product::ReviewStat
     def bump_seller_reputation_version
       user.bump_reputation_summary_version
     end
+
+    def bump_seller_reputation_version_for_rollup_change
+      bump_seller_reputation_version
+      previous_user_id = saved_change_to_user_id&.first
+      User.find_by(id: previous_user_id)&.bump_reputation_summary_version if previous_user_id
+    end
 end

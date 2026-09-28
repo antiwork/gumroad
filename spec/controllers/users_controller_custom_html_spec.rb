@@ -23,6 +23,30 @@ describe UsersController, :vcr, type: :controller do
       expect(response.body).not_to include("<h1>Live profile page</h1>")
     end
 
+    describe "head tags on a custom domain" do
+      before do
+        CustomDomain.create(domain: "pinned-scheme.example.com", user: seller)
+        @request.host = "pinned-scheme.example.com"
+      end
+
+      it "pins the canonical and og:url scheme to the app protocol, not the request's" do
+        # the request arrives over http; only PROTOCOL may decide the emitted scheme
+        stub_const("PROTOCOL", "https")
+
+        get :show
+
+        expect(response.body).to include(%(rel="canonical" href="https://pinned-scheme.example.com/"))
+        expect(response.body).to include(%(property="og:url" content="https://pinned-scheme.example.com/"))
+      end
+
+      it "emits the same description the standard profile head does" do
+        get :show
+
+        expect(response.body).to include(%(<meta name="description" content="Maker of things">))
+        expect(response.body).to include(%(property="og:description" content="Maker of things">))
+      end
+    end
+
     it "sandboxes the iframe without same-origin or top-navigation" do
       get :show
       expect(response.body).to include(%(sandbox="#{RendersCustomHtmlPages::CUSTOM_HTML_SANDBOX}"))

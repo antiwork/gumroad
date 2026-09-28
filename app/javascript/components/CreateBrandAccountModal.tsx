@@ -21,6 +21,17 @@ export const CreateBrandAccountModal = ({ open, onClose }: { open: boolean; onCl
   // Only offer to carry over the payout setup when there is one to carry over —
   // for a creator who never set up payouts, the checkbox would be a no-op.
   const canPortPayoutSetup = loggedInUser?.hasPayoutSetupToPort ?? false;
+  const canPortBankPayoutSetup = loggedInUser?.canPortBankPayoutSetup ?? true;
+  const willCopyBankPayout = loggedInUser?.willCopyBankPayout ?? false;
+  const payoutSetupDescription = () => {
+    if (willCopyBankPayout) {
+      return "The new account will pay out under the same legal identity and bank details as this one, skipping payments setup. Uncheck to set up payouts separately.";
+    }
+    if (!canPortBankPayoutSetup) {
+      return "The new account will use the same legal identity as this one. Bank payouts can't be set up on new accounts in your country yet, so it will need to pay out through PayPal.";
+    }
+    return "The new account will use this account's PayPal address. A legal identity on this account will be copied when one exists. Bank details from this account will not be copied.";
+  };
   const [name, setName] = React.useState("");
   const [username, setUsername] = React.useState("");
   const [email, setEmail] = React.useState("");
@@ -138,10 +149,7 @@ export const CreateBrandAccountModal = ({ open, onClose }: { open: boolean; onCl
             />
             Use my existing payout setup
           </Label>
-          <FieldsetDescription>
-            The new account will pay out under the same legal identity and bank details as this one, skipping payments
-            setup. Uncheck to set up payouts separately.
-          </FieldsetDescription>
+          <FieldsetDescription>{payoutSetupDescription()}</FieldsetDescription>
         </Fieldset>
       ) : null}
     </Modal>

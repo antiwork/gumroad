@@ -24,8 +24,10 @@ module CustomDomainRouteBuilder
     end
   end
 
+  # PROTOCOL, not request.protocol: the edge terminates TLS, so the origin sees the
+  # request as http and inheriting its scheme emitted http canonical/og:url on https pages.
   def seller_custom_domain_url
-    root_url(protocol: request.protocol, host: request.host_with_port) if @is_user_custom_domain
+    root_url(protocol: PROTOCOL, host: request.host_with_port) if @is_user_custom_domain
   end
 
   private

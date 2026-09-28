@@ -51,6 +51,11 @@ class Subscription::UpdaterService
       return { success: false, error_message: "This product is no longer available, so this membership can't be restarted." }
     end
 
+    # A pending cancellation is still the member's current term. Only an ended membership is a restart.
+    if is_resubscribing && !is_pending_cancellation && restart_tiers.any?(&:closed_to_new_buyers?)
+      return { success: false, error_message: "Sold out, please go back and pick another option." }
+    end
+
     if is_resubscribing && subscription.cancelled_by_seller? && use_existing_card?
       return {
         success: false,
@@ -614,6 +619,10 @@ class Subscription::UpdaterService
       @variants ||= (params[:variants] || []).map do |id|
         product.base_variants.find_by_external_id(id)
       end.compact
+    end
+
+    def restart_tiers
+      variants.presence || subscription.original_purchase.variant_attributes
     end
 
     def new_tier

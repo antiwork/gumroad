@@ -182,6 +182,16 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
 
         expect(result.passed).to eq(false)
         expect(result.reasons).to eq(["spam: outbound link farm"])
+        expect(result.empty_storefront).to eq(true)
+      end
+
+      it "does not mark a non-spam block as an empty-storefront block" do
+        allow(ContentModeration::Strategies::PromptStrategy).to receive(:new).and_return(
+          instance_double(ContentModeration::Strategies::PromptStrategy,
+                          perform: strategy_result.new(status: "flagged", reasoning: ["adult_content: explicit imagery described"]))
+        )
+
+        expect(described_class.check(page, :page).empty_storefront).to eq(false)
       end
 
       it "leaves no admin note for a dry-run preview candidate, which was never published" do
@@ -1105,6 +1115,39 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
       message = described_class.seller_message(["spam: repetitive CTAs"], "email", title: "Email #7")
 
       expect(message).to eq("The email \"Email #7\" can’t be saved because it looks like it contains content that reads as promotional spam. Please update the content to follow our content guidelines.")
+    end
+
+    it "tells a seller with no storefront to publish a product rather than reword a spam-flagged page" do
+      message = described_class.seller_message(["spam: link farm"], "page", empty_storefront: true)
+
+      expect(message).to eq(
+        "This page can’t be saved yet. It reads as promotional, and your account doesn’t have a published product " \
+        "or a sale yet, so we can’t publish promotional pages for it. Publish a product first, then save this page again."
+      )
+    end
+
+    it "still names a concrete flag raised alongside an empty-storefront spam block" do
+      message = described_class.seller_message(["spam: link farm", "adult_content: explicit"], "post", title: "Launch", empty_storefront: true)
+
+      expect(message).to start_with("The post \"Launch\" can’t be saved yet.")
+      expect(message).to include("This post can’t be saved because it looks like it contains adult content.")
+    end
+
+    it "keeps the replace-the-image fix when an unreviewable image is flagged alongside an empty-storefront spam block" do
+      message = described_class.seller_message(
+        ["spam: link farm", ContentModeration::Strategies::ClassifierStrategy::UNFETCHABLE_IMAGE_REASON],
+        "page",
+        empty_storefront: true
+      )
+
+      expect(message).to include("Publish a product first")
+      expect(message).to include("Replace that image with a new upload")
+    end
+
+    it "keeps the reword copy for a spam flag when the storefront was not the reason" do
+      message = described_class.seller_message(["spam: link farm"], "product")
+
+      expect(message).to include("Please update the content")
     end
 
     it "keeps the generic subject when no title is given" do

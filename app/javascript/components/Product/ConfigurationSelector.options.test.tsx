@@ -161,4 +161,75 @@ describe("version selector accessibility", () => {
 
     expect(document.activeElement).toBe(screen.getByRole("radio", { name: "Collector's Edition" }));
   });
+
+  it("leaves a sold-out cheaper option out of the advertised low price", () => {
+    render(
+      <ConfigurationSelector
+        product={{
+          ...versionedProduct,
+          options: [{ ...versionedOption(0), quantity_left: 0 }, versionedOption(1)],
+        }}
+        selection={initialSelection}
+        setSelection={() => {}}
+        discount={null}
+      />,
+    );
+
+    expect(document.querySelector("[itemprop='lowPrice']")?.textContent).toBe("14.99");
+  });
+
+  it("marks a fully closed membership sold out where the tiers render", () => {
+    render(
+      <ConfigurationSelector
+        product={{
+          ...versionedProduct,
+          is_tiered_membership: true,
+          options: [
+            { ...versionedOption(0), quantity_left: 0 },
+            { ...versionedOption(1), quantity_left: 0 },
+          ],
+        }}
+        selection={initialSelection}
+        setSelection={() => {}}
+        discount={null}
+      />,
+    );
+
+    expect(document.querySelector("[itemprop='availability']")?.textContent).toBe("https://schema.org/SoldOut");
+    expect(document.querySelector("[itemprop='offerCount']")?.textContent).toBe("0");
+    expect(document.querySelectorAll("[itemprop='offer']")).toHaveLength(0);
+  });
+
+  it("leaves a tier with no price for the selected recurrence out of the advertised low price", () => {
+    render(
+      <ConfigurationSelector
+        product={{
+          ...versionedProduct,
+          is_tiered_membership: true,
+          price_cents: 0,
+          recurrences: {
+            default: "monthly",
+            enabled: [{ recurrence: "monthly", price_cents: 0, id: "monthly" }],
+          },
+          options: [
+            { ...versionedOption(0), quantity_left: 5, recurrence_price_values: null },
+            {
+              ...versionedOption(1),
+              quantity_left: 5,
+              price_difference_cents: 0,
+              recurrence_price_values: { monthly: { price_cents: 1500, suggested_price_cents: null } },
+            },
+          ],
+        }}
+        selection={{ ...initialSelection, recurrence: "monthly" }}
+        setSelection={() => {}}
+        discount={null}
+      />,
+    );
+
+    expect(document.querySelector("[itemprop='lowPrice']")?.textContent).toBe("15");
+    expect(document.querySelector("[itemprop='offerCount']")?.textContent).toBe("1");
+    expect(document.querySelectorAll("[itemprop='offer']")).toHaveLength(1);
+    expect(screen.getByRole("radio", { name: "Listener's Edition" }).getAttribute("itemprop")).toBeNull();
+  });
 });

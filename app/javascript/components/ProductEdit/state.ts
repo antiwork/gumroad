@@ -77,6 +77,9 @@ export type RecurrencePriceValue =
 export type Tier = Variant & {
   customizable_price: boolean;
   apply_price_changes_to_existing_memberships: boolean;
+  // Served only when the seller may close tiers. Leave it unset otherwise: the
+  // server reads an omitted value as "unchanged", never as "reopen".
+  closed_to_new_purchases?: boolean;
   subscription_price_change_effective_date: string | null;
   subscription_price_change_message: string | null;
   recurrence_price_values: {
@@ -286,6 +289,7 @@ export const ProductEditContext = React.createContext<{
   currencyType: CurrencyCode;
   setCurrencyType: (newCurrencyCode: CurrencyCode) => void;
   isListedOnDiscover: boolean;
+  canCloseMembershipTiers: boolean;
   isPhysical: boolean;
   profileSections: ProfileSection[];
   taxonomies: Taxonomy[];

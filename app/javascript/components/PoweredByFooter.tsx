@@ -41,6 +41,9 @@ export const PoweredByFooter = ({
       {currencySelector ? (
         <FooterCurrencySelector detectedCurrency={detectedCurrency ?? null} shownCurrency={shownCurrency} />
       ) : null}
+      {/* The product page's buy bar is fixed over the end of the page on mobile; this reserves its
+          height (0 anywhere else, and on desktop, where the bar is at the top). */}
+      <div aria-hidden className="h-[var(--product-cta-bar-height,0px)]" />
     </footer>
   );
 };

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, render, act, fireEvent } from "@testing-library/react";
+import { cleanup, render, act, fireEvent, screen, waitFor } from "@testing-library/react";
 import type { Editor } from "@tiptap/core";
 import * as React from "react";
 import { afterEach, assert, expect, it, vi } from "vitest";
@@ -16,6 +16,10 @@ let mountedEditor: Editor | null = null;
 
 // vite.config.ts replaces the bare `SSR` identifier at build time.
 Object.assign(globalThis, { SSR: false });
+
+// The toolbar's `custom` slot holds the real entry points (link, upload, disable-downloads);
+// it stays unrendered everywhere else so a toolbar item can't affect an unrelated assertion.
+const toolbarCustom = vi.hoisted(() => ({ render: false }));
 
 const context = vi.hoisted(() => ({
   id: "product-id",
@@ -48,7 +52,10 @@ vi.mock("$app/components/RichTextEditor", async (importOriginal) => {
       mountedEditor = editor;
       return editor;
     },
-    RichTextEditorToolbar: () => null,
+    RichTextEditorToolbar: ({ custom }: { custom?: React.ReactNode }) => (toolbarCustom.render ? custom : null),
+    // The sibling toolbar items need the toolbar's own tooltip context, which the mock drops —
+    // only the disable-downloads item is under test when the custom slot renders.
+    PopoverMenuItem: () => null,
     useImageUploadSettings: () => ({ isUploading: false, onUpload: () => {}, allowedExtensions: [] }),
   };
 });
@@ -923,4 +930,46 @@ it("keeps the mobile page-list summary row out of the Sortable's container", asy
   expect(document.body.textContent).toContain("Table of contents:");
   expect(list?.textContent).not.toContain("Table of contents:");
   expect(list?.querySelectorAll('[role="tab"]')).toHaveLength(2);
+});
+
+// The result of the bulk disable-downloads action belongs to the content tab, so it is asserted
+// through the real toolbar entry point — a broken callback wiring or Dismiss would fail here.
+const disableDownloads = vi.hoisted((): unknown[] => []);
+vi.mock("$app/utils/request", () => ({
+  request: () => Promise.resolve({ ok: true, json: () => Promise.resolve(disableDownloads.shift()) }),
+  ResponseError: class ResponseError extends Error {},
+}));
+// The toolbar's link item renders only inside the custom slot, where it has no toolbar context.
+vi.mock("$app/components/TiptapExtensions/Link", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("$app/components/TiptapExtensions/Link")>()),
+  LinkMenuItem: () => null,
+}));
+
+it("shows the bulk disable-downloads result in flow and lets the seller dismiss it", async () => {
+  Object.assign(globalThis, {
+    Routes: {
+      disable_downloads_for_all_files_link_path: (permalink: string) =>
+        `/links/${permalink}/disable_downloads_for_all_files`,
+    },
+  });
+  toolbarCustom.render = true;
+  context.product = buildProduct([{ id: "variant-paid", name: "Paid", rich_content: [] }]);
+  disableDownloads.push({ disabled_count: 2, disabled_file_ids: [], ineligible_count: 1 });
+
+  try {
+    render(<ContentTabContent selectedVariantId="variant-paid" />);
+    await act(async () => {});
+
+    fireEvent.click(await screen.findByRole("button", { name: "Disable all downloads" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Yes, disable downloads" }));
+
+    const result = await screen.findByRole("status");
+    expect(result.textContent).toContain("Downloads are now off for 2 files.");
+    expect(result.textContent).toContain("1 file stays downloadable");
+
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
+  } finally {
+    toolbarCustom.render = false;
+  }
 });

@@ -257,6 +257,8 @@ class ProductPresenter
               subscription_price_change_effective_date: variant.subscription_price_change_effective_date,
               subscription_price_change_message: variant.subscription_price_change_message,
             )
+            # Absent unless the seller may write it; the editor only sends back what it was served.
+            props[:closed_to_new_purchases] = variant.closed_to_new_purchases? if variant.can_close_to_new_buyers?
           else
             props[:price_difference_cents] = variant.price_difference_cents
           end
@@ -337,6 +339,7 @@ class ProductPresenter
         .as_json,
       currency_type: product.price_currency_type,
       is_tiered_membership: product.is_tiered_membership,
+      can_close_membership_tiers: product.is_tiered_membership && Feature.active?(BaseVariant::CLOSE_TO_NEW_BUYERS_FEATURE, product.user),
       is_listed_on_discover: product.recommendable?,
       is_physical: product.is_physical,
       profile_sections: profile_sections.map do |section|

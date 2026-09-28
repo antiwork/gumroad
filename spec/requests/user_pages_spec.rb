@@ -68,6 +68,12 @@ describe "Public serving of seller pages", type: :request do
       expect(response.body).not_to include("<h1>Studio landing</h1>")
     end
 
+    it "titles the wrapper document for the browser tab and search results" do
+      get "http://seller.example.com/studio"
+
+      expect(response.body).to include("<title>Studio — Jane Doe</title>")
+    end
+
     it "serves the embed with the strict CSP" do
       get "http://#{seller.subdomain}/studio/landing/embed"
 

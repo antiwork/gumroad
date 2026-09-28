@@ -308,6 +308,13 @@ module Product::Prices
     available_prices.uniq
   end
 
+  # Discover filters on this. Discount checks keep available_price_cents, which includes closed tiers.
+  def discover_price_cents
+    return available_price_cents unless is_tiered_membership?
+
+    VariantPrice.where(variant_id: tiers_for_new_buyers.map(&:id)).alive.is_buy.pluck(:price_cents).uniq
+  end
+
   private
     # Returns the alive prices matching the product's current `price_currency_type`.
     # Filters in memory when `alive_prices` is already preloaded (the read path used by
@@ -403,44 +410,45 @@ module Product::Prices
     def show_customizable_price_indicator?
       return customizable_price unless is_tiered_membership
 
-      # for tiered products, show `+` in formatted price if:
-      # 1. there are multiple tiers, or
-      # 2. any tiers have PWYW enabled, or
-      # 3. there's only 1 tier but it has multiple prices
+      # The + follows the price a new buyer sees. A closed customizable tier must not add it.
       if (preloaded_tiers = preloaded_membership_tiers_with_prices)
-        any_customizable = preloaded_tiers.any?(&:customizable_price?)
-        # With one tier, that tier is the default; only then do multiple buy prices matter.
-        multiple_tier_prices = preloaded_tiers.size == 1 &&
-          preloaded_tiers.first.alive_prices.count(&:is_buy?) > 1
-        return preloaded_tiers.size > 1 || any_customizable || multiple_tier_prices
+        offered = tiers_for_displayed_price(preloaded_tiers)
+        any_customizable = offered.any?(&:customizable_price?)
+        multiple_tier_prices = offered.size == 1 && offered.first.alive_prices.count(&:is_buy?) > 1
+        return offered.size > 1 || any_customizable || multiple_tier_prices
       end
 
-      any_customizable =
-        if association(:tiers).loaded?
-          tiers.any?(&:customizable_price?)
-        else
-          tiers.where(customizable_price: true).exists?
-        end
-      multiple_tier_prices =
-        if default_tier.present? && default_tier.association(:alive_prices).loaded?
-          default_tier.alive_prices.count(&:is_buy?) > 1
-        else
-          default_tier.present? && default_tier.prices.alive.is_buy.size > 1
-        end
-      tiers.size > 1 || any_customizable || multiple_tier_prices
+      offered = tiers_for_displayed_price
+      any_customizable = offered.any?(&:customizable_price?)
+      multiple_tier_prices = offered.size == 1 && offered.first.prices.alive.is_buy.size > 1
+      offered.size > 1 || any_customizable || multiple_tier_prices
+    end
+
+    # Alive tiers a new buyer can purchase. No fallback: Discover must not treat a fully closed membership as priced.
+    def tiers_for_new_buyers(candidates = nil)
+      list = Array(candidates || tiers.alive)
+      list.select(&:alive?).reject(&:closed_to_new_buyers?)
+    end
+
+    # Card quote only. A fully closed membership still shows its price instead of a false $0.
+    def tiers_for_displayed_price(candidates = nil)
+      list = Array(candidates || tiers.alive)
+      tiers_for_new_buyers(list).presence || list.select(&:alive?)
     end
 
     def lowest_tier_price(for_default_duration: false)
       return unless is_tiered_membership
 
       if (preloaded_tiers = preloaded_membership_tiers_with_prices)
-        candidates = preloaded_tiers.flat_map(&:alive_prices).select(&:is_buy?)
+        offered = tiers_for_displayed_price(preloaded_tiers)
+        candidates = offered.flat_map(&:alive_prices).select(&:is_buy?)
         candidates = candidates.select { |p| p.recurrence == subscription_duration } if for_default_duration
         return candidates.min_by(&:price_cents) ||
                VariantPrice.new(price_cents: 0, recurrence: subscription_duration)
       end
 
-      relation = VariantPrice.where(variant_id: tiers.map(&:id)).alive.is_buy
+      offered_ids = tiers_for_displayed_price.map(&:id)
+      relation = VariantPrice.where(variant_id: offered_ids).alive.is_buy
       relation = relation.where(recurrence: subscription_duration) if for_default_duration
       lowest = relation.order("price_cents asc").take
 

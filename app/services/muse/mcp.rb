@@ -50,7 +50,7 @@ module Muse
           authorization_endpoint: "#{base_url}/muse/v1/oauth2/authorize",
           token_endpoint: "#{base_url}/muse/v1/oauth2/token",
           registration_endpoint: "#{base_url}/muse/v1/oauth2/register",
-          scopes: %w[view_profile view_sales edit_products view_payouts account]
+          scopes: OauthClientRegistration::MCP_SCOPES
         },
         api: "#{base_url}/api"
       }
@@ -65,7 +65,7 @@ module Muse
         response_types_supported: ["code"],
         grant_types_supported: %w[authorization_code refresh_token],
         token_endpoint_auth_methods_supported: %w[none client_secret_post client_secret_basic],
-        scopes_supported: Doorkeeper.configuration.public_scopes.map(&:to_s),
+        scopes_supported: OauthClientRegistration::MCP_SCOPES,
         code_challenge_methods_supported: %w[S256 plain]
       }
     end
@@ -75,7 +75,7 @@ module Muse
         resource: "#{base_url}#{resource_path}",
         authorization_servers: [base_url],
         bearer_methods_supported: ["header"],
-        scopes_supported: Doorkeeper.configuration.public_scopes.map(&:to_s)
+        scopes_supported: OauthClientRegistration::MCP_SCOPES
       }
     end
 

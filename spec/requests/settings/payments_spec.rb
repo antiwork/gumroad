@@ -699,6 +699,13 @@ describe("Payments Settings Scenario", type: :system, js: true) do
           click_on "Update settings"
           expect(page).to have_status(text: "We require a valid physical US address. We cannot accept a P.O. Box as a valid address.")
         end.to_not change { @user.alive_user_compliance_info.reload.street_address }
+        find(:css, "input[id$='creator-street-address']").set("123 North street, Post Office Box 95")
+        expect(UpdateUserComplianceInfo).not_to receive(:new)
+        expect do
+          click_on "Update settings"
+          expect(page).to have_status(text: "We require a valid physical US address. We cannot accept a P.O. Box as a valid address.")
+        end.to_not change { @user.alive_user_compliance_info.reload.street_address }
+        expect(find(:css, "input[id$='creator-street-address']")["aria-invalid"]).to eq "true"
       end
     end
 
@@ -2271,6 +2278,8 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "barnabas ngagy")
+        expect(page).to have_field("Bank Identifier Code (BIC)", placeholder: "BOPIPHMM")
+        expect(page).to have_content("Your bank's 8 or 11 character SWIFT/BIC code, using letters and numbers.")
         fill_in("Bank Identifier Code (BIC)", with: "BCDEPHM1123")
         fill_in("Account #", with: "01567890123456789")
         fill_in("Confirm account #", with: "01567890123456789")

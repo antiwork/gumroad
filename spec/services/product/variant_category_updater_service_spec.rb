@@ -220,6 +220,13 @@ describe Product::VariantCategoryUpdaterService do
         expect(variant.reload.deleted_at).to be_nil
       end
 
+      it "refuses to delete a contentless tier closed to new purchases when its removal wasn't confirmed" do
+        variant = create(:variant, variant_category: @variant_category, closed_to_new_purchases: true)
+
+        expect { perform_deletion }.to raise_error(Link::LinkInvalid, /weren't explicitly removed in the editor/)
+        expect(variant.reload.deleted_at).to be_nil
+      end
+
       it "refuses to delete a purchased contentless variant when its removal wasn't confirmed" do
         variant = create(:variant, variant_category: @variant_category)
         create(:free_purchase, link: @product, variant_attributes: [variant])
@@ -783,6 +790,104 @@ describe Product::VariantCategoryUpdaterService do
           @rich_content.external_id => [dead_foreign_file.external_id]
         )
         expect(@rich_content.reload.description).to eq([paragraph])
+      end
+    end
+
+    describe "closing a tier to new purchases" do
+      let(:seller) { create(:user) }
+      let(:product) { create(:membership_product, user: seller) }
+      let(:tier) { product.tiers.first }
+
+      before { Feature.activate_user(:close_membership_tier_to_new_buyers, seller) }
+
+      def save_tier(**option)
+        Product::VariantCategoryUpdaterService.new(
+          product:,
+          category_params: {
+            id: tier.variant_category.external_id,
+            title: tier.variant_category.title,
+            options: [{ id: tier.external_id, name: tier.name, **option }],
+          }
+        ).perform
+        tier.reload
+      end
+
+      it "closes and reopens the tier on an explicit value" do
+        expect(save_tier(closed_to_new_purchases: true).closed_to_new_purchases?).to be(true)
+        expect(save_tier(closed_to_new_purchases: false).closed_to_new_purchases?).to be(false)
+      end
+
+      it "casts form-encoded values" do
+        expect(save_tier(closed_to_new_purchases: "true").closed_to_new_purchases?).to be(true)
+        expect(save_tier(closed_to_new_purchases: "false").closed_to_new_purchases?).to be(false)
+      end
+
+      it "keeps a closed tier closed when the save omits the field or sends null" do
+        tier.update!(closed_to_new_purchases: true)
+
+        expect(save_tier.closed_to_new_purchases?).to be(true)
+        expect(save_tier(closed_to_new_purchases: nil).closed_to_new_purchases?).to be(true)
+        expect(save_tier(closed_to_new_purchases: "").closed_to_new_purchases?).to be(true)
+      end
+
+      it "leaves the other flags alone" do
+        tier.update!(apply_price_changes_to_existing_memberships: true, subscription_price_change_effective_date: 10.days.from_now.to_date)
+
+        save_tier(closed_to_new_purchases: true, apply_price_changes_to_existing_memberships: true, subscription_price_change_effective_date: tier.subscription_price_change_effective_date)
+
+        expect(tier).to have_attributes(closed_to_new_purchases?: true, apply_price_changes_to_existing_memberships?: true)
+      end
+
+      it "does not report a skipped price-change notification when only the close setting changes" do
+        tier.update!(apply_price_changes_to_existing_memberships: true, subscription_price_change_effective_date: 10.days.from_now.to_date)
+        expect(ErrorNotifier).not_to receive(:notify)
+
+        save_tier(closed_to_new_purchases: true, apply_price_changes_to_existing_memberships: true, subscription_price_change_effective_date: tier.subscription_price_change_effective_date)
+
+        expect(tier.closed_to_new_purchases?).to be(true)
+      end
+
+      it "closes a tier created in the same save" do
+        Product::VariantCategoryUpdaterService.new(
+          product:,
+          category_params: {
+            id: tier.variant_category.external_id,
+            title: tier.variant_category.title,
+            options: [{ id: tier.external_id, name: tier.name }, { name: "New tier", closed_to_new_purchases: true }],
+          }
+        ).perform
+
+        expect(product.tier_category.variants.alive.find_by(name: "New tier").closed_to_new_purchases?).to be(true)
+      end
+
+      context "when the feature is off for the seller" do
+        before { Feature.deactivate_user(:close_membership_tier_to_new_buyers, seller) }
+
+        it "does not persist a close" do
+          expect(save_tier(closed_to_new_purchases: true).closed_to_new_purchases?).to be(false)
+        end
+
+        it "does not reopen a tier closed while it was on" do
+          tier.update!(closed_to_new_purchases: true)
+
+          expect(save_tier(closed_to_new_purchases: false).closed_to_new_purchases?).to be(true)
+        end
+      end
+
+      it "ignores the field for versions" do
+        version_product = create(:product, user: seller)
+        version = create(:variant, variant_category: create(:variant_category, link: version_product))
+
+        Product::VariantCategoryUpdaterService.new(
+          product: version_product,
+          category_params: {
+            id: version.variant_category.external_id,
+            title: version.variant_category.title,
+            options: [{ id: version.external_id, name: version.name, closed_to_new_purchases: true }],
+          }
+        ).perform
+
+        expect(version.reload.closed_to_new_purchases?).to be(false)
       end
     end
   end
