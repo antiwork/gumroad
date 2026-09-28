@@ -49,11 +49,13 @@ module User::SocialGoogle
           return nil
         end
 
-        user = User.where(google_uid: data["uid"]).first
+        # The redirect below copies a deleted row's uid onto the live account without clearing it
+        # on the deleted row, so a live match must win or a later email change strands the user.
+        user = User.alive.find_by(google_uid: data["uid"]) || User.find_by(google_uid: data["uid"])
 
         # A closed account keeps its google_uid after support frees its email to a
-        # `@deleted.invalid` placeholder, so an identity that now belongs to a live account still
-        # resolves here. Prefer that account; never create one, so a freed address stays locked.
+        # `@deleted.invalid` placeholder. Prefer the live account holding the Google address; never
+        # create one, so a freed address stays locked.
         if user&.deleted? && user.email.to_s.end_with?("@#{User::DELETED_ACCOUNT_EMAIL_DOMAIN}")
           email = data["info"]["email"] || data["extra"]["raw_info"]["email"]
           live_user = EmailFormatValidator.valid?(email) ? User.alive.find_by(email:) : nil

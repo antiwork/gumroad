@@ -71,6 +71,17 @@ describe User::SocialGoogle do
         expect(@deleted_user.reload.email).to eq(freed_address)
       end
 
+      it "keeps signing in the live account after it takes the identity and changes its email" do
+        live_user = create(:user, email: @data_copy2["info"]["email"])
+        User.find_or_create_for_google_oauth2(@data_copy2)
+        expect(live_user.reload.google_uid).to eq(@data_copy2["uid"])
+
+        live_user.update_column(:email, "spongebob-new-address@example.com")
+        found_user = User.find_or_create_for_google_oauth2(@data_copy2)
+
+        expect(found_user.id).to eq(live_user.id)
+      end
+
       it "still returns the deleted account when no live account holds the address" do
         found_user = User.find_or_create_for_google_oauth2(@data_copy2)
 
