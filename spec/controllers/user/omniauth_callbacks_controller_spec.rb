@@ -539,13 +539,58 @@ describe User::OmniauthCallbacksController do
     end
 
     context "when user is marked as deleted" do
-      let!(:user) { create(:user, google_uid: "101656774483284362141", deleted_at: Time.current) }
+      let!(:user) { create(:user, google_uid: "101656774483284362141", email: "pdragunas@example.com", deleted_at: Time.current) }
 
       it "does not allow user to login" do
-        post :google_oauth2
+        expect { post :google_oauth2 }.not_to change(User, :count)
 
         expect(flash[:alert]).to eq ACCOUNT_DELETION_ERROR_MSG
         expect(response).to redirect_to login_path
+        expect(controller.user_signed_in?).to be false
+      end
+    end
+
+    context "when a deleted husk keeps the Google uid on a placeholder email" do
+      let(:google_uid) { "101656774483284362141" }
+      let(:google_email) { "pdragunas@example.com" }
+      let!(:husk) { create(:user) }
+
+      before do
+        husk.update_columns(
+          google_uid:,
+          email: "released-#{google_uid}@deleted.invalid",
+          deleted_at: Time.current
+        )
+        allow_any_instance_of(User).to receive(:google_picture_url).and_return(nil)
+      end
+
+      it "signs in the live user and leaves both Google uids unchanged" do
+        live_user = create(:user, google_uid: "live-google-uid", email: google_email)
+        husk_email = husk.reload.email
+        husk_deleted_at = husk.deleted_at
+
+        expect { post :google_oauth2 }.not_to change(User, :count)
+
+        expect(controller.user_signed_in?).to be true
+        expect(controller.current_user).to eq(live_user)
+        expect(flash[:alert]).not_to eq ACCOUNT_DELETION_ERROR_MSG
+        expect(live_user.reload.google_uid).to eq("live-google-uid")
+        expect(husk.reload.google_uid).to eq(google_uid)
+        expect(husk.email).to eq(husk_email)
+        expect(husk.deleted_at).to be_within(1.second).of(husk_deleted_at)
+      end
+
+      it "refuses login and does not create an account when no live user has the Google email" do
+        husk_email = husk.reload.email
+
+        expect { post :google_oauth2 }.not_to change(User, :count)
+
+        expect(flash[:alert]).to eq ACCOUNT_DELETION_ERROR_MSG
+        expect(response).to redirect_to login_path
+        expect(controller.user_signed_in?).to be false
+        expect(husk.reload.google_uid).to eq(google_uid)
+        expect(husk.email).to eq(husk_email)
+        expect(husk).to be_deleted
       end
     end
 

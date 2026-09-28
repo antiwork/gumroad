@@ -288,6 +288,74 @@ describe User::SocialGoogle do
       end
     end
 
+    it "returns the live user past a deleted placeholder husk without copying its Google uid" do
+      placeholder_data = @data.deep_dup
+      placeholder_data["uid"] = "deleted-husk-google-uid"
+      placeholder_data["info"]["email"] = "live-google-user@example.com"
+      placeholder_data["extra"]["raw_info"]["email"] = "live-google-user@example.com"
+
+      husk = create(:user)
+      husk.update_columns(
+        google_uid: placeholder_data["uid"],
+        email: "released-husk@deleted.invalid",
+        deleted_at: Time.current
+      )
+      live_user = create(:user, google_uid: "different-live-google-uid", email: "live-google-user@example.com")
+      allow_any_instance_of(User).to receive(:google_picture_url).and_return(nil)
+
+      expect do
+        result = User.find_or_create_for_google_oauth2(placeholder_data)
+
+        expect(result).to eq(live_user)
+      end.not_to change(User, :count)
+
+      expect(live_user.reload.google_uid).to eq("different-live-google-uid")
+      expect(husk.reload.google_uid).to eq(placeholder_data["uid"])
+      expect(husk.email).to eq("released-husk@deleted.invalid")
+      expect(husk).to be_deleted
+    end
+
+    it "keeps the deleted account when the placeholder husk has no live email match" do
+      placeholder_data = @data.deep_dup
+      placeholder_data["uid"] = "deleted-husk-without-live-uid"
+      placeholder_data["info"]["email"] = "nobody-live@example.com"
+      placeholder_data["extra"]["raw_info"]["email"] = "nobody-live@example.com"
+
+      husk = create(:user)
+      husk.update_columns(
+        google_uid: placeholder_data["uid"],
+        email: "released-without-live@deleted.invalid",
+        deleted_at: Time.current
+      )
+      allow_any_instance_of(User).to receive(:google_picture_url).and_return(nil)
+
+      expect do
+        result = User.find_or_create_for_google_oauth2(placeholder_data)
+
+        expect(result).to eq(husk)
+        expect(result).to be_deleted
+      end.not_to change(User, :count)
+
+      expect(husk.reload.email).to eq("released-without-live@deleted.invalid")
+      expect(husk.google_uid).to eq(placeholder_data["uid"])
+    end
+
+    it "still returns a deleted user who holds a real email" do
+      held_email_data = @data.deep_dup
+      held_email_data["uid"] = "deleted-real-email-uid"
+      held_email_data["info"]["email"] = "still-held@example.com"
+      held_email_data["extra"]["raw_info"]["email"] = "still-held@example.com"
+
+      deleted_user = create(:user, google_uid: held_email_data["uid"], email: "still-held@example.com", deleted_at: Time.current)
+      allow_any_instance_of(User).to receive(:google_picture_url).and_return(nil)
+
+      result = User.find_or_create_for_google_oauth2(held_email_data)
+
+      expect(result).to eq(deleted_user)
+      expect(result).to be_deleted
+      expect(result.email).to eq("still-held@example.com")
+    end
+
     it "still alerts Sentry for RecordInvalid raised by other validations" do
       invalid_data = @data.deep_dup
       invalid_data["uid"] = "google-other-invalid-uid"

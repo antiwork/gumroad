@@ -62,6 +62,15 @@ module User::SocialGoogle
           user = live_user if live_user
         end
 
+        # A console update_column frees the email onto @deleted.invalid and leaves
+        # google_uid set, so skip that husk. Login must not write either row.
+        if deleted_google_placeholder?(user)
+          live_user = live_user_for_google_email(data)
+          return live_user if live_user
+
+          return user
+        end
+
         if user.nil?
           email = data["info"]["email"] || data["extra"]["raw_info"]["email"]
           user = User.where(email:).first if EmailFormatValidator.valid?(email)
@@ -142,5 +151,18 @@ module User::SocialGoogle
 
       user
     end
+
+    private
+      # Support writes this placeholder with update_column. It is not an app email domain.
+      def deleted_google_placeholder?(user)
+        user&.deleted? && user.email.to_s.downcase.end_with?("@deleted.invalid")
+      end
+
+      def live_user_for_google_email(data)
+        email = data["info"]["email"] || data["extra"]["raw_info"]["email"]
+        return unless EmailFormatValidator.valid?(email)
+
+        User.alive.where(email:).first
+      end
   end
 end
