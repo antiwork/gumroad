@@ -124,13 +124,34 @@ class Purchase::BaseService
       return if subscription.purchases.where("id > ?", purchase.id).is_upgrade_purchase.where(purchase_state: %w[in_progress successful]).exists?
 
       new_original_purchase = subscription.original_purchase
-      previous_original_purchase = subscription.purchases.is_archived_original_subscription_purchase.last
+      previous_original_purchase = plan_before_unpaid_upgrades(subscription)
       new_original_purchase.update_flag!(:is_archived_original_subscription_purchase, true, true)
       previous_original_purchase.update_flag!(:is_archived_original_subscription_purchase, false, true)
       subscription.last_payment_option.update!(price: previous_original_purchase.price) if previous_original_purchase.price.present?
       return if subscription.purchases.in_progress.is_restart_authentication_purchase.exists?
 
       subscription.restore_indian_card_mandate_after_failed_reauthorization!(expected_credit_card_id: purchase.credit_card_id)
+    end
+
+    def plan_before_unpaid_upgrades(subscription)
+      previous = subscription.purchases.is_archived_original_subscription_purchase.order(id: :desc).first
+      failed_upgrades = subscription.purchases.failed.is_upgrade_purchase.where("id < ?", purchase.id)
+      last_successful_upgrade = subscription.purchases.successful.is_upgrade_purchase.where("id < ?", purchase.id).order(id: :desc).pick(:id)
+      failed_upgrades = failed_upgrades.where("id > ?", last_successful_upgrade) if last_successful_upgrade
+
+      while previous
+        failed_upgrade_id = failed_upgrades.where("id > ?", previous.id).order(:id).pick(:id)
+        break if failed_upgrade_id.blank?
+
+        unpaid_plan_id = subscription.purchases.is_original_subscription_purchase.where("id < ?", failed_upgrade_id).order(id: :desc).pick(:id)
+        break unless unpaid_plan_id == previous.id
+
+        older = subscription.purchases.is_archived_original_subscription_purchase.where("id < ?", previous.id).order(id: :desc).first
+        break if older.blank?
+
+        previous = older
+      end
+      previous
     end
 
     def mark_preorder_authorized

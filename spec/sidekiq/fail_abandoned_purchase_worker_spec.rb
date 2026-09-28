@@ -520,6 +520,22 @@ describe FailAbandonedPurchaseWorker, :vcr do
             expect(@subscription.reload.alive?).to be true
             expect(@subscription.is_resubscription_pending_confirmation?).to be true
           end
+
+          it "does not restore an earlier unpaid upgrade when the later upgrade also fails" do
+            paid = @subscription.original_purchase
+            paid.update_flag!(:is_archived_original_subscription_purchase, true, true)
+            unpaid = create(:purchase, subscription: @subscription, link: @subscription.link, purchase_state: "successful", is_original_subscription_purchase: true, is_archived_original_subscription_purchase: true, price: paid.price)
+            create(:purchase, subscription: @subscription, link: @subscription.link, purchase_state: "failed", is_upgrade_purchase: true)
+            create(:purchase, subscription: @subscription, link: @subscription.link, purchase_state: "successful", is_original_subscription_purchase: true, price: paid.price)
+            later = create(:purchase, subscription: @subscription, link: @subscription.link, purchase_state: "in_progress", is_upgrade_purchase: true)
+
+            Purchase::MarkFailedService.new(later).perform
+
+            expect(paid.reload.is_archived_original_subscription_purchase?).to be false
+            expect(unpaid.reload.is_archived_original_subscription_purchase?).to be true
+            expect(@subscription.reload.original_purchase).to eq(paid)
+            expect(@subscription.reload.alive?).to be true
+          end
         end
       end
 
