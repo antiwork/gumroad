@@ -263,6 +263,47 @@ describe("Product Edit Memberships", type: :system, js: true) do
       expect(@product.variant_categories.first.variants.alive.first.max_purchase_count).to eq 250
     end
 
+    context "when the seller may close tiers to new supporters" do
+      before { Feature.activate_user(:close_membership_tier_to_new_buyers, seller) }
+
+      it "closes a tier and reopens it without touching its prices" do
+        tier = @product.default_tier
+        prices = tier.prices.alive.pluck(:recurrence, :price_cents)
+        visit edit_link_path(@product.unique_permalink)
+
+        within tier_rows[0] do
+          check "Stop accepting new supporters"
+        end
+        save_change
+        expect(tier.reload.closed_to_new_purchases?).to be(true)
+
+        refresh
+        within tier_rows[0] do
+          expect(page).to have_checked_field("Stop accepting new supporters")
+          uncheck "Stop accepting new supporters"
+        end
+        save_change
+        expect(tier.reload.closed_to_new_purchases?).to be(false)
+        expect(tier.prices.alive.pluck(:recurrence, :price_cents)).to eq(prices)
+      end
+
+      it "offers the control on a tier added after every tier was removed" do
+        visit edit_link_path(@product.unique_permalink)
+
+        within tier_rows[0] do
+          click_on "Remove"
+        end
+        within_modal "Remove Untitled?" do
+          click_on "Yes, remove"
+        end
+        click_on "Add tier"
+
+        within tier_rows[0] do
+          expect(page).to have_unchecked_field("Stop accepting new supporters")
+        end
+      end
+    end
+
     context "when membership has rich content" do
       let(:membership_product) { create(:membership_product_with_preset_tiered_pricing, user: seller) }
 

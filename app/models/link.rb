@@ -375,6 +375,16 @@ class Link < ApplicationRecord
   }
   scope :membership, -> { is_recurring_billing }
   scope :non_membership, -> { not_is_recurring_billing }
+
+  # A flag change can make a closed tier purchasable again. Discover keeps the old price until this runs.
+  def self.refresh_discover_prices_for_closed_tiers(user: nil)
+    products = is_tiered_membership.joins(:tiers).merge(Variant.alive.closed_to_new_purchases).distinct
+    products = products.where(user_id: user.id) if user
+    products.find_each do |product|
+      product.touch
+      product.enqueue_index_update_for(["available_price_cents"])
+    end
+  end
   scope :with_min_price, ->(min_price) { min_price.present? ? distinct.joins(:prices).where("prices.deleted_at IS NULL AND prices.price_cents >= ?", min_price) : where("1 = 1") }
 
   # !! MySQL ONLY !! Retrieves products in the order specified by the ids array. Relies on MySQL FIELD.
@@ -1406,11 +1416,9 @@ class Link < ApplicationRecord
 
   def has_customizable_price_option?
     return customizable_price? unless is_tiered_membership?
-    if association(:tiers).loaded?
-      tiers.any? { |t| t.alive? && t.customizable_price? }
-    else
-      tiers.alive.exists?(customizable_price: true)
-    end
+
+    candidates = association(:tiers).loaded? ? tiers : nil
+    tiers_for_displayed_price(candidates).any?(&:customizable_price?)
   end
 
   def recurrence_price_enabled?(recurrence)
@@ -1440,7 +1448,10 @@ class Link < ApplicationRecord
     attrs = {}
     attrs[:rental] = !!params[:rent] && purchase_type != "buy_only"
     attrs[:options] = options
-    attrs[:option] = attrs[:options].find { |o| o[:id] == params[:option] } || (native_type != NATIVE_TYPE_COFFEE ? attrs[:options].find { |o| o[:quantity_left] != 0 } : nil)
+    requested = attrs[:options].find { |o| o[:id] == params[:option] }
+    # A closed tier reports quantity 0. Selecting it here makes checkout add a zero-quantity item.
+    requested = nil if requested && Variant.find_by_external_id(requested[:id])&.closed_to_new_buyers?
+    attrs[:option] = requested || (native_type != NATIVE_TYPE_COFFEE ? attrs[:options].find { |o| o[:quantity_left] != 0 } : nil)
     variant = attrs[:option] ? Variant.find_by_external_id(attrs[:option][:id]) : nil
     prices = (is_tiered_membership && variant ? variant : self).prices.is_buy.alive
     recurrence = if is_recurring_billing

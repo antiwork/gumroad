@@ -5759,6 +5759,8 @@ class Purchase < ApplicationRecord
     end
 
     def variants_available
+      closed_variants = closed_new_variants
+      return reject_closed_variants(closed_variants) if closed_variants.any?
       return if does_not_count_towards_max_purchases
       return if link.variant_categories_alive.empty?
       new_variants_available = new_variants.empty? || new_variants.map(&:available?).reduce { |a, e| a && e }
@@ -5772,6 +5774,28 @@ class Purchase < ApplicationRecord
         self.error_code = PurchaseErrorCode::EXCEEDING_VARIANT_QUANTITY
         errors.add :base, "You have chosen a quantity that exceeds what is available."
       end
+    end
+
+    # Unlike the inventory checks, a plan change onto a closed tier is rejected, so
+    # is_updated_original_subscription_purchase is not exempt. new_variants leaves out
+    # a stored current tier. Older memberships stored none and are on the default tier
+    # (Purchase#tiers). A scheduled plan change being applied was accepted before the close.
+    def closed_new_variants
+      return [] if is_recurring_subscription_charge || is_additional_contribution || is_preorder_charge? ||
+                   is_gift_receiver_purchase || is_commission_completion_purchase || is_applying_plan_change ||
+                   (is_installment_payment && !is_original_subscription_purchase)
+
+      candidates = new_variants
+      if is_updated_original_subscription_purchase && link.is_tiered_membership? && original_variant_attributes.blank?
+        candidates -= [link.default_tier]
+      end
+      candidates.select(&:closed_to_new_buyers?)
+    end
+
+    def reject_closed_variants(variants)
+      Rails.logger.info("[Purchase] new purchase rejected reason=tier_closed_to_new_purchases product_id=#{link.external_id} variant_ids=#{variants.map(&:external_id).join(",")}")
+      self.error_code = PurchaseErrorCode::VARIANT_SOLD_OUT
+      errors.add :base, "Sold out, please go back and pick another option."
     end
 
     def variants_available_for_quantity?

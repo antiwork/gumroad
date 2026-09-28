@@ -161,6 +161,7 @@ const renderLayout = (currentSeller: CurrentSeller) =>
             currencyType: "usd",
             setCurrencyType: vi.fn(),
             isListedOnDiscover: false,
+            canCloseMembershipTiers: false,
             isPhysical: false,
             profileSections: [],
             taxonomies: [],

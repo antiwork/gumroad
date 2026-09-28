@@ -126,6 +126,7 @@ module Product::StructuredData
     end
 
     def availability_for_schema_org
+      return AVAILABILITY_SOLD_OUT if closed_membership_for_new_buyers?
       return AVAILABILITY_IN_STOCK unless max_purchase_count?
 
       if remaining_for_sale_count&.zero?
@@ -133,6 +134,13 @@ module Product::StructuredData
       else
         AVAILABILITY_LIMITED
       end
+    end
+
+    def closed_membership_for_new_buyers?
+      return false unless is_tiered_membership?
+
+      alive_tiers = tiers.alive
+      alive_tiers.any? && alive_tiers.none?(&:available?)
     end
 
     def aggregate_rating_data

@@ -620,6 +620,7 @@ describe ProductPresenter do
             }
           ],
           is_tiered_membership: false,
+          can_close_membership_tiers: false,
           is_listed_on_discover: false,
           is_physical: false,
           earliest_membership_price_change_date: BaseVariant::MINIMUM_DAYS_TIL_EXISTING_MEMBERSHIP_PRICE_CHANGE.days.from_now.in_time_zone(product.user.timezone).iso8601,
@@ -718,6 +719,12 @@ describe ProductPresenter do
       it "exposes price_checker_enabled: true in edit_props" do
         expect(presenter.edit_props[:price_checker_enabled]).to eq(true)
       end
+    end
+
+    it "does not offer closing tiers on a product that is not a membership" do
+      Feature.activate_user(:close_membership_tier_to_new_buyers, product.user)
+
+      expect(presenter.edit_props[:can_close_membership_tiers]).to be(false)
     end
 
     context "when the auto_marketing feature flag is enabled for the seller" do
@@ -1027,6 +1034,7 @@ describe ProductPresenter do
             thumbnail: nil,
             refund_policies: [],
             is_tiered_membership: true,
+            can_close_membership_tiers: false,
             is_listed_on_discover: false,
             is_physical: false,
             earliest_membership_price_change_date: BaseVariant::MINIMUM_DAYS_TIL_EXISTING_MEMBERSHIP_PRICE_CHANGE.days.from_now.in_time_zone(membership.user.timezone).iso8601,
@@ -1073,6 +1081,15 @@ describe ProductPresenter do
             dropbox_api_key: DROPBOX_PICKER_API_KEY,
           }
         )
+      end
+
+      it "serves a tier's close setting only when the seller may change it" do
+        tier.update!(closed_to_new_purchases: true)
+        expect(presenter.edit_props[:product][:variants].sole).not_to have_key(:closed_to_new_purchases)
+
+        Feature.activate_user(:close_membership_tier_to_new_buyers, membership.user)
+        expect(presenter.edit_props[:can_close_membership_tiers]).to be(true)
+        expect(presenter.edit_props[:product][:variants].sole[:closed_to_new_purchases]).to be(true)
       end
     end
 
@@ -1277,6 +1294,7 @@ describe ProductPresenter do
             thumbnail: nil,
             refund_policies: [],
             is_tiered_membership: false,
+            can_close_membership_tiers: false,
             is_listed_on_discover: false,
             is_physical: false,
             earliest_membership_price_change_date: BaseVariant::MINIMUM_DAYS_TIL_EXISTING_MEMBERSHIP_PRICE_CHANGE.days.from_now.in_time_zone(new_product.user.timezone).iso8601,

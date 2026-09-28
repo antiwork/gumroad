@@ -121,9 +121,11 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
       price_difference_cents: "price_difference_cents" in variant ? variant.price_difference_cents : 0,
       is_pwyw: "customizable_price" in variant ? variant.customizable_price : product.customizable_price,
       quantity_left:
-        variant.max_purchase_count !== null
-          ? variant.max_purchase_count - (variant.sales_count_for_inventory ?? 0)
-          : null,
+        "closed_to_new_purchases" in variant && variant.closed_to_new_purchases
+          ? 0
+          : variant.max_purchase_count !== null
+            ? variant.max_purchase_count - (variant.sales_count_for_inventory ?? 0)
+            : null,
       recurrence_price_values:
         "recurrence_price_values" in variant
           ? Object.fromEntries(

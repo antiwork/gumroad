@@ -215,7 +215,7 @@ class Product::StaleContentWriteGuard
   # Variant attributes the editor lets a seller change that live on the variant
   # row itself, so a stale save would revert them. Membership prices live in a
   # separate table and are compared separately (overwrites_variant_prices?).
-  COMPARED_VARIANT_ATTRIBUTES = %i[name description price_difference_cents max_purchase_count duration_in_minutes].freeze
+  COMPARED_VARIANT_ATTRIBUTES = %i[name description price_difference_cents max_purchase_count duration_in_minutes closed_to_new_purchases].freeze
 
   # Whether a stale variant snapshot would actually change anything the seller
   # edits. A newer updated_at on a variant row does NOT by itself mean another
@@ -237,10 +237,22 @@ class Product::StaleContentWriteGuard
       next false unless submitted.key?(attribute) || submitted.key?(attribute.to_s)
 
       submitted_value = submitted[attribute].nil? ? submitted[attribute.to_s] : submitted[attribute]
+      next overwrites_close_setting?(stored, submitted_value) if attribute == :closed_to_new_purchases
+
       submitted_value.to_s != stored.public_send(attribute).to_s
     end
   end
   private_class_method :overwrites_variant_attributes?
+
+  # Same rules as VariantCategoryUpdaterService#closed_to_new_purchases_param, which ignores the
+  # value while the seller can't close tiers or when it casts to nil. A null cap is a real write.
+  def self.overwrites_close_setting?(stored, submitted_value)
+    return false unless stored.can_close_to_new_buyers?
+
+    closed = ActiveModel::Type::Boolean.new.cast(submitted_value)
+    !closed.nil? && closed != stored.closed_to_new_purchases?
+  end
+  private_class_method :overwrites_close_setting?
 
   # Whether the payload's membership prices for this tier differ from what's
   # stored — the same "would this write revert someone else's change?" question

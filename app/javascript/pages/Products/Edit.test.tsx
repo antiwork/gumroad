@@ -35,6 +35,7 @@ const makePageProps = (id: string): Record<string, unknown> => ({
   refund_policies: [],
   currency_type: "usd",
   is_tiered_membership: false,
+  can_close_membership_tiers: false,
   is_listed_on_discover: false,
   is_physical: false,
   profile_sections: [],

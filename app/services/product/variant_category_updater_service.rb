@@ -28,6 +28,7 @@ class Product::VariantCategoryUpdaterService
     subscription_price_change_message
     duration_in_minutes
     apply_price_changes_to_existing_memberships
+    closed_to_new_purchases
     variant_category
     product_files
   ].freeze
@@ -129,6 +130,7 @@ class Product::VariantCategoryUpdaterService
       variant.duration_in_minutes.present? ||
       variant.description.present? ||
       variant.apply_price_changes_to_existing_memberships? ||
+      variant.closed_to_new_purchases? ||
       variant.active_integrations.exists? ||
       (variant.respond_to?(:prices) && variant.prices.alive.where("price_cents > 0").exists?)
   end
@@ -232,7 +234,8 @@ class Product::VariantCategoryUpdaterService
                                         variant_category:,
                                         apply_price_changes_to_existing_memberships: !!option[:apply_price_changes_to_existing_memberships],
                                         subscription_price_change_effective_date: option[:subscription_price_change_effective_date],
-                                        subscription_price_change_message: option[:subscription_price_change_message])
+                                        subscription_price_change_message: option[:subscription_price_change_message],
+                                        **closed_to_new_purchases_param(option))
             rescue StaleVariantReferenceError
               # Raised only by the lookup inside `create_or_update_variant!`
               # (via `find_by_external_id!`), never by anything downstream —
@@ -397,15 +400,32 @@ class Product::VariantCategoryUpdaterService
       end
 
       notify_members_of_price_change = variant.apply_price_changes_to_existing_memberships? && variant.subscription_price_change_effective_date_changed?
+      # Read before save: flags_previously_changed? would also fire on an unrelated flag like closed_to_new_purchases.
+      price_change_setting_changed = variant.apply_price_changes_to_existing_memberships_changed?
       variant.save!
 
       if notify_members_of_price_change
         ScheduleMembershipPriceUpdatesJob.perform_async(variant.id)
-      elsif variant.apply_price_changes_to_existing_memberships? && (variant.flags_previously_changed? || variant.subscription_price_change_effective_date_previously_changed?)
+      elsif variant.apply_price_changes_to_existing_memberships? && (price_change_setting_changed || variant.subscription_price_change_effective_date_previously_changed?)
         ErrorNotifier.notify("Not notifying subscribers of membership price change - tier: #{variant.id}; apply_price_changes_to_existing_memberships: #{variant.apply_price_changes_to_existing_memberships?}; subscription_price_change_effective_date: #{variant.subscription_price_change_effective_date}")
       end
 
       variant
+    end
+
+    # Omitted or null leaves the stored bit alone, so an older editor or a partial
+    # payload can't reopen a closed tier; only an explicit false does.
+    def closed_to_new_purchases_param(option)
+      return {} unless is_tiered_membership && closing_tiers_enabled?
+
+      closed = ActiveModel::Type::Boolean.new.cast(option[:closed_to_new_purchases])
+      closed.nil? ? {} : { closed_to_new_purchases: closed }
+    end
+
+    def closing_tiers_enabled?
+      return @closing_tiers_enabled if defined?(@closing_tiers_enabled)
+
+      @closing_tiers_enabled = Feature.active?(BaseVariant::CLOSE_TO_NEW_BUYERS_FEATURE, product.user)
     end
 
     def has_variant_recurrences?

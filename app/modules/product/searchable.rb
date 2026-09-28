@@ -546,7 +546,7 @@ module Product::Searchable
       when "average_rating"    then average_rating
       when "reviews_count"     then reviews_count
       when "price_cents"       then price_cents
-      when "available_price_cents" then available_price_cents
+      when "available_price_cents" then discover_price_cents
       when "is_physical"       then is_physical
       when "is_subscription"   then is_recurring_billing
       when "is_bundle"         then is_bundle
