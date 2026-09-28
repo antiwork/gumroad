@@ -47,6 +47,20 @@ describe Onetime::ReclassifyOldBundleArchiveSizeFailures do
     expect(queries.grep(/FROM `product_files`/)).to be_empty
   end
 
+  it "sums the recorded sizes of a bundle archive in SQL, without loading its files" do
+    archive = failed_archive(bundle, bundle_files(300.megabytes, 300.megabytes))
+    queries = []
+
+    ActiveSupport::Notifications.subscribed(->(*, payload) { queries << payload[:sql] }, "sql.active_record") do
+      described_class.process
+    end
+
+    expect(archive.reload).to be_too_large
+    expect(queries.grep(/SUM\(`product_files`\.`size`\)/)).not_to be_empty
+    loaded_files = queries.grep(/SELECT `product_files`\.\* FROM `product_files`/)
+    expect(loaded_files).to all(include("`size` IS NULL"))
+  end
+
   it "lets a bundle whose old size failures used up its retry budget build a ZIP again" do
     files = bundle_files(300.megabytes, 300.megabytes)
     purchase = create(:purchase, link: bundle)
