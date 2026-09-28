@@ -76,6 +76,7 @@ describe "Subscription manage page tier upgrade with SCA", :js, type: :system do
     click_on "Update membership"
     within_sca_frame { click_on "Fail" }
 
+    expect(page).to have_alert(text: "We are unable to authenticate your payment method.")
     expect(@upgrade_purchase.reload).not_to be_successful
   end
 end
