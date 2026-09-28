@@ -250,6 +250,13 @@ end
 
 SCA_CHALLENGE_IFRAME = "iframe[src^='https://js.stripe.com/v3/three-ds-2-challenge']"
 
+# Chrome reaches the app from 127.0.0.1, which has no GeoIP country. Stripe's 3DS test card is
+# issued in France, so with no IP country Purchase#tax_location_valid? rejects the United States
+# selection and checkout never creates the challenge.
+def use_united_states_buyer_ip
+  allow_any_instance_of(ActionDispatch::Request).to receive(:remote_ip).and_return("104.193.168.19")
+end
+
 def within_sca_frame(wait: 240, &block)
   expect(page).to have_selector(SCA_CHALLENGE_IFRAME, wait:)
 
