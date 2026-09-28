@@ -765,7 +765,8 @@ class StripeChargeProcessor
       amount = (charge_refund.refund[:amount] * transfer.amount / charge.amount.to_r).round
       amount = remaining if amount - remaining == 1
       return [charge_refund, :not_reversible] unless amount.positive? && amount <= remaining
-      # A second fee refund could not be paired with this reversal, so do not move money.
+      # get_refund(for_external_refund: true) already refuses a charge with an application fee; this
+      # guard only keeps money from moving if that check changes.
       return [charge_refund, :fee_refund_unpaired] if self.class.application_fee_refund_count(charge) > 0
 
       begin

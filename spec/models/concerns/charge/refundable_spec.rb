@@ -614,6 +614,25 @@ describe Charge::Refundable do
         )
       end
 
+      it "raises for a retry when the fee check fails after the reversal was made" do
+        allow(Stripe::Transfer).to receive(:list_reversals).and_return([])
+        allow(Stripe::Transfer).to receive(:create_reversal)
+          .and_return(Stripe::StripeObject.construct_from(id: "trr_1", destination_payment_refund: "pyr_1"))
+        allow_any_instance_of(StripeChargeProcessor).to receive(:get_refund) do |_processor, _id, destination_payment_refund_id: nil, **|
+          raise StripeChargeProcessor::UnmatchedApplicationFeeRefundError if destination_payment_refund_id
+
+          charge_refund_with
+        end
+
+        expect do
+          purchase.handle_event_refund_updated!(build_external_event)
+        end.to raise_error(StripeChargeProcessor::UnmatchedApplicationFeeRefundError)
+
+        expect(purchase.reload.refunds).to be_empty
+        expect(ErrorNotifier).to have_received(:notify).with(Charge::Refundable::EXTERNAL_REFUND_ALERT,
+                                                             hash_including(transfer_outcome: :reversal_unbooked, recorded: false))
+      end
+
       it "books the refund as Gumroad-funded when Stripe refuses the reversal" do
         allow(Stripe::Transfer).to receive(:list_reversals).and_return([])
         allow(Stripe::Transfer).to receive(:create_reversal).and_raise(Stripe::InvalidRequestError.new("Transfer already paid out", nil))

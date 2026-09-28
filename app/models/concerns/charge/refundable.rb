@@ -114,6 +114,7 @@ module Charge::Refundable
       unrecorded = []
       blocked_purchase_ids = []
       refused_purchase_ids = []
+      reversal_started = false
       flow_of_funds_for = lambda do |purchase, refund|
         next refund.flow_of_funds unless purchase.is_part_of_combined_charge?
 
@@ -142,6 +143,7 @@ module Charge::Refundable
           if unrecorded.any? { _1.chargedback? && _1.chargeback_reversed }
             transfer_outcome = :dispute_won
           else
+            reversal_started = true
             charge_refund, transfer_outcome = processor.reverse_transfer_for_external_refund(charge_refund, merchant_account:)
           end
         end
@@ -190,8 +192,10 @@ module Charge::Refundable
       end
     end
   rescue StripeChargeProcessor::UnmatchedApplicationFeeRefundError
+    # After the reversal step the seller's transfer may already be reversed, so let the job retry.
     ErrorNotifier.notify(EXTERNAL_REFUND_ALERT, stripe_refund_id:, stripe_charge_id:, refunded_amount_cents:,
-                                                transfer_outcome: :fee_refund_unpaired, recorded: false)
+                                                transfer_outcome: reversal_started ? :reversal_unbooked : :fee_refund_unpaired, recorded: false)
+    raise if reversal_started
   rescue StandardError => error
     if stripe_charge_id.present?
       ErrorNotifier.notify(EXTERNAL_REFUND_ALERT, stripe_refund_id:, stripe_charge_id:, refunded_amount_cents:,
