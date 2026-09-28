@@ -378,10 +378,23 @@ const ItemsList = ({
   className?: string;
 }) => {
   const [displayedItem, setDisplayedItem] = React.useState(initialMenuItem);
+  const listRef = React.useRef<HTMLDivElement>(null);
+  const [minHeight, setMinHeight] = React.useState<number>();
+  // Hold the old height until the pointer reaches a row: a shorter list would otherwise leave the pointer that
+  // clicked outside the menu, and the menubar's mouseleave timer would close it.
+  const showItem = (item: MenuItemWithChildren) => {
+    if (listRef.current) setMinHeight(listRef.current.offsetHeight);
+    setDisplayedItem(item);
+  };
   return (
     <div
+      ref={listRef}
       id={menuId}
-      style={displayedItem.css}
+      style={{ ...displayedItem.css, minHeight }}
+      onMouseOver={(e) => {
+        if (minHeight !== undefined && e.target instanceof Element && e.target.closest("[role=menuitem]"))
+          setMinHeight(undefined);
+      }}
       role="menu"
       aria-label={displayedItem.label}
       className={classNames("overflow-hidden border-none! p-0! shadow-none!", className)}
@@ -394,7 +407,7 @@ const ItemsList = ({
           className="justify-start"
           onClick={(e) => {
             if (e.ctrlKey || e.shiftKey) return;
-            setDisplayedItem(displayedItem.parent ?? initialMenuItem);
+            showItem(displayedItem.parent ?? initialMenuItem);
             e.preventDefault();
           }}
         >
@@ -415,7 +428,7 @@ const ItemsList = ({
             if (item.children.length) {
               if (e.ctrlKey || e.shiftKey) return;
               e.preventDefault();
-              setDisplayedItem(item);
+              showItem(item);
             } else return onSelectItem?.(item, e);
           }}
           className={item.children.length ? "flex! items-start! no-underline!" : undefined}

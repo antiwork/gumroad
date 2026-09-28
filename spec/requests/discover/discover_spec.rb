@@ -574,6 +574,26 @@ describe("Discover", js: true, type: :system) do
         expect(page).to have_selector("[aria-label='Breadcrumbs']", text: "Business & Money")
       end
 
+      it "keeps a shorter child list open when the pointer that opened it ends up below the list" do
+        visit discover_url(host: discover_host)
+
+        find("[role=menuitem]", text: "More").hover
+        click_on "Software Development"
+        row = find("[role=menu] [role=menuitem]", text: "Hardware", exact_text: true).rect
+        click_on "Hardware"
+        # Absolute coordinates: Selenium's relative moves start from the last action-API position, not the click.
+        page.driver.browser.action.move_to_location((row.x + row.width / 2).round, (row.y + row.height / 2 - 10).round).perform
+        sleep 0.6
+
+        expect(page).to have_selector("[role=menu][aria-label='Hardware']")
+        find("[role=menu] [role=menuitem]", text: "Raspberry Pi").hover
+        expect(find("[role=menu][aria-label='Hardware']").rect.height).to be < row.y
+
+        click_on "Raspberry Pi"
+
+        expect(page).to have_selector("[aria-label='Breadcrumbs']", text: "Software Development\n/Hardware\n/Raspberry Pi")
+      end
+
       it "places categories that didn't fit the screen under 'More', which becomes aria-current if one of those categories is selected" do
         visit discover_url(host: discover_host)
 
