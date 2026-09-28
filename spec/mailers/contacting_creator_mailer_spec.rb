@@ -3087,8 +3087,29 @@ describe ContactingCreatorMailer do
         expect(mail.body.encoded).to include("won't clear on its own")
       end
 
-      it "offers a way out for a seller who has no other account" do
-        expect(mail.body.encoded).to include("reply to this email")
+      it "offers another way to pay a seller who can set up PayPal payouts" do
+        expect(seller.can_setup_paypal_payouts?).to be(true)
+        expect(mail.body.encoded).to include("work out another way to pay you")
+      end
+
+      context "when the seller's country only has bank payouts" do
+        let(:seller) { create(:user, payment_address: nil) }
+
+        before { create(:user_compliance_info, user: seller) }
+
+        it "does not promise a payout rail it cannot offer" do
+          expect(seller.can_setup_paypal_payouts?).to be(false)
+          expect(mail.body.encoded).not_to include("another way to pay you")
+          expect(mail.body.encoded).to include("we can only send payouts to a bank account")
+          expect(mail.body.encoded).to include("reply to this email")
+        end
+
+        it "keeps the offer for a seller with a connected PayPal account" do
+          create(:merchant_account_paypal, user: seller)
+          allow_any_instance_of(MerchantAccount).to receive(:paypal_account_details).and_return("primary_email" => "seller-paypal@example.com")
+
+          expect(mail.body.encoded).to include("work out another way to pay you")
+        end
       end
     end
 
