@@ -4224,11 +4224,8 @@ class Purchase < ApplicationRecord
     [(Rational(base_cents * pre_discount_cents, reference_purchase.displayed_price_cents)).ceil, base_cents].max
   end
 
-  # Upgrades always bill later from the original purchase. An installment restart does too,
-  # unless that cap is below the amount this PaymentIntent will charge — Stripe rejects a
-  # mandate maximum smaller than the charge, so that case keeps the charge-sized cap.
-  # Compare the US-cent cap this charge will register. The subscription terms amount can be
-  # in rupees, and a larger rupee number must not hide a US-cent cap below the charge.
+  # Stripe rejects a mandate maximum below this charge, so when the original cap is
+  # smaller, the cap stays on the charge. Compare that US-cent cap, not a rupee terms amount.
   private def use_subscription_original_for_mandate_cap?(fixed_rate: nil)
     original = subscription&.original_purchase
     return false if original.nil?
