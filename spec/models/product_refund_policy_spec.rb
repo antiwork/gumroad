@@ -294,8 +294,10 @@ describe ProductRefundPolicy do
       expect(refund_policy.valid?).to be true
     end
 
-    it "does not read a provider error body as a denial" do
-      stub_classifier_sequence({ "error" => { "message" => "Incorrect API key provided" } }, classifier_answer(false))
+    it "fails open when OpenRouter wraps an upstream failure in a 200 body" do
+      expect_any_instance_of(OpenAI::Client).to receive(:chat).once.and_return(
+        { "error" => { "message" => "Incorrect API key provided" } }
+      )
       refund_policy.fine_print = "Refunds are only issued for duplicate purchases."
 
       expect(refund_policy.valid?).to be true

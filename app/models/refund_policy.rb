@@ -68,15 +68,22 @@ class RefundPolicy < ApplicationRecord
     }
   end
 
-  # A completed-but-unreadable body (truncated, provider error wrapped in a 200,
-  # malformed JSON, non-Hash return) is retried once and then fails closed, so a
-  # single unreadable answer never accuses a seller of a claim the model did not
-  # make. Transport errors still fail open so an OpenRouter blip never blocks
-  # saves, and this must not widen to StandardError: a nil/scalar body raises
-  # NoMethodError on #dig, which is that same fail-open bug.
+  # Unreadable classifier output splits three ways. An upstream failure wrapped
+  # in a 200 body ("error" and no choices) is the outage class the transport
+  # rescues cover — fail open, never accuse the seller. A body with no answer at
+  # all (truncated) is retried once, then fails closed, because adversarial fine
+  # print can also push the model into answering nothing. A body that parsed but
+  # carries no usable boolean stays a denial. Never widen this to StandardError:
+  # a nil/scalar body raises NoMethodError on #dig, which is that fail-open bug.
   def fine_print_claims_no_refunds?
     FINE_PRINT_CLASSIFICATION_ATTEMPTS.times do
-      classification = parse_no_refunds_classification(ask_ai_fine_print_classification)
+      response = ask_ai_fine_print_classification
+      if upstream_failure?(response)
+        Rails.logger.warn("Error moderating fine print for refund policy #{id}: #{response["error"]}")
+        return false
+      end
+
+      classification = parse_no_refunds_classification(response)
       return classification unless classification.nil?
 
       Rails.logger.warn("Unreadable fine print classification for refund policy #{id}")
@@ -93,6 +100,12 @@ class RefundPolicy < ApplicationRecord
   private
     def refunds_guaranteed?
       max_refund_period_in_days.to_i.positive?
+    end
+
+    # OpenRouter relays an upstream failure as a 200 body with an "error" and no
+    # "choices" — a request that never ran, not a classification.
+    def upstream_failure?(response)
+      response.is_a?(Hash) && response["choices"].blank? && response["error"].present?
     end
 
     def fine_print_cannot_claim_no_refunds
