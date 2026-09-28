@@ -17,6 +17,8 @@ class Purchase::FinalizeConfirmedChargeService < Purchase::BaseService
   # the captured charge.
   def perform
     purchase.with_lock do
+      restore_failed_purchase_after_late_success! if recoverable_late_success?
+
       if purchase.successful?
         nil
       elsif !purchase.in_progress?
@@ -52,6 +54,25 @@ class Purchase::FinalizeConfirmedChargeService < Purchase::BaseService
 
   private
     attr_reader :charge_intent
+
+    # An early finalize (browser return, abandonment sweep) can see the intent before Stripe settles
+    # it (Cash App Pay right after the QR scan, a card retried on the same intent after a decline)
+    # and fail the purchase; the buyer is then charged when the intent succeeds moments later.
+    # The intent funds this purchase, so the success webhook must complete it instead of
+    # answering "your card was not charged". Purchases that failed for their own reasons
+    # (error_code set, e.g. PPP or price validation) were never part of the charge and stay failed.
+    def recoverable_late_success?
+      purchase.failed? && charge_intent.succeeded? && purchase.error_code.blank? &&
+        !purchase.refunds.exists? && !purchase.balance_transactions.exists?
+    end
+
+    def restore_failed_purchase_after_late_success!
+      purchase.update!(purchase_state: "in_progress", stripe_error_code: nil)
+      return unless purchase.is_gift_sender_purchase
+
+      purchase.gift_given&.update!(state: "in_progress")
+      purchase.gift_given&.giftee_purchase&.update!(purchase_state: "in_progress")
+    end
 
     def finalize_successful_charge
       purchase.charge_intent = charge_intent

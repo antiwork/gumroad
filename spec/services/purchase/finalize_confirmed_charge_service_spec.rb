@@ -307,6 +307,55 @@ describe Purchase::FinalizeConfirmedChargeService do
       end
     end
 
+    # Cash App Pay: the browser-return finalize can read the intent before Stripe settles it, fail the
+    # purchase, and then the payment_intent.succeeded webhook arrives seconds later for a charged buyer.
+    context "when the intent succeeded after an earlier finalize failed the purchase" do
+      let(:purchase) { create(:purchase_in_progress, card_country: "US", card_country_source: "stripe") }
+
+      before do
+        allow(purchase).to receive(:save_charge_data)
+        allow_any_instance_of(described_class).to receive(:handle_purchase_success)
+      end
+
+      it "completes the purchase instead of reporting the card was not charged" do
+        purchase.update_columns(purchase_state: "failed", stripe_error_code: "card_declined_generic_decline")
+
+        result = described_class.new(purchase:, charge_intent: charge_intent_double).perform
+
+        expect(result).to be_nil
+        expect(purchase.reload).to be_in_progress
+        expect(purchase.stripe_error_code).to be_nil
+        expect(purchase).to have_received(:save_charge_data)
+      end
+
+      it "leaves a purchase that failed for its own reason (error_code) failed" do
+        purchase.update_columns(purchase_state: "failed", error_code: PurchaseErrorCode::PPP_CARD_COUNTRY_NOT_MATCHING)
+
+        result = described_class.new(purchase:, charge_intent: charge_intent_double).perform
+
+        expect(result).to eq("There is a temporary problem, please try again (your card was not charged).")
+        expect(purchase.reload).to be_failed
+      end
+
+      it "leaves a failed purchase failed while the intent has not succeeded" do
+        purchase.update_columns(purchase_state: "failed")
+
+        result = described_class.new(purchase:, charge_intent: charge_intent_double(succeeded: false, processing: true)).perform
+
+        expect(result).to eq("There is a temporary problem, please try again (your card was not charged).")
+        expect(purchase.reload).to be_failed
+      end
+
+      it "does not resurrect a purchase that was refunded" do
+        purchase.update_columns(purchase_state: "failed")
+        allow(purchase).to receive_message_chain(:refunds, :exists?).and_return(true)
+
+        described_class.new(purchase:, charge_intent: charge_intent_double).perform
+
+        expect(purchase.reload).to be_failed
+      end
+    end
+
     context "when the purchase is already successful" do
       let(:purchase) { create(:purchase_in_progress).tap { _1.update_column(:purchase_state, "successful") } }
 
