@@ -249,6 +249,8 @@ describe("Subscription Purchases from the product page", type: :system, js: true
     end
 
     context "with an SCA-enabled card" do
+      before { use_united_states_buyer_ip }
+
       it "succeeds and does not immediately charge the user" do
         visit @membership_product.long_url
 
