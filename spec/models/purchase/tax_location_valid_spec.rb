@@ -7,38 +7,33 @@ describe Purchase do
     let(:seller) { create(:user) }
     let(:product) { create(:product, user: seller) }
 
+    before { create(:user_compliance_info, user: seller, country: "Canada") }
+
     def purchase_for(country:, ip_country:, card_country: nil)
       build(:purchase, link: product, seller:, country:, ip_country:, card_country:)
     end
 
-    context "when the buyer's IP resolves to the seller's own country" do
-      before { create(:user_compliance_info, user: seller, country: "Canada") }
+    it "rejects a buyer in the seller's country who selects another country without card evidence" do
+      purchase = purchase_for(country: "United States", ip_country: "Canada")
 
-      it "trusts the buyer's selection even when no card country was recorded" do
-        purchase = purchase_for(country: "United States", ip_country: "Canada")
-
-        expect(purchase.send(:tax_location_valid?)).to eq(true)
-        expect(purchase.error_code).to be_nil
-      end
-
-      it "does not extend that trust when the recorded card is from a different country" do
-        purchase = purchase_for(country: "Germany", ip_country: "Canada", card_country: "GB")
-
-        expect(purchase.send(:tax_location_valid?)).to eq(false)
-        expect(purchase.error_code).to eq(PurchaseErrorCode::TAX_VALIDATION_FAILED)
-      end
-
-      it "does not extend that trust to a buyer who is somewhere else" do
-        purchase = purchase_for(country: "United States", ip_country: "Germany")
-
-        expect(purchase.send(:tax_location_valid?)).to eq(false)
-        expect(purchase.error_code).to eq(PurchaseErrorCode::TAX_VALIDATION_FAILED)
-      end
+      expect(purchase.send(:tax_location_valid?)).to eq(false)
+      expect(purchase.error_code).to eq(PurchaseErrorCode::TAX_VALIDATION_FAILED)
     end
 
-    it "still trusts a buyer whose selected country matches their IP country" do
-      create(:user_compliance_info, user: seller, country: "Canada")
+    it "rejects a buyer whose IP and card both match the seller's country but who selects another country" do
+      purchase = purchase_for(country: "United States", ip_country: "Canada", card_country: "CA")
 
+      expect(purchase.send(:tax_location_valid?)).to eq(false)
+      expect(purchase.error_code).to eq(PurchaseErrorCode::TAX_VALIDATION_FAILED)
+    end
+
+    it "accepts a selected country that matches the card country" do
+      purchase = purchase_for(country: "United States", ip_country: "Canada", card_country: "US")
+
+      expect(purchase.send(:tax_location_valid?)).to eq(true)
+    end
+
+    it "accepts a selected country that matches the IP country" do
       purchase = purchase_for(country: "Germany", ip_country: "Germany")
 
       expect(purchase.send(:tax_location_valid?)).to eq(true)

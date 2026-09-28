@@ -6187,10 +6187,6 @@ class Purchase < ApplicationRecord
       return true if country.nil?
       return true if link.is_physical || link.require_shipping
       return true if card_country.nil? && country == ip_country
-      # `ip_country` is a country name; `compliance_country_code` is alpha2. A recorded card from another
-      # country still goes through the IP/card check below.
-      seller_country_code = link.user.compliance_country_code
-      return true if Compliance::Countries.find_by_name(ip_country)&.alpha2 == seller_country_code && (card_country.nil? || card_country == seller_country_code)
 
       country_code = Compliance::Countries.find_by_name(country)&.alpha2
       ip_country_code = Compliance::Countries.find_by_name(ip_country)&.alpha2
