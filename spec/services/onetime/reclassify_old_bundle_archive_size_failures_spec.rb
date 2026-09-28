@@ -39,11 +39,11 @@ describe Onetime::ReclassifyOldBundleArchiveSizeFailures do
     product = create(:product)
     failed_archive(product, [create(:product_file, link: product, size: 600.megabytes)])
     queries = []
-    subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") { |*, payload| queries << payload[:sql] }
 
-    described_class.process
-  ensure
-    ActiveSupport::Notifications.unsubscribe(subscriber)
+    ActiveSupport::Notifications.subscribed(->(*, payload) { queries << payload[:sql] }, "sql.active_record") do
+      described_class.process
+    end
+
     expect(queries.grep(/FROM `product_files`/)).to be_empty
   end
 
