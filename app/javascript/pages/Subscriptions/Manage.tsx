@@ -395,6 +395,8 @@ export default function SubscriptionsManage() {
         if (itemResult.success) {
           showAlert(`Your ${subscriptionEntity} has been updated.`, "success");
           router.reload();
+        } else {
+          showAlert(itemResult.error_message ?? "Sorry, something went wrong. Please try again.", "error");
         }
       });
     } else if (result.restartAtCheckoutUrl) {

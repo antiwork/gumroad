@@ -259,6 +259,28 @@ describe Purchase::ConfirmService, :vcr do
       ensure
         Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
       end
+
+      it "reports the browser error with the purchase", vcr: { cassette_name: "Purchase_ConfirmService/when_SCA_fails/for_a_membership_upgrade_purchase/reverts_the_subscription_to_old_tier_and_returns_an_error_message" } do
+        allow(ErrorNotifier).to receive(:notify)
+        params = {
+          stripe_error: {
+            type: "invalid_request_error",
+            message: "We are unable to authenticate your payment method."
+          }
+        }
+
+        Purchase::ConfirmService.new(purchase: @membership_upgrade_purchase, params:).perform
+
+        expect(ErrorNotifier).to have_received(:notify).with(
+          "Subscription confirm browser error",
+          purchase_id: @membership_upgrade_purchase.id,
+          subscription_id: @subscription.id,
+          stripe_error_type: "invalid_request_error",
+          stripe_error_code: "",
+          stripe_error_decline_code: "",
+          stripe_error_message: "We are unable to authenticate your payment method."
+        ).once
+      end
     end
 
     context "for a membership restart purchase" do

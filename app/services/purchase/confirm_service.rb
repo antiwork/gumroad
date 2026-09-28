@@ -108,10 +108,26 @@ class Purchase::ConfirmService < Purchase::BaseService
     def check_for_card_handling_error
       card_data_handling_error = CardParamsHelper.check_for_errors(params)
       if card_data_handling_error.present?
+        report_subscription_browser_error if purchase.subscription.present?
         purchase.stripe_error_code = card_data_handling_error.card_error_code
         handle_purchase_failure
 
         PurchaseErrorCode.customer_error_message(card_data_handling_error.error_message)
       end
+    end
+
+    # Stripe never sees a browser-side 3DS error, and a codeless one leaves stripe_error_code blank,
+    # so this report is the only record of it. Later confirms return early: one report per purchase.
+    def report_subscription_browser_error
+      stripe_error = params[:stripe_error]
+      ErrorNotifier.notify(
+        "Subscription confirm browser error",
+        purchase_id: purchase.id,
+        subscription_id: purchase.subscription_id,
+        stripe_error_type: stripe_error[:type].to_s.first(100),
+        stripe_error_code: stripe_error[:code].to_s.first(100),
+        stripe_error_decline_code: stripe_error[:decline_code].to_s.first(100),
+        stripe_error_message: stripe_error[:message].to_s.first(500),
+      )
     end
 end
