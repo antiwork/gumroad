@@ -3988,11 +3988,18 @@ class Purchase < ApplicationRecord
     mandate_options = intent.card_mandate_options
     return false if card.nil? || expected_terms.blank? || mandate_options.blank?
 
+    # A restart can need a larger cap because its billing address has higher tax.
+    amount_matches = if is_installment_payment && !is_original_subscription_purchase? && subscription.is_installment_plan?
+      mandate_options.amount.to_i >= expected_terms[:amount]
+    else
+      mandate_options.amount.to_i == expected_terms[:amount]
+    end
+
     intent.payment_method_id == card.processor_payment_method_id &&
       intent.customer_id == card.stripe_customer_id &&
       intent.setup_future_usage == "off_session" &&
       intent.currency.to_s.downcase == expected_terms[:currency] &&
-      mandate_options.amount.to_i == expected_terms[:amount] &&
+      amount_matches &&
       mandate_options.amount_type == "maximum" &&
       mandate_options.interval == expected_terms[:interval] &&
       mandate_options.interval_count&.to_i == expected_terms[:interval_count]&.to_i &&
