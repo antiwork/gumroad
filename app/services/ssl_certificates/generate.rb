@@ -78,7 +78,7 @@ module SslCertificates
       end
 
       def can_order_certificates?
-        return false, "Has valid certificate" if custom_domain.has_valid_certificate?(renew_in)
+        return false, "Has valid certificate" if certificate_covers_every_resolving_domain?
         return false, "Hourly limit reached" if hourly_rate_limit_reached?
         return false, "Invalid domain" unless custom_domain.valid?
 
@@ -92,6 +92,21 @@ module SslCertificates
           Rails.cache.write(domain_check_cache_key, false, expires_in: invalid_domain_cache_expires_in)
           [false, "No domains resolve to Gumroad"]
         end
+      end
+
+      # The row timestamp is stamped by whichever order last succeeded, so it says
+      # nothing about a name that started resolving afterwards (a www CNAME added
+      # after the apex was issued) — ask each name. Unreadable state (DNS or S3
+      # error) counts as covered, so a failed read keeps the old no-op.
+      def certificate_covers_every_resolving_domain?
+        return false unless custom_domain.has_valid_certificate?(renew_in)
+
+        domain_verification_service.domains_resolving_to_gumroad.all? do |domain|
+          domain_verification_service.has_valid_ssl_certificate_for?(domain)
+        end
+      rescue => e
+        Rails.logger.info("SSL certificate state check failed for custom domain '#{custom_domain.domain}'. Error: #{e.inspect}")
+        true
       end
   end
 end
