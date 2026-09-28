@@ -6231,7 +6231,7 @@ class Purchase < ApplicationRecord
       return true if country_code.in?(ip_and_card_locations)
 
       self.error_code = PurchaseErrorCode::TAX_VALIDATION_FAILED
-      errors.add :base, "We could not validate the location you selected. Please review."
+      errors.add :base, "We couldn't confirm the country you selected. It needs to match where you're connecting from or where your card was issued. If you're using a VPN, turn it off and try again."
       false
     end
 
