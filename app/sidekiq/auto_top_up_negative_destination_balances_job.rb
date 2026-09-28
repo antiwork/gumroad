@@ -340,7 +340,7 @@ class AutoTopUpNegativeDestinationBalancesJob
       # Stripe sent nothing for this request, but the key's first request (other parameters) may
       # have run, so the hold stays. It is a human check, not a transfer error.
       if e.is_a?(Stripe::IdempotencyError)
-        return { entry:, verdict: :escalate, reason: "Stripe refused #{transfer_key} because it was first used with different parameters — a human must check whether that first request moved money, then clear #{transfer_key} and #{unresolved_key}" }
+        return { entry:, verdict: :escalate, reason: "Stripe refused #{transfer_key} because it was first used with different parameters — a human must check whether that first request moved money before clearing #{transfer_key}, #{unresolved_key} and #{request_key}: a retry reuses the saved request under the same key, so it repeats this refusal until Stripe's 24h idempotency window has lapsed" }
       end
       { entry:, verdict: :error, reason: "#{e.class}: #{e.message}" }
     ensure
@@ -461,11 +461,14 @@ class AutoTopUpNegativeDestinationBalancesJob
       outcomes.any? { _1[:verdict] == :error }
     end
 
+    # Every candidate held for a person gets the prefix, whether an escalation or the leg-two
+    # reconciliation gate holds it: a live run that funded none of them is not routine, but it is
+    # also not a failure. The withheld count in the headline counts both verdicts, so this has to.
     def needs_human?(outcomes, live:)
       return false unless live
       return false if outcomes.any? { _1[:verdict] == :topped_up || _1[:verdict] == :error }
 
-      outcomes.any? { _1[:verdict] == :escalate }
+      outcomes.any? { _1[:verdict] == :escalate || _1[:verdict] == :awaiting_reconciliation }
     end
 
     def no_rate_escalation(entry, local_cents)

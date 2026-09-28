@@ -1362,7 +1362,7 @@ describe AutoTopUpNegativeDestinationBalancesJob do
     end
   end
 
-  it "does not label funded entries awaiting reconciliation as all failed" do
+  it "flags funded entries awaiting reconciliation for a human without calling them all failed" do
     residue_row(-100_00)
     make_payable
     Feature.activate(:auto_topup_negative_destination_balances)
@@ -1370,7 +1370,10 @@ describe AutoTopUpNegativeDestinationBalancesJob do
     described_class.new.perform
 
     expect(StripeTransferInternallyToCreator).to have_received(:transfer_funds_to_account).once
-    expect(InternalNotificationWorker).to have_received(:perform_async).with(anything, "Negative destination balance top-ups", /already topped up/).once
+    expect(InternalNotificationWorker).to have_received(:perform_async).with(
+      anything, "NEEDS HUMAN: Negative destination balance top-ups",
+      a_string_including("all 1 are withheld for a human, 0 errored", "already topped up")
+    ).once
     expect(InternalNotificationWorker).not_to have_received(:perform_async).with(anything, /ALL FAILED/, anything)
   ensure
     Feature.deactivate(:auto_topup_negative_destination_balances)
@@ -1435,7 +1438,8 @@ describe AutoTopUpNegativeDestinationBalancesJob do
     expect($redis.get("#{dedupe_key}:unresolved")).to eq("10000")
     expect($redis.ttl(transfer_key)).to eq(-1)
     expect(InternalNotificationWorker).to have_received(:perform_async).with(
-      anything, "NEEDS HUMAN: Negative destination balance top-ups", a_string_including("ESCALATE #{seller.email} — Stripe refused #{transfer_key}")
+      anything, "NEEDS HUMAN: Negative destination balance top-ups",
+      a_string_including("ESCALATE #{seller.email} — Stripe refused #{transfer_key}", "#{transfer_key}:request")
     ).once
     expect(InternalNotificationWorker).not_to have_received(:perform_async).with(anything, /ALL FAILED/, anything)
   ensure
