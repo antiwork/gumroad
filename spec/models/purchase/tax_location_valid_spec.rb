@@ -21,6 +21,13 @@ describe Purchase do
         expect(purchase.error_code).to be_nil
       end
 
+      it "does not extend that trust when the recorded card is from a different country" do
+        purchase = purchase_for(country: "Germany", ip_country: "Canada", card_country: "GB")
+
+        expect(purchase.send(:tax_location_valid?)).to eq(false)
+        expect(purchase.error_code).to eq(PurchaseErrorCode::TAX_VALIDATION_FAILED)
+      end
+
       it "does not extend that trust to a buyer who is somewhere else" do
         purchase = purchase_for(country: "United States", ip_country: "Germany")
 
