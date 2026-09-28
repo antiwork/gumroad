@@ -10,7 +10,6 @@ class Purchase
     INSUFFICIENT_FUNDS_GUMROAD_BALANCE_ERROR_MESSAGE = "The refund cannot be processed right now due to a temporary balance issue. Try again later or contact support."
     INSUFFICIENT_FUNDS_STRIPE_BALANCE_ERROR_MESSAGE = "The Stripe account holding the funds does not have sufficient funds to process this refund. Try again later or contact support."
     INSUFFICIENT_FUNDS_CREATOR_STRIPE_BALANCE_ERROR_MESSAGE = "Your connected Stripe account does not have sufficient funds to process this refund."
-    REFUND_NOTIFICATION_FAILED_ALERT = "Refund notification failed after the refund committed"
     INSUFFICIENT_FUNDS_PAYPAL_BALANCE_ERROR_MESSAGE = "Your PayPal account does not have sufficient funds to make this refund."
     ALREADY_REFUNDED_ERROR_MESSAGE = "The payment processor reports this purchase as already refunded. " \
                                      "If the refund is not reflected here, contact support."
@@ -274,7 +273,7 @@ class Purchase
   # cents as canonical USD.
   def refund_purchase!(flow_of_funds, refunding_user_id, stripe_refund = nil, is_for_fraud = false,
                        canonical_gross_refund_cents: nil, presentment_refund: nil, note: nil, gumroad_funded: false,
-                       balance_reconciliation_needed: false, defer_notifications_until_commit: false)
+                       balance_reconciliation_needed: false)
     if buyer_presentment? && canonical_gross_refund_cents.nil?
       derived = derive_presentment_refund_from_flow_of_funds(flow_of_funds)
       return false if derived.blank?
@@ -350,39 +349,14 @@ class Purchase
       debit_processor_fee_from_merchant_account!(refund) unless is_refund_chargeback_fee_waived || chargedback_not_reversed? || skip_seller_balance
       Credit.create_for_vat_exclusive_refund!(refund:) if (paypal_order_id.present? || merchant_account&.is_a_stripe_connect_account?) && !chargedback_not_reversed? && !skip_seller_balance
       subscription.original_purchase.update!(should_exclude_product_review: true) if subscription&.should_exclude_product_review_on_charge_reversal?
-      # Pass the refund's buyer-currency amount as plain values (not the Refund id):
-      # without deferral this enqueue happens inside the transaction, so the mailer job
-      # could run before the Refund row is committed/visible and would miss it.
-      buyer_mail = if partially_refunded_previously || self.stripe_partially_refunded
-        CustomerMailer.partial_refund(email, link.id, id, funds_refunded, formatted_refund_state, refund.presentment_amount_cents, refund.presentment_currency)
+      send_refunded_notification_webhook
+      if partially_refunded_previously || self.stripe_partially_refunded
+        # Pass the refund's buyer-currency amount as plain values (not the Refund id):
+        # this enqueue happens inside the transaction, so the mailer job could run
+        # before the Refund row is committed/visible and would miss it.
+        CustomerMailer.partial_refund(email, link.id, id, funds_refunded, formatted_refund_state, refund.presentment_amount_cents, refund.presentment_currency).deliver_later(queue: "critical")
       else
-        CustomerMailer.refund(email, link.id, id)
-      end
-      webhook_url_parameters = url_parameters
-      enqueue_refund_notifications = lambda do |best_effort|
-        [[:webhook, -> { send_refunded_notification_webhook(webhook_url_parameters) }],
-         [:buyer_mail, -> { buyer_mail.deliver_later(queue: "critical") }]].each do |notification, enqueue|
-          enqueue.call
-        rescue StandardError => error
-          raise unless best_effort
-
-          # The refund is already committed. Raising here, including from the alert, skips the
-          # caller's later work (such as the creator emails), and a retry finds the refund recorded.
-          begin
-            ErrorNotifier.notify(REFUND_NOTIFICATION_FAILED_ALERT, purchase_id: id, notification:, error_class: error.class.name)
-          rescue StandardError => alert_error
-            # The notifier is the thing that failed, so log the missed notification instead.
-            Rails.logger.warn(
-              "Refund notification alert failed: #{alert_error.class}: #{alert_error.message} " \
-              "purchase_id: #{id} notification: #{notification} error_class: #{error.class.name}"
-            )
-          end
-        end
-      end
-      if defer_notifications_until_commit
-        AfterCommitEverywhere.after_commit { enqueue_refund_notifications.call(true) }
-      else
-        enqueue_refund_notifications.call(false)
+        CustomerMailer.refund(email, link.id, id).deliver_later(queue: "critical")
       end
       # Those callbacks are manually invoked because of a rails issue: https://github.com/rails/rails/issues/39972
       update_creator_analytics_cache(force: true)

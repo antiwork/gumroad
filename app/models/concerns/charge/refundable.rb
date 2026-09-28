@@ -153,7 +153,7 @@ module Charge::Refundable
         booked = unrecorded.select do |purchase|
           purchase.refund_purchase!(flow_of_funds_for.(purchase, charge_refund), GUMROAD_ADMIN_ID, charge_refund.refund,
                                     event.extras[:refund_reason] == "fraudulent",
-                                    gumroad_funded:, balance_reconciliation_needed:, defer_notifications_until_commit: true)
+                                    gumroad_funded:, balance_reconciliation_needed:)
         end
         # refund_purchase! can refuse a purchase the check above passed; a partial booking would stay
         # partial on every redelivery, so book none.

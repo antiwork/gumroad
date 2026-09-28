@@ -85,17 +85,13 @@ describe Charge::Refundable, "external refund notifications" do
 
     before { stub_charge_refund(15_00) }
 
-    it "enqueues each purchase's webhook and buyer mail once, only after the retry commits" do
+    it "books every purchase once on the retry after a later purchase fails bookkeeping" do
       fail_second = true
-      counts_inside_transaction = nil
       allow_any_instance_of(Purchase).to receive(:decrement_balance_for_refund_or_chargeback!).and_wrap_original do |method, *args, **kwargs|
-        if method.receiver.id == purchases.last.id
-          counts_inside_transaction = notification_counts(purchases)
-          raise "second purchase bookkeeping failed" if fail_second
-        end
+        raise "second purchase bookkeeping failed" if fail_second && method.receiver.id == purchases.last.id
+
         method.call(*args, **kwargs)
       end
-      expect(ApplicationRecord.connection.open_transactions).to eq(0)
       balance_cents = seller.balances.sum(:amount_cents)
 
       expect { charge.handle_event_refund_updated!(event) }.to raise_error("second purchase bookkeeping failed")
@@ -103,65 +99,30 @@ describe Charge::Refundable, "external refund notifications" do
       expect(ApplicationRecord.connection.open_transactions).to eq(0)
       expect(refund_rows.call).to be_empty
       expect(seller.balances.sum(:amount_cents)).to eq(balance_cents)
-      expect(notification_counts(purchases)).to eq([[0, 0], [0, 0]])
 
       fail_second = false
       charge.reload.handle_event_refund_updated!(event)
 
-      expect(counts_inside_transaction).to eq([[0, 0], [0, 0]])
       expect(refund_rows.call).to eq([[purchases.first.id, 10_00], [purchases.last.id, 5_00]])
       expect(seller.balances.sum(:amount_cents)).to be < balance_cents
-      expect(notification_counts(purchases)).to eq([[1, 1], [1, 1]])
-      purchases.each do |purchase|
-        expect(refund_webhooks(purchase).sole["args"]).to eq([purchase.id, nil, ResourceSubscription::REFUNDED_RESOURCE_NAME])
-        expect(buyer_mails(purchase).sole[:args][0..3]).to eq(["CustomerMailer", "refund", "deliver_now",
-                                                               { "args" => [purchase.email, purchase.link_id, purchase.id], "_aj_ruby2_keywords" => ["args"] }])
-      end
+      # Notifications are enqueued inside the transaction, so the rolled-back attempt had already
+      # enqueued the first purchase's: a lost notification is worse than a repeated one.
+      expect(notification_counts(purchases)).to eq([[2, 2], [1, 1]])
 
       charge.reload.handle_event_refund_updated!(event)
 
       expect(refund_rows.call.size).to eq(2)
-      expect(notification_counts(purchases)).to eq([[1, 1], [1, 1]])
+      expect(notification_counts(purchases)).to eq([[2, 2], [1, 1]])
     end
 
-    it "alerts and still emails the creator when a deferred enqueue fails after commit" do
+    it "rolls back and raises when a notification cannot be enqueued, so the job retries" do
       allow(PostToPingEndpointsWorker).to receive(:perform_in).and_raise(RedisClient::CannotConnectError, "queue unavailable")
 
-      expect { charge.handle_event_refund_updated!(event) }.not_to raise_error
+      expect { charge.handle_event_refund_updated!(event) }.to raise_error(RedisClient::CannotConnectError)
 
-      expect(refund_rows.call.size).to eq(2)
-      expect(purchases.map { _1.reload.stripe_refunded? }).to eq([true, true])
-      expect(ErrorNotifier).to have_received(:notify).with(Purchase::Refundable::REFUND_NOTIFICATION_FAILED_ALERT,
-                                                           hash_including(notification: :webhook,
-                                                                          error_class: "RedisClient::CannotConnectError")).twice
-      expect(buyer_mails(purchases.first).size).to eq(1)
-      expect(buyer_mails(purchases.last).size).to eq(1)
-      expect(creator_mails(purchases).size).to eq(2)
-    end
-
-    it "still emails the creator when the deferred enqueue alert itself fails" do
-      allow(PostToPingEndpointsWorker).to receive(:perform_in).and_raise(RedisClient::CannotConnectError, "queue unavailable")
-      allow(Rails.logger).to receive(:warn)
-      allow(ErrorNotifier).to receive(:notify).and_wrap_original do |method, *args, **kwargs|
-        raise "notifier down" if kwargs[:notification]
-
-        method.call(*args, **kwargs)
-      end
-
-      expect { charge.handle_event_refund_updated!(event) }.not_to raise_error
-
-      expect(creator_mails(purchases).size).to eq(2)
-      purchases.each do |purchase|
-        expect(Rails.logger).to have_received(:warn).with(
-          a_string_including(
-            "Refund notification alert failed",
-            "RuntimeError: notifier down",
-            "purchase_id: #{purchase.id}",
-            "notification: webhook",
-            "error_class: RedisClient::CannotConnectError"
-          )
-        )
-      end
+      expect(refund_rows.call).to be_empty
+      expect(purchases.map { _1.reload.stripe_refunded? }).to eq([false, false])
+      expect(creator_mails(purchases)).to be_empty
     end
 
     it "still emails the creator and logs the refund report when the post-commit alert itself fails" do
