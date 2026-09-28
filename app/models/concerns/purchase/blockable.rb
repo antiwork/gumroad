@@ -1042,13 +1042,9 @@ module Purchase::Blockable
       sole
     end
 
-    # One script so a concurrent success clears the count and identities together. Any failure
-    # counted without its identity (a host still running the old INCR) leaves recorded behind
-    # count, and a streak is one buyer only while the two match. An old success deletes only
-    # the count key, so a later bare INCR can rebuild that integer beside the leftover recorded
-    # counter. The rebuilt key does not keep the recorded key's expire time, and those sets are
-    # trusted only while the two expire times still match. The shared deadline is one
-    # millisecond before the expire an old host can set, so a later EXPIRE cannot copy it.
+    # One script so a concurrent success clears the count and identities together. An old host's bare
+    # INCR leaves recorded behind count, or rebuilds count with its own EXPIRE; the sets are trusted
+    # only while counters and deadlines match, and the deadline sits 1ms off so no EXPIRE can copy it.
     PRODUCT_STREAK_RECORD_SCRIPT = <<~LUA
       local count_key, emails_key, cards_key, recorded_key = KEYS[1], KEYS[2], KEYS[3], KEYS[4]
       local email, card = ARGV[1], ARGV[2]
