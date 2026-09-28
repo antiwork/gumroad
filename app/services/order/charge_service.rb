@@ -480,6 +480,13 @@ class Order::ChargeService
   end
 
   def create_charge_for_seller_purchases(purchases, chargeable, off_session, setup_future_charges)
+    # Native PayPal builds and captures its order from every purchase attached to the charge,
+    # so a line rejected here would still be paid for. Fail the whole group instead.
+    if native_paypal?(chargeable) && purchases.any? { |purchase| purchase.in_progress? && purchase.errors.present? }
+      fail_native_paypal_group!(purchases)
+      return
+    end
+
     purchases_to_charge = purchases.reject do |purchase|
       purchase.is_free_trial_purchase? || purchase.is_preorder_authorization? || purchase.is_test_purchase? ||
         !purchase.errors.empty? || !purchase.in_progress?
@@ -625,6 +632,20 @@ class Order::ChargeService
           purchase.errors.add :base, "Sorry, something went wrong."
         end
       end
+    end
+  end
+
+  def native_paypal?(chargeable)
+    chargeable.respond_to?(:get_chargeable_for) &&
+      chargeable.get_chargeable_for(PaypalChargeProcessor.charge_processor_id).present?
+  end
+
+  def fail_native_paypal_group!(purchases)
+    rejected = purchases.find { |purchase| purchase.in_progress? && purchase.errors.present? }
+    purchases.each do |purchase|
+      next unless purchase.in_progress? && purchase.errors.empty?
+      purchase.errors.add :base, rejected.errors.first.message
+      purchase.error_code = rejected.error_code
     end
   end
 

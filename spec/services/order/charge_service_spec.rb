@@ -3714,4 +3714,67 @@ describe Order::ChargeService, :vcr do
       expect(failed_purchase.reload).to be_failed
     end
   end
+
+  describe "#perform with a native PayPal cart where one line item fails validation at charge time" do
+    let(:seller) { create(:user) }
+    let(:valid_product) { create(:product, user: seller, price_cents: 10_00) }
+    let(:rejected_product) { create(:product, user: seller, price_cents: 10_00) }
+    let(:ppp_message) { "In order to apply a purchasing power parity discount, you must use a card issued in the country you are in." }
+
+    before do
+      allow_any_instance_of(User).to receive(:native_paypal_payment_enabled?).and_return(true)
+      create(:merchant_account_paypal, user: seller, charge_processor_merchant_id: "B66YJBBNCRW6L")
+      rejected_link_id = rejected_product.id
+      message = ppp_message
+      allow_any_instance_of(Purchase).to receive(:validate_purchasing_power_parity) do |purchase|
+        next unless purchase.link_id == rejected_link_id
+        purchase.errors.add :base, message
+        purchase.error_code = PurchaseErrorCode::PPP_CARD_COUNTRY_NOT_MATCHING
+      end
+    end
+
+    def order_params(payment_params)
+      {
+        email: "buyer@gumroad.com",
+        purchase: { full_name: "Edgar Gumstein", country: "US", zip_code: "94117" },
+        browser_guid: SecureRandom.uuid,
+        ip_address: "0.0.0.0",
+        session_id: "a107d0b7ab5ab3c1eeb7d3aaf9792977",
+        is_mobile: false,
+        line_items: [
+          { uid: "uid-ok", permalink: valid_product.unique_permalink, perceived_price_cents: valid_product.price_cents, quantity: 1 },
+          { uid: "uid-rejected", permalink: rejected_product.unique_permalink, perceived_price_cents: rejected_product.price_cents, quantity: 1 },
+        ]
+      }.merge(payment_params)
+    end
+
+    shared_examples "fails the whole seller group without calling PayPal" do
+      it "does not capture and fails every line with the rejection message" do
+        order, _ = Order::CreateService.new(params:).perform
+        expect(order.purchases.in_progress.count).to eq(2)
+        expect(ChargeProcessor).not_to receive(:create_payment_intent_or_charge!)
+
+        charge_responses = Order::ChargeService.new(order:, params:).perform
+
+        expect(order.purchases.reload.map(&:purchase_state).uniq).to eq(["failed"])
+        expect(order.purchases.find_by(link: valid_product).error_code).to eq(PurchaseErrorCode::PPP_CARD_COUNTRY_NOT_MATCHING)
+        expect(order.charges.pluck(:processor_transaction_id).compact).to be_empty
+        expect(charge_responses.keys).to contain_exactly("uid-ok", "uid-rejected")
+        expect(charge_responses.values.map { _1[:success] }.uniq).to eq([false])
+        expect(charge_responses["uid-ok"][:error_message]).to include(ppp_message)
+      end
+    end
+
+    context "with a buyer-approved PayPal order" do
+      let(:params) { order_params(paypal_order_id: "9XX680320L106570A", visual: "buyer@example.com", card_country: "RS") }
+
+      include_examples "fails the whole seller group without calling PayPal"
+    end
+
+    context "with a PayPal billing agreement" do
+      let(:params) { order_params(billing_agreement_id: "B-12345678910", visual: "buyer@example.com", card_country: "RS") }
+
+      include_examples "fails the whole seller group without calling PayPal"
+    end
+  end
 end
