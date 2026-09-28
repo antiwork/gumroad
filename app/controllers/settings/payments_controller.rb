@@ -562,13 +562,14 @@ class Settings::PaymentsController < Settings::BaseController
     end
 
     # A `pending_verification` entry on its own is Stripe reviewing what the seller submitted
-    # and keeps the reassuring redirect. Paired with charges disabled, empty due lists, no
-    # errors and no deadline, Stripe surfaces nothing the seller can act on from our page,
-    # so offer the `account_update` link instead.
+    # and keeps the reassuring redirect. Paired with charges or payouts disabled, empty due
+    # lists, no errors and no live deadline, Stripe surfaces nothing the seller can act on from
+    # our page, so offer the `account_update` link instead. A deadline already in the past is
+    # not a live one: Stripe leaves it behind on reviews that stall with nothing due.
     def stripe_review_has_no_exit?(stripe_account, requirements)
       requirements["pending_verification"].present? &&
-        !stripe_account["charges_enabled"] &&
+        (!stripe_account["charges_enabled"] || stripe_account["payouts_enabled"] == false) &&
         Array(requirements["errors"]).empty? &&
-        requirements["current_deadline"].blank?
+        (requirements["current_deadline"].blank? || Time.zone.at(requirements["current_deadline"].to_i).past?)
     end
 end
