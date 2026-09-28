@@ -138,6 +138,26 @@ describe SslCertificates::Generate do
       end
     end
 
+    context "when one resolving name cannot be read and another definitely has no certificate" do
+      before do
+        @custom_domain.set_ssl_certificate_issued_at!
+        allow_any_instance_of(CustomDomainVerificationService)
+          .to receive(:domains_resolving_to_gumroad)
+          .and_return(["example.com", "www.example.com"])
+        allow_any_instance_of(CustomDomainVerificationService)
+          .to receive(:has_valid_ssl_certificate_for?)
+          .with("example.com")
+          .and_raise(Seahorse::Client::NetworkingError.new(StandardError.new("s3 unavailable")))
+        allow_any_instance_of(CustomDomainVerificationService)
+          .to receive(:has_valid_ssl_certificate_for?)
+          .with("www.example.com").and_return(false)
+      end
+
+      it "still orders for the name that has none" do
+        expect(@obj.send(:can_order_certificates?)).to eq true
+      end
+    end
+
     context "when the domain is invalid" do
       before do
         @custom_domain.domain = "test_store.example.com"

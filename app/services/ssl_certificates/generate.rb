@@ -95,17 +95,26 @@ module SslCertificates
       end
 
       # The row timestamp is stamped by whichever order last succeeded, so it says
-      # nothing about a name that started resolving afterwards (a www CNAME added
-      # after the apex was issued) — ask each name. Unreadable state (DNS or S3
-      # error) counts as covered, so a failed read keeps the old no-op.
+      # nothing about a name that started resolving afterwards — ask each name. An
+      # unreadable name counts as covered for itself, but another name's definite
+      # "no certificate" must still order.
       def certificate_covers_every_resolving_domain?
         return false unless custom_domain.has_valid_certificate?(renew_in)
 
         domain_verification_service.domains_resolving_to_gumroad.all? do |domain|
-          domain_verification_service.has_valid_ssl_certificate_for?(domain)
+          resolving_domain_has_valid_certificate?(domain)
         end
       rescue => e
+        # The names could not even be enumerated (DNS or parse failure), so there
+        # is nothing to order for; keep the no-op.
         Rails.logger.info("SSL certificate state check failed for custom domain '#{custom_domain.domain}'. Error: #{e.inspect}")
+        true
+      end
+
+      def resolving_domain_has_valid_certificate?(domain)
+        domain_verification_service.has_valid_ssl_certificate_for?(domain)
+      rescue => e
+        Rails.logger.info("SSL certificate state check failed for '#{domain}'. Error: #{e.inspect}")
         true
       end
   end
