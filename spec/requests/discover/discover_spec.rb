@@ -579,8 +579,10 @@ describe("Discover", js: true, type: :system) do
 
         find("[role=menuitem]", text: "More").hover
         click_on "Software Development"
+        row = find("[role=menu] [role=menuitem]", text: "Hardware", exact_text: true).rect
         click_on "Hardware"
-        page.driver.browser.action.move_by(0, -10).perform
+        # Absolute coordinates: Selenium's relative moves start from the last action-API position, not the click.
+        page.driver.browser.action.move_to_location((row.x + row.width / 2).round, (row.y + row.height / 2 - 10).round).perform
         sleep 0.6
 
         click_on "Raspberry Pi"
