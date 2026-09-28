@@ -21,6 +21,15 @@ class Purchase::ConfirmService < Purchase::BaseService
     # Example 2: user has purchased the same product in another tab and we canceled this purchase as potential duplicate.
     return "There is a temporary problem, please try again (your card was not charged)." unless purchase.in_progress?
 
+    # The browser can report an error while Stripe is still on the fingerprint step.
+    # Failing here cancels the restart and leaves the PaymentIntent in requires_action.
+    # Keep that restart alive only when Stripe still shows an open check with no payment error.
+    # A missed lookup is not proof the check is open, so it keeps the existing failure path.
+    if resubscription_authentication_state == :open
+      FailAbandonedPurchaseWorker.perform_in(ChargeProcessor::TIME_TO_COMPLETE_SCA, purchase.id)
+      return "Your bank is still verifying this card. Please try again (your card was not charged)."
+    end
+
     error_message = check_for_card_handling_error
     return error_message if error_message.present?
 
@@ -105,6 +114,16 @@ class Purchase::ConfirmService < Purchase::BaseService
   end
 
   private
+    def resubscription_authentication_state
+      return :not_open unless purchase.subscription&.is_resubscription_pending_confirmation?
+      return :not_open if purchase.processor_payment_intent_id.blank?
+
+      intent = ChargeProcessor.get_charge_intent(purchase.merchant_account, purchase.processor_payment_intent_id)
+      intent&.authentication_still_open? ? :open : :not_open
+    rescue ChargeProcessorError
+      :not_open
+    end
+
     def check_for_card_handling_error
       card_data_handling_error = CardParamsHelper.check_for_errors(params)
       if card_data_handling_error.present?

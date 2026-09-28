@@ -20,6 +20,14 @@ class StripeChargeIntent < ChargeIntent
     payment_intent.status == StripeIntentStatus::REQUIRES_ACTION && payment_intent.next_action.type == StripeIntentStatus::ACTION_TYPE_USE_SDK
   end
 
+  # Fingerprint and challenge both use this status. Any payment error means Stripe
+  # already declined the attempt, even when the error has type or decline_code only.
+  def authentication_still_open?
+    return false unless requires_action?
+
+    payment_intent.try(:last_payment_error).blank?
+  end
+
   def canceled?
     payment_intent.status == StripeIntentStatus::CANCELED
   end

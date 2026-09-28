@@ -360,7 +360,26 @@ class Subscription < ApplicationRecord
     purchase.ensure_completion do
       purchase.process!(off_session:)
       error_messages = purchase.errors.messages.dup
-      if purchase.errors.present? || purchase.error_code.present? || purchase.stripe_error_code.present?
+      # An open 3DS fingerprint is not a declined charge. Classifying it as one
+      # emails charge_failed and cancels the restart before the buyer can finish.
+      # A requires_action intent with any payment error is a decline, even when
+      # the charge call did not copy that error onto the purchase.
+      stripe_intent = purchase.charge_intent if purchase.in_progress? && purchase.charge_intent.is_a?(StripeChargeIntent)
+      open_authentication = stripe_intent&.authentication_still_open?
+      declined_authentication = stripe_intent&.requires_action? && !open_authentication
+      if open_authentication
+        FailAbandonedPurchaseWorker.perform_in(ChargeProcessor::TIME_TO_COMPLETE_SCA, purchase.id)
+      elsif purchase.errors.present? || purchase.error_code.present? || purchase.stripe_error_code.present? || declined_authentication
+        purchase.errors.add(:base, "Your card was declined.") if declined_authentication && purchase.errors.empty?
+        if declined_authentication && purchase.stripe_error_code.blank?
+          error = stripe_intent.payment_intent.try(:last_payment_error)
+          error_hash = {
+            "code" => error.try(:code),
+            "type" => error.try(:type),
+            "decline_code" => error.try(:decline_code)
+          }
+          purchase.stripe_error_code = StripeChargeProcessor.error_code_from_last_payment_error(error_hash) || "card_declined"
+        end
         mandate_status = purchase.indian_card_mandate_error_status
         if mandate_status.present?
           update_renewal_for_indian_card_mandate!(

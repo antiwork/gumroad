@@ -301,6 +301,7 @@ describe Purchase::ConfirmService, :vcr do
           .with(preserve_access_for_mandate_failure: false)
           .and_call_original
         expect_any_instance_of(Purchase::BaseService).to receive(:mark_items_failed).and_call_original
+        allow(ChargeProcessor).to receive(:get_charge_intent).and_return(instance_double(StripeChargeIntent, authentication_still_open?: false))
 
         params = {
           stripe_error: {
@@ -317,6 +318,74 @@ describe Purchase::ConfirmService, :vcr do
         expect(@subscription.alive?).to be(false)
       ensure
         Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+      end
+
+      it "leaves the restart alive while Stripe is still on the fingerprint step", vcr: { cassette_name: "Purchase_ConfirmService/when_SCA_fails/for_a_membership_restart_purchase/marks_the_purchase_as_failed_and_unsubscribes_the_membership" } do
+        expect(@membership_restart_purchase.purchase_state).to eq("in_progress")
+        expect(@subscription.reload.is_resubscription_pending_confirmation?).to be true
+        expect(@subscription.alive?).to be(true)
+        expect(@subscription).not_to receive(:unsubscribe_and_fail!)
+        @membership_restart_purchase.create_processor_payment_intent!(intent_id: "pi_fingerprint_open") if @membership_restart_purchase.processor_payment_intent_id.blank?
+        allow(ChargeProcessor).to receive(:get_charge_intent).and_return(instance_double(StripeChargeIntent, authentication_still_open?: true))
+        allow(ChargeProcessor).to receive(:confirm_payment_intent!)
+        FailAbandonedPurchaseWorker.jobs.clear
+
+        error_message = Purchase::ConfirmService.new(
+          purchase: @membership_restart_purchase,
+          params: {
+            stripe_error: {
+              code: "payment_intent_authentication_failure",
+              message: "We are unable to authenticate your payment method."
+            }
+          }
+        ).perform
+
+        expect(error_message).to eq("Your bank is still verifying this card. Please try again (your card was not charged).")
+        expect(@membership_restart_purchase.reload).to be_in_progress
+        expect(@subscription.reload.is_resubscription_pending_confirmation?).to be true
+        expect(@subscription.alive?).to be(true)
+        expect(ChargeProcessor).not_to have_received(:confirm_payment_intent!)
+        expect(FailAbandonedPurchaseWorker).to have_enqueued_sidekiq_job(@membership_restart_purchase.id)
+      end
+
+      it "still fails the restart when Stripe status cannot be read", vcr: { cassette_name: "Purchase_ConfirmService/when_SCA_fails/for_a_membership_restart_purchase/marks_the_purchase_as_failed_and_unsubscribes_the_membership" } do
+        @membership_restart_purchase.create_processor_payment_intent!(intent_id: "pi_fingerprint_open") if @membership_restart_purchase.processor_payment_intent_id.blank?
+        allow(ChargeProcessor).to receive(:get_charge_intent).and_raise(ChargeProcessorError)
+        expect(@subscription).to receive(:unsubscribe_and_fail!).and_call_original
+
+        error_message = Purchase::ConfirmService.new(
+          purchase: @membership_restart_purchase,
+          params: {
+            stripe_error: {
+              code: "payment_intent_authentication_failure",
+              message: "We are unable to authenticate your payment method."
+            }
+          }
+        ).perform
+
+        expect(error_message).to eq("We are unable to authenticate your payment method.")
+        expect(@membership_restart_purchase.reload.failed?).to be true
+        expect(@subscription.reload.alive?).to be(false)
+      end
+
+      it "still fails the restart when the PaymentIntent cannot be found", vcr: { cassette_name: "Purchase_ConfirmService/when_SCA_fails/for_a_membership_restart_purchase/marks_the_purchase_as_failed_and_unsubscribes_the_membership" } do
+        @membership_restart_purchase.create_processor_payment_intent!(intent_id: "pi_missing") if @membership_restart_purchase.processor_payment_intent_id.blank?
+        allow(ChargeProcessor).to receive(:get_charge_intent).and_raise(ChargeProcessorInvalidRequestError)
+        expect(@subscription).to receive(:unsubscribe_and_fail!).and_call_original
+
+        error_message = Purchase::ConfirmService.new(
+          purchase: @membership_restart_purchase,
+          params: {
+            stripe_error: {
+              code: "invalid_request_error",
+              message: "No such payment_intent."
+            }
+          }
+        ).perform
+
+        expect(error_message).to eq("No such payment_intent.")
+        expect(@membership_restart_purchase.reload.failed?).to be true
+        expect(@subscription.reload.alive?).to be(false)
       end
     end
   end
@@ -467,6 +536,7 @@ describe Purchase::ConfirmService, :vcr do
         expect(@membership_restart_purchase.purchase_state).to eq("in_progress")
         expect(@subscription.reload.is_resubscription_pending_confirmation?).to be true
         expect(@subscription.alive?).to be(true)
+        allow(ChargeProcessor).to receive(:get_charge_intent).and_return(instance_double(StripeChargeIntent, authentication_still_open?: false))
         allow_any_instance_of(Purchase).to receive(:confirm_charge_intent!).and_return true
         expect(@subscription).to receive(:send_restart_notifications!)
         expect(@subscription).to receive(:handle_purchase_success)
