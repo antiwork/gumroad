@@ -2851,19 +2851,21 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
       # The review state is stubbed, so a factory account is enough and no Stripe call is recorded.
       let!(:stripe_connect_account_id) { create(:merchant_account, user:).charge_processor_merchant_id }
 
-      def stub_pending_only_review(charges_enabled:, pending_verification: ["person_123.verification.document"])
+      def stub_pending_only_review(charges_enabled:, payouts_enabled: nil, pending_verification: ["person_123.verification.document"],
+                                   current_deadline: nil)
         allow(Stripe::Account).to receive(:retrieve).with(stripe_connect_account_id).and_return(
           Stripe::Account.construct_from(
             id: stripe_connect_account_id,
             object: "account",
             charges_enabled:,
+            payouts_enabled:,
             requirements: {
               "currently_due" => [],
               "past_due" => [],
               "eventually_due" => [],
               "pending_verification" => pending_verification,
               "errors" => [],
-              "current_deadline" => nil,
+              "current_deadline" => current_deadline,
             },
             future_requirements: { "currently_due" => [], "past_due" => [], "eventually_due" => [] }
           )
@@ -2899,6 +2901,29 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         expect(response).to redirect_to settings_payments_url
         expect(flash[:alert]).to be_nil
         expect(flash[:notice]).to eq("Thanks! You're all set.")
+      end
+
+      it "does not say 'all set' while payouts stay disabled behind a review whose deadline has passed" do
+        stub_pending_only_review(charges_enabled: true, payouts_enabled: false, current_deadline: 1.week.ago.to_i)
+
+        get :verify_stripe_remediation
+
+        expect(response).to redirect_to settings_payments_url
+        expect(flash[:notice]).to be_nil
+        expect(flash[:alert]).to be_nil
+        expect(flash[:info]).to include("Stripe is still reviewing your account")
+      end
+
+      it "warns about the Stripe payout pause instead of the review when both apply" do
+        user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
+        stub_pending_only_review(charges_enabled: true, payouts_enabled: false, current_deadline: 1.week.ago.to_i)
+
+        get :verify_stripe_remediation
+
+        expect(response).to redirect_to settings_payments_url
+        expect(flash[:notice]).to be_nil
+        expect(flash[:info]).to be_nil
+        expect(flash[:alert]).to include("Stripe has paused payouts")
       end
     end
   end
