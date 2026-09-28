@@ -77,11 +77,11 @@ describe Onetime::ReclassifyOldBundleArchiveSizeFailures do
   end
 
   it "reads an unrecorded size from S3, as the old worker did" do
-    large = failed_archive(bundle, bundle_files(1.megabyte, nil))
+    large = failed_archive(bundle, bundle_files(300.megabytes, nil))
     small = failed_archive(bundle, bundle_files(1.megabyte, nil))
     missing = failed_archive(bundle, bundle_files(1.megabyte, nil))
     forbidden = failed_archive(bundle, bundle_files(1.megabyte, nil))
-    s3_sizes = { large => 600.megabytes, small => 2.megabytes }
+    s3_sizes = { large => 300.megabytes, small => 2.megabytes }
     s3_errors = { missing => Aws::S3::Errors::NotFound.new(nil, "missing"), forbidden => Aws::S3::Errors::Forbidden.new(nil, "denied") }
     s3_objects = [large, small, missing, forbidden].to_h do |archive|
       file = archive.product_files.find { _1.size.nil? }
