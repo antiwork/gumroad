@@ -1489,6 +1489,18 @@ describe Purchase::Blockable do
           end
         end
 
+        context "when a host without identity recording counts a failure mid-streak" do
+          before do
+            create(:purchase, link: @product, email: "buyer@example.com", stripe_fingerprint: nil, purchase_state: "in_progress").mark_failed!
+            Redis::Namespace.new(:failed_purchases_count, redis: $redis).incr("product_#{@product.id}")
+            @purchase = create(:purchase, link: @product, email: "buyer@example.com", stripe_fingerprint: nil, purchase_state: "in_progress")
+          end
+
+          it "blocks purchases on product" do
+            expect { @purchase.mark_failed! }.to change { PlatformBlock.product.count }.by(1)
+          end
+        end
+
         context "when a concurrent success clears the streak after this failure is counted" do
           before do
             2.times { create(:purchase, link: @product, email: "buyer@example.com", stripe_fingerprint: nil, purchase_state: "in_progress").mark_failed! }
@@ -1509,6 +1521,18 @@ describe Purchase::Blockable do
               create(:purchase, link: @product, email: "buyer@example.com", charge_processor_id: PaypalChargeProcessor.charge_processor_id, card_visual: "buyer@paypal.example", stripe_fingerprint: "ba-token-#{n}", purchase_state: "in_progress").mark_failed!
             end
             @purchase = create(:purchase, link: @product, email: "buyer@example.com", charge_processor_id: PaypalChargeProcessor.charge_processor_id, card_visual: "buyer@paypal.example", stripe_fingerprint: "ba-token-2", purchase_state: "in_progress")
+          end
+
+          it "doesn't block purchases on product" do
+            expect { @purchase.mark_failed! }.not_to change { PlatformBlock.product.count }
+          end
+        end
+
+        context "when PayPal returns the same wallet email in different casing" do
+          before do
+            create(:purchase, link: @product, email: "buyer@example.com", charge_processor_id: PaypalChargeProcessor.charge_processor_id, card_visual: "Buyer@PayPal.example", stripe_fingerprint: "ba-token-0", purchase_state: "in_progress").mark_failed!
+            create(:purchase, link: @product, email: "buyer@example.com", charge_processor_id: PaypalChargeProcessor.charge_processor_id, card_visual: "buyer@paypal.example", stripe_fingerprint: "ba-token-1", purchase_state: "in_progress").mark_failed!
+            @purchase = create(:purchase, link: @product, email: "buyer@example.com", charge_processor_id: PaypalChargeProcessor.charge_processor_id, card_visual: "BUYER@paypal.example", stripe_fingerprint: "ba-token-2", purchase_state: "in_progress")
           end
 
           it "doesn't block purchases on product" do
