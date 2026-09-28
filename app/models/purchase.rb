@@ -4189,7 +4189,7 @@ class Purchase < ApplicationRecord
       self
     end
     base_cents = reference_purchase.total_transaction_cents
-    if reference_purchase.is_free_trial_purchase?
+    if reference_purchase.is_free_trial_purchase? || reference_purchase.installment_plan_relisted_in_another_currency?
       renewal_price_cents = if reference_purchase.subscription.present?
         reference_purchase.subscription.current_subscription_price_cents
       else
@@ -4222,6 +4222,15 @@ class Purchase < ApplicationRecord
     pre_discount_cents = discount.pre_discount_displayed_price_cents ||
       discount.pre_discount_minimum_price_cents * reference_purchase.quantity
     [(Rational(base_cents * pre_discount_cents, reference_purchase.displayed_price_cents)).ceil, base_cents].max
+  end
+
+  # Remaining installments bill the product's current listed price, so after a relisting the
+  # signup total is a stale conversion and must not size the mandate.
+  def installment_plan_relisted_in_another_currency?
+    return false unless is_installment_payment && subscription&.is_installment_plan?
+
+    displayed_currency = self[:displayed_price_currency_type].presence
+    displayed_currency.present? && displayed_currency.to_s.downcase != link.price_currency_type.to_s.downcase
   end
 
   # Stripe rejects a mandate maximum below this charge, so when the original cap is

@@ -1747,6 +1747,42 @@ describe "Indian card mandate reliability" do
     expect(registered_amount).to eq(31_75)
   end
 
+  it "sizes installment plan terms from the current listed price after the product changes currency" do
+    original, restart = create_installment_restart(original_cents: 31_75, charge_cents: 31_75)
+    original.update_columns(
+      displayed_price_currency_type: Currency::EUR,
+      rate_converted_to_usd: "0.874468",
+      total_transaction_cents: 36_31
+    )
+    original.link.update_column(:price_currency_type, Currency::USD)
+    subscription = restart.subscription.reload
+    subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
+    subscription.update_flag!(:indian_card_mandate_requires_reauthorization, true, true)
+    restart.mark_indian_card_mandate_registration!
+    allow(restart).to receive(:processor_payment_intent_id).and_return("pi_restart_relisted")
+
+    terms = subscription.indian_card_mandate_terms
+    registered_amount = restart.mandate_options_for_stripe[:payment_method_options][:card][:mandate_options][:amount]
+
+    expect(terms).to include(amount: 31_75, currency: Currency::USD)
+    expect(registered_amount).to eq(31_75)
+
+    allow(ChargeProcessor).to receive(:get_charge_intent)
+      .with(restart.merchant_account, "pi_restart_relisted")
+      .and_return(confirmed_intent_for(restart, terms))
+    restart.record_indian_card_mandate_status!("active", mandate_id: "mandate_restart_relisted")
+
+    expect(subscription.reload).not_to be_indian_card_mandate_requires_reauthorization
+  end
+
+  it "keeps the signup total as the installment plan cap when the listed currency is unchanged" do
+    original, restart = create_installment_restart(original_cents: 36_31, charge_cents: 31_75)
+    original.update_columns(displayed_price_currency_type: original.link.price_currency_type)
+
+    expect(original).not_to be_installment_plan_relisted_in_another_currency
+    expect(restart.subscription.reload.indian_card_mandate_terms[:amount]).to eq(36_31)
+  end
+
   it "clears plan reauthorization for matching sporadic terms" do
     registration = create_registration
     subscription = registration.subscription
