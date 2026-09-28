@@ -548,6 +548,19 @@ describe Purchase::ConfirmService, :vcr do
         expect(@subscription.alive?).to be(true)
       end
 
+      it "does not let a later ordinary charge take the restart emails" do
+        create(:purchase, subscription: @subscription, link: @subscription.link, purchase_state: "successful")
+        allow(ChargeProcessor).to receive(:get_charge_intent).and_return(instance_double(StripeChargeIntent, authentication_still_open?: false))
+        allow_any_instance_of(Purchase).to receive(:confirm_charge_intent!).and_return true
+        allow(@subscription).to receive(:handle_purchase_success)
+        expect(@subscription).to receive(:send_restart_notifications!)
+
+        error_message = Purchase::ConfirmService.new(purchase: @membership_restart_purchase, params: {}).perform
+
+        expect(error_message).to be nil
+        expect(@subscription.reload.is_resubscription_pending_confirmation?).to be false
+      end
+
       it "does not send restart notifications for an older attempt" do
         newer = create(:purchase, subscription: @subscription, link: @subscription.link, purchase_state: "in_progress")
         newer.update_flag!(:is_restart_authentication_purchase, true, true)

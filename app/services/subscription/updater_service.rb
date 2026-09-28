@@ -258,11 +258,10 @@ class Subscription::UpdaterService
       result = { success: false, error_message: e.message }
     end
 
-    if upgrade_purchase&.successful? && subscription.is_resubscription_pending_confirmation?
-      newer_attempt = subscription.purchases.where("purchases.id > ?", upgrade_purchase.id).where(purchase_state: %w[in_progress successful]).exists?
-      subscription.update_flag!(:is_resubscription_pending_confirmation, false, true) unless newer_attempt
+    if is_resubscribing && upgrade_purchase&.successful? && subscription.is_resubscription_pending_confirmation?
+      subscription.update_flag!(:is_resubscription_pending_confirmation, false, true) unless subscription.newer_restart_attempt?(upgrade_purchase)
     end
-    if (is_resubscribing || subscription.is_resubscription_pending_confirmation?) && result[:requires_card_action]
+    if is_resubscribing && result[:requires_card_action]
       subscription.update_flag!(:is_resubscription_pending_confirmation, true, true)
       upgrade_purchase.update_flag!(:is_restart_authentication_purchase, true, true) if upgrade_purchase&.in_progress?
     end
