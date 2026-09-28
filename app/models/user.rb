@@ -59,6 +59,10 @@ class User < ApplicationRecord
 
   DELETED_ACCOUNT_LOGIN_ERROR = "You cannot log in because your account was deleted. Email support@gumroad.com if you'd like to use this email address for a new account."
 
+  # Support frees a closed account's address by parking it on this reserved domain, which is what
+  # lets the address move to another account while the row keeps its other identifiers.
+  DELETED_ACCOUNT_EMAIL_DOMAIN = "deleted.invalid"
+
   MIN_AU_BACKTAX_OWED_CENTS_FOR_CONTACT = 100_00
 
   MIN_AGE_FOR_SERVICE_PRODUCTS = 30.days

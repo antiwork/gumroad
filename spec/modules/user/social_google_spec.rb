@@ -46,6 +46,52 @@ describe User::SocialGoogle do
       expect(created_user.reload.google_uid).to eq(@data_copy2["uid"])
     end
 
+    context "when the matched account was deleted and its email freed to another account" do
+      let(:freed_address) { "spongebob-freed-1234@deleted.invalid" }
+
+      before do
+        @deleted_user = create(:user, google_uid: @data_copy2["uid"], email: freed_address, deleted_at: Time.current)
+      end
+
+      it "uses the live account that holds the freed address" do
+        live_user = create(:user, email: @data_copy2["info"]["email"])
+
+        found_user = User.find_or_create_for_google_oauth2(@data_copy2)
+
+        expect(found_user.id).to eq(live_user.id)
+        expect(found_user).not_to be_deleted
+      end
+
+      it "leaves the deleted row's identity and parked address untouched" do
+        create(:user, email: @data_copy2["info"]["email"])
+
+        User.find_or_create_for_google_oauth2(@data_copy2)
+
+        expect(@deleted_user.reload.google_uid).to eq(@data_copy2["uid"])
+        expect(@deleted_user.reload.email).to eq(freed_address)
+      end
+
+      it "still returns the deleted account when no live account holds the address" do
+        found_user = User.find_or_create_for_google_oauth2(@data_copy2)
+
+        expect(found_user.id).to eq(@deleted_user.id)
+        expect(found_user).to be_deleted
+      end
+
+      it "does not create an account for the freed address" do
+        expect { User.find_or_create_for_google_oauth2(@data_copy2) }.not_to change { User.count }
+      end
+
+      it "still matches a deleted account that kept its own address" do
+        deleted_user = create(:user, google_uid: @data_copy1["uid"], email: @data_copy1["info"]["email"], deleted_at: Time.current)
+
+        found_user = User.find_or_create_for_google_oauth2(@data_copy1)
+
+        expect(found_user.id).to eq(deleted_user.id)
+        expect(found_user).to be_deleted
+      end
+    end
+
     it "creates user with sanitized name when name contains colons" do
       @data_with_colon = @data.deep_dup
       @data_with_colon["uid"] = "unique_colon_test_uid"
