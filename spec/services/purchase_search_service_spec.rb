@@ -499,6 +499,22 @@ describe PurchaseSearchService do
       expect(get_records(seller_query: purchase_6.license.serial)).to match_array([purchase_6])
     end
 
+    it "finds a buyer by a partial email longer than the indexed ngram window" do
+      purchase = create(:purchase, email: "longpartialbuyername@example.com")
+      paypal_purchase = create(:purchase, email: "someone@example.com", card_type: CardType::PAYPAL, card_visual: "longpaypaladdress@example.net")
+      buyer = create(:user, email: "longmemberaddress@example.org")
+      membership = create(:membership_purchase, purchaser: buyer, email: "signup@oldmail.example")
+      membership.subscription.update!(user: buyer)
+      index_model_records(Purchase)
+
+      # Tokens past 20 characters match no indexed gram, so only the raw prefix clauses reach these.
+      expect(get_records(seller_query: "longpartialbuyername@example")).to match_array([purchase])
+      expect(get_records(seller_query: "longpaypaladdress@example")).to match_array([paypal_purchase])
+      expect(get_records(seller_query: "longmemberaddress@example")).to match_array([membership])
+      # A long token that is not a prefix of any address still matches nothing.
+      expect(get_records(seller_query: "longpartialbuyername@elsewhere.example")).to match_array([])
+    end
+
     it "finds a membership by the member's current email after an email change" do
       buyer = create(:user, email: "signup@oldmail.example")
       membership = create(:membership_purchase, purchaser: buyer, email: "signup@oldmail.example")

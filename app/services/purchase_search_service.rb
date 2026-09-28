@@ -1,6 +1,11 @@
 # frozen_string_literal: true
 
 class PurchaseSearchService
+  # Mirrors the email analyzers' edge_ngram max_gram in Purchase::Searchable: a longer search token
+  # matches no indexed term. Raising it there affects only newly created indexes, so a real raise
+  # needs its own reindex migration rather than an edit to this constant.
+  EMAIL_AUTOCOMPLETE_MAX_GRAM = 20
+
   DEFAULT_OPTIONS = {
     # There must not be any active filters by default: calling .search without any options should return all purchases.
     # Values - They can be an ActiveRecord object, an id, or an Array of both
@@ -458,6 +463,15 @@ class PurchaseSearchService
           shoulds << { term: { "email.raw" => query_string } }
           shoulds << { term: { "subscription_current_email.raw" => query_string } }
           shoulds << { term: { "paypal_email.raw" => query_string } }
+        end
+        # A token past the gram window matches no indexed term, so "buyer@domain" found nobody even
+        # though the full address did. A raw prefix is exact for a typed prefix and, at this length,
+        # selective enough to stay cheap.
+        query_string.split.each do |token|
+          next if token.length <= EMAIL_AUTOCOMPLETE_MAX_GRAM
+          shoulds << { prefix: { "email.raw" => token } }
+          shoulds << { prefix: { "subscription_current_email.raw" => token } }
+          shoulds << { prefix: { "paypal_email.raw" => token } }
         end
         if query_string.match?(/\A[a-f0-9]{8}-[a-f0-9]{8}-[a-f0-9]{8}-[a-f0-9]{8}\z/)
           shoulds << { term: { "license_serial" => query_string.upcase } }
