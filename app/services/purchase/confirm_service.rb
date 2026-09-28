@@ -100,9 +100,10 @@ class Purchase::ConfirmService < Purchase::BaseService
       return
     end
 
-    if purchase.is_upgrade_purchase? || purchase.subscription&.is_resubscription_pending_confirmation?
+    pending_restart = purchase.subscription&.is_resubscription_pending_confirmation?
+    if purchase.is_upgrade_purchase? || pending_restart
       purchase.subscription.handle_purchase_success(purchase)
-      if purchase.subscription.is_resubscription_pending_confirmation?
+      if pending_restart
         purchase.subscription.send_restart_notifications!
         purchase.subscription.update_flag!(:is_resubscription_pending_confirmation, false, true)
       end
