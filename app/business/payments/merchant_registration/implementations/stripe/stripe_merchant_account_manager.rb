@@ -378,6 +378,7 @@ module StripeMerchantAccountManager
     "phone" => "phone number",
     "support_phone" => "business phone number",
     "id_number" => "Tax ID",
+    "ssn_last_4" => "Tax ID",
     "tax_id" => "business tax ID",
     "dob" => "date of birth",
     "first_name" => "first name",
@@ -1789,13 +1790,12 @@ module StripeMerchantAccountManager
     postal_code
   end
 
-  # Stripe validates the tax IDs we pass on account creation (individual `id_number`,
-  # business `tax_id`) and rejects obviously-fake values with an InvalidRequestError like
-  # `Invalid Tax ID. 123456789 is not an allowed value.` — placeholder numbers (all-same
-  # digits, sequential digits) are on Stripe's denylist. We don't pre-validate against that
-  # denylist, so these are expected seller-input errors: the seller sees Stripe's message
-  # inline on the payments settings page and can correct the tax ID themselves. Stripe
-  # doesn't always populate `code`/`param` on this rejection, so also match on the message.
+  # Stripe validates the tax IDs we pass on account creation (individual `id_number` or its
+  # 4-digit `ssn_last_4`, business `tax_id`) and rejects placeholder values (all-same digits,
+  # sequential digits) with an InvalidRequestError like `Invalid Tax ID. 123456789 is not an
+  # allowed value.` / `Invalid SSN last 4. 0000 is not an allowed value.` We don't pre-validate
+  # that denylist, so these are expected seller-input errors the seller fixes from the message
+  # Stripe shows inline. Stripe doesn't always populate `code`/`param`, so also match the message.
   private_class_method
   def self.tax_id_invalid_error?(error)
     return false unless error.is_a?(Stripe::InvalidRequestError)
@@ -1804,9 +1804,9 @@ module StripeMerchantAccountManager
     return true if code == "tax_id_invalid"
 
     param = error.respond_to?(:param) ? error.param.to_s : ""
-    return true if param.split("[").last.to_s.delete("]").in?(%w[id_number tax_id])
+    return true if param.split("[").last.to_s.delete("]").in?(%w[id_number ssn_last_4 tax_id])
 
-    error.message.to_s.match?(/invalid tax id/i)
+    error.message.to_s.match?(/invalid tax id|invalid ssn last 4/i)
   end
 
   # Stripe validates the phone numbers we pass on account creation (individual phone,

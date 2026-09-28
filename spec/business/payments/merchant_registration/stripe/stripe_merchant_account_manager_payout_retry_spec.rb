@@ -1048,6 +1048,39 @@ describe StripeMerchantAccountManager do
       end
     end
 
+    context "when Stripe rejects the SSN last 4 as a disallowed placeholder value" do
+      before do
+        allow(Stripe::Account).to receive(:create).and_raise(
+          Stripe::InvalidRequestError.new(
+            "Invalid SSN last 4. 0000 is not an allowed value.", nil
+          )
+        )
+      end
+
+      it "does not report the rejection to Sentry (expected seller-input error) and re-raises" do
+        allow(ErrorNotifier).to receive(:notify)
+
+        expect do
+          described_class.create_account(user, passphrase:)
+        end.to raise_error(Stripe::InvalidRequestError)
+
+        expect(ErrorNotifier).not_to have_received(:notify)
+      end
+
+      it "does not report the rejection when only the field name identifies it" do
+        allow(Stripe::Account).to receive(:create).and_raise(
+          Stripe::InvalidRequestError.new("Invalid value.", "individual[ssn_last_4]")
+        )
+        allow(ErrorNotifier).to receive(:notify)
+
+        expect do
+          described_class.create_account(user, passphrase:)
+        end.to raise_error(Stripe::InvalidRequestError)
+
+        expect(ErrorNotifier).not_to have_received(:notify)
+      end
+    end
+
     context "when Stripe rejects the phone number" do
       before do
         allow(Stripe::Account).to receive(:create).and_raise(
