@@ -928,18 +928,27 @@ module Purchase::Blockable
       max_number_of_failed_purchases_in_a_row = max_number_of_failed_purchases_in_a_row.try(:to_i) || 10
       failed_purchases_in_a_row_watch_days = failed_purchases_in_a_row_watch_days.try(:to_i) || 2
 
-      failed_purchase_attempts_count = link.sales
-                                           .failed
-                                           .not_recurring_charge
-                                           .where("price_cents > 0")
-                                           .where("error_code NOT IN (?) OR error_code IS NULL", IGNORED_ERROR_CODES)
-                                           .where(created_at: card_testing_product_watch_minutes.minutes.ago..).count
+      countable_failures = link.sales
+                               .failed
+                               .not_recurring_charge
+                               .where("price_cents > 0")
+                               .where("error_code NOT IN (?) OR error_code IS NULL", IGNORED_ERROR_CODES)
+      failed_purchase_attempts_count = countable_failures.where(created_at: card_testing_product_watch_minutes.minutes.ago..).count
 
-      recent_purchases_failed_in_a_row = failed_purchases_count_redis_namespace.incr(failed_purchases_count_redis_key)
-      failed_purchases_count_redis_namespace.expire(failed_purchases_count_redis_key, failed_purchases_in_a_row_watch_days.days.to_i)
+      recent_purchases_failed_in_a_row = record_product_failure_streak!(failed_purchases_in_a_row_watch_days)
 
-      return if failed_purchase_attempts_count < max_number_of_failed_purchases \
-             && recent_purchases_failed_in_a_row < max_number_of_failed_purchases_in_a_row
+      burst_tripped = failed_purchase_attempts_count >= max_number_of_failed_purchases
+      streak_tripped = recent_purchases_failed_in_a_row >= max_number_of_failed_purchases_in_a_row
+      return unless burst_tripped || streak_tripped
+
+      # Skip only when every tripped count is one buyer on one card. A second email or fingerprint
+      # still blocks. The streak's buyers are recorded as each failure is counted and cleared with it.
+      return if sole_product_block?(
+        countable_failures,
+        burst_tripped:,
+        streak_tripped:,
+        watch_minutes: card_testing_product_watch_minutes
+      )
 
       PlatformBlock.add!(
         object_type: PlatformBlock::TYPES[:product],
@@ -1019,8 +1028,91 @@ module Purchase::Blockable
       "#{link_id}:#{ip_address}"
     end
 
+    def sole_buyer_failures?(failures)
+      failures.distinct.limit(2).pluck(:email).size < 2 &&
+        distinct_card_count(failures.with_stripe_fingerprint) < 2
+    end
+
+    def sole_product_block?(countable_failures, burst_tripped:, streak_tripped:, watch_minutes:)
+      sole = true
+      if burst_tripped
+        sole &&= sole_buyer_failures?(countable_failures.where(created_at: watch_minutes.minutes.ago..))
+      end
+      sole &&= @product_streak_sole_buyer == true if streak_tripped
+      sole
+    end
+
+    # One script so a concurrent success clears the count and identities together. An old host's bare
+    # INCR leaves recorded behind count, or rebuilds count with its own EXPIRE; the sets are trusted
+    # only while counters and deadlines match, and the deadline sits 1ms off so no EXPIRE can copy it.
+    PRODUCT_STREAK_RECORD_SCRIPT = <<~LUA
+      local count_key, emails_key, cards_key, recorded_key = KEYS[1], KEYS[2], KEYS[3], KEYS[4]
+      local email, card = ARGV[1], ARGV[2]
+      local ttl = tonumber(ARGV[3])
+      local count = redis.call("INCR", count_key)
+      local recorded
+      if count == 1 then
+        redis.call("DEL", emails_key, cards_key)
+        redis.call("SET", recorded_key, 1)
+        recorded = 1
+      elseif redis.call("PEXPIRETIME", count_key) ~= redis.call("PEXPIRETIME", recorded_key) then
+        redis.call("DEL", emails_key, cards_key)
+        redis.call("SET", recorded_key, 0)
+        recorded = 0
+      else
+        recorded = redis.call("INCR", recorded_key)
+      end
+      if redis.call("SCARD", emails_key) < 2 then
+        redis.call("SADD", emails_key, email)
+      end
+      if card ~= "" and redis.call("SCARD", cards_key) < 2 then
+        redis.call("SADD", cards_key, card)
+      end
+      local time = redis.call("TIME")
+      local deadline = tonumber(time[1]) * 1000 + math.floor(tonumber(time[2]) / 1000) + ttl * 1000 - 1
+      for _, key in ipairs(KEYS) do
+        redis.call("PEXPIREAT", key, deadline)
+      end
+      return {count, recorded, redis.call("SCARD", emails_key), redis.call("SCARD", cards_key)}
+    LUA
+
+    PRODUCT_STREAK_CLEAR_SCRIPT = <<~LUA
+      return redis.call("DEL", unpack(KEYS))
+    LUA
+
+    def record_product_failure_streak!(watch_days)
+      count, recorded, emails, cards = failed_purchases_count_redis_namespace.eval(
+        PRODUCT_STREAK_RECORD_SCRIPT,
+        product_streak_redis_keys,
+        [product_streak_email_identity, product_streak_card_identity.to_s, watch_days.days.to_i]
+      ).map(&:to_i)
+      @product_streak_sole_buyer = recorded == count && emails < 2 && cards < 2
+      count
+    end
+
+    # Mirrors sole_buyer_failures?: emails compare case-insensitively like the column, and a PayPal
+    # wallet is one card however many billing-agreement tokens it produced.
+    def product_streak_email_identity
+      "email:#{email.to_s.strip.downcase}"
+    end
+
+    def product_streak_card_identity
+      return if stripe_fingerprint.blank?
+
+      if charge_processor_id == PaypalChargeProcessor.charge_processor_id
+        "wallet:#{card_visual.to_s.strip.downcase.presence || "token:#{stripe_fingerprint}"}"
+      else
+        "card:#{stripe_fingerprint}"
+      end
+    end
+
     def delete_failed_purchases_count
-      failed_purchases_count_redis_namespace.del(failed_purchases_count_redis_key)
+      failed_purchases_count_redis_namespace.eval(PRODUCT_STREAK_CLEAR_SCRIPT, product_streak_redis_keys, [])
+    end
+
+    def product_streak_redis_keys
+      base = failed_purchases_count_redis_key
+      [base, "#{base}:emails", "#{base}:cards", "#{base}:recorded"]
     end
 
     def failed_purchases_count_redis_key

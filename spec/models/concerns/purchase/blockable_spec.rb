@@ -1378,6 +1378,17 @@ describe Purchase::Blockable do
         end
       end
 
+      context "when a burst over the threshold comes from one buyer and one card" do
+        before do
+          9.times { create(:failed_purchase, link: @product, email: "buyer@example.com") }
+          @purchase = create(:purchase, link: @product, email: "buyer@example.com", purchase_state: "in_progress")
+        end
+
+        it "doesn't block purchases on product" do
+          expect { @purchase.mark_failed! }.not_to change { PlatformBlock.count }
+        end
+      end
+
       context "when number of failed purchases doesn't exceed the threshold" do
         before do
           create(:failed_purchase, link: @product)
@@ -1451,6 +1462,205 @@ describe Purchase::Blockable do
                 @purchase.mark_failed!
               end.not_to change { PlatformBlock.count }
             end
+          end
+        end
+
+        context "when every failure is one buyer retrying one card" do
+          before do
+            2.times { create(:purchase, link: @product, email: "buyer@example.com", stripe_fingerprint: nil, purchase_state: "in_progress").mark_failed! }
+            @purchase = create(:purchase, link: @product, email: "buyer@example.com", stripe_fingerprint: nil, purchase_state: "in_progress")
+          end
+
+          it "doesn't block purchases on product" do
+            expect { @purchase.mark_failed! }.not_to change { PlatformBlock.count }
+          end
+
+          it "blocks once a second card appears under that email" do
+            @purchase.update!(stripe_fingerprint: "second-card")
+            create(:purchase, link: @product, email: "buyer@example.com", stripe_fingerprint: "first-card", purchase_state: "in_progress").mark_failed!
+
+            expect { @purchase.mark_failed! }.to change { PlatformBlock.product.count }.by(1)
+          end
+
+          it "blocks once a second buyer email appears" do
+            @purchase.update!(email: "other@example.com")
+
+            expect { @purchase.mark_failed! }.to change { PlatformBlock.product.count }.by(1)
+          end
+        end
+
+        context "when a host without identity recording counts a failure mid-streak" do
+          before do
+            create(:purchase, link: @product, email: "buyer@example.com", stripe_fingerprint: nil, purchase_state: "in_progress").mark_failed!
+            Redis::Namespace.new(:failed_purchases_count, redis: $redis).incr("product_#{@product.id}")
+            @purchase = create(:purchase, link: @product, email: "buyer@example.com", stripe_fingerprint: nil, purchase_state: "in_progress")
+          end
+
+          it "blocks purchases on product" do
+            expect { @purchase.mark_failed! }.to change { PlatformBlock.product.count }.by(1)
+          end
+        end
+
+        context "when an old host deletes only the count and then counts a bare increment" do
+          before do
+            create(:purchase, link: @product, email: "buyer@example.com", stripe_fingerprint: nil, purchase_state: "in_progress").mark_failed!
+            redis = Redis::Namespace.new(:failed_purchases_count, redis: $redis)
+            redis.del("product_#{@product.id}")
+            redis.incr("product_#{@product.id}")
+            create(:purchase, link: @product, email: "buyer@example.com", stripe_fingerprint: nil, purchase_state: "in_progress").mark_failed!
+            @purchase = create(:purchase, link: @product, email: "buyer@example.com", stripe_fingerprint: nil, purchase_state: "in_progress")
+          end
+
+          it "blocks purchases on product" do
+            expect { @purchase.mark_failed! }.to change { PlatformBlock.product.count }.by(1)
+          end
+        end
+
+        context "when an old host deletes only the count and then expires that bare increment" do
+          before do
+            create(:purchase, link: @product, email: "buyer@example.com", stripe_fingerprint: nil, purchase_state: "in_progress").mark_failed!
+            redis = Redis::Namespace.new(:failed_purchases_count, redis: $redis)
+            redis.del("product_#{@product.id}")
+            redis.incr("product_#{@product.id}")
+            redis.expire("product_#{@product.id}", 2.days.to_i)
+            create(:purchase, link: @product, email: "buyer@example.com", stripe_fingerprint: nil, purchase_state: "in_progress").mark_failed!
+            @purchase = create(:purchase, link: @product, email: "buyer@example.com", stripe_fingerprint: nil, purchase_state: "in_progress")
+          end
+
+          it "blocks purchases on product" do
+            expect { @purchase.mark_failed! }.to change { PlatformBlock.product.count }.by(1)
+          end
+        end
+
+        context "when a concurrent success clears the streak after this failure is counted" do
+          before do
+            2.times { create(:purchase, link: @product, email: "buyer@example.com", stripe_fingerprint: nil, purchase_state: "in_progress").mark_failed! }
+            @purchase = create(:purchase, link: @product, email: "buyer@example.com", stripe_fingerprint: nil, purchase_state: "in_progress")
+            allow(@purchase).to receive(:record_product_failure_streak!).and_wrap_original do |original, *args|
+              original.call(*args).tap { create(:purchase, link: @product, purchase_state: "in_progress").mark_successful! }
+            end
+          end
+
+          it "doesn't block purchases on product" do
+            expect { @purchase.mark_failed! }.not_to change { PlatformBlock.product.count }
+          end
+        end
+
+        context "when one buyer retries one PayPal wallet" do
+          before do
+            2.times do |n|
+              create(:purchase, link: @product, email: "buyer@example.com", charge_processor_id: PaypalChargeProcessor.charge_processor_id, card_visual: "buyer@paypal.example", stripe_fingerprint: "ba-token-#{n}", purchase_state: "in_progress").mark_failed!
+            end
+            @purchase = create(:purchase, link: @product, email: "buyer@example.com", charge_processor_id: PaypalChargeProcessor.charge_processor_id, card_visual: "buyer@paypal.example", stripe_fingerprint: "ba-token-2", purchase_state: "in_progress")
+          end
+
+          it "doesn't block purchases on product" do
+            expect { @purchase.mark_failed! }.not_to change { PlatformBlock.product.count }
+          end
+        end
+
+        context "when PayPal returns the same wallet email in different casing" do
+          before do
+            create(:purchase, link: @product, email: "buyer@example.com", charge_processor_id: PaypalChargeProcessor.charge_processor_id, card_visual: "Buyer@PayPal.example", stripe_fingerprint: "ba-token-0", purchase_state: "in_progress").mark_failed!
+            create(:purchase, link: @product, email: "buyer@example.com", charge_processor_id: PaypalChargeProcessor.charge_processor_id, card_visual: "buyer@paypal.example", stripe_fingerprint: "ba-token-1", purchase_state: "in_progress").mark_failed!
+            @purchase = create(:purchase, link: @product, email: "buyer@example.com", charge_processor_id: PaypalChargeProcessor.charge_processor_id, card_visual: "BUYER@paypal.example", stripe_fingerprint: "ba-token-2", purchase_state: "in_progress")
+          end
+
+          it "doesn't block purchases on product" do
+            expect { @purchase.mark_failed! }.not_to change { PlatformBlock.product.count }
+          end
+        end
+
+        context "when one buyer uses a second PayPal wallet" do
+          before do
+            create(:purchase, link: @product, email: "buyer@example.com", charge_processor_id: PaypalChargeProcessor.charge_processor_id, card_visual: "first@paypal.example", stripe_fingerprint: "ba-token-1", purchase_state: "in_progress").mark_failed!
+            create(:purchase, link: @product, email: "buyer@example.com", charge_processor_id: PaypalChargeProcessor.charge_processor_id, card_visual: "second@paypal.example", stripe_fingerprint: "ba-token-2", purchase_state: "in_progress").mark_failed!
+            @purchase = create(:purchase, link: @product, email: "buyer@example.com", charge_processor_id: PaypalChargeProcessor.charge_processor_id, card_visual: "second@paypal.example", stripe_fingerprint: "ba-token-3", purchase_state: "in_progress")
+          end
+
+          it "blocks purchases on product" do
+            expect { @purchase.mark_failed! }.to change { PlatformBlock.product.count }.by(1)
+          end
+        end
+
+        context "when the streak counter started before purchase ids were recorded" do
+          before do
+            Redis::Namespace.new(:failed_purchases_count, redis: $redis).set("product_#{@product.id}", 2)
+            @purchase = create(:purchase, link: @product, email: "buyer@example.com", stripe_fingerprint: nil, purchase_state: "in_progress")
+          end
+
+          it "blocks purchases on product" do
+            expect { @purchase.mark_failed! }.to change { PlatformBlock.product.count }.by(1)
+          end
+        end
+
+        context "when an earlier buyer failed before a successful purchase cleared the streak" do
+          before do
+            create(:purchase, link: @product, email: "first@example.com", stripe_fingerprint: nil, purchase_state: "in_progress").mark_failed!
+            create(:purchase, link: @product, purchase_state: "in_progress").mark_successful!
+            2.times { create(:purchase, link: @product, email: "second@example.com", stripe_fingerprint: nil, purchase_state: "in_progress").mark_failed! }
+            @purchase = create(:purchase, link: @product, email: "second@example.com", stripe_fingerprint: nil, purchase_state: "in_progress")
+          end
+
+          it "doesn't block purchases on product" do
+            expect { @purchase.mark_failed! }.not_to change { PlatformBlock.product.count }
+          end
+        end
+
+        context "when an earlier buyer is outside the fixed watch window but still in the streak" do
+          before do
+            $redis.set(RedisKey.card_testing_failed_purchases_in_a_row_watch_days, 2)
+            travel_to(3.days.ago) do
+              create(:purchase, link: @product, email: "first@example.com", stripe_fingerprint: nil, purchase_state: "in_progress").mark_failed!
+            end
+            create(:purchase, link: @product, email: "second@example.com", stripe_fingerprint: nil, purchase_state: "in_progress").mark_failed!
+            @purchase = create(:purchase, link: @product, email: "second@example.com", stripe_fingerprint: nil, purchase_state: "in_progress")
+          end
+
+          it "blocks purchases on product" do
+            expect { @purchase.mark_failed! }.to change { PlatformBlock.product.count }.by(1)
+          end
+        end
+
+        context "when the burst window still contains another buyer after the streak was cleared" do
+          before do
+            $redis.set(RedisKey.card_testing_product_max_failed_purchases_count, 3)
+            create(:purchase, link: @product, email: "first@example.com", stripe_fingerprint: nil, purchase_state: "in_progress").mark_failed!
+            create(:purchase, link: @product, purchase_state: "in_progress").mark_successful!
+            create(:purchase, link: @product, email: "second@example.com", stripe_fingerprint: nil, purchase_state: "in_progress").mark_failed!
+            @purchase = create(:purchase, link: @product, email: "second@example.com", stripe_fingerprint: nil, purchase_state: "in_progress")
+          end
+
+          it "blocks purchases on product" do
+            expect { @purchase.mark_failed! }.to change { PlatformBlock.product.count }.by(1)
+          end
+        end
+
+        context "when an older purchase fails after a newer purchase began the streak" do
+          before do
+            @older = create(:purchase, link: @product, email: "first@example.com", stripe_fingerprint: nil, purchase_state: "in_progress")
+            create(:purchase, link: @product, email: "second@example.com", stripe_fingerprint: nil, purchase_state: "in_progress").mark_failed!
+            @older.mark_failed!
+            @purchase = create(:purchase, link: @product, email: "second@example.com", stripe_fingerprint: nil, purchase_state: "in_progress")
+          end
+
+          it "blocks purchases on product" do
+            expect { @purchase.mark_failed! }.to change { PlatformBlock.product.count }.by(1)
+          end
+        end
+
+        context "when a stuck purchase fails after a success cleared an earlier buyer" do
+          before do
+            @stuck = create(:purchase, link: @product, email: "second@example.com", stripe_fingerprint: nil, purchase_state: "in_progress")
+            create(:purchase, link: @product, email: "first@example.com", stripe_fingerprint: nil, purchase_state: "in_progress").mark_failed!
+            create(:purchase, link: @product, purchase_state: "in_progress").mark_successful!
+            @stuck.mark_failed!
+            create(:purchase, link: @product, email: "second@example.com", stripe_fingerprint: nil, purchase_state: "in_progress").mark_failed!
+            @purchase = create(:purchase, link: @product, email: "second@example.com", stripe_fingerprint: nil, purchase_state: "in_progress")
+          end
+
+          it "doesn't block purchases on product" do
+            expect { @purchase.mark_failed! }.not_to change { PlatformBlock.product.count }
           end
         end
 
