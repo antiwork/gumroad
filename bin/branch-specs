@@ -561,10 +561,19 @@ def option_false?(options, key)
   !node.nil? && node[0] == :var_ref && node[1][1] == "false"
 end
 
-# A NOT NULL column with no default makes every other insert into that table
-# fail, including inserts from specs that never mention its model.
+# A NOT NULL column with no usable default makes every other insert into that
+# table fail, including inserts from specs that never mention its model.
+# `default: nil` supplies no value, so it counts as no default.
 def not_null_without_default?(options)
-  option_false?(options, "null") && !options.key?("default")
+  default = options["default"]
+  has_default = !default.nil? && !(default[0] == :var_ref && default[1][1] == "nil")
+  option_false?(options, "null") && !has_default
+end
+
+# Timestamp columns on an existing table are NOT NULL unless the call says otherwise.
+def nullable_option?(options)
+  node = options["null"]
+  !node.nil? && node[0] == :var_ref && node[1][1] == "true"
 end
 
 # A unique index on an existing table can reject rows that unrelated specs create.
@@ -633,7 +642,7 @@ def additive_table_block?(block, new_table:)
     options = call_options(args)
     case name
     when "index" then new_table || !unique_index?(options)
-    when "timestamps" then true
+    when "timestamps" then new_table || nullable_option?(options)
     else new_table || !not_null_without_default?(options)
     end
   end
@@ -641,8 +650,8 @@ end
 
 # Tables an additive statement touches, nil when the statement is anything else.
 def additive_statement_tables(statement)
-  _receiver, name, args, block = call_parts(statement)
-  return unless name && args && args.all? { |arg| literal_node?(arg) }
+  receiver, name, args, block = call_parts(statement)
+  return unless receiver.nil? && name && args && args.all? { |arg| literal_node?(arg) }
 
   table = args[0] && literal_name(args[0])
   return unless table
@@ -761,11 +770,14 @@ def additive_db_specs(paths, merge_base)
     touched = additive_migration_tables(migration)
     return [nil, "#{migration} is not a purely additive migration"] unless touched
 
-    found = specs_mentioning(*touched.flat_map { |table| table_name_variants(table) })
-    return [nil, "no spec names #{touched.join(', ')} (from #{migration})"] if found.empty?
+    # Each table needs its own spec: a spec for one table must not cover another.
+    touched.each do |table|
+      found = specs_mentioning(*table_name_variants(table))
+      return [nil, "no spec names #{table} (from #{migration})"] if found.empty?
 
+      specs.concat(found)
+    end
     tables.concat(touched)
-    specs.concat(found)
   end
 
   if paths.include?(SCHEMA_PATH) && !schema_change_covered?(merge_base, tables.uniq)

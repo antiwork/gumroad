@@ -1520,6 +1520,22 @@ non_additive_check(
   "  def change\n    change_table :widgets do |t|\n      t.string :label, null: false\n    end\n  end\n",
 )
 non_additive_check(
+  "add_column called on a receiver escalates",
+  "  def change\n    SomeHelper.add_column(:widgets, :label, :string)\n  end\n",
+)
+non_additive_check(
+  "add_column that is NOT NULL with a nil default escalates",
+  "  def change\n    add_column :widgets, :label, :string, null: false, default: nil\n  end\n",
+)
+non_additive_check(
+  "change_table timestamps on an existing table escalates",
+  "  def change\n    change_table :widgets do |t|\n      t.timestamps\n    end\n  end\n",
+)
+non_additive_check(
+  "change_table timestamps with NOT NULL escalates",
+  "  def change\n    change_table :widgets do |t|\n      t.timestamps null: false\n    end\n  end\n",
+)
+non_additive_check(
   "unique add_index on an existing table escalates",
   "  def change\n    add_index :widgets, :name, unique: true\n  end\n",
 )
@@ -1560,6 +1576,29 @@ check(
   head_deletes: [MIGRATION_PATH_FOR_TEST],
   expect_escalate: true,
   expect_reason: ADDITIVE_REASON,
+)
+additive_check(
+  "change_table timestamps that allow NULL are accepted on an existing table",
+  "  def change\n    change_table :widgets do |t|\n      t.timestamps null: true\n    end\n  end\n",
+)
+
+check(
+  "migration touching two tables selects the specs of both",
+  base_files: DB_SPECS.merge("spec/models/gadget_spec.rb" => "RSpec.describe Gadget do\nend\n"),
+  head_files: {
+    MIGRATION_PATH_FOR_TEST => migration_rb("  def change\n    add_column :widgets, :label, :string\n    add_column :gadgets, :label, :string\n  end\n"),
+  },
+  expect_specs: WIDGET_SPECS + %w[spec/models/gadget_spec.rb],
+  reject_specs: %w[spec/models/unrelated_spec.rb],
+)
+check(
+  "migration touching two tables escalates when only one table has a spec",
+  base_files: DB_SPECS,
+  head_files: {
+    MIGRATION_PATH_FOR_TEST => migration_rb("  def change\n    add_column :widgets, :label, :string\n    add_column :gadgets, :label, :string\n  end\n"),
+  },
+  expect_escalate: true,
+  expect_reason: "no spec names gadgets",
 )
 check(
   "additive migration on a table no spec names escalates",
