@@ -95,7 +95,12 @@ describe User::SocialGoogle do
         expect(live_user.unconfirmed_email).to eq("spongebob-pending@example.com")
         expect(live_user.google_uid).to eq(@data_copy2["uid"])
         expect(@deleted_user.reload.google_uid).to eq(@data_copy2["uid"])
-        expect(User.find_or_create_for_google_oauth2(@data_copy2).id).to eq(live_user.id)
+
+        second_login = User.find_or_create_for_google_oauth2(@data_copy2)
+
+        expect(second_login.id).to eq(live_user.id)
+        expect(live_user.reload.email).to eq(@data_copy2["info"]["email"])
+        expect(live_user.unconfirmed_email).to eq("spongebob-pending@example.com")
       end
 
       it "still confirms a live account with no pending email change" do

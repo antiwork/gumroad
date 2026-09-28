@@ -52,7 +52,6 @@ module User::SocialGoogle
         # The redirect below copies a deleted row's uid onto the live account without clearing it
         # on the deleted row, so a live match must win or a later email change strands the user.
         user = User.alive.find_by(google_uid: data["uid"]) || User.find_by(google_uid: data["uid"])
-        redirected_to_live_user = false
 
         # A closed account keeps its google_uid after support frees its email to a
         # `@deleted.invalid` placeholder. Prefer the live account holding the Google address; never
@@ -60,10 +59,7 @@ module User::SocialGoogle
         if user&.deleted? && user.email.to_s.end_with?("@#{User::DELETED_ACCOUNT_EMAIL_DOMAIN}")
           email = data["info"]["email"] || data["extra"]["raw_info"]["email"]
           live_user = EmailFormatValidator.valid?(email) ? User.alive.find_by(email:) : nil
-          if live_user
-            user = live_user
-            redirected_to_live_user = true
-          end
+          user = live_user if live_user
         end
 
         if user.nil?
@@ -85,7 +81,10 @@ module User::SocialGoogle
             query_google(user, data)
           end
         else
-          query_google(user, data, keep_pending_email: redirected_to_live_user)
+          # A closed row keeps its uid after support frees the address, so this uid can be shared with
+          # a deleted account: the match proves the current address, not the pending replacement.
+          keep_pending_email = User.deleted.exists?(google_uid: data["uid"])
+          query_google(user, data, keep_pending_email:)
         end
 
         user
@@ -137,8 +136,8 @@ module User::SocialGoogle
 
       user.skip_confirmation_notification!
       user.save!
-      # On the deleted-row redirect Google only proved the current address. Confirming would apply a
-      # pending change it never verified, and the next login from that uid would land on the deleted row.
+      # keep_pending_email paths prove only the current address, so confirming would apply a pending
+      # change Google never verified — and strand the next sign-in in the two-identity case.
       user.confirm if user.has_unconfirmed_email? && !(keep_pending_email && user.pending_reconfirmation?)
 
       user
