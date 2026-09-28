@@ -36,6 +36,18 @@ describe SellerProfile do
       expect(Rails.cache.exist?(subject.custom_style_cache_name)).to eq(true)
     end
 
+    it "sets the radius and button hover tokens, with stock values by default" do
+      expect(subject.custom_styles).to include("--radius: 0.25rem;--button-hover-offset: 0.25rem")
+
+      subject.update!(border_radius: "large")
+      expect(Rails.cache.exist?(subject.custom_style_cache_name)).to eq(false)
+      expect(subject.custom_styles).to include("--radius: 1rem")
+
+      subject.update!(button_hover: "none")
+      expect(Rails.cache.exist?(subject.custom_style_cache_name)).to eq(false)
+      expect(subject.custom_styles).to include("--button-hover-offset: 0rem")
+    end
+
     it "keeps cached CSS until the theme update commits" do
       subject.custom_styles
 
@@ -93,6 +105,15 @@ describe SellerProfile do
       expect(subject.reload.custom_styles).to eq("")
     end
 
+    it "does not compile an unknown stored radius or button hover value" do
+      subject.custom_styles
+      subject.update_column(:border_radius, "1rem; } body { display: none }")
+      expect(subject.reload.custom_styles).to eq("")
+
+      subject.update_columns(border_radius: "small", button_hover: "0; } body { display: none }")
+      expect(subject.reload.custom_styles).to eq("")
+    end
+
     it "does not return cached CSS for an unsafe stored font" do
       subject.custom_styles
       subject.update_column(:font, "Roboto Mono; } body { display: none }")
@@ -108,6 +129,14 @@ describe SellerProfile do
       subject.save!
 
       expect(subject).to have_attributes(background_color: "#ffffff", highlight_color: "#00ff00")
+    end
+
+    it "rejects a radius or button hover outside the choices" do
+      subject = build(:seller_profile, border_radius: "huge", button_hover: "bounce")
+
+      expect(subject).not_to be_valid
+      expect(subject.errors[:border_radius]).to include("is not included in the list")
+      expect(subject.errors[:button_hover]).to include("is not included in the list")
     end
 
     it "rejects a colour with a valid first line and trailing content" do

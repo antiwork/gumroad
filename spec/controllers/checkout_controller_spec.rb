@@ -118,7 +118,17 @@ describe CheckoutController, type: :controller, inertia: true do
                                                text_color: "#000000",
                                                danger_color: "#9b1c12",
                                                font_family: %("Roboto Mono", "ABC Favorit", monospace),
+                                               border_radius: "0.25rem",
                                              })
+      end
+
+      it "sends the seller's radius as a literal length for Stripe's appearance variables" do
+        seller = create(:user).tap { _1.seller_profile.update!(border_radius: "large") }
+        cart_with(create(:product, user: seller))
+
+        get :show
+
+        expect(inertia.props.dig(:checkout_style, :theme, :border_radius)).to eq("1rem")
       end
 
       it "floors the indicator colour when the seller's accent is invisible on their background" do

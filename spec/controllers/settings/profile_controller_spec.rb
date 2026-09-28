@@ -87,6 +87,19 @@ describe Settings::ProfileController, :vcr, type: :controller, inertia: true do
       )
     end
 
+    it "updates the corner radius and button hover" do
+      put :update, params: { seller_profile: { border_radius: "large", button_hover: "none" } }
+
+      expect(response).to redirect_to(profile_path)
+      expect(seller.reload.seller_profile).to have_attributes(border_radius: "large", button_hover: "none")
+    end
+
+    it "rejects a corner radius or button hover outside the allowed choices" do
+      put :update, params: { seller_profile: { border_radius: "huge", button_hover: "bounce" } }
+
+      expect(seller.reload.seller_profile).to have_attributes(border_radius: "small", button_hover: "lift")
+    end
+
     it "leaves the other design fields alone when only one is sent" do
       seller.seller_profile.update!(background_color: "#ffffff", highlight_color: "#ff90e8", font: "ABC Favorit")
 

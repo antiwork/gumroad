@@ -48,6 +48,13 @@ describe ProfilePresenter do
       )
     end
 
+    it "includes the corner radius and button hover" do
+      seller = create_seller!(username: "cornered", email: "cornered@example.com")
+      seller.seller_profile.update!(border_radius: "medium", button_hover: "none")
+
+      expect(profile_settings_for(seller)).to include(border_radius: "medium", button_hover: "none")
+    end
+
     it "expands legacy shorthand colours for the browser color inputs" do
       seller = create_seller!(username: "legacycolors", email: "legacycolors@example.com")
       seller.seller_profile.tap(&:save!).update_columns(background_color: "#fff", highlight_color: "#0F0")

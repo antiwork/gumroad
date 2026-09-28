@@ -22,7 +22,8 @@ class PushNotificationWorker
                                              body:,
                                              data:,
                                              app_type:,
-                                             sound:).process
+                                             sound:,
+                                             app_version: device.app_version).process
       end
     end
   end

@@ -515,6 +515,20 @@ describe PurchaseSearchService do
       expect(get_records(seller_query: "longpartialbuyername@elsewhere.example")).to match_array([])
     end
 
+    it "does not widen an untracked search, whose response carries no total to compare" do
+      exact = create(:purchase, email: "rebecca.test@victoria.com")
+      create(:purchase, email: "rebecca.test@victoria.com.au")
+      index_model_records(Purchase)
+
+      # SellerMobileAnalyticsService searches with track_total_hits: false when it does not ask for
+      # :sales_count, so the response carries no total to compare. The address only the prefix
+      # clause reaches is what proves the fallback did not run.
+      result = described_class.search(seller_query: "rebecca.test@victoria.com", track_total_hits: false)
+
+      expect(result.results.total).to be_nil
+      expect(result.records.load).to match_array([exact])
+    end
+
     it "does not widen a complete address to another buyer whose address starts with it" do
       exact = create(:purchase, email: "rebecca.test@victoria.com")
       create(:purchase, email: "rebecca.test@victoria.com.au")

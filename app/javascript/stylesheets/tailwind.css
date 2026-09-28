@@ -61,6 +61,15 @@
   --shadow: 0.25rem 0.25rem 0 currentColor;
   --shadow-lg: 0.5rem 0.5rem 0 currentColor;
 
+  /*
+   * Seller custom styles override --radius and --button-hover-offset per store. Declaring --radius
+   * here makes `rounded` compile to var(--radius) instead of a fixed value. --radius-sm resolves on
+   * :root, so a subtree that overrides --radius must override --radius-sm too.
+   */
+  --radius: 0.25rem;
+  --radius-sm: var(--radius);
+  --button-hover-offset: 0.25rem;
+
   --spacing-product-page: 75.25rem;
   --grid-cols-sidebar: 1fr 3fr;
 
