@@ -515,6 +515,15 @@ describe PurchaseSearchService do
       expect(get_records(seller_query: "longpartialbuyername@elsewhere.example")).to match_array([])
     end
 
+    it "does not widen a complete address to another buyer whose address starts with it" do
+      exact = create(:purchase, email: "rebecca.test@victoria.com")
+      create(:purchase, email: "rebecca.test@victoria.com.au")
+      index_model_records(Purchase)
+
+      # The fallback is for text that reached nothing, not for an address that already matched.
+      expect(get_records(seller_query: "rebecca.test@victoria.com")).to match_array([exact])
+    end
+
     it "finds a membership by the member's current email after an email change" do
       buyer = create(:user, email: "signup@oldmail.example")
       membership = create(:membership_purchase, purchaser: buyer, email: "signup@oldmail.example")

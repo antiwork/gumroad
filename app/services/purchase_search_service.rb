@@ -76,7 +76,13 @@ class PurchaseSearchService
   end
 
   def process
-    Purchase.search(@body)
+    response = Purchase.search(@body)
+    return response if @options[:seller_query].blank? || response.results.total.positive?
+
+    tokens = long_query_tokens
+    return response if tokens.empty? || @fulltext_clause_index.nil?
+
+    Purchase.search(fallback_body(tokens))
   end
 
   def query = @body[:query]
@@ -464,26 +470,38 @@ class PurchaseSearchService
           shoulds << { term: { "subscription_current_email.raw" => query_string } }
           shoulds << { term: { "paypal_email.raw" => query_string } }
         end
-        # A token past the gram window matches no indexed term, so "buyer@domain" found nobody even
-        # though the full address did. A raw prefix is exact for a typed prefix and, at this length,
-        # selective enough to stay cheap.
-        query_string.split.each do |token|
-          next if token.length <= EMAIL_AUTOCOMPLETE_MAX_GRAM
-          shoulds << { prefix: { "email.raw" => token } }
-          shoulds << { prefix: { "subscription_current_email.raw" => token } }
-          shoulds << { prefix: { "paypal_email.raw" => token } }
-        end
         if query_string.match?(/\A[a-f0-9]{8}-[a-f0-9]{8}-[a-f0-9]{8}-[a-f0-9]{8}\z/)
           shoulds << { term: { "license_serial" => query_string.upcase } }
         end
       end
 
+      @fulltext_clause_index = @body[:query][:bool][:must].length
       @body[:query][:bool][:must] << {
         bool: {
           minimum_should_match: 1,
           should: shoulds,
         }
       }
+    end
+
+    # A token past the gram window matches no indexed term, so "buyer@domain" found nobody even
+    # though the full address did.
+    def long_query_tokens
+      @options[:seller_query].to_s.strip.downcase.split.select { |token| token.length > EMAIL_AUTOCOMPLETE_MAX_GRAM }
+    end
+
+    # Added only after the query above matched nothing, so a raw prefix cannot put an address that
+    # merely starts with the typed text next to the exact buyer it extends ("…@victoria.com" would
+    # otherwise also return "…@victoria.com.au").
+    def fallback_body(tokens)
+      body = @body.deep_dup
+      shoulds = body[:query][:bool][:must][@fulltext_clause_index][:bool][:should]
+      tokens.each do |token|
+        shoulds << { prefix: { "email.raw" => token } }
+        shoulds << { prefix: { "subscription_current_email.raw" => token } }
+        shoulds << { prefix: { "paypal_email.raw" => token } }
+      end
+      body
     end
 
     def build_body_buyer_search
