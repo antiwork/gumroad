@@ -267,13 +267,11 @@ describe ProductRefundPolicy do
       expect(refund_policy.errors.full_messages).to include("Fine print cannot state that refunds are not allowed")
     end
 
-    # The classifier spends part of the completion budget thinking, so a
-    # truncated response carries no answer; reading it as a denial blocked saves
-    # for any non-trivial fine print.
     def classifier_answer(no_refunds)
       { "choices" => [{ "message" => { "content" => %({"no_refunds": #{no_refunds}}) }, "finish_reason" => "stop" }] }
     end
 
+    # The classifier spends part of the budget thinking, so a cut-off body carries no answer.
     def truncated_classifier_response
       { "choices" => [{ "message" => { "content" => nil }, "finish_reason" => "length" }] }
     end
@@ -312,6 +310,25 @@ describe ProductRefundPolicy do
 
       expect(refund_policy.valid?).to be false
       expect(refund_policy.errors.full_messages).to include("Fine print cannot state that refunds are not allowed")
+    end
+
+    it "fails closed when an unreadable answer is followed by a transport failure" do
+      calls = 0
+      allow_any_instance_of(OpenAI::Client).to receive(:chat) do
+        calls += 1
+        calls == 1 ? truncated_classifier_response : raise(Faraday::TimeoutError.new("timeout"))
+      end
+      refund_policy.fine_print = "Refunds are granted only for duplicate purchases."
+
+      expect(refund_policy.valid?).to be false
+      expect(refund_policy.errors.full_messages).to include("Fine print cannot state that refunds are not allowed")
+    end
+
+    it "fails open when no attempt runs at all" do
+      allow_any_instance_of(OpenAI::Client).to receive(:chat).and_raise(Faraday::TimeoutError.new("timeout"))
+      refund_policy.fine_print = "Refunds are granted only for duplicate purchases."
+
+      expect(refund_policy.valid?).to be true
     end
 
     it "fails closed when the retry also comes back without an answer" do

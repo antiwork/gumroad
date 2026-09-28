@@ -42,10 +42,8 @@ class RefundPolicy < ApplicationRecord
   }.freeze
   OPENROUTER_URI_BASE = "https://openrouter.ai/api/v1"
   FINE_PRINT_CLASSIFICATION_MODEL = "openai/gpt-5.6-luna"
-  # The classifier answers after a reasoning pass, so the cap has to cover both
-  # that pass and the ~18-token JSON answer. At 20 every non-trivial fine print
-  # came back truncated (content nil, finish_reason "length"), which the parser
-  # read as a denial.
+  # The classifier answers after a reasoning pass, so the cap has to cover that
+  # pass and the ~18-token JSON answer.
   FINE_PRINT_CLASSIFICATION_MAX_TOKENS = 2_000
   FINE_PRINT_CLASSIFICATION_ATTEMPTS = 2
 
@@ -69,36 +67,40 @@ class RefundPolicy < ApplicationRecord
   end
 
   # An upstream failure wrapped in a 200 body is the outage class the transport
-  # rescues already cover: retried, then failed open. A body the model did return
-  # that we cannot read is retried once, then failed closed — adversarial fine
-  # print can push the model into answering nothing. A parsed body with no usable
-  # boolean stays a denial. Never widen to StandardError: a nil body raises on #dig.
+  # rescues cover: retried, then failed open. A body the model returned that we
+  # cannot read is retried once, then failed closed. Never widen to StandardError:
+  # a nil body raises on #dig.
   def fine_print_claims_no_refunds?
     failed_requests = 0
 
     FINE_PRINT_CLASSIFICATION_ATTEMPTS.times do
-      response = ask_ai_fine_print_classification
+      begin
+        response = ask_ai_fine_print_classification
+      rescue Faraday::TimeoutError, Faraday::ConnectionFailed, Faraday::ServerError, Net::ReadTimeout => e
+        failed_requests += 1
+        Rails.logger.warn("Fine print classifier request failed for refund policy #{id}: #{e.message}")
+        next
+      rescue Faraday::ParsingError => e
+        Rails.logger.warn("Fine print classifier response unreadable for refund policy #{id}: #{e.message}")
+        next
+      end
+
       if upstream_failure?(response)
         failed_requests += 1
-        Rails.logger.warn("Error moderating fine print for refund policy #{id}: #{response["error"]}")
+        Rails.logger.warn("Fine print classifier request failed for refund policy #{id}: #{response.dig("error", "message").to_s.truncate(200)}")
         next
       end
 
       classification = parse_no_refunds_classification(response)
       return classification unless classification.nil?
 
-      Rails.logger.warn("Unreadable fine print classification for refund policy #{id}")
+      Rails.logger.warn("Fine print classifier response unreadable for refund policy #{id}")
     end
 
-    # Nothing readable in any attempt. Every request failing means an outage
-    # (fail open); any attempt that returned a body we could not read is a
-    # denial, so a fine print that derails the classifier cannot buy a bypass.
+    # Nothing readable in any attempt: a request that never ran (or a body the
+    # model answered we cannot read) counts as a denial, and only a full outage —
+    # every attempt failing to run — fails open.
     failed_requests < FINE_PRINT_CLASSIFICATION_ATTEMPTS
-  rescue Faraday::TimeoutError, Faraday::ConnectionFailed, Faraday::ServerError, Net::ReadTimeout => e
-    Rails.logger.warn("Error moderating fine print for refund policy #{id}: #{e.message}")
-    false
-  rescue Faraday::ParsingError
-    true
   end
 
   private
