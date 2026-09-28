@@ -2525,12 +2525,13 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
 
     context "when the only open requirement is a pending_verification Stripe cannot finish" do
       def stub_unfinishable_review(stripe_connect_account_id, pending_verification: ["person_123.verification.document"],
-                                   charges_enabled: false, errors: [], current_deadline: nil)
+                                   charges_enabled: false, payouts_enabled: nil, errors: [], current_deadline: nil)
         allow(Stripe::Account).to receive(:retrieve).with(stripe_connect_account_id).and_return(
           Stripe::Account.construct_from(
             id: stripe_connect_account_id,
             object: "account",
             charges_enabled:,
+            payouts_enabled:,
             requirements: {
               "currently_due" => [],
               "past_due" => [],
@@ -2565,7 +2566,7 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
 
       it "keeps the reassuring redirect while the account can still take payments" do
         merchant_account = StripeMerchantAccountManager.create_account(user, passphrase: "1234")
-        stub_unfinishable_review(merchant_account.charge_processor_merchant_id, charges_enabled: true)
+        stub_unfinishable_review(merchant_account.charge_processor_merchant_id, charges_enabled: true, payouts_enabled: true)
         expect(Stripe::AccountLink).not_to receive(:create)
 
         get :remediation
@@ -2585,9 +2586,33 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         expect(response).to redirect_to settings_payments_url
       end
 
-      it "keeps the reassuring redirect when Stripe set a deadline on the review" do
+      it "keeps the reassuring redirect when Stripe set a deadline that has not passed" do
         merchant_account = StripeMerchantAccountManager.create_account(user, passphrase: "1234")
-        stub_unfinishable_review(merchant_account.charge_processor_merchant_id, current_deadline: 1790000000)
+        stub_unfinishable_review(merchant_account.charge_processor_merchant_id, current_deadline: 7.days.from_now.to_i)
+        expect(Stripe::AccountLink).not_to receive(:create)
+
+        get :remediation
+
+        expect(response).to redirect_to settings_payments_url
+      end
+
+      it "opens a Stripe AccountLink when payouts are disabled behind a review whose deadline has passed" do
+        merchant_account = StripeMerchantAccountManager.create_account(user, passphrase: "1234")
+        stripe_connect_account_id = merchant_account.charge_processor_merchant_id
+        stub_unfinishable_review(stripe_connect_account_id, charges_enabled: true, payouts_enabled: false,
+                                                            pending_verification: ["individual.first_name", "individual.address.line1"],
+                                                            current_deadline: 1.week.ago.to_i)
+        expect(Stripe::AccountLink).to receive(:create).and_call_original
+
+        get :remediation
+
+        expect(response.location).to match(Regexp.new("https://connect.stripe.com/setup/c/#{stripe_connect_account_id}/"))
+      end
+
+      it "keeps the reassuring redirect when payouts are disabled but the review deadline is still ahead" do
+        merchant_account = StripeMerchantAccountManager.create_account(user, passphrase: "1234")
+        stub_unfinishable_review(merchant_account.charge_processor_merchant_id, charges_enabled: true, payouts_enabled: false,
+                                                                                current_deadline: 7.days.from_now.to_i)
         expect(Stripe::AccountLink).not_to receive(:create)
 
         get :remediation
