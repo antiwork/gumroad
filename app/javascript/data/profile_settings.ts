@@ -66,12 +66,22 @@ export const updateProfileSettings = async (
     profileVersion?: string | null;
   },
 ) => {
-  const { profile_picture_blob_id, tabs, sections, profileVersion, font, background_color, highlight_color, ...user } =
-    profileSettings;
-  // font/background_color/highlight_color live on seller_profile, not user, and must be pulled out
-  // of the rest-spread above — anything left in `user` is sent as a User attribute and the profile
-  // policy would reject these three there.
-  const sellerProfile = { font, background_color, highlight_color };
+  const {
+    profile_picture_blob_id,
+    tabs,
+    sections,
+    profileVersion,
+    font,
+    background_color,
+    highlight_color,
+    border_radius,
+    button_hover,
+    ...user
+  } = profileSettings;
+  // The theme fields live on seller_profile, not user, and must be pulled out of the rest-spread
+  // above — anything left in `user` is sent as a User attribute and the profile policy would
+  // reject them there.
+  const sellerProfile = { font, background_color, highlight_color, border_radius, button_hover };
   const hasSellerProfileChanges = Object.values(sellerProfile).some((value) => value !== undefined);
   const response = await request({
     method: "PUT",

@@ -6,6 +6,8 @@ export type ProfileSettingsForm = {
   font: string;
   background_color: string;
   highlight_color: string;
+  border_radius: string;
+  button_hover: string;
   profile_picture_blob_id: string | null;
   product_page_storefront_enabled: boolean;
   hide_follow_form: boolean;
@@ -38,6 +40,8 @@ export const changedProfileSettings = (
   if (current.font !== baseline.font) changes.font = current.font;
   if (current.background_color !== baseline.background_color) changes.background_color = current.background_color;
   if (current.highlight_color !== baseline.highlight_color) changes.highlight_color = current.highlight_color;
+  if (current.border_radius !== baseline.border_radius) changes.border_radius = current.border_radius;
+  if (current.button_hover !== baseline.button_hover) changes.button_hover = current.button_hover;
   if (current.product_page_storefront_enabled !== baseline.product_page_storefront_enabled) {
     changes.product_page_storefront_enabled = current.product_page_storefront_enabled;
   }
@@ -65,6 +69,9 @@ export const rebaseProfileSettings = (
       : current.background_color,
   highlight_color:
     current.highlight_color === previousBaseline.highlight_color ? incoming.highlight_color : current.highlight_color,
+  border_radius:
+    current.border_radius === previousBaseline.border_radius ? incoming.border_radius : current.border_radius,
+  button_hover: current.button_hover === previousBaseline.button_hover ? incoming.button_hover : current.button_hover,
   product_page_storefront_enabled:
     current.product_page_storefront_enabled === previousBaseline.product_page_storefront_enabled
       ? incoming.product_page_storefront_enabled

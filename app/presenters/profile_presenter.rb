@@ -63,6 +63,8 @@ class ProfilePresenter
           font: seller.seller_profile.font,
           background_color: HexColorValidator.normalize(seller.seller_profile.background_color),
           highlight_color: HexColorValidator.normalize(seller.seller_profile.highlight_color),
+          border_radius: seller.seller_profile.border_radius,
+          button_hover: seller.seller_profile.button_hover,
           profile_picture_blob_id: seller.avatar.signed_id,
           product_page_storefront_enabled: seller.product_page_storefront_enabled?,
           hide_follow_form: seller.hide_follow_form?,
@@ -74,6 +76,11 @@ class ProfilePresenter
         profile_version:,
         memberships: memberships.map { |product| ProductPresenter.card_for_web(product:, show_seller: false) },
         seller_fonts_css_source: SellerProfile.seller_fonts_css_source,
+        # The lengths behind each choice, so the preview draws exactly what the storefront will.
+        theme_options: {
+          border_radii: SellerProfile::BORDER_RADIUS_CHOICES.symbolize_keys,
+          button_hover_offsets: SellerProfile::BUTTON_HOVER_OFFSETS.symbolize_keys,
+        },
         email_confirmation:,
         # Custom-HTML profile landing page (#5553). Authored solely via the seller's agent + the
         # `gumroad user page` CLI (no inline editor) - these props drive the "Build with your agent"
