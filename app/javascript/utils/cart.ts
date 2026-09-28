@@ -8,13 +8,28 @@ export type CartItemsCount = number | "not-available";
 
 let countPromise: Promise<CartItemsCount> | null = null;
 
+// WebKit grants a frame storage access only when it is same-origin with the page, so the count is
+// read from the storefront host when that host shares the root domain's cart cookie, and from the
+// root domain on a custom domain (which does not, and where the checkout button sends buyers anyway).
+export const cartItemsCountSrc = () => {
+  const { host } = window.location;
+  const rootHost = new URL(Routes.cart_items_count_url(), window.location.href).host;
+  return host === rootHost || host.endsWith(`.${rootHost}`)
+    ? Routes.cart_items_count_path()
+    : Routes.cart_items_count_url();
+};
+
+// "not-available" means the count could not be read, which is not the same as having items in the
+// cart: treating it as truthy shows the cart shortcut to every visitor whose count is unreadable.
+export const hasCartItems = (count: CartItemsCount | null): count is number => typeof count === "number" && count > 0;
+
 export const loadCartItemsCount = (src: string, cb: (value: CartItemsCount) => void) => {
   if (!countPromise)
     countPromise = new Promise((resolve) => {
       const iframe = document.createElement("iframe");
       iframe.style.display = "none";
       iframe.src = src;
-      const { origin } = new URL(src);
+      const { origin } = new URL(src, window.location.href);
       const handler = (evt: MessageEvent) => {
         if (evt.source !== iframe.contentWindow || evt.origin !== origin) return;
 

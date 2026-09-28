@@ -1510,6 +1510,10 @@ Rails.application.routes.draw do
 
     get "/landing/embed", to: "users#landing_iframe_content"
     get "/landing/version", to: "users#landing_version"
+    # A seller subdomain shares the root domain's cart cookie, so the storefront's count frame can
+    # be same-origin here — the only form WebKit grants storage access to. Custom domains keep using
+    # the root-domain route, where the checkout button sends buyers.
+    get "/cart_items_count", to: "links#cart_items_count", as: :storefront_cart_items_count
     # The gumroad:products bridge fetches this relative to the wrapper page,
     # which is served on the seller's subdomain or custom domain — hosts this
     # block routes. The Rack::Attack throttle matches the path by regexp, so
