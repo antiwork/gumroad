@@ -38,5 +38,25 @@ describe Purchase do
 
       expect(purchase.send(:tax_location_valid?)).to eq(true)
     end
+
+    context "when the IP country is unknown and the seller has no compliance country" do
+      let(:seller) { create(:user) }
+
+      before { seller.alive_user_compliance_info&.mark_deleted! }
+
+      it "rejects a selected country that differs from the card country" do
+        purchase = purchase_for(country: "United States", ip_country: nil, card_country: "FR")
+
+        expect(seller.compliance_country_code).to be_nil
+        expect(purchase.send(:tax_location_valid?)).to eq(false)
+        expect(purchase.error_code).to eq(PurchaseErrorCode::TAX_VALIDATION_FAILED)
+      end
+
+      it "accepts a selected country that matches the card country" do
+        purchase = purchase_for(country: "France", ip_country: nil, card_country: "FR")
+
+        expect(purchase.send(:tax_location_valid?)).to eq(true)
+      end
+    end
   end
 end

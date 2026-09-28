@@ -57,7 +57,7 @@ ASCII_LOCALE = { "LC_ALL" => "C", "LANG" => "C", "LC_CTYPE" => nil, "LANGUAGE" =
 # non-ASCII expectations below compare as text rather than raising.
 def utf8(str) = str.dup.force_encoding(Encoding::UTF_8)
 
-def check(name, base_files:, head_files:, head_deletes: [], expect_specs: nil, expect_escalate: false, env: {}, quote_path: nil)
+def check(name, base_files:, head_files:, head_deletes: [], expect_specs: nil, reject_specs: [], expect_escalate: false, expect_reason: nil, env: {}, quote_path: nil)
   $count += 1
   Dir.mktmpdir do |dir|
     build_repo(dir, base_files:, head_files:, head_deletes:, quote_path:)
@@ -69,6 +69,9 @@ def check(name, base_files:, head_files:, head_deletes: [], expect_specs: nil, e
       unless status.exitstatus == 3
         $failures << "#{name}: expected escalate (exit 3), got #{status.exitstatus}\nstdout: #{stdout}\nstderr: #{stderr}"
       end
+      if expect_reason && !stderr.include?(expect_reason)
+        $failures << "#{name}: expected escalate reason #{expect_reason.inspect}\nstderr: #{stderr}"
+      end
     else
       unless status.success?
         $failures << "#{name}: expected success, got #{status.exitstatus}\nstderr: #{stderr}"
@@ -79,6 +82,8 @@ def check(name, base_files:, head_files:, head_deletes: [], expect_specs: nil, e
       if missing.any?
         $failures << "#{name}: missing expected specs #{missing.inspect}\ngot: #{got.inspect}"
       end
+      leaked = reject_specs & got
+      $failures << "#{name}: selected specs it must not select #{leaked.inspect}" if leaked.any?
       # A non-empty list is a floor; an empty one means the selector prints nothing.
       if expect_specs == [] && got.any?
         $failures << "#{name}: expected no specs\ngot: #{got.inspect}"
@@ -1343,6 +1348,376 @@ check(
   head_files: {},
   head_deletes: %w[spec/support/some_helper.rb],
   expect_escalate: true,
+)
+
+# Purely additive migrations map to the specs that name their tables; any other
+# db/ change keeps escalating. Escalate cases assert the reason, so they fail
+# against a selector that escalates every db/ path for the old reason.
+WIDGET_SPEC = "# frozen_string_literal: true\n\nRSpec.describe Widget do\nend\n"
+WIDGETS_REQUEST_SPEC = "# frozen_string_literal: true\n\nRSpec.describe \"widgets\" do\nend\n"
+UNRELATED_SPEC = "# frozen_string_literal: true\n\nRSpec.describe Unrelated do\nend\n"
+DB_SPECS = {
+  "spec/models/widget_spec.rb" => WIDGET_SPEC,
+  "spec/requests/widgets_spec.rb" => WIDGETS_REQUEST_SPEC,
+  "spec/models/unrelated_spec.rb" => UNRELATED_SPEC,
+}.freeze
+WIDGET_SPECS = %w[spec/models/widget_spec.rb spec/requests/widgets_spec.rb].freeze
+ADDITIVE_REASON = "is not a purely additive migration"
+MIGRATION_PATH_FOR_TEST = "db/migrate/20261216120002_change_widgets.rb"
+
+def migration_rb(methods, superclass: "ActiveRecord::Migration[8.1]")
+  "# frozen_string_literal: true\n\nclass ChangeWidgets < #{superclass}\n#{methods}end\n"
+end
+
+def schema_rb(version: "2026_12_16_120001", widget_columns: [], gadget_columns: [], extra_tables: "")
+  out = +"# comment\n\nActiveRecord::Schema[7.1].define(version: #{version}) do\n"
+  out << %(  create_table "widgets", charset: "utf8mb4" do |t|\n    t.string "name"\n)
+  widget_columns.each { |column| out << "    #{column}\n" }
+  out << %(    t.index ["name"], name: "index_widgets_on_name"\n  end\n\n)
+  out << %(  create_table "gadgets", charset: "utf8mb4" do |t|\n    t.string "kind"\n)
+  gadget_columns.each { |column| out << "    #{column}\n" }
+  out << "  end\n#{extra_tables}end\n"
+end
+
+def additive_check(name, body, schema: nil, **options)
+  base_files = DB_SPECS.merge("db/schema.rb" => schema_rb)
+  head_files = { MIGRATION_PATH_FOR_TEST => migration_rb(body) }
+  head_files["db/schema.rb"] = schema if schema
+  check(name, base_files:, head_files:, expect_specs: WIDGET_SPECS, reject_specs: %w[spec/models/unrelated_spec.rb], **options)
+end
+
+def non_additive_check(name, body, reason: ADDITIVE_REASON, schema: nil)
+  head_files = { MIGRATION_PATH_FOR_TEST => migration_rb(body) }
+  head_files["db/schema.rb"] = schema if schema
+  check(name, base_files: DB_SPECS.merge("db/schema.rb" => schema_rb), head_files:, expect_escalate: true, expect_reason: reason)
+end
+
+WIDGET_SCHEMA = schema_rb(version: "2026_12_16_120002", widget_columns: [%(t.string "border_radius")])
+
+additive_check(
+  "additive change_table migration maps to specs naming the model and the table",
+  "  def change\n    change_table :widgets, bulk: true do |t|\n      t.string :border_radius\n    end\n  end\n",
+  schema: WIDGET_SCHEMA,
+)
+
+additive_check(
+  "additive add_column migration maps to specs naming the table",
+  "  def change\n    add_column :widgets, :border_radius, :string\n  end\n",
+  schema: WIDGET_SCHEMA,
+)
+
+additive_check(
+  "add_column in parentheses with a NOT NULL default is additive",
+  "  def change\n    add_column(:widgets, :border_radius, :integer, null: false, default: 0, limit: 2)\n  end\n",
+  schema: WIDGET_SCHEMA,
+)
+
+additive_check(
+  "additive add_index migration maps to specs naming the table",
+  "  def change\n    add_index :widgets, [:name, :kind], name: \"index_widgets_on_name_and_kind\"\n  end\n",
+  schema: schema_rb(version: "2026_12_16_120002", widget_columns: [%(t.index ["name", "kind"], name: "index_widgets_on_name_and_kind")]),
+)
+
+additive_check(
+  "additive up-only migration maps to specs naming the table",
+  "  def up\n    add_column :widgets, :border_radius, :string\n  end\n",
+  schema: WIDGET_SCHEMA,
+)
+
+additive_check(
+  "additive migration without a schema.rb change is accepted",
+  "  def change\n    add_column :widgets, :border_radius, :string\n  end\n",
+)
+
+additive_check(
+  "additive change_table migration with an index and a nullable reference is accepted",
+  "  def change\n    change_table :widgets do |t|\n      t.references :owner\n      t.index :owner_id\n    end\n  end\n",
+  schema: schema_rb(version: "2026_12_16_120002", widget_columns: [%(t.bigint "owner_id"), %(t.index ["owner_id"], name: "index_widgets_on_owner_id")]),
+)
+
+check(
+  "additive create_table migration maps to specs naming the new model, with its schema block",
+  base_files: {
+    "spec/models/thing_spec.rb" => "# frozen_string_literal: true\n\nRSpec.describe Thing do\nend\n",
+    "spec/models/unrelated_spec.rb" => UNRELATED_SPEC,
+    "db/schema.rb" => schema_rb,
+  },
+  head_files: {
+    "db/migrate/20261216120002_create_things.rb" => migration_rb(
+      "  def change\n    create_table :things do |t|\n      t.string :name, null: false\n      t.index :name, unique: true\n      t.timestamps\n    end\n  end\n",
+    ),
+    "db/schema.rb" => schema_rb(
+      version: "2026_12_16_120002",
+      extra_tables: %(\n  create_table "things", charset: "utf8mb4" do |t|\n    t.string "name", null: false\n    t.datetime "created_at", null: false\n    t.index ["name"], name: "index_things_on_name", unique: true\n  end\n),
+    ),
+  },
+  expect_specs: %w[spec/models/thing_spec.rb],
+  reject_specs: %w[spec/models/unrelated_spec.rb],
+)
+
+check(
+  "plural table name maps to specs naming the singular model",
+  base_files: {
+    "spec/models/category_spec.rb" => "# frozen_string_literal: true\n\nRSpec.describe Category do\nend\n",
+    "spec/models/unrelated_spec.rb" => UNRELATED_SPEC,
+  },
+  head_files: { "db/migrate/20261216120002_add_slug_to_categories.rb" => migration_rb("  def change\n    add_column :categories, :slug, :string\n  end\n") },
+  expect_specs: %w[spec/models/category_spec.rb],
+  reject_specs: %w[spec/models/unrelated_spec.rb],
+)
+
+non_additive_check("migration that removes a column escalates", "  def change\n    remove_column :widgets, :name, :string\n  end\n")
+non_additive_check("migration that renames a column escalates", "  def change\n    rename_column :widgets, :name, :title\n  end\n")
+non_additive_check("migration that changes a column escalates", "  def change\n    change_column :widgets, :name, :text\n  end\n")
+non_additive_check("migration that drops a table escalates", "  def change\n    drop_table :widgets\n  end\n")
+non_additive_check("migration that runs execute escalates", "  def up\n    execute \"UPDATE widgets SET name = 'x'\"\n  end\n")
+non_additive_check(
+  "migration with an update of existing rows escalates",
+  "  def change\n    add_column :widgets, :label, :string\n    Widget.update_all(label: \"x\")\n  end\n",
+)
+non_additive_check(
+  "migration with reversible escalates",
+  "  def change\n    reversible do |direction|\n      direction.up { add_column :widgets, :label, :string }\n    end\n  end\n",
+)
+non_additive_check(
+  "migration with an up and a down method escalates",
+  "  def up\n    add_column :widgets, :label, :string\n  end\n\n  def down\n    remove_column :widgets, :label\n  end\n",
+)
+non_additive_check(
+  "migration with one removal next to an addition escalates",
+  "  def change\n    add_column :widgets, :label, :string\n    remove_column :widgets, :name, :string\n  end\n",
+)
+non_additive_check(
+  "change_table that removes a column escalates",
+  "  def change\n    change_table :widgets, bulk: true do |t|\n      t.string :label\n      t.remove :name\n    end\n  end\n",
+)
+non_additive_check(
+  "change_table that changes a column escalates",
+  "  def change\n    change_table :widgets do |t|\n      t.change :name, :text\n    end\n  end\n",
+)
+non_additive_check(
+  "change_table that renames a column escalates",
+  "  def change\n    change_table :widgets do |t|\n      t.rename :name, :title\n    end\n  end\n",
+)
+non_additive_check(
+  "create_table with force escalates",
+  "  def change\n    create_table :widgets, force: true do |t|\n      t.string :name\n    end\n  end\n",
+)
+non_additive_check(
+  "add_column with a default computed by code escalates",
+  "  def change\n    add_column :widgets, :label, :string, default: Widget.default_label\n  end\n",
+)
+non_additive_check(
+  "add_column with an interpolated default escalates",
+  "  def change\n    add_column :widgets, :label, :string, default: \"a\#{1}\"\n  end\n",
+)
+non_additive_check(
+  "add_column that is NOT NULL without a default escalates",
+  "  def change\n    add_column :widgets, :label, :string, null: false\n  end\n",
+)
+non_additive_check(
+  "change_table column that is NOT NULL without a default escalates",
+  "  def change\n    change_table :widgets do |t|\n      t.string :label, null: false\n    end\n  end\n",
+)
+non_additive_check(
+  "add_column called on a receiver escalates",
+  "  def change\n    SomeHelper.add_column(:widgets, :label, :string)\n  end\n",
+)
+non_additive_check(
+  "add_column that is NOT NULL with a nil default escalates",
+  "  def change\n    add_column :widgets, :label, :string, null: false, default: nil\n  end\n",
+)
+non_additive_check(
+  "change_table timestamps on an existing table escalates",
+  "  def change\n    change_table :widgets do |t|\n      t.timestamps\n    end\n  end\n",
+)
+non_additive_check(
+  "change_table timestamps with NOT NULL escalates",
+  "  def change\n    change_table :widgets do |t|\n      t.timestamps null: false\n    end\n  end\n",
+)
+non_additive_check(
+  "unique add_index on an existing table escalates",
+  "  def change\n    add_index :widgets, :name, unique: true\n  end\n",
+)
+non_additive_check(
+  "unique index in change_table escalates",
+  "  def change\n    change_table :widgets do |t|\n      t.index :name, unique: true\n    end\n  end\n",
+)
+non_additive_check(
+  "change_table column call with a block escalates",
+  "  def change\n    change_table :widgets do |t|\n      t.string(:label) { puts 1 }\n    end\n  end\n",
+)
+non_additive_check(
+  "migration with an unknown statement escalates",
+  "  def change\n    add_column :widgets, :label, :string\n    say \"done\"\n  end\n",
+)
+non_additive_check(
+  "migration with a helper method next to change escalates",
+  "  def change\n    add_column :widgets, :label, :string\n  end\n\n  def helper\n  end\n",
+)
+check(
+  "migration class with a look-alike superclass escalates",
+  base_files: DB_SPECS,
+  head_files: { MIGRATION_PATH_FOR_TEST => migration_rb("  def change\n    add_column :widgets, :label, :string\n  end\n", superclass: "Other::Migration[8.1]") },
+  expect_escalate: true,
+  expect_reason: ADDITIVE_REASON,
+)
+check(
+  "migration that does not parse escalates",
+  base_files: DB_SPECS,
+  head_files: { MIGRATION_PATH_FOR_TEST => "class ChangeWidgets < ActiveRecord::Migration[8.1]\n  def change\n" },
+  expect_escalate: true,
+  expect_reason: ADDITIVE_REASON,
+)
+check(
+  "deleted migration escalates",
+  base_files: DB_SPECS.merge(MIGRATION_PATH_FOR_TEST => migration_rb("  def change\n    add_column :widgets, :label, :string\n  end\n")),
+  head_files: { "app/models/widget.rb" => "# noop\n" },
+  head_deletes: [MIGRATION_PATH_FOR_TEST],
+  expect_escalate: true,
+  expect_reason: ADDITIVE_REASON,
+)
+additive_check(
+  "change_table timestamps that allow NULL are accepted on an existing table",
+  "  def change\n    change_table :widgets do |t|\n      t.timestamps null: true\n    end\n  end\n",
+)
+
+check(
+  "migration touching two tables selects the specs of both",
+  base_files: DB_SPECS.merge("spec/models/gadget_spec.rb" => "RSpec.describe Gadget do\nend\n"),
+  head_files: {
+    MIGRATION_PATH_FOR_TEST => migration_rb("  def change\n    add_column :widgets, :label, :string\n    add_column :gadgets, :label, :string\n  end\n"),
+  },
+  expect_specs: WIDGET_SPECS + %w[spec/models/gadget_spec.rb],
+  reject_specs: %w[spec/models/unrelated_spec.rb],
+)
+check(
+  "migration touching two tables escalates when only one table has a spec",
+  base_files: DB_SPECS,
+  head_files: {
+    MIGRATION_PATH_FOR_TEST => migration_rb("  def change\n    add_column :widgets, :label, :string\n    add_column :gadgets, :label, :string\n  end\n"),
+  },
+  expect_escalate: true,
+  expect_reason: "no spec names gadgets",
+)
+check(
+  "additive migration on a table no spec names escalates",
+  base_files: { "spec/models/unrelated_spec.rb" => UNRELATED_SPEC },
+  head_files: { MIGRATION_PATH_FOR_TEST => migration_rb("  def change\n    add_column :widgets, :label, :string\n  end\n") },
+  expect_escalate: true,
+  expect_reason: "no spec names widgets",
+)
+check(
+  "additive migration whose specs exceed the file cap escalates",
+  base_files: (1..121).to_h { |i| ["spec/models/widget_#{i}_spec.rb", "RSpec.describe Widget do\nend\n"] },
+  head_files: { MIGRATION_PATH_FOR_TEST => migration_rb("  def change\n    add_column :widgets, :label, :string\n  end\n") },
+  expect_escalate: true,
+  expect_reason: "exceeds",
+)
+
+SCHEMA_REASON = "changes more than the additive migration's tables"
+
+non_additive_check(
+  "schema.rb change in a table the migration does not touch escalates",
+  "  def change\n    add_column :widgets, :border_radius, :string\n  end\n",
+  schema: schema_rb(version: "2026_12_16_120002", widget_columns: [%(t.string "border_radius")], gadget_columns: [%(t.string "extra")]),
+  reason: SCHEMA_REASON,
+)
+non_additive_check(
+  "schema.rb line removed from a touched table escalates",
+  "  def change\n    add_column :widgets, :border_radius, :string\n  end\n",
+  schema: schema_rb(version: "2026_12_16_120002", widget_columns: [%(t.string "border_radius")]).sub(%(    t.string "name"\n), ""),
+  reason: SCHEMA_REASON,
+)
+non_additive_check(
+  "schema.rb foreign key outside a table block escalates",
+  "  def change\n    add_column :widgets, :border_radius, :string\n  end\n",
+  schema: schema_rb(version: "2026_12_16_120002", widget_columns: [%(t.string "border_radius")]).sub(/^end\n\z/, %(  add_foreign_key "widgets", "gadgets"\nend\n)),
+  reason: SCHEMA_REASON,
+)
+non_additive_check(
+  "schema.rb change with a different table header escalates",
+  "  def change\n    add_column :widgets, :border_radius, :string\n  end\n",
+  schema: schema_rb(version: "2026_12_16_120002", widget_columns: [%(t.string "border_radius")]).sub(%(create_table "widgets", charset: "utf8mb4"), %(create_table "widgets", charset: "latin1")),
+  reason: SCHEMA_REASON,
+)
+
+check(
+  "schema.rb without a migration escalates",
+  base_files: DB_SPECS.merge("db/schema.rb" => schema_rb),
+  head_files: { "db/schema.rb" => WIDGET_SCHEMA },
+  expect_escalate: true,
+  expect_reason: "db/schema.rb changed without a migration",
+)
+check(
+  "db/ file that is neither a migration nor schema.rb escalates",
+  base_files: DB_SPECS,
+  head_files: { "db/seeds.rb" => "puts 1\n" },
+  expect_escalate: true,
+  expect_reason: "db/seeds.rb is not a migration or db/schema.rb",
+)
+check(
+  "additive migration next to a data migration escalates",
+  base_files: DB_SPECS,
+  head_files: {
+    MIGRATION_PATH_FOR_TEST => migration_rb("  def change\n    add_column :widgets, :label, :string\n  end\n"),
+    "db/data/20261216120003_backfill_widgets.rb" => "# noop\n",
+  },
+  expect_escalate: true,
+  expect_reason: "db/data/20261216120003_backfill_widgets.rb is not a migration or db/schema.rb",
+)
+check(
+  "additive migration next to an unmapped file escalates on the file",
+  base_files: DB_SPECS.merge("app/javascript/stylesheets/tailwind.css" => "old"),
+  head_files: {
+    MIGRATION_PATH_FOR_TEST => migration_rb("  def change\n    add_column :widgets, :label, :string\n  end\n"),
+    "app/javascript/stylesheets/tailwind.css" => "new",
+  },
+  expect_escalate: true,
+  expect_reason: "diff touches app/javascript/stylesheets/tailwind.css but no specs",
+)
+
+# The custom_styles template renders only through SellerProfile#custom_styles,
+# so the specs that name custom_styles cover it.
+check(
+  "custom_styles template maps to the specs that name custom_styles",
+  base_files: {
+    "spec/models/seller_profile_spec.rb" => "expect(subject.custom_styles).to include(\"--accent\")\n",
+    "spec/controllers/checkout_controller_spec.rb" => "expect(css).to eq(profile.custom_styles)\n",
+    "spec/models/unrelated_spec.rb" => UNRELATED_SPEC,
+    "app/views/layouts/custom_styles/styles.scss.erb" => "old",
+  },
+  head_files: { "app/views/layouts/custom_styles/styles.scss.erb" => "new" },
+  expect_specs: %w[spec/models/seller_profile_spec.rb spec/controllers/checkout_controller_spec.rb],
+  reject_specs: %w[spec/models/unrelated_spec.rb],
+)
+check(
+  "custom_styles partial is not mapped by the template rule",
+  base_files: {
+    "spec/models/seller_profile_spec.rb" => "expect(subject.custom_styles).to be_present\n",
+    "app/views/layouts/custom_styles/_style.html.erb" => "old",
+    "app/views/layouts/custom_styles/styles.scss.erb" => "old",
+  },
+  head_files: {
+    "app/views/layouts/custom_styles/_style.html.erb" => "new",
+    "app/views/layouts/custom_styles/styles.scss.erb" => "new",
+  },
+  expect_escalate: true,
+  expect_reason: "diff touches app/views/layouts/custom_styles/_style.html.erb but no specs",
+)
+check(
+  "global tailwind.css beside the custom_styles template still escalates on tailwind.css",
+  base_files: {
+    "spec/models/seller_profile_spec.rb" => "expect(subject.custom_styles).to be_present\n",
+    "app/views/layouts/custom_styles/styles.scss.erb" => "old",
+    "app/javascript/stylesheets/tailwind.css" => "old",
+  },
+  head_files: {
+    "app/views/layouts/custom_styles/styles.scss.erb" => "new",
+    "app/javascript/stylesheets/tailwind.css" => "new",
+  },
+  expect_escalate: true,
+  expect_reason: "diff touches app/javascript/stylesheets/tailwind.css but no specs",
 )
 
 WORKFLOW = File.expand_path("../../.github/workflows/tests.yml", __dir__)

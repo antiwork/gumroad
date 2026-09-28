@@ -12,8 +12,9 @@
 # full suite with the run-all-specs label.
 #
 # Exits 3 (ESCALATE) when the diff cannot be mapped safely — dependency,
-# config, migration, factory, or unmapped-helper changes, or a selection so
-# large the full suite is cheaper. CI turns that into "add run-all-specs".
+# config, factory, or unmapped-helper changes, a migration that is not purely
+# additive, or a selection so large the full suite is cheaper. CI turns that
+# into "add run-all-specs".
 #
 # Usage:
 #   bin/branch-specs                 # print the list, one per line
@@ -22,6 +23,7 @@
 #   bin/rspec $(bin/branch-specs)    # run it locally
 
 require "set"
+require "ripper"
 
 # Legacy always-on smoke set, now opt-in (--smoke): money-path smoke coverage
 # on every branch moved to the run-all-specs label + main's full suite.
@@ -257,7 +259,8 @@ MAPPED_SUPPORT = FANOUT.keys.select { |re| re.source.start_with?('\Aspec/support
 ESCALATE_PATTERNS = [
   %r{\AGemfile},
   %r{\Aconfig/},
-  %r{\Adb/},
+  # db/ is not listed: additive_db_specs classifies every db/ path and
+  # escalates the ones it cannot clear.
   %r{\Apackage\.json\z},
   %r{\A(pnpm-lock\.yaml|yarn\.lock|package-lock\.json)\z},
   %r{\Atsconfig},
@@ -361,6 +364,8 @@ changed.reject! { |path| IGNORED_PATTERNS.any? { |re| re.match?(path) } }
 # diff has nothing left to attribute, so escalate rather than run zero specs.
 escalate!("cassette-only diff: map to the owning spec or add run-all-specs") if changed.empty? && cassette_in_diff
 
+db_paths = changed.select { |path| path.start_with?("db/") }
+
 unmappable = changed.select do |path|
   ESCALATE_PATTERNS.any? { |re| re.match?(path) } && !CONFIG_SPEC_MAP.key?(path)
 end
@@ -375,9 +380,9 @@ escalate!("unmapped spec/support change: #{unmapped_support.first(3).join(', ')}
 # different name. Camelizes the basename (colombia_id_number →
 # ColombiaIdNumber) and greps specs for either form. Word-boundary anchored
 # so short names don't false-positive.
-def specs_mentioning(basename)
-  camel = basename.split("_").map(&:capitalize).join
-  pattern = "\\b(#{Regexp.escape(basename)}|#{Regexp.escape(camel)})\\b"
+def specs_mentioning(*basenames)
+  names = basenames.flat_map { |basename| [basename, basename.split("_").map(&:capitalize).join] }
+  pattern = "\\b(#{names.map { |name| Regexp.escape(name) }.join('|')})\\b"
   # grep prints path bytes unescaped, so the same rule as git() applies here.
   out = IO.popen(["grep", "-rlE", pattern, "spec/", "--include=*_spec.rb"], err: File::NULL, external_encoding: "UTF-8", &:read)
   return [] unless $?.success?
@@ -482,6 +487,10 @@ def spec_candidates(path)
       Dir.glob("spec/#{$1}/#{$2}#{$3}/**/*_spec.rb")
     e2e = Dir.glob("spec/requests/**/#{$3}*_spec.rb")
     unit + e2e
+  when "app/views/layouts/custom_styles/styles.scss.erb"
+    # Read only by SellerProfile#custom_styles (File.read), which every themed
+    # surface calls. Specs that name custom_styles cover the compiled output.
+    specs_mentioning("custom_styles")
   when %r{\Aapp/views/(([^/]+)(?:/.*)?)/[^/]+\z}
     # A mailer's templates are attributed by the render graph alone. Adding the
     # request/view globs here would let an unrelated spec keep the caller from
@@ -502,8 +511,291 @@ def spec_candidates(path)
   end
 end
 
+MIGRATION_PATH = %r{\Adb/migrate/\d+_[a-z0-9_]+\.rb\z}
+SCHEMA_PATH = "db/schema.rb"
+SCHEMA_DEFINE_LINE = /\AActiveRecord::Schema\[[\d.]+\]\.define\(version: [\d_]+\) do\z/
+
+# Column and index calls a `t` block may make on a table. Removals, renames,
+# type changes, and virtual columns are absent on purpose.
+ADDITIVE_TABLE_CALLS = %w[
+  string text longtext integer bigint float decimal numeric datetime timestamp time date
+  binary boolean json blob column references belongs_to timestamps index
+].freeze
+
+# Ripper nodes for the literal values a purely additive migration may pass.
+# Anything that can run code (constants, calls, interpolation) is rejected.
+def literal_node?(node)
+  case node[0]
+  when :symbol_literal, :@int, :@float then true
+  when :string_literal then node[1][1..].all? { |part| part[0] == :@tstring_content }
+  when :var_ref then node[1][0] == :@kw && %w[true false nil].include?(node[1][1])
+  when :unary then node[1] == :-@ && %i[@int @float].include?(node[2][0])
+  when :array then (node[1] || []).all? { |element| literal_node?(element) }
+  when :bare_assoc_hash
+    node[1].all? do |pair|
+      pair[0] == :assoc_new && (pair[1][0] == :@label || literal_node?(pair[1])) && literal_node?(pair[2])
+    end
+  else false
+  end
+end
+
+# Name of a symbol or plain string literal, nil for anything else.
+def literal_name(node)
+  case node[0]
+  when :symbol_literal then node[1][1][1]
+  when :string_literal
+    parts = node[1][1..]
+    parts[0][1] if parts.size == 1 && parts[0][0] == :@tstring_content
+  end
+end
+
+def call_options(args)
+  last = args.last
+  return {} unless last && last[0] == :bare_assoc_hash
+
+  last[1].to_h { |pair| [pair[1][0] == :@label ? pair[1][1].chomp(":") : literal_name(pair[1]), pair[2]] }
+end
+
+def option_false?(options, key)
+  node = options[key]
+  !node.nil? && node[0] == :var_ref && node[1][1] == "false"
+end
+
+# A NOT NULL column with no usable default makes every other insert into that
+# table fail, including inserts from specs that never mention its model.
+# `default: nil` supplies no value, so it counts as no default.
+def not_null_without_default?(options)
+  default = options["default"]
+  has_default = !default.nil? && !(default[0] == :var_ref && default[1][1] == "nil")
+  option_false?(options, "null") && !has_default
+end
+
+# Timestamp columns on an existing table are NOT NULL unless the call says otherwise.
+def nullable_option?(options)
+  node = options["null"]
+  !node.nil? && node[0] == :var_ref && node[1][1] == "true"
+end
+
+# A unique index on an existing table can reject rows that unrelated specs create.
+def unique_index?(options)
+  options.key?("unique") && !option_false?(options, "unique")
+end
+
+def call_args(node)
+  node = node[1] if node && node[0] == :arg_paren
+  return [] if node.nil?
+
+  node[0] == :args_add_block && node[2] == false ? node[1] : nil
+end
+
+# [receiver, method name, argument nodes (nil when unsupported), block] for a
+# call statement, nil for any other statement.
+def call_parts(node)
+  block = nil
+  if node[0] == :method_add_block
+    block = node[2]
+    node = node[1]
+  end
+
+  case node[0]
+  when :command then [nil, node[1][1], call_args(node[2]), block]
+  when :command_call then [node[1], node[3][1], call_args(node[4]), block]
+  when :call then [node[1], node[3][1], [], block] if node[3][0] == :@ident
+  when :method_add_arg
+    target = node[1]
+    case target[0]
+    when :fcall then [nil, target[1][1], call_args(node[2]), block]
+    when :call then [target[1], target[3][1], call_args(node[2]), block] if target[3][0] == :@ident
+    end
+  end
+end
+
+# [block parameter name, statements] for a block with exactly one plain parameter.
+def table_block_parts(block)
+  case block[0]
+  when :do_block
+    return unless block[2][2..].all?(&:nil?)
+
+    variable, statements = block[1], block[2][1]
+  when :brace_block
+    variable, statements = block[1], block[2]
+  else
+    return
+  end
+  return unless variable && variable[0] == :block_var && variable[2] == false
+
+  params = variable[1]
+  return unless params[1]&.size == 1 && params[2..].all?(&:nil?) && params[1][0][0] == :@ident
+
+  [params[1][0][1], statements]
+end
+
+def additive_table_block?(block, new_table:)
+  parts = table_block_parts(block) or return false
+  variable, statements = parts
+  statements.all? do |statement|
+    receiver, name, args, nested = call_parts(statement)
+    next false unless receiver && receiver[0] == :var_ref && receiver[1][1] == variable
+    next false unless nested.nil? && args && args.all? { |arg| literal_node?(arg) }
+    next false unless ADDITIVE_TABLE_CALLS.include?(name)
+
+    options = call_options(args)
+    case name
+    when "index" then new_table || !unique_index?(options)
+    when "timestamps" then new_table || nullable_option?(options)
+    else new_table || !not_null_without_default?(options)
+    end
+  end
+end
+
+# Tables an additive statement touches, nil when the statement is anything else.
+def additive_statement_tables(statement)
+  receiver, name, args, block = call_parts(statement)
+  return unless receiver.nil? && name && args && args.all? { |arg| literal_node?(arg) }
+
+  table = args[0] && literal_name(args[0])
+  return unless table
+
+  options = call_options(args)
+  additive =
+    case name
+    when "add_column" then block.nil? && args.size >= 3 && !not_null_without_default?(options)
+    when "add_index" then block.nil? && args.size >= 2 && !unique_index?(options)
+    # force: true drops the existing table first.
+    when "create_table" then !options.key?("force") && (block.nil? || additive_table_block?(block, new_table: true))
+    when "change_table" then !block.nil? && additive_table_block?(block, new_table: false)
+    end
+  [table] if additive
+end
+
+def const_tokens(node)
+  return [] unless node.is_a?(Array)
+  return [node[1]] if %i[@const @float].include?(node[0])
+
+  node.flat_map { |child| const_tokens(child) }
+end
+
+# Tables an additive migration adds to or creates, nil when the migration does
+# anything else. A migration qualifies when it is one class with a lone
+# `change` or `up` whose statements are all add_column, add_index,
+# create_table, or change_table with additions only.
+def additive_migration_tables(path)
+  return unless File.file?(path)
+
+  program = Ripper.sexp(File.read(path, encoding: "UTF-8")) or return
+  return unless program[1].size == 1 && program[1][0][0] == :class
+
+  _, _, superclass, body = program[1][0]
+  tokens = const_tokens(superclass)
+  return unless tokens.size == 3 && tokens[0..1] == %w[ActiveRecord Migration] && tokens[2].match?(/\A\d+\.\d+\z/)
+  return unless body[0] == :bodystmt && body[2..].all?(&:nil?) && body[1].size == 1
+
+  definition = body[1][0]
+  return unless definition[0] == :def && %w[change up].include?(definition[1][1])
+  return unless definition[2][0] == :params && definition[2][1..].all?(&:nil?)
+  return unless definition[3][2..].all?(&:nil?)
+
+  tables = []
+  definition[3][1].each do |statement|
+    touched = additive_statement_tables(statement) or return
+    tables.concat(touched)
+  end
+  tables.uniq unless tables.empty?
+end
+
+# Candidate spellings of a table's name: the table itself and the singular
+# forms its model can take, so a spec that names either one is picked up.
+def table_name_variants(table)
+  variants = [table]
+  variants << table.sub(/ies\z/, "y") if table.end_with?("ies")
+  variants << table.delete_suffix("es") if table.match?(/(s|x|z|ch|sh)es\z/)
+  variants << table.delete_suffix("s") if table.match?(/[^s]s\z/)
+  variants.uniq
+end
+
+# Line ranges of the create_table blocks in db/schema.rb for the given tables.
+def schema_table_ranges(lines, tables)
+  lines.each_with_index.filter_map do |line, index|
+    next unless (name = line[/\A  create_table "([^"]+)"/, 1]) && tables.include?(name)
+
+    offset = lines[index..].index("  end")
+    (index + 1)..(index + offset + 1) if offset
+  end
+end
+
+# db/schema.rb may change only in the define(version:) line and inside the
+# create_table blocks of tables an additive migration touches, plus blank
+# separator lines. Nothing may be removed except the old define line.
+def schema_change_covered?(merge_base, tables)
+  return false unless merge_base && File.file?(SCHEMA_PATH)
+
+  diff = git("diff", "-U0", "--no-color", merge_base, "--", SCHEMA_PATH)
+  return false if diff.empty?
+
+  ranges = schema_table_ranges(File.readlines(SCHEMA_PATH, chomp: true, encoding: "UTF-8"), tables)
+  line_number = nil
+  diff.all? do |line|
+    if (hunk = line.match(/\A@@ -\d+(?:,\d+)? \+(\d+)/))
+      line_number = hunk[1].to_i
+      next true
+    end
+    next true if line_number.nil? || line.start_with?("\\")
+
+    text = line[1..]
+    if line.start_with?("-")
+      text.match?(SCHEMA_DEFINE_LINE)
+    else
+      current = line_number
+      line_number += 1
+      # The dumper puts a blank line between tables, so a new table adds one.
+      text.empty? || text.match?(SCHEMA_DEFINE_LINE) || ranges.any? { |range| range.cover?(current) }
+    end
+  end
+end
+
+# Specs for a diff that touches db/: [specs, nil], or [nil, reason] when the
+# diff has to escalate. Every migration must be purely additive and have at
+# least one spec that names its tables; schema.rb must show only the matching
+# additions. The selection is by name, so it can miss a spec that reaches the
+# table through a factory. Main's full-suite gate covers that miss.
+def additive_db_specs(paths, merge_base)
+  migrations = paths.select { |path| MIGRATION_PATH.match?(path) }
+  other = paths - migrations - [SCHEMA_PATH]
+  return [nil, "#{other.first} is not a migration or db/schema.rb"] if other.any?
+  return [nil, "db/schema.rb changed without a migration"] if migrations.empty?
+
+  tables = []
+  specs = []
+  migrations.each do |migration|
+    touched = additive_migration_tables(migration)
+    return [nil, "#{migration} is not a purely additive migration"] unless touched
+
+    # Each table needs its own spec: a spec for one table must not cover another.
+    touched.each do |table|
+      found = specs_mentioning(*table_name_variants(table))
+      return [nil, "no spec names #{table} (from #{migration})"] if found.empty?
+
+      specs.concat(found)
+    end
+    tables.concat(touched)
+  end
+
+  if paths.include?(SCHEMA_PATH) && !schema_change_covered?(merge_base, tables.uniq)
+    return [nil, "#{SCHEMA_PATH} changes more than the additive migration's tables"]
+  end
+
+  [specs.uniq, nil]
+end
+
 specs = Set.new
 unattributed = []
+
+if db_paths.any?
+  db_specs, reason = additive_db_specs(db_paths, merge_base)
+  escalate!("cannot attribute specs to db/ changes: #{reason}") unless db_specs
+  specs.merge(db_specs)
+  changed.subtract(db_paths)
+end
 
 changed.each do |path|
   candidates = spec_candidates(path).select { |s| File.exist?(s) }

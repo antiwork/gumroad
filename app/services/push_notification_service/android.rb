@@ -4,13 +4,18 @@ module PushNotificationService
   class Android
     attr_reader :device_token, :title, :body, :data
 
-    def initialize(device_token:, title:, body:, data: {}, app_type:, sound: nil)
+    # Builds from this version create the "sales" channel. Older ones only have "Purchases", which on
+    # installs upgraded from the native app is stuck with a sound resource that no longer exists.
+    SALES_CHANNEL_MIN_APP_VERSION = Gem::Version.new("2026.09.29")
+
+    def initialize(device_token:, title:, body:, data: {}, app_type:, sound: nil, app_version: nil)
       @device_token = device_token
       @title = title
       @body = body
       @data = data
       @app_type = app_type
       @sound = sound
+      @app_version = app_version
     end
 
     def process
@@ -37,7 +42,7 @@ module PushNotificationService
 
         if @sound.present?
           notification.sound = @sound
-          notification_args[:channel_id] = "Purchases"
+          notification_args[:channel_id] = sales_channel_id
         else
           notification_args[:channel_id] = "default"
         end
@@ -58,6 +63,12 @@ module PushNotificationService
           data["subscription_id"].presence ||
           data["follower_id"].presence ||
           SecureRandom.uuid
+      end
+
+      def sales_channel_id
+        return "Purchases" unless Gem::Version.correct?(@app_version.to_s)
+
+        Gem::Version.new(@app_version) >= SALES_CHANNEL_MIN_APP_VERSION ? "sales" : "Purchases"
       end
 
       def creator_app?
