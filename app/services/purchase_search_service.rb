@@ -77,7 +77,7 @@ class PurchaseSearchService
 
   def process
     response = Purchase.search(@body)
-    return response if @options[:seller_query].blank? || response.results.total.positive?
+    return response if @options[:seller_query].blank? || seller_query_matched?(response)
 
     tokens = long_query_tokens
     return response if tokens.empty? || @fulltext_clause_index.nil?
@@ -488,6 +488,14 @@ class PurchaseSearchService
     # though the full address did.
     def long_query_tokens
       @options[:seller_query].to_s.strip.downcase.split.select { |token| token.length > EMAIL_AUTOCOMPLETE_MAX_GRAM }
+    end
+
+    # A nil total means the caller passed track_total_hits: false, so the response cannot say
+    # whether the query matched. The fallback below widens a result set that reached nothing,
+    # and widening one that cannot be read is worse than leaving the caller's results alone.
+    def seller_query_matched?(response)
+      total = response.results.total
+      total.nil? || total.positive?
     end
 
     # Added only after the query above matched nothing, so a raw prefix cannot put an address that

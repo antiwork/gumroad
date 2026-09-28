@@ -32,7 +32,8 @@ describe PushNotificationWorker do
                                                                   body: "Body",
                                                                   data: {},
                                                                   app_type: Device::APP_TYPES[:creator],
-                                                                  sound: Device::NOTIFICATION_SOUNDS[:sale]).and_return(android_b)
+                                                                  sound: Device::NOTIFICATION_SOUNDS[:sale],
+                                                                  app_version: @device_b.app_version).and_return(android_b)
     expect(ios_a).to receive(:process)
     expect(ios_c).to receive(:process)
     expect(android_b).to receive(:process)
