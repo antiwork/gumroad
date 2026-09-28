@@ -70,17 +70,22 @@ class RefundPolicy < ApplicationRecord
 
   # Unreadable classifier output splits three ways. An upstream failure wrapped
   # in a 200 body ("error" and no choices) is the outage class the transport
-  # rescues cover — fail open, never accuse the seller. A body with no answer at
-  # all (truncated) is retried once, then fails closed, because adversarial fine
-  # print can also push the model into answering nothing. A body that parsed but
-  # carries no usable boolean stays a denial. Never widen this to StandardError:
-  # a nil/scalar body raises NoMethodError on #dig, which is that fail-open bug.
+  # rescues cover: the request never ran, so it is retried and then fails open
+  # rather than accusing the seller. A body the model did return but we cannot
+  # read (truncated, refusal, malformed JSON) is retried once, then fails closed,
+  # because adversarial fine print can push the model into answering nothing.
+  # A body that parsed but carries no usable boolean stays a denial. Never widen
+  # this to StandardError: a nil/scalar body raises NoMethodError on #dig, which
+  # is that same fail-open bug.
   def fine_print_claims_no_refunds?
+    failed_requests = 0
+
     FINE_PRINT_CLASSIFICATION_ATTEMPTS.times do
       response = ask_ai_fine_print_classification
       if upstream_failure?(response)
+        failed_requests += 1
         Rails.logger.warn("Error moderating fine print for refund policy #{id}: #{response["error"]}")
-        return false
+        next
       end
 
       classification = parse_no_refunds_classification(response)
@@ -89,7 +94,10 @@ class RefundPolicy < ApplicationRecord
       Rails.logger.warn("Unreadable fine print classification for refund policy #{id}")
     end
 
-    true
+    # Nothing readable in any attempt. Every request failing means an outage
+    # (fail open); any attempt that returned a body we could not read is a
+    # denial, so a fine print that derails the classifier cannot buy a bypass.
+    failed_requests < FINE_PRINT_CLASSIFICATION_ATTEMPTS
   rescue Faraday::TimeoutError, Faraday::ConnectionFailed, Faraday::ServerError, Net::ReadTimeout => e
     Rails.logger.warn("Error moderating fine print for refund policy #{id}: #{e.message}")
     false

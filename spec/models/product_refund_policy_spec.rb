@@ -294,13 +294,24 @@ describe ProductRefundPolicy do
       expect(refund_policy.valid?).to be true
     end
 
-    it "fails open when OpenRouter wraps an upstream failure in a 200 body" do
-      expect_any_instance_of(OpenAI::Client).to receive(:chat).once.and_return(
+    it "fails open when every attempt is an upstream failure wrapped in a 200 body" do
+      calls = 0
+      allow_any_instance_of(OpenAI::Client).to receive(:chat) do
+        calls += 1
         { "error" => { "message" => "Incorrect API key provided" } }
-      )
+      end
       refund_policy.fine_print = "Refunds are only issued for duplicate purchases."
 
       expect(refund_policy.valid?).to be true
+      expect(calls).to eq(RefundPolicy::FINE_PRINT_CLASSIFICATION_ATTEMPTS)
+    end
+
+    it "fails closed when a failed request is followed by an unreadable answer" do
+      stub_classifier_sequence({ "error" => { "message" => "Incorrect API key provided" } }, truncated_classifier_response)
+      refund_policy.fine_print = "Refunds are only issued for duplicate purchases."
+
+      expect(refund_policy.valid?).to be false
+      expect(refund_policy.errors.full_messages).to include("Fine print cannot state that refunds are not allowed")
     end
 
     it "fails closed when the retry also comes back without an answer" do
