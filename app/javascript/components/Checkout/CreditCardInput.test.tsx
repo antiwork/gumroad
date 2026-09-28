@@ -78,6 +78,7 @@ describe("CreditCardInput", () => {
       text_color: "#000000",
       danger_color: "#9b1c12",
       font_family: '"Roboto Mono", "ABC Favorit", monospace',
+      border_radius: "0.25rem",
     };
 
     const { rerender } = render(
