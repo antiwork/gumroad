@@ -579,13 +579,13 @@ describe("Discover", js: true, type: :system) do
 
         find("[role=menuitem]", text: "More").hover
         click_on "Software Development"
-        click_on "Programming"
+        click_on "Hardware"
         page.driver.browser.action.move_by(0, -10).perform
         sleep 0.6
 
-        click_on "C#"
+        click_on "Raspberry Pi"
 
-        expect(page).to have_selector("[aria-label='Breadcrumbs']", text: "Software Development\n/Programming\n/C#")
+        expect(page).to have_selector("[aria-label='Breadcrumbs']", text: "Software Development\n/Hardware\n/Raspberry Pi")
       end
 
       it "places categories that didn't fit the screen under 'More', which becomes aria-current if one of those categories is selected" do
