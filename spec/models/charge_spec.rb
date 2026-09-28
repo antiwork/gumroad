@@ -294,6 +294,29 @@ describe Charge, :vcr do
         context: { purchase_id: second.id, charge_id: "ch_combined_raise", processor_refund_id: "re_second", processor_refund_amount_cents: 5_00, processor_refund_currency: "usd" }
       )
     end
+    it "preserves the original error when the processor omits its amount and currency" do
+      create(:balance, user: seller, amount_cents: 10_000)
+      first, second = purchases.sort_by(&:id)
+      [[first, "re_first", first.total_transaction_cents], [second, "re_second", 4_00]].each do |purchase, refund_id, refunded_cents|
+        flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::USD, -refunded_cents)
+        allow(ChargeProcessor).to receive(:refund!).with(anything, "ch_combined_raise", hash_including(purchase:))
+          .and_return(double(id: refund_id, refund: double(id: refund_id, status: "succeeded", amount: nil, currency: nil), flow_of_funds:))
+      end
+      allow_any_instance_of(Purchase).to receive(:refund_purchase!).and_wrap_original do |original, *args, **kwargs|
+        raise ActiveRecord::StatementInvalid, "lock wait timeout" if original.receiver.id == second.id
+        original.call(*args, **kwargs)
+      end
+      allow(ErrorNotifier).to receive(:notify)
+
+      expect(charge.refund_and_save!(seller.id)).to be(false)
+
+      expect(second.reload.refunds).to be_empty
+      expect(first.reload.refunds.sole.processor_refund_id).to eq("re_first")
+      expect(ErrorNotifier).to have_received(:notify).with(
+        an_instance_of(ActiveRecord::StatementInvalid),
+        context: { purchase_id: second.id, charge_id: "ch_combined_raise", processor_refund_id: "re_second", processor_refund_amount_cents: nil, processor_refund_currency: nil }
+      )
+    end
   end
 
   describe "#refund_and_save! when the accepted refund's amount comes back as a PayPal money object" do

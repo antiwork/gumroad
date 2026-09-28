@@ -698,7 +698,8 @@ class Purchase
         { processor_refund_amount_cents: (BigDecimal(reported_amount.value.to_s) * unit_scaling_factor(reported_amount.currency_code)).to_i,
           processor_refund_currency: reported_amount.currency_code.to_s.downcase }
       else
-        { processor_refund_amount_cents: reported_amount || processor_refund_amount_cents,
+        # Accounting amounts can be synthetic USD, so leave missing processor details unknown.
+        { processor_refund_amount_cents: reported_amount,
           processor_refund_currency: charge_refund.refund.try(:currency)&.to_s&.downcase }
       end
     end
