@@ -68,15 +68,11 @@ class RefundPolicy < ApplicationRecord
     }
   end
 
-  # Unreadable classifier output splits three ways. An upstream failure wrapped
-  # in a 200 body ("error" and no choices) is the outage class the transport
-  # rescues cover: the request never ran, so it is retried and then fails open
-  # rather than accusing the seller. A body the model did return but we cannot
-  # read (truncated, refusal, malformed JSON) is retried once, then fails closed,
-  # because adversarial fine print can push the model into answering nothing.
-  # A body that parsed but carries no usable boolean stays a denial. Never widen
-  # this to StandardError: a nil/scalar body raises NoMethodError on #dig, which
-  # is that same fail-open bug.
+  # An upstream failure wrapped in a 200 body is the outage class the transport
+  # rescues already cover: retried, then failed open. A body the model did return
+  # that we cannot read is retried once, then failed closed — adversarial fine
+  # print can push the model into answering nothing. A parsed body with no usable
+  # boolean stays a denial. Never widen to StandardError: a nil body raises on #dig.
   def fine_print_claims_no_refunds?
     failed_requests = 0
 
@@ -122,9 +118,7 @@ class RefundPolicy < ApplicationRecord
       errors.add(:fine_print, "cannot state that refunds are not allowed")
     end
 
-    # nil means "no answer to read" — truncated, or a provider error delivered
-    # as a 200 — which the caller retries. A body that parsed but carries no
-    # usable boolean stays a denial.
+    # No answer to read, which the caller retries rather than treating as a denial.
     def parse_no_refunds_classification(response)
       return nil unless response.is_a?(Hash)
 
