@@ -8,6 +8,7 @@ describe "DiscoverDomainScenario", type: :system, js: true do
   end
 
   before do
+    use_united_states_buyer_ip
     @port = Capybara.current_session.server.port
 
     @discover_domain = "discover.test.gumroad.com"
