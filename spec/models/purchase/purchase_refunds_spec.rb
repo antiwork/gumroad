@@ -2915,7 +2915,7 @@ describe "PurchaseRefunds", :vcr do
       create(:dispute, purchase:, state: "won", won_at: Time.at(1669749973).utc)
       expect(Stripe::Transfer).to_not receive(:list)
 
-      purchase.send(:reverse_the_transfer_made_for_dispute_win!)
+      purchase.send(:reverse_the_transfer_made_for_dispute_win!, refund: build(:refund, purchase:))
     end
 
     it "does nothing and returns if purchase is not disputed" do
@@ -2923,7 +2923,7 @@ describe "PurchaseRefunds", :vcr do
       purchase = create(:purchase, link: create(:product, user: merchant_account.user), merchant_account:)
       expect(Stripe::Transfer).to_not receive(:list)
 
-      purchase.send(:reverse_the_transfer_made_for_dispute_win!)
+      purchase.send(:reverse_the_transfer_made_for_dispute_win!, refund: build(:refund, purchase:))
     end
 
     it "does nothing and returns if purchase dispute is not won" do
@@ -2932,7 +2932,7 @@ describe "PurchaseRefunds", :vcr do
       create(:dispute, purchase:, state: "lost", lost_at: Time.at(1669749973).utc)
       expect(Stripe::Transfer).to_not receive(:list)
 
-      purchase.send(:reverse_the_transfer_made_for_dispute_win!)
+      purchase.send(:reverse_the_transfer_made_for_dispute_win!, refund: build(:refund, purchase:))
     end
 
     it "tries to reverse the dispute transfer if purchase dispute is won and holder of funds is Stripe" do
@@ -2941,7 +2941,57 @@ describe "PurchaseRefunds", :vcr do
       create(:dispute, purchase:, state: "won", won_at: Time.at(1669749973).utc)
       expect(Stripe::Transfer).to receive(:list).and_call_original
 
-      purchase.send(:reverse_the_transfer_made_for_dispute_win!)
+      purchase.send(:reverse_the_transfer_made_for_dispute_win!, refund: build(:refund, purchase:))
+    end
+
+    context "with a dispute-win transfer" do
+      let(:merchant_account) { create(:merchant_account, charge_processor_merchant_id: "acct_dispute_win") }
+      let(:purchase) do
+        create(:purchase, link: create(:product, user: merchant_account.user), merchant_account:, price_cents: 10_00,
+                          total_transaction_cents: 10_00)
+      end
+      let(:transfer) { Stripe::StripeObject.construct_from(id: "tr_dispute_win", amount: 8_50, amount_reversed: 0, description: "Dispute dp_win won") }
+
+      before do
+        create(:dispute, purchase:, state: "won", won_at: Time.current, charge_processor_dispute_id: "dp_win")
+        allow(Stripe::Transfer).to receive(:list).and_return([transfer])
+      end
+
+      it "reverses the whole seller share for a full refund" do
+        refund = create(:refund, purchase:, total_transaction_cents: 10_00, amount_cents: 10_00, processor_refund_id: "re_full")
+
+        expect(Stripe::Transfer).to receive(:create_reversal)
+          .with("tr_dispute_win", { amount: 8_50 }, { idempotency_key: "dispute_win_reversal_re_full" })
+
+        purchase.send(:reverse_the_transfer_made_for_dispute_win!, refund:)
+      end
+
+      it "reverses the refund's share of the seller share for a partial refund" do
+        refund = create(:refund, purchase:, total_transaction_cents: 4_00, amount_cents: 4_00, processor_refund_id: "re_partial")
+
+        expect(Stripe::Transfer).to receive(:create_reversal)
+          .with("tr_dispute_win", { amount: 3_40 }, { idempotency_key: "dispute_win_reversal_re_partial" })
+
+        purchase.send(:reverse_the_transfer_made_for_dispute_win!, refund:)
+      end
+
+      it "reverses no more than is left on the transfer" do
+        transfer.amount_reversed = 8_00
+        refund = create(:refund, purchase:, total_transaction_cents: 10_00, amount_cents: 10_00, processor_refund_id: "re_rest")
+
+        expect(Stripe::Transfer).to receive(:create_reversal).with("tr_dispute_win", { amount: 50 }, anything)
+
+        purchase.send(:reverse_the_transfer_made_for_dispute_win!, refund:)
+      end
+
+      it "records a full refund and reverses the seller share instead of asking Stripe for zero" do
+        purchase.update!(chargeback_date: Time.current, chargeback_reversed: true)
+        allow(Stripe::Transfer).to receive(:create_reversal)
+
+        expect(purchase.refund_purchase!(FlowOfFunds.build_simple_flow_of_funds(Currency::USD, -10_00), purchase.seller.id)).to be(true)
+
+        expect(Stripe::Transfer).to have_received(:create_reversal).with("tr_dispute_win", { amount: 8_50 }, anything)
+      end
     end
   end
 

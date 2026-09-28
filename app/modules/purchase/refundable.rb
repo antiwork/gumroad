@@ -358,7 +358,7 @@ class Purchase
       save!
       # skip_seller_balance means this refund must not move the seller's money. The dispute-win
       # transfer is a seller debit, so it stays with the paths that already debit the seller.
-      reverse_the_transfer_made_for_dispute_win! if chargedback? && chargeback_reversed && !skip_seller_balance
+      reverse_the_transfer_made_for_dispute_win!(refund:) if chargedback? && chargeback_reversed && !skip_seller_balance
       reverse_excess_amount_from_stripe_transfer(refund:) if stripe_partially_refunded && vat_already_refunded && !skip_seller_balance
       debit_processor_fee_from_merchant_account!(refund) unless is_refund_chargeback_fee_waived || chargedback_not_reversed? || skip_seller_balance
       Credit.create_for_vat_exclusive_refund!(refund:) if (paypal_order_id.present? || merchant_account&.is_a_stripe_connect_account?) && !chargedback_not_reversed? && !skip_seller_balance
@@ -720,13 +720,22 @@ class Purchase
         gumroad_tax_cents: (gumroad_tax_cents - existing_refunds.gt_cents) }
     end
 
-    def reverse_the_transfer_made_for_dispute_win!
+    def reverse_the_transfer_made_for_dispute_win!(refund:)
       return unless merchant_account&.holder_of_funds == HolderOfFunds::STRIPE
       return unless dispute&.won_at.present?
 
       transfers = Stripe::Transfer.list({ destination: merchant_account.charge_processor_merchant_id, created: { gte: dispute.won_at.to_i - 60000 },  limit: 100 })
       transfer = transfers.select { |tr| tr["description"]&.include?("Dispute #{dispute.charge_processor_dispute_id} won") }.first
-      Stripe::Transfer.create_reversal(transfer.id, { amount: amount_refundable_cents }) if transfer.present?
+      return if transfer.blank?
+
+      # The dispute-win transfer sent back the seller's share of the whole charge, so reverse this
+      # refund's share of it. It runs after the refund is saved, so it cannot read what is left to refund.
+      chargeable = charge || self
+      amount = (transfer.amount * refund.total_transaction_cents / chargeable.charged_amount_cents.to_r).round
+      amount = [amount, transfer.amount - transfer.amount_reversed.to_i].min
+      return unless amount.positive?
+
+      Stripe::Transfer.create_reversal(transfer.id, { amount: }, { idempotency_key: "dispute_win_reversal_#{refund.processor_refund_id || refund.id}" })
     end
 
     # Stripe collection waits for the OUTERMOST commit: Charge#refund_and_save! wraps several
