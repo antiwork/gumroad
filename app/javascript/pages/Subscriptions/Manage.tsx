@@ -396,7 +396,11 @@ export default function SubscriptionsManage() {
           showAlert(`Your ${subscriptionEntity} has been updated.`, "success");
           router.reload();
         } else {
-          showAlert(itemResult.error_message ?? "Sorry, something went wrong. Please try again.", "error");
+          showAlert(
+            itemResult.error_message ??
+              "We couldn't confirm your payment. Refresh this page to check your membership before you try again.",
+            "error",
+          );
         }
       });
     } else if (result.restartAtCheckoutUrl) {
