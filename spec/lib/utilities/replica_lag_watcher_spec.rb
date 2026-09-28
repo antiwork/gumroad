@@ -36,8 +36,8 @@ describe ReplicaLagWatcher do
 
     def set_connections
       described_class.connections = [double(query_options: { host: "replica.host" })]
-      query_response = [{ "Seconds_Behind_Master" => @seconds_behind_master }]
-      expect(described_class.connections.first).to receive(:query).with("SHOW SLAVE STATUS").and_return(query_response)
+      query_response = [{ "Seconds_Behind_Source" => @seconds_behind_source }]
+      expect(described_class.connections.first).to receive(:query).with("SHOW REPLICA STATUS").and_return(query_response)
     end
 
     it "sets last_checked_at" do
@@ -46,19 +46,19 @@ describe ReplicaLagWatcher do
     end
 
     it "returns true if one of the replica connections is lagging" do
-      @seconds_behind_master = 2
+      @seconds_behind_source = 2
       set_connections
       expect(described_class.lagging?(@options)).to eq(true)
     end
 
     it "returns false if no connections are lagging" do
-      @seconds_behind_master = 0
+      @seconds_behind_source = 0
       set_connections
       expect(described_class.lagging?(@options)).to eq(false)
     end
 
     it "raises an error if the lag can't be determined" do
-      @seconds_behind_master = nil
+      @seconds_behind_source = nil
       set_connections
       expect do
         described_class.lagging?(@options)
@@ -67,10 +67,24 @@ describe ReplicaLagWatcher do
 
     it "raises an error if a host is not a replica" do
       described_class.connections = [double(query_options: { host: "primary.host" })]
-      expect(described_class.connections.first).to receive(:query).with("SHOW SLAVE STATUS").and_return([])
+      expect(described_class.connections.first).to receive(:query).with("SHOW REPLICA STATUS").and_return([])
       expect do
         described_class.lagging?(@options)
       end.to raise_error(/primary.host is in REPLICAS_HOSTS but is not replicating/)
+    end
+
+    it "queries replica status with syntax the connected MySQL server accepts" do
+      config = ActiveRecord::Base.connection_db_config.configuration_hash
+      client = Mysql2::Client.new(**config.slice(:host, :port, :socket, :username, :password, :database).compact)
+      described_class.connections = [client]
+
+      # The test database is not a replica, so a valid statement returns no rows; on MySQL 8.4
+      # the removed SHOW SLAVE STATUS raises a syntax error instead.
+      expect do
+        described_class.lagging?(@options)
+      end.to raise_error(/is in REPLICAS_HOSTS but is not replicating/)
+    ensure
+      client&.close
     end
 
     it "returns nil if it doesn't need to check for lag" do

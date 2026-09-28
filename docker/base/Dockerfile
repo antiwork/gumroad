@@ -19,6 +19,11 @@ ARG DEBIAN_FRONTEND="noninteractive"
 ARG DUMB_INIT_VERSION=1.2.0
 ARG GOSU_VERSION=1.10
 ARG S6_OVERLAY_VERSION=v1.19.1.1
+# Debian bookworm ships 3.2.1, whose pt-online-schema-change checks replica lag with
+# SHOW SLAVE STATUS and dies against MySQL 8.4. 3.7.0 is the first release that picks
+# SLAVE or REPLICA syntax per server version, so it works on 8.0 and 8.4.
+ARG PERCONA_TOOLKIT_VERSION=3.7.1-4.bookworm
+ARG PERCONA_TOOLKIT_SHA256=4fa75797667c30322fa713e21769e73d71da35a8909a140985214939a13a0d1c
 ARG BUNDLE_GEMS__CONTRIBSYS__COM
 
 # Workaround weird jdk bug
@@ -47,7 +52,6 @@ RUN cd /tmp \
   libgcrypt20 \
   libxml2-dev \
   libyaml-dev \
-  percona-toolkit \
   pdftk \
   qpdf \
   ruby-dev \
@@ -91,6 +95,11 @@ RUN cd /tmp \
   && apt-get update \
   && apt-get install -y nodejs \
   && corepack enable \
+  # percona-toolkit (pt-online-schema-change, run by Alterity migrations)
+  && curl -fsSL -o /tmp/percona-toolkit.deb "https://repo.percona.com/pt/apt/pool/main/p/percona-toolkit/percona-toolkit_${PERCONA_TOOLKIT_VERSION}_amd64.deb" \
+  && echo "${PERCONA_TOOLKIT_SHA256}  /tmp/percona-toolkit.deb" | sha256sum -c - \
+  && apt-get install -yq --no-install-recommends /tmp/percona-toolkit.deb \
+  && pt-online-schema-change --version \
   # git
   && apt-get install -y git \
   # jemalloc
