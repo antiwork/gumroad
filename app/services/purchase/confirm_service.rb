@@ -117,7 +117,7 @@ class Purchase::ConfirmService < Purchase::BaseService
     end
 
     # Stripe never sees a browser-side 3DS error, and a codeless one leaves stripe_error_code blank,
-    # so this report is the only record of it. It runs after the failure so it cannot block it.
+    # so this report is the only record of it. It is best-effort: the buyer must still get the error.
     def report_subscription_browser_error
       stripe_error = params[:stripe_error]
       ErrorNotifier.notify(
@@ -129,5 +129,7 @@ class Purchase::ConfirmService < Purchase::BaseService
         stripe_error_decline_code: stripe_error[:decline_code].to_s.first(100),
         stripe_error_message: stripe_error[:message].to_s.first(500),
       )
+    rescue StandardError => e
+      Rails.logger.error("Subscription confirm browser error report failed for purchase #{purchase.id}: #{e.class}: #{e.message}")
     end
 end
