@@ -95,9 +95,8 @@ module SslCertificates
       end
 
       # The row timestamp is stamped by whichever order last succeeded, so it says
-      # nothing about a name that started resolving afterwards — ask each name. An
-      # unreadable name counts as covered for itself, but another name's definite
-      # "no certificate" must still order.
+      # nothing about a name that started resolving afterwards. An unreadable name
+      # counts as covered for itself; a definite miss on another name still orders.
       def certificate_covers_every_resolving_domain?
         return false unless custom_domain.has_valid_certificate?(renew_in)
 
