@@ -1501,6 +1501,37 @@ describe Purchase::Blockable do
           end
         end
 
+        context "when an old host deletes only the count and then counts a bare increment" do
+          before do
+            create(:purchase, link: @product, email: "buyer@example.com", stripe_fingerprint: nil, purchase_state: "in_progress").mark_failed!
+            redis = Redis::Namespace.new(:failed_purchases_count, redis: $redis)
+            redis.del("product_#{@product.id}")
+            redis.incr("product_#{@product.id}")
+            create(:purchase, link: @product, email: "buyer@example.com", stripe_fingerprint: nil, purchase_state: "in_progress").mark_failed!
+            @purchase = create(:purchase, link: @product, email: "buyer@example.com", stripe_fingerprint: nil, purchase_state: "in_progress")
+          end
+
+          it "blocks purchases on product" do
+            expect { @purchase.mark_failed! }.to change { PlatformBlock.product.count }.by(1)
+          end
+        end
+
+        context "when an old host deletes only the count and then expires that bare increment" do
+          before do
+            create(:purchase, link: @product, email: "buyer@example.com", stripe_fingerprint: nil, purchase_state: "in_progress").mark_failed!
+            redis = Redis::Namespace.new(:failed_purchases_count, redis: $redis)
+            redis.del("product_#{@product.id}")
+            redis.incr("product_#{@product.id}")
+            redis.expire("product_#{@product.id}", 2.days.to_i)
+            create(:purchase, link: @product, email: "buyer@example.com", stripe_fingerprint: nil, purchase_state: "in_progress").mark_failed!
+            @purchase = create(:purchase, link: @product, email: "buyer@example.com", stripe_fingerprint: nil, purchase_state: "in_progress")
+          end
+
+          it "blocks purchases on product" do
+            expect { @purchase.mark_failed! }.to change { PlatformBlock.product.count }.by(1)
+          end
+        end
+
         context "when a concurrent success clears the streak after this failure is counted" do
           before do
             2.times { create(:purchase, link: @product, email: "buyer@example.com", stripe_fingerprint: nil, purchase_state: "in_progress").mark_failed! }

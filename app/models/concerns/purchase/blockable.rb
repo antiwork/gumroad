@@ -1044,7 +1044,11 @@ module Purchase::Blockable
 
     # One script so a concurrent success clears the count and identities together. Any failure
     # counted without its identity (a host still running the old INCR) leaves recorded behind
-    # count, and a streak is one buyer only while the two match.
+    # count, and a streak is one buyer only while the two match. An old success deletes only
+    # the count key, so a later bare INCR can rebuild that integer beside the leftover recorded
+    # counter. The rebuilt key does not keep the recorded key's expire time, and those sets are
+    # trusted only while the two expire times still match. The shared deadline is one
+    # millisecond before the expire an old host can set, so a later EXPIRE cannot copy it.
     PRODUCT_STREAK_RECORD_SCRIPT = <<~LUA
       local count_key, emails_key, cards_key, recorded_key = KEYS[1], KEYS[2], KEYS[3], KEYS[4]
       local email, card = ARGV[1], ARGV[2]
@@ -1055,6 +1059,10 @@ module Purchase::Blockable
         redis.call("DEL", emails_key, cards_key)
         redis.call("SET", recorded_key, 1)
         recorded = 1
+      elseif redis.call("PEXPIRETIME", count_key) ~= redis.call("PEXPIRETIME", recorded_key) then
+        redis.call("DEL", emails_key, cards_key)
+        redis.call("SET", recorded_key, 0)
+        recorded = 0
       else
         recorded = redis.call("INCR", recorded_key)
       end
@@ -1064,8 +1072,10 @@ module Purchase::Blockable
       if card ~= "" and redis.call("SCARD", cards_key) < 2 then
         redis.call("SADD", cards_key, card)
       end
+      local time = redis.call("TIME")
+      local deadline = tonumber(time[1]) * 1000 + math.floor(tonumber(time[2]) / 1000) + ttl * 1000 - 1
       for _, key in ipairs(KEYS) do
-        redis.call("EXPIRE", key, ttl)
+        redis.call("PEXPIREAT", key, deadline)
       end
       return {count, recorded, redis.call("SCARD", emails_key), redis.call("SCARD", cards_key)}
     LUA
