@@ -3106,7 +3106,7 @@ describe ContactingCreatorMailer do
 
         it "keeps the offer for a seller with a connected PayPal account" do
           create(:merchant_account_paypal, user: seller)
-          allow_any_instance_of(MerchantAccount).to receive(:paypal_account_details).and_return("primary_email" => "seller-paypal@example.com")
+          expect_any_instance_of(MerchantAccount).not_to receive(:paypal_account_details)
 
           expect(mail.body.encoded).to include("work out another way to pay you")
         end
