@@ -1,6 +1,11 @@
 # frozen_string_literal: true
 
 class PurchaseSearchService
+  # Mirrors the email analyzers' edge_ngram max_gram in Purchase::Searchable: a longer search token
+  # matches no indexed term. Raising it there affects only newly created indexes, so a real raise
+  # needs its own reindex migration rather than an edit to this constant.
+  EMAIL_AUTOCOMPLETE_MAX_GRAM = 20
+
   DEFAULT_OPTIONS = {
     # There must not be any active filters by default: calling .search without any options should return all purchases.
     # Values - They can be an ActiveRecord object, an id, or an Array of both
@@ -71,7 +76,13 @@ class PurchaseSearchService
   end
 
   def process
-    Purchase.search(@body)
+    response = Purchase.search(@body)
+    return response if @options[:seller_query].blank? || response.results.total.positive?
+
+    tokens = long_query_tokens
+    return response if tokens.empty? || @fulltext_clause_index.nil?
+
+    Purchase.search(fallback_body(tokens))
   end
 
   def query = @body[:query]
@@ -464,12 +475,33 @@ class PurchaseSearchService
         end
       end
 
+      @fulltext_clause_index = @body[:query][:bool][:must].length
       @body[:query][:bool][:must] << {
         bool: {
           minimum_should_match: 1,
           should: shoulds,
         }
       }
+    end
+
+    # A token past the gram window matches no indexed term, so "buyer@domain" found nobody even
+    # though the full address did.
+    def long_query_tokens
+      @options[:seller_query].to_s.strip.downcase.split.select { |token| token.length > EMAIL_AUTOCOMPLETE_MAX_GRAM }
+    end
+
+    # Added only after the query above matched nothing, so a raw prefix cannot put an address that
+    # merely starts with the typed text next to the exact buyer it extends ("…@victoria.com" would
+    # otherwise also return "…@victoria.com.au").
+    def fallback_body(tokens)
+      body = @body.deep_dup
+      shoulds = body[:query][:bool][:must][@fulltext_clause_index][:bool][:should]
+      tokens.each do |token|
+        shoulds << { prefix: { "email.raw" => token } }
+        shoulds << { prefix: { "subscription_current_email.raw" => token } }
+        shoulds << { prefix: { "paypal_email.raw" => token } }
+      end
+      body
     end
 
     def build_body_buyer_search
