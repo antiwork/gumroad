@@ -686,6 +686,10 @@ class Subscription < ApplicationRecord
   end
 
   def indian_card_mandate_price_cents(purchase, renewal_price_cents, fixed_rate: nil)
+    if purchase.installment_plan_relisted_in_another_currency?
+      return get_usd_cents(link.price_currency_type, renewal_price_cents, rate: fixed_rate)
+    end
+
     displayed_price_cents = purchase.mandate_maximum_displayed_price_cents
     displayed_price_cents = renewal_price_cents if displayed_price_cents.zero?
     displayed_currency = purchase[:displayed_price_currency_type].presence || link.price_currency_type

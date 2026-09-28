@@ -129,7 +129,7 @@ describe Onetime::ClearDetachedDefaultOfferCodes do
     offer_code = create(:offer_code, user: seller, products: [product])
     product.update!(default_offer_code_id: offer_code.id)
     offer_code.products.delete(product)
-    # The console-pod failure mode: SHOW SLAVE STATUS comes back empty. Swallowed
+    # The console-pod failure mode: SHOW REPLICA STATUS comes back empty. Swallowed
     # per row this reports "cleared 0" and exits successfully, which is
     # indistinguishable from a clean no-op run.
     allow(ReplicaLagWatcher).to receive(:watch).and_raise(NoMethodError.new("undefined method '[]' for nil"))

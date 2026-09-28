@@ -29,7 +29,7 @@ set -euo pipefail
 NETWORK=$1
 OUTPUT=$2
 
-MYSQL_IMAGE=mysql:8.0.32
+MYSQL_IMAGE=mysql:8.4.11
 
 # --add-drop-database makes the dump idempotent to restore: the CI step that
 # restores it runs under a retry wrapper, so a second attempt must be able to

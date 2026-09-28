@@ -3988,11 +3988,18 @@ class Purchase < ApplicationRecord
     mandate_options = intent.card_mandate_options
     return false if card.nil? || expected_terms.blank? || mandate_options.blank?
 
+    # A restart can need a larger cap because its billing address has higher tax.
+    amount_matches = if is_installment_payment && !is_original_subscription_purchase? && subscription.is_installment_plan?
+      mandate_options.amount.to_i >= expected_terms[:amount]
+    else
+      mandate_options.amount.to_i == expected_terms[:amount]
+    end
+
     intent.payment_method_id == card.processor_payment_method_id &&
       intent.customer_id == card.stripe_customer_id &&
       intent.setup_future_usage == "off_session" &&
       intent.currency.to_s.downcase == expected_terms[:currency] &&
-      mandate_options.amount.to_i == expected_terms[:amount] &&
+      amount_matches &&
       mandate_options.amount_type == "maximum" &&
       mandate_options.interval == expected_terms[:interval] &&
       mandate_options.interval_count&.to_i == expected_terms[:interval_count]&.to_i &&
@@ -4189,7 +4196,7 @@ class Purchase < ApplicationRecord
       self
     end
     base_cents = reference_purchase.total_transaction_cents
-    if reference_purchase.is_free_trial_purchase?
+    if reference_purchase.is_free_trial_purchase? || reference_purchase.installment_plan_relisted_in_another_currency?
       renewal_price_cents = if reference_purchase.subscription.present?
         reference_purchase.subscription.current_subscription_price_cents
       else
@@ -4222,6 +4229,15 @@ class Purchase < ApplicationRecord
     pre_discount_cents = discount.pre_discount_displayed_price_cents ||
       discount.pre_discount_minimum_price_cents * reference_purchase.quantity
     [(Rational(base_cents * pre_discount_cents, reference_purchase.displayed_price_cents)).ceil, base_cents].max
+  end
+
+  # Remaining installments bill the product's current listed price, so after a relisting the
+  # signup total is a stale conversion and must not size the mandate.
+  def installment_plan_relisted_in_another_currency?
+    return false unless is_installment_payment && subscription&.is_installment_plan?
+
+    displayed_currency = self[:displayed_price_currency_type].presence
+    displayed_currency.present? && displayed_currency.to_s.downcase != link.price_currency_type.to_s.downcase
   end
 
   # Stripe rejects a mandate maximum below this charge, so when the original cap is
@@ -6215,7 +6231,7 @@ class Purchase < ApplicationRecord
       return true if country_code.in?(ip_and_card_locations)
 
       self.error_code = PurchaseErrorCode::TAX_VALIDATION_FAILED
-      errors.add :base, "We could not validate the location you selected. Please review."
+      errors.add :base, "We couldn't confirm the country you selected. It needs to match where you're connecting from or where your card was issued. If you're using a VPN, turn it off and try again."
       false
     end
 

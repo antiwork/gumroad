@@ -76,27 +76,27 @@ sudo usermod -aG docker $(whoami)
 
 #### MySQL & Percona Toolkit
 
-Install a local version of MySQL 8.0.x to match the version running in production.
+Install a local version of MySQL 8.4.x to match the version running in production.
 
 The local version of MySQL is a dependency of the Ruby `mysql2` gem. You do not need to start an instance of the MySQL service locally. The app will connect to a MySQL instance running in the Docker container.
 
 - For MacOS:
 
 ```bash
-brew install mysql@8.0 percona-toolkit
-brew link --force mysql@8.0
+brew install mysql@8.4 percona-toolkit
+brew link --force mysql@8.4
 
 # to use Homebrew's `openssl`:
 brew install openssl
 bundle config --global build.mysql2 --with-opt-dir="$(brew --prefix openssl)"
 
 # ensure MySQL is not running as a service
-brew services stop mysql@8.0
+brew services stop mysql@8.4
 ```
 
 - For Linux:
   - MySQL:
-    - https://dev.mysql.com/doc/refman/8.0/en/linux-installation.html
+    - https://dev.mysql.com/doc/refman/8.4/en/linux-installation.html
     - `apt install libmysqlclient-dev`
   - Percona Toolkit: https://www.percona.com/doc/percona-toolkit/LATEST/installation.html
 

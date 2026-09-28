@@ -2915,7 +2915,7 @@ describe "PurchaseRefunds", :vcr do
       create(:dispute, purchase:, state: "won", won_at: Time.at(1669749973).utc)
       expect(Stripe::Transfer).to_not receive(:list)
 
-      purchase.send(:reverse_the_transfer_made_for_dispute_win!)
+      purchase.send(:reverse_the_transfer_made_for_dispute_win!, refund: build(:refund, purchase:))
     end
 
     it "does nothing and returns if purchase is not disputed" do
@@ -2923,7 +2923,7 @@ describe "PurchaseRefunds", :vcr do
       purchase = create(:purchase, link: create(:product, user: merchant_account.user), merchant_account:)
       expect(Stripe::Transfer).to_not receive(:list)
 
-      purchase.send(:reverse_the_transfer_made_for_dispute_win!)
+      purchase.send(:reverse_the_transfer_made_for_dispute_win!, refund: build(:refund, purchase:))
     end
 
     it "does nothing and returns if purchase dispute is not won" do
@@ -2932,7 +2932,7 @@ describe "PurchaseRefunds", :vcr do
       create(:dispute, purchase:, state: "lost", lost_at: Time.at(1669749973).utc)
       expect(Stripe::Transfer).to_not receive(:list)
 
-      purchase.send(:reverse_the_transfer_made_for_dispute_win!)
+      purchase.send(:reverse_the_transfer_made_for_dispute_win!, refund: build(:refund, purchase:))
     end
 
     it "tries to reverse the dispute transfer if purchase dispute is won and holder of funds is Stripe" do
@@ -2941,7 +2941,106 @@ describe "PurchaseRefunds", :vcr do
       create(:dispute, purchase:, state: "won", won_at: Time.at(1669749973).utc)
       expect(Stripe::Transfer).to receive(:list).and_call_original
 
-      purchase.send(:reverse_the_transfer_made_for_dispute_win!)
+      purchase.send(:reverse_the_transfer_made_for_dispute_win!, refund: build(:refund, purchase:))
+    end
+
+    context "with a dispute-win transfer" do
+      let(:merchant_account) { create(:merchant_account, charge_processor_merchant_id: "acct_dispute_win") }
+      let(:purchase) do
+        create(:purchase, link: create(:product, user: merchant_account.user), merchant_account:, price_cents: 10_00,
+                          total_transaction_cents: 10_00)
+      end
+      let(:transfer) { Stripe::StripeObject.construct_from(id: "tr_dispute_win", amount: 8_50, amount_reversed: 0, description: "Dispute dp_win won") }
+
+      before do
+        create(:dispute, purchase:, state: "won", won_at: Time.current, charge_processor_dispute_id: "dp_win")
+        allow(Stripe::Transfer).to receive(:list).and_return([transfer])
+      end
+
+      it "reverses the whole seller share for a full refund" do
+        refund = create(:refund, purchase:, total_transaction_cents: 10_00, amount_cents: 10_00, processor_refund_id: "re_full")
+
+        expect(Stripe::Transfer).to receive(:create_reversal)
+          .with("tr_dispute_win", { amount: 8_50 }, { idempotency_key: "dispute_win_reversal_re_full" })
+
+        purchase.send(:reverse_the_transfer_made_for_dispute_win!, refund:)
+      end
+
+      it "reverses the refund's share of the seller share for a partial refund" do
+        refund = create(:refund, purchase:, total_transaction_cents: 4_00, amount_cents: 4_00, processor_refund_id: "re_partial")
+
+        expect(Stripe::Transfer).to receive(:create_reversal)
+          .with("tr_dispute_win", { amount: 3_40 }, { idempotency_key: "dispute_win_reversal_re_partial" })
+
+        purchase.send(:reverse_the_transfer_made_for_dispute_win!, refund:)
+      end
+
+      it "reverses what is left on the transfer when the refund completes the purchase after a tax-only refund" do
+        purchase.update!(stripe_refunded: true)
+        refund = create(:refund, purchase:, total_transaction_cents: 9_00, amount_cents: 9_00, processor_refund_id: "re_after_tax")
+
+        expect(Stripe::Transfer).to receive(:create_reversal).with("tr_dispute_win", { amount: 8_50 }, anything)
+
+        purchase.send(:reverse_the_transfer_made_for_dispute_win!, refund:)
+      end
+
+      it "reverses what is left on the transfer when the refund completes the successful purchases on a charge" do
+        failed = create(:failed_purchase, link: purchase.link)
+        create(:charge, purchases: [purchase, failed], processor_transaction_id: "ch_dispute_win")
+        purchase.reload.update!(stripe_refunded: true)
+        refund = create(:refund, purchase:, total_transaction_cents: 9_00, amount_cents: 9_00, processor_refund_id: "re_on_charge")
+
+        expect(Stripe::Transfer).to receive(:create_reversal).with("tr_dispute_win", { amount: 8_50 }, anything)
+
+        purchase.send(:reverse_the_transfer_made_for_dispute_win!, refund:)
+      end
+
+      it "leaves the share of an earlier Gumroad-funded refund on the transfer" do
+        create(:refund, purchase:, total_transaction_cents: 4_00, amount_cents: 4_00, gumroad_funded: true, processor_refund_id: "re_funded")
+        purchase.update!(stripe_refunded: true)
+        refund = create(:refund, purchase:, total_transaction_cents: 6_00, amount_cents: 6_00, processor_refund_id: "re_last")
+
+        expect(Stripe::Transfer).to receive(:create_reversal).with("tr_dispute_win", { amount: 5_10 }, anything)
+
+        purchase.send(:reverse_the_transfer_made_for_dispute_win!, refund:)
+      end
+
+      it "reverses the tax-free share after a tax-only refund" do
+        purchase.update_columns(gumroad_tax_cents: 1_00)
+        create(:refund, purchase:, total_transaction_cents: 1_00, amount_cents: 0, gumroad_tax_cents: 1_00, processor_refund_id: "re_tax")
+        refund = create(:refund, purchase:, total_transaction_cents: 4_50, amount_cents: 4_50, gumroad_tax_cents: 0, processor_refund_id: "re_half")
+
+        expect(Stripe::Transfer).to receive(:create_reversal).with("tr_dispute_win", { amount: 4_25 }, anything)
+
+        purchase.send(:reverse_the_transfer_made_for_dispute_win!, refund:)
+      end
+
+      it "counts a failed refund whose seller debit was not reversed" do
+        create(:refund, purchase:, total_transaction_cents: 4_00, amount_cents: 4_00, status: "failed", processor_refund_id: "re_failed")
+        refund = create(:refund, purchase:, total_transaction_cents: 2_00, amount_cents: 2_00, processor_refund_id: "re_after_failed")
+
+        expect(Stripe::Transfer).to receive(:create_reversal).with("tr_dispute_win", { amount: 5_10 }, anything)
+
+        purchase.send(:reverse_the_transfer_made_for_dispute_win!, refund:)
+      end
+
+      it "reverses no more than is left on the transfer" do
+        transfer.amount_reversed = 8_00
+        refund = create(:refund, purchase:, total_transaction_cents: 10_00, amount_cents: 10_00, processor_refund_id: "re_rest")
+
+        expect(Stripe::Transfer).to receive(:create_reversal).with("tr_dispute_win", { amount: 50 }, anything)
+
+        purchase.send(:reverse_the_transfer_made_for_dispute_win!, refund:)
+      end
+
+      it "records a full refund and reverses the seller share instead of asking Stripe for zero" do
+        purchase.update!(chargeback_date: Time.current, chargeback_reversed: true)
+        allow(Stripe::Transfer).to receive(:create_reversal)
+
+        expect(purchase.refund_purchase!(FlowOfFunds.build_simple_flow_of_funds(Currency::USD, -10_00), purchase.seller.id)).to be(true)
+
+        expect(Stripe::Transfer).to have_received(:create_reversal).with("tr_dispute_win", { amount: 8_50 }, anything)
+      end
     end
   end
 
