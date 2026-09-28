@@ -776,8 +776,8 @@ class Purchase
       end
       return unless amount_to_reverse_cents.positive?
 
-      # A refund made outside the app gets its reversal from the refund webhook, tagged by metadata.
-      existing_reversal = transfer.reversals.data.find do |reversal|
+      # A retry can find its earlier reversal beyond the ten embedded results, so search every page.
+      existing_reversal = StripeChargeProcessor.each_refund_fee_reversal(transfer.reversals).find do |reversal|
         reversal.source_refund == refund.processor_refund_id ||
           StripeChargeProcessor.external_refund_reversal_for?(reversal, refund.processor_refund_id)
       end
