@@ -1148,7 +1148,7 @@ describe("Product Page - Later country tax scenarios", type: :system, js: true) 
       expect(page).to have_select("Country", selected: "Austria")
 
       check_out(@product, country: "Mexico", zip_code: nil, credit_card: { number: "4000000400000008" },
-                          error: "The country you selected doesn't match your location or your payment method. Please select the country you live in. If you're using a VPN, turn it off and try again.")
+                          error: "We couldn't confirm the country you selected. It needs to match where you're connecting from or where your card was issued. If you're using a VPN, turn it off and try again.")
     end
 
     it "allows the purchase when non-EU elected country matches the non-EU card country, but not the EU detected country" do

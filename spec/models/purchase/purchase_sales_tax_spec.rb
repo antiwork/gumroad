@@ -275,8 +275,8 @@ describe "PurchaseSalesTax", :vcr do
             expect(ChargeProcessor).to_not receive(:create_payment_intent_or_charge!).with(anything, anything, chargeable, @purchase_transaction_amount, anything, anything, anything)
           end
 
-          it "fails validation and asks the buyer to select the country they live in" do
-            expect(@purchase.errors[:base]).to eq(["The country you selected doesn't match your location or your payment method. Please select the country you live in. If you're using a VPN, turn it off and try again."])
+          it "fails validation and tells the buyer which countries the selection must match" do
+            expect(@purchase.errors[:base]).to eq(["We couldn't confirm the country you selected. It needs to match where you're connecting from or where your card was issued. If you're using a VPN, turn it off and try again."])
             expect(@purchase.error_code).to eq(PurchaseErrorCode::TAX_VALIDATION_FAILED)
           end
         end
