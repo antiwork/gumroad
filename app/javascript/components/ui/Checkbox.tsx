@@ -24,7 +24,8 @@ export const Checkbox = React.forwardRef<
           "shrink-0 cursor-pointer",
           "disabled:cursor-not-allowed disabled:opacity-30",
           "checked:bg-accent-with-text",
-          "rounded-lg",
+          // Follows the seller's --radius down to square, but never rounder than the stock 0.5rem.
+          "rounded-[min(var(--radius-lg),calc(var(--radius)*2))]",
           "peer",
           stateBorderStyles[state],
           className,
