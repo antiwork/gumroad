@@ -2499,6 +2499,30 @@ class LinkTest < ActiveSupport::TestCase
     assert_equal [other_product.id], without_product.reload.shown_products
   end
 
+  test "delete! works for a seller whose profile predates the theme columns" do
+    seller = create_user
+    product = create_product(user: seller)
+    section = create_seller_profile_products_section(seller:, shown_products: [product.id])
+    profile = seller.create_seller_profile!
+    # Rows written before border_radius/button_hover existed read both back as NULL.
+    SellerProfile.where(id: profile.id).update_all(border_radius: nil, button_hover: nil)
+
+    product.delete!
+
+    assert_equal [], section.reload.shown_products
+  end
+
+  test "creating a product works for a seller whose profile predates the theme columns" do
+    seller = create_user
+    section = create_seller_profile_products_section(seller:)
+    profile = seller.create_seller_profile!
+    SellerProfile.where(id: profile.id).update_all(border_radius: nil, button_hover: nil)
+
+    product = create_product(user: seller)
+
+    assert_includes section.reload.shown_products, product.id
+  end
+
   test "delete! schedules the product's public files for deletion" do
     product = create_product
     public_file1 = create_public_file(resource: product, with_audio: true)

@@ -969,7 +969,7 @@ class User < ApplicationRecord
   def with_profile_sections_lock(lock_wait_timeout_seconds: nil, &block)
     profile = SellerProfile.find_by(seller_id: id)
     return yield if profile.nil?
-    return profile.with_lock(&block) if lock_wait_timeout_seconds.nil?
+    return SellerProfile.transaction { lock_profile_row(profile); block.call } if lock_wait_timeout_seconds.nil?
 
     SellerProfile.transaction do
       acquire_profile_row_lock(profile, lock_wait_timeout_seconds)
@@ -978,9 +978,16 @@ class User < ApplicationRecord
   end
 
   private def acquire_profile_row_lock(profile, seconds)
-    with_bounded_lock_wait(seconds) { profile.lock! }
+    with_bounded_lock_wait(seconds) { lock_profile_row(profile) }
   rescue ActiveRecord::LockWaitTimeout
     raise ProfileSectionsLockTimeout
+  end
+
+  # SellerProfile#after_initialize fills theme defaults the row's columns leave NULL (rows cut
+  # before those columns existed), and `lock!` refuses a record with unpersisted changes. Callers
+  # need the seller_profiles row locked, never this instance, so take the lock with a scoped read.
+  private def lock_profile_row(profile)
+    SellerProfile.lock.find(profile.id)
   end
 
   # `innodb_lock_wait_timeout` is a session setting on the connection the lock will run on,
