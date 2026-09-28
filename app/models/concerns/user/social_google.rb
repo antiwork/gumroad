@@ -52,6 +52,7 @@ module User::SocialGoogle
         # The redirect below copies a deleted row's uid onto the live account without clearing it
         # on the deleted row, so a live match must win or a later email change strands the user.
         user = User.alive.find_by(google_uid: data["uid"]) || User.find_by(google_uid: data["uid"])
+        redirected_to_live_user = false
 
         # A closed account keeps its google_uid after support frees its email to a
         # `@deleted.invalid` placeholder. Prefer the live account holding the Google address; never
@@ -59,7 +60,10 @@ module User::SocialGoogle
         if user&.deleted? && user.email.to_s.end_with?("@#{User::DELETED_ACCOUNT_EMAIL_DOMAIN}")
           email = data["info"]["email"] || data["extra"]["raw_info"]["email"]
           live_user = EmailFormatValidator.valid?(email) ? User.alive.find_by(email:) : nil
-          user = live_user if live_user
+          if live_user
+            user = live_user
+            redirected_to_live_user = true
+          end
         end
 
         if user.nil?
@@ -81,7 +85,7 @@ module User::SocialGoogle
             query_google(user, data)
           end
         else
-          query_google(user, data)
+          query_google(user, data, keep_pending_email: redirected_to_live_user)
         end
 
         user
@@ -103,7 +107,7 @@ module User::SocialGoogle
       nil
     end
 
-    def query_google(user, data, new_user: false)
+    def query_google(user, data, new_user: false, keep_pending_email: false)
       return if data.blank? || data.is_a?(String)
 
       email = data["info"]["email"] || data["extra"]["raw_info"]["email"]
@@ -133,7 +137,9 @@ module User::SocialGoogle
 
       user.skip_confirmation_notification!
       user.save!
-      user.confirm if user.has_unconfirmed_email?
+      # On the deleted-row redirect Google only proved the current address. Confirming would apply a
+      # pending change it never verified, and the next login from that uid would land on the deleted row.
+      user.confirm if user.has_unconfirmed_email? && !(keep_pending_email && user.pending_reconfirmation?)
 
       user
     end

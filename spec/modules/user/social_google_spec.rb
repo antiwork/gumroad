@@ -82,6 +82,71 @@ describe User::SocialGoogle do
         expect(found_user.id).to eq(live_user.id)
       end
 
+      it "does not apply the live account's pending email change when copying the identity", :aggregate_failures do
+        @data_copy2["info"]["image"] = nil
+        live_user = create(:user, email: @data_copy2["info"]["email"])
+        live_user.update!(email: "spongebob-pending@example.com")
+        expect(live_user.reload.unconfirmed_email).to eq("spongebob-pending@example.com")
+
+        first_login = User.find_or_create_for_google_oauth2(@data_copy2)
+
+        expect(first_login.id).to eq(live_user.id)
+        expect(live_user.reload.email).to eq(@data_copy2["info"]["email"])
+        expect(live_user.unconfirmed_email).to eq("spongebob-pending@example.com")
+        expect(live_user.google_uid).to eq(@data_copy2["uid"])
+        expect(@deleted_user.reload.google_uid).to eq(@data_copy2["uid"])
+        expect(User.find_or_create_for_google_oauth2(@data_copy2).id).to eq(live_user.id)
+      end
+
+      it "still confirms a live account with no pending email change" do
+        @data_copy2["info"]["image"] = nil
+        live_user = create(:unconfirmed_user, email: @data_copy2["info"]["email"])
+
+        User.find_or_create_for_google_oauth2(@data_copy2)
+
+        expect(live_user.reload).to be_confirmed
+        expect(live_user.email).to eq(@data_copy2["info"]["email"])
+      end
+
+      context "when the live account already has its own Google identity" do
+        let(:live_google_uid) { "222222" }
+
+        before { @data_copy2["info"]["image"] = nil }
+
+        it "signs in the live account and keeps both identities", :aggregate_failures do
+          live_user = create(:user, email: @data_copy2["info"]["email"], google_uid: live_google_uid)
+
+          found_user = nil
+          expect { found_user = User.find_or_create_for_google_oauth2(@data_copy2) }.not_to change { User.count }
+
+          expect(found_user.id).to eq(live_user.id)
+          expect(live_user.reload.google_uid).to eq(live_google_uid)
+          expect(@deleted_user.reload.google_uid).to eq(@data_copy2["uid"])
+          expect(@deleted_user.email).to eq(freed_address)
+          expect(@deleted_user).to be_deleted
+        end
+
+        it "keeps signing in the live account without applying its pending email change", :aggregate_failures do
+          live_user = create(:user, email: @data_copy2["info"]["email"], google_uid: live_google_uid)
+          live_user.update!(email: "spongebob-pending@example.com")
+          expect(live_user.reload.unconfirmed_email).to eq("spongebob-pending@example.com")
+
+          first_login = second_login = nil
+          expect do
+            first_login = User.find_or_create_for_google_oauth2(@data_copy2)
+            second_login = User.find_or_create_for_google_oauth2(@data_copy2)
+          end.not_to change { User.count }
+
+          expect(first_login.id).to eq(live_user.id)
+          expect(second_login.id).to eq(live_user.id)
+          expect(live_user.reload.email).to eq(@data_copy2["info"]["email"])
+          expect(live_user.unconfirmed_email).to eq("spongebob-pending@example.com")
+          expect(live_user.google_uid).to eq(live_google_uid)
+          expect(@deleted_user.reload.google_uid).to eq(@data_copy2["uid"])
+          expect(@deleted_user.email).to eq(freed_address)
+        end
+      end
+
       it "still returns the deleted account when no live account holds the address" do
         found_user = User.find_or_create_for_google_oauth2(@data_copy2)
 
