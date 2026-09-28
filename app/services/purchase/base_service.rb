@@ -103,8 +103,11 @@ class Purchase::BaseService
 
       subscription = purchase.subscription
       if subscription&.is_resubscription_pending_confirmation?
-        subscription.unsubscribe_and_fail!(preserve_access_for_mandate_failure: false)
-        subscription.update_flag!(:is_resubscription_pending_confirmation, false, true)
+        # A later restart owns the membership. Timing out this attempt must not cancel that one.
+        unless later_restart_attempt?(purchase)
+          subscription.unsubscribe_and_fail!(preserve_access_for_mandate_failure: false)
+          subscription.update_flag!(:is_resubscription_pending_confirmation, false, true)
+        end
       elsif purchase.is_upgrade_purchase?
         new_original_purchase = subscription.original_purchase
         previous_original_purchase = subscription.purchases.is_archived_original_subscription_purchase.last
@@ -133,5 +136,11 @@ class Purchase::BaseService
         purchase.mark_preorder_authorization_failed
         preorder&.mark_authorization_failed!
       end
+    end
+
+    def later_restart_attempt?(purchase)
+      return false if purchase.subscription_id.blank?
+
+      purchase.subscription.purchases.where("id > ?", purchase.id).where(purchase_state: %w[in_progress successful]).exists?
     end
 end

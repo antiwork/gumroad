@@ -443,6 +443,7 @@ class Subscription < ApplicationRecord
     self.credit_card_id = purchase.credit_card_id
     self.renewal_disabled_due_to_indian_card_mandate = false unless indian_card_mandate_requires_reauthorization?
     save!
+    update_flag!(:is_resubscription_pending_confirmation, false, true) if is_resubscription_pending_confirmation?
     create_purchase_event(purchase)
     if purchase.was_product_recommended
       recommendation_type = original_purchase.recommended_purchase_info.try(:recommendation_type)
