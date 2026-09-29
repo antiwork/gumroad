@@ -113,6 +113,24 @@ module Purchase::Blockable
       SQL
       relation.distinct.limit(MAX_NUMBER_OF_FAILED_FINGERPRINTS).pluck(Arel.sql(identity)).size
     end
+
+    # Purchase => the downcased addresses Purchase::Risk#check_for_past_fraudulent_ips resolves
+    # buyer accounts from, preloaded so a batch costs a fixed number of queries.
+    def checkout_ip_lookup_emails(purchases)
+      ActiveRecord::Associations::Preloader.new(records: purchases, associations: [:purchaser, :gift_given, :gift_received]).call
+      purchases.index_with { |purchase| purchase.send(:blockable_emails_if_fraudulent_transaction).map(&:downcase) }
+    end
+
+    # Downcased email => the account IPs checkout matches for it. Report-only: these are
+    # shared-radius values, and one reached through a typed third-party address says nothing about
+    # which of the buyer's identifiers are safe to clear.
+    def checkout_account_ips_by_email(emails)
+      return {} if emails.empty?
+
+      User.where(email: emails).pluck(:email, *Purchase::Risk::ACCOUNT_IP_COLUMNS).each_with_object({}) do |(email, *ips), by_email|
+        (by_email[email.downcase] ||= []).concat(ips.compact_blank)
+      end
+    end
   end
 
   # How many of the buyer's other purchases #unblock_buyer! collects identifiers from. An admin
@@ -203,7 +221,13 @@ module Purchase::Blockable
   # success while the buyer may still be held (gumroad-private#1648).
   def surviving_buyer_blocks
     scopes = buyer_blockable_values.map { |object_type, values| PlatformBlock.active.where(object_type:, object_value: values) }
-    scopes << PlatformBlock.active.ip_address.where(object_value: ip_address) if ip_address.present?
+    if checkout_ip_exempt?
+      # Checkout never IP-checks this row, so only the ip_address row the unblock itself targets.
+      scopes << PlatformBlock.active.ip_address.where(object_value: ip_address) if ip_address.present?
+    else
+      ip_values = checkout_ip_values
+      scopes << PlatformBlock.active.where(object_value: ip_values) if ip_values.any?
+    end
     blockable_values_for(same_email_guest_purchases - sibling_buyer_purchases).each do |object_type, values|
       scopes << PlatformBlock.active.where(object_type:, object_value: values)
     end
@@ -216,6 +240,18 @@ module Purchase::Blockable
     return PlatformBlock.none if scopes.empty?
 
     scopes.reduce { |combined, scope| combined.or(scope) }
+  end
+
+  # Active blocks on the IPs Purchase::Risk#check_for_past_fraudulent_ips holds this buyer on: the
+  # request IP plus the account IPs of every address on this row, matched by value whatever the
+  # stored type, as checkout matches them. Report-only — #unblock_buyer! clears none of the account
+  # IPs, and #buyer_blocked? deliberately does not ask about them. None for a row checkout never
+  # IP-checks.
+  def checkout_ip_holds
+    return PlatformBlock.none if checkout_ip_exempt?
+
+    ip_values = checkout_ip_values
+    ip_values.any? ? PlatformBlock.active.where(object_value: ip_values) : PlatformBlock.none
   end
 
   # How far back to look for the buyer's latest processor attempt. Radar's own velocity predicates
@@ -388,6 +424,17 @@ module Purchase::Blockable
     return false if predicate.blank?
 
     PLATFORM_BLOCK_VALUE_LISTS.any? { |list| predicate.include?(list) }
+  end
+
+  # The same early returns as Purchase::Risk#check_for_past_fraudulent_ips.
+  def checkout_ip_exempt?
+    is_recurring_subscription_charge || free_purchase?
+  end
+
+  # The seller's IPs are left out on purpose: checkout never declines a buyer on a seller-only match.
+  private def checkout_ip_values
+    account_ips = self.class.checkout_account_ips_by_email(blockable_emails_if_fraudulent_transaction.map(&:downcase)).values.flatten
+    [ip_address.presence, *account_ips].compact.uniq
   end
 
   private def buyer_blockable_values

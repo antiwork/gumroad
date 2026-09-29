@@ -68,7 +68,9 @@ class Risk::StrandedBuyerRecoveryService
 
   def call
     return result(:noop, :buyer_not_found) if user.nil? && candidate_purchases.empty?
-    return result(:noop, :no_active_blocks) if active_blocks.empty?
+    # A buyer held only on an account IP still runs every gate below, so the verdict says which
+    # one stands before a human even gets to the IP.
+    return result(:noop, :no_active_blocks) if active_blocks.empty? && account_ip_holds.empty?
 
     # Any row that names an author — a human admin OR the shared automation actor, which writes
     # confirmed-fraud blocks (chargeback count, EFW) — is a decision about this buyer, not a rule
@@ -104,7 +106,7 @@ class Risk::StrandedBuyerRecoveryService
         verify!(clearable)
         record_admin_comment(attribution, clearable)
       end
-      notify_buyer(withheld)
+      notify_buyer(withheld + withheld_account_ip_holds)
     end
 
     result(:cleared, attribution[:rule], attribution:, cleared: clearable, skipped: withheld)
@@ -227,6 +229,46 @@ class Risk::StrandedBuyerRecoveryService
       end
     end
 
+    # Blocked checkouts in the footprint. Read from candidate_purchases, not buyer_purchases: a
+    # checkout stopped by an IP block never reaches the processor, so it has no fingerprint to
+    # corroborate it. Their addresses only resolve accounts — they never join identifier_emails.
+    def blocked_failures
+      @_blocked_failures ||= candidate_purchases.select { _1.failed? && BLOCK_ERROR_CODES.include?(_1.error_code) }.tap do |rows|
+        ActiveRecord::Associations::Preloader.new(records: rows, associations: :subscription).call
+      end
+    end
+
+    # Every account IP (Purchase::Risk#check_for_past_fraudulent_ips) any blocked checkout could
+    # meet. Classification only: #partition_blocks never clears a row on one of these values.
+    def account_ip_values
+      @_account_ip_values ||= account_ips_for(blocked_failures)
+    end
+
+    # The account IPs reported as holding the buyer: only when a blocked checkout ran the IP check.
+    # Free purchases and renewals skip it, so a buyer whose blocked attempts were all exempt is not
+    # held here, and their resolved mail is not suppressed on its account.
+    def reported_account_ip_values
+      @_reported_account_ip_values ||= begin
+        ip_checked = blocked_failures.reject(&:checkout_ip_exempt?)
+        ip_checked.any? ? account_ips_for(ip_checked) : Set.new
+      end
+    end
+
+    def account_ips_for(rows)
+      emails = (identifier_emails + Purchase.checkout_ip_lookup_emails(rows).values.flatten).uniq
+      Purchase.checkout_account_ips_by_email(emails).values.flatten.map(&:downcase).to_set
+    end
+
+    # Matched by value whatever the stored type. Deliberately not deduplicated against active_blocks:
+    # a proven guid can equal an IP string, and the row is still an IP hold (see #partition_blocks).
+    def account_ip_holds
+      @_account_ip_holds ||= reported_account_ip_values.any? ? PlatformBlock.active.where(object_value: reported_account_ip_values.to_a).to_a : []
+    end
+
+    def withheld_account_ip_holds
+      account_ip_holds.map { [_1, :shared_identifier_needs_human_review] }
+    end
+
     # blocked_by nil is the only clearable authorship: the velocity rules write nil, while
     # GUMROAD_ADMIN_ID authors confirmed-fraud blocks (chargeback count, EFW) and humans author
     # decisions — both escalate.
@@ -342,7 +384,8 @@ class Risk::StrandedBuyerRecoveryService
       clearable = []
       withheld = []
       active_blocks.each do |block|
-        if identifier_ips.include?(block.object_value) || SHARED_RADIUS_TYPES.include?(block.object_type)
+        if identifier_ips.include?(block.object_value) || account_ip_values.include?(block.object_value.downcase) ||
+           SHARED_RADIUS_TYPES.include?(block.object_type)
           withheld << [block, :shared_identifier_needs_human_review]
         elsif CLEARABLE_TYPES.include?(block.object_type) || identifier_guids.include?(block.object_value)
           clearable << block
@@ -441,7 +484,12 @@ class Risk::StrandedBuyerRecoveryService
       CustomerLowPriorityMailer.blocked_purchase_resolved(failed.id).deliver_later(queue: "low")
     end
 
+    # Every verdict carries the account-IP holds, early exits included: a skip or escalation that
+    # hid them would read as "only this gate stands between the buyer and checkout". A row the gates
+    # already listed keeps its own reason (an authored row stays :authored).
     def result(verdict, reason, attribution: nil, cleared: [], skipped: [])
-      Result.new(verdict:, reason:, attribution:, cleared:, skipped:, dry_run:)
+      listed = skipped.map { |block, _why| block.id }.to_set
+      holds = withheld_account_ip_holds.reject { |block, _why| listed.include?(block.id) }
+      Result.new(verdict:, reason:, attribution:, cleared:, skipped: skipped + holds, dry_run:)
     end
 end
