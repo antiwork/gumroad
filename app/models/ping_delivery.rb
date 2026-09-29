@@ -2,8 +2,8 @@
 
 # One row per POST attempt to a seller's ping endpoint, written by
 # PostToIndividualPingEndpointWorker. Append-only: the ping is fire-and-retry and the worker
-# discards the endpoint's answer, so without these rows "did we send a ping for sale X, and what
-# came back?" is only answerable from Rails logs on a host.
+# discards the endpoint's answer, so these rows are the only record of what a seller's endpoint
+# answered to a given POST.
 class PingDelivery < ApplicationRecord
   # How many rows the seller settings list and the admin lookup show.
   MAX_RECENT = 10

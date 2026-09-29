@@ -99,8 +99,7 @@ class PostToIndividualPingEndpointWorker
     end
 
     # Best-effort: the ping is the job's real work, so a failed write here is logged and dropped
-    # rather than raised inside a :critical queue. A missing row leaves that ping unrecorded,
-    # which is where every ping stood before this table existed.
+    # rather than raised inside a :critical queue.
     def record_delivery(post_url:, user_id:, ping:, retry_count:, response_code: nil, error_class: nil, succeeded: false)
       return if user_id.blank? || !ping.is_a?(Hash)
 
