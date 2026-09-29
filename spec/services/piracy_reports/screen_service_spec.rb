@@ -63,6 +63,15 @@ describe PiracyReports::ScreenService do
       expect(notice).to include(%("Course 2. Infringing material and location: https://victim.example/store"))
     end
 
+    it "prints a product title of the maximum length in full" do
+      long_name = "a" * 255
+      product.update_columns(name: long_name)
+
+      call(pass_params)
+
+      expect(report.reload.notice_text).to include(%("#{long_name}"))
+    end
+
     it "lists only the page the seller reported, whatever URLs the agent sends" do
       call(pass_params.merge("infringing_urls" => ["https://example.net/someone-elses-file"]))
 

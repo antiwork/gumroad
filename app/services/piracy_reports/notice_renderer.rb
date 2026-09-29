@@ -4,7 +4,6 @@
 class PiracyReports::NoticeRenderer
   # Bump when the template or the confirmations shown with it change.
   STATEMENT_VERSION = "2026-09-v1"
-  MAX_PRODUCT_NAME_LENGTH = 200
 
   def initialize(report)
     @report = report
@@ -22,7 +21,7 @@ class PiracyReports::NoticeRenderer
         owner_name: clean(compliance_info.legal_entity_name),
         owner_address_lines: address_lines(compliance_info),
         owner_email: report.seller.email,
-        product_name: clean(report.product.name).truncate(MAX_PRODUCT_NAME_LENGTH),
+        product_name: clean(report.product.name),
         product_url: report.product.long_url,
         infringing_urls: report.infringing_urls,
         support_email: ApplicationMailer::SUPPORT_EMAIL
