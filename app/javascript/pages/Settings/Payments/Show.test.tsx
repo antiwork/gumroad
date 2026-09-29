@@ -811,9 +811,8 @@ describe("bank payout switch option on the payments page", () => {
   });
 });
 
-// Stripe's Japanese-script ("Kanji") variations: an account whose name/address variation holds no
-// Japanese characters at all is refused at account creation with `Invalid string: must provide a
-// Kanji variation.`, so the page must refuse it before saving.
+// Stripe refuses an account whose ("Kanji") variation holds no Japanese characters, so the page
+// must refuse it before saving.
 describe("Japanese (Kanji) variation fields", () => {
   const jpCompliance = (overrides: Partial<ComplianceInfo> = {}) =>
     complianceInfo({
@@ -882,11 +881,20 @@ describe("Japanese (Kanji) variation fields", () => {
     expect(screen.getByText("First name (Kanji) must include Japanese characters.")).toBeTruthy();
   });
 
+  it("blocks a field holding only an ideographic space", () => {
+    renderJpSeller({ first_name_kanji: "\u3000" });
+    save();
+
+    expect(mocks.put).not.toHaveBeenCalled();
+    expect(screen.getByText("First name (Kanji) must include Japanese characters.")).toBeTruthy();
+  });
+
   it("blocks saving while a (Kanji) name field is blank", () => {
     renderJpSeller({ last_name_kanji: "" });
     save();
 
     expect(mocks.put).not.toHaveBeenCalled();
+    expect(screen.getByText(/Please complete the required fields below/u)).toBeTruthy();
     expect(screen.getAllByText(/Last name \/ 姓 \(Kanji\)/u).length).toBeGreaterThan(0);
   });
 

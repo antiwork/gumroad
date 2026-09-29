@@ -64,7 +64,9 @@ const INDONESIA_BANK_CODE_REGEX = /^[0-9]{3}$/u;
 const KANA_NAME_ERROR = "may only contain katakana characters, spaces, dashes, and dots.";
 const KANA_ADDRESS_ERROR = "may only contain katakana, latin characters, digits, spaces, dashes, and dots.";
 
-const HAS_JAPANESE_CHARS = /[\u3000-\u303F\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uFF65-\uFF9F]/u;
+// U+3000 (ideographic space) sits inside the Japanese range but is not a character, so it is excluded:
+// a (Kanji) variation holding only blanks must not pass as Japanese script.
+const HAS_JAPANESE_CHARS = /[\u3001-\u303F\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uFF65-\uFF9F]/u;
 const HAS_KATAKANA = /[\u30A0-\u30FF\u31F0-\u31FF\uFF65-\uFF9F]/u;
 
 const PAYOUT_FREQUENCIES = ["daily", "weekly", "monthly", "quarterly"] as const;
@@ -492,11 +494,9 @@ export default function PaymentsPage() {
     }
   };
 
-  // Each (Kanji) field is Stripe's Japanese-script variation of the value beside it, and Stripe
-  // rejects an account whose variation carries no Japanese characters at all — a seller retyping
-  // their romaji name or town into it — with `Invalid string: must provide a Kanji variation.`,
-  // which names neither the field nor the rule. Kana counts: a seller whose name has no kanji form
-  // can use it.
+  // Each (Kanji) field is Stripe's Japanese-script variation of the value beside it, and an account
+  // whose variation carries no Japanese character is refused later, naming neither the field nor the
+  // rule. Kana counts: a seller whose name has no kanji form can use its katakana rendering.
   const validateJapaneseScriptField = (fieldName: FormFieldName, value: string | null | undefined, label: string) => {
     if (value && !HAS_JAPANESE_CHARS.test(value)) {
       markFieldInvalid(fieldName);
