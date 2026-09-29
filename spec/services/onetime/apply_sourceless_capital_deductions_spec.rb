@@ -303,6 +303,57 @@ describe Onetime::ApplySourcelessCapitalDeductions do
       expect(refused.financing_paydown_purchase_id).to be_present
     end
 
+    it "flags a negative account group even when the seller's total stays positive" do
+      balance.update_columns(merchant_account_id: create(:merchant_account, user: seller, currency: Currency::USD).id)
+
+      first = statuses.first
+      expect(first).to include(status: :dry_run, balance_id: nil, before_cents: 0, after_cents: -352, ledger_after_cents: 5001,
+                               ends_negative: true, payout_held: true)
+    end
+
+    it "skips a credit that would leave its own account group negative" do
+      balance.update_columns(merchant_account_id: create(:merchant_account, user: seller, currency: Currency::USD).id)
+
+      expect(statuses(skip_negative: true).map { _1[:status] }).to eq(%i[skipped skipped])
+      expect(statuses(dry_run: false, skip_negative: true).map { _1[:status] }).to eq(%i[skipped skipped])
+      expect(credit.reload.balance_id).to be_nil
+    end
+
+    it "does not skip a credit because another account of the seller is already negative" do
+      other = create(:merchant_account, user: seller, currency: Currency::USD)
+      balance.update_columns(merchant_account_id: other.id, amount_cents: -10, holding_amount_cents: -10)
+      Balance.create!(user: seller, merchant_account:, date: Date.current - 1, currency: Currency::USD, holding_currency: Currency::USD,
+                      amount_cents: 900, holding_amount_cents: 900)
+
+      expect(statuses(skip_negative: true).first).to include(status: :dry_run, ends_negative: false, payout_held: true)
+    end
+
+    it "names the first credit's date for every row that shares a balance to be opened" do
+      balance.update_columns(state: "paid")
+      financing_second = financing.deep_merge(id: "cptxn_second", created_at: 1_787_200_000, details: { total_amount: 100 })
+      allow(Stripe).to receive(:raw_request)
+        .with(:get, "/v1/capital/financing_transactions/cptxn_second", {}, { stripe_account: merchant_account.charge_processor_merchant_id }) { double(http_body: financing_second.to_json) }
+
+      first, last = statuses
+      expect(first[:new_balance_date]).to eq(Time.zone.at(1_787_000_000).to_date)
+      expect(last[:new_balance_date]).to eq(first[:new_balance_date])
+      expect(last).to include(before_cents: -352, after_cents: -452)
+    end
+
+    it "holds the seller lock while it applies a credit under skip_negative, and only then" do
+      locked = []
+      allow_any_instance_of(User).to receive(:with_lock).and_wrap_original do |original, *args, &block|
+        locked << true
+        original.call(*args, &block)
+      end
+
+      statuses(dry_run: false)
+      expect(locked).to be_empty
+      third = create_credit(amount_cents: -10, stripe_id: "cptxn_third")
+      expect(described_class.new(credit_ids: [third.id], dry_run: false, skip_negative: true).process.sole).to include(status: :applied)
+      expect(locked.size).to eq(1)
+    end
+
     context "when a deduction would end the unpaid ledger below zero" do
       let!(:large) { create_credit(amount_cents: -6000, stripe_id: "cptxn_large") }
 

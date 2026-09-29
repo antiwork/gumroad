@@ -73,13 +73,17 @@ Read a dry run like this:
   A credit whose transaction is already applied adds nothing itself, but its row still includes the earlier credits of the batch.
   Run the dry run and the live run with the same IDs in the same order.
   A credit's own effect is `deduction_cents`.
-- `ledger_after_cents` is the seller's whole unpaid ledger after this credit, across all balances, and `ends_negative` is true when it is below zero.
-  A ledger at or below zero holds the seller's payouts (`Payouts.negative_ledger?`), so `payout_held` is true from zero down, and a payout is also held when any one account or currency group is negative.
-  `ledger_after_cents` ignores that grouping and the payout date, so treat it as a guide and check `payout_held` and `ends_negative` together.
+- `ledger_after_cents` is the seller's whole unpaid ledger after this credit, across all balances.
+  `ends_negative` is true when that ledger, or the group of this credit's merchant account and currency, is below zero.
+  A ledger at or below zero holds the seller's payouts (`Payouts.negative_ledger?`), so `payout_held` is true from zero down, and also when any account or currency group of the seller is negative, even one this batch did not touch.
+  The figures ignore the payout date, Payouts' exception for currencies an account cannot pay out, and its merge of Gumroad-held balances into the payout account's group, so a flag can be raised for a group Payouts would not hold.
+  Treat them as a guide and check `payout_held` and `ends_negative` together.
   Check every row with either flag before running live.
 - A transaction that an interrupted run already applied only gets linked to its credit.
   Its balance is not changed again, and its `balance_state` (`paid`, `processing`, or `unpaid`) is ignored, so a link to a paid balance does not reopen it.
   Such a credit adds nothing to the ledger, and `skip_negative` never skips it.
-- With `skip_negative: true`, a credit whose new deduction would end the ledger below zero (`ends_negative`, not a ledger of exactly zero) returns `skipped` with `ledger_after_cents` and stays unapplied.
+- With `skip_negative: true`, a credit whose new deduction would end the ledger or its own account group below zero (`ends_negative`, not a ledger of exactly zero) returns `skipped` with `ledger_after_cents` and stays unapplied.
   Later credits are judged without it.
+  With `skip_negative: true`, a live run holds the seller lock while it judges and applies each credit, so a payout cannot move the balances in between.
+- `new_balance_date` is the date of the balance a live run opens when the seller has no unpaid one; every later row of the batch that lands on that balance repeats the first credit's date.
   The default applies every credit, negative or not; choosing between the two is a policy decision for the payout owner.

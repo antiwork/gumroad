@@ -35,8 +35,9 @@ class Onetime::ApplySourcelessCapitalDeductions
     665316, 666449, 666605, 669318, 669671, 671062, 672886
   ].freeze
 
-  # skip_negative leaves a credit alone when applying it would end the seller's unpaid ledger below zero.
-  # A negative ledger holds the seller's payouts, so the caller decides whether that is acceptable.
+  # skip_negative leaves a credit alone when applying it would end the seller's unpaid ledger, or the credit's own
+  # merchant account and currency group, below zero. A negative ledger or group holds the seller's payouts, so the
+  # caller decides whether that is acceptable.
   def initialize(credit_ids: CREDIT_IDS, dry_run: true, skip_negative: false)
     raise ArgumentError, "Only listed credits can be applied" unless (credit_ids - CREDIT_IDS).empty?
     raise ArgumentError, "Credit IDs must be unique" unless credit_ids.uniq.size == credit_ids.size
@@ -49,7 +50,8 @@ class Onetime::ApplySourcelessCapitalDeductions
   def process
     # A dry run applies nothing, so later credits of the batch see earlier ones through these.
     @projected_deltas = Hash.new(0)
-    @projected_ledgers = Hash.new(0)
+    @projected_groups = Hash.new(0)
+    @projected_dates = {}
     @credit_ids.map do |credit_id|
       process_credit(credit_id)
     rescue => e
@@ -66,6 +68,14 @@ class Onetime::ApplySourcelessCapitalDeductions
       verify_record!(credit)
       stripe = verify_stripe_source_is_absent!(credit)
 
+      # Payouts claims balances under the seller lock, so holding it keeps the ledger judged by skip_negative
+      # unchanged until the deduction lands. It is taken before the Credit lock, never after.
+      return apply_credit(credit, stripe) unless @skip_negative && !@dry_run
+
+      ApplicationRecord.connected_to(role: :writing) { credit.user.with_lock { apply_credit(credit, stripe) } }
+    end
+
+    def apply_credit(credit, stripe)
       ApplicationRecord.connected_to(role: :writing) do
         credit.with_lock do
           return already_applied(credit) if credit.balance_id.present?
@@ -85,7 +95,8 @@ class Onetime::ApplySourcelessCapitalDeductions
         end
       end
 
-      # Outside the Credit lock: this locks a Balance and creates the missing BalanceTransaction.
+      # This locks a Balance and creates the missing BalanceTransaction. Under skip_negative the seller lock, and so the
+      # Credit lock, is still held and a failure rolls back the unlink too; the order stays seller, credit, balance.
       credit.apply_financing_paydown!(merchant_account: credit.merchant_account, amount_cents: credit.amount_cents,
                                       currency: Currency::USD, reason: Credit::AUTOMATIC_CAPITAL_WITHHOLDING,
                                       financing_paydown_purchase_id: nil)
@@ -187,24 +198,37 @@ class Onetime::ApplySourcelessCapitalDeductions
       else
         before_cents, after_cents, ledger_change = held_cents, held_cents + credit.amount_cents, credit.amount_cents
       end
-      ledger_after_cents = unpaid_ledger_cents(credit.user_id) + @projected_ledgers[credit.user_id] + ledger_change
+      groups = projected_groups(credit, ledger_change)
+      ledger_after_cents = groups.values.sum
+      own_group_negative = groups[[credit.merchant_account_id, Currency::USD]].negative?
       { balance:, balance_key:, before_cents:, after_cents:, ledger_change:, ledger_after_cents:,
-        ends_negative: ledger_after_cents.negative?, payout_held: ledger_after_cents <= 0, new_deduction: applied_balance.nil? }
+        ends_negative: ledger_after_cents.negative? || own_group_negative,
+        payout_held: ledger_after_cents <= 0 || groups.values.any?(&:negative?), new_deduction: applied_balance.nil? }
     end
 
-    # What Payouts weighs when it decides whether a negative ledger holds a seller's payout.
-    def unpaid_ledger_cents(user_id)
-      ApplicationRecord.connected_to(role: :writing) { Balance.where(user_id:, state: "unpaid").sum(:amount_cents) }
+    # What Payouts weighs when it decides whether a negative ledger holds a seller's payout: the whole
+    # unpaid ledger, and each merchant account and currency group on its own. Payouts also merges Gumroad-held
+    # balances into the payout account's group; this does not, so it can flag a group Payouts would not hold.
+    def projected_groups(credit, ledger_change)
+      groups = Hash.new(0)
+      ApplicationRecord.connected_to(role: :writing) do
+        Balance.where(user_id: credit.user_id, state: "unpaid").group(:merchant_account_id, :holding_currency).sum(:amount_cents)
+      end.each { |group, cents| groups[group] += cents }
+      @projected_groups.each { |(user_id, *group), cents| groups[group] += cents if user_id == credit.user_id }
+      groups[[credit.merchant_account_id, Currency::USD]] += ledger_change
+      groups
     end
 
     def dry_run_result(credit, transaction, stripe, projection)
       @projected_deltas[projection[:balance_key]] += credit.amount_cents if projection[:new_deduction]
-      @projected_ledgers[credit.user_id] += projection[:ledger_change]
+      @projected_groups[[credit.user_id, credit.merchant_account_id, Currency::USD]] += projection[:ledger_change]
       balance = projection[:balance]
+      # A live batch opens one balance and reuses it, so later rows name the first credit's date.
+      new_balance_date = balance ? nil : (@projected_dates[projection[:balance_key]] ||= Time.zone.at(stripe[:stripe_loan_paydown_deducted_at]).to_date)
       { status: :dry_run, credit_id: credit.id, user_id: credit.user_id, balance_transaction_id: transaction&.id,
         creates_balance_transaction: transaction.nil?, links_applied_transaction: !projection[:new_deduction],
         unlinks_purchase_id: credit.financing_paydown_purchase_id, balance_id: balance&.id, balance_state: balance&.state,
-        new_balance_date: balance ? nil : Time.zone.at(stripe[:stripe_loan_paydown_deducted_at]).to_date,
+        new_balance_date:,
         before_cents: projection[:before_cents], deduction_cents: credit.amount_cents, after_cents: projection[:after_cents],
         ledger_after_cents: projection[:ledger_after_cents], ends_negative: projection[:ends_negative],
         payout_held: projection[:payout_held] }
