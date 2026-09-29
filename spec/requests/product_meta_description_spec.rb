@@ -2,12 +2,9 @@
 
 require "spec_helper"
 
-# A seller's description can run to thousands of characters, and the sanitizer
-# returns it entity-encoded with embedded newlines. Emitted verbatim into
-# <meta name="description"> / og:description it is pure head weight — every
-# crawler truncates to roughly the same ~160 chars anyway. The profile page meta
-# caps at first(300) and the wishlist at truncate(160); the product page must cap
-# too so the SERP snippet is a single clean line.
+# The product page must cap its description meta the way the profile (first(300)) and
+# wishlist (truncate(160)) pages already do: descriptions run to thousands of characters
+# and plaintext_description leaves entities encoded, so the cap must not slice one in half.
 describe "product page meta tags", type: :request do
   let(:seller) { create(:user, name: "Meta Seller") }
   let(:long_description) { (1..40).map { |i| "word#{i}" }.join(" ") }
@@ -39,6 +36,19 @@ describe "product page meta tags", type: :request do
       # The untruncated description must never reach the document head verbatim.
       # (It legitimately still appears later in the body's Inertia props.)
       expect(response.body.split("<body").first).not_to include(long_description)
+    end
+  end
+
+  context "when an entity-encoded character sits at the cutoff" do
+    # 155 characters before the ampersand, so a 160-character cap applied to the
+    # encoded string would keep only "&am" of "&amp;".
+    let(:product) { create(:product, user: seller, description: ("a" * 155) + "& chips") }
+
+    it "caps the decoded text instead of splitting the entity" do
+      get "http://#{seller.subdomain}/l/#{product.unique_permalink}"
+
+      expect(rendered_meta_description).to eq(("a" * 155) + "&amp; ...")
+      expect(rendered_og_description).to eq(("a" * 155) + "&amp; ...")
     end
   end
 
