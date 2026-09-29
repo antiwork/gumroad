@@ -447,19 +447,18 @@ class Settings::PaymentsController < Settings::BaseController
       true
     end
 
-    # The form echoes every stored field back on save, so an unchanged ZIP is skipped: a stored military ZIP
-    # must not lock the seller out of unrelated settings. It is checked anyway when the save starts sending
-    # that address to Stripe for the first time (account type switch, a stored country other than the US, or a
-    # bank account submitted before the seller has a Stripe account).
-    # Country and business status resolve as UpdateUserComplianceInfo does, and a business also sends its
-    # representative's personal address.
+    # The form echoes stored fields back, so an unchanged ZIP is skipped and a stored military ZIP can't lock
+    # the seller out of unrelated settings, unless this save is when the address first reaches Stripe.
+    # Country and business status resolve as UpdateUserComplianceInfo does.
     def military_zip_fields(compliance_info)
       us_code = Compliance::Countries::USA.alpha2
       submitted = params[:user]
       return [] if submitted.blank?
 
       business = submitted[:is_business].nil? ? compliance_info.is_business? : ActiveModel::Type::Boolean.new.cast(submitted[:is_business])
-      first_stripe_setup = params.dig(:bank_account, :account_number).present? && current_seller.stripe_connect_account.blank?
+      first_stripe_setup = current_seller.stripe_connect_account.blank? &&
+                           (params.dig(:bank_account, :account_number).present? || current_seller.active_bank_account.present?) &&
+                           !StripeMerchantAccountManager.blocks_new_managed_account?(current_seller)
       account_type_changed = business != compliance_info.is_business?
       # A business record without its own country is validated under the personal country (legal_entity_country).
       stored_business_country_code = compliance_info.business_country_code.presence || compliance_info.country_code
