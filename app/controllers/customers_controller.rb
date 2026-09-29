@@ -211,7 +211,7 @@ class CustomersController < Sellers::BaseController
           ],
           link: :alive_variants,
           product_review: [:response, { alive_videos: [:video_file] }],
-          purchase_custom_fields: { files_attachments: :blob },
+          purchase_custom_fields: [:custom_field, { files_attachments: :blob }],
           purchase_offer_code_discount: :offer_code,
           # original_product_review goes through Subscription#true_original_purchase (a different
           # Purchase), so the top-level product_review preload never applies to memberships.
