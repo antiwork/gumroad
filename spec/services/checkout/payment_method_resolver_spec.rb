@@ -176,10 +176,17 @@ describe Checkout::PaymentMethodResolver do
           end
 
           it "withholds Klarna whenever a forced-currency method survives — Klarna is vetted for USD intents only" do
-            methods = resolve(buyer_country: "US", cart_product_currency: "eur", cart_total_usd_cents: 10_00).payment_method_types
+            methods = resolve(buyer_country: "NL", cart_product_currency: "eur", cart_total_usd_cents: 10_00).payment_method_types
 
             expect(methods).to include("ideal", "bancontact")
             expect(methods).not_to include("klarna")
+          end
+
+          it "offers Klarna to a US buyer of a EUR product, whose Element mounts in USD once iDEAL/Bancontact are region-gated out" do
+            methods = resolve(buyer_country: "US", cart_product_currency: "eur", cart_total_usd_cents: 10_00).payment_method_types
+
+            expect(methods).not_to include("ideal", "bancontact")
+            expect(methods).to include("klarna")
           end
         end
 
@@ -277,10 +284,17 @@ describe Checkout::PaymentMethodResolver do
           end
 
           it "withholds Alipay whenever a forced-currency method survives — Alipay is vetted for USD intents only, and an entry Stripe rejects fails the whole intent create" do
-            methods = resolve(buyer_country: "US", cart_product_currency: "eur").payment_method_types
+            methods = resolve(buyer_country: "NL", cart_product_currency: "eur").payment_method_types
 
             expect(methods).to include("ideal", "bancontact")
             expect(methods).not_to include("alipay")
+          end
+
+          it "offers Alipay to a non-eurozone buyer of a EUR product, whose Element mounts in USD once iDEAL/Bancontact are region-gated out" do
+            methods = resolve(buyer_country: "US", cart_product_currency: "eur").payment_method_types
+
+            expect(methods).not_to include("ideal", "bancontact")
+            expect(methods).to include("alipay")
           end
         end
 
@@ -336,7 +350,14 @@ describe Checkout::PaymentMethodResolver do
         end
 
         it "surfaces the EUR forced-currency methods for manual presentment QA when the cart is priced in EUR" do
-          expect(resolve(cart_product_currency: "eur").payment_method_types).to include("ideal", "bancontact")
+          expect(resolve(buyer_country: "NL", cart_product_currency: "eur").payment_method_types).to include("ideal", "bancontact")
+        end
+
+        it "offers the EUR forced-currency methods only to eurozone buyers, since they mount the whole Element in EUR" do
+          expect(resolve(buyer_country: "BE", cart_product_currency: "eur").payment_method_types).to include("ideal", "bancontact")
+          expect(resolve(buyer_country: "US", cart_product_currency: "eur").payment_method_types).not_to include("ideal", "bancontact")
+          expect(resolve(buyer_country: "GB", cart_product_currency: "eur").payment_method_types).not_to include("ideal", "bancontact")
+          expect(resolve(buyer_country: nil, cart_product_currency: "eur").payment_method_types).not_to include("ideal", "bancontact")
         end
 
         it "surfaces UPI for manual presentment QA only for Indian buyers when the cart is priced in INR" do
@@ -375,7 +396,7 @@ describe Checkout::PaymentMethodResolver do
           allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
           Feature.activate_user(:checkout_local_method_ideal, seller)
 
-          methods = resolve(cart_product_currency: "eur").payment_method_types
+          methods = resolve(buyer_country: "NL", cart_product_currency: "eur").payment_method_types
           expect(methods).to include("ideal")
           expect(methods).not_to include("bancontact")
         end
@@ -384,7 +405,7 @@ describe Checkout::PaymentMethodResolver do
           allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
           Feature.activate_user(:checkout_local_method_bancontact, seller)
 
-          methods = resolve(cart_product_currency: "eur").payment_method_types
+          methods = resolve(buyer_country: "NL", cart_product_currency: "eur").payment_method_types
           expect(methods).to include("bancontact")
           expect(methods).not_to include("ideal")
         end
@@ -399,7 +420,7 @@ describe Checkout::PaymentMethodResolver do
           Feature.activate_user(:checkout_local_method_ideal, seller)
           platform_merchant_account.record_settlement_currency_mismatch!(Currency::EUR)
 
-          expect(resolve(cart_product_currency: Currency::EUR).payment_method_types).to include("ideal")
+          expect(resolve(buyer_country: "NL", cart_product_currency: Currency::EUR).payment_method_types).to include("ideal")
         end
 
         it "keeps a launched forced-currency method offered when the charged account holds a non-USD balance" do
@@ -407,7 +428,7 @@ describe Checkout::PaymentMethodResolver do
           Feature.activate_user(:checkout_local_method_ideal, seller)
           platform_merchant_account.update!(currency: Currency::CAD)
 
-          expect(resolve(cart_product_currency: Currency::EUR).payment_method_types).to include("ideal")
+          expect(resolve(buyer_country: "NL", cart_product_currency: Currency::EUR).payment_method_types).to include("ideal")
         end
 
         # gumroad-private#1409: a seller who is not a Stripe Connect seller is charged
@@ -435,7 +456,7 @@ describe Checkout::PaymentMethodResolver do
           Feature.activate_user(:buyer_local_currency, connect_seller)
           Feature.activate_user(:checkout_local_method_ideal, connect_seller)
 
-          expect(resolve(sellers: [connect_seller], cart_product_currency: Currency::EUR).payment_method_types).to include("ideal")
+          expect(resolve(sellers: [connect_seller], buyer_country: "NL", cart_product_currency: Currency::EUR).payment_method_types).to include("ideal")
         end
 
         # The per-account capability snapshot, not a settlement-currency rule, is what
@@ -460,7 +481,7 @@ describe Checkout::PaymentMethodResolver do
           Feature.activate_user(:checkout_local_method_ideal, seller)
           platform_merchant_account.record_settlement_currency_mismatch!(Currency::GBP)
 
-          expect(resolve(cart_product_currency: Currency::EUR).payment_method_types).to include("ideal")
+          expect(resolve(buyer_country: "NL", cart_product_currency: Currency::EUR).payment_method_types).to include("ideal")
         end
 
         it "launches UPI in live mode when its per-method launch flag is on for an Indian buyer, without pulling EUR methods along" do

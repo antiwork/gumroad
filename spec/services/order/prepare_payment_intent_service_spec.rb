@@ -1863,7 +1863,8 @@ describe Order::PreparePaymentIntentService, :vcr do
         # shape, so a card ConfirmationToken minted on it is an EUR token — it can never confirm
         # a USD intent. Every method on the forced-currency element must charge through the
         # forced-currency intent, not just iDEAL/Bancontact.
-        def perform_with_card_preview(order, params, confirmation_token: "ctoken_card_eur")
+        def perform_with_card_preview(order, params, confirmation_token: "ctoken_card_eur", ip_country: "Netherlands")
+          order.purchases.each { _1.update!(ip_country:) }
           preview = Stripe::StripeObject.construct_from(type: "card", card: { country: "NL" })
           allow(Stripe::ConfirmationToken).to receive(:retrieve)
             .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
@@ -1920,6 +1921,16 @@ describe Order::PreparePaymentIntentService, :vcr do
                                                                stripe_fx_quote_id: nil)
           expect(order.purchases.first.reload.purchase_presentment)
             .to have_attributes(presentment_currency: Currency::EUR, presentment_total_cents: 15_00)
+        end
+
+        it "prepares a USD intent for a card buyer outside the eurozone, who is never offered the EUR-forced methods" do
+          order, params = build_order
+          create_args, responses = perform_with_card_preview(order, params, ip_country: "United States")
+
+          expect(create_args[:currency]).to eq(Checkout::StripePaymentPresenter::CLIENT_CONFIRM_CURRENCY)
+          expect(create_args[:payment_method_types]).not_to include("ideal", "bancontact")
+          expect(responses["unique-id-0"][:success]).to eq(true)
+          expect(order.charges.last.charge_presentment).to be_nil
         end
 
         it "fails closed instead of creating a USD intent when the card-path presentment build fails" do

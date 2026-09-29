@@ -68,6 +68,9 @@ class Checkout::PaymentMethodResolver
   # Brazilian buyers on BRL PaymentIntents only — Pix settles over Brazil's domestic instant-payment
   # rails, so the buyer needs an account at a Brazilian bank. Unknown GeoIP fails safe.
   BR_LOCKED_PAYMENT_METHOD_TYPES = %w[pix].freeze
+  # Eurozone buyers only. Offering one mounts the whole Element in EUR, so card and Link are billed
+  # in EUR too; a buyer elsewhere would pay a foreign-currency charge the product page never showed.
+  EUR_LOCKED_PAYMENT_METHOD_TYPES = %w[ideal bancontact].freeze
   PIX_PAYMENT_METHOD_TYPE = "pix"
   # Stripe's Pix transaction window: at least 0.50 BRL, at most 3,000 USD per payment
   # (https://docs.stripe.com/payments/pix#transaction-limits). Each bound stays in the currency
@@ -227,16 +230,16 @@ class Checkout::PaymentMethodResolver
       # other seller-complete flags: one seller opting out must not change another's checkout.
       launched -= [LINK_PAYMENT_METHOD_TYPE] if link_disabled?
       launched += seller_opt_in_methods(eligible)
-      forced = forced_currency_methods(eligible)
+      # Region-gate forced methods before the Klarna/Alipay check: one this buyer cannot see does
+      # not force a non-USD mount, so it must not withhold the USD-lane methods either.
+      forced = without_region_locked(forced_currency_methods(eligible))
       launched += forced
       # Klarna and Alipay never join a forced-currency element mount: a surviving forced-currency
       # method means the Element and the deferred intent are in EUR/INR, but both gates below vet
       # only for the canonical-USD lane, so the two surfaces stay mutually exclusive.
       launched += klarna_methods(eligible) if forced.empty?
       launched += alipay_methods(eligible) if forced.empty?
-      launched -= US_LOCKED_PAYMENT_METHOD_TYPES unless buyer_country == US_ALPHA2
-      launched -= IN_LOCKED_PAYMENT_METHOD_TYPES unless buyer_country == IN_ALPHA2
-      launched -= BR_LOCKED_PAYMENT_METHOD_TYPES unless buyer_country == BR_ALPHA2
+      launched = without_region_locked(launched)
       launched = ppp_method_matrix(launched) if ppp_discounted
       launched & account_supported_methods(launched)
     end
@@ -247,6 +250,19 @@ class Checkout::PaymentMethodResolver
       return [] unless sellers.one? && sellers.first&.ach_payments_enabled?
 
       eligible & SELLER_OPT_IN_PAYMENT_METHOD_TYPES
+    end
+
+    def without_region_locked(methods)
+      methods -= US_LOCKED_PAYMENT_METHOD_TYPES unless buyer_country == US_ALPHA2
+      methods -= IN_LOCKED_PAYMENT_METHOD_TYPES unless buyer_country == IN_ALPHA2
+      methods -= BR_LOCKED_PAYMENT_METHOD_TYPES unless buyer_country == BR_ALPHA2
+      methods -= EUR_LOCKED_PAYMENT_METHOD_TYPES unless eurozone_buyer?
+      methods
+    end
+
+    # Unknown GeoIP fails safe, like the other region locks.
+    def eurozone_buyer?
+      buyer_country.present? && ISO3166::Country[buyer_country]&.currency_code == Currency::EUR.upcase
     end
 
     # Seller-complete keying: one seller's opt-out must not remove Link from another seller's buyers.
