@@ -962,6 +962,8 @@ class Order::PreparePaymentIntentService
       end
       nil
     rescue ChargeProcessorError => e
+      return fail_intent_create_on_settlement_mismatch(e, presentment) if settlement_mismatch_at_intent_create?(e, presentment)
+
       Rails.logger.error("Error preparing client-confirm PaymentIntent for order #{order.id} charge #{charge.external_id}: #{e.class} => #{e.message} => #{e.backtrace&.first(15)&.join("\n")}")
       # Stamp the failure details on the purchases now, before the caller's generic
       # fail_purchases_with runs (it only fills error_code when blank). An invalid-request
@@ -985,6 +987,31 @@ class Order::PreparePaymentIntentService
         purchases_to_charge.each do |purchase|
           purchase.error_code = PurchaseErrorCode::STRIPE_UNAVAILABLE if purchase.error_code.blank?
         end
+      end
+      nil
+    end
+
+    def settlement_mismatch_at_intent_create?(error, presentment)
+      presentment&.stripe_fx_quote_id.present? &&
+        error.is_a?(ChargeProcessorInvalidRequestError) &&
+        error.message.to_s.match?(StripeFxQuote::SETTLEMENT_MISMATCH_MESSAGE)
+    end
+
+    # Stripe accepts the USD-settling FX quote but rejects it on the intent when the charged
+    # account settles the presentment currency in itself (a EUR intent on the platform account).
+    # Mirrors Charge::CreateService: learn the mismatch so the next quote falls back to canonical
+    # USD, and have the buyer review that total rather than charging a different amount silently.
+    def fail_intent_create_on_settlement_mismatch(error, presentment)
+      begin
+        Checkout::BuyerCurrencyEligibility.fx_quote_merchant_account(merchant_account)
+          &.record_settlement_currency_mismatch!(presentment.presentment_currency)
+      rescue StandardError => e
+        Rails.logger.warn("Failed to record settlement currency mismatch for merchant account #{merchant_account&.id}: #{e.class} #{e.message}")
+      end
+      Rails.logger.info("Buyer currency settlement mismatch at client-confirm intent create for order #{order.id}: #{error.message}")
+      purchases_to_charge.each do |purchase|
+        purchase.error_code = PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID
+        purchase.errors.add(:base, Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE)
       end
       nil
     end
