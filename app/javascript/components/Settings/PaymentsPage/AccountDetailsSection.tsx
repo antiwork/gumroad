@@ -55,6 +55,7 @@ const AccountDetailsSection = ({
   canadaBusinessTypes,
   states,
   errorFieldNames,
+  fieldErrorMessages = new Map(),
   saveCounter,
   hasIdDocumentAlternative = false,
 }: {
@@ -79,6 +80,7 @@ const AccountDetailsSection = ({
     jp: { value: string; label: string; kana: string }[];
   };
   errorFieldNames: Set<FormFieldName>;
+  fieldErrorMessages?: Map<FormFieldName, string>;
   saveCounter: number;
   hasIdDocumentAlternative?: boolean;
 }) => {
@@ -181,6 +183,13 @@ const AccountDetailsSection = ({
       ...(config?.maxLength != null && { maxLength: config.maxLength }),
       idSuffix: "business-tax-id",
     };
+  };
+
+  const fieldErrorMessageId = (fieldName: FormFieldName) =>
+    fieldErrorMessages.has(fieldName) ? `${uid}-${fieldName}-error` : undefined;
+  const renderFieldErrorMessage = (fieldName: FormFieldName) => {
+    const message = fieldErrorMessages.get(fieldName);
+    return message ? <FieldsetDescription id={`${uid}-${fieldName}-error`}>{message}</FieldsetDescription> : null;
   };
 
   const isPrefectureConfig = (config: StateConfig | PrefectureConfig): config is PrefectureConfig =>
@@ -413,9 +422,11 @@ const AccountDetailsSection = ({
                   value={complianceInfo.business_name_kanji || ""}
                   disabled={isFormDisabled}
                   aria-invalid={errorFieldNames.has("business_name_kanji")}
+                  aria-describedby={fieldErrorMessageId("business_name_kanji")}
                   required
                   onChange={(evt) => updateComplianceInfo({ business_name_kanji: evt.target.value })}
                 />
+                {renderFieldErrorMessage("business_name_kanji")}
               </Fieldset>
               <Fieldset state={errorFieldNames.has("business_name_kana") ? "danger" : undefined}>
                 <FieldsetTitle>
@@ -480,9 +491,11 @@ const AccountDetailsSection = ({
                     value={complianceInfo.business_street_address_kanji || ""}
                     disabled={isFormDisabled}
                     aria-invalid={errorFieldNames.has("business_street_address_kanji")}
+                    aria-describedby={fieldErrorMessageId("business_street_address_kanji")}
                     required
                     onChange={(evt) => updateComplianceInfo({ business_street_address_kanji: evt.target.value })}
                   />
+                  {renderFieldErrorMessage("business_street_address_kanji")}
                 </Fieldset>
                 <Fieldset state={errorFieldNames.has("business_street_address_kana") ? "danger" : undefined}>
                   <FieldsetTitle>
@@ -512,9 +525,11 @@ const AccountDetailsSection = ({
                     value={complianceInfo.business_city || ""}
                     disabled={isFormDisabled}
                     aria-invalid={errorFieldNames.has("business_city")}
+                    aria-describedby={fieldErrorMessageId("business_city")}
                     required
                     onChange={(evt) => updateComplianceInfo({ business_city: evt.target.value })}
                   />
+                  {renderFieldErrorMessage("business_city")}
                 </Fieldset>
                 <Fieldset state={errorFieldNames.has("business_city_kana") ? "danger" : undefined}>
                   <FieldsetTitle>
@@ -762,9 +777,11 @@ const AccountDetailsSection = ({
                   value={complianceInfo.first_name_kanji || ""}
                   disabled={isFormDisabled}
                   aria-invalid={errorFieldNames.has("first_name_kanji")}
+                  aria-describedby={fieldErrorMessageId("first_name_kanji")}
                   required
                   onChange={(evt) => updateComplianceInfo({ first_name_kanji: evt.target.value })}
                 />
+                {renderFieldErrorMessage("first_name_kanji")}
               </Fieldset>
               <Fieldset state={errorFieldNames.has("last_name_kanji") ? "danger" : undefined}>
                 <FieldsetTitle>
@@ -777,9 +794,11 @@ const AccountDetailsSection = ({
                   value={complianceInfo.last_name_kanji || ""}
                   disabled={isFormDisabled}
                   aria-invalid={errorFieldNames.has("last_name_kanji")}
+                  aria-describedby={fieldErrorMessageId("last_name_kanji")}
                   required
                   onChange={(evt) => updateComplianceInfo({ last_name_kanji: evt.target.value })}
                 />
+                {renderFieldErrorMessage("last_name_kanji")}
               </Fieldset>
             </div>
             <div className="grid gap-5 md:auto-cols-fr md:grid-flow-col">
@@ -862,9 +881,11 @@ const AccountDetailsSection = ({
                   value={complianceInfo.street_address_kanji || ""}
                   disabled={isFormDisabled}
                   aria-invalid={errorFieldNames.has("street_address_kanji")}
+                  aria-describedby={fieldErrorMessageId("street_address_kanji")}
                   required
                   onChange={(evt) => updateComplianceInfo({ street_address_kanji: evt.target.value })}
                 />
+                {renderFieldErrorMessage("street_address_kanji")}
               </Fieldset>
               <Fieldset state={errorFieldNames.has("street_address_kana") ? "danger" : undefined}>
                 <FieldsetTitle>
@@ -894,9 +915,11 @@ const AccountDetailsSection = ({
                   value={complianceInfo.city || ""}
                   disabled={isFormDisabled}
                   aria-invalid={errorFieldNames.has("city")}
+                  aria-describedby={fieldErrorMessageId("city")}
                   required
                   onChange={(evt) => updateComplianceInfo({ city: evt.target.value })}
                 />
+                {renderFieldErrorMessage("city")}
               </Fieldset>
               <Fieldset state={errorFieldNames.has("city_kana") ? "danger" : undefined}>
                 <FieldsetTitle>

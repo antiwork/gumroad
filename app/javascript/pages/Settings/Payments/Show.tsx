@@ -257,9 +257,16 @@ export default function PaymentsPage() {
   // well as in state because validateForm both writes it (through markFieldInvalid, from a dozen
   // nested helpers) and reads it back within the same synchronous call, before React has re-rendered.
   const errorFieldNamesRef = React.useRef(errorFieldNames);
+  // Reasons shown beside the (Kanji) variation fields. Focusing the first invalid field scrolls the
+  // banner out of view, so without these the seller sees a red border and no reason. They clear with
+  // the highlights so a reason never outlives its field's aria-invalid.
+  const [fieldErrorMessages, setFieldErrorMessages] = React.useState(() => new Map<FormFieldName, string>());
+  const setFieldErrorMessage = (fieldName: FormFieldName, message: string) =>
+    setFieldErrorMessages((messages) => new Map(messages).set(fieldName, message));
   const resetErrorFieldNames = () => {
     errorFieldNamesRef.current = new Set();
     setErrorFieldNames(errorFieldNamesRef.current);
+    setFieldErrorMessages(new Map());
   };
   // Counts failed save attempts. The scroll-to-first-invalid-field effect keys off this rather than
   // off errorFieldNames, so it fires once per press of "Update settings" and never again while the
@@ -502,6 +509,7 @@ export default function PaymentsPage() {
     if (value && !HAS_JAPANESE_LETTERS.test(value)) {
       markFieldInvalid(fieldName);
       setClientErrorMessage({ message: `${label} must include Japanese characters.` });
+      setFieldErrorMessage(fieldName, "Must include Japanese characters.");
     }
   };
 
@@ -875,9 +883,11 @@ export default function PaymentsPage() {
       );
       if (!form.data.user.first_name_kanji) {
         markFieldInvalid("first_name_kanji");
+        setFieldErrorMessage("first_name_kanji", "Required.");
       }
       if (!form.data.user.last_name_kanji) {
         markFieldInvalid("last_name_kanji");
+        setFieldErrorMessage("last_name_kanji", "Required.");
       }
       validateJapaneseScriptField("first_name_kanji", form.data.user.first_name_kanji, "First name (Kanji)");
       validateJapaneseScriptField("last_name_kanji", form.data.user.last_name_kanji, "Last name (Kanji)");
@@ -1626,6 +1636,7 @@ export default function PaymentsPage() {
                 canadaBusinessTypes={props.canada_business_types}
                 states={props.states}
                 errorFieldNames={errorFieldNames}
+                fieldErrorMessages={fieldErrorMessages}
                 saveCounter={saveCounter}
                 hasIdDocumentAlternative={hasIdDocumentAlternative}
               />
