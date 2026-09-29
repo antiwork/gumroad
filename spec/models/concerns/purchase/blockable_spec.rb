@@ -2485,6 +2485,34 @@ describe Purchase::Blockable do
 
         expect(seller.reload.payouts_paused_internally?).to be(false)
       end
+
+      # The rate aggregate is slow enough for an admin to pause the account while it runs.
+      # Relabelling that pause "system" would hand it to the chargeback release job.
+      it "leaves an admin pause written while the rate was being computed" do
+        admin = create(:admin_user)
+        allow(seller).to receive(:lost_chargebacks_for_payout_gate) do
+          User.find(seller.id).update!(payouts_paused_internally: true, payouts_paused_by: admin.id)
+          { volume: "4.2%", count: "15.0%" }
+        end
+
+        expect do
+          purchase.pause_payouts_for_seller_based_on_chargeback_rate!
+        end.not_to change { seller.comments.count }
+
+        seller.reload
+        expect(seller.payouts_paused_internally?).to be(true)
+        expect(seller.payouts_paused_by).to eq(admin.id)
+        expect(seller.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_ADMIN)
+      end
+
+      it "takes over a Stripe pause as before" do
+        seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
+
+        purchase.pause_payouts_for_seller_based_on_chargeback_rate!
+
+        expect(seller.reload.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+        expect(seller.comments.last.author_name).to eq("pause_payouts_for_seller_based_on_chargeback_rate")
+      end
     end
 
     context "when chargeback volume is far above the threshold" do

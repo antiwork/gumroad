@@ -204,6 +204,73 @@ describe User::Risk do
     end
   end
 
+  describe "marking an account compliant while payouts are held" do
+    let(:admin) { create(:admin_user) }
+    let!(:user) { create(:user, user_risk_state: "on_probation", refunds_disabled: true) }
+
+    # refunds_disabled and payouts_paused_internally share the `flags` integer, and re-enabling
+    # refunds on the way to compliant writes that whole integer from the caller's copy.
+    it "keeps an admin payout pause written after the caller loaded the account" do
+      stale_copy = User.find(user.id)
+      User.find(user.id).update!(payouts_paused_internally: true, payouts_paused_by: admin.id)
+
+      stale_copy.mark_compliant!(author_id: admin.id)
+
+      user.reload
+      expect(user).to be_compliant
+      expect(user.refunds_disabled?).to be(false)
+      expect(user.payouts_paused_internally?).to be(true)
+      expect(user.payouts_paused_by).to eq(admin.id)
+    end
+
+    it "keeps an admin payout pause the account already had when it was loaded" do
+      user.update!(payouts_paused_internally: true, payouts_paused_by: admin.id)
+
+      User.find(user.id).mark_compliant!(author_id: admin.id)
+
+      user.reload
+      expect(user).to be_compliant
+      expect(user.payouts_paused_internally?).to be(true)
+      expect(user.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_ADMIN)
+    end
+
+    it "re-enables refunds and leaves payouts unpaused on an account with no hold" do
+      user.mark_compliant!(author_id: admin.id)
+
+      user.reload
+      expect(user).to be_compliant
+      expect(user.refunds_disabled?).to be(false)
+      expect(user.payouts_paused_internally?).to be(false)
+      expect(user.payouts_paused_by).to be_nil
+    end
+
+    it "still writes the caller's own unsaved flag changes alongside a concurrent pause" do
+      stale_copy = User.find(user.id)
+      stale_copy.disable_comments_email = true
+      User.find(user.id).update!(payouts_paused_internally: true, payouts_paused_by: admin.id)
+
+      stale_copy.mark_compliant!(author_id: admin.id)
+
+      user.reload
+      expect(user.disable_comments_email?).to be(true)
+      expect(user.payouts_paused_internally?).to be(true)
+      expect(user.refunds_disabled?).to be(false)
+    end
+
+    it "still clears a pause the caller itself cleared before the transition" do
+      user.update!(payouts_paused_internally: true, payouts_paused_by: admin.id)
+      caller_copy = User.find(user.id)
+      caller_copy.payouts_paused_internally = false
+      User.find(user.id).update!(disable_comments_email: true)
+
+      caller_copy.mark_compliant!(author_id: admin.id)
+
+      user.reload
+      expect(user.payouts_paused_internally?).to be(false)
+      expect(user.disable_comments_email?).to be(true)
+    end
+  end
+
   describe "#suspend_due_to_stripe_risk" do
     let(:user) { create(:user) }
 

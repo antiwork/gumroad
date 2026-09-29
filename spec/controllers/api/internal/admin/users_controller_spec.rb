@@ -3259,6 +3259,43 @@ describe Api::Internal::Admin::UsersController do
         expect(unsuspended.reload).to be_suspended_for_tos_violation
       end
     end
+
+    context "when the user's payouts are paused by an admin" do
+      let(:probated_user) { create(:user, user_risk_state: "on_probation", refunds_disabled: true) }
+
+      it "leaves the payout pause in place" do
+        probated_user.update!(payouts_paused_internally: true, payouts_paused_by: admin_user.id)
+
+        post :mark_compliant, params: { user_id: probated_user.external_id }
+
+        expect(response).to have_http_status(:ok)
+        probated_user.reload
+        expect(probated_user).to be_compliant
+        expect(probated_user.payouts_paused_internally?).to be(true)
+        expect(probated_user.payouts_paused_by).to eq(admin_user.id)
+      end
+
+      it "leaves a payout pause written after the request loaded the user in place" do
+        paused = false
+        allow_any_instance_of(User).to receive(:suspended?).and_wrap_original do |original, *args|
+          unless paused
+            paused = true
+            User.find(probated_user.id).update!(payouts_paused_internally: true, payouts_paused_by: admin_user.id)
+          end
+          original.call(*args)
+        end
+
+        post :mark_compliant, params: { user_id: probated_user.external_id }
+
+        expect(response).to have_http_status(:ok)
+        expect(paused).to be(true)
+        probated_user.reload
+        expect(probated_user).to be_compliant
+        expect(probated_user.refunds_disabled?).to be(false)
+        expect(probated_user.payouts_paused_internally?).to be(true)
+        expect(probated_user.payouts_paused_by).to eq(admin_user.id)
+      end
+    end
   end
 
   describe "POST suspend_for_fraud" do

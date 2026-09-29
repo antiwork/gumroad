@@ -23,19 +23,15 @@ class Api::Internal::Admin::PayoutsController < Api::Internal::Admin::BaseContro
 
   def pause
     record_admin_write(action: "payouts.pause", target: @user) do
-      if @user.payouts_paused_by_source == User::PAYOUT_PAUSE_SOURCE_ADMIN
-        return render json: {
-          success: true,
-          user_id: @user.external_id,
-          status: "already_paused",
-          message: "Payouts are already paused by admin",
-          payouts_paused: true
-        }
-      end
-
       reason = params[:reason].to_s.strip.presence
 
-      User.transaction do
+      already_paused = User.transaction do
+        # update! saves the whole `flags` integer, so a copy loaded before a concurrent write
+        # committed (marking compliant re-enables refunds) would put its bits back. The check reads
+        # the locked row too, or a concurrent admin pause would be relabelled and noted twice.
+        @user.lock!
+        next true if @user.payouts_paused_by_source == User::PAYOUT_PAUSE_SOURCE_ADMIN
+
         @user.update!(payouts_paused_internally: true, payouts_paused_by: current_admin_actor_id)
         if reason.present?
           @user.comments.create!(
@@ -44,6 +40,17 @@ class Api::Internal::Admin::PayoutsController < Api::Internal::Admin::BaseContro
             content: reason
           )
         end
+        false
+      end
+
+      if already_paused
+        return render json: {
+          success: true,
+          user_id: @user.external_id,
+          status: "already_paused",
+          message: "Payouts are already paused by admin",
+          payouts_paused: true
+        }
       end
 
       render json: {
@@ -68,6 +75,8 @@ class Api::Internal::Admin::PayoutsController < Api::Internal::Admin::BaseContro
       end
 
       User.transaction do
+        # Same whole-`flags` save as pause.
+        @user.lock!
         @user.update!(payouts_paused_internally: false, payouts_paused_by: nil)
         @user.comments.create!(
           author_id: current_admin_actor_id,
