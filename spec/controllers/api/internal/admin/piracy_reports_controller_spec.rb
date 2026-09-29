@@ -92,6 +92,19 @@ describe Api::Internal::Admin::PiracyReportsController do
       expect(response).to have_http_status(:not_found)
     end
 
+    it "pages with the after cursor, so reports beyond the first page stay reachable" do
+      first, second, third = 3.times.map { |i| create(:piracy_report, url: "https://example.net/copy-#{i}") }
+
+      get :index, params: { after: first.external_id }
+      expect(response.parsed_body["reports"].pluck("report_id")).to eq([second.external_id, third.external_id])
+
+      get :index, params: { after: third.external_id }
+      expect(response.parsed_body["reports"]).to eq([])
+
+      get :index, params: { after: "unknown" }
+      expect(response).to have_http_status(:not_found)
+    end
+
     it "returns 400 for an updated_before that is not a timestamp" do
       get :index, params: { updated_before: "yesterday-ish" }
 

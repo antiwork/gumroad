@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 
-# The one place a report is opened, for both the seller's dashboard and the admin API.
 class PiracyReports::CreateService
   Result = Struct.new(:report, :errors, keyword_init: true) do
     def success?
@@ -17,8 +16,7 @@ class PiracyReports::CreateService
     @ticket_url = ticket_url.presence
   end
 
-  # The seller row lock makes the monthly count and the insert one step, so parallel requests
-  # cannot all read a count below the limit.
+  # The seller lock makes the monthly count and the insert one step.
   def call
     seller.with_lock do
       errors = guard_errors

@@ -1,10 +1,10 @@
 # frozen_string_literal: true
 
-# Renders the notice text the seller will sign. The text is frozen on the report and digested, so
-# the seller signs exactly what is later sent. The signature block is added at send time.
+# The text is frozen on the report and digested, so the seller signs exactly what is later sent.
 class PiracyReports::NoticeRenderer
   # Bump when the template or the confirmations shown with it change.
   STATEMENT_VERSION = "2026-09-v1"
+  MAX_PRODUCT_NAME_LENGTH = 200
 
   def initialize(report)
     @report = report
@@ -19,10 +19,10 @@ class PiracyReports::NoticeRenderer
       layout: false,
       locals: {
         recipient_label: recipient_label,
-        owner_name: compliance_info.legal_entity_name,
+        owner_name: clean(compliance_info.legal_entity_name),
         owner_address_lines: address_lines(compliance_info),
         owner_email: report.seller.email,
-        product_name: report.product.name,
+        product_name: clean(report.product.name).truncate(MAX_PRODUCT_NAME_LENGTH),
         product_url: report.product.long_url,
         infringing_urls: report.infringing_urls,
         support_email: ApplicationMailer::SUPPORT_EMAIL
@@ -33,8 +33,7 @@ class PiracyReports::NoticeRenderer
   private
     attr_reader :report
 
-    # Built from the reported URL, never from text the agent supplied, so nothing read on a pirate
-    # page can reach the notice the seller signs.
+    # Built from the reported URL so nothing the agent read on a pirate page reaches the notice.
     def recipient_label
       report.recipient_kind == "host" ? "the hosting provider of #{report.url_host}" : report.url_host
     end
@@ -44,6 +43,11 @@ class PiracyReports::NoticeRenderer
         info.legal_entity_street_address,
         [info.legal_entity_city, [info.legal_entity_state, info.legal_entity_zip_code].compact_blank.join(" ")].compact_blank.join(", "),
         info.legal_entity_country
-      ].compact_blank
+      ].map { clean(_1) }.compact_blank
+    end
+
+    # Seller-editable text must stay on one line, or a title could open its own numbered section.
+    def clean(value)
+      value.to_s.squish
     end
 end

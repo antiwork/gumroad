@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-# Validates the agent's screening result and moves the report on. The agent supplies a verdict,
-# its judgment checks and the recipient. It supplies no notice text and no URLs: Rails
-# renders that from a template, so nothing read on a pirate page can reach the signed notice.
+# The agent supplies a verdict, its checks and a recipient, and no notice text or URLs.
 class PiracyReports::ScreenService
   Result = Struct.new(:report, :errors, keyword_init: true) do
     def success?
@@ -10,8 +8,7 @@ class PiracyReports::ScreenService
     end
   end
 
-  # `passed` arrives as a JSON boolean or a form string. Anything else, such as [false], is
-  # malformed input and must not be read as true.
+  # Anything but a boolean or its string form, such as [false], must not be read as true.
   PASSED_VALUES = { true => true, "true" => true, false => false, "false" => false }.freeze
   MAX_NAME_LENGTH = 100
   NAME_FORMAT = /\A[\p{L}\p{N} .,&'-]+\z/
@@ -22,8 +19,7 @@ class PiracyReports::ScreenService
     @params = params
   end
 
-  # The lock reloads the report, so a second request that arrives while the first is running
-  # sees the state the first one left and is refused.
+  # The lock reloads the report, so a concurrent second request sees the first one's result.
   def call
     report.with_lock { screen }
   end
@@ -72,6 +68,7 @@ class PiracyReports::ScreenService
       errors << "verdict must be pass or fail" unless %w[pass fail].include?(verdict)
       errors.concat(check_errors)
       errors.concat(pass_errors) if verdict == "pass"
+      errors << "a fail verdict needs at least one failed check" if verdict == "fail" && checks_from_agent.values.none? { _1["passed"] == false }
       errors
     end
 
@@ -109,11 +106,9 @@ class PiracyReports::ScreenService
       errors
     end
 
-    # Rails cannot read the page the agent cites, so it limits where the citation may point and what
-    # it may name. A contact cited from the reported site's own domain must be an address on that
-    # domain, so a fake "DMCA contact" page on a shared platform cannot name a stranger's address.
-    # A third-party agent must come from the Copyright Office directory. A hosting provider has no
-    # page on the reported site, so only the directory qualifies.
+    # Rails cannot read the cited page, so it limits where the citation may point and what it may
+    # name. A contact cited from the site itself must be an address on that domain; a third-party
+    # agent or a hosting provider must come from the Copyright Office directory.
     def source_url_errors
       uri = PiracyReport.parse_http_url(recipient[:source_url])
       if uri.nil? || recipient[:source_url].length > PiracyReport::MAX_URL_LENGTH

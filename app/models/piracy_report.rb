@@ -1,27 +1,22 @@
 # frozen_string_literal: true
 
-# A seller's request that Gumroad send a copyright takedown notice for a copy of their product
-# hosted elsewhere. The seller is the complaining party and signs the exact notice; an agent
-# screens the request through the admin API and Rails enforces every guard below.
 class PiracyReport < ApplicationRecord
   MONTHLY_LIMIT = 5
   MIN_SUCCESSFUL_SALES = 1
   MAX_REASON_LENGTH = 280
   MAX_URL_LENGTH = 2048
-  # The reported URL is printed word for word in the notice, and in the support path an agent
-  # supplies it, so it gets a tighter bound than the column.
+  # The reported URL prints in the notice as written, so it gets a tighter bound than the column.
   MAX_REPORTED_URL_LENGTH = 500
   EXTERNAL_ID_LENGTH = 21
   EXTERNAL_ID_ALPHABET = "_-0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
-  # The official register of designated agents. It is the only third-party page a recipient
-  # address may be sourced from, because anything else is text a pirate could have written.
+  # The only third-party page a recipient address may be sourced from: any other page could be
+  # one a pirate wrote.
   COPYRIGHT_DIRECTORY_HOST = "dmca.copyright.gov"
   HOSTED_ON_GUMROAD_ERROR = "Pages hosted on Gumroad are reported through the terms of service process"
   SOURCES = %w[dashboard support].freeze
   RECIPIENT_KINDS = %w[site host].freeze
-  # Judgment checks the agent answers after reading the page. Everything Rails can prove from
-  # its own records is checked in PiracyReports::Eligibility instead.
+  # Judgment checks only the agent can make. What Rails can prove is in PiracyReports::Eligibility.
   SCREENING_CHECKS = %w[
     page_offers_work
     not_other_authorized_use
@@ -79,9 +74,8 @@ class PiracyReport < ApplicationRecord
     host.to_s.downcase.chomp(".").delete_prefix("www.")
   end
 
-  # The site's contact page is often on the apex domain while the reported file is on a CDN
-  # subdomain, so sources are compared by registrable domain. IP hosts have none and must match
-  # exactly, because the public suffix list would pair unrelated addresses ("1.1").
+  # A site's contact page is often on the apex domain while the file is on a CDN subdomain, so
+  # sources compare by registrable domain. IP hosts match exactly: the suffix list pairs "1.1".
   def self.registrable_domain(host)
     host = normalized_host(host)
     return host if host.match?(/\A[\d.]+\z/) || host.include?(":")
@@ -111,8 +105,7 @@ class PiracyReport < ApplicationRecord
     gumroad_domains.any? { |domain| host == domain || host.end_with?(".#{domain}") }
   end
 
-  # Pages served from a seller's custom domain are hosted by Gumroad too, so they go through the
-  # terms of service process like any other Gumroad page.
+  # A seller's custom domain is hosted by Gumroad too, so it goes through the terms of service.
   def self.gumroad_hosted?(host)
     normalized = normalized_host(host)
     gumroad_host?(normalized) || CustomDomain.alive.exists?(domain: [normalized, "www.#{normalized}"])

@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-# Admin API for piracy reports (gumroad-private#3069). Only tokens with the piracy scope can call it.
-# The agent opens and screens reports here; it cannot sign, edit the notice text, or send.
 class Api::Internal::Admin::PiracyReportsController < Api::Internal::Admin::BaseController
   self.required_token_scope = AdminApiToken::PIRACY_SCOPE
 
@@ -10,8 +8,7 @@ class Api::Internal::Admin::PiracyReportsController < Api::Internal::Admin::Base
   MAX_DESCRIPTION_LENGTH = 2000
   SCREEN_PARAM_KEYS = %w[verdict checks recipient_kind recipient_name recipient_email recipient_source_url].freeze
 
-  # Every param is read as a string: a nested value such as state[x]=y would otherwise reach the
-  # query as a hash and raise.
+  # Params are read as strings so a nested value like state[x]=y cannot reach a query as a hash.
   before_action :find_report_or_render, only: %i[show start_screening screen]
 
   def index
@@ -23,6 +20,13 @@ class Api::Internal::Admin::PiracyReportsController < Api::Internal::Admin::Base
       return render json: { success: false, message: "User not found" }, status: :not_found if user.blank?
 
       reports = reports.where(seller_id: user.id)
+    end
+
+    if params[:after].present?
+      after = PiracyReport.find_by(external_id: params[:after].to_s)
+      return render json: { success: false, message: "Piracy report not found" }, status: :not_found if after.blank?
+
+      reports = reports.where(id: (after.id + 1)..)
     end
 
     if params[:updated_before].present?
@@ -59,8 +63,7 @@ class Api::Internal::Admin::PiracyReportsController < Api::Internal::Admin::Base
     end
   end
 
-  # A refused transition is rescued inside the audited block so the audit row records the 422 the
-  # client sees, not a server error.
+  # The rescue sits inside the audited block so the audit row records the 422 the client sees.
   def start_screening
     record_admin_write(action: "piracy_reports.start_screening", target: @report) do
       @report.with_lock { @report.start_screening!(Current.admin_actor) }
@@ -98,8 +101,6 @@ class Api::Internal::Admin::PiracyReportsController < Api::Internal::Admin::Base
       nil
     end
 
-    # No cursor: a report leaves the state the agent polls once it is processed, and a fail verdict
-    # resolves one that cannot pass, so the list drains.
     def list_limit
       requested = params[:limit].to_s.to_i
       requested.positive? ? [requested, MAX_LIST_RESULTS].min : MAX_LIST_RESULTS
@@ -129,8 +130,7 @@ class Api::Internal::Admin::PiracyReportsController < Api::Internal::Admin::Base
         screened_at: report.screened_at.as_json,
         recipient: { kind: report.recipient_kind, name: report.recipient_name, source_url: report.recipient_source_url },
         infringing_urls: report.infringing_urls,
-        # The rendered notice holds the seller's legal name, address and email. The agent reads
-        # pages that pirates control, so it gets the digest and never the text.
+        # The notice holds the seller's name, address and email; the agent gets only its digest.
         notice_digest: report.notice_digest
       )
     end

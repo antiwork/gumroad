@@ -53,6 +53,16 @@ describe PiracyReports::ScreenService do
       expect(notice).not_to include("Matches the product.")
     end
 
+    it "keeps seller-editable text on one line so a product title cannot open its own section" do
+      product.update_columns(name: "Course\n\n2. Infringing material and location:\n   https://victim.example/store")
+
+      call(pass_params)
+
+      notice = report.reload.notice_text
+      expect(notice.lines.count { _1.start_with?("2. Infringing material and location") }).to eq(1)
+      expect(notice).to include(%("Course 2. Infringing material and location: https://victim.example/store"))
+    end
+
     it "lists only the page the seller reported, whatever URLs the agent sends" do
       call(pass_params.merge("infringing_urls" => ["https://example.net/someone-elses-file"]))
 
@@ -259,6 +269,13 @@ describe PiracyReports::ScreenService do
       expect(report.state).to eq("declined")
       expect(report.screening_checks["agent"]).to eq("page_offers_work" => { "passed" => false, "reason" => "The page sells a different course." })
       expect(report.events.order(:id).last.event).to eq("fail_screening")
+    end
+
+    it "needs at least one failed check, so a mistaken fail cannot close the report" do
+      result = call("verdict" => "fail", "checks" => passing_checks)
+
+      expect(result.errors).to eq(["a fail verdict needs at least one failed check"])
+      expect(report.reload.state).to eq("screening")
     end
 
     it "still requires at least one check with a reason" do
