@@ -60,7 +60,8 @@ class Pages::ProductPrices
       # default_tier is its own has-one-through — `tiers:` does not populate it, and
       # show_customizable_price_indicator? reads it per tiered membership.
       seller.products.alive.not_archived.not_draft
-            .includes(:alive_prices, :installment_plan, :user, :skus, :default_offer_code,
+            .includes(:alive_prices, :installment_plan, :user, :skus,
+                      default_offer_code: :variants,
                       tiers: :alive_prices, default_tier: :alive_prices,
                       variant_categories_alive: :alive_variants)
             .order(created_at: :desc, id: :desc).offset(offset).limit(limit)
@@ -71,6 +72,10 @@ class Pages::ProductPrices
     # own purchases SUM — up to MAX_ITEMS of them on this uncached path when every product
     # carries its own code.
     def warm_offer_code_uses(products)
+      # A code's option scope can hold SKUs, which have no variant_category, so the categories
+      # (read by BaseVariant#owning_product_id) are preloaded for the variants alone.
+      scoped_variants = products.filter_map(&:default_offer_code).flat_map(&:variants).grep(Variant)
+      ActiveRecord::Associations::Preloader.new(records: scoped_variants, associations: :variant_category).call
       cache = (Current.default_offer_code_uses_left ||= {})
       capped = products.filter_map(&:default_offer_code)
                        .select { |code| code.max_purchase_count.present? }

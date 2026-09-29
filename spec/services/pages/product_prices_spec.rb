@@ -229,8 +229,9 @@ describe Pages::ProductPrices do
 
     # discounted_price_cents reads default_offer_code for every product, so a profile whose
     # products are all discounted issues one offer-code query per product unless it is preloaded —
-    # on an uncached public page rendered up to MAX_ITEMS times.
-    it "loads the default offer codes in one query regardless of how many products carry one" do
+    # on an uncached public page rendered up to MAX_ITEMS times. The second query is the codes'
+    # option scope (offer_codes_variants), also loaded once for the whole page.
+    it "loads the default offer codes in a fixed number of queries regardless of how many products carry one" do
       offer_code = seller.offer_codes.create!(code: "half", amount_percentage: 50, products: [product])
       product.update!(default_offer_code: offer_code)
       3.times do |i|
@@ -246,7 +247,47 @@ describe Pages::ProductPrices do
       described_class.build(seller, ip: nil)
       ActiveSupport::Notifications.unsubscribe(subscriber)
 
-      expect(queries.size).to eq(1)
+      expect(queries.size).to eq(2)
+    end
+
+    it "quotes the discount only when the code covers the lowest-priced option" do
+      category = create(:variant_category, link: product)
+      basic = create(:variant, variant_category: category, name: "Basic")
+      pro = create(:variant, variant_category: category, name: "Pro", price_difference_cents: 500)
+      offer_code = seller.offer_codes.create!(code: "half", amount_percentage: 50, products: [product], variants: [pro])
+      product.update!(default_offer_code: offer_code)
+
+      expect(described_class.build(seller, ip: nil)[product.general_permalink][:price_cents]).to eq(1400)
+
+      offer_code.update!(variants: [basic])
+      expect(described_class.build(seller, ip: nil)[product.general_permalink][:price_cents]).to eq(700)
+    end
+
+    it "prices a page whose default codes are limited to options, SKUs included, without a query per product" do
+      count_queries = lambda do
+        queries = []
+        subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |*, payload|
+          queries << payload[:sql] if payload[:name] != "SCHEMA" && payload[:sql].match?(/FROM `(base_variants|variant_categories|offer_codes_variants)`/)
+        end
+        described_class.build(seller, ip: nil)
+        ActiveSupport::Notifications.unsubscribe(subscriber)
+        queries.size
+      end
+      scoped_product = lambda do |code|
+        extra = create(:product, user: seller, price_cents: 1000)
+        option = create(:variant, variant_category: create(:variant_category, link: extra))
+        extra.update!(default_offer_code: seller.offer_codes.create!(code:, amount_percentage: 10, products: [extra], variants: [option]))
+      end
+      physical = create(:physical_product, user: seller, price_cents: 1000)
+      sku = physical.skus.first || create(:sku, link: physical)
+      physical.update!(default_offer_code: seller.offer_codes.create!(code: "skucode", amount_percentage: 50, products: [physical], variants: [sku]))
+      scoped_product.call("opt0")
+      baseline = count_queries.call
+
+      3.times { |i| scoped_product.call("more#{i}") }
+
+      expect(count_queries.call).to eq(baseline)
+      expect(described_class.build(seller, ip: nil)[physical.general_permalink][:price_cents]).to eq(500)
     end
 
     it "takes the default offer code off, so the card cannot quote a price checkout would not honor" do

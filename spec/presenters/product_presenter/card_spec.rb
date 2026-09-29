@@ -314,6 +314,63 @@ describe ProductPresenter::Card do
         expect(data[:original_price_cents]).to eq 10_00
       end
 
+      context "when the code is limited to options" do
+        let(:category) { create(:variant_category, link: product_with_offer_code) }
+        let!(:basic) { create(:variant, variant_category: category, name: "Basic") }
+        let!(:pro) { create(:variant, variant_category: category, name: "Pro", price_difference_cents: 5_00) }
+
+        it "does not quote the discount when the lowest-priced option is not eligible" do
+          offer_code.update!(variants: [pro])
+          data = described_class.new(product: product_with_offer_code.reload).for_web
+
+          expect(data[:price_cents]).to eq 10_00
+          expect(data).not_to have_key(:original_price_cents)
+        end
+
+        it "quotes the discount when the lowest-priced option is eligible" do
+          offer_code.update!(variants: [basic])
+          data = described_class.new(product: product_with_offer_code.reload).for_web
+
+          expect(data[:price_cents]).to eq 9_00
+          expect(data[:original_price_cents]).to eq 10_00
+        end
+
+        it "renders a listing whose product's default code is limited to a SKU" do
+          physical = create(:physical_product, user: creator, price_cents: 10_00)
+          sku = physical.skus.first || create(:sku, link: physical)
+          code = create(:offer_code, user: creator, products: [physical], amount_percentage: 50, amount_cents: nil, variants: [sku])
+          physical.update!(default_offer_code: code)
+          loaded = Link.includes(ProductPresenter::Card::ASSOCIATIONS).find(physical.id)
+
+          expect(described_class.new(product: loaded).for_web[:price_cents]).to eq 5_00
+        end
+
+        it "quotes the discount for a tiered membership only when its lowest tier is eligible" do
+          membership = create(:membership_product_with_preset_tiered_pricing, user: creator)
+          lowest_tier, other_tier = membership.tiers.sort_by { |tier| tier.prices.alive.is_buy.minimum(:price_cents) }
+          code = create(:offer_code, user: creator, products: [membership], amount_percentage: 50, amount_cents: nil, variants: [other_tier])
+          membership.update!(default_offer_code: code)
+          base = membership.display_price_cents(for_default_duration: true)
+
+          expect(described_class.new(product: membership.reload).for_web[:price_cents]).to eq base
+
+          code.update!(variants: [lowest_tier])
+          expect(described_class.new(product: membership.reload).for_web[:price_cents]).to eq base - (base * 0.5).round
+        end
+
+        it "quotes the discount when the code covers any of several tiers tied at the lowest price" do
+          membership = create(:membership_product_with_preset_tiered_pricing, user: creator)
+          lowest_tier, other_tier = membership.tiers.sort_by { |tier| tier.prices.alive.is_buy.minimum(:price_cents) }
+          lowest_cents = lowest_tier.prices.alive.is_buy.minimum(:price_cents)
+          other_tier.prices.alive.is_buy.update_all(price_cents: lowest_cents)
+          code = create(:offer_code, user: creator, products: [membership], amount_percentage: 50, amount_cents: nil, variants: [other_tier])
+          membership.update!(default_offer_code: code)
+          base = membership.reload.display_price_cents(for_default_duration: true)
+
+          expect(described_class.new(product: membership.reload).for_web[:price_cents]).to eq base - (base * 0.5).round
+        end
+      end
+
       it "does not show original price for zero discount" do
         offer_code.update!(amount_percentage: 0)
         data = described_class.new(product: product_with_offer_code).for_web

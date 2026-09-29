@@ -6,8 +6,9 @@ class ProductPresenter::Card
   include CurrencyHelper
 
   ASSOCIATIONS = [
-    :alive_prices, :product_review_stat, :default_offer_code, :skus,
+    :alive_prices, :product_review_stat, :skus,
     {
+      default_offer_code: :variants,
       tiers: :alive_prices,
       user: [:custom_domain, { avatar_attachment: { blob: { variant_records: { image_attachment: :blob } } } }],
       variant_categories_alive: :alive_variants,
