@@ -811,9 +811,6 @@ describe("bank payout switch option on the payments page", () => {
   });
 });
 
-// Stripe's Japanese-script ("Kanji") variations: an account whose name/address variation holds no
-// Japanese characters at all is refused at account creation with `Invalid string: must provide a
-// Kanji variation.`, so the page must refuse it before saving.
 describe("Japanese (Kanji) variation fields", () => {
   const jpCompliance = (overrides: Partial<ComplianceInfo> = {}) =>
     complianceInfo({
@@ -867,6 +864,51 @@ describe("Japanese (Kanji) variation fields", () => {
     job_title: "Owner",
   };
 
+  const renderJpBusiness = (complianceOverrides: Partial<ComplianceInfo> = {}) =>
+    renderJpSeller({ ...jpBusiness, ...complianceOverrides }, { business_tax_id_entered: true });
+
+  // [field, name used in the banner, label rendered next to the input, business branch]
+  const kanjiFields = [
+    ["first_name_kanji", "First name (Kanji)", "First name / 名 (Kanji)", false],
+    ["last_name_kanji", "Last name (Kanji)", "Last name / 姓 (Kanji)", false],
+    ["street_address_kanji", "Town/Cho-me (Kanji)", "Town/Cho-me (Kanji)", false],
+    ["city", "City/Ward (Kanji)", "City/Ward (Kanji)", false],
+    ["business_name_kanji", "Business Name (Kanji)", "Business Name (Kanji)", true],
+    ["business_street_address_kanji", "Business town/Cho-me (Kanji)", "Business town/Cho-me (Kanji)", true],
+    ["business_city", "Business city/Ward (Kanji)", "Business city/Ward (Kanji)", true],
+  ] as const;
+
+  const noJapaneseLetters = [
+    ["romaji", "Chiyoda"],
+    ["only an ideographic space", "\u3000"],
+    ["only fullwidth punctuation and marks", "「ー・」"],
+    ["only halfwidth katakana marks", "ｰ･ﾞ"],
+  ] as const;
+
+  describe.each(kanjiFields)("%s", (field, bannerName, inputLabel, business) => {
+    it.each(noJapaneseLetters)("blocks a value with %s", (_, value) => {
+      if (business) renderJpBusiness({ [field]: value });
+      else renderJpSeller({ [field]: value });
+      save();
+
+      expect(mocks.put).not.toHaveBeenCalled();
+      expect(screen.getByText(`${bannerName} must include Japanese characters.`)).toBeTruthy();
+      expect(screen.getByLabelText(inputLabel).getAttribute("aria-invalid")).toBe("true");
+    });
+  });
+
+  it.each([
+    ["first_name_kanji", "First name / 名 (Kanji)"],
+    ["last_name_kanji", "Last name / 姓 (Kanji)"],
+  ] as const)("requires %s for an individual", (field, inputLabel) => {
+    renderJpSeller({ [field]: "" });
+    save();
+
+    expect(mocks.put).not.toHaveBeenCalled();
+    expect(screen.getByText(`Please complete the required fields below: ${inputLabel}.`)).toBeTruthy();
+    expect(screen.getByLabelText(inputLabel).getAttribute("aria-invalid")).toBe("true");
+  });
+
   it("saves a Japanese seller whose variations hold Japanese characters", () => {
     renderJpSeller();
     save();
@@ -874,55 +916,30 @@ describe("Japanese (Kanji) variation fields", () => {
     expect(mocks.put).toHaveBeenCalledTimes(1);
   });
 
-  it("blocks a romaji value typed into a (Kanji) name field", () => {
-    renderJpSeller({ first_name_kanji: "Taro" });
-    save();
-
-    expect(mocks.put).not.toHaveBeenCalled();
-    expect(screen.getByText("First name (Kanji) must include Japanese characters.")).toBeTruthy();
-  });
-
-  it("blocks saving while a (Kanji) name field is blank", () => {
-    renderJpSeller({ last_name_kanji: "" });
-    save();
-
-    expect(mocks.put).not.toHaveBeenCalled();
-    expect(screen.getAllByText(/Last name \/ 姓 \(Kanji\)/u).length).toBeGreaterThan(0);
-  });
-
-  it("accepts kana in a (Kanji) name field, for sellers whose name has no kanji form", () => {
-    renderJpSeller({ first_name_kanji: "タロウ", last_name_kanji: "ヤマダ" });
+  it("saves a Japanese business whose variations hold Japanese characters", () => {
+    renderJpBusiness();
     save();
 
     expect(mocks.put).toHaveBeenCalledTimes(1);
   });
 
-  it("blocks a romaji town typed into the (Kanji) address field", () => {
-    renderJpSeller({ street_address_kanji: "Chiyoda" });
+  it.each([
+    ["kanji with the 々 iteration mark", "佐々木"],
+    ["hiragana", "さくら"],
+    ["katakana with the ー length mark", "ローラ"],
+    ["halfwidth katakana", "ﾛｰﾗ"],
+    ["an ideograph outside the BMP", "𠮷田"],
+    ["kanji mixed with block numbers", "丸の内1丁目2-3"],
+    ["kanji around an ideographic space", "山田\u3000太郎"],
+  ])("saves when every (Kanji) field holds %s", (_, value) => {
+    renderJpBusiness(Object.fromEntries(kanjiFields.map(([field]) => [field, value])));
     save();
 
-    expect(mocks.put).not.toHaveBeenCalled();
-    expect(screen.getByText("Town/Cho-me (Kanji) must include Japanese characters.")).toBeTruthy();
+    expect(mocks.put).toHaveBeenCalledTimes(1);
   });
 
-  it("blocks a romaji city typed into the (Kanji) city field", () => {
-    renderJpSeller({ city: "Chiyoda" });
-    save();
-
-    expect(mocks.put).not.toHaveBeenCalled();
-    expect(screen.getByText("City/Ward (Kanji) must include Japanese characters.")).toBeTruthy();
-  });
-
-  it("applies the same rule to a Japanese business's (Kanji) fields", () => {
-    renderJpSeller({ ...jpBusiness, business_city: "Chiyoda" }, { business_tax_id_entered: true });
-    save();
-
-    expect(mocks.put).not.toHaveBeenCalled();
-    expect(screen.getByText("Business city/Ward (Kanji) must include Japanese characters.")).toBeTruthy();
-  });
-
-  it("saves a Japanese business whose variations hold Japanese characters", () => {
-    renderJpSeller(jpBusiness, { business_tax_id_entered: true });
+  it("leaves non-Japanese sellers' leftover (Kanji) values alone", () => {
+    renderPage({}, { first_name_kanji: "\u3000", last_name_kanji: "", street_address_kanji: "ー" });
     save();
 
     expect(mocks.put).toHaveBeenCalledTimes(1);
