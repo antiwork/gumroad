@@ -331,6 +331,85 @@ describe ProductRefundPolicy do
       expect(refund_policy.valid?).to be true
     end
 
+    def expect_validity(expected)
+      valid = nil
+      expect { valid = refund_policy.valid? }.not_to raise_error
+      expect(valid).to be(expected)
+    end
+
+    ["Incorrect API key provided", 401, true, ["Incorrect API key provided"]].each do |error|
+      context "when a 200 body carries a non-object error (#{error.inspect})" do
+        let(:malformed_envelope) { { "error" => error } }
+        let(:upstream_failure) { { "error" => { "message" => "Incorrect API key provided" } } }
+
+        before { refund_policy.fine_print = "Refunds are only issued for duplicate purchases." }
+
+        it "retries it as unreadable and fails closed" do
+          calls = 0
+          allow_any_instance_of(OpenAI::Client).to receive(:chat) do
+            calls += 1
+            malformed_envelope
+          end
+
+          expect_validity(false)
+          expect(refund_policy.errors.full_messages).to include("Fine print cannot state that refunds are not allowed")
+          expect(calls).to eq(RefundPolicy::FINE_PRINT_CLASSIFICATION_ATTEMPTS)
+        end
+
+        it "uses a readable retry's classification" do
+          stub_classifier_sequence(malformed_envelope, classifier_answer(false))
+          expect_validity(true)
+
+          stub_classifier_sequence(malformed_envelope, classifier_answer(true))
+          expect_validity(false)
+        end
+
+        it "fails closed alongside an upstream failure in either order" do
+          stub_classifier_sequence(malformed_envelope, upstream_failure)
+          expect_validity(false)
+
+          stub_classifier_sequence(upstream_failure, malformed_envelope)
+          expect_validity(false)
+        end
+      end
+    end
+
+    describe "classifier failure logging" do
+      let(:long_detail) { "#{"a" * 300}tail-that-must-not-be-logged" }
+      let(:logged) { [] }
+
+      before do
+        allow(Rails.logger).to receive(:warn) { |message| logged << message }
+        refund_policy.fine_print = "Refunds are only issued for duplicate purchases."
+      end
+
+      def logged_detail(prefix)
+        line = logged.find { |message| message.start_with?(prefix) }
+        expect(line).to be_present
+        line.delete_prefix(prefix)
+      end
+
+      it "caps the detail of an unparseable response" do
+        allow_any_instance_of(OpenAI::Client).to receive(:chat).and_raise(Faraday::ParsingError.new(long_detail))
+
+        expect_validity(false)
+        detail = logged_detail("Fine print classifier response unreadable for refund policy #{refund_policy.id}: ")
+        expect(detail).to start_with("a" * 100)
+        expect(detail.length).to be <= 200
+        expect(detail).not_to include("tail-that-must-not-be-logged")
+      end
+
+      it "caps the detail of a transport failure" do
+        allow_any_instance_of(OpenAI::Client).to receive(:chat).and_raise(Faraday::ConnectionFailed.new(long_detail))
+
+        expect_validity(true)
+        detail = logged_detail("Fine print classifier request failed for refund policy #{refund_policy.id}: ")
+        expect(detail).to start_with("a" * 100)
+        expect(detail.length).to be <= 200
+        expect(detail).not_to include("tail-that-must-not-be-logged")
+      end
+    end
+
     it "fails closed when the retry also comes back without an answer" do
       stub_classifier_sequence(truncated_classifier_response)
       refund_policy.fine_print = "Refunds are granted only for duplicate purchases."

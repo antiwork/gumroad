@@ -67,9 +67,9 @@ class RefundPolicy < ApplicationRecord
   end
 
   # An upstream failure wrapped in a 200 body is the outage class the transport
-  # rescues cover: retried, then failed open. A body the model returned that we
-  # cannot read is retried once, then failed closed. Never widen to StandardError:
-  # a nil body raises on #dig.
+  # rescues cover: retried, then failed open. A body with no answer to read is
+  # retried once, then failed closed; an answer that does not parse is a denial.
+  # Never widen to StandardError: a nil body raises on #dig.
   def fine_print_claims_no_refunds?
     failed_requests = 0
 
@@ -78,10 +78,10 @@ class RefundPolicy < ApplicationRecord
         response = ask_ai_fine_print_classification
       rescue Faraday::TimeoutError, Faraday::ConnectionFailed, Faraday::ServerError, Net::ReadTimeout => e
         failed_requests += 1
-        Rails.logger.warn("Fine print classifier request failed for refund policy #{id}: #{e.message}")
+        Rails.logger.warn("Fine print classifier request failed for refund policy #{id}: #{e.message.truncate(200)}")
         next
       rescue Faraday::ParsingError => e
-        Rails.logger.warn("Fine print classifier response unreadable for refund policy #{id}: #{e.message}")
+        Rails.logger.warn("Fine print classifier response unreadable for refund policy #{id}: #{e.message.truncate(200)}")
         next
       end
 
@@ -109,9 +109,10 @@ class RefundPolicy < ApplicationRecord
     end
 
     # OpenRouter relays an upstream failure as a 200 body with an "error" and no
-    # "choices" — a request that never ran, not a classification.
+    # "choices" — a request that never ran, not a classification. Any other
+    # "error" shape is an unreadable body, not an outage.
     def upstream_failure?(response)
-      response.is_a?(Hash) && response["choices"].blank? && response["error"].present?
+      response.is_a?(Hash) && response["choices"].blank? && response["error"].is_a?(Hash) && response["error"].present?
     end
 
     def fine_print_cannot_claim_no_refunds
