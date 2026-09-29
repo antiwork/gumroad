@@ -9,6 +9,14 @@ module PageMeta::Product
   private
     def set_product_page_meta(product)
       product_description = product.description.present? ? product.plaintext_description : "Available on Gumroad"
+      # Sellers write descriptions thousands of characters long, and the sanitizer
+      # hands them back with entity-encoded punctuation and embedded newlines.
+      # Uncapped, that whole string lands verbatim in <meta name="description">
+      # and og:description — every crawler truncates to ~160 chars anyway, so the
+      # extra bytes are pure head weight (one product page carried 8 KB of it).
+      # The profile page caps at first(300), the wishlist at truncate(160); match
+      # the wishlist so the SERP snippet is a single clean line.
+      product_description = product_description.squish.truncate(160)
 
       # On a seller's own domain the page must point search engines at that domain, not at
       # the *.gumroad.com subdomain Link#long_url defaults to — otherwise Search Console
