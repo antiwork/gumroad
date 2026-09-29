@@ -46,10 +46,32 @@ describe Onetime::ApplySourcelessCapitalDeductions do
     described_class.new(**options).process.sole
   end
 
+  def create_credit(amount_cents:, stripe_id:, total_amount: -amount_cents)
+    purchase = create(:failed_purchase, link: create(:product, user: seller), merchant_account:).tap do |record|
+      record.update_columns(stripe_transaction_id: nil, succeeded_at: nil)
+    end
+    created = create(:credit, user: seller, merchant_account:, financing_paydown_purchase: purchase, crediting_user: nil,
+                              stripe_loan_paydown_id: stripe_id, amount_cents:, balance: nil)
+    amount = BalanceTransaction::Amount.new(currency: Currency::USD, gross_cents: amount_cents, net_cents: amount_cents)
+    BalanceTransaction.create!(user: seller, merchant_account:, credit: created, issued_amount: amount, holding_amount: amount, update_user_balance: false)
+    stripe_financing = financing.deep_merge(id: stripe_id, details: { total_amount: })
+    allow(Stripe).to receive(:raw_request)
+      .with(:get, "/v1/capital/financing_transactions/#{stripe_id}", {}, { stripe_account: merchant_account.charge_processor_merchant_id }) { double(http_body: stripe_financing.to_json) }
+    stub_const("#{described_class}::CREDIT_IDS", described_class::CREDIT_IDS + [created.id])
+    created
+  end
+
+  # What an interrupted run leaves: purchase link cleared, Stripe fields written, nothing applied.
+  def clear_link(target, **overrides)
+    target.update!(financing_paydown_purchase: nil, stripe_loan_paydown_reason: Credit::AUTOMATIC_CAPITAL_WITHHOLDING,
+                   stripe_loan_paydown_currency: Currency::USD, stripe_loan_paydown_deducted_at: 1_787_000_000,
+                   stripe_loan_paydown_linked_payment_id: "py_linked", stripe_loan_paydown_linked_transfer_id: "tr_source", **overrides)
+  end
+
   it "defaults to a dry-run that reports the target balance without changing records" do
     expect(process).to include(status: :dry_run, credit_id: credit.id, balance_transaction_id: transaction.id, creates_balance_transaction: false,
-                               unlinks_purchase_id: blank_purchase.id, balance_id: balance.id, before_cents: 5353, deduction_cents: -352,
-                               after_cents: 5001)
+                               unlinks_purchase_id: blank_purchase.id, balance_id: balance.id, balance_state: "unpaid", before_cents: 5353,
+                               deduction_cents: -352, after_cents: 5001, ledger_after_cents: 5001, ends_negative: false)
     expect(credit.reload.financing_paydown_purchase_id).to eq(blank_purchase.id)
     expect(credit.balance_id).to be_nil
     expect(transaction.reload.balance_id).to be_nil
@@ -124,6 +146,27 @@ describe Onetime::ApplySourcelessCapitalDeductions do
       expect(balance.reload.holding_amount_cents).to eq(5001)
     end
 
+    %w[paid processing].each do |state|
+      it "links a transaction applied to a #{state} balance and reports that state" do
+        balance.update_columns(state:)
+
+        expect(process).to include(status: :dry_run, balance_id: balance.id, balance_state: state, links_applied_transaction: true,
+                                   before_cents: 5353, after_cents: 5001, ledger_after_cents: 0, ends_negative: false)
+        expect(process(dry_run: false)).to include(status: :applied, balance_id: balance.id)
+        expect(credit.reload.balance_id).to eq(balance.id)
+        expect(balance.reload.holding_amount_cents).to eq(5001)
+        expect(balance.state).to eq(state)
+      end
+    end
+
+    it "never skips an already applied transaction, even when the ledger is negative" do
+      balance.update_columns(holding_amount_cents: -10, amount_cents: -10)
+
+      expect(process(skip_negative: true)).to include(status: :dry_run, ends_negative: true, links_applied_transaction: true)
+      expect(process(dry_run: false, skip_negative: true)).to include(status: :applied)
+      expect(credit.reload.balance_id).to eq(balance.id)
+    end
+
     it "links the credit without applying the deduction twice" do
       expect { expect(process(dry_run: false)).to include(status: :applied, balance_id: balance.id) }.not_to change { BalanceTransaction.count }
 
@@ -154,6 +197,138 @@ describe Onetime::ApplySourcelessCapitalDeductions do
 
       expect(process(dry_run: false)).to include(status: :refused, error: "Balance transaction does not match the credit")
       expect(credit.reload.balance_id).to be_nil
+    end
+  end
+
+  it "resumes an unlinked credit that has no transaction" do
+    transaction.destroy!
+    clear_link(credit)
+
+    expect(process).to include(status: :dry_run, creates_balance_transaction: true, unlinks_purchase_id: nil, balance_id: balance.id,
+                               before_cents: 5353, after_cents: 5001)
+    expect { expect(process(dry_run: false)).to include(status: :applied, balance_id: balance.id) }.to change { BalanceTransaction.count }.by(1)
+    expect(balance.reload.holding_amount_cents).to eq(5001)
+  end
+
+  context "when the credit stores a Stripe field that differs from Stripe" do
+    it "refuses a cleared credit with another deduction time" do
+      clear_link(credit, stripe_loan_paydown_deducted_at: 1_787_000_001)
+
+      expect(process(dry_run: false)).to include(status: :refused, error: "Stored stripe_loan_paydown_deducted_at does not match Stripe")
+      expect(credit.reload.balance_id).to be_nil
+      expect(credit.stripe_loan_paydown_deducted_at).to eq(1_787_000_001)
+      expect(balance.reload.holding_amount_cents).to eq(5353)
+    end
+
+    it "refuses a cleared credit that lacks a Stripe field" do
+      clear_link(credit, stripe_loan_paydown_linked_transfer_id: nil)
+
+      expect(process(dry_run: false)).to include(status: :refused, error: "Stored stripe_loan_paydown_linked_transfer_id does not match Stripe")
+      expect(balance.reload.holding_amount_cents).to eq(5353)
+    end
+
+    it "refuses a linked credit with another stored payment ID before overwriting it" do
+      credit.update!(stripe_loan_paydown_linked_payment_id: "py_other")
+
+      expect(process(dry_run: false)).to include(status: :refused, error: "Stored stripe_loan_paydown_linked_payment_id does not match Stripe")
+      expect(credit.reload.financing_paydown_purchase_id).to eq(blank_purchase.id)
+      expect(credit.stripe_loan_paydown_linked_payment_id).to eq("py_other")
+      expect(balance.reload.holding_amount_cents).to eq(5353)
+    end
+
+    it "accepts a linked credit whose stored IDs equal Stripe's" do
+      credit.update!(stripe_loan_paydown_linked_payment_id: "py_linked", stripe_loan_paydown_linked_transfer_id: "tr_source")
+
+      expect(process(dry_run: false)).to include(status: :applied)
+    end
+  end
+
+  context "with several credits of one seller" do
+    let!(:second) { create_credit(amount_cents: -100, stripe_id: "cptxn_second") }
+
+    def statuses(**options)
+      described_class.new(credit_ids: [credit.id, second.id], **options).process
+    end
+
+    it "reports amounts that accumulate on the balance in a dry run" do
+      first, last = statuses
+      expect(first).to include(status: :dry_run, before_cents: 5353, after_cents: 5001, ledger_after_cents: 5001)
+      expect(last).to include(status: :dry_run, before_cents: 5001, deduction_cents: -100, after_cents: 4901, ledger_after_cents: 4901, ends_negative: false)
+      expect(balance.reload.holding_amount_cents).to eq(5353)
+    end
+
+    it "matches the dry run with the balance a live run leaves" do
+      expect(statuses(dry_run: false).map { _1[:status] }).to eq(%i[applied applied])
+      expect(balance.reload.holding_amount_cents).to eq(4901)
+    end
+
+    it "flags a ledger of exactly zero as holding payouts without calling it negative" do
+      balance.update_columns(holding_amount_cents: 452, amount_cents: 452)
+
+      expect(statuses(skip_negative: true).map { _1.values_at(:status, :ledger_after_cents, :ends_negative, :payout_held) })
+        .to eq([[:dry_run, 100, false, false], [:dry_run, 0, false, true]])
+    end
+
+    it "accounts for an earlier credit when it previews an applied transaction on the same balance" do
+      allow_any_instance_of(BalanceTransaction).to receive(:update_balance!).and_wrap_original do |original, *args, **kwargs|
+        original.call(*args, **kwargs)
+        raise "interrupted"
+      end
+      described_class.new(credit_ids: [second.id], dry_run: false).process
+      allow_any_instance_of(BalanceTransaction).to receive(:update_balance!).and_call_original
+      expect(second.reload.balance_transaction.balance_id).to eq(balance.id)
+      expect(balance.reload.holding_amount_cents).to eq(5253)
+
+      first, applied = described_class.new(credit_ids: [credit.id, second.id]).process
+      expect(first).to include(before_cents: 5253, after_cents: 4901)
+      expect(applied).to include(links_applied_transaction: true, before_cents: 5001, after_cents: 4901, ledger_after_cents: 4901)
+    end
+
+    it "accumulates on a balance that does not exist yet" do
+      balance.update_columns(state: "paid")
+
+      first, last = statuses
+      expect(first).to include(balance_id: nil, before_cents: 0, after_cents: -352, ledger_after_cents: -352, ends_negative: true)
+      expect(last).to include(balance_id: nil, before_cents: -352, after_cents: -452, ledger_after_cents: -452)
+    end
+
+    it "leaves another credit applied when one is refused" do
+      refused = create_credit(amount_cents: -50, stripe_id: "cptxn_refused", total_amount: 51)
+
+      results = described_class.new(credit_ids: [credit.id, refused.id, second.id], dry_run: false).process
+      expect(results.map { _1[:status] }).to eq(%i[applied refused applied])
+      expect(results.second[:error]).to eq("Stripe financing transaction does not match the credit")
+      expect(balance.reload.holding_amount_cents).to eq(4901)
+      expect(refused.reload.balance_id).to be_nil
+      expect(refused.financing_paydown_purchase_id).to be_present
+    end
+
+    context "when a deduction would end the unpaid ledger below zero" do
+      let!(:large) { create_credit(amount_cents: -6000, stripe_id: "cptxn_large") }
+
+      def outcomes(**options)
+        described_class.new(credit_ids: [credit.id, large.id, second.id], **options).process
+      end
+
+      it "applies it by default and reports the negative ledger in the dry run" do
+        expect(outcomes.map { _1.values_at(:status, :ledger_after_cents, :ends_negative) })
+          .to eq([[:dry_run, 5001, false], [:dry_run, -999, true], [:dry_run, -1099, true]])
+
+        expect(outcomes(dry_run: false).map { _1[:status] }).to eq(%i[applied applied applied])
+        expect(balance.reload.holding_amount_cents).to eq(-1099)
+      end
+
+      it "skips it when asked, and later credits do not count it" do
+        results = outcomes(skip_negative: true)
+        expect(results.map { _1[:status] }).to eq(%i[dry_run skipped dry_run])
+        expect(results.second).to include(credit_id: large.id, reason: "Ledger would go negative", ledger_after_cents: -999)
+        expect(results.third).to include(before_cents: 5001, after_cents: 4901, ledger_after_cents: 4901)
+
+        expect(outcomes(dry_run: false, skip_negative: true).map { _1[:status] }).to eq(%i[applied skipped applied])
+        expect(balance.reload.holding_amount_cents).to eq(4901)
+        expect(large.reload.balance_id).to be_nil
+        expect(large.financing_paydown_purchase_id).to be_present
+      end
     end
   end
 
@@ -200,6 +375,15 @@ describe Onetime::ApplySourcelessCapitalDeductions do
 
     expect(process(dry_run: false)).to include(status: :refused, error: "Balance transaction does not match the credit")
     expect(balance.reload.holding_amount_cents).to eq(5353)
+  end
+
+  it "refuses a batch that repeats a credit, which a dry run would count twice" do
+    expect { described_class.new(credit_ids: [credit.id, credit.id]) }.to raise_error(ArgumentError, "Credit IDs must be unique")
+  end
+
+  it "reports the same numbers when the same instance processes again" do
+    task = described_class.new
+    expect(task.process).to eq(task.process)
   end
 
   it "refuses credits that are not listed" do

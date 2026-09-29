@@ -35,14 +35,21 @@ class Onetime::ApplySourcelessCapitalDeductions
     665316, 666449, 666605, 669318, 669671, 671062, 672886
   ].freeze
 
-  def initialize(credit_ids: CREDIT_IDS, dry_run: true)
+  # skip_negative leaves a credit alone when applying it would end the seller's unpaid ledger below zero.
+  # A negative ledger holds the seller's payouts, so the caller decides whether that is acceptable.
+  def initialize(credit_ids: CREDIT_IDS, dry_run: true, skip_negative: false)
     raise ArgumentError, "Only listed credits can be applied" unless (credit_ids - CREDIT_IDS).empty?
+    raise ArgumentError, "Credit IDs must be unique" unless credit_ids.uniq.size == credit_ids.size
 
     @credit_ids = credit_ids
     @dry_run = dry_run
+    @skip_negative = skip_negative
   end
 
   def process
+    # A dry run applies nothing, so later credits of the batch see earlier ones through these.
+    @projected_deltas = Hash.new(0)
+    @projected_ledgers = Hash.new(0)
     @credit_ids.map do |credit_id|
       process_credit(credit_id)
     rescue => e
@@ -64,10 +71,12 @@ class Onetime::ApplySourcelessCapitalDeductions
           return already_applied(credit) if credit.balance_id.present?
 
           verify_record!(credit)
-          verify_stripe_fields!(credit, stripe) if unlinked?(credit)
+          verify_stripe_fields!(credit, stripe)
           transaction = credit.balance_transaction
           verify_balance_transaction!(credit, transaction) if transaction
-          return dry_run_result(credit, transaction, stripe) if @dry_run
+          projection = project(credit, transaction)
+          return skipped(credit, projection) if @skip_negative && projection[:new_deduction] && projection[:ends_negative]
+          return dry_run_result(credit, transaction, stripe, projection) if @dry_run
 
           unless unlinked?(credit)
             credit.update!(financing_paydown_purchase: nil, stripe_loan_paydown_reason: Credit::AUTOMATIC_CAPITAL_WITHHOLDING,
@@ -137,8 +146,14 @@ class Onetime::ApplySourcelessCapitalDeductions
         stripe_loan_paydown_linked_transfer_id: linked_transfer_id }
     end
 
+    # A stored value must never be overwritten with a different one. A credit that an interrupted run cleared
+    # must carry every field; an untouched one may have none.
     def verify_stripe_fields!(credit, stripe)
-      raise "Cleared credit does not match Stripe" unless stripe.all? { |field, value| credit.public_send(field) == value }
+      stripe.each do |field, value|
+        stored = credit.public_send(field)
+        next if stored.nil? && !unlinked?(credit)
+        raise "Stored #{field} does not match Stripe" unless stored == value
+      end
     end
 
     def verify_balance_transaction!(credit, transaction)
@@ -159,17 +174,45 @@ class Onetime::ApplySourcelessCapitalDeductions
     end
 
     # The balance BalanceTransaction#find_or_create_balance would pick. A missing one is created by the live run, so it starts at 0.
-    def dry_run_result(credit, transaction, stripe)
+    # Amounts are cumulative over the batch in a dry run, so they match what a live run of the same batch would produce.
+    def project(credit, transaction)
       applied_balance = transaction&.balance
       balance = applied_balance || Balance.where(user_id: credit.user_id, merchant_account_id: credit.merchant_account_id,
                                                  currency: Currency::USD, holding_currency: Currency::USD, state: "unpaid").order(date: :asc).first
-      held_cents = balance&.holding_amount_cents || 0
-      before_cents, after_cents = applied_balance ? [held_cents - credit.amount_cents, held_cents] : [held_cents, held_cents + credit.amount_cents]
+      balance_key = balance&.id || [:new, credit.user_id, credit.merchant_account_id]
+      # An applied transaction is already in held_cents, so only earlier credits of the batch can still move its balance.
+      held_cents = (balance&.holding_amount_cents || 0) + @projected_deltas[balance_key]
+      if applied_balance
+        before_cents, after_cents, ledger_change = held_cents - credit.amount_cents, held_cents, 0
+      else
+        before_cents, after_cents, ledger_change = held_cents, held_cents + credit.amount_cents, credit.amount_cents
+      end
+      ledger_after_cents = unpaid_ledger_cents(credit.user_id) + @projected_ledgers[credit.user_id] + ledger_change
+      { balance:, balance_key:, before_cents:, after_cents:, ledger_change:, ledger_after_cents:,
+        ends_negative: ledger_after_cents.negative?, payout_held: ledger_after_cents <= 0, new_deduction: applied_balance.nil? }
+    end
+
+    # What Payouts weighs when it decides whether a negative ledger holds a seller's payout.
+    def unpaid_ledger_cents(user_id)
+      ApplicationRecord.connected_to(role: :writing) { Balance.where(user_id:, state: "unpaid").sum(:amount_cents) }
+    end
+
+    def dry_run_result(credit, transaction, stripe, projection)
+      @projected_deltas[projection[:balance_key]] += credit.amount_cents if projection[:new_deduction]
+      @projected_ledgers[credit.user_id] += projection[:ledger_change]
+      balance = projection[:balance]
       { status: :dry_run, credit_id: credit.id, user_id: credit.user_id, balance_transaction_id: transaction&.id,
-        creates_balance_transaction: transaction.nil?, links_applied_transaction: applied_balance.present?,
-        unlinks_purchase_id: credit.financing_paydown_purchase_id, balance_id: balance&.id,
+        creates_balance_transaction: transaction.nil?, links_applied_transaction: !projection[:new_deduction],
+        unlinks_purchase_id: credit.financing_paydown_purchase_id, balance_id: balance&.id, balance_state: balance&.state,
         new_balance_date: balance ? nil : Time.zone.at(stripe[:stripe_loan_paydown_deducted_at]).to_date,
-        before_cents:, deduction_cents: credit.amount_cents, after_cents: }
+        before_cents: projection[:before_cents], deduction_cents: credit.amount_cents, after_cents: projection[:after_cents],
+        ledger_after_cents: projection[:ledger_after_cents], ends_negative: projection[:ends_negative],
+        payout_held: projection[:payout_held] }
+    end
+
+    def skipped(credit, projection)
+      { status: :skipped, credit_id: credit.id, user_id: credit.user_id, reason: "Ledger would go negative",
+        deduction_cents: credit.amount_cents, ledger_after_cents: projection[:ledger_after_cents] }
     end
 
     def already_applied(credit)
