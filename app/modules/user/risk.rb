@@ -331,6 +331,22 @@ module User::Risk
     !!clear_suspension
   end
 
+  # `enable_refunds!` runs after the move to compliant and saves the whole `flags` integer from
+  # this copy, so a bit committed since it was loaded (an admin payout pause) would be written
+  # back to its old value. Rebase onto the locked row, keeping only the bits this copy changed.
+  def rebase_flags_onto_locked_row(_transition)
+    return true if new_record?
+
+    persisted_flags = self.class.where(id:).lock.pick(:flags).to_i
+    caller_flags = self[:flags].to_i
+    caller_changed_bits = caller_flags ^ attribute_in_database(:flags).to_i
+
+    self[:flags] = persisted_flags
+    clear_attribute_changes([:flags])
+    self[:flags] = (persisted_flags & ~caller_changed_bits) | (caller_flags & caller_changed_bits)
+    true
+  end
+
   def add_user_comment(transition)
     params = transition.args.first
     raise ArgumentError, "first transition argument must include an author_id or author_name" if !params || (!params[:author_id] && !params[:author_name])

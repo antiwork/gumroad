@@ -554,7 +554,8 @@ module Purchase::Blockable
 
   def pause_payouts_for_seller_based_on_chargeback_rate!
     return unless seller.present?
-    return if [User::PAYOUT_PAUSE_SOURCE_ADMIN, User::PAYOUT_PAUSE_SOURCE_SYSTEM].include?(seller.payouts_paused_by_source)
+    outranking_sources = [User::PAYOUT_PAUSE_SOURCE_ADMIN, User::PAYOUT_PAUSE_SOURCE_SYSTEM]
+    return if outranking_sources.include?(seller.payouts_paused_by_source)
 
     chargeback_stats = seller.lost_chargebacks_for_payout_gate
     chargeback_volume_percentage = chargeback_stats[:volume]
@@ -566,7 +567,13 @@ module Purchase::Blockable
     # Flag and comment must land together — see the same note in Payment. Both automatic checks
     # write source "system", so the comment is the only thing that says which one holds this
     # account, and a gap between the two writes is a window where the hold is misattributed.
-    User.transaction do
+    #
+    # The rate aggregate is slow enough for an admin to pause the account meanwhile, so re-check
+    # the source on the locked row: relabelling that pause "system" would let
+    # ReleaseChargebackRatePayoutPauseForSellerJob lift it once the rate recovers.
+    seller.with_lock do
+      next if outranking_sources.include?(seller.payouts_paused_by_source)
+
       seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
       seller.comments.create(
         content: "Payouts automatically paused due to chargeback rate (#{chargeback_volume_percentage}) exceeding #{User::MAX_CHARGEBACK_RATE_ALLOWED_FOR_PAYOUTS}% volume over the last #{User::PAYOUT_CHARGEBACK_RATE_WINDOW.inspect}.",

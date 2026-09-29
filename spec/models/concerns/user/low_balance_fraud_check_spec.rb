@@ -214,6 +214,22 @@ describe User::LowBalanceFraudCheck do
           .to change { creator.reload.user_risk_state }.from("on_probation").to("compliant")
       end
 
+      it "keeps an admin payout pause placed while the recovery held an older copy of the account" do
+        creator = create(:user)
+        allow(creator).to receive(:unpaid_balance_cents).and_return(100_00)
+        creator.mark_compliant!(author_name: "test")
+        creator.send(:disable_refunds_and_put_on_probation!)
+        User.find(creator.id).update!(payouts_paused_internally: true, payouts_paused_by: GUMROAD_ADMIN_ID)
+
+        creator.check_for_high_balance_and_remove_low_balance_probation!
+
+        creator.reload
+        expect(creator).to be_compliant
+        expect(creator.refunds_disabled?).to be(false)
+        expect(creator.payouts_paused_internally?).to be(true)
+        expect(creator.payouts_paused_by).to eq(GUMROAD_ADMIN_ID)
+      end
+
       it "does not override a newer admin risk-state transition after probation" do
         @creator.mark_compliant!(author_name: "admin", content: "manual review")
 

@@ -470,6 +470,7 @@ class User < ApplicationRecord
     # a stale in-memory `suspended?`; this guard re-checks the row at write time.
     before_transition any => %i[compliant on_probation not_reviewed],
                       :do => :refuse_unauthorized_suspension_clear
+    before_transition any => :compliant, :do => :rebase_flags_onto_locked_row
     after_transition any => %i[suspended_for_fraud suspended_for_tos_violation], :do => :invalidate_active_sessions!
     after_transition any => %i[suspended_for_fraud suspended_for_tos_violation], :do => :disable_links_and_tell_chat
     after_transition any => %i[on_probation compliant not_reviewed flagged_for_tos_violation flagged_for_fraud suspended_for_tos_violation suspended_for_fraud],
