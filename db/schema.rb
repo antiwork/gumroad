@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_16_120002) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_16_130000) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -1645,6 +1645,21 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_16_120002) do
     t.datetime "updated_at", precision: nil, null: false
     t.index ["balance_id"], name: "index_payments_balances_on_balance_id"
     t.index ["payment_id"], name: "index_payments_balances_on_payment_id"
+  end
+
+create_table "ping_deliveries", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.integer "attempt", default: 1, null: false
+    t.datetime "created_at", null: false
+    t.string "error_class"
+    t.string "post_url", null: false
+    t.bigint "purchase_id"
+    t.string "resource_name", null: false
+    t.integer "response_code"
+    t.bigint "subscription_id"
+    t.boolean "succeeded", default: false, null: false
+    t.bigint "user_id", null: false
+    t.index ["purchase_id", "created_at"], name: "index_ping_deliveries_on_purchase_id_and_created_at"
+    t.index ["user_id", "created_at"], name: "index_ping_deliveries_on_user_id_and_created_at"
   end
 
   create_table "platform_blocks", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|

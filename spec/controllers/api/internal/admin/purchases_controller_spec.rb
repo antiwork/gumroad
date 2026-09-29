@@ -477,6 +477,28 @@ describe Api::Internal::Admin::PurchasesController do
       )
     end
 
+    it "includes the ping delivery results for that sale" do
+      purchase = create(:free_purchase)
+      delivery = create(:ping_delivery, user: purchase.seller, purchase:, response_code: 403, succeeded: false)
+
+      get :show, params: { id: purchase.external_id_numeric }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["purchase"]["ping_deliveries"]).to eq([
+                                                                          {
+                                                                            "id" => delivery.id,
+                                                                            "resource_name" => "sale",
+                                                                            "sale_id" => purchase.external_id_numeric.to_s,
+                                                                            "subscription_id" => nil,
+                                                                            "post_url" => "https://example.com/hook",
+                                                                            "attempt" => 1,
+                                                                            "outcome" => "HTTP 403",
+                                                                            "succeeded" => false,
+                                                                            "created_at" => delivery.created_at.as_json,
+                                                                          },
+                                                                        ])
+    end
+
     it "returns nil seller fields when the purchase has no seller" do
       purchase = create(:free_purchase)
       purchase.update_columns(seller_id: nil)

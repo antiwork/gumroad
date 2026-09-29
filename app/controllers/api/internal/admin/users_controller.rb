@@ -950,6 +950,7 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
           comments_count: user.comments.size
         },
         stripe: serialize_stripe_connect(stripe_merchant_account),
+        recent_ping_deliveries: user.ping_deliveries.recent.limit(PingDelivery::MAX_RECENT).includes(:purchase).map(&:as_props),
         admin_links: serialize_admin_links(user, stripe_merchant_account)
       }
     end

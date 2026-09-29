@@ -82,6 +82,29 @@ describe Api::Internal::Admin::UsersController do
       expect(response.parsed_body["user"]["username"]).to eq("byusername")
     end
 
+    it "includes the seller's recent ping deliveries" do
+      user = create(:compliant_user, email: "pings@example.com")
+      purchase = create(:free_purchase, seller: user, link: create(:product, user:))
+      delivery = create(:ping_delivery, user:, purchase:, response_code: nil, error_class: "SocketError", succeeded: false)
+
+      get :info, params: { email: "pings@example.com" }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["user"]["recent_ping_deliveries"]).to eq([
+                                                                             {
+                                                                               "id" => delivery.id,
+                                                                               "resource_name" => "sale",
+                                                                               "sale_id" => purchase.external_id_numeric.to_s,
+                                                                               "subscription_id" => nil,
+                                                                               "post_url" => "https://example.com/hook",
+                                                                               "attempt" => 1,
+                                                                               "outcome" => "SocketError",
+                                                                               "succeeded" => false,
+                                                                               "created_at" => delivery.created_at.as_json,
+                                                                             },
+                                                                           ])
+    end
+
     it "resolves a hyphenated storefront handle to an underscored username" do
       user = create(:compliant_user, email: "legacyhandle@example.com")
       user.update_columns(username: "legacy_handle")

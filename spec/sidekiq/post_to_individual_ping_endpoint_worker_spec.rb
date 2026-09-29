@@ -222,4 +222,76 @@ describe PostToIndividualPingEndpointWorker do
       expect(logged).not_to include(endpoint, "endpoint-secret", "license-secret", "buyer@example.com")
     end
   end
+
+  describe "delivery records" do
+    let(:seller) { create(:user) }
+    let(:purchase) { create(:free_purchase, seller:, link: create(:product, user: seller)) }
+    let(:ping) { { "purchase_id" => purchase.id, "subscription_id" => nil, "resource_name" => ResourceSubscription::SALE_RESOURCE_NAME } }
+
+    it "records the attempt with the endpoint's response for that sale" do
+      expect(SsrfFilter).to receive(:post).and_return(@ok_response)
+
+      PostToIndividualPingEndpointWorker.new.perform("http://notification.com", { "a" => 1 }, Mime[:url_encoded_form].to_s, seller.id, ping)
+
+      delivery = seller.ping_deliveries.sole
+      expect(delivery).to have_attributes(
+        purchase_id: purchase.id,
+        resource_name: ResourceSubscription::SALE_RESOURCE_NAME,
+        post_url: "http://notification.com",
+        attempt: 1,
+        response_code: 200,
+        error_class: nil,
+        succeeded: true
+      )
+    end
+
+    it "records a rejection the worker does not retry" do
+      allow(SsrfFilter).to receive(:post).and_return(Net::HTTPExpectationFailed.new("1.1", "417", "Expectation Failed"))
+
+      PostToIndividualPingEndpointWorker.new.perform("http://notification.com", { "a" => 1 }, Mime[:url_encoded_form].to_s, seller.id, ping)
+
+      expect(seller.ping_deliveries.sole).to have_attributes(response_code: 417, error_class: nil, succeeded: false)
+    end
+
+    it "records the error class when the connection never completed" do
+      allow(SsrfFilter).to receive(:post).and_raise(SocketError.new("socket error message"))
+
+      PostToIndividualPingEndpointWorker.new.perform("http://notification.com", { "a" => 1 }, Mime[:url_encoded_form].to_s, seller.id, ping)
+
+      expect(seller.ping_deliveries.sole).to have_attributes(response_code: nil, error_class: "SocketError", succeeded: false)
+    end
+
+    it "numbers each retry attempt" do
+      allow(SsrfFilter).to receive(:post).and_return(Net::HTTPInternalServerError.new("1.1", "500", "Internal Server Error"))
+
+      PostToIndividualPingEndpointWorker.new.perform("http://notification.com", { "a" => 1, "retry_count" => 2 }, Mime[:url_encoded_form].to_s, seller.id, ping)
+
+      expect(seller.ping_deliveries.sole.attempt).to eq(3)
+    end
+
+    it "carries the sale context into the retry it enqueues" do
+      allow(SsrfFilter).to receive(:post).and_raise(Net::ReadTimeout)
+
+      PostToIndividualPingEndpointWorker.new.perform("http://notification.com", { "a" => 1 }, Mime[:url_encoded_form].to_s, seller.id, ping)
+
+      expect(PostToIndividualPingEndpointWorker.jobs.sole["args"].last).to eq(ping)
+    end
+
+    it "records nothing for a job enqueued before the ping context argument existed" do
+      expect(SsrfFilter).to receive(:post).and_return(@ok_response)
+
+      PostToIndividualPingEndpointWorker.new.perform("http://notification.com", { "a" => 1 }, Mime[:url_encoded_form].to_s, seller.id)
+
+      expect(PingDelivery.count).to eq(0)
+    end
+
+    it "delivers the ping even when the attempt cannot be recorded" do
+      allow(SsrfFilter).to receive(:post).and_return(@ok_response)
+      allow(PingDelivery).to receive(:create!).and_raise(ActiveRecord::StatementInvalid.new("gone away"))
+
+      expect do
+        PostToIndividualPingEndpointWorker.new.perform("http://notification.com", { "a" => 1 }, Mime[:url_encoded_form].to_s, seller.id, ping)
+      end.to_not raise_error
+    end
+  end
 end

@@ -15,7 +15,7 @@ class Api::Internal::Admin::PurchasesController < Api::Internal::Admin::BaseCont
 
     ActiveRecord::Associations::Preloader.new(records: [purchase], associations: ADMIN_PURCHASE_INCLUDES).call
     risk_level = Radar::ChargeRiskLevelService.fetch(purchase)
-    render json: { success: true, purchase: serialize_purchase(purchase, with_clusters: true, stripe_risk_level: risk_level) }
+    render json: { success: true, purchase: serialize_purchase(purchase, with_clusters: true, stripe_risk_level: risk_level, with_ping_deliveries: true) }
   end
 
   def search

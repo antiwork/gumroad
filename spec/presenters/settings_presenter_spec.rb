@@ -259,6 +259,7 @@ describe SettingsPresenter do
                                                  applications: [],
                                                  allow_deactivation: true,
                                                  formatted_balance_to_forfeit_on_account_deletion: nil,
+                                                 recent_ping_deliveries: [],
                                                })
       end
     end
@@ -281,6 +282,7 @@ describe SettingsPresenter do
                                                  applications: [],
                                                  allow_deactivation: true,
                                                  formatted_balance_to_forfeit_on_account_deletion: nil,
+                                                 recent_ping_deliveries: [],
                                                })
       end
     end
@@ -301,7 +303,31 @@ describe SettingsPresenter do
                                                  applications: [],
                                                  allow_deactivation: true,
                                                  formatted_balance_to_forfeit_on_account_deletion: Money.new(2500, :usd).format(no_cents_if_whole: true),
+                                                 recent_ping_deliveries: [],
                                                })
+      end
+    end
+
+    context "when the seller has ping deliveries" do
+      let!(:ping_delivery) do
+        purchase = create(:free_purchase, seller:, link: create(:product, user: seller))
+        create(:ping_delivery, user: seller, purchase:)
+      end
+
+      it "returns the most recent deliveries for that seller" do
+        expect(presenter.advanced_props[:recent_ping_deliveries]).to eq([
+                                                                          {
+                                                                            id: ping_delivery.id,
+                                                                            resource_name: "sale",
+                                                                            sale_id: ping_delivery.purchase.external_id_numeric.to_s,
+                                                                            subscription_id: nil,
+                                                                            post_url: "https://example.com/hook",
+                                                                            attempt: 1,
+                                                                            outcome: "HTTP 200",
+                                                                            succeeded: true,
+                                                                            created_at: ping_delivery.created_at.as_json,
+                                                                          },
+                                                                        ])
       end
     end
   end

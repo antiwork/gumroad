@@ -101,6 +101,7 @@ class User < ApplicationRecord
            class_name: "OauthApplication",
            as: :owner
   has_many :resource_subscriptions
+  has_many :ping_deliveries
   has_many :devices
 
   belongs_to :credit_card, optional: true
