@@ -1018,6 +1018,23 @@ describe("Japanese (Kanji) variation fields", () => {
     expect(inlineMessage("City/Ward (Kanji)")).toBeNull();
   });
 
+  it.each([
+    ["street_address_kanji", "Town/Cho-me (Kanji)", false],
+    ["city", "City/Ward (Kanji)", false],
+    ["business_name_kanji", "Business Name (Kanji)", true],
+    ["business_street_address_kanji", "Business town/Cho-me (Kanji)", true],
+    ["business_city", "Business city/Ward (Kanji)", true],
+  ] as const)("explains beside the input that a blank %s is required", (field, inputLabel, business) => {
+    if (business) renderJpBusiness({ [field]: "" });
+    else renderJpSeller({ [field]: "" });
+    save();
+
+    expect(mocks.put).not.toHaveBeenCalled();
+    expect(inlineMessage(inputLabel)).toBe("Required.");
+    expect(screen.getByLabelText(inputLabel).getAttribute("aria-invalid")).toBe("true");
+    expect(screen.getByText(/^Please complete the required fields below:/u).textContent).toContain(inputLabel);
+  });
+
   it("clears the reasons with the highlights on the next edit and keeps the banner", () => {
     renderJpSeller({ first_name_kanji: "Taro", last_name_kanji: "Yamada" });
     save();

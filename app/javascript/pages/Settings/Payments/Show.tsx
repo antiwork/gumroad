@@ -828,12 +828,14 @@ export default function PaymentsPage() {
       }
       if (!form.data.user.street_address_kanji) {
         markFieldInvalid("street_address_kanji");
+        setFieldErrorMessage("street_address_kanji", "Required.");
       }
       if (!form.data.user.street_address_kana) {
         markFieldInvalid("street_address_kana");
       }
       if (!form.data.user.city) {
         markFieldInvalid("city");
+        setFieldErrorMessage("city", "Required.");
       }
       if (!form.data.user.city_kana) {
         markFieldInvalid("city_kana");
@@ -1026,6 +1028,7 @@ export default function PaymentsPage() {
       if (form.data.user.business_country === "JP") {
         if (!form.data.user.business_name_kanji) {
           markFieldInvalid("business_name_kanji");
+          setFieldErrorMessage("business_name_kanji", "Required.");
         }
         if (!form.data.user.business_name_kana) {
           markFieldInvalid("business_name_kana");
@@ -1035,12 +1038,14 @@ export default function PaymentsPage() {
         }
         if (!form.data.user.business_street_address_kanji) {
           markFieldInvalid("business_street_address_kanji");
+          setFieldErrorMessage("business_street_address_kanji", "Required.");
         }
         if (!form.data.user.business_street_address_kana) {
           markFieldInvalid("business_street_address_kana");
         }
         if (!form.data.user.business_city) {
           markFieldInvalid("business_city");
+          setFieldErrorMessage("business_city", "Required.");
         }
         if (!form.data.user.business_city_kana) {
           markFieldInvalid("business_city_kana");
