@@ -689,7 +689,7 @@ class UrlRedirectsController < ApplicationController
     end
 
     def common_props
-      add_to_library_option = if @url_redirect.purchase && @url_redirect.purchase.purchaser.nil?
+      add_to_library_option = if @url_redirect.purchase && @url_redirect.purchase.purchaser.nil? && !@url_redirect.purchase.claim_by_seller?(logged_in_user)
         logged_in_user.present? ? AddToLibraryOption::ADD_TO_LIBRARY_BUTTON : AddToLibraryOption::SIGNUP_FORM
       else
         AddToLibraryOption::NONE

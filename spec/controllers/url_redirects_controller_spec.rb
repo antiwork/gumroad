@@ -537,6 +537,12 @@ describe UrlRedirectsController, inertia: true do
           get :download_page, params: { id: @token }
           expect(inertia.props[:add_to_library_option]).to eq "add_to_library_button"
         end
+
+        it "does not offer add to library to the seller of a customer's purchase" do
+          sign_in @product.user
+          get :download_page, params: { id: @token }
+          expect(inertia.props[:add_to_library_option]).to eq "none"
+        end
       end
 
       describe "with purchase purchaser set to signed in user" do
@@ -3150,6 +3156,16 @@ describe UrlRedirectsController, inertia: true do
 
       expect(response).to redirect_to(url_redirect_check_purchaser_path(@token, next: "/r/#{@token}"))
       expect(flash[:alert]).to eq("This is your customer's purchase, so it can't be moved into your account.")
+    end
+
+    it "does not let the seller take a buyer's purchase that was made with the seller's email" do
+      buyer = create(:user)
+      @url_redirect.purchase.update!(email: @product.user.email, purchaser: buyer)
+
+      expect do
+        sign_in @product.user
+        post :change_purchaser, params: { id: @token, next: "/r/#{@token}", email: @product.user.email }
+      end.not_to change { @url_redirect.purchase.reload.purchaser }
     end
 
     it "lets the seller claim a signed-out checkout made with their own email" do

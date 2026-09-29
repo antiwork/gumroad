@@ -2902,9 +2902,11 @@ class Purchase < ApplicationRecord
 
   # Moving a customer's purchase into the seller's account turns it into a test purchase,
   # which only the seller can open, so the customer loses their links and library entry.
-  # A signed-out checkout under the seller's own email is theirs to claim.
+  # An unclaimed checkout under the seller's own email is theirs to claim.
   def claim_by_seller?(user)
-    user.present? && link.user == user && !is_test_purchase? && !email.to_s.casecmp?(user.email.to_s)
+    return false unless user.present? && link.user == user && !is_test_purchase?
+
+    purchaser_id.present? || !email.to_s.casecmp?(user.email.to_s)
   end
 
   # Public: Return json information about this purchase for the mobile api.
