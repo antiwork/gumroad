@@ -23,6 +23,14 @@ set -e
 cache_scope=$(printf '%s' "$PROD_BASTION|$PROD_SECURITY_GROUP|$PROD_CONTAINER_FILTER" | cksum | cut -d' ' -f1)
 : "${PROD_IP_CACHE:=$HOME/.cache/gumroad-prod-console/last_ip.$cache_scope}"
 : "${PROD_IP_CACHE_TTL:=600}"
+# Seconds the caller's outer `timeout` gives this whole run. When set, the
+# runner loop's waits are carved out of it so a stalled loop falls back to the
+# one-shot path (or names the stall) before that timeout fires. Unset keeps the
+# fixed 420s queue / 360s exec waits for callers with long outer timeouts.
+: "${PROD_CALLER_BUDGET:=${HOP_TIMEOUT:-}}"
+# Held back for the one-shot fallback: a cold Rails boot plus the query.
+: "${PROD_ONESHOT_RESERVE:=40}"
+run_started_at=$(date +%s)
 
 # Extra ssh flags. Must stay flags on the `ssh` binary — `timeout` cannot
 # execute a shell function (it would 127 every probe).
@@ -433,24 +441,23 @@ if pid_is_loop "$live_pid"; then
       echo "GUMCLAW_LOOP_FALLBACK_OK: stale loop did not exit; deferring replacement" >&2
       exit 97
     fi
+    # The old loop's watcher still holds boot.lock until it has cleaned up;
+    # booting needs that lock, so let it finish first.
+    flock -w 5 "$BASE/boot.lock" true 2>/dev/null || true
     rm -f "$BASE/loop.pid" "$BASE/starting"
     loop_alive=
   fi
 fi
 if [ -z "$loop_alive" ]; then
   # One booter at a time: concurrent cold callers would each boot a loop and
-  # all but one exit after wasting a full Rails boot. flock serializes the
-  # whole decide-and-boot step and cannot go stale (the kernel releases it
-  # when the holder exits), so the age check on `starting` — which outlives a
-  # successful boot on purpose, for the client's dead-loop grace below — runs
-  # with no takeover race. Boot rc 2 = the loop script could not be written.
+  # all but one exit after wasting a full Rails boot. The lock is held for the
+  # loop's whole life (see the watcher below) and the kernel releases it when
+  # the holder exits, so winning it means no loop is booting or serving and any
+  # `starting` stamp is left over from a boot that died. Boot rc 2 = the loop
+  # script could not be written.
   (
     flock -n 9 || exit 0
-    now=$(date +%s)
-    if [ -f "$BASE/starting" ] && [ $(( now - $(cat "$BASE/starting" 2>/dev/null || echo 0) )) -lt 180 ]; then
-      exit 0
-    fi
-    echo "$now" > "$BASE/starting"
+    date +%s > "$BASE/starting"
     # Lock holder writes loop.rb — losers must not overwrite it mid-boot with
     # their own version. A failed write (e.g. ENOSPC) would boot a truncated
     # script: release the claim and tell the client a one-shot re-run is safe.
@@ -460,7 +467,18 @@ if [ -z "$loop_alive" ]; then
     fi
     # No cd: bundle needs the app's Gemfile, i.e. the container WORKDIR the
     # one-shot path already relies on.
-    ( DATABASE_HOST="$__DB_HOST_VAR__" nohup bundle exec rails runner "$BASE/loop.rb" > "$BASE/loop.log" 2>&1 & )
+    #
+    # The watcher keeps the boot lock (fd 9) until `rails runner` exits, then
+    # clears `starting` if no loop is serving. Without that, a boot that dies
+    # leaves a fresh stamp that hides the dead loop from every caller for 180s.
+    # `trap '' HUP` is nohup for the watcher and the runner it starts.
+    (
+      trap '' HUP
+      DATABASE_HOST="$__DB_HOST_VAR__" bundle exec rails runner "$BASE/loop.rb" > "$BASE/loop.log" 2>&1
+      if ! loop_pid_alive; then
+        rm -f "$BASE/starting" "$BASE/loop.pid"
+      fi
+    ) </dev/null >/dev/null 2>&1 &
   ) 9>"$BASE/boot.lock"
   if [ "$?" -eq 2 ]; then
     echo "GUMCLAW_LOOP_FALLBACK_OK: could not write the loop script" >&2
@@ -480,37 +498,55 @@ mv "$BASE/in/$job_id.rb.tmp" "$BASE/in/$job_id.rb"
 # ~15s + earlier jobs, each capped at 300s) must not eat the EXECUTION budget,
 # or a query behind a slow neighbour gets re-run one-shot while still running.
 spool_time=$(date +%s)
-queue_deadline=$(( spool_time + 420 ))
+queue_deadline=$(( spool_time + __QUEUE_WAIT__ ))
+# Once taken the query must not be re-run, so give up just before the caller's
+# own timeout and say so, rather than dying as a bare timeout.
+caller_deadline=$(( spool_time + __CALLER_LEFT__ ))
 exec_deadline=
 while [ ! -f "$BASE/out/$job_id.rc" ]; do
   now=$(date +%s)
   if [ -z "$exec_deadline" ] && [ -f "$BASE/out/$job_id.taken" ]; then
     exec_deadline=$(( now + 360 ))
+    [ "$exec_deadline" -gt "$caller_deadline" ] && exec_deadline=$caller_deadline
   fi
   if [ -n "$exec_deadline" ]; then
     if [ "$now" -ge "$exec_deadline" ]; then
       # Taken but no result: the query may still be executing. Never re-run.
-      echo "gumclaw runner loop took the query but produced no result; NOT re-running. See $BASE/loop.log on the host" >&2
+      echo "gumclaw runner loop took the query but produced no result within $(( now - spool_time ))s; NOT re-running. See $BASE/loop.log on the host" >&2
       rm -f "$BASE/out/$job_id.taken"
       exit 96
     fi
   else
     dead_loop=
-    # The 10s grace covers the flock winner's window between taking the boot
-    # lock and writing `starting`: a missing file reads as age-infinite and
-    # would otherwise trip this check on the very first poll.
-    if ! loop_pid_alive \
-       && [ $(( now - spool_time )) -ge 10 ] \
-       && [ $(( now - $(cat "$BASE/starting" 2>/dev/null || echo 0) )) -ge 180 ]; then
-      dead_loop=1
+    # A booting or serving loop holds boot.lock (the runner inherits fd 9), so
+    # a free lock with no live pid means nothing will ever take this job,
+    # whatever `starting` says. The 180s stamp age stays as the backstop.
+    if ! loop_pid_alive; then
+      if flock -n "$BASE/boot.lock" true 2>/dev/null; then
+        dead_loop=1
+      elif [ $(( now - spool_time )) -ge 10 ] \
+         && [ $(( now - $(cat "$BASE/starting" 2>/dev/null || echo 0) )) -ge 180 ]; then
+        dead_loop=1
+      fi
     fi
     if [ "$now" -ge "$queue_deadline" ] || [ -n "$dead_loop" ]; then
-      # Job still spooled, never picked up — remove it and tell the client a
-      # one-shot re-run is safe. The sentinel goes on stderr because exit
-      # codes cannot be trusted here: the query's own rc passes through this
-      # script verbatim, so ANY reserved number could collide with it.
-      rm -f "$BASE/in/$job_id.rb"
-      echo "GUMCLAW_LOOP_FALLBACK_OK: query was never picked up" >&2
+      # Withdraw by rename, not rm: the loop claims by rename too, so exactly
+      # one side wins. If the loop got there first the query is running and
+      # must not be re-run one-shot; keep waiting for its result instead.
+      if ! mv "$BASE/in/$job_id.rb" "$BASE/in/$job_id.rb.withdrawn" 2>/dev/null; then
+        sleep 0.2
+        continue
+      fi
+      rm -f "$BASE/in/$job_id.rb.withdrawn"
+      # Sentinels go on stderr because exit codes cannot be trusted here: the
+      # query's own rc passes through this script verbatim, so ANY reserved
+      # number could collide with it.
+      if [ -n "$dead_loop" ]; then
+        echo "GUMCLAW_LOOP_FALLBACK_OK: no runner loop is alive" >&2
+        tail -n 3 "$BASE/loop.log" 2>/dev/null | sed 's/^/  loop.log: /' >&2
+      else
+        echo "GUMCLAW_LOOP_STALLED: runner loop did not take the query within $(( now - spool_time ))s" >&2
+      fi
       exit 97
     fi
   fi
@@ -526,6 +562,24 @@ REMOTE
   remote_script=${remote_script//__LOOP_B64__/$loop_b64}
   remote_script=${remote_script//__QUERY_B64__/$encoded}
   remote_script=${remote_script//__DB_HOST_VAR__/$PROD_DB_HOST_VAR}
+  # Queue wait = what is left of the caller's budget after the one-shot
+  # reserve, floored at 5s (an idle live loop takes a job in under a second)
+  # and capped at the fixed default.
+  caller_left=100000
+  if [ -n "$PROD_CALLER_BUDGET" ]; then
+    caller_left=$(( PROD_CALLER_BUDGET - ($(date +%s) - run_started_at) - 5 ))
+    [ "$caller_left" -lt 10 ] && caller_left=10 || true
+  fi
+  if [ -z "${PROD_LOOP_QUEUE_WAIT:-}" ]; then
+    PROD_LOOP_QUEUE_WAIT=420
+    if [ -n "$PROD_CALLER_BUDGET" ]; then
+      PROD_LOOP_QUEUE_WAIT=$(( caller_left + 5 - PROD_ONESHOT_RESERVE ))
+      [ "$PROD_LOOP_QUEUE_WAIT" -lt 5 ] && PROD_LOOP_QUEUE_WAIT=5 || true
+      [ "$PROD_LOOP_QUEUE_WAIT" -gt 420 ] && PROD_LOOP_QUEUE_WAIT=420 || true
+    fi
+  fi
+  remote_script=${remote_script//__QUEUE_WAIT__/$PROD_LOOP_QUEUE_WAIT}
+  remote_script=${remote_script//__CALLER_LEFT__/$caller_left}
   remote_b64=$(printf '%s\n' "$remote_script" | base64 | tr -d '\n')
 
   loop_err=$(mktemp)
@@ -537,7 +591,9 @@ REMOTE
   set -e
   cat "$loop_err" >&2
   fallback_ok=
+  stalled=
   grep -q "GUMCLAW_LOOP_FALLBACK_OK" "$loop_err" && fallback_ok=1
+  grep -q "GUMCLAW_LOOP_STALLED" "$loop_err" && fallback_ok=1 && stalled=1
   rm -f "$loop_err"
   if [ "$loop_rc" -eq 0 ]; then
     record_success
@@ -551,7 +607,11 @@ REMOTE
     record_failure
     exit "$loop_rc"
   fi
-  >&2 echo "Runner loop never took the query; falling back to one-shot rails runner."
+  if [ -n "$stalled" ]; then
+    >&2 echo "Runner loop on $instance_ip stalled (no pickup within its ${PROD_LOOP_QUEUE_WAIT}s queue wait${PROD_CALLER_BUDGET:+ of a ${PROD_CALLER_BUDGET}s caller budget}); falling back to one-shot rails runner. See /tmp/gumclaw-runner/loop.log in the container."
+  else
+    >&2 echo "Runner loop never took the query; falling back to one-shot rails runner."
+  fi
 fi
 
 query_rc=0
