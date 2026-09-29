@@ -233,8 +233,8 @@ class Onetime::ApplySourcelessCapitalDeductions
       groups[gumroad_key] += held_by_gumroad.sum(&:amount_cents)
       credit_key = group_key.call(credit.merchant_account)
       groups[credit_key] += ledger_change if deduction_date <= date
-      changes.each do |change_date, merchant_account_id, cents|
-        groups[group_key.call(MerchantAccount.find(merchant_account_id))] += cents if change_date <= date
+      changes.each do |change_date, merchant_account, cents|
+        groups[group_key.call(merchant_account)] += cents if change_date <= date
       end
       total_cents = groups.values.sum
       { date:, total_cents:, ends_negative: total_cents.negative? || groups[credit_key].negative?,
@@ -243,7 +243,7 @@ class Onetime::ApplySourcelessCapitalDeductions
 
     def dry_run_result(credit, transaction, stripe, projection)
       @projected_deltas[projection[:balance_key]] += credit.amount_cents if projection[:new_deduction]
-      @projected_changes[credit.user_id] << [projection[:date], credit.merchant_account_id, projection[:ledger_change]]
+      @projected_changes[credit.user_id] << [projection[:date], credit.merchant_account, projection[:ledger_change]]
       balance = projection[:balance]
       # A live batch opens one balance and reuses it, so later rows name the first credit's date.
       new_balance_date = balance ? nil : (@projected_dates[projection[:balance_key]] ||= projection[:date])
