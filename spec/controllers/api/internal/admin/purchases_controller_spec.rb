@@ -1689,6 +1689,158 @@ describe Api::Internal::Admin::PurchasesController do
       )
     end
 
+    describe "account IPs checkout matches" do
+      # Paid: checkout skips the IP check on free purchases and recurring charges (covered below).
+      let(:purchase) { create(:purchase, email: "buyer@example.com", ip_address: "192.0.2.65") }
+      let(:account_ip) { "203.0.113.66" }
+      let!(:buyer) { create(:user, email: "buyer@example.com", current_sign_in_ip: nil, last_sign_in_ip: nil, account_created_ip: account_ip) }
+
+      before { allow_any_instance_of(Purchase).to receive(:processor_rule_refusal).and_return(nil) }
+
+      def block_ip(value, object_type: :ip_address)
+        PlatformBlock.add!(object_type: PlatformBlock::TYPES[object_type], object_value: value, expires_in: 6.months)
+      end
+
+      it "reports a buyer held only on an account IP instead of calling them not blocked, and clears nothing" do
+        ip_block = block_ip(account_ip)
+        expect(purchase.buyer_blocked?).to be(false)
+        expect_any_instance_of(Purchase).not_to receive(:unblock_buyer!)
+
+        expect { post :unblock_buyer, params: params }.not_to change { purchase.comments.count }
+
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body).to include("success" => true, "status" => "held_by_ip_block")
+        expect(response.parsed_body["surviving_blocks"]).to eq([{ "object_type" => "ip_address", "object_value" => account_ip }])
+        expect(response.parsed_body["message"]).to include("1 IP block(s) still hold them at checkout: ip_address #{account_ip}")
+        expect(ip_block.reload.blocked_at).to be_present
+      end
+
+      it "reports an account IP stored under an unexpected object_type" do
+        block_ip(account_ip, object_type: :browser_guid)
+
+        post :unblock_buyer, params: params
+
+        expect(response.parsed_body["status"]).to eq("held_by_ip_block")
+        expect(response.parsed_body["surviving_blocks"]).to eq([{ "object_type" => "browser_guid", "object_value" => account_ip }])
+      end
+
+      it "still reports not_blocked when the account IP block has expired" do
+        block_ip(account_ip).update!(expires_at: 1.minute.ago)
+
+        post :unblock_buyer, params: params
+
+        expect(response.parsed_body["status"]).to eq("not_blocked")
+      end
+
+      it "does not report a block on the seller's own IP" do
+        purchase.seller.update!(current_sign_in_ip: "198.51.100.66")
+        block_ip("198.51.100.66")
+
+        post :unblock_buyer, params: params
+
+        expect(response.parsed_body["status"]).to eq("not_blocked")
+      end
+
+      it "reports an address the buyer's account shares with the seller" do
+        purchase.seller.update!(current_sign_in_ip: account_ip)
+        block_ip(account_ip)
+
+        post :unblock_buyer, params: params
+
+        expect(response.parsed_body["status"]).to eq("held_by_ip_block")
+      end
+
+      it "names the account IP among the survivors of a real unblock, which clears the request IP as before and leaves the account IP" do
+        purchase.update!(ip_address: "192.0.2.66")
+        purchase.block_buyer!(blocking_user_id: admin_user.id)
+        request_ip_block = PlatformBlock.active.find_by!(object_type: "ip_address", object_value: "192.0.2.66")
+        account_ip_block = block_ip(account_ip)
+        allow_any_instance_of(Purchase).to receive(:processor_rule_refusal).and_return(nil)
+
+        post :unblock_buyer, params: params
+
+        expect(response.parsed_body["status"]).to eq("partially_unblocked")
+        expect(response.parsed_body["surviving_blocks"]).to eq([{ "object_type" => "ip_address", "object_value" => account_ip }])
+        expect(response.parsed_body["message"]).to include("1 block(s) still hold this buyer: ip_address #{account_ip}")
+        expect(request_ip_block.reload.blocked_at).to be_nil
+        expect(account_ip_block.reload.blocked_at).to be_present
+        expect(purchase.reload.buyer_blocked?).to be(false)
+      end
+
+      it "reports a typed gifter's account IP without clearing it" do
+        gifter = create(:user, email: "gifter-owner@example.net", current_sign_in_ip: "203.0.113.67", last_sign_in_ip: nil, account_created_ip: nil)
+        purchase.update!(is_gift_sender_purchase: true)
+        create(:gift, gifter_purchase: purchase, gifter_email: gifter.email)
+        gifter_ip_block = block_ip(gifter.current_sign_in_ip)
+
+        post :unblock_buyer, params: params
+
+        expect(response.parsed_body["status"]).to eq("held_by_ip_block")
+        expect(response.parsed_body["surviving_blocks"]).to eq([{ "object_type" => "ip_address", "object_value" => gifter.current_sign_in_ip }])
+        expect(gifter_ip_block.reload.blocked_at).to be_present
+      end
+    end
+
+    describe "account IPs on a purchase checkout never IP-checks" do
+      let(:account_ip) { "203.0.113.68" }
+      let!(:buyer) { create(:user, email: "buyer@example.com", current_sign_in_ip: account_ip, last_sign_in_ip: nil, account_created_ip: nil) }
+      let!(:account_ip_block) do
+        PlatformBlock.add!(object_type: PlatformBlock::TYPES[:ip_address], object_value: account_ip, expires_in: 6.months)
+      end
+      let(:recurring_charge) do
+        original = create(:membership_purchase, email: "buyer@example.com")
+        create(:purchase, link: original.link, subscription: original.subscription, email: "buyer@example.com", ip_address: "192.0.2.68")
+      end
+      let(:recurring_params) { params.merge(id: recurring_charge.external_id_numeric.to_s) }
+
+      before { allow_any_instance_of(Purchase).to receive(:processor_rule_refusal).and_return(nil) }
+
+      it "calls a free purchase not blocked rather than held by an account IP" do
+        post :unblock_buyer, params: params
+
+        expect(response.parsed_body).to include("status" => "not_blocked")
+      end
+
+      it "calls a recurring charge not blocked rather than held by an account IP" do
+        expect(recurring_charge.is_recurring_subscription_charge).to be(true)
+
+        post :unblock_buyer, params: recurring_params
+
+        expect(response.parsed_body).to include("status" => "not_blocked")
+      end
+
+      it "leaves the account IP out of a free purchase's survivors, clearing its request-IP row as before" do
+        purchase.update!(ip_address: "192.0.2.69")
+        purchase.block_buyer!(blocking_user_id: admin_user.id)
+        request_ip_block = PlatformBlock.active.find_by!(object_type: "ip_address", object_value: "192.0.2.69")
+
+        post :unblock_buyer, params: params
+
+        expect(response.parsed_body["message"]).to eq("Successfully unblocked buyer for purchase number #{purchase.external_id_numeric}")
+        expect(request_ip_block.reload.blocked_at).to be_nil
+        expect(account_ip_block.reload.blocked_at).to be_present
+      end
+
+      it "leaves the account IP out of a recurring charge's survivors" do
+        recurring_charge.block_buyer!(blocking_user_id: admin_user.id)
+
+        post :unblock_buyer, params: recurring_params
+
+        expect(response.parsed_body["message"]).to eq("Successfully unblocked buyer for purchase number #{recurring_charge.external_id_numeric}")
+        expect(account_ip_block.reload.blocked_at).to be_present
+      end
+
+      it "still unblocks a free purchase carrying only the admin-blocked flag" do
+        purchase.update!(is_buyer_blocked_by_admin: true)
+
+        expect { post :unblock_buyer, params: params }
+          .to change { purchase.reload.is_buyer_blocked_by_admin? }.from(true).to(false)
+
+        expect(response.parsed_body["success"]).to be(true)
+        expect(response.parsed_body).not_to have_key("status")
+      end
+    end
+
     it "clears the stale admin flag when PlatformBlock was cleared elsewhere" do
       purchase.block_buyer!(blocking_user_id: admin_user.id)
       purchase.unblock_buyer!

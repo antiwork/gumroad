@@ -288,6 +288,49 @@ describe CustomerPresenter do
       end
     end
 
+    context "when a custom field was renamed after the buyer answered it" do
+      let(:product) { create(:product, user: seller) }
+      let(:purchase) { create(:purchase, link: product, seller:) }
+      let(:custom_field) { create(:custom_field, seller:, name: "Your birthplace (city and country)") }
+
+      before do
+        purchase.purchase_custom_fields << PurchaseCustomField.build_from_custom_field(custom_field:, value: "Berlin")
+        custom_field.update!(name: "Paid order ID (for eligibility)")
+      end
+
+      it "labels the answer with the field's current name" do
+        expect(described_class.new(purchase:).customer(pundit_user:)[:custom_fields]).to eq(
+          [{ type: "text", attribute: "Paid order ID (for eligibility)", value: "Berlin" }]
+        )
+      end
+
+      it "keeps the label the buyer answered under once the field no longer exists" do
+        custom_field.destroy!
+
+        expect(described_class.new(purchase: purchase.reload).customer(pundit_user:)[:custom_fields]).to eq(
+          [{ type: "text", attribute: "Your birthplace (city and country)", value: "Berlin" }]
+        )
+      end
+
+      it "loads the current labels in one query however many answers there are" do
+        custom_field_queries = lambda do
+          queries = []
+          callback = ->(*, payload) { queries << payload[:sql] if payload[:sql].include?("`custom_fields`") }
+          ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+            described_class.new(purchase: Purchase.find(purchase.id)).customer(pundit_user:)
+          end
+          queries
+        end
+
+        2.times do |i|
+          field = create(:custom_field, seller:, name: "Extra #{i}")
+          purchase.purchase_custom_fields << PurchaseCustomField.build_from_custom_field(custom_field: field, value: "v#{i}")
+        end
+
+        expect(custom_field_queries.call.size).to eq(1)
+      end
+    end
+
     context "purchase has a commission", :vcr do
       let(:commission) { create(:commission) }
       let(:commission_file) { fixture_file_upload("spec/support/fixtures/test.pdf") }

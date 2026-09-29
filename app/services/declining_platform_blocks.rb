@@ -13,13 +13,14 @@ class DecliningPlatformBlocks
     @failures = failures
   end
 
-  # Three queries for the whole set rather than one per purchase.
+  # A fixed number of queries for the whole set rather than one per purchase.
   def call
     guid_purchases, remaining = failures.partition { |purchase| purchase.error_code == PurchaseErrorCode::BLOCKED_BROWSER_GUID }
     ip_purchases, domain_purchases = remaining.partition { |purchase| purchase.error_code == PurchaseErrorCode::BLOCKED_IP_ADDRESS }
 
     guids = guid_purchases.filter_map { |purchase| purchase.browser_guid.presence }.uniq
-    ips = ip_purchases.filter_map { |purchase| purchase.ip_address.presence }.uniq
+    ips_by_purchase = checkout_ip_candidates(ip_purchases)
+    ips = ips_by_purchase.values.flatten.uniq
     domains_by_purchase = domain_purchases.index_with { |purchase| blocked_domain_candidates(purchase) }
 
     # Each lookup mirrors the check that declined this purchase, and the checks do NOT agree on
@@ -40,7 +41,9 @@ class DecliningPlatformBlocks
 
     blocks = {}
     guid_purchases.each { |purchase| blocks[purchase.id] = guid_blocks[purchase.browser_guid&.downcase] }
-    ip_purchases.each { |purchase| blocks[purchase.id] = ip_blocks[purchase.ip_address&.downcase] }
+    ip_purchases.each do |purchase|
+      blocks[purchase.id] = ips_by_purchase[purchase].filter_map { |ip| ip_blocks[ip.downcase] }.min_by { |block| [block.blocked_at, block.id] }
+    end
     domain_purchases.each do |purchase|
       declining_domain = domains_by_purchase[purchase].find { |domain| domain_blocks.key?(domain.downcase) }
       blocks[purchase.id] = domain_blocks[declining_domain.downcase] if declining_domain
@@ -50,6 +53,19 @@ class DecliningPlatformBlocks
 
   private
     attr_reader :failures
+
+    # The request IP plus the account IPs checkout resolved from the row's addresses — the buyer-side
+    # set Purchase::Risk#check_for_past_fraudulent_ips declines on. Reading the request IP alone drops
+    # every buyer held on an account IP. Seller IPs stay out: a seller-only match never declines.
+    def checkout_ip_candidates(purchases)
+      return {} if purchases.empty?
+
+      emails_by_purchase = Purchase.checkout_ip_lookup_emails(purchases)
+      account_ips = Purchase.checkout_account_ips_by_email(emails_by_purchase.values.flatten.uniq)
+      purchases.index_with do |purchase|
+        [purchase.ip_address.presence, *emails_by_purchase[purchase].flat_map { account_ips.fetch(_1, []) }].compact.uniq
+      end
+    end
 
     # Keyed on the downcased value, because the lookup is case-insensitive but the hash is not: the
     # column collates utf8mb4_unicode_ci, so a row stored as `Example.COM` enforces against

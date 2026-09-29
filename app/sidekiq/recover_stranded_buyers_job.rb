@@ -154,11 +154,14 @@ class RecoverStrandedBuyersJob
       errors = outcomes.select { _1[:verdict] == :error }
       blocks_cleared = outcomes.sum { _1[:cleared] }
       withheld = outcomes.sum { _1[:withheld] }
+      # A clear that left any row behind has not recovered the buyer: checkout still declines them.
+      partial, recovered = outcomes.select { _1[:verdict] == :cleared }.partition { _1[:withheld].positive? }
 
       [
         "#{live ? "Recovered" : "DRY RUN (auto_recover_stranded_buyers off) — would recover"} " \
-          "#{counts[:cleared].to_i} of #{outcomes.size} stranded buyers processed " \
-          "(#{total} candidates total): #{blocks_cleared} blocks cleared, #{withheld} withheld for a human, " \
+          "#{recovered.size} of #{outcomes.size} stranded buyers processed " \
+          "(#{total} candidates total): #{partial.size} partly cleared but still held, " \
+          "#{blocks_cleared} blocks cleared, #{withheld} withheld for a human, " \
           "#{counts[:skip].to_i} skipped, #{counts[:noop].to_i} no-ops.",
         (out_of_budget.positive? ? "#{out_of_budget} due today left unprocessed — the run budget ran out; they stay due on their bucket's next turn." : nil),
         ("" if escalations.any?),

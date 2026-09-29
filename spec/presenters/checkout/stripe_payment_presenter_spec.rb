@@ -1499,6 +1499,10 @@ describe Checkout::StripePaymentPresenter do
       Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
     end
 
+    # iDEAL/Bancontact are offered to eurozone buyers only, so examples without an explicit IP
+    # model a Dutch buyer.
+    before { stub_geoip_country(nil, "Netherlands") }
+
     it "mounts the Payment Element in EUR with the listed amount and the EUR method tabs for an EUR-priced product in test mode with the flags on" do
       seller, product = buyer_currency_seller_with_product(price_cents: 1500)
       activate_buyer_currency_flags(seller)
@@ -2287,13 +2291,28 @@ describe Checkout::StripePaymentPresenter do
       end
     end
 
-    it "drops the US-locked methods (Cash App Pay, ACH) from the forced-currency element for a US buyer" do
+    it "keeps a US buyer of a EUR product on the USD element, without the EUR-forced methods" do
       seller, product = buyer_currency_seller_with_product(price_cents: 1500)
       activate_buyer_currency_flags(seller)
       allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+      platform_merchant_account
       stub_geoip_country("104.28.0.1", "United States")
 
       props = stripe_payment_props(add_products: [checkout_product_for(product)], ip: "104.28.0.1")
+
+      expect(props[:elements_options][:currency]).to eq(described_class::CLIENT_CONFIRM_CURRENCY)
+      expect(props[:elements_options][:presentment_amount_cents]).to be_nil
+      expect(props[:elements_options][:payment_method_types]).not_to include("ideal", "bancontact")
+    ensure
+      deactivate_buyer_currency_flags(seller) if seller
+    end
+
+    it "drops the US-locked methods (Cash App Pay, ACH) from the forced-currency element" do
+      seller, product = buyer_currency_seller_with_product(price_cents: 1500)
+      activate_buyer_currency_flags(seller)
+      allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+
+      props = stripe_payment_props(add_products: [checkout_product_for(product)])
 
       expect(props[:elements_options][:currency]).to eq("eur")
       expect(props[:elements_options][:payment_method_types]).not_to include("cashapp", "us_bank_account")
@@ -2612,6 +2631,7 @@ describe Checkout::StripePaymentPresenter do
       # always seed it. Without this the cart is not method-forced at all and the example would
       # assert client-confirm for the wrong reason. Inlined rather than shared because the
       # equivalent `let` lives in the method-forced describe block above.
+      stub_geoip_country(nil, "Netherlands")
       MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id)&.tap do |account|
         account.update!(charge_processor_merchant_id: "acct_gumroad", currency: Currency::USD)
       end ||

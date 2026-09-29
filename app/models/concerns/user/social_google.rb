@@ -56,7 +56,7 @@ module User::SocialGoogle
         # A closed account keeps its google_uid after support frees its email to a
         # `@deleted.invalid` placeholder. Prefer the live account holding the Google address; never
         # create one, so a freed address stays locked.
-        if user&.deleted? && user.email.to_s.end_with?("@#{User::DELETED_ACCOUNT_EMAIL_DOMAIN}")
+        if user&.deleted? && user.email.to_s.downcase.end_with?("@#{User::DELETED_ACCOUNT_EMAIL_DOMAIN}")
           email = data["info"]["email"] || data["extra"]["raw_info"]["email"]
           live_user = EmailFormatValidator.valid?(email) ? User.alive.find_by(email:) : nil
           user = live_user if live_user

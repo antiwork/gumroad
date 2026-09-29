@@ -6,6 +6,10 @@ module Purchase::Risk
   CHARGEBACK_GRACE_PERIOD = 1.year
   CHARGEBACK_GRACE_LIMIT = 1
 
+  # The buyer-account columns #check_for_past_fraudulent_ips matches. Reporting paths read the same
+  # list (Purchase.checkout_account_ips_by_email) so they cannot miss a column checkout enforces.
+  ACCOUNT_IP_COLUMNS = [:current_sign_in_ip, :last_sign_in_ip, :account_created_ip].freeze
+
   # Shown when an identifier-level block stopped the purchase. Deliberately suggests nothing the
   # payer can change themselves: we cannot see from here which identifiers are blocked, and every
   # self-service suggestion we have tried sent people around a loop that could not end
@@ -137,7 +141,7 @@ module Purchase::Risk
       return if is_recurring_subscription_charge
       return if free_purchase?
 
-      buyer_ip_addresses = User.where(email: blockable_emails_if_fraudulent_transaction).pluck(:current_sign_in_ip, :last_sign_in_ip, :account_created_ip).flatten.compact.uniq
+      buyer_ip_addresses = User.where(email: blockable_emails_if_fraudulent_transaction).pluck(*ACCOUNT_IP_COLUMNS).flatten.compact.uniq
       seller_ip_addresses = [seller.current_sign_in_ip, seller.last_sign_in_ip, seller.account_created_ip].compact
       buyer_side_ip_addresses = ([ip_address].compact + buyer_ip_addresses).uniq
       ip_addresses_to_check = seller_ip_addresses + buyer_side_ip_addresses

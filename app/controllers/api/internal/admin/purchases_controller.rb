@@ -318,6 +318,21 @@ class Api::Internal::Admin::PurchasesController < Api::Internal::Admin::BaseCont
 
     record_admin_write(action: "purchases.unblock_buyer", target: purchase) do
       unless purchase.buyer_blocked? || purchase.is_buyer_blocked_by_admin?
+        # buyer_blocked? cannot see an account IP and the unblock would not clear one, so a buyer
+        # held only there is reported, not unblocked and not called "not blocked".
+        ip_holds = purchase.checkout_ip_holds.to_a
+        if ip_holds.any?
+          return render json: {
+            success: true,
+            status: "held_by_ip_block",
+            surviving_blocks: ip_holds.map { |block| { object_type: block.object_type, object_value: block.object_value } },
+            message: "Nothing the unblock clears is blocking the buyer for purchase number #{purchase.external_id_numeric}, " \
+                     "but #{ip_holds.size} IP block(s) still hold them at checkout: " \
+                     "#{ip_holds.map { |block| "#{block.object_type} #{block.object_value}" }.join(", ")}. " \
+                     "IP blocks are shared, so lifting one is a human decision."
+          }
+        end
+
         return render json: {
           success: true,
           status: "not_blocked",
