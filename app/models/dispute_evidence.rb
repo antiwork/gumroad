@@ -31,7 +31,6 @@ class DisputeEvidence < ApplicationRecord
 
   belongs_to :dispute
 
-  # Base length of the seller's window. Use window_duration for the real one.
   SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS = 72
   # Added when the base window touches a Saturday or Sunday (UTC), so a dispute noticed at the weekend
   # still leaves the seller working days to answer.
