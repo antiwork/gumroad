@@ -39,7 +39,7 @@ import { hasPaidVariantPricing, useProductEditContext } from "$app/components/Pr
 import { ToggleSettingRow } from "$app/components/SettingRow";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { Alert } from "$app/components/ui/Alert";
-import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 import { LinkButton } from "$app/components/ui/LinkButton";
@@ -108,8 +108,12 @@ export const ProductTab = () => {
                 type="text"
                 dir="auto"
                 value={product.name}
+                aria-describedby={`${uid}-name-description`}
                 onChange={(evt) => updateProduct({ name: evt.target.value })}
               />
+              <FieldsetDescription id={`${uid}-name-description`}>
+                Shown as the title at the top of your product page.
+              </FieldsetDescription>
             </Fieldset>
             {isCoffee ? (
               <>
