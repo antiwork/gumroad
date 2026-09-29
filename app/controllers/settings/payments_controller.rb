@@ -449,7 +449,8 @@ class Settings::PaymentsController < Settings::BaseController
 
     # The form echoes every stored field back on save, so an unchanged ZIP is skipped: a stored military ZIP
     # must not lock the seller out of unrelated settings. It is checked anyway when the save starts sending
-    # that address to Stripe for the first time (account type switch, or the stored country was not the US).
+    # that address to Stripe for the first time (account type switch, a stored country other than the US, or a
+    # bank account submitted before the seller has a Stripe account).
     # Country and business status resolve as UpdateUserComplianceInfo does, and a business also sends its
     # representative's personal address.
     def military_zip_fields(compliance_info)
@@ -458,10 +459,13 @@ class Settings::PaymentsController < Settings::BaseController
       return [] if submitted.blank?
 
       business = submitted[:is_business].nil? ? compliance_info.is_business? : ActiveModel::Type::Boolean.new.cast(submitted[:is_business])
+      first_stripe_setup = params.dig(:bank_account, :account_number).present? && current_seller.stripe_connect_account.blank?
       account_type_changed = business != compliance_info.is_business?
+      # A business record without its own country is validated under the personal country (legal_entity_country).
+      stored_business_country_code = compliance_info.business_country_code.presence || compliance_info.country_code
       fields = if business
         [
-          [:business_zip_code, submitted[:business_country].presence || compliance_info.business_country_code, compliance_info.business_country_code],
+          [:business_zip_code, submitted[:business_country].presence || stored_business_country_code, stored_business_country_code],
           [:zip_code, submitted[:country].presence || compliance_info.country_code, compliance_info.country_code],
         ]
       else
@@ -471,7 +475,7 @@ class Settings::PaymentsController < Settings::BaseController
       fields.filter_map do |field, country_code, stored_country_code|
         next unless country_code == us_code && submitted[field].present?
 
-        newly_sent = account_type_changed || stored_country_code != us_code
+        newly_sent = first_stripe_setup || account_type_changed || stored_country_code != us_code
         changed = submitted[field].to_s.strip != compliance_info.public_send(field).to_s.strip
         field if (newly_sent || changed) && MILITARY_STATES.include?(UsZipCodes.identify_state_code(submitted[field]))
       end

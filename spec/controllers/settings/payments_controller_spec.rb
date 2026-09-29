@@ -764,6 +764,34 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
           expect(session[:inertia_errors][:field]).to eq("zip_code")
         end
 
+        it "rechecks an unchanged military zip code when a bank account is added before the seller has a Stripe account" do
+          user.alive_user_compliance_info.dup_and_save! { |info| info.zip_code = "09330" }
+
+          expect(StripeMerchantAccountManager).not_to receive(:create_account)
+          expect do
+            put :update, params: {
+              user: params.except(:is_business).merge(zip_code: "09330"),
+              bank_account: { type: AchAccount.name, account_number: "000123456789", account_number_confirmation: "000123456789", routing_number: "110000000", account_holder_full_name: "gumbot" },
+            }
+          end.not_to change { user.reload.alive_bank_accounts.count }
+
+          expect(session[:inertia_errors][:base].first).to include("military (APO/FPO/DPO) ZIP codes")
+          expect(session[:inertia_errors][:field]).to eq("zip_code")
+        end
+
+        it "does not block unrelated saves for a US business with a stored military business zip and no business country" do
+          user.alive_user_compliance_info.dup_and_save! do |info|
+            info.is_business = true
+            info.business_country = nil
+            info.business_zip_code = "09330"
+          end
+
+          put :update, params: { user: params.merge(is_business: true, business_country: "US", business_zip_code: "09330", zip_code: "10001"), payout_threshold_cents: 10_000 }
+
+          expect(session[:inertia_errors]&.dig(:base)&.first.to_s).not_to include("military")
+          expect(user.reload.payout_threshold_cents.to_i).to eq(10_000)
+        end
+
         it "still accepts a physical US zip code" do
           put :update, params: { user: params.except(:is_business).merge(zip_code: "10001") }
 
