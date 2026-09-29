@@ -243,6 +243,33 @@ describe Onetime::ApplySourcelessCapitalDeductions do
     end
   end
 
+  it "judges the ledger up to each payout date, so a newer balance does not cover the deduction" do
+    balance.update_columns(date: Date.current - 3, amount_cents: 100, holding_amount_cents: 100)
+    Balance.create!(user: seller, merchant_account:, date: Date.current, currency: Currency::USD, holding_currency: Currency::USD,
+                    amount_cents: 900, holding_amount_cents: 900)
+
+    expect(process).to include(status: :dry_run, ledger_after_cents: 648, worst_ledger_cents: -252, negative_from: Date.current - 3,
+                               ends_negative: true, payout_held: true)
+    expect(process(skip_negative: true)).to include(status: :skipped, ledger_after_cents: 648, worst_ledger_cents: -252, negative_from: Date.current - 3)
+    expect(process(dry_run: false, skip_negative: true)).to include(status: :skipped)
+    expect(credit.reload.balance_id).to be_nil
+  end
+
+  it "judges only the given payout date" do
+    balance.update_columns(date: Date.current - 3, amount_cents: 100, holding_amount_cents: 100)
+    Balance.create!(user: seller, merchant_account:, date: Date.current, currency: Currency::USD, holding_currency: Currency::USD,
+                    amount_cents: 900, holding_amount_cents: 900)
+
+    expect(process(payout_date: Date.current)).to include(status: :dry_run, ledger_after_cents: 648, worst_ledger_cents: 648, negative_from: nil,
+                                                          ends_negative: false, payout_held: false)
+    expect(process(payout_date: Date.current - 1)).to include(status: :dry_run, ledger_after_cents: -252, negative_from: Date.current - 1,
+                                                              ends_negative: true, payout_held: true)
+  end
+
+  it "does not flag a deduction that every payout date covers" do
+    expect(process).to include(ends_negative: false, payout_held: false, worst_ledger_cents: 5001, negative_from: nil)
+  end
+
   context "with several credits of one seller" do
     let!(:second) { create_credit(amount_cents: -100, stripe_id: "cptxn_second") }
 
@@ -357,17 +384,29 @@ describe Onetime::ApplySourcelessCapitalDeductions do
     end
 
     it "holds the seller lock while it applies a credit under skip_negative, and only then" do
-      locked = []
+      lock_held = false
       allow_any_instance_of(User).to receive(:with_lock).and_wrap_original do |original, *args, &block|
-        locked << true
-        original.call(*args, &block)
+        original.call(*args) do
+          lock_held = true
+          block.call
+        end
+      ensure
+        lock_held = false
+      end
+      held_while_applying = []
+      allow_any_instance_of(Credit).to receive(:apply_financing_paydown!).and_wrap_original do |original, *args, **kwargs|
+        held_while_applying << lock_held
+        original.call(*args, **kwargs)
       end
 
       statuses(dry_run: false)
-      expect(locked).to be_empty
+      expect(held_while_applying).to eq([false, false])
+
+      held_while_applying.clear
       third = create_credit(amount_cents: -10, stripe_id: "cptxn_third")
       expect(described_class.new(credit_ids: [third.id], dry_run: false, skip_negative: true).process.sole).to include(status: :applied)
-      expect(locked.size).to eq(1)
+      expect(held_while_applying).to eq([true])
+      expect(lock_held).to be(false)
     end
 
     context "when a deduction would end the unpaid ledger below zero" do
