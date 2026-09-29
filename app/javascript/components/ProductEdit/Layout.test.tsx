@@ -140,7 +140,7 @@ const product: Product = {
   community_chat_enabled: false,
 };
 
-const renderLayout = (currentSeller: CurrentSeller) =>
+const renderLayout = (currentSeller: CurrentSeller, { saveBlocked = false }: { saveBlocked?: boolean } = {}) =>
   render(
     <DomainSettingsProvider
       value={{
@@ -183,6 +183,7 @@ const renderLayout = (currentSeller: CurrentSeller) =>
             s3Url: "",
             availableCountries: [],
             saving: false,
+            saveBlocked,
             save: () => Promise.resolve(true),
             variantIdMappings: {},
             richContentIdMappings: {},
@@ -266,6 +267,17 @@ describe("ProductEdit Layout publish and unpublish", () => {
     await waitFor(() => expect(reportErrorSpy).toHaveBeenCalledTimes(1));
     expect(showAlert).toHaveBeenCalledWith("Something went wrong. Please try again.", "error");
     expect(screen.getByRole<HTMLButtonElement>("button", { name: "Unpublish" }).disabled).toBe(false);
+  });
+});
+
+describe("ProductEdit Layout when saving is blocked until a reload", () => {
+  it("disables Save without claiming a save is in progress", () => {
+    product.files = [];
+    renderLayout(minor, { saveBlocked: true });
+
+    const button = screen.getByRole<HTMLButtonElement>("button", { name: "Save and continue" });
+    expect(button.disabled).toBe(true);
+    expect(screen.queryByText("Saving changes...")).toBeNull();
   });
 });
 

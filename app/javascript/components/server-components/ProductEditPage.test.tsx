@@ -1328,7 +1328,8 @@ describe("a save that fails with an unexpected error", () => {
     expect(await save()).toBe(false);
 
     // The server kept the save but the editor holds stale ids, so another save must wait for a reload.
-    expect(contextCapture.current?.saving).toBe(true);
+    expect(contextCapture.current?.saving).toBe(false);
+    expect(contextCapture.current?.saveBlocked).toBe(true);
     expect(
       await screen.findByText("Your changes were saved, but this page could not refresh to match them."),
     ).toBeTruthy();
@@ -1341,13 +1342,24 @@ describe("a save that fails with an unexpected error", () => {
 
     expect(await save()).toBe(false);
 
-    expect(contextCapture.current?.saving).toBe(true);
+    expect(contextCapture.current?.saving).toBe(false);
+    expect(contextCapture.current?.saveBlocked).toBe(true);
     expect(reportErrorSpy).toHaveBeenCalledWith(cause);
     expect(
       await screen.findByText(
         "We could not confirm that your changes saved. Reload the page to check before saving again.",
       ),
     ).toBeTruthy();
+  });
+
+  it("refuses a later save from any caller while a reload is required", async () => {
+    await renderEditor();
+    saveProductMock.mockRejectedValueOnce(new UnconfirmedSaveError(new SyntaxError("Unexpected end of JSON input")));
+    await save();
+    saveProductMock.mockClear();
+
+    expect(await save()).toBe(false);
+    expect(saveProductMock).not.toHaveBeenCalled();
   });
 
   it("keeps the reload explanation on the page after the seller dismisses the modal", async () => {
@@ -1379,7 +1391,8 @@ describe("a save that fails with an unexpected error", () => {
     });
 
     expect(reload).toHaveBeenCalledTimes(1);
-    expect(contextCapture.current?.saving).toBe(true);
+    expect(contextCapture.current?.saving).toBe(false);
+    expect(contextCapture.current?.saveBlocked).toBe(true);
   });
 });
 

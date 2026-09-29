@@ -150,6 +150,7 @@ const createContextValue = (props: Props) => ({
   s3Url: props.s3_url,
   availableCountries: props.available_countries,
   saving: false,
+  saveBlocked: false,
   save: () => Promise.resolve(false),
   variantIdMappings: {},
   richContentIdMappings: {},
@@ -616,8 +617,6 @@ const ProductEditPage = (props: Props) => {
     hiddenPageIds: string[];
   }): Promise<boolean> => {
     let saved = false;
-    // Keeps Save disabled once the page must be reloaded before it can save again.
-    let reloading = false;
     let productToSave = product;
     if (conflictResolution?.choice === "keep_shared") {
       productToSave = {
@@ -686,7 +685,6 @@ const ProductEditPage = (props: Props) => {
       // state can't render the outcome. Reload to pick up the kept content.
       if (conflictResolution?.choice === "keep_version") {
         // Leave Save disabled until the page is gone, so a second click cannot save again.
-        reloading = true;
         setReloadRequired("Your changes were saved. Reloading the page to show them.");
         setReloadModalOpen(true);
         window.location.reload();
@@ -802,7 +800,6 @@ const ProductEditPage = (props: Props) => {
         setInstallmentPlanClearConflict({ message: e.message });
       } else if (e instanceof UnconfirmedSaveError) {
         // Keep Save disabled: a retry could resend stale ids for records the server already kept.
-        reloading = true;
         if (typeof reportError === "function") reportError(e.originalError);
         setReloadRequired(e.message);
         setReloadModalOpen(true);
@@ -815,18 +812,19 @@ const ProductEditPage = (props: Props) => {
         if (saved) {
           // The server kept the save but this editor could not adopt the result (canonical ids,
           // new baseline). Another save would resend stale ids, so Save stays disabled until reload.
-          reloading = true;
           saved = false;
           setReloadRequired("Your changes were saved, but this page could not refresh to match them.");
           setReloadModalOpen(true);
         } else showAlert("Something went wrong while saving. Please try again.", "error");
       }
     } finally {
-      if (!reloading) setSaving(false);
+      setSaving(false);
     }
     return saved;
   };
   const runSave = (): Promise<boolean> => {
+    // Callers other than the buttons, such as a file download, also reach this: refuse the same way.
+    if (reloadRequired !== null) return Promise.resolve(false);
     const { confirmed, unexpected } = findPendingDeletions(product, lastSavedProductRef.current);
     // Content missing without recorded intent means the session lost state:
     // fail closed and ask for a reload instead of offering it as a deletion.
@@ -879,6 +877,7 @@ const ProductEditPage = (props: Props) => {
       updateProduct,
       save,
       saving,
+      saveBlocked: reloadRequired !== null,
       variantIdMappings,
       richContentIdMappings,
       fileIdMappings,

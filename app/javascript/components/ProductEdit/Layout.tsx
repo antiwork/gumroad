@@ -139,7 +139,8 @@ export const Layout = ({
   // preview body), shown in the Receipt tab's email chrome. Null while the preview is loading.
   receiptSubject?: string | null;
 }) => {
-  const { product, updateProduct, uniquePermalink, saving, save, receiptEmailFrom } = useProductEditContext();
+  const { product, updateProduct, uniquePermalink, saving, saveBlocked, save, receiptEmailFrom } =
+    useProductEditContext();
   const currentSeller = useCurrentSeller();
   const rootPath = Routes.edit_link_path(uniquePermalink);
 
@@ -209,14 +210,16 @@ export const Layout = ({
     product.files.some((file) => isUploadingFile(file) || file.subtitle_files.some(isUploadingFile));
   const imageSettings = useImageUploadSettings();
   const isUploadingFilesOrImages = isLoading || isUploadingFiles || !!imageSettings?.isUploading;
-  const isBusy = isUploadingFilesOrImages || saving || isPublishing;
+  const isBusy = isUploadingFilesOrImages || saving || saveBlocked || isPublishing;
   const saveButtonTooltip = isUploadingFiles
     ? "Files are still uploading..."
     : isUploadingFilesOrImages
       ? "Images are still uploading..."
-      : isBusy
-        ? "Please wait..."
-        : undefined;
+      : saveBlocked
+        ? "Reload the page to save again."
+        : isBusy
+          ? "Please wait..."
+          : undefined;
 
   React.useEffect(() => {
     if (!isUploadingFilesOrImages) return;
