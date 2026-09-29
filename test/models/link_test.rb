@@ -582,6 +582,32 @@ class LinkTest < ActiveSupport::TestCase
     assert_equal [1, 2, 3, product.id].sort, section.reload.shown_products.sort
   end
 
+  test "product creation succeeds when the seller's profile row still has NULL theme columns" do
+    seller = create_user
+    create_seller_profile_products_section(seller:)
+    seller.create_seller_profile!
+    # A profile row written before the theme columns existed has NULL there, which the model's
+    # after_initialize defaults turn into unpersisted changes on every load.
+    SellerProfile.where(seller_id: seller.id).update_all(border_radius: nil, button_hover: nil)
+    seller.reload
+
+    product = create_product(user: seller)
+
+    assert product.persisted?
+  end
+
+  test "showing a product in sections succeeds when the profile row still has NULL theme columns" do
+    seller = create_user
+    section = create_seller_profile_products_section(seller:)
+    seller.create_seller_profile!
+    product = create_product(user: seller)
+    SellerProfile.where(seller_id: seller.id).update_all(border_radius: nil, button_hover: nil)
+
+    product.show_in_sections!([section.external_id])
+
+    assert_includes section.reload.shown_products, product.id
+  end
+
   test "adding to profile sections honors add_new_products on per-product sections" do
     seller = create_user
     other_product = create_product(user: seller)
