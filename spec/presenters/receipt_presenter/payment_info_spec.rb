@@ -658,6 +658,19 @@ describe ReceiptPresenter::PaymentInfo do
             ]
           )
         end
+
+        context "when the listing is in EUR" do
+          before do
+            purchase.update_columns(displayed_price_currency_type: Currency::EUR, displayed_price_cents: 645, price_cents: 731, rate_converted_to_usd: "0.882")
+            purchase.reload
+          end
+
+          it "states the balance in EUR" do
+            expect(payment_info.upcoming_payment_attributes).to include(
+              { label: "The Works of Edgar Gumstein", value: "€6.45 on completion" }
+            )
+          end
+        end
       end
     end
 

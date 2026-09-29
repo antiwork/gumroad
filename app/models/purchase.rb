@@ -1856,7 +1856,7 @@ class Purchase < ApplicationRecord
   end
 
   def formatted_total_display_price_per_unit
-    format_price_in_cents(displayed_price_per_unit_cents + (commission&.completion_price_cents || 0) - (tip&.value_cents || 0))
+    format_price_in_cents(displayed_price_per_unit_cents + (commission&.completion_display_price_cents || 0) - (tip&.value_cents || 0))
   end
 
   def total_in_purchase_currency
