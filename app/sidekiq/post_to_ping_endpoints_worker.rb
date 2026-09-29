@@ -12,10 +12,12 @@ class PostToPingEndpointsWorker
         return if resource_name == ResourceSubscription::SUBSCRIPTION_RESTARTED_RESOURCE_NAME && subscription.termination_date.present?
         user = subscription.link.user
         ping_params = subscription.payload_for_ping_notification(resource_name:, additional_params:)
+        ping_context = { resource_name:, subscription_id: subscription.id }
       else
         purchase = Purchase.find(purchase_id)
         user = purchase.seller
         ping_params = purchase.payload_for_ping_notification(url_parameters: url_parameters.presence || purchase.url_parameters, resource_name:)
+        ping_context = { resource_name:, purchase_id: purchase.id, subscription_id: purchase.subscription_id }
       end
 
       targets = user.ping_notification_targets(resource_name)
@@ -29,8 +31,14 @@ class PostToPingEndpointsWorker
       # No URL vetting here: SsrfFilter.post in the individual worker validates the resolved IPs at
       # connect time (and per redirect hop), and a pre-check here meant a transient empty DNS lookup
       # silently dropped the ping with no retry (gp#2155).
+      #
+      # The fifth argument is gated so a consumer still on the four-argument `perform` never
+      # receives it mid-rollout; activate :record_ping_deliveries once the deploy has finished.
+      record_context = Feature.active?(:record_ping_deliveries)
       post_urls.each do |post_url, content_type|
-        PostToIndividualPingEndpointWorker.perform_async(post_url, ping_params.deep_stringify_keys, content_type, user.id)
+        args = [post_url, ping_params.deep_stringify_keys, content_type, user.id]
+        args << ping_context.stringify_keys if record_context
+        PostToIndividualPingEndpointWorker.perform_async(*args)
       end
     end
   end
