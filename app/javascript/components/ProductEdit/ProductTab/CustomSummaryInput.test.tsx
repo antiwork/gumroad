@@ -26,7 +26,10 @@ describe("CustomButtonTextOptionInput", () => {
     );
 
     expect(screen.getByLabelText("Call to action")).toBe(
-      screen.getByRole("combobox", { description: "The text on the buy button of your product page." }),
+      screen.getByRole("combobox", {
+        description:
+          "The text on the buy button of your product page. The button shows other text at times, such as “Choose an option”.",
+      }),
     );
   });
 });

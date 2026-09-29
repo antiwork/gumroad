@@ -31,7 +31,8 @@ export const CustomButtonTextOptionInput = <T extends CustomButtonTextOption>({
         options={options.map((option) => ({ id: option, label: getCtaName(option) }))}
       />
       <FieldsetDescription id={`${uid}-description`}>
-        The text on the buy button of your product page.
+        The text on the buy button of your product page. The button shows other text at times, such as “Choose an
+        option”.
       </FieldsetDescription>
     </Fieldset>
   );

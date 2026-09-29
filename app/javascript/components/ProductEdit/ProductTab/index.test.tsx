@@ -225,7 +225,8 @@ describe("ProductTab naming fields", () => {
     expect(
       screen.getByRole("combobox", {
         name: "Call to action",
-        description: "The text on the buy button of your product page.",
+        description:
+          "The text on the buy button of your product page. The button shows other text at times, such as “Choose an option”.",
       }),
     ).toBeTruthy();
     expect(
