@@ -12,9 +12,14 @@ class Purchase::CompleteGiftLegsService < Purchase::BaseService
     giftee_purchase = gift.giftee_purchase
     giftee_purchase.mark_gift_receiver_purchase_successful! if giftee_purchase.in_progress?
     if purchase.link.is_recurring_billing || purchase.is_installment_payment
+      had_subscription = purchase.subscription.present?
       create_subscription(giftee_purchase)
       # create_subscription skips a gifter that already has one, which may not include the giftee yet.
       purchase.subscription.purchases << giftee_purchase if giftee_purchase.subscription_id.nil?
+      # The gifter reached successful without a subscription, so its transition never scheduled renewal jobs.
+      if !had_subscription && purchase.link.is_recurring_billing && !purchase.not_charged_and_not_free_trial?
+        after_commit { purchase.send(:schedule_subscription_jobs) }
+      end
     end
     gift.mark_successful! if gift.in_progress?
   end

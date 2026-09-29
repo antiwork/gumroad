@@ -556,7 +556,10 @@ describe Purchase::SyncStatusWithChargeProcessorService, :vcr do
       let!(:gifter_purchase) { create(:purchase, link: product, price: product.default_price, gift_given: gift, is_gift_sender_purchase: true, purchase_state: "successful") }
       let!(:giftee_purchase) { create(:free_purchase, link: product, purchaser: giftee, gift_received: gift, is_gift_receiver_purchase: true, purchase_state: "in_progress") }
 
-      before { SendPurchaseReceiptJob.clear }
+      before do
+        SendPurchaseReceiptJob.clear
+        RecurringChargeWorker.clear
+      end
 
       it "rebuilds a missing recipient subscription and completes the gift once" do
         expect do
@@ -570,11 +573,15 @@ describe Purchase::SyncStatusWithChargeProcessorService, :vcr do
         expect(subscription.credit_card).to be_nil
         expect(subscription.purchases).to contain_exactly(gifter_purchase, giftee_purchase)
         expect(SendPurchaseReceiptJob.jobs.size).to eq(1)
+        expect(RecurringChargeWorker.jobs.size).to eq(1)
+        expect(RecurringChargeWorker.jobs.first["args"]).to eq([subscription.id])
+        expect(RecurringChargeWorker.jobs.first["at"]).to be_within(1).of((gifter_purchase.reload.succeeded_at + subscription.period).to_f)
 
         expect do
           expect(Purchase::SyncStatusWithChargeProcessorService.new(giftee_purchase, mark_as_failed: true).perform).to be(false)
         end.not_to change { Subscription.count }
         expect(SendPurchaseReceiptJob.jobs.size).to eq(1)
+        expect(RecurringChargeWorker.jobs.size).to eq(1)
       end
 
       it "reuses a recipient subscription that already exists" do
@@ -590,9 +597,11 @@ describe Purchase::SyncStatusWithChargeProcessorService, :vcr do
         expect(subscription.reload.purchases).to contain_exactly(gifter_purchase, giftee_purchase)
         expect(gift.reload).to be_successful
         expect(SendPurchaseReceiptJob.jobs.size).to eq(1)
+        expect(RecurringChargeWorker.jobs.size).to eq(0)
 
         expect(Purchase::SyncStatusWithChargeProcessorService.new(giftee_purchase, mark_as_failed: true).perform).to be(false)
         expect(SendPurchaseReceiptJob.jobs.size).to eq(1)
+        expect(RecurringChargeWorker.jobs.size).to eq(0)
       end
 
       it "attaches the giftee purchase to the recipient subscription already linked to the gifter" do
@@ -615,6 +624,7 @@ describe Purchase::SyncStatusWithChargeProcessorService, :vcr do
         end.not_to change { Subscription.count }
         expect(subscription.reload.purchases).to contain_exactly(gifter_purchase, giftee_purchase)
         expect(SendPurchaseReceiptJob.jobs.size).to eq(1)
+        expect(RecurringChargeWorker.jobs.size).to eq(0)
       end
 
       it "rolls back the giftee purchase and recipient subscription when the gift cannot be finalized, then completes them once on retry" do
@@ -637,6 +647,7 @@ describe Purchase::SyncStatusWithChargeProcessorService, :vcr do
         expect(gifter_purchase.subscription).to be_nil
         expect(gift.reload).to be_in_progress
         expect(SendPurchaseReceiptJob.jobs.size).to eq(0)
+        expect(RecurringChargeWorker.jobs.size).to eq(0)
 
         gift.update_column(:giftee_email, giftee_email)
 
@@ -651,6 +662,8 @@ describe Purchase::SyncStatusWithChargeProcessorService, :vcr do
         expect(UrlRedirect.where(purchase: giftee_purchase).count).to eq(1)
         expect(SendPurchaseReceiptJob.jobs.size).to eq(1)
         expect(SendPurchaseReceiptJob).to have_enqueued_sidekiq_job(giftee_purchase.id)
+        expect(RecurringChargeWorker.jobs.size).to eq(1)
+        expect(RecurringChargeWorker.jobs.first["args"]).to eq([giftee_purchase.subscription.id])
       end
     end
   end
