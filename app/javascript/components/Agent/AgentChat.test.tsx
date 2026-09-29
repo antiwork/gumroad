@@ -1396,6 +1396,31 @@ describe("AgentChat new chat control", () => {
     expect(screen.getByText("Applying your page edit.")).toBeTruthy();
   });
 
+  it("can leave an executing card that has no proposal id to reconcile", async () => {
+    fetchLatestAgentConversation.mockResolvedValue({
+      id: "conv1",
+      title: null,
+      messages: [
+        {
+          role: "assistant" as const,
+          content: "Applying your page edit.",
+          proposed_action: {
+            type: "api_write" as const,
+            params: { endpoint: "edit_user_custom_html", path_params: {}, params: { find: "a", replace: "b" } },
+            summary: "Edit the custom page.",
+            title: "Edit your page",
+          },
+          action_status: "executing" as const,
+        },
+      ],
+    });
+
+    render(<AgentChat greeting="Hi" suggestions={[]} />);
+    await waitFor(() => expect(screen.getByText("Applying your page edit.")).toBeTruthy());
+
+    expect(screen.getByLabelText("New chat").hasAttribute("disabled")).toBe(false);
+  });
+
   it("cannot switch conversations under an in-flight turn", async () => {
     fetchLatestAgentConversation.mockResolvedValue(resumedConversation);
     // A turn that never settles: its callbacks still own the chat and would adopt conv1 back onto it.

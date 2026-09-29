@@ -952,8 +952,11 @@ export const AgentChat = ({ greeting, suggestions, locked = null }: Props) => {
 
   // Refused while anything can still adopt the old id or land on the old transcript: a turn in
   // flight (onDone / interrupted-turn recovery), a pending confirmation, or a card still applying
-  // (after confirmAction has cleared its pending index).
-  const hasExecutingAction = messages.some((message) => message.actionStatus === "executing");
+  // (after confirmAction has cleared its pending index). An executing card without a proposal id
+  // has no status endpoint to settle it, so it must not hold the button forever.
+  const hasExecutingAction = messages.some(
+    (message) => message.actionStatus === "executing" && Boolean(message.proposalMessageId),
+  );
   const startNewChat = () => {
     if (isSending || pendingActionIndex !== null || hasExecutingAction || locked) return;
     // A settled turn can still be draining suggestion chips — drop its late frames on the discarded
