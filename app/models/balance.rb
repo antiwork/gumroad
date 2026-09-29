@@ -48,6 +48,9 @@ class Balance < ApplicationRecord
   # nearer interbank would be a pricing decision, not a correctness fix (gumroad-private#1318).
   validates :merchant_account, :currency, :holding_currency, presence: true
   validate :validate_amounts_are_only_changed_when_unpaid, on: :update
+  # Only when the currency or amount fields change, so a state transition on a row written
+  # before this check (the repair backlog) is not refused.
+  validate :validate_gumroad_held_amounts_are_usd, if: :currency_or_amounts_changing?
 
   # Balance state machine
   #
@@ -95,6 +98,20 @@ class Balance < ApplicationRecord
       ].each do |field|
         errors.add(field, "may not be changed in #{state} state.") if field.to_s.in?(changed)
       end
+    end
+
+    def currency_or_amounts_changing?
+      new_record? || will_save_change_to_currency? || will_save_change_to_holding_currency? ||
+        will_save_change_to_amount_cents? || will_save_change_to_holding_amount_cents?
+    end
+
+    def validate_gumroad_held_amounts_are_usd
+      return unless merchant_account&.holder_of_funds == HolderOfFunds::GUMROAD
+
+      errors.add(:holding_currency, "must be usd for Gumroad-held funds") unless holding_currency == Currency::USD
+      return unless currency == Currency::USD && holding_currency == Currency::USD
+
+      errors.add(:holding_amount_cents, "must equal amount_cents for Gumroad-held funds") unless holding_amount_cents == amount_cents
     end
 
     def log_transition

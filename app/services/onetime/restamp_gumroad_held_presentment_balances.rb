@@ -1,25 +1,36 @@
 # frozen_string_literal: true
 
-# Relabels the Gumroad-held seller balances that buyer-currency presentment charges stamped with
-# the buyer's currency instead of USD (gumroad-private#1471). Gumroad-held holding fields are the
-# canonical USD record of what Gumroad owes the seller, and both payout processors reject non-USD
-# Gumroad-held balances — Stripe fails the seller's whole payment with `currency_mismatch`, PayPal
-# silently drops the row. The forward fix is #6505; this repairs the rows written before it.
+# Relabels unpaid Gumroad-held balances whose holding currency is not USD. Gumroad-held holding
+# fields are the canonical USD record of what Gumroad owes the user, and both payout processors
+# reject non-USD Gumroad-held balances — Stripe fails the user's whole payment with
+# `currency_mismatch`, PayPal silently drops the row.
 #
-# Only the label and gross were wrong: `holding_amount_net_cents` (the only field that accumulates
-# into the balance) was already the canonical USD figure, and what the fixed code would have
-# written is exactly the row's own `issued_amount_*` fields — so the repair copies those across
-# and moves no money.
+# Two write paths produced these rows, and each transaction must be positively traced to one of
+# them before it is touched:
 #
-# Dry run by default. Explicit ids only — the worklist is enumerated and reviewed on the tracking
-# issue, not discovered here:
+#   :presentment — seller rows from buyer-currency presentment charges (fixed by #6505). Only the
+#     holding label and gross were wrong; the row's own issued_amount_* fields are the canonical
+#     USD figures, so those are copied across.
 #
-#   Onetime::RestampGumroadHeldPresentmentBalances.new(balance_ids: [...], fix_deployed_at: ...).process
-#   Onetime::RestampGumroadHeldPresentmentBalances.new(balance_ids: [...], fix_deployed_at: ..., dry_run: false).process
+#   :affiliate_credit — affiliate rows on direct charges into a seller's non-USD connected account.
+#     The affiliate helpers took their currency from the charge's application-fee settlement
+#     currency, so BOTH the issued and holding sides were labelled e.g. EUR. The cents were never
+#     converted: they are the purchase's AffiliateCredit#amount_cents, which is computed in USD.
+#     The repair writes that recorded USD figure to both sides and asserts it equals the cents
+#     already on the row. No exchange rate is used or inferred.
 #
-# Run only after #6505 deploys, and re-freeze the worklist at run time: until the fix ships,
-# refund and chargeback legs on presentment purchases keep minting fresh mislabelled rows — the
-# flag ramp-down alone did not stop this. The regression window below enforces the ordering.
+# Any other shape is refused. Relabelling must not move a cent: the balance's stored totals must
+# equal the re-derived USD total, or the balance is refused.
+#
+# Dry run by default. Explicit ids only; `candidate_balance_ids` lists what to review:
+#
+#   ids = Onetime::RestampGumroadHeldPresentmentBalances.candidate_balance_ids
+#   Onetime::RestampGumroadHeldPresentmentBalances.new(balance_ids: ids, fix_deployed_at: ..., affiliate_fix_deployed_at: ...).process
+#   Onetime::RestampGumroadHeldPresentmentBalances.new(balance_ids: ids, fix_deployed_at: ..., affiliate_fix_deployed_at: ..., dry_run: false).process
+#
+# Both cutoffs are production deploy times (from the release, not the merge) of the fix for that
+# path. A transaction written after its path's fix deployed means the cutoff or the fix is wrong,
+# and the balance is refused.
 class Onetime::RestampGumroadHeldPresentmentBalances
   # A day before the earliest mislabelled row (2026-07-23 21:07 UTC, when the ramp hit 100%).
   REGRESSION_WINDOW_START = Time.utc(2026, 7, 22, 0, 0)
@@ -31,14 +42,22 @@ class Onetime::RestampGumroadHeldPresentmentBalances
     REGRESSION_WINDOW_START..fix_deployed_at
   end
 
+  # Every unpaid Gumroad-held balance labelled with a non-USD holding currency.
+  def self.candidate_balance_ids
+    gumroad_held_ids = MerchantAccount.where(user_id: nil).select { |account| account.holder_of_funds == HolderOfFunds::GUMROAD }.map(&:id)
+    Balance.unpaid.where(merchant_account_id: gumroad_held_ids).where.not(holding_currency: Currency::USD).order(:id).pluck(:id)
+  end
+
   attr_reader :stats, :corrected, :skipped
 
-  def initialize(balance_ids:, fix_deployed_at:, dry_run: true, logger: Rails.logger)
+  def initialize(balance_ids:, fix_deployed_at:, affiliate_fix_deployed_at:, dry_run: true, logger: Rails.logger)
     raise ArgumentError, "fix_deployed_at is required: pass #6505's production deployment time" if fix_deployed_at.blank?
     raise ArgumentError, "fix_deployed_at #{fix_deployed_at} precedes the regression window start" if fix_deployed_at <= REGRESSION_WINDOW_START
+    raise ArgumentError, "affiliate_fix_deployed_at is required: pass the affiliate currency fix's production deployment time" if affiliate_fix_deployed_at.blank?
 
     @balance_ids = balance_ids
     @regression_window = self.class.regression_window(fix_deployed_at)
+    @affiliate_fix_deployed_at = affiliate_fix_deployed_at
     @dry_run = dry_run
     @logger = logger
     @stats = Hash.new(0)
@@ -48,7 +67,8 @@ class Onetime::RestampGumroadHeldPresentmentBalances
 
   def process
     log "Starting #{self.class.name} (#{@dry_run ? 'DRY RUN' : 'LIVE'}) for #{@balance_ids.size} balances"
-    log "Regression window: #{@regression_window.first} .. #{@regression_window.last} (#6505 deployment)"
+    log "Presentment window: #{@regression_window.first} .. #{@regression_window.last} (#6505 deployment)"
+    log "Affiliate cutoff: #{@affiliate_fix_deployed_at}"
 
     @balance_ids.each do |balance_id|
       ReplicaLagWatcher.watch unless @dry_run
@@ -102,25 +122,24 @@ class Onetime::RestampGumroadHeldPresentmentBalances
         summary = correction_summary(balance, transactions)
 
         transactions.each do |bt|
+          target = usd_target(bt)
           # balance_transactions has no deleted_at, so this log line is the audit trail.
-          log "restamping BT #{bt.id} (balance #{balance.id}, purchase #{bt.purchase_id}): " \
-              "holding #{bt.holding_amount_currency} gross=#{bt.holding_amount_gross_cents} " \
-              "net=#{bt.holding_amount_net_cents} -> #{bt.issued_amount_currency} " \
-              "gross=#{bt.issued_amount_gross_cents} net=#{bt.issued_amount_net_cents}"
+          log "restamping BT #{bt.id} (balance #{balance.id}, purchase #{bt.purchase_id}, #{provenance(bt)}): " \
+              "issued #{bt.issued_amount_currency} gross=#{bt.issued_amount_gross_cents} net=#{bt.issued_amount_net_cents}, " \
+              "holding #{bt.holding_amount_currency} gross=#{bt.holding_amount_gross_cents} net=#{bt.holding_amount_net_cents} " \
+              "-> usd #{target.inspect}"
 
           # update_columns skips the immutability guard deliberately: these fields were wrong from
-          # the moment they were written, and the replacements come from the same row.
-          bt.update_columns(
-            holding_amount_currency: bt.issued_amount_currency,
-            holding_amount_gross_cents: bt.issued_amount_gross_cents,
-            holding_amount_net_cents: bt.issued_amount_net_cents,
-            updated_at: Time.current,
-          )
+          # the moment they were written, and the replacements are the row's own recorded USD figures.
+          bt.update_columns(**target, updated_at: Time.current)
         end
 
-        # Only the label changes; the total was asserted equal above.
+        # Only the labels change; the totals were asserted equal above.
+        total = transactions.sum { |bt| usd_target(bt)[:holding_amount_net_cents] }
+        balance.currency = Currency::USD
+        balance.amount_cents = total
         balance.holding_currency = Currency::USD
-        balance.holding_amount_cents = transactions.sum(&:issued_amount_net_cents)
+        balance.holding_amount_cents = total
         balance.save!
 
         @stats[:corrected] += 1
@@ -132,14 +151,42 @@ class Onetime::RestampGumroadHeldPresentmentBalances
       log "ERROR on balance #{balance_id}: #{e.class}: #{e.message}"
     end
 
-    # Relabelling must not move a cent: if the total re-derived from the rows' issued amounts
-    # disagrees with what the balance holds, this is not a pure label fix — refuse.
+    # Relabelling must not move a cent: if the USD total re-derived from the rows disagrees with
+    # either stored total, this is not a pure label fix — refuse.
     def assert_amounts_unchanged!(balance, transactions)
-      rederived = transactions.sum(&:issued_amount_net_cents)
-      return if rederived == balance.holding_amount_cents
+      rederived = transactions.sum { |bt| usd_target(bt)[:holding_amount_net_cents] }
+      return if rederived == balance.holding_amount_cents && rederived == balance.amount_cents
 
-      raise "Balance #{balance.id}: re-derived holding amount #{rederived} != stored " \
-            "#{balance.holding_amount_cents} — refusing to relabel, this is not a pure label fix"
+      raise "Balance #{balance.id}: re-derived USD amount #{rederived} != stored holding " \
+            "#{balance.holding_amount_cents} / amount #{balance.amount_cents} — refusing to relabel, this is not a pure label fix"
+    end
+
+    # The USD figures a transaction is rewritten to. Only called for transactions that passed
+    # eligibility, so the provenance is already proven.
+    def usd_target(bt)
+      if provenance(bt) == :affiliate_credit
+        # AffiliateCredit#amount_cents is the purchase's recorded USD figure for this credit.
+        cents = bt.purchase.affiliate_credit.amount_cents
+        {
+          issued_amount_currency: Currency::USD, issued_amount_gross_cents: cents, issued_amount_net_cents: cents,
+          holding_amount_currency: Currency::USD, holding_amount_gross_cents: cents, holding_amount_net_cents: cents,
+        }
+      else
+        {
+          holding_amount_currency: bt.issued_amount_currency,
+          holding_amount_gross_cents: bt.issued_amount_gross_cents,
+          holding_amount_net_cents: bt.issued_amount_net_cents,
+        }
+      end
+    end
+
+    # A purchase leg that credits the purchase's affiliate is the affiliate path; everything
+    # else must prove the presentment path.
+    def provenance(bt)
+      affiliate_credit = bt.purchase&.affiliate_credit
+      return :affiliate_credit if affiliate_credit && bt.user_id == affiliate_credit.affiliate_user_id && bt.user_id != bt.purchase.seller_id
+
+      :presentment
     end
 
     def check_eligibility(balance)
@@ -160,22 +207,43 @@ class Onetime::RestampGumroadHeldPresentmentBalances
       return :no_balance_transactions if transactions.empty?
 
       transactions.each do |bt|
-        # The issued side is what gets copied, so it must be the canonical USD amount.
-        return :bt_issued_not_usd unless usd?(bt.issued_amount_currency)
-        # The broken branch passed issued_net_cents straight through as the holding net, so a row
-        # where these disagree came from something else and copying would move money.
-        return :bt_net_mismatch unless bt.holding_amount_net_cents == bt.issued_amount_net_cents
+        return :bt_wrong_merchant_account unless bt.merchant_account_id == balance.merchant_account_id
         # Balances are keyed on holding currency, so every row should share the balance's label.
         return :bt_currency_disagrees_with_balance unless bt.holding_amount_currency.to_s.downcase == balance.holding_currency.to_s.downcase
-        return :bt_outside_regression_window unless @regression_window.cover?(bt.created_at)
-        return :bt_wrong_merchant_account unless bt.merchant_account_id == balance.merchant_account_id
-        # Positive proof the row came from the presentment path: the broken branch only fired with
-        # a canonical issued amount, which requires a PurchasePresentment (no FX quote involved).
-        reason = presentment_backed?(bt)
+
+        reason = provenance(bt) == :affiliate_credit ? affiliate_credit_eligibility(bt, balance) : presentment_eligibility(bt)
         return reason unless reason == :ok
       end
 
       :eligible
+    end
+
+    def presentment_eligibility(bt)
+      # The issued side is what gets copied, so it must be the canonical USD amount.
+      return :bt_issued_not_usd unless usd?(bt.issued_amount_currency)
+      # The broken branch passed issued_net_cents straight through as the holding net, so a row
+      # where these disagree came from something else and copying would move money.
+      return :bt_net_mismatch unless bt.holding_amount_net_cents == bt.issued_amount_net_cents
+      return :bt_outside_regression_window unless @regression_window.cover?(bt.created_at)
+      # Positive proof the row came from the presentment path: the broken branch only fired with
+      # a canonical issued amount, which requires a PurchasePresentment (no FX quote involved).
+      presentment_backed?(bt)
+    end
+
+    # The affiliate helpers wrote the credit's USD cents verbatim under the settlement currency's
+    # label, on both sides. Anything else is not that bug, so it is refused.
+    def affiliate_credit_eligibility(bt, balance)
+      return :bt_affiliate_after_fix unless bt.created_at <= @affiliate_fix_deployed_at
+      return :bt_affiliate_labels_disagree unless bt.issued_amount_currency.to_s.downcase == bt.holding_amount_currency.to_s.downcase
+      return :bt_affiliate_balance_currency_disagrees unless balance.currency.to_s.downcase == bt.issued_amount_currency.to_s.downcase
+
+      recorded_usd_cents = bt.purchase.affiliate_credit.amount_cents
+      amounts = [bt.issued_amount_gross_cents, bt.issued_amount_net_cents, bt.holding_amount_gross_cents, bt.holding_amount_net_cents]
+      # The cents must already be the recorded USD figure; if they were ever converted, relabelling
+      # would change the value owed.
+      return :bt_affiliate_amount_not_recorded_usd unless amounts.all? { |cents| cents == recorded_usd_cents }
+
+      :ok
     end
 
     # Refund and dispute legs carry no purchase_id of their own, and a combined-cart dispute
@@ -226,11 +294,14 @@ class Onetime::RestampGumroadHeldPresentmentBalances
         balance_id: balance.id,
         user_id: balance.user_id,
         date: balance.date,
+        from_currency: balance.currency,
         from_holding_currency: balance.holding_currency,
         to_holding_currency: Currency::USD,
+        amount_cents: balance.amount_cents,
         holding_amount_cents: balance.holding_amount_cents,
-        rederived_holding_amount_cents: transactions.sum(&:issued_amount_net_cents),
+        rederived_holding_amount_cents: transactions.sum { |bt| usd_target(bt)[:holding_amount_net_cents] },
         balance_transaction_ids: transactions.map(&:id),
+        provenances: transactions.map { |bt| provenance(bt) }.uniq,
       }
     end
 
@@ -245,6 +316,6 @@ class Onetime::RestampGumroadHeldPresentmentBalances
     end
 
     def log(msg)
-      @logger.info("[gumroad-held presentment restamp] #{msg}")
+      @logger.info("[gumroad-held restamp] #{msg}")
     end
 end

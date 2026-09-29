@@ -3,22 +3,11 @@
 module Purchase::DisputeWinCredits
   extend ActiveSupport::Concern
 
-  def create_credit_for_dispute_won_for_affiliate!(flow_of_funds, amount_cents: 0)
+  def create_credit_for_dispute_won_for_affiliate!(amount_cents: 0)
     return if affiliate_credit_cents == 0 || amount_cents == 0
 
-    canonical_issued_amount = presentment_canonical_dispute_won_issued_amount
-
-    affiliate_issued_amount = BalanceTransaction::Amount.create_issued_amount_for_affiliate(
-        flow_of_funds:,
-        issued_affiliate_cents: amount_cents,
-        canonical_issued_amount:
-    )
-
-    affiliate_holding_amount = BalanceTransaction::Amount.create_holding_amount_for_affiliate(
-        flow_of_funds:,
-        issued_affiliate_cents: amount_cents,
-        canonical_issued_amount:
-    )
+    affiliate_issued_amount = BalanceTransaction::Amount.create_issued_amount_for_affiliate(issued_affiliate_cents: amount_cents)
+    affiliate_holding_amount = BalanceTransaction::Amount.create_holding_amount_for_affiliate(issued_affiliate_cents: amount_cents)
 
     Credit.create_for_dispute_won!(
         merchant_account: affiliate_merchant_account,
@@ -73,7 +62,7 @@ module Purchase::DisputeWinCredits
         seller_disputed_cents = seller_disputed_cents - affiliate_disputed_cents
       end
     end
-    create_credit_for_dispute_won_for_affiliate!(flow_of_funds, amount_cents: affiliate_disputed_cents)
+    create_credit_for_dispute_won_for_affiliate!(amount_cents: affiliate_disputed_cents)
     create_credit_for_dispute_won_for_seller!(flow_of_funds, amount_cents: seller_disputed_cents)
   end
 end

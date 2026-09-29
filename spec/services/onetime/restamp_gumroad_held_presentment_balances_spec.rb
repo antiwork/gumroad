@@ -19,9 +19,15 @@ describe Onetime::RestampGumroadHeldPresentmentBalances do
   # Stands in for #6505's production deploy time; just has to be after every row built here.
   let(:fix_deployed_at) { Time.utc(2026, 7, 29, 12, 0) }
 
+  # Stands in for the affiliate currency fix's production deploy time.
+  let(:affiliate_fix_deployed_at) { Time.utc(2026, 9, 30, 12, 0) }
+
   def service(balance_ids:, dry_run: true)
-    described_class.new(balance_ids:, fix_deployed_at:, dry_run:)
+    described_class.new(balance_ids:, fix_deployed_at:, affiliate_fix_deployed_at:, dry_run:)
   end
+
+  # These rows are built exactly as the broken code wrote them, which the model now refuses.
+  before { allow_legacy_gumroad_held_rows }
 
   # A purchase with presentment records — the provenance the service requires. Deliberately no
   # Stripe FX quote: forced-currency local methods take none, and they are most of the affected rows.
@@ -434,13 +440,116 @@ describe Onetime::RestampGumroadHeldPresentmentBalances do
 
   describe "the deployment cutoff argument" do
     it "refuses to run without one, because a guessed cutoff defeats the guard" do
-      expect { described_class.new(balance_ids: [1], fix_deployed_at: nil) }
+      expect { described_class.new(balance_ids: [1], fix_deployed_at: nil, affiliate_fix_deployed_at:) }
         .to raise_error(ArgumentError, /fix_deployed_at is required/)
     end
 
     it "refuses a cutoff that precedes the regression window" do
-      expect { described_class.new(balance_ids: [1], fix_deployed_at: Time.utc(2026, 7, 1)) }
+      expect { described_class.new(balance_ids: [1], fix_deployed_at: Time.utc(2026, 7, 1), affiliate_fix_deployed_at:) }
         .to raise_error(ArgumentError, /precedes the regression window/)
+    end
+
+    it "refuses to run without the affiliate cutoff" do
+      expect { described_class.new(balance_ids: [1], fix_deployed_at:, affiliate_fix_deployed_at: nil) }
+        .to raise_error(ArgumentError, /affiliate_fix_deployed_at is required/)
+    end
+  end
+
+  describe "affiliate credits labelled with the settlement currency" do
+    let(:affiliate_user) { create(:affiliate_user) }
+    let(:affiliate) { create(:direct_affiliate, affiliate_user:, seller:, products: [product]) }
+    let(:affiliate_written_at) { Time.utc(2026, 9, 27, 0, 15) }
+
+    # A direct charge into the seller's EUR connected account: the affiliate helpers took the
+    # application fee's settlement currency, so both sides say EUR while the cents are the credit's
+    # USD figure, never converted.
+    def create_eur_affiliate_row(credit_cents: 42, currency: Currency::EUR)
+      connected = create(:merchant_account_stripe_connect, user: seller, currency:)
+      purchase = create(:purchase, seller:, link: product, affiliate:, merchant_account: connected,
+                                   affiliate_credit_cents: credit_cents,
+                                   created_at: affiliate_written_at, succeeded_at: affiliate_written_at)
+      affiliate_credit = create(:affiliate_credit, purchase:, affiliate:, seller:, affiliate_user:,
+                                                   amount_cents: credit_cents)
+      bt = travel_to(affiliate_written_at) do
+        BalanceTransaction.create!(
+          user: affiliate_user,
+          merchant_account: gumroad_account,
+          purchase:,
+          issued_amount: BalanceTransaction::Amount.new(currency:, gross_cents: credit_cents, net_cents: credit_cents),
+          holding_amount: BalanceTransaction::Amount.new(currency:, gross_cents: credit_cents, net_cents: credit_cents),
+          update_user_balance: true,
+        )
+      end
+      [Balance.find(bt.balance_id), bt, affiliate_credit]
+    end
+
+    it "relabels issued and holding sides and the balance to USD using the credit's recorded cents" do
+      balance, bt, _credit = create_eur_affiliate_row(credit_cents: 42)
+      second_balance, second_bt, _ = create_eur_affiliate_row(credit_cents: 70)
+      expect(second_balance.id).to eq(balance.id)
+      expect(balance.reload.currency).to eq(Currency::EUR)
+      expect(balance.amount_cents).to eq(112)
+
+      dry = service(balance_ids: [balance.id]).process
+      expect(dry[:stats][:corrected]).to eq(1)
+      expect(dry[:corrected].first[:provenances]).to eq([:affiliate_credit])
+      expect(balance.reload.holding_currency).to eq(Currency::EUR)
+
+      result = service(balance_ids: [balance.id], dry_run: false).process
+      expect(result[:stats][:corrected]).to eq(1)
+      expect(result[:corrected].first[:from_currency]).to eq(Currency::EUR)
+
+      balance.reload
+      expect([balance.currency, balance.holding_currency]).to eq([Currency::USD, Currency::USD])
+      expect([balance.amount_cents, balance.holding_amount_cents]).to eq([112, 112])
+      [[bt, 42], [second_bt, 70]].each do |row, cents|
+        row.reload
+        expect([row.issued_amount_currency, row.holding_amount_currency]).to eq([Currency::USD, Currency::USD])
+        expect([row.issued_amount_gross_cents, row.issued_amount_net_cents, row.holding_amount_gross_cents, row.holding_amount_net_cents]).to eq([cents] * 4)
+      end
+      expect(PaypalPayoutProcessor.is_balance_payable(balance)).to eq(true)
+    end
+
+    it "refuses a row whose cents differ from the credit's recorded USD figure, rather than converting" do
+      balance, bt, _credit = create_eur_affiliate_row(credit_cents: 42)
+      bt.update_columns(issued_amount_net_cents: 38, holding_amount_net_cents: 38)
+      balance.update_columns(amount_cents: 38, holding_amount_cents: 38)
+
+      result = service(balance_ids: [balance.id], dry_run: false).process
+      expect(result[:stats][:bt_affiliate_amount_not_recorded_usd]).to eq(1)
+      expect(balance.reload.holding_currency).to eq(Currency::EUR)
+      expect(bt.reload.issued_amount_currency).to eq(Currency::EUR)
+    end
+
+    it "refuses an affiliate row written after the affiliate fix deployed" do
+      balance, bt, _credit = create_eur_affiliate_row
+      bt.update_columns(created_at: affiliate_fix_deployed_at + 1.minute)
+
+      result = service(balance_ids: [balance.id], dry_run: false).process
+      expect(result[:stats][:bt_affiliate_after_fix]).to eq(1)
+      expect(balance.reload.holding_currency).to eq(Currency::EUR)
+    end
+
+    it "does not treat the seller's own row on the same purchase as an affiliate row" do
+      balance, bt, credit = create_eur_affiliate_row
+      bt.update_columns(user_id: seller.id)
+      balance.update_columns(user_id: seller.id)
+
+      result = service(balance_ids: [balance.id], dry_run: false).process
+      # Falls to the presentment checks, which a non-USD issued side fails.
+      expect(result[:stats][:bt_issued_not_usd]).to eq(1)
+      expect(credit.reload.amount_cents).to eq(42)
+    end
+
+    it "lists unpaid non-USD Gumroad-held balances as candidates" do
+      affiliate_balance, _bt, _credit = create_eur_affiliate_row
+      presentment_balance, _bt2, _purchase = create_mislabelled_balance
+      usd_balance = create(:balance, user: seller, merchant_account: gumroad_account)
+      paid = create(:balance, user: seller, merchant_account: gumroad_account, currency: Currency::EUR, holding_currency: Currency::EUR, state: "paid")
+
+      ids = described_class.candidate_balance_ids
+      expect(ids).to include(affiliate_balance.id, presentment_balance.id)
+      expect(ids).not_to include(usd_balance.id, paid.id)
     end
   end
 end

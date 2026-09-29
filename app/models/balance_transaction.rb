@@ -23,23 +23,16 @@ class BalanceTransaction < ApplicationRecord
       @net_cents = net_cents
     end
 
-    # When canonical_issued_amount is supplied (buyer-presentment charges), "issued amount"
-    # here means the canonical seller/accounting issued amount, not the processor-issued
-    # presentment amount — the processor issued e.g. CAD, but balances stay canonical.
-    def self.create_issued_amount_for_affiliate(flow_of_funds:, issued_affiliate_cents:, canonical_issued_amount: nil)
-      new(
-        currency: canonical_issued_amount&.currency || flow_of_funds.gumroad_amount.currency,
-        gross_cents: issued_affiliate_cents,
-        net_cents: issued_affiliate_cents
-      )
+    # Affiliate cents are always USD (Purchase#determine_affiliate_balance_cents) and always booked
+    # on a Gumroad-held account, so the label is USD whatever the charge settled in. A flow-of-funds
+    # currency is not safe here: a direct charge's application fee can settle in the connected
+    # account's currency.
+    def self.create_issued_amount_for_affiliate(issued_affiliate_cents:)
+      new(currency: Currency::USD, gross_cents: issued_affiliate_cents, net_cents: issued_affiliate_cents)
     end
 
-    def self.create_holding_amount_for_affiliate(flow_of_funds:, issued_affiliate_cents:, canonical_issued_amount: nil)
-      new(
-        currency: canonical_issued_amount&.currency || flow_of_funds.gumroad_amount.currency,
-        gross_cents: issued_affiliate_cents,
-        net_cents: issued_affiliate_cents
-      )
+    def self.create_holding_amount_for_affiliate(issued_affiliate_cents:)
+      new(currency: Currency::USD, gross_cents: issued_affiliate_cents, net_cents: issued_affiliate_cents)
     end
 
     def self.create_issued_amount_for_seller(flow_of_funds:, issued_net_cents:, canonical_issued_amount: nil)
@@ -151,6 +144,7 @@ class BalanceTransaction < ApplicationRecord
   attr_mutable :balance_id
 
   validate :validate_exactly_one_of_purchase_dispute_refund_credit_is_present
+  validate :validate_gumroad_held_amounts_are_usd, on: :create
 
   # Public: Creates a balance transaction for a user and mutates the User's balance and Balance objects.
   # The merchant account should be the account that the funds are being held in, and for a purchase this is simply the same merchant account as the purchase.
@@ -323,6 +317,17 @@ class BalanceTransaction < ApplicationRecord
       return if exactly_one_is_present
 
       errors.add(:base, "can only have one of: purchase, dispute, refund, credit")
+    end
+
+    # Refused here rather than at the Balance: by the time a Balance is picked the transaction is
+    # already committed, and a non-USD Gumroad-held row fails the seller's whole payout.
+    def validate_gumroad_held_amounts_are_usd
+      return unless merchant_account&.holder_of_funds == HolderOfFunds::GUMROAD
+
+      errors.add(:holding_amount_currency, "must be usd for Gumroad-held funds") unless holding_amount_currency == Currency::USD
+      return unless issued_amount_currency == Currency::USD && holding_amount_currency == Currency::USD
+
+      errors.add(:holding_amount_net_cents, "must equal issued_amount_net_cents for Gumroad-held funds") unless holding_amount_net_cents == issued_amount_net_cents
     end
 
     class BalanceCouldNotBeFoundOrCreated < GumroadRuntimeError

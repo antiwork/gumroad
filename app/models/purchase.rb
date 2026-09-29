@@ -2019,17 +2019,8 @@ class Purchase < ApplicationRecord
   end
 
   def create_affiliate_balances!
-    affiliate_issued_amount = BalanceTransaction::Amount.create_issued_amount_for_affiliate(
-      flow_of_funds:,
-      issued_affiliate_cents: affiliate_credit_cents,
-      canonical_issued_amount: presentment_canonical_issued_amount
-    )
-
-    affiliate_holding_amount = BalanceTransaction::Amount.create_holding_amount_for_affiliate(
-      flow_of_funds:,
-      issued_affiliate_cents: affiliate_credit_cents,
-      canonical_issued_amount: presentment_canonical_issued_amount
-    )
+    affiliate_issued_amount = BalanceTransaction::Amount.create_issued_amount_for_affiliate(issued_affiliate_cents: affiliate_credit_cents)
+    affiliate_holding_amount = BalanceTransaction::Amount.create_holding_amount_for_affiliate(issued_affiliate_cents: affiliate_credit_cents)
 
     affiliate_balance_transaction = BalanceTransaction.create!(
       user: affiliate.affiliate_user,
@@ -2608,22 +2599,11 @@ class Purchase < ApplicationRecord
     fields
   end
 
-  def process_refund_or_chargeback_for_affiliate_credit_balance(flow_of_funds, refund: nil, dispute: nil, refund_cents: 0, fee_cents: 0)
+  def process_refund_or_chargeback_for_affiliate_credit_balance(refund: nil, dispute: nil, refund_cents: 0, fee_cents: 0)
     return if affiliate_credit_cents == 0 || refund_cents == 0
 
-    canonical_issued_amount = presentment_canonical_refund_or_chargeback_issued_amount(refund:, dispute:)
-
-    affiliate_issued_amount = BalanceTransaction::Amount.create_issued_amount_for_affiliate(
-      flow_of_funds:,
-      issued_affiliate_cents: -1 * refund_cents,
-      canonical_issued_amount:
-    )
-
-    affiliate_holding_amount = BalanceTransaction::Amount.create_holding_amount_for_affiliate(
-      flow_of_funds:,
-      issued_affiliate_cents: -1 * refund_cents,
-      canonical_issued_amount:
-    )
+    affiliate_issued_amount = BalanceTransaction::Amount.create_issued_amount_for_affiliate(issued_affiliate_cents: -1 * refund_cents)
+    affiliate_holding_amount = BalanceTransaction::Amount.create_holding_amount_for_affiliate(issued_affiliate_cents: -1 * refund_cents)
 
     affiliate_balance_transaction = BalanceTransaction.create!(
       user: affiliate_credit.affiliate_user,
@@ -2736,7 +2716,7 @@ class Purchase < ApplicationRecord
       end
     end
 
-    process_refund_or_chargeback_for_affiliate_credit_balance(flow_of_funds, refund:, dispute:, refund_cents: affiliate_refund_cents, fee_cents: affiliate_refund_fee_cents)
+    process_refund_or_chargeback_for_affiliate_credit_balance(refund:, dispute:, refund_cents: affiliate_refund_cents, fee_cents: affiliate_refund_fee_cents)
     process_refund_or_chargeback_for_purchase_balance(flow_of_funds, refund:, dispute:, refund_cents: seller_refund_cents)
   end
 

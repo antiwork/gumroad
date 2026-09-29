@@ -72,4 +72,43 @@ describe Balance do
       expect(Balance.new.state).to eq("unpaid")
     end
   end
+
+  describe "Gumroad-held USD invariant" do
+    let(:gumroad_account) { MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) }
+
+    it "refuses a Gumroad-held balance with a non-USD holding currency" do
+      balance = build(:balance, merchant_account: gumroad_account, currency: Currency::EUR, holding_currency: Currency::EUR)
+      expect(balance).not_to be_valid
+      expect(balance.errors[:holding_currency]).to include("must be usd for Gumroad-held funds")
+    end
+
+    it "refuses a Gumroad-held USD balance whose holding amount differs from its amount" do
+      balance = build(:balance, merchant_account: gumroad_account, amount_cents: 10_00, holding_amount_cents: 9_00)
+      expect(balance).not_to be_valid
+      expect(balance.errors[:holding_amount_cents]).to include("must equal amount_cents for Gumroad-held funds")
+    end
+
+    it "accepts a connected account's own-currency balance" do
+      connected = create(:merchant_account, user: create(:user), currency: Currency::CAD)
+      balance = build(:balance, merchant_account: connected, currency: Currency::USD, amount_cents: 10_00,
+                                holding_currency: Currency::CAD, holding_amount_cents: 13_00)
+      expect(balance).to be_valid
+    end
+
+    it "still lets a legacy non-USD Gumroad-held balance change state, so payouts and repairs are not wedged" do
+      balance = writing_legacy_gumroad_held_rows do
+        create(:balance, merchant_account: gumroad_account, currency: Currency::EUR, holding_currency: Currency::EUR)
+      end
+      expect { balance.mark_processing! }.not_to raise_error
+      expect(balance.reload.state).to eq("processing")
+    end
+
+    it "refuses a further amount change on a legacy non-USD Gumroad-held balance" do
+      balance = writing_legacy_gumroad_held_rows do
+        create(:balance, merchant_account: gumroad_account, currency: Currency::EUR, holding_currency: Currency::EUR)
+      end
+      balance.increment(:amount_cents, 1).increment(:holding_amount_cents, 1)
+      expect(balance.save).to eq(false)
+    end
+  end
 end

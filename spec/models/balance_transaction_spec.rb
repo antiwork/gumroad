@@ -4,132 +4,16 @@ require "spec_helper"
 
 describe BalanceTransaction, :vcr do
   describe BalanceTransaction::Amount do
-    describe "create_issued_amount_for_affiliate" do
-      let(:issued_affiliate_cents) { 10_00 }
-      let(:flow_of_funds) { raise "You must define `flow_of_funds`." }
-      let(:amount) do
-        BalanceTransaction::Amount.create_issued_amount_for_affiliate(
-          flow_of_funds:,
-          issued_affiliate_cents:
-        )
-      end
-
-      describe "issued amount and settled amounts are the same, no merchant account" do
-        let(:flow_of_funds) do
-          FlowOfFunds.new(
-            issued_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: 100_00),
-            settled_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: 100_00),
-            gumroad_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: 100_00),
-            merchant_account_gross_amount: nil,
-            merchant_account_net_amount: nil
-          )
+    %i[create_issued_amount_for_affiliate create_holding_amount_for_affiliate].each do |method|
+      describe method.to_s do
+        it "is USD at the affiliate's cents" do
+          amount = BalanceTransaction::Amount.public_send(method, issued_affiliate_cents: 10_00)
+          expect([amount.currency, amount.gross_cents, amount.net_cents]).to eq([Currency::USD, 10_00, 10_00])
         end
 
-        it "creates an amount" do
-          expect(amount.currency).to eq(flow_of_funds.gumroad_amount.currency)
-          expect(amount.gross_cents).to eq(issued_affiliate_cents)
-          expect(amount.net_cents).to eq(issued_affiliate_cents)
-        end
-      end
-
-      describe "issued amount and settled amounts are the same, a merchant accounts" do
-        let(:flow_of_funds) do
-          FlowOfFunds.new(
-            issued_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: 100_00),
-            settled_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: 100_00),
-            gumroad_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: 30_00),
-            merchant_account_gross_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: 100_00),
-            merchant_account_net_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: 70_00)
-          )
-        end
-
-        it "creates an amount" do
-          expect(amount.currency).to eq(flow_of_funds.gumroad_amount.currency)
-          expect(amount.gross_cents).to eq(issued_affiliate_cents)
-          expect(amount.net_cents).to eq(issued_affiliate_cents)
-        end
-      end
-
-      describe "issued amount and settled amounts are not the same, a merchant account" do
-        let(:flow_of_funds) do
-          FlowOfFunds.new(
-            issued_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: 100_00),
-            settled_amount: FlowOfFunds::Amount.new(currency: Currency::CAD, cents: 110_00),
-            gumroad_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: 30_00),
-            merchant_account_gross_amount: FlowOfFunds::Amount.new(currency: Currency::CAD, cents: 110_00),
-            merchant_account_net_amount: FlowOfFunds::Amount.new(currency: Currency::CAD, cents: 80_00)
-          )
-        end
-
-        it "creates an amount" do
-          expect(amount.currency).to eq(flow_of_funds.gumroad_amount.currency)
-          expect(amount.gross_cents).to eq(issued_affiliate_cents)
-          expect(amount.net_cents).to eq(issued_affiliate_cents)
-        end
-      end
-    end
-
-    describe "create_holding_amount_for_affiliate" do
-      let(:issued_affiliate_cents) { 10_00 }
-      let(:flow_of_funds) { raise "You must define `flow_of_funds`." }
-      let(:amount) do
-        BalanceTransaction::Amount.create_holding_amount_for_affiliate(
-          flow_of_funds:,
-          issued_affiliate_cents:
-        )
-      end
-
-      describe "issued amount and settled amounts are the same, no merchant account" do
-        let(:flow_of_funds) do
-          FlowOfFunds.new(
-            issued_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: 100_00),
-            settled_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: 100_00),
-            gumroad_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: 100_00),
-            merchant_account_gross_amount: nil,
-            merchant_account_net_amount: nil
-          )
-        end
-
-        it "creates an amount" do
-          expect(amount.currency).to eq(flow_of_funds.gumroad_amount.currency)
-          expect(amount.gross_cents).to eq(issued_affiliate_cents)
-          expect(amount.net_cents).to eq(issued_affiliate_cents)
-        end
-      end
-
-      describe "issued amount and settled amounts are the same, a merchant accounts" do
-        let(:flow_of_funds) do
-          FlowOfFunds.new(
-            issued_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: 100_00),
-            settled_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: 100_00),
-            gumroad_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: 30_00),
-            merchant_account_gross_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: 100_00),
-            merchant_account_net_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: 70_00)
-          )
-        end
-
-        it "creates an amount" do
-          expect(amount.currency).to eq(flow_of_funds.gumroad_amount.currency)
-          expect(amount.gross_cents).to eq(issued_affiliate_cents)
-          expect(amount.net_cents).to eq(issued_affiliate_cents)
-        end
-      end
-
-      describe "issued amount and settled amounts are not the same, a merchant account" do
-        let(:flow_of_funds) do
-          FlowOfFunds.new(
-            issued_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: 100_00),
-            settled_amount: FlowOfFunds::Amount.new(currency: Currency::CAD, cents: 110_00),
-            gumroad_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: 30_00),
-            merchant_account_gross_amount: FlowOfFunds::Amount.new(currency: Currency::CAD, cents: 110_00),
-            merchant_account_net_amount: FlowOfFunds::Amount.new(currency: Currency::CAD, cents: 80_00)
-          )
-        end
-
-        it "creates an amount" do
-          expect(amount.currency).to eq(flow_of_funds.gumroad_amount.currency)
-          expect(amount.gross_cents).to eq(issued_affiliate_cents)
-          expect(amount.net_cents).to eq(issued_affiliate_cents)
+        it "is USD for a negative refund or chargeback leg too" do
+          amount = BalanceTransaction::Amount.public_send(method, issued_affiliate_cents: -4_00)
+          expect([amount.currency, amount.gross_cents, amount.net_cents]).to eq([Currency::USD, -4_00, -4_00])
         end
       end
     end
@@ -390,11 +274,14 @@ describe BalanceTransaction, :vcr do
                                       charge_processor_merchant_id: "acct_seller_#{SecureRandom.hex(6)}")
 
             as_booked = create(:balance, user: seller, merchant_account:, date: Date.yesterday,
-                                         currency: Currency::USD, holding_currency: amount.currency,
-                                         holding_amount_cents: amount.gross_cents)
-            mislabelled = create(:balance, user: seller, merchant_account:, date: Date.today,
-                                           currency: Currency::USD, holding_currency: Currency::EUR,
-                                           holding_amount_cents: amount.gross_cents)
+                                         currency: Currency::USD, amount_cents: amount.gross_cents,
+                                         holding_currency: amount.currency, holding_amount_cents: amount.gross_cents)
+            # A pre-validation row: the model now refuses to write one.
+            mislabelled = writing_legacy_gumroad_held_rows do
+              create(:balance, user: seller, merchant_account:, date: Date.today,
+                               currency: Currency::USD, amount_cents: amount.gross_cents,
+                               holding_currency: Currency::EUR, holding_amount_cents: amount.gross_cents)
+            end
 
             payment = create(:payment, user: seller, processor: PayoutProcessorType::STRIPE)
             errors = StripePayoutProcessor.prepare_payment_and_set_amount(payment, [as_booked, mislabelled])
@@ -1655,6 +1542,60 @@ describe BalanceTransaction, :vcr do
           end
         end
       end
+    end
+  end
+
+  describe "Gumroad-held USD invariant" do
+    let(:user) { create(:user) }
+    let(:gumroad_account) { MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) }
+    let(:purchase) { create(:purchase) }
+
+    def build_bt(merchant_account:, issued:, holding:)
+      described_class.create!(user:, merchant_account:, purchase:,
+                              issued_amount: BalanceTransaction::Amount.new(**issued),
+                              holding_amount: BalanceTransaction::Amount.new(**holding))
+    end
+
+    it "refuses a Gumroad-held row with a non-USD holding currency, before any balance moves" do
+      expect do
+        build_bt(merchant_account: gumroad_account,
+                 issued: { currency: Currency::EUR, gross_cents: 42, net_cents: 42 },
+                 holding: { currency: Currency::EUR, gross_cents: 42, net_cents: 42 })
+      end.to raise_error(ActiveRecord::RecordInvalid, /Holding amount currency must be usd/)
+        .and not_change { Balance.count }
+        .and not_change { BalanceTransaction.count }
+    end
+
+    it "refuses a Gumroad-held USD row whose holding net differs from its issued net" do
+      expect do
+        build_bt(merchant_account: gumroad_account,
+                 issued: { currency: Currency::USD, gross_cents: 100, net_cents: 70 },
+                 holding: { currency: Currency::USD, gross_cents: 100, net_cents: 65 })
+      end.to raise_error(ActiveRecord::RecordInvalid, /must equal issued_amount_net_cents/)
+    end
+
+    it "accepts a Gumroad-held USD row" do
+      bt = build_bt(merchant_account: gumroad_account,
+                    issued: { currency: Currency::USD, gross_cents: 100, net_cents: 70 },
+                    holding: { currency: Currency::USD, gross_cents: 100, net_cents: 70 })
+      expect(bt.balance.holding_currency).to eq(Currency::USD)
+    end
+
+    it "leaves a connected account's own-currency row alone" do
+      connected = create(:merchant_account, user:, currency: Currency::CAD)
+      bt = build_bt(merchant_account: connected,
+                    issued: { currency: Currency::USD, gross_cents: 100, net_cents: 70 },
+                    holding: { currency: Currency::CAD, gross_cents: 130, net_cents: 91 })
+      expect(bt.balance.holding_currency).to eq(Currency::CAD)
+    end
+
+    it "does not re-check an existing row on update, so linking a legacy row to its balance still works" do
+      bt = writing_legacy_gumroad_held_rows do
+        build_bt(merchant_account: gumroad_account,
+                 issued: { currency: Currency::EUR, gross_cents: 42, net_cents: 42 },
+                 holding: { currency: Currency::EUR, gross_cents: 42, net_cents: 42 })
+      end
+      expect(bt.reload.update(balance_id: bt.balance_id)).to eq(true)
     end
   end
 
