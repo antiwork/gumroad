@@ -41,7 +41,10 @@ const RESOURCE_LABELS: Record<string, string> = {
 
 const describeEvent = (delivery: PingDelivery) => {
   const label = RESOURCE_LABELS[delivery.resource_name] ?? delivery.resource_name;
-  return delivery.sale_id ? `${label} · Sale #${delivery.sale_id}` : label;
+  if (!delivery.sale_id) return label;
+  const reference = `Sale #${delivery.sale_id}`;
+  // Prefixing a sale row with its own label would read "Sale · Sale #123".
+  return label === "Sale" ? reference : `${label} · ${reference}`;
 };
 
 const describeDelivery = (delivery: PingDelivery) =>
