@@ -8,13 +8,14 @@ import AccountDeletionSection from "$app/components/Settings/AdvancedPage/Accoun
 import ApplicationsSection, { type Application } from "$app/components/Settings/AdvancedPage/ApplicationsSection";
 import BlockEmailsSection from "$app/components/Settings/AdvancedPage/BlockEmailsSection";
 import CustomDomainSection from "$app/components/Settings/AdvancedPage/CustomDomainSection";
-import NotificationEndpointSection from "$app/components/Settings/AdvancedPage/NotificationEndpointSection";
+import NotificationEndpointSection, { type PingDelivery } from "$app/components/Settings/AdvancedPage/NotificationEndpointSection";
 import { Layout } from "$app/components/Settings/Layout";
 
 type AdvancedPageProps = {
   settings_pages: SettingPage[];
   user_id: string;
   notification_endpoint: string;
+  recent_ping_deliveries: PingDelivery[];
   blocked_customer_emails: string;
   custom_domain_verification_status: { success: boolean; message: string } | null;
   custom_domain_name: string;
@@ -66,6 +67,7 @@ export default function AdvancedPage() {
           pingEndpoint={form.data.user.notification_endpoint}
           setPingEndpoint={(value) => form.setData("user.notification_endpoint", value)}
           userId={props.user_id}
+          recentDeliveries={props.recent_ping_deliveries}
         />
 
         <ApplicationsSection applications={props.applications} />

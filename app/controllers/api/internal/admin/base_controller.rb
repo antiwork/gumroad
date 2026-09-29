@@ -233,7 +233,7 @@ class Api::Internal::Admin::BaseController < Api::Internal::BaseController
       end
     end
 
-    def serialize_purchase(purchase, with_clusters: false, stripe_risk_level: nil)
+    def serialize_purchase(purchase, with_clusters: false, stripe_risk_level: nil, with_ping_deliveries: false)
       {
         id: purchase.external_id_numeric.to_s,
         email: purchase.email,
@@ -268,6 +268,7 @@ class Api::Internal::Admin::BaseController < Api::Internal::BaseController
         payload[:refund_amount] = refund_amount if refund_amount.positive?
         payload[:refund_date] = latest_refund(purchase)&.created_at&.as_json if payload[:refund_status].present?
         payload[:clusters] = serialize_purchase_clusters(purchase) if with_clusters
+        payload[:ping_deliveries] = purchase.ping_deliveries.recent.limit(PingDelivery::MAX_RECENT).map(&:as_props) if with_ping_deliveries
       end
     end
 

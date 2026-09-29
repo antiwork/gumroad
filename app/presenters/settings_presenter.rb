@@ -126,6 +126,7 @@ class SettingsPresenter
       end,
       allow_deactivation: Pundit.policy!(pundit_user, [:user]).deactivate?,
       formatted_balance_to_forfeit_on_account_deletion: seller.formatted_balance_to_forfeit(:account_closure),
+      recent_ping_deliveries: seller.ping_deliveries.recent.limit(PingDelivery::MAX_RECENT).includes(:purchase).map(&:as_props),
     }
   end
 
