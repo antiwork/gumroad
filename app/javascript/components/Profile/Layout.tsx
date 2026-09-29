@@ -86,7 +86,7 @@ export const Layout = ({ creatorProfile, hideFollowForm, currencySelector, shown
               <FollowForm creatorProfile={creatorProfile} />
             </div>
           ) : null}
-          {!isDesktop && headerButtons ? <div className="flex basis-full p-4 pt-0">{headerButtons}</div> : null}
+          {!isDesktop && headerButtons ? <div className="flex basis-full p-4">{headerButtons}</div> : null}
           {isDesktop ? headerButtons : null}
         </div>
       </header>
