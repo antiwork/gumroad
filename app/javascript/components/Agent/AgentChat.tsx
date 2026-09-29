@@ -491,6 +491,7 @@ export const AgentChat = ({ greeting, suggestions, locked = null }: Props) => {
   const [pendingActionIndex, setPendingActionIndex] = React.useState<number | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const inputRef = React.useRef<HTMLTextAreaElement>(null);
+  const newChatButtonRef = React.useRef<HTMLButtonElement>(null);
   const mountedRef = React.useRef(true);
   const actionStatusAbortControllersRef = React.useRef(new Map<string, AbortController>());
   // Whether to follow new content to the bottom. Stays true while the seller is near the bottom and
@@ -959,6 +960,11 @@ export const AgentChat = ({ greeting, suggestions, locked = null }: Props) => {
   const hasExecutingAction = messages.some(
     (message) => message.actionStatus === "executing" && Boolean(message.proposalMessageId),
   );
+  // The dialog opens from a plain button, so nothing hands focus back to it when the seller backs out.
+  const keepChat = () => {
+    setConfirmingNewChat(false);
+    window.setTimeout(() => newChatButtonRef.current?.focus({ preventScroll: true }), 0);
+  };
   const startNewChat = () => {
     setConfirmingNewChat(false);
     if (isSending || pendingActionIndex !== null || hasExecutingAction || locked) return;
@@ -1062,6 +1068,7 @@ export const AgentChat = ({ greeting, suggestions, locked = null }: Props) => {
               <Button
                 size="sm"
                 className="sm:px-4 sm:py-3 sm:text-base"
+                ref={newChatButtonRef}
                 aria-label="New chat"
                 disabled={isSending || pendingActionIndex !== null || hasExecutingAction}
                 onClick={() => setConfirmingNewChat(true)}
@@ -1075,10 +1082,10 @@ export const AgentChat = ({ greeting, suggestions, locked = null }: Props) => {
       <Modal
         open={confirmingNewChat}
         title="Start a new chat?"
-        onClose={() => setConfirmingNewChat(false)}
+        onClose={keepChat}
         footer={
           <>
-            <Button onClick={() => setConfirmingNewChat(false)}>Keep this chat</Button>
+            <Button onClick={keepChat}>Keep this chat</Button>
             <Button color="primary" onClick={startNewChat}>
               Start new chat
             </Button>

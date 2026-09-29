@@ -1341,6 +1341,8 @@ describe("AgentChat new chat control", () => {
     fireEvent.click(screen.getByRole("button", { name: "Keep this chat" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(screen.getByText(RESUMED_REPLY)).toBeTruthy();
+    // Backing out hands keyboard focus back to the button that opened the dialog.
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText("New chat")));
 
     await sendMessage("still here");
     expect(streamAgentMessage.mock.calls.at(-1)?.[2]).toBe("conv1");
