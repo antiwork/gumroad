@@ -810,3 +810,118 @@ describe("bank payout switch option on the payments page", () => {
     expect(mocks.put).not.toHaveBeenCalled();
   });
 });
+
+// Stripe's Japanese-script ("Kanji") variations: an account whose name/address variation holds no
+// Japanese characters at all is refused at account creation with `Invalid string: must provide a
+// Kanji variation.`, so the page must refuse it before saving.
+describe("Japanese (Kanji) variation fields", () => {
+  const jpCompliance = (overrides: Partial<ComplianceInfo> = {}) =>
+    complianceInfo({
+      country: "JP",
+      street_address: null,
+      building_number: "1-1",
+      building_number_kana: "1-1",
+      street_address_kanji: "千代田",
+      street_address_kana: "チヨダ",
+      city: "千代田区",
+      city_kana: "チヨダク",
+      state: "東京都",
+      zip_code: "100-0001",
+      first_name_kanji: "太郎",
+      last_name_kanji: "山田",
+      first_name_kana: "タロウ",
+      last_name_kana: "ヤマダ",
+      phone: "+819012345678",
+      ...overrides,
+    });
+
+  const renderJpSeller = (complianceOverrides: Partial<ComplianceInfo> = {}, userOverrides: Partial<User> = {}) => {
+    mocks.usePage.mockReturnValue({
+      props: {
+        ...pageProps({ country_code: "JP", payout_currency: "jpy", ...userOverrides }, jpCompliance(complianceOverrides)),
+        countries: { JP: "Japan" },
+      },
+    });
+    render(<PaymentsPage />);
+  };
+
+  const jpBusiness = {
+    is_business: true,
+    business_country: "JP",
+    business_type: "corporation",
+    business_name: "Yamada KK",
+    business_name_kanji: "山田株式会社",
+    business_name_kana: "ヤマダカブシキガイシャ",
+    business_building_number: "1-1",
+    business_building_number_kana: "1-1",
+    business_street_address_kanji: "千代田",
+    business_street_address_kana: "チヨダ",
+    business_city: "千代田区",
+    business_city_kana: "チヨダク",
+    business_state: "東京都",
+    business_zip_code: "100-0001",
+    business_phone: "+819012345678",
+    job_title: "Owner",
+  };
+
+  it("saves a Japanese seller whose variations hold Japanese characters", () => {
+    renderJpSeller();
+    save();
+
+    expect(mocks.put).toHaveBeenCalledTimes(1);
+  });
+
+  it("blocks a romaji value typed into a (Kanji) name field", () => {
+    renderJpSeller({ first_name_kanji: "Taro" });
+    save();
+
+    expect(mocks.put).not.toHaveBeenCalled();
+    expect(screen.getByText("First name (Kanji) must include Japanese characters.")).toBeTruthy();
+  });
+
+  it("blocks saving while a (Kanji) name field is blank", () => {
+    renderJpSeller({ last_name_kanji: "" });
+    save();
+
+    expect(mocks.put).not.toHaveBeenCalled();
+    expect(screen.getAllByText(/Last name \/ 姓 \(Kanji\)/u).length).toBeGreaterThan(0);
+  });
+
+  it("accepts kana in a (Kanji) name field, for sellers whose name has no kanji form", () => {
+    renderJpSeller({ first_name_kanji: "タロウ", last_name_kanji: "ヤマダ" });
+    save();
+
+    expect(mocks.put).toHaveBeenCalledTimes(1);
+  });
+
+  it("blocks a romaji town typed into the (Kanji) address field", () => {
+    renderJpSeller({ street_address_kanji: "Chiyoda" });
+    save();
+
+    expect(mocks.put).not.toHaveBeenCalled();
+    expect(screen.getByText("Town/Cho-me (Kanji) must include Japanese characters.")).toBeTruthy();
+  });
+
+  it("blocks a romaji city typed into the (Kanji) city field", () => {
+    renderJpSeller({ city: "Chiyoda" });
+    save();
+
+    expect(mocks.put).not.toHaveBeenCalled();
+    expect(screen.getByText("City/Ward (Kanji) must include Japanese characters.")).toBeTruthy();
+  });
+
+  it("applies the same rule to a Japanese business's (Kanji) fields", () => {
+    renderJpSeller({ ...jpBusiness, business_city: "Chiyoda" }, { business_tax_id_entered: true });
+    save();
+
+    expect(mocks.put).not.toHaveBeenCalled();
+    expect(screen.getByText("Business city/Ward (Kanji) must include Japanese characters.")).toBeTruthy();
+  });
+
+  it("saves a Japanese business whose variations hold Japanese characters", () => {
+    renderJpSeller(jpBusiness, { business_tax_id_entered: true });
+    save();
+
+    expect(mocks.put).toHaveBeenCalledTimes(1);
+  });
+});

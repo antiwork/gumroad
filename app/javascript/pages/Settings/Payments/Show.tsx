@@ -492,6 +492,18 @@ export default function PaymentsPage() {
     }
   };
 
+  // Each (Kanji) field is Stripe's Japanese-script variation of the value beside it, and Stripe
+  // rejects an account whose variation carries no Japanese characters at all — a seller retyping
+  // their romaji name or town into it — with `Invalid string: must provide a Kanji variation.`,
+  // which names neither the field nor the rule. Kana counts: a seller whose name has no kanji form
+  // can use it.
+  const validateJapaneseScriptField = (fieldName: FormFieldName, value: string | null | undefined, label: string) => {
+    if (value && !HAS_JAPANESE_CHARS.test(value)) {
+      markFieldInvalid(fieldName);
+      setClientErrorMessage({ message: `${label} must include Japanese characters.` });
+    }
+  };
+
   const validateBankAccountFields = () => {
     if (!form.data.bank_account) {
       return;
@@ -860,6 +872,18 @@ export default function PaymentsPage() {
         "City (Kana)",
         "must include katakana characters.",
       );
+      // Stripe requires the name in Japanese script, so the business branch already demands these;
+      // an individual could save with both blank and only learn it from Stripe at payout setup.
+      if (!form.data.user.first_name_kanji) {
+        markFieldInvalid("first_name_kanji");
+      }
+      if (!form.data.user.last_name_kanji) {
+        markFieldInvalid("last_name_kanji");
+      }
+      validateJapaneseScriptField("first_name_kanji", form.data.user.first_name_kanji, "First name (Kanji)");
+      validateJapaneseScriptField("last_name_kanji", form.data.user.last_name_kanji, "Last name (Kanji)");
+      validateJapaneseScriptField("street_address_kanji", form.data.user.street_address_kanji, "Town/Cho-me (Kanji)");
+      validateJapaneseScriptField("city", form.data.user.city, "City/Ward (Kanji)");
     } else if (
       !form.data.user.street_address ||
       (streetAddressValidationContextChanged &&
@@ -1054,6 +1078,13 @@ export default function PaymentsPage() {
           "Business city (Kana)",
           "must include katakana characters.",
         );
+        validateJapaneseScriptField("business_name_kanji", form.data.user.business_name_kanji, "Business Name (Kanji)");
+        validateJapaneseScriptField(
+          "business_street_address_kanji",
+          form.data.user.business_street_address_kanji,
+          "Business town/Cho-me (Kanji)",
+        );
+        validateJapaneseScriptField("business_city", form.data.user.business_city, "Business city/Ward (Kanji)");
         if (form.data.user.business_name && HAS_JAPANESE_CHARS.test(form.data.user.business_name)) {
           markFieldInvalid("business_name");
           setClientErrorMessage({
