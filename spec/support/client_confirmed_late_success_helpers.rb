@@ -1,8 +1,5 @@
 # frozen_string_literal: true
 
-# A client-confirmed cart on a Charge with a PaymentIntent, and a provider boundary that stubs
-# only Stripe SDK class methods (any provider write raises). Tests set provider[:pi_status],
-# provider[:intent] and provider[:charge] to shape what Stripe reports.
 module ClientConfirmedLateSuccessHelpers
   def self.included(base)
     base.let(:seller) { create(:user) }

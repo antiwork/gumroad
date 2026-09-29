@@ -2,14 +2,9 @@
 
 require "spec_helper"
 
-# A client-confirmed purchase whose success first arrived before Stripe had settlement data: the
-# finalizer saves the charge id and waits (:pending). A stale payment_failed then fails the row, and
-# the settled success that follows must still book it, exactly once.
 describe Purchase::FinalizeConfirmedChargeService, "after a missing-settlement deferral" do
   include ClientConfirmedLateSuccessHelpers
 
-  # Browser return while Stripe has no balance transaction yet, then a late payment_failed from an
-  # earlier attempt on the same intent.
   def defer_then_fail_stale(mode:, gift: false)
     order, charge, (purchase, *) = build_cart(mode:, gift:)
     provider[:charge] = { balance_transaction: nil }

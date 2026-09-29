@@ -2,9 +2,6 @@
 
 require "spec_helper"
 
-# A client-confirmed purchase failed before its PaymentIntent settled, and the intent then succeeds.
-# These run the real webhook worker, order finalizer, ledger and access creation; only Stripe SDK
-# class methods are stubbed, and any provider write raises.
 describe Purchase::FinalizeConfirmedChargeService, "late success after an earlier failure" do
   include ClientConfirmedLateSuccessHelpers
 
