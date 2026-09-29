@@ -33,6 +33,9 @@ type PrefectureConfig = {
   idSuffix: string;
 };
 
+// The longest reason Show.tsx sets beside a (Kanji) field; keep the two in step.
+const LONGEST_FIELD_ERROR_MESSAGE = "Must include Japanese characters.";
+
 export const getBusinessTypes = (country: string | null, lists: Record<string, { code: string; name: string }[]>) =>
   (country ? lists[country] : null) ?? [
     { code: "llc", name: "LLC" },
@@ -187,9 +190,22 @@ const AccountDetailsSection = ({
 
   const fieldErrorMessageId = (fieldName: FormFieldName) =>
     fieldErrorMessages.has(fieldName) ? `${uid}-${fieldName}-error` : undefined;
+  // The slot always holds an invisible copy of the longest reason, so a reason appearing or clearing
+  // never changes the field's height. Both share one grid cell, so a wrapped reason is still covered.
   const renderFieldErrorMessage = (fieldName: FormFieldName) => {
     const message = fieldErrorMessages.get(fieldName);
-    return message ? <FieldsetDescription id={`${uid}-${fieldName}-error`}>{message}</FieldsetDescription> : null;
+    return (
+      <div className="grid">
+        <FieldsetDescription aria-hidden="true" className="invisible col-start-1 row-start-1">
+          {LONGEST_FIELD_ERROR_MESSAGE}
+        </FieldsetDescription>
+        {message ? (
+          <FieldsetDescription id={`${uid}-${fieldName}-error`} className="col-start-1 row-start-1">
+            {message}
+          </FieldsetDescription>
+        ) : null}
+      </div>
+    );
   };
 
   const isPrefectureConfig = (config: StateConfig | PrefectureConfig): config is PrefectureConfig =>
