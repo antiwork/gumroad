@@ -244,9 +244,8 @@ class Risk::StrandedBuyerRecoveryService
       @_account_ip_values ||= account_ips_for(blocked_failures)
     end
 
-    # The account IPs reported as holding the buyer: only when a blocked checkout ran the IP check.
-    # Free purchases and renewals skip it, so a buyer whose blocked attempts were all exempt is not
-    # held here, and their resolved mail is not suppressed on its account.
+    # A non-exempt blocked checkout may still hit an account-IP hold on retry, even if an
+    # earlier fraud check stopped its original attempt. Free purchases and renewals cannot.
     def reported_account_ip_values
       @_reported_account_ip_values ||= begin
         ip_checked = blocked_failures.reject(&:checkout_ip_exempt?)
