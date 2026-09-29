@@ -768,10 +768,12 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
           user.alive_user_compliance_info.dup_and_save! { |info| info.zip_code = "09330" }
 
           expect(StripeMerchantAccountManager).not_to receive(:create_account)
-          put :update, params: {
-            user: params.except(:is_business).merge(zip_code: "09330"),
-            bank_account: { type: AchAccount.name, account_number: "000123456789", account_number_confirmation: "000123456789", routing_number: "110000000", account_holder_full_name: "gumbot" },
-          }
+          expect do
+            put :update, params: {
+              user: params.except(:is_business).merge(zip_code: "09330"),
+              bank_account: { type: AchAccount.name, account_number: "000123456789", account_number_confirmation: "000123456789", routing_number: "110000000", account_holder_full_name: "gumbot" },
+            }
+          end.not_to change { user.reload.alive_bank_accounts.count }
 
           expect(session[:inertia_errors][:base].first).to include("military (APO/FPO/DPO) ZIP codes")
           expect(session[:inertia_errors][:field]).to eq("zip_code")
@@ -788,6 +790,20 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
           expect(session[:inertia_errors][:field]).to eq("zip_code")
         end
 
+        it "keeps the existing bank account when a replacement is rejected because a military zip code is saved" do
+          user.alive_user_compliance_info.dup_and_save! { |info| info.zip_code = "09330" }
+          existing = create(:ach_account, user:)
+
+          expect(StripeMerchantAccountManager).not_to receive(:create_account)
+          put :update, params: {
+            user: params.except(:is_business).merge(zip_code: "09330"),
+            bank_account: { type: AchAccount.name, account_number: "000123456789", account_number_confirmation: "000123456789", routing_number: "110000000", account_holder_full_name: "gumbot" },
+          }
+
+          expect(session[:inertia_errors][:field]).to eq("zip_code")
+          expect(user.reload.active_bank_account.id).to eq(existing.id)
+        end
+
         it "does not create a Stripe account when a PayPal address arrives with bank fields and a military zip code is saved" do
           user.alive_user_compliance_info.dup_and_save! { |info| info.zip_code = "09330" }
           create(:ach_account, user:, account_holder_full_name: "gumbot")
@@ -801,7 +817,7 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
 
           expect(session[:inertia_errors][:base].first).to include("military (APO/FPO/DPO) ZIP codes")
           expect(session[:inertia_errors][:field]).to eq("zip_code")
-          expect(user.reload.active_bank_account).to be_present
+          expect(user.reload.active_bank_account.account_holder_full_name).to eq("gumbot")
         end
 
         it "lets a seller with a saved bank account switch to PayPal while an unchanged military zip code is stored" do

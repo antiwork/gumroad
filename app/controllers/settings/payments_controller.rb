@@ -148,10 +148,6 @@ class Settings::PaymentsController < Settings::BaseController
     # we can create a stripe merchant account for them if they don't already have one.
     if current_seller.active_bank_account && current_seller.native_payouts_supported? && current_seller.stripe_connect_account.blank? && !StripeMerchantAccountManager.blocks_new_managed_account?(current_seller)
       begin
-        # An unchanged military ZIP saved before the guard existed reaches Stripe here for the first time.
-        saved_military_zip_field = stored_military_zip_field(current_seller.fetch_or_build_user_compliance_info)
-        return redirect_with_error(MILITARY_ZIP_MESSAGE, field: saved_military_zip_field) if saved_military_zip_field
-
         StripeMerchantAccountManager.create_account(current_seller, passphrase: GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))
       rescue Stripe::StripeError, MerchantRegistrationUserNotReadyError => e
         if e.is_a?(Stripe::InvalidRequestError) && e.code == "postal_code_invalid"
@@ -454,12 +450,14 @@ class Settings::PaymentsController < Settings::BaseController
     end
 
     # The form echoes stored fields back, so an unchanged ZIP is skipped and a stored military ZIP can't lock
-    # the seller out of unrelated settings, unless this save switches the account type or the stored country.
+    # the seller out of unrelated settings, unless this save switches the account type or the stored country,
+    # or is the one that first sends the address to Stripe. That check runs before any payout change is saved.
     # Country and business status resolve as UpdateUserComplianceInfo does.
     def military_zip_fields(compliance_info)
       us_code = Compliance::Countries::USA.alpha2
-      submitted = params[:user]
-      return [] if submitted.blank?
+      first_stripe_setup = first_stripe_setup_from_save?
+      submitted = params[:user].presence || (first_stripe_setup ? ActionController::Parameters.new : nil)
+      return [] if submitted.blank? && !first_stripe_setup
 
       business = submitted[:is_business].nil? ? compliance_info.is_business? : ActiveModel::Type::Boolean.new.cast(submitted[:is_business])
       account_type_changed = business != compliance_info.is_business?
@@ -475,26 +473,34 @@ class Settings::PaymentsController < Settings::BaseController
       end
 
       fields.filter_map do |field, country_code, stored_country_code|
-        next unless country_code == us_code && submitted[field].present?
+        zip_code = submitted.key?(field) ? submitted[field] : (first_stripe_setup ? compliance_info.public_send(field) : nil)
+        next unless country_code == us_code && zip_code.present?
 
-        newly_sent = account_type_changed || stored_country_code != us_code
-        changed = submitted[field].to_s.strip != compliance_info.public_send(field).to_s.strip
-        field if (newly_sent || changed) && MILITARY_STATES.include?(UsZipCodes.identify_state_code(submitted[field]))
+        newly_sent = first_stripe_setup || account_type_changed || stored_country_code != us_code
+        changed = zip_code.to_s.strip != compliance_info.public_send(field).to_s.strip
+        field if (newly_sent || changed) && MILITARY_STATES.include?(UsZipCodes.identify_state_code(zip_code))
       end
     end
 
-    def stored_military_zip_field(compliance_info)
-      us_code = Compliance::Countries::USA.alpha2
-      fields = if compliance_info.is_business?
-        [
-          [:business_zip_code, compliance_info.business_country_code.presence || compliance_info.country_code],
-          [:zip_code, compliance_info.country_code],
-        ]
-      else
-        [[:zip_code, compliance_info.country_code]]
-      end
+    # Whether this save leaves the seller with a bank account and no Stripe account, so the update below
+    # creates one. Mirrors the branch order in UpdatePayoutMethod: bank fields win over a PayPal address.
+    # Any save by a seller with a bank account and no Stripe account creates it, so that seller has to fix a
+    # saved military ZIP first: the alternative is the same rejection from Stripe after the save.
+    def first_stripe_setup_from_save?
+      return false if current_seller.stripe_connect_account.present? || StripeMerchantAccountManager.blocks_new_managed_account?(current_seller)
 
-      fields.find { |field, country_code| country_code == us_code && MILITARY_STATES.include?(UsZipCodes.identify_state_code(compliance_info.public_send(field))) }&.first
+      bank = params[:bank_account]
+      bank_fields = bank.present? && bank[:type].present? && (bank[:account_holder_full_name].present? || bank[:account_number].present?)
+
+      if params[:card].present?
+        true
+      elsif bank_fields
+        bank[:account_number].present? || current_seller.active_bank_account.present?
+      elsif params[:payment_address].present?
+        false
+      else
+        current_seller.active_bank_account.present?
+      end
     end
 
     def update_payout_method
