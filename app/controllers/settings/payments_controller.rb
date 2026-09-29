@@ -76,12 +76,20 @@ class Settings::PaymentsController < Settings::BaseController
     end
 
     if Compliance::Countries::USA.common_name == compliance_info.legal_entity_country
-      zip_code = params.dig(:user, :is_business) ? params.dig(:user, :business_zip_code).presence : params.dig(:user, :zip_code).presence
+      zip_code = params.dig(:user, params.dig(:user, :is_business) ? :business_zip_code : :zip_code).presence
       if zip_code
         unless UsZipCodes.identify_state_code(zip_code).present?
           return redirect_with_error("You entered a ZIP Code that doesn't exist within your country.")
         end
       end
+    end
+
+    military_zip_field = changed_us_zip_fields(compliance_info).find do |field|
+      MILITARY_STATES.include?(UsZipCodes.identify_state_code(params.dig(:user, field)))
+    end
+    if military_zip_field
+      # Stripe rejects military ZIP codes in the background, after the save has already looked successful.
+      return redirect_with_error("We can't accept military (APO/FPO/DPO) ZIP codes for payouts. Please enter a physical US street address and its ZIP code.", field: military_zip_field)
     end
 
     is_changing_payout_method = params[:payment_address].present? ||
@@ -439,6 +447,30 @@ class Settings::PaymentsController < Settings::BaseController
       # An unparseable date is not something the seller can have had stored, so treat it as new
       # input rather than blowing up the country change over a message-wording detail.
       true
+    end
+
+    # The form echoes every stored field back on save, so only a ZIP the seller changed counts: a stored
+    # military ZIP must not lock them out of unrelated settings. Country and business status resolve as
+    # UpdateUserComplianceInfo does, and a business also sends its representative's personal address.
+    def changed_us_zip_fields(compliance_info)
+      us_code = Compliance::Countries::USA.alpha2
+      submitted = params[:user]
+      return [] if submitted.blank?
+
+      business = submitted[:is_business].nil? ? compliance_info.is_business? : ActiveModel::Type::Boolean.new.cast(submitted[:is_business])
+      representative_country = submitted[:country].presence || compliance_info.country_code
+      fields = if business
+        [
+          (:business_zip_code if (submitted[:business_country].presence || compliance_info.business_country_code) == us_code),
+          (:zip_code if representative_country == us_code),
+        ]
+      else
+        [(:zip_code if compliance_info.country_code == us_code)]
+      end
+
+      fields.compact.select do |field|
+        submitted[field].present? && submitted[field].to_s.strip != compliance_info.public_send(field).to_s.strip
+      end
     end
 
     def update_payout_method
