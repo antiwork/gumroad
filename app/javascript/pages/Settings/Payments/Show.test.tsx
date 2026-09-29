@@ -813,3 +813,302 @@ describe("bank payout switch option on the payments page", () => {
     expect(mocks.put).not.toHaveBeenCalled();
   });
 });
+
+// Stripe refuses an account whose ("Kanji") variation holds no Japanese characters, so the page
+// must refuse it before saving.
+describe("Japanese (Kanji) variation fields", () => {
+  const jpCompliance = (overrides: Partial<ComplianceInfo> = {}) =>
+    complianceInfo({
+      country: "JP",
+      street_address: null,
+      building_number: "1-1",
+      building_number_kana: "1-1",
+      street_address_kanji: "千代田",
+      street_address_kana: "チヨダ",
+      city: "千代田区",
+      city_kana: "チヨダク",
+      state: "東京都",
+      zip_code: "100-0001",
+      first_name_kanji: "太郎",
+      last_name_kanji: "山田",
+      first_name_kana: "タロウ",
+      last_name_kana: "ヤマダ",
+      phone: "+819012345678",
+      ...overrides,
+    });
+
+  const renderJpSeller = (complianceOverrides: Partial<ComplianceInfo> = {}, userOverrides: Partial<User> = {}) => {
+    mocks.usePage.mockReturnValue({
+      props: {
+        ...pageProps(
+          { country_code: "JP", payout_currency: "jpy", ...userOverrides },
+          jpCompliance(complianceOverrides),
+        ),
+        countries: { JP: "Japan" },
+      },
+    });
+    render(<PaymentsPage />);
+  };
+
+  const jpBusiness = {
+    is_business: true,
+    business_country: "JP",
+    business_type: "corporation",
+    business_name: "Yamada KK",
+    business_name_kanji: "山田株式会社",
+    business_name_kana: "ヤマダカブシキガイシャ",
+    business_building_number: "1-1",
+    business_building_number_kana: "1-1",
+    business_street_address_kanji: "千代田",
+    business_street_address_kana: "チヨダ",
+    business_city: "千代田区",
+    business_city_kana: "チヨダク",
+    business_state: "東京都",
+    business_zip_code: "100-0001",
+    business_phone: "+819012345678",
+    job_title: "Owner",
+  };
+
+  const renderJpBusiness = (complianceOverrides: Partial<ComplianceInfo> = {}) =>
+    renderJpSeller({ ...jpBusiness, ...complianceOverrides }, { business_tax_id_entered: true });
+
+  // [field, name used in the banner, label rendered next to the input, business branch]
+  const kanjiFields = [
+    ["first_name_kanji", "First name (Kanji)", "First name / 名 (Kanji)", false],
+    ["last_name_kanji", "Last name (Kanji)", "Last name / 姓 (Kanji)", false],
+    ["street_address_kanji", "Town/Cho-me (Kanji)", "Town/Cho-me (Kanji)", false],
+    ["city", "City/Ward (Kanji)", "City/Ward (Kanji)", false],
+    ["business_name_kanji", "Business Name (Kanji)", "Business Name (Kanji)", true],
+    ["business_street_address_kanji", "Business town/Cho-me (Kanji)", "Business town/Cho-me (Kanji)", true],
+    ["business_city", "Business city/Ward (Kanji)", "Business city/Ward (Kanji)", true],
+  ] as const;
+
+  const noJapaneseLetters = [
+    ["romaji", "Chiyoda"],
+    ["only an ideographic space", "\u3000"],
+    ["only fullwidth punctuation and marks", "「ー・」"],
+    ["only halfwidth katakana marks", "ｰ･ﾞ"],
+    ["only kanji iteration marks", "々〻"],
+    ["only kana iteration marks", "ゝゞヽヾ"],
+    ["only Kangxi and CJK radicals", "⼭⺅"],
+    ["only enclosed and squared katakana", "㋐㌀"],
+  ] as const;
+
+  describe.each(kanjiFields)("%s", (field, bannerName, inputLabel, business) => {
+    it.each(noJapaneseLetters)("blocks a value with %s", (_, value) => {
+      if (business) renderJpBusiness({ [field]: value });
+      else renderJpSeller({ [field]: value });
+      save();
+
+      expect(mocks.put).not.toHaveBeenCalled();
+      expect(screen.getByText(`${bannerName} must include Japanese characters.`)).toBeTruthy();
+      expect(screen.getByLabelText(inputLabel).getAttribute("aria-invalid")).toBe("true");
+    });
+  });
+
+  it.each([
+    ["first_name_kanji", "First name / 名 (Kanji)"],
+    ["last_name_kanji", "Last name / 姓 (Kanji)"],
+  ] as const)("requires %s for an individual", (field, inputLabel) => {
+    renderJpSeller({ [field]: "" });
+    save();
+
+    expect(mocks.put).not.toHaveBeenCalled();
+    expect(screen.getByText(`Please complete the required fields below: ${inputLabel}.`)).toBeTruthy();
+    expect(screen.getByLabelText(inputLabel).getAttribute("aria-invalid")).toBe("true");
+  });
+
+  it("saves a Japanese seller whose variations hold Japanese characters", () => {
+    renderJpSeller();
+    save();
+
+    expect(mocks.put).toHaveBeenCalledTimes(1);
+  });
+
+  it("saves a Japanese business whose variations hold Japanese characters", () => {
+    renderJpBusiness();
+    save();
+
+    expect(mocks.put).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ["kanji with the 々 iteration mark", "佐々木"],
+    ["hiragana with the ゞ iteration mark", "いすゞ"],
+    ["katakana with the ヽ iteration mark", "ノスヽメ"],
+    ["a CJK compatibility ideograph", "山﨑"],
+    ["hiragana", "さくら"],
+    ["katakana with the ー length mark", "ローラ"],
+    ["halfwidth katakana", "ﾛｰﾗ"],
+    ["an ideograph outside the BMP", "𠮷田"],
+    ["kanji mixed with block numbers", "丸の内1丁目2-3"],
+    ["kanji around an ideographic space", "山田\u3000太郎"],
+  ])("saves when every (Kanji) field holds %s", (_, value) => {
+    renderJpBusiness(Object.fromEntries(kanjiFields.map(([field]) => [field, value])));
+    save();
+
+    expect(mocks.put).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ["between romaji words", "Yamada\u3000KK"],
+    ["on its own", "\u3000"],
+  ])("blocks a legal business name with an ideographic space %s", (_, value) => {
+    renderJpBusiness({ business_name: value });
+    save();
+
+    expect(mocks.put).not.toHaveBeenCalled();
+    expect(
+      screen.getByText("Legal business name must be in romaji (latin characters) for Japanese accounts."),
+    ).toBeTruthy();
+    expect(screen.getByLabelText("Legal business name (Romaji)").getAttribute("aria-invalid")).toBe("true");
+  });
+
+  // A failed save focuses the first invalid field, scrolling the banner away, so the reason has to
+  // sit in the input's own fieldset and be what the input is described by.
+  const inlineMessage = (inputLabel: string) => {
+    const input = screen.getByLabelText(inputLabel);
+    const id = input.getAttribute("aria-describedby");
+    if (!id) return null;
+    const message = document.getElementById(id);
+    expect(message).not.toBeNull();
+    expect(input.closest("fieldset")?.contains(message)).toBe(true);
+    return message?.textContent ?? null;
+  };
+
+  const renderJpSellerWith = (props: Record<string, unknown>, complianceOverrides: Partial<ComplianceInfo>) => {
+    mocks.usePage.mockReturnValue({
+      props: {
+        ...pageProps({ country_code: "JP", payout_currency: "jpy" }, jpCompliance(complianceOverrides)),
+        countries: { JP: "Japan" },
+        ...props,
+      },
+    });
+    render(<PaymentsPage />);
+  };
+
+  describe.each(kanjiFields)("%s", (field, bannerName, inputLabel, business) => {
+    it("explains the rejection beside the input as well as in the banner", () => {
+      if (business) renderJpBusiness({ [field]: "Chiyoda" });
+      else renderJpSeller({ [field]: "Chiyoda" });
+
+      expect(inlineMessage(inputLabel)).toBeNull();
+      save();
+
+      expect(mocks.put).not.toHaveBeenCalled();
+      expect(inlineMessage(inputLabel)).toBe("Must include Japanese characters.");
+      expect(screen.getByText(`${bannerName} must include Japanese characters.`)).toBeTruthy();
+    });
+  });
+
+  it.each([
+    ["first_name_kanji", "First name / 名 (Kanji)"],
+    ["last_name_kanji", "Last name / 姓 (Kanji)"],
+  ] as const)("explains beside the input that a blank %s is required", (field, inputLabel) => {
+    renderJpSeller({ [field]: "" });
+    save();
+
+    expect(inlineMessage(inputLabel)).toBe("Required.");
+    expect(screen.getByText(`Please complete the required fields below: ${inputLabel}.`)).toBeTruthy();
+  });
+
+  it("tells a blank name apart from one without Japanese characters", () => {
+    renderJpSeller({ first_name_kanji: "", last_name_kanji: "Yamada" });
+    save();
+
+    expect(inlineMessage("First name / 名 (Kanji)")).toBe("Required.");
+    expect(inlineMessage("Last name / 姓 (Kanji)")).toBe("Must include Japanese characters.");
+    expect(inlineMessage("City/Ward (Kanji)")).toBeNull();
+  });
+
+  it.each([
+    ["street_address_kanji", "Town/Cho-me (Kanji)", false],
+    ["city", "City/Ward (Kanji)", false],
+    ["business_name_kanji", "Business Name (Kanji)", true],
+    ["business_street_address_kanji", "Business town/Cho-me (Kanji)", true],
+    ["business_city", "Business city/Ward (Kanji)", true],
+  ] as const)("explains beside the input that a blank %s is required", (field, inputLabel, business) => {
+    if (business) renderJpBusiness({ [field]: "" });
+    else renderJpSeller({ [field]: "" });
+    save();
+
+    expect(mocks.put).not.toHaveBeenCalled();
+    expect(inlineMessage(inputLabel)).toBe("Required.");
+    expect(screen.getByLabelText(inputLabel).getAttribute("aria-invalid")).toBe("true");
+    expect(screen.getByText(/^Please complete the required fields below:/u).textContent).toContain(inputLabel);
+  });
+
+  it("clears the reasons with the highlights on the next edit and keeps the banner", () => {
+    renderJpSeller({ first_name_kanji: "Taro", last_name_kanji: "Yamada" });
+    save();
+    expect(inlineMessage("First name / 名 (Kanji)")).toBe("Must include Japanese characters.");
+    expect(inlineMessage("Last name / 姓 (Kanji)")).toBe("Must include Japanese characters.");
+
+    fireEvent.change(screen.getByLabelText("First name"), { target: { value: "Taro" } });
+
+    for (const inputLabel of ["First name / 名 (Kanji)", "Last name / 姓 (Kanji)"]) {
+      expect(inlineMessage(inputLabel)).toBeNull();
+      expect(screen.getByLabelText(inputLabel).getAttribute("aria-invalid")).toBe("false");
+    }
+    expect(screen.getByText("Last name (Kanji) must include Japanese characters.")).toBeTruthy();
+  });
+
+  it("clears every reason when the account type changes", () => {
+    renderJpSeller({ first_name_kanji: "Taro", last_name_kanji: "Yamada" });
+    save();
+    expect(inlineMessage("Last name / 姓 (Kanji)")).toBe("Must include Japanese characters.");
+
+    fireEvent.click(screen.getByRole("radio", { name: /Business/u }));
+
+    expect(inlineMessage("First name / 名 (Kanji)")).toBeNull();
+    expect(inlineMessage("Last name / 姓 (Kanji)")).toBeNull();
+  });
+
+  it("clears every reason when the country changes", () => {
+    renderJpSellerWith(
+      { countries: { JP: "Japan", US: "United States" } },
+      { first_name_kanji: "Taro", city: "Chiyoda" },
+    );
+    save();
+    expect(inlineMessage("City/Ward (Kanji)")).toBe("Must include Japanese characters.");
+
+    fireEvent.change(screen.getByLabelText("Country"), { target: { value: "US" } });
+
+    expect(inlineMessage("First name / 名 (Kanji)")).toBeNull();
+    expect(inlineMessage("City/Ward (Kanji)")).toBeNull();
+  });
+
+  it("clears every reason when the payout method changes", () => {
+    renderJpSellerWith(
+      { bank_account_details: { ...pageProps().bank_account_details, show_bank_account: true } },
+      { first_name_kanji: "Taro" },
+    );
+    save();
+    expect(inlineMessage("First name / 名 (Kanji)")).toBe("Must include Japanese characters.");
+
+    fireEvent.click(screen.getByRole("radio", { name: /Bank Account/u }));
+
+    expect(inlineMessage("First name / 名 (Kanji)")).toBeNull();
+  });
+
+  it("keeps a server error in the banner while the inline reason clears", () => {
+    const serverMessage = "Stripe could not verify the account.";
+    renderJpSellerWith({ errors: { base: [serverMessage] } }, { first_name_kanji: "Taro" });
+    save();
+
+    expect(inlineMessage("First name / 名 (Kanji)")).toBe("Must include Japanese characters.");
+    expect(screen.getByText(serverMessage)).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText("First name / 名 (Kanji)"), { target: { value: "太郎" } });
+
+    expect(inlineMessage("First name / 名 (Kanji)")).toBeNull();
+    expect(screen.getByText(serverMessage)).toBeTruthy();
+  });
+
+  it("leaves non-Japanese sellers' leftover (Kanji) values alone", () => {
+    renderPage({}, { first_name_kanji: "\u3000", last_name_kanji: "", street_address_kanji: "ー" });
+    save();
+
+    expect(mocks.put).toHaveBeenCalledTimes(1);
+  });
+});

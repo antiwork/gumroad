@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, describe, expect, it } from "vitest";
 
-import type { ComplianceInfo, User } from "$app/types/payments";
+import type { ComplianceInfo, FormFieldName, User } from "$app/types/payments";
 
 import AccountDetailsSection from "$app/components/Settings/PaymentsPage/AccountDetailsSection";
 
@@ -305,5 +305,84 @@ describe("AccountDetailsSection nationality field", () => {
     renderSection(makeUser({ country_code: "GR", has_outstanding_nationality_requirement: false }));
 
     expect(screen.queryByText(/Nationals of Cuba/u)).toBeNull();
+  });
+});
+
+describe("AccountDetailsSection (Kanji) field reasons", () => {
+  const LONGEST = "Must include Japanese characters.";
+  const kanjiFields: [FormFieldName, string][] = [
+    ["business_name_kanji", "Business Name (Kanji)"],
+    ["business_street_address_kanji", "Business town/Cho-me (Kanji)"],
+    ["business_city", "Business city/Ward (Kanji)"],
+    ["first_name_kanji", "First name / 名 (Kanji)"],
+    ["last_name_kanji", "Last name / 姓 (Kanji)"],
+    ["street_address_kanji", "Town/Cho-me (Kanji)"],
+    ["city", "City/Ward (Kanji)"],
+  ];
+
+  const japanSection = (fieldErrorMessages: Map<FormFieldName, string>) => (
+    <AccountDetailsSection
+      user={makeUser({ country_code: "JP", payout_currency: "jpy" })}
+      complianceInfo={{ ...complianceInfo, country: "JP", is_business: true, business_country: "JP" }}
+      updateComplianceInfo={() => {}}
+      isFormDisabled={false}
+      minDobYear={2008}
+      countries={{ JP: "Japan" }}
+      usBusinessTypes={usBusinessTypes}
+      uaeBusinessTypes={[]}
+      indiaBusinessTypes={[]}
+      canadaBusinessTypes={[]}
+      states={{ us: [], ca: [], au: [], mx: [], ae: [], ir: [], br: [], jp: [] }}
+      errorFieldNames={new Set(fieldErrorMessages.keys())}
+      fieldErrorMessages={fieldErrorMessages}
+      saveCounter={0}
+    />
+  );
+
+  // The slot under each input is what keeps the form still: it must exist, hidden from assistive
+  // technology, whether or not a reason is showing.
+  const slotBelow = (label: string) => {
+    const slot = screen.getByLabelText(label).nextElementSibling;
+    const sizer = slot?.querySelector('[aria-hidden="true"]');
+    expect(sizer?.textContent).toBe(LONGEST);
+    expect(sizer?.id).toBe("");
+    return slot;
+  };
+
+  it("reserves the longest reason's room under every (Kanji) input before any reason shows", () => {
+    render(japanSection(new Map()));
+
+    for (const [, label] of kanjiFields) {
+      slotBelow(label);
+      expect(screen.getByLabelText(label).hasAttribute("aria-describedby")).toBe(false);
+    }
+  });
+
+  it("shows each reason inside the reserved slot and describes the input with that reason alone", () => {
+    for (const [field, label] of kanjiFields) {
+      for (const message of ["Required.", LONGEST]) {
+        cleanup();
+        render(japanSection(new Map([[field, message]])));
+
+        const input = screen.getByRole("textbox", { name: label, description: message });
+        const reason = document.getElementById(input.getAttribute("aria-describedby") ?? "");
+        expect(reason?.textContent).toBe(message);
+        expect(reason?.getAttribute("aria-hidden")).toBeNull();
+        expect(reason?.parentElement).toBe(slotBelow(label));
+      }
+    }
+  });
+
+  it("keeps the same slot when the reasons clear", () => {
+    const { rerender } = render(japanSection(new Map(kanjiFields.map(([field]) => [field, "Required."]))));
+    const slots = kanjiFields.map(([, label]) => slotBelow(label));
+
+    rerender(japanSection(new Map()));
+
+    kanjiFields.forEach(([, label], index) => {
+      expect(slotBelow(label)).toBe(slots[index]);
+      expect(screen.getByLabelText(label).hasAttribute("aria-describedby")).toBe(false);
+    });
+    expect(screen.queryByText("Required.")).toBeNull();
   });
 });

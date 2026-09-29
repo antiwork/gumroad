@@ -64,7 +64,10 @@ const INDONESIA_BANK_CODE_REGEX = /^[0-9]{3}$/u;
 const KANA_NAME_ERROR = "may only contain katakana characters, spaces, dashes, and dots.";
 const KANA_ADDRESS_ERROR = "may only contain katakana, latin characters, digits, spaces, dashes, and dots.";
 
+// Keep ideographic spaces in the romaji check; the server ignores space-only edits.
 const HAS_JAPANESE_CHARS = /[\u3000-\u303F\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uFF65-\uFF9F]/u;
+// Require a base letter: script properties also include iteration marks, radicals, and enclosed kana.
+const HAS_JAPANESE_LETTERS = /(?=\p{Lo})[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u;
 const HAS_KATAKANA = /[\u30A0-\u30FF\u31F0-\u31FF\uFF65-\uFF9F]/u;
 
 const PAYOUT_FREQUENCIES = ["daily", "weekly", "monthly", "quarterly"] as const;
@@ -254,9 +257,16 @@ export default function PaymentsPage() {
   // well as in state because validateForm both writes it (through markFieldInvalid, from a dozen
   // nested helpers) and reads it back within the same synchronous call, before React has re-rendered.
   const errorFieldNamesRef = React.useRef(errorFieldNames);
+  // Reasons shown beside the (Kanji) variation fields. Focusing the first invalid field scrolls the
+  // banner out of view, so without these the seller sees a red border and no reason. They clear with
+  // the highlights so a reason never outlives its field's aria-invalid.
+  const [fieldErrorMessages, setFieldErrorMessages] = React.useState(() => new Map<FormFieldName, string>());
+  const setFieldErrorMessage = (fieldName: FormFieldName, message: string) =>
+    setFieldErrorMessages((messages) => new Map(messages).set(fieldName, message));
   const resetErrorFieldNames = () => {
     errorFieldNamesRef.current = new Set();
     setErrorFieldNames(errorFieldNamesRef.current);
+    setFieldErrorMessages(new Map());
   };
   // Counts failed save attempts. The scroll-to-first-invalid-field effect keys off this rather than
   // off errorFieldNames, so it fires once per press of "Update settings" and never again while the
@@ -489,6 +499,17 @@ export default function PaymentsPage() {
     if (value && !regex.test(value)) {
       markFieldInvalid(fieldName);
       setClientErrorMessage({ message: `${label} ${errorSuffix}` });
+    }
+  };
+
+  // Each (Kanji) field is Stripe's Japanese-script variation of the value beside it, and an account
+  // whose variation carries no Japanese character is refused later, naming neither the field nor the
+  // rule. Kana counts: a seller whose name has no kanji form can use its katakana rendering.
+  const validateJapaneseScriptField = (fieldName: FormFieldName, value: string | null | undefined, label: string) => {
+    if (value && !HAS_JAPANESE_LETTERS.test(value)) {
+      markFieldInvalid(fieldName);
+      setClientErrorMessage({ message: `${label} must include Japanese characters.` });
+      setFieldErrorMessage(fieldName, "Must include Japanese characters.");
     }
   };
 
@@ -807,12 +828,14 @@ export default function PaymentsPage() {
       }
       if (!form.data.user.street_address_kanji) {
         markFieldInvalid("street_address_kanji");
+        setFieldErrorMessage("street_address_kanji", "Required.");
       }
       if (!form.data.user.street_address_kana) {
         markFieldInvalid("street_address_kana");
       }
       if (!form.data.user.city) {
         markFieldInvalid("city");
+        setFieldErrorMessage("city", "Required.");
       }
       if (!form.data.user.city_kana) {
         markFieldInvalid("city_kana");
@@ -860,6 +883,18 @@ export default function PaymentsPage() {
         "City (Kana)",
         "must include katakana characters.",
       );
+      if (!form.data.user.first_name_kanji) {
+        markFieldInvalid("first_name_kanji");
+        setFieldErrorMessage("first_name_kanji", "Required.");
+      }
+      if (!form.data.user.last_name_kanji) {
+        markFieldInvalid("last_name_kanji");
+        setFieldErrorMessage("last_name_kanji", "Required.");
+      }
+      validateJapaneseScriptField("first_name_kanji", form.data.user.first_name_kanji, "First name (Kanji)");
+      validateJapaneseScriptField("last_name_kanji", form.data.user.last_name_kanji, "Last name (Kanji)");
+      validateJapaneseScriptField("street_address_kanji", form.data.user.street_address_kanji, "Town/Cho-me (Kanji)");
+      validateJapaneseScriptField("city", form.data.user.city, "City/Ward (Kanji)");
     } else if (
       !form.data.user.street_address ||
       (streetAddressValidationContextChanged &&
@@ -993,6 +1028,7 @@ export default function PaymentsPage() {
       if (form.data.user.business_country === "JP") {
         if (!form.data.user.business_name_kanji) {
           markFieldInvalid("business_name_kanji");
+          setFieldErrorMessage("business_name_kanji", "Required.");
         }
         if (!form.data.user.business_name_kana) {
           markFieldInvalid("business_name_kana");
@@ -1002,12 +1038,14 @@ export default function PaymentsPage() {
         }
         if (!form.data.user.business_street_address_kanji) {
           markFieldInvalid("business_street_address_kanji");
+          setFieldErrorMessage("business_street_address_kanji", "Required.");
         }
         if (!form.data.user.business_street_address_kana) {
           markFieldInvalid("business_street_address_kana");
         }
         if (!form.data.user.business_city) {
           markFieldInvalid("business_city");
+          setFieldErrorMessage("business_city", "Required.");
         }
         if (!form.data.user.business_city_kana) {
           markFieldInvalid("business_city_kana");
@@ -1054,6 +1092,13 @@ export default function PaymentsPage() {
           "Business city (Kana)",
           "must include katakana characters.",
         );
+        validateJapaneseScriptField("business_name_kanji", form.data.user.business_name_kanji, "Business Name (Kanji)");
+        validateJapaneseScriptField(
+          "business_street_address_kanji",
+          form.data.user.business_street_address_kanji,
+          "Business town/Cho-me (Kanji)",
+        );
+        validateJapaneseScriptField("business_city", form.data.user.business_city, "Business city/Ward (Kanji)");
         if (form.data.user.business_name && HAS_JAPANESE_CHARS.test(form.data.user.business_name)) {
           markFieldInvalid("business_name");
           setClientErrorMessage({
@@ -1596,6 +1641,7 @@ export default function PaymentsPage() {
                 canadaBusinessTypes={props.canada_business_types}
                 states={props.states}
                 errorFieldNames={errorFieldNames}
+                fieldErrorMessages={fieldErrorMessages}
                 saveCounter={saveCounter}
                 hasIdDocumentAlternative={hasIdDocumentAlternative}
               />
