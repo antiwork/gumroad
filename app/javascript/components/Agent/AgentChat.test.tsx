@@ -1267,7 +1267,7 @@ describe("AgentChat new chat control", () => {
     // The resumed transcript is gone, the stale id with it, and the composer is empty.
     expect(screen.queryByText(RESUMED_REPLY)).toBeNull();
     expect(screen.getByText("Hi")).toBeTruthy();
-    expect((screen.getByLabelText("Message") as HTMLTextAreaElement).value).toBe("");
+    expect(screen.getByLabelText<HTMLTextAreaElement>("Message").value).toBe("");
 
     await sendMessage("start over");
 
