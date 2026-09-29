@@ -5,6 +5,10 @@ class StripeCharge < BaseProcessorCharge
   # (gumroad-private#1608).
   DESTINATION_PAYMENT_SETTLEMENT_GRACE = 24.hours
 
+  # Raw captured facts in the charge's own currency. `refunded` is only true for a full refund,
+  # so a partial refund is visible only through amount_refunded_cents.
+  attr_reader :amount_cents, :currency, :amount_refunded_cents
+
   # Shared with the refund path, which must reverse an uncredited destination payment to the same
   # zero-in-account-currency the charge recorded. Fails closed: without the payment object or the
   # account's currency we cannot tell "never credited" from "not settled yet", so keep waiting.
@@ -35,6 +39,9 @@ class StripeCharge < BaseProcessorCharge
     self.status = stripe_charge[:status].to_s.downcase
     self.refunded = stripe_charge[:refunded]
     self.disputed = stripe_charge[:dispute].present?
+    @amount_cents = stripe_charge[:amount]
+    @currency = stripe_charge[:currency]
+    @amount_refunded_cents = stripe_charge[:amount_refunded]
 
     if stripe_charge_balance_transaction.present?
       stripe_fee_detail = stripe_charge_balance_transaction[:fee_details].find { |fee_detail| fee_detail[:type] == "stripe_fee" }

@@ -226,24 +226,23 @@ describe "Client-confirmed PaymentIntent webhook lifecycle", :vcr do
         create(:purchase_presentment, purchase:, charge_presentment:, presentment_currency: Currency::EUR)
       end
 
-      it "fails the purchase and removes the presentment snapshot so the retry starts clean" do
+      it "fails the purchase and keeps the presentment snapshot a later success on the same intent needs" do
+        charge_presentment = charge.charge_presentment
         deliver_webhook(payment_intent_event("payment_intent.payment_failed", charge, event_id: "evt_presentment_failed"))
 
         expect(purchase.reload).to be_failed
-        # The prepare-time snapshot describes a payment that will never settle; a retried
-        # checkout re-runs prepare and persists a fresh set for its new intent.
-        expect(charge.reload.charge_presentment).to be_nil
-        expect(purchase.purchase_presentment).to be_nil
-        expect(ChargePresentment.count).to eq(0)
-        expect(PurchasePresentment.count).to eq(0)
+        # payment_failed returns the intent to requires_payment_method, so it can still succeed.
+        expect(charge.reload.charge_presentment).to eq(charge_presentment)
+        expect(purchase.purchase_presentment).to be_present
       end
 
-      it "handles a re-delivered payment_failed after cleanup as a no-op" do
+      it "handles a re-delivered payment_failed as a no-op" do
         deliver_webhook(payment_intent_event("payment_intent.payment_failed", charge, event_id: "evt_presentment_failed_1"))
         expect do
           deliver_webhook(payment_intent_event("payment_intent.payment_failed", charge, event_id: "evt_presentment_failed_2"))
         end.not_to raise_error
-        expect(charge.reload.charge_presentment).to be_nil
+        expect(purchase.reload).to be_failed
+        expect(charge.reload.charge_presentment).to be_present
       end
     end
 

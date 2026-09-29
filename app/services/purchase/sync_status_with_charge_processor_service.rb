@@ -24,9 +24,9 @@ class Purchase::SyncStatusWithChargeProcessorService
     return false unless purchase.in_progress? || purchase.failed?
 
     # Client-confirmed recovery must use the PaymentIntent finalizer so recurring instruments are
-    # persisted before fulfillment. The delegated finalizer owns its own row lock.
+    # persisted before fulfillment. The delegated finalizer owns its own row lock, and a failed
+    # purchase stays failed here: only the finalizer's late-success guards may revive it.
     if client_confirmed_charge?
-      purchase.with_lock { restore_failed_purchase_to_in_progress! }
       # Scope to this purchase's charge: a multi-seller order can hold several
       # client-confirmed charges, and the order-wide finalizer would pick one arbitrarily.
       finalizer_args = { order: purchase.charge.order, charge: purchase.charge }

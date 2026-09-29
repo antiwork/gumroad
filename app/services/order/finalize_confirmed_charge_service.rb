@@ -29,7 +29,9 @@ class Order::FinalizeConfirmedChargeService
     @charge_intent ||= ChargeProcessor.get_charge_intent(charge.merchant_account, charge.stripe_payment_intent_id)
 
     failed_purchases = []
-    purchases_to_finalize = @charge.present? ? charge.purchases : order.purchases
+    # Id order keeps concurrent finalizers from deadlocking: each holds one purchase while fee
+    # allocation updates its siblings.
+    purchases_to_finalize = (@charge.present? ? charge.purchases : order.purchases).sort_by(&:id)
     purchases_to_finalize.each do |purchase|
       result = Purchase::FinalizeConfirmedChargeService.new(purchase:, charge_intent:).perform
       failed_purchases << purchase if result.present? && result != :pending

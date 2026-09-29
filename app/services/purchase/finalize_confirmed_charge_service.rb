@@ -57,10 +57,41 @@ class Purchase::FinalizeConfirmedChargeService < Purchase::BaseService
 
     # A purchase failed by an earlier finalize (the intent had not settled yet) is still funded by
     # this intent, so its success must complete the purchase instead of answering "your card was
-    # not charged". Purchases that failed for their own reason (error_code set) stay failed.
+    # not charged". Anything Stripe or our own records say was reversed, already booked, or not
+    # covered by the capture stays failed for manual review.
     def recoverable_late_success?
-      purchase.failed? && charge_intent.succeeded? && purchase.error_code.blank? &&
-        !purchase.refunds.exists? && !purchase.balance_transactions.exists?
+      return false unless purchase.failed? && charge_intent.succeeded?
+      # stripe_transaction_id is written in the same lock as fulfillment, so it marks a purchase a
+      # stale failure overwrote after it was booked. Connect-direct books no ledger row to say so.
+      return false if purchase.error_code.present? || purchase.stripe_transaction_id.present?
+      return false if purchase.refunds.exists? || purchase.balance_transactions.exists?
+      # Failing these ran resubscription/upgrade reversals that restoring the row does not undo, and
+      # client-confirm never saves an instrument for later installments.
+      return false if purchase.subscription.present? || purchase.is_upgrade_purchase? || purchase.is_installment_payment?
+
+      captured_charge_unreversed? && charge_split_matches_capture?
+    end
+
+    # A succeeded intent stays succeeded after refunds and disputes, so read the charge itself.
+    def captured_charge_unreversed?
+      charge = purchase.charge
+      processor_charge = charge_intent.charge
+      return false if charge.nil? || charge.stripe_payment_intent_id != charge_intent.id
+      return false if processor_charge.nil? || processor_charge.refunded || processor_charge.disputed
+      return false unless processor_charge.try(:amount_refunded_cents) == 0
+
+      presentment = charge.charge_presentment
+      expected_currency = presentment&.presentment_currency || Currency::USD
+      expected_cents = presentment&.presentment_total_cents || charge.amount_cents
+      processor_charge.try(:currency).to_s.casecmp?(expected_currency) && processor_charge.try(:amount_cents) == expected_cents
+    end
+
+    # #build_flow_of_funds_from_combined_charge splits the capture across every purchase on the
+    # charge by these totals. When they add up to what was charged, each purchase books only its
+    # own share, so reviving one cannot book more than was captured, whatever its peers' states.
+    def charge_split_matches_capture?
+      charge = purchase.charge
+      charge.purchases.sum(&:total_transaction_cents) == charge.amount_cents
     end
 
     def restore_failed_purchase_after_late_success!
