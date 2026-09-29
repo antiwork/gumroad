@@ -1334,14 +1334,12 @@ describe("AgentChat new chat control", () => {
     await waitFor(() => expect(screen.getByText(RESUMED_REPLY)).toBeTruthy());
 
     fireEvent.click(screen.getByLabelText("New chat"));
-    // Nothing is cleared until the seller confirms.
     expect(screen.getByRole("dialog", { name: "Start a new chat?" })).toBeTruthy();
     expect(screen.getByText(RESUMED_REPLY)).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Keep this chat" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(screen.getByText(RESUMED_REPLY)).toBeTruthy();
-    // Backing out hands keyboard focus back to the button that opened the dialog.
     await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText("New chat")));
 
     await sendMessage("still here");
