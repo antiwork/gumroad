@@ -60,9 +60,9 @@ class Purchase::FinalizeConfirmedChargeService < Purchase::BaseService
     # Anything Stripe or our records say was reversed, already booked, or uncaptured stays failed.
     def recoverable_late_success?
       return false unless purchase.failed? && charge_intent.succeeded?
-      # stripe_transaction_id is written in the same lock as fulfillment, so it marks a purchase a
-      # stale failure overwrote after it was booked. Connect-direct books no ledger row to say so.
-      return false if purchase.error_code.present? || purchase.stripe_transaction_id.present?
+      # Settlement deferral saves the charge ID before fulfillment. succeeded_at also protects
+      # completed direct Connect purchases, which have no ledger entry.
+      return false if purchase.error_code.present? || purchase.succeeded_at.present?
       return false if purchase.refunds.exists? || purchase.balance_transactions.exists?
       # Failing these ran resubscription/upgrade reversals that restoring the row does not undo, and
       # client-confirm never saves an instrument for later installments.
@@ -77,6 +77,7 @@ class Purchase::FinalizeConfirmedChargeService < Purchase::BaseService
       processor_charge = charge_intent.charge
       return false if charge.nil? || charge.stripe_payment_intent_id != charge_intent.id
       return false if processor_charge.nil? || processor_charge.refunded || processor_charge.disputed
+      return false if purchase.stripe_transaction_id.present? && purchase.stripe_transaction_id != processor_charge.id
       return false unless processor_charge.try(:amount_refunded_cents) == 0
 
       presentment = charge.charge_presentment

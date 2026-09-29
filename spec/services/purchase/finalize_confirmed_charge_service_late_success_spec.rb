@@ -77,6 +77,58 @@ describe Purchase::FinalizeConfirmedChargeService, "late success after an earlie
     end
   end
 
+  context "when settlement data arrives after a stale failure event" do
+    { destination_charge: 1, connect_direct: 0 }.each do |mode, ledger_rows|
+      %i[webhook manual_sync strict_sync].each do |entry_point|
+        it "recovers #{mode} through #{entry_point} without repeating fulfillment" do
+          _order, charge, (purchase, *) = build_cart(mode:)
+          provider[:charge] = { balance_transaction: nil }
+          deliver(charge, "payment_intent.succeeded")
+
+          expect(purchase.reload).to be_in_progress
+          expect(purchase.stripe_transaction_id).to eq("ch_late_#{charge.id}")
+          expect(purchase.succeeded_at).to be_nil
+          expect(purchase.balance_transactions).to be_empty
+          expect(access_count([purchase])).to eq(0)
+
+          HandleStripeEventWorker.new.perform(failed_event(charge))
+          expect(purchase.reload).to be_failed
+          provider[:charge] = {}
+          Sidekiq::Worker.clear_all
+
+          if entry_point == :webhook
+            deliver(charge, "payment_intent.succeeded")
+          else
+            sync = Purchase::SyncStatusWithChargeProcessorService.new(purchase, require_final_charge_status: entry_point == :strict_sync)
+            expect(sync.perform).to be(true)
+          end
+          deliver(charge, "payment_intent.succeeded")
+
+          expect(purchase.reload).to be_successful
+          expect(purchase.succeeded_at).to be_present
+          expect(purchase.stripe_error_code).to be_nil
+          expect(purchase.balance_transactions.count).to eq(ledger_rows)
+          expect(ledger_cents([purchase])).to eq(charge.amount_cents) if ledger_rows == 1
+          expect(access_count([purchase])).to eq(1)
+          expect(ActivateIntegrationsWorker.jobs.size).to eq(1)
+        end
+      end
+    end
+
+    it "rejects a saved charge ID that differs from the captured charge" do
+      _order, charge, (purchase, *) = build_cart(mode: :destination_charge)
+      fail_via_webhook(charge)
+      purchase.reload.update!(stripe_transaction_id: "ch_other_capture")
+
+      deliver(charge, "payment_intent.succeeded")
+
+      expect(purchase.reload).to be_failed
+      expect(purchase.stripe_transaction_id).to eq("ch_other_capture")
+      expect(purchase.balance_transactions).to be_empty
+      expect(access_count([purchase])).to eq(0)
+    end
+  end
+
   context "with several purchases on one captured charge" do
     it "completes every failed purchase of a normal cart, booking exactly the captured amount" do
       _order, charge, purchases = build_cart(items: 3)
@@ -127,11 +179,10 @@ describe Purchase::FinalizeConfirmedChargeService, "late success after an earlie
 
     it "revives a failed peer next to a booked peer that a stale failure overwrote, booking only its own share" do
       _order, charge, (booked, failed) = build_cart(items: 2)
-      deliver(charge, "payment_intent.succeeded")
+      charge_intent = ChargeProcessor.get_charge_intent(charge.merchant_account, charge.stripe_payment_intent_id)
+      described_class.new(purchase: booked, charge_intent:).perform
+      fail_via_webhook(charge)
       booked.reload.update_columns(purchase_state: "failed")
-      failed.reload.update_columns(purchase_state: "failed", stripe_transaction_id: nil)
-      BalanceTransaction.where(purchase_id: failed.id).delete_all
-      UrlRedirect.where(purchase_id: failed.id).delete_all
 
       deliver(charge, "payment_intent.succeeded")
 
