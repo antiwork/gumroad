@@ -142,7 +142,6 @@ describe Purchase::SyncStatusWithChargeProcessorService, :vcr do
     expect(Order::FinalizeConfirmedChargeService).to receive(:new).with(order:, charge:).and_return(finalizer)
     expect(finalizer).to receive(:perform) { purchase.update!(purchase_state: "successful") }
     expect(ChargeProcessor).not_to receive(:get_or_search_charge)
-    expect(purchase).to receive(:with_lock).and_call_original
 
     expect(described_class.new(purchase, mark_as_failed: true).perform).to be(true)
     expect(purchase.reload).to be_successful

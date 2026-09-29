@@ -162,17 +162,16 @@ module Purchase::ChargeEventsHandler
       # last_payment_error, matching what the synchronous confirm path stores.
       stripe_error_code = event.extras.try(:[], "stripe_error_code")
       charged_purchases.each do |purchase|
-        next unless purchase.in_progress?
-        purchase.stripe_error_code = stripe_error_code if stripe_error_code.present?
-        purchase.mark_failed!
+        # Re-read under the row lock: a finalizer may have booked it since it was loaded.
+        purchase.with_lock do
+          next unless purchase.in_progress?
+          purchase.stripe_error_code = stripe_error_code if stripe_error_code.present?
+          purchase.mark_failed!
+        end
       end
-      # A method-forced local method (iDEAL/Bancontact) checkout snapshots its
-      # buyer-currency presentment rows at intent-*prepare* time, before the buyer
-      # confirms. When the intent fails, that snapshot describes a payment that will
-      # never settle, so drop it here; the buyer's retry runs prepare again and
-      # persists a fresh snapshot for the new intent. (Card checkouts never reach
-      # this with rows attached — their presentment is built at charge time.)
-      destroy_presentment_records!
+      # Keep any buyer-currency presentment snapshot: the intent returns to
+      # requires_payment_method and can still succeed, and booking that success needs the
+      # snapshot's amount and currency. A retry never reuses these purchases.
       return
     end
 
