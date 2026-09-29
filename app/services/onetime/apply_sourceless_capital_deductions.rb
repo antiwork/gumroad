@@ -38,19 +38,24 @@ class Onetime::ApplySourcelessCapitalDeductions
   # skip_negative leaves a credit alone when applying it would end the seller's unpaid ledger, or the credit's own
   # merchant account and currency group, below zero. A negative ledger or group holds the seller's payouts, so the
   # caller decides whether that is acceptable.
-  def initialize(credit_ids: CREDIT_IDS, dry_run: true, skip_negative: false)
+  #
+  # Payouts judges only the balances dated up to the payout date, so the ledger is judged the same way: at every date
+  # from the one the deduction lands on, or only at payout_date when one is given. A later positive balance cannot
+  # cover a deduction that a payout dated before it would still hit.
+  def initialize(credit_ids: CREDIT_IDS, dry_run: true, skip_negative: false, payout_date: nil)
     raise ArgumentError, "Only listed credits can be applied" unless (credit_ids - CREDIT_IDS).empty?
     raise ArgumentError, "Credit IDs must be unique" unless credit_ids.uniq.size == credit_ids.size
 
     @credit_ids = credit_ids
     @dry_run = dry_run
     @skip_negative = skip_negative
+    @payout_date = payout_date&.to_date
   end
 
   def process
     # A dry run applies nothing, so later credits of the batch see earlier ones through these.
     @projected_deltas = Hash.new(0)
-    @projected_groups = Hash.new(0)
+    @projected_changes = Hash.new { |hash, user_id| hash[user_id] = [] }
     @projected_dates = {}
     @credit_ids.map do |credit_id|
       process_credit(credit_id)
@@ -84,7 +89,7 @@ class Onetime::ApplySourcelessCapitalDeductions
           verify_stripe_fields!(credit, stripe)
           transaction = credit.balance_transaction
           verify_balance_transaction!(credit, transaction) if transaction
-          projection = project(credit, transaction)
+          projection = project(credit, transaction, stripe)
           return skipped(credit, projection) if @skip_negative && projection[:new_deduction] && projection[:ends_negative]
           return dry_run_result(credit, transaction, stripe, projection) if @dry_run
 
@@ -186,7 +191,7 @@ class Onetime::ApplySourcelessCapitalDeductions
 
     # The balance BalanceTransaction#find_or_create_balance would pick. A missing one is created by the live run, so it starts at 0.
     # Amounts are cumulative over the batch in a dry run, so they match what a live run of the same batch would produce.
-    def project(credit, transaction)
+    def project(credit, transaction, stripe)
       applied_balance = transaction&.balance
       balance = applied_balance || Balance.where(user_id: credit.user_id, merchant_account_id: credit.merchant_account_id,
                                                  currency: Currency::USD, holding_currency: Currency::USD, state: "unpaid").order(date: :asc).first
@@ -198,53 +203,64 @@ class Onetime::ApplySourcelessCapitalDeductions
       else
         before_cents, after_cents, ledger_change = held_cents, held_cents + credit.amount_cents, credit.amount_cents
       end
-      groups, credit_key = projected_groups(credit, ledger_change)
-      ledger_after_cents = groups.values.sum
-      { balance:, balance_key:, before_cents:, after_cents:, ledger_change:, ledger_after_cents:,
-        ends_negative: ledger_after_cents.negative? || groups[credit_key].negative?,
-        payout_held: ledger_after_cents <= 0 || groups.values.any?(&:negative?), new_deduction: applied_balance.nil? }
+      # A dry run names the date of the balance a live run opens; the first credit of the batch sets it for the rest.
+      date = balance&.date || @projected_dates[balance_key] || Time.zone.at(stripe[:stripe_loan_paydown_deducted_at]).to_date
+      ledgers = projected_ledgers(credit, ledger_change, date)
+      { balance:, balance_key:, before_cents:, after_cents:, ledger_change:, date:, new_deduction: applied_balance.nil?,
+        ledger_after_cents: ledgers.last[:total_cents], worst_ledger_cents: ledgers.map { _1[:total_cents] }.min,
+        negative_from: ledgers.find { _1[:ends_negative] }&.dig(:date),
+        ends_negative: ledgers.any? { _1[:ends_negative] }, payout_held: ledgers.any? { _1[:payout_held] } }
     end
 
-    # What Payouts weighs when it decides whether a negative ledger holds a seller's payout: the whole unpaid
-    # ledger, and each payout group on its own. Groups follow StripePayoutProcessor.payout_groups, so Gumroad-held
-    # balances count toward the payout account's group. Payouts' exception for currencies an account cannot pay out
-    # is not modelled.
-    def projected_groups(credit, ledger_change)
+    # What Payouts weighs when it decides whether a negative ledger holds a seller's payout: the unpaid ledger up to
+    # the payout date, and each payout group on its own. Groups follow StripePayoutProcessor.payout_groups, so
+    # Gumroad-held balances count toward the payout account's group. Payouts' exception for currencies an account
+    # cannot pay out is not modelled. Returns one entry per payout date it judges, oldest first; the deduction counts
+    # from the date of its balance on, and so do earlier credits of a dry-run batch.
+    def projected_ledgers(credit, ledger_change, deduction_date)
       balances = ApplicationRecord.connected_to(role: :writing) { Balance.where(user_id: credit.user_id, state: "unpaid").includes(:merchant_account).to_a }
-      destination, held_by_gumroad, held_by_stripe = StripePayoutProcessor.get_payout_details(credit.user, balances)
+      changes = @projected_changes[credit.user_id]
+      dates = @payout_date ? [@payout_date] : ([deduction_date] + balances.map(&:date) + changes.map(&:first)).select { _1 >= deduction_date }.uniq.sort
+      dates.map { |date| ledger_up_to(credit, date, balances, changes, ledger_change, deduction_date) }
+    end
+
+    def ledger_up_to(credit, date, balances, changes, ledger_change, deduction_date)
+      destination, held_by_gumroad, held_by_stripe = StripePayoutProcessor.get_payout_details(credit.user, balances.select { _1.date <= date })
       gumroad_key = destination ? [destination.id, destination.currency.to_s] : [nil, nil]
+      group_key = ->(merchant_account) { merchant_account.holder_of_funds == HolderOfFunds::GUMROAD ? gumroad_key : [merchant_account.id, Currency::USD.to_s] }
       groups = Hash.new(0)
       held_by_stripe.each { |balance| groups[[balance.merchant_account_id, balance.holding_currency.to_s]] += balance.amount_cents }
       groups[gumroad_key] += held_by_gumroad.sum(&:amount_cents)
-      credit_key = credit.merchant_account.holder_of_funds == HolderOfFunds::GUMROAD ? gumroad_key : [credit.merchant_account_id, Currency::USD.to_s]
-      groups[credit_key] += ledger_change
-      @projected_groups.each do |(user_id, merchant_account_id), cents|
-        next unless user_id == credit.user_id
-
-        account = MerchantAccount.find(merchant_account_id)
-        groups[account.holder_of_funds == HolderOfFunds::GUMROAD ? gumroad_key : [merchant_account_id, Currency::USD.to_s]] += cents
+      credit_key = group_key.call(credit.merchant_account)
+      groups[credit_key] += ledger_change if deduction_date <= date
+      changes.each do |change_date, merchant_account, cents|
+        groups[group_key.call(merchant_account)] += cents if change_date <= date
       end
-      [groups, credit_key]
+      total_cents = groups.values.sum
+      { date:, total_cents:, ends_negative: total_cents.negative? || groups[credit_key].negative?,
+        payout_held: total_cents <= 0 || groups.values.any?(&:negative?) }
     end
 
     def dry_run_result(credit, transaction, stripe, projection)
       @projected_deltas[projection[:balance_key]] += credit.amount_cents if projection[:new_deduction]
-      @projected_groups[[credit.user_id, credit.merchant_account_id]] += projection[:ledger_change]
+      @projected_changes[credit.user_id] << [projection[:date], credit.merchant_account, projection[:ledger_change]]
       balance = projection[:balance]
       # A live batch opens one balance and reuses it, so later rows name the first credit's date.
-      new_balance_date = balance ? nil : (@projected_dates[projection[:balance_key]] ||= Time.zone.at(stripe[:stripe_loan_paydown_deducted_at]).to_date)
+      new_balance_date = balance ? nil : (@projected_dates[projection[:balance_key]] ||= projection[:date])
       { status: :dry_run, credit_id: credit.id, user_id: credit.user_id, balance_transaction_id: transaction&.id,
         creates_balance_transaction: transaction.nil?, links_applied_transaction: !projection[:new_deduction],
         unlinks_purchase_id: credit.financing_paydown_purchase_id, balance_id: balance&.id, balance_state: balance&.state,
         new_balance_date:,
         before_cents: projection[:before_cents], deduction_cents: credit.amount_cents, after_cents: projection[:after_cents],
-        ledger_after_cents: projection[:ledger_after_cents], ends_negative: projection[:ends_negative],
+        ledger_after_cents: projection[:ledger_after_cents], worst_ledger_cents: projection[:worst_ledger_cents],
+        negative_from: projection[:negative_from], ends_negative: projection[:ends_negative],
         payout_held: projection[:payout_held] }
     end
 
     def skipped(credit, projection)
       { status: :skipped, credit_id: credit.id, user_id: credit.user_id, reason: "Ledger would go negative",
-        deduction_cents: credit.amount_cents, ledger_after_cents: projection[:ledger_after_cents] }
+        deduction_cents: credit.amount_cents, ledger_after_cents: projection[:ledger_after_cents],
+        worst_ledger_cents: projection[:worst_ledger_cents], negative_from: projection[:negative_from] }
     end
 
     def already_applied(credit)
