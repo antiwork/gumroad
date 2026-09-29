@@ -171,8 +171,7 @@ module Purchase::ChargeEventsHandler
       end
       # Keep any buyer-currency presentment snapshot: the intent returns to
       # requires_payment_method and can still succeed, and booking that success needs the
-      # snapshot's amount and currency. A retry never reuses these purchases (prepare only
-      # runs on in_progress ones), and canceled intents are cleaned up in #cancel_charge_intent!.
+      # snapshot's amount and currency. A retry never reuses these purchases.
       return
     end
 

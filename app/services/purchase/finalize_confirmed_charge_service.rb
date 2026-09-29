@@ -56,9 +56,8 @@ class Purchase::FinalizeConfirmedChargeService < Purchase::BaseService
     attr_reader :charge_intent
 
     # A purchase failed by an earlier finalize (the intent had not settled yet) is still funded by
-    # this intent, so its success must complete the purchase instead of answering "your card was
-    # not charged". Anything Stripe or our own records say was reversed, already booked, or not
-    # covered by the capture stays failed for manual review.
+    # this intent, so its success must complete it instead of answering "your card was not charged".
+    # Anything Stripe or our records say was reversed, already booked, or uncaptured stays failed.
     def recoverable_late_success?
       return false unless purchase.failed? && charge_intent.succeeded?
       # stripe_transaction_id is written in the same lock as fulfillment, so it marks a purchase a

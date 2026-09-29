@@ -15,18 +15,36 @@ describe Purchase::FinalizeConfirmedChargeService, "on concurrent connections" d
   let(:notified_errors) { [] }
 
   before do
-    @id_watermarks = connection.tables.filter_map do |table|
-      next unless connection.column_exists?(table, :id)
-
-      [table, connection.select_value("SELECT COALESCE(MAX(id), 0) FROM #{connection.quote_table_name(table)}").to_i]
-    end.to_h
+    seller # materialize the helper's seller so cleanup always has this example's records to anchor on
     allow(ErrorNotifier).to receive(:notify) { |error, *| notified_errors << error }
   end
 
   after do
-    @id_watermarks&.each do |table, max_id|
-      connection.execute("DELETE FROM #{connection.quote_table_name(table)} WHERE id > #{max_id}")
+    clean_up_example_records(seller.id)
+  end
+
+  # Both connections commit (the race needs that), so the rows outlive the run and are deleted
+  # explicitly, anchored on this example's seller. Deleting every row above a per-table ID
+  # watermark would also delete what another local run commits to the shared test database.
+  def clean_up_example_records(seller_id)
+    purchase_ids = Purchase.where(seller_id:).pluck(:id)
+    order_ids = OrderPurchase.where(purchase_id: purchase_ids).pluck(:order_id)
+    link_ids = Link.where(user_id: seller_id).pluck(:id)
+
+    [BalanceTransaction, UrlRedirect, ProcessorPaymentIntent, PurchaseRefundPolicy,
+     PurchaseSalesTaxInfo, ChargePurchase, OrderPurchase].each do |model|
+      model.where(purchase_id: purchase_ids).delete_all
     end
+    Purchase.where(id: purchase_ids).delete_all
+    Charge.where(seller_id:).delete_all
+    Order.where(id: order_ids).delete_all
+    Price.where(link_id: link_ids).delete_all
+    Link.where(id: link_ids).delete_all
+    [AudienceMember, RefundPolicy].each { |model| model.where(seller_id:).delete_all }
+    # A user gets a GlobalAffiliate on creation, keyed by affiliate_user_id rather than seller_id.
+    Affiliate.where(affiliate_user_id: seller_id).delete_all
+    Balance.where(user_id: seller_id).delete_all
+    User.where(id: seller_id).delete_all
   end
 
   def connection_id = Purchase.connection.select_value("SELECT CONNECTION_ID()")
