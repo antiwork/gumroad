@@ -755,6 +755,15 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
           expect(session[:inertia_errors][:field]).to eq("zip_code")
         end
 
+        it "rechecks an unchanged military personal zip code when the account switches to a business" do
+          user.alive_user_compliance_info.dup_and_save! { |info| info.zip_code = "09330" }
+
+          put :update, params: { user: params.merge(is_business: true, business_country: "US", business_zip_code: "10001", zip_code: "09330") }
+
+          expect(session[:inertia_errors][:base].first).to include("military (APO/FPO/DPO) ZIP codes")
+          expect(session[:inertia_errors][:field]).to eq("zip_code")
+        end
+
         it "still accepts a physical US zip code" do
           put :update, params: { user: params.except(:is_business).merge(zip_code: "10001") }
 

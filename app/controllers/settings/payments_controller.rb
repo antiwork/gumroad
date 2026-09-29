@@ -84,9 +84,7 @@ class Settings::PaymentsController < Settings::BaseController
       end
     end
 
-    military_zip_field = changed_us_zip_fields(compliance_info).find do |field|
-      MILITARY_STATES.include?(UsZipCodes.identify_state_code(params.dig(:user, field)))
-    end
+    military_zip_field = military_zip_fields(compliance_info).first
     if military_zip_field
       # Stripe rejects military ZIP codes in the background, after the save has already looked successful.
       return redirect_with_error("We can't accept military (APO/FPO/DPO) ZIP codes for payouts. Please enter a physical US street address and its ZIP code.", field: military_zip_field)
@@ -449,27 +447,33 @@ class Settings::PaymentsController < Settings::BaseController
       true
     end
 
-    # The form echoes every stored field back on save, so only a ZIP the seller changed counts: a stored
-    # military ZIP must not lock them out of unrelated settings. Country and business status resolve as
-    # UpdateUserComplianceInfo does, and a business also sends its representative's personal address.
-    def changed_us_zip_fields(compliance_info)
+    # The form echoes every stored field back on save, so an unchanged ZIP is skipped: a stored military ZIP
+    # must not lock the seller out of unrelated settings. It is checked anyway when the save starts sending
+    # that address to Stripe for the first time (account type switch, or the stored country was not the US).
+    # Country and business status resolve as UpdateUserComplianceInfo does, and a business also sends its
+    # representative's personal address.
+    def military_zip_fields(compliance_info)
       us_code = Compliance::Countries::USA.alpha2
       submitted = params[:user]
       return [] if submitted.blank?
 
       business = submitted[:is_business].nil? ? compliance_info.is_business? : ActiveModel::Type::Boolean.new.cast(submitted[:is_business])
-      representative_country = submitted[:country].presence || compliance_info.country_code
+      account_type_changed = business != compliance_info.is_business?
       fields = if business
         [
-          (:business_zip_code if (submitted[:business_country].presence || compliance_info.business_country_code) == us_code),
-          (:zip_code if representative_country == us_code),
+          [:business_zip_code, submitted[:business_country].presence || compliance_info.business_country_code, compliance_info.business_country_code],
+          [:zip_code, submitted[:country].presence || compliance_info.country_code, compliance_info.country_code],
         ]
       else
-        [(:zip_code if compliance_info.country_code == us_code)]
+        [[:zip_code, compliance_info.country_code, compliance_info.country_code]]
       end
 
-      fields.compact.select do |field|
-        submitted[field].present? && submitted[field].to_s.strip != compliance_info.public_send(field).to_s.strip
+      fields.filter_map do |field, country_code, stored_country_code|
+        next unless country_code == us_code && submitted[field].present?
+
+        newly_sent = account_type_changed || stored_country_code != us_code
+        changed = submitted[field].to_s.strip != compliance_info.public_send(field).to_s.strip
+        field if (newly_sent || changed) && MILITARY_STATES.include?(UsZipCodes.identify_state_code(submitted[field]))
       end
     end
 
