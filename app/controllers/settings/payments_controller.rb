@@ -4,6 +4,8 @@ class Settings::PaymentsController < Settings::BaseController
   include ActionView::Helpers::SanitizeHelper
   include AuditsPayoutSettingsChanges
 
+  MILITARY_ZIP_MESSAGE = "We can't accept military (APO/FPO/DPO) ZIP codes for payouts. Please enter a physical US street address and its ZIP code."
+
   before_action :authorize
 
   def show
@@ -87,7 +89,7 @@ class Settings::PaymentsController < Settings::BaseController
     military_zip_field = military_zip_fields(compliance_info).first
     if military_zip_field
       # Stripe rejects military ZIP codes in the background, after the save has already looked successful.
-      return redirect_with_error("We can't accept military (APO/FPO/DPO) ZIP codes for payouts. Please enter a physical US street address and its ZIP code.", field: military_zip_field)
+      return redirect_with_error(MILITARY_ZIP_MESSAGE, field: military_zip_field)
     end
 
     is_changing_payout_method = params[:payment_address].present? ||
@@ -146,6 +148,10 @@ class Settings::PaymentsController < Settings::BaseController
     # we can create a stripe merchant account for them if they don't already have one.
     if current_seller.active_bank_account && current_seller.native_payouts_supported? && current_seller.stripe_connect_account.blank? && !StripeMerchantAccountManager.blocks_new_managed_account?(current_seller)
       begin
+        # An unchanged military ZIP saved before the guard existed reaches Stripe here for the first time.
+        saved_military_zip_field = stored_military_zip_field(current_seller.fetch_or_build_user_compliance_info)
+        return redirect_with_error(MILITARY_ZIP_MESSAGE, field: saved_military_zip_field) if saved_military_zip_field
+
         StripeMerchantAccountManager.create_account(current_seller, passphrase: GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))
       rescue Stripe::StripeError, MerchantRegistrationUserNotReadyError => e
         if e.is_a?(Stripe::InvalidRequestError) && e.code == "postal_code_invalid"
@@ -448,7 +454,7 @@ class Settings::PaymentsController < Settings::BaseController
     end
 
     # The form echoes stored fields back, so an unchanged ZIP is skipped and a stored military ZIP can't lock
-    # the seller out of unrelated settings, unless this save is when the address first reaches Stripe.
+    # the seller out of unrelated settings, unless this save switches the account type or the stored country.
     # Country and business status resolve as UpdateUserComplianceInfo does.
     def military_zip_fields(compliance_info)
       us_code = Compliance::Countries::USA.alpha2
@@ -456,10 +462,6 @@ class Settings::PaymentsController < Settings::BaseController
       return [] if submitted.blank?
 
       business = submitted[:is_business].nil? ? compliance_info.is_business? : ActiveModel::Type::Boolean.new.cast(submitted[:is_business])
-      first_stripe_setup = current_seller.stripe_connect_account.blank? &&
-                           (params.dig(:bank_account, :account_number).present? ||
-                            (params[:payment_address].blank? && current_seller.active_bank_account.present?)) &&
-                           !StripeMerchantAccountManager.blocks_new_managed_account?(current_seller)
       account_type_changed = business != compliance_info.is_business?
       # A business record without its own country is validated under the personal country (legal_entity_country).
       stored_business_country_code = compliance_info.business_country_code.presence || compliance_info.country_code
@@ -475,10 +477,24 @@ class Settings::PaymentsController < Settings::BaseController
       fields.filter_map do |field, country_code, stored_country_code|
         next unless country_code == us_code && submitted[field].present?
 
-        newly_sent = first_stripe_setup || account_type_changed || stored_country_code != us_code
+        newly_sent = account_type_changed || stored_country_code != us_code
         changed = submitted[field].to_s.strip != compliance_info.public_send(field).to_s.strip
         field if (newly_sent || changed) && MILITARY_STATES.include?(UsZipCodes.identify_state_code(submitted[field]))
       end
+    end
+
+    def stored_military_zip_field(compliance_info)
+      us_code = Compliance::Countries::USA.alpha2
+      fields = if compliance_info.is_business?
+        [
+          [:business_zip_code, compliance_info.business_country_code.presence || compliance_info.country_code],
+          [:zip_code, compliance_info.country_code],
+        ]
+      else
+        [[:zip_code, compliance_info.country_code]]
+      end
+
+      fields.find { |field, country_code| country_code == us_code && MILITARY_STATES.include?(UsZipCodes.identify_state_code(compliance_info.public_send(field))) }&.first
     end
 
     def update_payout_method
