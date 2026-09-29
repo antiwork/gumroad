@@ -1,36 +1,13 @@
 # frozen_string_literal: true
 
-# Relabels unpaid Gumroad-held balances whose holding currency is not USD. Gumroad-held holding
-# fields are the canonical USD record of what Gumroad owes the user, and both payout processors
-# reject non-USD Gumroad-held balances — Stripe fails the user's whole payment with
-# `currency_mismatch`, PayPal silently drops the row.
-#
-# Two write paths produced these rows, and each transaction must be positively traced to one of
-# them before it is touched:
-#
-#   :presentment — seller rows from buyer-currency presentment charges (fixed by #6505). Only the
-#     holding label and gross were wrong; the row's own issued_amount_* fields are the canonical
-#     USD figures, so those are copied across.
-#
-#   :affiliate_credit — affiliate rows on direct charges into a seller's non-USD connected account.
-#     The affiliate helpers took their currency from the charge's application-fee settlement
-#     currency, so BOTH the issued and holding sides were labelled e.g. EUR. The cents were never
-#     converted: they are the purchase's AffiliateCredit#amount_cents, which is computed in USD.
-#     The repair writes that recorded USD figure to both sides and asserts it equals the cents
-#     already on the row. No exchange rate is used or inferred.
-#
-# Any other shape is refused. Relabelling must not move a cent: the balance's stored totals must
-# equal the re-derived USD total, or the balance is refused.
-#
-# Dry run by default. Explicit ids only; `candidate_balance_ids` lists what to review:
+# Relabels unpaid Gumroad-held balances with a non-USD holding currency to USD. Every transaction
+# must trace to :presentment (issued side already canonical USD; copied to holding) or
+# :affiliate_credit (USD cents under a foreign label; relabelled in place). Anything else refuses
+# the whole balance. No exchange rate is used, and the balance totals must not change.
 #
 #   ids = Onetime::RestampGumroadHeldPresentmentBalances.candidate_balance_ids
 #   Onetime::RestampGumroadHeldPresentmentBalances.new(balance_ids: ids, fix_deployed_at: ..., affiliate_fix_deployed_at: ...).process
 #   Onetime::RestampGumroadHeldPresentmentBalances.new(balance_ids: ids, fix_deployed_at: ..., affiliate_fix_deployed_at: ..., dry_run: false).process
-#
-# Both cutoffs are production deploy times (from the release, not the merge) of the fix for that
-# path. A transaction written after its path's fix deployed means the cutoff or the fix is wrong,
-# and the balance is refused.
 class Onetime::RestampGumroadHeldPresentmentBalances
   # A day before the earliest mislabelled row (2026-07-23 21:07 UTC, when the ramp hit 100%).
   REGRESSION_WINDOW_START = Time.utc(2026, 7, 22, 0, 0)
@@ -165,11 +142,10 @@ class Onetime::RestampGumroadHeldPresentmentBalances
     # eligibility, so the provenance is already proven.
     def usd_target(bt)
       if provenance(bt) == :affiliate_credit
-        # AffiliateCredit#amount_cents is the purchase's recorded USD figure for this credit.
-        cents = bt.purchase.affiliate_credit.amount_cents
+        # The cents were always USD; only the labels were wrong.
         {
-          issued_amount_currency: Currency::USD, issued_amount_gross_cents: cents, issued_amount_net_cents: cents,
-          holding_amount_currency: Currency::USD, holding_amount_gross_cents: cents, holding_amount_net_cents: cents,
+          issued_amount_currency: Currency::USD, issued_amount_gross_cents: bt.issued_amount_gross_cents, issued_amount_net_cents: bt.issued_amount_net_cents,
+          holding_amount_currency: Currency::USD, holding_amount_gross_cents: bt.holding_amount_gross_cents, holding_amount_net_cents: bt.holding_amount_net_cents,
         }
       else
         {
@@ -180,13 +156,21 @@ class Onetime::RestampGumroadHeldPresentmentBalances
       end
     end
 
-    # A purchase leg that credits the purchase's affiliate is the affiliate path; everything
-    # else must prove the presentment path.
+    # A leg that pays or claws back the affiliate share of a related purchase is the affiliate
+    # path; everything else must prove the presentment path.
     def provenance(bt)
-      affiliate_credit = bt.purchase&.affiliate_credit
-      return :affiliate_credit if affiliate_credit && bt.user_id == affiliate_credit.affiliate_user_id && bt.user_id != bt.purchase.seller_id
+      affiliate_purchase(bt) ? :affiliate_credit : :presentment
+    end
 
-      :presentment
+    # Affiliate refund/chargeback legs carry refund:/dispute: rather than purchase:, and the
+    # dispute-won leg is a Credit pointing at the chargebacked purchase.
+    def affiliate_purchase(bt)
+      candidates = related_purchases(bt)
+      candidates = [bt.credit.chargebacked_purchase].compact if candidates.empty? && bt.credit&.dispute_id
+      candidates.find do |purchase|
+        credit = purchase.affiliate_credit
+        credit && bt.user_id == credit.affiliate_user_id && bt.user_id != purchase.seller_id
+      end
     end
 
     def check_eligibility(balance)
@@ -230,52 +214,51 @@ class Onetime::RestampGumroadHeldPresentmentBalances
       presentment_backed?(bt)
     end
 
-    # The affiliate helpers wrote the credit's USD cents verbatim under the settlement currency's
-    # label, on both sides. Anything else is not that bug, so it is refused.
+    # The affiliate helpers wrote USD cents verbatim under the settlement currency's label, on both
+    # sides. A purchase leg is exactly the credit; refund/chargeback legs are negative and
+    # dispute-won legs positive, each at most the credit. Anything else is refused.
     def affiliate_credit_eligibility(bt, balance)
       return :bt_affiliate_after_fix unless bt.created_at <= @affiliate_fix_deployed_at
       return :bt_affiliate_labels_disagree unless bt.issued_amount_currency.to_s.downcase == bt.holding_amount_currency.to_s.downcase
       return :bt_affiliate_balance_currency_disagrees unless balance.currency.to_s.downcase == bt.issued_amount_currency.to_s.downcase
 
-      recorded_usd_cents = bt.purchase.affiliate_credit.amount_cents
       amounts = [bt.issued_amount_gross_cents, bt.issued_amount_net_cents, bt.holding_amount_gross_cents, bt.holding_amount_net_cents]
-      # The cents must already be the recorded USD figure; if they were ever converted, relabelling
-      # would change the value owed.
-      return :bt_affiliate_amount_not_recorded_usd unless amounts.all? { |cents| cents == recorded_usd_cents }
+      # If the four ever disagree, something converted or netted them, and relabelling would move money.
+      return :bt_affiliate_amounts_disagree unless amounts.uniq.size == 1
 
-      :ok
+      cents = amounts.first
+      credit_cents = affiliate_purchase(bt).affiliate_credit.amount_cents
+      ok =
+        if bt.purchase_id
+          cents == credit_cents
+        elsif bt.refund_id || bt.dispute_id
+          cents.negative? && cents.abs <= credit_cents
+        else
+          cents.positive? && cents <= credit_cents
+        end
+      ok ? :ok : :bt_affiliate_amount_not_recorded_usd
     end
 
-    # Refund and dispute legs carry no purchase_id of their own, and a combined-cart dispute
-    # carries only charge_id — Dispute#purchases handles both dispute shapes. No reachable
-    # purchase (a credit leg, say) means the row cannot be tied to this regression: refuse.
-    #
-    # For a charge-level dispute this is every purchase on the charge, and only SOME of them
-    # can have a presentment row. A charge carries the seller's free/test lines alongside the
-    # paid ones (Order::PreparePaymentIntentService#charge_purchases appends them), while the
-    # presentment snapshot is built from the paid lines only, because a free line contributes
-    # no money to the charge (Charge::PresentmentOrchestrator.persist! writes a row per paid
-    # allocation). So a paid EUR line plus a $0 EUR companion is a normal presentment charge
-    # with one presentment-backed purchase and one without. Requiring all of them would refuse
-    # exactly the rows this repair exists to fix, and tell the operator they were never part of
-    # the regression. One presentment-backed purchase is the proof we need: it can only exist
-    # if this charge went down the presentment path.
+    # One presentment-backed purchase is enough: a charge-level dispute also reaches the charge's
+    # free/test lines, which never get a presentment row even on a presentment charge.
     def presentment_backed?(balance_transaction)
-      purchases =
-        if balance_transaction.purchase
-          [balance_transaction.purchase]
-        elsif balance_transaction.refund
-          [balance_transaction.refund.purchase]
-        elsif balance_transaction.dispute
-          balance_transaction.dispute.purchases
-        else
-          []
-        end.compact
-
+      purchases = related_purchases(balance_transaction)
       return :bt_no_related_purchase if purchases.empty?
       return :bt_purchase_not_presentment unless purchases.any? { |purchase| purchase.purchase_presentment.present? }
 
       :ok
+    end
+
+    def related_purchases(bt)
+      if bt.purchase
+        [bt.purchase]
+      elsif bt.refund
+        [bt.refund.purchase]
+      elsif bt.dispute
+        bt.dispute.purchases
+      else
+        []
+      end.compact
     end
 
     def usd?(currency)

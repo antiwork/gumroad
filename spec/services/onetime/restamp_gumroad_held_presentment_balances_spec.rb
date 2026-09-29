@@ -512,13 +512,91 @@ describe Onetime::RestampGumroadHeldPresentmentBalances do
 
     it "refuses a row whose cents differ from the credit's recorded USD figure, rather than converting" do
       balance, bt, _credit = create_eur_affiliate_row(credit_cents: 42)
-      bt.update_columns(issued_amount_net_cents: 38, holding_amount_net_cents: 38)
+      bt.update_columns(issued_amount_gross_cents: 38, issued_amount_net_cents: 38, holding_amount_gross_cents: 38, holding_amount_net_cents: 38)
       balance.update_columns(amount_cents: 38, holding_amount_cents: 38)
 
       result = service(balance_ids: [balance.id], dry_run: false).process
       expect(result[:stats][:bt_affiliate_amount_not_recorded_usd]).to eq(1)
       expect(balance.reload.holding_currency).to eq(Currency::EUR)
       expect(bt.reload.issued_amount_currency).to eq(Currency::EUR)
+    end
+
+    def create_eur_affiliate_leg(cents:, refund: nil, dispute: nil, credit: nil, currency: Currency::EUR)
+      bt = travel_to(affiliate_written_at + 1.hour) do
+        BalanceTransaction.create!(
+          user: affiliate_user,
+          merchant_account: gumroad_account,
+          refund:, dispute:, credit:,
+          issued_amount: BalanceTransaction::Amount.new(currency:, gross_cents: cents, net_cents: cents),
+          holding_amount: BalanceTransaction::Amount.new(currency:, gross_cents: cents, net_cents: cents),
+          update_user_balance: true,
+        )
+      end
+      bt
+    end
+
+    it "relabels a partial affiliate refund leg, which carries refund: and no purchase" do
+      balance, credit_bt, credit = create_eur_affiliate_row(credit_cents: 42)
+      refund = create(:refund, purchase: credit.purchase, amount_cents: 5_00)
+      refund_bt = create_eur_affiliate_leg(cents: -15, refund:)
+      expect(refund_bt.purchase_id).to be_nil
+      expect(refund_bt.balance_id).to eq(balance.id)
+      expect(balance.reload.amount_cents).to eq(27)
+
+      result = service(balance_ids: [balance.id], dry_run: false).process
+      expect(result[:stats][:corrected]).to eq(1)
+      expect(result[:corrected].first[:provenances]).to eq([:affiliate_credit])
+
+      balance.reload
+      expect([balance.currency, balance.holding_currency]).to eq([Currency::USD, Currency::USD])
+      expect([balance.amount_cents, balance.holding_amount_cents]).to eq([27, 27])
+      expect(balance.holding_amount_cents).to eq(balance.balance_transactions.sum(:holding_amount_net_cents))
+      refund_bt.reload
+      expect([refund_bt.issued_amount_currency, refund_bt.holding_amount_currency]).to eq([Currency::USD, Currency::USD])
+      expect([refund_bt.issued_amount_gross_cents, refund_bt.issued_amount_net_cents, refund_bt.holding_amount_gross_cents, refund_bt.holding_amount_net_cents]).to eq([-15] * 4)
+      expect(credit_bt.reload.holding_amount_net_cents).to eq(42)
+    end
+
+    it "relabels an affiliate chargeback leg and the dispute-won credit leg" do
+      balance, _credit_bt, credit = create_eur_affiliate_row(credit_cents: 42)
+      dispute = create(:dispute_formalized, purchase: credit.purchase)
+      create_eur_affiliate_leg(cents: -42, dispute:)
+      won = Credit.create!(user: affiliate_user, merchant_account: gumroad_account, amount_cents: 42,
+                           chargebacked_purchase: credit.purchase, dispute:)
+      won_bt = create_eur_affiliate_leg(cents: 42, credit: won)
+      expect(balance.reload.amount_cents).to eq(42)
+
+      result = service(balance_ids: [balance.id], dry_run: false).process
+      expect(result[:stats][:corrected]).to eq(1)
+      expect([balance.reload.holding_currency, balance.holding_amount_cents]).to eq([Currency::USD, 42])
+      expect(won_bt.reload.holding_amount_currency).to eq(Currency::USD)
+    end
+
+    it "refuses an affiliate refund leg whose cents disagree across fields" do
+      balance, _credit_bt, credit = create_eur_affiliate_row(credit_cents: 42)
+      refund = create(:refund, purchase: credit.purchase, amount_cents: 5_00)
+      refund_bt = create_eur_affiliate_leg(cents: -15, refund:)
+      refund_bt.update_columns(holding_amount_gross_cents: -14)
+
+      result = service(balance_ids: [balance.id], dry_run: false).process
+      expect(result[:stats][:bt_affiliate_amounts_disagree]).to eq(1)
+      expect(balance.reload.holding_currency).to eq(Currency::EUR)
+      expect(refund_bt.reload.issued_amount_currency).to eq(Currency::EUR)
+    end
+
+    it "refuses an affiliate refund leg larger than the credit, or with the wrong sign" do
+      balance, _credit_bt, credit = create_eur_affiliate_row(credit_cents: 42)
+      refund = create(:refund, purchase: credit.purchase)
+      refund_bt = create_eur_affiliate_leg(cents: -43, refund:)
+
+      result = service(balance_ids: [balance.id], dry_run: false).process
+      expect(result[:stats][:bt_affiliate_amount_not_recorded_usd]).to eq(1)
+
+      refund_bt.update_columns(issued_amount_gross_cents: 15, issued_amount_net_cents: 15, holding_amount_gross_cents: 15, holding_amount_net_cents: 15)
+      balance.update_columns(amount_cents: 57, holding_amount_cents: 57)
+      result = service(balance_ids: [balance.id], dry_run: false).process
+      expect(result[:stats][:bt_affiliate_amount_not_recorded_usd]).to eq(1)
+      expect(balance.reload.holding_currency).to eq(Currency::EUR)
     end
 
     it "refuses an affiliate row written after the affiliate fix deployed" do
