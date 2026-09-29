@@ -193,8 +193,7 @@ export const Layout = ({
     } catch (e) {
       if (e instanceof ResponseError) showAlert(e.message, "error", { html: true });
       else {
-        // Release Save and Publish even for an unexpected error, or they stay disabled
-        // with no message (gumroad-private#3123).
+        // Release Save and Publish for any other error too, or they stay disabled with no message.
         if (typeof reportError === "function") reportError(e);
         showAlert("Something went wrong. Please try again.", "error");
       }

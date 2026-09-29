@@ -700,8 +700,7 @@ export const saveProduct = async (
 };
 
 // A 2xx the editor cannot read: the server may already have kept the save, so a blind retry could
-// resend stale ids and duplicate records. The editor keeps Save disabled until the seller reloads
-// (gumroad-private#3123).
+// resend stale ids and duplicate records. The editor keeps Save disabled until the seller reloads.
 export class UnconfirmedSaveError extends ResponseError {
   constructor(public originalError: unknown) {
     super("We could not confirm that your changes saved. Reload the page to check before saving again.");

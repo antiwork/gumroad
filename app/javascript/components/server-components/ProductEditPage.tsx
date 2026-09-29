@@ -579,6 +579,7 @@ const ProductEditPage = (props: Props) => {
   // Set when a save may have reached the server but this editor cannot save again safely (it holds
   // stale ids). Save stays disabled, so the reason has to stay on screen until the seller reloads.
   const [reloadRequired, setReloadRequired] = React.useState<string | null>(null);
+  const [reloadModalOpen, setReloadModalOpen] = React.useState(false);
   // Shown inline rather than as a toast so it cannot cover the header or tabs
   // while the seller copies their unsaved edits. An object so a repeated
   // refusal re-focuses it.
@@ -687,6 +688,7 @@ const ProductEditPage = (props: Props) => {
         // Leave Save disabled until the page is gone, so a second click cannot save again.
         reloading = true;
         setReloadRequired("Your changes were saved. Reloading the page to show them.");
+        setReloadModalOpen(true);
         window.location.reload();
         return true;
       }
@@ -803,12 +805,12 @@ const ProductEditPage = (props: Props) => {
         reloading = true;
         if (typeof reportError === "function") reportError(e.originalError);
         setReloadRequired(e.message);
+        setReloadModalOpen(true);
       } else if (e instanceof ResponseError) {
         showAlert(e.message, "error");
       } else {
-        // Anything else must still release the save: rethrowing here left `saving` true, which
-        // disabled Save with no message (gumroad-private#3123). reportError raises a window
-        // `error` event so a global handler sees it; older browsers lack it.
+        // Release the save for any other error too; reportError raises a window `error` event
+        // for a global handler, and older browsers lack it.
         if (typeof reportError === "function") reportError(e);
         if (saved) {
           // The server kept the save but this editor could not adopt the result (canonical ids,
@@ -816,6 +818,7 @@ const ProductEditPage = (props: Props) => {
           reloading = true;
           saved = false;
           setReloadRequired("Your changes were saved, but this page could not refresh to match them.");
+          setReloadModalOpen(true);
         } else showAlert("Something went wrong while saving. Please try again.", "error");
       }
     } finally {
@@ -1101,27 +1104,35 @@ const ProductEditPage = (props: Props) => {
           </Modal>
         ) : null}
         {reloadRequired ? (
-          <Modal
-            open
-            onClose={() => setReloadRequired(null)}
-            title="Reload the page to keep editing"
-            footer={
-              <>
-                <Button onClick={() => setReloadRequired(null)}>Keep this page open</Button>
-                <Button color="accent" onClick={() => window.location.reload()}>
-                  Reload page
-                </Button>
-              </>
-            }
-          >
-            <div className="flex flex-col gap-4">
-              <p>{reloadRequired}</p>
-              <p>
-                Save is turned off on this page until you reload, because saving again could repeat changes. Copy
-                anything you still need first — unsaved edits on this page are lost when you reload.
-              </p>
-            </div>
-          </Modal>
+          <>
+            <Modal
+              open={reloadModalOpen}
+              onClose={() => setReloadModalOpen(false)}
+              title="Reload the page to keep editing"
+              footer={
+                <>
+                  <Button onClick={() => setReloadModalOpen(false)}>Keep this page open</Button>
+                  <Button color="accent" onClick={() => window.location.reload()}>
+                    Reload page
+                  </Button>
+                </>
+              }
+            >
+              <div className="flex flex-col gap-4">
+                <p>{reloadRequired}</p>
+                <p>
+                  Save is turned off on this page until you reload, because saving again could repeat changes. Copy
+                  anything you still need first — unsaved edits on this page are lost when you reload.
+                </p>
+              </div>
+            </Modal>
+            <Alert variant="danger" className="mx-4 mt-4 md:mx-8 md:mt-8">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span>{reloadRequired} Save is turned off until you reload.</span>
+                <Button onClick={() => window.location.reload()}>Reload page</Button>
+              </div>
+            </Alert>
+          </>
         ) : null}
         {staleDeletionConflict ? (
           <Modal

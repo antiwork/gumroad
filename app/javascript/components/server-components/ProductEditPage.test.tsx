@@ -1270,9 +1270,8 @@ describe("a failed upload's embed", () => {
   });
 });
 
-// gumroad-private#3123: a finished 611.5 MB upload left Save disabled with no error. A save that
-// fails with anything other than a ResponseError (for example a response that is not JSON)
-// used to skip setSaving(false), so the button stayed on "Saving changes..." for the rest of the session.
+// Save must be released after an error the editor does not know, and stay off only when a retry
+// could repeat changes the server already kept.
 describe("a save that fails with an unexpected error", () => {
   const reportErrorSpy = vi.fn();
   beforeEach(() => {
@@ -1349,6 +1348,18 @@ describe("a save that fails with an unexpected error", () => {
         "We could not confirm that your changes saved. Reload the page to check before saving again.",
       ),
     ).toBeTruthy();
+  });
+
+  it("keeps the reload explanation on the page after the seller dismisses the modal", async () => {
+    await renderEditor();
+    saveProductMock.mockRejectedValueOnce(new UnconfirmedSaveError(new SyntaxError("Unexpected end of JSON input")));
+    await save();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Keep this page open" }));
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByText(/Save is turned off until you reload\./u)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Reload page" })).toBeTruthy();
   });
 
   it("keeps Save disabled while the page reloads after keeping version content", async () => {
