@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import { Fieldset } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetDescription } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 
@@ -15,7 +15,16 @@ export const CustomSummaryInput = ({
   return (
     <Fieldset>
       <Label htmlFor={uid}>Summary</Label>
-      <Input id={uid} type="text" value={value ?? ""} onChange={(evt) => onChange(evt.target.value)} />
+      <Input
+        id={uid}
+        type="text"
+        aria-describedby={`${uid}-description`}
+        value={value ?? ""}
+        onChange={(evt) => onChange(evt.target.value)}
+      />
+      <FieldsetDescription id={`${uid}-description`}>
+        Shown below the call to action on your product page.
+      </FieldsetDescription>
     </Fieldset>
   );
 };

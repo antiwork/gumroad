@@ -4,7 +4,7 @@ import { CustomButtonTextOption } from "$app/parsers/product";
 
 import { getCtaName } from "$app/components/Product/CtaButton";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
-import { Fieldset } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetDescription } from "$app/components/ui/Fieldset";
 import { Label } from "$app/components/ui/Label";
 
 export const CustomButtonTextOptionInput = <T extends CustomButtonTextOption>({
@@ -25,10 +25,15 @@ export const CustomButtonTextOptionInput = <T extends CustomButtonTextOption>({
       <Label htmlFor={uid}>Call to action</Label>
       <TypeSafeOptionSelect
         id={uid}
+        aria-describedby={`${uid}-description`}
         value={value ?? options[0]}
         onChange={onChange}
         options={options.map((option) => ({ id: option, label: getCtaName(option) }))}
       />
+      <FieldsetDescription id={`${uid}-description`}>
+        The text on the buy button of your product page. The button shows other text at times, such as “Choose an
+        option”.
+      </FieldsetDescription>
     </Fieldset>
   );
 };
