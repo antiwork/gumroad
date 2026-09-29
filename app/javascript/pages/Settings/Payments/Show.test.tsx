@@ -885,6 +885,10 @@ describe("Japanese (Kanji) variation fields", () => {
     ["only an ideographic space", "\u3000"],
     ["only fullwidth punctuation and marks", "「ー・」"],
     ["only halfwidth katakana marks", "ｰ･ﾞ"],
+    ["only kanji iteration marks", "々〻"],
+    ["only kana iteration marks", "ゝゞヽヾ"],
+    ["only Kangxi and CJK radicals", "⼭⺅"],
+    ["only enclosed and squared katakana", "㋐㌀"],
   ] as const;
 
   describe.each(kanjiFields)("%s", (field, bannerName, inputLabel, business) => {
@@ -927,6 +931,9 @@ describe("Japanese (Kanji) variation fields", () => {
 
   it.each([
     ["kanji with the 々 iteration mark", "佐々木"],
+    ["hiragana with the ゞ iteration mark", "いすゞ"],
+    ["katakana with the ヽ iteration mark", "ノスヽメ"],
+    ["a CJK compatibility ideograph", "山﨑"],
     ["hiragana", "さくら"],
     ["katakana with the ー length mark", "ローラ"],
     ["halfwidth katakana", "ﾛｰﾗ"],
@@ -938,6 +945,20 @@ describe("Japanese (Kanji) variation fields", () => {
     save();
 
     expect(mocks.put).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ["between romaji words", "Yamada\u3000KK"],
+    ["on its own", "\u3000"],
+  ])("blocks a legal business name with an ideographic space %s", (_, value) => {
+    renderJpBusiness({ business_name: value });
+    save();
+
+    expect(mocks.put).not.toHaveBeenCalled();
+    expect(
+      screen.getByText("Legal business name must be in romaji (latin characters) for Japanese accounts."),
+    ).toBeTruthy();
+    expect(screen.getByLabelText("Legal business name (Romaji)").getAttribute("aria-invalid")).toBe("true");
   });
 
   it("leaves non-Japanese sellers' leftover (Kanji) values alone", () => {

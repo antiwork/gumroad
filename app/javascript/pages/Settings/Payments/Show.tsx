@@ -64,11 +64,10 @@ const INDONESIA_BANK_CODE_REGEX = /^[0-9]{3}$/u;
 const KANA_NAME_ERROR = "may only contain katakana characters, spaces, dashes, and dots.";
 const KANA_ADDRESS_ERROR = "may only contain katakana, latin characters, digits, spaces, dashes, and dots.";
 
-// U+3000 (ideographic space) sits inside the Japanese range but is not a character, so it is excluded:
-// a (Kanji) variation holding only blanks must not pass as Japanese script.
-const HAS_JAPANESE_CHARS = /[\u3001-\u303F\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uFF65-\uFF9F]/u;
-// Narrower than HAS_JAPANESE_CHARS: script-neutral marks (「」, ー, ・) are not letters.
-const HAS_JAPANESE_LETTERS = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u;
+// Keep ideographic spaces in the romaji check; the server ignores space-only edits.
+const HAS_JAPANESE_CHARS = /[\u3000-\u303F\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uFF65-\uFF9F]/u;
+// Require a base letter: script properties also include iteration marks, radicals, and enclosed kana.
+const HAS_JAPANESE_LETTERS = /(?=\p{Lo})[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u;
 const HAS_KATAKANA = /[\u30A0-\u30FF\u31F0-\u31FF\uFF65-\uFF9F]/u;
 
 const PAYOUT_FREQUENCIES = ["daily", "weekly", "monthly", "quarterly"] as const;
