@@ -150,7 +150,8 @@ describe "PurchaseRefunds", :vcr do
       @purchase.mark_successful!
       @event = create(:event, event_name: "purchase", purchase_id: @purchase.id, link_id: @product.id)
       @balance = if merchant_account
-        create(:balance, user: @user, amount_cents: @initial_balance, merchant_account:, holding_currency: Currency::CAD)
+        create(:balance, user: @user, amount_cents: @initial_balance, merchant_account:,
+                         holding_currency: merchant_account.is_managed_by_gumroad? ? Currency::USD : Currency::CAD)
       else
         create(:balance, user: @user, amount_cents: @initial_balance)
       end
@@ -2386,7 +2387,8 @@ describe "PurchaseRefunds", :vcr do
       @purchase.mark_successful!
       @event = create(:event, event_name: "purchase", purchase_id: @purchase.id, link_id: @product.id)
       @balance = if merchant_account
-        create(:balance, user: @user, amount_cents: @initial_balance, merchant_account:, holding_currency: Currency::CAD)
+        create(:balance, user: @user, amount_cents: @initial_balance, merchant_account:,
+                         holding_currency: merchant_account.is_managed_by_gumroad? ? Currency::USD : Currency::CAD)
       else
         create(:balance, user: @user, amount_cents: @initial_balance)
       end

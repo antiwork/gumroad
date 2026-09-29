@@ -44,7 +44,7 @@ class Onetime::RestampGumroadHeldPresentmentBalances
 
   # Every unpaid Gumroad-held balance labelled with a non-USD holding currency.
   def self.candidate_balance_ids
-    gumroad_held_ids = MerchantAccount.where(user_id: nil).select { |account| account.holder_of_funds == HolderOfFunds::GUMROAD }.map(&:id)
+    gumroad_held_ids = MerchantAccount.where(user_id: nil).filter_map { |account| account.id if account.holder_of_funds == HolderOfFunds::GUMROAD }
     Balance.unpaid.where(merchant_account_id: gumroad_held_ids).where.not(holding_currency: Currency::USD).order(:id).pluck(:id)
   end
 
