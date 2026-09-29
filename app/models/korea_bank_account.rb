@@ -3,9 +3,8 @@
 class KoreaBankAccount < BankAccount
   BANK_ACCOUNT_TYPE = "KR"
 
-  # Stripe resolves only the 8-character SWIFT/BIC and its 11-character branch-suffixed form;
-  # the old 8-to-11 range let 9/10-character values save and fail later. Case is pinned because
-  # only the literal `KR` was, and the location pair stays alphanumeric (Kakao is `KAKOKR22`).
+  # Stripe resolves only the 8-character BIC and its 11-character branch form. The location
+  # pair stays alphanumeric (Kakao is `KAKOKR22`).
   BANK_CODE_FORMAT_REGEX = /\A[A-Z]{4}KR[A-Z0-9]{2}(?:[A-Z0-9]{3})?\z/
   private_constant :BANK_CODE_FORMAT_REGEX
 
