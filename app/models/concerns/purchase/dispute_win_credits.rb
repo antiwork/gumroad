@@ -6,19 +6,9 @@ module Purchase::DisputeWinCredits
   def create_credit_for_dispute_won_for_affiliate!(flow_of_funds, amount_cents: 0)
     return if affiliate_credit_cents == 0 || amount_cents == 0
 
-    canonical_issued_amount = presentment_canonical_dispute_won_issued_amount
-
-    affiliate_issued_amount = BalanceTransaction::Amount.create_issued_amount_for_affiliate(
-        flow_of_funds:,
-        issued_affiliate_cents: amount_cents,
-        canonical_issued_amount:
-    )
-
-    affiliate_holding_amount = BalanceTransaction::Amount.create_holding_amount_for_affiliate(
-        flow_of_funds:,
-        issued_affiliate_cents: amount_cents,
-        canonical_issued_amount:
-    )
+    issued_currency, holding_currency = affiliate_reversal_currencies(dispute_won: true)
+    affiliate_issued_amount = BalanceTransaction::Amount.create_issued_amount_for_affiliate(issued_affiliate_cents: amount_cents, currency: issued_currency)
+    affiliate_holding_amount = BalanceTransaction::Amount.create_holding_amount_for_affiliate(issued_affiliate_cents: amount_cents, currency: holding_currency)
 
     Credit.create_for_dispute_won!(
         merchant_account: affiliate_merchant_account,
