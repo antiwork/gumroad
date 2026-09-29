@@ -26,6 +26,15 @@ describe Api::Internal::Admin::WhoamiController do
                                          })
     end
 
+    it "rejects a token with the piracy scope" do
+      actor = create(:admin_user)
+      request.headers["Authorization"] = "Bearer #{AdminApiToken.mint!(actor_user_id: actor.id, scope: AdminApiToken::PIRACY_SCOPE)}"
+
+      get :show
+
+      expect(response).to have_http_status(:forbidden)
+    end
+
     it "returns a placeholder actor for the legacy admin token" do
       actor = create(:admin_user, name: "Admin User", email: "admin@example.com")
       stub_const("GUMROAD_ADMIN_ID", actor.id)

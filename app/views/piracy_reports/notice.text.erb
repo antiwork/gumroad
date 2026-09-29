@@ -1,0 +1,23 @@
+To the Designated Agent of <%= recipient_label %>:
+
+This is a notification of claimed infringement under 17 U.S.C. § 512(c)(3). Gumroad sends it on behalf of the complaining party, <%= owner_name %> (the "Owner"). The Owner has authorized Gumroad in writing to send it.
+
+1. Copyrighted work. The Owner's work is "<%= product_name %>", published at <%= product_url %>.
+
+2. Infringing material and location. The following page offers a copy of the work without the Owner's permission:
+<% infringing_urls.each do |url| -%>
+   <%= url %>
+<% end -%>
+   Please remove the material or disable access to it.
+
+3. Contact information for the complaining party.
+   <%= owner_name %>
+<% owner_address_lines.each do |line| -%>
+   <%= line %>
+<% end -%>
+   <%= owner_email %>
+   Gumroad can also be reached at <%= support_email %>.
+
+4. Good-faith statement. I have a good faith belief that use of the material in the manner complained of is not authorized by the copyright owner, its agent, or the law.
+
+5. Accuracy and authority. The information in this notification is accurate, and under penalty of perjury, I am the owner, or authorized to act on behalf of the owner, of an exclusive right that is allegedly infringed.

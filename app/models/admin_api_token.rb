@@ -6,6 +6,9 @@ class AdminApiToken < ApplicationRecord
   TOKEN_ALPHABET = "_-0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
   HUMAN_TOKEN_TTL = 30.days
   HUMAN_TOKEN_MAX_AGE = 90.days
+  ADMIN_SCOPE = "admin"
+  PIRACY_SCOPE = "piracy"
+  SCOPES = [ADMIN_SCOPE, PIRACY_SCOPE].freeze
 
   belongs_to :actor_user, class_name: "User"
   has_many :admin_api_audit_logs
@@ -14,20 +17,21 @@ class AdminApiToken < ApplicationRecord
   validates :external_id, presence: true, uniqueness: true
   validates :token_hash, presence: true, uniqueness: true
   validates :actor_user, presence: true
+  validates :scope, inclusion: { in: SCOPES }
 
   before_validation :generate_external_id, on: :create
 
   scope :active, -> { where(revoked_at: nil).where("expires_at IS NULL OR expires_at > ?", Time.current) }
 
-  def self.mint!(actor_user_id:, expires_at: nil)
-    plaintext_token, = mint_with_plaintext!(actor_user_id:, expires_at:)
+  def self.mint!(actor_user_id:, expires_at: nil, scope: ADMIN_SCOPE)
+    plaintext_token, = mint_with_plaintext!(actor_user_id:, expires_at:, scope:)
 
     plaintext_token
   end
 
-  def self.mint_with_plaintext!(actor_user_id:, expires_at: nil)
+  def self.mint_with_plaintext!(actor_user_id:, expires_at: nil, scope: ADMIN_SCOPE)
     plaintext_token = generate_plaintext_token
-    admin_api_token = create!(actor_user_id:, expires_at:, token_hash: hash_token(plaintext_token))
+    admin_api_token = create!(actor_user_id:, expires_at:, scope:, token_hash: hash_token(plaintext_token))
 
     [plaintext_token, admin_api_token]
   end
