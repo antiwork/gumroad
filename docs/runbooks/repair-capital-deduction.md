@@ -35,3 +35,27 @@ It refuses changed amounts, mismatched records, partial links, and balances that
 A completed repair returns `already_applied` on a repeated call.
 The live call logs the record IDs and amounts under `RepairCapitalDeduction`.
 If any check fails, reconcile the new state before choosing another action.
+
+## Apply a deduction whose Stripe transfer has no source charge
+
+Use `Onetime::ApplySourcelessCapitalDeductions` for the listed automatic withholdings whose Stripe transfer has no `source_transaction`.
+Older code linked these credits to a seller purchase with no charge ID, which never succeeded, so `RepairCapitalDeduction` refuses them.
+The task only accepts credit IDs from its `CREDIT_IDS` list.
+
+```ruby
+Onetime::ApplySourcelessCapitalDeductions.new(credit_ids: batch).process
+Onetime::ApplySourcelessCapitalDeductions.new(credit_ids: batch, dry_run: false).process
+```
+
+For each credit it:
+
+1. Reads the Stripe financing transaction, its linked payment, and that payment's source transfer.
+   The financing transaction must be an automatic withholding in USD for the credit's amount and account, and the transfer must have no `source_transaction`.
+2. Locks the credit and checks the USD Stripe merchant account, the never-charged purchase link, and any existing balance transaction.
+3. In a dry run, returns the balance the deduction would land on (the earliest unpaid balance, or a new one dated to the Stripe deduction) with before/after amounts.
+4. In a live run, clears the purchase link, records the Stripe payment and transfer IDs, and applies the deduction with `Credit#apply_financing_paydown!`.
+   That reuses the existing balance transaction, or creates the missing one in USD.
+
+Each credit returns `dry_run`, `applied`, `already_applied`, or `refused` with the reason; one refusal does not stop the batch.
+A credit that already has a balance returns `already_applied`, and a credit left unlinked by an interrupted run resumes.
+Run batches small enough to finish inside the console time limit, with the IDs written inline.
