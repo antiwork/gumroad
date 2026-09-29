@@ -29,6 +29,14 @@ describe Api::Internal::Admin::PayoutsController do
     stub_const("GUMROAD_ADMIN_ID", create(:admin_user).id)
   end
 
+  # Commits `concurrent_write` right after the request has loaded the user, as another request
+  # finishing while this one is in flight would.
+  def after_request_loads_user(&concurrent_write)
+    allow(controller).to receive(:find_internal_admin_user_for_write_or_render).and_wrap_original do |original, *args, **kwargs|
+      original.call(*args, **kwargs).tap { concurrent_write.call }
+    end
+  end
+
   describe "GET index" do
     include_examples "admin api authorization required", :get, :index
 
@@ -220,6 +228,20 @@ describe Api::Internal::Admin::PayoutsController do
       expect(user.reload.payouts_paused_by.to_s).to eq(GUMROAD_ADMIN_ID.to_s)
     end
 
+    # The pause saves the whole `flags` integer, which also carries refunds_disabled.
+    it "keeps refunds re-enabled by a compliant transition that committed after the request loaded the user" do
+      probated_user = create(:user, user_risk_state: "on_probation", refunds_disabled: true)
+      after_request_loads_user { User.find(probated_user.id).mark_compliant!(author_id: GUMROAD_ADMIN_ID) }
+
+      post :pause, params: { user_id: probated_user.external_id }
+
+      expect(response).to have_http_status(:ok)
+      probated_user.reload
+      expect(probated_user).to be_compliant
+      expect(probated_user.refunds_disabled?).to be(false)
+      expect(probated_user.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_ADMIN)
+    end
+
     it "creates a COMMENT_TYPE_PAYOUTS_PAUSED comment when reason is provided" do
       reason = "Payouts paused due to verification"
 
@@ -300,6 +322,24 @@ describe Api::Internal::Admin::PayoutsController do
       )
     end
 
+    it "short-circuits on an admin pause placed after the request loaded the user, keeping that admin's attribution" do
+      other_admin = create(:admin_user)
+      after_request_loads_user { User.find(user.id).update!(payouts_paused_internally: true, payouts_paused_by: other_admin.id) }
+
+      expect { post :pause, params: { user_id: user.external_id, reason: "again" } }
+        .not_to change { user.comments.count }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to include(
+        "success" => true,
+        "user_id" => user.external_id,
+        "status" => "already_paused",
+        "message" => "Payouts are already paused by admin",
+        "payouts_paused" => true
+      )
+      expect(user.reload.payouts_paused_by).to eq(other_admin.id)
+    end
+
     it "asserts admin attribution when payouts were previously paused by the system" do
       user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
       reason = "Manual review pending"
@@ -362,6 +402,22 @@ describe Api::Internal::Admin::PayoutsController do
       comment = user.comments.with_type_payouts_resumed.last
       expect(comment.author_id).to eq(GUMROAD_ADMIN_ID)
       expect(comment.content).to eq("Payouts resumed.")
+    end
+
+    # The resume saves the whole `flags` integer, which also carries refunds_disabled.
+    it "keeps refunds re-enabled by a compliant transition that committed after the request loaded the user" do
+      probated_user = create(:user, user_risk_state: "on_probation", refunds_disabled: true)
+      probated_user.update!(payouts_paused_internally: true, payouts_paused_by: GUMROAD_ADMIN_ID)
+      after_request_loads_user { User.find(probated_user.id).mark_compliant!(author_id: GUMROAD_ADMIN_ID) }
+
+      post :resume, params: { user_id: probated_user.external_id }
+
+      expect(response).to have_http_status(:ok)
+      probated_user.reload
+      expect(probated_user).to be_compliant
+      expect(probated_user.refunds_disabled?).to be(false)
+      expect(probated_user.payouts_paused_internally?).to be(false)
+      expect(probated_user.payouts_paused_by).to be_nil
     end
 
     it "reports payouts_paused: true after admin resume when the seller is still self-paused" do
