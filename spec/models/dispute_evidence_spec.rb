@@ -3,6 +3,8 @@
 require "spec_helper"
 
 describe DisputeEvidence do
+  include_context "without the weekend window extension"
+
   let(:dispute_evidence) do
     DisputeEvidence.create!(
       dispute: create(:dispute),
@@ -225,6 +227,134 @@ describe DisputeEvidence do
 
       expect(described_class.seller_response_due_at(stamp))
         .to eq(stamp + described_class::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS.hours)
+    end
+  end
+
+  describe "weekend window extension" do
+    # Dates below are in October 2026: the 9th is a Friday, the 10th a Saturday, the 12th a Monday.
+    before { stub_const("DisputeEvidence::WEEKEND_EXTENSION_STARTS_AT", Time.utc(2026, 10, 5)) }
+
+    def due_at(stamp)
+      described_class.seller_response_due_at(stamp)
+    end
+
+    {
+      "Monday 16:18" => [Time.utc(2026, 10, 12, 16, 18), Time.utc(2026, 10, 15, 16, 18)],
+      "Tuesday 16:18" => [Time.utc(2026, 10, 13, 16, 18), Time.utc(2026, 10, 16, 16, 18)],
+      "Wednesday 00:00, when the 72 hours end exactly as Saturday begins" => [Time.utc(2026, 10, 14), Time.utc(2026, 10, 17)],
+    }.each do |label, (stamp, due)|
+      it "keeps 72 hours for a window sent #{label}" do
+        expect(due_at(stamp)).to eq(due)
+        expect(described_class.window_duration(stamp)).to eq(72.hours)
+      end
+    end
+
+    {
+      "Wednesday 00:01, one minute into the weekend" => [Time.utc(2026, 10, 14, 0, 1), Time.utc(2026, 10, 19, 0, 1)],
+      "Wednesday 16:18" => [Time.utc(2026, 10, 14, 16, 18), Time.utc(2026, 10, 19, 16, 18)],
+      "Friday 16:18, crossing the weekend" => [Time.utc(2026, 10, 9, 16, 18), Time.utc(2026, 10, 14, 16, 18)],
+      "Saturday 16:18" => [Time.utc(2026, 10, 10, 16, 18), Time.utc(2026, 10, 15, 16, 18)],
+      "Sunday 16:18" => [Time.utc(2026, 10, 11, 16, 18), Time.utc(2026, 10, 16, 16, 18)],
+    }.each do |label, (stamp, due)|
+      it "adds 48 hours for a window sent #{label}" do
+        expect(due_at(stamp)).to eq(due)
+        expect(described_class.window_duration(stamp)).to eq(120.hours)
+      end
+    end
+
+    it "reads the weekend in UTC, whatever zone the stamp carries" do
+      # Monday 09:00 in Auckland is Sunday 20:00 UTC, so this window starts on a UTC Sunday.
+      stamp = Time.find_zone("Pacific/Auckland").local(2026, 10, 12, 9)
+
+      expect(stamp.utc.sunday?).to be(true)
+      expect(due_at(stamp)).to eq(stamp + 120.hours)
+    end
+
+    it "leaves windows stamped before the rule took effect at 72 hours" do
+      stamp = Time.utc(2026, 10, 3, 16, 18) # a Saturday
+
+      expect(due_at(stamp)).to eq(stamp + 72.hours)
+    end
+
+    it "gates saves and submission on the extended deadline" do
+      stamp = Time.utc(2026, 10, 10, 16, 18) # Saturday; a 72-hour window would close Tuesday 16:18
+
+      travel_to(Time.utc(2026, 10, 13, 16, 19)) { expect(described_class.window_open?(stamp)).to be(true) }
+      travel_to(Time.utc(2026, 10, 15, 16, 17)) { expect(described_class.window_open?(stamp)).to be(true) }
+      travel_to(Time.utc(2026, 10, 15, 16, 19)) { expect(described_class.window_open?(stamp)).to be(false) }
+    end
+
+    it "counts the hours left against the extended deadline" do
+      stamp = Time.utc(2026, 10, 10, 16, 18)
+
+      travel_to(stamp) { expect(described_class.hours_left_in_window(stamp)).to eq(120) }
+      travel_to(Time.utc(2026, 10, 13, 16, 18)) { expect(described_class.hours_left_in_window(stamp)).to eq(48) }
+    end
+
+    it "schedules the due-soon reminder 24 hours before the extended deadline" do
+      stamp = Time.utc(2026, 10, 10, 16, 18)
+
+      travel_to(stamp) do
+        described_class.schedule_due_soon_reminder(dispute_id: 123, seller_contacted_at: stamp, resolved_at: nil)
+      end
+
+      expect(described_class.seller_response_reminder_at(stamp)).to eq(Time.utc(2026, 10, 14, 16, 18))
+      expect(DisputeEvidenceDueSoonReminderJob).to have_enqueued_sidekiq_job(123).at(Time.utc(2026, 10, 14, 16, 18))
+    end
+
+    describe ".latest_window_start" do
+      let(:now) { Time.utc(2026, 10, 10, 12) } # Saturday
+
+      it "starts now when the closing time leaves room for the whole window" do
+        expect(described_class.latest_window_start(closing_by: now + 30.days, not_after: now)).to eq(now)
+      end
+
+      it "ends the extended window at the closing time when it is the best fit" do
+        closing_by = Time.utc(2026, 10, 13, 12) # Tuesday
+
+        start = described_class.latest_window_start(closing_by:, not_after: now)
+
+        expect(start).to eq(Time.utc(2026, 10, 8, 12))
+        expect(due_at(start)).to eq(closing_by)
+      end
+
+      it "never lets the extended window pass the closing time" do
+        closing_by = Time.utc(2026, 10, 14, 12) # a 72-hour start of Saturday 12:00 would get 120 hours
+
+        start = described_class.latest_window_start(closing_by:, not_after: now)
+
+        expect(due_at(start)).to be <= closing_by
+        expect(due_at(start)).to be > now
+      end
+
+      it "matches an exhaustive search over the stamps that fit when now is on a Saturday" do
+        not_after = Time.utc(2026, 10, 10, 12)
+        (0..(7 * 24)).each do |offset|
+          closing_by = not_after + offset.hours
+          expected = (0..(6 * 24)).map { |back| not_after - back.hours }
+                                  .select { due_at(_1) <= closing_by }
+                                  .map { due_at(_1) }.max
+
+          start = described_class.latest_window_start(closing_by:, not_after:)
+
+          # Hourly steps hit every boundary here: all the stamps are on the hour.
+          expect(due_at(start)).to eq(expected), "closing_by #{closing_by}: got #{due_at(start)}, wanted #{expected}"
+        end
+      end
+
+      it "never passes the closing time and never starts after now, whatever day now falls on" do
+        (0..6).each do |day|
+          not_after = Time.utc(2026, 10, 5 + day, 10)
+          (0..(7 * 24)).step(5) do |offset|
+            closing_by = not_after + offset.hours
+
+            start = described_class.latest_window_start(closing_by:, not_after:)
+
+            expect(start).to be <= not_after
+            expect(due_at(start)).to be <= closing_by
+          end
+        end
+      end
     end
   end
 

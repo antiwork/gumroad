@@ -10,7 +10,7 @@ class FightDisputeJob
     return if dispute_evidence.resolved?
     # Exact comparison, not hours_left_to_submit_evidence or the rounded window: rounding closed
     # this gate up to 29 minutes before the real deadline. Nothing is forwarded before the window
-    # closes even when the seller has already saved a statement: they keep the whole 72 hours to
+    # closes even when the seller has already saved a statement: they keep the whole window to
     # revise it, and Stripe accepts one submission.
     return if DisputeEvidence.window_open?(dispute_evidence.seller_contacted_at)
 

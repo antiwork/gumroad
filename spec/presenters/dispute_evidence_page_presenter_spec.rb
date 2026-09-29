@@ -3,6 +3,8 @@
 require "spec_helper"
 
 describe DisputeEvidencePagePresenter do
+  include_context "without the weekend window extension"
+
   let(:dispute_evidence) { create(:dispute_evidence, seller_contacted_at: 1.hour.ago) }
   let(:purchase) { dispute_evidence.disputable.purchase_for_dispute_evidence }
   let(:purchase_route_id) { purchase.external_id }

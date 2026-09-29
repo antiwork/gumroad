@@ -3,6 +3,8 @@
 require("spec_helper")
 
 describe("Dispute evidence page", type: :system, js: true) do
+  include_context "without the weekend window extension"
+
   let(:dispute) { create(:dispute_formalized, reason: Dispute::REASON_FRAUDULENT) }
   let(:dispute_evidence) { create(:dispute_evidence, dispute:) }
   let(:purchase) { dispute_evidence.disputable.purchase_for_dispute_evidence }

@@ -3,6 +3,8 @@
 require "spec_helper"
 
 describe Charge::Disputable, :vcr do
+  include_context "without the weekend window extension"
+
   let(:stripe_purchase) do
     create(:purchase,
            charge_processor_id: StripeChargeProcessor.charge_processor_id,

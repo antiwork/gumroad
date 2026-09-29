@@ -4,6 +4,8 @@ require "spec_helper"
 require "inertia_rails/rspec"
 
 describe Purchases::DisputeEvidenceController, type: :controller, inertia: true do
+  include_context "without the weekend window extension"
+
   let(:dispute_evidence) { create(:dispute_evidence) }
   let(:purchase) { dispute_evidence.disputable.purchase_for_dispute_evidence }
   # Minted the way the chargeback emails mint it, so the elapsed-window cases below exercise the
