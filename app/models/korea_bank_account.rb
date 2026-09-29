@@ -3,7 +3,10 @@
 class KoreaBankAccount < BankAccount
   BANK_ACCOUNT_TYPE = "KR"
 
-  BANK_CODE_FORMAT_REGEX = /\A[A-Za-z]{4}KR[A-Za-z0-9]{2,5}\z/
+  # Stripe resolves only the 8-character SWIFT/BIC and its 11-character branch-suffixed form;
+  # the old 8-to-11 range let 9/10-character values save and fail later. Case is pinned because
+  # only the literal `KR` was, and the location pair stays alphanumeric (Kakao is `KAKOKR22`).
+  BANK_CODE_FORMAT_REGEX = /\A[A-Z]{4}KR[A-Z0-9]{2}(?:[A-Z0-9]{3})?\z/
   private_constant :BANK_CODE_FORMAT_REGEX
 
   # Stripe accepts 11-16 digit South Korean account numbers (verified by live
@@ -14,7 +17,9 @@ class KoreaBankAccount < BankAccount
 
   alias_attribute :bank_code, :bank_number
 
-  validate :validate_bank_code
+  # Only on write: 156 pre-existing rows carry a 9- or 10-character code, and re-validating them
+  # would abort unrelated saves — including the mark_deleted! a payout-method switch performs.
+  validate :validate_bank_code, if: -> { new_record? || will_save_change_to_bank_number? }
   validate :validate_account_number
 
   def routing_number

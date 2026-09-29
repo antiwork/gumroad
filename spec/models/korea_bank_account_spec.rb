@@ -36,15 +36,38 @@ describe KoreaBankAccount do
   end
 
   describe "#validate_bank_code" do
-    it "allows 8 to 11 characters only" do
+    it "allows the 8-character SWIFT/BIC and its 11-character branch-suffixed form only" do
+      expect(build(:korea_bank_account, bank_code: "NACFKRSE")).to be_valid
+      expect(build(:korea_bank_account, bank_code: "NACFKRSEXXX")).to be_valid
+      # Kakao Bank's BIC carries digits in the location pair and still resolves at Stripe.
+      expect(build(:korea_bank_account, bank_code: "KAKOKR22")).to be_valid
       expect(build(:korea_bank_account, bank_code: "TESTKR00")).to be_valid
-      expect(build(:korea_bank_account, bank_code: "BANKKR001")).to be_valid
-      expect(build(:korea_bank_account, bank_code: "CASHKR00123")).to be_valid
 
       expect(build(:korea_bank_account, bank_code: "ABCD")).not_to be_valid
       expect(build(:korea_bank_account, bank_code: "1234")).not_to be_valid
       expect(build(:korea_bank_account, bank_code: "TESTKR0")).not_to be_valid
+      expect(build(:korea_bank_account, bank_code: "BANKKR001")).not_to be_valid
+      expect(build(:korea_bank_account, bank_code: "CASHKR0012")).not_to be_valid
       expect(build(:korea_bank_account, bank_code: "TESTKR001234")).not_to be_valid
+      expect(build(:korea_bank_account, bank_code: "nacfkrsexxx")).not_to be_valid
+      expect(build(:korea_bank_account, bank_code: "NACFKRSExxx")).not_to be_valid
+      expect(build(:korea_bank_account, bank_code: "NACFKRSEXXX\n")).not_to be_valid
+    end
+
+    it "does not re-validate a pre-existing code on an unrelated save" do
+      ba = build(:korea_bank_account, bank_code: "NACFKRSEXX")
+      ba.save!(validate: false)
+
+      expect(ba.mark_deleted!).to be_truthy
+      expect(ba.reload).to be_deleted
+    end
+
+    it "still rejects a code the save is changing" do
+      ba = build(:korea_bank_account, bank_code: "NACFKRSE")
+      ba.save!(validate: false)
+
+      ba.bank_code = "NACFKRSEXX"
+      expect(ba).not_to be_valid
     end
   end
 

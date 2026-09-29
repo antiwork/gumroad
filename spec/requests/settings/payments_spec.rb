@@ -1947,6 +1947,31 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         expect(compliance_info.birthday).to eq(Date.new(1980, 1, 1))
         expect(@user.reload.active_bank_account.send(:account_number_decrypted)).to eq("000123456789")
       end
+
+      it "allows to enter the 8-character SWIFT / BIC code a Korean bank publishes" do
+        visit settings_payments_path
+
+        fill_in("First name", with: "barnabas")
+        fill_in("Last name", with: "barnabastein")
+        fill_in("Address", with: "address_full_match")
+        fill_in("City", with: "barnabasville")
+        fill_in("Phone number", with: "23123456")
+        fill_in("Postal code", with: "10169")
+
+        select("1", from: "Day")
+        select("January", from: "Month")
+        select("1980", from: "Year")
+
+        fill_in("Pay to the order of", with: "barnabas ngagy")
+        fill_in("Bank code", with: "NACFKRSE")
+        fill_in("Account #", with: "000123456789")
+        fill_in("Confirm account #", with: "000123456789")
+
+        click_on("Update settings")
+
+        expect(page).to have_alert(text: "Thanks! You're all set.")
+        expect(@user.reload.active_bank_account.routing_number).to eq("NACFKRSE")
+      end
     end
 
     describe "AE business" do
