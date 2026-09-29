@@ -72,6 +72,21 @@ const COLOR_PRESETS = [
 // Keys are the values SellerProfile stores. "none" reads as "no corners" under a Corners title.
 const BORDER_RADIUS_LABELS: Record<string, string> = { none: "Square" };
 
+// Arrow keys move focus and selection through a group of role="radio" buttons, wrapping at the
+// ends. Pair with a roving tabIndex so the group is a single tab stop.
+const RADIO_ARROW_STEPS: Record<string, number> = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 };
+const selectAdjacentRadio = (event: React.KeyboardEvent<HTMLElement>) => {
+  const step = RADIO_ARROW_STEPS[event.key];
+  if (step === undefined) return;
+  const radios = [...event.currentTarget.querySelectorAll<HTMLButtonElement>("[role=radio]:not(:disabled)")];
+  const index = radios.findIndex((radio) => radio === event.target);
+  if (index === -1) return;
+  event.preventDefault();
+  const next = radios[(index + step + radios.length) % radios.length];
+  next?.focus();
+  next?.click();
+};
+
 type ProfilePageProps = {
   profile_settings: ProfileSettingsForm;
   editable_profile: ProfileEditorProps;
@@ -268,6 +283,12 @@ export default function SettingsPage() {
   // --radius-sm is derived from --radius on :root, so the preview has to restate it.
   const previewRadius = theme_options.border_radii[profileSettings.border_radius];
   const previewHoverOffset = theme_options.button_hover_offsets[profileSettings.button_hover];
+  // Stored six-digit colors keep the case they were saved with; only shorthand is lowercased.
+  const selectedColorPreset = COLOR_PRESETS.find(
+    (preset) =>
+      preset.background_color === profileSettings.background_color.toLowerCase() &&
+      preset.highlight_color === profileSettings.highlight_color.toLowerCase(),
+  );
 
   const customLandingPageActive = custom_html_pages_enabled && has_custom_landing_page;
   const showPagesTab = !customLandingPageActive;
@@ -528,16 +549,22 @@ export default function SettingsPage() {
               </Fieldset>
               <Fieldset>
                 <FieldsetTitle>Colors</FieldsetTitle>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3" role="radiogroup" aria-label="Color presets">
-                  {COLOR_PRESETS.map((preset) => {
-                    const isSelected =
-                      preset.background_color === profileSettings.background_color &&
-                      preset.highlight_color === profileSettings.highlight_color;
+                <div
+                  className="grid grid-cols-1 gap-4 sm:grid-cols-3"
+                  role="radiogroup"
+                  aria-label="Color presets"
+                  onKeyDown={selectAdjacentRadio}
+                >
+                  {COLOR_PRESETS.map((preset, index) => {
+                    const isSelected = preset === selectedColorPreset;
+                    // Custom colors match no preset; the first one then takes the group's tab stop.
+                    const isTabStop = selectedColorPreset ? isSelected : index === 0;
                     return (
                       <Button
                         role="radio"
                         key={preset.name}
                         aria-checked={isSelected}
+                        tabIndex={isTabStop ? 0 : -1}
                         onClick={() =>
                           updateProfileSettings({
                             background_color: preset.background_color,
@@ -582,14 +609,21 @@ export default function SettingsPage() {
               </Fieldset>
               <Fieldset>
                 <FieldsetTitle>Corners</FieldsetTitle>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-4" role="radiogroup" aria-label="Corners">
-                  {Object.entries(theme_options.border_radii).map(([value, radius]) => {
+                <div
+                  className="grid grid-cols-1 gap-4 sm:grid-cols-4"
+                  role="radiogroup"
+                  aria-label="Corners"
+                  onKeyDown={selectAdjacentRadio}
+                >
+                  {Object.entries(theme_options.border_radii).map(([value, radius], index) => {
                     const isSelected = value === profileSettings.border_radius;
+                    const isTabStop = previewRadius === undefined ? index === 0 : isSelected;
                     return (
                       <Button
                         role="radio"
                         key={value}
                         aria-checked={isSelected}
+                        tabIndex={isTabStop ? 0 : -1}
                         onClick={() => updateProfileSettings({ border_radius: value })}
                         disabled={!canUpdate}
                         className={classNames("justify-start!", isSelected && "border-accent! ring-1 ring-accent")}

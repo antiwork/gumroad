@@ -287,9 +287,12 @@ describe("US company representative tax ID", () => {
     );
     render(<PaymentsPage />);
     await screen.findByText("Stripe needs: Personal tax ID");
-    const link = screen.queryByRole("link", { name: "Upload a passport via Stripe instead" });
-    if (offered) expect(link?.getAttribute("href")).toBe("/remediation_settings_payments");
-    else expect(link).toBeNull();
+    // The link renders a commit after the owner text: the section reports the alternative to the page from an effect.
+    if (offered)
+      expect(
+        (await screen.findByRole("link", { name: "Upload a passport via Stripe instead" })).getAttribute("href"),
+      ).toBe("/remediation_settings_payments");
+    else expect(screen.queryByRole("link", { name: "Upload a passport via Stripe instead" })).toBeNull();
     vi.unstubAllGlobals();
   });
 });
