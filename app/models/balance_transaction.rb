@@ -292,7 +292,8 @@ class BalanceTransaction < ApplicationRecord
           elsif credit&.returned_payment
             credit.returned_payment.balances.order(date: :asc).first&.date || credit.created_at.to_date
           elsif credit
-            credit.created_at.to_date
+            # A delayed webhook still lands on the day Stripe took the money.
+            credit.capital_deduction_date || credit.created_at.to_date
           end
 
         # create a new balance at the date this balance transaction occurred
