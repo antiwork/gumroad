@@ -27,7 +27,8 @@ class Purchase::BaseService
 
       purchase.update_balance_and_mark_successful!
       fix_later_charge_presentment unless purchase.credit_card&.recurring_upi?
-      purchase.gift_given.mark_successful! if purchase.is_gift_sender_purchase
+      # A restored gifter can find its gift already successful from before it failed.
+      purchase.gift_given.mark_successful! if purchase.is_gift_sender_purchase && !purchase.gift_given.successful?
       purchase.seller.save_gumroad_day_timezone
       after_commit do
         ActivateIntegrationsWorker.perform_async(purchase.id)
