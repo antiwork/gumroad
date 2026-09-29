@@ -311,6 +311,24 @@ describe CustomerPresenter do
           [{ type: "text", attribute: "Your birthplace (city and country)", value: "Berlin" }]
         )
       end
+
+      it "loads the current labels in one query however many answers there are" do
+        custom_field_queries = lambda do
+          queries = []
+          callback = ->(*, payload) { queries << payload[:sql] if payload[:sql].include?("`custom_fields`") }
+          ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+            described_class.new(purchase: Purchase.find(purchase.id)).customer(pundit_user:)
+          end
+          queries
+        end
+
+        2.times do |i|
+          field = create(:custom_field, seller:, name: "Extra #{i}")
+          purchase.purchase_custom_fields << PurchaseCustomField.build_from_custom_field(custom_field: field, value: "v#{i}")
+        end
+
+        expect(custom_field_queries.call.size).to eq(1)
+      end
     end
 
     context "purchase has a commission", :vcr do

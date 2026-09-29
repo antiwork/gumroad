@@ -127,7 +127,7 @@ class CustomerPresenter
         status: commission.status,
         files_are_editable: commission.files_are_editable?,
       } : nil,
-      custom_fields: purchase.purchase_custom_fields.map do |field|
+      custom_fields: purchase_custom_fields_with_current_labels.map do |field|
         # `name` is the label snapshotted when the answer was saved; the field's current label keeps
         # the panel readable when the seller renames it or fixes a mislabelled one after the sale.
         attribute = field.custom_field&.name.presence || field.name
@@ -220,6 +220,13 @@ class CustomerPresenter
       return deposit if completion.blank?
 
       deposit.to_i + completion
+    end
+
+    # Bundle product purchases reach this presenter without the sales list's includes.
+    def purchase_custom_fields_with_current_labels
+      purchase.purchase_custom_fields.tap do |fields|
+        ActiveRecord::Associations::Preloader.new(records: fields.to_a, associations: :custom_field).call
+      end
     end
 
     def file_details(file)
