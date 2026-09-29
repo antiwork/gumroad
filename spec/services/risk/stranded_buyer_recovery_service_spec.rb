@@ -644,4 +644,351 @@ describe Risk::StrandedBuyerRecoveryService do
       end.to not_have_enqueued_mail(CustomerLowPriorityMailer, :blocked_purchase_resolved)
     end
   end
+
+  # Checkout also declines on the account IPs of every address on the row
+  # (Purchase::Risk#check_for_past_fraudulent_ips). Recovery reports those as withheld — never
+  # clearable, never part of the gates — so a buyer still held there is not told to retry.
+  describe "account IPs checkout matches" do
+    let(:account_ip) { "203.0.113.77" }
+    let(:clean_request_ip) { "192.0.2.50" }
+    let!(:buyer_account) { create(:user, email: buyer_email, current_sign_in_ip: nil, last_sign_in_ip: account_ip, account_created_ip: nil) }
+
+    before do
+      failed_purchase.update!(ip_address: clean_request_ip, error_code: PurchaseErrorCode::BLOCKED_IP_ADDRESS)
+    end
+
+    def block_account_ip(value = account_ip, object_type: :ip_address)
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[object_type], object_value: value, expires_in: 6.months)
+    end
+
+    it "reports a sole account-IP hold instead of no_active_blocks, and sends no retry mail" do
+      guid_block.unblock!
+      email_block.unblock!
+      ip_block = block_account_ip
+
+      result = nil
+      expect { result = call }.to not_have_enqueued_mail(CustomerLowPriorityMailer, :blocked_purchase_resolved)
+
+      expect(result.verdict).to eq(:noop)
+      expect(result.reason).to eq(:nothing_clearable)
+      expect(result.cleared).to be_empty
+      expect(result.skipped).to contain_exactly([ip_block, :shared_identifier_needs_human_review])
+      expect(ip_block.reload.blocked_at).to be_present
+    end
+
+    it "clears exactly the same rows on a mixed hold, reports the account IP, and sends no resolved mail" do
+      ip_block = block_account_ip
+
+      result = nil
+      expect { result = call }.to not_have_enqueued_mail(CustomerLowPriorityMailer, :blocked_purchase_resolved)
+
+      expect(result.verdict).to eq(:cleared)
+      expect(result.cleared).to contain_exactly(guid_block, email_block)
+      expect(result.skipped).to contain_exactly([ip_block, :shared_identifier_needs_human_review])
+      expect(ip_block.reload.blocked_at).to be_present
+      expect(guid_block.reload.blocked_at).to be_nil
+    end
+
+    %i[current_sign_in_ip last_sign_in_ip account_created_ip].each do |column|
+      it "finds a hold on the account's #{column}" do
+        buyer_account.update!(column => "203.0.113.#{column.length}")
+        ip_block = block_account_ip(buyer_account.public_send(column))
+
+        expect(call.skipped).to include([ip_block, :shared_identifier_needs_human_review])
+      end
+    end
+
+    it "keeps an account IP stored under an unexpected object_type withheld" do
+      mistyped = block_account_ip(object_type: :browser_guid)
+
+      result = call
+
+      expect(result.cleared).to contain_exactly(guid_block, email_block)
+      expect(result.skipped).to include([mistyped, :shared_identifier_needs_human_review])
+      expect(mistyped.reload.blocked_at).to be_present
+    end
+
+    it "ignores an expired account-IP block and still emails the recovered buyer" do
+      block_account_ip.update!(expires_at: 1.minute.ago)
+
+      result = nil
+      expect { result = call }.to have_enqueued_mail(CustomerLowPriorityMailer, :blocked_purchase_resolved).with(failed_purchase.id)
+
+      expect(result.skipped).to be_empty
+    end
+
+    it "does not report the seller's own IP, which checkout never declines the buyer on" do
+      seller_ip = "198.51.100.40"
+      failed_purchase.seller.update!(current_sign_in_ip: seller_ip)
+      block_account_ip(seller_ip)
+
+      expect(call.skipped).to be_empty
+    end
+
+    it "reports an address the buyer's account shares with the seller" do
+      failed_purchase.seller.update!(current_sign_in_ip: account_ip)
+      ip_block = block_account_ip
+
+      expect(call.skipped).to include([ip_block, :shared_identifier_needs_human_review])
+    end
+
+    # A typed gifter/PayPal address explains why checkout declined, but it is not the buyer's
+    # identity: its account IP is reported, and nothing of that person's becomes clearable.
+    it "reports a typed third-party address's account IP without clearing anything of theirs" do
+      third_party = create(:user, email: "gift-recipient-owner@example.net", current_sign_in_ip: "203.0.113.200",
+                                  last_sign_in_ip: nil, account_created_ip: nil)
+      failed_purchase.update!(is_gift_sender_purchase: true)
+      create(:gift, gifter_purchase: failed_purchase, gifter_email: third_party.email)
+      third_party_ip_block = block_account_ip(third_party.current_sign_in_ip)
+      third_party_email_block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: third_party.email)
+
+      result = nil
+      expect { result = call }.to not_have_enqueued_mail(CustomerLowPriorityMailer, :blocked_purchase_resolved)
+
+      expect(result.cleared).to contain_exactly(guid_block, email_block)
+      expect(result.skipped).to contain_exactly([third_party_ip_block, :shared_identifier_needs_human_review])
+      expect(third_party_email_block.reload.blocked_at).to be_present
+      expect(third_party_ip_block.reload.blocked_at).to be_present
+    end
+
+    it "reports a PayPal address's account IP from the blocked checkout" do
+      paypal_owner = create(:user, email: "wallet-owner@example.net", current_sign_in_ip: "203.0.113.201",
+                                   last_sign_in_ip: nil, account_created_ip: nil)
+      failed_purchase.update_columns(charge_processor_id: PaypalChargeProcessor.charge_processor_id, card_visual: paypal_owner.email)
+      ip_block = block_account_ip(paypal_owner.current_sign_in_ip)
+
+      expect(call.skipped).to include([ip_block, :shared_identifier_needs_human_review])
+    end
+
+    describe "an account-IP value that also matches a known block" do
+      # A browser guid is client-supplied, so a proven guid can carry an IP string. Checkout still
+      # declines on that row by IP value, so it stays withheld whatever type it is stored under.
+      it "withholds a browser_guid row whose value is an account IP, clearing nothing else new" do
+        failed_purchase.update!(browser_guid: account_ip)
+        overlap = block_account_ip(object_type: :browser_guid)
+
+        result = nil
+        expect { result = call }.to not_have_enqueued_mail(CustomerLowPriorityMailer, :blocked_purchase_resolved)
+
+        expect(result.verdict).to eq(:cleared)
+        expect(result.cleared).to contain_exactly(email_block)
+        expect(result.skipped).to contain_exactly([overlap, :shared_identifier_needs_human_review])
+        expect(overlap.reload.blocked_at).to be_present
+        expect(guid_block.reload.blocked_at).to be_present
+      end
+
+      it "keeps an authored overlapping row as authored, listed once" do
+        failed_purchase.update!(browser_guid: account_ip)
+        overlap = block_account_ip(object_type: :browser_guid)
+        overlap.update!(blocked_by: create(:admin_user).id)
+
+        result = nil
+        expect { result = call }.not_to change { PlatformBlock.active.count }
+
+        expect(result.verdict).to eq(:escalate)
+        expect(result.reason).to eq(:authored_block)
+        expect(result.skipped).to contain_exactly([overlap, :authored])
+      end
+
+      it "lists a request-IP row that is also an account IP once" do
+        failed_purchase.update!(ip_address: account_ip)
+        ip_block = block_account_ip
+
+        result = call
+
+        expect(result.cleared).to contain_exactly(guid_block, email_block)
+        expect(result.skipped).to contain_exactly([ip_block, :shared_identifier_needs_human_review])
+      end
+    end
+
+    describe "existing gates still decide the verdict" do
+      it "escalates an authored block and still names the account-IP hold" do
+        email_block.update!(blocked_by: create(:admin_user).id)
+        ip_block = block_account_ip
+
+        result = nil
+        expect { result = call }.not_to change { PlatformBlock.active.count }
+
+        expect(result.verdict).to eq(:escalate)
+        expect(result.reason).to eq(:authored_block)
+        expect(result.skipped).to contain_exactly([email_block, :authored], [ip_block, :shared_identifier_needs_human_review])
+      end
+
+      it "does not treat an authored account-IP hold as an authored block about this buyer" do
+        ip_block = block_account_ip
+        ip_block.update!(blocked_by: create(:admin_user).id)
+
+        result = call
+
+        expect(result.verdict).to eq(:cleared)
+        expect(result.cleared).to contain_exactly(guid_block, email_block)
+        expect(result.skipped).to contain_exactly([ip_block, :shared_identifier_needs_human_review])
+      end
+
+      it "skips on missing clean history even when only an account IP holds the buyer" do
+        guid_block.unblock!
+        email_block.unblock!
+        history.each { |purchase| purchase.update!(chargeback_date: 1.month.ago) }
+        ip_block = block_account_ip
+
+        result = call
+
+        expect(result.verdict).to eq(:skip)
+        expect(result.reason).to eq(:no_clean_payment_history)
+        expect(result.skipped).to contain_exactly([ip_block, :shared_identifier_needs_human_review])
+      end
+
+      it "skips on an unreversed chargeback and still names the account-IP hold" do
+        create(:purchase, email: buyer_email, stripe_fingerprint: "other-card", chargeback_date: 1.week.ago, created_at: 3.months.ago)
+        ip_block = block_account_ip
+
+        result = nil
+        expect { result = call }.not_to change { PlatformBlock.active.count }
+
+        expect(result.reason).to eq(:unreversed_chargeback)
+        expect(result.skipped).to contain_exactly([ip_block, :shared_identifier_needs_human_review])
+      end
+
+      it "skips while a velocity rule still fires and still names the account-IP hold" do
+        Purchase::Blockable::MAX_NUMBER_OF_FAILED_FINGERPRINTS.times do |index|
+          create(:purchase, email: buyer_email, browser_guid:, purchase_state: "failed", stripe_fingerprint: "tester-#{index}",
+                            charge_processor_id: StripeChargeProcessor.charge_processor_id, created_at: 1.day.ago)
+        end
+        ip_block = block_account_ip
+
+        result = nil
+        expect { result = call }.not_to change { PlatformBlock.active.count }
+
+        expect(result.reason).to eq(:velocity_rule_still_firing)
+        expect(result.skipped).to contain_exactly([ip_block, :shared_identifier_needs_human_review])
+      end
+    end
+  end
+
+  # An IP-blocked checkout never reaches the processor, so its row has no fingerprint and nothing
+  # corroborates it. Its typed addresses still decide which accounts checkout reads IPs from.
+  describe "account IPs reached from a fingerprintless guest failure" do
+    let(:wallet_owner) do
+      create(:user, email: "wallet-owner@example.net", current_sign_in_ip: "203.0.113.150", last_sign_in_ip: nil, account_created_ip: nil)
+    end
+    let!(:wallet_owner_ip_block) do
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:ip_address], object_value: wallet_owner.current_sign_in_ip, expires_in: 6.months)
+    end
+    let!(:wallet_owner_email_block) { PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: wallet_owner.email) }
+
+    def fingerprintless_ip_failure(**attrs)
+      create(:purchase, email: buyer_email, purchase_state: "failed", error_code: PurchaseErrorCode::BLOCKED_IP_ADDRESS,
+                        ip_address: "192.0.2.51", browser_guid: "guid-uncorroborated", stripe_fingerprint: nil,
+                        stripe_transaction_id: nil, merchant_account: nil, created_at: 1.hour.ago, **attrs)
+    end
+
+    it "reports the PayPal owner's account IP for a sole hold, clearing nothing" do
+      guid_block.unblock!
+      email_block.unblock!
+      fingerprintless_ip_failure(charge_processor_id: PaypalChargeProcessor.charge_processor_id, card_visual: wallet_owner.email)
+
+      result = nil
+      expect { result = call }.to not_change { PlatformBlock.active.count }
+        .and not_have_enqueued_mail(CustomerLowPriorityMailer, :blocked_purchase_resolved)
+
+      expect(result.verdict).to eq(:noop)
+      expect(result.reason).to eq(:nothing_clearable)
+      expect(result.skipped).to contain_exactly([wallet_owner_ip_block, :shared_identifier_needs_human_review])
+    end
+
+    it "reports a gifter's account IP and clears exactly the buyer's own rows" do
+      failure = fingerprintless_ip_failure(is_gift_sender_purchase: true)
+      create(:gift, gifter_purchase: failure, gifter_email: wallet_owner.email)
+
+      result = nil
+      expect { result = call }.to not_have_enqueued_mail(CustomerLowPriorityMailer, :blocked_purchase_resolved)
+
+      expect(result.cleared).to contain_exactly(guid_block, email_block)
+      expect(result.skipped).to contain_exactly([wallet_owner_ip_block, :shared_identifier_needs_human_review])
+      expect(wallet_owner_email_block.reload.blocked_at).to be_present
+    end
+  end
+
+  # Free purchases and renewals skip the IP check (Purchase::Risk#check_for_past_fraudulent_ips), so a
+  # buyer whose only blocked attempts were exempt is not held by an account IP once the rest clears.
+  describe "account IPs behind blocked checkouts that skip the IP check" do
+    let(:account_ip) { "203.0.113.90" }
+    let!(:buyer_account) { create(:user, email: buyer_email, current_sign_in_ip: account_ip, last_sign_in_ip: nil, account_created_ip: nil) }
+    let!(:account_ip_block) do
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:ip_address], object_value: account_ip, expires_in: 6.months)
+    end
+
+    before do
+      # The paid failure becomes an ordinary decline, so only the exempt attempt below hit a block.
+      failed_purchase.update!(error_code: nil)
+    end
+
+    # Written after create, since the purchase's own before_create checks would reject or re-code the
+    # row: a free row on a paid product fails as price_cents_too_low, and a paid row needs a
+    # fingerprint, which a checkout blocked before the charge never gets.
+    def blocked(purchase, guid: browser_guid)
+      purchase.tap do
+        _1.update_columns(browser_guid: guid, stripe_fingerprint: nil, purchase_state: "failed", error_code: PurchaseErrorCode::BLOCKED_BROWSER_GUID)
+      end
+    end
+
+    def free_guid_failure(guid: browser_guid)
+      blocked(create(:free_purchase, email: buyer_email, purchaser: buyer_account, created_at: 1.hour.ago), guid:)
+    end
+
+    # Paid, so the renewal is exempt only as a recurring charge, not also as a free purchase.
+    def renewal_guid_failure
+      product = create(:membership_product_with_preset_tiered_pricing)
+      tier = product.tier_category.variants.first
+      original = create(:membership_purchase, link: product, tier:, price_cents: 300, email: buyer_email, created_at: 3.months.ago)
+      blocked(create(:purchase, link: product, subscription: original.subscription, variant_attributes: [tier], price_cents: 300,
+                                email: buyer_email, purchaser: buyer_account, created_at: 1.hour.ago))
+    end
+
+    [["a free purchase", :free_guid_failure], ["a real renewal", :renewal_guid_failure]].each do |label, builder|
+      [["active", -> { }], ["expired", -> { account_ip_block.update!(expires_at: 1.minute.ago) }]].each do |state, setup|
+        it "recovers a buyer whose only blocked attempt was #{label}, with the account-IP block #{state}" do
+          instance_exec(&setup)
+          failure = send(builder)
+          expect(failure.free_purchase?).to be(builder == :free_guid_failure)
+          expect(failure.is_recurring_subscription_charge).to be(builder == :renewal_guid_failure)
+
+          result = nil
+          expect { result = call }.to have_enqueued_mail(CustomerLowPriorityMailer, :blocked_purchase_resolved).with(failure.id)
+
+          expect(result.verdict).to eq(:cleared)
+          expect(result.cleared).to contain_exactly(guid_block, email_block)
+          expect(result.skipped).to be_empty
+          expect(account_ip_block.reload.blocked_at).to be_present
+        end
+      end
+    end
+
+    it "still reports the account IP when a paid blocked checkout ran the IP check alongside an exempt one" do
+      failed_purchase.update!(error_code: PurchaseErrorCode::BLOCKED_IP_ADDRESS, ip_address: "192.0.2.53")
+      free_guid_failure
+
+      result = nil
+      expect { result = call }.to not_have_enqueued_mail(CustomerLowPriorityMailer, :blocked_purchase_resolved)
+
+      expect(result.cleared).to contain_exactly(guid_block, email_block)
+      expect(result.skipped).to contain_exactly([account_ip_block, :shared_identifier_needs_human_review])
+    end
+
+    # Classification is not scoped to IP-checked attempts. The guid check runs on free purchases and
+    # matches any row by value, so when the exempt attempt's guid equals the account IP, both rows on
+    # that value still hold its retry and stay withheld.
+    it "keeps rows valued as the account IP withheld when an exempt attempt's guid carries that value" do
+      free_guid_failure(guid: account_ip)
+      overlap = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: account_ip)
+
+      result = nil
+      expect { result = call }.to not_have_enqueued_mail(CustomerLowPriorityMailer, :blocked_purchase_resolved)
+
+      expect(result.cleared).to contain_exactly(guid_block, email_block)
+      expect(result.skipped).to contain_exactly([overlap, :shared_identifier_needs_human_review],
+                                                [account_ip_block, :shared_identifier_needs_human_review])
+      expect(overlap.reload.blocked_at).to be_present
+    end
+  end
 end

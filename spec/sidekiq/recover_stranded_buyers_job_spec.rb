@@ -136,7 +136,9 @@ describe RecoverStrandedBuyersJob do
     described_class.new.perform
 
     expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
-      expect(message).to include("would recover 1 of 3")
+      # The clear left a row behind, so that buyer is partly cleared, not recovered.
+      expect(message).to include("would recover 0 of 3")
+      expect(message).to include("1 partly cleared but still held")
       expect(message).to include("(3 candidates total)")
       expect(message).to include("2 blocks cleared")
       expect(message).to include("1 withheld for a human")
@@ -449,5 +451,155 @@ describe RecoverStrandedBuyersJob do
     travel_to(described_class::ROTATION_EPOCH) { job.perform }
 
     expect(calls).to eq(described_class::MAX_RECOVERIES_PER_RUN)
+  end
+
+  describe "account-IP holds through the real scan and recovery" do
+    let(:buyer_email) { "account-ip-held@example.com" }
+    let(:account_ip) { "203.0.113.88" }
+    let!(:buyer) { create(:user, email: buyer_email, current_sign_in_ip: nil, last_sign_in_ip: account_ip, account_created_ip: nil) }
+    let!(:ip_block) { PlatformBlock.add!(object_type: PlatformBlock::TYPES[:ip_address], object_value: account_ip, expires_in: 6.months) }
+
+    before do
+      create_list(:purchase, Purchase::Blockable::MIN_SUCCESSFUL_PURCHASES_FOR_CLEAN_HISTORY,
+                  email: buyer_email, ip_address: "192.0.2.10", purchase_state: "successful", created_at: 6.months.ago)
+      # A guest checkout: the account is reached through the typed email, as checkout reaches it.
+      create(:purchase, email: buyer_email, browser_guid: "guid-account-ip-held", ip_address: "192.0.2.50",
+                        purchase_state: "failed", error_code: PurchaseErrorCode::BLOCKED_IP_ADDRESS, created_at: 1.day.ago)
+      Feature.activate(:auto_recover_stranded_buyers)
+    end
+
+    after { Feature.deactivate(:auto_recover_stranded_buyers) }
+
+    def report
+      message = nil
+      expect(InternalNotificationWorker).to have_received(:perform_async) { |_room, _sender, text| message = text }
+      message
+    end
+
+    it "names a buyer held only on an account IP and clears nothing" do
+      expect { described_class.new.perform }
+        .to not_change { ip_block.reload.blocked_at }
+        .and not_have_enqueued_mail(CustomerLowPriorityMailer, :blocked_purchase_resolved)
+
+      expect(report).to include("Recovered 0 of 1")
+      expect(report).to include("1 no-ops")
+      expect(report).to include("WITHHELD #{buyer_email} — 1 shared-radius block(s)")
+    end
+
+    it "reports a mixed hold as partly cleared, not recovered, and sends no resolved mail" do
+      guid_block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: "guid-account-ip-held")
+
+      expect { described_class.new.perform }
+        .to change { guid_block.reload.blocked_at }.to(nil)
+        .and not_change { ip_block.reload.blocked_at }
+        .and not_have_enqueued_mail(CustomerLowPriorityMailer, :blocked_purchase_resolved)
+
+      expect(report).to include("Recovered 0 of 1")
+      expect(report).to include("1 partly cleared but still held")
+      expect(report).to include("WITHHELD #{buyer_email} — 1 shared-radius block(s)")
+    end
+
+    it "counts the buyer recovered once the account-IP block has expired" do
+      guid_block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: "guid-account-ip-held")
+      ip_block.update!(expires_at: 1.minute.ago)
+      # Expired, the IP row no longer surfaces the IP-coded failure, so the guid row has to.
+      Purchase.failed.where(email: buyer_email).update_all(error_code: PurchaseErrorCode::BLOCKED_BROWSER_GUID)
+
+      expect { described_class.new.perform }
+        .to change { guid_block.reload.blocked_at }.to(nil)
+        .and have_enqueued_mail(CustomerLowPriorityMailer, :blocked_purchase_resolved)
+
+      expect(report).to include("Recovered 1 of 1")
+      expect(report).not_to include("WITHHELD")
+    end
+  end
+
+  # No account for the buyer at all, and the IP-blocked checkout has no fingerprint, so nothing
+  # corroborates it — only its typed PayPal address leads to the blocked account IP.
+  describe "a guest buyer held through a typed address's account IP" do
+    let(:buyer_email) { "guest-only@example.com" }
+    let(:wallet_owner) do
+      create(:user, email: "wallet-owner@example.net", current_sign_in_ip: "203.0.113.160", last_sign_in_ip: nil, account_created_ip: nil)
+    end
+    let!(:ip_block) do
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:ip_address], object_value: wallet_owner.current_sign_in_ip, expires_in: 6.months)
+    end
+    let!(:uncorroborated_guid_block) { PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: "guid-guest-failure") }
+
+    before do
+      # One more than the clean-history minimum, so the newest settled row can anchor on the others.
+      create_list(:purchase, Purchase::Blockable::MIN_SUCCESSFUL_PURCHASES_FOR_CLEAN_HISTORY + 1,
+                  email: buyer_email, ip_address: "192.0.2.20", purchase_state: "successful", created_at: 6.months.ago)
+      create(:purchase, email: buyer_email, purchase_state: "failed", error_code: PurchaseErrorCode::BLOCKED_IP_ADDRESS,
+                        ip_address: "192.0.2.52", browser_guid: "guid-guest-failure",
+                        charge_processor_id: PaypalChargeProcessor.charge_processor_id, card_visual: wallet_owner.email,
+                        stripe_fingerprint: nil, stripe_transaction_id: nil, merchant_account: nil, created_at: 1.day.ago)
+      Feature.activate(:auto_recover_stranded_buyers)
+    end
+
+    after { Feature.deactivate(:auto_recover_stranded_buyers) }
+
+    it "names the buyer as withheld and clears nothing" do
+      expect(User.find_by(email: buyer_email)).to be_nil
+
+      expect { described_class.new.perform }
+        .to not_change { PlatformBlock.active.count }
+        .and not_have_enqueued_mail(CustomerLowPriorityMailer, :blocked_purchase_resolved)
+
+      message = nil
+      expect(InternalNotificationWorker).to have_received(:perform_async) { |_room, _sender, text| message = text }
+      expect(message).to include("Recovered 0 of 1")
+      expect(message).to include("WITHHELD #{buyer_email} — 1 shared-radius block(s)")
+      expect(uncorroborated_guid_block.reload.blocked_at).to be_present
+    end
+  end
+
+  # Renewals skip the IP check, so a subscriber blocked only on a guid is recovered once it clears,
+  # even with a blocked IP on their account.
+  describe "a renewal blocked on a guid while the account IP is blocked" do
+    let(:buyer_email) { "renewing-subscriber@example.com" }
+    let!(:buyer) { create(:user, email: buyer_email, current_sign_in_ip: "203.0.113.170", last_sign_in_ip: nil, account_created_ip: nil) }
+    let!(:ip_block) { PlatformBlock.add!(object_type: PlatformBlock::TYPES[:ip_address], object_value: buyer.current_sign_in_ip, expires_in: 6.months) }
+    let!(:guid_block) { PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: "guid-renewal") }
+    # Paid, so the renewal is exempt only as a recurring charge. Guid, fingerprint and block code are
+    # written after create: the purchase's own before_create checks reject a paid row with no
+    # fingerprint, which a checkout blocked before the charge never gets.
+    let(:renewal) do
+      product = create(:membership_product_with_preset_tiered_pricing)
+      tier = product.tier_category.variants.first
+      original = create(:membership_purchase, link: product, tier:, price_cents: 300, email: buyer_email, created_at: 5.months.ago)
+      create(:purchase, link: product, subscription: original.subscription, variant_attributes: [tier], price_cents: 300,
+                        email: buyer_email, purchaser: buyer, created_at: 1.day.ago)
+        .tap do
+          _1.update_columns(browser_guid: "guid-renewal", stripe_fingerprint: nil, purchase_state: "failed",
+                            error_code: PurchaseErrorCode::BLOCKED_BROWSER_GUID)
+        end
+    end
+
+    before do
+      # One more than the clean-history minimum, so the newest settled row can anchor on the others.
+      create_list(:purchase, Purchase::Blockable::MIN_SUCCESSFUL_PURCHASES_FOR_CLEAN_HISTORY + 1,
+                  email: buyer_email, ip_address: "192.0.2.30", purchase_state: "successful", created_at: 6.months.ago)
+      renewal
+      Feature.activate(:auto_recover_stranded_buyers)
+    end
+
+    after { Feature.deactivate(:auto_recover_stranded_buyers) }
+
+    it "counts the subscriber recovered, sends the resolved mail, and names no withheld hold" do
+      expect(renewal.is_recurring_subscription_charge).to be(true)
+      expect(renewal.free_purchase?).to be(false)
+
+      expect { described_class.new.perform }
+        .to change { guid_block.reload.blocked_at }.to(nil)
+        .and not_change { ip_block.reload.blocked_at }
+        .and have_enqueued_mail(CustomerLowPriorityMailer, :blocked_purchase_resolved).with(renewal.id)
+
+      message = nil
+      expect(InternalNotificationWorker).to have_received(:perform_async) { |_room, _sender, text| message = text }
+      expect(message).to include("Recovered 1 of 1")
+      expect(message).to include("0 partly cleared but still held")
+      expect(message).not_to include("WITHHELD")
+    end
   end
 end
