@@ -43,10 +43,12 @@ export type AccountStatus = {
 export default function AccountStatusSection({
   accountStatus,
   payoutsPausedBy,
+  payoutsPausedForChargebackRate,
   payoutReservePercent,
 }: {
   accountStatus: AccountStatus;
   payoutsPausedBy: "stripe" | "admin" | "system" | "user" | null;
+  payoutsPausedForChargebackRate?: boolean;
   payoutReservePercent?: number | null;
 }) {
   if (!accountStatus.show_section) return null;
@@ -66,6 +68,14 @@ export default function AccountStatusSection({
       <>
         We're holding {payoutReservePercent}% of your balance in reserve while your chargeback rate is above 1.5%. The
         rest pays out on the normal weekly schedule.
+        <SupportLink />
+      </>
+    ) : payoutsPausedBy === "system" && payoutsPausedForChargebackRate ? (
+      // No reserve percent means the seller's own pause is on top of the chargeback hold, which
+      // stops the run outright. Naming the switch is the only thing that explains the difference.
+      <>
+        Your payouts are held by the chargeback check while your chargeback rate is above 1.5%. The pause payouts switch
+        below controls only your own pause.
         <SupportLink />
       </>
     ) : payoutsPausedBy === "system" ? (

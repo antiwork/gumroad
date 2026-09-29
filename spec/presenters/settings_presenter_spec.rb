@@ -827,6 +827,7 @@ describe SettingsPresenter do
         },
         payouts_paused_internally: false,
         payouts_paused_by: nil,
+        payouts_paused_for_chargeback_rate: false,
         payout_reserve_percent: nil,
         payouts_paused_by_user: false,
         payout_threshold_cents: Payouts::MIN_AMOUNT_CENTS,
@@ -842,6 +843,32 @@ describe SettingsPresenter do
 
     it "returns correct props for a seller who has no compliance info or payout method" do
       expect(presenter.payments_props).to eq(@base_props)
+    end
+
+    it "reports the chargeback-rate hold separately from the seller's own pause" do
+      seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+      seller.comments.create!(
+        content: "Payouts automatically paused due to chargeback rate (4.0%) exceeding #{User::MAX_CHARGEBACK_RATE_ALLOWED_FOR_PAYOUTS}% volume over the last #{User::PAYOUT_CHARGEBACK_RATE_WINDOW.inspect}.",
+        comment_type: Comment::COMMENT_TYPE_ON_PROBATION,
+        author_name: User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:high_chargeback_rate]
+      )
+
+      expect(presenter.payments_props).to include(
+        payouts_paused_internally: true,
+        payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM,
+        payouts_paused_for_chargeback_rate: true,
+        payout_reserve_percent: User::CHARGEBACK_RATE_PAYOUT_RESERVE_PERCENT
+      )
+
+      # The seller's own pause on top of the hold drops the reserve, so the reserve percent alone
+      # cannot tell the page that the hold is still a chargeback one.
+      seller.update!(payouts_paused_by_user: true)
+
+      expect(presenter.payments_props).to include(
+        payouts_paused_for_chargeback_rate: true,
+        payout_reserve_percent: nil,
+        payouts_paused_by_user: true
+      )
     end
 
     it "excludes Puerto Rico but keeps the other US outlying areas in the seller compliance country dropdown" do

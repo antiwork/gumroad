@@ -162,6 +162,7 @@ const pageProps = (userOverrides: Partial<User> = {}, complianceOverrides: Parti
   paypal_switch_loses_bank_rail: false,
   payouts_paused_internally: false,
   payouts_paused_by: null,
+  payouts_paused_for_chargeback_rate: false,
   account_status: {
     show_section: false,
     is_suspended: false,
@@ -548,6 +549,64 @@ describe("full-SSN re-entry validation", () => {
 
     expect(fullSsnError()).toBeTruthy();
     expect(mocks.put).not.toHaveBeenCalled();
+  });
+});
+
+// A chargeback-volume hold pays 75% on the normal schedule, so it must not freeze the seller's own
+// pause the way an admin or Stripe pause does: the hold's own gate reads that flag and skips the
+// whole run, so a seller who had paused before the hold was stuck at 0% behind a disabled switch.
+describe("Pause payouts switch under a chargeback-volume hold", () => {
+  const chargebackHold = {
+    payouts_paused_internally: true,
+    payouts_paused_by: "system",
+    payouts_paused_for_chargeback_rate: true,
+    payout_reserve_percent: 25,
+  };
+  const pauseSwitch = () => screen.getByRole<HTMLInputElement>("switch", { name: "Pause payouts" });
+  const renderWith = (overrides: Record<string, unknown>) => {
+    mocks.usePage.mockReturnValue({ props: { ...pageProps(), ...overrides } });
+    render(<PaymentsPage />);
+  };
+
+  it("leaves the seller's own switch operable and honest about its own state", () => {
+    renderWith({ ...chargebackHold, payouts_paused_by_user: false });
+
+    expect(pauseSwitch().disabled).toBe(false);
+    expect(pauseSwitch().checked).toBe(false);
+  });
+
+  it("lets a seller who had paused before the hold turn their own pause off", () => {
+    renderWith({ ...chargebackHold, payouts_paused_by_user: true });
+
+    expect(pauseSwitch().checked).toBe(true);
+
+    fireEvent.click(pauseSwitch());
+    save();
+
+    expect(mocks.put).toHaveBeenCalledWith(
+      "/settings_payments",
+      expect.objectContaining({ payouts_paused_by_user: false }),
+    );
+  });
+
+  it("keeps the switch disabled when Stripe paused the payouts", () => {
+    renderWith({ payouts_paused_internally: true, payouts_paused_by: "stripe" });
+
+    expect(pauseSwitch().disabled).toBe(true);
+    expect(pauseSwitch().checked).toBe(true);
+  });
+
+  it("keeps the switch disabled when Gumroad paused the payouts", () => {
+    renderWith({ payouts_paused_internally: true, payouts_paused_by: "admin" });
+
+    expect(pauseSwitch().disabled).toBe(true);
+    expect(pauseSwitch().checked).toBe(true);
+  });
+
+  it("keeps the switch disabled for a system pause that is not the chargeback hold", () => {
+    renderWith({ payouts_paused_internally: true, payouts_paused_by: "system" });
+
+    expect(pauseSwitch().disabled).toBe(true);
   });
 });
 

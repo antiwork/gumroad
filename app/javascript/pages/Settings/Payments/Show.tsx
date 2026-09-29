@@ -217,6 +217,7 @@ type PaymentsPageProps = {
   paypal_switch_loses_bank_rail: boolean;
   payouts_paused_internally: boolean;
   payouts_paused_by: "stripe" | "admin" | "system" | "user" | null;
+  payouts_paused_for_chargeback_rate: boolean;
   payout_reserve_percent?: number | null;
   account_status: AccountStatus;
   payouts_paused_by_user: boolean;
@@ -1304,13 +1305,20 @@ export default function PaymentsPage() {
     }
   };
 
+  // A chargeback-volume hold pays 75% on the normal schedule, so it is not a hard block like an
+  // admin or Stripe pause. It also skips the whole run while the seller's own pause is on
+  // (`User#chargeback_rate_payout_reserve_active?`), so a disabled switch here stranded sellers at
+  // 0% with no way to resume: under this hold the switch answers to the seller alone.
+  const chargebackRateHold = props.payouts_paused_internally && props.payouts_paused_for_chargeback_rate;
+  const pausedWithoutSellerChoice = props.payouts_paused_internally && !chargebackRateHold;
+
   const payoutsPausedToggle = (
     <Fieldset>
       <Switch
-        checked={form.data.payouts_paused_by_user || props.payouts_paused_internally}
+        checked={form.data.payouts_paused_by_user || pausedWithoutSellerChoice}
         onChange={(e) => form.setData("payouts_paused_by_user", e.target.checked)}
         aria-label="Pause payouts"
-        disabled={props.is_form_disabled || props.payouts_paused_internally}
+        disabled={props.is_form_disabled || pausedWithoutSellerChoice}
         label="Pause payouts"
       />
       <FieldsetDescription>
@@ -1353,6 +1361,7 @@ export default function PaymentsPage() {
         <AccountStatusSection
           accountStatus={props.account_status}
           payoutsPausedBy={props.payouts_paused_by}
+          payoutsPausedForChargebackRate={props.payouts_paused_for_chargeback_rate}
           payoutReservePercent={props.payout_reserve_percent ?? null}
         />
 
@@ -1453,12 +1462,12 @@ export default function PaymentsPage() {
             {props.payouts_paused_internally ? (
               <WithTooltip
                 tip={
-                  props.payouts_paused_by === "stripe"
-                    ? "Your payouts have been paused by Stripe."
-                    : props.payouts_paused_by === "admin"
-                      ? "Your payouts have been paused by Gumroad."
-                      : props.payouts_paused_by === "system" && props.payout_reserve_percent
-                        ? "Payout pausing is managed automatically while the reserve hold is active."
+                  chargebackRateHold
+                    ? "Gumroad keeps part of each payout in reserve while your chargeback rate is above the limit. This switch controls your own pause only."
+                    : props.payouts_paused_by === "stripe"
+                      ? "Your payouts have been paused by Stripe."
+                      : props.payouts_paused_by === "admin"
+                        ? "Your payouts have been paused by Gumroad."
                         : props.payouts_paused_by === "system"
                           ? "Your payouts have been paused for a security review."
                           : null

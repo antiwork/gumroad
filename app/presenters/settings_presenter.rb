@@ -274,6 +274,9 @@ class SettingsPresenter
       paypal_switch_loses_bank_rail: seller.paypal_switch_loses_bank_rail?,
       payouts_paused_internally: seller.payouts_paused_internally?,
       payouts_paused_by: seller.payouts_paused_by_source,
+      # `payout_reserve_percent` below is nil whenever the seller's own pause is on, so the page
+      # needs the hold itself to tell that this switch is the seller's to operate (gp#3124).
+      payouts_paused_for_chargeback_rate: seller.payouts_paused_for_chargeback_rate?,
       payout_reserve_percent: seller.chargeback_rate_payout_reserve_active? ? User::CHARGEBACK_RATE_PAYOUT_RESERVE_PERCENT : nil,
       account_status: account_status_details(payments_policy),
       payouts_paused_by_user: seller.payouts_paused_by_user?,
