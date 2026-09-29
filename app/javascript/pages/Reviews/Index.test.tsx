@@ -87,6 +87,8 @@ describe("Reviews page edit popover", () => {
     // happy-dom does no layout, so assert the classes that fix the width. Without them the popover
     // falls back to `w-max` and the unwrapped quote stretches it to the viewport cap.
     expect(popover.className).toContain("w-[min(28rem,calc(100vw-2rem))]");
+    // `cn` (tailwind-merge) must drop the component's default `w-max`; if it stayed, it would fight the new width.
+    expect(popover.classList.contains("w-max")).toBe(false);
     expect(popover.getAttribute("data-align")).toBe("end");
   });
 
