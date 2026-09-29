@@ -453,8 +453,6 @@ describe RecoverStrandedBuyersJob do
     expect(calls).to eq(described_class::MAX_RECOVERIES_PER_RUN)
   end
 
-  # Unstubbed: the real scan must surface a buyer held only on an account IP, recovery must report
-  # the hold without clearing it, and the report must name them rather than count a recovery.
   describe "account-IP holds through the real scan and recovery" do
     let(:buyer_email) { "account-ip-held@example.com" }
     let(:account_ip) { "203.0.113.88" }
