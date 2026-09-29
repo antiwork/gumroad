@@ -3,9 +3,7 @@
 require "spec_helper"
 
 # iDEAL/Bancontact force the whole Payment Element into EUR, so whether they are offered decides
-# the currency a EUR listing is charged in. These specs follow one buy-now checkout from the price
-# in CheckoutController#show's props, through the Element it mounts and the surcharge request the
-# browser makes for it, to the intent prepare creates.
+# the currency a EUR listing is charged in.
 describe "checkout currency for a EUR listing, by buyer region", type: :request do
   let(:seller) { create(:user, check_merchant_account_is_linked: true, disable_buyer_local_currency: false) }
   let!(:connect_account) { create(:merchant_account_stripe_connect, user: seller) }
