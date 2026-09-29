@@ -582,7 +582,7 @@ export default function SettingsPage() {
               </Fieldset>
               <Fieldset>
                 <FieldsetTitle>Corners</FieldsetTitle>
-                <div className="grid grid-cols-2 gap-4 sm:grid-cols-4" role="radiogroup" aria-label="Corners">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-4" role="radiogroup" aria-label="Corners">
                   {Object.entries(theme_options.border_radii).map(([value, radius]) => {
                     const isSelected = value === profileSettings.border_radius;
                     return (
