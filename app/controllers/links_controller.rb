@@ -251,9 +251,13 @@ class LinksController < ApplicationController
 
   def cart_items_count
     cart = Cart.fetch_by(user: logged_in_user, browser_guid: cookies[:_gumroad_guid])
-    render inertia: "Products/CartItemsCount", props: {
-      cart_items_count: cart&.cart_products&.alive&.count || 0
-    }
+    cart_items_count = cart&.cart_products&.alive&.count || 0
+    # A storefront host fetches the count with the page's own request, which carries the cart cookie;
+    # only a custom domain, which cannot read that cookie, still needs the frame.
+    respond_to do |format|
+      format.json { render json: { cart_items_count: } }
+      format.any { render inertia: "Products/CartItemsCount", props: { cart_items_count: } }
+    end
   end
 
   def landing_iframe_content

@@ -357,7 +357,11 @@ describe Checkout::PaymentMethodResolver do
           expect(resolve(buyer_country: "BE", cart_product_currency: "eur").payment_method_types).to include("ideal", "bancontact")
           expect(resolve(buyer_country: "US", cart_product_currency: "eur").payment_method_types).not_to include("ideal", "bancontact")
           expect(resolve(buyer_country: "GB", cart_product_currency: "eur").payment_method_types).not_to include("ideal", "bancontact")
-          expect(resolve(buyer_country: nil, cart_product_currency: "eur").payment_method_types).not_to include("ideal", "bancontact")
+        end
+
+        # GeoIP placing no country leaves the product page on the EUR listing as-is.
+        it "keeps the EUR forced-currency methods for a buyer GeoIP cannot place" do
+          expect(resolve(buyer_country: nil, cart_product_currency: "eur").payment_method_types).to include("ideal", "bancontact")
         end
 
         it "surfaces UPI for manual presentment QA only for Indian buyers when the cart is priced in INR" do
