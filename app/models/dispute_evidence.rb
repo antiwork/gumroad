@@ -32,6 +32,14 @@ class DisputeEvidence < ApplicationRecord
   belongs_to :dispute
 
   SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS = 72
+  # Added when the base window touches a Saturday or Sunday (UTC), so a dispute noticed at the weekend
+  # still leaves the seller working days to answer.
+  WEEKEND_EXTENSION_IN_HOURS = 48
+  # Only windows stamped at or after this get the extension, so no deadline a seller was already
+  # quoted moves. That matters most for windows CreateMissingDisputeEvidenceJob backdated to end just
+  # inside the processor's cutoff: a longer window would end after it. It compares the stamp, not the
+  # deploy time, so it must be later than the moment this ships; move it forward if the merge slips.
+  WEEKEND_EXTENSION_STARTS_AT = Time.utc(2026, 10, 5)
   EVIDENCE_REMINDER_LEAD_TIME = 24.hours
   # check_if_needs_redirect re-checks the window on every request, so the emailed link may safely
   # outlive the deadline it quotes — and must, or a late click gets a 404 instead of the explanation.
@@ -90,9 +98,10 @@ class DisputeEvidence < ApplicationRecord
   # Rounded, so it reads 0 up to ~29 minutes before seller_response_due_at actually arrives;
   # anything gating a save or a submission must use window_open? below instead.
   def self.hours_left_in_window(seller_contacted_at)
-    return 0 if seller_contacted_at.nil?
+    due_at = seller_response_due_at(seller_contacted_at)
+    return 0 if due_at.nil?
 
-    (SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS - (Time.current - seller_contacted_at) / 1.hour).round
+    ((due_at - Time.current) / 1.hour).round
   end
 
   # Hours the seller has left to keep working on their statement. A saved statement does not close
@@ -104,10 +113,45 @@ class DisputeEvidence < ApplicationRecord
     self.class.hours_left_in_window(seller_contacted? ? seller_contacted_at : nil)
   end
 
+  # The one place the window length is decided: every deadline, gate, reminder and hour count derives
+  # from the stamp through it.
+  def self.window_duration(seller_contacted_at)
+    hours = SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS
+    hours += WEEKEND_EXTENSION_IN_HOURS if weekend_extended?(seller_contacted_at)
+    hours.hours
+  end
+
+  # The base window is [stamp, stamp + 72h): one ending exactly at midnight does not reach the day
+  # that begins there.
+  def self.weekend_extended?(seller_contacted_at)
+    return false if seller_contacted_at < WEEKEND_EXTENSION_STARTS_AT
+
+    starts_at = seller_contacted_at.utc
+    ends_at = starts_at + SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS.hours
+    last_day = ends_at.to_date
+    last_day -= 1 if ends_at == ends_at.beginning_of_day
+    (starts_at.to_date..last_day).any? { _1.saturday? || _1.sunday? }
+  end
+  private_class_method :weekend_extended?
+
   def self.seller_response_due_at(seller_contacted_at)
     return if seller_contacted_at.nil?
 
-    seller_contacted_at + SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS.hours
+    seller_contacted_at + window_duration(seller_contacted_at)
+  end
+
+  # Not `closing_by - 72h`: that stamp can land on a weekend and become a 120-hour window that
+  # misses the cutoff. Of the candidates, pick one whose window fits, even if it ends a little early;
+  # a cutoff between Saturday and Monday 00:00 UTC has no stamp that ends there and gets Saturday 00:00.
+  def self.latest_window_start(closing_by:, not_after: Time.current)
+    short_start = [not_after, closing_by - SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS.hours].min
+    last_wednesday = short_start.utc.beginning_of_week(:monday) + 2.days
+    last_wednesday -= 1.week if last_wednesday > short_start
+    long_start = [not_after, closing_by - (SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS + WEEKEND_EXTENSION_IN_HOURS).hours].min
+
+    [short_start, last_wednesday, long_start]
+      .select { seller_response_due_at(_1) <= closing_by }
+      .max_by { seller_response_due_at(_1) }
   end
 
   # Exact comparison against the deadline, for anything that gates a save or a submission.

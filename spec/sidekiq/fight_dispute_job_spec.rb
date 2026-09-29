@@ -3,6 +3,8 @@
 require "spec_helper"
 
 describe FightDisputeJob do
+  include_context "without the weekend window extension"
+
   describe "#perform" do
     let(:dispute_evidence) { create(:dispute_evidence) }
     let(:dispute) { dispute_evidence.dispute }
@@ -112,6 +114,31 @@ describe FightDisputeJob do
             end
 
             it_behaves_like "submitted dispute evidence"
+          end
+        end
+
+        context "when the window was extended over a weekend" do
+          let(:stamp) { Time.utc(2026, 10, 10, 16, 18) }
+
+          before do
+            stub_const("DisputeEvidence::WEEKEND_EXTENSION_STARTS_AT", Time.utc(2026, 10, 5))
+            dispute_evidence.update!(seller_contacted_at: stamp)
+          end
+
+          it "does nothing after 72 hours, while the extended window is still open" do
+            travel_to(stamp + 73.hours) do
+              expect_any_instance_of(Purchase).not_to receive(:fight_chargeback)
+              described_class.new.perform(dispute.id)
+              expect(dispute_evidence.reload.resolved?).to eq(false)
+            end
+          end
+
+          it "submits once the extended window has closed" do
+            travel_to(stamp + 120.hours + 1.minute) do
+              expect_any_instance_of(Purchase).to receive(:fight_chargeback)
+              described_class.new.perform(dispute.id)
+              expect(dispute_evidence.reload.resolution).to eq(DisputeEvidence::RESOLUTION_SUBMITTED)
+            end
           end
         end
 

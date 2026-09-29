@@ -47,7 +47,7 @@ class CreateMissingDisputeEvidenceJob
   DEADLINE_BUFFER = 6.hours
 
   # Distinguishes "this processor has no deadline for us to read" from "we tried and could not".
-  # The second defers the dispute rather than giving it an unverified 72 hours.
+  # The second defers the dispute rather than giving it an unverified full window.
   DEADLINE_UNKNOWN = :unknown
 
   # How long a dispute may sit formalized with unfinished side effects before this job takes it
@@ -87,7 +87,7 @@ class CreateMissingDisputeEvidenceJob
 
       deadline = processor_deadline(dispute)
       # Nothing is stamped, so the next sweep selects this dispute again and reads the cutoff
-      # afresh. Opening a window without it would be an unverified 72 hours that may end after the
+      # afresh. Opening a window without it would be an unverified full window that may end after the
       # processor stops accepting evidence.
       return if deadline == DEADLINE_UNKNOWN
       # Past the cutoff the processor accepts nothing, so there is no submission left to make and
@@ -211,8 +211,7 @@ class CreateMissingDisputeEvidenceJob
     def seller_window_start(deadline)
       return Time.current if deadline.nil?
 
-      latest_start = deadline - DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS.hours - DEADLINE_BUFFER
-      [Time.current, latest_start].min
+      DisputeEvidence.latest_window_start(closing_by: deadline - DEADLINE_BUFFER)
     end
 
     # A dispute the processor will no longer accept evidence for. Its evidence row would otherwise

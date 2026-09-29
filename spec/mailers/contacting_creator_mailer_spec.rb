@@ -3,6 +3,8 @@
 require "spec_helper"
 
 describe ContactingCreatorMailer do
+  include_context "without the weekend window extension"
+
   let(:custom_mailer_route_helper) do
     Class.new(ActionMailer::Base) do
       include CustomMailerRouteBuilder
@@ -404,6 +406,33 @@ describe ContactingCreatorMailer do
           expect(mail.body.encoded).to include "Any additional information you can provide by"
           expect(mail.body.encoded).to include "(in the next 72 hours) will help us win on your behalf."
           expect(mail.body.encoded).to include "Submit additional information"
+        end
+
+        context "when the window was extended over a weekend" do
+          let(:stamp) { Time.utc(2026, 10, 10, 16, 18) } # a Saturday
+
+          before do
+            stub_const("DisputeEvidence::WEEKEND_EXTENSION_STARTS_AT", Time.utc(2026, 10, 5))
+            dispute_evidence.update!(seller_contacted_at: stamp)
+          end
+
+          it "quotes the extended hours and deadline in the notice" do
+            travel_to(stamp) do
+              mail = ContactingCreatorMailer.chargeback_notice(dispute.id)
+
+              expect(mail.body.encoded).to include "(in the next 120 hours) will help us win on your behalf."
+              expect(mail.body.encoded).to include "October 15, 2026"
+            end
+          end
+
+          it "sends the reminder with the hours left against the extended deadline" do
+            travel_to(stamp + 96.hours) do
+              mail = ContactingCreatorMailer.chargeback_evidence_due_soon(dispute.id)
+
+              expect(mail.body.encoded).to include "You have 24 hours left."
+              expect(mail.body.encoded).to include "October 15, 2026"
+            end
+          end
         end
 
         # The link outlives the deadline on purpose — check_if_needs_redirect refuses the late save,

@@ -5,8 +5,8 @@ class Purchases::DisputeEvidenceController < ApplicationController
 
   SECURE_ID_SCOPE = "dispute_evidence"
 
-  # Sellers reach this page from a one-off emailed link and have only 72 hours
-  # (DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS) to send us their
+  # Sellers reach this page from a one-off emailed link and have a limited
+  # window (DisputeEvidence.window_duration) to send us their
   # side of a chargeback before we forward whatever we have to the card network.
   # A suspension that lands inside that window is not a reason to throw the
   # evidence away: whether the seller keeps their account is a separate question

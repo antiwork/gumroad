@@ -3,6 +3,8 @@
 require "spec_helper"
 
 describe FightDisputesJob do
+  include_context "without the weekend window extension"
+
   # The window has elapsed: seller_contacted_at is old enough that hours_left is not positive.
   let!(:dispute_evidence) { create(:dispute_evidence, seller_contacted_at: 80.hours.ago) }
   let!(:dispute_evidence_not_ready) { create(:dispute_evidence) }
@@ -15,6 +17,26 @@ describe FightDisputesJob do
       expect(FightDisputeJob).to have_enqueued_sidekiq_job(dispute_evidence.dispute.id)
       expect(FightDisputeJob).not_to have_enqueued_sidekiq_job(dispute_evidence_not_ready.dispute.id)
       expect(FightDisputeJob).not_to have_enqueued_sidekiq_job(dispute_evidence_resolved.dispute.id)
+    end
+
+    context "when the window was extended over a weekend" do
+      before { stub_const("DisputeEvidence::WEEKEND_EXTENSION_STARTS_AT", Time.utc(2026, 10, 5)) }
+
+      # A Saturday 16:18 stamp: a 72-hour window would already be over on Tuesday 16:19.
+      let(:stamp) { Time.utc(2026, 10, 10, 16, 18) }
+      let!(:weekend_evidence) { create(:dispute_evidence, seller_contacted_at: stamp) }
+
+      it "keeps waiting past 72 hours and submits once the extended window closes" do
+        travel_to(stamp + 73.hours) do
+          described_class.new.perform
+          expect(FightDisputeJob).not_to have_enqueued_sidekiq_job(weekend_evidence.dispute.id)
+        end
+
+        travel_to(stamp + 120.hours + 1.minute) do
+          described_class.new.perform
+          expect(FightDisputeJob).to have_enqueued_sidekiq_job(weekend_evidence.dispute.id)
+        end
+      end
     end
 
     context "when the seller submitted early, inside their window" do

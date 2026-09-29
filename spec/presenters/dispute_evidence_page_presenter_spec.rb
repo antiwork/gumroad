@@ -3,11 +3,29 @@
 require "spec_helper"
 
 describe DisputeEvidencePagePresenter do
+  include_context "without the weekend window extension"
+
   let(:dispute_evidence) { create(:dispute_evidence, seller_contacted_at: 1.hour.ago) }
   let(:purchase) { dispute_evidence.disputable.purchase_for_dispute_evidence }
   let(:purchase_route_id) { purchase.external_id }
   let(:presenter) { described_class.new(dispute_evidence, purchase_route_id:) }
   let(:purchase_product_presenter) { PurchaseProductPresenter.new(purchase) }
+
+  describe "a window that touches a weekend" do
+    before { stub_const("DisputeEvidence::WEEKEND_EXTENSION_STARTS_AT", Time.utc(2026, 10, 5)) }
+
+    it "quotes the extended hours and due time" do
+      saturday = Time.utc(2026, 10, 10, 16, 18)
+      dispute_evidence.update!(seller_contacted_at: saturday)
+
+      travel_to(saturday + 1.hour) do
+        props = presenter.props[:dispute_evidence]
+
+        expect(props[:duration_left_to_submit_evidence_formatted]).to eq("119 hours")
+        expect(props[:seller_response_due_at]).to eq(Time.utc(2026, 10, 15, 16, 18).iso8601)
+      end
+    end
+  end
 
   describe "#props" do
     it "returns correct props" do

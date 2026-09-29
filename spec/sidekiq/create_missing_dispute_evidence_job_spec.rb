@@ -3,6 +3,8 @@
 require "spec_helper"
 
 describe CreateMissingDisputeEvidenceJob do
+  include_context "without the weekend window extension"
+
   # The real evidence builder screenshots the receipt page with headless Chrome, and the
   # deadline lookup calls the processor. Neither is what this job is about, so stub both and
   # let the rest of the creation path run for real.
@@ -242,6 +244,64 @@ describe CreateMissingDisputeEvidenceJob do
         expect(dispute_evidence.hours_left_to_submit_evidence).to eq(6)
         expect(dispute_evidence.seller_contacted_at).to be < Time.current
         expect(DisputeEvidenceDueSoonReminderJob).not_to have_enqueued_sidekiq_job(dispute.id)
+      end
+    end
+
+    # The weekend rule lengthens a window that touches a Saturday or Sunday to 120 hours, and the
+    # processor's cutoff still wins: the sweep must never open a window that ends past it.
+    context "when the window would touch a weekend" do
+      let!(:purchase) { charged_back_purchase }
+      let!(:dispute) { stripe_dispute_for(purchase) }
+      let(:saturday) { Time.utc(2026, 10, 10, 12) }
+
+      # Only Time.current is pinned: travel_to would also skew the request time signed for the
+      # storage service, which rejects the receipt upload.
+      before do
+        stub_const("DisputeEvidence::WEEKEND_EXTENSION_STARTS_AT", Time.utc(2026, 10, 5))
+        allow(Time).to receive(:current).and_return(saturday)
+      end
+
+      it "opens the extended window and schedules the reminder 24 hours before its end" do
+        stub_processor_deadline(saturday + 30.days)
+
+        described_class.new.perform
+
+        dispute_evidence = dispute.reload.dispute_evidence
+        expect(dispute_evidence.seller_contacted_at).to eq(saturday)
+        expect(dispute_evidence.seller_response_due_at).to eq(saturday + 120.hours)
+        expect(dispute_evidence.hours_left_to_submit_evidence).to eq(120)
+        expect(DisputeEvidenceDueSoonReminderJob)
+          .to have_enqueued_sidekiq_job(dispute.id).at(saturday + 96.hours)
+      end
+
+      it "backdates the window to end at the processor's cutoff, not past it, when the cutoff is shorter" do
+        # Cutoff Wednesday 18:00, so the window must end by Wednesday 12:00 after the buffer. Friday
+        # 12:00 is the latest start that fits: Saturday 12:00 would get 120 hours and end Thursday.
+        cutoff = Time.utc(2026, 10, 14, 18)
+        stub_processor_deadline(cutoff)
+
+        described_class.new.perform
+
+        dispute_evidence = dispute.reload.dispute_evidence
+        closing_by = cutoff - described_class::DEADLINE_BUFFER
+        expect(dispute_evidence.seller_response_due_at).to eq(closing_by)
+        expect(dispute_evidence.seller_contacted_at).to be < saturday
+        expect(dispute_evidence.seller_contacted_at).to eq(Time.utc(2026, 10, 9, 12))
+        expect(dispute_evidence.hours_left_to_submit_evidence).to eq(96)
+      end
+
+      it "never opens a window that ends after the cutoff, wherever the cutoff falls" do
+        [30, 60, 100, 119].each do |hours_out|
+          evidence_dispute = stripe_dispute_for(charged_back_purchase)
+          cutoff = saturday + hours_out.hours
+          stub_processor_deadline(cutoff)
+
+          described_class.new.perform
+
+          due_at = evidence_dispute.reload.dispute_evidence&.seller_response_due_at
+          expect(due_at).to be_present
+          expect(due_at).to be <= [cutoff - described_class::DEADLINE_BUFFER, saturday].max
+        end
       end
     end
 

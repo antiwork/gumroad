@@ -4,6 +4,8 @@ require "spec_helper"
 require "inertia_rails/rspec"
 
 describe Purchases::DisputeEvidenceController, type: :controller, inertia: true do
+  include_context "without the weekend window extension"
+
   let(:dispute_evidence) { create(:dispute_evidence) }
   let(:purchase) { dispute_evidence.disputable.purchase_for_dispute_evidence }
   # Minted the way the chargeback emails mint it, so the elapsed-window cases below exercise the
@@ -64,6 +66,40 @@ describe Purchases::DisputeEvidenceController, type: :controller, inertia: true 
 
         expect(response).to redirect_to(dashboard_url)
         expect(flash[:alert]).to eq("The deadline for submitting additional information for this dispute has passed.")
+      end
+    end
+
+    context "when the window touches a weekend" do
+      before do
+        stub_const("DisputeEvidence::WEEKEND_EXTENSION_STARTS_AT", Time.utc(2026, 10, 5))
+        dispute_evidence.update!(seller_contacted_at: Time.utc(2026, 10, 10, 16, 18))
+      end
+
+      it "still takes the form after the plain 72 hours" do
+        travel_to(Time.utc(2026, 10, 14, 16, 18)) do
+          get :show, params: { purchase_id: evidence_token }
+
+          expect(response).to be_successful
+          expect(flash[:alert]).to be_nil
+        end
+      end
+
+      it "closes the form at the extended deadline" do
+        travel_to(Time.utc(2026, 10, 15, 16, 19)) do
+          get :show, params: { purchase_id: evidence_token }
+
+          expect(response).to redirect_to(dashboard_url)
+          expect(flash[:alert]).to eq("The deadline for submitting additional information for this dispute has passed.")
+        end
+      end
+
+      it "saves a response after the plain 72 hours" do
+        travel_to(Time.utc(2026, 10, 14, 16, 18)) do
+          put :update, params: { purchase_id: evidence_token, dispute_evidence: { reason_for_winning: "Late but in time" } }
+
+          expect(dispute_evidence.reload.reason_for_winning).to eq("Late but in time")
+          expect(response).to redirect_to(success_purchase_dispute_evidence_path(evidence_token))
+        end
       end
     end
 
