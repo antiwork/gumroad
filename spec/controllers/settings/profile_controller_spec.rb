@@ -97,6 +97,8 @@ describe Settings::ProfileController, :vcr, type: :controller, inertia: true do
     it "rejects a corner radius or button hover outside the allowed choices" do
       put :update, params: { seller_profile: { border_radius: "huge", button_hover: "bounce" } }
 
+      expect(response).to redirect_to(profile_path)
+      expect(flash[:alert]).to eq("Border radius is not included in the list and Button hover is not included in the list")
       expect(seller.reload.seller_profile).to have_attributes(border_radius: "small", button_hover: "lift")
     end
 
