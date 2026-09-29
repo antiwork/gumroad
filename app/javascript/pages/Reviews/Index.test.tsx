@@ -78,18 +78,19 @@ const renderPage = (message: string) => {
 
 describe("ReviewsIndex", () => {
   it("anchors the edit popover to a definite width instead of the reviewer's quote", () => {
-    renderPage("Original review");
+    renderPage("A long review that would otherwise stretch the popover to the viewport cap. ".repeat(20));
     fireEvent.click(screen.getByLabelText("Edit"));
 
-    // Without a width the popover's `w-max` sizes it to the unwrapped quote, i.e. the viewport cap.
-    expect(document.querySelector('[class*="w-[min(28rem,calc(100vw-2rem))]"]')).not.toBeNull();
+    // happy-dom has no layout, so pin the resolved class list: `cn` must drop the component's `w-max`.
+    const popover = document.querySelector('[class*="w-[min(28rem,calc(100vw-2rem))]"]');
+    expect(popover).not.toBeNull();
+    expect(popover?.classList.contains("w-max")).toBe(false);
   });
 
   it("closes the edit popover after the review is saved", async () => {
     mocks.setProductRating.mockResolvedValue({ anonymous: false, rating: 5, message: "Updated review", video: null });
     renderPage("Original review");
 
-    // One "Edit" control (the row's pencil) while the popover is closed, two while it is open.
     fireEvent.click(screen.getByLabelText("Edit"));
     expect(screen.getAllByRole("button", { name: "Edit" })).toHaveLength(2);
 
