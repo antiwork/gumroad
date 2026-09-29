@@ -242,11 +242,8 @@ module Purchase::Blockable
     scopes.reduce { |combined, scope| combined.or(scope) }
   end
 
-  # Active blocks on the IPs Purchase::Risk#check_for_past_fraudulent_ips holds this buyer on: the
-  # request IP plus the account IPs of every address on this row, matched by value whatever the
-  # stored type, as checkout matches them. Report-only — #unblock_buyer! clears none of the account
-  # IPs, and #buyer_blocked? deliberately does not ask about them. None for a row checkout never
-  # IP-checks.
+  # Checkout matches IPs by value regardless of stored type; this lookup is report-only.
+  # Free purchases and recurring charges never run the IP check.
   def checkout_ip_holds
     return PlatformBlock.none if checkout_ip_exempt?
 
