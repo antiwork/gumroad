@@ -5,6 +5,10 @@ require "spec_helper"
 describe SitemapService do
   let(:service) { described_class.new }
 
+  # sitemap_config sets process-global options, and the production branch's tmp/ public_path
+  # would follow later specs. This swaps in a new LinkSet; LinkSet#reset! would keep the options.
+  after { SitemapGenerator::Sitemap.reset! }
+
   describe "#generate" do
     before do
       @product = create(:product, created_at: Time.current)
