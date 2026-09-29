@@ -1,9 +1,6 @@
 # frozen_string_literal: true
 
-# Applies automatic Capital withholdings whose Stripe transfer has no source charge. Before the
-# forward fix, a blank source matched a seller purchase with no charge id, so the apply step refused
-# these credits and they never reached a balance. Each one is re-checked against Stripe, unlinked from
-# that purchase and applied the way a new account-level withholding is (earliest unpaid balance).
+# Live runs write seller balances. Dry-run each batch first.
 class Onetime::ApplySourcelessCapitalDeductions
   CREDIT_IDS = [
     483839, 483840, 483843, 483928, 483933, 483996, 484035, 484037, 484410, 484746, 484830, 486071,
@@ -146,7 +143,8 @@ class Onetime::ApplySourcelessCapitalDeductions
 
     def verify_balance_transaction!(credit, transaction)
       unless [transaction.user_id, transaction.merchant_account_id] == [credit.user_id, credit.merchant_account_id] &&
-             transaction.balance_id.nil? && [transaction.purchase_id, transaction.refund_id, transaction.dispute_id].all?(&:nil?) &&
+             (transaction.balance_id.nil? || applied_to_credit_balance?(credit, transaction.balance)) &&
+             [transaction.purchase_id, transaction.refund_id, transaction.dispute_id].all?(&:nil?) &&
              [transaction.issued_amount_currency, transaction.holding_amount_currency].all?(Currency::USD) &&
              [transaction.issued_amount_gross_cents, transaction.issued_amount_net_cents,
               transaction.holding_amount_gross_cents, transaction.holding_amount_net_cents].all?(credit.amount_cents)
@@ -154,15 +152,24 @@ class Onetime::ApplySourcelessCapitalDeductions
       end
     end
 
-    # The balance BalanceTransaction#find_or_create_balance would pick; a missing one is reported, not created.
+    # A transaction applied by an interrupted run only needs its credit linked; its balance already holds the deduction.
+    def applied_to_credit_balance?(credit, balance)
+      balance.present? && [balance.user_id, balance.merchant_account_id] == [credit.user_id, credit.merchant_account_id] &&
+        [balance.currency, balance.holding_currency].all?(Currency::USD)
+    end
+
+    # The balance BalanceTransaction#find_or_create_balance would pick. A missing one is created by the live run, so it starts at 0.
     def dry_run_result(credit, transaction, stripe)
-      balance = Balance.where(user_id: credit.user_id, merchant_account_id: credit.merchant_account_id, currency: Currency::USD,
-                              holding_currency: Currency::USD, state: "unpaid").order(date: :asc).first
+      applied_balance = transaction&.balance
+      balance = applied_balance || Balance.where(user_id: credit.user_id, merchant_account_id: credit.merchant_account_id,
+                                                 currency: Currency::USD, holding_currency: Currency::USD, state: "unpaid").order(date: :asc).first
+      held_cents = balance&.holding_amount_cents || 0
+      before_cents, after_cents = applied_balance ? [held_cents - credit.amount_cents, held_cents] : [held_cents, held_cents + credit.amount_cents]
       { status: :dry_run, credit_id: credit.id, user_id: credit.user_id, balance_transaction_id: transaction&.id,
-        creates_balance_transaction: transaction.nil?, unlinks_purchase_id: credit.financing_paydown_purchase_id,
-        balance_id: balance&.id, new_balance_date: balance ? nil : Time.zone.at(stripe[:stripe_loan_paydown_deducted_at]).to_date,
-        before_cents: balance&.holding_amount_cents, deduction_cents: credit.amount_cents,
-        after_cents: balance && balance.holding_amount_cents + credit.amount_cents }
+        creates_balance_transaction: transaction.nil?, links_applied_transaction: applied_balance.present?,
+        unlinks_purchase_id: credit.financing_paydown_purchase_id, balance_id: balance&.id,
+        new_balance_date: balance ? nil : Time.zone.at(stripe[:stripe_loan_paydown_deducted_at]).to_date,
+        before_cents:, deduction_cents: credit.amount_cents, after_cents: }
     end
 
     def already_applied(credit)

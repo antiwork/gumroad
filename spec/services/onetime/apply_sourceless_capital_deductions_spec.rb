@@ -88,7 +88,8 @@ describe Onetime::ApplySourcelessCapitalDeductions do
   it "opens a balance dated to the Stripe deduction when none is unpaid" do
     balance.update_columns(state: "paid")
 
-    expect(process).to include(status: :dry_run, balance_id: nil, new_balance_date: Time.zone.at(1_787_000_000).to_date)
+    expect(process).to include(status: :dry_run, balance_id: nil, new_balance_date: Time.zone.at(1_787_000_000).to_date,
+                               before_cents: 0, deduction_cents: -352, after_cents: -352)
     process(dry_run: false)
     expect(credit.reload.balance.date).to eq(Time.zone.at(1_787_000_000).to_date)
     expect(credit.balance.holding_amount_cents).to eq(-352)
@@ -102,6 +103,58 @@ describe Onetime::ApplySourcelessCapitalDeductions do
 
     allow_any_instance_of(Credit).to receive(:apply_financing_paydown!).and_call_original
     expect(process(dry_run: false)).to include(status: :applied, balance_id: balance.id)
+  end
+
+  context "when the transaction was applied but the credit was never linked to its balance" do
+    before do
+      allow_any_instance_of(BalanceTransaction).to receive(:update_balance!).and_wrap_original do |original, *args, **kwargs|
+        original.call(*args, **kwargs)
+        raise "interrupted"
+      end
+      expect(process(dry_run: false)).to include(status: :refused, error: "interrupted")
+      allow_any_instance_of(BalanceTransaction).to receive(:update_balance!).and_call_original
+    end
+
+    it "reports the link in the dry run without changing the balance" do
+      expect(transaction.reload.balance_id).to eq(balance.id)
+      expect(credit.reload.balance_id).to be_nil
+
+      expect(process).to include(status: :dry_run, balance_id: balance.id, links_applied_transaction: true,
+                                 before_cents: 5353, deduction_cents: -352, after_cents: 5001)
+      expect(balance.reload.holding_amount_cents).to eq(5001)
+    end
+
+    it "links the credit without applying the deduction twice" do
+      expect { expect(process(dry_run: false)).to include(status: :applied, balance_id: balance.id) }.not_to change { BalanceTransaction.count }
+
+      expect(credit.reload.balance_id).to eq(balance.id)
+      expect(balance.reload.holding_amount_cents).to eq(5001)
+      expect(process(dry_run: false)).to eq(status: :already_applied, credit_id: credit.id, balance_id: balance.id)
+      expect(balance.reload.holding_amount_cents).to eq(5001)
+    end
+
+    it "refuses a transaction applied to another seller's balance" do
+      other_balance = create(:balance, user: create(:user), merchant_account: create(:merchant_account, currency: Currency::USD))
+      transaction.update_columns(balance_id: other_balance.id)
+
+      expect(process(dry_run: false)).to include(status: :refused, error: "Balance transaction does not match the credit")
+      expect(credit.reload.balance_id).to be_nil
+    end
+
+    it "refuses a transaction applied to a balance of another merchant account of the seller" do
+      other_account = create(:merchant_account, user: seller, currency: Currency::USD)
+      transaction.update_columns(balance_id: create(:balance, user: seller, merchant_account: other_account).id)
+
+      expect(process(dry_run: false)).to include(status: :refused, error: "Balance transaction does not match the credit")
+      expect(credit.reload.balance_id).to be_nil
+    end
+
+    it "refuses a transaction applied to a non-USD balance" do
+      balance.update_columns(holding_currency: Currency::CAD)
+
+      expect(process(dry_run: false)).to include(status: :refused, error: "Balance transaction does not match the credit")
+      expect(credit.reload.balance_id).to be_nil
+    end
   end
 
   context "when the transfer names a charge" do

@@ -52,9 +52,11 @@ For each credit it:
 1. Reads the Stripe financing transaction, its linked payment, and that payment's source transfer.
    The financing transaction must be an automatic withholding in USD for the credit's amount and account, and the transfer must have no `source_transaction`.
 2. Locks the credit and checks the USD Stripe merchant account, the never-charged purchase link, and any existing balance transaction.
-3. In a dry run, returns the balance the deduction would land on (the earliest unpaid balance, or a new one dated to the Stripe deduction) with before/after amounts.
+3. In a dry run, returns the balance the deduction would land on (the earliest unpaid balance, or a new one dated to the Stripe deduction, which starts at 0) with before/after amounts.
+   A transaction that an interrupted run already applied reports its own balance and `links_applied_transaction: true`.
 4. In a live run, clears the purchase link, records the Stripe payment and transfer IDs, and applies the deduction with `Credit#apply_financing_paydown!`.
    That reuses the existing balance transaction, or creates the missing one in USD.
+   A transaction already applied to the seller's USD balance is only linked to the credit; the balance is not changed again.
 
 Each credit returns `dry_run`, `applied`, `already_applied`, or `refused` with the reason; one refusal does not stop the batch.
 A credit that already has a balance returns `already_applied`, and a credit left unlinked by an interrupted run resumes.
