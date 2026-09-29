@@ -226,6 +226,7 @@ module Product::Prices
     return base_price_cents if offer_code.minimum_quantity.to_i > 1
     return base_price_cents if offer_code.minimum_amount_cents.to_i > base_price_cents
     return base_price_cents unless default_offer_code_uses_left?(offer_code)
+    return base_price_cents unless discounts_lowest_priced_option?(offer_code)
 
     [base_price_cents - offer_code.amount_off(base_price_cents), 0].max
   end
@@ -436,6 +437,25 @@ module Product::Prices
       tiers_for_new_buyers(list).presence || list.select(&:alive?)
     end
 
+    # base_price_cents is the lowest option's price, so an option-scoped code that leaves that
+    # option out would quote a price the buyer only reaches by picking a dearer option.
+    def discounts_lowest_priced_option?(offer_code)
+      restricted_ids = offer_code.restricted_variants_for(self).map(&:id)
+      return true if restricted_ids.empty?
+
+      lowest_ids =
+        if is_tiered_membership?
+          [lowest_tier_price(for_default_duration: true)&.variant_id]
+        elsif (options = preloaded_options)
+          minimum = options.map(&:price_difference_cents).compact.min
+          options.filter_map { |option| option.id if option.price_difference_cents == minimum }
+        else
+          current_base_variants.where(price_difference_cents: lowest_variant_price_difference_cents).pluck(:id)
+        end
+
+      (lowest_ids & restricted_ids).any?
+    end
+
     def lowest_tier_price(for_default_duration: false)
       return unless is_tiered_membership
 
@@ -488,6 +508,12 @@ module Product::Prices
       # CollabProductsPagePresenter#display_price_cents,
       # Product::StructuredData#minimum_offer_price_cents) don't pay a
       # per-category N+1.
+      options = preloaded_options
+      options ? options.map(&:price_difference_cents).compact.min : current_base_variants.minimum(:price_difference_cents)
+    end
+
+    # Alive SKUs plus alive variants, from associations the caller already loaded; nil when any is missing.
+    def preloaded_options
       preloaded_skus =
         if association(:skus_alive).loaded?
           skus_alive.to_a
@@ -495,14 +521,11 @@ module Product::Prices
           skus.select(&:alive?)
         end
 
-      if preloaded_skus &&
-         association(:variant_categories_alive).loaded? &&
-         variant_categories_alive.all? { |c| c.association(:alive_variants).loaded? }
-        candidates = preloaded_skus + variant_categories_alive.flat_map(&:alive_variants)
-        candidates.map(&:price_difference_cents).compact.min
-      else
-        current_base_variants.minimum(:price_difference_cents)
-      end
+      return unless preloaded_skus &&
+                    association(:variant_categories_alive).loaded? &&
+                    variant_categories_alive.all? { |c| c.association(:alive_variants).loaded? }
+
+      preloaded_skus + variant_categories_alive.flat_map(&:alive_variants)
     end
 
     def display_recurrence
