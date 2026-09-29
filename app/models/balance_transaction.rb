@@ -23,20 +23,20 @@ class BalanceTransaction < ApplicationRecord
       @net_cents = net_cents
     end
 
-    # When canonical_issued_amount is supplied (buyer-presentment charges), "issued amount"
-    # here means the canonical seller/accounting issued amount, not the processor-issued
-    # presentment amount — the processor issued e.g. CAD, but balances stay canonical.
-    def self.create_issued_amount_for_affiliate(flow_of_funds:, issued_affiliate_cents:, canonical_issued_amount: nil)
+    # Affiliate cents are canonical USD on the Gumroad-held account whatever the charge; the flow of
+    # funds' gumroad_amount is in the charge's or application fee's currency on a seller-held charge.
+    # `currency` only lets a reversal follow the label of the ledger it offsets (Purchase#affiliate_reversal_currencies).
+    def self.create_issued_amount_for_affiliate(issued_affiliate_cents:, currency: Currency::USD)
       new(
-        currency: canonical_issued_amount&.currency || flow_of_funds.gumroad_amount.currency,
+        currency:,
         gross_cents: issued_affiliate_cents,
         net_cents: issued_affiliate_cents
       )
     end
 
-    def self.create_holding_amount_for_affiliate(flow_of_funds:, issued_affiliate_cents:, canonical_issued_amount: nil)
+    def self.create_holding_amount_for_affiliate(issued_affiliate_cents:, currency: Currency::USD)
       new(
-        currency: canonical_issued_amount&.currency || flow_of_funds.gumroad_amount.currency,
+        currency:,
         gross_cents: issued_affiliate_cents,
         net_cents: issued_affiliate_cents
       )

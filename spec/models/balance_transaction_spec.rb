@@ -4,133 +4,20 @@ require "spec_helper"
 
 describe BalanceTransaction, :vcr do
   describe BalanceTransaction::Amount do
+    # Affiliate cents are canonical USD whatever the charge, so no flow of funds is consulted.
     describe "create_issued_amount_for_affiliate" do
-      let(:issued_affiliate_cents) { 10_00 }
-      let(:flow_of_funds) { raise "You must define `flow_of_funds`." }
-      let(:amount) do
-        BalanceTransaction::Amount.create_issued_amount_for_affiliate(
-          flow_of_funds:,
-          issued_affiliate_cents:
-        )
-      end
+      it "creates a USD amount for the affiliate's cents" do
+        amount = BalanceTransaction::Amount.create_issued_amount_for_affiliate(issued_affiliate_cents: 10_00)
 
-      describe "issued amount and settled amounts are the same, no merchant account" do
-        let(:flow_of_funds) do
-          FlowOfFunds.new(
-            issued_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: 100_00),
-            settled_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: 100_00),
-            gumroad_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: 100_00),
-            merchant_account_gross_amount: nil,
-            merchant_account_net_amount: nil
-          )
-        end
-
-        it "creates an amount" do
-          expect(amount.currency).to eq(flow_of_funds.gumroad_amount.currency)
-          expect(amount.gross_cents).to eq(issued_affiliate_cents)
-          expect(amount.net_cents).to eq(issued_affiliate_cents)
-        end
-      end
-
-      describe "issued amount and settled amounts are the same, a merchant accounts" do
-        let(:flow_of_funds) do
-          FlowOfFunds.new(
-            issued_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: 100_00),
-            settled_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: 100_00),
-            gumroad_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: 30_00),
-            merchant_account_gross_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: 100_00),
-            merchant_account_net_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: 70_00)
-          )
-        end
-
-        it "creates an amount" do
-          expect(amount.currency).to eq(flow_of_funds.gumroad_amount.currency)
-          expect(amount.gross_cents).to eq(issued_affiliate_cents)
-          expect(amount.net_cents).to eq(issued_affiliate_cents)
-        end
-      end
-
-      describe "issued amount and settled amounts are not the same, a merchant account" do
-        let(:flow_of_funds) do
-          FlowOfFunds.new(
-            issued_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: 100_00),
-            settled_amount: FlowOfFunds::Amount.new(currency: Currency::CAD, cents: 110_00),
-            gumroad_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: 30_00),
-            merchant_account_gross_amount: FlowOfFunds::Amount.new(currency: Currency::CAD, cents: 110_00),
-            merchant_account_net_amount: FlowOfFunds::Amount.new(currency: Currency::CAD, cents: 80_00)
-          )
-        end
-
-        it "creates an amount" do
-          expect(amount.currency).to eq(flow_of_funds.gumroad_amount.currency)
-          expect(amount.gross_cents).to eq(issued_affiliate_cents)
-          expect(amount.net_cents).to eq(issued_affiliate_cents)
-        end
+        expect(amount).to have_attributes(currency: Currency::USD, gross_cents: 10_00, net_cents: 10_00)
       end
     end
 
     describe "create_holding_amount_for_affiliate" do
-      let(:issued_affiliate_cents) { 10_00 }
-      let(:flow_of_funds) { raise "You must define `flow_of_funds`." }
-      let(:amount) do
-        BalanceTransaction::Amount.create_holding_amount_for_affiliate(
-          flow_of_funds:,
-          issued_affiliate_cents:
-        )
-      end
+      it "creates a USD amount for the affiliate's cents" do
+        amount = BalanceTransaction::Amount.create_holding_amount_for_affiliate(issued_affiliate_cents: -10_00)
 
-      describe "issued amount and settled amounts are the same, no merchant account" do
-        let(:flow_of_funds) do
-          FlowOfFunds.new(
-            issued_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: 100_00),
-            settled_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: 100_00),
-            gumroad_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: 100_00),
-            merchant_account_gross_amount: nil,
-            merchant_account_net_amount: nil
-          )
-        end
-
-        it "creates an amount" do
-          expect(amount.currency).to eq(flow_of_funds.gumroad_amount.currency)
-          expect(amount.gross_cents).to eq(issued_affiliate_cents)
-          expect(amount.net_cents).to eq(issued_affiliate_cents)
-        end
-      end
-
-      describe "issued amount and settled amounts are the same, a merchant accounts" do
-        let(:flow_of_funds) do
-          FlowOfFunds.new(
-            issued_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: 100_00),
-            settled_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: 100_00),
-            gumroad_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: 30_00),
-            merchant_account_gross_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: 100_00),
-            merchant_account_net_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: 70_00)
-          )
-        end
-
-        it "creates an amount" do
-          expect(amount.currency).to eq(flow_of_funds.gumroad_amount.currency)
-          expect(amount.gross_cents).to eq(issued_affiliate_cents)
-          expect(amount.net_cents).to eq(issued_affiliate_cents)
-        end
-      end
-
-      describe "issued amount and settled amounts are not the same, a merchant account" do
-        let(:flow_of_funds) do
-          FlowOfFunds.new(
-            issued_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: 100_00),
-            settled_amount: FlowOfFunds::Amount.new(currency: Currency::CAD, cents: 110_00),
-            gumroad_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: 30_00),
-            merchant_account_gross_amount: FlowOfFunds::Amount.new(currency: Currency::CAD, cents: 110_00),
-            merchant_account_net_amount: FlowOfFunds::Amount.new(currency: Currency::CAD, cents: 80_00)
-          )
-        end
-
-        it "creates an amount" do
-          expect(amount.currency).to eq(flow_of_funds.gumroad_amount.currency)
-          expect(amount.gross_cents).to eq(issued_affiliate_cents)
-          expect(amount.net_cents).to eq(issued_affiliate_cents)
-        end
+        expect(amount).to have_attributes(currency: Currency::USD, gross_cents: -10_00, net_cents: -10_00)
       end
     end
 

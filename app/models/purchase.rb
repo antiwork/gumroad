@@ -2019,17 +2019,8 @@ class Purchase < ApplicationRecord
   end
 
   def create_affiliate_balances!
-    affiliate_issued_amount = BalanceTransaction::Amount.create_issued_amount_for_affiliate(
-      flow_of_funds:,
-      issued_affiliate_cents: affiliate_credit_cents,
-      canonical_issued_amount: presentment_canonical_issued_amount
-    )
-
-    affiliate_holding_amount = BalanceTransaction::Amount.create_holding_amount_for_affiliate(
-      flow_of_funds:,
-      issued_affiliate_cents: affiliate_credit_cents,
-      canonical_issued_amount: presentment_canonical_issued_amount
-    )
+    affiliate_issued_amount = BalanceTransaction::Amount.create_issued_amount_for_affiliate(issued_affiliate_cents: affiliate_credit_cents)
+    affiliate_holding_amount = BalanceTransaction::Amount.create_holding_amount_for_affiliate(issued_affiliate_cents: affiliate_credit_cents)
 
     affiliate_balance_transaction = BalanceTransaction.create!(
       user: affiliate.affiliate_user,
@@ -2611,19 +2602,9 @@ class Purchase < ApplicationRecord
   def process_refund_or_chargeback_for_affiliate_credit_balance(flow_of_funds, refund: nil, dispute: nil, refund_cents: 0, fee_cents: 0)
     return if affiliate_credit_cents == 0 || refund_cents == 0
 
-    canonical_issued_amount = presentment_canonical_refund_or_chargeback_issued_amount(refund:, dispute:)
-
-    affiliate_issued_amount = BalanceTransaction::Amount.create_issued_amount_for_affiliate(
-      flow_of_funds:,
-      issued_affiliate_cents: -1 * refund_cents,
-      canonical_issued_amount:
-    )
-
-    affiliate_holding_amount = BalanceTransaction::Amount.create_holding_amount_for_affiliate(
-      flow_of_funds:,
-      issued_affiliate_cents: -1 * refund_cents,
-      canonical_issued_amount:
-    )
+    issued_currency, holding_currency = affiliate_reversal_currencies
+    affiliate_issued_amount = BalanceTransaction::Amount.create_issued_amount_for_affiliate(issued_affiliate_cents: -1 * refund_cents, currency: issued_currency)
+    affiliate_holding_amount = BalanceTransaction::Amount.create_holding_amount_for_affiliate(issued_affiliate_cents: -1 * refund_cents, currency: holding_currency)
 
     affiliate_balance_transaction = BalanceTransaction.create!(
       user: affiliate_credit.affiliate_user,
@@ -4433,6 +4414,20 @@ class Purchase < ApplicationRecord
       return if purchase_presentment.blank?
 
       FlowOfFunds::Amount.new(currency: Currency::USD, cents: total_transaction_cents)
+    end
+
+    # [issued, holding] labels of the ledger a reversal offsets — the recorded chargeback debit for a
+    # re-credit, else the credit itself — so legacy foreign-labelled legs keep netting in one currency
+    # whatever the source's payout state (same cents, no FX). Read fresh: the associations can predate a repair.
+    def affiliate_reversal_currencies(dispute_won: false)
+      return [Currency::USD, Currency::USD] if affiliate_credit.nil?
+
+      ApplicationRecord.connected_to(role: :writing) do
+        success_id, chargeback_id = AffiliateCredit.where(id: affiliate_credit.id).pick(:affiliate_credit_success_balance_id, :affiliate_credit_chargeback_balance_id)
+        source_id = dispute_won ? chargeback_id || success_id : success_id
+        merchant_account_id, *labels = Balance.where(id: source_id).pick(:merchant_account_id, :currency, :holding_currency)
+        merchant_account_id.present? && merchant_account_id == affiliate_merchant_account&.id ? labels : [Currency::USD, Currency::USD]
+      end
     end
 
     # This purchase's refunds that actually moved money, as an in-memory array.

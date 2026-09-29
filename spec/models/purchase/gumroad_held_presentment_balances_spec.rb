@@ -286,4 +286,205 @@ describe "Gumroad-held presentment balance booking", :vcr do
       expect(purchase.purchase_success_balance.holding_amount_cents).to eq(purchase.purchase_success_balance.amount_cents)
     end
   end
+
+  # The affiliate's share lands on the Gumroad-held account in canonical USD cents even when the
+  # sale is charged into the seller's own account. The old code labelled those cents with the flow
+  # of funds' gumroad_amount currency — for a destination charge, the charge's own EUR.
+  describe "an affiliate's share of a EUR charge into the seller's own Stripe account" do
+    let(:seller_account) do
+      create(:merchant_account, user: seller, currency: Currency::EUR,
+                                charge_processor_merchant_id: "acct_seller_held_#{SecureRandom.hex(6)}")
+    end
+    let(:affiliate_user) { create(:affiliate_user) }
+    let(:affiliate) { create(:direct_affiliate, affiliate_user:, seller:, affiliate_basis_points: 10_00, products: [product]) }
+    let(:affiliate_cents) { purchase.affiliate_credit_cents }
+
+    # Deliberately no purchase_presentment: that is the case with nothing but the flow of funds
+    # to take a currency from.
+    let(:purchase) do
+      purchase = create(:purchase, seller:, link: product, price_cents: 100_00, fee_cents: 10_00,
+                                   merchant_account: seller_account, affiliate:)
+      purchase.flow_of_funds = eur_flow_of_funds(1)
+      purchase
+    end
+
+    # StripeCharge#build_flow_of_funds for a transfer_data[amount] destination charge: gumroad_amount
+    # is in the charge currency, the merchant-account legs in the connected account's.
+    def eur_flow_of_funds(sign)
+      FlowOfFunds.new(
+        issued_amount: FlowOfFunds::Amount.new(currency: Currency::EUR, cents: sign * 90_00),
+        settled_amount: FlowOfFunds::Amount.new(currency: Currency::EUR, cents: sign * 90_00),
+        gumroad_amount: FlowOfFunds::Amount.new(currency: Currency::EUR, cents: sign * 9_00),
+        merchant_account_gross_amount: FlowOfFunds::Amount.new(currency: Currency::EUR, cents: sign * 81_00),
+        merchant_account_net_amount: FlowOfFunds::Amount.new(currency: Currency::EUR, cents: sign * 78_00)
+      )
+    end
+
+    def affiliate_success_transaction
+      purchase.balance_transactions.find_by(user: affiliate_user)
+    end
+
+    it "books the affiliate's share in USD on the Gumroad-held account" do
+      purchase.increment_sellers_balance!
+      balance_transaction = affiliate_success_transaction
+
+      expect(balance_transaction.merchant_account.holder_of_funds).to eq(HolderOfFunds::GUMROAD)
+      expect(balance_transaction).to have_attributes(
+        issued_amount_currency: Currency::USD, issued_amount_net_cents: affiliate_cents,
+        holding_amount_currency: Currency::USD, holding_amount_net_cents: affiliate_cents
+      )
+
+      balance = balance_transaction.balance
+      expect(balance).to have_attributes(currency: Currency::USD, holding_currency: Currency::USD)
+      expect(balance.holding_amount_cents).to eq(balance.amount_cents)
+      expect(PaypalPayoutProcessor.is_balance_payable(balance)).to be(true)
+    end
+
+    it "leaves the seller's own leg in the connected account's currency" do
+      purchase.increment_sellers_balance!
+      balance_transaction = purchase.balance_transactions.find_by(user: seller)
+
+      expect(balance_transaction.merchant_account).to eq(seller_account)
+      expect(balance_transaction.holding_amount_currency).to eq(Currency::EUR)
+    end
+
+    it "books the refund leg in USD, against the same balance it debits" do
+      purchase.increment_sellers_balance!
+      refund = create(:refund, purchase:)
+
+      purchase.process_refund_or_chargeback_for_affiliate_credit_balance(eur_flow_of_funds(-1), refund:, refund_cents: affiliate_cents)
+
+      balance_transaction = refund.balance_transactions.find_by(user: affiliate_user)
+      expect(balance_transaction).to have_attributes(
+        issued_amount_currency: Currency::USD, issued_amount_net_cents: -affiliate_cents,
+        holding_amount_currency: Currency::USD, holding_amount_net_cents: -affiliate_cents
+      )
+      expect(balance_transaction.balance).to eq(affiliate_success_transaction.balance)
+      expect(balance_transaction.balance.reload.amount_cents).to eq(0)
+    end
+
+    def book_affiliate_chargeback!
+      dispute = create(:dispute_formalized, purchase:)
+      purchase.process_refund_or_chargeback_for_affiliate_credit_balance(eur_flow_of_funds(-1), dispute:, refund_cents: affiliate_cents)
+      purchase.reload
+      dispute.balance_transactions.find_by!(user: affiliate_user)
+    end
+
+    def win_affiliate_dispute!
+      purchase.create_credit_for_dispute_won_for_affiliate!(eur_flow_of_funds(1), amount_cents: affiliate_cents)
+      Credit.last.balance_transaction
+    end
+
+    it "offsets the chargeback debit with a USD re-credit on the same balance" do
+      purchase.increment_sellers_balance!
+      debit = book_affiliate_chargeback!
+
+      recredit = win_affiliate_dispute!
+
+      expect(recredit.user).to eq(affiliate_user)
+      expect(recredit).to have_attributes(
+        issued_amount_currency: Currency::USD, issued_amount_net_cents: affiliate_cents,
+        holding_amount_currency: Currency::USD, holding_amount_net_cents: affiliate_cents
+      )
+      expect(recredit.balance).to eq(debit.balance)
+      expect(recredit.balance.reload).to have_attributes(amount_cents: affiliate_cents, holding_amount_cents: affiliate_cents)
+    end
+
+    # A credit booked before the fix, written past the model the way production still holds it.
+    describe "reversing a credit still on a legacy foreign-labelled balance" do
+      def legacy_affiliate_balance!(state: "unpaid")
+        purchase.increment_sellers_balance!
+        balance_transaction = affiliate_success_transaction
+        balance_transaction.update_columns(issued_amount_currency: Currency::EUR, holding_amount_currency: Currency::EUR)
+        balance = balance_transaction.balance
+        balance.update_columns(currency: Currency::EUR, holding_currency: Currency::EUR, state:)
+        purchase.reload
+        balance
+      end
+
+      def refund_affiliate!
+        refund = create(:refund, purchase:)
+        purchase.process_refund_or_chargeback_for_affiliate_credit_balance(eur_flow_of_funds(-1), refund:, refund_cents: affiliate_cents)
+        refund.balance_transactions.find_by!(user: affiliate_user)
+      end
+
+      it "books the refund under the credit's own label so it nets on that balance" do
+        legacy_balance = legacy_affiliate_balance!
+
+        balance_transaction = refund_affiliate!
+
+        expect(balance_transaction).to have_attributes(
+          issued_amount_currency: Currency::EUR, issued_amount_net_cents: -affiliate_cents,
+          holding_amount_currency: Currency::EUR, holding_amount_net_cents: -affiliate_cents
+        )
+        expect(balance_transaction.balance).to eq(legacy_balance)
+        expect(legacy_balance.reload).to have_attributes(amount_cents: 0, holding_amount_cents: 0)
+        expect(Balance.where(user: affiliate_user).count).to eq(1)
+      end
+
+      # Every Stripe payout claims foreign Gumroad-held rows as processing, fails on currency_mismatch
+      # and hands them back as unpaid, so a refund can land mid-attempt.
+      it "keeps the credit's label while a failing payout holds its balance, so the pair still nets" do
+        legacy_balance = legacy_affiliate_balance!(state: "processing")
+
+        balance_transaction = refund_affiliate!
+        legacy_balance.reload.mark_unpaid!
+
+        expect(balance_transaction).to have_attributes(issued_amount_currency: Currency::EUR, holding_amount_currency: Currency::EUR)
+        affiliate_balances = Balance.where(user: affiliate_user)
+        expect(affiliate_balances.pluck(:holding_currency).uniq).to eq([Currency::EUR])
+        expect(affiliate_balances.unpaid.sum(:holding_amount_cents)).to eq(0)
+      end
+
+      it "reads the credit's current label, not an association loaded before a relabel" do
+        legacy_balance = legacy_affiliate_balance!
+        expect(purchase.affiliate_credit.affiliate_credit_success_balance.holding_currency).to eq(Currency::EUR)
+        Balance.where(id: legacy_balance.id).update_all(currency: Currency::USD, holding_currency: Currency::USD)
+
+        balance_transaction = refund_affiliate!
+
+        expect(balance_transaction).to have_attributes(issued_amount_currency: Currency::USD, holding_amount_currency: Currency::USD)
+        expect(balance_transaction.balance).to eq(legacy_balance)
+      end
+
+      it "nets a legacy chargeback debit and its re-credit on the credit's balance" do
+        legacy_balance = legacy_affiliate_balance!
+        debit = book_affiliate_chargeback!
+
+        recredit = win_affiliate_dispute!
+
+        expect([debit, recredit].map(&:holding_amount_currency)).to eq([Currency::EUR, Currency::EUR])
+        expect(recredit.balance).to eq(legacy_balance)
+        expect(legacy_balance.reload.amount_cents).to eq(affiliate_cents)
+      end
+
+      it "re-credits onto the recorded chargeback debit when the original credit has been paid" do
+        legacy_affiliate_balance!(state: "paid")
+        debit = book_affiliate_chargeback!
+        expect(debit.balance).to be_unpaid
+
+        recredit = win_affiliate_dispute!
+
+        expect(recredit.holding_amount_currency).to eq(debit.holding_amount_currency)
+        expect(recredit.balance).to eq(debit.balance)
+        expect(debit.balance.reload).to have_attributes(amount_cents: 0, holding_amount_cents: 0)
+      end
+
+      it "re-credits under the chargeback debit's label, not the credit's, when they differ" do
+        legacy_affiliate_balance!
+        dispute = create(:dispute_formalized, purchase:)
+        usd = BalanceTransaction::Amount.new(currency: Currency::USD, gross_cents: -affiliate_cents, net_cents: -affiliate_cents)
+        debit = BalanceTransaction.create!(user: affiliate_user, merchant_account: affiliate_success_transaction.merchant_account,
+                                           dispute:, issued_amount: usd, holding_amount: usd)
+        purchase.affiliate_credit.update!(affiliate_credit_chargeback_balance: debit.balance)
+        purchase.reload
+
+        recredit = win_affiliate_dispute!
+
+        expect(recredit).to have_attributes(issued_amount_currency: Currency::USD, holding_amount_currency: Currency::USD)
+        expect(recredit.balance).to eq(debit.balance)
+        expect(debit.balance.reload.amount_cents).to eq(0)
+      end
+    end
+  end
 end
