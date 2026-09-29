@@ -838,7 +838,10 @@ describe("Japanese (Kanji) variation fields", () => {
   const renderJpSeller = (complianceOverrides: Partial<ComplianceInfo> = {}, userOverrides: Partial<User> = {}) => {
     mocks.usePage.mockReturnValue({
       props: {
-        ...pageProps({ country_code: "JP", payout_currency: "jpy", ...userOverrides }, jpCompliance(complianceOverrides)),
+        ...pageProps(
+          { country_code: "JP", payout_currency: "jpy", ...userOverrides },
+          jpCompliance(complianceOverrides),
+        ),
         countries: { JP: "Japan" },
       },
     });
