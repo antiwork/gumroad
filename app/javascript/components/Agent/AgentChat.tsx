@@ -949,6 +949,30 @@ export const AgentChat = ({ greeting, suggestions, locked = null }: Props) => {
     }
   };
 
+  // Start a fresh conversation: drop the resumed transcript and forget the stored conversation id,
+  // so the next turn's request omits `conversation_id` and the server opens (and titles) a new
+  // conversation from its first message. The previous conversation stays stored server-side; there
+  // is no index to browse back to it yet.
+  //
+  // A turn in flight owns the chat: its callbacks adopt the conversation id it was sent to (onDone,
+  // or the interrupted-turn recovery), so switching under it would re-attach this "new" chat to the
+  // old conversation. A pending confirmation is the same shape — the reply lands on a card that
+  // resetting would discard. Both refuse instead.
+  const startNewChat = () => {
+    if (isSending || pendingActionIndex !== null || locked) return;
+    // A settled turn can still be draining suggestion chips on its old connection. Bump the
+    // generation so those late frames land on the discarded chat rather than seeding follow-up
+    // chips into the new one; the connection itself is left alone (after an inconclusive recovery
+    // it may still be generating a turn, and only the server's verdict makes aborting safe).
+    sendGenerationRef.current += 1;
+    setConversationId(null);
+    setMessages([{ role: "assistant", content: greeting }]);
+    setFollowUps([]);
+    setPendingActionIndex(null);
+    setIsStreaming(false);
+    stickToBottom.current = true;
+  };
+
   const confirmAction = async (index: number, action: ProposedAction, proposalMessageId?: string) => {
     setPendingActionIndex(index);
     setMessages((prev) => prev.map((msg, i) => (i === index ? { ...msg, actionWarning: null } : msg)));
@@ -1019,9 +1043,25 @@ export const AgentChat = ({ greeting, suggestions, locked = null }: Props) => {
   };
 
   const hasText = input.trim().length > 0;
+  // The page header is hidden below `sm`, so the new-chat control lives at the top of the chat pane
+  // itself. Only worth offering once there is a conversation to leave (resumed history, or a stored
+  // conversation this session created).
+  const canStartNewChat = !locked && (messages.length > 1 || conversationId !== null);
 
   return (
     <div className="flex h-full flex-col">
+      {canStartNewChat ? (
+        <div className="mx-auto flex w-full max-w-2xl justify-end px-4 pt-4 md:px-8 md:pt-8">
+          <Button
+            size="sm"
+            aria-label="New chat"
+            disabled={isSending || pendingActionIndex !== null}
+            onClick={startNewChat}
+          >
+            New chat
+          </Button>
+        </div>
+      ) : null}
       {/* The scroll container spans the full width so its scrollbar sits at the far right; the chat
           content inside stays narrow and centered (max-w-2xl). */}
       <div

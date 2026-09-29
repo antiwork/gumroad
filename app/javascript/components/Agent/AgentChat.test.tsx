@@ -1219,3 +1219,82 @@ describe("AgentChat locked state", () => {
     expect(screen.getByText("List my products")).toBeTruthy();
   });
 });
+
+describe("AgentChat new chat control", () => {
+  const RESUMED_REPLY = "Refunds go back to the buyer's card.";
+  const resumedConversation = {
+    id: "conv1",
+    title: "Refunds",
+    messages: [
+      { role: "user" as const, content: "how do refunds work" },
+      { role: "assistant" as const, content: RESUMED_REPLY },
+    ],
+  };
+
+  beforeEach(() => {
+    fetchLatestAgentConversation.mockReset();
+    streamAgentMessage.mockReset();
+    fetchAgentTurnStatus.mockReset();
+    fetchAgentActionStatus.mockReset();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  it("drops the resumed conversation so the next turn starts a new one", async () => {
+    fetchLatestAgentConversation.mockResolvedValue(resumedConversation);
+    streamAgentMessage.mockImplementation(async (_messages, handlers = {}) => {
+      handlers.onToken?.("Fresh start.");
+      return {
+        reply: "Fresh start.",
+        proposedAction: null,
+        proposalMessageId: null,
+        objects: [],
+        suggestions: [],
+        conversationId: "conv2",
+      };
+    });
+
+    render(<AgentChat greeting="Hi" suggestions={[]} />);
+    await waitFor(() => expect(screen.getByText(RESUMED_REPLY)).toBeTruthy());
+
+    fireEvent.click(screen.getByLabelText("New chat"));
+
+    // The resumed transcript is gone and the stale id with it.
+    expect(screen.queryByText(RESUMED_REPLY)).toBeNull();
+    expect(screen.getByText("Hi")).toBeTruthy();
+
+    await sendMessage("start over");
+
+    // No conversation_id on the turn, which is what makes the server create (and title) a new one.
+    expect(streamAgentMessage.mock.calls.at(-1)?.[2]).toBeNull();
+  });
+
+  it("offers no new chat on a chat with nothing to leave", async () => {
+    fetchLatestAgentConversation.mockResolvedValue(null);
+
+    render(<AgentChat greeting="Hi" suggestions={[]} />);
+    await waitFor(() => expect(fetchLatestAgentConversation).toHaveBeenCalled());
+
+    expect(screen.queryByLabelText("New chat")).toBeNull();
+  });
+
+  it("cannot switch conversations under an in-flight turn", async () => {
+    fetchLatestAgentConversation.mockResolvedValue(resumedConversation);
+    // A turn that never settles: its callbacks still own the chat and would adopt conv1 back onto it.
+    streamAgentMessage.mockImplementation(() => new Promise(() => {}));
+
+    render(<AgentChat greeting="Hi" suggestions={[]} />);
+    await waitFor(() => expect(screen.getByText(RESUMED_REPLY)).toBeTruthy());
+
+    await sendMessage("keep going");
+
+    const newChat = screen.getByLabelText("New chat");
+    expect(newChat.hasAttribute("disabled")).toBe(true);
+    fireEvent.click(newChat);
+    // The resumed transcript is still on screen: no switch happened under the turn.
+    expect(screen.getByText(RESUMED_REPLY)).toBeTruthy();
+  });
+});
