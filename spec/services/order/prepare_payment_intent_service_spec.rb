@@ -2343,10 +2343,8 @@ describe Order::PreparePaymentIntentService, :vcr do
       end
     end
 
-    # gumroad-private#3105: Stripe accepts the USD-settling FX quote, then rejects it on the
-    # intent because the platform account settles EUR in EUR. Server-confirm already learns the
-    # mismatch and re-quotes in USD; client-confirm must do the same instead of failing every
-    # retry with processor_invalid_request.
+    # Stripe may accept an FX quote but reject it when creating the intent on the
+    # platform account; record the mismatch there, not on the destination account.
     context "when Stripe rejects the quote at intent create because the platform settles the currency itself" do
       let(:seller) { create(:user, check_merchant_account_is_linked: true, disable_buyer_local_currency: false) }
       let!(:destination_account) { create(:merchant_account, user: seller, country: "JP", currency: "jpy") }
