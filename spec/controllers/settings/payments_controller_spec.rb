@@ -820,6 +820,17 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
           expect(user.reload.active_bank_account.account_holder_full_name).to eq("gumbot")
         end
 
+        it "rejects any save up front when the update would create a Stripe account from a saved military zip code" do
+          user.alive_user_compliance_info.dup_and_save! { |info| info.zip_code = "09330" }
+          create(:ach_account, user:)
+
+          expect(StripeMerchantAccountManager).not_to receive(:create_account)
+          put :update, params: { user: params.except(:is_business).merge(zip_code: "09330"), payout_threshold_cents: 25_000 }
+
+          expect(session[:inertia_errors][:field]).to eq("zip_code")
+          expect(user.reload.payout_threshold_cents.to_i).not_to eq(25_000)
+        end
+
         it "lets a seller with a saved bank account switch to PayPal while an unchanged military zip code is stored" do
           user.alive_user_compliance_info.dup_and_save! { |info| info.zip_code = "09330" }
           create(:ach_account, user:)
