@@ -518,10 +518,9 @@ while [ ! -f "$BASE/out/$job_id.rc" ]; do
     fi
   else
     dead_loop=
-    # boot.lock is held by the watcher for as long as a loop is booting or
-    # serving, so
-    # a free lock with no live pid means nothing will ever take this job,
-    # whatever `starting` says. The 180s stamp age stays as the backstop.
+    # The watcher holds boot.lock while a loop is booting or serving, so a free
+    # lock with no live pid means nothing will ever take this job, whatever
+    # `starting` says. The 180s stamp age stays as the backstop.
     if ! loop_pid_alive; then
       if flock -n "$BASE/boot.lock" true 2>/dev/null; then
         dead_loop=1
