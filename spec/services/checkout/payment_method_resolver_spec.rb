@@ -181,6 +181,13 @@ describe Checkout::PaymentMethodResolver do
             expect(methods).to include("ideal", "bancontact")
             expect(methods).not_to include("klarna")
           end
+
+          it "offers Klarna to a US buyer of a EUR product, whose Element mounts in USD once iDEAL/Bancontact are region-gated out" do
+            methods = resolve(buyer_country: "US", cart_product_currency: "eur", cart_total_usd_cents: 10_00).payment_method_types
+
+            expect(methods).not_to include("ideal", "bancontact")
+            expect(methods).to include("klarna")
+          end
         end
 
         context "for a direct-charge (connect) seller" do
@@ -281,6 +288,13 @@ describe Checkout::PaymentMethodResolver do
 
             expect(methods).to include("ideal", "bancontact")
             expect(methods).not_to include("alipay")
+          end
+
+          it "offers Alipay to a non-eurozone buyer of a EUR product, whose Element mounts in USD once iDEAL/Bancontact are region-gated out" do
+            methods = resolve(buyer_country: "US", cart_product_currency: "eur").payment_method_types
+
+            expect(methods).not_to include("ideal", "bancontact")
+            expect(methods).to include("alipay")
           end
         end
 
