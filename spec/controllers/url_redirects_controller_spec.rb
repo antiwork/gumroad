@@ -3166,6 +3166,8 @@ describe UrlRedirectsController, inertia: true do
         sign_in @product.user
         post :change_purchaser, params: { id: @token, next: "/r/#{@token}", email: @product.user.email }
       end.not_to change { @url_redirect.purchase.reload.purchaser }
+
+      expect(flash[:alert]).to eq("This is your customer's purchase, so it can't be moved into your account.")
     end
 
     it "lets the seller claim a signed-out checkout made with their own email" do

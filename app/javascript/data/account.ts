@@ -57,9 +57,10 @@ export const addPurchaseToLibrary = async (data: {
     data: { user: { purchase_id: data.purchaseId, purchase_email: data.purchaseEmail } },
   });
 
-  const responseData = typia.assert<{ success: true; redirect_location: string } | { success: false }>(
-    await response.json(),
-  );
-  if (!responseData.success) throw new ResponseError();
+  const responseData = typia.assert<
+    { success: true; redirect_location: string } | { success: false; error_message?: string }
+  >(await response.json());
+  if (!responseData.success)
+    throw new ResponseError(responseData.error_message ?? "Sorry, something went wrong. Please try again.");
   return { redirectLocation: responseData.redirect_location };
 };
