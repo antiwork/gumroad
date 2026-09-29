@@ -327,6 +327,20 @@ describe DisputeEvidence do
         expect(due_at(start)).to be > now
       end
 
+      # Accepted trade-off: no stamp after Wednesday 00:00 UTC ends between Saturday 00:00 and Monday
+      # 00:00 (it gets 120 hours), so a cutoff that falls in that gap gets the nearest earlier due time.
+      # The sweep then treats the window as already elapsed and submits without a seller statement, as
+      # it does for any cutoff too close to ask.
+      it "falls back to Saturday 00:00 when the closing time is inside the weekend gap" do
+        not_after = Time.utc(2026, 10, 10, 12)
+        closing_by = Time.utc(2026, 10, 11, 12)
+
+        start = described_class.latest_window_start(closing_by:, not_after:)
+
+        expect(start).to eq(Time.utc(2026, 10, 7))
+        expect(due_at(start)).to eq(Time.utc(2026, 10, 10))
+      end
+
       it "matches an exhaustive search over the stamps that fit when now is on a Saturday" do
         not_after = Time.utc(2026, 10, 10, 12)
         (0..(7 * 24)).each do |offset|

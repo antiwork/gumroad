@@ -140,12 +140,9 @@ class DisputeEvidence < ApplicationRecord
     seller_contacted_at + window_duration(seller_contacted_at)
   end
 
-  # A stamp, not after not_after, whose window ends by closing_by and as late as the three
-  # candidates allow. Not a subtraction: the length depends on the stamp, so a start that just fits a
-  # 72-hour window can be handed 120 hours and overshoot. A stamp fits if it is 120 hours before
-  # closing_by or earlier, or 72 hours before it with no weekend in the window (Monday 00:00 to
-  # Wednesday 00:00 UTC). It may end a little earlier than the true latest stamp when closing_by is
-  # tight on a Monday to Wednesday; it never ends after closing_by, which is what matters.
+  # Not `closing_by - 72h`: that stamp can land on a weekend and become a 120-hour window that
+  # misses the cutoff. Of the candidates, pick one whose window fits, even if it ends a little early;
+  # a cutoff between Saturday and Monday 00:00 UTC has no stamp that ends there and gets Saturday 00:00.
   def self.latest_window_start(closing_by:, not_after: Time.current)
     short_start = [not_after, closing_by - SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS.hours].min
     last_wednesday = short_start.utc.beginning_of_week(:monday) + 2.days
