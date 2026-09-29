@@ -6792,9 +6792,9 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         expect(page).not_to have_text("paused for a security review")
 
         within_section "Payout schedule", section_element: :section do
-          toggle = find_field("Pause payouts", disabled: true, checked: true)
+          toggle = find_field("Pause payouts", disabled: false, checked: false)
           toggle.hover
-          expect(toggle).to have_tooltip(text: "Payout pausing is managed automatically while the reserve hold is active.")
+          expect(toggle).to have_tooltip(text: "Gumroad keeps part of each payout in reserve while your chargeback rate is above the limit. This switch controls your own pause only.")
         end
       end
 

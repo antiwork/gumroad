@@ -1305,10 +1305,8 @@ export default function PaymentsPage() {
     }
   };
 
-  // A chargeback-volume hold pays 75% on the normal schedule, so it is not a hard block like an
-  // admin or Stripe pause. It also skips the whole run while the seller's own pause is on
-  // (`User#chargeback_rate_payout_reserve_active?`), so a disabled switch here stranded sellers at
-  // 0% with no way to resume: under this hold the switch answers to the seller alone.
+  // Under a chargeback-rate hold only the seller's own pause is theirs to change; the reserve gate
+  // skips the whole payout run while it is on.
   const chargebackRateHold = props.payouts_paused_internally && props.payouts_paused_for_chargeback_rate;
   const pausedWithoutSellerChoice = props.payouts_paused_internally && !chargebackRateHold;
 
@@ -1463,7 +1461,9 @@ export default function PaymentsPage() {
               <WithTooltip
                 tip={
                   chargebackRateHold
-                    ? "Gumroad keeps part of each payout in reserve while your chargeback rate is above the limit. This switch controls your own pause only."
+                    ? props.payout_reserve_percent
+                      ? "Gumroad keeps part of each payout in reserve while your chargeback rate is above the limit. This switch controls your own pause only."
+                      : "This switch controls your own pause only. While it is on, none of your balance pays out."
                     : props.payouts_paused_by === "stripe"
                       ? "Your payouts have been paused by Stripe."
                       : props.payouts_paused_by === "admin"

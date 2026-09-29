@@ -552,9 +552,7 @@ describe("full-SSN re-entry validation", () => {
   });
 });
 
-// A chargeback-volume hold pays 75% on the normal schedule, so it must not freeze the seller's own
-// pause the way an admin or Stripe pause does: the hold's own gate reads that flag and skips the
-// whole run, so a seller who had paused before the hold was stuck at 0% behind a disabled switch.
+// Under a chargeback-volume hold the seller's own pause stays operable; other internal pauses do not.
 describe("Pause payouts switch under a chargeback-volume hold", () => {
   const chargebackHold = {
     payouts_paused_internally: true,
