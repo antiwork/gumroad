@@ -308,11 +308,14 @@ module User::Stats
       .sum("amount_cents")
   end
 
+  # Automatic deductions keep amount_cents in the account's currency, so report the USD their
+  # applied transaction booked. Manual ones book amount_cents itself.
   def loan_repayment_cents_for_balances(balance_ids)
     credits
-      .where("financing_paydown_purchase_id IS NOT NULL OR json_data->>'$.stripe_loan_paydown_id' IS NOT NULL")
+      .where("credits.financing_paydown_purchase_id IS NOT NULL OR credits.json_data->>'$.stripe_loan_paydown_id' IS NOT NULL")
       .where(balance_id: balance_ids)
-      .sum("amount_cents")
+      .joins("LEFT JOIN balance_transactions ON balance_transactions.credit_id = credits.id AND balance_transactions.balance_id = credits.balance_id")
+      .sum("COALESCE(balance_transactions.issued_amount_net_cents, credits.amount_cents)")
   end
 
   def fees_cents_for_balances(balance_ids)

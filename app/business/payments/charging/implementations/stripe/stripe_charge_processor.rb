@@ -1302,26 +1302,67 @@ class StripeChargeProcessor
       merchant_account.user.credits.find_by("json_data->'$.stripe_loan_paydown_id' = ?", stripe_loan_paydown_id)
     end
     if existing_credit
-      return unless existing_credit.financing_paydown_purchase_id.present?
+      # Manual repayments are recorded once and left alone.
+      return unless existing_credit.automatic_capital_deduction?
 
-      unless existing_credit.merchant_account_id == merchant_account.id && existing_credit.amount_cents == amount_cents
-        raise ArgumentError, "Capital event does not match the existing credit"
-      end
-      return existing_credit.apply_financing_paydown!
+      return existing_credit.apply_financing_paydown!(merchant_account:, amount_cents: capital_withholding_amount_cents(data), currency:,
+                                                      reason: data["details"]["reason"])
     end
 
     if data["details"]["reason"] == "collection" && data["user_facing_description"] == "Forced debit from Stripe Payments"
       Credit.create_for_manual_paydown_on_stripe_loan!(amount_cents:, merchant_account:, stripe_loan_paydown_id:)
-    elsif data["details"]["reason"] == "automatic_withholding"
-      linked_payment_id = data["details"]["transaction"]["charge"].presence || data["details"]["linked_payment"]
-      if linked_payment_id.present?
+    elsif data["details"]["reason"] == Credit::AUTOMATIC_CAPITAL_WITHHOLDING
+      deduction = { amount_cents: capital_withholding_amount_cents(data), merchant_account:, stripe_loan_paydown_id:,
+                    deducted_at: capital_deduction_time(stripe_event, data) }
+      linked_payment_id = (data["details"]["transaction"] || {})["charge"].presence || data["details"]["linked_payment"].presence
+      if linked_payment_id
         linked_payment = Stripe::Charge.retrieve(linked_payment_id, { stripe_account: merchant_account.charge_processor_merchant_id })
-        linked_transfer = Stripe::Transfer.retrieve(linked_payment.source_transfer)
-        purchase = merchant_account.user.sales.find_by(stripe_transaction_id: linked_transfer.source_transaction)
+        linked_transfer_id = linked_payment.source_transfer.presence
+        # A blank source must never reach the lookup: it matches unrelated sales with no charge id.
+        source_transaction = Stripe::Transfer.retrieve(linked_transfer_id).source_transaction.presence if linked_transfer_id
       end
-      Credit.create_for_financing_paydown!(purchase:, amount_cents:, merchant_account:, stripe_loan_paydown_id:)
+
+      if source_transaction
+        purchase = capital_withholding_sale(merchant_account.user, source_transaction)
+        Credit.create_for_financing_paydown!(purchase:, **deduction, linked_payment_id:, linked_transfer_id:)
+      else
+        Credit.create_for_account_capital_withholding!(**deduction, linked_payment_id:, linked_transfer_id:)
+      end
     end
   end
+
+  # Only a positive integer total is a withholding; anything else would book no debit or add funds.
+  def self.capital_withholding_amount_cents(data)
+    total_amount = data["details"]["total_amount"]
+    raise ArgumentError, "Capital withholding total_amount must be a positive integer" unless total_amount.is_a?(Integer) && total_amount.positive?
+
+    -total_amount
+  end
+  private_class_method :capital_withholding_amount_cents
+
+  # The financing transaction's own timestamp, else the event's; never when this delivery is processed.
+  def self.capital_deduction_time(stripe_event, data)
+    timestamp = data["created_at"].nil? ? stripe_event["created"] : data["created_at"]
+    timestamp = Integer(timestamp, 10) if timestamp.is_a?(String) && timestamp.match?(/\A\d+\z/)
+    raise ArgumentError, "Capital withholding has no valid deduction time" unless timestamp.is_a?(Integer) && timestamp.positive?
+
+    timestamp
+  end
+  private_class_method :capital_deduction_time
+
+  # The sale link only chooses the balance date, so siblings of one charge are interchangeable
+  # when they all succeeded that day. Anything else is left for review rather than guessed.
+  def self.capital_withholding_sale(seller, source_transaction)
+    sales = seller.sales.where(stripe_transaction_id: source_transaction).order(:id).to_a
+    raise "Capital withholding names charge #{source_transaction}, which has no sale for seller #{seller.id}" if sales.empty?
+    return sales.first if sales.one?
+
+    succeeded_on = sales.map { _1.succeeded_at&.to_date }
+    return sales.first if succeeded_on.all? && succeeded_on.uniq.one?
+
+    raise "Capital withholding charge #{source_transaction} has sales that did not all succeed on one date"
+  end
+  private_class_method :capital_withholding_sale
 
   def self.handle_stripe_charge_event(stripe_event)
     event = nil

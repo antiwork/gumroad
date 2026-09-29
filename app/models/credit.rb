@@ -31,6 +31,17 @@ class Credit < ApplicationRecord
   validate :validate_associated_entity
 
   attr_json_data_accessor :stripe_loan_paydown_id
+  # Written once when an automatic Capital deduction is created, so retries book the same money.
+  attr_json_data_accessor :stripe_loan_paydown_reason
+  attr_json_data_accessor :stripe_loan_paydown_deducted_at
+  attr_json_data_accessor :stripe_loan_paydown_currency
+  attr_json_data_accessor :stripe_loan_paydown_usd_rate
+  attr_json_data_accessor :stripe_loan_paydown_usd_cents
+  # Where Stripe took the money from; not a claim about which sale it repays.
+  attr_json_data_accessor :stripe_loan_paydown_linked_payment_id
+  attr_json_data_accessor :stripe_loan_paydown_linked_transfer_id
+
+  AUTOMATIC_CAPITAL_WITHHOLDING = "automatic_withholding"
 
   scope :failed_refund_fee_reversals, -> { where.not(failed_refund_id: nil) }
 
@@ -208,47 +219,82 @@ class Credit < ApplicationRecord
     credit
   end
 
-  def self.create_for_financing_paydown!(purchase:, amount_cents:, merchant_account:, stripe_loan_paydown_id:)
+  def self.create_for_financing_paydown!(purchase:, **deduction)
+    raise ArgumentError, "A sale-linked Capital deduction needs its purchase" if purchase.nil?
+
+    create_for_automatic_capital_deduction!(purchase:, **deduction)
+  end
+
+  # A withholding with no provable sale is an account-level debit: earliest unpaid balance,
+  # else a new one dated to the deduction (BalanceTransaction#find_or_create_balance).
+  def self.create_for_account_capital_withholding!(**deduction)
+    create_for_automatic_capital_deduction!(purchase: nil, **deduction)
+  end
+
+  def self.create_for_automatic_capital_deduction!(purchase:, amount_cents:, merchant_account:, stripe_loan_paydown_id:,
+                                                   deducted_at: nil, linked_payment_id: nil, linked_transfer_id: nil)
     return unless stripe_loan_paydown_id.present?
+    raise ArgumentError, "A Capital withholding must be a negative integer amount" unless amount_cents.is_a?(Integer) && amount_cents.negative?
+
+    currency = merchant_account.currency
+    credit = new(user: merchant_account.user, amount_cents:, merchant_account:, financing_paydown_purchase: purchase,
+                 stripe_loan_paydown_id:, stripe_loan_paydown_reason: AUTOMATIC_CAPITAL_WITHHOLDING,
+                 stripe_loan_paydown_deducted_at: deducted_at, stripe_loan_paydown_currency: currency,
+                 stripe_loan_paydown_linked_payment_id: linked_payment_id, stripe_loan_paydown_linked_transfer_id: linked_transfer_id)
+    # Rated before the lock and stored, so a retry never re-rates the deduction.
+    credit.stripe_loan_paydown_usd_rate = credit.get_rate(currency)
+    credit.stripe_loan_paydown_usd_cents = credit.get_usd_cents(currency, amount_cents, rate: credit.stripe_loan_paydown_usd_rate)
 
     ApplicationRecord.connected_to(role: :writing) do
       credit = merchant_account.with_lock do
-        merchant_account.user.credits.find_by("json_data->'$.stripe_loan_paydown_id' = ?", stripe_loan_paydown_id) ||
-          create!(user: merchant_account.user, amount_cents:, merchant_account:, financing_paydown_purchase: purchase, stripe_loan_paydown_id:)
-      end
-      unless credit.merchant_account_id == merchant_account.id && credit.amount_cents == amount_cents && credit.financing_paydown_purchase_id == purchase&.id
-        raise ArgumentError, "Capital deduction does not match the existing credit"
+        merchant_account.user.credits.find_by("json_data->'$.stripe_loan_paydown_id' = ?", stripe_loan_paydown_id) || credit.tap(&:save!)
       end
 
-      credit.apply_financing_paydown!
+      credit.apply_financing_paydown!(merchant_account:, amount_cents:, currency:, reason: AUTOMATIC_CAPITAL_WITHHOLDING,
+                                      financing_paydown_purchase_id: purchase&.id)
     end
   end
+  private_class_method :create_for_automatic_capital_deduction!
 
-  def apply_financing_paydown!
+  # Legacy automatic deductions are identified by their sale link, which only the automatic path
+  # ever set. A bare paydown id is not enough: manual repayments carry one too.
+  def automatic_capital_deduction?
+    stripe_loan_paydown_id.present? &&
+      (financing_paydown_purchase_id.present? || stripe_loan_paydown_reason == AUTOMATIC_CAPITAL_WITHHOLDING)
+  end
+
+  def capital_deduction_date
+    Time.zone.at(stripe_loan_paydown_deducted_at).to_date if stripe_loan_paydown_deducted_at.present?
+  end
+
+  # `expected` is the event's view of the deduction (see capital_deduction_matches?).
+  def apply_financing_paydown!(**expected)
     ApplicationRecord.connected_to(role: :writing) do
       transaction = with_lock do
-        raise ArgumentError, "Credit is not an automatic Capital deduction" unless stripe_loan_paydown_id.present? && financing_paydown_purchase_id.present?
+        raise ArgumentError, "Credit is not an automatic Capital deduction" unless automatic_capital_deduction?
+        raise ArgumentError, "Capital deduction does not match the existing credit" unless capital_deduction_matches?(**expected)
         return self if balance_id.present?
+        raise ArgumentError, "Capital deduction must be negative" unless amount_cents.negative?
 
         # Stripe can deliver the withholding before the purchase finishes. Let the event retry.
-        raise "Capital purchase has not succeeded yet" unless financing_paydown_purchase.reload.succeeded_at.present?
+        if financing_paydown_purchase_id.present?
+          raise "Capital purchase has not succeeded yet" unless financing_paydown_purchase.reload.succeeded_at.present?
+        end
 
-        balance_transaction || BalanceTransaction.create!(
-          user:,
-          merchant_account:,
-          credit: self,
-          issued_amount: BalanceTransaction::Amount.new(
-            currency: Currency::USD,
-            gross_cents: get_usd_cents(merchant_account.currency, amount_cents),
-            net_cents: get_usd_cents(merchant_account.currency, amount_cents)
-          ),
-          holding_amount: BalanceTransaction::Amount.new(
-            currency: merchant_account.currency,
-            gross_cents: amount_cents,
-            net_cents: amount_cents
-          ),
-          update_user_balance: false
-        )
+        if balance_transaction
+          verify_capital_balance_transaction!(balance_transaction)
+        else
+          # Legacy deductions have no stored rate and keep today's behaviour.
+          issued_cents = stripe_loan_paydown_usd_cents.nil? ? get_usd_cents(capital_holding_currency, amount_cents) : stripe_loan_paydown_usd_cents
+          BalanceTransaction.create!(
+            user:,
+            merchant_account:,
+            credit: self,
+            issued_amount: BalanceTransaction::Amount.new(currency: Currency::USD, gross_cents: issued_cents, net_cents: issued_cents),
+            holding_amount: BalanceTransaction::Amount.new(currency: capital_holding_currency, gross_cents: amount_cents, net_cents: amount_cents),
+            update_user_balance: false
+          )
+        end
       end
 
       # Release the Credit lock before selecting and locking a Balance.
@@ -492,8 +538,39 @@ class Credit < ApplicationRecord
   end
 
   private
+    def capital_holding_currency
+      stripe_loan_paydown_currency.presence || merchant_account.currency
+    end
+
+    # Only omitted keys go unchecked, so a nil from the event fails rather than matching anything.
+    # A redelivery doesn't re-resolve the sale, so the handler leaves the purchase unchecked.
+    def capital_deduction_matches?(merchant_account: :unchecked, amount_cents: :unchecked, currency: :unchecked, reason: :unchecked,
+                                   financing_paydown_purchase_id: :unchecked)
+      (merchant_account == :unchecked || [merchant_account_id, user_id] == [merchant_account&.id, merchant_account&.user_id]) &&
+        (amount_cents == :unchecked || self.amount_cents == amount_cents) &&
+        (currency == :unchecked || capital_holding_currency == currency) &&
+        (reason == :unchecked || reason == AUTOMATIC_CAPITAL_WITHHOLDING) &&
+        (financing_paydown_purchase_id == :unchecked || self.financing_paydown_purchase_id == financing_paydown_purchase_id)
+    end
+
+    def verify_capital_balance_transaction!(transaction)
+      issued_cents = transaction.issued_amount_net_cents
+      matches = [transaction.user_id, transaction.merchant_account_id] == [user_id, merchant_account_id] &&
+        [transaction.purchase_id, transaction.refund_id, transaction.dispute_id].all?(&:nil?) &&
+        transaction.holding_amount_currency == capital_holding_currency &&
+        [transaction.holding_amount_gross_cents, transaction.holding_amount_net_cents].all?(amount_cents) &&
+        transaction.issued_amount_currency == Currency::USD &&
+        transaction.issued_amount_gross_cents == issued_cents &&
+        # Legacy deductions were rated when their transaction was written; only the sign is checkable.
+        (stripe_loan_paydown_usd_cents.nil? ? issued_cents * amount_cents >= 0 : issued_cents == stripe_loan_paydown_usd_cents)
+      raise ArgumentError, "Capital deduction balance transaction does not match its credit" unless matches
+
+      transaction
+    end
+
     def validate_associated_entity
       return if crediting_user || chargebacked_purchase || returned_payment || refund || financing_paydown_purchase || fee_retention_refund || backtax_agreement
+      return if automatic_capital_deduction?
 
       errors.add(:base, "A crediting user, chargebacked purchase, returned payment, refund, financing_paydown_purchase, fee_retention_refund or backtax_agreement must be provided.")
     end
