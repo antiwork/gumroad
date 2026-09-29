@@ -2307,6 +2307,27 @@ describe Checkout::StripePaymentPresenter do
       deactivate_buyer_currency_flags(seller) if seller
     end
 
+    it "keeps a buyer GeoIP cannot place on the listed EUR element" do
+      seller, product = buyer_currency_seller_with_product(price_cents: 1500)
+      activate_buyer_currency_flags(seller)
+      allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+      platform_merchant_account
+      allow(GeoIp).to receive(:lookup).with("10.9.9.9").and_return(nil)
+
+      props = stripe_payment_props(add_products: [checkout_product_for(product)], ip: "10.9.9.9")
+
+      expect(props).to eq(
+        payment_element_client_confirm_props(
+          currency: "eur",
+          presentment_amount_cents: 1500,
+          payment_method_types: %w[card link ideal bancontact],
+          disable_wallets: true,
+        )
+      )
+    ensure
+      deactivate_buyer_currency_flags(seller) if seller
+    end
+
     it "drops the US-locked methods (Cash App Pay, ACH) from the forced-currency element" do
       seller, product = buyer_currency_seller_with_product(price_cents: 1500)
       activate_buyer_currency_flags(seller)
