@@ -416,7 +416,7 @@ const AddToLibrary = ({ add_to_library_option, terms_page_url, purchase_id, purc
       window.location.href = result.redirectLocation;
     } catch (error) {
       assertResponseError(error);
-      showAlert("Sorry, something went wrong. Please try again.", "error");
+      showAlert(error.message, "error");
     }
     setIsSubmitting(false);
   });

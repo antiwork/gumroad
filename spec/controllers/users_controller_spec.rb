@@ -893,6 +893,29 @@ describe UsersController do
       expect(@purchase.reload.purchaser).to eq @user
     end
 
+    it "does not move a customer's purchase into the signed-in seller's account" do
+      sign_in(@purchase.link.user)
+      post :add_purchase_to_library, params: @params
+
+      expect(@purchase.reload.purchaser).to be_nil
+      expect(response.parsed_body["success"]).to eq false
+      expect(response.parsed_body["error_message"]).to eq "This is your customer's purchase, so it can't be moved into your account."
+    end
+
+    it "does not let the seller take a buyer's purchase that was made with the seller's email" do
+      seller = @purchase.link.user
+      buyer = create(:user)
+      @purchase.update!(email: seller.email, purchaser: buyer)
+      @params["user"]["purchase_email"] = seller.email
+
+      sign_in(seller)
+      post :add_purchase_to_library, params: @params
+
+      expect(@purchase.reload.purchaser).to eq buyer
+      expect(response.parsed_body["success"]).to eq false
+      expect(response.parsed_body["error_message"]).to eq "This is your customer's purchase, so it can't be moved into your account."
+    end
+
     it "doesn't associate the purchase with the user if the password is incorrect" do
       @params["user"]["password"] = "wrong password"
       post :add_purchase_to_library, params: @params
