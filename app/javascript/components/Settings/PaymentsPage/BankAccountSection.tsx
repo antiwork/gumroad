@@ -1227,13 +1227,16 @@ const BankAccountSection = ({
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
-                    placeholder="ABCDKR00123"
+                    placeholder="NACFKRSEXXX"
                     maxLength={11}
                     required
                     disabled={isFormDisabled}
                     aria-invalid={errorFieldNames.has("bank_code")}
                     onChange={(evt) => updateBankAccount({ bank_code: evt.target.value })}
                   />
+                  <FieldsetDescription>
+                    Your bank's SWIFT/BIC code, 8 or 11 characters (e.g. NACFKRSE or NACFKRSEXXX).
+                  </FieldsetDescription>
                 </Fieldset>
               ) : user.country_code === "VN" ? (
                 <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
