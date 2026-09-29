@@ -440,6 +440,11 @@ module Product::Prices
     # base_price_cents is the lowest option's price, so an option-scoped code that leaves that
     # option out would quote a price the buyer only reaches by picking a dearer option.
     def discounts_lowest_priced_option?(offer_code)
+      # Categories are loaded for the Variants only: a SKU has no variant_category to preload, and
+      # an includes on ProductPresenter::Card::ASSOCIATIONS would raise for a SKU-scoped code.
+      unloaded = offer_code.variants.grep(Variant).reject { |variant| variant.association(:variant_category).loaded? }
+      ActiveRecord::Associations::Preloader.new(records: unloaded, associations: :variant_category).call if unloaded.any?
+
       restricted_ids = offer_code.restricted_variants_for(self).map(&:id)
       return true if restricted_ids.empty?
 

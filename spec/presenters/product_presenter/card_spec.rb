@@ -335,6 +335,16 @@ describe ProductPresenter::Card do
           expect(data[:original_price_cents]).to eq 10_00
         end
 
+        it "renders a listing whose product's default code is limited to a SKU" do
+          physical = create(:physical_product, user: creator, price_cents: 10_00)
+          sku = physical.skus.first || create(:sku, link: physical)
+          code = create(:offer_code, user: creator, products: [physical], amount_percentage: 50, amount_cents: nil, variants: [sku])
+          physical.update!(default_offer_code: code)
+          loaded = Link.includes(ProductPresenter::Card::ASSOCIATIONS).find(physical.id)
+
+          expect(described_class.new(product: loaded).for_web[:price_cents]).to eq 5_00
+        end
+
         it "quotes the discount for a tiered membership only when its lowest tier is eligible" do
           membership = create(:membership_product_with_preset_tiered_pricing, user: creator)
           lowest_tier, other_tier = membership.tiers.sort_by { |tier| tier.prices.alive.is_buy.minimum(:price_cents) }
