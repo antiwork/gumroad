@@ -198,30 +198,38 @@ class Onetime::ApplySourcelessCapitalDeductions
       else
         before_cents, after_cents, ledger_change = held_cents, held_cents + credit.amount_cents, credit.amount_cents
       end
-      groups = projected_groups(credit, ledger_change)
+      groups, credit_key = projected_groups(credit, ledger_change)
       ledger_after_cents = groups.values.sum
-      own_group_negative = groups[[credit.merchant_account_id, Currency::USD]].negative?
       { balance:, balance_key:, before_cents:, after_cents:, ledger_change:, ledger_after_cents:,
-        ends_negative: ledger_after_cents.negative? || own_group_negative,
+        ends_negative: ledger_after_cents.negative? || groups[credit_key].negative?,
         payout_held: ledger_after_cents <= 0 || groups.values.any?(&:negative?), new_deduction: applied_balance.nil? }
     end
 
-    # What Payouts weighs when it decides whether a negative ledger holds a seller's payout: the whole
-    # unpaid ledger, and each merchant account and currency group on its own. Payouts also merges Gumroad-held
-    # balances into the payout account's group; this does not, so it can flag a group Payouts would not hold.
+    # What Payouts weighs when it decides whether a negative ledger holds a seller's payout: the whole unpaid
+    # ledger, and each payout group on its own. Groups follow StripePayoutProcessor.payout_groups, so Gumroad-held
+    # balances count toward the payout account's group. Payouts' exception for currencies an account cannot pay out
+    # is not modelled.
     def projected_groups(credit, ledger_change)
+      balances = ApplicationRecord.connected_to(role: :writing) { Balance.where(user_id: credit.user_id, state: "unpaid").includes(:merchant_account).to_a }
+      destination, held_by_gumroad, held_by_stripe = StripePayoutProcessor.get_payout_details(credit.user, balances)
+      gumroad_key = destination ? [destination.id, destination.currency.to_s] : [nil, nil]
       groups = Hash.new(0)
-      ApplicationRecord.connected_to(role: :writing) do
-        Balance.where(user_id: credit.user_id, state: "unpaid").group(:merchant_account_id, :holding_currency).sum(:amount_cents)
-      end.each { |group, cents| groups[group] += cents }
-      @projected_groups.each { |(user_id, *group), cents| groups[group] += cents if user_id == credit.user_id }
-      groups[[credit.merchant_account_id, Currency::USD]] += ledger_change
-      groups
+      held_by_stripe.each { |balance| groups[[balance.merchant_account_id, balance.holding_currency.to_s]] += balance.amount_cents }
+      groups[gumroad_key] += held_by_gumroad.sum(&:amount_cents)
+      credit_key = credit.merchant_account.holder_of_funds == HolderOfFunds::GUMROAD ? gumroad_key : [credit.merchant_account_id, Currency::USD.to_s]
+      groups[credit_key] += ledger_change
+      @projected_groups.each do |(user_id, merchant_account_id), cents|
+        next unless user_id == credit.user_id
+
+        account = MerchantAccount.find(merchant_account_id)
+        groups[account.holder_of_funds == HolderOfFunds::GUMROAD ? gumroad_key : [merchant_account_id, Currency::USD.to_s]] += cents
+      end
+      [groups, credit_key]
     end
 
     def dry_run_result(credit, transaction, stripe, projection)
       @projected_deltas[projection[:balance_key]] += credit.amount_cents if projection[:new_deduction]
-      @projected_groups[[credit.user_id, credit.merchant_account_id, Currency::USD]] += projection[:ledger_change]
+      @projected_groups[[credit.user_id, credit.merchant_account_id]] += projection[:ledger_change]
       balance = projection[:balance]
       # A live batch opens one balance and reuses it, so later rows name the first credit's date.
       new_balance_date = balance ? nil : (@projected_dates[projection[:balance_key]] ||= Time.zone.at(stripe[:stripe_loan_paydown_deducted_at]).to_date)

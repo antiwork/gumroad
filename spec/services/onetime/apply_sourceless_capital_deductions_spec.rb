@@ -328,6 +328,22 @@ describe Onetime::ApplySourcelessCapitalDeductions do
       expect(statuses(skip_negative: true).first).to include(status: :dry_run, ends_negative: false, payout_held: true)
     end
 
+    it "counts Gumroad-held funds toward the payout account's group, as Payouts does" do
+      balance.update_columns(amount_cents: 0, holding_amount_cents: 0)
+      create(:balance, user: seller, date: Date.current - 1, amount_cents: 5000)
+
+      expect(statuses(skip_negative: true).first).to include(status: :dry_run, ends_negative: false, payout_held: false, ledger_after_cents: 4648)
+      expect(statuses(dry_run: false, skip_negative: true).map { _1[:status] }).to eq(%i[applied applied])
+    end
+
+    it "still skips when Gumroad-held funds do not cover the payout account's group" do
+      balance.update_columns(amount_cents: 0, holding_amount_cents: 0)
+      create(:balance, user: seller, date: Date.current - 1, amount_cents: 100)
+
+      expect(statuses(skip_negative: true).first).to include(status: :skipped, ledger_after_cents: -252)
+      expect(statuses.first).to include(status: :dry_run, ends_negative: true, payout_held: true)
+    end
+
     it "names the first credit's date for every row that shares a balance to be opened" do
       balance.update_columns(state: "paid")
       financing_second = financing.deep_merge(id: "cptxn_second", created_at: 1_787_200_000, details: { total_amount: 100 })
