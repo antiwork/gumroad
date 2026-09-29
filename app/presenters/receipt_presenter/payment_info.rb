@@ -324,7 +324,7 @@ class ReceiptPresenter::PaymentInfo
           label: price_attribute_label(purchase),
           value: "#{formatted_price(
               purchase.displayed_price_currency_type,
-              purchase.commission.completion_price_cents
+              purchase.commission.completion_display_price_cents
             )} on completion".html_safe
         }
       else

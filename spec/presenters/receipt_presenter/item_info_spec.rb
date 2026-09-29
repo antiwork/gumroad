@@ -935,6 +935,19 @@ describe ReceiptPresenter::ItemInfo do
           { label: "Product price", value: "$2" }
         )
       end
+
+      context "when the listing is in EUR" do
+        before do
+          purchase.update_columns(displayed_price_currency_type: Currency::EUR, displayed_price_cents: 645, price_cents: 731, rate_converted_to_usd: "0.882")
+        end
+
+        it "returns the listing price in EUR regardless of the USD rate" do
+          expect(described_class.new(purchase.reload).props[:general_attributes]).to include({ label: "Product price", value: "€12.90" })
+
+          purchase.update_columns(price_cents: 748, rate_converted_to_usd: "0.862")
+          expect(described_class.new(purchase.reload).props[:general_attributes]).to include({ label: "Product price", value: "€12.90" })
+        end
+      end
     end
   end
 end
