@@ -68,8 +68,8 @@ class Checkout::PaymentMethodResolver
   # Brazilian buyers on BRL PaymentIntents only — Pix settles over Brazil's domestic instant-payment
   # rails, so the buyer needs an account at a Brazilian bank. Unknown GeoIP fails safe.
   BR_LOCKED_PAYMENT_METHOD_TYPES = %w[pix].freeze
-  # Eurozone buyers only. Offering one mounts the whole Element in EUR, so card and Link are billed
-  # in EUR too; a buyer elsewhere would pay a foreign-currency charge the product page never showed.
+  # Withheld from buyers GeoIP places outside the eurozone. Offering one mounts the whole Element in
+  # EUR, so card and Link are billed in EUR too, a currency the product page never showed them.
   EUR_LOCKED_PAYMENT_METHOD_TYPES = %w[ideal bancontact].freeze
   PIX_PAYMENT_METHOD_TYPE = "pix"
   # Stripe's Pix transaction window: at least 0.50 BRL, at most 3,000 USD per payment
@@ -256,13 +256,14 @@ class Checkout::PaymentMethodResolver
       methods -= US_LOCKED_PAYMENT_METHOD_TYPES unless buyer_country == US_ALPHA2
       methods -= IN_LOCKED_PAYMENT_METHOD_TYPES unless buyer_country == IN_ALPHA2
       methods -= BR_LOCKED_PAYMENT_METHOD_TYPES unless buyer_country == BR_ALPHA2
-      methods -= EUR_LOCKED_PAYMENT_METHOD_TYPES unless eurozone_buyer?
+      methods -= EUR_LOCKED_PAYMENT_METHOD_TYPES unless eur_locked_methods_allowed?
       methods
     end
 
-    # Unknown GeoIP fails safe, like the other region locks.
-    def eurozone_buyer?
-      buyer_country.present? && ISO3166::Country[buyer_country]&.currency_code == Currency::EUR.upcase
+    # Unlike the other locks, an unknown GeoIP keeps these: that buyer is shown the EUR listing as-is,
+    # so the EUR Element charges the price they saw.
+    def eur_locked_methods_allowed?
+      buyer_country.blank? || ISO3166::Country[buyer_country]&.currency_code == Currency::EUR.upcase
     end
 
     # Seller-complete keying: one seller's opt-out must not remove Link from another seller's buyers.
