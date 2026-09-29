@@ -8,39 +8,53 @@ export type CartItemsCount = number | "not-available";
 
 let countPromise: Promise<CartItemsCount> | null = null;
 
-// WebKit grants a frame storage access only when it is same-origin with the page, so the count is
-// read from the storefront host when that host shares the root domain's cart cookie, and from the
-// root domain on a custom domain (which does not, and where the checkout button sends buyers anyway).
-export const cartItemsCountSrc = () => {
+// The count is read from the storefront host when that host shares the root domain's cart cookie,
+// and from the root domain on a custom domain (which does not, and where the checkout button sends
+// buyers anyway).
+export const cartItemsCountIsSameOrigin = () => {
   const { host } = window.location;
   const rootHost = new URL(Routes.cart_items_count_url(), window.location.href).host;
-  return host === rootHost || host.endsWith(`.${rootHost}`)
-    ? Routes.cart_items_count_path()
-    : Routes.cart_items_count_url();
+  return host === rootHost || host.endsWith(`.${rootHost}`);
 };
+
+export const cartItemsCountSrc = () =>
+  cartItemsCountIsSameOrigin() ? Routes.cart_items_count_path() : Routes.cart_items_count_url();
 
 // "not-available" means the count could not be read, which is not the same as having items in the
 // cart: treating it as truthy shows the cart shortcut to every visitor whose count is unreadable.
 export const hasCartItems = (count: CartItemsCount | null): count is number => typeof count === "number" && count > 0;
 
+// A same-origin count is fetched from the page itself: the page's own request carries the cart
+// cookie, while a frame only gets it when the browser grants the frame storage access.
+const readSameOriginCount = (): Promise<CartItemsCount> =>
+  fetch(Routes.cart_items_count_path(), { headers: { Accept: "application/json" }, cache: "no-store" })
+    .then((response) => (response.ok ? response.json() : Promise.reject(new Error("count unavailable"))))
+    .then((body) => (typia.is<{ cart_items_count: number }>(body) ? body.cart_items_count : "not-available"))
+    .catch(() => "not-available");
+
+const readCountFromFrame = (src: string, resolve: (value: CartItemsCount) => void) => {
+  const iframe = document.createElement("iframe");
+  iframe.style.display = "none";
+  iframe.src = src;
+  const { origin } = new URL(src, window.location.href);
+  const handler = (evt: MessageEvent) => {
+    if (evt.source !== iframe.contentWindow || evt.origin !== origin) return;
+
+    if (typia.is<{ type: "cart-items-count"; cartItemsCount: CartItemsCount }>(evt.data)) {
+      window.removeEventListener("message", handler);
+      iframe.remove();
+      resolve(evt.data.cartItemsCount);
+    }
+  };
+  window.addEventListener("message", handler);
+  document.body.appendChild(iframe);
+};
+
 export const loadCartItemsCount = (src: string, cb: (value: CartItemsCount) => void) => {
   if (!countPromise)
     countPromise = new Promise((resolve) => {
-      const iframe = document.createElement("iframe");
-      iframe.style.display = "none";
-      iframe.src = src;
-      const { origin } = new URL(src, window.location.href);
-      const handler = (evt: MessageEvent) => {
-        if (evt.source !== iframe.contentWindow || evt.origin !== origin) return;
-
-        if (typia.is<{ type: "cart-items-count"; cartItemsCount: CartItemsCount }>(evt.data)) {
-          window.removeEventListener("message", handler);
-          iframe.remove();
-          resolve(evt.data.cartItemsCount);
-        }
-      };
-      window.addEventListener("message", handler);
-      document.body.appendChild(iframe);
+      if (cartItemsCountIsSameOrigin()) void readSameOriginCount().then(resolve);
+      else readCountFromFrame(src, resolve);
     });
   void countPromise.then(cb);
 };

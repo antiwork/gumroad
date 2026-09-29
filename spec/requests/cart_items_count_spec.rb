@@ -2,9 +2,8 @@
 
 require "spec_helper"
 
-# WebKit grants a frame storage access only when it is same-origin with the page, so a seller
-# subdomain now serves the count itself; a custom domain cannot read the root domain's cookie and
-# keeps using the root-domain route.
+# A seller subdomain shares the root domain's cart cookie, so it serves the count to the page's own
+# request; a custom domain cannot read that cookie and keeps the root-domain frame.
 describe "Cart items count on a storefront host", type: :request do
   let(:seller) { create(:user, username: "countseller") }
   let(:browser_guid) { "cart-count-browser-guid" }
@@ -31,5 +30,16 @@ describe "Cart items count on a storefront host", type: :request do
 
   it "still serves the count on the root domain" do
     expect(inertia_props("#{PROTOCOL}://#{ROOT_DOMAIN}/cart_items_count")["cart_items_count"]).to eq(0)
+  end
+
+  it "serves the count as JSON to the page's own request on the subdomain" do
+    cart = create(:cart, :guest, browser_guid:)
+    create(:cart_product, cart:)
+    cookies[:_gumroad_guid] = browser_guid
+
+    get "/cart_items_count", headers: { "Accept" => "application/json" }
+
+    expect(response).to be_successful
+    expect(response.parsed_body["cart_items_count"]).to eq(1)
   end
 end
