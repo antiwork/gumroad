@@ -1235,7 +1235,7 @@ const BankAccountSection = ({
                     onChange={(evt) => updateBankAccount({ bank_code: evt.target.value })}
                   />
                   <FieldsetDescription>
-                    Your bank's SWIFT/BIC code, 8 or 11 characters (e.g. NACFKRSE or NACFKRSEXXX).
+                    Your bank's SWIFT/BIC code, 8 or 11 uppercase characters (e.g. NACFKRSE or NACFKRSEXXX).
                   </FieldsetDescription>
                 </Fieldset>
               ) : user.country_code === "VN" ? (

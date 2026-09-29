@@ -356,7 +356,7 @@ describe("BankAccountSection Korean bank code", () => {
     renderForCountry("KR");
 
     expect(
-      screen.getByText("Your bank's SWIFT/BIC code, 8 or 11 characters (e.g. NACFKRSE or NACFKRSEXXX)."),
+      screen.getByText("Your bank's SWIFT/BIC code, 8 or 11 uppercase characters (e.g. NACFKRSE or NACFKRSEXXX)."),
     ).toBeTruthy();
   });
 });
