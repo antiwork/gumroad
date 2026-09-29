@@ -1260,11 +1260,14 @@ describe("AgentChat new chat control", () => {
     render(<AgentChat greeting="Hi" suggestions={[]} />);
     await waitFor(() => expect(screen.getByText(RESUMED_REPLY)).toBeTruthy());
 
+    // A draft typed before New chat belongs to the conversation being left, not the new one.
+    fireEvent.change(screen.getByLabelText("Message"), { target: { value: "half-written draft" } });
     fireEvent.click(screen.getByLabelText("New chat"));
 
-    // The resumed transcript is gone and the stale id with it.
+    // The resumed transcript is gone, the stale id with it, and the composer is empty.
     expect(screen.queryByText(RESUMED_REPLY)).toBeNull();
     expect(screen.getByText("Hi")).toBeTruthy();
+    expect((screen.getByLabelText("Message") as HTMLTextAreaElement).value).toBe("");
 
     await sendMessage("start over");
 

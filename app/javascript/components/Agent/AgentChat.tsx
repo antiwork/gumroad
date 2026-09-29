@@ -949,24 +949,17 @@ export const AgentChat = ({ greeting, suggestions, locked = null }: Props) => {
     }
   };
 
-  // Start a fresh conversation: drop the resumed transcript and forget the stored conversation id,
-  // so the next turn's request omits `conversation_id` and the server opens (and titles) a new
-  // conversation from its first message. The previous conversation stays stored server-side; there
-  // is no index to browse back to it yet.
-  //
-  // A turn in flight owns the chat: its callbacks adopt the conversation id it was sent to (onDone,
-  // or the interrupted-turn recovery), so switching under it would re-attach this "new" chat to the
-  // old conversation. A pending confirmation is the same shape — the reply lands on a card that
-  // resetting would discard. Both refuse instead.
+  // Refused while a turn or a confirmation is in flight: both adopt the conversation id from their
+  // own response (onDone / interrupted-turn recovery), so switching under one would re-attach this
+  // new chat to the conversation the in-flight turn was sent to.
   const startNewChat = () => {
     if (isSending || pendingActionIndex !== null || locked) return;
-    // A settled turn can still be draining suggestion chips on its old connection. Bump the
-    // generation so those late frames land on the discarded chat rather than seeding follow-up
-    // chips into the new one; the connection itself is left alone (after an inconclusive recovery
-    // it may still be generating a turn, and only the server's verdict makes aborting safe).
+    // A settled turn can still be draining suggestion chips — drop its late frames on the discarded
+    // chat. Its connection stays open: only the server's verdict makes aborting one safe.
     sendGenerationRef.current += 1;
     setConversationId(null);
     setMessages([{ role: "assistant", content: greeting }]);
+    setInput("");
     setFollowUps([]);
     setPendingActionIndex(null);
     setIsStreaming(false);
@@ -1043,9 +1036,8 @@ export const AgentChat = ({ greeting, suggestions, locked = null }: Props) => {
   };
 
   const hasText = input.trim().length > 0;
-  // The page header is hidden below `sm`, so the new-chat control lives at the top of the chat pane
-  // itself. Only worth offering once there is a conversation to leave (resumed history, or a stored
-  // conversation this session created).
+  // The page header is hidden below `sm`, so the control lives at the top of the chat pane, and only
+  // appears once there is a conversation to leave.
   const canStartNewChat = !locked && (messages.length > 1 || conversationId !== null);
 
   return (
