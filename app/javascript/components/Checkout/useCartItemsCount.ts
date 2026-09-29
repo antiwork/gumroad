@@ -1,13 +1,15 @@
 import * as React from "react";
 
-import { CartItemsCount, loadCartItemsCount } from "$app/utils/cart";
+import { CartItemsCount, cartItemsCountSrc, loadCartItemsCount } from "$app/utils/cart";
 
+import { useDomains } from "$app/components/DomainSettings";
 import { useRunOnce } from "$app/components/useRunOnce";
 
 export const useCartItemsCount = () => {
+  const { rootDomain } = useDomains();
   const [cartItemsCount, setCartItemsCount] = React.useState<CartItemsCount | null>(null);
 
-  useRunOnce(() => loadCartItemsCount(Routes.cart_items_count_url(), setCartItemsCount));
+  useRunOnce(() => loadCartItemsCount(cartItemsCountSrc(rootDomain), setCartItemsCount));
 
   return cartItemsCount;
 };

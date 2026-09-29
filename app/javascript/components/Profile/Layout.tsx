@@ -2,6 +2,7 @@ import { Pencil, Star, TwitterX, Youtube } from "@boxicons/react";
 import * as React from "react";
 
 import { CreatorProfile } from "$app/parsers/profile";
+import { hasCartItems } from "$app/utils/cart";
 
 import { NavigationButton } from "$app/components/Button";
 import { CartNavigationButton } from "$app/components/Checkout/CartNavigationButton";
@@ -32,7 +33,7 @@ export const Layout = ({ creatorProfile, hideFollowForm, currencySelector, shown
   const youtubeChannelId = creatorProfile.youtube_channel_id;
 
   const headerButtons =
-    creatorProfile.can_edit || creatorProfile.twitter_handle || youtubeChannelId || cartItemsCount ? (
+    creatorProfile.can_edit || creatorProfile.twitter_handle || youtubeChannelId || hasCartItems(cartItemsCount) ? (
       <div className="flex shrink-0 items-center gap-3 lg:ml-auto">
         {creatorProfile.can_edit ? (
           <NavigationButton color="filled" className="whitespace-nowrap" href={Routes.profile_url({ host: appDomain })}>
@@ -85,7 +86,7 @@ export const Layout = ({ creatorProfile, hideFollowForm, currencySelector, shown
               <FollowForm creatorProfile={creatorProfile} />
             </div>
           ) : null}
-          {!isDesktop && headerButtons ? <div className="flex basis-full p-4 pt-0">{headerButtons}</div> : null}
+          {!isDesktop && headerButtons ? <div className="flex basis-full p-4">{headerButtons}</div> : null}
           {isDesktop ? headerButtons : null}
         </div>
       </header>
