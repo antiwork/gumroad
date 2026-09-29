@@ -811,6 +811,8 @@ describe("bank payout switch option on the payments page", () => {
   });
 });
 
+// Stripe refuses an account whose ("Kanji") variation holds no Japanese characters, so the page
+// must refuse it before saving.
 describe("Japanese (Kanji) variation fields", () => {
   const jpCompliance = (overrides: Partial<ComplianceInfo> = {}) =>
     complianceInfo({
