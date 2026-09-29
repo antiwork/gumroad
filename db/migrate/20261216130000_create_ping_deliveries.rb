@@ -16,6 +16,7 @@ class CreatePingDeliveries < ActiveRecord::Migration[7.1]
 
       t.index [:user_id, :created_at]
       t.index [:purchase_id, :created_at]
+      t.index :created_at
     end
   end
 end

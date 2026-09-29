@@ -8,7 +8,9 @@ import AccountDeletionSection from "$app/components/Settings/AdvancedPage/Accoun
 import ApplicationsSection, { type Application } from "$app/components/Settings/AdvancedPage/ApplicationsSection";
 import BlockEmailsSection from "$app/components/Settings/AdvancedPage/BlockEmailsSection";
 import CustomDomainSection from "$app/components/Settings/AdvancedPage/CustomDomainSection";
-import NotificationEndpointSection, { type PingDelivery } from "$app/components/Settings/AdvancedPage/NotificationEndpointSection";
+import NotificationEndpointSection, {
+  type PingDelivery,
+} from "$app/components/Settings/AdvancedPage/NotificationEndpointSection";
 import { Layout } from "$app/components/Settings/Layout";
 
 type AdvancedPageProps = {

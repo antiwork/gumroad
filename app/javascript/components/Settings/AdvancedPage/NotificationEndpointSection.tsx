@@ -28,6 +28,22 @@ export type PingDelivery = {
   created_at: string;
 };
 
+const RESOURCE_LABELS: Record<string, string> = {
+  sale: "Sale",
+  refund: "Refund",
+  dispute: "Dispute",
+  dispute_won: "Dispute won",
+  cancellation: "Cancellation",
+  subscription_ended: "Subscription ended",
+  subscription_restarted: "Subscription restarted",
+  subscription_updated: "Subscription updated",
+};
+
+const describeEvent = (delivery: PingDelivery) => {
+  const label = RESOURCE_LABELS[delivery.resource_name] ?? delivery.resource_name;
+  return delivery.sale_id ? `${label} · Sale #${delivery.sale_id}` : label;
+};
+
 const describeDelivery = (delivery: PingDelivery) =>
   `${delivery.succeeded ? "Delivered" : "Not delivered"} — ${delivery.outcome}${
     delivery.attempt > 1 ? ` (attempt ${delivery.attempt})` : ""
@@ -47,8 +63,9 @@ const RecentDeliveries = ({ deliveries }: { deliveries: PingDelivery[] }) => {
       {deliveries.map((delivery) => (
         <Row key={delivery.id} role="listitem">
           <RowContent>
-            <div>
-              <h4>{delivery.sale_id ? `Sale #${delivery.sale_id}` : delivery.resource_name}</h4>
+            <div className="flex flex-col">
+              <h4>{describeEvent(delivery)}</h4>
+              <span className="break-all text-muted">{delivery.post_url}</span>
               <span className={delivery.succeeded ? "text-muted" : "text-red"}>{describeDelivery(delivery)}</span>
             </div>
           </RowContent>

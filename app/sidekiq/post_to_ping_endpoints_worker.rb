@@ -31,8 +31,14 @@ class PostToPingEndpointsWorker
       # No URL vetting here: SsrfFilter.post in the individual worker validates the resolved IPs at
       # connect time (and per redirect hop), and a pre-check here meant a transient empty DNS lookup
       # silently dropped the ping with no retry (gp#2155).
+      #
+      # The fifth argument is gated so a consumer still on the four-argument `perform` never
+      # receives it mid-rollout; activate :record_ping_deliveries once the deploy has finished.
+      record_context = Feature.active?(:record_ping_deliveries)
       post_urls.each do |post_url, content_type|
-        PostToIndividualPingEndpointWorker.perform_async(post_url, ping_params.deep_stringify_keys, content_type, user.id, ping_context)
+        args = [post_url, ping_params.deep_stringify_keys, content_type, user.id]
+        args << ping_context.stringify_keys if record_context
+        PostToIndividualPingEndpointWorker.perform_async(*args)
       end
     end
   end

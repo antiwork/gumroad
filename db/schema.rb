@@ -1658,6 +1658,7 @@ create_table "ping_deliveries", charset: "utf8mb4", collation: "utf8mb4_unicode_
     t.bigint "subscription_id"
     t.boolean "succeeded", default: false, null: false
     t.bigint "user_id", null: false
+    t.index ["created_at"], name: "index_ping_deliveries_on_created_at"
     t.index ["purchase_id", "created_at"], name: "index_ping_deliveries_on_purchase_id_and_created_at"
     t.index ["user_id", "created_at"], name: "index_ping_deliveries_on_user_id_and_created_at"
   end

@@ -33,7 +33,7 @@ class PostToIndividualPingEndpointWorker
   # enqueued before this argument existed.
   def perform(post_url, params, content_type = Mime[:url_encoded_form].to_s, user_id = nil, ping = nil)
     retry_count = params["retry_count"] || 0
-    ping = ping.to_h.symbolize_keys if ping.respond_to?(:to_h)
+    ping = ping.stringify_keys if ping.is_a?(Hash)
 
     body = if content_type == Mime[:json]
       params.to_json
@@ -106,9 +106,9 @@ class PostToIndividualPingEndpointWorker
 
       PingDelivery.create!(
         user_id:,
-        purchase_id: ping[:purchase_id],
-        subscription_id: ping[:subscription_id],
-        resource_name: ping[:resource_name].presence || ResourceSubscription::SALE_RESOURCE_NAME,
+        purchase_id: ping["purchase_id"],
+        subscription_id: ping["subscription_id"],
+        resource_name: ping["resource_name"].presence || ResourceSubscription::SALE_RESOURCE_NAME,
         post_url:,
         attempt: retry_count.to_i + 1,
         response_code:,
