@@ -108,6 +108,8 @@ export const ReviewForm = React.forwardRef<
     purchaseEmailDigest?: string;
     review: Review | null;
     onChange?: (review: Review) => void;
+    /** Called after the review was saved with the explicit submit button, not after a rating autosave. */
+    onSaved?: () => void;
     preview?: boolean;
     disabledStatus?: string | null;
     style?: React.CSSProperties;
@@ -123,6 +125,7 @@ export const ReviewForm = React.forwardRef<
       purchaseEmailDigest,
       review,
       onChange,
+      onSaved,
       preview,
       disabledStatus,
       style,
@@ -342,6 +345,7 @@ export const ReviewForm = React.forwardRef<
         });
         setFormState("viewing");
         onChange?.(review);
+        onSaved?.();
 
         setVideoState(
           review.video

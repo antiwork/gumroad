@@ -123,7 +123,12 @@ const Row = ({ review, onChange }: { review: Review; onChange: (review: Review) 
                   </Button>
                 </PopoverTrigger>
               </PopoverAnchor>
-              <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none" usePortal>
+              <PopoverContent
+                sideOffset={4}
+                align="end"
+                className="w-[min(28rem,calc(100vw-2rem))] border-0 p-0 shadow-none"
+                usePortal
+              >
                 <Card>
                   <ReviewForm
                     permalink={review.product.permalink}
@@ -132,6 +137,7 @@ const Row = ({ review, onChange }: { review: Review; onChange: (review: Review) 
                     review={review}
                     accountName={review.account_name}
                     onChange={(newReview) => onChange({ ...review, ...newReview })}
+                    onSaved={() => setIsEditing(false)}
                     className="flex flex-wrap items-center justify-between gap-4 p-4"
                   />
                 </Card>
