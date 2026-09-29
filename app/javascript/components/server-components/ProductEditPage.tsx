@@ -15,6 +15,7 @@ import {
   richContentMoveSourceIds,
   SaveProductResponse,
   StaleContentConflictError,
+  UnconfirmedSaveError,
   StaleDeletionConflictError,
   UnmarkedInstallmentPlanClearConflictError,
   saveProduct,
@@ -29,7 +30,7 @@ import { useDedupeInFlight } from "$app/utils/dedupeInFlight";
 import { Taxonomy } from "$app/utils/discover";
 import { ALLOWED_EXTENSIONS } from "$app/utils/file";
 import GuidGenerator from "$app/utils/guid_generator";
-import { assertResponseError, request } from "$app/utils/request";
+import { assertResponseError, request, ResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import { Modal } from "$app/components/Modal";
@@ -575,6 +576,9 @@ const ProductEditPage = (props: Props) => {
   // because this session cannot tell which of its own field values are also
   // stale.
   const [staleDeletionConflict, setStaleDeletionConflict] = React.useState<string | null>(null);
+  // Set when a save may have reached the server but this editor cannot save again safely (it holds
+  // stale ids). Save stays disabled, so the reason has to stay on screen until the seller reloads.
+  const [reloadRequired, setReloadRequired] = React.useState<string | null>(null);
   // Shown inline rather than as a toast so it cannot cover the header or tabs
   // while the seller copies their unsaved edits. An object so a repeated
   // refusal re-focuses it.
@@ -611,6 +615,8 @@ const ProductEditPage = (props: Props) => {
     hiddenPageIds: string[];
   }): Promise<boolean> => {
     let saved = false;
+    // Keeps Save disabled once the page must be reloaded before it can save again.
+    let reloading = false;
     let productToSave = product;
     if (conflictResolution?.choice === "keep_shared") {
       productToSave = {
@@ -678,6 +684,9 @@ const ProductEditPage = (props: Props) => {
       // editor session (the shared-content flag hid them), so the in-memory
       // state can't render the outcome. Reload to pick up the kept content.
       if (conflictResolution?.choice === "keep_version") {
+        // Leave Save disabled until the page is gone, so a second click cannot save again.
+        reloading = true;
+        setReloadRequired("Your changes were saved. Reloading the page to show them.");
         window.location.reload();
         return true;
       }
@@ -789,12 +798,29 @@ const ProductEditPage = (props: Props) => {
         setStaleDeletionConflict(e.message);
       } else if (e instanceof UnmarkedInstallmentPlanClearConflictError) {
         setInstallmentPlanClearConflict({ message: e.message });
-      } else {
-        assertResponseError(e);
+      } else if (e instanceof UnconfirmedSaveError) {
+        // Keep Save disabled: a retry could resend stale ids for records the server already kept.
+        reloading = true;
+        if (typeof reportError === "function") reportError(e.originalError);
+        setReloadRequired(e.message);
+      } else if (e instanceof ResponseError) {
         showAlert(e.message, "error");
+      } else {
+        // Anything else must still release the save: rethrowing here left `saving` true, which
+        // disabled Save with no message (gumroad-private#3123). reportError raises a window
+        // `error` event so a global handler sees it; older browsers lack it.
+        if (typeof reportError === "function") reportError(e);
+        if (saved) {
+          // The server kept the save but this editor could not adopt the result (canonical ids,
+          // new baseline). Another save would resend stale ids, so Save stays disabled until reload.
+          reloading = true;
+          saved = false;
+          setReloadRequired("Your changes were saved, but this page could not refresh to match them.");
+        } else showAlert("Something went wrong while saving. Please try again.", "error");
       }
+    } finally {
+      if (!reloading) setSaving(false);
     }
-    setSaving(false);
     return saved;
   };
   const runSave = (): Promise<boolean> => {
@@ -1070,6 +1096,29 @@ const ProductEditPage = (props: Props) => {
               <p>
                 Nothing was saved. Reload the page to get the latest content — your unsaved edits in this session will
                 be lost, so copy anything you need first.
+              </p>
+            </div>
+          </Modal>
+        ) : null}
+        {reloadRequired ? (
+          <Modal
+            open
+            onClose={() => setReloadRequired(null)}
+            title="Reload the page to keep editing"
+            footer={
+              <>
+                <Button onClick={() => setReloadRequired(null)}>Keep this page open</Button>
+                <Button color="accent" onClick={() => window.location.reload()}>
+                  Reload page
+                </Button>
+              </>
+            }
+          >
+            <div className="flex flex-col gap-4">
+              <p>{reloadRequired}</p>
+              <p>
+                Save is turned off on this page until you reload, because saving again could repeat changes. Copy
+                anything you still need first — unsaved edits on this page are lost when you reload.
               </p>
             </div>
           </Modal>
