@@ -790,6 +790,15 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
           expect(session[:inertia_errors][:field]).to eq("zip_code")
         end
 
+        it "lets a seller with a saved bank account switch to PayPal while an unchanged military zip code is stored" do
+          user.alive_user_compliance_info.dup_and_save! { |info| info.zip_code = "09330" }
+          create(:ach_account, user:)
+
+          put :update, params: { user: params.except(:is_business).merge(zip_code: "09330"), payment_address: "seller@example.com" }
+
+          expect(session[:inertia_errors]&.dig(:base)&.first.to_s).not_to include("military")
+        end
+
         it "does not block unrelated saves for a US business with a stored military business zip and no business country" do
           user.alive_user_compliance_info.dup_and_save! do |info|
             info.is_business = true

@@ -457,7 +457,8 @@ class Settings::PaymentsController < Settings::BaseController
 
       business = submitted[:is_business].nil? ? compliance_info.is_business? : ActiveModel::Type::Boolean.new.cast(submitted[:is_business])
       first_stripe_setup = current_seller.stripe_connect_account.blank? &&
-                           (params.dig(:bank_account, :account_number).present? || current_seller.active_bank_account.present?) &&
+                           (params.dig(:bank_account, :account_number).present? ||
+                            (params[:payment_address].blank? && current_seller.active_bank_account.present?)) &&
                            !StripeMerchantAccountManager.blocks_new_managed_account?(current_seller)
       account_type_changed = business != compliance_info.is_business?
       # A business record without its own country is validated under the personal country (legal_entity_country).
