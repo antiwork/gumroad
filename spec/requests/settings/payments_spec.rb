@@ -1967,8 +1967,6 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Account #", with: "000123456789")
         fill_in("Confirm account #", with: "000123456789")
 
-        expect(page).to have_content("Your bank's SWIFT/BIC code, 8 or 11 characters")
-
         click_on("Update settings")
 
         expect(page).to have_alert(text: "Thanks! You're all set.")

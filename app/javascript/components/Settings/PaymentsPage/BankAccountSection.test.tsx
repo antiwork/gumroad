@@ -340,3 +340,23 @@ describe("BankAccountSection Egyptian bank code", () => {
     expect(field.placeholder).not.toHaveLength(11);
   });
 });
+describe("BankAccountSection Korean bank code", () => {
+  // Stripe resolves only the 8-character SWIFT/BIC and its 11-character branch-suffixed form. The
+  // old placeholder `ABCDKR00123` was an 11-character code with a digit tail — the shape that saves
+  // and then fails at bank-sync — so the field's own example advertised an unresolvable code.
+  it("advertises a SWIFT/BIC that Stripe resolves rather than a digit-tailed example", () => {
+    renderForCountry("KR");
+    const field = screen.getByLabelText<HTMLInputElement>("Bank code");
+
+    expect(field.placeholder).toBe("NACFKRSEXXX");
+    expect(field.placeholder).not.toBe("ABCDKR00123");
+  });
+
+  it("states the two accepted lengths next to the field", () => {
+    renderForCountry("KR");
+
+    expect(
+      screen.getByText("Your bank's SWIFT/BIC code, 8 or 11 characters (e.g. NACFKRSE or NACFKRSEXXX)."),
+    ).toBeTruthy();
+  });
+});
