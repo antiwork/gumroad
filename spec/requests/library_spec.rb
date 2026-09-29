@@ -764,16 +764,11 @@ describe("Library Scenario", type: :system, js: true) do
 
         expect(page).to have_alert(text: "Review submitted successfully!")
 
-        within find("tr", text: "Product 0") do
-          expect(page).to have_text('"Message 0"')
-        end
+        # Saving closes the edit popover, so the saved review is read off the row.
+        expect(page).to have_no_button("Update review")
 
-        within "form" do
-          expect(page).to have_radio_button("1 star", checked: false)
-          [2, 3, 5].each do |i|
-            expect(page).to have_radio_button("#{i} stars", checked: false)
-          end
-          expect(page).to have_radio_button("4 stars", checked: true)
+        within find("tr", text: "Product 0") do
+          expect(page).to have_selector("[aria-label='4 stars']")
           expect(page).to have_text('"Message 0"')
         end
 
