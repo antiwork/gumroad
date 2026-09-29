@@ -9,6 +9,10 @@ module PageMeta::Product
   private
     def set_product_page_meta(product)
       product_description = product.description.present? ? product.plaintext_description : "Available on Gumroad"
+      # plaintext_description leaves entities encoded ("Fish &amp; Chips") and can run to
+      # thousands of characters, so decode before truncating — otherwise the cap can slice
+      # one in half. Crawlers cut the snippet to ~160 chars, so the rest is pure head weight.
+      product_description = CGI.unescapeHTML(product_description).squish.truncate(160)
 
       # On a seller's own domain the page must point search engines at that domain, not at
       # the *.gumroad.com subdomain Link#long_url defaults to — otherwise Search Console
