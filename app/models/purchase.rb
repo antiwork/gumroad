@@ -2900,6 +2900,13 @@ class Purchase < ApplicationRecord
     link.user == purchaser
   end
 
+  # Moving a customer's purchase into the seller's account turns it into a test purchase,
+  # which only the seller can open, so the customer loses their links and library entry.
+  # A signed-out checkout under the seller's own email is theirs to claim.
+  def claim_by_seller?(user)
+    user.present? && link.user == user && !is_test_purchase? && !email.to_s.casecmp?(user.email.to_s)
+  end
+
   # Public: Return json information about this purchase for the mobile api.
   def json_data_for_mobile(options = {})
     # `product_updates_data` is the list of creator posts this buyer is entitled to
@@ -3314,8 +3321,8 @@ class Purchase < ApplicationRecord
 
     # Signup can pass the purchase id from the confirm page with no email check.
     # A seller's own purchase must stay with the seller, or the delivery guard stops applying.
-    if is_test_purchase?
-      logger.info("Attaching user to purchase #{id}: skipped because the purchase belongs to its seller")
+    if is_test_purchase? || claim_by_seller?(user)
+      logger.info("Attaching user to purchase #{id}: skipped because the purchase or the user is its seller")
       return false
     end
 

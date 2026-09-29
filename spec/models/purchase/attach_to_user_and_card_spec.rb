@@ -36,6 +36,11 @@ describe Purchase, "#attach_to_user_and_card" do
     expect(purchase.reload.purchaser).to eq(seller)
   end
 
+  it "does not attach a customer's purchase to its seller" do
+    expect(purchase.attach_to_user_and_card(purchase.link.user, nil, nil)).to eq(false)
+    expect(purchase.reload.purchaser).to be_nil
+  end
+
   it "does not attach a reassignment-locked purchase" do
     purchase.update!(is_reassignment_locked: true)
 

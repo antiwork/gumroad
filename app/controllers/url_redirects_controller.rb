@@ -290,6 +290,11 @@ class UrlRedirectsController < ApplicationController
       protocol: PROTOCOL
     ), allow_other_host: true if logged_in_user.nil?
 
+    if purchase.claim_by_seller?(logged_in_user)
+      flash[:alert] = "This is your customer's purchase, so it can't be moved into your account."
+      return redirect_to url_redirect_check_purchaser_path({ id: @url_redirect.token, next: params[:next].presence }.compact)
+    end
+
     # A purchaser-only claim must not re-run charge validation: `financial_transaction_validation`
     # is registered on the `:successful` state and would reject a success row whose charge fields
     # are incomplete (older/migrated or imported purchases), turning the claim into a 500. Save with

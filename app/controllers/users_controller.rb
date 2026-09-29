@@ -200,6 +200,8 @@ class UsersController < ApplicationController
       return render json: { success: false } if purchase.is_test_purchase?
 
       if logged_in_user.present?
+        return render json: { success: false } if purchase.claim_by_seller?(logged_in_user)
+
         purchase.purchaser = logged_in_user
         # Same legacy charge-incomplete successful rows as change_purchaser: skip
         # charge-field validators so a library claim does not silently no-op.

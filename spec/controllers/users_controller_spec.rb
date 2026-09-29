@@ -893,6 +893,14 @@ describe UsersController do
       expect(@purchase.reload.purchaser).to eq @user
     end
 
+    it "does not move a customer's purchase into the signed-in seller's account" do
+      sign_in(@purchase.link.user)
+      post :add_purchase_to_library, params: @params
+
+      expect(@purchase.reload.purchaser).to be_nil
+      expect(response.parsed_body["success"]).to eq false
+    end
+
     it "doesn't associate the purchase with the user if the password is incorrect" do
       @params["user"]["password"] = "wrong password"
       post :add_purchase_to_library, params: @params

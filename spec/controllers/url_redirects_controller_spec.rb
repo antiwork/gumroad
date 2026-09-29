@@ -3138,6 +3138,28 @@ describe UrlRedirectsController, inertia: true do
       expect(response).to redirect_to(url_redirect_check_purchaser_path(@token, next: "/r/#{@token}"))
       expect(flash[:alert]).to eq("This purchase is under review and cannot be moved to another account. Please contact support for help.")
     end
+
+    it "does not move a customer's purchase into the seller's account" do
+      buyer = create(:user, email: @url_redirect.purchase.email)
+      @url_redirect.purchase.update!(purchaser: buyer)
+
+      expect do
+        sign_in @product.user
+        post :change_purchaser, params: { id: @token, next: "/r/#{@token}", email: @url_redirect.purchase.email }
+      end.not_to change { @url_redirect.purchase.reload.purchaser }
+
+      expect(response).to redirect_to(url_redirect_check_purchaser_path(@token, next: "/r/#{@token}"))
+      expect(flash[:alert]).to eq("This is your customer's purchase, so it can't be moved into your account.")
+    end
+
+    it "lets the seller claim a signed-out checkout made with their own email" do
+      @url_redirect.purchase.update!(email: @product.user.email)
+
+      expect do
+        sign_in @product.user
+        post :change_purchaser, params: { id: @token, next: "/r/#{@token}", email: @product.user.email }
+      end.to change { @url_redirect.purchase.reload.purchaser }.to(@product.user)
+    end
   end
 
   describe "GET membership_inactive_page", inertia: true do
