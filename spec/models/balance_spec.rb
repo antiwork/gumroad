@@ -80,7 +80,7 @@ describe Balance do
                                 charge_processor_merchant_id: "acct_gumroad_held_#{SecureRandom.hex(6)}")
     end
 
-    # The mislabelled shape found in production, written past the model as the ledger writers did.
+    # Bypass relabel validation to represent an existing foreign-labelled balance.
     def legacy_eur_balance(state: "unpaid", holding_amount_cents: 1_12)
       balance = create(:balance, user:, merchant_account: gumroad_account, amount_cents: 1_12, state:)
       balance.update_columns(currency: Currency::EUR, holding_currency: Currency::EUR, holding_amount_cents:)

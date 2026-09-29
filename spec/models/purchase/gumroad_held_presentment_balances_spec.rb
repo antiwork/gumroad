@@ -2,24 +2,9 @@
 
 require "spec_helper"
 
-# End-to-end coverage of what the ledger records for a buyer-currency (presentment) purchase
-# whose funds Gumroad holds itself, driven through the real booking methods
-# (`increment_sellers_balance!` and `decrement_balance_for_refund_or_chargeback!`) rather than by
-# calling `BalanceTransaction::Amount` directly.
-#
-# The unit specs in spec/models/balance_transaction_spec.rb pin the branch that picks the currency.
-# These specs pin the thing that actually matters to a seller: that a real EUR purchase books a
-# balance the payout processors will accept. See gumroad-private#1471 — the whole incident was a
-# correct-looking `Amount` object flowing into a balance nobody could be paid from.
-#
-# ## What "Gumroad-held" means here, and why the holding fields are USD
-#
-# For funds Gumroad holds, `holding_*` is Gumroad's canonical record of what it owes the seller — a
-# liability, always denominated in USD, because USD is the currency every Gumroad-held payout is
-# computed and wired in. It is deliberately not a record of which currency Stripe is physically
-# sitting on: the platform account really does carry foreign-currency balances (a EUR charge can
-# settle and stay in EUR), but that is an account-level treasury position spanning every seller and
-# nothing about paying one seller follows from it.
+# Gumroad-held `holding_*` fields record the USD liability used for payouts, not Stripe's
+# settlement currency. Exercise the booking methods and payout guards together: an Amount's
+# currency alone does not establish that the resulting balance is payable.
 describe "Gumroad-held presentment balance booking", :vcr do
   # The Gumroad-held platform account: userless, which is what StripeChargeProcessor#holder_of_funds
   # keys on to return GUMROAD (in production this is merchant_accounts.id = 1, currency USD).
@@ -35,15 +20,8 @@ describe "Gumroad-held presentment balance booking", :vcr do
   let(:seller) { create(:user) }
   let(:product) { create(:product, user: seller, price_cents: 100_00) }
 
-  # A EUR-presentment purchase booked against the Gumroad-held account.
-  #
-  # `flow_of_funds` is assigned rather than obtained from a live charge because the flow of funds is
-  # exactly the input under test: production hands this method a flow whose settled amount is in the
-  # buyer's currency, and that is what used to leak into the holding fields. Building it here lets
-  # the spec state the shape it is about instead of depending on what a cassette happens to contain.
-  #
-  # `settled_cents` defaults to the EUR amount with no `merchant_account_*` leg, which is the shape
-  # a Gumroad-held charge produces — there is no destination payment, so those are nil.
+  # Set the settlement currency explicitly so coverage does not depend on a cassette's flow.
+  # Gumroad-held charges have no destination payment, so the merchant-account legs are nil.
   def build_presentment_purchase(settled_currency: Currency::EUR, settled_cents: 90_00, with_fx_quote: false)
     purchase = create(:purchase, seller:, link: product, price_cents: 100_00, fee_cents: 30_00,
                                  displayed_price_currency_type: Currency::EUR,
@@ -55,10 +33,7 @@ describe "Gumroad-held presentment balance booking", :vcr do
       presentment_total_cents: 90_00,
       presentment_gumroad_amount_cents: 9_00,
     }
-    # The quote-less shape. Forced-currency local methods (iDEAL, Bancontact) and any product
-    # already listed in the buyer's currency take no FX quote at all — Stripe does not convert, so
-    # the funds settle and stay in EUR. 19 of the affected production rows arrived this way, and a
-    # fix keyed on the quote rather than on who holds the funds would have missed every one of them.
+    # Settlement can stay in EUR without an FX quote; the holding liability still uses USD.
     unless with_fx_quote
       charge_presentment_attrs.merge!(stripe_fx_quote_id: nil, stripe_fx_quote_expires_at: nil, fx_rate: nil)
     end
@@ -98,8 +73,7 @@ describe "Gumroad-held presentment balance booking", :vcr do
       expect(purchase.merchant_account.holder_of_funds).to eq(HolderOfFunds::GUMROAD)
       expect(purchase.purchase_presentment.charge_presentment.stripe_fx_quote_id).to be_nil
       expect(purchase.purchase_presentment.presentment_currency).to eq(Currency::EUR)
-      # The canonical issued amount survives the missing quote — this is why gating the fix on the
-      # quote would not have worked. It is non-nil on the presence of a presentment row alone.
+      # A presentment row supplies the canonical amount even without an FX quote.
       expect(purchase.send(:presentment_canonical_issued_amount).currency).to eq(Currency::USD)
     end
 
@@ -117,7 +91,6 @@ describe "Gumroad-held presentment balance booking", :vcr do
       expect(balance_transaction.holding_amount_gross_cents).to eq(purchase.total_transaction_cents)
       expect(balance_transaction.holding_amount_net_cents).to eq(purchase.payment_cents)
 
-      # And explicitly not the buyer's currency, which is what the incident recorded.
       expect(balance_transaction.holding_amount_currency).to_not eq(Currency::EUR)
       expect(balance_transaction.holding_amount_gross_cents).to_not eq(90_00)
     end
@@ -171,10 +144,7 @@ describe "Gumroad-held presentment balance booking", :vcr do
       expect(transferred[:currency]).to eq(Currency::USD)
       expect(transferred[:amount_cents]).to eq(balance.holding_amount_cents)
 
-      # The assertion is that the currency guard did NOT fire, not that the whole method succeeded:
-      # once past the guard it goes on to make a real Stripe internal transfer, which is a network
-      # call well downstream of the currency decision under test. A `currency_mismatch` failure is
-      # what the incident produced and is what must be absent here.
+      # The transfer stub stops after the currency guard, so overall payout success is not asserted.
       expect(payment.failure_reason).to_not eq(Payment::FailureReason::CURRENCY_MISMATCH)
 
       # PayPal: the opposite failure mode, and the one with no error to notice. is_balance_payable
@@ -227,8 +197,7 @@ describe "Gumroad-held presentment balance booking", :vcr do
       expect(balance_transaction.holding_amount_net_cents).to be < 0
       expect(balance_transaction.holding_amount_net_cents).to eq(balance_transaction.issued_amount_net_cents)
 
-      # The label is what keys a balance, so a EUR negative leg would open a *second*, EUR-labelled
-      # balance for this seller — which is how one refund could re-break an already-repaired seller.
+      # Currency keys the balance; a EUR negative leg would not offset the USD credit.
       expect(purchase.purchase_refund_balance.holding_currency).to eq(Currency::USD)
     end
   end
@@ -258,12 +227,8 @@ describe "Gumroad-held presentment balance booking", :vcr do
     end
   end
 
-  # The quote-backed lane, which the incident did not affect — Stripe converts at settlement, so the
-  # settled currency was already USD and the old code produced a USD label by accident rather than
-  # on purpose. What this change does move is the holding GROSS: it was Stripe's settled figure
-  # (post-conversion, net of Stripe's FX spread) and is now the canonical issued amount Gumroad's
-  # books recorded. Both are USD, so nothing here was ever unpayable; the point of this spec is that
-  # the change to gross is deliberate and pinned rather than incidental.
+  # Stripe's USD settlement can differ from the canonical issued gross because of its FX spread.
+  # The holding gross follows the canonical amount; only the holding net accrues to the balance.
   describe "a quote-backed presentment charge that Stripe converted to USD" do
     # Stripe settled 96_00 USD after converting from the buyer's EUR; Gumroad's canonical issued
     # amount is the 100_00 the product was listed at. The two differ, which is what makes this
@@ -278,7 +243,6 @@ describe "Gumroad-held presentment balance booking", :vcr do
 
       expect(balance_transaction.holding_amount_currency).to eq(Currency::USD)
       expect(balance_transaction.holding_amount_gross_cents).to eq(purchase.total_transaction_cents)
-      # Explicitly not Stripe's settled amount, which is what the old branch wrote here.
       expect(balance_transaction.holding_amount_gross_cents).to_not eq(96_00)
       # The net — the only holding field that accumulates into the balance, and therefore the only
       # one that could move money — is unchanged by this.
@@ -287,9 +251,7 @@ describe "Gumroad-held presentment balance booking", :vcr do
     end
   end
 
-  # The affiliate's share lands on the Gumroad-held account in canonical USD cents even when the
-  # sale is charged into the seller's own account. The old code labelled those cents with the flow
-  # of funds' gumroad_amount currency — for a destination charge, the charge's own EUR.
+  # Affiliate credits are USD liabilities even when the seller's destination charge is in EUR.
   describe "an affiliate's share of a EUR charge into the seller's own Stripe account" do
     let(:seller_account) do
       create(:merchant_account, user: seller, currency: Currency::EUR,
@@ -390,7 +352,7 @@ describe "Gumroad-held presentment balance booking", :vcr do
       expect(recredit.balance.reload).to have_attributes(amount_cents: affiliate_cents, holding_amount_cents: affiliate_cents)
     end
 
-    # A credit booked before the fix, written past the model the way production still holds it.
+    # Legacy reversals must offset the recorded credit without relabelling its balance.
     describe "reversing a credit still on a legacy foreign-labelled balance" do
       def legacy_affiliate_balance!(state: "unpaid")
         purchase.increment_sellers_balance!
