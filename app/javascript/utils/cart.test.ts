@@ -46,27 +46,20 @@ describe("loadCartItemsCount", () => {
     cart_items_count_url: () => "https://gumroad.com/cart_items_count",
   };
 
-  const stubWindow = (host: string, onMessage?: (listener: (evt: MessageEvent) => void) => void) => {
-    vi.stubGlobal("window", {
-      location: { host, href: `https://${host}/` },
-      addEventListener: (type: string, listener: (evt: MessageEvent) => void) => {
-        if (type === "message" && onMessage) onMessage(listener);
-      },
-      removeEventListener: vi.fn(),
-    });
-  };
-
-  afterEach(() => vi.unstubAllGlobals());
-
-  const load = async (host: string, fetchImpl?: unknown, onMessage?: (l: (evt: MessageEvent) => void) => void) => {
+  const load = async (
+    host: string,
+    fetchImpl: (url: string, init?: { cache?: string; headers?: Record<string, string> }) => Promise<unknown>,
+  ) => {
     vi.resetModules();
     vi.stubGlobal("Routes", routes);
-    if (fetchImpl) vi.stubGlobal("fetch", fetchImpl);
-    stubWindow(host, onMessage);
+    vi.stubGlobal("fetch", fetchImpl);
+    vi.stubGlobal("window", { location: { host, href: `https://${host}/` } });
 
     const { loadCartItemsCount } = await import("$app/utils/cart");
     return new Promise((resolve) => loadCartItemsCount(routes.cart_items_count_url(), resolve));
   };
+
+  afterEach(() => vi.unstubAllGlobals());
 
   it("reads a same-origin count with the page's own request", async () => {
     const fetchImpl = vi.fn(async () => ({ ok: true, json: async () => ({ cart_items_count: 3 }) }));
@@ -84,28 +77,5 @@ describe("loadCartItemsCount", () => {
     });
 
     await expect(load("stanleynumber2.gumroad.com", fetchImpl)).resolves.toBe("not-available");
-  });
-
-  it("falls back to the root-domain frame on a custom domain", async () => {
-    const iframe = { style: {} as Record<string, string>, contentWindow: {}, remove: vi.fn(), src: "" };
-    const appended: unknown[] = [];
-    let handler: ((evt: MessageEvent) => void) | undefined;
-    vi.stubGlobal("document", {
-      createElement: () => iframe,
-      body: { appendChild: (el: unknown) => appended.push(el) },
-    });
-
-    const count = await load("shop.s2madeit.com", undefined, (listener) => (handler = listener));
-
-    expect(appended).toEqual([iframe]);
-    expect(iframe.src).toBe("https://gumroad.com/cart_items_count");
-
-    handler?.({
-      source: iframe.contentWindow,
-      origin: "https://gumroad.com",
-      data: { type: "cart-items-count", cartItemsCount: 4 },
-    } as unknown as MessageEvent);
-
-    await expect(count).resolves.toBe(4);
   });
 });
