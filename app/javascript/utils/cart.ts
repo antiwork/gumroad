@@ -11,14 +11,13 @@ let countPromise: Promise<CartItemsCount> | null = null;
 // The count is read from the storefront host when that host shares the root domain's cart cookie,
 // and from the root domain on a custom domain (which does not, and where the checkout button sends
 // buyers anyway).
-export const cartItemsCountIsSameOrigin = () => {
+export const cartItemsCountIsSameOrigin = (rootDomain: string) => {
   const { host } = window.location;
-  const rootHost = new URL(Routes.cart_items_count_url(), window.location.href).host;
-  return host === rootHost || host.endsWith(`.${rootHost}`);
+  return host === rootDomain || host.endsWith(`.${rootDomain}`);
 };
 
-export const cartItemsCountSrc = () =>
-  cartItemsCountIsSameOrigin() ? Routes.cart_items_count_path() : Routes.cart_items_count_url();
+export const cartItemsCountSrc = (rootDomain: string) =>
+  cartItemsCountIsSameOrigin(rootDomain) ? Routes.cart_items_count_path() : Routes.cart_items_count_url();
 
 // "not-available" means the count could not be read, which is not the same as having items in the
 // cart: treating it as truthy shows the cart shortcut to every visitor whose count is unreadable.
@@ -26,8 +25,8 @@ export const hasCartItems = (count: CartItemsCount | null): count is number => t
 
 // A same-origin count is fetched from the page itself: the page's own request carries the cart
 // cookie, while a frame only gets it when the browser grants the frame storage access.
-const readSameOriginCount = (): Promise<CartItemsCount> =>
-  fetch(Routes.cart_items_count_path(), { headers: { Accept: "application/json" }, cache: "no-store" })
+const readSameOriginCount = (src: string): Promise<CartItemsCount> =>
+  fetch(src, { headers: { Accept: "application/json" }, cache: "no-store" })
     .then((response) => (response.ok ? response.json() : Promise.reject(new Error("count unavailable"))))
     .then((body) => (typia.is<{ cart_items_count: number }>(body) ? body.cart_items_count : "not-available"))
     .catch(() => "not-available");
@@ -53,7 +52,8 @@ const readCountFromFrame = (src: string, resolve: (value: CartItemsCount) => voi
 export const loadCartItemsCount = (src: string, cb: (value: CartItemsCount) => void) => {
   if (!countPromise)
     countPromise = new Promise((resolve) => {
-      if (cartItemsCountIsSameOrigin()) void readSameOriginCount().then(resolve);
+      if (new URL(src, window.location.href).origin === window.location.origin)
+        void readSameOriginCount(src).then(resolve);
       else readCountFromFrame(src, resolve);
     });
   void countPromise.then(cb);
