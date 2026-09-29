@@ -307,23 +307,23 @@ describe Purchase::FinalizeConfirmedChargeService do
       end
     end
 
-    # Cash App Pay: the browser-return finalize can read the intent before Stripe settles it, fail the
-    # purchase, and then the payment_intent.succeeded webhook arrives seconds later for a charged buyer.
+    # An earlier finalize can fail a purchase whose intent then settles; the success webhook must
+    # still complete it for the charged buyer.
     context "when the intent succeeded after an earlier finalize failed the purchase" do
       let(:purchase) { create(:purchase_in_progress, card_country: "US", card_country_source: "stripe") }
 
       before do
         allow(purchase).to receive(:save_charge_data)
-        allow_any_instance_of(described_class).to receive(:handle_purchase_success)
       end
 
-      it "completes the purchase instead of reporting the card was not charged" do
+      it "completes and fulfills the purchase instead of reporting the card was not charged" do
         purchase.update_columns(purchase_state: "failed", stripe_error_code: "card_declined_generic_decline")
 
         result = described_class.new(purchase:, charge_intent: charge_intent_double).perform
 
         expect(result).to be_nil
-        expect(purchase.reload).to be_in_progress
+        # Real fulfillment, not just a restored row: the charged buyer ends up with access.
+        expect(purchase.reload).to be_successful
         expect(purchase.stripe_error_code).to be_nil
         expect(purchase).to have_received(:save_charge_data)
       end

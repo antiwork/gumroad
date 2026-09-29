@@ -55,12 +55,9 @@ class Purchase::FinalizeConfirmedChargeService < Purchase::BaseService
   private
     attr_reader :charge_intent
 
-    # An early finalize (browser return, abandonment sweep) can see the intent before Stripe settles
-    # it (Cash App Pay right after the QR scan, a card retried on the same intent after a decline)
-    # and fail the purchase; the buyer is then charged when the intent succeeds moments later.
-    # The intent funds this purchase, so the success webhook must complete it instead of
-    # answering "your card was not charged". Purchases that failed for their own reasons
-    # (error_code set, e.g. PPP or price validation) were never part of the charge and stay failed.
+    # A purchase failed by an earlier finalize (the intent had not settled yet) is still funded by
+    # this intent, so its success must complete the purchase instead of answering "your card was
+    # not charged". Purchases that failed for their own reason (error_code set) stay failed.
     def recoverable_late_success?
       purchase.failed? && charge_intent.succeeded? && purchase.error_code.blank? &&
         !purchase.refunds.exists? && !purchase.balance_transactions.exists?
