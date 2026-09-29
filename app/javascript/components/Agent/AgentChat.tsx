@@ -27,6 +27,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { DefinitionList } from "$app/components/ui/DefinitionList";
+import { PageHeader } from "$app/components/ui/PageHeader";
 import { Textarea } from "$app/components/ui/Textarea";
 
 // While the seller is within this many px of the bottom we keep auto-scrolling as new content
@@ -949,11 +950,12 @@ export const AgentChat = ({ greeting, suggestions, locked = null }: Props) => {
     }
   };
 
-  // Refused while a turn or a confirmation is in flight: both adopt the conversation id from their
-  // own response (onDone / interrupted-turn recovery), so switching under one would re-attach this
-  // new chat to the conversation the in-flight turn was sent to.
+  // Refused while anything can still adopt the old id or land on the old transcript: a turn in
+  // flight (onDone / interrupted-turn recovery), a pending confirmation, or a card still applying
+  // (after confirmAction has cleared its pending index).
+  const hasExecutingAction = messages.some((message) => message.actionStatus === "executing");
   const startNewChat = () => {
-    if (isSending || pendingActionIndex !== null || locked) return;
+    if (isSending || pendingActionIndex !== null || hasExecutingAction || locked) return;
     // A settled turn can still be draining suggestion chips — drop its late frames on the discarded
     // chat. Its connection stays open: only the server's verdict makes aborting one safe.
     sendGenerationRef.current += 1;
@@ -964,6 +966,8 @@ export const AgentChat = ({ greeting, suggestions, locked = null }: Props) => {
     setPendingActionIndex(null);
     setIsStreaming(false);
     stickToBottom.current = true;
+    // The button unmounts with the reset, which would drop keyboard focus to the page body.
+    inputRef.current?.focus({ preventScroll: true });
   };
 
   const confirmAction = async (index: number, action: ProposedAction, proposalMessageId?: string) => {
@@ -1036,24 +1040,31 @@ export const AgentChat = ({ greeting, suggestions, locked = null }: Props) => {
   };
 
   const hasText = input.trim().length > 0;
-  // The page header is hidden below `sm`, so the control lives at the top of the chat pane, and only
-  // appears once there is a conversation to leave.
   const canStartNewChat = !locked && (messages.length > 1 || conversationId !== null);
 
   return (
     <div className="flex h-full flex-col">
-      {canStartNewChat ? (
-        <div className="mx-auto flex w-full max-w-2xl justify-end px-4 pt-4 md:px-8 md:pt-8">
-          <Button
-            size="sm"
-            aria-label="New chat"
-            disabled={isSending || pendingActionIndex !== null}
-            onClick={startNewChat}
-          >
-            New chat
-          </Button>
-        </div>
-      ) : null}
+      {/* Below `sm` the header has no title, so it only shows when it carries the New chat action. */}
+      <PageHeader
+        title="Agent"
+        className={canStartNewChat ? "p-2 sm:p-4 md:p-8" : "hidden sm:flex"}
+        actions={
+          canStartNewChat ? (
+            // The header's mobile actions grid stretches a bare button to full width.
+            <div className="flex justify-end">
+              <Button
+                size="sm"
+                className="sm:px-4 sm:py-3 sm:text-base"
+                aria-label="New chat"
+                disabled={isSending || pendingActionIndex !== null || hasExecutingAction}
+                onClick={startNewChat}
+              >
+                New chat
+              </Button>
+            </div>
+          ) : null
+        }
+      />
       {/* The scroll container spans the full width so its scrollbar sits at the far right; the chat
           content inside stays narrow and centered (max-w-2xl). */}
       <div

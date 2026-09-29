@@ -1282,6 +1282,118 @@ describe("AgentChat new chat control", () => {
     await waitFor(() => expect(fetchLatestAgentConversation).toHaveBeenCalled());
 
     expect(screen.queryByLabelText("New chat")).toBeNull();
+
+    // Once the seller's first turn creates a conversation, there is one to leave.
+    streamAgentMessage.mockResolvedValue({
+      reply: "Hello.",
+      proposedAction: null,
+      proposalMessageId: null,
+      objects: [],
+      suggestions: [],
+      conversationId: "conv1",
+    });
+    await sendMessage("hi");
+    await waitFor(() => expect(screen.getByLabelText("New chat").hasAttribute("disabled")).toBe(false));
+  });
+
+  it("clears a typed draft so it does not carry into the new chat", async () => {
+    fetchLatestAgentConversation.mockResolvedValue(resumedConversation);
+
+    render(<AgentChat greeting="Hi" suggestions={[]} />);
+    await waitFor(() => expect(screen.getByText(RESUMED_REPLY)).toBeTruthy());
+
+    fireEvent.change(screen.getByLabelText("Message"), { target: { value: "half-typed thought" } });
+    fireEvent.click(screen.getByLabelText("New chat"));
+
+    expect(screen.getByLabelText<HTMLTextAreaElement>("Message").value).toBe("");
+  });
+
+  it("puts the seller back in the composer after starting a new chat", async () => {
+    fetchLatestAgentConversation.mockResolvedValue(resumedConversation);
+
+    render(<AgentChat greeting="Hi" suggestions={[]} />);
+    await waitFor(() => expect(screen.getByText(RESUMED_REPLY)).toBeTruthy());
+
+    // The button unmounts with the reset; focus must not fall back to the page body.
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    fireEvent.click(screen.getByLabelText("New chat"));
+
+    expect(document.activeElement).toBe(screen.getByLabelText("Message"));
+  });
+
+  it("starts the next turn without a conversation id after a settled turn adopted one", async () => {
+    fetchLatestAgentConversation.mockResolvedValue(null);
+    let handlers: Parameters<typeof streamAgentMessage>[1];
+    let finishStream: (value: Awaited<ReturnType<typeof streamAgentMessage>>) => void = () => {};
+    const done = {
+      reply: "First reply.",
+      proposedAction: null,
+      proposalMessageId: null,
+      objects: [],
+      suggestions: [],
+      conversationId: "conv1",
+    };
+    streamAgentMessage.mockImplementationOnce((_messages, streamHandlers) => {
+      handlers = streamHandlers;
+      return new Promise((resolve) => {
+        finishStream = resolve;
+      });
+    });
+
+    render(<AgentChat greeting="Hi" suggestions={[]} />);
+    await sendMessage("first");
+    // onDone unlocks the composer while the connection is still draining suggestion chips.
+    act(() => {
+      handlers?.onDone?.(done);
+    });
+    await waitFor(() => expect(screen.getByLabelText("New chat").hasAttribute("disabled")).toBe(false));
+
+    fireEvent.click(screen.getByLabelText("New chat"));
+    expect(screen.queryByText("First reply.")).toBeNull();
+
+    await act(async () => {
+      handlers?.onSuggestions?.(["Late chip"]);
+      finishStream({ ...done, suggestions: ["Late chip"] });
+      await Promise.resolve();
+    });
+    expect(screen.queryByText("Late chip")).toBeNull();
+    expect(screen.queryByLabelText("Suggested follow-ups")).toBeNull();
+
+    streamAgentMessage.mockResolvedValueOnce({ ...done, reply: "Second reply.", conversationId: "conv2" });
+    await sendMessage("second");
+    await waitFor(() => expect(streamAgentMessage).toHaveBeenCalledTimes(2));
+    expect(streamAgentMessage.mock.calls.at(-1)?.[2]).toBeNull();
+  });
+
+  it("cannot leave a card whose confirmation is still being reconciled", async () => {
+    fetchLatestAgentConversation.mockResolvedValue({
+      id: "conv1",
+      title: null,
+      messages: [
+        {
+          role: "assistant" as const,
+          content: "Applying your page edit.",
+          proposed_action: {
+            type: "api_write" as const,
+            params: { endpoint: "edit_user_custom_html", path_params: {}, params: { find: "a", replace: "b" } },
+            summary: "Edit the custom page.",
+            title: "Edit your page",
+          },
+          proposal_message_id: "message1",
+          action_status: "executing" as const,
+        },
+      ],
+    });
+    // The status read never settles, so the card stays on "Applying…".
+    fetchAgentActionStatus.mockImplementation(() => new Promise(() => {}));
+
+    render(<AgentChat greeting="Hi" suggestions={[]} />);
+    await waitFor(() => expect(fetchAgentActionStatus).toHaveBeenCalled());
+
+    const newChat = screen.getByLabelText("New chat");
+    expect(newChat.hasAttribute("disabled")).toBe(true);
+    fireEvent.click(newChat);
+    expect(screen.getByText("Applying your page edit.")).toBeTruthy();
   });
 
   it("cannot switch conversations under an in-flight turn", async () => {
