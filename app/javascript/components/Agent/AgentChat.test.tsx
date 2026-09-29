@@ -1243,6 +1243,12 @@ describe("AgentChat new chat control", () => {
     vi.clearAllMocks();
   });
 
+  // New chat asks first: leaving a conversation is not undoable from the tab.
+  const confirmNewChat = () => {
+    fireEvent.click(screen.getByLabelText("New chat"));
+    fireEvent.click(screen.getByRole("button", { name: "Start new chat" }));
+  };
+
   it("drops the resumed conversation so the next turn starts a new one", async () => {
     fetchLatestAgentConversation.mockResolvedValue(resumedConversation);
     streamAgentMessage.mockImplementation(async (_messages, handlers = {}) => {
@@ -1262,7 +1268,7 @@ describe("AgentChat new chat control", () => {
 
     // A draft typed before New chat belongs to the conversation being left, not the new one.
     fireEvent.change(screen.getByLabelText("Message"), { target: { value: "half-written draft" } });
-    fireEvent.click(screen.getByLabelText("New chat"));
+    confirmNewChat();
 
     // The resumed transcript is gone, the stale id with it, and the composer is empty.
     expect(screen.queryByText(RESUMED_REPLY)).toBeNull();
@@ -1303,7 +1309,7 @@ describe("AgentChat new chat control", () => {
     await waitFor(() => expect(screen.getByText(RESUMED_REPLY)).toBeTruthy());
 
     fireEvent.change(screen.getByLabelText("Message"), { target: { value: "half-typed thought" } });
-    fireEvent.click(screen.getByLabelText("New chat"));
+    confirmNewChat();
 
     expect(screen.getByLabelText<HTMLTextAreaElement>("Message").value).toBe("");
   });
@@ -1316,9 +1322,28 @@ describe("AgentChat new chat control", () => {
 
     // The button unmounts with the reset; focus must not fall back to the page body.
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
-    fireEvent.click(screen.getByLabelText("New chat"));
+    confirmNewChat();
 
-    expect(document.activeElement).toBe(screen.getByLabelText("Message"));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText("Message")));
+  });
+
+  it("asks before leaving the conversation, and keeps it when the seller backs out", async () => {
+    fetchLatestAgentConversation.mockResolvedValue(resumedConversation);
+
+    render(<AgentChat greeting="Hi" suggestions={[]} />);
+    await waitFor(() => expect(screen.getByText(RESUMED_REPLY)).toBeTruthy());
+
+    fireEvent.click(screen.getByLabelText("New chat"));
+    // Nothing is cleared until the seller confirms.
+    expect(screen.getByRole("dialog", { name: "Start a new chat?" })).toBeTruthy();
+    expect(screen.getByText(RESUMED_REPLY)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Keep this chat" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(screen.getByText(RESUMED_REPLY)).toBeTruthy();
+
+    await sendMessage("still here");
+    expect(streamAgentMessage.mock.calls.at(-1)?.[2]).toBe("conv1");
   });
 
   it("starts the next turn without a conversation id after a settled turn adopted one", async () => {
@@ -1348,7 +1373,7 @@ describe("AgentChat new chat control", () => {
     });
     await waitFor(() => expect(screen.getByLabelText("New chat").hasAttribute("disabled")).toBe(false));
 
-    fireEvent.click(screen.getByLabelText("New chat"));
+    confirmNewChat();
     expect(screen.queryByText("First reply.")).toBeNull();
 
     await act(async () => {

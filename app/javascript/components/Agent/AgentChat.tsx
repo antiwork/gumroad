@@ -23,6 +23,7 @@ import { RateLimitError } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
+import { Modal } from "$app/components/Modal";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
@@ -466,6 +467,7 @@ const ProposedActionCard = ({
 export const AgentChat = ({ greeting, suggestions, locked = null }: Props) => {
   const [messages, setMessages] = React.useState<DisplayMessage[]>([{ role: "assistant", content: greeting }]);
   const [input, setInput] = React.useState("");
+  const [confirmingNewChat, setConfirmingNewChat] = React.useState(false);
   const [isSending, setIsSending] = React.useState(false);
   // The stored conversation this chat belongs to (server-side external id). Set when the latest
   // conversation is resumed on mount or when the first turn's response creates one; sent with each
@@ -958,6 +960,7 @@ export const AgentChat = ({ greeting, suggestions, locked = null }: Props) => {
     (message) => message.actionStatus === "executing" && Boolean(message.proposalMessageId),
   );
   const startNewChat = () => {
+    setConfirmingNewChat(false);
     if (isSending || pendingActionIndex !== null || hasExecutingAction || locked) return;
     // A settled turn can still be draining suggestion chips — drop its late frames on the discarded
     // chat. Its connection stays open: only the server's verdict makes aborting one safe.
@@ -969,8 +972,9 @@ export const AgentChat = ({ greeting, suggestions, locked = null }: Props) => {
     setPendingActionIndex(null);
     setIsStreaming(false);
     stickToBottom.current = true;
-    // The button unmounts with the reset, which would drop keyboard focus to the page body.
-    inputRef.current?.focus({ preventScroll: true });
+    // The button unmounts with the reset, which would drop keyboard focus to the page body. The
+    // dialog also returns focus as it closes, so wait for that before claiming it.
+    window.setTimeout(() => inputRef.current?.focus({ preventScroll: true }), 0);
   };
 
   const confirmAction = async (index: number, action: ProposedAction, proposalMessageId?: string) => {
@@ -1060,7 +1064,7 @@ export const AgentChat = ({ greeting, suggestions, locked = null }: Props) => {
                 className="sm:px-4 sm:py-3 sm:text-base"
                 aria-label="New chat"
                 disabled={isSending || pendingActionIndex !== null || hasExecutingAction}
-                onClick={startNewChat}
+                onClick={() => setConfirmingNewChat(true)}
               >
                 New chat
               </Button>
@@ -1068,6 +1072,21 @@ export const AgentChat = ({ greeting, suggestions, locked = null }: Props) => {
           ) : null
         }
       />
+      <Modal
+        open={confirmingNewChat}
+        title="Start a new chat?"
+        onClose={() => setConfirmingNewChat(false)}
+        footer={
+          <>
+            <Button onClick={() => setConfirmingNewChat(false)}>Keep this chat</Button>
+            <Button color="primary" onClick={startNewChat}>
+              Start new chat
+            </Button>
+          </>
+        }
+      >
+        <p>This conversation will disappear from the screen, and you won't be able to open it again.</p>
+      </Modal>
       {/* The scroll container spans the full width so its scrollbar sits at the far right; the chat
           content inside stays narrow and centered (max-w-2xl). */}
       <div
