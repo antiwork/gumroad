@@ -445,7 +445,7 @@ module Product::Prices
 
       lowest_ids =
         if is_tiered_membership?
-          [lowest_tier_price(for_default_duration: true)&.variant_id]
+          lowest_priced_tier_ids
         elsif (options = preloaded_options)
           minimum = options.map(&:price_difference_cents).compact.min
           options.filter_map { |option| option.id if option.price_difference_cents == minimum }
@@ -454,6 +454,23 @@ module Product::Prices
         end
 
       (lowest_ids & restricted_ids).any?
+    end
+
+    # Every tier tied at the default-duration lowest price, since a code covering any of them
+    # gives the buyer that price.
+    def lowest_priced_tier_ids
+      cents = lowest_tier_price(for_default_duration: true)&.price_cents
+      return [] if cents.nil?
+
+      if (preloaded_tiers = preloaded_membership_tiers_with_prices)
+        tiers_for_displayed_price(preloaded_tiers)
+          .filter_map do |tier|
+            tier.id if tier.alive_prices.any? { |p| p.is_buy? && p.recurrence == subscription_duration && p.price_cents == cents }
+          end
+      else
+        VariantPrice.where(variant_id: tiers_for_displayed_price.map(&:id))
+                    .alive.is_buy.where(recurrence: subscription_duration, price_cents: cents).pluck(:variant_id)
+      end
     end
 
     def lowest_tier_price(for_default_duration: false)

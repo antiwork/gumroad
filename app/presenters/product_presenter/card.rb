@@ -8,7 +8,7 @@ class ProductPresenter::Card
   ASSOCIATIONS = [
     :alive_prices, :product_review_stat, :skus,
     {
-      default_offer_code: :variants,
+      default_offer_code: { variants: :variant_category },
       tiers: :alive_prices,
       user: [:custom_domain, { avatar_attachment: { blob: { variant_records: { image_attachment: :blob } } } }],
       variant_categories_alive: :alive_variants,

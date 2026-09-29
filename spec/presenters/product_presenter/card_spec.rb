@@ -347,6 +347,18 @@ describe ProductPresenter::Card do
           code.update!(variants: [lowest_tier])
           expect(described_class.new(product: membership.reload).for_web[:price_cents]).to eq base - (base * 0.5).round
         end
+
+        it "quotes the discount when the code covers any of several tiers tied at the lowest price" do
+          membership = create(:membership_product_with_preset_tiered_pricing, user: creator)
+          lowest_tier, other_tier = membership.tiers.sort_by { |tier| tier.prices.alive.is_buy.minimum(:price_cents) }
+          lowest_cents = lowest_tier.prices.alive.is_buy.minimum(:price_cents)
+          other_tier.prices.alive.is_buy.update_all(price_cents: lowest_cents)
+          code = create(:offer_code, user: creator, products: [membership], amount_percentage: 50, amount_cents: nil, variants: [other_tier])
+          membership.update!(default_offer_code: code)
+          base = membership.reload.display_price_cents(for_default_duration: true)
+
+          expect(described_class.new(product: membership.reload).for_web[:price_cents]).to eq base - (base * 0.5).round
+        end
       end
 
       it "does not show original price for zero discount" do
