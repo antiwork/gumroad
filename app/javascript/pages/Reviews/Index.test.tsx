@@ -18,7 +18,7 @@ vi.mock("$app/data/product_reviews", () => ({
   setProductRating: mocks.setProductRating,
   getReviewVideoUploadContext: vi.fn(),
 }));
-// The uploader fetches S3 credentials on mount; the review form needs none for a text edit.
+// The uploader fetches S3 credentials once a video review is chosen; a text edit needs none.
 vi.mock("$app/components/ReviewForm/useReviewVideoUploader", () => ({
   useReviewVideoUploader: () => ({ error: null, readyToUpload: false, evaporateUploader: null, s3UploadConfig: null }),
 }));

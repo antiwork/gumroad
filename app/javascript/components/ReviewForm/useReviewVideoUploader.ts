@@ -6,13 +6,21 @@ import { assertResponseError } from "$app/utils/request";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { useConfigureEvaporate } from "$app/components/useConfigureEvaporate";
 
-export const useReviewVideoUploader = ({ preview }: { preview?: boolean } = {}) => {
-  const loggedInUser = useLoggedInUser();
-  const [uploadContext, setUploadContext] = useState<ReviewVideoUploadContext | null>(null);
+// `enabled` keeps the context request lazy: the context is only needed once the buyer is editing a
+// video review, but every form used to fetch it on mount (Reviews/Index mounts one per purchase
+// awaiting review).
+export const useReviewVideoUploader = ({ enabled, preview }: { enabled: boolean; preview?: boolean }) => {
+  // The id, not the user object: the layouts call parseLoggedInUser inline, so every render of one,
+  // including each usePoll reload on the download page, hands down a new object and re-ran the effect.
+  // The id is still tracked, so a context loaded for another user is never reused.
+  const loggedInUserId = useLoggedInUser()?.id;
+  const [loaded, setLoaded] = useState<{ userId: string; context: ReviewVideoUploadContext } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const uploadContext = loaded != null && loaded.userId === loggedInUserId ? loaded.context : null;
+  const shouldFetch = enabled && !preview && loggedInUserId != null && uploadContext == null;
 
   useEffect(() => {
-    if (preview || !loggedInUser) return;
+    if (!shouldFetch || loggedInUserId == null) return;
     let isMounted = true;
 
     const initializeUploader = async () => {
@@ -20,9 +28,11 @@ export const useReviewVideoUploader = ({ preview }: { preview?: boolean } = {}) 
         const context = await getReviewVideoUploadContext();
         if (!isMounted) return;
 
-        setUploadContext(context);
+        setError(null);
+        setLoaded({ userId: loggedInUserId, context });
       } catch (err) {
         assertResponseError(err);
+        if (!isMounted) return;
         setError("Failed to get upload context");
       }
     };
@@ -32,7 +42,7 @@ export const useReviewVideoUploader = ({ preview }: { preview?: boolean } = {}) 
     return () => {
       isMounted = false;
     };
-  }, [loggedInUser, preview]);
+  }, [shouldFetch, loggedInUserId]);
 
   const { evaporateUploader, s3UploadConfig } = useConfigureEvaporate({
     aws_access_key_id: uploadContext?.aws_access_key_id ?? "",

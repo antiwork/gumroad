@@ -148,7 +148,10 @@ export const ReviewForm = React.forwardRef<
     const [videoRecorderUiState, setVideoRecorderUiState] = React.useState<ReviewVideoRecorderUiState | null>(null);
 
     const loggedInUser = useLoggedInUser();
-    const { error, readyToUpload, evaporateUploader, s3UploadConfig } = useReviewVideoUploader({ preview: !!preview });
+    const { error, readyToUpload, evaporateUploader, s3UploadConfig } = useReviewVideoUploader({
+      enabled: reviewMode === "video" && formState === "editing",
+      preview: !!preview,
+    });
 
     // Autosave bookkeeping: a monotonically increasing sequence number lets us
     // ignore responses from superseded autosaves (e.g. the buyer taps 3 stars,
