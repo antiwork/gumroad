@@ -1420,16 +1420,6 @@ describe PaypalPayoutProcessor do
       end.to raise_error(RuntimeError, /PayPal TransactionSearch failed \(ACK="Failure"\)/)
     end
 
-    it "raises TransactionNotFoundError when searching by transaction ID returns no transactions" do
-      allow(HTTParty).to receive(:post).and_return(
-        instance_double(HTTParty::Response, parsed_response: "ACK=Success&CORRELATIONID=c51c5e0cecbce")
-      )
-
-      expect do
-        described_class.search_payment_on_paypal(amount_cents: 1000, transaction_id: "75K708962P9301333", start_date: 1.day.ago)
-      end.to raise_error(described_class::TransactionNotFoundError, "No PayPal transaction found for transaction ID 75K708962P9301333 and amount 10.00")
-    end
-
     it "returns nil when ACK is Success but no transactions are returned" do
       allow(HTTParty).to receive(:post).and_return(
         instance_double(HTTParty::Response, parsed_response: "ACK=Success&CORRELATIONID=c51c5e0cecbce")

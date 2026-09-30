@@ -1,10 +1,6 @@
 # frozen_string_literal: true
 
 class PaypalPayoutProcessor
-  # A TransactionSearch by transaction ID that succeeded but returned no rows. Kept a RuntimeError
-  # so callers that rescue the old bare raise still do.
-  class TransactionNotFoundError < RuntimeError; end
-
   # We would split up the payment into chunks of at most this size, only when necessary, in order to get around the MassPay API limitations.
   # See perform_payment_in_split_mode. This is a hack that should be replaced with a proper split payout mechanism that supports a single Balance being
   # split into separate Payments, since a single day's balance could be larger than the PayPal payout limit.
@@ -670,7 +666,7 @@ class PaypalPayoutProcessor
       return if transaction_id.blank?
       # But if we had a transaction ID we should find a corresponding transaction on PayPal,
       # raise an error if that's not the case.
-      raise TransactionNotFoundError, "No PayPal transaction found for transaction ID #{transaction_id} and amount #{amt_str}"
+      raise "No PayPal transaction found for transaction ID #{transaction_id} and amount #{amt_str}"
     end
   end
 
