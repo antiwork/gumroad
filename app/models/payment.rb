@@ -540,13 +540,19 @@ class Payment < ApplicationRecord
             PaypalPayoutProcessor.update_split_payment_state(self)
           end
         else
-          paypal_response = PaypalPayoutProcessor.search_payment_on_paypal(amount_cents:, transaction_id: txn_id, payment_address:,
-                                                                           start_date: created_at.beginning_of_day - 1.day,
-                                                                           end_date: created_at.end_of_day + 1.day)
+          # PayPal returns an unclaimed payout's money after ~30 days, so one it no longer knows
+          # is settled: cancel (no failure pause/email) instead of the impossible unclaimed => failed.
+          stale_unclaimed = state?(UNCLAIMED) && created_at < UNCLAIMED_LOOKUP_WINDOW.ago
+          paypal_response = begin
+            PaypalPayoutProcessor.search_payment_on_paypal(amount_cents:, transaction_id: txn_id, payment_address:,
+                                                           start_date: created_at.beginning_of_day - 1.day,
+                                                           end_date: created_at.end_of_day + 1.day)
+          rescue PaypalPayoutProcessor::TransactionNotFoundError
+            # A search by transaction ID raises instead of returning nil when PayPal has no such row.
+            raise unless stale_unclaimed
+            nil
+          end
           if paypal_response.nil?
-            # PayPal returns an unclaimed payout's money after ~30 days, so one it no longer knows
-            # is settled: cancel (no failure pause/email) instead of the impossible unclaimed => failed.
-            stale_unclaimed = state?(UNCLAIMED) && created_at < UNCLAIMED_LOOKUP_WINDOW.ago
             transition_to_new_state(stale_unclaimed ? "cancelled" : "failed")
           else
             transition_to_new_state(paypal_response[:state], transaction_id: paypal_response[:transaction_id],
