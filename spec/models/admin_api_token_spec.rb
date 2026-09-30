@@ -20,6 +20,22 @@ describe AdminApiToken do
     end
   end
 
+  describe "scope" do
+    it "defaults to admin and can be minted as piracy" do
+      actor = create(:admin_user)
+
+      _, admin_token = described_class.mint_with_plaintext!(actor_user_id: actor.id)
+      _, piracy_token = described_class.mint_with_plaintext!(actor_user_id: actor.id, scope: described_class::PIRACY_SCOPE)
+
+      expect(admin_token.scope).to eq("admin")
+      expect(piracy_token.scope).to eq("piracy")
+    end
+
+    it "rejects an unknown scope" do
+      expect(build(:admin_api_token, scope: "root")).not_to be_valid
+    end
+  end
+
   describe ".mint_with_plaintext!" do
     it "returns the plaintext token and token row" do
       actor = create(:admin_user)

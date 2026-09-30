@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_16_130000) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_16_130002) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -92,6 +92,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_16_130000) do
     t.datetime "expires_at"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "scope", limit: 32, default: "admin", null: false
     t.index ["actor_user_id"], name: "index_admin_api_tokens_on_actor_user_id"
     t.index ["expires_at"], name: "index_admin_api_tokens_on_expires_at"
     t.index ["external_id"], name: "index_admin_api_tokens_on_external_id", unique: true
@@ -1661,6 +1662,31 @@ create_table "ping_deliveries", charset: "utf8mb4", collation: "utf8mb4_unicode_
     t.index ["created_at"], name: "index_ping_deliveries_on_created_at"
     t.index ["purchase_id", "created_at"], name: "index_ping_deliveries_on_purchase_id_and_created_at"
     t.index ["user_id", "created_at"], name: "index_ping_deliveries_on_user_id_and_created_at"
+  end
+
+  create_table "piracy_reports", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.string "external_id", limit: 21, null: false
+    t.bigint "seller_id", null: false
+    t.bigint "product_id", null: false
+    t.string "source", limit: 16, null: false
+    t.string "ticket_url", limit: 1024
+    t.string "state", limit: 32, null: false
+    t.string "url", limit: 2048, null: false
+    t.string "normalized_url_digest", limit: 64, null: false
+    t.string "recipient_name"
+    t.string "recipient_email"
+    t.string "recipient_source_url", limit: 2048
+    t.string "screening_verdict", limit: 16
+    t.json "screening_checks"
+    t.datetime "screened_at"
+    t.text "notice_text"
+    t.string "notice_digest", limit: 64
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["external_id"], name: "index_piracy_reports_on_external_id", unique: true
+    t.index ["product_id", "normalized_url_digest"], name: "index_piracy_reports_on_product_id_and_normalized_url_digest", unique: true
+    t.index ["seller_id", "created_at"], name: "index_piracy_reports_on_seller_id_and_created_at"
+    t.index ["state"], name: "index_piracy_reports_on_state"
   end
 
   create_table "platform_blocks", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|

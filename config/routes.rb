@@ -433,6 +433,13 @@ Rails.application.routes.draw do
             end
           end
 
+          resources :piracy_reports, only: [:index, :show, :create] do
+            member do
+              post :start_screening
+              post :screen
+            end
+          end
+
           resources :stranded_buyers, only: [] do
             collection do
               get :scan

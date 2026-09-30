@@ -1,0 +1,10 @@
+# Verified takedown contacts, keyed by host. An entry covers its subdomains, so "google.com"
+# also covers drive.google.com. Add an entry only after checking the contact against the
+# Copyright Office directory (https://dmca.copyright.gov/osp/) or the site's own DMCA page,
+# and record that page as source_url.
+#
+# example.net:
+#   name: Example Net Inc.
+#   email: copyright@example.net
+#   source_url: https://dmca.copyright.gov/osp/...
+{}
