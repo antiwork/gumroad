@@ -255,6 +255,7 @@ jobs:
         id: test_image_tag
         env:
           WEB_BASE_REPO: antiwork/gumroad-web_base
+          WEB_REPO: antiwork/gumroad-web
         run: |
           set -e
           # Resolve the base test SHA (used as a hash input).
@@ -262,25 +263,48 @@ jobs:
           TAG=test-$(BASE_TEST_SHA=$WEB_BASE_TEST_SHA docker/base/generate_tag_for_test_image.sh)
           echo "tag=$TAG" >> $GITHUB_OUTPUT
           echo "Computed test image tag: $TAG"
+          if docker manifest inspect "$WEB_REPO:$TAG" > /dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Set up Docker Buildx
         uses: useblacksmith/setup-docker-builder@v1
         with:
           max-cache-size-mb: "204800"
-      - name: Restore asset precompile cache
-        id: asset_cache
-        uses: actions/cache@v4
+      # vite_ruby skips `vite build` when public/vite-test and its digest are restored.
+      # Keep the inputs in sync with preview_asset_cache_inputs() in
+      # .buildkite/scripts/preview_asset_cache.sh. No restore-keys: vite_ruby's digest
+      # ignores the Tailwind @source paths, so a prefix restore could keep stale CSS.
+      - name: Restore Vite test build cache
+        id: vite_cache
+        if: steps.test_image_tag.outputs.exists != 'true'
+        uses: actions/cache/restore@v4
         with:
-          path: /tmp/asset-cache
-          key: asset-precompile-${{ hashFiles('app/assets/**', 'app/javascript/**', 'config/webpack/**', 'config/shakapacker.yml', 'Gemfile.lock', 'package-lock.json', '.ruby-version') }}
-          restore-keys: |
-            asset-precompile-
+          path: /tmp/vite-cache
+          key: >-
+            vite-test-v1-${{ hashFiles(
+              'app/javascript/**', 'app/views/**',
+              'config/routes.rb', 'config/routes/**', 'config/domain.rb',
+              'config/application.rb', 'config/boot.rb', 'config/environment.rb',
+              'config/environments/**', 'config/redis.rb',
+              'lib/catch_bad_request_errors.rb', 'lib/utilities/global_config.rb',
+              'config/initializers/js-routes.rb', 'config/vite.json', 'config/vite/**',
+              'config/currencies.json', 'lib/json_schemas/**', 'lib/tasks/**', 'Rakefile',
+              'public/**', 'vendor/assets/**', 'patches/**', 'scripts/build_pages_tailwind.mjs',
+              'docker/base/**', 'docker/web/Dockerfile.test', '.github/workflows/tests.yml',
+              'package.json', 'package-lock.json', '.npmrc', 'tsconfig.json',
+              'vite.config.ts', 'vite.config.widget.ts', 'postcss.config.js',
+              'Gemfile.lock', '.ruby-version') }}
       - name: Build and push test image
         env:
           WEB_BASE_REPO: antiwork/gumroad-web_base
           WEB_BASE_TEST_REPO: antiwork/gumroad-web_base_test
           WEB_REPO: antiwork/gumroad-web
           TEST_IMAGE_TAG: ${{ steps.test_image_tag.outputs.tag }}
-          ASSET_CACHE_HIT: ${{ steps.asset_cache.outputs.cache-hit }}
+          TEST_EXISTS: ${{ steps.test_image_tag.outputs.exists }}
+          # Fork PRs run in main's cache scope, so only pushes write the cache.
+          SAVE_VITE_CACHE: ${{ github.event_name == 'push' && steps.vite_cache.outputs.cache-hit != 'true' }}
         run: |
           set -e
           GREEN='\033[0;32m'
@@ -291,11 +315,10 @@ jobs:
           docker pull --quiet ruby:$(cat .ruby-version)-slim-bookworm
           WEB_BASE_TEST_SHA=$(WEB_BASE_DOCKERFILE_FROM=ruby:$(cat .ruby-version)-slim-bookworm docker/base/generate_tag_for_web_base_test.sh)
 
-          # Check if both images already exist (content-addressed cache hit).
+          # Check if the images already exist (content-addressed cache hit).
+          # TEST_EXISTS comes from the tag step, which also gates the Vite cache.
           BASE_TEST_EXISTS=false
-          TEST_EXISTS=false
           docker manifest inspect $WEB_BASE_TEST_REPO:$WEB_BASE_TEST_SHA > /dev/null 2>&1 && BASE_TEST_EXISTS=true
-          docker manifest inspect $WEB_REPO:$TEST_IMAGE_TAG > /dev/null 2>&1 && TEST_EXISTS=true
 
           if [ "$TEST_EXISTS" = "true" ]; then
             logger "$WEB_REPO:$TEST_IMAGE_TAG already exists — nothing to build"
@@ -338,8 +361,6 @@ jobs:
             docker tag $WEB_REPO:test-${TEST_IMAGE_TAG#test-} $WEB_REPO:$TEST_IMAGE_TAG
 
             # Run asset precompile + docker commit (Makefile's post-build steps).
-            # Volume-mount cached precompile artifacts so Sprockets/Shakapacker
-            # can skip recompiling unchanged assets (~4 min → ~30s on cache hit).
             COMPOSE_PROJECT_NAME=web_${{ github.run_id }}_${{ github.run_attempt }} \
               docker compose -f docker/docker-compose-test-and-ci.yml up -d db_test redis elasticsearch
             docker run --rm --entrypoint="" \
@@ -347,16 +368,15 @@ jobs:
               $WEB_REPO:$TEST_IMAGE_TAG \
               docker/ci/wait_on_connection.sh db_test 3306
 
-            # Prepare cached asset precompile artifacts.
-            # Copy cached outputs into the container BEFORE running precompile
-            # so Sprockets/Shakapacker can skip recompiling unchanged assets.
-            # (Volume mounts won't work — docker commit ignores mounted paths.)
-            ASSET_MOUNTS=""
-            if [ "$ASSET_CACHE_HIT" = "true" ] || [ -d /tmp/asset-cache/public_assets ]; then
-              logger "Restoring cached asset precompile artifacts"
-              ASSET_MOUNTS="-v /tmp/asset-cache:/tmp/asset-cache:ro"
+            # Copy the cached Vite build into the container before precompile.
+            # The copy must land in the container filesystem, because docker
+            # commit ignores mounted paths.
+            VITE_CACHE_MOUNT=""
+            if [ -d /tmp/vite-cache/public_vite_test ]; then
+              logger "Restoring cached Vite test build"
+              VITE_CACHE_MOUNT="-v /tmp/vite-cache:/tmp/vite-cache:ro"
             else
-              logger "No asset cache found — full precompile will run"
+              logger "No Vite test build cache — full Vite build will run"
             fi
 
             # shellcheck disable=SC2086
@@ -366,38 +386,30 @@ jobs:
               --shm-size="2g" \
               --memory-swappiness="0" \
               -e RAILS_ENV="test" \
-              $ASSET_MOUNTS \
+              $VITE_CACHE_MOUNT \
               --label routes_compiled=true \
               --name worker_web_${{ github.run_id }}_${{ github.run_attempt }} \
               $WEB_REPO:$TEST_IMAGE_TAG \
               bash -c '
-                # Restore cached assets if available (before precompile).
-                if [ -d /tmp/asset-cache/public_assets ]; then
-                  echo "Copying cached assets into container..."
-                  cp -a /tmp/asset-cache/public_assets /app/public/assets 2>/dev/null || true
-                  cp -a /tmp/asset-cache/public_packs_test /app/public/packs-test 2>/dev/null || true
+                if [ -d /tmp/vite-cache/public_vite_test ]; then
                   mkdir -p /app/tmp/cache
-                  cp -a /tmp/asset-cache/tmp_cache_assets /app/tmp/cache/assets 2>/dev/null || true
-                  cp -a /tmp/asset-cache/tmp_shakapacker /app/tmp/shakapacker 2>/dev/null || true
-                  chown -R app:app /app/public/assets /app/public/packs-test /app/tmp/cache /app/tmp/shakapacker 2>/dev/null || true
+                  cp -a /tmp/vite-cache/public_vite_test /app/public/vite-test
+                  cp -a /tmp/vite-cache/tmp_cache_vite /app/tmp/cache/vite
+                  chown -R app:app /app/public/vite-test /app/tmp/cache
                 fi
                 su -c "npm run setup && bundle exec rake db:setup assets:precompile --trace" app
               '
 
-            # Extract updated asset artifacts for next run's cache.
-            logger "Saving asset precompile artifacts to cache"
             CONTAINER=worker_web_${{ github.run_id }}_${{ github.run_attempt }}
-            mkdir -p /tmp/asset-cache
-            for dir_pair in \
-              "public/assets:public_assets" \
-              "public/packs-test:public_packs_test" \
-              "tmp/cache/assets:tmp_cache_assets" \
-              "tmp/shakapacker:tmp_shakapacker"; do
-              src="${dir_pair%%:*}"
-              dst="${dir_pair##*:}"
-              rm -rf "/tmp/asset-cache/$dst"
-              docker cp "$CONTAINER:/app/$src" "/tmp/asset-cache/$dst" 2>/dev/null || true
-            done
+            if [ "$SAVE_VITE_CACHE" = "true" ]; then
+              logger "Saving Vite test build for the cache"
+              mkdir -p /tmp/vite-cache
+              if ! { docker cp "$CONTAINER:/app/public/vite-test" /tmp/vite-cache/public_vite_test \
+                  && docker cp "$CONTAINER:/app/tmp/cache/vite" /tmp/vite-cache/tmp_cache_vite; }; then
+                logger "Vite test build copy failed (non-fatal) — nothing will be cached"
+                rm -rf /tmp/vite-cache
+              fi
+            fi
 
             # Bake the prepared test database into the image. The db:setup
             # above left a fully prepared gumroad_test in this stack's MySQL;
@@ -436,6 +448,12 @@ jobs:
               && logger "Pushed $WEB_REPO:test-cache" \
               || logger "Failed to push test-cache (non-fatal)"
           fi
+      - name: Save Vite test build cache
+        if: github.event_name == 'push' && steps.test_image_tag.outputs.exists != 'true' && steps.vite_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: /tmp/vite-cache
+          key: ${{ steps.vite_cache.outputs.cache-primary-key }}
 
   test_minitest:
     name: Test Minitest ${{ matrix.ci_node_index }}${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository && ' (internal PR noop)' || '' }}
