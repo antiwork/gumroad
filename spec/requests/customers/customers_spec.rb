@@ -529,22 +529,22 @@ describe "Sales page", type: :system, js: true do
       end
     end
 
-    describe "content accesses" do
-      it "shows content accesses for regular products and hides them for bundle purchases" do
+    describe "times opened" do
+      it "shows times opened for regular products and hides them for bundle purchases" do
         create(:url_redirect, purchase: purchase1, uses: 42)
         create(:url_redirect, purchase: purchase3, uses: 25)
 
         index_model_records(Purchase)
 
         visit customer_sale_path(purchase1.external_id)
-        expect(page).to have_text("Content accesses 42", normalize_ws: true)
+        expect(page).to have_text("Times opened 42", normalize_ws: true)
         expect(page).not_to have_text("Download count")
 
         visit customer_sale_path(purchase3.external_id)
-        expect(page).not_to have_text("Content accesses")
+        expect(page).not_to have_text("Times opened")
       end
 
-      it "hides content accesses for coffee products" do
+      it "hides times opened for coffee products" do
         coffee_product = create(:product, user: seller, name: "Buy Me Coffee", native_type: Link::NATIVE_TYPE_COFFEE, price_cents: 500)
         coffee_purchase = create(:purchase, link: coffee_product, full_name: "Coffee Buyer", email: "coffee@example.com", seller:, created_at: 1.day.ago)
         create(:url_redirect, purchase: coffee_purchase, uses: 10)
@@ -552,7 +552,7 @@ describe "Sales page", type: :system, js: true do
         index_model_records(Purchase)
 
         visit customer_sale_path(coffee_purchase.external_id)
-        expect(page).not_to have_text("Content accesses")
+        expect(page).not_to have_text("Times opened")
       end
     end
 
