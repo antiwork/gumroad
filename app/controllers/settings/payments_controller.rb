@@ -451,29 +451,33 @@ class Settings::PaymentsController < Settings::BaseController
 
     # The form echoes stored fields back, so an unchanged ZIP is skipped and a stored military ZIP can't lock
     # the seller out of unrelated settings, unless this save switches the account type or the stored country,
-    # or is the one that first sends the address to Stripe. That check runs before any payout change is saved.
+    # or creates the Stripe account. That check runs before any payout change is saved.
     # Country and business status resolve as UpdateUserComplianceInfo does.
     def military_zip_fields(compliance_info)
       us_code = Compliance::Countries::USA.alpha2
-      first_stripe_setup = first_stripe_setup_from_save?
-      submitted = params[:user].presence || (first_stripe_setup ? ActionController::Parameters.new : nil)
-      return [] if submitted.blank? && !first_stripe_setup
+      submitted = params[:user].presence || ActionController::Parameters.new
 
       business = submitted[:is_business].nil? ? compliance_info.is_business? : ActiveModel::Type::Boolean.new.cast(submitted[:is_business])
       account_type_changed = business != compliance_info.is_business?
       # A business record without its own country is validated under the personal country (legal_entity_country).
       stored_business_country_code = compliance_info.business_country_code.presence || compliance_info.country_code
+      business_country_code = submitted[:business_country].presence || stored_business_country_code
+      personal_country_code = submitted[:country].presence || compliance_info.country_code
+      first_stripe_setup = first_stripe_setup_from_save?(business ? business_country_code : compliance_info.country_code)
+      return [] if params[:user].blank? && !first_stripe_setup
+
       fields = if business
         [
-          [:business_zip_code, submitted[:business_country].presence || stored_business_country_code, stored_business_country_code],
-          [:zip_code, submitted[:country].presence || compliance_info.country_code, compliance_info.country_code],
+          [:business_zip_code, business_country_code, stored_business_country_code],
+          [:zip_code, personal_country_code, compliance_info.country_code],
         ]
       else
         [[:zip_code, compliance_info.country_code, compliance_info.country_code]]
       end
 
       fields.filter_map do |field, country_code, stored_country_code|
-        zip_code = submitted.key?(field) ? submitted[field] : (first_stripe_setup ? compliance_info.public_send(field) : nil)
+        # Compliance updates ignore a blank ZIP, so the stored one is what reaches Stripe.
+        zip_code = submitted[field].presence || (first_stripe_setup ? compliance_info.public_send(field) : nil)
         next unless country_code == us_code && zip_code.present?
 
         newly_sent = first_stripe_setup || account_type_changed || stored_country_code != us_code
@@ -482,12 +486,11 @@ class Settings::PaymentsController < Settings::BaseController
       end
     end
 
-    # Whether this save leaves the seller with a bank account and no Stripe account, so the update below
-    # creates one. Mirrors the branch order in UpdatePayoutMethod: bank fields win over a PayPal address.
-    # Any save by a seller with a bank account and no Stripe account creates it, so that seller has to fix a
-    # saved military ZIP first: the alternative is the same rejection from Stripe after the save.
-    def first_stripe_setup_from_save?
+    # Whether the update below creates the Stripe account. Every save by a seller with a bank account and no
+    # Stripe account does, so a saved military ZIP has to be fixed first. Bank fields win over a PayPal address.
+    def first_stripe_setup_from_save?(legal_entity_country_code)
       return false if current_seller.stripe_connect_account.present? || StripeMerchantAccountManager.blocks_new_managed_account?(current_seller)
+      return false unless current_seller.native_payouts_supported?(country_code: legal_entity_country_code)
 
       bank = params[:bank_account]
       bank_fields = bank.present? && bank[:type].present? && (bank[:account_holder_full_name].present? || bank[:account_number].present?)
