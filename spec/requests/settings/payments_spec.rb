@@ -6792,9 +6792,9 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         expect(page).not_to have_text("paused for a security review")
 
         within_section "Payout schedule", section_element: :section do
-          toggle = find_field("Pause payouts", disabled: false, checked: false)
+          toggle = find_field("Pause payouts", disabled: true, checked: true)
           toggle.hover
-          expect(toggle).to have_tooltip(text: "Gumroad keeps part of each payout in reserve while your chargeback rate is above the limit. This switch controls your own pause only.")
+          expect(toggle).to have_tooltip(text: "Payout pausing is managed automatically while the reserve hold is active.")
         end
       end
 
@@ -6852,6 +6852,56 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(user.reload.payouts_paused_by_user?).to be false
+      end
+
+      context "when a chargeback-rate hold applies" do
+        before do
+          user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+          user.comments.create!(
+            content: "Payouts automatically paused due to chargeback rate.",
+            comment_type: Comment::COMMENT_TYPE_ON_PROBATION,
+            author_name: User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:high_chargeback_rate]
+          )
+        end
+
+        it "lets a seller who also paused their payouts turn their own pause off" do
+          user.update!(payouts_paused_by_user: true)
+          visit settings_payments_path
+
+          expect(page).to have_status(text: "Turn off Pause payouts below and save")
+          within_section "Payout schedule", section_element: :section do
+            uncheck "Pause payouts", checked: true
+          end
+          click_on "Update settings"
+
+          expect(page).to have_alert(text: "Thanks! You're all set.")
+          expect(user.reload.payouts_paused_by_user?).to be false
+          expect(user.chargeback_rate_payout_reserve_active?).to be true
+
+          refresh
+
+          expect(page).to have_status(text: "We're holding 25% of your balance in reserve")
+          within_section "Payout schedule", section_element: :section do
+            expect(page).to have_field("Pause payouts", disabled: true, checked: true)
+          end
+        end
+
+        it "keeps the toggle locked when the seller has not paused their own payouts" do
+          visit settings_payments_path
+
+          within_section "Payout schedule", section_element: :section do
+            expect(page).to have_field("Pause payouts", disabled: true, checked: true)
+          end
+        end
+      end
+
+      it "keeps the toggle locked for a security hold even when the seller also paused their payouts" do
+        user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM, payouts_paused_by_user: true)
+        visit settings_payments_path
+
+        within_section "Payout schedule", section_element: :section do
+          expect(page).to have_field("Pause payouts", disabled: true, checked: true)
+        end
       end
 
       it "disables the toggle when payouts are paused internally by admin" do

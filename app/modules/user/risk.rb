@@ -487,8 +487,15 @@ module User::Risk
   # on top of the hold also stays a full skip — payouts_paused_by_source still reports
   # "system" when both are set, so this flag is what the UI and the payment path share.
   def chargeback_rate_payout_reserve_active?
-    return false if Feature.active?(:disable_chargeback_rate_payout_reserve)
     return false if payouts_paused_by_user?
+
+    chargeback_rate_payout_reserve_available?
+  end
+
+  # Same as above but ignoring the seller's own pause: whether turning that pause off would
+  # bring the reserve back.
+  def chargeback_rate_payout_reserve_available?
+    return false if Feature.active?(:disable_chargeback_rate_payout_reserve)
     # Deletion/GDPR set the pause flag without touching payouts_paused_by, so an account
     # deleted mid-hold still matches the predicate below. Deleted accounts get no carve-out.
     return false if deleted?

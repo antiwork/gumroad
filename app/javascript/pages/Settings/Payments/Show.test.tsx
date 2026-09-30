@@ -161,8 +161,8 @@ const pageProps = (userOverrides: Partial<User> = {}, complianceOverrides: Parti
   formatted_balance_to_forfeit_on_payout_method_change: null,
   paypal_switch_loses_bank_rail: false,
   payouts_paused_internally: false,
+  payout_reserve_available: false,
   payouts_paused_by: null,
-  payouts_paused_for_chargeback_rate: false,
   account_status: {
     show_section: false,
     is_suspended: false,
@@ -549,62 +549,6 @@ describe("full-SSN re-entry validation", () => {
 
     expect(fullSsnError()).toBeTruthy();
     expect(mocks.put).not.toHaveBeenCalled();
-  });
-});
-
-// Under a chargeback-volume hold the seller's own pause stays operable; other internal pauses do not.
-describe("Pause payouts switch under a chargeback-volume hold", () => {
-  const chargebackHold = {
-    payouts_paused_internally: true,
-    payouts_paused_by: "system",
-    payouts_paused_for_chargeback_rate: true,
-    payout_reserve_percent: 25,
-  };
-  const pauseSwitch = () => screen.getByRole<HTMLInputElement>("switch", { name: "Pause payouts" });
-  const renderWith = (overrides: Record<string, unknown>) => {
-    mocks.usePage.mockReturnValue({ props: { ...pageProps(), ...overrides } });
-    render(<PaymentsPage />);
-  };
-
-  it("leaves the seller's own switch operable and honest about its own state", () => {
-    renderWith({ ...chargebackHold, payouts_paused_by_user: false });
-
-    expect(pauseSwitch().disabled).toBe(false);
-    expect(pauseSwitch().checked).toBe(false);
-  });
-
-  it("lets a seller who had paused before the hold turn their own pause off", () => {
-    renderWith({ ...chargebackHold, payouts_paused_by_user: true });
-
-    expect(pauseSwitch().checked).toBe(true);
-
-    fireEvent.click(pauseSwitch());
-    save();
-
-    expect(mocks.put).toHaveBeenCalledWith(
-      "/settings_payments",
-      expect.objectContaining({ payouts_paused_by_user: false }),
-    );
-  });
-
-  it("keeps the switch disabled when Stripe paused the payouts", () => {
-    renderWith({ payouts_paused_internally: true, payouts_paused_by: "stripe" });
-
-    expect(pauseSwitch().disabled).toBe(true);
-    expect(pauseSwitch().checked).toBe(true);
-  });
-
-  it("keeps the switch disabled when Gumroad paused the payouts", () => {
-    renderWith({ payouts_paused_internally: true, payouts_paused_by: "admin" });
-
-    expect(pauseSwitch().disabled).toBe(true);
-    expect(pauseSwitch().checked).toBe(true);
-  });
-
-  it("keeps the switch disabled for a system pause that is not the chargeback hold", () => {
-    renderWith({ payouts_paused_internally: true, payouts_paused_by: "system" });
-
-    expect(pauseSwitch().disabled).toBe(true);
   });
 });
 
@@ -1167,5 +1111,67 @@ describe("Japanese (Kanji) variation fields", () => {
     save();
 
     expect(mocks.put).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("Pause payouts switch under an internal hold", () => {
+  const pauseSwitch = () => screen.getByRole<HTMLInputElement>("switch", { name: "Pause payouts" });
+  const renderHeld = (overrides: Record<string, unknown>) => {
+    mocks.usePage.mockReturnValue({
+      props: {
+        ...pageProps(),
+        payouts_paused_internally: true,
+        payouts_paused_by: "system",
+        account_status: { ...pageProps().account_status, show_section: true },
+        ...overrides,
+      },
+    });
+    render(<PaymentsPage />);
+  };
+
+  it("lets a creator turn off their own pause when only the chargeback-rate hold applies", () => {
+    renderHeld({ payout_reserve_available: true, payouts_paused_by_user: true });
+
+    expect(pauseSwitch().disabled).toBe(false);
+    expect(pauseSwitch().checked).toBe(true);
+
+    fireEvent.click(pauseSwitch());
+
+    expect(pauseSwitch().disabled).toBe(false);
+    expect(pauseSwitch().checked).toBe(false);
+    expect(screen.getByText(/Turn off Pause payouts below and save/u)).toBeTruthy();
+  });
+
+  it("submits payouts_paused_by_user false when the creator turns the pause off", () => {
+    renderHeld({ payout_reserve_available: true, payouts_paused_by_user: true });
+
+    fireEvent.click(pauseSwitch());
+    save();
+
+    expect(mocks.put).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ payouts_paused_by_user: false }),
+    );
+  });
+
+  it("keeps the switch locked for a chargeback-rate hold the creator has not paused themselves", () => {
+    renderHeld({ payout_reserve_available: true, payouts_paused_by_user: false });
+
+    expect(pauseSwitch().disabled).toBe(true);
+    expect(pauseSwitch().checked).toBe(true);
+  });
+
+  it("keeps the switch locked for a security hold even when the creator also paused", () => {
+    renderHeld({ payout_reserve_available: false, payouts_paused_by_user: true });
+
+    expect(pauseSwitch().disabled).toBe(true);
+    expect(pauseSwitch().checked).toBe(true);
+    expect(screen.queryByText(/Turn off Pause payouts below and save/u)).toBeNull();
+  });
+
+  it("keeps the switch locked for an admin hold", () => {
+    renderHeld({ payouts_paused_by: "admin", payout_reserve_available: false, payouts_paused_by_user: true });
+
+    expect(pauseSwitch().disabled).toBe(true);
   });
 });

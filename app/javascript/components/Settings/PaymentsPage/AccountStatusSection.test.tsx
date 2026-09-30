@@ -98,34 +98,3 @@ describe("optional review connections", () => {
     expect(screen.getByRole("link", { name: "Complete verification" })).toBeTruthy();
   });
 });
-
-// The chargeback-volume hold is not a security review: it pays a reserve on the normal schedule,
-// and the seller can only act on it through their own pause switch on the page below.
-describe("chargeback-volume hold", () => {
-  it("names the reserve while the hold is the only pause", () => {
-    render(
-      <AccountStatusSection
-        accountStatus={status}
-        payoutsPausedBy="system"
-        payoutsPausedForChargebackRate
-        payoutReservePercent={25}
-      />,
-    );
-
-    expect(screen.getByText(/We're holding 25% of your balance in reserve/u)).toBeTruthy();
-    expect(screen.queryByText(/security review/u)).toBeNull();
-  });
-
-  it("stops calling the hold a security review when the seller's own pause sits on top of it", () => {
-    render(<AccountStatusSection accountStatus={status} payoutsPausedBy="system" payoutsPausedForChargebackRate />);
-
-    expect(screen.getByText(/held by the chargeback check/u)).toBeTruthy();
-    expect(screen.queryByText(/security review/u)).toBeNull();
-  });
-
-  it("still calls any other system pause a security review", () => {
-    render(<AccountStatusSection accountStatus={status} payoutsPausedBy="system" />);
-
-    expect(screen.getByText(/security review/u)).toBeTruthy();
-  });
-});

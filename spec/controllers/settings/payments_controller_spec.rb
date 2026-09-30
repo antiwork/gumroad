@@ -263,6 +263,29 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
       end.to change { user.reload.payouts_paused_by_user }.from(false).to(true)
     end
 
+    context "when the seller paused their own payouts under a chargeback-rate hold" do
+      before do
+        user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM, payouts_paused_by_user: true)
+        user.comments.create!(
+          content: "Payouts automatically paused due to chargeback rate.",
+          comment_type: Comment::COMMENT_TYPE_ON_PROBATION,
+          author_name: User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:high_chargeback_rate]
+        )
+      end
+
+      it "lets them turn their own pause off, which restores the payout reserve and keeps the hold" do
+        expect(user.chargeback_rate_payout_reserve_active?).to eq(false)
+
+        put :update, params: { payouts_paused_by_user: false }
+
+        user.reload
+        expect(user.payouts_paused_by_user?).to eq(false)
+        expect(user.payouts_paused_internally?).to eq(true)
+        expect(user.payouts_paused_for_chargeback_rate?).to eq(true)
+        expect(user.chargeback_rate_payout_reserve_active?).to eq(true)
+      end
+    end
+
     describe "minimum payout threshold" do
       def create_current_compliance_info_matching_form_params
         create(

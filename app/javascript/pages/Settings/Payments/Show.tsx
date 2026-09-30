@@ -216,8 +216,8 @@ type PaymentsPageProps = {
   formatted_balance_to_forfeit_on_payout_method_change: string | null;
   paypal_switch_loses_bank_rail: boolean;
   payouts_paused_internally: boolean;
+  payout_reserve_available: boolean;
   payouts_paused_by: "stripe" | "admin" | "system" | "user" | null;
-  payouts_paused_for_chargeback_rate: boolean;
   payout_reserve_percent?: number | null;
   account_status: AccountStatus;
   payouts_paused_by_user: boolean;
@@ -1305,18 +1305,19 @@ export default function PaymentsPage() {
     }
   };
 
-  // Under a chargeback-rate hold only the seller's own pause is theirs to change; the reserve gate
-  // skips the whole payout run while it is on.
-  const chargebackRateHold = props.payouts_paused_internally && props.payouts_paused_for_chargeback_rate;
-  const pausedWithoutSellerChoice = props.payouts_paused_internally && !chargebackRateHold;
+  // Read from saved props, not form state, so unchecking the switch doesn't lock it before the save.
+  // Only a hold that pays the reserve once the creator's own pause is off can be cleared by them.
+  const canClearOwnPayoutsPause =
+    props.payouts_paused_internally && props.payout_reserve_available && props.payouts_paused_by_user;
+  const isPayoutsPausedToggleLocked = props.payouts_paused_internally && !canClearOwnPayoutsPause;
 
   const payoutsPausedToggle = (
     <Fieldset>
       <Switch
-        checked={form.data.payouts_paused_by_user || pausedWithoutSellerChoice}
+        checked={form.data.payouts_paused_by_user || isPayoutsPausedToggleLocked}
         onChange={(e) => form.setData("payouts_paused_by_user", e.target.checked)}
         aria-label="Pause payouts"
-        disabled={props.is_form_disabled || pausedWithoutSellerChoice}
+        disabled={props.is_form_disabled || isPayoutsPausedToggleLocked}
         label="Pause payouts"
       />
       <FieldsetDescription>
@@ -1359,8 +1360,8 @@ export default function PaymentsPage() {
         <AccountStatusSection
           accountStatus={props.account_status}
           payoutsPausedBy={props.payouts_paused_by}
-          payoutsPausedForChargebackRate={props.payouts_paused_for_chargeback_rate}
           payoutReservePercent={props.payout_reserve_percent ?? null}
+          canClearOwnPause={canClearOwnPayoutsPause}
         />
 
         {props.aus_backtax_details.show_au_backtax_prompt ? (
@@ -1457,17 +1458,15 @@ export default function PaymentsPage() {
                   : null}
               </FieldsetDescription>
             </Fieldset>
-            {props.payouts_paused_internally ? (
+            {isPayoutsPausedToggleLocked ? (
               <WithTooltip
                 tip={
-                  chargebackRateHold
-                    ? props.payout_reserve_percent
-                      ? "Gumroad keeps part of each payout in reserve while your chargeback rate is above the limit. This switch controls your own pause only."
-                      : "This switch controls your own pause only. While it is on, none of your balance pays out."
-                    : props.payouts_paused_by === "stripe"
-                      ? "Your payouts have been paused by Stripe."
-                      : props.payouts_paused_by === "admin"
-                        ? "Your payouts have been paused by Gumroad."
+                  props.payouts_paused_by === "stripe"
+                    ? "Your payouts have been paused by Stripe."
+                    : props.payouts_paused_by === "admin"
+                      ? "Your payouts have been paused by Gumroad."
+                      : props.payouts_paused_by === "system" && props.payout_reserve_percent
+                        ? "Payout pausing is managed automatically while the reserve hold is active."
                         : props.payouts_paused_by === "system"
                           ? "Your payouts have been paused for a security review."
                           : null
