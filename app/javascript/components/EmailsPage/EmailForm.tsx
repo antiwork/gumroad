@@ -689,7 +689,9 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
   ) => ({
     installment: {
       name: form.data.installment.name,
-      message: form.data.installment.message,
+      // Read the editor directly: form.data gets the message through a 500ms debounce,
+      // so a save right after typing would send an older (or empty) message.
+      message: getCurrentMessage(),
       files: files.map((file, position) => ({
         external_id: file.id,
         position,
