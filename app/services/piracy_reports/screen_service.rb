@@ -93,7 +93,9 @@ class PiracyReports::ScreenService
         screening_checks: { "agent" => checks_from_agent },
         screened_at: Time.current,
         recipient_name: recipient.name,
-        recipient_email: recipient.email
+        recipient_email: recipient.email,
+        # Frozen with the contact, so a later registry edit cannot erase why this address was used.
+        recipient_source_url: recipient.source_url
       )
       report.notice_text = PiracyReports::NoticeRenderer.new(report).call
       report.notice_digest = Digest::SHA256.hexdigest(report.notice_text)

@@ -128,7 +128,7 @@ class Api::Internal::Admin::PiracyReportsController < Api::Internal::Admin::Base
         screening_verdict: report.screening_verdict,
         screening_checks: report.screening_checks,
         screened_at: report.screened_at.as_json,
-        recipient: { name: report.recipient_name, email: report.recipient_email },
+        recipient: { name: report.recipient_name, email: report.recipient_email, source_url: report.recipient_source_url },
         # The notice holds the seller's legal name and email; the agent gets only its digest.
         notice_digest: report.notice_digest
       )

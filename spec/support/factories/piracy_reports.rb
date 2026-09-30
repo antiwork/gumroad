@@ -16,6 +16,7 @@ FactoryBot.define do
       screening_verdict { "pass" }
       recipient_name { "Example Net Inc." }
       recipient_email { "copyright@example.net" }
+      recipient_source_url { "https://dmca.copyright.gov/osp/example" }
       notice_text { "Notice text" }
       notice_digest { Digest::SHA256.hexdigest("Notice text") }
     end

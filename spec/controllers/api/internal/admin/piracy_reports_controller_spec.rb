@@ -274,7 +274,7 @@ describe Api::Internal::Admin::PiracyReportsController do
 
       expect(response.body).not_to include(seller.email)
       expect(response.parsed_body["report"]).not_to have_key("notice_text")
-      expect(response.parsed_body["report"]["recipient"]).to eq("name" => "Example Net Inc.", "email" => "copyright@example.net")
+      expect(response.parsed_body["report"]["recipient"]).to eq("name" => "Example Net Inc.", "email" => "copyright@example.net", "source_url" => "https://dmca.copyright.gov/osp/example")
     end
 
     it "returns 422 and keeps the report in screening when the host has no registry entry" do

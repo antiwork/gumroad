@@ -28,7 +28,7 @@ describe PiracyReports::ScreenService do
 
       expect(result).to be_success
       report.reload
-      expect(report).to have_attributes(state: "awaiting_signature", screening_verdict: "pass", recipient_name: "Example Net Inc.", recipient_email: "copyright@example.net")
+      expect(report).to have_attributes(state: "awaiting_signature", screening_verdict: "pass", recipient_name: "Example Net Inc.", recipient_email: "copyright@example.net", recipient_source_url: "https://dmca.copyright.gov/osp/example")
       expect(report.notice_digest).to eq(Digest::SHA256.hexdigest(report.notice_text))
     end
 

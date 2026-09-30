@@ -13,6 +13,7 @@ class CreatePiracyReports < ActiveRecord::Migration[7.1]
       t.string :normalized_url_digest, limit: 64, null: false
       t.string :recipient_name
       t.string :recipient_email
+      t.string :recipient_source_url, limit: 2048
       t.string :screening_verdict, limit: 16
       t.json :screening_checks
       t.datetime :screened_at

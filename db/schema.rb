@@ -1675,6 +1675,7 @@ create_table "ping_deliveries", charset: "utf8mb4", collation: "utf8mb4_unicode_
     t.string "normalized_url_digest", limit: 64, null: false
     t.string "recipient_name"
     t.string "recipient_email"
+    t.string "recipient_source_url", limit: 2048
     t.string "screening_verdict", limit: 16
     t.json "screening_checks"
     t.datetime "screened_at"
