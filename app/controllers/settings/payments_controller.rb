@@ -4,6 +4,8 @@ class Settings::PaymentsController < Settings::BaseController
   include ActionView::Helpers::SanitizeHelper
   include AuditsPayoutSettingsChanges
 
+  MILITARY_ZIP_MESSAGE = "We can't accept military (APO/FPO/DPO) ZIP codes for payouts. Please enter a physical US street address and its ZIP code."
+
   before_action :authorize
 
   def show
@@ -76,12 +78,18 @@ class Settings::PaymentsController < Settings::BaseController
     end
 
     if Compliance::Countries::USA.common_name == compliance_info.legal_entity_country
-      zip_code = params.dig(:user, :is_business) ? params.dig(:user, :business_zip_code).presence : params.dig(:user, :zip_code).presence
+      zip_code = params.dig(:user, params.dig(:user, :is_business) ? :business_zip_code : :zip_code).presence
       if zip_code
         unless UsZipCodes.identify_state_code(zip_code).present?
           return redirect_with_error("You entered a ZIP Code that doesn't exist within your country.")
         end
       end
+    end
+
+    military_zip_field = military_zip_fields(compliance_info).first
+    if military_zip_field
+      # Stripe rejects military ZIP codes in the background, after the save has already looked successful.
+      return redirect_with_error(MILITARY_ZIP_MESSAGE, field: military_zip_field)
     end
 
     is_changing_payout_method = params[:payment_address].present? ||
@@ -106,39 +114,52 @@ class Settings::PaymentsController < Settings::BaseController
       end
     end
 
-    current_seller.tos_agreements.create!(ip: request.remote_ip)
+    # Only a seller without a Stripe account and with a saved military ZIP gets the transaction: if the save
+    # would create the account from that ZIP, it rolls back. Later saves send updates to Stripe and must not roll back.
+    create_stripe_account = false
+    military_zip_field = nil
+    with_transaction_if(current_seller.stripe_account.blank? && current_seller.stripe_connect_account.blank? && stored_military_zip_field(compliance_info).present?) do
+      current_seller.tos_agreements.create!(ip: request.remote_ip)
 
-    return unless update_payout_method
+      return unless update_payout_method
 
-    # Log the audit note as soon as the payout method has actually changed —
-    # not only at the end of the action — so a later validation failure
-    # (compliance info, payout threshold) can't leave a completed payout
-    # method change without an attribution record.
-    log_payout_settings_update_by_non_owner if is_changing_payout_method
+      # Log the audit note as soon as the payout method has actually changed —
+      # not only at the end of the action — so a later validation failure
+      # (compliance info, payout threshold) can't leave a completed payout
+      # method change without an attribution record.
+      log_payout_settings_update_by_non_owner if is_changing_payout_method
 
-    return unless update_user_compliance_info
+      return unless update_user_compliance_info
 
-    log_payout_settings_update_by_non_owner if params[:user].present?
+      log_payout_settings_update_by_non_owner if params[:user].present?
 
-    if params[:payout_threshold_cents].present? && params[:payout_threshold_cents].to_i < current_seller.minimum_payout_threshold_cents
-      return redirect_with_error("Your payout threshold must be greater than the minimum payout amount")
+      if params[:payout_threshold_cents].present? && params[:payout_threshold_cents].to_i < current_seller.minimum_payout_threshold_cents
+        return redirect_with_error("Your payout threshold must be greater than the minimum payout amount")
+      end
+
+      payout_preference_params = params.permit(:payouts_paused_by_user, :payout_threshold_cents, :payout_frequency, :disable_buyer_local_currency, :disable_buyer_currency_rounding)
+      unless current_seller.update(payout_preference_params)
+        return redirect_with_error(current_seller.errors.full_messages.first)
+      end
+
+      # Log right after the settings write succeeds — not at the end of the
+      # action — so a later Stripe merchant-account failure can't leave a
+      # completed change unattributed, and only when a payout preference was
+      # actually submitted, so a request that changed nothing here doesn't
+      # record a false audit entry.
+      log_payout_settings_update_by_non_owner if payout_preference_params.to_h.any?
+
+      create_stripe_account = current_seller.active_bank_account && current_seller.native_payouts_supported? && current_seller.stripe_connect_account.blank? && !StripeMerchantAccountManager.blocks_new_managed_account?(current_seller)
+      if create_stripe_account
+        military_zip_field = stored_military_zip_field(current_seller.fetch_or_build_user_compliance_info)
+        raise ActiveRecord::Rollback if military_zip_field
+      end
     end
-
-    payout_preference_params = params.permit(:payouts_paused_by_user, :payout_threshold_cents, :payout_frequency, :disable_buyer_local_currency, :disable_buyer_currency_rounding)
-    unless current_seller.update(payout_preference_params)
-      return redirect_with_error(current_seller.errors.full_messages.first)
-    end
-
-    # Log right after the settings write succeeds — not at the end of the
-    # action — so a later Stripe merchant-account failure can't leave a
-    # completed change unattributed, and only when a payout preference was
-    # actually submitted, so a request that changed nothing here doesn't
-    # record a false audit entry.
-    log_payout_settings_update_by_non_owner if payout_preference_params.to_h.any?
+    return redirect_with_error(MILITARY_ZIP_MESSAGE, field: military_zip_field) if military_zip_field
 
     # Once the user has submitted all their information, and a bank account record was created for them,
     # we can create a stripe merchant account for them if they don't already have one.
-    if current_seller.active_bank_account && current_seller.native_payouts_supported? && current_seller.stripe_connect_account.blank? && !StripeMerchantAccountManager.blocks_new_managed_account?(current_seller)
+    if create_stripe_account
       begin
         StripeMerchantAccountManager.create_account(current_seller, passphrase: GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))
       rescue Stripe::StripeError, MerchantRegistrationUserNotReadyError => e
@@ -439,6 +460,54 @@ class Settings::PaymentsController < Settings::BaseController
       # An unparseable date is not something the seller can have had stored, so treat it as new
       # input rather than blowing up the country change over a message-wording detail.
       true
+    end
+
+    # The form echoes stored fields back, so an unchanged ZIP is skipped and a stored military ZIP can't lock
+    # the seller out of unrelated settings, unless this save switches the account type or the stored country.
+    # Country and business status resolve as UpdateUserComplianceInfo does.
+    def military_zip_fields(compliance_info)
+      us_code = Compliance::Countries::USA.alpha2
+      submitted = params[:user]
+      return [] if submitted.blank?
+
+      business = submitted[:is_business].nil? ? compliance_info.is_business? : ActiveModel::Type::Boolean.new.cast(submitted[:is_business])
+      account_type_changed = business != compliance_info.is_business?
+      # A business record without its own country is validated under the personal country (legal_entity_country).
+      stored_business_country_code = compliance_info.business_country_code.presence || compliance_info.country_code
+      fields = if business
+        [
+          [:business_zip_code, submitted[:business_country].presence || stored_business_country_code, stored_business_country_code],
+          [:zip_code, submitted[:country].presence || compliance_info.country_code, compliance_info.country_code],
+        ]
+      else
+        [[:zip_code, compliance_info.country_code, compliance_info.country_code]]
+      end
+
+      fields.filter_map do |field, country_code, stored_country_code|
+        next unless country_code == us_code && submitted[field].present?
+
+        newly_sent = account_type_changed || stored_country_code != us_code
+        changed = submitted[field].to_s.strip != compliance_info.public_send(field).to_s.strip
+        field if (newly_sent || changed) && MILITARY_STATES.include?(UsZipCodes.identify_state_code(submitted[field]))
+      end
+    end
+
+    def stored_military_zip_field(compliance_info)
+      us_code = Compliance::Countries::USA.alpha2
+      fields = if compliance_info.is_business?
+        [
+          [:business_zip_code, compliance_info.business_country_code.presence || compliance_info.country_code],
+          [:zip_code, compliance_info.country_code],
+        ]
+      else
+        [[:zip_code, compliance_info.country_code]]
+      end
+
+      fields.find { |field, country_code| country_code == us_code && MILITARY_STATES.include?(UsZipCodes.identify_state_code(compliance_info.public_send(field))) }&.first
+    end
+
+    def with_transaction_if(condition, &block)
+      condition ? ActiveRecord::Base.transaction(&block) : yield
     end
 
     def update_payout_method
