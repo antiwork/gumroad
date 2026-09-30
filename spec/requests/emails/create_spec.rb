@@ -450,6 +450,17 @@ describe("Email Creation Flow", :js, type: :system) do
     expect(page).to have_combo_box(fieldset: "Affiliated products", expanded: true, with_options: ["Sample product"])
   end
 
+  it "saves the message typed right before clicking Save" do
+    visit "#{emails_path}/new"
+
+    fill_in "Title", with: "Hello"
+    set_rich_text_editor_input(find("[aria-label='Email message']"), to_text: "Hello, world!")
+    click_on "Save"
+    expect(page).to have_alert(text: "Email created!")
+
+    expect(Installment.last.message).to eq("<p>Hello, world!</p>")
+  end
+
   it "does not upload unsupported file as a subtitle" do
     visit "#{emails_path}/new"
 
