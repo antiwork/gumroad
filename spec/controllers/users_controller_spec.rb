@@ -87,6 +87,33 @@ describe UsersController do
       expect(response.cookies[affiliate.cookie_key]).to be_present
     end
 
+    describe "profile meta description" do
+      before do
+        stub_const("ROOT_DOMAIN", "test.gumroad.com")
+        @request.host = "#{creator.username}.test.gumroad.com"
+      end
+
+      it "uses the creator's bio when they have one" do
+        creator.update!(bio: "I write about woodworking.")
+
+        get :show, params: { username: creator.username }
+
+        html = Nokogiri::HTML.parse(response.body)
+        expect(html.at_css('meta[name="description"]')["content"]).to eq("I write about woodworking.")
+        expect(html.at_css('meta[property="og:description"]')["content"]).to eq("I write about woodworking.")
+      end
+
+      it "names the creator and the action when they have no bio" do
+        creator.update!(bio: nil)
+
+        get :show, params: { username: creator.username }
+
+        html = Nokogiri::HTML.parse(response.body)
+        expect(html.at_css('meta[name="description"]')["content"]).to eq("Get the latest products and updates from creator on Gumroad.")
+        expect(html.at_css('meta[property="og:description"]')["content"]).to eq("Get the latest products and updates from creator on Gumroad.")
+      end
+    end
+
     context "when the user is deleted" do
       let(:creator) { create(:user, username: "creator", deleted_at: Time.current) }
 
