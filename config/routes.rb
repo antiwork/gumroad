@@ -1397,7 +1397,6 @@ Rails.application.routes.draw do
     get "/.well-known/acme-challenge/:token", to: "acme_challenges#show", as: :acme_challenge
     product_info_and_purchase_routes(named_routes: false)
     devise_scope :user do
-      post "signup", to: "signup#create"
       post "save_to_library", to: "signup#save_to_library"
       post "add_purchase_to_library", to: "users#add_purchase_to_library"
     end
