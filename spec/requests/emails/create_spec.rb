@@ -450,6 +450,21 @@ describe("Email Creation Flow", :js, type: :system) do
     expect(page).to have_combo_box(fieldset: "Affiliated products", expanded: true, with_options: ["Sample product"])
   end
 
+  it "saves the message typed right before clicking Save" do
+    visit "#{emails_path}/new"
+
+    fill_in "Title", with: "Hello"
+    # Type and click Save in one browser task, so the click always lands before the
+    # editor's 500ms debounce copies the message into the form.
+    page.execute_script(<<~JS, find("[aria-label='Email message']"))
+      arguments[0].editor.commands.insertContent("Hello, world!");
+      Array.from(document.querySelectorAll("button")).find((button) => button.textContent.trim() === "Save").click();
+    JS
+    expect(page).to have_alert(text: "Email created!")
+
+    expect(Installment.last.message).to eq("<p>Hello, world!</p>")
+  end
+
   it "does not upload unsupported file as a subtitle" do
     visit "#{emails_path}/new"
 
