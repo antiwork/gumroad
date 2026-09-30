@@ -849,6 +849,31 @@ describe Payment do
         end.not_to change { payment.reload.state }
       end
 
+      context "when the payment is unclaimed and PayPal no longer knows it" do
+        let(:creator) { create(:user) }
+        let(:balance) { create(:balance, user: creator, state: "processing", merchant_account: create(:merchant_account_paypal, user: creator)) }
+
+        it "cancels one older than the lookup window and returns its balances to unpaid" do
+          payment = create(:payment_unclaimed, user: creator, balances: [balance], processor: PayoutProcessorType::PAYPAL, created_at: 90.days.ago)
+          allow(PaypalPayoutProcessor).to receive(:search_payment_on_paypal).and_return(nil)
+
+          payment.send(:sync_with_paypal)
+
+          expect(payment.reload.state).to eq("cancelled")
+          expect(balance.reload.state).to eq("unpaid")
+        end
+
+        it "leaves a recent one unclaimed" do
+          payment = create(:payment_unclaimed, user: creator, balances: [balance], processor: PayoutProcessorType::PAYPAL, created_at: 5.days.ago)
+          allow(PaypalPayoutProcessor).to receive(:search_payment_on_paypal).and_return(nil)
+
+          payment.send(:sync_with_paypal)
+
+          expect(payment.reload.state).to eq("unclaimed")
+          expect(balance.reload.state).to eq("processing")
+        end
+      end
+
       it "does not mark the payment failed when TransactionSearch raises (failed ACK)" do
         payment = create(:payment, processor_fee_cents: 10, txn_id: nil, correlation_id: nil)
 
