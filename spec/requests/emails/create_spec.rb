@@ -202,7 +202,6 @@ describe("Email Creation Flow", :js, type: :system) do
 
     fill_in "Title", with: "Hello"
     set_rich_text_editor_input(find("[aria-label='Email message']"), to_text: "Hello, world!")
-    sleep 0.5 # wait for the message editor to update
     click_on "Save"
     wait_for_ajax
     expect(page).to have_alert(text: "Email created!")
@@ -265,7 +264,6 @@ describe("Email Creation Flow", :js, type: :system) do
 
     fill_in "Title", with: "Hello"
     set_rich_text_editor_input(find("[aria-label='Email message']"), to_text: "Hello, world!")
-    sleep 0.5 # wait for the message editor to update
     click_on "Save"
     wait_for_ajax
     expect(page).to have_alert(text: "Email created!")
@@ -317,7 +315,6 @@ describe("Email Creation Flow", :js, type: :system) do
 
     fill_in "Title", with: "Hello"
     set_rich_text_editor_input(find("[aria-label='Email message']"), to_text: "Hello, world!")
-    sleep 0.5 # wait for the message editor to update
     click_on "Save"
     expect(page).to have_alert(text: "Email created!")
 
@@ -389,7 +386,6 @@ describe("Email Creation Flow", :js, type: :system) do
     expect(page).to_not have_select("From")
     fill_in "Title", with: "Hello"
     set_rich_text_editor_input(find("[aria-label='Email message']"), to_text: "Hello, world!")
-    sleep 0.5 # wait for the message editor to update
 
     click_on "Save"
     wait_for_ajax
@@ -512,7 +508,6 @@ describe("Email Creation Flow", :js, type: :system) do
       expect(page).to have_text("I have recently updated some files associated with Sample product. They're yours for free.")
     end
 
-    sleep 0.5 # wait for the message editor to update
     click_on "Save"
     wait_for_ajax
     expect(page).to have_alert(text: "Email created!")
@@ -560,7 +555,6 @@ describe("Email Creation Flow", :js, type: :system) do
         expect(page).to have_link("Get your bundle", href: short_link_url(product, host: DOMAIN))
         expect(page).to have_text("Thanks for your support!")
       end
-      sleep 0.5 # wait for the message editor to update
 
       click_on "Save"
       wait_for_ajax
@@ -604,7 +598,6 @@ describe("Email Creation Flow", :js, type: :system) do
     expect(page).to have_checked_field("Send email")
     fill_in "Title", with: "Hello"
     set_rich_text_editor_input(find("[aria-label='Email message']"), to_text: "Hello, world!")
-    sleep 0.5 # wait for the message editor to update
 
     # Does not create an email if the schedule date is invalid while scheduling it
     select_disclosure "Publish" do
@@ -661,7 +654,6 @@ describe("Email Creation Flow", :js, type: :system) do
 
     # Creates and publishes an email if all required fields are present and valid
     set_rich_text_editor_input(find("[aria-label='Email message']"), to_text: "Hello, world!")
-    sleep 1 # wait for the message editor to update
 
     select_disclosure "Publish" do
       click_on "Publish now"
@@ -726,7 +718,6 @@ describe("Email Creation Flow", :js, type: :system) do
       expect(page).to have_checked_field("Send email")
       fill_in "Title", with: "Hello"
       set_rich_text_editor_input(find("[aria-label='Email message']"), to_text: "Hello, world!")
-      sleep 0.5 # wait for the message editor to update
 
       # Sends the preview email
       select_disclosure "Preview" do
@@ -752,7 +743,6 @@ describe("Email Creation Flow", :js, type: :system) do
       # Creates and opens the post in a new window
       fill_in "Title", with: "My post"
       set_rich_text_editor_input(find("[aria-label='Email message']"), to_text: "Hello, world!")
-      sleep 0.5 # wait for the message editor to update
 
       new_window = window_opened_by do
         select_disclosure "Preview" do
@@ -802,7 +792,6 @@ describe("Email Creation Flow", :js, type: :system) do
 
       fill_in "Title", with: "Hello"
       set_rich_text_editor_input(find("[aria-label='Email message']"), to_text: "Hello, world!")
-      sleep 0.5 # wait for the message editor to update
 
       click_on "Preview"
       wait_for_ajax
@@ -836,7 +825,6 @@ describe("Email Creation Flow", :js, type: :system) do
       expect(page).to_not have_disclosure("Preview")
       fill_in "Title", with: "My post"
       set_rich_text_editor_input(find("[aria-label='Email message']"), to_text: "Hello, world!")
-      sleep 0.5 # wait for the message editor to update
 
       new_window = window_opened_by do
         click_on "Preview"
@@ -875,10 +863,6 @@ describe("Email Creation Flow", :js, type: :system) do
     uncheck "Allow comments"
     fill_in "Title", with: "Hello"
     set_rich_text_editor_input(find("[aria-label='Email message']"), to_text: "Hello, world!")
-    # The editor pushes its content into the form state through a 500ms debounce
-    # (see handleMessageChange in EmailForm.tsx), so publishing sooner than that
-    # submits an empty message and trips the "Please include a message" validation.
-    sleep 1 # wait for the message editor to update
     # Allows attaching files to the email
     upload_attachment("thing.mov")
     select_disclosure "Publish" do
@@ -933,8 +917,6 @@ describe("Email Creation Flow", :js, type: :system) do
     fill_in "Title", with: "Test Email"
     set_rich_text_editor_input(find("[aria-label='Email message']"), to_text: "This is a test email.")
 
-    sleep 0.5 # wait for the message editor to update
-
     click_on "Save"
     expect(page).to have_alert(text: "Email created!")
 
@@ -971,7 +953,6 @@ describe("Email Creation Flow", :js, type: :system) do
       expect(page).to have_text("$10 $9")
     end
 
-    sleep 1
     click_on "Save"
     expect(page).to have_alert(text: "Email created!")
 
@@ -991,9 +972,7 @@ describe("Email Creation Flow", :js, type: :system) do
     expect(installment.message).to eq("<p>Hi there!</p><upsell-card productid=\"#{product.external_id}\" discount='{\"type\":\"fixed\",\"cents\":100}' id=\"#{upsell.external_id}\"></upsell-card>")
 
     set_rich_text_editor_input(find("[aria-label='Email message']"), to_text: "")
-    sleep 0.5 # wait for the message editor to update
     set_rich_text_editor_input(find("[aria-label='Email message']"), to_text: "Hello, world!")
-    sleep 0.5 # wait for the message editor to update
     click_on "Save"
     expect(page).to have_alert(text: "Changes saved!")
 
