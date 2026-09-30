@@ -820,7 +820,7 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
           expect(user.reload.active_bank_account.account_holder_full_name).to eq("gumbot")
         end
 
-        it "rejects any save up front when the update would create a Stripe account from a saved military zip code" do
+        it "rolls back the whole save when it would create a Stripe account from a saved military zip code" do
           user.alive_user_compliance_info.dup_and_save! { |info| info.zip_code = "09330" }
           create(:ach_account, user:)
 
@@ -829,6 +829,17 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
 
           expect(session[:inertia_errors][:field]).to eq("zip_code")
           expect(user.reload.payout_threshold_cents.to_i).not_to eq(25_000)
+        end
+
+        it "rolls back a save without the form fields when it would create a Stripe account from a saved military zip code" do
+          user.alive_user_compliance_info.dup_and_save! { |info| info.zip_code = "09330" }
+          create(:ach_account, user:)
+
+          expect(StripeMerchantAccountManager).not_to receive(:create_account)
+          put :update, params: { payouts_paused_by_user: true }
+
+          expect(session[:inertia_errors][:field]).to eq("zip_code")
+          expect(user.reload.payouts_paused_by_user?).to eq(false)
         end
 
         it "checks a saved military zip code on a first bank account even when the form sends a blank zip code" do
@@ -857,6 +868,19 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
 
           expect(session[:inertia_errors]&.dig(:base)&.first.to_s).not_to include("military")
           expect(user.reload.payout_threshold_cents.to_i).to eq(25_000)
+        end
+
+        it "checks a saved military zip code when an individual switches to a UAE business and adds a bank account" do
+          user.alive_user_compliance_info.dup_and_save! { |info| info.zip_code = "09330" }
+
+          expect(StripeMerchantAccountManager).not_to receive(:create_account)
+          put :update, params: {
+            user: params.merge(is_business: true, business_country: "AE", business_zip_code: "", zip_code: ""),
+            bank_account: { type: AchAccount.name, account_number: "000123456789", account_number_confirmation: "000123456789", routing_number: "110000000", account_holder_full_name: "gumbot" },
+          }
+
+          expect(session[:inertia_errors][:field]).to eq("zip_code")
+          expect(user.reload.alive_bank_accounts.count).to eq(0)
         end
 
         it "lets a seller with a saved bank account switch to PayPal while an unchanged military zip code is stored" do
