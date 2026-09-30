@@ -536,12 +536,10 @@ describe "Sales page", type: :system, js: true do
 
         index_model_records(Purchase)
 
-        # Test regular product - should show content accesses
         visit customer_sale_path(purchase1.external_id)
         expect(page).to have_text("Content accesses 42", normalize_ws: true)
         expect(page).not_to have_text("Download count")
 
-        # Test bundle purchase - should NOT show content accesses
         visit customer_sale_path(purchase3.external_id)
         expect(page).not_to have_text("Content accesses")
       end
@@ -553,7 +551,6 @@ describe "Sales page", type: :system, js: true do
 
         index_model_records(Purchase)
 
-        # Test coffee product - should NOT show content accesses
         visit customer_sale_path(coffee_purchase.external_id)
         expect(page).not_to have_text("Content accesses")
       end
