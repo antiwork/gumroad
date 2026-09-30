@@ -529,32 +529,33 @@ describe "Sales page", type: :system, js: true do
       end
     end
 
-    describe "download count" do
-      it "shows download count for regular products and hides it for bundle purchases" do
+    describe "content accesses" do
+      it "shows content accesses for regular products and hides them for bundle purchases" do
         create(:url_redirect, purchase: purchase1, uses: 42)
         create(:url_redirect, purchase: purchase3, uses: 25)
 
         index_model_records(Purchase)
 
-        # Test regular product - should show download count
+        # Test regular product - should show content accesses
         visit customer_sale_path(purchase1.external_id)
-        expect(page).to have_text("Download count 42", normalize_ws: true)
-
-        # Test bundle purchase - should NOT show download count
-        visit customer_sale_path(purchase3.external_id)
+        expect(page).to have_text("Content accesses 42", normalize_ws: true)
         expect(page).not_to have_text("Download count")
+
+        # Test bundle purchase - should NOT show content accesses
+        visit customer_sale_path(purchase3.external_id)
+        expect(page).not_to have_text("Content accesses")
       end
 
-      it "hides download count for coffee products" do
+      it "hides content accesses for coffee products" do
         coffee_product = create(:product, user: seller, name: "Buy Me Coffee", native_type: Link::NATIVE_TYPE_COFFEE, price_cents: 500)
         coffee_purchase = create(:purchase, link: coffee_product, full_name: "Coffee Buyer", email: "coffee@example.com", seller:, created_at: 1.day.ago)
         create(:url_redirect, purchase: coffee_purchase, uses: 10)
 
         index_model_records(Purchase)
 
-        # Test coffee product - should NOT show download count
+        # Test coffee product - should NOT show content accesses
         visit customer_sale_path(coffee_purchase.external_id)
-        expect(page).not_to have_text("Download count")
+        expect(page).not_to have_text("Content accesses")
       end
     end
 

@@ -390,7 +390,7 @@ const CustomerDetailPage = ({
             </CardContent>
             {customer.download_count ? (
               <CardContent>
-                <h5 className="grow font-bold">Download count</h5>
+                <h5 className="grow font-bold">Content accesses</h5>
                 {customer.download_count}
               </CardContent>
             ) : null}
