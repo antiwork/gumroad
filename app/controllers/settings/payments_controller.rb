@@ -114,11 +114,11 @@ class Settings::PaymentsController < Settings::BaseController
       end
     end
 
-    # Only sellers with a saved military ZIP get the transaction: if the save would create a Stripe account
-    # from that ZIP, it rolls back, so a rejected save leaves no half-applied payout or compliance change.
+    # Only a seller without a Stripe account and with a saved military ZIP gets the transaction: if the save
+    # would create the account from that ZIP, it rolls back. Later saves send updates to Stripe and must not roll back.
     create_stripe_account = false
     military_zip_field = nil
-    with_transaction_if(stored_military_zip_field(compliance_info).present?) do
+    with_transaction_if(current_seller.stripe_account.blank? && current_seller.stripe_connect_account.blank? && stored_military_zip_field(compliance_info).present?) do
       current_seller.tos_agreements.create!(ip: request.remote_ip)
 
       return unless update_payout_method

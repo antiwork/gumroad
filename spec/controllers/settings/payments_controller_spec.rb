@@ -842,6 +842,21 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
           expect(user.reload.payouts_paused_by_user?).to eq(false)
         end
 
+        it "does not wrap the save in a transaction once the seller has a Stripe account, so a Stripe update is never rolled back" do
+          user.alive_user_compliance_info.dup_and_save! { |info| info.zip_code = "09330" }
+          create(:merchant_account, user:)
+          depth = nil
+          baseline = ActiveRecord::Base.connection.open_transactions
+          allow_any_instance_of(UpdateUserComplianceInfo).to receive(:process) do
+            depth = ActiveRecord::Base.connection.open_transactions
+            { success: true }
+          end
+
+          put :update, params: { user: params.except(:is_business).merge(zip_code: "09330") }
+
+          expect(depth).to eq(baseline)
+        end
+
         it "checks a saved military zip code on a first bank account even when the form sends a blank zip code" do
           user.alive_user_compliance_info.dup_and_save! { |info| info.zip_code = "09330" }
 
