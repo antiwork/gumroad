@@ -29,7 +29,7 @@ PREVIEW_ASSET_CACHE_BUCKET="buildkite-branch-cache"
 PREVIEW_ASSET_CACHE_PREFIX="preview-asset-cache"
 # Bump to invalidate every existing cache entry at once (e.g. after changing
 # the artifact list below or discovering a missing hash input).
-PREVIEW_ASSET_CACHE_VERSION="v1"
+PREVIEW_ASSET_CACHE_VERSION="v2"
 PREVIEW_ASSET_CACHE_TARBALL="preview-asset-cache.tar.gz"
 # Local scratch file for the SHA-256 sidecar (see restore/save below).
 PREVIEW_ASSET_CACHE_CHECKSUM="preview-asset-cache.tar.gz.sha256"
@@ -68,10 +68,16 @@ preview_asset_cache_logger() {
 # read of config/ — a JS `import` from config/, a new file consumed by
 # js:export or the Vite configs, or a routes-file reference to a constant
 # defined outside config/domain.rb — add its path here.
+#
+# Tailwind also scans files outside app/javascript for class names: the
+# `@source` globs in app/javascript/stylesheets/tailwind.css pull in
+# app/views/**/*.erb and public/help/**/*.html. If you add an `@source`, add
+# its path here.
 preview_asset_cache_inputs() {
   git ls-tree -r HEAD -- \
     app/assets \
     app/javascript \
+    app/views \
     config/routes.rb \
     config/routes \
     config/domain.rb \
