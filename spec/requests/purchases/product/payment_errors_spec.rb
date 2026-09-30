@@ -39,7 +39,9 @@ describe("Purchase from a product page", type: :system, js: true) do
     visit "/l/#{@product.unique_permalink}"
 
     add_to_cart(@product)
-    check_out(@product, credit_card: { number: "4000000000000119" }, error: "An error occurred while processing your card. Try again in a little bit.")
+    # Asserts Stripe's copy, not ours — if this breaks, Stripe reworded the message; the
+    # decline-code assertion below is the stable signal.
+    check_out(@product, credit_card: { number: "4000000000000119" }, error: "The card couldn't be processed. Try the payment again. If it still fails, contact your card issuer.")
 
     expect(Purchase.last.stripe_error_code).to eq("processing_error")
   end
