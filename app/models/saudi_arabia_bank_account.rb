@@ -3,12 +3,13 @@
 class SaudiArabiaBankAccount < BankAccount
   BANK_ACCOUNT_TYPE = "SA"
 
-  BANK_CODE_FORMAT_REGEX = /^([a-zA-Z]){4}([a-zA-Z]){2}([0-9a-zA-Z]){2}([0-9a-zA-Z]{3})?$/
+  BANK_CODE_FORMAT_REGEX = /^[a-zA-Z]{4}[a-zA-Z]{2}[0-9a-zA-Z]{2}(XXX)?$/i
   private_constant :BANK_CODE_FORMAT_REGEX
 
   alias_attribute :bank_code, :bank_number
 
-  validate :validate_bank_code
+  # Create-only: existing rows saved with branch BICs must stay saveable (settings saves, mark_deleted!).
+  validate :validate_bank_code, on: :create
   validate :validate_account_number
 
   def routing_number
