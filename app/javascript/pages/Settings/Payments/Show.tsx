@@ -216,6 +216,7 @@ type PaymentsPageProps = {
   formatted_balance_to_forfeit_on_payout_method_change: string | null;
   paypal_switch_loses_bank_rail: boolean;
   payouts_paused_internally: boolean;
+  payout_reserve_available: boolean;
   payouts_paused_by: "stripe" | "admin" | "system" | "user" | null;
   payout_reserve_percent?: number | null;
   account_status: AccountStatus;
@@ -1304,13 +1305,19 @@ export default function PaymentsPage() {
     }
   };
 
+  // Read from saved props, not form state, so unchecking the switch doesn't lock it before the save.
+  // Only a hold that pays the reserve once the creator's own pause is off can be cleared by them.
+  const canClearOwnPayoutsPause =
+    props.payouts_paused_internally && props.payout_reserve_available && props.payouts_paused_by_user;
+  const isPayoutsPausedToggleLocked = props.payouts_paused_internally && !canClearOwnPayoutsPause;
+
   const payoutsPausedToggle = (
     <Fieldset>
       <Switch
-        checked={form.data.payouts_paused_by_user || props.payouts_paused_internally}
+        checked={form.data.payouts_paused_by_user || isPayoutsPausedToggleLocked}
         onChange={(e) => form.setData("payouts_paused_by_user", e.target.checked)}
         aria-label="Pause payouts"
-        disabled={props.is_form_disabled || props.payouts_paused_internally}
+        disabled={props.is_form_disabled || isPayoutsPausedToggleLocked}
         label="Pause payouts"
       />
       <FieldsetDescription>
@@ -1354,6 +1361,7 @@ export default function PaymentsPage() {
           accountStatus={props.account_status}
           payoutsPausedBy={props.payouts_paused_by}
           payoutReservePercent={props.payout_reserve_percent ?? null}
+          canClearOwnPause={canClearOwnPayoutsPause}
         />
 
         {props.aus_backtax_details.show_au_backtax_prompt ? (
@@ -1450,7 +1458,7 @@ export default function PaymentsPage() {
                   : null}
               </FieldsetDescription>
             </Fieldset>
-            {props.payouts_paused_internally ? (
+            {isPayoutsPausedToggleLocked ? (
               <WithTooltip
                 tip={
                   props.payouts_paused_by === "stripe"

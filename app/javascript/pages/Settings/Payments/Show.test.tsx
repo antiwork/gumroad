@@ -161,6 +161,7 @@ const pageProps = (userOverrides: Partial<User> = {}, complianceOverrides: Parti
   formatted_balance_to_forfeit_on_payout_method_change: null,
   paypal_switch_loses_bank_rail: false,
   payouts_paused_internally: false,
+  payout_reserve_available: false,
   payouts_paused_by: null,
   account_status: {
     show_section: false,
@@ -1110,5 +1111,67 @@ describe("Japanese (Kanji) variation fields", () => {
     save();
 
     expect(mocks.put).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("Pause payouts switch under an internal hold", () => {
+  const pauseSwitch = () => screen.getByRole<HTMLInputElement>("switch", { name: "Pause payouts" });
+  const renderHeld = (overrides: Record<string, unknown>) => {
+    mocks.usePage.mockReturnValue({
+      props: {
+        ...pageProps(),
+        payouts_paused_internally: true,
+        payouts_paused_by: "system",
+        account_status: { ...pageProps().account_status, show_section: true },
+        ...overrides,
+      },
+    });
+    render(<PaymentsPage />);
+  };
+
+  it("lets a creator turn off their own pause when only the chargeback-rate hold applies", () => {
+    renderHeld({ payout_reserve_available: true, payouts_paused_by_user: true });
+
+    expect(pauseSwitch().disabled).toBe(false);
+    expect(pauseSwitch().checked).toBe(true);
+
+    fireEvent.click(pauseSwitch());
+
+    expect(pauseSwitch().disabled).toBe(false);
+    expect(pauseSwitch().checked).toBe(false);
+    expect(screen.getByText(/Turn off Pause payouts below and save/u)).toBeTruthy();
+  });
+
+  it("submits payouts_paused_by_user false when the creator turns the pause off", () => {
+    renderHeld({ payout_reserve_available: true, payouts_paused_by_user: true });
+
+    fireEvent.click(pauseSwitch());
+    save();
+
+    expect(mocks.put).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ payouts_paused_by_user: false }),
+    );
+  });
+
+  it("keeps the switch locked for a chargeback-rate hold the creator has not paused themselves", () => {
+    renderHeld({ payout_reserve_available: true, payouts_paused_by_user: false });
+
+    expect(pauseSwitch().disabled).toBe(true);
+    expect(pauseSwitch().checked).toBe(true);
+  });
+
+  it("keeps the switch locked for a security hold even when the creator also paused", () => {
+    renderHeld({ payout_reserve_available: false, payouts_paused_by_user: true });
+
+    expect(pauseSwitch().disabled).toBe(true);
+    expect(pauseSwitch().checked).toBe(true);
+    expect(screen.queryByText(/Turn off Pause payouts below and save/u)).toBeNull();
+  });
+
+  it("keeps the switch locked for an admin hold", () => {
+    renderHeld({ payouts_paused_by: "admin", payout_reserve_available: false, payouts_paused_by_user: true });
+
+    expect(pauseSwitch().disabled).toBe(true);
   });
 });

@@ -44,10 +44,12 @@ export default function AccountStatusSection({
   accountStatus,
   payoutsPausedBy,
   payoutReservePercent,
+  canClearOwnPause = false,
 }: {
   accountStatus: AccountStatus;
   payoutsPausedBy: "stripe" | "admin" | "system" | "user" | null;
   payoutReservePercent?: number | null;
+  canClearOwnPause?: boolean;
 }) {
   if (!accountStatus.show_section) return null;
 
@@ -66,6 +68,13 @@ export default function AccountStatusSection({
       <>
         We're holding {payoutReservePercent}% of your balance in reserve while your chargeback rate is above 1.5%. The
         rest pays out on the normal weekly schedule.
+        <SupportLink />
+      </>
+    ) : payoutsPausedBy === "system" && canClearOwnPause ? (
+      <>
+        Your payouts are on hold because your chargeback rate is above 1.5%. You also paused payouts yourself, so
+        nothing is paid out right now. Turn off Pause payouts below and save. We will then pay out most of your balance
+        on your normal schedule and keep the rest in reserve.
         <SupportLink />
       </>
     ) : payoutsPausedBy === "system" ? (

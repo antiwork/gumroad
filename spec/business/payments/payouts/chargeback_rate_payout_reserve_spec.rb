@@ -87,6 +87,32 @@ describe "chargeback-rate payout reserve" do
 
       expect(seller.chargeback_rate_payout_reserve_active?).to eq(false)
     end
+
+    describe "#chargeback_rate_payout_reserve_available?" do
+      it "stays true when the seller paused payouts themselves, so turning that pause off restores the reserve" do
+        pause_for_chargeback_rate!(seller)
+        seller.update!(payouts_paused_by_user: true)
+
+        expect(seller.chargeback_rate_payout_reserve_available?).to eq(true)
+        expect(seller.chargeback_rate_payout_reserve_active?).to eq(false)
+
+        seller.update!(payouts_paused_by_user: false)
+        expect(seller.chargeback_rate_payout_reserve_active?).to eq(true)
+      end
+
+      it "is off for a deleted account, for another system pause, and when the kill switch is on" do
+        expect(seller.chargeback_rate_payout_reserve_available?).to eq(false)
+
+        pause_for_chargeback_rate!(seller)
+        allow(Feature).to receive(:active?).and_call_original
+        allow(Feature).to receive(:active?).with(:disable_chargeback_rate_payout_reserve).and_return(true)
+        expect(seller.chargeback_rate_payout_reserve_available?).to eq(false)
+
+        allow(Feature).to receive(:active?).with(:disable_chargeback_rate_payout_reserve).and_return(false)
+        seller.update!(deleted_at: Time.current)
+        expect(seller.chargeback_rate_payout_reserve_available?).to eq(false)
+      end
+    end
   end
 
   describe Payouts do

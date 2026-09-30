@@ -273,6 +273,7 @@ class SettingsPresenter
       formatted_balance_to_forfeit_on_payout_method_change: seller.formatted_balance_to_forfeit(:payout_method_change),
       paypal_switch_loses_bank_rail: seller.paypal_switch_loses_bank_rail?,
       payouts_paused_internally: seller.payouts_paused_internally?,
+      payout_reserve_available: seller.chargeback_rate_payout_reserve_available?,
       payouts_paused_by: seller.payouts_paused_by_source,
       payout_reserve_percent: seller.chargeback_rate_payout_reserve_active? ? User::CHARGEBACK_RATE_PAYOUT_RESERVE_PERCENT : nil,
       account_status: account_status_details(payments_policy),
