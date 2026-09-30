@@ -299,6 +299,9 @@ IGNORED_PATTERNS = [
   %r{\Adocker/(nginx|branch_app_nginx)/},
   %r{\Adocker/web/(server|sidekiq_worker|rpush|post_deployment|database_migration|compile_assets|push_assets_to_s3|setup_db)\.sh\z},
   %r{\Adocker/docker-compose-local\.yml\z},
+  # Buildkite runs preview and production deploys only; rspec runs in GitHub
+  # Actions and reads nothing under .buildkite/.
+  %r{\A\.buildkite/},
 ].freeze
 
 # Above this many selected files the full suite's parallelism wins anyway.

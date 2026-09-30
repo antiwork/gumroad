@@ -793,6 +793,13 @@ check(
 )
 
 check(
+  "buildkite deploy script-only change does not escalate",
+  base_files: { ".buildkite/scripts/preview_asset_cache.sh" => "old" },
+  head_files: { ".buildkite/scripts/preview_asset_cache.sh" => "new" },
+  expect_specs: [],
+)
+
+check(
   "docker nginx-only change does not escalate",
   base_files: { "docker/nginx/nginx.conf" => "old" },
   head_files: { "docker/nginx/nginx.conf" => "new" },
