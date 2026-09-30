@@ -454,8 +454,12 @@ describe("Email Creation Flow", :js, type: :system) do
     visit "#{emails_path}/new"
 
     fill_in "Title", with: "Hello"
-    set_rich_text_editor_input(find("[aria-label='Email message']"), to_text: "Hello, world!")
-    click_on "Save"
+    # Type and click Save in one browser task, so the click always lands before the
+    # editor's 500ms debounce copies the message into the form.
+    page.execute_script(<<~JS, find("[aria-label='Email message']"))
+      arguments[0].editor.commands.insertContent("Hello, world!");
+      Array.from(document.querySelectorAll("button")).find((button) => button.textContent.trim() === "Save").click();
+    JS
     expect(page).to have_alert(text: "Email created!")
 
     expect(Installment.last.message).to eq("<p>Hello, world!</p>")
