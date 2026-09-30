@@ -67,6 +67,12 @@ def configure_vcr
     # The Stripe client sends the recording machine's hostname and `uname` in this
     # header. That metadata is irrelevant to replaying the interaction, so scrub it
     # before the cassette is written to avoid checking workstation details into the repo.
+    # Stripe adds fraudulent refunds to Radar's blocklist, which includes the shared test cards.
+    config.before_http_request(:recordable) do |request|
+      if request.uri.include?("api.stripe.com/v1/refunds") && request.body.to_s.include?("reason=fraudulent")
+        raise "Refusing a live Stripe refund with reason=fraudulent: it would blocklist the shared test card."
+      end
+    end
     config.before_record do |interaction|
       if interaction.request.headers["X-Stripe-Client-User-Agent"]
         interaction.request.headers["X-Stripe-Client-User-Agent"] = ["<STRIPE_CLIENT_USER_AGENT>"]
