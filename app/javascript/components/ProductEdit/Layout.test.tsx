@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -7,6 +7,7 @@ import { CurrentSellerProvider, type CurrentSeller } from "$app/components/Curre
 import { DomainSettingsProvider } from "$app/components/DomainSettings";
 import { Layout } from "$app/components/ProductEdit/Layout";
 import { type FileEntry, ProductEditContext, type Product } from "$app/components/ProductEdit/state";
+import { showAlert } from "$app/components/server-components/Alert";
 
 vi.mock("react-router-dom", () => ({
   Link: ({ to, children }: { to: string; children?: React.ReactNode }) => <a href={to}>{children}</a>,
@@ -25,7 +26,8 @@ vi.mock("$app/components/SubtitleList/Row", () => ({ SubtitleFile: () => null })
 vi.mock("$app/components/WithTooltip", () => ({
   WithTooltip: ({ children }: { children?: React.ReactNode }) => <span>{children}</span>,
 }));
-vi.mock("$app/data/publish_product", () => ({ setProductPublished: vi.fn() }));
+const setProductPublished = vi.hoisted(() => vi.fn());
+vi.mock("$app/data/publish_product", () => ({ setProductPublished }));
 vi.mock("$app/components/server-components/Alert", () => ({ showAlert: vi.fn() }));
 
 beforeAll(() => {
@@ -44,6 +46,8 @@ beforeAll(() => {
 afterEach(() => {
   cleanup();
   product.files = [];
+  product.is_published = false;
+  vi.unstubAllGlobals();
 });
 
 const minor: CurrentSeller = {
@@ -136,7 +140,7 @@ const product: Product = {
   community_chat_enabled: false,
 };
 
-const renderLayout = (currentSeller: CurrentSeller) =>
+const renderLayout = (currentSeller: CurrentSeller, { saveBlocked = false }: { saveBlocked?: boolean } = {}) =>
   render(
     <DomainSettingsProvider
       value={{
@@ -179,6 +183,7 @@ const renderLayout = (currentSeller: CurrentSeller) =>
             s3Url: "",
             availableCountries: [],
             saving: false,
+            saveBlocked,
             save: () => Promise.resolve(true),
             variantIdMappings: {},
             richContentIdMappings: {},
@@ -245,6 +250,34 @@ describe("ProductEdit Layout save gating", () => {
     renderLayout(minor);
 
     expect(screen.getByRole<HTMLButtonElement>("button", { name: "Save and continue" }).disabled).toBe(false);
+  });
+});
+
+describe("ProductEdit Layout publish and unpublish", () => {
+  it("re-enables the buttons when unpublishing fails with an unexpected error", async () => {
+    const reportErrorSpy = vi.fn();
+    vi.stubGlobal("reportError", reportErrorSpy);
+    setProductPublished.mockRejectedValueOnce(new TypeError("Unexpected token < in JSON"));
+    product.files = [];
+    product.is_published = true;
+    renderLayout(minor);
+
+    fireEvent.click(screen.getByRole("button", { name: "Unpublish" }));
+
+    await waitFor(() => expect(reportErrorSpy).toHaveBeenCalledTimes(1));
+    expect(showAlert).toHaveBeenCalledWith("Something went wrong. Please try again.", "error");
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Unpublish" }).disabled).toBe(false);
+  });
+});
+
+describe("ProductEdit Layout when saving is blocked until a reload", () => {
+  it("disables Save without claiming a save is in progress", () => {
+    product.files = [];
+    renderLayout(minor, { saveBlocked: true });
+
+    const button = screen.getByRole<HTMLButtonElement>("button", { name: "Save and continue" });
+    expect(button.disabled).toBe(true);
+    expect(screen.queryByText("Saving changes...")).toBeNull();
   });
 });
 

@@ -187,6 +187,7 @@ const renderProductTab = (product: Product, currentSeller: CurrentSeller = selle
             s3Url: "",
             availableCountries: [],
             saving: false,
+            saveBlocked: false,
             save: () => Promise.resolve(true),
             variantIdMappings: {},
             richContentIdMappings: {},
