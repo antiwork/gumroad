@@ -8,10 +8,6 @@ module PageMeta::User
   private
     # The custom-HTML profile wrapper builds its own <head> and can't use
     # set_meta_tag, so both render sites read this to stay in sync.
-    #
-    # A creator with no bio used to ship the two-word description "On Gumroad",
-    # which tells a searcher nothing when Google renders it as the profile's
-    # snippet. Name the creator and what the page offers instead.
     def profile_meta_description(user)
       return user.bio.squish.first(300) if user.bio.present?
 

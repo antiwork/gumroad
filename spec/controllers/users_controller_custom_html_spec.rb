@@ -45,6 +45,16 @@ describe UsersController, :vcr, type: :controller do
         expect(response.body).to include(%(<meta name="description" content="Maker of things">))
         expect(response.body).to include(%(property="og:description" content="Maker of things">))
       end
+
+      it "names the creator when the seller has no bio" do
+        seller.update!(bio: nil)
+
+        get :show
+
+        description = "Get the latest products and updates from Jane Doe on Gumroad."
+        expect(response.body).to include(%(<meta name="description" content="#{description}">))
+        expect(response.body).to include(%(property="og:description" content="#{description}">))
+      end
     end
 
     it "sandboxes the iframe without same-origin or top-navigation" do
