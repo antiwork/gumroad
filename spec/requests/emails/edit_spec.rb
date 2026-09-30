@@ -74,7 +74,6 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
       expect(page).to have_text "Original message"
     end
     set_rich_text_editor_input(find("[aria-label='Email message']"), to_text: "Updated message")
-    sleep 0.5 # Wait for the message editor to update
     attach_file(file_fixture("test.jpg")) do
       click_on "Insert image"
     end
@@ -345,7 +344,6 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
     # Try publishing the already published email
     fill_in "Title", with: "Hello - edit 3"
     set_rich_text_editor_input(find("[aria-label='Email message']"), to_text: "Updated message")
-    sleep 0.5 # Wait for the message editor to update
     select_disclosure "Publish" do
       expect(page).to have_button("Schedule", disabled: true)
       click_on "Publish now"
@@ -402,7 +400,6 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
 
     # Opens the post in a new window when the "Post to profile" channel is checked
     set_rich_text_editor_input(find("[aria-label='Email message']"), to_text: "Updated message")
-    sleep 0.5 # Wait for the message editor to update
     expect(installment.reload.name).to eq("Updated original email")
     choose "Everyone"
     check "Post to profile"
@@ -435,7 +432,6 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
     # Schedule the email
     fill_in "Title", with: "Updated original email - scheduled", fill_options: { clear: :backspace }
     set_rich_text_editor_input(find("[aria-label='Email message']"), to_text: "Scheduled message")
-    sleep 0.5 # Wait for the title editor to update
     select_disclosure "Publish" do
       click_on "Schedule"
     end
@@ -462,7 +458,6 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
     # Publish the email
     fill_in "Title", with: "Updated original email - published", fill_options: { clear: :backspace }
     set_rich_text_editor_input(find("[aria-label='Email message']"), to_text: "Published message")
-    sleep 0.5 # Wait for the message editor to update
     select_disclosure "Publish" do
       click_on "Publish now"
     end
@@ -485,7 +480,6 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
     expect(page).to have_field("Publish date", with: installment.published_at.to_date.to_s)
     fill_in "Title", with: "Updated original email - published - edit 2", fill_options: { clear: :backspace }
     set_rich_text_editor_input(find("[aria-label='Email message']"), to_text: "Published message 2")
-    sleep 0.5 # Wait for the message editor to update
     new_window = window_opened_by do
       select_disclosure "Preview" do
         click_on "Preview Post"
