@@ -690,7 +690,29 @@ export const saveProduct = async (
       ),
     },
   });
-  if (!response.ok) throw saveProductError(typia.assert<SaveProductErrorPayload>(await response.json()));
+  if (!response.ok) throw saveProductError(typia.assert<SaveProductErrorPayload>(await readFailureJson(response)));
   if (response.status === 204) return {};
-  return typia.assert<SaveProductResponse>(await response.json());
+  try {
+    return typia.assert<SaveProductResponse>(await response.json());
+  } catch (cause) {
+    throw new UnconfirmedSaveError(cause);
+  }
+};
+
+// A 2xx the editor cannot read: the server may already have kept the save, so a blind retry could
+// resend stale ids and duplicate records. The editor keeps Save disabled until the seller reloads.
+export class UnconfirmedSaveError extends ResponseError {
+  constructor(public originalError: unknown) {
+    super("We could not confirm that your changes saved. Reload the page to check before saving again.");
+  }
+}
+
+// A proxy error page or a truncated body is not JSON. Answer it with a ResponseError the editor
+// reports, not a SyntaxError it does not expect.
+const readFailureJson = async (response: Response): Promise<unknown> => {
+  try {
+    return await response.json();
+  } catch {
+    throw new ResponseError();
+  }
 };

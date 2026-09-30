@@ -826,6 +826,7 @@ describe SettingsPresenter do
           stripe_rejected_payout_date: nil,
         },
         payouts_paused_internally: false,
+        payout_reserve_available: false,
         payouts_paused_by: nil,
         payout_reserve_percent: nil,
         payouts_paused_by_user: false,
@@ -1678,6 +1679,42 @@ describe SettingsPresenter do
 
       it "returns true for payouts_paused_internally" do
         expect(presenter.payments_props[:payouts_paused_internally]).to eq(true)
+      end
+    end
+
+    context "when payouts are paused by the chargeback-rate check" do
+      def pause_for_chargeback_rate!
+        seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+        seller.comments.create!(
+          content: "Payouts automatically paused due to chargeback rate.",
+          comment_type: Comment::COMMENT_TYPE_ON_PROBATION,
+          author_name: User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:high_chargeback_rate]
+        )
+      end
+
+      it "flags the reserve as available, also when the seller has paused their own payouts" do
+        pause_for_chargeback_rate!
+        expect(presenter.payments_props[:payout_reserve_available]).to eq(true)
+
+        seller.update!(payouts_paused_by_user: true)
+        expect(presenter.payments_props[:payout_reserve_available]).to eq(true)
+        expect(presenter.payments_props[:payouts_paused_by_user]).to eq(true)
+      end
+
+      it "does not flag the hold while the reserve is switched off" do
+        pause_for_chargeback_rate!
+        allow(Feature).to receive(:active?).and_call_original
+        allow(Feature).to receive(:active?).with(:disable_chargeback_rate_payout_reserve).and_return(true)
+
+        expect(presenter.payments_props[:payout_reserve_available]).to eq(false)
+      end
+
+      it "does not flag other internal pauses" do
+        seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+        expect(presenter.payments_props[:payout_reserve_available]).to eq(false)
+
+        seller.update!(payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_ADMIN)
+        expect(presenter.payments_props[:payout_reserve_available]).to eq(false)
       end
     end
 

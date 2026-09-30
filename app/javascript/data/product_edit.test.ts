@@ -23,6 +23,7 @@ import {
   scalarSettingsForSave,
   StaleContentConflictError,
   StaleDeletionConflictError,
+  UnconfirmedSaveError,
   UnmarkedInstallmentPlanClearConflictError,
 } from "$app/data/product_edit";
 import { ResponseError } from "$app/utils/request";
@@ -119,6 +120,55 @@ describe("saveProduct with a failed upload", () => {
         }),
       }),
     );
+  });
+});
+
+describe("saveProduct with an unreadable response", () => {
+  const minimalProduct = () =>
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- fixture only carries the fields the save reads
+    ({
+      files: [],
+      public_files: [],
+      rich_content: [],
+      variants: [],
+      has_same_rich_content_for_all_variants: true,
+      covers: [],
+      availabilities: [],
+      confirmed_removed_variant_ids: [],
+      confirmed_removed_rich_content_ids: [],
+      preserved_rich_content_ids: [],
+      editor_revision: null,
+      allow_installment_plan: false,
+    }) as unknown as Parameters<typeof saveProduct>[2];
+  const respond = (response: object) => {
+    Object.assign(globalThis, { Routes: { link_path: () => "/p/demo" } });
+    requestMock.mockReset().mockResolvedValue(response);
+  };
+  const notJson = () => Promise.reject(new SyntaxError("Unexpected end of JSON input"));
+
+  it("answers a failed response that is not JSON with a plain ResponseError", async () => {
+    respond({ ok: false, status: 400, json: notJson });
+
+    const error = await saveProduct("demo", "product-id", minimalProduct(), "usd").catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ResponseError);
+    expect(error).not.toBeInstanceOf(UnconfirmedSaveError);
+  });
+
+  it.each([
+    ["is not JSON", notJson],
+    ["has the wrong shape", () => Promise.resolve({ variant_id_mappings: "nope" })],
+  ])("tells the seller to reload when a successful response %s", async (_label, json) => {
+    respond({ ok: true, status: 200, json });
+
+    const error = await saveProduct("demo", "product-id", minimalProduct(), "usd").catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(UnconfirmedSaveError);
+    expect(error).toHaveProperty(
+      "message",
+      "We could not confirm that your changes saved. Reload the page to check before saving again.",
+    );
+    expect(error).toHaveProperty("originalError");
   });
 });
 

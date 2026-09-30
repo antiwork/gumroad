@@ -36,11 +36,23 @@ describe SaudiArabiaBankAccount do
   end
 
   describe "#validate_bank_code" do
-    it "allows 8 to 11 characters only" do
+    it "allows 8 characters, or 11 with an XXX suffix" do
       expect(build(:saudi_arabia_bank_account, bank_code: "RIBLSARIXXX")).to be_valid
       expect(build(:saudi_arabia_bank_account, bank_code: "RIBLSARI")).to be_valid
       expect(build(:saudi_arabia_bank_account, bank_code: "RIBLSAR")).not_to be_valid
       expect(build(:saudi_arabia_bank_account, bank_code: "RIBLSARIXXXX")).not_to be_valid
+    end
+
+    it "rejects branch suffixes other than XXX and 9-10 character codes" do
+      expect(build(:saudi_arabia_bank_account, bank_code: "NCBKSAJE101")).not_to be_valid
+      expect(build(:saudi_arabia_bank_account, bank_code: "NCBKSAJE1")).not_to be_valid
+      expect(build(:saudi_arabia_bank_account, bank_code: "NCBKSAJE10")).not_to be_valid
+    end
+
+    it "does not revalidate the bank code on update" do
+      account = create(:saudi_arabia_bank_account)
+      account.update_column(:bank_number, "NCBKSAJE101")
+      expect(account.reload.update(account_holder_full_name: "Renamed Holder")).to be(true)
     end
   end
 end

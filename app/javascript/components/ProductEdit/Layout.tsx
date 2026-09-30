@@ -5,7 +5,7 @@ import { Link, useMatches, useNavigate } from "react-router-dom";
 import { setProductPublished } from "$app/data/publish_product";
 import { classNames } from "$app/utils/classNames";
 import { getAccessibleAccent, getContrastColor, hexToRgb } from "$app/utils/color";
-import { assertResponseError } from "$app/utils/request";
+import { ResponseError } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
@@ -139,7 +139,8 @@ export const Layout = ({
   // preview body), shown in the Receipt tab's email chrome. Null while the preview is loading.
   receiptSubject?: string | null;
 }) => {
-  const { product, updateProduct, uniquePermalink, saving, save, receiptEmailFrom } = useProductEditContext();
+  const { product, updateProduct, uniquePermalink, saving, saveBlocked, save, receiptEmailFrom } =
+    useProductEditContext();
   const currentSeller = useCurrentSeller();
   const rootPath = Routes.edit_link_path(uniquePermalink);
 
@@ -180,10 +181,7 @@ export const Layout = ({
       // content" confirmation. save() surfaces its own error alerts and
       // resolves false when it failed or the seller cancelled; stay put then.
       const saved = await save();
-      if (!saved) {
-        setIsPublishing(false);
-        return;
-      }
+      if (!saved) return;
       await setProductPublished(uniquePermalink, published);
       updateProduct({ is_published: published });
       showAlert(published ? "Published!" : "Unpublished!", "success");
@@ -194,10 +192,15 @@ export const Layout = ({
         navigate.current(`${rootPath}/share`);
       }
     } catch (e) {
-      assertResponseError(e);
-      showAlert(e.message, "error", { html: true });
+      if (e instanceof ResponseError) showAlert(e.message, "error", { html: true });
+      else {
+        // Release Save and Publish for any other error too, or they stay disabled with no message.
+        if (typeof reportError === "function") reportError(e);
+        showAlert("Something went wrong. Please try again.", "error");
+      }
+    } finally {
+      setIsPublishing(false);
     }
-    setIsPublishing(false);
   };
 
   const isUploadingFile = (file: FileEntry | SubtitleFile) =>
@@ -207,14 +210,16 @@ export const Layout = ({
     product.files.some((file) => isUploadingFile(file) || file.subtitle_files.some(isUploadingFile));
   const imageSettings = useImageUploadSettings();
   const isUploadingFilesOrImages = isLoading || isUploadingFiles || !!imageSettings?.isUploading;
-  const isBusy = isUploadingFilesOrImages || saving || isPublishing;
+  const isBusy = isUploadingFilesOrImages || saving || saveBlocked || isPublishing;
   const saveButtonTooltip = isUploadingFiles
     ? "Files are still uploading..."
     : isUploadingFilesOrImages
       ? "Images are still uploading..."
-      : isBusy
-        ? "Please wait..."
-        : undefined;
+      : saveBlocked
+        ? "Reload the page to save again."
+        : isBusy
+          ? "Please wait..."
+          : undefined;
 
   React.useEffect(() => {
     if (!isUploadingFilesOrImages) return;

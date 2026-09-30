@@ -23,10 +23,12 @@ import { RateLimitError } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
+import { Modal } from "$app/components/Modal";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { DefinitionList } from "$app/components/ui/DefinitionList";
+import { PageHeader } from "$app/components/ui/PageHeader";
 import { Textarea } from "$app/components/ui/Textarea";
 
 // While the seller is within this many px of the bottom we keep auto-scrolling as new content
@@ -465,6 +467,7 @@ const ProposedActionCard = ({
 export const AgentChat = ({ greeting, suggestions, locked = null }: Props) => {
   const [messages, setMessages] = React.useState<DisplayMessage[]>([{ role: "assistant", content: greeting }]);
   const [input, setInput] = React.useState("");
+  const [confirmingNewChat, setConfirmingNewChat] = React.useState(false);
   const [isSending, setIsSending] = React.useState(false);
   // The stored conversation this chat belongs to (server-side external id). Set when the latest
   // conversation is resumed on mount or when the first turn's response creates one; sent with each
@@ -488,6 +491,7 @@ export const AgentChat = ({ greeting, suggestions, locked = null }: Props) => {
   const [pendingActionIndex, setPendingActionIndex] = React.useState<number | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const inputRef = React.useRef<HTMLTextAreaElement>(null);
+  const newChatButtonRef = React.useRef<HTMLButtonElement>(null);
   const mountedRef = React.useRef(true);
   const actionStatusAbortControllersRef = React.useRef(new Map<string, AbortController>());
   // Whether to follow new content to the bottom. Stays true while the seller is near the bottom and
@@ -949,6 +953,36 @@ export const AgentChat = ({ greeting, suggestions, locked = null }: Props) => {
     }
   };
 
+  // Refused while anything can still adopt the old id or land on the old transcript: a turn in
+  // flight (onDone / interrupted-turn recovery), a pending confirmation, or a card still applying
+  // (after confirmAction has cleared its pending index). An executing card without a proposal id
+  // has no status endpoint to settle it, so it must not hold the button forever.
+  const hasExecutingAction = messages.some(
+    (message) => message.actionStatus === "executing" && Boolean(message.proposalMessageId),
+  );
+  // The dialog opens from a plain button, so nothing hands focus back to it when the seller backs out.
+  const keepChat = () => {
+    setConfirmingNewChat(false);
+    window.setTimeout(() => newChatButtonRef.current?.focus({ preventScroll: true }), 0);
+  };
+  const startNewChat = () => {
+    setConfirmingNewChat(false);
+    if (isSending || pendingActionIndex !== null || hasExecutingAction || locked) return;
+    // A settled turn can still be draining suggestion chips — drop its late frames on the discarded
+    // chat. Its connection stays open: only the server's verdict makes aborting one safe.
+    sendGenerationRef.current += 1;
+    setConversationId(null);
+    setMessages([{ role: "assistant", content: greeting }]);
+    setInput("");
+    setFollowUps([]);
+    setPendingActionIndex(null);
+    setIsStreaming(false);
+    stickToBottom.current = true;
+    // The button unmounts with the reset, which would drop keyboard focus to the page body. The
+    // dialog also returns focus as it closes, so wait for that before claiming it.
+    window.setTimeout(() => inputRef.current?.focus({ preventScroll: true }), 0);
+  };
+
   const confirmAction = async (index: number, action: ProposedAction, proposalMessageId?: string) => {
     setPendingActionIndex(index);
     setMessages((prev) => prev.map((msg, i) => (i === index ? { ...msg, actionWarning: null } : msg)));
@@ -1019,9 +1053,47 @@ export const AgentChat = ({ greeting, suggestions, locked = null }: Props) => {
   };
 
   const hasText = input.trim().length > 0;
+  const canStartNewChat = !locked && (messages.length > 1 || conversationId !== null);
 
   return (
     <div className="flex h-full flex-col">
+      {/* Below `sm` the header has no title, so it only shows when it carries the New chat action. */}
+      <PageHeader
+        title="Agent"
+        className={canStartNewChat ? "p-2 sm:p-4 md:p-8" : "hidden sm:flex"}
+        actions={
+          canStartNewChat ? (
+            // The header's mobile actions grid stretches a bare button to full width.
+            <div className="flex justify-end">
+              <Button
+                size="sm"
+                className="sm:px-4 sm:py-3 sm:text-base"
+                ref={newChatButtonRef}
+                aria-label="New chat"
+                disabled={isSending || pendingActionIndex !== null || hasExecutingAction}
+                onClick={() => setConfirmingNewChat(true)}
+              >
+                New chat
+              </Button>
+            </div>
+          ) : null
+        }
+      />
+      <Modal
+        open={confirmingNewChat}
+        title="Start a new chat?"
+        onClose={keepChat}
+        footer={
+          <>
+            <Button onClick={keepChat}>Keep this chat</Button>
+            <Button color="primary" onClick={startNewChat}>
+              Start new chat
+            </Button>
+          </>
+        }
+      >
+        <p>This conversation will disappear from the screen, and you won't be able to open it again.</p>
+      </Modal>
       {/* The scroll container spans the full width so its scrollbar sits at the far right; the chat
           content inside stays narrow and centered (max-w-2xl). */}
       <div

@@ -309,6 +309,8 @@ export const ProductEditContext = React.createContext<{
   s3Url: string;
   availableCountries: ShippingCountry[];
   saving: boolean;
+  // A save may have reached the server but this page cannot save again safely until it reloads.
+  saveBlocked: boolean;
   // Resolves true only when the save request actually succeeded (false on
   // request failure or when the seller cancels the deletion confirmation) —
   // callers chaining navigation on save() must check it before proceeding.

@@ -4,7 +4,12 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { type SaveProductResponse, saveProductError } from "$app/data/product_edit";
+import {
+  HiddenVariantContentConflictError,
+  type SaveProductResponse,
+  saveProductError,
+  UnconfirmedSaveError,
+} from "$app/data/product_edit";
 import { confirmRemovedVariantPageDeletions } from "$app/data/product_save_contract";
 
 import { type FileEntry, ProductEditContext, type Product, type Version } from "$app/components/ProductEdit/state";
@@ -1262,6 +1267,132 @@ describe("a failed upload's embed", () => {
     await save();
 
     expect(contextCapture.current?.contentUpdates).toEqual({ uniquePermalinkOrVariantIds: ["tier-a"] });
+  });
+});
+
+// Save must be released after an error the editor does not know, and stay off only when a retry
+// could repeat changes the server already kept.
+describe("a save that fails with an unexpected error", () => {
+  const reportErrorSpy = vi.fn();
+  beforeEach(() => {
+    reportErrorSpy.mockReset();
+    vi.stubGlobal("reportError", reportErrorSpy);
+  });
+  afterEach(() => vi.unstubAllGlobals());
+  const renderEditor = async () => {
+    const product = buildTieredProduct([
+      buildTier("tier-a", "Tier A", [
+        {
+          id: "existing-page",
+          title: "Unchanged",
+          description: { type: "doc", content: [] },
+          updated_at: "2026-01-01T00:00:00Z",
+        },
+      ]),
+    ]);
+    vi.mocked(showAlert).mockClear();
+    render(<ProductEditPage {...buildTieredProps(product)} />);
+    await waitFor(() => expect(contextCapture.current).not.toBeNull());
+  };
+  const save = async () => {
+    let saved: boolean | undefined;
+    await act(async () => {
+      saved = await contextCapture.current?.save();
+    });
+    return saved;
+  };
+
+  it("releases the saving state and tells the seller, so Save can be pressed again", async () => {
+    await renderEditor();
+    saveProductMock.mockRejectedValueOnce(new TypeError("Unexpected response shape"));
+
+    expect(await save()).toBe(false);
+
+    expect(contextCapture.current?.saving).toBe(false);
+    expect(reportErrorSpy).toHaveBeenCalledTimes(1);
+    expect(showAlert).toHaveBeenCalledWith("Something went wrong while saving. Please try again.", "error");
+
+    saveProductMock.mockResolvedValueOnce({} satisfies SaveProductResponse);
+    expect(await save()).toBe(true);
+    expect(saveProductMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps Save disabled and reports no success when a saved response cannot be reconciled", async () => {
+    await renderEditor();
+    saveProductMock.mockResolvedValueOnce({
+      get variant_id_mappings(): Record<string, string> {
+        throw new Error("reconcile failed");
+      },
+    } satisfies SaveProductResponse);
+
+    expect(await save()).toBe(false);
+
+    // The server kept the save but the editor holds stale ids, so another save must wait for a reload.
+    expect(contextCapture.current?.saving).toBe(false);
+    expect(contextCapture.current?.saveBlocked).toBe(true);
+    expect(
+      await screen.findByText("Your changes were saved, but this page could not refresh to match them."),
+    ).toBeTruthy();
+  });
+
+  it("keeps Save disabled and reports the cause when the server's answer cannot be confirmed", async () => {
+    await renderEditor();
+    const cause = new SyntaxError("Unexpected end of JSON input");
+    saveProductMock.mockRejectedValueOnce(new UnconfirmedSaveError(cause));
+
+    expect(await save()).toBe(false);
+
+    expect(contextCapture.current?.saving).toBe(false);
+    expect(contextCapture.current?.saveBlocked).toBe(true);
+    expect(reportErrorSpy).toHaveBeenCalledWith(cause);
+    expect(
+      await screen.findByText(
+        "We could not confirm that your changes saved. Reload the page to check before saving again.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("refuses a later save from any caller while a reload is required", async () => {
+    await renderEditor();
+    saveProductMock.mockRejectedValueOnce(new UnconfirmedSaveError(new SyntaxError("Unexpected end of JSON input")));
+    await save();
+    saveProductMock.mockClear();
+
+    expect(await save()).toBe(false);
+    expect(saveProductMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps the reload explanation on the page after the seller dismisses the modal", async () => {
+    await renderEditor();
+    saveProductMock.mockRejectedValueOnce(new UnconfirmedSaveError(new SyntaxError("Unexpected end of JSON input")));
+    await save();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Keep this page open" }));
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByText(/Save is turned off until you reload\./u)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Reload page" })).toBeTruthy();
+  });
+
+  it("keeps Save disabled while the page reloads after keeping version content", async () => {
+    const reload = vi.fn();
+    vi.stubGlobal("location", { ...window.location, reload });
+    await renderEditor();
+    saveProductMock.mockRejectedValueOnce(
+      new HiddenVariantContentConflictError("conflict", [
+        { id: "hidden-page", title: "Hidden", variant_name: "Tier A" },
+      ]),
+    );
+    await save();
+    saveProductMock.mockResolvedValueOnce({} satisfies SaveProductResponse);
+
+    await act(async () => {
+      fireEvent.click(await screen.findByRole("button", { name: /^Keep (?!shared).* content$/u }));
+    });
+
+    expect(reload).toHaveBeenCalledTimes(1);
+    expect(contextCapture.current?.saving).toBe(false);
+    expect(contextCapture.current?.saveBlocked).toBe(true);
   });
 });
 

@@ -1219,3 +1219,247 @@ describe("AgentChat locked state", () => {
     expect(screen.getByText("List my products")).toBeTruthy();
   });
 });
+
+describe("AgentChat new chat control", () => {
+  const RESUMED_REPLY = "Refunds go back to the buyer's card.";
+  const resumedConversation = {
+    id: "conv1",
+    title: "Refunds",
+    messages: [
+      { role: "user" as const, content: "how do refunds work" },
+      { role: "assistant" as const, content: RESUMED_REPLY },
+    ],
+  };
+
+  beforeEach(() => {
+    fetchLatestAgentConversation.mockReset();
+    streamAgentMessage.mockReset();
+    fetchAgentTurnStatus.mockReset();
+    fetchAgentActionStatus.mockReset();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  // New chat asks first: leaving a conversation is not undoable from the tab.
+  const confirmNewChat = () => {
+    fireEvent.click(screen.getByLabelText("New chat"));
+    fireEvent.click(screen.getByRole("button", { name: "Start new chat" }));
+  };
+
+  it("drops the resumed conversation so the next turn starts a new one", async () => {
+    fetchLatestAgentConversation.mockResolvedValue(resumedConversation);
+    streamAgentMessage.mockImplementation(async (_messages, handlers = {}) => {
+      handlers.onToken?.("Fresh start.");
+      return {
+        reply: "Fresh start.",
+        proposedAction: null,
+        proposalMessageId: null,
+        objects: [],
+        suggestions: [],
+        conversationId: "conv2",
+      };
+    });
+
+    render(<AgentChat greeting="Hi" suggestions={[]} />);
+    await waitFor(() => expect(screen.getByText(RESUMED_REPLY)).toBeTruthy());
+
+    // A draft typed before New chat belongs to the conversation being left, not the new one.
+    fireEvent.change(screen.getByLabelText("Message"), { target: { value: "half-written draft" } });
+    confirmNewChat();
+
+    // The resumed transcript is gone, the stale id with it, and the composer is empty.
+    expect(screen.queryByText(RESUMED_REPLY)).toBeNull();
+    expect(screen.getByText("Hi")).toBeTruthy();
+    expect(screen.getByLabelText<HTMLTextAreaElement>("Message").value).toBe("");
+
+    await sendMessage("start over");
+
+    // No conversation_id on the turn, which is what makes the server create (and title) a new one.
+    expect(streamAgentMessage.mock.calls.at(-1)?.[2]).toBeNull();
+  });
+
+  it("offers no new chat on a chat with nothing to leave", async () => {
+    fetchLatestAgentConversation.mockResolvedValue(null);
+
+    render(<AgentChat greeting="Hi" suggestions={[]} />);
+    await waitFor(() => expect(fetchLatestAgentConversation).toHaveBeenCalled());
+
+    expect(screen.queryByLabelText("New chat")).toBeNull();
+
+    // Once the seller's first turn creates a conversation, there is one to leave.
+    streamAgentMessage.mockResolvedValue({
+      reply: "Hello.",
+      proposedAction: null,
+      proposalMessageId: null,
+      objects: [],
+      suggestions: [],
+      conversationId: "conv1",
+    });
+    await sendMessage("hi");
+    await waitFor(() => expect(screen.getByLabelText("New chat").hasAttribute("disabled")).toBe(false));
+  });
+
+  it("clears a typed draft so it does not carry into the new chat", async () => {
+    fetchLatestAgentConversation.mockResolvedValue(resumedConversation);
+
+    render(<AgentChat greeting="Hi" suggestions={[]} />);
+    await waitFor(() => expect(screen.getByText(RESUMED_REPLY)).toBeTruthy());
+
+    fireEvent.change(screen.getByLabelText("Message"), { target: { value: "half-typed thought" } });
+    confirmNewChat();
+
+    expect(screen.getByLabelText<HTMLTextAreaElement>("Message").value).toBe("");
+  });
+
+  it("puts the seller back in the composer after starting a new chat", async () => {
+    fetchLatestAgentConversation.mockResolvedValue(resumedConversation);
+
+    render(<AgentChat greeting="Hi" suggestions={[]} />);
+    await waitFor(() => expect(screen.getByText(RESUMED_REPLY)).toBeTruthy());
+
+    // The button unmounts with the reset; focus must not fall back to the page body.
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    confirmNewChat();
+
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText("Message")));
+  });
+
+  it("asks before leaving the conversation, and keeps it when the seller backs out", async () => {
+    fetchLatestAgentConversation.mockResolvedValue(resumedConversation);
+
+    render(<AgentChat greeting="Hi" suggestions={[]} />);
+    await waitFor(() => expect(screen.getByText(RESUMED_REPLY)).toBeTruthy());
+
+    fireEvent.click(screen.getByLabelText("New chat"));
+    expect(screen.getByRole("dialog", { name: "Start a new chat?" })).toBeTruthy();
+    expect(screen.getByText(RESUMED_REPLY)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Keep this chat" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(screen.getByText(RESUMED_REPLY)).toBeTruthy();
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText("New chat")));
+
+    await sendMessage("still here");
+    expect(streamAgentMessage.mock.calls.at(-1)?.[2]).toBe("conv1");
+  });
+
+  it("starts the next turn without a conversation id after a settled turn adopted one", async () => {
+    fetchLatestAgentConversation.mockResolvedValue(null);
+    let handlers: Parameters<typeof streamAgentMessage>[1];
+    let finishStream: (value: Awaited<ReturnType<typeof streamAgentMessage>>) => void = () => {};
+    const done = {
+      reply: "First reply.",
+      proposedAction: null,
+      proposalMessageId: null,
+      objects: [],
+      suggestions: [],
+      conversationId: "conv1",
+    };
+    streamAgentMessage.mockImplementationOnce((_messages, streamHandlers) => {
+      handlers = streamHandlers;
+      return new Promise((resolve) => {
+        finishStream = resolve;
+      });
+    });
+
+    render(<AgentChat greeting="Hi" suggestions={[]} />);
+    await sendMessage("first");
+    // onDone unlocks the composer while the connection is still draining suggestion chips.
+    act(() => {
+      handlers?.onDone?.(done);
+    });
+    await waitFor(() => expect(screen.getByLabelText("New chat").hasAttribute("disabled")).toBe(false));
+
+    confirmNewChat();
+    expect(screen.queryByText("First reply.")).toBeNull();
+
+    await act(async () => {
+      handlers?.onSuggestions?.(["Late chip"]);
+      finishStream({ ...done, suggestions: ["Late chip"] });
+      await Promise.resolve();
+    });
+    expect(screen.queryByText("Late chip")).toBeNull();
+    expect(screen.queryByLabelText("Suggested follow-ups")).toBeNull();
+
+    streamAgentMessage.mockResolvedValueOnce({ ...done, reply: "Second reply.", conversationId: "conv2" });
+    await sendMessage("second");
+    await waitFor(() => expect(streamAgentMessage).toHaveBeenCalledTimes(2));
+    expect(streamAgentMessage.mock.calls.at(-1)?.[2]).toBeNull();
+  });
+
+  it("cannot leave a card whose confirmation is still being reconciled", async () => {
+    fetchLatestAgentConversation.mockResolvedValue({
+      id: "conv1",
+      title: null,
+      messages: [
+        {
+          role: "assistant" as const,
+          content: "Applying your page edit.",
+          proposed_action: {
+            type: "api_write" as const,
+            params: { endpoint: "edit_user_custom_html", path_params: {}, params: { find: "a", replace: "b" } },
+            summary: "Edit the custom page.",
+            title: "Edit your page",
+          },
+          proposal_message_id: "message1",
+          action_status: "executing" as const,
+        },
+      ],
+    });
+    // The status read never settles, so the card stays on "Applying…".
+    fetchAgentActionStatus.mockImplementation(() => new Promise(() => {}));
+
+    render(<AgentChat greeting="Hi" suggestions={[]} />);
+    await waitFor(() => expect(fetchAgentActionStatus).toHaveBeenCalled());
+
+    const newChat = screen.getByLabelText("New chat");
+    expect(newChat.hasAttribute("disabled")).toBe(true);
+    fireEvent.click(newChat);
+    expect(screen.getByText("Applying your page edit.")).toBeTruthy();
+  });
+
+  it("can leave an executing card that has no proposal id to reconcile", async () => {
+    fetchLatestAgentConversation.mockResolvedValue({
+      id: "conv1",
+      title: null,
+      messages: [
+        {
+          role: "assistant" as const,
+          content: "Applying your page edit.",
+          proposed_action: {
+            type: "api_write" as const,
+            params: { endpoint: "edit_user_custom_html", path_params: {}, params: { find: "a", replace: "b" } },
+            summary: "Edit the custom page.",
+            title: "Edit your page",
+          },
+          action_status: "executing" as const,
+        },
+      ],
+    });
+
+    render(<AgentChat greeting="Hi" suggestions={[]} />);
+    await waitFor(() => expect(screen.getByText("Applying your page edit.")).toBeTruthy());
+
+    expect(screen.getByLabelText("New chat").hasAttribute("disabled")).toBe(false);
+  });
+
+  it("cannot switch conversations under an in-flight turn", async () => {
+    fetchLatestAgentConversation.mockResolvedValue(resumedConversation);
+    // A turn that never settles: its callbacks still own the chat and would adopt conv1 back onto it.
+    streamAgentMessage.mockImplementation(() => new Promise(() => {}));
+
+    render(<AgentChat greeting="Hi" suggestions={[]} />);
+    await waitFor(() => expect(screen.getByText(RESUMED_REPLY)).toBeTruthy());
+
+    await sendMessage("keep going");
+
+    const newChat = screen.getByLabelText("New chat");
+    expect(newChat.hasAttribute("disabled")).toBe(true);
+    fireEvent.click(newChat);
+    // The resumed transcript is still on screen: no switch happened under the turn.
+    expect(screen.getByText(RESUMED_REPLY)).toBeTruthy();
+  });
+});
