@@ -6,7 +6,7 @@ class Api::Internal::Admin::PiracyReportsController < Api::Internal::Admin::Base
   MAX_LIST_RESULTS = 100
   MAX_PRODUCT_FILES = 50
   MAX_DESCRIPTION_LENGTH = 2000
-  SCREEN_PARAM_KEYS = %w[verdict checks recipient_kind recipient_name recipient_email recipient_source_url].freeze
+  SCREEN_PARAM_KEYS = %w[verdict checks].freeze
 
   # Params are read as strings so a nested value like state[x]=y cannot reach a query as a hash.
   before_action :find_report_or_render, only: %i[show start_screening screen]
@@ -52,7 +52,7 @@ class Api::Internal::Admin::PiracyReportsController < Api::Internal::Admin::Base
 
     record_admin_write(action: "piracy_reports.create", target: user) do
       result = PiracyReports::CreateService.new(
-        seller: user, product:, url: params[:url], source: "support", actor: Current.admin_actor, ticket_url: params[:ticket_url]
+        seller: user, product:, url: params[:url], source: "support", ticket_url: params[:ticket_url]
       ).call
 
       if result.success?
@@ -66,7 +66,7 @@ class Api::Internal::Admin::PiracyReportsController < Api::Internal::Admin::Base
   # The rescue sits inside the audited block so the audit row records the 422 the client sees.
   def start_screening
     record_admin_write(action: "piracy_reports.start_screening", target: @report) do
-      @report.with_lock { @report.start_screening!(Current.admin_actor) }
+      @report.with_lock { @report.start_screening! }
       render json: { success: true, report: serialize_summary(@report) }
     rescue StateMachines::InvalidTransition => e
       render json: { success: false, message: e.message }, status: :unprocessable_entity
@@ -76,7 +76,7 @@ class Api::Internal::Admin::PiracyReportsController < Api::Internal::Admin::Base
   def screen
     record_admin_write(action: "piracy_reports.screen", target: @report) do
       result = PiracyReports::ScreenService.new(
-        report: @report, actor: Current.admin_actor, params: params.to_unsafe_h.slice(*SCREEN_PARAM_KEYS)
+        report: @report, params: params.to_unsafe_h.slice(*SCREEN_PARAM_KEYS)
       ).call
 
       if result.success?
@@ -128,9 +128,8 @@ class Api::Internal::Admin::PiracyReportsController < Api::Internal::Admin::Base
         screening_verdict: report.screening_verdict,
         screening_checks: report.screening_checks,
         screened_at: report.screened_at.as_json,
-        recipient: { kind: report.recipient_kind, name: report.recipient_name, source_url: report.recipient_source_url },
-        infringing_urls: report.infringing_urls,
-        # The notice holds the seller's name, address and email; the agent gets only its digest.
+        recipient: { name: report.recipient_name, email: report.recipient_email },
+        # The notice holds the seller's legal name and email; the agent gets only its digest.
         notice_digest: report.notice_digest
       )
     end

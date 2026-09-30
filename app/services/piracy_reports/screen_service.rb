@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# The agent supplies a verdict, its checks and a recipient, and no notice text or URLs.
+# The agent supplies only a verdict and its checks. The recipient comes from RecipientRegistry.
 class PiracyReports::ScreenService
   Result = Struct.new(:report, :errors, keyword_init: true) do
     def success?
@@ -10,12 +10,9 @@ class PiracyReports::ScreenService
 
   # Anything but a boolean or its string form, such as [false], must not be read as true.
   PASSED_VALUES = { true => true, "true" => true, false => false, "false" => false }.freeze
-  MAX_NAME_LENGTH = 100
-  NAME_FORMAT = /\A[\p{L}\p{N} .,&'-]+\z/
 
-  def initialize(report:, actor:, params:)
+  def initialize(report:, params:)
     @report = report
-    @actor = actor
     @params = params
   end
 
@@ -25,7 +22,7 @@ class PiracyReports::ScreenService
   end
 
   private
-    attr_reader :report, :actor, :params
+    attr_reader :report, :params
 
     def screen
       return Result.new(report:, errors: ["The report is not being screened"]) unless report.screening?
@@ -54,15 +51,6 @@ class PiracyReports::ScreenService
       check_params.slice(*PiracyReport::SCREENING_CHECKS).select { |_, entry| entry.is_a?(Hash) }
     end
 
-    def recipient
-      @recipient ||= {
-        kind: params[:recipient_kind].to_s,
-        name: params[:recipient_name].to_s.squish,
-        email: params[:recipient_email].to_s.strip,
-        source_url: params[:recipient_source_url].to_s.strip
-      }
-    end
-
     def input_errors
       errors = []
       errors << "verdict must be pass or fail" unless %w[pass fail].include?(verdict)
@@ -89,60 +77,7 @@ class PiracyReports::ScreenService
       missing = PiracyReport::SCREENING_CHECKS - checks_from_agent.keys
       errors << "a pass verdict needs every check: missing #{missing.join(", ")}" if missing.any?
       errors << "every check must pass for a pass verdict" unless checks_from_agent.values.all? { _1["passed"] }
-      errors.concat(recipient_errors)
       errors
-    end
-
-    def recipient_errors
-      errors = []
-      errors << "recipient_kind must be one of #{PiracyReport::RECIPIENT_KINDS.join(", ")}" unless PiracyReport::RECIPIENT_KINDS.include?(recipient[:kind])
-      unless recipient[:name].length.between?(1, MAX_NAME_LENGTH) && recipient[:name].match?(NAME_FORMAT)
-        errors << "recipient_name must be 1 to #{MAX_NAME_LENGTH} letters, digits, spaces or . , & ' -"
-      end
-      errors << "recipient_email is invalid" unless recipient[:email].length <= 254 && EmailFormatValidator.valid?(recipient[:email])
-      errors << "recipient_email cannot be a Gumroad address" if gumroad_email?(recipient[:email])
-      errors << "recipient_email cannot be the seller's address" if seller_email?(recipient[:email])
-      errors.concat(source_url_errors)
-      errors
-    end
-
-    # Rails cannot read the cited page, so it limits where the citation may point and what it may
-    # name. A contact cited from the site itself must be an address on that domain; a third-party
-    # agent or a hosting provider must come from the Copyright Office directory.
-    def source_url_errors
-      uri = PiracyReport.parse_http_url(recipient[:source_url])
-      if uri.nil? || recipient[:source_url].length > PiracyReport::MAX_URL_LENGTH
-        return ["recipient_source_url must be an http(s) URL of at most #{PiracyReport::MAX_URL_LENGTH} characters"]
-      end
-
-      host = PiracyReport.normalized_host(uri.host)
-      directory = PiracyReport::COPYRIGHT_DIRECTORY_HOST
-      return [] if host == directory || host.end_with?(".#{directory}")
-
-      site = PiracyReport.registrable_domain(report.url_host)
-      if recipient[:kind] == "site" && PiracyReport.registrable_domain(host) == site
-        return email_on_site?(site) ? [] : ["recipient_email must be an address at #{site} when the contact page is on the reported site; cite the Copyright Office directory for a third-party agent"]
-      end
-
-      ["recipient_source_url must be a page on #{[("#{site}" if recipient[:kind] == "site"), directory].compact.join(" or ")}"]
-    end
-
-    # A heuristic. A site that gives out mailboxes on its own domain (a free-mail provider that also
-    # hosts files) can still pass. The control is slice 2: the seller sees the recipient and its
-    # source before signing.
-    def email_on_site?(site)
-      # A malformed address already has its own error.
-      return true unless EmailFormatValidator.valid?(recipient[:email])
-
-      PiracyReport.registrable_domain(recipient[:email].to_s.split("@").last.to_s) == site
-    end
-
-    def gumroad_email?(email)
-      PiracyReport.gumroad_host?(email.to_s.split("@").last.to_s)
-    end
-
-    def seller_email?(email)
-      [report.seller.email, report.seller.unconfirmed_email].compact.any? { _1.casecmp?(email) }
     end
 
     def pass
@@ -150,21 +85,24 @@ class PiracyReports::ScreenService
       rails_errors << PiracyReport::HOSTED_ON_GUMROAD_ERROR if PiracyReport.gumroad_hosted?(report.url_host)
       return fail_report(checks_from_agent, rails_errors:) if rails_errors.any?
 
+      recipient = PiracyReports::RecipientRegistry.for_host(report.url_host)
+      return Result.new(report:, errors: [no_recipient_error]) if recipient.nil?
+
       report.assign_attributes(
         screening_verdict: "pass",
         screening_checks: { "agent" => checks_from_agent },
         screened_at: Time.current,
-        infringing_urls: [report.url],
-        recipient_kind: recipient[:kind],
-        recipient_name: recipient[:name],
-        recipient_email: recipient[:email],
-        recipient_source_url: recipient[:source_url]
+        recipient_name: recipient.name,
+        recipient_email: recipient.email
       )
       report.notice_text = PiracyReports::NoticeRenderer.new(report).call
       report.notice_digest = Digest::SHA256.hexdigest(report.notice_text)
-      report.signature_statement_version = PiracyReports::NoticeRenderer::STATEMENT_VERSION
-      report.pass_screening!(actor)
+      report.pass_screening!
       Result.new(report:, errors: [])
+    end
+
+    def no_recipient_error
+      "No verified recipient for #{report.url_host}. The report stays in screening until one is added to config/piracy_recipients.yml."
     end
 
     def fail_report(agent_checks, rails_errors: [])
@@ -173,7 +111,7 @@ class PiracyReports::ScreenService
         screening_checks: { "agent" => agent_checks, "rails" => rails_errors },
         screened_at: Time.current
       )
-      report.fail_screening!(actor)
+      report.fail_screening!
       Result.new(report:, errors: [])
     end
 end

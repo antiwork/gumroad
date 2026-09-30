@@ -3,11 +3,10 @@
 require "spec_helper"
 
 describe PiracyReports::CreateService do
-  let(:admin) { create(:admin_user) }
   let(:url) { "https://example.net/design-course" }
 
   def call(seller:, product:, url: self.url, source: "support")
-    described_class.new(seller:, product:, url:, source:, actor: admin, ticket_url: "https://helper.example.com/tickets/1").call
+    described_class.new(seller:, product:, url:, source:, ticket_url: "https://helper.example.com/tickets/1").call
   end
 
   context "with an eligible seller" do
@@ -15,12 +14,11 @@ describe PiracyReports::CreateService do
     let(:seller) { seller_and_product.first }
     let(:product) { seller_and_product.last }
 
-    it "creates a requested report with the source, ticket and actor" do
+    it "creates a requested report with the source and ticket" do
       result = call(seller:, product:)
 
       expect(result).to be_success
       expect(result.report).to have_attributes(state: "requested", source: "support", ticket_url: "https://helper.example.com/tickets/1", seller:, product:)
-      expect(result.report.events.sole.actor_id).to eq(admin.id)
     end
 
     it "rejects a URL that is not http or https" do
@@ -45,7 +43,7 @@ describe PiracyReports::CreateService do
       long_url = "https://example.net/#{"a" * PiracyReport::MAX_REPORTED_URL_LENGTH}"
 
       result = call(seller:, product:, url: long_url)
-      ticket = described_class.new(seller:, product:, url:, source: "support", actor: admin, ticket_url: "https://helper.example.com/#{"a" * 1024}").call
+      ticket = described_class.new(seller:, product:, url:, source: "support", ticket_url: "https://helper.example.com/#{"a" * 1024}").call
 
       expect(result.errors).to eq(["Url is too long (maximum is 500 characters)"])
       expect(ticket.errors).to eq(["Ticket url is too long (maximum is 1024 characters)"])
@@ -118,14 +116,18 @@ describe PiracyReports::CreateService do
       expect(call(seller:, product:).errors).to include("The seller has not completed payout setup")
     end
 
-    it "rejects a seller whose payout record has no legal name or address to print in the notice" do
+    it "rejects a seller whose payout record has no legal name to print in the notice" do
       seller, product = create_piracy_seller_with_product
       seller.alive_user_compliance_info.update_columns(first_name: nil, last_name: nil)
-      other_seller, other_product = create_piracy_seller_with_product
-      other_seller.alive_user_compliance_info.update_columns(street_address: nil)
 
       expect(call(seller:, product:).errors).to include("The seller has not completed payout setup")
-      expect(call(seller: other_seller, product: other_product).errors).to include("The seller has not completed payout setup")
+    end
+
+    it "accepts a seller whose payout record has no street address, since the notice does not print it" do
+      seller, product = create_piracy_seller_with_product
+      seller.alive_user_compliance_info.update_columns(street_address: nil)
+
+      expect(call(seller:, product:)).to be_success
     end
 
     it "rejects a product that belongs to another seller" do

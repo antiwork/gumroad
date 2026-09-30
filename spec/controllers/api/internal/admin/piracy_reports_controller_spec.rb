@@ -175,7 +175,6 @@ describe Api::Internal::Admin::PiracyReportsController do
       expect(response).to have_http_status(:created)
       report = PiracyReport.last
       expect(report).to have_attributes(source: "support", state: "requested", seller:, product:, ticket_url: "https://helper.example.com/tickets/1")
-      expect(report.events.sole.actor_id).to eq(bot.id)
       expect(AdminApiAuditLog.last).to have_attributes(action: "piracy_reports.create", target_external_id: seller.external_id)
     end
 
@@ -231,7 +230,7 @@ describe Api::Internal::Admin::PiracyReportsController do
       post :start_screening, params: { id: report.external_id }
 
       expect(response).to have_http_status(:unprocessable_entity)
-      expect(report.reload.events.where(event: "start_screening")).to be_empty
+      expect(report.reload.state).to eq("screening")
       expect(AdminApiAuditLog.last).to have_attributes(action: "piracy_reports.start_screening", response_status: 422, error_class: nil)
     end
 
@@ -250,16 +249,11 @@ describe Api::Internal::Admin::PiracyReportsController do
     let(:product) { seller_and_product.last }
     let(:report) { create(:piracy_report, :screening, seller:, product:) }
     let(:checks) { PiracyReport::SCREENING_CHECKS.index_with { { passed: true, reason: "Matches the product." } } }
-    let(:pass_params) do
-      {
-        id: report.external_id,
-        verdict: "pass",
-        checks:,
-        recipient_kind: "site",
-        recipient_name: "Example Net",
-        recipient_email: "copyright@example.net",
-        recipient_source_url: "https://example.net/copyright"
-      }
+    let(:pass_params) { { id: report.external_id, verdict: "pass", checks: } }
+
+    before do
+      entry = PiracyReports::RecipientRegistry::Entry.new(name: "Example Net Inc.", email: "copyright@example.net", source_url: "https://dmca.copyright.gov/osp/example")
+      allow(PiracyReports::RecipientRegistry).to receive(:entries).and_return("example.net" => entry)
     end
 
     it "passes the report, returns the rendered notice and audits the write" do
@@ -274,19 +268,22 @@ describe Api::Internal::Admin::PiracyReportsController do
       expect(AdminApiAuditLog.last).to have_attributes(action: "piracy_reports.screen", target_external_id: report.external_id)
     end
 
-    it "never returns the rendered notice, which holds the seller's name, address and email" do
+    it "never returns the rendered notice, which holds the seller's legal name and email" do
       post :screen, params: pass_params
       get :show, params: { id: report.external_id }
 
       expect(response.body).not_to include(seller.email)
-      expect(response.body).not_to include(seller.alive_user_compliance_info.legal_entity_street_address)
       expect(response.parsed_body["report"]).not_to have_key("notice_text")
+      expect(response.parsed_body["report"]["recipient"]).to eq("name" => "Example Net Inc.", "email" => "copyright@example.net")
     end
 
-    it "redacts the recipient email in the audit snapshot" do
-      post :screen, params: pass_params
+    it "returns 422 and keeps the report in screening when the host has no registry entry" do
+      unlisted = create(:piracy_report, :screening, seller:, product:, url: "https://unlisted.example.org/course")
 
-      expect(AdminApiAuditLog.last.params_snapshot["recipient_email"]).to eq("[REDACTED]")
+      post :screen, params: pass_params.merge(id: unlisted.external_id)
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(unlisted.reload.state).to eq("screening")
     end
 
     it "declines the report on a fail verdict" do
@@ -297,10 +294,10 @@ describe Api::Internal::Admin::PiracyReportsController do
     end
 
     it "returns 422 with the errors for invalid input and leaves the report in screening" do
-      post :screen, params: pass_params.merge(recipient_email: "not-an-email")
+      post :screen, params: pass_params.merge(checks: checks.merge("page_offers_work" => { passed: "maybe", reason: "r" }))
 
       expect(response).to have_http_status(:unprocessable_entity)
-      expect(response.parsed_body["errors"]).to eq(["recipient_email is invalid"])
+      expect(response.parsed_body["errors"]).to include("check page_offers_work passed must be true or false")
       expect(report.reload.state).to eq("screening")
     end
 

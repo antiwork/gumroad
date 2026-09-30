@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_16_130003) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_16_130002) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -1664,18 +1664,6 @@ create_table "ping_deliveries", charset: "utf8mb4", collation: "utf8mb4_unicode_
     t.index ["user_id", "created_at"], name: "index_ping_deliveries_on_user_id_and_created_at"
   end
 
-  create_table "piracy_report_events", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
-    t.bigint "piracy_report_id", null: false
-    t.string "event", limit: 64, null: false
-    t.string "from_state", limit: 32
-    t.string "to_state", limit: 32
-    t.string "actor_type", limit: 16, null: false
-    t.bigint "actor_id"
-    t.json "data"
-    t.datetime "created_at", null: false
-    t.index ["piracy_report_id", "created_at"], name: "index_piracy_report_events_on_piracy_report_id_and_created_at"
-  end
-
   create_table "piracy_reports", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "external_id", limit: 21, null: false
     t.bigint "seller_id", null: false
@@ -1685,28 +1673,13 @@ create_table "ping_deliveries", charset: "utf8mb4", collation: "utf8mb4_unicode_
     t.string "state", limit: 32, null: false
     t.string "url", limit: 2048, null: false
     t.string "normalized_url_digest", limit: 64, null: false
-    t.string "recipient_kind", limit: 16
     t.string "recipient_name"
     t.string "recipient_email"
-    t.string "recipient_source_url", limit: 2048
-    t.json "infringing_urls"
     t.string "screening_verdict", limit: 16
     t.json "screening_checks"
     t.datetime "screened_at"
     t.text "notice_text"
     t.string "notice_digest", limit: 64
-    t.string "signature_statement_version", limit: 32
-    t.string "signed_name"
-    t.datetime "signed_at"
-    t.string "signed_ip", limit: 45
-    t.string "signed_digest", limit: 64
-    t.datetime "sent_at"
-    t.string "sent_message_id"
-    t.datetime "counter_notice_received_at"
-    t.datetime "restore_window_opens_at"
-    t.datetime "restore_window_closes_at"
-    t.string "outcome", limit: 32
-    t.datetime "closed_at"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["external_id"], name: "index_piracy_reports_on_external_id", unique: true

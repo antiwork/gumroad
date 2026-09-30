@@ -7,12 +7,11 @@ class PiracyReports::CreateService
     end
   end
 
-  def initialize(seller:, product:, url:, source:, actor:, ticket_url: nil)
+  def initialize(seller:, product:, url:, source:, ticket_url: nil)
     @seller = seller
     @product = product
     @url = url.to_s.strip
     @source = source
-    @actor = actor
     @ticket_url = ticket_url.presence
   end
 
@@ -22,7 +21,7 @@ class PiracyReports::CreateService
       errors = guard_errors
       next Result.new(errors:) if errors.any?
 
-      report = PiracyReport.new(seller:, product:, url:, source:, ticket_url:, creation_actor: actor)
+      report = PiracyReport.new(seller:, product:, url:, source:, ticket_url:)
       report.save!
       Result.new(report:, errors: [])
     end
@@ -33,7 +32,7 @@ class PiracyReports::CreateService
   end
 
   private
-    attr_reader :seller, :product, :url, :source, :actor, :ticket_url
+    attr_reader :seller, :product, :url, :source, :ticket_url
 
     def guard_errors
       errors = PiracyReports::Eligibility.new(seller:, product:).errors

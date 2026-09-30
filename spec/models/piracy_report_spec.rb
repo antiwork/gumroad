@@ -95,34 +95,22 @@ describe PiracyReport do
     end
   end
 
-  describe "creation" do
-    it "starts in the requested state and records a created event with the actor" do
-      admin = create(:admin_user)
-      report = create(:piracy_report, source: "support", creation_actor: admin)
-
-      expect(report.state).to eq("requested")
-      expect(report.events.sole).to have_attributes(event: "created", to_state: "requested", actor_type: "admin_actor", actor_id: admin.id, data: { "source" => "support" })
-    end
-  end
-
   describe "state machine" do
-    let(:admin) { create(:admin_user) }
-
-    it "moves from requested to screening and records who did it" do
+    it "starts in requested and moves to screening" do
       report = create(:piracy_report)
+      expect(report.state).to eq("requested")
 
-      report.start_screening!(admin)
+      report.start_screening!
 
       expect(report.reload.state).to eq("screening")
-      expect(report.events.order(:id).last).to have_attributes(event: "start_screening", from_state: "requested", to_state: "screening", actor_type: "admin_actor")
     end
 
     it "moves from screening to awaiting_signature or declined" do
       passed = create(:piracy_report, :screening)
       failed = create(:piracy_report, :screening)
 
-      passed.pass_screening!(admin)
-      failed.fail_screening!(admin)
+      passed.pass_screening!
+      failed.fail_screening!
 
       expect(passed.reload.state).to eq("awaiting_signature")
       expect(failed.reload.state).to eq("declined")
@@ -131,21 +119,13 @@ describe PiracyReport do
     it "rejects screening from a state other than requested" do
       report = create(:piracy_report, :screening)
 
-      expect { report.start_screening!(admin) }.to raise_error(StateMachines::InvalidTransition)
+      expect { report.start_screening! }.to raise_error(StateMachines::InvalidTransition)
     end
 
     it "does not skip screening on the way to awaiting_signature" do
       report = create(:piracy_report)
 
-      expect { report.pass_screening!(admin) }.to raise_error(StateMachines::InvalidTransition)
-    end
-
-    it "records the seller as the actor when the seller acts" do
-      report = create(:piracy_report)
-
-      report.record_event!(event: "sign", actor: report.seller)
-
-      expect(report.events.order(:id).last.actor_type).to eq("seller")
+      expect { report.pass_screening! }.to raise_error(StateMachines::InvalidTransition)
     end
   end
 end

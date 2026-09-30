@@ -26,10 +26,9 @@ class PiracyReports::Eligibility
   private
     attr_reader :seller, :product
 
-    # The notice prints the seller's legal name and address, so the record must carry both.
+    # The notice names the seller by their legal name, so payout setup must carry one.
     def owner_identified?
-      info = seller.alive_user_compliance_info
-      info.present? && info.legal_entity_name.present? && info.legal_entity_street_address.present? && info.legal_entity_country.present?
+      seller.alive_user_compliance_info&.legal_entity_name.present?
     end
 
     def successful_sales_count
