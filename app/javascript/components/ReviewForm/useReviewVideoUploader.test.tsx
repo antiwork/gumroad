@@ -128,11 +128,59 @@ describe("useReviewVideoUploader", () => {
     expect(mockGetReviewVideoUploadContext).toHaveBeenCalledTimes(2);
   });
 
-  it("ignores a failure that arrives after it was disabled", async () => {
-    let rejectRequest: (reason: ResponseError) => void = () => {};
+  it("sends one request when it is disabled and enabled again while the request is pending", async () => {
+    let resolveRequest: (context: typeof uploadContext) => void = () => {};
+    mockGetReviewVideoUploadContext.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveRequest = resolve;
+      }),
+    );
+    const { result, rerender } = renderHook(({ enabled }) => useReviewVideoUploader({ enabled }), {
+      initialProps: { enabled: true },
+    });
+    await waitFor(() => expect(mockGetReviewVideoUploadContext).toHaveBeenCalledOnce());
+
+    rerender({ enabled: false });
+    rerender({ enabled: true });
+    await act(async () => {
+      resolveRequest(uploadContext);
+      await Promise.resolve();
+    });
+
+    expect(mockGetReviewVideoUploadContext).toHaveBeenCalledOnce();
+    expect(result.current.readyToUpload).toBe(true);
+  });
+
+  it("ignores a failure from a request that was superseded by a newer one for the same user", async () => {
+    let rejectFirst: (reason: ResponseError) => void = () => {};
     mockGetReviewVideoUploadContext.mockReturnValueOnce(
       new Promise((_resolve, reject) => {
-        rejectRequest = reject;
+        rejectFirst = reject;
+      }),
+    );
+    mockGetReviewVideoUploadContext.mockReturnValueOnce(new Promise(() => {}));
+    mockGetReviewVideoUploadContext.mockReturnValueOnce(new Promise(() => {}));
+    const { result, rerender } = renderHook(() => useReviewVideoUploader({ enabled: true }));
+    await waitFor(() => expect(mockGetReviewVideoUploadContext).toHaveBeenCalledOnce());
+
+    mocks.loggedInUser = { id: "other-user-id" };
+    rerender();
+    mocks.loggedInUser = { id: "user-id" };
+    rerender();
+    expect(mockGetReviewVideoUploadContext).toHaveBeenCalledTimes(3);
+    await act(async () => {
+      rejectFirst(new ResponseError());
+      await Promise.resolve();
+    });
+
+    expect(result.current.error).toBeNull();
+  });
+
+  it("keeps a context that arrives after it was disabled and uses it when re-enabled", async () => {
+    let resolveRequest: (context: typeof uploadContext) => void = () => {};
+    mockGetReviewVideoUploadContext.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveRequest = resolve;
       }),
     );
     const { result, rerender } = renderHook(({ enabled }) => useReviewVideoUploader({ enabled }), {
@@ -142,11 +190,58 @@ describe("useReviewVideoUploader", () => {
 
     rerender({ enabled: false });
     await act(async () => {
-      rejectRequest(new ResponseError());
+      resolveRequest(uploadContext);
+      await Promise.resolve();
+    });
+    rerender({ enabled: true });
+
+    expect(result.current.readyToUpload).toBe(true);
+    expect(mockGetReviewVideoUploadContext).toHaveBeenCalledOnce();
+  });
+
+  it("does not use a context that arrives after the logged-in user changed", async () => {
+    let resolveRequest: (context: typeof uploadContext) => void = () => {};
+    mockGetReviewVideoUploadContext.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveRequest = resolve;
+      }),
+    );
+    mockGetReviewVideoUploadContext.mockReturnValueOnce(new Promise(() => {}));
+    const { result, rerender } = renderHook(() => useReviewVideoUploader({ enabled: true }));
+    await waitFor(() => expect(mockGetReviewVideoUploadContext).toHaveBeenCalledOnce());
+
+    mocks.loggedInUser = { id: "other-user-id" };
+    rerender();
+    await act(async () => {
+      resolveRequest(uploadContext);
       await Promise.resolve();
     });
 
-    expect(result.current.error).toBeNull();
+    expect(result.current.readyToUpload).toBe(false);
+    expect(mockGetReviewVideoUploadContext).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps the current user's context when an earlier user's request resolves after it", async () => {
+    let resolveFirst: (context: typeof uploadContext) => void = () => {};
+    mockGetReviewVideoUploadContext.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveFirst = resolve;
+      }),
+    );
+    mockGetReviewVideoUploadContext.mockResolvedValueOnce({ ...uploadContext, user_id: "other-user-id" });
+    const { result, rerender } = renderHook(() => useReviewVideoUploader({ enabled: true }));
+    await waitFor(() => expect(mockGetReviewVideoUploadContext).toHaveBeenCalledOnce());
+    mocks.loggedInUser = { id: "other-user-id" };
+    rerender();
+    await waitFor(() => expect(result.current.readyToUpload).toBe(true));
+
+    await act(async () => {
+      resolveFirst(uploadContext);
+      await Promise.resolve();
+    });
+
+    expect(result.current.readyToUpload).toBe(true);
+    expect(mockGetReviewVideoUploadContext).toHaveBeenCalledTimes(2);
   });
 
   it("reports a failure without retrying on later renders, then retries once re-enabled and clears the failure", async () => {
@@ -170,5 +265,68 @@ describe("useReviewVideoUploader", () => {
     await waitFor(() => expect(result.current.readyToUpload).toBe(true));
     expect(result.current.error).toBeNull();
     expect(mockGetReviewVideoUploadContext).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not report a failure while disabled", async () => {
+    mockGetReviewVideoUploadContext.mockRejectedValueOnce(new ResponseError());
+    const { result, rerender } = renderHook(({ enabled }) => useReviewVideoUploader({ enabled }), {
+      initialProps: { enabled: true },
+    });
+    await waitFor(() => expect(result.current.error).toBe("Failed to get upload context"));
+
+    rerender({ enabled: false });
+
+    expect(result.current.error).toBeNull();
+  });
+
+  it("clears the previous failure while a retry is pending, then reports the retry's own failure", async () => {
+    let rejectRetry: (reason: ResponseError) => void = () => {};
+    mockGetReviewVideoUploadContext.mockRejectedValueOnce(new ResponseError());
+    mockGetReviewVideoUploadContext.mockReturnValueOnce(
+      new Promise((_resolve, reject) => {
+        rejectRetry = reject;
+      }),
+    );
+    const { result, rerender } = renderHook(({ enabled }) => useReviewVideoUploader({ enabled }), {
+      initialProps: { enabled: true },
+    });
+    await waitFor(() => expect(result.current.error).toBe("Failed to get upload context"));
+
+    rerender({ enabled: false });
+    rerender({ enabled: true });
+
+    expect(mockGetReviewVideoUploadContext).toHaveBeenCalledTimes(2);
+    expect(result.current.error).toBeNull();
+
+    await act(async () => {
+      rejectRetry(new ResponseError());
+      await Promise.resolve();
+    });
+    expect(result.current.error).toBe("Failed to get upload context");
+  });
+
+  it("does not report a failure once the user is logged out", async () => {
+    mockGetReviewVideoUploadContext.mockRejectedValueOnce(new ResponseError());
+    const { result, rerender } = renderHook(() => useReviewVideoUploader({ enabled: true }));
+    await waitFor(() => expect(result.current.error).toBe("Failed to get upload context"));
+
+    mocks.loggedInUser = null;
+    rerender();
+
+    expect(result.current.error).toBeNull();
+  });
+
+  it("does not report one user's failure for another user, and reports a new failure for the new user", async () => {
+    mockGetReviewVideoUploadContext.mockRejectedValueOnce(new ResponseError());
+    mockGetReviewVideoUploadContext.mockRejectedValueOnce(new ResponseError());
+    const { result, rerender } = renderHook(() => useReviewVideoUploader({ enabled: true }));
+    await waitFor(() => expect(result.current.error).toBe("Failed to get upload context"));
+
+    mocks.loggedInUser = { id: "other-user-id" };
+    rerender();
+    expect(result.current.error).toBeNull();
+
+    await waitFor(() => expect(mockGetReviewVideoUploadContext).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(result.current.error).toBe("Failed to get upload context"));
   });
 });

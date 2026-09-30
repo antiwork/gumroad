@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { getReviewVideoUploadContext, ReviewVideoUploadContext } from "$app/data/product_reviews";
 import { assertResponseError } from "$app/utils/request";
@@ -14,26 +14,43 @@ export const useReviewVideoUploader = ({ enabled, preview }: { enabled: boolean;
   // including each usePoll reload on the download page, hands down a new object and re-ran the effect.
   // The id is still tracked, so a context loaded for another user is never reused.
   const loggedInUserId = useLoggedInUser()?.id;
-  const [loaded, setLoaded] = useState<{ userId: string; context: ReviewVideoUploadContext } | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const uploadContext = loaded != null && loaded.userId === loggedInUserId ? loaded.context : null;
+  const [loaded, setLoaded] = useState<Record<string, ReviewVideoUploadContext>>({});
+  const [failedUserId, setFailedUserId] = useState<string | null>(null);
+  const pendingRequest = useRef<{ userId: string; promise: Promise<ReviewVideoUploadContext> } | null>(null);
+  const uploadContext = loggedInUserId != null ? (loaded[loggedInUserId] ?? null) : null;
   const shouldFetch = enabled && !preview && loggedInUserId != null && uploadContext == null;
+  // Bound to the request that failed: shown only while enabled and for the same user, since the form
+  // renders it in text mode too, where a video request failure is not relevant.
+  const error =
+    enabled && failedUserId != null && failedUserId === loggedInUserId ? "Failed to get upload context" : null;
 
   useEffect(() => {
     if (!shouldFetch || loggedInUserId == null) return;
     let isMounted = true;
 
+    // A retry is under way, so the previous attempt's failure no longer describes the form.
+    setFailedUserId(null);
+
+    // Shared so that toggling out of video mode and back while the request is in flight does not send a second one.
+    const requestContext = () => {
+      if (pendingRequest.current?.userId === loggedInUserId) return pendingRequest.current.promise;
+      const promise = getReviewVideoUploadContext().finally(() => {
+        if (pendingRequest.current?.promise === promise) pendingRequest.current = null;
+      });
+      pendingRequest.current = { userId: loggedInUserId, promise };
+      return promise;
+    };
+
     const initializeUploader = async () => {
       try {
-        const context = await getReviewVideoUploadContext();
-        if (!isMounted) return;
-
-        setError(null);
-        setLoaded({ userId: loggedInUserId, context });
+        const context = await requestContext();
+        // Kept even if the request was cancelled meanwhile: it is stored under its user id, so only that
+        // user can use it, and discarding it would make leaving and re-entering video mode refetch.
+        setLoaded((current) => ({ ...current, [loggedInUserId]: context }));
       } catch (err) {
         assertResponseError(err);
         if (!isMounted) return;
-        setError("Failed to get upload context");
+        setFailedUserId(loggedInUserId);
       }
     };
 

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -113,9 +113,11 @@ const form = (props: Partial<React.ComponentProps<typeof ReviewForm>> = {}, key?
   />
 );
 
-const withProviders = (children: React.ReactNode, loggedIn = true) => (
+const withProviders = (children: React.ReactNode, loggedIn = true, userId = rawLoggedInUser.id) => (
   <DomainSettingsProvider value={domains}>
-    <LoggedInUserProvider value={loggedIn ? parseLoggedInUser(rawLoggedInUser) : null}>{children}</LoggedInUserProvider>
+    <LoggedInUserProvider value={loggedIn ? parseLoggedInUser({ ...rawLoggedInUser, id: userId }) : null}>
+      {children}
+    </LoggedInUserProvider>
   </DomainSettingsProvider>
 );
 
@@ -221,6 +223,40 @@ describe("ReviewForm upload context", () => {
       expect(mockGetReviewVideoUploadContext).toHaveBeenCalledTimes(1);
     });
 
+    it("keeps an upload context that arrives while the buyer is writing a text review", async () => {
+      let resolveRequest: (context: typeof uploadContext) => void = () => {};
+      mockGetReviewVideoUploadContext.mockReturnValue(
+        new Promise((resolve) => {
+          resolveRequest = resolve;
+        }),
+      );
+      render(withProviders(form({ review: savedReview() })));
+      fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+      chooseVideoReview();
+      chooseTextReview();
+
+      await act(async () => {
+        resolveRequest(uploadContext);
+        await Promise.resolve();
+      });
+      chooseVideoReview();
+
+      await waitFor(() => expect(postButton().disabled).toBe(false));
+      expect(mockGetReviewVideoUploadContext).toHaveBeenCalledTimes(1);
+    });
+
+    it("sends one request when the buyer switches between text and video review while it is pending", () => {
+      mockGetReviewVideoUploadContext.mockReturnValue(new Promise(() => {}));
+      render(withProviders(form({ review: savedReview() })));
+      fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+
+      chooseVideoReview();
+      chooseTextReview();
+      chooseVideoReview();
+
+      expect(mockGetReviewVideoUploadContext).toHaveBeenCalledTimes(1);
+    });
+
     it("does not request the upload context again when the page re-renders its logged-in user", async () => {
       mockGetReviewVideoUploadContext.mockResolvedValue(uploadContext);
       const tree = () => withProviders(form({ review: savedReview() }));
@@ -288,6 +324,48 @@ describe("ReviewForm upload context", () => {
       await waitFor(() => expect(postButton().disabled).toBe(false));
       expect(screen.queryByText("Failed to get upload context")).toBeNull();
       expect(mockGetReviewVideoUploadContext).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe("after the upload context failed to load", () => {
+    it("hides the failure while the buyer writes a text review", async () => {
+      mockGetReviewVideoUploadContext.mockRejectedValue(new ResponseError());
+      render(withProviders(form({ review: savedReview() })));
+      fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+      chooseVideoReview();
+      await screen.findByText("Failed to get upload context");
+
+      chooseTextReview();
+
+      expect(screen.queryByText("Failed to get upload context")).toBeNull();
+    });
+
+    it("hides the failure again while the retry on re-entering video review is pending", async () => {
+      mockGetReviewVideoUploadContext.mockRejectedValueOnce(new ResponseError());
+      mockGetReviewVideoUploadContext.mockReturnValueOnce(new Promise(() => {}));
+      render(withProviders(form({ review: savedReview() })));
+      fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+      chooseVideoReview();
+      await screen.findByText("Failed to get upload context");
+
+      chooseTextReview();
+      chooseVideoReview();
+
+      expect(mockGetReviewVideoUploadContext).toHaveBeenCalledTimes(2);
+      expect(screen.queryByText("Failed to get upload context")).toBeNull();
+    });
+
+    it("hides the failure when the logged-in user changes", async () => {
+      mockGetReviewVideoUploadContext.mockRejectedValueOnce(new ResponseError());
+      mockGetReviewVideoUploadContext.mockReturnValue(new Promise(() => {}));
+      const { rerender } = render(withProviders(form({ review: savedReview() })));
+      fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+      chooseVideoReview();
+      await screen.findByText("Failed to get upload context");
+
+      rerender(withProviders(form({ review: savedReview() }), true, "other-user-id"));
+
+      expect(screen.queryByText("Failed to get upload context")).toBeNull();
     });
   });
 
