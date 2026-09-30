@@ -68,7 +68,7 @@ def configure_vcr
     # header. That metadata is irrelevant to replaying the interaction, so scrub it
     # before the cassette is written to avoid checking workstation details into the repo.
     # Stripe adds fraudulent refunds to Radar's blocklist, which includes the shared test cards.
-    config.before_http_request(:recordable) do |request|
+    config.before_http_request(:recordable?) do |request|
       if request.uri.include?("api.stripe.com/v1/refunds") && request.body.to_s.include?("reason=fraudulent")
         raise "Refusing a live Stripe refund with reason=fraudulent: it would blocklist the shared test card."
       end
