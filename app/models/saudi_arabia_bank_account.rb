@@ -8,7 +8,8 @@ class SaudiArabiaBankAccount < BankAccount
 
   alias_attribute :bank_code, :bank_number
 
-  validate :validate_bank_code
+  # Create-only: existing rows saved with branch BICs must stay saveable (settings saves, mark_deleted!).
+  validate :validate_bank_code, on: :create
   validate :validate_account_number
 
   def routing_number

@@ -48,5 +48,11 @@ describe SaudiArabiaBankAccount do
       expect(build(:saudi_arabia_bank_account, bank_code: "NCBKSAJE1")).not_to be_valid
       expect(build(:saudi_arabia_bank_account, bank_code: "NCBKSAJE10")).not_to be_valid
     end
+
+    it "does not revalidate the bank code on update" do
+      account = create(:saudi_arabia_bank_account)
+      account.update_column(:bank_number, "NCBKSAJE101")
+      expect(account.reload.update(account_holder_full_name: "Renamed Holder")).to be(true)
+    end
   end
 end
