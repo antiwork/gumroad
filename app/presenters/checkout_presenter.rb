@@ -105,9 +105,9 @@ class CheckoutPresenter
     }
   end
 
-  # `arrival` marks a product the buyer is adding to the cart right now (as opposed to one read back
-  # from the saved cart); only an arrival can carry proof that they want a cancelled membership
-  # restarted.
+  # `arrival` marks a product the buyer is adding to the cart right now, by arriving at checkout or by
+  # accepting a cross-sell (as opposed to one read back from the saved cart); only an arrival can carry
+  # proof that they want a cancelled membership restarted.
   def checkout_product(product, cart_item, params, include_cross_sells: true, arrival: false)
     return unless product.present?
     upsell_variants = product.available_upsell_variants.alive.includes(:selected_variant, :offered_variant)
@@ -214,7 +214,7 @@ class CheckoutPresenter
           replace_selected_products: cross_sell.replace_selected_products,
           text: cross_sell.text.to_s,
           description: Rinku.auto_link(sanitize(cross_sell.description).to_s, :all, 'target="_blank" rel="noopener"'),
-          offered_product: checkout_product(offered_product, offered_product_cart_item, {}, include_cross_sells: false),
+          offered_product: checkout_product(offered_product, offered_product_cart_item, {}, include_cross_sells: false, arrival: true),
           discount: cross_sell.offer_code&.discount_for_display(buyer: logged_in_user, product: cross_sell.product),
           ratings: offered_product.display_product_reviews? ? {
             count: offered_product.reviews_count,

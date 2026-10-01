@@ -1417,6 +1417,70 @@ describe Order::CreateService, :vcr do
         expect(order.purchases.first.link).to eq(product_2)
       end
 
+      context "when the membership line was accepted from a cross-sell" do
+        let(:cross_sell) { create(:upsell, seller: seller_1, product: membership_product, selected_products: [product_2], cross_sell: true) }
+
+        let(:params_with_accepted_cross_sell) do
+          params_with_membership.deep_dup.tap do |params|
+            params[:line_items].first[:accepted_offer] = { id: cross_sell.external_id, original_product_id: product_2.external_id }
+          end
+        end
+
+        it "restarts the cancelled membership once and orders the unrelated product once when the offered line carries the signed intent" do
+          updater_service = instance_double(Subscription::UpdaterService)
+          expect(Subscription::UpdaterService).to receive(:new).once.and_return(updater_service)
+          expect(updater_service).to receive(:perform).once.and_return({ success: true, success_message: "Membership restarted" })
+
+          order, purchase_responses, _ = Order::CreateService.new(params: params_with_accepted_cross_sell, buyer:).perform
+
+          expect(purchase_responses["unique-id-0"]).to include(success: true)
+          expect(order.purchases.map(&:link)).to eq([product_2])
+        end
+
+        it "refuses the accepted line without charging when it carries no intent, while the unrelated product is ordered once" do
+          params_with_accepted_cross_sell[:line_items].first.delete(:restart_intent)
+          expect(Subscription::UpdaterService).not_to receive(:new)
+          before_counts = [Purchase.where(link: membership_product).count, Subscription.where(link: membership_product).count]
+
+          order, purchase_responses, _ = Order::CreateService.new(params: params_with_accepted_cross_sell, buyer:).perform
+
+          expect(purchase_responses["unique-id-0"]).to include(success: false, error_message: Purchase::CreateService.restart_not_requested_message(membership_product))
+          expect(order.purchases.map(&:link)).to eq([product_2])
+          expect([Purchase.where(link: membership_product).count, Subscription.where(link: membership_product).count]).to eq(before_counts)
+          expect(subscription.reload).not_to be_alive
+        end
+      end
+
+      context "when the restart intent has expired" do
+        let(:expired_restart_intent) do
+          travel_to((Checkout::RestartIntentToken::TTL + 1.minute).ago) { Checkout::RestartIntentToken.issue(product: membership_product, buyer:) }
+        end
+
+        it "refuses with a link to the product page and charges nothing for the membership, then restarts from a fresh arrival" do
+          updater_service = instance_double(Subscription::UpdaterService, perform: { success: true, success_message: "Membership restarted" })
+          allow(Subscription::UpdaterService).to receive(:new).and_return(updater_service)
+          params_with_membership[:line_items].first[:restart_intent] = expired_restart_intent
+
+          order, purchase_responses, _ = Order::CreateService.new(params: params_with_membership, buyer:).perform
+
+          message = purchase_responses["unique-id-0"][:error_message]
+          expect(purchase_responses["unique-id-0"]).to include(success: false)
+          expect(message).to eq(Purchase::CreateService.restart_not_requested_message(membership_product))
+          expect(Capybara.string(message).find_link("product page")[:href]).to eq(membership_product.long_url)
+          expect(order.purchases.map(&:link)).to eq([product_2])
+          expect(Subscription::UpdaterService).not_to have_received(:new)
+          expect(subscription.reload).not_to be_alive
+
+          # Following that link and choosing the membership arrives at checkout with a freshly signed intent.
+          params_with_membership[:line_items].first[:restart_intent] = Checkout::RestartIntentToken.issue(product: membership_product, buyer:)
+
+          _, retry_responses, _ = Order::CreateService.new(params: params_with_membership, buyer:).perform
+
+          expect(retry_responses["unique-id-0"]).to include(success: true)
+          expect(Subscription::UpdaterService).to have_received(:new).once
+        end
+      end
+
       context "when the membership line is a stale cart line with no restart intent" do
         it "refuses the line and orders only the unrelated product, without restarting or re-buying the membership" do
           expect(Subscription::UpdaterService).not_to receive(:new)

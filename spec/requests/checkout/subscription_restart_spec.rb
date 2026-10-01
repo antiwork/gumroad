@@ -159,6 +159,61 @@ describe "Subscription restart at checkout", :js, type: :system do
     end
   end
 
+  context "when the cancelled membership is offered as a cross-sell on another product" do
+    let(:other_product) { create(:product, user: @seller, name: "Sketching bundle", price_cents: 300) }
+    let(:updater_double) { instance_double(Subscription::UpdaterService) }
+
+    before do
+      create(:upsell, text: "Rejoin the membership", seller: @seller, product: @product, selected_products: [other_product], cross_sell: true)
+      allow(Subscription::UpdaterService).to receive(:new).and_return(updater_double)
+      allow(updater_double).to receive(:perform) do
+        Subscription.find(@subscription.id).resubscribe!
+        { success: true, success_message: "Your membership has been restarted!" }
+      end
+    end
+
+    it "restarts the membership once when the buyer accepts the cross-sell, and charges the unrelated product once" do
+      login_as @buyer
+      visit "/checkout?product=#{other_product.unique_permalink}&quantity=1"
+      expect(page).to have_cart_item(other_product.name)
+      fill_checkout_form(other_product, logged_in_user: @buyer, email: @buyer.email)
+
+      expect do
+        click_on "Pay", exact: true
+        within_modal "Rejoin the membership" do
+          click_on "Add to cart"
+        end
+        expect(page).to have_text("Your purchase was successful!")
+      end.to change { other_product.sales.successful.count }.by(1)
+
+      expect(page).not_to have_selector("[role=alert]", text: "You weren't charged for this membership")
+      expect(Subscription::UpdaterService).to have_received(:new).once
+      expect(@subscription.reload).to be_alive
+      expect(@product.subscriptions.count).to eq(1)
+      expect(Charge.count).to eq(1)
+    end
+
+    it "leaves the cancelled membership alone when the buyer declines the cross-sell" do
+      login_as @buyer
+      visit "/checkout?product=#{other_product.unique_permalink}&quantity=1"
+      expect(page).to have_cart_item(other_product.name)
+      fill_checkout_form(other_product, logged_in_user: @buyer, email: @buyer.email)
+
+      expect do
+        click_on "Pay", exact: true
+        within_modal "Rejoin the membership" do
+          click_on "Continue without adding"
+        end
+        expect(page).to have_text("Your purchase was successful!")
+      end.to change { other_product.sales.successful.count }.by(1)
+
+      expect(Subscription::UpdaterService).not_to have_received(:new)
+      expect(@subscription.reload).not_to be_alive
+      expect(@product.subscriptions.count).to eq(1)
+      expect(@product.sales.successful.count).to eq(1)
+    end
+  end
+
   context "when the cancelled membership is only a stale line in the saved cart" do
     let(:other_product) { create(:product, user: @seller, name: "Sketching bundle", price_cents: 300) }
 

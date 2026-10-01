@@ -185,6 +185,37 @@ describe CheckoutPresenter do
         expect(@instance.checkout_props(params: { product: product.unique_permalink }, browser_guid:)[:add_products].sole).not_to have_key(:restart_intent)
       end
 
+      context "with a cross-sell offering a membership" do
+        let(:product) { create(:product, user: membership.user) }
+
+        def offered_product_for(presenter)
+          line = presenter.checkout_props(params: { product: product.unique_permalink }, browser_guid:)[:add_products].sole
+          line[:product][:cross_sells].sole[:offered_product]
+        end
+
+        let!(:cross_sell) { create(:upsell, selected_products: [product], seller: membership.user, product: membership, cross_sell: true) }
+
+        it "signs a restart intent for the signed-in buyer on the offered membership" do
+          token = offered_product_for(@instance)[:restart_intent]
+
+          expect(Checkout::RestartIntentToken.restart_intended?(token, product: membership, buyer: @user, lapsed_at: 1.minute.ago)).to be true
+          expect(Checkout::RestartIntentToken.restart_intended?(token, product: membership, buyer: create(:user), lapsed_at: 1.minute.ago)).to be false
+        end
+
+        it "signs a guest-bound restart intent on the offered membership for a logged-out buyer" do
+          token = offered_product_for(described_class.new(logged_in_user: nil, ip: "104.193.168.19"))[:restart_intent]
+
+          expect(Checkout::RestartIntentToken.restart_intended?(token, product: membership, buyer: nil, lapsed_at: 1.minute.ago)).to be true
+          expect(Checkout::RestartIntentToken.restart_intended?(token, product: membership, buyer: @user, lapsed_at: 1.minute.ago)).to be false
+        end
+
+        it "omits the restart intent when the offered product is not recurring" do
+          cross_sell.update!(product: create(:product, user: membership.user))
+
+          expect(offered_product_for(@instance)).not_to have_key(:restart_intent)
+        end
+      end
+
       it "does not issue a restart intent for lines read back from the saved cart" do
         cart = create(:cart, user: @user)
         create(:cart_product, cart:, product: membership)
