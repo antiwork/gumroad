@@ -239,7 +239,11 @@ const TeamMembersSection = ({
           break;
         }
         case "resend_invitation": {
-          await resendInvitation(memberInfo);
+          const result = await resendInvitation(memberInfo);
+          if (!result.success) {
+            showAlert(result.error_message, "error", { position: "bottom" });
+            break;
+          }
           refreshMemberInfos();
           showAlert("Invitation sent!", "success");
           break;

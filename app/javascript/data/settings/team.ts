@@ -76,7 +76,9 @@ export const deleteMember = async (memberInfo: MemberInfo) => {
   if (!response.ok) throw new ResponseError();
 };
 
-export const resendInvitation = async (memberInfo: MemberInfo) => {
+export const resendInvitation = async (
+  memberInfo: MemberInfo,
+): Promise<{ success: false; error_message: string } | { success: true }> => {
   const response = await request({
     method: "PUT",
     accept: "json",
@@ -84,6 +86,9 @@ export const resendInvitation = async (memberInfo: MemberInfo) => {
   });
 
   if (!response.ok) throw new ResponseError();
+
+  // A refused resend answers 200 with the validation message the seller needs to read.
+  return typia.assert<{ success: false; error_message: string } | { success: true }>(await response.json());
 };
 
 export const restoreMember = async (memberInfo: MemberInfo) => {
