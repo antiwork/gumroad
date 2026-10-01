@@ -34,7 +34,9 @@ vi.mock("$app/components/Authentication/Layout", () => ({
   Layout: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
 vi.mock("$app/components/AuthAlert", () => ({ AuthAlert: () => null }));
-vi.mock("$app/components/useOriginalLocation", () => ({ useOriginalLocation: () => "http://localhost:3000/two_factor_authentication" }));
+vi.mock("$app/components/useOriginalLocation", () => ({
+  useOriginalLocation: () => "http://localhost:3000/two_factor_authentication",
+}));
 
 const advance = (ms: number) =>
   act(() => {
