@@ -12,6 +12,22 @@ PASS=0; FAIL=0
 ok()   { PASS=$((PASS + 1)); echo "  ok   $1"; }
 fail() { FAIL=$((FAIL + 1)); echo "  FAIL $1"; }
 
+# A stub `buildkite-agent` so the build meta-data pin can be driven the way the four
+# steps drive it: the pin lives in a file, and either direction can be made to fail.
+STUB_BIN="$WORK/bin"
+mkdir -p "$STUB_BIN"
+cat > "$STUB_BIN/buildkite-agent" <<'STUB'
+#!/bin/bash
+KEY=deploy-relevance-baseline
+case "$1 $2" in
+  "meta-data get") [ "${META_GET_FAIL:-}" = "1" ] && exit 1; [ "$3" = "$KEY" ] || exit 1; cat "$META_FILE" 2>/dev/null || exit 1 ;;
+  "meta-data set") [ "${META_SET_FAIL:-}" = "1" ] && exit 1; [ "$3" = "$KEY" ] || exit 1; printf '%s\n' "$4" > "$META_FILE" ;;
+  *) exit 0 ;;
+esac
+STUB
+chmod +x "$STUB_BIN/buildkite-agent"
+BASE_PATH="$PATH"
+
 # --- fixture: a bare "origin" + a clone with one released commit ---------------
 make_fixture() {
   rm -rf "$WORK/origin.git" "$WORK/repo"
@@ -100,6 +116,9 @@ expect() { # <label> <want> <got>
 
 run_suite() {
   PASS=0; FAIL=0
+  unset META_FILE META_GET_FAIL META_SET_FAIL
+  # The stub agent is opted into by the pinning cases, not by the whole suite.
+  export PATH="$BASE_PATH"
   make_fixture
   local released; released=$(cd "$WORK/repo" && git rev-parse HEAD)
 
@@ -189,6 +208,44 @@ EXIT 0"  "$(wrapper_outcome "$s")"
   expect "wrapper ignores non-main branch"   "CONTINUED
 EXIT 0"  "$(wrapper_outcome "$s" feature-x)"
 
+  # --- one build, one baseline: the pin in build meta-data ---------------------
+  # The steps run minutes apart, so the baseline is resolved once and pinned. A step that
+  # cannot read the pin re-derives; a step that cannot write it must not skip, because the
+  # steps that follow would then decide against a baseline it never shared.
+  make_fixture
+  export PATH="$STUB_BIN:$BASE_PATH"
+  local pin="$WORK/meta-deploy-relevance-baseline"
+  export META_FILE="$pin"
+  local base_a; base_a=$(cd "$WORK/repo" && git rev-parse 'v2026.09.15.1^{commit}')
+  rm -f "$pin"
+
+  # g1 adds the probe file and re-writes the workflow, g2 deletes the probe file again: the
+  # older tag cancels the pair out and skips, the newer one sees only the removal and ships.
+  s=$(commit "probe + workflow" "ci-vite-cache-probe.txt=probe" ".github/workflows/tests.yml=on: pull_request")
+  local g1; g1=$(cd "$WORK/repo" && git rev-parse HEAD)
+  s=$(commit "probe removed" "ci-vite-cache-probe.txt=@DELETE")
+
+  expect "pin: first step skips against the older tag" SKIP "$(decide "$s")"
+  expect "pin: and pins the baseline it used" "$base_a" "$(cat "$pin" 2>/dev/null)"
+
+  # A release lands between the steps: without the pin the deploy step compares against the
+  # new tag, ships, and exits on an image the build steps never built.
+  (cd "$WORK/repo" && git tag v2026.09.15.2 "$g1" && git push -q origin --tags)
+  expect "pin: later step reuses the pinned baseline" SKIP "$(decide "$s")"
+  grep -qF "changed since ${base_a:0:12}" "$WORK/last.log" \
+    && ok "pin: and logs the pinned baseline" || fail "pin: log should name ${base_a:0:12}"
+  rm -f "$pin"
+  expect "no pin: the same call ships (the incident)" DEPLOY "$(decide "$s")"
+
+  # A write that fails must not leave a step skipping on a baseline the others cannot see.
+  rm -f "$pin"
+  (cd "$WORK/repo" && git tag -d v2026.09.15.2 >/dev/null && git push -q origin :refs/tags/v2026.09.15.2)
+  expect "pin write fails: deploys instead of skipping" DEPLOY "$(decide "$s" META_SET_FAIL=1)"
+  [ -s "$pin" ] && fail "pin write fails: nothing should be pinned" || ok "pin write fails: pins nothing"
+
+  # A read that fails falls back to the live tag.
+  expect "pin read fails: falls back to the tag" SKIP "$(decide "$s" META_GET_FAIL=1)"
+
   echo "$PASS passed, $FAIL failed"
   [ "$FAIL" -eq 0 ]
 }
@@ -222,6 +279,9 @@ if [ "${1:-}" = "--mutate" ]; then
   mutate "wrapper-skips-all-branches" 's/\[ "\${BUILDKITE_BRANCH:-}" = "main" \] || return 0/true/'
   mutate "wrapper-set-e-unsafe"    's/decision=\$(production_deploy_is_noop) || rc=\$?/decision=$(production_deploy_is_noop); rc=$?/'
   mutate "js-tests-not-excluded"   's/app\/javascript\/\*\.test\.ts|app\/javascript\/\*\.test\.tsx|app\/javascript\/\*\/__tests__\/\*) return 0 ;;//'
+  mutate "pin-never-read"          's|meta-data get deploy-relevance-baseline|meta-data get deploy-relevance-baseline-typo|'
+  mutate "pin-never-written"       's|meta-data set deploy-relevance-baseline|meta-data set deploy-relevance-baseline-typo|'
+  mutate "pin-failure-ignored"     's|if ! buildkite-agent meta-data set|if false \&\& ! buildkite-agent meta-data set|'
   echo "MUTANTS_ESCAPED=$ESCAPED"
   [ "$ESCAPED" -eq 0 ] || SUITE_RC=1
 fi

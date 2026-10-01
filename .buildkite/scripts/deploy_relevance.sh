@@ -29,8 +29,7 @@ deploy_irrelevant_path() {
 #
 # Pinned in build meta-data on first use: the four steps run minutes apart, and a release that
 # lands in between moves the newest tag, so a step re-deriving it compares against a different
-# commit than the build steps that already ran. Build 24905 (2026-09-30) skipped the build steps
-# as a no-op, then failed the deploy step on an image that was never built. One build, one baseline.
+# commit than the steps that already ran. One build, one baseline.
 deploy_relevance_baseline() {
   local tag pinned
   if command -v buildkite-agent >/dev/null 2>&1; then
@@ -46,7 +45,11 @@ deploy_relevance_baseline() {
   pinned=$(git rev-parse --verify --quiet "${tag}^{commit}") || return 1
   [ -n "$pinned" ] || return 1
   if command -v buildkite-agent >/dev/null 2>&1; then
-    buildkite-agent meta-data set deploy-relevance-baseline "$pinned" >/dev/null 2>&1 || true
+    # A baseline the other steps cannot read is worse than none: deploy rather than skip on it.
+    if ! buildkite-agent meta-data set deploy-relevance-baseline "$pinned" >/dev/null 2>&1; then
+      echo "could not pin the release baseline in build meta-data — deploying" >&2
+      return 1
+    fi
   fi
   printf '%s\n' "$pinned"
 }
@@ -67,7 +70,7 @@ production_deploy_is_noop() {
   fi
 
   if ! base=$(deploy_relevance_baseline) || [ -z "$base" ]; then
-    echo "no release tag found to compare against — deploying"
+    echo "no usable baseline to compare against — deploying"
     return 1
   fi
   if ! git merge-base --is-ancestor "$base" "$commit" 2>/dev/null; then
