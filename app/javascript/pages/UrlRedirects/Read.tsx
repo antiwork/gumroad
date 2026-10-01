@@ -246,9 +246,8 @@ const PdfReader = ({
       if (isCancelled) return;
 
       const eventBus = new EventBus();
-      // pdf.js defaults externalLinkTarget to null (LinkTarget.NONE), which renders in-PDF links as
-      // plain anchors with no target, so clicking one navigates the current tab away from the reader
-      // and the buyer loses their place. Open them in a new tab instead.
+      // pdf.js leaves externalLinkTarget null by default, so an in-PDF link would navigate the
+      // current tab away from the reader.
       const pdfLinkService = new PDFLinkService({ eventBus, externalLinkTarget: LinkTarget.BLANK });
       const pdfSinglePageViewer = new PDFSinglePageViewer({ container, eventBus, linkService: pdfLinkService });
       pdfLinkService.setViewer(pdfSinglePageViewer);

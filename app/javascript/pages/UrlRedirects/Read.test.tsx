@@ -255,9 +255,7 @@ describe("PDF reader teardown", () => {
   });
 
   it("opens a link inside the PDF in a new tab instead of replacing the reader", async () => {
-    // Regression for gumroad-private#3174: pdf.js defaults externalLinkTarget to null
-    // (LinkTarget.NONE), so an in-PDF link rendered as a plain anchor with no target and clicking
-    // it navigated the current tab away from the reader, losing the buyer's place.
+    // pdf.js's default leaves externalLinkTarget null, which lets an in-PDF link replace the reader.
     mocks.linkServiceOptions.length = 0;
 
     render(<Read />);
