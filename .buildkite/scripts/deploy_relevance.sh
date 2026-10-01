@@ -31,12 +31,24 @@ deploy_irrelevant_path() {
 # lands in between moves the newest tag, so a step re-deriving it compares against a different
 # commit than the steps that already ran. One build, one baseline.
 deploy_relevance_baseline() {
-  local tag pinned
+  local tag pinned status=0
   if command -v buildkite-agent >/dev/null 2>&1; then
-    pinned=$(buildkite-agent meta-data get deploy-relevance-baseline 2>/dev/null) || pinned=""
-    if [ -n "$pinned" ]; then
+    # `exists` separates "nothing pinned yet" (100) from "the store is unreachable" (any other
+    # failure). The two cannot be told apart by an empty `get`, and a step that guesses cannot
+    # know the steps before it read the same baseline, so on an unreachable store it deploys.
+    buildkite-agent meta-data exists deploy-relevance-baseline >/dev/null 2>&1 || status=$?
+    if [ "$status" -eq 0 ]; then
+      pinned=$(buildkite-agent meta-data get deploy-relevance-baseline 2>/dev/null) || pinned=""
+      if [ -z "$pinned" ]; then
+        echo "the pinned release baseline is unreadable — deploying" >&2
+        return 1
+      fi
       printf '%s\n' "$pinned"
       return 0
+    fi
+    if [ "$status" -ne 100 ]; then
+      echo "cannot tell whether the release baseline is pinned — deploying" >&2
+      return 1
     fi
   fi
   git fetch --quiet --tags --force origin >/dev/null 2>&1 || return 1

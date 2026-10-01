@@ -18,9 +18,11 @@ STUB_BIN="$WORK/bin"
 mkdir -p "$STUB_BIN"
 cat > "$STUB_BIN/buildkite-agent" <<'STUB'
 #!/bin/bash
+# Exit 100 mirrors the agent's documented "this key has not been set".
 KEY=deploy-relevance-baseline
 case "$1 $2" in
-  "meta-data get") [ "${META_GET_FAIL:-}" = "1" ] && exit 1; [ "$3" = "$KEY" ] || exit 1; cat "$META_FILE" 2>/dev/null || exit 1 ;;
+  "meta-data get") [ "${META_GET_FAIL:-}" = "1" ] && exit 1; [ "$3" = "$KEY" ] || exit 100; cat "$META_FILE" 2>/dev/null || exit 100 ;;
+  "meta-data exists") [ "${META_EXISTS_FAIL:-}" = "1" ] && exit 1; [ "$3" = "$KEY" ] || exit 100; [ -s "$META_FILE" ] || exit 100 ;;
   "meta-data set") [ "${META_SET_FAIL:-}" = "1" ] && exit 1; [ "$3" = "$KEY" ] || exit 1; printf '%s\n' "$4" > "$META_FILE" ;;
   *) exit 0 ;;
 esac
@@ -116,7 +118,7 @@ expect() { # <label> <want> <got>
 
 run_suite() {
   PASS=0; FAIL=0
-  unset META_FILE META_GET_FAIL META_SET_FAIL
+  unset META_FILE META_GET_FAIL META_SET_FAIL META_EXISTS_FAIL
   # The stub agent is opted into by the pinning cases, not by the whole suite.
   export PATH="$BASE_PATH"
   make_fixture
@@ -210,8 +212,8 @@ EXIT 0"  "$(wrapper_outcome "$s" feature-x)"
 
   # --- one build, one baseline: the pin in build meta-data ---------------------
   # The steps run minutes apart, so the baseline is resolved once and pinned. A step that
-  # cannot read the pin re-derives; a step that cannot write it must not skip, because the
-  # steps that follow would then decide against a baseline it never shared.
+  # cannot tell whether a pin exists, or cannot read the one that is there, must not skip:
+  # it would be deciding against a baseline the steps before it never shared.
   make_fixture
   export PATH="$STUB_BIN:$BASE_PATH"
   local pin="$WORK/meta-deploy-relevance-baseline"
@@ -243,8 +245,14 @@ EXIT 0"  "$(wrapper_outcome "$s" feature-x)"
   expect "pin write fails: deploys instead of skipping" DEPLOY "$(decide "$s" META_SET_FAIL=1)"
   [ -s "$pin" ] && fail "pin write fails: nothing should be pinned" || ok "pin write fails: pins nothing"
 
-  # A read that fails falls back to the live tag.
-  expect "pin read fails: falls back to the tag" SKIP "$(decide "$s" META_GET_FAIL=1)"
+  # A pin that exists but cannot be read is not the same as no pin: this step cannot know the
+  # baseline the earlier steps decided against, and its own derived tag may be newer.
+  printf '%s\n' "$base_a" > "$pin"
+  expect "pin unreadable: deploys instead of skipping" DEPLOY "$(decide "$s" META_GET_FAIL=1)"
+  expect "pin unreadable: leaves the pin alone" "$base_a" "$(cat "$pin" 2>/dev/null)"
+  expect "pin uncheckable: deploys instead of skipping" DEPLOY "$(decide "$s" META_EXISTS_FAIL=1)"
+  expect "pin uncheckable: leaves the pin alone" "$base_a" "$(cat "$pin" 2>/dev/null)"
+  rm -f "$pin"
 
   echo "$PASS passed, $FAIL failed"
   [ "$FAIL" -eq 0 ]
@@ -282,6 +290,7 @@ if [ "${1:-}" = "--mutate" ]; then
   mutate "pin-never-read"          's|meta-data get deploy-relevance-baseline|meta-data get deploy-relevance-baseline-typo|'
   mutate "pin-never-written"       's|meta-data set deploy-relevance-baseline|meta-data set deploy-relevance-baseline-typo|'
   mutate "pin-failure-ignored"     's|if ! buildkite-agent meta-data set|if false \&\& ! buildkite-agent meta-data set|'
+  mutate "pin-read-error-ignored"  's|if \[ "\$status" -ne 100 \]; then|if [ "$status" -eq 999 ]; then|'
   echo "MUTANTS_ESCAPED=$ESCAPED"
   [ "$ESCAPED" -eq 0 ] || SUITE_RC=1
 fi
