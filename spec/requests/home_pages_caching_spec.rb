@@ -95,6 +95,21 @@ describe "Marketing page edge caching", type: :request do
     end
   end
 
+  describe "stalled payout read" do
+    it "keeps the default private cache behavior for /about" do
+      # The degraded figure must not be published by the shared cache while Redis recovers.
+      allow($redis).to receive(:get).and_call_original
+      allow($redis).to receive(:get).with(RedisKey.prev_week_payout_usd)
+        .and_raise(RedisClient::ReadTimeoutError.new("Waited 1.0 seconds"))
+
+      get "/about"
+
+      expect(response).to have_http_status(:ok)
+      expect(response.headers["Cache-Control"]).to include("private")
+      expect(response.headers["Cache-Control"]).not_to include("public")
+    end
+  end
+
   describe "dynamic pages" do
     it "does not mark /discover as publicly cacheable" do
       get "/discover"

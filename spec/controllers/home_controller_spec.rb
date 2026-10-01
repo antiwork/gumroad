@@ -7,6 +7,28 @@ describe HomeController do
 
   before { allow(GithubStarsController).to receive(:cached_count).and_return(1234) }
 
+  describe "GET about" do
+    it "renders the figure held in Redis" do
+      $redis.set(RedisKey.prev_week_payout_usd, "424242")
+
+      get :about
+
+      expect(response).to be_successful
+      expect(response.body).to include("$424,242")
+    end
+
+    it "renders the default figure instead of failing when the Redis read times out" do
+      allow($redis).to receive(:get).and_call_original
+      allow($redis).to receive(:get).with(RedisKey.prev_week_payout_usd)
+        .and_raise(RedisClient::ReadTimeoutError.new("Waited 1.0 seconds"))
+
+      get :about
+
+      expect(response).to be_successful
+      expect(response.body).to include("$3,129,297")
+    end
+  end
+
   describe "GET features_md" do
     it "returns markdown with the feature list" do
       get :features_md
