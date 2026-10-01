@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SlowConnectionNotice } from "$app/components/Authentication/SlowConnectionNotice";
 
-const SLOW_NOTICE = /taking longer than usual/i;
+const SLOW_NOTICE = /taking longer than usual/iu;
 
 const advance = (ms: number) =>
   act(() => {

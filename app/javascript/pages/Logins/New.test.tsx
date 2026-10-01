@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import LoginPage from "$app/pages/Logins/New";
 
-const SLOW_NOTICE = /taking longer than usual/i;
+const SLOW_NOTICE = /taking longer than usual/iu;
 
 // The page renders inside an Inertia app with Rails routes exposed as a `Routes` global; neither
 // exists under vitest, so stub the routes and drive `form.processing` from the test.
@@ -53,7 +53,9 @@ describe("login form on a slow connection", () => {
   it("surfaces a slow-connection notice instead of spinning forever", () => {
     form.processing = true;
     render(<LoginPage />);
-    expect((screen.getByRole("button", { name: "Logging in..." }) as HTMLButtonElement).disabled).toBe(true);
+    // No type assertion: ts-eslint bans them, and the attribute is present exactly when the
+    // submit is blocked, which is the state a stalled visit leaves the form in.
+    expect(screen.getByRole("button", { name: "Logging in..." }).hasAttribute("disabled")).toBe(true);
 
     advance(15_000);
 
