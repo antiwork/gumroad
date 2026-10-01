@@ -47,6 +47,7 @@ type SharePageProps = {
     custom_summary: string | null;
     custom_attributes: Attribute[];
     refund_policy: RefundPolicy;
+    product_refund_policy_enabled: boolean;
     public_files: PublicFileWithStatus[];
     is_published: boolean;
     taxonomy_id: string | null;
