@@ -62,6 +62,30 @@ describe CurrencyHelper do
       expect(helper.buyer_currency_for_country("SK")).to eq("eur") # Slovakia
     end
 
+    it "maps every eurozone member to eur, including Croatia and Bulgaria" do
+      %w[AT BE BG HR CY EE FI FR DE GR IE IT LV LT LU MT NL PT SK SI ES].each do |country_code|
+        expect(helper.buyer_currency_for_country(country_code)).to eq("eur"), "expected #{country_code} to resolve to eur"
+      end
+    end
+
+    it "maps Bulgaria to eur regardless of the case of the country code" do
+      expect(helper.buyer_currency_for_country("bg")).to eq("eur")
+    end
+
+    it "does not offer eur for Bulgaria when eur is not a supported checkout currency" do
+      stub_const("CURRENCY_CHOICES", CURRENCY_CHOICES.except("eur"))
+
+      expect(helper.buyer_currency_for_country("BG")).to be_nil
+      expect(helper.buyer_currency_for_country("DE")).to be_nil
+    end
+
+    it "keeps non-euro neighbours on their own currency or no currency" do
+      expect(helper.buyer_currency_for_country("RO")).to eq("ron")
+      expect(helper.buyer_currency_for_country("TR")).to eq("try")
+      expect(helper.buyer_currency_for_country("HU")).to be_nil # HUF is not a checkout currency
+      expect(helper.buyer_currency_for_country("RS")).to be_nil # RSD is not a checkout currency
+    end
+
     it "returns nil for unknown countries" do
       expect(helper.buyer_currency_for_country("ZZ")).to be_nil
       expect(helper.buyer_currency_for_country(nil)).to be_nil
@@ -74,6 +98,22 @@ describe CurrencyHelper do
   end
 
   describe "#buyer_currency_for_ip" do
+    def geoip_result(country_name, country_code)
+      GeoIp::Result.new(country_name:, country_code:, region_name: nil, city_name: nil, postal_code: nil, latitude: nil, longitude: nil)
+    end
+
+    it "resolves an IP that GeoIP places in Bulgaria to eur" do
+      allow(GeoIp).to receive(:lookup).with("203.0.113.50").and_return(geoip_result("Bulgaria", "BG"))
+
+      expect(helper.buyer_currency_for_ip("203.0.113.50")).to eq("eur")
+    end
+
+    it "returns nil when GeoIP cannot place the IP" do
+      allow(GeoIp).to receive(:lookup).with("203.0.113.51").and_return(nil)
+
+      expect(helper.buyer_currency_for_ip("203.0.113.51")).to be_nil
+    end
+
     it "returns nil when GeoIP lookup fails" do
       allow(GeoIp).to receive(:lookup).with("2.2.2.2").and_raise(StandardError)
 
@@ -258,6 +298,53 @@ describe CurrencyHelper do
       props = helper.buyer_currency_display_props(product:, price_cents: 1000, ip: "1.2.3.4")
 
       expect(props).to include(display_mode: "buyer_local", buyer_currency_shown: "eur")
+    end
+
+    context "when GeoIP places the buyer in Bulgaria" do
+      let(:bulgarian_ip) { "203.0.113.50" }
+
+      before do
+        allow(helper).to receive(:buyer_currency_for_ip).and_call_original
+        allow(GeoIp).to receive(:lookup).with(bulgarian_ip).and_return(
+          GeoIp::Result.new(country_name: "Bulgaria", country_code: "BG", region_name: nil, city_name: nil, postal_code: nil, latitude: nil, longitude: nil)
+        )
+      end
+
+      it "shows the euro price for a USD listing" do
+        props = helper.buyer_currency_display_props(product:, price_cents: 1000, ip: bulgarian_ip)
+
+        expect(props).to include(
+          display_mode: "buyer_local",
+          buyer_currency_shown: "eur",
+          product_currency: "usd",
+          buyer_local_price_cents: 800,
+          rate: 0.8
+        )
+      end
+
+      it "shows the listed price when the seller has opted out of buyer-local currency" do
+        seller.update!(disable_buyer_local_currency: true)
+
+        props = helper.buyer_currency_display_props(product: product.reload, price_cents: 1000, ip: bulgarian_ip)
+
+        expect(props).to include(display_mode: "default", buyer_currency_shown: "usd", rate: nil)
+      end
+
+      it "shows the listed price when the buyer-local currency feature is off for the seller" do
+        Feature.deactivate_user(:buyer_local_currency, seller)
+
+        props = helper.buyer_currency_display_props(product:, price_cents: 1000, ip: bulgarian_ip)
+
+        expect(props).to include(display_mode: "default", buyer_currency_shown: "usd", rate: nil)
+      end
+
+      it "shows the listed price when the seller's account cannot settle eur" do
+        merchant_account.record_settlement_currency_mismatch!("eur")
+
+        props = helper.buyer_currency_display_props(product:, price_cents: 1000, ip: bulgarian_ip)
+
+        expect(props).to include(display_mode: "default", buyer_currency_shown: "usd", rate: nil)
+      end
     end
 
     it "prefers an explicit currency choice over the IP-detected currency" do

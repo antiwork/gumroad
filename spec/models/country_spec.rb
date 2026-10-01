@@ -287,6 +287,12 @@ describe Country do
   end
 
   describe "#default_currency" do
+    # Merchant accounts are created from this value, and Bulgarian sellers are paid out through
+    # #payout_currency instead, so the buyer-currency lookup's Bulgaria override must not leak here.
+    it "leaves Bulgaria without a default currency" do
+      expect(Country.new("BG").default_currency).to be_nil
+    end
+
     it "returns the currency which is set as default currency for all the accounts from the country" do
       expect(Country.new("US").default_currency).to eq Currency::USD
       expect(Country.new("GB").default_currency).to eq Currency::GBP
@@ -383,6 +389,10 @@ describe Country do
   end
 
   describe "#payout_currency" do
+    it "returns the euro for Bulgaria" do
+      expect(Country.new("BG").payout_currency).to eq Currency::EUR
+    end
+
     it "returns the currency which is used for sending stripe payouts to the country" do
       expect(Country.new("US").payout_currency).to eq Currency::USD
       expect(Country.new("GB").payout_currency).to eq Currency::GBP
