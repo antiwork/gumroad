@@ -37,6 +37,7 @@ class HomeController < ApplicationController
   before_action :hide_layouts
 
   def about
+    @prev_week_payout_usd = prev_week_payout_usd
     set_meta_tag(title: "Earn your first dollar online with Gumroad")
     set_meta_tag(name: "description", content: "Start selling what you know, see what sticks, and get paid. Simple and effective.")
     set_meta_tag(tag_name: "link", rel: "canonical", href: about_url, head_key: "canonical")
@@ -143,6 +144,15 @@ class HomeController < ApplicationController
   private
     def hide_layouts
       @hide_layouts = true
+    end
+
+    def prev_week_payout_usd
+      $redis.get(RedisKey.prev_week_payout_usd)
+    rescue *REDIS_TRANSPORT_ERRORS
+      # A stalled read must not 500 the root page; the view falls back to a fixed figure, which must
+      # not reach the shared edge cache.
+      @edge_cacheable_response = false
+      nil
     end
 
     def edge_cacheable_request?

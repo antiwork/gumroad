@@ -102,4 +102,25 @@ describe "Marketing page edge caching", type: :request do
       expect(response.headers["Cache-Control"].to_s).not_to include("s-maxage")
     end
   end
+
+  describe "Redis read failure on the homepage figure" do
+    before do
+      allow($redis).to receive(:get).and_call_original
+      allow($redis).to receive(:get).with(RedisKey.prev_week_payout_usd).and_raise(Redis::TimeoutError)
+    end
+
+    it "serves the page with the fallback figure instead of erroring" do
+      get "/"
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include("$3,129,297")
+    end
+
+    it "does not let the degraded figure into the shared edge cache" do
+      get "/"
+
+      expect(response.headers["Cache-Control"]).to include("private")
+      expect(response.headers["Cache-Control"]).not_to include("public")
+    end
+  end
 end
