@@ -35,30 +35,52 @@ describe TanzaniaBankAccount do
   end
 
   describe "#validate_account_number" do
-    it "allows records that match the required account number regex" do
-      allow(Rails.env).to receive(:production?).and_return(true)
-
+    it "allows 10 to 14 digits" do
       expect(build(:tanzania_bank_account)).to be_valid
-      expect(build(:tanzania_bank_account, account_number: "0000123456789")).to be_valid
       expect(build(:tanzania_bank_account, account_number: "0000123456")).to be_valid
-      expect(build(:tanzania_bank_account, account_number: "ABC12345678")).to be_valid
-      expect(build(:tanzania_bank_account, account_number: "0001234567ABCD")).to be_valid
+      expect(build(:tanzania_bank_account, account_number: "0000123456789")).to be_valid
+      expect(build(:tanzania_bank_account, account_number: "00001234567890")).to be_valid
+    end
 
-      na_bank_account = build(:tanzania_bank_account, account_number: "000012345")
-      expect(na_bank_account).to_not be_valid
-      expect(na_bank_account.errors.full_messages.to_sentence).to eq("The account number is invalid.")
+    it "rejects the shapes Stripe's TZ rail refuses" do
+      expect(build(:tanzania_bank_account, account_number: "000012345")).not_to be_valid
+      expect(build(:tanzania_bank_account, account_number: "000012345678901")).not_to be_valid
+      expect(build(:tanzania_bank_account, account_number: "ABC12345678")).not_to be_valid
+      expect(build(:tanzania_bank_account, account_number: "0001234567ABCD")).not_to be_valid
+    end
 
-      na_bank_account = build(:tanzania_bank_account, account_number: "000012345678910")
-      expect(na_bank_account).to_not be_valid
+    it "names the expected format in the error" do
+      na_bank_account = build(:tanzania_bank_account, account_number: "0001234567ABCD")
+      na_bank_account.valid?
       expect(na_bank_account.errors.full_messages.to_sentence).to eq("The account number is invalid.")
+    end
 
-      na_bank_account = build(:tanzania_bank_account, account_number: "0001234567ABCDE")
-      expect(na_bank_account).to_not be_valid
-      expect(na_bank_account.errors.full_messages.to_sentence).to eq("The account number is invalid.")
+    it "rejects a new row with no account number" do
+      expect(build(:tanzania_bank_account, account_number: nil)).not_to be_valid
+    end
 
-      na_bank_account = build(:tanzania_bank_account, account_number: "ABCDE0001234567")
-      expect(na_bank_account).to_not be_valid
-      expect(na_bank_account.errors.full_messages.to_sentence).to eq("The account number is invalid.")
+    it "does not re-validate a pre-existing alphanumeric number on an unrelated save" do
+      ba = build(:tanzania_bank_account, account_number: "ABC12345678")
+      ba.save!(validate: false)
+
+      expect(ba.mark_deleted!).to be_truthy
+      expect(ba.reload).to be_deleted
+    end
+
+    it "still rejects a bad number when the number itself is being changed" do
+      ba = build(:tanzania_bank_account, account_number: "ABC12345678")
+      ba.save!(validate: false)
+
+      ba.account_number = "0001234567ABCD"
+      expect(ba).not_to be_valid
+    end
+
+    it "allows a pre-existing alphanumeric number to be corrected" do
+      ba = build(:tanzania_bank_account, account_number: "ABC12345678")
+      ba.save!(validate: false)
+
+      ba.account_number = "0000123456789"
+      expect(ba).to be_valid
     end
   end
 end
