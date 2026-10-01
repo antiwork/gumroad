@@ -4966,6 +4966,11 @@ describe Purchase::CreateService, :vcr do
   end
 
   describe "existing subscription handling" do
+    # Cassettes recorded by existing examples in this block. Examples that make the same requests replay
+    # them rather than carrying their own copy: a lone payment-method request, or a new membership charge.
+    setup_cassette = "Purchase_CreateService/existing_subscription_handling/when_buyer_has_a_restartable_subscription/restarts_the_subscription_and_returns_the_original_purchase"
+    new_purchase_cassette = "Purchase_CreateService/existing_subscription_handling/when_buyer_has_an_abandoned_in-progress_membership_purchase/allows_the_purchase"
+
     let(:membership_product) { create(:membership_product, user:, price_cents: price) }
     let(:membership_params) do
       bp = base_params.deep_dup
@@ -5078,7 +5083,7 @@ describe Purchase::CreateService, :vcr do
       end
 
       context "without a restart intent" do
-        it "refuses the line before restarting or creating a new subscription" do
+        it "refuses the line before restarting or creating a new subscription", vcr: { cassette_name: setup_cassette } do
           expect(Subscription::UpdaterService).not_to receive(:new)
 
           expect do
@@ -5091,7 +5096,7 @@ describe Purchase::CreateService, :vcr do
           expect(subscription.reload.deactivated_at).to be_present
         end
 
-        it "logs the refusal without reporting to Sentry" do
+        it "logs the refusal without reporting to Sentry", vcr: { cassette_name: setup_cassette } do
           expect(ErrorNotifier).not_to receive(:notify)
           allow(Rails.logger).to receive(:info).and_call_original
 
@@ -5100,7 +5105,7 @@ describe Purchase::CreateService, :vcr do
           expect(Rails.logger).to have_received(:info).with(/Refused cart checkout of lapsed membership: subscription_id=#{subscription.id} product_id=#{membership_product.id}/)
         end
 
-        it "still buys a new subscription when the buyer explicitly asks for one" do
+        it "still buys a new subscription when the buyer explicitly asks for one", vcr: { cassette_name: new_purchase_cassette } do
           expect(Subscription::UpdaterService).not_to receive(:new)
 
           purchase, error = Purchase::CreateService.new(product: membership_product, params: membership_params.merge(force_new_subscription: true), buyer:).perform
@@ -5111,7 +5116,7 @@ describe Purchase::CreateService, :vcr do
         end
       end
 
-      it "refuses an intent from before the subscription was cancelled" do
+      it "refuses an intent from before the subscription was cancelled", vcr: { cassette_name: setup_cassette } do
         stale_intent = travel_to(3.days.ago) { Checkout::RestartIntentToken.issue(product: membership_product, buyer:) }
         expect(Subscription::UpdaterService).not_to receive(:new)
 
@@ -5121,7 +5126,7 @@ describe Purchase::CreateService, :vcr do
         expect(error).to eq(Purchase::CreateService.restart_not_requested_message(membership_product))
       end
 
-      it "refuses an intent issued to a different buyer" do
+      it "refuses an intent issued to a different buyer", vcr: { cassette_name: setup_cassette } do
         other_buyers_intent = Checkout::RestartIntentToken.issue(product: membership_product, buyer: create(:user))
         expect(Subscription::UpdaterService).not_to receive(:new)
 
@@ -5167,11 +5172,11 @@ describe Purchase::CreateService, :vcr do
       context "because it ended" do
         let!(:subscription) { create_subscription_for(product: membership_product, purchaser: buyer, email: email, ended_at: 1.day.ago, deactivated_at: 1.day.ago) }
 
-        it "refuses a stale line instead of buying a new subscription" do
+        it "refuses a stale line instead of buying a new subscription", vcr: { cassette_name: setup_cassette } do
           refused_and_nothing_charged(membership_params)
         end
 
-        it "lets the buyer start a new subscription from the product page" do
+        it "lets the buyer start a new subscription from the product page", vcr: { cassette_name: new_purchase_cassette } do
           intent = Checkout::RestartIntentToken.issue(product: membership_product, buyer:)
 
           purchase, error = Purchase::CreateService.new(product: membership_product, params: membership_params.merge(restart_intent: intent), buyer:).perform
@@ -5180,14 +5185,14 @@ describe Purchase::CreateService, :vcr do
           expect(purchase.subscription).not_to eq(subscription)
         end
 
-        it "lets a signed-in buyer pick a new subscription explicitly with force_new_subscription" do
+        it "lets a signed-in buyer pick a new subscription explicitly with force_new_subscription", vcr: { cassette_name: new_purchase_cassette } do
           purchase, error = Purchase::CreateService.new(product: membership_product, params: membership_params.merge(force_new_subscription: true), buyer:).perform
 
           expect(error).to be_nil
           expect(purchase.subscription).not_to eq(subscription)
         end
 
-        it "refuses an intent issued before the subscription ended" do
+        it "refuses an intent issued before the subscription ended", vcr: { cassette_name: setup_cassette } do
           subscription.update!(ended_at: 1.minute.ago, deactivated_at: 1.minute.ago)
           intent = travel_to(1.hour.ago) { Checkout::RestartIntentToken.issue(product: membership_product, buyer:) }
 
@@ -5198,11 +5203,11 @@ describe Purchase::CreateService, :vcr do
       context "because an admin cancelled it" do
         let!(:subscription) { create_subscription_for(product: membership_product, purchaser: buyer, email: email, cancelled_at: 1.day.ago, cancelled_by_admin: true, deactivated_at: 1.day.ago) }
 
-        it "refuses a stale line instead of buying a new subscription" do
+        it "refuses a stale line instead of buying a new subscription", vcr: { cassette_name: setup_cassette } do
           refused_and_nothing_charged(membership_params)
         end
 
-        it "never restarts the barred subscription even with a fresh intent" do
+        it "never restarts the barred subscription even with a fresh intent", vcr: { cassette_name: new_purchase_cassette } do
           expect(Subscription::UpdaterService).not_to receive(:new)
           intent = Checkout::RestartIntentToken.issue(product: membership_product, buyer:)
 
@@ -5216,7 +5221,7 @@ describe Purchase::CreateService, :vcr do
       context "for a logged-out email" do
         let!(:subscription) { create_subscription_for(product: membership_product, purchaser: create(:user), email: email, ended_at: 1.day.ago, deactivated_at: 1.day.ago) }
 
-        it "refuses a stale line, even with force_new_subscription" do
+        it "refuses a stale line, even with force_new_subscription", vcr: { cassette_name: setup_cassette } do
           expect(Subscription::UpdaterService).not_to receive(:new)
 
           purchase, error = Purchase::CreateService.new(product: membership_product, params: membership_params.merge(force_new_subscription: true)).perform
@@ -5231,7 +5236,7 @@ describe Purchase::CreateService, :vcr do
       let!(:old_subscription) { create_subscription_for(product: membership_product, purchaser: buyer, email: email, cancelled_at: 3.days.ago, deactivated_at: 3.days.ago) }
       let!(:active_subscription) { create_subscription_for(product: membership_product, purchaser: buyer, email: email) }
 
-      it "returns the already-subscribed error, not the stale-line refusal, and never restarts the old one" do
+      it "returns the already-subscribed error, not the stale-line refusal, and never restarts the old one", vcr: { cassette_name: setup_cassette } do
         expect(Subscription::UpdaterService).not_to receive(:new)
 
         purchase, error = Purchase::CreateService.new(product: membership_product, params: membership_params, buyer:).perform
@@ -5244,7 +5249,7 @@ describe Purchase::CreateService, :vcr do
     context "when an older subscription is restartable and a newer one ended after the buyer arrived" do
       let!(:restartable) { create_subscription_for(product: membership_product, purchaser: buyer, email: email, cancelled_at: 5.days.ago, deactivated_at: 5.days.ago) }
 
-      it "refuses the restart because the intent predates the latest deactivation" do
+      it "refuses the restart because the intent predates the latest deactivation", vcr: { cassette_name: setup_cassette } do
         intent = Checkout::RestartIntentToken.issue(product: membership_product, buyer:)
         travel_to(1.minute.from_now) do
           create_subscription_for(product: membership_product, purchaser: buyer, email: email, ended_at: Time.current, deactivated_at: Time.current)
@@ -5328,7 +5333,7 @@ describe Purchase::CreateService, :vcr do
         expect(purchase).to eq(subscription.original_purchase)
       end
 
-      it "refuses the restart without a restart intent" do
+      it "refuses the restart without a restart intent", vcr: { cassette_name: setup_cassette } do
         expect(Subscription::UpdaterService).not_to receive(:new)
 
         purchase, error = Purchase::CreateService.new(product: membership_product, params: membership_params).perform
@@ -5337,7 +5342,7 @@ describe Purchase::CreateService, :vcr do
         expect(error).to eq(Purchase::CreateService.restart_not_requested_message(membership_product))
       end
 
-      it "refuses the restart even when force_new_subscription is sent, because only a signed-in buyer can skip the check" do
+      it "refuses the restart even when force_new_subscription is sent, because only a signed-in buyer can skip the check", vcr: { cassette_name: setup_cassette } do
         expect(Subscription::UpdaterService).not_to receive(:new)
 
         purchase, error = Purchase::CreateService.new(product: membership_product, params: membership_params.merge(force_new_subscription: true)).perform
@@ -5346,7 +5351,7 @@ describe Purchase::CreateService, :vcr do
         expect(error).to eq(Purchase::CreateService.restart_not_requested_message(membership_product))
       end
 
-      it "refuses a signed-in buyer's intent when the checkout is a guest checkout" do
+      it "refuses a signed-in buyer's intent when the checkout is a guest checkout", vcr: { cassette_name: setup_cassette } do
         expect(Subscription::UpdaterService).not_to receive(:new)
         signed_in_intent = Checkout::RestartIntentToken.issue(product: membership_product, buyer: create(:user))
 

@@ -593,7 +593,7 @@ describe OrdersController, :vcr do
         end
       end
 
-      context "when the saved cart holds a line for a cancelled membership" do
+      context "when the saved cart holds a line for a cancelled membership", vcr: { cassette_name: "OrdersController/POST_create/multiple_purchases/when_the_saved_cart_holds_a_line_for_a_cancelled_membership" } do
         let(:buyer) { create(:user) }
         let(:membership) { create(:membership_product, user: seller_1, price_cents: 20_00) }
         let!(:subscription) do
