@@ -271,6 +271,7 @@ export default function BundlesProductEdit() {
     custom_summary: form.data.custom_summary,
     custom_attributes: form.data.custom_attributes,
     refund_policy: form.data.refund_policy,
+    product_refund_policy_enabled: form.data.product_refund_policy_enabled,
     public_files: publicFiles,
   };
 

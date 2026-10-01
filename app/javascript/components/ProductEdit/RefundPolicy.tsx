@@ -24,6 +24,37 @@ export type RefundPolicy = {
   title: string;
 };
 
+export type PreviewRefundPolicy = { title: string; fine_print: string | null; updated_at: string };
+
+// The editor previews must show what the product page renders, so this mirrors
+// ProductPresenter::ProductProps#refund_policy_props: the account-level policy wins,
+// then the product's own policy only while its toggle is on, otherwise nothing.
+export const previewRefundPolicy = ({
+  sellerRefundPolicyEnabled,
+  sellerRefundPolicy,
+  productRefundPolicyEnabled,
+  productRefundPolicy,
+}: {
+  sellerRefundPolicyEnabled: boolean;
+  sellerRefundPolicy: Pick<RefundPolicy, "title" | "fine_print">;
+  productRefundPolicyEnabled: boolean;
+  productRefundPolicy: RefundPolicy;
+}): PreviewRefundPolicy | null => {
+  if (sellerRefundPolicyEnabled) {
+    return { title: sellerRefundPolicy.title, fine_print: sellerRefundPolicy.fine_print ?? "", updated_at: "" };
+  }
+  if (!productRefundPolicyEnabled) return null;
+
+  return {
+    title:
+      productRefundPolicy.allowed_refund_periods_in_days.find(
+        ({ key }) => key === productRefundPolicy.max_refund_period_in_days,
+      )?.value ?? "",
+    fine_print: productRefundPolicy.fine_print ?? "",
+    updated_at: "",
+  };
+};
+
 export const RefundPolicySelector = ({
   refundPolicy,
   setRefundPolicy,

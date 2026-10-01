@@ -7,7 +7,7 @@ import { Product, ProductDiscount } from "$app/components/Product";
 import { CoffeeProduct } from "$app/components/Product/CoffeeProduct";
 import { LandingPagePreview } from "$app/components/ProductEdit/LandingPagePreview";
 import { useProductUrl } from "$app/components/ProductEdit/Layout";
-import { RefundPolicyModalPreview } from "$app/components/ProductEdit/RefundPolicy";
+import { previewRefundPolicy, RefundPolicyModalPreview } from "$app/components/ProductEdit/RefundPolicy";
 import { useProductEditContext } from "$app/components/ProductEdit/state";
 import { Layout as ProfileLayout } from "$app/components/Profile/Layout";
 
@@ -145,20 +145,12 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
     has_third_party_analytics: false,
     ppp_details: null,
     can_edit: false,
-    refund_policy: seller_refund_policy_enabled
-      ? {
-          title: seller_refund_policy.title,
-          fine_print: seller_refund_policy.fine_print ?? "",
-          updated_at: "",
-        }
-      : {
-          title:
-            product.refund_policy.allowed_refund_periods_in_days.find(
-              ({ key }) => key === product.refund_policy.max_refund_period_in_days,
-            )?.value ?? "",
-          fine_print: product.refund_policy.fine_print ?? "",
-          updated_at: "",
-        },
+    refund_policy: previewRefundPolicy({
+      sellerRefundPolicyEnabled: seller_refund_policy_enabled,
+      sellerRefundPolicy: seller_refund_policy,
+      productRefundPolicyEnabled: product.product_refund_policy_enabled,
+      productRefundPolicy: product.refund_policy,
+    }),
     bundle_products: [],
     public_files: product.public_files,
   };

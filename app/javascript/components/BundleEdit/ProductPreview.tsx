@@ -9,7 +9,7 @@ import { computeStandalonePrice } from "$app/components/BundleEdit/utils";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { Product, Seller } from "$app/components/Product";
 import { Attribute } from "$app/components/ProductEdit/ProductTab/AttributesEditor";
-import { RefundPolicy, RefundPolicyModalPreview } from "$app/components/ProductEdit/RefundPolicy";
+import { previewRefundPolicy, RefundPolicy, RefundPolicyModalPreview } from "$app/components/ProductEdit/RefundPolicy";
 import { PublicFileWithStatus } from "$app/components/ProductEdit/state";
 
 type ProductPreviewBundle = {
@@ -31,6 +31,7 @@ type ProductPreviewBundle = {
   custom_summary: string | null;
   custom_attributes: Attribute[];
   refund_policy: RefundPolicy;
+  product_refund_policy_enabled: boolean;
   public_files: PublicFileWithStatus[];
   is_published: boolean;
   custom_permalink?: string | null;
@@ -126,20 +127,12 @@ export const ProductPreview = ({
           has_third_party_analytics: false,
           ppp_details: null,
           can_edit: false,
-          refund_policy: sellerRefundPolicyEnabled
-            ? {
-                title: sellerRefundPolicy.title,
-                fine_print: sellerRefundPolicy.fine_print ?? "",
-                updated_at: "",
-              }
-            : {
-                title:
-                  bundle.refund_policy.allowed_refund_periods_in_days.find(
-                    ({ key }) => key === bundle.refund_policy.max_refund_period_in_days,
-                  )?.value ?? "",
-                fine_print: bundle.refund_policy.fine_print ?? "",
-                updated_at: "",
-              },
+          refund_policy: previewRefundPolicy({
+            sellerRefundPolicyEnabled,
+            sellerRefundPolicy,
+            productRefundPolicyEnabled: bundle.product_refund_policy_enabled,
+            productRefundPolicy: bundle.refund_policy,
+          }),
           bundle_products: bundle.products.map((bundleProduct) => ({
             ...bundleProduct,
             price: computeStandalonePrice(bundleProduct),
