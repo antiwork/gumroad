@@ -1,8 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { RateLimitError, ResponseError } from "$app/utils/request";
-
 import type { MemberInfo } from "$app/data/settings/team";
+import { RateLimitError, ResponseError } from "$app/utils/request";
 
 vi.mock("$app/utils/request", async (importOriginal) => {
   const actual = await importOriginal<typeof import("$app/utils/request")>();
@@ -58,7 +57,7 @@ describe("createTeamInvitation", () => {
 
 describe("resendInvitation", () => {
   const jsonResponse = (body: unknown) =>
-    ({ ok: true, json: async () => body }) as unknown as Response;
+    new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
 
   it("returns the server's validation message so the page does not report a refused resend as sent", async () => {
     request.mockResolvedValue(
