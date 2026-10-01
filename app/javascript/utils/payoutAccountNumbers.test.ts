@@ -31,10 +31,12 @@ describe("accountNumberFormatError", () => {
     }
   });
 
-  // Oman's model takes 6 to 16 digits, so the generic example is genuinely valid there — its entry
-  // exists to reject a non-numeric value, not to replace a wrong example.
+  // Oman's model takes 6 to 16 digits and Tanzania's takes 10 to 14, so the generic example is
+  // genuinely valid for both — their entries exist to reject a non-numeric value, not to replace a
+  // wrong example.
+  const COUNTRIES_WHOSE_MODEL_ACCEPTS_THE_GENERIC_EXAMPLE = ["OM", "TZ"];
   const COUNTRIES_THE_GENERIC_EXAMPLE_IS_WRONG_FOR = Object.entries(COUNTRY_ACCOUNT_NUMBER_HINTS).filter(
-    ([countryCode]) => countryCode !== "OM",
+    ([countryCode]) => !COUNTRIES_WHOSE_MODEL_ACCEPTS_THE_GENERIC_EXAMPLE.includes(countryCode),
   );
 
   it("rejects the generic example for every country whose model would reject it", () => {
@@ -43,9 +45,16 @@ describe("accountNumberFormatError", () => {
     }
   });
 
-  it("accepts the generic example for Oman, whose model does allow it", () => {
+  it("accepts the generic example for Oman and Tanzania, whose models do allow it", () => {
     expect(accountNumberFormatError("OM", "1234567890")).toBeNull();
     expect(accountNumberFormatError("OM", "OM810180000001299123456")).toBe(COUNTRY_ACCOUNT_NUMBER_HINTS.OM?.title);
+    expect(accountNumberFormatError("TZ", "1234567890")).toBeNull();
+  });
+
+  it("rejects a Tanzania account number that carries a letter or the wrong length", () => {
+    expect(accountNumberFormatError("TZ", "0001234567ABCD")).toBe(COUNTRY_ACCOUNT_NUMBER_HINTS.TZ?.title);
+    expect(accountNumberFormatError("TZ", "ABC12345678")).toBe(COUNTRY_ACCOUNT_NUMBER_HINTS.TZ?.title);
+    expect(accountNumberFormatError("TZ", "000012345678901")).toBe(COUNTRY_ACCOUNT_NUMBER_HINTS.TZ?.title);
   });
 
   // These numbers are valid today: UpdatePayoutMethod strips the separators before it validates,
@@ -56,6 +65,7 @@ describe("accountNumberFormatError", () => {
     ["MX", "0321 8000 0118 3597 19"],
     ["AR", "0110 0006 0000 0000 0000 00"],
     ["MZ", "0012 3456 7890 1234 5678 9"],
+    ["TZ", "0123 4567 89"],
   ])("accepts %s's number written with the separators its bank prints", (countryCode, accountNumber) => {
     expect(accountNumberFormatError(countryCode, accountNumber)).toBeNull();
   });

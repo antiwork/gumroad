@@ -139,6 +139,14 @@ export const COUNTRY_ACCOUNT_NUMBER_HINTS: Record<string, CountryAccountNumberHi
     inputMode: "numeric",
     title: "Enter your 8-digit account number",
   },
+  // TanzaniaBankAccount takes 10 to 14 digits, so this entry exists to refuse the alphanumeric
+  // values Stripe's TZ rail rejects, not to replace a wrong example.
+  TZ: {
+    placeholder: "0123456789",
+    pattern: "[0-9]{10,14}",
+    inputMode: "numeric",
+    title: "Enter your 10 to 14 digit account number, digits only",
+  },
   // OmanBankAccount only runs its format check in production, so this is the one entry whose
   // pattern a local or CI run cannot cross-check against the model.
   OM: {
