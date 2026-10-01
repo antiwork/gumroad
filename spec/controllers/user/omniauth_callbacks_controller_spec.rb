@@ -64,12 +64,15 @@ describe User::OmniauthCallbacksController do
         expect(response).to redirect_to safe_redirect_path(oauth_completions_stripe_path)
       end
 
-      it "does not create a new user if the email is already taken" do
+      it "does not sign in an existing user that only shares the Stripe account email" do
         create(:user, email: "stripe.connect@gum.co")
 
         expect { post :stripe_connect }.not_to change { User.count }
 
-        expect(response).to redirect_to safe_redirect_path(oauth_completions_stripe_path)
+        expect(controller.user_signed_in?).to be false
+        expect(session[:stripe_connect_data]).to be_nil
+        expect(flash[:alert]).to eq "An account already exists with this email."
+        expect(response).to redirect_to safe_redirect_path(request.env["omniauth.params"]["referer"])
       end
     end
 
@@ -197,12 +200,13 @@ describe User::OmniauthCallbacksController do
         expect(response).to redirect_to safe_redirect_path(oauth_completions_stripe_path)
       end
 
-      it "allows existing users with matching email (without Stripe connected) to log in" do
+      it "does not log in existing users with matching email (without Stripe connected)" do
         create(:user, email: "stripe.connect@gum.co")
 
         expect { post :stripe_connect }.not_to change { User.count }
 
-        expect(response).to redirect_to safe_redirect_path(oauth_completions_stripe_path)
+        expect(controller.user_signed_in?).to be false
+        expect(response).to redirect_to signup_url
       end
 
       it "allows existing users without email to log in" do
