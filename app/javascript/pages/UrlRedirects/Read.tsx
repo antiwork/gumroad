@@ -236,7 +236,9 @@ const PdfReader = ({
         await import("pdfjs-dist/legacy/build/pdf.worker.mjs?url"),
       ).default;
 
-      const { EventBus, PDFLinkService, PDFSinglePageViewer } = await import("pdfjs-dist/legacy/web/pdf_viewer.mjs");
+      const { EventBus, LinkTarget, PDFLinkService, PDFSinglePageViewer } = await import(
+        "pdfjs-dist/legacy/web/pdf_viewer.mjs"
+      );
       // The three dynamic imports above are a real network window on a first visit (the pdf_viewer
       // chunk is not small). Bail before constructing anything if the reader closed during them,
       // or we build a viewer against a detached container, overwrite the ref the cleanup just
@@ -244,7 +246,10 @@ const PdfReader = ({
       if (isCancelled) return;
 
       const eventBus = new EventBus();
-      const pdfLinkService = new PDFLinkService({ eventBus });
+      // pdf.js defaults externalLinkTarget to null (LinkTarget.NONE), which renders in-PDF links as
+      // plain anchors with no target, so clicking one navigates the current tab away from the reader
+      // and the buyer loses their place. Open them in a new tab instead.
+      const pdfLinkService = new PDFLinkService({ eventBus, externalLinkTarget: LinkTarget.BLANK });
       const pdfSinglePageViewer = new PDFSinglePageViewer({ container, eventBus, linkService: pdfLinkService });
       pdfLinkService.setViewer(pdfSinglePageViewer);
       pdfViewerRef.current = pdfSinglePageViewer;

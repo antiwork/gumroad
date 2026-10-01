@@ -6,23 +6,33 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import Read, { canResumePdfFromLocation, downloadEpubArchive } from "./Read";
 
-const mocks = vi.hoisted(() => ({
-  createEpub: vi.fn(),
-  trackMediaLocationChanged: vi.fn(),
-  usePage: vi.fn(),
-  getDocument: vi.fn(),
-  // Shared pdfjs harness state. The module mocks below are hoisted above any test, so the
-  // constructors have to read these lazily rather than close over a per-test object.
-  on: vi.fn<(type: string, listener: () => void) => void>(),
-  off: vi.fn<(type: string, listener: () => void) => void>(),
-  viewer: {
-    cleanup: vi.fn(),
-    setDocument: vi.fn(),
-    currentScaleValue: "",
-    currentScale: 1,
-    pdfDocument: { numPages: 3 },
-  },
-}));
+const mocks = vi.hoisted(() => {
+  // The options the reader handed to the PDFLinkService constructor, so a test can assert how the
+  // reader configured link handling.
+  const linkServiceOptions: Record<string, unknown>[] = [];
+
+  return {
+    createEpub: vi.fn(),
+    trackMediaLocationChanged: vi.fn(),
+    usePage: vi.fn(),
+    getDocument: vi.fn(),
+    // Shared pdfjs harness state. The module mocks below are hoisted above any test, so the
+    // constructors have to read these lazily rather than close over a per-test object.
+    on: vi.fn<(type: string, listener: () => void) => void>(),
+    off: vi.fn<(type: string, listener: () => void) => void>(),
+    viewer: {
+      cleanup: vi.fn(),
+      setDocument: vi.fn(),
+      currentScaleValue: "",
+      currentScale: 1,
+      pdfDocument: { numPages: 3 },
+    },
+    // pdf.js's own LinkTarget enum (pdfjs-dist 4.5.136). Held here so the module mock and the
+    // assertions read the same values.
+    LinkTarget: { NONE: 0, SELF: 1, BLANK: 2, PARENT: 3, TOP: 4 },
+    linkServiceOptions,
+  };
+});
 
 vi.mock("@inertiajs/react", () => ({ usePage: mocks.usePage }));
 vi.mock("$app/data/media_location", () => ({ trackMediaLocationChanged: mocks.trackMediaLocationChanged }));
@@ -41,7 +51,11 @@ vi.mock("pdfjs-dist/legacy/web/pdf_viewer.mjs", () => ({
     on = mocks.on;
     off = mocks.off;
   },
+  LinkTarget: mocks.LinkTarget,
   PDFLinkService: class {
+    constructor(options: Record<string, unknown>) {
+      mocks.linkServiceOptions.push(options);
+    }
     setViewer = vi.fn();
     setDocument = vi.fn();
   },
@@ -238,6 +252,18 @@ describe("PDF reader teardown", () => {
     unmount();
 
     expect(pdf.destroy).toHaveBeenCalled();
+  });
+
+  it("opens a link inside the PDF in a new tab instead of replacing the reader", async () => {
+    // Regression for gumroad-private#3174: pdf.js defaults externalLinkTarget to null
+    // (LinkTarget.NONE), so an in-PDF link rendered as a plain anchor with no target and clicking
+    // it navigated the current tab away from the reader, losing the buyer's place.
+    mocks.linkServiceOptions.length = 0;
+
+    render(<Read />);
+
+    await waitFor(() => expect(mocks.linkServiceOptions).toHaveLength(1));
+    expect(mocks.linkServiceOptions.map((options) => options.externalLinkTarget)).toEqual([mocks.LinkTarget.BLANK]);
   });
 });
 
