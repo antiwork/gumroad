@@ -130,12 +130,14 @@ class Settings::Team::InvitationsController < Sellers::BaseController
     end
     return unless throttle_invitation_sends
 
-    @team_invitation.update!(
+    if @team_invitation.update(
       expires_at: TeamInvitation::ACTIVE_INTERVAL_IN_DAYS.days.from_now.at_end_of_day
     )
-
-    TeamMailer.invite(@team_invitation).deliver_later
-    render json: { success: true }
+      TeamMailer.invite(@team_invitation).deliver_later
+      render json: { success: true }
+    else
+      render json: { success: false, error_message: @team_invitation.errors.full_messages.to_sentence }
+    end
   end
 
   private

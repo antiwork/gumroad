@@ -687,6 +687,25 @@ describe Settings::Team::InvitationsController do
 
       expect(response).to have_http_status(:forbidden)
     end
+
+    context "when the email is associated with an existing team member" do
+      before do
+        member = create(:user, email: team_invitation.email)
+        member.create_owner_membership_if_needed!
+        create(:team_membership, seller:, user: member)
+      end
+
+      it "returns an error instead of raising" do
+        expect(TeamMailer).not_to receive(:invite)
+        expect do
+          put :resend_invitation, params: { id: team_invitation.external_id }, as: :json
+        end.not_to change { team_invitation.reload.expires_at }
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to eq(false)
+        expect(response.parsed_body["error_message"]).to include("existing team member")
+      end
+    end
   end
 end
 
