@@ -26,9 +26,8 @@ export type RefundPolicy = {
 
 export type PreviewRefundPolicy = { title: string; fine_print: string | null; updated_at: string };
 
-// The editor previews must show what the product page renders, so this mirrors
-// ProductPresenter::ProductProps#refund_policy_props: the account-level policy wins,
-// then the product's own policy only while its toggle is on, otherwise nothing.
+// Mirrors ProductPresenter::ProductProps#refund_policy_props so a preview shows exactly
+// what the product page renders: the account policy, else the product's own, else nothing.
 export const previewRefundPolicy = ({
   sellerRefundPolicyEnabled,
   sellerRefundPolicy,
