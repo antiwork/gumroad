@@ -65,6 +65,25 @@ RSpec.describe MysqlReadOnlyPrimaryRetry do
     expect(probe_ids).to eq([])
   end
 
+  it "tries the discard again at the next checkin when disconnecting fails" do
+    fail_queries_with(read_only_error, times: 2)
+    expect { adapter.execute("INSERT INTO read_only_retry_probe (id) VALUES (1)") }
+      .to raise_error(ActiveRecord::StatementInvalid, /--read-only/)
+
+    attempts = 0
+    allow(adapter).to receive(:disconnect!).and_wrap_original do |original|
+      attempts += 1
+      raise Mysql2::Error, "close failed" if attempts == 1
+      original.call
+    end
+
+    adapter._run_checkin_callbacks { }
+    adapter._run_checkin_callbacks { }
+
+    expect(attempts).to eq(2)
+    expect(adapter.instance_variable_get(:@raw_connection)).to be_nil
+  end
+
   it "covers the mysql2_proxy primary adapter" do
     require "active_record/connection_adapters/mysql2_proxy_adapter"
 

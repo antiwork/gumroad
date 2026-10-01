@@ -40,8 +40,8 @@ module MysqlReadOnlyPrimaryRetry
     def discard_read_only_primary_connection
       return unless @read_only_primary_connection
 
-      @read_only_primary_connection = false
       disconnect!
+      @read_only_primary_connection = false
     rescue StandardError
       nil
     end
