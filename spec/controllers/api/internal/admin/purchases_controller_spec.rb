@@ -976,7 +976,19 @@ describe Api::Internal::Admin::PurchasesController do
           post :refund, params: params
 
           expect(response).to have_http_status(:unprocessable_entity)
-          expect(response.parsed_body).to eq({ success: false, message: "Purchase has no recorded refund policy and requires seller review" }.as_json)
+          expect(response.parsed_body).to eq({ success: false, message: "Purchase has no recorded refund policy" }.as_json)
+        end
+
+        it "names the missing policy and does not refund a chargedback purchase without force" do
+          purchase.update_column(:chargeback_date, Time.current)
+          expect(purchase).to be_chargedback
+          expect(purchase.purchase_refund_policy).to be_nil
+          expect(purchase).not_to receive(:refund!)
+
+          post :refund, params: params
+
+          expect(response).to have_http_status(:unprocessable_entity)
+          expect(response.parsed_body).to eq({ success: false, message: "Purchase has no recorded refund policy" }.as_json)
         end
 
         it "succeeds with force=true" do

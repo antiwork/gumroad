@@ -176,10 +176,9 @@ class Api::Internal::Admin::PurchasesController < Api::Internal::Admin::BaseCont
 
       unless force
         unless purchase.within_refund_policy_timeframe?
-          # Renewals and purchases made while no policy was enabled have no snapshot; they are
-          # refused the same way, but "expired" would misstate why.
+          # Without a snapshot there is no window to have expired, so "outside" would misstate why.
           message = if purchase.purchase_refund_policy.blank?
-            "Purchase has no recorded refund policy and requires seller review"
+            "Purchase has no recorded refund policy"
           else
             "Purchase is outside of the refund policy timeframe"
           end
