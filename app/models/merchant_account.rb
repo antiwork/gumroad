@@ -133,6 +133,18 @@ class MerchantAccount < ApplicationRecord
     end
   end
 
+  # Any unpaid/processing balance counts whatever its amount, as does a committed BalanceTransaction not yet
+  # applied to one. That is read first: if it applies between the reads, its Balance row is already committed.
+  # Completed payouts never count, unlike Payment::NON_TERMINAL_STATES.
+  def unsettled_payout_obligations?
+    return true if balance_transactions.where(balance_id: nil).exists?
+    return true if balances.where(state: %w[unpaid processing]).exists?
+
+    in_flight_payments = Payment.where(user_id:, state: [Payment::CREATING, Payment::PROCESSING])
+    in_flight_payments.joins(:balances).where(balances: { merchant_account_id: id }).exists? ||
+      (charge_processor_merchant_id.present? && in_flight_payments.where(stripe_connect_account_id: charge_processor_merchant_id).exists?)
+  end
+
   def delete_charge_processor_account!
     clear_non_hash_json_data_for_disconnect!
     mark_deleted!

@@ -76,6 +76,102 @@ describe MerchantAccount do
     end
   end
 
+  describe "#unsettled_payout_obligations?" do
+    let(:seller) { create(:user) }
+    let(:merchant_account) { create(:merchant_account, user: seller, charge_processor_merchant_id: "acct_managed_obligations") }
+
+    def create_balance(state:, amount_cents:, account: merchant_account)
+      create(:balance, user: seller, merchant_account: account, state:, amount_cents:)
+    end
+
+    def create_unapplied_balance_transaction(account: merchant_account)
+      credit = create(:credit, user: seller, merchant_account: account, balance: nil, amount_cents: 5_00)
+      amount = BalanceTransaction::Amount.new(currency: Currency::USD, gross_cents: 5_00, net_cents: 5_00)
+      BalanceTransaction.create!(user: seller, merchant_account: account, credit:, issued_amount: amount, holding_amount: amount, update_user_balance: false)
+    end
+
+    it "is false for an account with no balances or payouts" do
+      expect(merchant_account.unsettled_payout_obligations?).to be(false)
+    end
+
+    {
+      "positive unpaid" => ["unpaid", 10_00],
+      "negative unpaid" => ["unpaid", -5_00],
+      "zero-net unpaid" => ["unpaid", 0],
+      "processing" => ["processing", 10_00],
+    }.each do |label, (state, amount_cents)|
+      it "is true for a #{label} balance on the account" do
+        create_balance(state:, amount_cents:)
+
+        expect(merchant_account.unsettled_payout_obligations?).to be(true)
+      end
+    end
+
+    it "is true for a committed balance transaction that has no balance yet" do
+      create_unapplied_balance_transaction
+
+      expect(merchant_account.unsettled_payout_obligations?).to be(true)
+    end
+
+    it "is false once the balance transaction has been applied to a paid balance" do
+      create_unapplied_balance_transaction.update!(balance: create_balance(state: "paid", amount_cents: 5_00))
+
+      expect(merchant_account.unsettled_payout_obligations?).to be(false)
+    end
+
+    it "ignores unapplied balance transactions recorded against other merchant accounts" do
+      other_account = create(:merchant_account, user: seller, charge_processor_merchant_id: "acct_other_managed")
+      create_unapplied_balance_transaction(account: other_account)
+
+      expect(merchant_account.unsettled_payout_obligations?).to be(false)
+    end
+
+    it "is false when every balance on the account is paid or forfeited" do
+      create_balance(state: "paid", amount_cents: 10_00)
+      create_balance(state: "forfeited", amount_cents: 10_00)
+
+      expect(merchant_account.unsettled_payout_obligations?).to be(false)
+    end
+
+    it "ignores unpaid balances held on other merchant accounts" do
+      other_account = create(:merchant_account, user: seller, charge_processor_merchant_id: "acct_other_managed")
+      create_balance(state: "unpaid", amount_cents: 10_00, account: other_account)
+      create(:balance, user: seller, state: "unpaid", amount_cents: 10_00)
+      create(:balance, user: create(:user), merchant_account:, state: "paid", amount_cents: 10_00)
+
+      expect(merchant_account.unsettled_payout_obligations?).to be(false)
+    end
+
+    %w[creating processing].each do |state|
+      it "is true for a #{state} payout against the account" do
+        create(:payment, user: seller, processor: PayoutProcessorType::STRIPE, state:, stripe_connect_account_id: merchant_account.charge_processor_merchant_id)
+
+        expect(merchant_account.unsettled_payout_obligations?).to be(true)
+      end
+
+      it "is true for a #{state} payout whose balances are on the account" do
+        balance = create_balance(state: "paid", amount_cents: 10_00)
+        create(:payment, user: seller, processor: PayoutProcessorType::STRIPE, state:, balances: [balance])
+
+        expect(merchant_account.unsettled_payout_obligations?).to be(true)
+      end
+    end
+
+    it "is false when the seller only has completed historical payouts against the account" do
+      balance = create_balance(state: "paid", amount_cents: 10_00)
+      create(:payment_completed, user: seller, processor: PayoutProcessorType::STRIPE, stripe_connect_account_id: merchant_account.charge_processor_merchant_id,
+                                 stripe_transfer_id: "tr_history", balances: [balance])
+
+      expect(merchant_account.unsettled_payout_obligations?).to be(false)
+    end
+
+    it "ignores in-flight payouts against a different account" do
+      create(:payment, user: seller, processor: PayoutProcessorType::STRIPE, state: "processing", stripe_connect_account_id: "acct_elsewhere")
+
+      expect(merchant_account.unsettled_payout_obligations?).to be(false)
+    end
+  end
+
   describe "#delete_charge_processor_account!", :vcr do
     it "marks the merchant account as deleted and clears the meta field" do
       merchant_account = create(:merchant_account_stripe)
