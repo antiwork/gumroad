@@ -963,6 +963,68 @@ describe Api::Internal::Admin::PurchasesController do
         end
       end
 
+      context "when no refund policy snapshot is recorded for the purchase" do
+        before do
+          allow(purchase).to receive(:within_refund_policy_timeframe?).and_call_original
+          allow(purchase).to receive(:purchase_refund_policy).and_call_original
+        end
+
+        it "returns 422 naming the missing policy and does not refund without force" do
+          expect(purchase.purchase_refund_policy).to be_nil
+          expect(purchase).not_to receive(:refund!)
+
+          post :refund, params: params
+
+          expect(response).to have_http_status(:unprocessable_entity)
+          expect(response.parsed_body).to eq({ success: false, message: "Purchase has no recorded refund policy and requires seller review" }.as_json)
+        end
+
+        it "succeeds with force=true" do
+          expect(purchase).to receive(:refund!).with(refunding_user_id: admin_user.id, amount: nil, reason: "Refund requested by the buyer").and_return(true)
+
+          post :refund, params: params.merge(force: "true")
+
+          expect(response).to have_http_status(:ok)
+          expect(response.parsed_body["success"]).to be(true)
+        end
+      end
+
+      context "when the recorded refund policy has expired" do
+        before do
+          allow(purchase).to receive(:within_refund_policy_timeframe?).and_call_original
+          allow(purchase).to receive(:purchase_refund_policy).and_call_original
+          create(:purchase_refund_policy, purchase:, max_refund_period_in_days: 30, fine_print: nil)
+          purchase.update_column(:created_at, 31.days.ago)
+        end
+
+        it "returns 422 with the outside-of-timeframe message and does not refund without force" do
+          expect(purchase).not_to receive(:refund!)
+
+          post :refund, params: params
+
+          expect(response).to have_http_status(:unprocessable_entity)
+          expect(response.parsed_body).to eq({ success: false, message: "Purchase is outside of the refund policy timeframe" }.as_json)
+        end
+
+        it "reports the expired timeframe ahead of fine print review" do
+          purchase.purchase_refund_policy.update!(fine_print: "No refunds after 7 days")
+
+          post :refund, params: params
+
+          expect(response).to have_http_status(:unprocessable_entity)
+          expect(response.parsed_body["message"]).to eq("Purchase is outside of the refund policy timeframe")
+        end
+
+        it "succeeds with force=true" do
+          expect(purchase).to receive(:refund!).with(refunding_user_id: admin_user.id, amount: nil, reason: "Refund requested by the buyer").and_return(true)
+
+          post :refund, params: params.merge(force: "true")
+
+          expect(response).to have_http_status(:ok)
+          expect(response.parsed_body["success"]).to be(true)
+        end
+      end
+
       context "when the refund policy has fine print" do
         before do
           allow(refund_policy).to receive(:fine_print).and_return("No refunds after 7 days")
