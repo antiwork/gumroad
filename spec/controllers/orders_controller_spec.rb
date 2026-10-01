@@ -593,6 +593,87 @@ describe OrdersController, :vcr do
         end
       end
 
+      context "when the saved cart holds a line for a cancelled membership" do
+        let(:buyer) { create(:user) }
+        let(:membership) { create(:membership_product, user: seller_1, price_cents: 20_00) }
+        let!(:subscription) do
+          sub = create(:subscription, link: membership, user: buyer)
+          create(:purchase, link: membership, purchaser: buyer, email: buyer.email, subscription: sub,
+                            is_original_subscription_purchase: true, price_cents: membership.price_cents,
+                            variant_attributes: membership.tiers.to_a)
+          sub.update!(cancelled_at: 1.day.ago, cancelled_by_buyer: true, deactivated_at: 1.day.ago)
+          sub
+        end
+        let(:membership_line) do
+          { uid: "membership-line", permalink: membership.unique_permalink, perceived_price_cents: membership.price_cents,
+            quantity: 1, price_id: membership.prices.alive.first.external_id }
+        end
+        let(:product_line) do
+          { uid: "product-line", permalink: product_2.unique_permalink, perceived_price_cents: product_2.price_cents, quantity: 1 }
+        end
+
+        before do
+          sign_in buyer
+          cart = create(:cart, user: buyer, browser_guid: cookies[:_gumroad_guid])
+          create(:cart_product, cart:, product: membership, created_at: 1.year.ago)
+          create(:cart_product, cart:, product: product_2)
+        end
+
+        it "charges only the unrelated product and leaves the cancelled membership alone" do
+          expect(Subscription::UpdaterService).not_to receive(:new)
+          membership_purchases = Purchase.where(link: membership).count
+
+          expect do
+            post :create, params: { line_items: [membership_line, product_line] }.merge(common_purchase_params)
+          end.to change(Charge, :count).by(1)
+
+          expect(response.parsed_body["line_items"]["product-line"]["success"]).to be(true)
+          expect(response.parsed_body["line_items"]["membership-line"]).to include(
+            "success" => false,
+            "error_message" => Purchase::CreateService.restart_not_requested_message(membership)
+          )
+          charge = Charge.last
+          expect(charge.purchases.map(&:link)).to eq([product_2])
+          expect(charge.amount_cents).to eq(product_2.price_cents)
+          expect(Purchase.where(link: membership).count).to eq(membership_purchases)
+          expect(Subscription.where(link: membership).count).to eq(1)
+          expect(subscription.reload).not_to be_alive
+          expect(subscription.deactivated_at).to be_present
+        end
+
+        it "charges only the unrelated product when the stale line is an ended membership" do
+          subscription.update!(ended_at: 1.day.ago)
+          expect(Subscription::UpdaterService).not_to receive(:new)
+          membership_purchases = Purchase.where(link: membership).count
+
+          expect do
+            post :create, params: { line_items: [membership_line, product_line] }.merge(common_purchase_params)
+          end.to change(Charge, :count).by(1)
+
+          expect(response.parsed_body["line_items"]["membership-line"]).to include("success" => false, "error_message" => Purchase::CreateService.restart_not_requested_message(membership))
+          expect(Charge.last.purchases.map(&:link)).to eq([product_2])
+          expect(Purchase.where(link: membership).count).to eq(membership_purchases)
+          expect(Subscription.where(link: membership).count).to eq(1)
+        end
+
+        it "restarts the membership when its line carries the intent signed on checkout arrival" do
+          updater_service = instance_double(Subscription::UpdaterService)
+          allow(Subscription::UpdaterService).to receive(:new).and_return(updater_service)
+          allow(updater_service).to receive(:perform) do
+            subscription.reload.resubscribe!
+            { success: true, success_message: "Membership restarted" }
+          end
+          intent = Checkout::RestartIntentToken.issue(product: membership, buyer:)
+
+          post :create, params: { line_items: [membership_line.merge(restart_intent: intent), product_line] }.merge(common_purchase_params)
+
+          expect(response.parsed_body["line_items"]["membership-line"]["success"]).to be(true)
+          expect(response.parsed_body["line_items"]["product-line"]["success"]).to be(true)
+          expect(subscription.reload).to be_alive
+          expect(Subscription.where(link: membership).count).to eq(1)
+        end
+      end
+
       it "saves the referrer" do
         multiple_purchase_params[:line_items][0][:referrer] = "https://facebook.com"
         multiple_purchase_params[:line_items][1][:referrer] = "https://google.com"

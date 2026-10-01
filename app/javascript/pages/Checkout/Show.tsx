@@ -652,6 +652,7 @@ const CheckoutIndexPage = () => {
                 item.price !== 0,
               acceptsPppDiscount: !!item.product.ppp_details && !cartForm.data.cart.rejectPppDiscount,
               forceNewSubscription: item.force_new_subscription,
+              restartIntent: item.restart_intent ?? null,
               confirmedDuplicatePurchase: confirmedDuplicatePurchaseUidsRef.current.has(getCartItemUid(item)),
               acceptedOffer: item.accepted_offer ?? null,
               bundleProducts: item.product.bundle_products.map((bundleProduct) => ({

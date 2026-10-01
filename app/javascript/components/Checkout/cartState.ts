@@ -101,6 +101,9 @@ export type CartItem = {
   call_start_time: string | null;
   pay_in_installments: boolean;
   force_new_subscription: boolean;
+  // Server-signed proof the buyer just asked for this cancelled membership to be restarted. Only
+  // present on a product added in this page load; saved cart lines never carry one.
+  restart_intent?: string | null;
 };
 
 export type CrossSell = {
@@ -126,6 +129,9 @@ export type ProductToAdd = {
   accepted_offer: { id: string } | null;
   pay_in_installments: boolean;
   force_new_subscription: boolean;
+  // Server-signed proof the buyer just asked for this cancelled membership to be restarted. Only
+  // present on a product added in this page load; saved cart lines never carry one.
+  restart_intent?: string | null;
 };
 
 export type CartState = {

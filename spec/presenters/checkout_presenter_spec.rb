@@ -170,6 +170,33 @@ describe CheckoutPresenter do
       expect(@instance.checkout_props(params:, browser_guid:)[:add_products].first[:accepted_offer]).to be_nil
     end
 
+    describe "restart intent" do
+      let(:membership) { create(:membership_product, user: create(:named_user)) }
+
+      it "signs a restart intent for a recurring product arriving at checkout" do
+        token = @instance.checkout_props(params: { product: membership.unique_permalink }, browser_guid:)[:add_products].sole[:restart_intent]
+
+        expect(Checkout::RestartIntentToken.restart_intended?(token, product: membership, buyer: @user, lapsed_at: 1.minute.ago)).to be true
+      end
+
+      it "omits the restart intent for a product that cannot be restarted" do
+        product = create(:product, user: create(:named_user))
+
+        expect(@instance.checkout_props(params: { product: product.unique_permalink }, browser_guid:)[:add_products].sole).not_to have_key(:restart_intent)
+      end
+
+      it "does not issue a restart intent for lines read back from the saved cart" do
+        cart = create(:cart, user: @user)
+        create(:cart_product, cart:, product: membership)
+
+        items = CartPresenter.new(logged_in_user: @user, ip: "104.193.168.19", browser_guid:).cart_props[:items]
+
+        expect(items.sole[:product][:id]).to eq(membership.external_id)
+        expect(items.sole).not_to have_key(:restart_intent)
+        expect(items.sole[:force_new_subscription]).to be(false)
+      end
+    end
+
     it "allows adding a product" do
       product = create(:product_with_digital_versions, name: "Sample Product", description: "Simple description", user: create(:named_user), duration_in_months: 6)
       product.alive_variants.first.update!(max_purchase_count: 0)
@@ -354,7 +381,8 @@ describe CheckoutPresenter do
             call_start_time: nil,
             accepted_offer: nil,
             pay_in_installments: false,
-            force_new_subscription: false
+            force_new_subscription: false,
+            restart_intent: a_kind_of(String)
           },
           {
             product: a_hash_including(id: versioned_product.external_id),

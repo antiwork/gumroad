@@ -391,4 +391,31 @@ describe Subscription::Restartable, :sidekiq_inline do
       end
     end
   end
+
+  describe ".lapsed_for_product_and_buyer and .lapsed_for_product_and_email" do
+    let!(:cancelled) { create_subscription_with_purchase(product:, purchaser: buyer, cancelled_at: 1.day.ago, deactivated_at: 1.day.ago) }
+    let!(:ended) { create_subscription_with_purchase(product:, purchaser: buyer, ended_at: 1.day.ago, deactivated_at: 1.day.ago) }
+    let!(:admin_cancelled) { create_subscription_with_purchase(product:, purchaser: buyer, cancelled_at: 1.day.ago, cancelled_by_admin: true, deactivated_at: 1.day.ago) }
+
+    before do
+      create_subscription_with_purchase(product:, purchaser: buyer)
+      create_subscription_with_purchase(product:, purchaser: buyer, deactivated_at: 1.day.ago, is_test_subscription: true)
+      create_subscription_with_purchase(product:, purchaser: create(:user), deactivated_at: 1.day.ago)
+      create_subscription_with_purchase(product: create(:membership_product), purchaser: buyer, deactivated_at: 1.day.ago)
+    end
+
+    it "includes ended and admin-cancelled subscriptions that are not restartable, and excludes active, test, other buyers and other products" do
+      expect(Subscription.restartable_for_product_and_buyer(product:, buyer:)).to eq(cancelled)
+      expect(Subscription.lapsed_for_product_and_buyer(product:, buyer:)).to contain_exactly(cancelled, ended, admin_cancelled)
+    end
+
+    it "matches by purchase email for a logged-out checkout" do
+      expect(Subscription.lapsed_for_product_and_email(product:, email: " #{buyer.email.upcase} ")).to contain_exactly(cancelled, ended, admin_cancelled)
+    end
+
+    it "is empty for a non-recurring product" do
+      expect(Subscription.lapsed_for_product_and_buyer(product: create(:product), buyer:)).to be_empty
+      expect(Subscription.lapsed_for_product_and_email(product: create(:product), email: buyer.email)).to be_empty
+    end
+  end
 end
