@@ -11,6 +11,7 @@ describe "checkout currency for a EUR listing, by buyer region", type: :request 
   let(:currency_rates) { Redis::Namespace.new(:currencies, redis: $redis) }
   let(:us_ip) { "104.28.0.1" }
   let(:nl_ip) { "145.52.0.1" }
+  let(:bg_ip) { "203.0.113.50" }
   let(:unplaceable_ip) { "10.9.9.9" }
   let(:seller_features) do
     [
@@ -33,6 +34,7 @@ describe "checkout currency for a EUR listing, by buyer region", type: :request 
     allow(GeoIp).to receive(:lookup).and_call_original
     allow(GeoIp).to receive(:lookup).with(us_ip).and_return(geoip_result("United States", "US"))
     allow(GeoIp).to receive(:lookup).with(nl_ip).and_return(geoip_result("Netherlands", "NL"))
+    allow(GeoIp).to receive(:lookup).with(bg_ip).and_return(geoip_result("Bulgaria", "BG"))
     allow(GeoIp).to receive(:lookup).with(unplaceable_ip).and_return(nil)
     # 1 USD = 0.8 EUR, so the EUR 15.00 listing converts to US$18.75.
     currency_rates.set("EUR", "0.8")
@@ -109,17 +111,17 @@ describe "checkout currency for a EUR listing, by buyer region", type: :request 
     [order, create_args, responses["unique-id-0"]]
   end
 
-  def listed_euro_elements_options(props)
+  def listed_euro_elements_options(props, local_methods: true)
     elements_options = props.dig("checkout_payment", "elements_options")
     expect(elements_options).to include("currency" => Currency::EUR, "presentment_amount_cents" => 15_00)
     expect(elements_options["listed_currency_display"]).to include("currency" => Currency::EUR)
-    expect(elements_options["payment_method_types"]).to include("ideal", "bancontact")
+    expect(elements_options["payment_method_types"]).to include("ideal", "bancontact") if local_methods
     elements_options
   end
 
   # Prepare must check the signed surcharge amount, not fall back to the unsigned in-flight-tab path.
-  def expect_listed_euro_checkout(props, surcharge_ip:, order_ip: surcharge_ip)
-    elements_options = listed_euro_elements_options(props)
+  def expect_listed_euro_checkout(props, surcharge_ip:, order_ip: surcharge_ip, local_methods: true)
+    elements_options = listed_euro_elements_options(props, local_methods:)
     surcharge = surcharge_response(ip: surcharge_ip, elements_options:)
     token = surcharge.fetch("direct_listed_amount_token")
     expect(token).to be_present
@@ -174,6 +176,22 @@ describe "checkout currency for a EUR listing, by buyer region", type: :request 
 
     expect(displayed_currency(props)).to include("display_mode" => "default", "buyer_currency_shown" => Currency::EUR)
     expect_listed_euro_checkout(props, surcharge_ip: nl_ip)
+  end
+
+  # GeoIP lists Bulgaria's currency as the lev (countries gem), so its buyers were never matched
+  # to a euro presentment and fell through to the converted US dollar checkout.
+  context "when the seller has the direct-listed card ramp on" do
+    before { Feature.activate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller) }
+
+    after { Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller) }
+
+    it "keeps the listed euro checkout for a buyer in Bulgaria, who joined the eurozone in 2026" do
+      props = checkout_page_props(ip: bg_ip)
+
+      expect(displayed_currency(props)).to include("display_mode" => "default", "buyer_currency_shown" => Currency::EUR)
+      expect(props.dig("checkout_payment", "elements_options")).to include("direct_listed_card" => true)
+      expect_listed_euro_checkout(props, surcharge_ip: bg_ip, local_methods: false)
+    end
   end
 
   it "keeps the listed euro checkout for a buyer GeoIP cannot place, who is shown the listing as-is" do

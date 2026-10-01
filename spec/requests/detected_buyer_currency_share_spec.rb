@@ -29,6 +29,17 @@ describe "detected_buyer_currency Inertia share", type: :request do
     expect(inertia_props("#{seller.subdomain_with_protocol}/")["detected_buyer_currency"]).to eq("eur")
   end
 
+  it "shares eur as the detected currency for a buyer in Bulgaria" do
+    allow(GeoIp).to receive(:lookup).and_return(
+      GeoIp::Result.new(
+        country_name: "Bulgaria", country_code: "BG", region_name: "22",
+        city_name: "Sofia", postal_code: "1000", latitude: nil, longitude: nil
+      )
+    )
+
+    expect(inertia_props("#{seller.subdomain_with_protocol}/")["detected_buyer_currency"]).to eq("eur")
+  end
+
   it "omits the detected currency from a dashboard page that has no selector" do
     allow_any_instance_of(ActionDispatch::Request).to receive(:host).and_return(VALID_REQUEST_HOSTS.first)
     sign_in seller

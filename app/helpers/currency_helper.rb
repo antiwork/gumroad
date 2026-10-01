@@ -9,6 +9,10 @@ module CurrencyHelper
   # raised by the underlying client escapes a Redis::BaseError-only rescue.
   REDIS_TRANSPORT_ERRORS = [Redis::BaseError, RedisClient::Error].freeze
 
+  # The countries gem still lists the lev for Bulgaria, which adopted the euro on 2026-01-01.
+  # Without this, `buyer_currency_for_country` finds no supported currency for a Bulgarian buyer.
+  BUYER_CURRENCY_COUNTRY_OVERRIDES = { Compliance::Countries::BGR.alpha2 => Currency::EUR }.freeze
+
   # Raised when a rate is needed, Redis cannot be read, and this process has never seen the
   # currency's rate. Callers that price money turn it into a failed request rather than a
   # substituted rate.
@@ -150,7 +154,8 @@ module CurrencyHelper
   def buyer_currency_for_country(country_code)
     return if country_code.blank?
 
-    currency = ISO3166::Country.new(country_code.to_s.upcase)&.currency_code&.downcase
+    country_code = country_code.to_s.upcase
+    currency = BUYER_CURRENCY_COUNTRY_OVERRIDES[country_code] || ISO3166::Country.new(country_code)&.currency_code&.downcase
     # Only localize into currencies we support for both display and input (currencies.json);
     # buyers in other countries fall back to the seller's set price.
     currency if currency && CURRENCY_CHOICES.key?(currency)

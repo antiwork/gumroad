@@ -1738,6 +1738,59 @@ describe Checkout::StripePaymentPresenter do
       end
     end
 
+    it "mounts and displays a EUR listing in EUR for a Bulgarian card buyer in the direct-listed ramp" do
+      seller, product = buyer_currency_seller_with_product(price_currency_type: Currency::EUR, price_cents: 1500)
+      activate_buyer_currency_flags(seller)
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+      allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+      stub_geoip_country("203.0.113.50", "Bulgaria")
+      platform_merchant_account
+
+      expect(stripe_payment_props(add_products: [checkout_product_for(product)], ip: "203.0.113.50")).to eq(
+        payment_element_client_confirm_props(
+          currency: Currency::EUR,
+          presentment_amount_cents: 1500,
+          direct_listed_card: true,
+          disable_wallets: true,
+        )
+      )
+    ensure
+      if seller
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+        deactivate_buyer_currency_flags(seller)
+      end
+    end
+
+    it "keeps that EUR listing on the USD element for a Bulgarian buyer while the direct-listed ramp is off" do
+      seller, product = buyer_currency_seller_with_product(price_currency_type: Currency::EUR, price_cents: 1500)
+      activate_buyer_currency_flags(seller)
+      allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+      stub_geoip_country("203.0.113.50", "Bulgaria")
+
+      expect(stripe_payment_props(add_products: [checkout_product_for(product)], ip: "203.0.113.50"))
+        .to eq(payment_element_client_confirm_props)
+    ensure
+      deactivate_buyer_currency_flags(seller) if seller
+    end
+
+    it "keeps that EUR listing on the USD element for a Bulgarian buyer when the seller has hidden local-currency display" do
+      seller, product = buyer_currency_seller_with_product(price_currency_type: Currency::EUR, price_cents: 1500)
+      seller.update!(disable_buyer_local_currency: true)
+      activate_buyer_currency_flags(seller)
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+      allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+      stub_geoip_country("203.0.113.50", "Bulgaria")
+      platform_merchant_account
+
+      expect(stripe_payment_props(add_products: [checkout_product_for(product)], ip: "203.0.113.50"))
+        .to eq(payment_element_client_confirm_props)
+    ensure
+      if seller
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+        deactivate_buyer_currency_flags(seller)
+      end
+    end
+
     it "mounts a multi-item cart uniformly priced in CAD as one direct-listed CAD element" do
       seller, product = buyer_currency_seller_with_product(price_currency_type: Currency::CAD, price_cents: 1500)
       second_product = create(:product, user: seller, price_currency_type: Currency::CAD, price_cents: 2500)
@@ -2189,6 +2242,39 @@ describe Checkout::StripePaymentPresenter do
       )
     ensure
       deactivate_buyer_currency_flags(seller) if seller
+    end
+
+    it "selects client-confirm quote presentment for a Bulgarian buyer of a single USD-priced product with the flags on" do
+      seller, product = buyer_currency_seller_with_product(price_currency_type: "usd", price_cents: 1500)
+      activate_buyer_currency_flags(seller)
+      allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+      stub_geoip_country("203.0.113.50", "Bulgaria")
+      add_products = [
+        checkout_product_for(
+          product,
+          buyer_currency_display: {
+            display_mode: "buyer_local",
+            buyer_currency_shown: Currency::EUR,
+          }
+        )
+      ]
+
+      expect(stripe_payment_props(add_products:, ip: "203.0.113.50")).to eq(
+        payment_element_client_confirm_props(buyer_currency_presentment: true, disable_wallets: true)
+      )
+    ensure
+      deactivate_buyer_currency_flags(seller) if seller
+    end
+
+    it "keeps a Bulgarian buyer of a single USD-priced product on the canonical USD element when the seller is not enabled for buyer currency" do
+      _seller, product = buyer_currency_seller_with_product(price_currency_type: "usd", price_cents: 1500)
+      allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+      stub_geoip_country("203.0.113.50", "Bulgaria")
+
+      props = stripe_payment_props(add_products: [checkout_product_for(product)], ip: "203.0.113.50")
+
+      expect(props.dig(:elements_options, :currency)).to eq(described_class::CLIENT_CONFIRM_CURRENCY)
+      expect(props.dig(:elements_options, :buyer_currency_presentment)).to be(false)
     end
 
     it "advertises UPI on a real Indian buyer-local client-confirm remount" do
