@@ -176,7 +176,13 @@ class Api::Internal::Admin::PurchasesController < Api::Internal::Admin::BaseCont
 
       unless force
         unless purchase.within_refund_policy_timeframe?
-          return render json: { success: false, message: "Purchase is outside of the refund policy timeframe" }, status: :unprocessable_entity
+          # Without a snapshot there is no window to have expired, so "outside" would misstate why.
+          message = if purchase.purchase_refund_policy.blank?
+            "Purchase has no recorded refund policy"
+          else
+            "Purchase is outside of the refund policy timeframe"
+          end
+          return render json: { success: false, message: }, status: :unprocessable_entity
         end
 
         if purchase.purchase_refund_policy&.fine_print.present?
