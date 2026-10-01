@@ -26,12 +26,29 @@ deploy_irrelevant_path() {
 # The v* tag is created only after `bin/deploy` succeeds, so it IS what production runs. Diffing
 # against the parent instead would drop a change that was skipped (long-running-job skip, failed
 # deploy) out of every later diff. Prints nothing when there is no tag.
+#
+# Pinned in build meta-data on first use: the four steps run minutes apart, and a release that
+# lands in between moves the newest tag, so a step re-deriving it compares against a different
+# commit than the build steps that already ran. Build 24905 (2026-09-30) skipped the build steps
+# as a no-op, then failed the deploy step on an image that was never built. One build, one baseline.
 deploy_relevance_baseline() {
-  local tag
+  local tag pinned
+  if command -v buildkite-agent >/dev/null 2>&1; then
+    pinned=$(buildkite-agent meta-data get deploy-relevance-baseline 2>/dev/null) || pinned=""
+    if [ -n "$pinned" ]; then
+      printf '%s\n' "$pinned"
+      return 0
+    fi
+  fi
   git fetch --quiet --tags --force origin >/dev/null 2>&1 || return 1
   tag=$(git tag -l 'v*.*.*.*' | sort -t. -k1,1 -k2,2n -k3,3n -k4,4n | tail -1)
   [ -n "$tag" ] || return 1
-  git rev-parse --verify --quiet "${tag}^{commit}"
+  pinned=$(git rev-parse --verify --quiet "${tag}^{commit}") || return 1
+  [ -n "$pinned" ] || return 1
+  if command -v buildkite-agent >/dev/null 2>&1; then
+    buildkite-agent meta-data set deploy-relevance-baseline "$pinned" >/dev/null 2>&1 || true
+  fi
+  printf '%s\n' "$pinned"
 }
 
 # 0 when this commit changes nothing that ships relative to the last release, 1 when it does or
