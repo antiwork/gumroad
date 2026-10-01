@@ -72,6 +72,7 @@ describe User::OmniauthCallbacksController do
         expect(controller.user_signed_in?).to be false
         expect(session[:stripe_connect_data]).to be_nil
         expect(flash[:alert]).to eq "An account already exists with this email."
+        expect(response).to redirect_to safe_redirect_path(request.env["omniauth.params"]["referer"])
       end
     end
 
