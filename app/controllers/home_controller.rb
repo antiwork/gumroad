@@ -31,6 +31,10 @@ class HomeController < ApplicationController
   # production.
   EDGE_CACHEABLE_ACTIONS = %w[about features features_md pricing terms privacy prohibited dpa hackathon saas small_bets].freeze
 
+  # What the about page renders when the payout figure has never been written.
+  # A stalled read degrades to the same number rather than failing the render.
+  PREV_WEEK_PAYOUT_DEFAULT = "3129297"
+
   prepend_before_action :prepare_edge_cacheable_response, if: :edge_cacheable_request?
   after_action :set_edge_cache_headers, if: -> { @edge_cacheable_response }
 
@@ -44,6 +48,7 @@ class HomeController < ApplicationController
     set_meta_tag(property: "og:description", content: "Start selling what you know, see what sticks, and get paid. Simple and effective.")
     set_meta_tag(property: "og:type", content: "website")
     set_meta_tag(property: "og:url", content: about_url)
+    @prev_week_payout_usd = prev_week_payout_usd
   end
 
   def features
@@ -143,6 +148,14 @@ class HomeController < ApplicationController
   private
     def hide_layouts
       @hide_layouts = true
+    end
+
+    # A raw read here 500s the page when the client's 1.0s read timeout fires; a
+    # stall degrades to the same value an unset key already renders.
+    def prev_week_payout_usd
+      $redis.get(RedisKey.prev_week_payout_usd).presence || PREV_WEEK_PAYOUT_DEFAULT
+    rescue *REDIS_TRANSPORT_ERRORS
+      PREV_WEEK_PAYOUT_DEFAULT
     end
 
     def edge_cacheable_request?
