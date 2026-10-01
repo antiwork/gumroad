@@ -40,6 +40,14 @@ describe("SlowConnectionNotice", () => {
     expect(screen.getByRole("link", { name: "Reload the page" }).getAttribute("href")).toBe(window.location.href);
   });
 
+  it("sends a form whose submit consumes a one-time token to the page that submit would land on", () => {
+    render(<SlowConnectionNotice processing actionHref="/login" actionLabel="Go to sign in" />);
+
+    advance(15_000);
+
+    expect(screen.getByRole("link", { name: "Go to sign in" }).getAttribute("href")).toBe("/login");
+  });
+
   it("stays hidden when no visit is in flight", () => {
     render(<SlowConnectionNotice processing={false} />);
 

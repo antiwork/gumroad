@@ -63,7 +63,11 @@ function PasswordReset() {
           <Button color="primary" type="submit" disabled={form.processing}>
             {form.processing ? "Resetting..." : "Reset password"}
           </Button>
-          <SlowConnectionNotice processing={form.processing} />
+          <SlowConnectionNotice
+            processing={form.processing}
+            actionHref={Routes.login_path()}
+            actionLabel="Go to sign in"
+          />
         </section>
       </form>
     </Layout>

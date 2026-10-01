@@ -126,7 +126,7 @@ function TwoFactorAuthentication() {
           <Button color="primary" type="submit" disabled={isSubmitting}>
             {isSubmitting ? "Logging in..." : "Login"}
           </Button>
-          <SlowConnectionNotice processing={isSubmitting} />
+          <SlowConnectionNotice processing={isSubmitting || switchForm.processing} />
           {(() => {
             switch (two_factor_method) {
               case "email":

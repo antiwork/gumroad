@@ -64,7 +64,11 @@ function ForgotPasswordPage() {
           <Button color="primary" type="submit" disabled={form.processing}>
             {form.processing ? "Sending..." : "Send"}
           </Button>
-          <SlowConnectionNotice processing={form.processing} />
+          <SlowConnectionNotice
+            processing={form.processing}
+            actionHref={Routes.login_path({ next })}
+            actionLabel="Go to sign in"
+          />
         </section>
       </form>
     </Layout>

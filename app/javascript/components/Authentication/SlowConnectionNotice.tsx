@@ -10,9 +10,14 @@ type Props = {
   // Whether the form's Inertia visit is currently in flight (`form.processing`, or the page's own
   // submitting flag for visits started through `router`).
   processing: boolean;
+  // Where to send the user when the visit is stalled. Reloading the current page is only safe where
+  // re-requesting it is idempotent; a form whose submit consumes a one-time token points at the page
+  // a successful submit would have landed on instead.
+  actionHref?: string;
+  actionLabel?: string;
 };
 
-export const SlowConnectionNotice: React.FC<Props> = ({ processing }) => {
+export const SlowConnectionNotice: React.FC<Props> = ({ processing, actionHref, actionLabel }) => {
   const [isSlow, setIsSlow] = React.useState(false);
 
   React.useEffect(() => {
@@ -30,10 +35,9 @@ export const SlowConnectionNotice: React.FC<Props> = ({ processing }) => {
   return (
     <Alert variant="warning">
       This is taking longer than usual — your connection may be too slow to load the next page.{" "}
-      <a href={window.location.href} className="underline">
-        Reload the page
-      </a>{" "}
-      to try again.
+      <a href={actionHref ?? window.location.href} className="underline">
+        {actionLabel ?? "Reload the page"}
+      </a>
     </Alert>
   );
 };

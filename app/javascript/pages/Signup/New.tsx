@@ -100,7 +100,11 @@ function SignupPage() {
           <Button color="primary" type="submit" disabled={form.processing}>
             {form.processing ? "Creating..." : "Create account"}
           </Button>
-          <SlowConnectionNotice processing={form.processing} />
+          <SlowConnectionNotice
+            processing={form.processing}
+            actionHref={Routes.login_path({ next })}
+            actionLabel="Go to sign in"
+          />
           <p>
             You agree to our <a href="https://gumroad.com/terms">Terms of Use</a> and{" "}
             <a href="https://gumroad.com/privacy">Privacy Policy</a>.
