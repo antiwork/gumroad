@@ -31,8 +31,6 @@ class HomeController < ApplicationController
   # production.
   EDGE_CACHEABLE_ACTIONS = %w[about features features_md pricing terms privacy prohibited dpa hackathon saas small_bets].freeze
 
-  # What the about page renders when the payout figure has never been written.
-  # A stalled read degrades to the same number rather than failing the render.
   PREV_WEEK_PAYOUT_DEFAULT = "3129297"
 
   prepend_before_action :prepare_edge_cacheable_response, if: :edge_cacheable_request?
@@ -150,11 +148,11 @@ class HomeController < ApplicationController
       @hide_layouts = true
     end
 
-    # A raw read here 500s the page when the client's 1.0s read timeout fires; a
-    # stall degrades to the same value an unset key already renders.
     def prev_week_payout_usd
+      @payout_read_stalled = false
       $redis.get(RedisKey.prev_week_payout_usd).presence || PREV_WEEK_PAYOUT_DEFAULT
     rescue *REDIS_TRANSPORT_ERRORS
+      @payout_read_stalled = true
       PREV_WEEK_PAYOUT_DEFAULT
     end
 
@@ -200,6 +198,8 @@ class HomeController < ApplicationController
 
     def set_edge_cache_headers
       return unless response.status == 200
+      # A figure degraded from a stalled read must not be published by the shared cache.
+      return if @payout_read_stalled
       # Belt and braces: if anything still wrote a cookie, keep the default
       # private cache behavior rather than letting a shared cache store it.
       return if response.headers["Set-Cookie"].present?
