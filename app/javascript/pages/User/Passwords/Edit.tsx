@@ -3,6 +3,7 @@ import * as React from "react";
 
 import { AuthAlert } from "$app/components/AuthAlert";
 import { Layout } from "$app/components/Authentication/Layout";
+import { SlowConnectionNotice } from "$app/components/Authentication/SlowConnectionNotice";
 import { Button } from "$app/components/Button";
 import { PasswordInput } from "$app/components/PasswordInput";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
@@ -62,6 +63,7 @@ function PasswordReset() {
           <Button color="primary" type="submit" disabled={form.processing}>
             {form.processing ? "Resetting..." : "Reset password"}
           </Button>
+          <SlowConnectionNotice processing={form.processing} />
         </section>
       </form>
     </Layout>

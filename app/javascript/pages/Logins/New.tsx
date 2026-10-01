@@ -13,6 +13,7 @@ import {
 
 import { AuthAlert } from "$app/components/AuthAlert";
 import { Layout } from "$app/components/Authentication/Layout";
+import { SlowConnectionNotice } from "$app/components/Authentication/SlowConnectionNotice";
 import { SocialAuth } from "$app/components/Authentication/SocialAuth";
 import { Button } from "$app/components/Button";
 import { PasswordInput } from "$app/components/PasswordInput";
@@ -206,6 +207,7 @@ function LoginPage() {
             <Button color="primary" type="submit" disabled={form.processing}>
               {form.processing ? "Logging in..." : "Login"}
             </Button>
+            <SlowConnectionNotice processing={form.processing} />
             {passkeyLoginEnabled ? (
               <>
                 {passkeyError ? <Alert variant="danger">{passkeyError}</Alert> : null}

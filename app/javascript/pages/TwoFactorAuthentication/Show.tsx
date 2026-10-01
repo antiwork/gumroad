@@ -3,6 +3,7 @@ import * as React from "react";
 
 import { AuthAlert } from "$app/components/AuthAlert";
 import { Layout } from "$app/components/Authentication/Layout";
+import { SlowConnectionNotice } from "$app/components/Authentication/SlowConnectionNotice";
 import { Button } from "$app/components/Button";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
@@ -125,6 +126,7 @@ function TwoFactorAuthentication() {
           <Button color="primary" type="submit" disabled={isSubmitting}>
             {isSubmitting ? "Logging in..." : "Login"}
           </Button>
+          <SlowConnectionNotice processing={isSubmitting} />
           {(() => {
             switch (two_factor_method) {
               case "email":

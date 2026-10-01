@@ -3,6 +3,7 @@ import * as React from "react";
 
 import { AuthAlert } from "$app/components/AuthAlert";
 import { Layout } from "$app/components/Authentication/Layout";
+import { SlowConnectionNotice } from "$app/components/Authentication/SlowConnectionNotice";
 import { SocialAuth } from "$app/components/Authentication/SocialAuth";
 import { Button } from "$app/components/Button";
 import { Separator } from "$app/components/Separator";
@@ -63,6 +64,7 @@ function ForgotPasswordPage() {
           <Button color="primary" type="submit" disabled={form.processing}>
             {form.processing ? "Sending..." : "Send"}
           </Button>
+          <SlowConnectionNotice processing={form.processing} />
         </section>
       </form>
     </Layout>
