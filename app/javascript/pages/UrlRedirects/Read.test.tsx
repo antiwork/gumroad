@@ -7,8 +7,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Read, { canResumePdfFromLocation, downloadEpubArchive } from "./Read";
 
 const mocks = vi.hoisted(() => {
-  // The options the reader handed to the PDFLinkService constructor, so a test can assert how the
-  // reader configured link handling.
   const linkServiceOptions: Record<string, unknown>[] = [];
 
   return {
@@ -27,8 +25,7 @@ const mocks = vi.hoisted(() => {
       currentScale: 1,
       pdfDocument: { numPages: 3 },
     },
-    // pdf.js's own LinkTarget enum (pdfjs-dist 4.5.136). Held here so the module mock and the
-    // assertions read the same values.
+    // Copy of pdf.js's LinkTarget, which the module mock replaces.
     LinkTarget: { NONE: 0, SELF: 1, BLANK: 2, PARENT: 3, TOP: 4 },
     linkServiceOptions,
   };
@@ -255,7 +252,7 @@ describe("PDF reader teardown", () => {
   });
 
   it("opens a link inside the PDF in a new tab instead of replacing the reader", async () => {
-    // pdf.js's default leaves externalLinkTarget null, which lets an in-PDF link replace the reader.
+    // The hoisted mock collects constructor options across tests.
     mocks.linkServiceOptions.length = 0;
 
     render(<Read />);
