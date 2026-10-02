@@ -16,7 +16,7 @@ class DispatchPendingRetiredAccountChecksJob
   RECOVERY_DELAY = 6.hours
 
   # `merchant_accounts` has no index on `deleted_at` or the marker, so this walks the primary key. The
-  # cap fails a slow scan well before the next hourly run instead of holding the recurring lock.
+  # cap applies to each statement of that walk, not to its total time.
   QUERY_TIME_BUDGET = 2.minutes
 
   def perform
