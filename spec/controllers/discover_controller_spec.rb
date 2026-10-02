@@ -620,6 +620,56 @@ describe DiscoverController, type: :controller, inertia: true do
           expect(meta_tags["meta-name-description"][:content]).to eq(description)
         end
       end
+
+      context "tag filtering" do
+        # normalize_search_param_values! rewrites "-" to a space before the query, so a URL cannot
+        # say whether the reader meant a hyphenated tag or its spaced twin — match both.
+        let(:tag_seller) { create(:compliant_user, name: "Tag Seller") }
+        let(:tag_taxonomy) { create(:taxonomy, slug: "tag-filtering-probe") }
+        let!(:hyphenated_tag_product) { create(:product, user: tag_seller, name: "Hyphenated tag product", taxonomy: tag_taxonomy) }
+        let!(:spaced_tag_product) { create(:product, user: tag_seller, name: "Spaced tag product", taxonomy: tag_taxonomy) }
+
+        before do
+          hyphenated_tag_product.tag!("self-improvement")
+          spaced_tag_product.tag!("self improvement")
+          # Discover only surfaces products that have made a sale.
+          [hyphenated_tag_product, spaced_tag_product].each { |product| create(:purchase, link: product, price_cents: 0) }
+          Link.import(refresh: true, force: true)
+        end
+
+        def result_names
+          inertia.props[:search_results][:products].map { |product| product[:name] }
+        end
+
+        it "matches a hyphenated tag sent as a comma-joined string" do
+          get :index, params: { tags: "self-improvement" }
+
+          expect(result_names).to include("Hyphenated tag product", "Spaced tag product")
+        end
+
+        it "matches a hyphenated tag sent as nested hash params" do
+          get :index, params: { tags: { "0" => "self-improvement" } }
+
+          expect(result_names).to include("Hyphenated tag product", "Spaced tag product")
+        end
+
+        it "still matches the spaced spelling" do
+          get :index, params: { tags: "self improvement" }
+
+          expect(result_names).to include("Hyphenated tag product", "Spaced tag product")
+        end
+
+        # The tag page title is built from params[:tags], so widening the query must not widen it.
+        it "renders the same tag page title for either spelling" do
+          get :index, params: { tags: "self-improvement" }
+          hyphenated_title = controller.send(:meta_tags)["title"][:inner_content]
+
+          get :index, params: { tags: "self improvement" }
+          spaced_title = controller.send(:meta_tags)["title"][:inner_content]
+
+          expect(hyphenated_title).to eq(spaced_title)
+        end
+      end
     end
   end
 end

@@ -254,8 +254,12 @@ module Product::Searchable
             end
 
             if params[:tags]
+              # A tag name can carry a hyphen, and Discover/profile URLs spell spaces as hyphens, so
+              # the two spellings are indistinguishable once normalized. `tags.keyword` keeps the
+              # spelling the tag was saved with, so query both — `terms` ORs them.
+              tag_terms = Array.wrap(params[:tags]).flat_map { |tag| [tag.to_s, tag.to_s.tr(" ", "-")] }.uniq
               must do
-                terms "tags.keyword" => Array.wrap(params[:tags])
+                terms "tags.keyword" => tag_terms
               end
             end
 
