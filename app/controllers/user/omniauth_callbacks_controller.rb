@@ -256,6 +256,11 @@ class User::OmniauthCallbacksController < Devise::OmniauthCallbacksController
     elsif params[:error_description].present?
       redirect_to settings_payments_path, notice: params[:error_description]
     elsif params[REQ_PARAM_STATE] != :async_link_twitter_account.to_s
+      if connect_provider.blank?
+        # This route is reachable without an OmniAuth flow; super (Devise's #failure) reads
+        # failed_strategy.name and 500s when the request carries no strategy.
+        return redirect_to login_path
+      end
       Rails.logger.info("OAuth failure and request state unexpected: #{params}")
       Rails.logger.info("OAuth failure message: #{failure_message}")
       Rails.logger.info("OAuth failure kind: #{request.env['omniauth.error.type']}")
