@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
+import { useRefToLatest } from "$app/components/useRefToLatest";
 
 const SCROLL_END_TOLERANCE_PX = 2;
 
@@ -17,6 +18,10 @@ const isScrolledToEnd = (items: HTMLElement) => {
 
 export function useScrollableCarousel(activeIndex: number, setActiveIndex: (index: number) => void) {
   const itemsRef = React.useRef<HTMLDivElement>(null);
+  const activeIndexRef = useRefToLatest(activeIndex);
+  // True while the counter shows the last card because the scroll handler put it there, not
+  // because an arrow stepped to it.
+  const endClampedRef = React.useRef(false);
 
   const handleScroll = useDebouncedCallback(() => {
     const items = itemsRef.current;
@@ -24,30 +29,30 @@ export function useScrollableCarousel(activeIndex: number, setActiveIndex: (inde
     // The track cannot scroll far enough to put the last items at the left edge, so the offset
     // search below stops short of the final index when several cards fit in view.
     if (isScrolledToEnd(items)) {
-      setActiveIndex(items.children.length - 1);
+      const last = items.children.length - 1;
+      if (activeIndexRef.current !== last) endClampedRef.current = true;
+      setActiveIndex(last);
       return;
     }
+    endClampedRef.current = false;
     setActiveIndex(leftEdgeIndex(items));
   }, 100);
 
-  // At the end of the track the counter is the last card, but that card's offset is past the max
-  // scroll, so stepping back from it would not move the track. Step from the card at the left
-  // edge instead, but only once the track has reached the end; otherwise keep the counter, so
-  // clicks during a smooth scroll still add up.
+  // When the scroll handler clamped the counter to the last card, that card's offset is past the
+  // max scroll, so stepping back from it would not move the track. Step from the card at the left
+  // edge instead. A counter that an arrow set steps back one card, so Previous undoes Next.
   const getPreviousIndex = (count: number) => {
     const items = itemsRef.current;
-    const activeChild = items?.children[activeIndex];
     let from = activeIndex;
-    if (items && activeChild instanceof HTMLElement) {
-      const maxScroll = items.scrollWidth - items.clientWidth;
+    if (items && endClampedRef.current && activeIndex === count - 1 && isScrolledToEnd(items)) {
       const leftEdge = leftEdgeIndex(items);
-      if (isScrolledToEnd(items) && activeChild.offsetLeft > maxScroll + SCROLL_END_TOLERANCE_PX && leftEdge > 0)
-        from = leftEdge;
+      if (leftEdge > 0) from = leftEdge;
     }
     return (from + count - 1) % count;
   };
 
   React.useEffect(() => {
+    if (activeIndex !== (itemsRef.current?.children.length ?? 0) - 1) endClampedRef.current = false;
     const activeChild = itemsRef.current?.children[activeIndex];
     itemsRef.current?.scroll({
       left: activeChild instanceof HTMLElement ? activeChild.offsetLeft : 0,

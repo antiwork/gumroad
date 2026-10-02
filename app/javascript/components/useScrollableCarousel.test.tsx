@@ -128,6 +128,22 @@ describe("useScrollableCarousel", () => {
     expect(onActiveChange).toHaveBeenLastCalledWith(5);
   });
 
+  it("undoes Next with Previous when Next lands on a card the track cannot reach", () => {
+    const onActiveChange = vi.fn<(index: number) => void>();
+    const { getByTestId } = render(<Carousel onActiveChange={onActiveChange} />);
+    const track = getByTestId("track");
+    layOut(track);
+
+    scrollTo(track, CARD_COUNT * CARD_WIDTH - VIEWPORT_WIDTH);
+    // The track stays at its end while the arrows are clicked in quick succession.
+    fireEvent.click(getByTestId("previous"));
+    fireEvent.click(getByTestId("next"));
+    fireEvent.click(getByTestId("next"));
+    fireEvent.click(getByTestId("previous"));
+
+    expect(onActiveChange.mock.calls.map(([index]) => index)).toEqual([CARD_COUNT - 1, 4, 5, 6, 5]);
+  });
+
   it("steps back from the counter when every card fits in view", () => {
     const onActiveChange = vi.fn<(index: number) => void>();
     const { getByTestId } = render(<Carousel onActiveChange={onActiveChange} />);
