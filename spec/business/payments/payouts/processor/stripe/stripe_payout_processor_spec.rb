@@ -351,23 +351,54 @@ describe StripePayoutProcessor do
       end
 
       [[:deleted_at, Time.current], [:charge_processor_deleted_at, Time.current], [:charge_processor_alive_at, nil]].each do |attribute, value|
-        it "refuses an explicitly grouped destination retired through #{attribute}, leaving its positive balance unpaid" do
+        it "drains a positive same-currency balance parked on an account retired through #{attribute}" do
           account = create(:merchant_account, user: seller, currency: Currency::AUD,
                                               charge_processor_merchant_id: "acct_#{attribute}", attribute => value)
           credit = create(:balance, user: seller, merchant_account: account, state: "processing", date: 2.days.ago.to_date,
                                     amount_cents: 300_00, holding_currency: Currency::AUD, holding_amount_cents: 450_00)
           payment = build_payment(seller, [credit], account.charge_processor_merchant_id)
-          expect_no_stripe_money_movement
-          expect(account.active?).to eq(false)
+          allow(Stripe::Balance).to receive(:retrieve).and_return(
+            Stripe::Balance.construct_from(available: [{ currency: Currency::AUD, amount: 450_00 }], pending: [])
+          )
+          expect(StripeTransferInternallyToCreator).not_to receive(:transfer_funds_to_account)
 
           errors = described_class.prepare_payment_and_set_amount(payment, [credit], account, Currency::AUD)
 
-          expect(errors.sole).to include("acct_#{attribute}").and include(attribute.to_s)
-          expect(payment.reload).to be_failed
-          expect(payment.failure_reason).to eq(Payment::FailureReason::DESTINATION_ACCOUNT_RETIRED)
-          expect(payment.amount_cents).to eq(0)
-          expect(credit.reload).to be_unpaid
+          expect(errors).to eq([])
+          expect(payment).not_to be_failed
+          expect(payment.stripe_connect_account_id).to eq("acct_#{attribute}")
+          expect(payment.amount_cents).to eq(450_00)
+          expect(payment.bank_account).to be_nil
         end
+      end
+
+      it "still refuses a retired account whose balances sum negative" do
+        account = create(:merchant_account, user: seller, currency: Currency::AUD, charge_processor_merchant_id: "acct_neg_aud")
+          .tap(&:delete_charge_processor_account!)
+        debt = create(:balance, user: seller, merchant_account: account, state: "processing", date: 2.days.ago.to_date,
+                                amount_cents: -30_00, holding_currency: Currency::AUD, holding_amount_cents: -45_00)
+        payment = build_payment(seller, [debt], account.charge_processor_merchant_id)
+        expect_no_stripe_money_movement
+
+        errors = described_class.prepare_payment_and_set_amount(payment, [debt], account, Currency::AUD)
+
+        expect(errors.sole).to include("is retired")
+        expect(payment.reload.failure_reason).to eq(Payment::FailureReason::DESTINATION_ACCOUNT_RETIRED)
+        expect(debt.reload).to be_unpaid
+      end
+
+      it "gives money on a retired account its own payout group, apart from the active destination" do
+        account = create(:merchant_account, user: seller, currency: Currency::AUD, charge_processor_merchant_id: "acct_split_aud")
+          .tap(&:delete_charge_processor_account!)
+        credit = create(:balance, user: seller, merchant_account: account, state: "processing", date: 2.days.ago.to_date,
+                                  amount_cents: 20_00, holding_currency: Currency::AUD, holding_amount_cents: 30_00)
+        gumroad_held = create(:balance, user: seller, state: "processing", date: 1.day.ago.to_date, amount_cents: 50_00)
+
+        groups = described_class.payout_groups(seller, [credit, gumroad_held])
+
+        expect(groups.map { |acct, currency, group| [acct, currency, group] })
+          .to include([account, Currency::AUD, [credit]])
+        expect(groups.flat_map(&:last)).to match_array([credit, gumroad_held])
       end
     end
 
@@ -396,11 +427,11 @@ describe StripePayoutProcessor do
 
       # payout_groups routes a stale row to the active account so preparation fails it as a mismatch;
       # that path is unchanged and must not be reclassified as a retired destination.
-      it "keeps failing a balance parked on a replaced account as a currency mismatch" do
+      it "keeps failing a debt parked on a replaced account as a currency mismatch" do
         replaced_account = create(:merchant_account, user: seller, currency: Currency::AUD, charge_processor_merchant_id: "acct_replaced_aud")
                              .tap(&:delete_charge_processor_account!)
         stale = create(:balance, user: seller, merchant_account: replaced_account, state: "processing", date: 2.days.ago.to_date,
-                                 amount_cents: 20_00, holding_currency: Currency::AUD, holding_amount_cents: 30_00)
+                                 amount_cents: -20_00, holding_currency: Currency::AUD, holding_amount_cents: -30_00)
         merchant_account, payout_currency, group = described_class.payout_groups(seller, [stale]).sole
         expect(merchant_account).to eq(active_account)
         payment = build_payment(seller, group, merchant_account.charge_processor_merchant_id)

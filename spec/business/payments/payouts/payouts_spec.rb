@@ -1553,17 +1553,38 @@ describe Payouts do
       expect(user.payments.sole.failure_reason).to eq(Payment::FailureReason::DESTINATION_ACCOUNT_RETIRED)
       expect(user.balances.reload.map(&:state).uniq).to eq(["unpaid"])
     end
+  end
 
-    it "also refuses positive balances parked on the retired account instead of paying through it" do
-      stripe_debts.each { |debt| debt.update!(amount_cents: 100_00, holding_amount_cents: 150_00) }
+  describe ".create_payments with positive Stripe-held balances left on a retired account" do
+    let(:payout_date) { Date.today - 1 }
+    let(:user) { create(:user) }
+    let!(:compliance_info) { create(:user_compliance_info, user:) }
+    let!(:retired_account) do
+      create(:merchant_account, user:, currency: Currency::AUD, charge_processor_merchant_id: "acct_retired_aud")
+        .tap(&:delete_charge_processor_account!)
+    end
+    let!(:retired_balances) do
+      [
+        create(:balance, user:, merchant_account: retired_account, date: payout_date - 4, amount_cents: 100_00,
+                         holding_currency: Currency::AUD, holding_amount_cents: 150_00),
+        create(:balance, user:, merchant_account: retired_account, date: payout_date - 3, amount_cents: 50_00,
+                         holding_currency: Currency::AUD, holding_amount_cents: 75_00),
+      ]
+    end
 
-      pairs = described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, user)
+    it "pays them out from that account without an internal transfer" do
+      allow(Stripe::Balance).to receive(:retrieve).and_return(
+        Stripe::Balance.construct_from(available: [{ currency: Currency::AUD, amount: 225_00 }], pending: [])
+      )
+      expect(StripeTransferInternallyToCreator).not_to receive(:transfer_funds_to_account)
 
-      payment, errors = pairs.sole
-      expect(errors.sole).to include("acct_retired_aud")
-      expect(payment.reload).to be_failed
-      expect(payment.failure_reason).to eq(Payment::FailureReason::DESTINATION_ACCOUNT_RETIRED)
-      expect(user.balances.reload.map(&:state).uniq).to eq(["unpaid"])
+      payment, errors = described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, user).sole
+
+      expect(errors).to eq([])
+      expect(payment.reload).not_to be_failed
+      expect(payment.stripe_connect_account_id).to eq("acct_retired_aud")
+      expect(payment.amount_cents).to eq(225_00)
+      expect(payment.balances.ids).to match_array(retired_balances.map(&:id))
     end
   end
 

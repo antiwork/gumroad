@@ -230,8 +230,9 @@ class StripePayoutProcessor
 
   # Never sum cents held in different currencies or on different Stripe accounts.
   def self.payout_groups(user, balances)
+    drained_groups, balances = split_retired_account_groups(balances)
     merchant_account, balances_held_by_gumroad, balances_held_by_stripe = get_payout_details(user, balances)
-    groups = {}
+    groups = drained_groups
 
     # Every Stripe-held group pays out through the account the user-level lookup picked; a balance
     # still parked on a replaced account keeps its own group so preparation fails it as a mismatch
@@ -256,6 +257,28 @@ class StripePayoutProcessor
     end
 
     groups.values
+  end
+
+  # Public: Money left on a retired Gumroad-managed account is paid out from that account, as its own
+  # group, when it is all one currency and sums positive. Anything else (debts, mixed currencies) stays
+  # in the user-level group so it is refused as before. Returns `[groups_by_key, remaining_balances]`.
+  def self.split_retired_account_groups(balances)
+    drained = {}
+    retired = balances.select do |balance|
+      account = balance.merchant_account
+      account.holder_of_funds == HolderOfFunds::STRIPE && drainable_retired_account?(account)
+    end
+    retired.group_by { |balance| [balance.merchant_account_id, balance.holding_currency.to_s] }.each do |(account_id, currency), group|
+      next unless group.sum(&:holding_amount_cents).positive? && group.sum(&:amount_cents).positive?
+      next unless pay_out_currency?(group.first.merchant_account, currency)
+
+      drained[[account_id, currency]] = [group.first.merchant_account, currency, group]
+    end
+    [drained, balances - drained.values.flat_map(&:last)]
+  end
+
+  def self.drainable_retired_account?(merchant_account)
+    !merchant_account.active? && merchant_account.is_a_gumroad_managed_stripe_account?
   end
 
   def self.instantly_payable_amount_cents_on_stripe(user)
@@ -296,7 +319,13 @@ class StripePayoutProcessor
 
     # Held balances can still name a retired account. Stop before transferring more funds
     # into it, without discarding the ledger obligations attached to those balances.
-    unless merchant_account.active?
+    drains_retired_account = !merchant_account.active? && drainable_retired_account?(merchant_account) &&
+      balances_held_by_gumroad.empty? && balances_held_by_stripe.present? &&
+      balances_held_by_stripe.all? { |b| b.merchant_account_id == merchant_account.id } &&
+      balances_held_by_stripe.sum(&:holding_amount_cents).positive?
+    # A retired account pays out to its own external account; the seller's current bank lives on another one.
+    payment.bank_account = nil if drains_retired_account && payment.bank_account&.stripe_connect_account_id != merchant_account.charge_processor_merchant_id
+    unless merchant_account.active? || drains_retired_account
       message = retired_destination_error(merchant_account, balances_held_by_stripe)
       payment.stripe_connect_account_id = merchant_account.charge_processor_merchant_id
       payment.error_message = message.truncate(1000)
