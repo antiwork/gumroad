@@ -23,6 +23,19 @@ describe HealthcheckController do
 
       expect(response.status).to eq(200)
     end
+
+    # The gate polls the instance's IP, which GumroadDomainConstraint does not match and
+    # PublicSuffix.valid? accepts as a domain, so the filter chain reached the DB here too.
+    # A database blip then held the check open for the full Rack::Timeout instead of
+    # answering with nginx and Puma up.
+    it "answers without checking out a database connection" do
+      request.host = "10.0.34.160"
+      expect(CustomDomain).not_to receive(:find_by_host)
+
+      get :index
+
+      expect(response.status).to eq(200)
+    end
   end
 
   SIDEKIQ_QUEUE_NAMES = [:critical, :default].freeze
