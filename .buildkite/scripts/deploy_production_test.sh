@@ -34,11 +34,14 @@ PY
 STUB
 # `sleep` must not really sleep (the 503 path waits 3 minutes per attempt)
 printf '#!/bin/bash\nexit 0\n' > "$STUB_DIR/sleep"
-chmod +x "$STUB_DIR/date" "$STUB_DIR/sleep"
+# announce_skip annotates through `buildkite-agent` when it is on PATH; never reach a real one
+printf '#!/bin/bash\nexit 0\n' > "$STUB_DIR/buildkite-agent"
+chmod +x "$STUB_DIR/date" "$STUB_DIR/sleep" "$STUB_DIR/buildkite-agent"
 
-# --- extract the shipped function + its logger, no retyping ---
+# --- extract the shipped function + its logger and announce_skip, no retyping ---
 extract() {
   { awk '/^logger\(\) \{/,/^\}/' "$SCRIPT"
+    awk '/^announce_skip\(\) \{/,/^\}/' "$SCRIPT"
     awk '/^wait_for_healthcheck\(\) \{/,/^\}/' "$SCRIPT"
   } > "$STUB_DIR/fn.sh"
   [ -s "$STUB_DIR/fn.sh" ] || { echo "FATAL: extraction failed"; exit 1; }
@@ -115,7 +118,7 @@ cases() {
   # --- the 404 branch exists for its distinct log line: a live endpoint that starts 404ing
   #     means a renamed/removed route, a web-only rollback, or an edge 404, and the deploy log
   #     should say so rather than call it unreachable. Assert the wording, both directions. ---
-  check_log "404 skip logs it as absent, not unreachable"  "absent (HTTP 404) inside the fail-safe window" "404" $D 2  long
+  check_log "404 skip logs it as absent, not unreachable"  "absent (HTTP 404) — skipping deployment" "404" $D 2  long
   check_log "404 proceed logs it as absent too"            "absent (HTTP 404) outside the fail-safe window" "404" $D 20 long
   check_log "5xx still logs as unreachable"                "unreachable (HTTP 500)" "500" $D 2 long
   # --- genuinely broken endpoint uses the same window ---
@@ -166,8 +169,8 @@ if [ "${1:-}" = "--mutate" ]; then
     's/    elif \[ "\$hc_status" = "404" \]; then.*?      return 0\n(    else)/$1/s'
   mutate "404 branch ignores the window and always skips" \
     's/(= "404" \]; then\n      )if eval "\$failsafe_window_test"; then/${1}if true; then/'
-  mutate "404 skip uses return instead of exit (deploy proceeds anyway)" \
-    's/(absent \(HTTP 404\) inside the fail-safe window — skipping deployment"\n        )exit 0/${1}return 0/'
+  mutate "announce_skip returns instead of exiting (deploy proceeds anyway)" \
+    's/(^announce_skip\(\) \{.*?\n)  exit 0\n\}/${1}  return 0\n}/ms'
   mutate "off-by-one: fail-safe window overnight leg becomes -le 6" \
     "s/(date -u \\+%-H\\)\" -le )5/\${1}6/"
   mutate "fail-safe window loses its report-hours leg (08-13 becomes 18-13)" \
