@@ -3,6 +3,8 @@
 # Links a seller's Stripe Connect account and retires the Gumroad-managed Stripe account it replaces.
 # Retiring that account strands whatever it still owes the seller (payout preparation refuses an
 # inactive destination), so a replacement with unsettled obligations is refused before any write.
+# Refunds and chargebacks that arrive after the retirement still book to the retired account: they are
+# later events, not a race this lock can order.
 class StripeConnectAccountLinker
   def self.link(owner:, auth_uid:, stripe_account:)
     new(owner:, auth_uid:, stripe_account:).link
@@ -23,6 +25,8 @@ class StripeConnectAccountLinker
 
   private
     def link_under_lock
+      # Locked before any plain read so the obligations below see every sale that passed the charge-time check.
+      managed_account = @owner.stripe_account(lock: true)
       existing = MerchantAccount.where(charge_processor_merchant_id: @auth_uid).alive
                    .find { |merchant_account| merchant_account.is_a_stripe_connect_account? }
       return :linked_elsewhere if existing.present? && existing.user != @owner
@@ -30,7 +34,7 @@ class StripeConnectAccountLinker
       # An already-active link replaces nothing: signing in or replaying the callback leaves any
       # managed account alone, whatever it still owes.
       replacing = !existing&.active?
-      predecessor = @owner.stripe_account if replacing
+      predecessor = managed_account if replacing
       return :unsettled_obligations if predecessor&.unsettled_payout_obligations?
 
       merchant_account = existing || @owner.merchant_accounts.new

@@ -133,28 +133,41 @@ class MerchantAccount < ApplicationRecord
     end
   end
 
-  IN_FLIGHT_CHARGE_WINDOW = 1.hour
+  # Past this a sale still in_progress no longer blocks a replacement. A sale that settles later than this (the
+  # stuck-purchase sweep reaches back 3 days) can still book to the retired account: the window narrows the gap,
+  # it does not close it.
+  IN_FLIGHT_PURCHASE_HORIZON = 2.days
 
-  # Any unpaid/processing balance counts whatever its amount, as does a committed BalanceTransaction not yet
-  # applied to one. That is read first: if it applies between the reads, its Balance row is already committed.
-  # A recent in-progress purchase counts too. Completed payouts never count, unlike Payment::NON_TERMINAL_STATES.
+  # A sale is read first, then its balance transaction, then its balance: each stage is committed before the
+  # next begins, so a sale that moves between reads is still counted by a later one. Any unpaid/processing
+  # balance counts whatever its amount, as does a committed BalanceTransaction not yet applied to one.
+  # Completed payouts never count, unlike Payment::NON_TERMINAL_STATES.
   def unsettled_payout_obligations?
+    # A sale that has not picked its account yet has a nil merchant_account_id, so it counts too (it may be this one).
+    return true if Purchase.in_progress.where(seller_id: user_id, merchant_account_id: [id, nil], created_at: IN_FLIGHT_PURCHASE_HORIZON.ago..).exists?
     return true if balance_transactions.where(balance_id: nil).exists?
     return true if balances.where(state: %w[unpaid processing]).exists?
-    return true if charges_in_flight?
 
     in_flight_payments = Payment.where(user_id:, state: [Payment::CREATING, Payment::PROCESSING])
     in_flight_payments.joins(:balances).where(balances: { merchant_account_id: id }).exists? ||
       (charge_processor_merchant_id.present? && in_flight_payments.where(stripe_connect_account_id: charge_processor_merchant_id).exists?)
   end
 
-  # A sale picks its account before charging and books the balance only on success, and that write takes
-  # no seller lock, so a checkout still in progress could post to this account after it is retired.
-  def charges_in_flight?
-    Purchase.where(seller_id: user_id, merchant_account_id: id, purchase_state: "in_progress")
-            .where("created_at > ?", IN_FLIGHT_CHARGE_WINDOW.ago).exists?
+  REPLACED_ACCOUNT_ERROR_CODE = PurchaseErrorCode::MERCHANT_ACCOUNT_REPLACED
+
+  # Called right before a charge is created, with the sale's purchase already saved on this account. The locking
+  # read waits behind a replacement holding the row (StripeConnectAccountLinker) and sees it committed; a charge
+  # that gets past first has its in_progress purchase counted by the replacement. The lock is released when this
+  # read ends (charges run in autocommit); only the ordering against the replacement is guaranteed. The read is
+  # pinned to the primary: the replacement commits there, and a replica could still show the account as live.
+  def verify_live_for_charge!
+    return unless user_id.present? && is_a_gumroad_managed_stripe_account?
+
+    live = ApplicationRecord.connected_to(role: :writing) { self.class.lock("LOCK IN SHARE MODE").find(id).active? }
+    return if live
+
+    raise ChargeProcessorErrorGeneric.new(REPLACED_ACCOUNT_ERROR_CODE, message: "Merchant account #{id} was replaced before the charge was created")
   end
-  private :charges_in_flight?
 
   def delete_charge_processor_account!
     clear_non_hash_json_data_for_disconnect!

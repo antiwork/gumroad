@@ -24,6 +24,10 @@ module PurchaseErrorCode
   # that state, and the remedy is an account action rather than a deploy. Split out of
   # PROCESSOR_INVALID_REQUEST so that bucket keeps meaning "our request was malformed".
   PROCESSOR_MERCHANT_CANNOT_RECEIVE_TRANSFERS = "processor_merchant_cannot_receive_transfers"
+  # The seller's managed account was retired by a Stripe Connect link between choosing it and charging.
+  # No charge was created; the next attempt resolves the new account, so renewals retry instead of
+  # being reported as a declined card.
+  MERCHANT_ACCOUNT_REPLACED = "merchant_account_replaced"
   PROCESSING_ERROR = "processing_error"
   HIGH_PROXY_SCORE_AND_ADDITIONAL_CONTRIBUTION = "high_proxy_score_can_only_buy_once"
   BUYER_CHARGED_BACK = "buyer_has_charged_back"
@@ -265,6 +269,7 @@ module PurchaseErrorCode
                                                     PROCESSOR_INVALID_REQUEST,
                                                     PROCESSOR_MERCHANT_CANNOT_RECEIVE_TRANSFERS,
                                                     PROCESSING_ERROR,
+                                                    MERCHANT_ACCOUNT_REPLACED,
                                                     CREDIT_CARD_NOT_PROVIDED,
                                                     INDIA_CARD_MANDATE_MISSING,
                                                     INDIA_CARD_MANDATE_INACTIVE,
@@ -310,8 +315,11 @@ module PurchaseErrorCode
     #
     # PROCESSOR_MERCHANT_CANNOT_RECEIVE_TRANSFERS too: the account state changes, not our code,
     # and a renewal that self-heals beats a subscription terminated while the seller is blocked.
+    #
+    # MERCHANT_ACCOUNT_REPLACED too: nothing was charged, and the retry builds against the new account.
     error_code == STRIPE_UNAVAILABLE || error_code == PAYPAL_UNAVAILABLE || error_code == PROCESSING_ERROR ||
-      error_code == PROCESSOR_INVALID_REQUEST || error_code == PROCESSOR_MERCHANT_CANNOT_RECEIVE_TRANSFERS
+      error_code == PROCESSOR_INVALID_REQUEST || error_code == PROCESSOR_MERCHANT_CANNOT_RECEIVE_TRANSFERS ||
+      error_code == MERCHANT_ACCOUNT_REPLACED
   end
 
   def self.is_error_retryable?(error_code)

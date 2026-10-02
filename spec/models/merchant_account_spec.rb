@@ -165,24 +165,93 @@ describe MerchantAccount do
       expect(merchant_account.unsettled_payout_obligations?).to be(false)
     end
 
-    it "is true for a recent in-progress purchase charged on the account" do
-      create(:purchase, seller:, link: create(:product, user: seller), merchant_account:, purchase_state: "in_progress")
-
-      expect(merchant_account.unsettled_payout_obligations?).to be(true)
-    end
-
-    it "ignores stale in-progress purchases and successful ones" do
-      product = create(:product, user: seller)
-      create(:purchase, seller:, link: product, merchant_account:, purchase_state: "in_progress", created_at: 2.hours.ago)
-      create(:purchase, seller:, link: product, merchant_account:, purchase_state: "successful")
-
-      expect(merchant_account.unsettled_payout_obligations?).to be(false)
-    end
-
     it "ignores in-flight payouts against a different account" do
       create(:payment, user: seller, processor: PayoutProcessorType::STRIPE, state: "processing", stripe_connect_account_id: "acct_elsewhere")
 
       expect(merchant_account.unsettled_payout_obligations?).to be(false)
+    end
+
+    context "with sales that have not settled yet" do
+      let(:product) { create(:product, user: seller) }
+
+      def create_sale(state: "in_progress", account: merchant_account, **attributes)
+        create(:purchase, link: product, seller:, merchant_account: account, purchase_state: state, **attributes)
+      end
+
+      it "is true for an in_progress sale on the account" do
+        create_sale
+
+        expect(merchant_account.unsettled_payout_obligations?).to be(true)
+      end
+
+      it "is false for a sale that has finished or failed" do
+        create_sale(state: "successful")
+        create_sale(state: "failed")
+
+        expect(merchant_account.unsettled_payout_obligations?).to be(false)
+      end
+
+      it "is true for an in_progress sale that has not picked its account yet" do
+        create_sale(account: nil)
+
+        expect(merchant_account.unsettled_payout_obligations?).to be(true)
+      end
+
+      it "ignores an in_progress sale on another merchant account" do
+        create_sale(account: create(:merchant_account, user: seller, charge_processor_merchant_id: "acct_other_managed"))
+
+        expect(merchant_account.unsettled_payout_obligations?).to be(false)
+      end
+
+      it "ignores an in_progress sale older than the in-flight horizon" do
+        create_sale(created_at: (MerchantAccount::IN_FLIGHT_PURCHASE_HORIZON + 1.hour).ago)
+
+        expect(merchant_account.unsettled_payout_obligations?).to be(false)
+      end
+    end
+  end
+
+  describe "#verify_live_for_charge!" do
+    let(:merchant_account) { create(:merchant_account, charge_processor_merchant_id: "acct_managed_charge") }
+
+    it "passes for a live managed account" do
+      expect { merchant_account.verify_live_for_charge! }.not_to raise_error
+    end
+
+    it "raises a named error once the managed account has been retired" do
+      merchant_account.delete_charge_processor_account!
+
+      expect { merchant_account.verify_live_for_charge! }
+        .to raise_error(ChargeProcessorErrorGeneric) { |error| expect(error.error_code).to eq(MerchantAccount::REPLACED_ACCOUNT_ERROR_CODE) }
+    end
+
+    it "reads the stored state, not the instance in memory" do
+      stale = MerchantAccount.find(merchant_account.id)
+      merchant_account.delete_charge_processor_account!
+
+      expect { stale.verify_live_for_charge! }.to raise_error(ChargeProcessorErrorGeneric)
+    end
+
+    it "takes a shared lock on the account row" do
+      statements = []
+      subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") { |*, payload| statements << payload[:sql] }
+      merchant_account.verify_live_for_charge!
+      ActiveSupport::Notifications.unsubscribe(subscriber)
+
+      expect(statements).to include(a_string_matching(/FROM `merchant_accounts` WHERE `merchant_accounts`.`id` = #{merchant_account.id} .*LOCK IN SHARE MODE/))
+    end
+
+    it "does not touch accounts that are not retired by connecting Stripe" do
+      connect_account = create(:merchant_account_stripe_connect)
+      connect_account.delete_charge_processor_account!
+      paypal_account = create(:merchant_account_paypal)
+      paypal_account.update!(charge_processor_alive_at: nil)
+      platform_account = create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_platform_charge")
+      platform_account.update!(charge_processor_alive_at: nil)
+
+      [connect_account, paypal_account, platform_account].each do |account|
+        expect { account.verify_live_for_charge! }.not_to raise_error
+      end
     end
   end
 

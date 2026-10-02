@@ -42,6 +42,7 @@ describe PurchaseErrorCode do
       # which is retryable. Terminating a subscription while a seller's account is blocked would
       # be a worse outcome than a renewal that succeeds once the account clears.
       expect(described_class.is_temporary_network_error?(described_class::PROCESSOR_MERCHANT_CANNOT_RECEIVE_TRANSFERS)).to be(true)
+      expect(described_class.is_temporary_network_error?(described_class::MERCHANT_ACCOUNT_REPLACED)).to be(true)
     end
   end
 

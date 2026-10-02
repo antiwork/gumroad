@@ -37,6 +37,8 @@ describe StripeConnectAccountLinker, "racing payout writers" do
       thread.kill
       thread.join
     end
+    Purchase.where(seller_id: seller.id).delete_all
+    Link.where(user_id: seller.id).delete_all
     payment_ids = Payment.where(user_id: seller.id).ids
     ApplicationRecord.connection.execute("DELETE FROM payments_balances WHERE payment_id IN (#{payment_ids.presence&.join(',') || 'NULL'})")
     Payment.where(id: payment_ids).delete_all
@@ -111,14 +113,14 @@ describe StripeConnectAccountLinker, "racing payout writers" do
     @held.pop(timeout: wait_seconds) || raise("the writer never reached its hold")
   end
 
-  def wait_until_blocked_on_user_row(waiting_pid, blocking_pid)
+  def wait_until_blocked_on_user_row(waiting_pid, blocking_pid, table: "users")
     Timeout.timeout(wait_seconds) do
       loop do
         blocked = ActiveRecord::Base.connection.uncached do
           ActiveRecord::Base.connection.select_value(<<~SQL.squish).to_i.positive?
             SELECT COUNT(*) FROM sys.innodb_lock_waits
             WHERE waiting_pid = #{waiting_pid.to_i} AND blocking_pid = #{blocking_pid.to_i}
-              AND locked_table = CONCAT('`', DATABASE(), '`.`users`')
+              AND locked_table = CONCAT('`', DATABASE(), '`.`#{table}`')
           SQL
         end
         break if blocked
@@ -307,6 +309,107 @@ describe StripeConnectAccountLinker, "racing payout writers" do
       expect(Balance.where(user_id: seller.id, merchant_account_id: managed_account.id).sole.amount_cents).to eq(5_00)
       expect(connect_accounts).to be_empty
       expect(managed_account.reload).to be_active
+    end
+  end
+
+  def create_in_flight_sale(**attributes)
+    create(:purchase, link: product, seller:, merchant_account: managed_account, purchase_state: "in_progress", **attributes)
+  end
+
+  # Returns the refusal instead of raising, so the thread's join in the cleanup does not re-raise it.
+  def charge_on_managed_account
+    ChargeProcessor.create_payment_intent_or_charge!(MerchantAccount.find(managed_account.id), instance_double(Chargeable, get_chargeable_for: :chargeable), 10_00, 1_00, "ref", "description")
+  rescue ChargeProcessorErrorGeneric => e
+    e
+  end
+
+  context "when a sale and the replacement overlap" do
+    let!(:product) { create(:product, user: seller) }
+
+    let(:processor) { instance_double(StripeChargeProcessor, create_payment_intent_or_charge!: nil) }
+
+    before { allow(ChargeProcessor).to receive(:get_charge_processor).and_return(processor) }
+
+    it "refuses the replacement that waits behind a charge holding the shared lock" do
+      sale, sale_pid = on_new_connection do
+        ActiveRecord::Base.transaction do
+          MerchantAccount.find(managed_account.id).verify_live_for_charge!
+          @in_flight_sale = create_in_flight_sale
+          @held << true
+          @proceed.pop
+        end
+      end
+      wait_for_hold
+
+      linking, linking_pid = on_new_connection { link }
+      wait_until_blocked_on_user_row(linking_pid, sale_pid, table: "merchant_accounts")
+      expect(linking).to be_alive
+
+      @proceed << true
+      sale.value
+      expect(Timeout.timeout(wait_seconds) { linking.value }).to eq(:unsettled_obligations)
+
+      expect(Purchase.find(@in_flight_sale.id)).to be_in_progress
+      expect(connect_accounts).to be_empty
+      expect(managed_account.reload).to be_active
+    end
+
+    it "refuses a charge that waits behind the replacement before any charge is created" do
+      hold_before(/\AINSERT INTO `merchant_accounts`/)
+      linking, linking_pid = on_new_connection(racing_writer: true) { link }
+      wait_for_hold
+
+      charging, charging_pid = on_new_connection { charge_on_managed_account }
+      wait_until_blocked_on_user_row(charging_pid, linking_pid, table: "merchant_accounts")
+      expect(charging).to be_alive
+
+      @proceed << true
+      expect(Timeout.timeout(wait_seconds) { linking.value }).to eq(:linked)
+      refusal = Timeout.timeout(wait_seconds) { charging.value }
+      expect(refusal).to be_a(ChargeProcessorErrorGeneric)
+      expect(refusal.error_code).to eq(MerchantAccount::REPLACED_ACCOUNT_ERROR_CODE)
+
+      expect(processor).not_to have_received(:create_payment_intent_or_charge!)
+      expect(Balance.where(user_id: seller.id)).to be_empty
+      expect(BalanceTransaction.where(user_id: seller.id)).to be_empty
+      expect(connect_accounts.sole).to be_active
+      expect(managed_account.reload).not_to be_active
+    end
+
+    it "lets charges on the account run side by side" do
+      first, = on_new_connection do
+        ActiveRecord::Base.transaction do
+          MerchantAccount.find(managed_account.id).verify_live_for_charge!
+          @held << true
+          @proceed.pop
+        end
+      end
+      wait_for_hold
+
+      second, = on_new_connection { MerchantAccount.find(managed_account.id).verify_live_for_charge! }
+      expect(Timeout.timeout(wait_seconds) { second.value }).to be_nil
+      expect(first).to be_alive
+
+      @proceed << true
+      first.value
+    end
+
+    it "does not wait on a payout claim holding the seller lock" do
+      claim, = on_new_connection do
+        ActiveRecord::Base.transaction do
+          claim_payable_balances
+          @held << true
+          @proceed.pop
+        end
+      end
+      wait_for_hold
+
+      charging, = on_new_connection { charge_on_managed_account }
+      Timeout.timeout(wait_seconds) { charging.value }
+      expect(processor).to have_received(:create_payment_intent_or_charge!)
+
+      @proceed << true
+      claim.value
     end
   end
 end
