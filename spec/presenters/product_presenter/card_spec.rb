@@ -79,13 +79,19 @@ describe ProductPresenter::Card do
         expect(result[:description]).to eq(product.plaintext_description.truncate(described_class::DESCRIPTION_MAX_LENGTH))
       end
 
-      it "keeps up to 300 characters of a long description for the featured card" do
-        product.update!(description: "<p>#{"Fresh card magic every month. " * 20}</p>")
+      context "with a long description" do
+        before { product.update!(description: "<p>#{"Fresh card magic every month. " * 20}</p>") }
 
-        result = described_class.new(product:).for_web
+        it "truncates to 100 characters by default" do
+          expect(described_class.new(product:).for_web[:description].length).to eq(100)
+        end
 
-        expect(result[:description].length).to eq(300)
-        expect(result[:description]).to end_with("...")
+        it "keeps the requested number of characters for the featured card" do
+          result = described_class.new(product:).for_web(description_max_length: described_class::FEATURED_DESCRIPTION_MAX_LENGTH)
+
+          expect(result[:description].length).to eq(300)
+          expect(result[:description]).to end_with("...")
+        end
       end
 
       it "excludes description when compute_description is false" do

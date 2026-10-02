@@ -51,8 +51,8 @@ class ProductPresenter
   end
 
   ASSOCIATIONS_FOR_CARD = ProductPresenter::Card::ASSOCIATIONS
-  def self.card_for_web(product:, request: nil, recommended_by: nil, recommender_model_name: nil, target: nil, show_seller: true, affiliate_id: nil, query: nil, offer_code: nil, compute_description: true, compute_inventory: true)
-    ProductPresenter::Card.new(product:).for_web(request:, recommended_by:, recommender_model_name:, target:, show_seller:, affiliate_id:, query:, offer_code:, compute_description:, compute_inventory:)
+  def self.card_for_web(product:, request: nil, recommended_by: nil, recommender_model_name: nil, target: nil, show_seller: true, affiliate_id: nil, query: nil, offer_code: nil, compute_description: true, compute_inventory: true, description_max_length: ProductPresenter::Card::DESCRIPTION_MAX_LENGTH)
+    ProductPresenter::Card.new(product:).for_web(request:, recommended_by:, recommender_model_name:, target:, show_seller:, affiliate_id:, query:, offer_code:, compute_description:, compute_inventory:, description_max_length:)
   end
 
   def self.card_for_email(product:)
