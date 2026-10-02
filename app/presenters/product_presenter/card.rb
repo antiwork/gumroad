@@ -62,7 +62,7 @@ class ProductPresenter::Card
     props[:original_price_cents] = original_price_cents if original_price_cents.present?
 
     if compute_description
-      props[:description] = product.plaintext_description.truncate(description_max_length)
+      props[:description] = truncate_description(product.plaintext_description, description_max_length)
     end
 
     props
@@ -80,4 +80,13 @@ class ProductPresenter::Card
       },
     }
   end
+
+  private
+    # Drops punctuation before the omission so a cut after a sentence period does not end in "....".
+    def truncate_description(text, max_length)
+      return text if text.length <= max_length
+
+      omission = "..."
+      text[0, max_length - omission.length].sub(/[[:punct:][:space:]]+\z/, "") + omission
+    end
 end

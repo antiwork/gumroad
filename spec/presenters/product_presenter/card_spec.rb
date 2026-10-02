@@ -94,6 +94,14 @@ describe ProductPresenter::Card do
         end
       end
 
+      context "when the cut lands after a sentence period" do
+        before { product.update!(description: "<p>#{"a" * 96}. More text follows here.</p>") }
+
+        it "ends in a single ellipsis" do
+          expect(described_class.new(product:).for_web[:description]).to eq("#{"a" * 96}...")
+        end
+      end
+
       it "excludes description when compute_description is false" do
         result = described_class.new(product:).for_web(compute_description: false)
 
