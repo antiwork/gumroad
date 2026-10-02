@@ -27,6 +27,15 @@ announce_skip() {
   exit 0
 }
 
+# bin/deploy exits 0 when the deploy spacing gate skips a superseded deploy, so the gate's
+# marker is the only sign that nothing shipped. Same path and content check as the wizard's
+# deploy_skipped_by_spacing_gate?, so the release and production-release always agree. The
+# wizard sets DEPLOY_TAG only for its own subprocess; it equals PRODUCTION_TAG.
+deploy_skipped_by_spacing_gate() {
+  local marker="${DEPLOY_SPACING_SKIP_MARKER:-nomad/production/.deploy_spacing_skipped}"
+  [ -f "$marker" ] && [ "$(cat "$marker" 2>/dev/null)" = "$PRODUCTION_TAG ${BUILDKITE_BUILD_NUMBER:-}" ]
+}
+
 # Deploys wait while work a deploy would destroy is ACTUALLY running, by asking the app
 # rather than guessing from the clock. Jobs a deploy must not interrupt register a token in
 # Redis while they run (see DeployBlockingJobTracking) and the matching healthcheck answers
@@ -155,6 +164,12 @@ gem install dotenv
 # Deploy to production
 logger "Starting production deployment"
 DEPLOYMENT_FROM_CI=true bin/deploy
+
+# A release tag marks what production runs (deploy_relevance.sh diffs against it), so a
+# skipped deploy must not create one.
+if deploy_skipped_by_spacing_gate; then
+  announce_skip "Deploy spacing" "superseded by a newer build inside the spacing window"
+fi
 
 logger "Successfully deployed $WEB_REPO:$PRODUCTION_TAG to production"
 
