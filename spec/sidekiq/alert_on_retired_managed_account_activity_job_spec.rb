@@ -89,8 +89,11 @@ describe AlertOnRetiredManagedAccountActivityJob do
     subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |*, payload|
       statements << payload[:sql] if payload[:sql].include?("FROM `balances`")
     end
-    perform
-    ActiveSupport::Notifications.unsubscribe(subscriber)
+    begin
+      perform
+    ensure
+      ActiveSupport::Notifications.unsubscribe(subscriber)
+    end
 
     expect(statements).not_to be_empty
     expect(statements).to all(match(/`balances`\.`user_id` = #{seller.id}\b/))

@@ -7,8 +7,8 @@ class AlertOnRetiredManagedAccountActivityJob
   include Sidekiq::Job
   sidekiq_options retry: 2, queue: :low
 
-  # Payouts holds a sale at least this long before it can pay it, so everything a retired account can
-  # still receive from a sale in flight at retirement has landed by the run this schedules.
+  # SyncStuckPurchasesJob stops resolving an in_progress sale 3 days after it was created, so a sale in
+  # flight at retirement has landed by then or is no longer being resolved. Keep in step with its range.
   SETTLEMENT_TAIL = 3.days
 
   # Report at most this many landed rows per leg. The alert exists to be read.
