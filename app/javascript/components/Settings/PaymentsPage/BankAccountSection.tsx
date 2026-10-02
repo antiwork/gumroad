@@ -1853,7 +1853,7 @@ const BankAccountSection = ({
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
-                    placeholder="Enter your bank's 3-digit ASFI code"
+                    placeholder="Enter the 3-digit bank code"
                     maxLength={3}
                     required
                     disabled={isFormDisabled}
@@ -1861,7 +1861,7 @@ const BankAccountSection = ({
                     onChange={(evt) => updateBankAccount({ bank_code: evt.target.value })}
                   />
                   <FieldsetDescription>
-                    Your bank's 3-digit ASFI code. Find it on your bank's statement or ask your bank.
+                    Banks in Bolivia don't issue this code. Contact Gumroad support for the 3-digit code for your bank.
                   </FieldsetDescription>
                 </Fieldset>
               ) : user.country_code === "NG" ? (
