@@ -3833,13 +3833,15 @@ class StripePayoutProcessorTest < ActiveSupport::TestCase
     assert_equal "failed", payment.state
   end
 
-  test "prepare_payment_and_set_amount fails a balance still parked on a replaced Stripe account instead of paying through it" do
+  # A positive balance on a replaced account now drains from that account (specs for
+  # split_retired_account_groups cover that); a debt stays in the user-level group and still fails closed.
+  test "prepare_payment_and_set_amount keeps failing a debt parked on a replaced Stripe account as a currency mismatch" do
     user = create_user
     old_account = create_merchant_account(user:, currency: Currency::VND, country: "VN")
     old_account.update!(charge_processor_deleted_at: Time.current, deleted_at: Time.current)
     live_account = create_merchant_account(user:, currency: Currency::USD, country: "US")
     stale_balance = create_balance(user:, merchant_account: old_account, date: Date.today - 1, state: "processing",
-                                   amount_cents: 20_00, holding_currency: Currency::VND, holding_amount_cents: 500_000)
+                                   amount_cents: -20_00, holding_currency: Currency::VND, holding_amount_cents: -500_000)
     payment = create_payment(user:, currency: nil, amount_cents: nil)
     payment.balances << stale_balance
     StripePayoutProcessor.expects(:pay_out_currencies).never
