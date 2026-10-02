@@ -261,6 +261,25 @@ describe("BankAccountSection Bolivia bank picker", () => {
     expect(updates).toContainEqual({ bank_code: "006" });
     expect(screen.getByLabelText<HTMLSelectElement>("Bank").value).toBe("006");
   });
+
+  it("shows the saved account's bank by name", () => {
+    render(
+      <BankAccountSection
+        bankAccountDetails={{ ...bankAccountDetails, routing_number: "040", account_number_visual: "******6789" }}
+        bankAccount={null}
+        updateBankAccount={() => {}}
+        hasConnectedStripe={false}
+        user={makeUser("BO")}
+        isFormDisabled={false}
+        feeInfoText=""
+        showNewBankAccount={false}
+        setShowNewBankAccount={() => {}}
+        errorFieldNames={new Set()}
+      />,
+    );
+
+    expect(screen.getByLabelText<HTMLInputElement>("Bank").value).toBe("Cooperativa San Joaquín");
+  });
 });
 
 describe("BankAccountSection bank-code placeholders", () => {

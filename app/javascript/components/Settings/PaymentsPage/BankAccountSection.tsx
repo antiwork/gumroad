@@ -887,6 +887,8 @@ const BankAccountSection = ({
         return "SWIFT/BIC and branch code";
       case BANK_AND_BRANCH_CODE_COUNTRIES.includes(countryCode):
         return "Bank and branch code";
+      case countryCode === "BO":
+        return "Bank";
       case BANK_CODE_COUNTRIES.includes(countryCode):
         return "Bank code";
       case SWIFT_BIC_CODE_COUNTRIES.includes(countryCode):
@@ -2612,7 +2614,12 @@ const BankAccountSection = ({
                     <Input
                       id={`${uid}-saved-routing-number`}
                       disabled
-                      value={bankAccountDetails.routing_number || ""}
+                      value={
+                        (user.country_code === "BO" &&
+                          BOLIVIA_BANKS.find(([code]) => code === bankAccountDetails.routing_number)?.[1]) ||
+                        bankAccountDetails.routing_number ||
+                        ""
+                      }
                     />
                   </Fieldset>
                 )}

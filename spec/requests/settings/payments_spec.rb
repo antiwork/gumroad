@@ -4755,7 +4755,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         select("1901", from: "Year")
 
         fill_in("Pay to the order of", with: "Chuck Bartowski")
-        fill_in("Bank code", with: "040")
+        select("Cooperativa San Joaquín", from: "Bank")
         fill_in("Account #", with: "000123456789")
         fill_in("Confirm account #", with: "000123456789")
         fill_in("Cédula de Identidad (CI)", with: "00123456")
@@ -4766,7 +4766,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         click_on("Update settings")
 
         expect(page).to have_alert(text: "Thanks! You're all set.")
-        expect(page).to have_content("Bank code")
+        expect(page).to have_field("Bank", with: "Cooperativa San Joaquín", disabled: true)
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("Bolivian")
         expect(compliance_info.last_name).to eq("Creator")
