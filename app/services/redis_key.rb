@@ -137,6 +137,12 @@ class RedisKey
     # One sitemap generation at a time: SitemapGenerator::Sitemap keeps its output path on
     # the class, so two runs in one process write into each other's path. See SitemapService.
     def sitemap_generation_lock = "sitemap_generation_lock"
+    # One Merchant Center feed run at a time; see MerchantCenterFeedRun.
+    def merchant_center_feed_lock = "merchant_center_feed_lock"
+    # Units the current feed run has finished, so a retry resumes after them.
+    def merchant_center_feed_progress = "merchant_center_feed_progress"
+    # Highest id-range shard to publish. Unset means the legacy file only.
+    def merchant_center_feed_max_shard = "merchant_center_feed_max_shard"
     def workflow_seller_fanout_lock_ttl_seconds = "workflow_seller_fanout_lock_ttl_seconds"
     def workflow_seller_fanout_retry_seconds = "workflow_seller_fanout_retry_seconds"
     def workflow_immediate_fanout_threshold = "workflow_immediate_fanout_threshold"
