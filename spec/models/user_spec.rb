@@ -3197,6 +3197,21 @@ describe User, :vcr do
     end
   end
 
+  describe "#after_confirmation" do
+    it "attaches guest purchases made with the confirmed email" do
+      user = create(:unconfirmed_user)
+      guest_purchase = create(:purchase, email: user.email)
+      other_buyer_purchase = create(:purchase, email: user.email, purchaser: create(:user))
+
+      user.confirm
+      expect(AttachPastPurchasesToUserWorker.jobs.size).to eq 1
+      AttachPastPurchasesToUserWorker.drain
+
+      expect(guest_purchase.reload.purchaser).to eq(user)
+      expect(other_buyer_purchase.reload.purchaser).not_to eq(user)
+    end
+  end
+
   describe "#update_alive_cart_email" do
     it "syncs the cart email to the user's new email when user email is updated" do
       user = create(:user, email: "old@example.com")

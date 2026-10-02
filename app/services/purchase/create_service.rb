@@ -654,6 +654,9 @@ class Purchase::CreateService < Purchase::BaseService
         purchase.purchaser = buyer unless purchase.is_gift_receiver_purchase
       else
         user_from_email = User.find_by(email: purchase_email)
+        # Anyone can sign up with an address they do not own. Confirmation attaches these
+        # purchases later through AttachPastPurchasesToUserWorker.
+        user_from_email = nil unless user_from_email&.confirmed?
         # This limits test purchase to be done in logged out mode
         if purchase.link.user != user_from_email
           purchase.purchaser = user_from_email
