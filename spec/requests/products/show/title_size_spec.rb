@@ -11,7 +11,10 @@ Capybara.register_driver :title_size_phone_chrome do |app|
   options.add_preference("intl.accept_languages", "en-US")
   test_host_resolver_args.each { |arg| options.args << arg }
 
-  Capybara::Selenium::Driver.new(app, browser: :chrome, options:)
+  # Same WebDriver timeouts as the shared drivers in spec/support/capybara_driver.rb.
+  http_client = Selenium::WebDriver::Remote::Http::Default.new(open_timeout: 120, read_timeout: 120)
+
+  Capybara::Selenium::Driver.new(app, browser: :chrome, http_client:, options:)
 end
 
 describe "Product title size", type: :system, js: true do
