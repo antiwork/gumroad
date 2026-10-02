@@ -3204,7 +3204,7 @@ describe User, :vcr do
       other_buyer_purchase = create(:purchase, email: user.email, purchaser: create(:user))
 
       user.confirm
-      expect(AttachPastPurchasesToUserWorker.jobs.size).to eq 1
+      expect(AttachPastPurchasesToUserWorker).to have_enqueued_sidekiq_job(user.id, user.email)
       AttachPastPurchasesToUserWorker.drain
 
       expect(guest_purchase.reload.purchaser).to eq(user)

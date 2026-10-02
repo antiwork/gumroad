@@ -1560,7 +1560,7 @@ class User < ApplicationRecord
       update!(reset_password_token: nil, reset_password_sent_at: nil)
 
       # Guest purchases follow the address only once its owner has proven it.
-      AttachPastPurchasesToUserWorker.perform_async(id)
+      AttachPastPurchasesToUserWorker.perform_async(id, email)
     end
 
   private

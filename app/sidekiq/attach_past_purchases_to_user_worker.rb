@@ -4,12 +4,14 @@ class AttachPastPurchasesToUserWorker
   include Sidekiq::Job
   sidekiq_options retry: 3, queue: :default
 
-  def perform(user_id)
+  # `email` pins the address the user confirmed; the account email can change before the job runs.
+  def perform(user_id, email = nil)
     user = User.find(user_id)
-    return if user.email.blank?
+    email ||= user.email
+    return if email.blank?
 
     failure = nil
-    Purchase.where(email: user.email, purchaser_id: nil).find_each do |past_purchase|
+    Purchase.where(email:, purchaser_id: nil).find_each do |past_purchase|
       attach(past_purchase, user)
     rescue => e
       failure ||= e
