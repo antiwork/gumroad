@@ -38,6 +38,14 @@ describe User::FeatureStatus, ".no_payout_rail_in_compliance_country?" do
     expect(seller.no_payout_rail_in_compliance_country?).to be(false)
   end
 
+  it "is false for US outlying areas, whose residents register PayPal under the US" do
+    ["Guam", "American Samoa", "Northern Mariana Islands", "United States Virgin Islands"].each do |country|
+      set_country(country)
+
+      expect(seller.no_payout_rail_in_compliance_country?).to be(false), "expected #{country} to have a rail"
+    end
+  end
+
   it "is false with no compliance info at all, rather than claiming the seller cannot be paid" do
     expect(seller.alive_user_compliance_info).to be_nil
     expect(seller.no_payout_rail_in_compliance_country?).to be(false)
