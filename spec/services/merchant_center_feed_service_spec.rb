@@ -463,6 +463,28 @@ describe MerchantCenterFeedService do
       expect(queries.grep(/FROM `purchases`/)).to be_empty
     end
 
+    it "does not look up sales for a product without a preview" do
+      create(:product, :recommendable, price_cents: 999)
+
+      queries = sql_during { expect(service.generate).to eq 0 }
+
+      expect(queries.grep(/FROM `purchases`/)).to be_empty
+    end
+
+    it "does not resolve the cover image of a product that fails the Discover checks" do
+      product = create(:product, price_cents: 999)
+      create(:asset_preview, link: product)
+      resolved = 0
+      allow_any_instance_of(Link).to receive(:social_share_image).and_wrap_original do |original|
+        resolved += 1
+        original.call
+      end
+
+      expect(service.generate).to eq 0
+
+      expect(resolved).to eq 0
+    end
+
     it "loads taxonomies once per batch, not once per product" do
       3.times { create_eligible_product(taxonomy: create(:taxonomy)) }
 
