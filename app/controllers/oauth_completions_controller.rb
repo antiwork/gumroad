@@ -3,7 +3,7 @@
 class OauthCompletionsController < ApplicationController
   include AuditsPayoutSettingsChanges
 
-  UNSETTLED_BALANCE_ALERT = "Your current payout account still has funds that haven't been paid out, so you can't connect a different Stripe account yet. Try again after your next payout, or contact support if you need help."
+  UNSETTLED_BALANCE_ALERT = "We can't connect this Stripe account yet because some of your Gumroad payouts aren't settled. Contact support for help with the next step."
 
   before_action :authenticate_user!
 
