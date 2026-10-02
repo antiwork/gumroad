@@ -5553,5 +5553,77 @@ describe StripeChargeProcessor, "#fight_chargeback shipment evidence" do
 
       expect(theirs[:idempotency_key]).to_not eq(mine[:idempotency_key])
     end
+
+    context "when the evidence has files" do
+      before do
+        disputed_purchase.dispute.reload.dispute_evidence.customer_communication_file.attach(fixture_file_upload("test.pdf"))
+      end
+
+      # Stripe::File.create is not deduplicated, so a retry re-uploads and gets a new id; reusing
+      # the old key with it is rejected as "same key, different parameters".
+      it "changes with the uploaded file ids" do
+        allow(Stripe::File).to receive(:create).and_return(double(id: "file_a"), double(id: "file_b"))
+
+        first = capture_options
+        second = capture_options
+
+        expect(first[:idempotency_key]).to start_with("dispute_evidence_#{disputed_purchase.dispute.reload.dispute_evidence.external_id}_")
+        expect(second[:idempotency_key]).to_not eq(first[:idempotency_key])
+      end
+
+      it "is stable for the same file ids" do
+        allow(Stripe::File).to receive(:create).and_return(double(id: "file_a"))
+
+        expect(capture_options[:idempotency_key]).to eq(capture_options[:idempotency_key])
+      end
+    end
+  end
+
+  describe "customer communication file over the page limit" do
+    let(:page_limit_error) do
+      Stripe::InvalidRequestError.new("The file you uploaded was too long. Please upload a file with fewer than 50 pages.", "file", http_status: 400)
+    end
+
+    before do
+      DisputeEvidence.create_from_dispute!(disputed_purchase.dispute.reload)
+      disputed_purchase.dispute.reload.dispute_evidence.customer_communication_file.attach(fixture_file_upload("test.pdf"))
+    end
+
+    def fight
+      sent = nil
+      allow(Stripe::Dispute).to receive(:update) { |_id, params, _opts| sent = params[:evidence] }
+      omitted = described_class.new.fight_chargeback("ch_test", disputed_purchase.dispute.reload.dispute_evidence)
+      [sent, omitted]
+    end
+
+    it "submits the rest of the evidence without that file and reports it as omitted" do
+      allow(Stripe::File).to receive(:create).and_raise(page_limit_error)
+      expect(ErrorNotifier).to receive(:notify).with(/submitted without customer_communication/)
+
+      sent, omitted = fight
+
+      expect(omitted).to eq([:customer_communication])
+      expect(sent).to include(customer_communication: nil)
+      expect(sent[:access_activity_log]).to eq(disputed_purchase.dispute.reload.dispute_evidence.access_activity_log)
+      expect(sent[:uncategorized_text]).to be_present
+    end
+
+    it "still fails on any other file error, without submitting" do
+      allow(Stripe::File).to receive(:create).and_raise(Stripe::InvalidRequestError.new("Invalid file.", "file", http_status: 400))
+      expect(Stripe::Dispute).to_not receive(:update)
+
+      expect do
+        described_class.new.fight_chargeback("ch_test", disputed_purchase.dispute.reload.dispute_evidence)
+      end.to raise_error(ChargeProcessorInvalidRequestError, /Invalid file/)
+    end
+
+    it "reports nothing omitted when the file uploads" do
+      allow(Stripe::File).to receive(:create).and_return(double(id: "file_ok"))
+
+      sent, omitted = fight
+
+      expect(omitted).to eq([])
+      expect(sent[:customer_communication]).to eq("file_ok")
+    end
   end
 end

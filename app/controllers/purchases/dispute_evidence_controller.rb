@@ -62,6 +62,7 @@ class Purchases::DisputeEvidenceController < ApplicationController
 
     if input_blobs.one? && !@dispute_evidence.customer_communication_file.attached?
       attached_blob = covert_and_optimize_blob_if_needed(input_blobs.first)
+      ensure_within_page_limit!(attached_blob)
       @dispute_evidence.customer_communication_file.attach(attached_blob)
     elsif input_blobs.any?
       # customer_communication_file is has_one_attached, so a bare #attach on a later save would
@@ -77,6 +78,7 @@ class Purchases::DisputeEvidenceController < ApplicationController
         blobs: merge_blobs,
         max_size: @dispute_evidence.customer_communication_file_max_size
       )
+      ensure_within_page_limit!(merged_blob)
       @dispute_evidence.customer_communication_file.attach(merged_blob)
     end
     @dispute_evidence.update_as_seller_submitted!
@@ -93,10 +95,26 @@ class Purchases::DisputeEvidenceController < ApplicationController
     merged_blob&.purge
     redirect_to purchase_dispute_evidence_path(@purchase_route_id), alert: @dispute_evidence.errors.full_messages.to_sentence
   rescue DisputeEvidence::MergeCustomerCommunicationFilesService::MergeError => e
+    merged_blob&.purge
     redirect_to purchase_dispute_evidence_path(@purchase_route_id), alert: e.message
   end
 
   private
+    # Stripe rejects a longer evidence file outright, and the submission it belongs to is one-shot,
+    # so refuse it while the seller can still shorten it. A PDF we cannot parse keeps today's path.
+    def ensure_within_page_limit!(blob)
+      return unless blob.content_type == "application/pdf"
+
+      page_count = blob.open { PDF::Reader.new(_1.path).page_count }
+      return if page_count <= DisputeEvidence::STRIPE_MAX_FILE_PAGES
+
+      raise DisputeEvidence::MergeCustomerCommunicationFilesService::MergeError,
+            "Your customer communication is #{page_count} pages long, but our payment processor accepts " \
+            "at most #{DisputeEvidence::STRIPE_MAX_FILE_PAGES} pages. Please remove pages or upload a shorter file."
+    rescue PDF::Reader::MalformedPDFError, PDF::Reader::UnsupportedFeatureError, PDF::Reader::EncryptedPDFError
+      nil
+    end
+
     def set_purchase
       requested_id = params[:purchase_id] || params[:id]
       scoped_purchase = Purchase.find_by_secure_external_id(requested_id, scope: SECURE_ID_SCOPE)

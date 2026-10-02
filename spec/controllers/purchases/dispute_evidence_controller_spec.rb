@@ -442,6 +442,50 @@ describe Purchases::DisputeEvidenceController, type: :controller, inertia: true 
       end
     end
 
+    context "when the customer communication is over the processor's page limit" do
+      def pdf_blob(pages, filename)
+        io = StringIO.new(Prawn::Document.new { |pdf| (pages - 1).times { pdf.start_new_page } }.render)
+        ActiveStorage::Blob.create_and_upload!(io:, filename:, content_type: "application/pdf")
+      end
+
+      let(:alert) do
+        "Your customer communication is 51 pages long, but our payment processor accepts at most 50 pages. " \
+          "Please remove pages or upload a shorter file."
+      end
+
+      before do
+        allow_any_instance_of(ActiveStorage::Blob).to receive(:purge).and_return(nil)
+      end
+
+      it "refuses a single PDF without saving the submission" do
+        put :update, params: { purchase_id: evidence_token, dispute_evidence: { customer_communication_file_signed_blob_id: pdf_blob(51, "long.pdf").signed_id } }
+
+        dispute_evidence.reload
+        expect(dispute_evidence.customer_communication_file.attached?).to be(false)
+        expect(dispute_evidence.seller_submitted?).to be(false)
+        expect(response).to redirect_to(purchase_dispute_evidence_path(evidence_token))
+        expect(flash[:alert]).to eq(alert)
+      end
+
+      it "refuses files that only cross the limit once merged" do
+        blobs = [pdf_blob(26, "a.pdf"), pdf_blob(25, "b.pdf")]
+
+        put :update, params: { purchase_id: evidence_token, dispute_evidence: { customer_communication_file_signed_blob_ids: blobs.map(&:signed_id) } }
+
+        dispute_evidence.reload
+        expect(dispute_evidence.customer_communication_file.attached?).to be(false)
+        expect(dispute_evidence.seller_submitted?).to be(false)
+        expect(flash[:alert]).to eq(alert)
+      end
+
+      it "accepts a PDF of exactly the limit" do
+        put :update, params: { purchase_id: evidence_token, dispute_evidence: { customer_communication_file_signed_blob_id: pdf_blob(50, "max.pdf").signed_id } }
+
+        expect(dispute_evidence.reload.customer_communication_file.attached?).to be(true)
+        expect(response).to redirect_to(success_purchase_dispute_evidence_path(evidence_token))
+      end
+    end
+
     context "when the dispute evidence is invalid" do
       it "redirects with error message" do
         put :update, params: { purchase_id: evidence_token, dispute_evidence: { cancellation_rebuttal: "a" * 3_001 } }

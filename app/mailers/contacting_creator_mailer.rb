@@ -472,6 +472,14 @@ class ContactingCreatorMailer < ApplicationMailer
     @subject = "A dispute has been lost"
   end
 
+  def chargeback_evidence_file_omitted(dispute_id)
+    dispute = Dispute.find(dispute_id)
+    @disputable = dispute.disputable
+    @seller = @disputable.seller
+    @max_pages = DisputeEvidence::STRIPE_MAX_FILE_PAGES
+    @subject = "Your dispute response was sent without your attached file"
+  end
+
   def chargeback_won(dispute_id)
     dispute = Dispute.find(dispute_id)
     @disputable = dispute.disputable

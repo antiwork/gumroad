@@ -1,0 +1,19 @@
+<%= header_section(@subject) %>
+<div>
+  <p>
+    We have sent our response to the dispute on <%= @disputable.customer_email %>'s purchase of <%= @disputable.multiple_purchases? ? "the following items" : @disputable.purchase_for_dispute_evidence.link.name %> for <%= @disputable.formatted_disputed_amount %>.
+  </p>
+  <% if @disputable.multiple_purchases? %>
+    <% @disputable.disputed_purchases.each do |purchase| %>
+      <p>
+        <%= link_to purchase.link.name, purchase.link.long_url %>
+      </p>
+    <% end %>
+  <% end %>
+  <p>
+    It includes the receipt, the customer's access history and any written statement you saved. Your customer communication file could not be included: our payment processor only accepts files of up to <%= @max_pages %> pages, and yours was longer.
+  </p>
+  <p>
+    A dispute response can only be sent once, so nothing more can be added. You'll get another notification if we win the dispute.
+  </p>
+</div>

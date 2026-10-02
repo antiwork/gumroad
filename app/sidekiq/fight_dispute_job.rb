@@ -4,6 +4,8 @@ class FightDisputeJob
   include Sidekiq::Job
   sidekiq_options retry: 5, queue: :default, lock: :until_executed
 
+  CUSTOMER_COMMUNICATION_OMITTED_MESSAGE = "Submitted without the seller's customer communication file: it exceeds the processor's page limit."
+
   def perform(dispute_id)
     dispute = Dispute.find(dispute_id)
     dispute_evidence = dispute.dispute_evidence
@@ -25,13 +27,27 @@ class FightDisputeJob
       return
     end
 
-    disputable.fight_chargeback
-    dispute_evidence.update_as_resolved!(resolution: DisputeEvidence::RESOLUTION_SUBMITTED)
+    omitted_fields = Array.wrap(disputable.fight_chargeback)
+    if omitted_fields.include?(:customer_communication)
+      dispute_evidence.update_as_resolved!(
+        resolution: DisputeEvidence::RESOLUTION_SUBMITTED,
+        error_message: CUSTOMER_COMMUNICATION_OMITTED_MESSAGE
+      )
+      ContactingCreatorMailer.chargeback_evidence_file_omitted(dispute.id).deliver_later
+    else
+      dispute_evidence.update_as_resolved!(resolution: DisputeEvidence::RESOLUTION_SUBMITTED)
+    end
   rescue ChargeProcessorInvalidRequestError => e
     if rejected?(e.message)
       dispute_evidence.update_as_resolved!(
         resolution: DisputeEvidence::RESOLUTION_REJECTED,
         error_message: e.message
+      )
+    elsif already_submitted?(e.message)
+      # A retry after an update that reached Stripe but whose response never came back.
+      dispute_evidence.update_as_resolved!(
+        resolution: DisputeEvidence::RESOLUTION_SUBMITTED,
+        error_message: e.message.truncate(255)
       )
     else
       raise e
@@ -41,5 +57,9 @@ class FightDisputeJob
   private
     def rejected?(message)
       message.include?("This dispute is already closed")
+    end
+
+    def already_submitted?(message)
+      message.include?("maximum number of evidence submissions")
     end
 end
