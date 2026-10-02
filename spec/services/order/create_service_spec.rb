@@ -1314,6 +1314,8 @@ describe Order::CreateService, :vcr do
         sub
       end
 
+      let(:restart_intent) { Checkout::RestartIntentToken.issue(product: membership_product, buyer:) }
+
       let(:params_with_membership) do
         {
           line_items: [
@@ -1322,7 +1324,8 @@ describe Order::CreateService, :vcr do
               permalink: membership_product.unique_permalink,
               perceived_price_cents: membership_product.price_cents,
               quantity: 1,
-              price_id: membership_product.prices.alive.first.external_id
+              price_id: membership_product.prices.alive.first.external_id,
+              restart_intent:
             },
             {
               uid: "unique-id-1",
@@ -1334,6 +1337,11 @@ describe Order::CreateService, :vcr do
         }.merge(common_order_params_without_payment)
       end
 
+      # The saved cart line a buyer left behind before cancelling: it reaches the server with no intent.
+      let(:params_with_stale_membership_line) do
+        params_with_membership.deep_dup.tap { _1[:line_items].first.delete(:restart_intent) }
+      end
+
       it "treats submitted checkout payment data as a new card during subscription restart in a multi-seller cart" do
         multi_seller_params = {
           line_items: [
@@ -1342,7 +1350,8 @@ describe Order::CreateService, :vcr do
               permalink: membership_product.unique_permalink,
               perceived_price_cents: membership_product.price_cents,
               quantity: 1,
-              price_id: membership_product.prices.alive.first.external_id
+              price_id: membership_product.prices.alive.first.external_id,
+              restart_intent:
             },
             {
               uid: "unique-id-1",
@@ -1408,6 +1417,149 @@ describe Order::CreateService, :vcr do
         expect(order.purchases.first.link).to eq(product_2)
       end
 
+      context "when the membership line was accepted from a cross-sell" do
+        let(:cross_sell) { create(:upsell, seller: seller_1, product: membership_product, selected_products: [product_2], cross_sell: true) }
+
+        let(:params_with_accepted_cross_sell) do
+          params_with_membership.deep_dup.tap do |params|
+            params[:line_items].first[:accepted_offer] = { id: cross_sell.external_id, original_product_id: product_2.external_id }
+          end
+        end
+
+        it "restarts the cancelled membership once and orders the unrelated product once when the offered line carries the signed intent" do
+          updater_service = instance_double(Subscription::UpdaterService)
+          expect(Subscription::UpdaterService).to receive(:new).once.and_return(updater_service)
+          expect(updater_service).to receive(:perform).once.and_return({ success: true, success_message: "Membership restarted" })
+
+          order, purchase_responses, _ = Order::CreateService.new(params: params_with_accepted_cross_sell, buyer:).perform
+
+          expect(purchase_responses["unique-id-0"]).to include(success: true)
+          expect(order.purchases.map(&:link)).to eq([product_2])
+        end
+
+        it "refuses the accepted line without charging when it carries no intent, while the unrelated product is ordered once" do
+          params_with_accepted_cross_sell[:line_items].first.delete(:restart_intent)
+          expect(Subscription::UpdaterService).not_to receive(:new)
+          before_counts = [Purchase.where(link: membership_product).count, Subscription.where(link: membership_product).count]
+
+          order, purchase_responses, _ = Order::CreateService.new(params: params_with_accepted_cross_sell, buyer:).perform
+
+          expect(purchase_responses["unique-id-0"]).to include(success: false, error_message: Purchase::CreateService.restart_not_requested_message(membership_product))
+          expect(order.purchases.map(&:link)).to eq([product_2])
+          expect([Purchase.where(link: membership_product).count, Subscription.where(link: membership_product).count]).to eq(before_counts)
+          expect(subscription.reload).not_to be_alive
+        end
+      end
+
+      context "when the restart intent has expired" do
+        let(:expired_restart_intent) do
+          travel_to((Checkout::RestartIntentToken::TTL + 1.minute).ago) { Checkout::RestartIntentToken.issue(product: membership_product, buyer:) }
+        end
+
+        it "refuses with a link to the product page and charges nothing for the membership, then restarts from a fresh arrival" do
+          updater_service = instance_double(Subscription::UpdaterService, perform: { success: true, success_message: "Membership restarted" })
+          allow(Subscription::UpdaterService).to receive(:new).and_return(updater_service)
+          params_with_membership[:line_items].first[:restart_intent] = expired_restart_intent
+
+          order, purchase_responses, _ = Order::CreateService.new(params: params_with_membership, buyer:).perform
+
+          message = purchase_responses["unique-id-0"][:error_message]
+          expect(purchase_responses["unique-id-0"]).to include(success: false)
+          expect(message).to eq(Purchase::CreateService.restart_not_requested_message(membership_product))
+          expect(Capybara.string(message).find_link("product page")[:href]).to eq(membership_product.long_url)
+          expect(order.purchases.map(&:link)).to eq([product_2])
+          expect(Subscription::UpdaterService).not_to have_received(:new)
+          expect(subscription.reload).not_to be_alive
+
+          # Following that link and choosing the membership arrives at checkout with a freshly signed intent.
+          params_with_membership[:line_items].first[:restart_intent] = Checkout::RestartIntentToken.issue(product: membership_product, buyer:)
+
+          _, retry_responses, _ = Order::CreateService.new(params: params_with_membership, buyer:).perform
+
+          expect(retry_responses["unique-id-0"]).to include(success: true)
+          expect(Subscription::UpdaterService).to have_received(:new).once
+        end
+      end
+
+      context "when the membership line is a stale cart line with no restart intent" do
+        it "refuses the line and orders only the unrelated product, without restarting or re-buying the membership" do
+          expect(Subscription::UpdaterService).not_to receive(:new)
+
+          membership_purchases = -> { Purchase.where(link: membership_product).count }
+          membership_subscriptions = -> { Subscription.where(link: membership_product).count }
+          before_counts = [membership_purchases.call, membership_subscriptions.call]
+
+          order, purchase_responses, _ = Order::CreateService.new(params: params_with_stale_membership_line, buyer:).perform
+
+          expect(purchase_responses["unique-id-0"]).to include(
+            success: false,
+            error_message: Purchase::CreateService.restart_not_requested_message(membership_product)
+          )
+          expect(order.purchases.map(&:link)).to eq([product_2])
+          expect([membership_purchases.call, membership_subscriptions.call]).to eq(before_counts)
+
+          expect(subscription.reload).not_to be_alive
+          expect(subscription.deactivated_at).to be_present
+        end
+
+        %i[ended admin_cancelled].each do |state|
+          it "refuses a stale line for a #{state} membership and orders only the unrelated product" do
+            subscription.update!(cancelled_at: nil, cancelled_by_buyer: false, deactivated_at: 1.day.ago)
+            state == :ended ? subscription.update!(ended_at: 1.day.ago) : subscription.update!(cancelled_at: 1.day.ago, cancelled_by_admin: true)
+            expect(Subscription::UpdaterService).not_to receive(:new)
+            before_counts = [Purchase.where(link: membership_product).count, Subscription.where(link: membership_product).count]
+
+            order, purchase_responses, _ = Order::CreateService.new(params: params_with_stale_membership_line, buyer:).perform
+
+            expect(purchase_responses["unique-id-0"]).to include(success: false, error_message: Purchase::CreateService.restart_not_requested_message(membership_product))
+            expect(order.purchases.map(&:link)).to eq([product_2])
+            expect([Purchase.where(link: membership_product).count, Subscription.where(link: membership_product).count]).to eq(before_counts)
+          end
+        end
+
+        it "keeps the cart when only the stale line is submitted, so the buyer can remove it" do
+          cart = create(:cart, user: buyer, browser_guid:)
+          stale_only_params = params_with_stale_membership_line.deep_dup.tap { _1[:line_items].pop }
+
+          order, purchase_responses, _ = Order::CreateService.new(params: stale_only_params, buyer:).perform
+
+          expect(order).not_to be_persisted
+          expect(purchase_responses["unique-id-0"]).to include(success: false)
+          expect(cart.reload).not_to be_deleted
+          expect(subscription.reload).not_to be_alive
+        end
+
+        it "refuses a restart intent issued for a different product" do
+          other_membership = create(:membership_product, user: seller_1)
+          params_with_stale_membership_line[:line_items].first[:restart_intent] = Checkout::RestartIntentToken.issue(product: other_membership, buyer:)
+          expect(Subscription::UpdaterService).not_to receive(:new)
+
+          _, purchase_responses, _ = Order::CreateService.new(params: params_with_stale_membership_line, buyer:).perform
+
+          expect(purchase_responses["unique-id-0"]).to include(success: false)
+        end
+
+        it "refuses a restart intent issued before the subscription was cancelled" do
+          token = travel_to(2.days.ago) { Checkout::RestartIntentToken.issue(product: membership_product, buyer:) }
+          params_with_stale_membership_line[:line_items].first[:restart_intent] = token
+          expect(Subscription::UpdaterService).not_to receive(:new)
+
+          _, purchase_responses, _ = Order::CreateService.new(params: params_with_stale_membership_line, buyer:).perform
+
+          expect(purchase_responses["unique-id-0"]).to include(success: false)
+        end
+
+        it "lets the buyer pick a brand-new subscription explicitly with force_new_subscription" do
+          params_with_stale_membership_line[:line_items].first[:force_new_subscription] = true
+          expect(Subscription::UpdaterService).not_to receive(:new)
+
+          order, purchase_responses, _ = Order::CreateService.new(params: params_with_stale_membership_line, buyer:).perform
+
+          expect(purchase_responses["unique-id-0"]).not_to include(error_message: Purchase::CreateService.restart_not_requested_message(membership_product))
+          expect(order.purchases.map(&:link)).to match_array([membership_product, product_2])
+        end
+      end
+
       it "passes through SCA data when the restart requires card action" do
         merchant_account = create(:merchant_account_stripe_connect, user: membership_product.user)
 
@@ -1471,7 +1623,8 @@ describe Order::CreateService, :vcr do
               permalink: membership_product.unique_permalink,
               perceived_price_cents: membership_product.price_cents,
               quantity: 1,
-              price_id: membership_product.prices.alive.first.external_id
+              price_id: membership_product.prices.alive.first.external_id,
+              restart_intent:
             }
           ]
         }.merge(common_order_params_without_payment)

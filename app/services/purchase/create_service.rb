@@ -6,6 +6,13 @@ class Purchase::CreateService < Purchase::BaseService
   RESERVED_URL_PARAMETERS = %w[code wanted referrer email as_modal as_embed debug affiliate_id].freeze
   INVENTORY_LOCK_ACQUISITION_TIMEOUT = 50.seconds
 
+  # The checkout receipt renders line errors as HTML, so the link is built with an escaping helper.
+  # Opens in a new tab so the receipt for the rest of the order stays on screen.
+  def self.restart_not_requested_message(product)
+    link = ActionController::Base.helpers.link_to("product page", product.long_url, target: "_blank", rel: "noopener noreferrer")
+    "You weren't charged for this membership. To rejoin, visit its #{link}.".html_safe
+  end
+
   attr_reader :product, :params, :purchase_params, :gift_params, :buyer
   attr_accessor :purchase, :gift
 
@@ -16,6 +23,7 @@ class Purchase::CreateService < Purchase::BaseService
     @gift_params = params[:gift].presence
     @buyer = buyer
     @force_new_subscription = !!params[:force_new_subscription]
+    @restart_intent = params[:restart_intent]
   end
 
   def perform
@@ -366,7 +374,25 @@ class Purchase::CreateService < Purchase::BaseService
         end
       end
 
-      # Then check for restartable subscriptions
+      # Then check for lapsed subscriptions. Every deactivated one counts, not only restartable
+      # ones: an ended or admin-cancelled membership would otherwise fall through and charge a
+      # brand-new subscription from a stale cart line.
+      lapsed_subscription = (
+        buyer.present? ?
+          Subscription.lapsed_for_product_and_buyer(product:, buyer:) :
+          Subscription.lapsed_for_product_and_email(product:, email: purchase_params[:email])
+      ).order(:deactivated_at, :id).last
+      return nil unless lapsed_subscription.present?
+
+      # Skipping the restart is not enough: the line would fall through and buy a second
+      # subscription at today's price, so the line is refused before anything is charged.
+      unless Checkout::RestartIntentToken.restart_intended?(@restart_intent, product:, buyer:, lapsed_at: lapsed_subscription.deactivated_at)
+        Rails.logger.info(
+          "Refused cart checkout of lapsed membership: subscription_id=#{lapsed_subscription.id} product_id=#{product.id}"
+        )
+        return nil, self.class.restart_not_requested_message(product)
+      end
+
       restartable_subscription = buyer.present? ?
         Subscription.restartable_for_product_and_buyer(product:, buyer:) :
         Subscription.restartable_for_product_and_email(product:, email: purchase_params[:email])

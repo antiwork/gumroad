@@ -180,6 +180,22 @@ describe("computeInitialCheckout", () => {
       ]);
     });
 
+    it("contract only (passes without the feature): gives the replaced saved line the arriving restart intent and leaves other saved lines without one", () => {
+      const savedMembership = membership("rocket", "monthly");
+      const otherSavedLine = makeProductToAdd({ permalink: "pack", creatorId: "seller-1" });
+      const cart = computeInitialCheckout(makeArgs([savedMembership, otherSavedLine])).cart;
+      expect(cart.items.map((i) => i.restart_intent)).toEqual([undefined, undefined]);
+
+      const result = computeInitialCheckout(
+        makeArgs([{ ...membership("moon", "yearly"), restart_intent: "signed-intent" }], { cart }),
+      );
+
+      expect(result.cart.items.map((i) => [i.product.permalink, i.restart_intent])).toEqual([
+        ["space", "signed-intent"],
+        ["pack", undefined],
+      ]);
+    });
+
     it("keeps separate lines for different options of a non-recurring product", () => {
       const cart = cartHolding(makeProductToAdd({ permalink: "pack", creatorId: "seller-1", optionId: "small" }));
 

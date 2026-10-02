@@ -220,6 +220,22 @@ describe("startOrderCreation", () => {
     );
   });
 
+  it("sends a line's restart intent and omits the field for a saved line without one", async () => {
+    vi.stubGlobal("Routes", { orders_path: () => "/orders" });
+    requestMock
+      .mockReset()
+      .mockImplementation(() => Promise.resolve(jsonResponse({ success: false, error_message: "Try again." })));
+    const lineItem = requestData.lineItems.at(0);
+    if (!lineItem) throw new Error("Missing test line item");
+
+    await startOrderCreation({ ...requestData, lineItems: [{ ...lineItem, restartIntent: "signed-intent" }] });
+    await startOrderCreation({ ...requestData, lineItems: [lineItem] });
+
+    const [arrived, saved] = requestMock.mock.calls.map(([options]) => options.data);
+    expect(arrived).toMatchObject({ line_items: [{ restart_intent: "signed-intent" }] });
+    expect(JSON.stringify(saved)).not.toContain("restart_intent");
+  });
+
   it("preserves active codes when order creation fails before line results", async () => {
     vi.stubGlobal("Routes", { orders_path: () => "/orders" });
     requestMock.mockReset().mockResolvedValueOnce(jsonResponse({ success: false, error_message: "Try again." }));

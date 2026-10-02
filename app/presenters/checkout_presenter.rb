@@ -105,7 +105,10 @@ class CheckoutPresenter
     }
   end
 
-  def checkout_product(product, cart_item, params, include_cross_sells: true)
+  # `arrival` marks a product the buyer is adding to the cart right now, by arriving at checkout or by
+  # accepting a cross-sell (as opposed to one read back from the saved cart); only an arrival can carry
+  # proof that they want a cancelled membership restarted.
+  def checkout_product(product, cart_item, params, include_cross_sells: true, arrival: false)
     return unless product.present?
     upsell_variants = product.available_upsell_variants.alive.includes(:selected_variant, :offered_variant)
     bundle_products = product.bundle_products.in_order.includes(:product, :variant).alive.load
@@ -186,6 +189,7 @@ class CheckoutPresenter
       recommender_model_name: params[:recommender_model_name],
       accepted_offer: accepted_offer ? { id: accepted_offer.external_id, variant_id: accepted_offer&.variant&.external_id, discount: accepted_offer.offer_code&.discount_for_display(buyer: logged_in_user, product: accepted_offer.product) } : nil,
     }
+    value[:restart_intent] = Checkout::RestartIntentToken.issue(product:, buyer: logged_in_user) if arrival && product.is_recurring_billing
     if include_cross_sells
       selected_option_name = value[:product][:options].find { |option| option[:id] == option_id }&.[](:name)
       value[:product][:cross_sells] = product.available_cross_sells.filter_map do |cross_sell|
@@ -210,7 +214,7 @@ class CheckoutPresenter
           replace_selected_products: cross_sell.replace_selected_products,
           text: cross_sell.text.to_s,
           description: Rinku.auto_link(sanitize(cross_sell.description).to_s, :all, 'target="_blank" rel="noopener"'),
-          offered_product: checkout_product(offered_product, offered_product_cart_item, {}, include_cross_sells: false),
+          offered_product: checkout_product(offered_product, offered_product_cart_item, {}, include_cross_sells: false, arrival: true),
           discount: cross_sell.offer_code&.discount_for_display(buyer: logged_in_user, product: cross_sell.product),
           ratings: offered_product.display_product_reviews? ? {
             count: offered_product.reviews_count,
@@ -338,7 +342,7 @@ class CheckoutPresenter
       product = single_product(params, user:)
       cart_item = product.cart_item(params) if product
       {
-        add_products: [checkout_product(product, cart_item, params)].compact
+        add_products: [checkout_product(product, cart_item, params, arrival: true)].compact
       }
     end
 
@@ -378,6 +382,7 @@ class CheckoutPresenter
         wishlist_product.product,
         cart_item,
         params.reverse_merge(recommended_by: RecommendationType::WISHLIST_RECOMMENDATION),
+        arrival: true,
       )
     end
 

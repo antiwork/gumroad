@@ -28,6 +28,27 @@ module Subscription::Restartable
       .first
   end
 
+  # Every deactivated subscription the buyer holds for the product, including the ones
+  # `restartable_for_*` skips (ended, cancelled by an admin).
+  def lapsed_for_product_and_buyer(product:, buyer:)
+    return none unless product.is_recurring_billing
+
+    where(link_id: product.id)
+      .where(user_id: buyer.id)
+      .where.not(deactivated_at: nil)
+      .not_is_test_subscription
+  end
+
+  def lapsed_for_product_and_email(product:, email:)
+    return none unless product.is_recurring_billing
+
+    where(link_id: product.id)
+      .joins(:original_purchase)
+      .where(purchases: { email: email.to_s.downcase.strip })
+      .where.not(deactivated_at: nil)
+      .not_is_test_subscription
+  end
+
   def active_for_product_and_buyer(product:, buyer:)
     return nil unless product.is_recurring_billing
 

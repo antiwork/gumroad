@@ -83,6 +83,7 @@ export type PurchaseLineItemPayload = {
   isPppDiscounted: boolean;
   acceptsPppDiscount?: boolean;
   forceNewSubscription: boolean;
+  restartIntent?: string | null;
   // Set once the buyer has explicitly confirmed a same-product repeat charge that
   // Purchase#not_double_charged flagged — see confirmedDuplicatePurchaseUidsRef in Checkout/Show.tsx.
   confirmedDuplicatePurchase: boolean;
@@ -309,6 +310,7 @@ export const createPurchasesRequestData = (
       is_purchasing_power_parity_discounted: lineItem.isPppDiscounted,
       accepts_purchasing_power_parity_discount: lineItem.acceptsPppDiscount,
       force_new_subscription: lineItem.forceNewSubscription || false,
+      restart_intent: lineItem.restartIntent ?? undefined,
       confirmed_duplicate_purchase: lineItem.confirmedDuplicatePurchase,
       custom_fields: lineItem.customFields,
     })),
