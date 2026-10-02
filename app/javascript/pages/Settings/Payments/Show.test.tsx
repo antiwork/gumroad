@@ -651,6 +651,50 @@ describe("server error naming a field", () => {
   });
 });
 
+describe("Bangladesh bank code validation", () => {
+  const beftnError = "Enter your bank's 9-digit BEFTN routing number, digits only.";
+
+  const renderBangladeshSeller = (bank_code: string, account_number: string) => {
+    mocks.usePage.mockReturnValue({
+      props: {
+        ...pageProps({ country_code: "BD", payout_currency: "bdt" }, { country: "BD" }),
+        countries: { BD: "Bangladesh" },
+        bank_account_details: {
+          show_bank_account: true,
+          show_paypal: false,
+          is_a_card: false,
+          routing_number: null,
+          account_number_visual: null,
+          card: null,
+          card_data_handling_mode: null,
+          bank_account: null,
+        },
+      },
+    });
+    render(<PaymentsPage />);
+    fireEvent.change(screen.getByLabelText("Bank code"), { target: { value: bank_code } });
+    fireEvent.change(screen.getByLabelText("Account #"), { target: { value: account_number } });
+    save();
+  };
+
+  it("rejects a lettered bank code with the BEFTN message", () => {
+    renderBangladeshSeller("SWIFTCODE1", "1234567890123");
+
+    expect(mocks.put).not.toHaveBeenCalled();
+    expect(screen.getAllByText(beftnError).length).toBeGreaterThan(0);
+  });
+
+  // The account-number format check runs after the bank-code one, so it must not displace the
+  // reason the banner and the scroll-to-first-invalid-field are pointing at.
+  it("keeps the BEFTN message when the account number is also invalid", () => {
+    renderBangladeshSeller("SWIFTCODE1", "123");
+
+    expect(mocks.put).not.toHaveBeenCalled();
+    expect(screen.getAllByText(beftnError).length).toBeGreaterThan(0);
+    expect(screen.queryByText("Enter your 13 to 17 character account number")).toBeNull();
+  });
+});
+
 describe("switching to PayPal where the bank rail cannot be re-created", () => {
   // An India seller with a live bank account: the save deletes it and Stripe refuses a new IND
   // account, so the confirmation must fire even with nothing forfeitable.

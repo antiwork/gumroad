@@ -27,6 +27,27 @@ describe BangladeshBankAccount do
     end
   end
 
+  describe "#validate_bank_code" do
+    it "accepts a 9-digit routing number" do
+      expect(build(:bangladesh_bank_account, bank_number: "060263429")).to be_valid
+    end
+
+    it "rejects SWIFT codes and wrong lengths" do
+      ["BRAKBDDHX", "BRAKBDDH", "0602634291", "06026342"].each do |code|
+        ba = build(:bangladesh_bank_account, bank_number: code)
+        expect(ba).not_to be_valid
+        expect(ba.errors.full_messages.to_sentence).to include("9-digit BEFTN routing number")
+      end
+    end
+
+    it "does not revalidate a legacy bank code on unrelated saves" do
+      ba = create(:bangladesh_bank_account)
+      ba.update_column(:bank_number, "BRAKBDDHX")
+      ba.reload.account_number_last_four = "1234"
+      expect(ba).to be_valid
+    end
+  end
+
   describe "#account_number_visual" do
     it "returns the visual account number" do
       expect(create(:bangladesh_bank_account, account_number_last_four: "6789").account_number_visual).to eq("******6789")
