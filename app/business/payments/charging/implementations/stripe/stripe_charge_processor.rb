@@ -1217,11 +1217,14 @@ class StripeChargeProcessor
     end
   end
 
+  # Returns the evidence fields left out of the submission (see customer_communication_stripe_file).
   def fight_chargeback(stripe_charge_id, dispute_evidence, merchant_account: nil)
-    return if merchant_migrated? merchant_account
+    return [] if merchant_migrated? merchant_account
 
+    omitted_fields = []
     with_stripe_error_handler do
       charge = Stripe::Charge.retrieve(stripe_charge_id)
+      customer_communication = customer_communication_stripe_file(dispute_evidence, omitted_fields)
 
       evidence = {
         billing_address: dispute_evidence.billing_address,
@@ -1246,21 +1249,26 @@ class StripeChargeProcessor
         refund_policy_disclosure: dispute_evidence.refund_policy_disclosure,
         cancellation_rebuttal: dispute_evidence.cancellation_rebuttal,
         refund_refusal_explanation: dispute_evidence.refund_refusal_explanation,
-        customer_communication: create_dispute_evidence_stripe_file(dispute_evidence.customer_communication_file),
+        customer_communication:,
       }
 
-      # A dispute accepts evidence once (gumroad-private#1612) and FightDisputeJob has five Sidekiq
-      # retries, so a network failure on a call that actually landed would otherwise spend the
-      # submission a second time. The key must be IMMUTABLE for that to work: anything derived from
-      # the payload or from `updated_at` changes between attempts — the payload because
-      # create_dispute_evidence_stripe_file re-uploads and returns a fresh Stripe file id on every
-      # call, `updated_at` because the seller writes their statement into the same row. One evidence
-      # row is one permitted submission (the job returns early once the row is resolved), so the
-      # row's own identity is the whole key.
+      # Every attempt re-uploads the files and gets fresh Stripe file ids (Stripe does not dedupe
+      # file uploads by idempotency key), so the key must cover them: a fixed key with new ids is
+      # rejected as reused with different parameters. Stripe itself refuses a second submission,
+      # which FightDisputeJob treats as already submitted.
+      file_ids = evidence.values_at(:receipt, :cancellation_policy, :refund_policy, :customer_communication).compact
       idempotency_key = "dispute_evidence_#{dispute_evidence.external_id}"
+      idempotency_key += "_#{Digest::SHA256.hexdigest(file_ids.join(","))[0, 32]}" if file_ids.any?
 
       Stripe::Dispute.update(charge.dispute, { evidence: }, { idempotency_key: })
+      omitted_fields
     end
+  rescue ChargeProcessorInvalidRequestError => e
+    # A retry whose earlier submission landed gets "maximum number of evidence submissions";
+    # the oversized file fails the same way on every attempt, so this attempt's omissions are
+    # what was sent, and FightDisputeJob still has to tell the seller.
+    e.omitted_evidence_fields = omitted_fields
+    raise
   end
 
   def holder_of_funds(merchant_account)
@@ -1885,6 +1893,20 @@ class StripeChargeProcessor
       ensure
         file.close!
       end
+    end
+
+    STRIPE_FILE_PAGE_LIMIT_ERROR = /fewer than \d+ pages/
+
+    # A seller file over Stripe's page limit fails its upload with a 400 that no retry can fix, and
+    # one failed field must not throw away the receipt and access log we generated ourselves.
+    def customer_communication_stripe_file(dispute_evidence, omitted_fields)
+      create_dispute_evidence_stripe_file(dispute_evidence.customer_communication_file)
+    rescue Stripe::InvalidRequestError => e
+      raise unless e.param == "file" && e.message.match?(STRIPE_FILE_PAGE_LIMIT_ERROR)
+
+      ErrorNotifier.notify("Dispute evidence submitted without customer_communication (dispute_evidence_id=#{dispute_evidence.id}): #{e.message}")
+      omitted_fields << :customer_communication
+      nil
     end
 
     # UPI exposes no reusable Mandate id; Stripe selects it from the Customer + PaymentMethod.

@@ -45,6 +45,7 @@ class DisputeEvidence < ApplicationRecord
   # outlive the deadline it quotes — and must, or a late click gets a 404 instead of the explanation.
   EVIDENCE_LINK_GRACE_PERIOD = 30.days
   STRIPE_MAX_COMBINED_FILE_SIZE = 5_000_000.bytes
+  STRIPE_MAX_FILE_PAGES = 50
   MINIMUM_RECOMMENDED_CUSTOMER_COMMUNICATION_FILE_SIZE = 1_000_000.bytes
   # Bounds the inline merge work in Purchases::DisputeEvidenceController#update; Stripe still
   # receives a single merged customer_communication_file.

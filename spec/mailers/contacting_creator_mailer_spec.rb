@@ -2307,6 +2307,21 @@ describe ContactingCreatorMailer do
     end
   end
 
+  describe "chargeback_evidence_file_omitted" do
+    let!(:seller) { create(:user) }
+    let!(:purchase) { create(:purchase, seller:, link: create(:product, user: seller)) }
+    let!(:dispute) { create(:dispute, purchase:) }
+
+    it "tells the seller what was sent and why their file was left out" do
+      mail = ContactingCreatorMailer.chargeback_evidence_file_omitted(dispute.id)
+
+      expect(mail.to).to eq [seller.form_email]
+      expect(mail.subject).to eq "Your dispute response was sent without your attached file"
+      expect(mail.body.encoded).to include "We have sent our response to the dispute on #{purchase.email}'s purchase of #{purchase.link.name} for #{purchase.formatted_disputed_amount}."
+      expect(mail.body.encoded).to include "only accepts files of up to 50 pages"
+    end
+  end
+
   describe "preorder_summary" do
     before do
       @product = create(:product, price_cents: 600, is_in_preorder_state: false)
