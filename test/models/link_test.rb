@@ -1942,8 +1942,13 @@ class LinkTest < ActiveSupport::TestCase
     assert_equal "I like pie. Do you?", create_product(description: "I like <strong><u>pie</u></strong>. Do you?").plaintext_description
   end
 
-  test "plaintext_description encodes lone angle brackets" do
-    assert_equal "some &lt; text &gt;", create_product(description: "some < text >").plaintext_description
+  test "plaintext_description separates block elements" do
+    assert_equal "What you get A 25-page guide", create_product(description: "<h2>What you get</h2><p>A 25-page guide</p>").plaintext_description
+  end
+
+  test "plaintext_description leaves lone angle brackets literal" do
+    # Text comes back decoded; each caller escapes it for the context it renders in.
+    assert_equal "some < text >", create_product(description: "some < text >").plaintext_description
   end
 
   test "plaintext_description does not encode apostrophes" do

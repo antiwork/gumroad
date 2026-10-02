@@ -111,11 +111,8 @@ class MerchantCenterFeedService
       end
     end
 
-    # plaintext_description strips tags but leaves HTML entities encoded ("Fish &amp;
-    # Chips"); decode them so Builder's XML escaping is the only encoding layer —
-    # otherwise Google renders the literal "&amp;".
     def feed_description(product)
-      CGI.unescapeHTML(product.plaintext_description).truncate(MAX_DESCRIPTION_LENGTH)
+      product.plaintext_description.truncate(MAX_DESCRIPTION_LENGTH)
     end
 
     def feed_title(product)

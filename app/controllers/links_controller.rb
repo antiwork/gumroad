@@ -2342,12 +2342,10 @@ class LinksController < ApplicationController
       # descriptions like "<p><br></p>" — present as raw HTML but empty once
       # stripped to text — still fall back instead of emitting empty tags.
       description = product.plaintext_description.presence || "Available on Gumroad"
-      # plaintext_description comes back from the Rails sanitizer, which strips
-      # tags and entity-encodes &/</> for text context but does NOT escape
-      # double quotes — and ERB::Util.h passes html_safe strings through
-      # untouched. Escape quotes explicitly so a description containing `"`
-      # can't break out of the meta tag's attribute value.
-      description_attr = description.gsub('"', "&quot;")
+      # plaintext_description returns decoded text with no HTML escaping, and this wrapper
+      # interpolates it into an attribute and into the document body below, so escape it here
+      # (ERB::Util.h covers quotes as well as &/</>).
+      escaped_description = ERB::Util.h(description)
       structured_data = product.structured_data(host: custom_domain_host_for_meta(product))
       # json_escape keeps the JSON valid while escaping <, >, & so a
       # description containing "</script>" can't break out of the script tag.
@@ -2377,9 +2375,9 @@ class LinksController < ApplicationController
             <meta name="viewport" content="width=device-width, initial-scale=1">
             <title>#{title}</title>
             <link rel="canonical" href="#{canonical}">
-            <meta name="description" content="#{description_attr}">
+            <meta name="description" content="#{escaped_description}">
             <meta property="og:title" content="#{title}">
-            <meta property="og:description" content="#{description_attr}">
+            <meta property="og:description" content="#{escaped_description}">
             <meta property="og:type" content="product">
             <meta property="og:url" content="#{canonical}">
             #{share_image_tags}
@@ -2391,7 +2389,7 @@ class LinksController < ApplicationController
           <body>
             <div class="seo-summary">
               <h1>#{title}</h1>
-              <p>#{description}</p>
+              <p>#{escaped_description}</p>
             </div>
             <iframe
               id="gumroad-landing-frame"
