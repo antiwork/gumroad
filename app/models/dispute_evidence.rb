@@ -45,6 +45,8 @@ class DisputeEvidence < ApplicationRecord
   # outlive the deadline it quotes — and must, or a late click gets a 404 instead of the explanation.
   EVIDENCE_LINK_GRACE_PERIOD = 30.days
   STRIPE_MAX_COMBINED_FILE_SIZE = 5_000_000.bytes
+  # Stripe rejects the whole evidence update when any attached PDF is longer than this.
+  STRIPE_MAX_FILE_PAGES = 50
   MINIMUM_RECOMMENDED_CUSTOMER_COMMUNICATION_FILE_SIZE = 1_000_000.bytes
   # Bounds the inline merge work in Purchases::DisputeEvidenceController#update; Stripe still
   # receives a single merged customer_communication_file.
@@ -66,6 +68,21 @@ class DisputeEvidence < ApplicationRecord
   validate :customer_communication_file_size
   validate :customer_communication_file_type
   validate :all_files_size_within_limit
+
+  # Page count of a stored blob, or nil when it is not a PDF, its file is missing from storage, or
+  # qpdf cannot read it. A nil count lets the upload continue and the later steps handle the file.
+  def self.pdf_page_count(blob)
+    return unless blob.content_type == "application/pdf"
+
+    blob.open { |file| pdf_page_count_at(file.path) }
+  rescue ActiveStorage::FileNotFoundError
+    nil
+  end
+
+  def self.pdf_page_count_at(path)
+    stdout, _stderr, status = Open3.capture3("qpdf", "--show-npages", path)
+    stdout.to_i if PdfStampingService::Stamp::QPDF_SUCCESS_EXIT_CODES.include?(status.exitstatus)
+  end
 
   def policy_disclosure=(value)
     policy_disclosure_attribute = for_subscription_purchase? ? :cancellation_policy_disclosure : :refund_policy_disclosure

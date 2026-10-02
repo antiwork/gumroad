@@ -61,6 +61,7 @@ class Purchases::DisputeEvidenceController < ApplicationController
     )
 
     if input_blobs.one? && !@dispute_evidence.customer_communication_file.attached?
+      DisputeEvidence::MergeCustomerCommunicationFilesService.ensure_within_page_limit!(input_blobs.first)
       attached_blob = covert_and_optimize_blob_if_needed(input_blobs.first)
       @dispute_evidence.customer_communication_file.attach(attached_blob)
     elsif input_blobs.any?

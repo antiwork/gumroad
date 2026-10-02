@@ -9,6 +9,7 @@
 class DisputeEvidence::MergeCustomerCommunicationFilesService
   class MergeError < StandardError; end
   class FilesTooLargeError < MergeError; end
+  class TooManyPagesError < MergeError; end
 
   MERGED_FILENAME = "customer_communication.pdf"
   IMAGE_CONTENT_TYPES = %w[image/jpeg image/png].freeze
@@ -27,10 +28,23 @@ class DisputeEvidence::MergeCustomerCommunicationFilesService
   FILE_TOO_LARGE_MESSAGE = "One of the uploaded files exceeds the maximum size allowed."
   FILES_TOO_LARGE_MESSAGE = "The combined size of the uploaded files exceeds the maximum allowed, even after compression. Please remove a file or upload smaller versions."
   UNPROCESSABLE_FILE_MESSAGE = "One of the uploaded files could not be processed. Please check that every PDF opens correctly and is not password-protected."
+  TOO_MANY_PAGES_MESSAGE = "The uploaded files have %{count} pages, but at most #{DisputeEvidence::STRIPE_MAX_FILE_PAGES} pages can be submitted. Please remove some pages or upload fewer files."
   UNSUPPORTED_FILE_TYPE_MESSAGE = "One of the uploaded files is not a JPG, PNG, or PDF."
 
   def self.perform(blobs:, max_size:)
     new(blobs:, max_size:).perform
+  end
+
+  # Stripe rejects the whole evidence update for a PDF over the page limit, so a file that
+  # skips the merge (a single upload) is checked here before it is attached.
+  def self.ensure_within_page_limit!(blob)
+    ensure_page_count_within_limit!(DisputeEvidence.pdf_page_count(blob))
+  end
+
+  def self.ensure_page_count_within_limit!(page_count)
+    return if page_count.nil? || page_count <= DisputeEvidence::STRIPE_MAX_FILE_PAGES
+
+    raise TooManyPagesError, format(TOO_MANY_PAGES_MESSAGE, count: page_count)
   end
 
   def initialize(blobs:, max_size:)
@@ -53,6 +67,7 @@ class DisputeEvidence::MergeCustomerCommunicationFilesService
 
     downloaded_files = download_blobs
     merged_path = merge_within_size_budget(downloaded_files)
+    self.class.ensure_page_count_within_limit!(DisputeEvidence.pdf_page_count_at(merged_path))
 
     File.open(merged_path) do |file|
       ActiveStorage::Blob.create_and_upload!(io: file, filename: MERGED_FILENAME, content_type: "application/pdf")

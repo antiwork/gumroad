@@ -240,6 +240,22 @@ describe("Dispute evidence page", type: :system, js: true) do
       expect((first_page_media_box[2] - first_page_media_box[0]).round).to eq(1006)
     end
 
+    it "tells the seller a PDF over Stripe's page limit cannot be used and saves nothing" do
+      visit purchase_dispute_evidence_path(evidence_token)
+
+      pdf_path = create_pdf_path(DisputeEvidence::STRIPE_MAX_FILE_PAGES + 13)
+      page.attach_file(pdf_path) do
+        click_on "Upload customer communication"
+      end
+      wait_for_ajax
+      expect(page).to have_selector("[role=listitem] h4", text: File.basename(pdf_path))
+      submit_and_confirm
+
+      expect(page).to have_alert(text: "The uploaded files have 63 pages, but at most 50 pages can be submitted.")
+      expect(dispute_evidence.reload.customer_communication_file.attached?).to be(false)
+      expect(dispute_evidence.seller_submitted?).to be(false)
+    end
+
     it "allows the user to delete an uploaded file" do
       visit purchase_dispute_evidence_path(evidence_token)
 

@@ -675,4 +675,23 @@ describe DisputeEvidence do
       expect(dispute_evidence.for_subscription_purchase?).to be true
     end
   end
+
+  describe ".pdf_page_count" do
+    it "counts the pages of a stored PDF" do
+      expect(described_class.pdf_page_count(create_pdf_blob(3))).to eq(3)
+    end
+
+    it "returns nil for a file that is not a PDF" do
+      blob = ActiveStorage::Blob.create_and_upload!(io: File.open(file_fixture("smilie.png")), filename: "smilie.png", content_type: "image/png")
+
+      expect(described_class.pdf_page_count(blob)).to be_nil
+    end
+
+    it "returns nil when the PDF is missing from storage" do
+      blob = create_pdf_blob(3)
+      allow(blob).to receive(:open).and_raise(ActiveStorage::FileNotFoundError)
+
+      expect(described_class.pdf_page_count(blob)).to be_nil
+    end
+  end
 end
