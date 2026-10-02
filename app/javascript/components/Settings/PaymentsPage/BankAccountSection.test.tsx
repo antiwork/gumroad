@@ -240,6 +240,7 @@ describe("BankAccountSection Bolivia bank code", () => {
     const field = screen.getByLabelText<HTMLInputElement>("Bank code");
     expect(field.maxLength).toBe(3);
     expect(/\d{3}/u.test(field.placeholder)).toBe(false);
+    expect(field.placeholder.toLowerCase()).not.toContain("asfi");
     expect(screen.getByText(/Contact Gumroad support/u)).toBeTruthy();
     expect(screen.queryByText(/ASFI/u)).toBeNull();
   });
