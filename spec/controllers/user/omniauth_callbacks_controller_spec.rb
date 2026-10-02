@@ -959,5 +959,11 @@ describe User::OmniauthCallbacksController do
       expect(response).to redirect_to settings_social_connections_path
       expect(flash[:alert]).to eq "Couldn't connect X. Please try again."
     end
+
+    it "redirects a request with no OAuth strategy to login" do
+      get :failure
+
+      expect(response).to redirect_to login_path
+    end
   end
 end
