@@ -471,6 +471,17 @@ describe MerchantCenterFeedService do
       expect(queries.grep(/FROM `purchases`/)).to be_empty
     end
 
+    it "does not look up sales for a product whose oEmbed preview has no thumbnail" do
+      product = create(:product, :recommendable, price_cents: 999)
+      preview = create(:asset_preview_youtube, link: product)
+      preview.oembed["info"].delete("thumbnail_url")
+      preview.save!
+
+      queries = sql_during { expect(service.generate).to eq 0 }
+
+      expect(queries.grep(/FROM `purchases`/)).to be_empty
+    end
+
     it "does not resolve the cover image of a product that fails the Discover checks" do
       product = create(:product, price_cents: 999)
       create(:asset_preview, link: product)

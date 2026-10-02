@@ -122,16 +122,24 @@ class MerchantCenterFeedService
     # (social_share_image is the cover image, an oEmbed THUMBNAIL, or a video poster —
     # never the oEmbed iframe URL, which Merchant Center rejects for g:image_link).
     # The checks before recommendable? need no database query, so the rows they reject skip
-    # its purchase and payout lookups. social_share_image goes after it: a video cover can
-    # query and enqueue poster generation, and every branch of it needs main_preview.
+    # its purchase and payout lookups. social_share_image goes after it: for a video cover it
+    # can query and enqueue poster generation.
     def eligible?(product)
       product.price_cents.to_i.positive? &&
         !product.user.suspended? &&
-        product.main_preview.present? &&
+        cover_image_possible?(product) &&
         usd_price_cents(product).to_i.positive? &&
         !product.rated_as_adult? &&
         product.recommendable? &&
         product.social_share_image.present?
+    end
+
+    # Necessary for social_share_image, from preloaded data only: its image, oEmbed thumbnail
+    # and video poster branches. A video cover stays possible until its poster is looked up.
+    def cover_image_possible?(product)
+      product.preview_image_path? ||
+        product.preview_oembed_thumbnail_url.present? ||
+        product.preview_video_path?
     end
 
     # The block receives an emit callable for each eligible product.
