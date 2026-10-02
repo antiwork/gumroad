@@ -95,6 +95,9 @@ class User
       country_code = alive_user_compliance_info&.legal_entity_country_code
       return false if country_code.blank?
 
+      # US outlying areas have no PayPal country of their own; residents register under the US.
+      country_code = "US" if ::Compliance::Countries::US_OUTLYING_AREA_ALPHA2.include?(country_code)
+
       !native_payouts_supported? &&
         PaypalPayoutProcessor::PAYOUT_RECEIVING_COUNTRY_CODES.exclude?(country_code)
     end
