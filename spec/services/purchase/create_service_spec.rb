@@ -3200,6 +3200,21 @@ describe Purchase::CreateService, :vcr do
       expect(gift.giftee_purchase.purchaser_id).to eq user.id
     end
 
+    it "leaves the giftee purchase unattached until the account with giftee email is confirmed" do
+      user = create(:unconfirmed_user, email: gift_params[:gift][:giftee_email])
+
+      purchase, _ = Purchase::CreateService.new(product:, params: gift_params).perform
+
+      giftee_purchase = purchase.gift_given.giftee_purchase
+      expect(giftee_purchase.gift_receiver_purchase_successful?).to be true
+      expect(giftee_purchase.purchaser_id).to be_nil
+
+      user.confirm
+      AttachPastPurchasesToUserWorker.drain
+
+      expect(giftee_purchase.reload.purchaser_id).to eq user.id
+    end
+
     it "creates a giftee and a gifter purchase successfully if user with giftee email doesn't exist" do
       purchase, _ = Purchase::CreateService.new(product:, params: gift_params).perform
 

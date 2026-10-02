@@ -619,7 +619,13 @@ class Purchase::CreateService < Purchase::BaseService
     end
 
     def giftee_purchaser
-      @_giftee_purchaser ||= gift_params[:giftee_id].present? ? User.alive.find_by_external_id(gift_params[:giftee_id]) : User.alive.by_email(gift_params[:giftee_email]).last
+      @_giftee_purchaser ||= if gift_params[:giftee_id].present?
+        User.alive.find_by_external_id(gift_params[:giftee_id])
+      else
+        # Same rule as set_purchaser_for: an unconfirmed account may not own the address.
+        user = User.alive.by_email(gift_params[:giftee_email]).last
+        user if user&.confirmed?
+      end
     end
 
     def giftee_email
