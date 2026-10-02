@@ -59,7 +59,7 @@ const sortTitles = {
 
 const ProductsCarousel = ({ products, title }: { products: CardProduct[]; title: string }) => {
   const [active, setActive] = React.useState(0);
-  const { itemsRef, handleScroll } = useScrollableCarousel(active, setActive);
+  const { itemsRef, handleScroll, getPreviousIndex } = useScrollableCarousel(active, setActive);
   const [dragStart, setDragStart] = React.useState<number | null>(null);
 
   return (
@@ -67,10 +67,7 @@ const ProductsCarousel = ({ products, title }: { products: CardProduct[]; title:
       <header className="flex items-center justify-between">
         <h2>{title}</h2>
         <div className="flex items-center gap-2">
-          <button
-            className="cursor-pointer all-unset"
-            onClick={() => setActive((active + products.length - 1) % products.length)}
-          >
+          <button className="cursor-pointer all-unset" onClick={() => setActive(getPreviousIndex(products.length))}>
             <ArrowLeft className="size-6" />
           </button>
           {active + 1} / {products.length}
