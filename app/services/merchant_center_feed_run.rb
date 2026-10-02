@@ -1,18 +1,14 @@
 # frozen_string_literal: true
 
-# One daily Merchant Center feed run: the legacy feed.xml, then any id-range shards the stage
-# allows. Shards are published only up to the highest index in
-# RedisKey.merchant_center_feed_max_shard, which is unset by default, so a run writes exactly
-# what it wrote before shards existed. Nothing here registers a shard with Merchant Center.
-#
-# Stop it with Feature :disable_merchant_center_feed. The run checks before each file and after
-# each batch of rows, so it stops within seconds and publishes no half-built file.
+# One daily run: the legacy feed.xml, then the id-range shards up to
+# RedisKey.merchant_center_feed_max_shard. Unset, it writes only feed.xml, as before shards.
+# Nothing here registers a shard with Merchant Center.
 class MerchantCenterFeedRun
   LEGACY_UNIT = "legacy"
   KILL_SWITCH = :disable_merchant_center_feed
-  # Renewed after every batch. Short, so a run that dies frees the feed for its Sidekiq retry.
+  # Short, so a run that dies frees the feed for its Sidekiq retry.
   LOCK_TTL = 15.minutes.to_i
-  # Refreshed whenever a unit finishes: a run abandoned for longer than this starts over.
+  # A run abandoned for longer than this starts over instead of resuming.
   PROGRESS_TTL = 12.hours.to_i
   LOCK_SCRIPT_RELEASE = <<~LUA
     if redis.call("GET", KEYS[1]) == ARGV[1] then
@@ -27,14 +23,13 @@ class MerchantCenterFeedRun
     return 0
   LUA
 
-  # Another run holds the lock. The worker tries again later, once that run has finished or its lock has expired.
+  # The worker retries later.
   class GenerationInProgress < StandardError; end
-  # This run's lock expired or was taken over, so another run may be writing. Stop without publishing.
+  # Another run may be writing, so this one must stop without publishing.
   class LockLost < StandardError; end
   class KillSwitchEngaged < StandardError; end
   private_constant :KillSwitchEngaged
 
-  # Returns :completed or :stopped (kill switch).
   def call(max_products: MerchantCenterFeedService::DEFAULT_MAX_PRODUCTS)
     return stopped if kill_switch?
 
@@ -57,13 +52,16 @@ class MerchantCenterFeedRun
       units = [LEGACY_UNIT, *shard_indexes.map { |index| shard_unit(index) }]
       finished = $redis.hkeys(RedisKey.merchant_center_feed_progress)
       finished = [] if (units - finished).empty?
-      service = MerchantCenterFeedService.new(on_batch: -> { check_in(token) })
+      service = MerchantCenterFeedService.new(on_batch: -> { check_in(token) }, on_upload: -> { renew_lock(token) })
 
       units.each do |unit|
         next if finished.include?(unit)
 
         check_in(token)
         publish_unit(service, unit, max_products)
+        # Before marking: a run that lost the lock must not write into the next run's progress.
+        renew_lock(token)
+        mark_finished(unit)
       end
 
       $redis.del(RedisKey.merchant_center_feed_progress)
@@ -73,12 +71,10 @@ class MerchantCenterFeedRun
     def publish_unit(service, unit, max_products)
       items = unit == LEGACY_UNIT ? service.generate(max_products:) : service.generate_shard(shard_index(unit))
       Rails.logger.info("MerchantCenterFeedRun: #{unit} published #{items} items")
-      mark_finished(unit)
     rescue MerchantCenterFeedService::ShardTooLarge => e
-      # Rebuilding the same oversized range cannot succeed, and it must not hold back the other
-      # shards. Its previous object stays in place until someone narrows SHARD_WIDTH.
+      # Retrying cannot help, and it must not hold back the other shards. The previous object
+      # stays until someone narrows SHARD_WIDTH.
       ErrorNotifier.notify(e, unit:)
-      mark_finished(unit)
     end
 
     def shard_indexes
@@ -107,6 +103,10 @@ class MerchantCenterFeedRun
     def check_in(token)
       raise KillSwitchEngaged if kill_switch?
 
+      renew_lock(token)
+    end
+
+    def renew_lock(token)
       renewed = $redis.eval(LOCK_SCRIPT_RENEW, keys: [RedisKey.merchant_center_feed_lock], argv: [token, LOCK_TTL])
       raise LockLost, "the Merchant Center feed lock expired mid-run" if renewed.to_i.zero?
     end

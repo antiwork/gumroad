@@ -4,6 +4,10 @@ require "spec_helper"
 
 describe MerchantCenterFeedService do
   let(:service) { described_class.new }
+  let(:feed_glob) { Rails.public_path.join("sitemap/merchant-center/feed*.xml") }
+
+  before { FileUtils.rm_f(Dir[feed_glob]) }
+  after { FileUtils.rm_f(Dir[feed_glob]) }
 
   def create_eligible_product(**attrs)
     product = create(:product, :recommendable, price_cents: 999, **attrs)
@@ -254,7 +258,6 @@ describe MerchantCenterFeedService do
       [first, second]
     end
 
-    after { FileUtils.rm_f(Dir[Rails.public_path.join("sitemap/merchant-center/feed*.xml")]) }
 
     describe ".shard_key" do
       it "zero-pads the index under the sitemap uploader's prefix" do
@@ -333,6 +336,43 @@ describe MerchantCenterFeedService do
         expect(object).to receive(:upload_file).with(kind_of(String), hash_including(acl: "public-read"))
 
         service.generate_shard(0)
+      end
+    end
+
+    describe "uploading" do
+      let(:checked_in) { [] }
+      let(:service) { described_class.new(on_upload: -> { checked_in << true }) }
+
+      before do
+        create_eligible_product
+        stub_const("#{described_class}::UPLOAD_CHECK_IN_INTERVAL", 0)
+        allow(service).to receive_messages(upload_to_s3?: true, s3_client: instance_double(Aws::S3::Client))
+      end
+
+      it "calls on_upload while the file uploads" do
+        allow_any_instance_of(Aws::S3::Object).to receive(:upload_file) { |_object, _path, options| options[:progress_callback].call([1], [2]) }
+
+        service.generate
+
+        expect(checked_in.size).to eq 1
+      end
+
+      it "raises the callback's own error when the SDK wraps it in a multipart failure" do
+        service = described_class.new(on_upload: -> { raise ArgumentError, "lock lost" })
+        allow(service).to receive_messages(upload_to_s3?: true, s3_client: instance_double(Aws::S3::Client))
+        allow_any_instance_of(Aws::S3::Object).to receive(:upload_file) do |_object, _path, options|
+          options[:progress_callback].call([1], [2])
+        rescue => e
+          raise Aws::S3::MultipartUploadError.new("multipart upload failed: lock lost", [e])
+        end
+
+        expect { service.generate }.to raise_error(ArgumentError, "lock lost")
+      end
+
+      it "leaves a genuine upload failure as the SDK raised it" do
+        allow_any_instance_of(Aws::S3::Object).to receive(:upload_file).and_raise(Aws::S3::MultipartUploadError.new("boom", []))
+
+        expect { service.generate }.to raise_error(Aws::S3::MultipartUploadError, "boom")
       end
     end
 

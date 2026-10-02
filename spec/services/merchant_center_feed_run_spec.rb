@@ -159,6 +159,36 @@ describe MerchantCenterFeedRun do
       expect(published).to be_empty
     end
 
+    it "stops without marking the file finished when the lock is lost during the upload" do
+      allow_any_instance_of(MerchantCenterFeedService).to receive(:upload).and_wrap_original do |original, *args|
+        $redis.del(RedisKey.merchant_center_feed_lock)
+        original.call(*args)
+      end
+
+      expect { run.call }.to raise_error(described_class::LockLost)
+
+      expect($redis.hexists(RedisKey.merchant_center_feed_progress, described_class::LEGACY_UNIT)).to be false
+    end
+
+    it "renews the lock while a file uploads" do
+      ttls = []
+      allow_any_instance_of(MerchantCenterFeedService).to receive(:upload).and_wrap_original do |original, *args|
+        $redis.expire(RedisKey.merchant_center_feed_lock, 10)
+        original.call(*args)
+      end
+      stub_const("MerchantCenterFeedService::UPLOAD_CHECK_IN_INTERVAL", 0)
+      allow_any_instance_of(MerchantCenterFeedService).to receive(:upload_to_s3?).and_return(true)
+      allow_any_instance_of(MerchantCenterFeedService).to receive(:s3_client).and_return(instance_double(Aws::S3::Client))
+      allow_any_instance_of(Aws::S3::Object).to receive(:upload_file) do |_object, _path, options|
+        options[:progress_callback].call([1], [2])
+        ttls << $redis.ttl(RedisKey.merchant_center_feed_lock)
+      end
+
+      run.call
+
+      expect(ttls.first).to be > described_class::LOCK_TTL - 5
+    end
+
     it "does not delete a lock another run took over" do
       allow_any_instance_of(MerchantCenterFeedService).to receive(:eligible?).and_wrap_original do |original, product|
         $redis.set(RedisKey.merchant_center_feed_lock, "someone-else")
