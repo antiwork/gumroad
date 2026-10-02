@@ -445,4 +445,38 @@ describe MerchantCenterFeedService do
       end
     end
   end
+
+  describe "query cost" do
+    def sql_during(&block)
+      queries = []
+      callback = ->(*, payload) { queries << payload[:sql] }
+      ActiveSupport::Notifications.subscribed(callback, "sql.active_record", &block)
+      queries
+    end
+
+    it "does not look up sales for a product a query-free check rejects" do
+      product = create_eligible_product
+      product.update!(price_cents: 0, customizable_price: true)
+
+      queries = sql_during { expect(service.generate).to eq 0 }
+
+      expect(queries.grep(/FROM `purchases`/)).to be_empty
+    end
+
+    it "loads taxonomies once per batch, not once per product" do
+      3.times { create_eligible_product(taxonomy: create(:taxonomy)) }
+
+      queries = sql_during { expect(service.generate).to eq 3 }
+
+      expect(queries.grep(/FROM `taxonomies`/).size).to eq 1
+    end
+
+    it "loads prices once per batch, not once per product" do
+      3.times { create_eligible_product }
+
+      queries = sql_during { expect(service.generate).to eq 3 }
+
+      expect(queries.grep(/FROM `prices`/).size).to eq 1
+    end
+  end
 end

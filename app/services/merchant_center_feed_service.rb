@@ -41,10 +41,12 @@ class MerchantCenterFeedService
     max_id ? max_id / SHARD_WIDTH : nil
   end
 
-  # Same preload shape as SitemapService: keeps the per-row seller and cover lookups flat
-  # across a full-catalog walk.
+  # SitemapService's preload shape plus what eligible? reads on every row: price_cents
+  # resolves through alive_prices, and recommendable? reads taxonomy.
   FEED_PRELOADS = [
     :user,
+    :alive_prices,
+    :taxonomy,
     { display_asset_previews: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } } }
   ].freeze
   private_constant :FEED_PRELOADS
@@ -119,13 +121,15 @@ class MerchantCenterFeedService
     # doesn't cover: no adult content, a nonzero price, and a real image resource
     # (social_share_image is the cover image, an oEmbed THUMBNAIL, or a video poster —
     # never the oEmbed iframe URL, which Merchant Center rejects for g:image_link).
+    # recommendable? goes last: it queries purchases and payout accounts per row, and the
+    # checks before it need no database query, so the rows they reject skip those queries.
     def eligible?(product)
-      product.recommendable? &&
-        !product.rated_as_adult? &&
+      product.price_cents.to_i.positive? &&
         !product.user.suspended? &&
-        product.price_cents.to_i.positive? &&
+        product.social_share_image.present? &&
         usd_price_cents(product).to_i.positive? &&
-        product.social_share_image.present?
+        !product.rated_as_adult? &&
+        product.recommendable?
     end
 
     # The block receives an emit callable for each eligible product.
