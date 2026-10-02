@@ -94,6 +94,22 @@ describe ProductPresenter::Card do
         end
       end
 
+      context "when the cut lands after a sentence period" do
+        before { product.update!(description: "<p>#{"a" * 96}. More text follows here.</p>") }
+
+        it "ends in a single ellipsis" do
+          expect(described_class.new(product:).for_web[:description]).to eq("#{"a" * 96}...")
+        end
+
+        it "ends in a single ellipsis at the featured card limit" do
+          product.update!(description: "<p>#{"a" * 296}. More text follows here.</p>")
+
+          result = described_class.new(product:).for_web(description_max_length: described_class::FEATURED_DESCRIPTION_MAX_LENGTH)
+
+          expect(result[:description]).to eq("#{"a" * 296}...")
+        end
+      end
+
       it "excludes description when compute_description is false" do
         result = described_class.new(product:).for_web(compute_description: false)
 
