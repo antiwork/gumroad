@@ -102,7 +102,7 @@ export const HorizontalCard = ({ product, big, eager }: { product: CardProduct; 
               </h3>
             )}
           </StretchedLink>
-          <small className={classNames("hidden truncate text-muted lg:block", big && "lg:line-clamp-4")}>
+          <small className={classNames("hidden text-muted lg:block", big ? "lg:line-clamp-6" : "truncate")}>
             {product.description}
           </small>
           {product.seller ? (
@@ -114,7 +114,7 @@ export const HorizontalCard = ({ product, big, eager }: { product: CardProduct; 
             />
           ) : null}
         </ProductCardHeader>
-        <ProductCardFooter className="items-center lg:divide-x-0">
+        <ProductCardFooter className="items-center max-lg:flex-col max-lg:items-stretch max-lg:divide-x-0 max-lg:divide-y lg:divide-x-0">
           <div className="flex-1 p-4 lg:p-0">
             <PriceTag
               url={product.url}

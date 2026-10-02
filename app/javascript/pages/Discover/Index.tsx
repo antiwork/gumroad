@@ -81,7 +81,7 @@ const ProductsCarousel = ({ products, title }: { products: CardProduct[]; title:
       </header>
       <div className="relative">
         <div
-          className="override grid min-h-96 auto-cols-[min(20rem,60vw)] grid-flow-col gap-6 overflow-x-auto pb-1 [scrollbar-width:none] lg:auto-cols-[40rem] [&::-webkit-scrollbar]:hidden"
+          className="override grid min-h-96 auto-cols-[min(20rem,60vw)] grid-flow-col gap-6 overflow-x-auto pb-1 [scrollbar-width:none] lg:auto-cols-[44rem] [&::-webkit-scrollbar]:hidden"
           ref={itemsRef}
           style={{ scrollSnapType: dragStart != null ? "none" : undefined }}
           onScroll={handleScroll}
@@ -111,7 +111,7 @@ const ProductsCarouselSkeleton = () => (
     <header>
       <h2>Featured products</h2>
     </header>
-    <div className="override grid min-h-96 auto-cols-[min(20rem,60vw)] grid-flow-col gap-6 overflow-x-auto pb-1 [scrollbar-width:none] lg:auto-cols-[40rem] [&::-webkit-scrollbar]:hidden">
+    <div className="override grid min-h-96 auto-cols-[min(20rem,60vw)] grid-flow-col gap-6 overflow-x-auto pb-1 [scrollbar-width:none] lg:auto-cols-[44rem] [&::-webkit-scrollbar]:hidden">
       {Array.from({ length: 3 }, (_, index) => (
         <Skeleton key={index} className="h-96" />
       ))}

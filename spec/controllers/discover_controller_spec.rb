@@ -101,6 +101,17 @@ describe DiscoverController, type: :controller, inertia: true do
         expect(props).not_to have_key("search_results")
       end
 
+      it "sends featured products with the long description the featured card shows" do
+        create(:product, :recommendable, taxonomy: Taxonomy.find_by(slug: "3d"), description: "<p>#{"Fresh card magic every month. " * 20}</p>")
+        Link.import(refresh: true, force: true)
+        request.headers["X-Inertia-Partial-Data"] = "recommended_products"
+
+        get :index, params: { taxonomy: "3d" }
+
+        descriptions = response.parsed_body.fetch("props").fetch("recommended_products").map { _1["description"] }
+        expect(descriptions.map(&:length)).to eq([ProductPresenter::Card::FEATURED_DESCRIPTION_MAX_LENGTH])
+      end
+
       it "returns recommended wishlists in partial props" do
         request.headers["X-Inertia-Partial-Data"] = "recommended_wishlists"
 

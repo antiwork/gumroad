@@ -1,6 +1,10 @@
 # frozen_string_literal: true
 
 class ProductPresenter::Card
+  DESCRIPTION_MAX_LENGTH = 100
+  # Room for the Discover featured card's six-line clamp; the frontend ellipsizes the rest.
+  FEATURED_DESCRIPTION_MAX_LENGTH = 300
+
   include Rails.application.routes.url_helpers
   include ProductsHelper
   include CurrencyHelper
@@ -24,7 +28,7 @@ class ProductPresenter::Card
     @product = product
   end
 
-  def for_web(request: nil, recommended_by: nil, recommender_model_name: nil, target: nil, show_seller: true, affiliate_id: nil, query: nil, offer_code: nil, compute_description: true, compute_inventory: true)
+  def for_web(request: nil, recommended_by: nil, recommender_model_name: nil, target: nil, show_seller: true, affiliate_id: nil, query: nil, offer_code: nil, compute_description: true, compute_inventory: true, description_max_length: DESCRIPTION_MAX_LENGTH)
     default_recurrence = product.default_price_recurrence
     base_price_cents = product.display_price_cents(for_default_duration: true)
     price_cents = product.discounted_price_cents(base_price_cents)
@@ -58,7 +62,7 @@ class ProductPresenter::Card
     props[:original_price_cents] = original_price_cents if original_price_cents.present?
 
     if compute_description
-      props[:description] = product.plaintext_description.truncate(100)
+      props[:description] = product.plaintext_description.truncate(description_max_length)
     end
 
     props
