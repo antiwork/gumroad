@@ -221,4 +221,39 @@ describe Link do
       expect(product.changed?).to eq(false)
     end
   end
+
+  describe "#plaintext_description" do
+    def description_for(html)
+      Link.new(description: html).plaintext_description
+    end
+
+    # Block elements carry no whitespace of their own, so stripping the tags used to fuse
+    # "</h2><p>" into "What you getA 25-page guide" in every meta/OG/feed description.
+    it "separates a heading from the paragraph after it" do
+      expect(description_for("<h2>What you get</h2><p>A 25-page guide</p>"))
+        .to eq("What you get A 25-page guide")
+    end
+
+    it "separates list items" do
+      expect(description_for("<ul><li>One</li><li>Two</li></ul>")).to eq("One Two")
+    end
+
+    it "decodes entities so callers get real text rather than escaped text" do
+      expect(description_for("<p>Fish &amp; Chips &mdash; 100% caf&eacute;</p>"))
+        .to eq("Fish & Chips — 100% café")
+    end
+
+    it "collapses the separators it inserts around inline markup" do
+      expect(description_for("<p>A <strong>bold</strong> word</p>")).to eq("A bold word")
+    end
+
+    it "returns an empty string when there is no description" do
+      expect(description_for(nil)).to eq("")
+      expect(description_for("   ")).to eq("")
+    end
+
+    it "returns an empty string for a markup-only description" do
+      expect(description_for("<p><br></p>")).to eq("")
+    end
+  end
 end

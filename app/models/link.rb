@@ -770,9 +770,10 @@ class Link < ApplicationRecord
   def plaintext_description
     return "" if description.blank?
 
-    escaped_description = sanitize(description, tags: [])
-    escaped_description = escaped_description.squish
-    escaped_description
+    # to_text separates block elements — sanitize(tags: []) fused "</h2><p>" into
+    # "What you getA 25-page guide" — and decodes entities, so callers get real text
+    # rather than "Fish &amp; Chips".
+    Loofah.fragment(description).to_text(encode_special_chars: false).squish
   end
 
   def html_safe_description
