@@ -805,7 +805,9 @@ export default function PaymentsPage() {
       const formatError = accountNumberFormatError(props.user.country_code, form.data.bank_account.account_number);
       if (formatError) {
         markFieldInvalid("account_number");
-        setClientErrorMessage({ message: formatError });
+        // Keep a reason an earlier check already set for a field above this one: the banner and the
+        // scroll-to-first-invalid-field both address that first field, not this one.
+        setClientErrorMessage((current: ErrorMessageInfo | null) => current ?? { message: formatError });
       }
     }
     if (!form.data.bank_account.account_number_confirmation) {
