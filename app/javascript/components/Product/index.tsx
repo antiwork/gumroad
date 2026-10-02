@@ -279,6 +279,9 @@ export type Props = {
   wishlists: WishlistForProduct[];
 };
 
+// Past this many characters the 40px title wraps to three or more lines on a standard product page.
+export const LONG_TITLE_LENGTH = 60;
+
 export const Product = ({
   product,
   purchase,
@@ -291,6 +294,7 @@ export const Product = ({
   wishlists = [],
   disableAnalytics,
   hideSellerByline,
+  scaleLongTitle = true,
 }: {
   product: Product;
   purchase: Purchase | null;
@@ -305,6 +309,9 @@ export const Product = ({
   // The storefront-wrapped product page renders the profile header directly above, which
   // already shows the same avatar and name — the byline is redundant there.
   hideSellerByline?: boolean | undefined;
+  // Long titles step down to 32px (24px on phones) on standard product pages. Surfaces that reuse
+  // this component under another heading, like the featured product on a profile, opt out.
+  scaleLongTitle?: boolean;
 }) => {
   const [pageLoaded, setPageLoaded] = React.useState(false);
   const descriptionEditor = useRichTextEditor({
@@ -393,7 +400,14 @@ export const Product = ({
               rationale as the description fix in #6138).
               wrap-break-word overrides the inherited global overflow-wrap: anywhere, which
               splits titles mid-word in narrow in-app browsers. */}
-          <h1 itemProp="name" dir="auto" className="wrap-break-word">
+          <h1
+            itemProp="name"
+            dir="auto"
+            className={classNames(
+              "wrap-break-word",
+              scaleLongTitle && product.name.trim().length > LONG_TITLE_LENGTH && "text-[2rem] max-sm:text-[1.5rem]",
+            )}
+          >
             {product.name}
           </h1>
         </header>

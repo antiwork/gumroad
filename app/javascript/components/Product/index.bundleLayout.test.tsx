@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { trackUserProductAction } from "$app/data/user_action_event";
 
-import { Product, type Product as ProductData } from "$app/components/Product";
+import { LONG_TITLE_LENGTH, Product, type Product as ProductData } from "$app/components/Product";
 import type { PriceSelection } from "$app/components/Product/ConfigurationSelector";
 import { Layout } from "$app/components/Product/Layout";
 
@@ -154,6 +154,35 @@ const product: ProductData = {
   ],
   public_files: [],
 };
+
+describe("long product titles", () => {
+  const longName = "A".repeat(LONG_TITLE_LENGTH + 1);
+  const renderTitle = (name: string, props: Partial<React.ComponentProps<typeof Product>> = {}) => {
+    render(
+      <Product product={{ ...product, name }} purchase={null} selection={selection} disableAnalytics {...props} />,
+    );
+    return screen.getByRole("heading", { level: 1 });
+  };
+
+  it("steps a long title down to 32px, and 24px on phones", () => {
+    const title = renderTitle(longName);
+
+    expect(title.className).toContain("text-[2rem]");
+    expect(title.className).toContain("max-sm:text-[1.5rem]");
+  });
+
+  it("keeps a title of exactly the threshold length at the stock size", () => {
+    expect(renderTitle("A".repeat(LONG_TITLE_LENGTH)).className).not.toContain("text-[2rem]");
+  });
+
+  it("ignores surrounding whitespace when measuring", () => {
+    expect(renderTitle(`  ${"A".repeat(LONG_TITLE_LENGTH)}  `).className).not.toContain("text-[2rem]");
+  });
+
+  it("leaves the heading at its stock size when the surface opts out", () => {
+    expect(renderTitle(longName, { scaleLongTitle: false }).className).not.toContain("text-[2rem]");
+  });
+});
 
 describe("product page recovery prompt", () => {
   it("places recovery after the main purchase button", () => {
