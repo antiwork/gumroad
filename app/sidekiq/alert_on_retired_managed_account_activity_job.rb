@@ -1,22 +1,11 @@
 # frozen_string_literal: true
 
 # Reports activity that landed on a Gumroad-managed Stripe account after a Stripe Connect link
-# retired it (gumroad-private#3182).
+# retired it. The check at the switch cannot see what lands later, so this runs at the settlement
+# tail: one read of everything created at or after the retirement covers the late settlement and the
+# race in the same pass.
 #
-# Retiring a managed account takes it out of payout preparation while the funds stay at Stripe, so
-# anything that books to it afterwards cannot be paid out from it. StripeConnectAccountLinker refuses
-# a replacement that still has unsettled obligations, but a check at the switch cannot see the future:
-# a sale that picks the account while the link commits, a sale that settles later than the linker
-# looks, a refund or a chargeback that arrives on the buyer's clock. This job is the net under that,
-# and it is why the obligations check belongs at the switch (once per retirement, on the rare side)
-# rather than on every charge: the residue above is not a race a per-charge read can order anyway.
-#
-# It runs at the settlement tail rather than immediately. One read of everything created at or after
-# the retirement covers the race and the late settlement in the same pass, so an earlier run finds
-# nothing this one would not.
-#
-# Reports only. Recovering a stranded balance needs a payout from the retired account, and moving
-# money is a human decision.
+# Reports only. Recovering a stranded balance needs a payout from the retired account.
 class AlertOnRetiredManagedAccountActivityJob
   include Sidekiq::Job
   sidekiq_options retry: 2, queue: :low
@@ -33,18 +22,25 @@ class AlertOnRetiredManagedAccountActivityJob
     merchant_account = MerchantAccount.find_by(id: merchant_account_id)
     return if merchant_account.nil?
     # A retired account that has come back is not stranded: it is a payout destination again.
-    return if merchant_account.active?
+    return clear_pending_marker(merchant_account) if merchant_account.active?
 
     retired_at = Time.iso8601(retired_at_iso)
     landed = landed_since(merchant_account, retired_at)
-    return if landed.empty?
+    return clear_pending_marker(merchant_account) if landed.empty?
 
     log_landed(merchant_account, retired_at, landed)
     InternalNotificationWorker.perform_async("payouts", "Activity on a retired Stripe account",
                                              message_for(merchant_account, retired_at, landed))
+    clear_pending_marker(merchant_account)
   end
 
   private
+    # Cleared last, so a run that dies mid-report leaves the marker for
+    # DispatchPendingRetiredAccountChecksJob to re-dispatch rather than dropping the check.
+    def clear_pending_marker(merchant_account)
+      merchant_account.update!(retired_activity_check_pending_at: nil)
+    end
+
     # Every leg is index-backed. `merchant_account_id` leads the index on charges and on balance
     # transactions. Balances has no index on it alone — its indexes lead on `state` or `user_id` — so
     # it is scoped by the account's owner too, which is what `index_on_user_merchant_account_date`
@@ -56,28 +52,32 @@ class AlertOnRetiredManagedAccountActivityJob
     # Balance transactions are read in their own right rather than only through balances: a late
     # refund or chargeback adds one to a balance that already exists and inserts no new balance row,
     # so a scan of balances alone would miss it.
+    #
+    # The money-event legs are collected first, so a burst of purchases or balances cannot fill the
+    # report cap and leave that refund's balance transaction out of the list.
     def landed_since(merchant_account, retired_at)
       landed = []
+      collect(landed, "balance_transaction", BalanceTransaction.where(merchant_account_id: merchant_account.id), retired_at)
+      collect(landed, "charge", Charge.where(merchant_account_id: merchant_account.id), retired_at)
       if merchant_account.user_id.present?
         collect(landed, "purchase",
                 Purchase.where(seller_id: merchant_account.user_id, merchant_account_id: merchant_account.id), retired_at)
         collect(landed, "balance",
                 Balance.where(user_id: merchant_account.user_id, merchant_account_id: merchant_account.id), retired_at)
       end
-      collect(landed, "charge", Charge.where(merchant_account_id: merchant_account.id), retired_at)
-      collect(landed, "balance_transaction", BalanceTransaction.where(merchant_account_id: merchant_account.id), retired_at)
-      landed.sort_by { |row| row[:created_at] }
+      # Grouped by leg rather than re-sorted: the report is truncated to the first rows, and the money
+      # events above must not be the ones dropped.
+      landed
     end
 
     # At or after, not after: `deleted_at` is stored to the second, so a row created in the same second
     # as the retirement cannot be told apart from one created just before it. This is a report — a
     # borderline row named twice is better than one dropped.
     #
-    # Stops reading once one row past the report cap is held: the count in the headline is then a
-    # floor, and `message_for` says so rather than presenting it as the total.
+    # Stops reading a leg once one row past the report cap is held. Bounded per leg rather than by one
+    # running total, so no leg is skipped because an earlier one filled the cap: the count in the
+    # headline is a floor over the legs that were read, and `message_for` says so.
     def collect(landed, kind, scope, retired_at)
-      return if landed.size > MAX_REPORTED
-
       scope.where("created_at >= ?", retired_at).order(:created_at).limit(MAX_REPORTED + 1).each do |record|
         landed << { kind:, record:, created_at: record.created_at }
       end

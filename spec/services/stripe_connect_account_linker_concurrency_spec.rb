@@ -330,6 +330,9 @@ describe StripeConnectAccountLinker, "racing payout writers" do
       # obligations read established, so it could not see a sale that committed in between.
       expect(transaction_open_at_enqueue).to be(false)
       expect(managed_account.reload).not_to be_active
+      # DispatchPendingRetiredAccountChecksJob re-dispatches the check from this marker when the
+      # enqueue above was lost.
+      expect(managed_account.reload.retired_activity_check_pending_at).to be_present
     end
 
     it "enqueues nothing when the replacement is refused for unsettled obligations" do

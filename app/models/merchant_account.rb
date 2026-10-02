@@ -19,6 +19,9 @@ class MerchantAccount < ApplicationRecord
   attr_json_data_accessor :stripe_payouts_pause_email_sent
   attr_json_data_accessor :stripe_payouts_pause_email_claim_token
   attr_json_data_accessor :stripe_rejection_email_sent
+  # Re-dispatch marker: set on retirement by StripeConnectAccountLinker, cleared once
+  # AlertOnRetiredManagedAccountActivityJob has run.
+  attr_json_data_accessor :retired_activity_check_pending_at
   # Stripe Connect (direct-charge) capabilities snapshot. Checkout must only offer methods
   # the account has activated — Stripe rejects a PaymentIntent that lists anything else.
   # Full hash so new methods don't need a re-fetch. Shape:

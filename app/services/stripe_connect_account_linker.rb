@@ -1,14 +1,9 @@
 # frozen_string_literal: true
 
 # Links a seller's Stripe Connect account and retires the Gumroad-managed Stripe account it replaces.
-# Retiring that account strands whatever it still owes the seller (payout preparation refuses an
-# inactive destination), so a replacement with unsettled obligations is refused before any write.
-#
-# What that check cannot see is anything that lands on the account after it runs: a sale that picks
-# the account while this commits, a sale that settles late, a refund or a chargeback that arrives
-# later. Instead the retired account is checked once, at the settlement tail, by
-# AlertOnRetiredManagedAccountActivityJob, which reports every row that landed on it after the
-# retirement.
+# Retiring it strands whatever it still owes the seller (payout preparation refuses an inactive
+# destination), so a replacement with unsettled obligations is refused before any write. A sale that
+# settles late, a refund or a chargeback, is reported at the settlement tail instead.
 class StripeConnectAccountLinker
   def self.link(owner:, auth_uid:, stripe_account:)
     new(owner:, auth_uid:, stripe_account:).link
@@ -69,16 +64,18 @@ class StripeConnectAccountLinker
 
       if predecessor
         predecessor.delete_charge_processor_account!
+        # Durable re-dispatch marker: if the enqueue below is lost, the sweep re-derives this
+        # retirement from the row instead of the check being lost with the enqueue.
+        predecessor.update!(retired_activity_check_pending_at: predecessor.deleted_at.utc.iso8601)
         @retired_account_id = predecessor.id
         @retired_at = predecessor.deleted_at
       end
       :linked
     end
 
-    # Enqueued after the transaction above has committed, and scheduled for the settlement tail. The
-    # delay is the point: a read inside that transaction would be pinned to the snapshot the
-    # obligations read established and could not see a sale that committed in between, and a read
-    # right after it commits still runs ahead of a sale that has not settled yet.
+    # Enqueued after the transaction above has committed. The delay is the point: a read inside the
+    # transaction is pinned to the snapshot the obligations read established, and one right after it
+    # commits still runs ahead of a sale that has not settled yet.
     def enqueue_retired_account_check
       return if @retired_account_id.nil? || @retired_at.nil?
 

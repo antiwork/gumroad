@@ -145,4 +145,40 @@ describe AlertOnRetiredManagedAccountActivityJob do
 
     expect(InternalNotificationWorker).not_to have_received(:perform_async)
   end
+
+  # While the marker is set, DispatchPendingRetiredAccountChecksJob re-dispatches the check; clearing
+  # it once this has run is what stops it being reported twice.
+  it "clears the re-dispatch marker it ran from" do
+    managed_account.update!(retired_activity_check_pending_at: retired_at.utc.iso8601)
+    create(:balance, user: seller, merchant_account: managed_account, state: "unpaid", amount_cents: 10_00,
+                     created_at: retired_at + 1.hour)
+
+    perform
+
+    expect(managed_account.reload.retired_activity_check_pending_at).to be_nil
+  end
+
+  it "clears the re-dispatch marker when nothing landed" do
+    managed_account.update!(retired_activity_check_pending_at: retired_at.utc.iso8601)
+
+    perform
+
+    expect(managed_account.reload.retired_activity_check_pending_at).to be_nil
+  end
+
+  # The report exists to name the money event a late refund leaves behind. Purchases fill the report
+  # cap on their own, so a leg read only after them would be missing from the count as well as the
+  # list.
+  it "still reads the money-event legs when purchases fill the report cap" do
+    product = create(:product, user: seller)
+    (described_class::MAX_REPORTED + 1).times do |index|
+      create(:purchase, link: product, seller:, merchant_account: managed_account, purchase_state: "in_progress",
+                        created_at: retired_at + (index + 1).minutes)
+    end
+    balance_transaction = unapplied_balance_transaction
+
+    body = reported_body
+    expect(body).to include("At least")
+    expect(body).to include("balance_transaction #{balance_transaction.id}")
+  end
 end
