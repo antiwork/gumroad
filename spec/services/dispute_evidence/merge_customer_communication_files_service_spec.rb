@@ -136,6 +136,35 @@ describe DisputeEvidence::MergeCustomerCommunicationFilesService do
     end.to raise_error(described_class::FilesTooLargeError, described_class::FILES_TOO_LARGE_MESSAGE)
   end
 
+  it "raises TooManyPagesError when the merged PDF is over Stripe's page limit" do
+    blobs = [create_pdf_blob(30, filename: "a.pdf"), create_pdf_blob(21, filename: "b.pdf")]
+
+    expect do
+      described_class.perform(blobs:, max_size:)
+    end.to raise_error(described_class::TooManyPagesError, /have 51 pages, but at most 50 pages/)
+  end
+
+  it "merges up to exactly the page limit" do
+    blobs = [create_pdf_blob(30, filename: "a.pdf"), create_pdf_blob(20, filename: "b.pdf")]
+
+    expect(pages(described_class.perform(blobs:, max_size:)).size).to eq(50)
+  end
+
+  describe ".ensure_within_page_limit!" do
+    it "raises for a single PDF over the limit" do
+      expect do
+        described_class.ensure_within_page_limit!(create_pdf_blob(63))
+      end.to raise_error(described_class::TooManyPagesError, /have 63 pages/)
+    end
+
+    it "accepts a PDF at the limit, images, and a PDF qpdf cannot read" do
+      expect { described_class.ensure_within_page_limit!(create_pdf_blob(50)) }.not_to raise_error
+      expect { described_class.ensure_within_page_limit!(create_blob("smilie.png", "chat.png", "image/png")) }.not_to raise_error
+      unreadable = ActiveStorage::Blob.create_and_upload!(io: StringIO.new("not a pdf"), filename: "x.pdf", content_type: "application/pdf")
+      expect { described_class.ensure_within_page_limit!(unreadable) }.not_to raise_error
+    end
+  end
+
   it "raises MergeError for a PDF qpdf cannot process" do
     blobs = [
       create_blob("password_protected_pdf.pdf", "locked.pdf", "application/pdf"),

@@ -757,6 +757,45 @@ describe StripeChargeProcessor, :vcr do
       expect(subject.send(:create_dispute_evidence_stripe_file, unattached)).to be_nil
     end
 
+    it "uploads a blob once and reuses the Stripe file id on a retry" do
+      expect(Stripe::File).to receive(:create).once.and_return(double(id: "file_once"))
+
+      2.times { expect(subject.send(:create_dispute_evidence_stripe_file, attached)).to eq("file_once") }
+    end
+
+    it "still uploads and returns the file id when Redis is unavailable" do
+      attached # build the fixtures before Redis goes away
+      allow($redis).to receive(:get).and_raise(Redis::CannotConnectError)
+      allow($redis).to receive(:set).and_raise(Redis::CannotConnectError)
+      allow(ErrorNotifier).to receive(:notify)
+      expect(Stripe::File).to receive(:create).and_return(double(id: "file_no_redis"))
+
+      expect(subject.send(:create_dispute_evidence_stripe_file, attached)).to eq("file_no_redis")
+      expect(ErrorNotifier).to have_received(:notify).twice
+    end
+
+    it "does not remember an upload that failed" do
+      allow(Stripe::File).to receive(:create).and_raise(Stripe::APIConnectionError.new("boom"))
+      expect { subject.send(:create_dispute_evidence_stripe_file, attached) }.to raise_error(Stripe::APIConnectionError)
+
+      allow(Stripe::File).to receive(:create).and_return(double(id: "file_retry"))
+      expect(subject.send(:create_dispute_evidence_stripe_file, attached)).to eq("file_retry")
+    end
+
+    it "returns nil and notifies when Stripe rejects the file for being too long" do
+      error = Stripe::InvalidRequestError.new("The file you uploaded was too long. Please upload a file with fewer than 50 pages.", nil, http_status: 400)
+      allow(Stripe::File).to receive(:create).and_raise(error)
+      expect(ErrorNotifier).to receive(:notify).with(/over Stripe's page limit/)
+
+      expect(subject.send(:create_dispute_evidence_stripe_file, attached)).to be_nil
+    end
+
+    it "still raises for any other invalid request" do
+      allow(Stripe::File).to receive(:create).and_raise(Stripe::InvalidRequestError.new("Invalid file type", nil, http_status: 400))
+
+      expect { subject.send(:create_dispute_evidence_stripe_file, attached) }.to raise_error(Stripe::InvalidRequestError)
+    end
+
     it "returns nil and notifies when the underlying file is missing from storage" do
       allow(attached.blob).to receive(:download).and_raise(ActiveStorage::FileNotFoundError)
       expect(ErrorNotifier).to receive(:notify).with(/Dispute evidence file missing from storage/)
@@ -5504,6 +5543,48 @@ describe StripeChargeProcessor, "#fight_chargeback shipment evidence" do
     expect(evidence[:uncategorized_text]).to_not include("confirmed delivery by phone")
   end
 
+  describe "a customer communication PDF over Stripe's page limit" do
+    before { DisputeEvidence.create_from_dispute!(disputed_purchase.dispute.reload) }
+
+    # The seller's file is the only part Stripe refuses. Sending the rest keeps the receipt and
+    # access log, because the dispute takes one submission and a failed update loses it.
+    it "is left out while the rest of the evidence is still submitted" do
+      evidence_row = disputed_purchase.dispute.reload.dispute_evidence
+      evidence_row.customer_communication_file.attach(create_pdf_blob(63))
+      allow(Stripe::File).to receive(:create) do |args|
+        next double(id: "file_ok") unless File.extname(args[:file].path) == ".pdf"
+
+        raise Stripe::InvalidRequestError.new("The file you uploaded was too long. Please upload a file with fewer than 50 pages.", nil, http_status: 400)
+      end
+      sent = nil
+      allow(Stripe::Dispute).to receive(:update) { |_id, params, _opts| sent = params[:evidence] }
+
+      described_class.new.fight_chargeback("ch_test", evidence_row)
+
+      expect(sent).to include(access_activity_log: evidence_row.access_activity_log)
+      expect(sent[:customer_communication]).to be_nil
+    end
+
+    it "sends the same file ids on a retry after the update call failed" do
+      evidence_row = disputed_purchase.dispute.reload.dispute_evidence
+      evidence_row.customer_communication_file.attach(create_pdf_blob(2))
+      uploads = 0
+      allow(Stripe::File).to receive(:create) { double(id: "file_#{uploads += 1}") }
+      sent = []
+      attempts = 0
+      allow(Stripe::Dispute).to receive(:update) do |_id, params, _opts|
+        sent << params[:evidence].slice(:receipt, :customer_communication)
+        raise Stripe::APIConnectionError.new("timeout") if (attempts += 1) == 1
+      end
+
+      expect { described_class.new.fight_chargeback("ch_test", evidence_row) }.to raise_error(ChargeProcessorUnavailableError)
+      described_class.new.fight_chargeback("ch_test", evidence_row)
+
+      expect(sent.size).to eq(2)
+      expect(sent.first).to eq(sent.second)
+    end
+  end
+
   describe "idempotency key" do
     # A dispute accepts evidence once (gumroad-private#1612) and FightDisputeJob retries five
     # times, so the key is what stops a retry after a landed call spending the submission again.
@@ -5522,9 +5603,8 @@ describe StripeChargeProcessor, "#fight_chargeback shipment evidence" do
     end
 
     it "is stable across a retry that re-reads the same row" do
-      # The payload is NOT stable across attempts — create_dispute_evidence_stripe_file uploads a
-      # fresh Stripe file each call — so anything digesting it would change here and let the retry
-      # spend the one-shot submission.
+      # Digesting the payload is not safe: its Stripe file ids are cached for a bounded time, so
+      # a digest could change here and let the retry spend the one-shot submission.
       first = capture_options
 
       expect(capture_options[:idempotency_key]).to eq(first[:idempotency_key])

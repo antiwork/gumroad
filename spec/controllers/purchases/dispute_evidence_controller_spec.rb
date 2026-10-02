@@ -312,6 +312,47 @@ describe Purchases::DisputeEvidenceController, type: :controller, inertia: true 
       end
     end
 
+    context "when a single PDF is longer than Stripe's page limit" do
+      let(:blob) { create_pdf_blob(DisputeEvidence::STRIPE_MAX_FILE_PAGES + 1) }
+
+      it "refuses it with a clear message and saves nothing" do
+        put :update, params: { purchase_id: evidence_token, dispute_evidence: { customer_communication_file_signed_blob_id: blob.signed_id, reason_for_winning: "Delivered" } }
+
+        dispute_evidence.reload
+        expect(dispute_evidence.customer_communication_file.attached?).to be(false)
+        expect(dispute_evidence.seller_submitted?).to be(false)
+        expect(response).to redirect_to(purchase_dispute_evidence_path(evidence_token))
+        expect(flash[:alert]).to eq("The uploaded files have 51 pages, but at most 50 pages can be submitted. Please remove some pages or upload fewer files.")
+      end
+
+      it "accepts a PDF of exactly the limit" do
+        limit_blob = create_pdf_blob(DisputeEvidence::STRIPE_MAX_FILE_PAGES)
+        put :update, params: { purchase_id: evidence_token, dispute_evidence: { customer_communication_file_signed_blob_id: limit_blob.signed_id } }
+
+        expect(dispute_evidence.reload.customer_communication_file.attached?).to be(true)
+        expect(response).to redirect_to(success_purchase_dispute_evidence_path(evidence_token))
+      end
+    end
+
+    context "when several uploads add up to more than Stripe's page limit" do
+      let(:blobs) { [create_pdf_blob(30, filename: "a.pdf"), create_pdf_blob(30, filename: "b.pdf")] }
+
+      before do
+        # Purging in test ENV returns Aws::S3::Errors::AccessDenied
+        allow_any_instance_of(ActiveStorage::Blob).to receive(:purge).and_return(nil)
+      end
+
+      it "refuses the merge with a clear message and saves nothing" do
+        put :update, params: { purchase_id: evidence_token, dispute_evidence: { customer_communication_file_signed_blob_ids: blobs.map(&:signed_id) } }
+
+        dispute_evidence.reload
+        expect(dispute_evidence.customer_communication_file.attached?).to be(false)
+        expect(dispute_evidence.seller_submitted?).to be(false)
+        expect(response).to redirect_to(purchase_dispute_evidence_path(evidence_token))
+        expect(flash[:alert]).to eq("The uploaded files have 60 pages, but at most 50 pages can be submitted. Please remove some pages or upload fewer files.")
+      end
+    end
+
     # customer_communication_file is has_one_attached, so a bare #attach on this second save would
     # replace rather than add to the first save's evidence — the exact loss Greptile flagged.
     context "when a later revision adds another file" do

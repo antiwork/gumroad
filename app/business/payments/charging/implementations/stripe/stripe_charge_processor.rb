@@ -1252,11 +1252,10 @@ class StripeChargeProcessor
       # A dispute accepts evidence once (gumroad-private#1612) and FightDisputeJob has five Sidekiq
       # retries, so a network failure on a call that actually landed would otherwise spend the
       # submission a second time. The key must be IMMUTABLE for that to work: anything derived from
-      # the payload or from `updated_at` changes between attempts — the payload because
-      # create_dispute_evidence_stripe_file re-uploads and returns a fresh Stripe file id on every
-      # call, `updated_at` because the seller writes their statement into the same row. One evidence
-      # row is one permitted submission (the job returns early once the row is resolved), so the
-      # row's own identity is the whole key.
+      # the payload or from `updated_at` changes between attempts — the payload because the Stripe
+      # file ids it carries can change if the cached ids expire, `updated_at` because the seller
+      # writes their statement into the same row. One evidence row is one permitted submission (the
+      # job returns early once the row is resolved), so the row's own identity is the whole key.
       idempotency_key = "dispute_evidence_#{dispute_evidence.external_id}"
 
       Stripe::Dispute.update(charge.dispute, { evidence: }, { idempotency_key: })
@@ -1871,20 +1870,55 @@ class StripeChargeProcessor
     # https://stripe.com/docs/api/files/object#file_object-purpose
     STRIPE_FILE_PURPOSE_DISPUTE_EVIDENCE = "dispute_evidence"
 
+    STRIPE_FILE_ID_TTL = 7.days
+    # Stripe's 50-page cap on an evidence PDF (the upload form enforces it too). It answers a 400
+    # with no error code, so the message is the only handle.
+    STRIPE_FILE_TOO_LONG_MESSAGE = /file you uploaded was too long/i
+
+    # A retried submission must send the same file ids as the first attempt, or the fixed
+    # idempotency key on the dispute update (see #fight_chargeback) no longer matches its
+    # parameters. Stripe ignores idempotency keys on file uploads, so the id is remembered per blob.
     def create_dispute_evidence_stripe_file(blob)
       return unless blob.attached?
+
+      cache_key = "dispute_evidence_stripe_file:#{blob.key}"
+      cached_file_id = read_stripe_file_id_cache(cache_key)
+      return cached_file_id if cached_file_id.present?
 
       file = Tempfile.new(["#file", File.extname(blob.filename.to_s)], binmode: true)
       begin
         file.write(blob.download)
         file.rewind
-        Stripe::File.create(file:, purpose: STRIPE_FILE_PURPOSE_DISPUTE_EVIDENCE).id
+        file_id = Stripe::File.create(file:, purpose: STRIPE_FILE_PURPOSE_DISPUTE_EVIDENCE).id
+        write_stripe_file_id_cache(cache_key, file_id)
+        file_id
       rescue ActiveStorage::FileNotFoundError => e
         ErrorNotifier.notify("Dispute evidence file missing from storage (blob_id=#{blob.id}): #{e.message}")
+        nil
+      rescue Stripe::InvalidRequestError => e
+        raise unless e.message.match?(STRIPE_FILE_TOO_LONG_MESSAGE)
+
+        # One oversized file must not void the receipt and access log along with it: Stripe
+        # takes a single evidence submission, so a failed update here loses the dispute.
+        ErrorNotifier.notify("Dispute evidence file omitted, over Stripe's page limit (blob_id=#{blob.id}): #{e.message}")
         nil
       ensure
         file.close!
       end
+    end
+
+    # The cache only keeps retries consistent, so a Redis outage must not stop the one-shot submission.
+    def read_stripe_file_id_cache(cache_key)
+      $redis.get(cache_key)
+    rescue Redis::BaseError, RedisClient::Error => e
+      ErrorNotifier.notify(e)
+      nil
+    end
+
+    def write_stripe_file_id_cache(cache_key, file_id)
+      $redis.set(cache_key, file_id, ex: STRIPE_FILE_ID_TTL.to_i)
+    rescue Redis::BaseError, RedisClient::Error => e
+      ErrorNotifier.notify(e)
     end
 
     # UPI exposes no reusable Mandate id; Stripe selects it from the Customer + PaymentMethod.
