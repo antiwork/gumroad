@@ -471,7 +471,7 @@ describe "Balance Pages Scenario", js: true, type: :system do
             )
           end
 
-          it "shows the reserve banner and a Held in reserve line with the withheld dollar amount" do
+          it "shows the reserve banner and a Held back line with the withheld dollar amount" do
             data = {
               should_be_shown_currencies_always: true,
               displayable_payout_period_range: "Activity up to May 6th, 2022",
@@ -509,8 +509,8 @@ describe "Balance Pages Scenario", js: true, type: :system do
             visit balance_path
 
             expect(page).to have_status(text: "We're holding 25% of your balance in reserve while your chargeback rate is above 1.5%. The rest pays out on the normal weekly schedule.")
-            expect(page).to have_content("Held in reserve (25%)")
-            expect(get_label_value.call("Held in reserve (25%)")).to eq("- $100.00 USD")
+            expect(page).to have_content("Held back by chargeback reserve")
+            expect(get_label_value.call("Held back by chargeback reserve")).to eq("- $100.00 USD")
             expect(page).to have_content("Sales")
             expect(page).to have_content("Fees")
           end

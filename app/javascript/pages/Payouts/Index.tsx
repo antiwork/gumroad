@@ -247,7 +247,7 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
         payoutPeriodData.payout_reserve_cents > 0 &&
         payoutPeriodData.payout_reserve_percent != null ? (
           <CardContent>
-            <h4 className="grow font-bold">Held in reserve ({payoutPeriodData.payout_reserve_percent}%)</h4>
+            <h4 className="grow font-bold">Held back by chargeback reserve</h4>
             <div>{formatNegativeDollarAmount(payoutPeriodData.payout_reserve_cents)}</div>
           </CardContent>
         ) : null}
