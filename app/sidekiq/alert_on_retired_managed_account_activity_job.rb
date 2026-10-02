@@ -1,38 +1,34 @@
 # frozen_string_literal: true
 
-# Reports activity that landed on a Gumroad-managed Stripe account after a Stripe Connect link
-# retired it. The check at the switch cannot see what lands later, so this runs at the settlement
-# tail: one read of everything created at or after the retirement covers the late settlement and the
-# race in the same pass.
-#
-# Reports only. Recovering a stranded balance needs a payout from the retired account.
+# Reports activity that landed on a Gumroad-managed Stripe account after a Stripe Connect link retired
+# it: one read at the settlement tail, by `created_at`, covers the late settlement and the race in the
+# same pass. Reports only — recovering a stranded balance is a human decision.
 class AlertOnRetiredManagedAccountActivityJob
   include Sidekiq::Job
   sidekiq_options retry: 2, queue: :low
 
-  # How long the linker waits before this runs. Payouts holds a sale at least this long before it can
-  # pay it, so this is the settlement tail: everything a retired account can still receive from a sale
-  # that was in flight when it was retired has landed by here.
+  # Payouts holds a sale at least this long before it can pay it, so everything a retired account can
+  # still receive from a sale in flight at retirement has landed by the run this schedules.
   SETTLEMENT_TAIL = 3.days
 
-  # Report at most this many landed rows. The alert exists to be read.
+  # Report at most this many landed rows per leg. The alert exists to be read.
   MAX_REPORTED = 25
 
   def perform(merchant_account_id, retired_at_iso)
     merchant_account = MerchantAccount.find_by(id: merchant_account_id)
     return if merchant_account.nil?
 
-    # Locked and inside one transaction: the marker read and its clear cannot be split by another
-    # copy of the check, and a run that dies mid-report rolls the clear back with it.
+    # Locked and inside one transaction: the marker read and its clear cannot be split by another copy
+    # of the check, and a run that dies mid-report rolls the clear back with it.
     merchant_account.with_lock { report_landed_activity(merchant_account, retired_at_iso) }
   end
 
   private
-    # The marker is the claim on the check, so the sweep's copy — dispatched for a scheduled copy
-    # that is only delayed — finds it cleared instead of reporting the same activity again.
+    # The marker is the claim on the check, so the sweep's copy — dispatched for a scheduled copy that
+    # is only delayed — finds it cleared instead of reporting the same activity again.
     def report_landed_activity(merchant_account, retired_at_iso)
-      # A retired account that has come back is not stranded: it is a payout destination again, and
-      # whatever retirement left the marker is moot.
+      # A retired account that has come back is a payout destination again, so whatever left the marker
+      # is moot.
       return clear_pending_marker(merchant_account) if merchant_account.active?
 
       marker = merchant_account.retired_activity_check_pending_at
@@ -46,9 +42,9 @@ class AlertOnRetiredManagedAccountActivityJob
                                                  message_for(merchant_account, retired_at, landed))
       end
 
-      # Only the marker this check was dispatched for is spent here. A seller who reconnects inside
-      # the tail leaves a marker for the later retirement, and that retirement's own check is the one
-      # that reports from its `deleted_at` — clearing it here would skip it.
+      # Only the marker this check was dispatched for is spent here. A seller who reconnects inside the
+      # tail leaves a marker for the later retirement, and that retirement's own check is the one that
+      # reports from its `deleted_at` — clearing it here would skip it.
       clear_pending_marker(merchant_account) if marker == retired_at_iso
     end
 
@@ -58,50 +54,39 @@ class AlertOnRetiredManagedAccountActivityJob
       merchant_account.update!(retired_activity_check_pending_at: nil)
     end
 
-    # Every leg is index-backed. `merchant_account_id` leads the index on charges and on balance
-    # transactions. Balances has no index on it alone — its indexes lead on `state` or `user_id` — so
-    # it is scoped by the account's owner too, which is what `index_on_user_merchant_account_date`
-    # leads on. Purchases has no `merchant_account_id` index either, so it is scoped by the owner.
-    # Both of those legs are inside the owner guard: a retired managed account always has one (the
-    # linker only retires the account of the owner who is linking), and an ownerless account has no
-    # balances or sales to report.
+    # Charges and balance transactions are read on `merchant_account_id`, which leads their index.
+    # Balances has no index on it alone, so that leg carries the owner too.
     #
-    # Balance transactions are read in their own right rather than only through balances: a late
-    # refund or chargeback adds one to a balance that already exists and inserts no new balance row,
-    # so a scan of balances alone would miss it.
+    # Balance transactions are read in their own right — a late refund or chargeback adds one to a
+    # balance that already exists and inserts no new balance row — and they are read first, so a burst
+    # of balances cannot fill the report cap and drop them from the list.
     #
-    # The money-event legs are collected first, so a burst of purchases or balances cannot fill the
-    # report cap and leave that refund's balance transaction out of the list.
+    # Purchases are not read: a sale that moved money left a charge and a balance transaction, and the
+    # `seller_id` walk purchase rows would need is the expensive one on a large seller.
     def landed_since(merchant_account, retired_at)
       landed = []
       collect(landed, "balance_transaction", BalanceTransaction.where(merchant_account_id: merchant_account.id), retired_at)
       collect(landed, "charge", Charge.where(merchant_account_id: merchant_account.id), retired_at)
       if merchant_account.user_id.present?
-        collect(landed, "purchase",
-                Purchase.where(seller_id: merchant_account.user_id, merchant_account_id: merchant_account.id), retired_at)
         collect(landed, "balance",
                 Balance.where(user_id: merchant_account.user_id, merchant_account_id: merchant_account.id), retired_at)
       end
-      # Grouped by leg rather than re-sorted: the report is truncated to the first rows, and the money
-      # events above must not be the ones dropped.
       landed
     end
 
-    # At or after, not after: `deleted_at` is stored to the second, so a row created in the same second
-    # as the retirement cannot be told apart from one created just before it. This is a report — a
-    # borderline row named twice is better than one dropped.
+    # At or after, not after: `deleted_at` is stored to the second, so a row in the same second as the
+    # retirement cannot be told apart from one just before it — a report may name a borderline row
+    # twice, but must not drop one.
     #
-    # Stops reading a leg once one row past the report cap is held. Bounded per leg rather than by one
-    # running total, so no leg is skipped because an earlier one filled the cap: the count in the
-    # headline is a floor over the legs that were read, and `message_for` says so.
+    # Bounded per leg rather than by one running total, so no leg is skipped because an earlier one
+    # filled the cap; the headline count is then a floor, and `message_for` says so.
     def collect(landed, kind, scope, retired_at)
       scope.where("created_at >= ?", retired_at).order(:created_at).limit(MAX_REPORTED + 1).each do |record|
         landed << { kind:, record:, created_at: record.created_at }
       end
     end
 
-    # The machine-readable half of the finding: a search for this account in the logs answers what
-    # landed and when without parsing the alert text.
+    # Searchable by account id without parsing the alert text.
     def log_landed(merchant_account, retired_at, landed)
       Rails.logger.info(
         "retired_managed_account_activity " \

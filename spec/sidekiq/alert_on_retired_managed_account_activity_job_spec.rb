@@ -47,12 +47,16 @@ describe AlertOnRetiredManagedAccountActivityJob do
     expect(InternalNotificationWorker).not_to have_received(:perform_async)
   end
 
-  it "reports a purchase that landed after the retirement" do
-    purchase = create(:purchase, link: create(:product, user: seller), seller:, merchant_account: managed_account,
-                                 purchase_state: "in_progress", created_at: retired_at + 1.hour)
+  # A sale that moved money left a charge and a balance transaction, both of which are read. The
+  # purchase row is not read on its own: `merchant_account_id` is unindexed on purchases, so that leg
+  # would walk the seller's whole history.
+  it "does not report a purchase on its own" do
+    create(:purchase, link: create(:product, user: seller), seller:, merchant_account: managed_account,
+                      purchase_state: "in_progress", created_at: retired_at + 1.hour)
 
-    expect(reported_body).to include("1 row landed on")
-    expect(reported_body).to include("purchase #{purchase.id}")
+    perform
+
+    expect(InternalNotificationWorker).not_to have_received(:perform_async)
   end
 
   it "reports a charge that landed after the retirement" do
@@ -207,14 +211,13 @@ describe AlertOnRetiredManagedAccountActivityJob do
     expect(managed_account.reload.retired_activity_check_pending_at).to eq(later_marker)
   end
 
-  # The report exists to name the money event a late refund leaves behind. Purchases fill the report
+  # The report exists to name the money event a late refund leaves behind. Balances fill the report
   # cap on their own, so a leg read only after them would be missing from the count as well as the
   # list.
-  it "still reads the money-event legs when purchases fill the report cap" do
-    product = create(:product, user: seller)
+  it "still reads the money-event legs when balances fill the report cap" do
     (described_class::MAX_REPORTED + 1).times do |index|
-      create(:purchase, link: product, seller:, merchant_account: managed_account, purchase_state: "in_progress",
-                        created_at: retired_at + (index + 1).minutes)
+      create(:balance, user: seller, merchant_account: managed_account, state: "unpaid", amount_cents: 5_00,
+                       created_at: retired_at + (index + 1).minutes)
     end
     balance_transaction = unapplied_balance_transaction
 
