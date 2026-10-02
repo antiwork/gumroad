@@ -1,11 +1,8 @@
 # frozen_string_literal: true
 
 # Backstop for the delayed retired-account check StripeConnectAccountLinker enqueues after a Connect
-# switch commits. A Redis failure there leaves the retirement durable and the seller linked, with
-# nothing else ever looking at the account again, so the pending check is re-derived from the row.
-#
-# The marker is written by the linker, so this only ever re-dispatches a retirement the switch made,
-# and the check clears it when it runs.
+# switch commits: a lost enqueue leaves the marker set with nothing else reading it. Only the linker
+# writes the marker, so this cannot re-dispatch a retirement the switch did not make.
 class DispatchPendingRetiredAccountChecksJob
   include Sidekiq::Job
   sidekiq_options retry: 5, queue: :low, lock: :until_executed
@@ -17,10 +14,6 @@ class DispatchPendingRetiredAccountChecksJob
   # dispatched twice.
   RECOVERY_DELAY = 6.hours
 
-  # A retirement unchecked this long after its tail is left to the payout guard
-  # (Payment::FailureReason::DESTINATION_ACCOUNT_RETIRED), which blocks a payout on it in any case.
-  LOOKBACK = 7.days
-
   def perform
     due = AlertOnRetiredManagedAccountActivityJob::SETTLEMENT_TAIL + RECOVERY_DELAY
 
@@ -29,7 +22,10 @@ class DispatchPendingRetiredAccountChecksJob
                    # An absent key and a cleared marker both have to be excluded by value: `->>`
                    # reads a JSON null back as the text 'null', not SQL NULL.
                    .where("COALESCE(json_data->>'$.retired_activity_check_pending_at', '') NOT IN ('', 'null')")
-                   .where(deleted_at: LOOKBACK.ago..due.ago)
+                   # The marker is cleared when the check runs, so no age window: an old marker is
+                   # exactly the lost check, and the upper edge alone keeps a check whose own
+                   # schedule has not fired yet from being dispatched twice.
+                   .where(deleted_at: ..due.ago)
                    .find_each do |merchant_account|
       AlertOnRetiredManagedAccountActivityJob.perform_async(merchant_account.id, merchant_account.deleted_at.utc.iso8601)
     end

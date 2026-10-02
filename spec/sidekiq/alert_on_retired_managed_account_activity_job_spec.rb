@@ -10,7 +10,8 @@ describe AlertOnRetiredManagedAccountActivityJob do
   let(:retired_at) { Time.zone.parse("2026-08-03T19:46:09Z") }
 
   before do
-    managed_account.update!(deleted_at: retired_at)
+    # A check always runs from the marker the linker wrote on the retirement.
+    managed_account.update!(deleted_at: retired_at, retired_activity_check_pending_at: retired_at.utc.iso8601)
     allow(InternalNotificationWorker).to receive(:perform_async)
   end
 
@@ -18,12 +19,15 @@ describe AlertOnRetiredManagedAccountActivityJob do
     described_class.new.perform(managed_account.id, retired_at.utc.iso8601)
   end
 
-  # The alert body, or nil when the job reported nothing.
+  # The alert body, or nil when the job reported nothing. One run per example: the check is spent
+  # when it reports, so a second copy of the job reports nothing.
   def reported_body
+    return @reported_body if defined?(@reported_body)
+
     captured = nil
     allow(InternalNotificationWorker).to receive(:perform_async) { |_room, _subject, body| captured = body }
     perform
-    captured
+    @reported_body = captured
   end
 
   def unapplied_balance_transaction
@@ -164,6 +168,28 @@ describe AlertOnRetiredManagedAccountActivityJob do
     perform
 
     expect(managed_account.reload.retired_activity_check_pending_at).to be_nil
+  end
+
+  # The sweep re-dispatches a check whose scheduled copy is only delayed, so two copies of one check
+  # can be queued; the marker is what lets the second one find it already reported.
+  it "reports once when two copies of the check run" do
+    create(:balance, user: seller, merchant_account: managed_account, state: "unpaid", amount_cents: 10_00,
+                     created_at: retired_at + 1.hour)
+
+    perform
+    perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async).once
+  end
+
+  it "reports nothing for a retirement the linker left no marker on" do
+    managed_account.update!(retired_activity_check_pending_at: nil)
+    create(:balance, user: seller, merchant_account: managed_account, state: "unpaid", amount_cents: 10_00,
+                     created_at: retired_at + 1.hour)
+
+    perform
+
+    expect(InternalNotificationWorker).not_to have_received(:perform_async)
   end
 
   # The report exists to name the money event a late refund leaves behind. Purchases fill the report

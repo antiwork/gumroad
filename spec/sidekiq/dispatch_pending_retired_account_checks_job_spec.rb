@@ -41,13 +41,15 @@ describe DispatchPendingRetiredAccountChecksJob do
     expect(AlertOnRetiredManagedAccountActivityJob).not_to have_received(:perform_async)
   end
 
-  # The payout guard blocks a payout on such an account in any case.
-  it "leaves a retirement older than the lookback to the payout guard" do
-    retire_account!(retired_at: (described_class::LOOKBACK + 1.day).ago)
+  # The marker is set only while a check is owed, so a retirement far past its tail that is still
+  # marked is exactly the lost-enqueue case this job exists for.
+  it "re-dispatches a retirement whose check is still owed long after its tail" do
+    account = retire_account!(retired_at: 30.days.ago)
 
     described_class.new.perform
 
-    expect(AlertOnRetiredManagedAccountActivityJob).not_to have_received(:perform_async)
+    expect(AlertOnRetiredManagedAccountActivityJob).to have_received(:perform_async)
+      .with(account.id, account.deleted_at.utc.iso8601)
   end
 
   it "leaves a managed account the switch never retired alone" do

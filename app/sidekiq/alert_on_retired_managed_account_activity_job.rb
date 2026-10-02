@@ -21,23 +21,33 @@ class AlertOnRetiredManagedAccountActivityJob
   def perform(merchant_account_id, retired_at_iso)
     merchant_account = MerchantAccount.find_by(id: merchant_account_id)
     return if merchant_account.nil?
-    # A retired account that has come back is not stranded: it is a payout destination again.
-    return clear_pending_marker(merchant_account) if merchant_account.active?
 
-    retired_at = Time.iso8601(retired_at_iso)
-    landed = landed_since(merchant_account, retired_at)
-    return clear_pending_marker(merchant_account) if landed.empty?
-
-    log_landed(merchant_account, retired_at, landed)
-    InternalNotificationWorker.perform_async("payouts", "Activity on a retired Stripe account",
-                                             message_for(merchant_account, retired_at, landed))
-    clear_pending_marker(merchant_account)
+    # Locked and inside one transaction: the marker read and its clear cannot be split by another
+    # copy of the check, and a run that dies mid-report rolls the clear back with it.
+    merchant_account.with_lock { report_landed_activity(merchant_account, retired_at_iso) }
   end
 
   private
-    # Cleared last, so a run that dies mid-report leaves the marker for
-    # DispatchPendingRetiredAccountChecksJob to re-dispatch rather than dropping the check.
+    # The marker is the claim on the check, so the sweep's copy — dispatched for a scheduled copy
+    # that is only delayed — finds it cleared instead of reporting the same activity again.
+    def report_landed_activity(merchant_account, retired_at_iso)
+      # A retired account that has come back is not stranded: it is a payout destination again.
+      return clear_pending_marker(merchant_account) if merchant_account.active?
+      return if merchant_account.retired_activity_check_pending_at.blank?
+
+      retired_at = Time.iso8601(retired_at_iso)
+      landed = landed_since(merchant_account, retired_at)
+      return clear_pending_marker(merchant_account) if landed.empty?
+
+      log_landed(merchant_account, retired_at, landed)
+      InternalNotificationWorker.perform_async("payouts", "Activity on a retired Stripe account",
+                                               message_for(merchant_account, retired_at, landed))
+      clear_pending_marker(merchant_account)
+    end
+
     def clear_pending_marker(merchant_account)
+      return if merchant_account.retired_activity_check_pending_at.blank?
+
       merchant_account.update!(retired_activity_check_pending_at: nil)
     end
 
