@@ -119,13 +119,12 @@ describe("useScrollableCarousel", () => {
     scrollTo(track, 5 * CARD_WIDTH - 200);
     scrollTo(track, 300);
     expect(onActiveChange).toHaveBeenLastCalledWith(3);
-    for (let i = 3; i < 5; i++) fireEvent.click(getByTestId("next"));
-    expect(onActiveChange).toHaveBeenLastCalledWith(5);
-    // The track is still at 300 while the smooth scroll toward card 5 runs.
-    fireEvent.click(getByTestId("next"));
+    for (let i = 3; i < CARD_COUNT - 1; i++) fireEvent.click(getByTestId("next"));
+    expect(onActiveChange).toHaveBeenLastCalledWith(CARD_COUNT - 1);
+    // The track is still at 300 while the smooth scroll toward the last card runs.
     fireEvent.click(getByTestId("previous"));
 
-    expect(onActiveChange).toHaveBeenLastCalledWith(5);
+    expect(onActiveChange).toHaveBeenLastCalledWith(CARD_COUNT - 2);
   });
 
   it("undoes Next with Previous when Next lands on a card the track cannot reach", () => {
@@ -169,6 +168,53 @@ describe("useScrollableCarousel", () => {
 
     // The left-edge card is the first one, so wrapping from it would leave the counter unchanged.
     expect(onActiveChange).toHaveBeenLastCalledWith(CARD_COUNT - 2);
+  });
+
+  it("undoes a Next click made while the track is still at its end", () => {
+    const onActiveChange = vi.fn<(index: number) => void>();
+    const { getByTestId } = render(<Carousel onActiveChange={onActiveChange} />);
+    const track = getByTestId("track");
+    layOut(track);
+
+    scrollTo(track, CARD_COUNT * CARD_WIDTH - VIEWPORT_WIDTH);
+    fireEvent.click(getByTestId("previous"));
+    fireEvent.click(getByTestId("next"));
+    fireEvent.click(getByTestId("next"));
+    // Card 6 is past what the track can reach, so the track has not moved.
+    expect(onActiveChange).toHaveBeenLastCalledWith(6);
+    fireEvent.click(getByTestId("previous"));
+
+    expect(onActiveChange).toHaveBeenLastCalledWith(5);
+  });
+
+  it("undoes a Next click onto the last card made while the track is still at its end", () => {
+    const onActiveChange = vi.fn<(index: number) => void>();
+    const { getByTestId } = render(<Carousel onActiveChange={onActiveChange} />);
+    const track = getByTestId("track");
+    layOut(track);
+
+    scrollTo(track, CARD_COUNT * CARD_WIDTH - VIEWPORT_WIDTH);
+    fireEvent.click(getByTestId("previous"));
+    for (let i = 4; i < CARD_COUNT - 1; i++) fireEvent.click(getByTestId("next"));
+    expect(onActiveChange).toHaveBeenLastCalledWith(CARD_COUNT - 1);
+    fireEvent.click(getByTestId("previous"));
+
+    expect(onActiveChange).toHaveBeenLastCalledWith(CARD_COUNT - 2);
+  });
+
+  it("keeps stepping one card per click after wrapping from the first card to the last", () => {
+    const onActiveChange = vi.fn<(index: number) => void>();
+    const { getByTestId } = render(<Carousel onActiveChange={onActiveChange} />);
+    const track = getByTestId("track");
+    layOut(track);
+
+    fireEvent.click(getByTestId("previous"));
+    // The track smooth-scrolls to its end, which the scroll handler observes.
+    scrollTo(track, CARD_COUNT * CARD_WIDTH - VIEWPORT_WIDTH);
+    fireEvent.click(getByTestId("previous"));
+
+    // Card 5 is at the left edge, so the first click back lands on 4, a card the track can reach.
+    expect(onActiveChange).toHaveBeenLastCalledWith(4);
   });
 
   it("wraps to the last card when going back from the start", () => {

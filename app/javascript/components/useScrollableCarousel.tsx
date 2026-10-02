@@ -1,7 +1,6 @@
 import * as React from "react";
 
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
-import { useRefToLatest } from "$app/components/useRefToLatest";
 
 const SCROLL_END_TOLERANCE_PX = 2;
 
@@ -18,10 +17,9 @@ const isScrolledToEnd = (items: HTMLElement) => {
 
 export function useScrollableCarousel(activeIndex: number, setActiveIndex: (index: number) => void) {
   const itemsRef = React.useRef<HTMLDivElement>(null);
-  const activeIndexRef = useRefToLatest(activeIndex);
-  // True while the counter shows the last card because the scroll handler put it there, not
-  // because an arrow stepped to it.
-  const endClampedRef = React.useRef(false);
+  // Set when a scroll to the track end clamps the counter to the last card; cleared as soon as the
+  // counter changes any other way, so a card picked with the arrows is never mistaken for it.
+  const endClampedIndexRef = React.useRef<number | null>(null);
 
   const handleScroll = useDebouncedCallback(() => {
     const items = itemsRef.current;
@@ -29,22 +27,20 @@ export function useScrollableCarousel(activeIndex: number, setActiveIndex: (inde
     // The track cannot scroll far enough to put the last items at the left edge, so the offset
     // search below stops short of the final index when several cards fit in view.
     if (isScrolledToEnd(items)) {
-      const last = items.children.length - 1;
-      if (activeIndexRef.current !== last) endClampedRef.current = true;
-      setActiveIndex(last);
+      endClampedIndexRef.current = items.children.length - 1;
+      setActiveIndex(items.children.length - 1);
       return;
     }
-    endClampedRef.current = false;
     setActiveIndex(leftEdgeIndex(items));
   }, 100);
 
-  // When the scroll handler clamped the counter to the last card, that card's offset is past the
-  // max scroll, so stepping back from it would not move the track. Step from the card at the left
-  // edge instead. A counter that an arrow set steps back one card, so Previous undoes Next.
+  // At the end of the track the counter is the last card, but that card's offset is past the max
+  // scroll, so stepping back from it would not move the track. Step from the card at the left
+  // edge instead. Any other counter value is a card the buyer picked, so step from it.
   const getPreviousIndex = (count: number) => {
     const items = itemsRef.current;
     let from = activeIndex;
-    if (items && endClampedRef.current && activeIndex === count - 1 && isScrolledToEnd(items)) {
+    if (items && endClampedIndexRef.current === activeIndex && isScrolledToEnd(items)) {
       const leftEdge = leftEdgeIndex(items);
       if (leftEdge > 0) from = leftEdge;
     }
@@ -52,7 +48,7 @@ export function useScrollableCarousel(activeIndex: number, setActiveIndex: (inde
   };
 
   React.useEffect(() => {
-    if (activeIndex !== (itemsRef.current?.children.length ?? 0) - 1) endClampedRef.current = false;
+    if (endClampedIndexRef.current !== activeIndex) endClampedIndexRef.current = null;
     const activeChild = itemsRef.current?.children[activeIndex];
     itemsRef.current?.scroll({
       left: activeChild instanceof HTMLElement ? activeChild.offsetLeft : 0,
