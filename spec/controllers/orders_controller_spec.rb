@@ -1180,6 +1180,81 @@ describe OrdersController, :vcr do
         end.not_to change(Purchase, :count)
       end
 
+      describe "free downloads held by the product and ip_address block" do
+        let(:free_product) { create(:product, user: seller_1, price_cents: 0) }
+        let(:free_download_params) do
+          {
+            line_items: [{ uid: "free-download", permalink: free_product.unique_permalink, perceived_price_cents: "0", quantity: 1 }],
+          }.merge(common_purchase_params_without_payment)
+        end
+
+        before do
+          allow_any_instance_of(Link).to receive(:require_captcha?).and_return(false)
+          PlatformBlock.add!(
+            object_type: PlatformBlock::TYPES[:product_ip_address],
+            object_value: "#{free_product.id}:#{request.remote_ip}",
+            expires_in: 24.hours,
+          )
+        end
+
+        it "tells a guest refused by the block that the seller's own sign-in lifts it, keeping the generic message" do
+          expect do
+            post :create, params: free_download_params
+          end.not_to change(Purchase.successful, :count)
+
+          line_item = response.parsed_body["line_items"]["free-download"]
+          expect(line_item).to include(
+            "success" => false,
+            "error_message" => "The transaction could not complete.",
+            "error_code" => PurchaseErrorCode::TEMPORARILY_BLOCKED_PRODUCT,
+            "owner_sign_in_remedy" => true,
+          )
+        end
+
+        it "sends the same response to a guest who types the seller's email, which discloses nothing" do
+          post :create, params: free_download_params.merge(email: seller_1.email)
+
+          line_item = response.parsed_body["line_items"]["free-download"]
+          expect(line_item).to include("error_code" => PurchaseErrorCode::TEMPORARILY_BLOCKED_PRODUCT, "owner_sign_in_remedy" => true)
+          expect(line_item["error_message"]).to eq("The transaction could not complete.")
+        end
+
+        it "does not offer the remedy to a signed-in buyer who is not the seller" do
+          sign_in create(:user)
+
+          post :create, params: free_download_params
+
+          line_item = response.parsed_body["line_items"]["free-download"]
+          expect(line_item).to include(
+            "success" => false,
+            "error_message" => "The transaction could not complete.",
+            "error_code" => PurchaseErrorCode::TEMPORARILY_BLOCKED_PRODUCT,
+          )
+          expect(line_item).not_to have_key("owner_sign_in_remedy")
+        end
+
+        it "lets the signed-in seller download their own product" do
+          sign_in seller_1
+
+          expect do
+            post :create, params: free_download_params
+          end.to change { free_product.sales.count }.by(1)
+
+          expect(response.parsed_body["line_items"]["free-download"]).to include("success" => true)
+          expect(free_product.sales.sole.purchaser).to eq seller_1
+        end
+
+        it "does not offer the remedy on a refusal unrelated to the block" do
+          PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email_domain], object_value: "gumroad.com")
+
+          post :create, params: free_download_params.merge(email: "guest@gumroad.com")
+
+          line_item = response.parsed_body["line_items"]["free-download"]
+          expect(line_item).to include("success" => false, "error_code" => PurchaseErrorCode::BLOCKED_EMAIL_DOMAIN)
+          expect(line_item).not_to have_key("owner_sign_in_remedy")
+        end
+      end
+
       describe "reCAPTCHA skipping behavior" do
         it "does not attempt to verify reCAPTCHA if all purchases are free and don't require captcha" do
           allow_any_instance_of(Link).to receive(:require_captcha?).and_return(false)

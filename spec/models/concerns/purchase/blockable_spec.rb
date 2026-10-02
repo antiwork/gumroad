@@ -2181,6 +2181,87 @@ describe Purchase::Blockable do
     end
   end
 
+  describe "#owner_sign_in_lifts_product_block?" do
+    let(:product) { create(:product, price_cents: 0) }
+
+    before do
+      PlatformBlock.add!(
+        object_type: PlatformBlock::TYPES[:product_ip_address],
+        object_value: "#{product.id}:127.0.0.1",
+        expires_in: 24.hours,
+      )
+    end
+
+    def refused_free_download(**attributes)
+      build(:purchase, link: product, ip_address: "127.0.0.1", purchaser: nil, **attributes).tap(&:save)
+    end
+
+    it "is true for a guest refused by the free-download block" do
+      purchase = refused_free_download
+
+      expect(purchase.error_code).to eq PurchaseErrorCode::TEMPORARILY_BLOCKED_PRODUCT
+      expect(purchase.errors.full_messages).to include "The transaction could not complete."
+      expect(purchase.owner_sign_in_lifts_product_block?).to be true
+    end
+
+    it "gives a guest who types the seller's email the same answer as any other guest" do
+      expect(refused_free_download(email: product.user.email).owner_sign_in_lifts_product_block?).to be true
+      expect(refused_free_download(email: "stranger@example.com").owner_sign_in_lifts_product_block?).to be true
+    end
+
+    it "is false for a signed-in buyer who is not the seller, who stays refused" do
+      purchase = refused_free_download(purchaser: create(:user))
+
+      expect(purchase.error_code).to eq PurchaseErrorCode::TEMPORARILY_BLOCKED_PRODUCT
+      expect(purchase.owner_sign_in_lifts_product_block?).to be false
+    end
+
+    it "is false for the signed-in seller, who is not refused" do
+      purchase = refused_free_download(purchaser: product.user)
+
+      expect(purchase.error_code).to be_nil
+      expect(purchase.owner_sign_in_lifts_product_block?).to be false
+    end
+
+    it "is false when nothing blocked the purchase" do
+      expect(build(:purchase, link: create(:product, price_cents: 0), ip_address: "127.0.0.1", purchaser: nil).owner_sign_in_lifts_product_block?).to be false
+    end
+
+    it "is false for a failure unrelated to the product block" do
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email_domain], object_value: "example.com")
+      purchase = refused_free_download(email: "guest@example.com")
+
+      expect(purchase.error_code).to eq PurchaseErrorCode::BLOCKED_EMAIL_DOMAIN
+      expect(purchase.owner_sign_in_lifts_product_block?).to be false
+    end
+
+    it "is false for the paid-checkout product block, which signing in does not lift" do
+      Feature.activate(:block_purchases_on_product)
+      paid_product = create(:product, price_cents: 500)
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:product], object_value: paid_product.id, expires_in: 1.hour)
+
+      purchase = build(:purchase, link: paid_product, price_cents: 500, purchaser: nil)
+      purchase.send(:product_is_not_blocked)
+
+      expect(purchase.error_code).to eq PurchaseErrorCode::TEMPORARILY_BLOCKED_PRODUCT
+      expect(purchase.errors.full_messages).to include "Your card was not charged."
+      expect(purchase.owner_sign_in_lifts_product_block?).to be false
+    end
+
+    it "is false for both rows of a free gift, whose receiver row the seller's sign-in does not clear" do
+      gift = create(:gift, link: product)
+      gifter_purchase = build(:free_purchase, link: product, ip_address: "127.0.0.1", purchaser: nil, gift_given: gift,
+                                              is_gift_sender_purchase: true, purchase_state: "in_progress").tap(&:save)
+      giftee_purchase = build(:free_purchase, link: product, ip_address: "127.0.0.1", purchaser: nil, gift_received: gift,
+                                              is_gift_receiver_purchase: true, purchase_state: "in_progress").tap(&:save)
+
+      expect(gifter_purchase.error_code).to eq PurchaseErrorCode::TEMPORARILY_BLOCKED_PRODUCT
+      expect(giftee_purchase.error_code).to eq PurchaseErrorCode::TEMPORARILY_BLOCKED_PRODUCT
+      expect(gifter_purchase.owner_sign_in_lifts_product_block?).to be false
+      expect(giftee_purchase.owner_sign_in_lifts_product_block?).to be false
+    end
+  end
+
   describe "#suspend_buyer_on_fraudulent_card_decline!" do
     before do
       Feature.activate(:suspend_fraudulent_buyers)

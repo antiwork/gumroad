@@ -45,6 +45,9 @@ type LineItemPaymentErrorFull = {
   card_country: string | null;
   ip_country: string | null;
   updated_product: ProductToAdd | null;
+  // Present only when a guest was refused by the free-download block that the seller's own
+  // sign-in lifts.
+  owner_sign_in_remedy?: boolean;
 };
 export type ErrorLineItemResult = LineItemPaymentErrorFull | LineItemPaymentErrorShort;
 

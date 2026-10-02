@@ -11,6 +11,7 @@ import { Button, NavigationButton } from "$app/components/Button";
 import { CartItem } from "$app/components/Checkout/cartState";
 import { useState } from "$app/components/Checkout/payment";
 import { DiscordButton } from "$app/components/DiscordButton";
+import { useDomains } from "$app/components/DomainSettings";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
@@ -18,6 +19,7 @@ import { Card, CardContent } from "$app/components/ui/Card";
 import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
+import { useOriginalLocation } from "$app/components/useOriginalLocation";
 
 export const LineItem = ({
   name,
@@ -49,6 +51,17 @@ export const LineItemResultEntry = ({ name, result }: { name: string; result: Li
     <FailedLineItemResultEntry name={name} result={result} />
   );
 
+const OwnerSignInRemedy = () => {
+  const { appDomain } = useDomains();
+  const location = useOriginalLocation();
+  return (
+    <p>
+      Testing your own product? <a href={Routes.login_url({ host: appDomain, next: location })}>Sign in</a> to your
+      Gumroad account and try again.
+    </p>
+  );
+};
+
 const FailedLineItemResultEntry = ({ name, result }: { name: string; result: ErrorLineItemResult }) => {
   const message = result.error_message ?? "Sorry, something went wrong.";
   return (
@@ -63,6 +76,7 @@ const FailedLineItemResultEntry = ({ name, result }: { name: string; result: Err
         </div>
         <Alert variant="warning">
           <div dangerouslySetInnerHTML={{ __html: message }} />
+          {"owner_sign_in_remedy" in result && result.owner_sign_in_remedy ? <OwnerSignInRemedy /> : null}
         </Alert>
       </section>
     </CardContent>

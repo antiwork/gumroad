@@ -682,6 +682,16 @@ module Purchase::Blockable
             .count >= MIN_SUCCESSFUL_PURCHASES_FOR_CLEAN_HISTORY
   end
 
+  # Whether this refusal is the guest-side of #free_product_ip_address_is_not_blocked, the only
+  # TEMPORARILY_BLOCKED_PRODUCT refusal that the seller signing in lifts. Keyed on the missing
+  # `purchaser_id`, never the typed-in email, so it says nothing about who owns the product. Gift
+  # rows are left out: the receiver's row never carries the seller's id, so signing in would not
+  # clear them.
+  def owner_sign_in_lifts_product_block?
+    error_code == PurchaseErrorCode::TEMPORARILY_BLOCKED_PRODUCT &&
+      free_purchase? && purchaser_id.blank? && !is_gift_sender_purchase? && !is_gift_receiver_purchase?
+  end
+
   private
     def recent_stripe_fingerprint
       [self, *sibling_buyer_purchases].select { |purchase| purchase.stripe_fingerprint.present? }.max_by(&:id)&.stripe_fingerprint
