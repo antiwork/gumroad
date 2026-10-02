@@ -60,6 +60,7 @@ const GAMBIA_SWIFT_BIC_REGEX = /^[0-9A-Za-z]{8,11}$/u;
 // the difference between `014` and `BCA`. Stripe resolves the ID bank from its 3-digit Sandi Bank
 // directory, so a letter code saves here and then fails bank-sync with routing_number_invalid.
 const INDONESIA_BANK_CODE_REGEX = /^[0-9]{3}$/u;
+const BANGLADESH_BANK_CODE_REGEX = /^[0-9]{9}$/u;
 
 const KANA_NAME_ERROR = "may only contain katakana characters, spaces, dashes, and dots.";
 const KANA_ADDRESS_ERROR = "may only contain katakana, latin characters, digits, spaces, dashes, and dots.";
@@ -746,8 +747,13 @@ export default function PaymentsPage() {
     if (form.data.bank_account.type === "SriLankaBankAccount" && !form.data.bank_account.branch_code) {
       markFieldInvalid("branch_code");
     }
-    if (form.data.bank_account.type === "BangladeshBankAccount" && !form.data.bank_account.bank_code) {
-      markFieldInvalid("bank_code");
+    if (form.data.bank_account.type === "BangladeshBankAccount") {
+      if (!form.data.bank_account.bank_code) {
+        markFieldInvalid("bank_code");
+      } else if (!BANGLADESH_BANK_CODE_REGEX.test(form.data.bank_account.bank_code)) {
+        markFieldInvalid("bank_code");
+        setClientErrorMessage({ message: "Enter your bank's 9-digit BEFTN routing number, digits only." });
+      }
     }
     if (form.data.bank_account.type === "BhutanBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
