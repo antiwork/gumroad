@@ -2021,6 +2021,8 @@ const BankAccountSection = ({
                     id={`${uid}-bank-code`}
                     placeholder="123456789"
                     maxLength={9}
+                    pattern="[0-9]{9}"
+                    inputMode="numeric"
                     required
                     disabled={isFormDisabled}
                     aria-invalid={errorFieldNames.has("bank_code")}

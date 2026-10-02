@@ -3,7 +3,7 @@
 class BangladeshBankAccount < BankAccount
   BANK_ACCOUNT_TYPE = "BD"
 
-  BANK_CODE_FORMAT_REGEX = /^([0-9a-zA-Z]){9}$/
+  BANK_CODE_FORMAT_REGEX = /\A[0-9]{9}\z/
   private_constant :BANK_CODE_FORMAT_REGEX
 
   ACCOUNT_NUMBER_FORMAT_REGEX = /^([0-9a-zA-Z]){13,17}$/
@@ -11,7 +11,7 @@ class BangladeshBankAccount < BankAccount
 
   alias_attribute :bank_code, :bank_number
 
-  validate :validate_bank_code
+  validate :validate_bank_code, if: -> { new_record? || will_save_change_to_bank_number? }
   validate :validate_account_number
 
   def routing_number
@@ -45,7 +45,7 @@ class BangladeshBankAccount < BankAccount
   private
     def validate_bank_code
       return if BANK_CODE_FORMAT_REGEX.match?(bank_code)
-      errors.add :base, "The bank code is invalid."
+      errors.add :base, "Enter your bank's 9-digit BEFTN routing number (for example 250110123), not a SWIFT/BIC code."
     end
 
     def validate_account_number
