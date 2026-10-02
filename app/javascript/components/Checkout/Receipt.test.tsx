@@ -57,8 +57,8 @@ describe("LineItemResultEntry for a failed line item", () => {
     renderEntry(failedResult({ owner_sign_in_remedy: true }));
 
     expect(screen.getByText("The transaction could not complete.")).toBeTruthy();
-    expect(screen.getByText(/Testing your own product\?/u)).toBeTruthy();
-    const link = screen.getByRole<HTMLAnchorElement>("link", { name: "Sign in" });
+    expect(screen.getByText(/If you own this product,/u)).toBeTruthy();
+    const link = screen.getByRole<HTMLAnchorElement>("link", { name: "sign in to Gumroad" });
     expect(link.getAttribute("href")).toBe(
       `https://app.example.com/login?next=${encodeURIComponent(window.location.href)}`,
     );
@@ -67,27 +67,29 @@ describe("LineItemResultEntry for a failed line item", () => {
   it("opens the sign-in link in the top window so a framed checkout can keep the login cookie", () => {
     renderEntry(failedResult({ owner_sign_in_remedy: true }));
 
-    expect(screen.getByRole<HTMLAnchorElement>("link", { name: "Sign in" }).getAttribute("target")).toBe("_top");
+    expect(screen.getByRole<HTMLAnchorElement>("link", { name: "sign in to Gumroad" }).getAttribute("target")).toBe(
+      "_top",
+    );
   });
 
   it("shows only the generic message when the server does not flag the remedy", () => {
     renderEntry(failedResult());
 
     expect(screen.getByText("The transaction could not complete.")).toBeTruthy();
-    expect(screen.queryByText(/Testing your own product\?/u)).toBeNull();
-    expect(screen.queryByRole("link", { name: "Sign in" })).toBeNull();
+    expect(screen.queryByText(/If you own this product,/u)).toBeNull();
+    expect(screen.queryByRole("link", { name: "sign in to Gumroad" })).toBeNull();
   });
 
   it("shows only the generic message when the remedy flag is false", () => {
     renderEntry(failedResult({ owner_sign_in_remedy: false }));
 
-    expect(screen.queryByRole("link", { name: "Sign in" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "sign in to Gumroad" })).toBeNull();
   });
 
   it("leaves an unrelated risk error without the remedy", () => {
     renderEntry(failedResult({ error_code: "blocked_email_domain" }));
 
     expect(screen.getByText("The transaction could not complete.")).toBeTruthy();
-    expect(screen.queryByRole("link", { name: "Sign in" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "sign in to Gumroad" })).toBeNull();
   });
 });
