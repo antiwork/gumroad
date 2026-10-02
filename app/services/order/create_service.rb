@@ -173,7 +173,7 @@ class Order::CreateService
         end
 
         if error
-          purchase_responses[line_item_uid] = error_response(error, purchase:)
+          purchase_responses[line_item_uid] = error_response(error, purchase:, guest: buyer.blank?)
           failed_purchases << purchase if purchase&.persisted?
           recovered_allocations = discount_allocations.values.uniq.select do |candidate|
             candidate.dig(:products_data, line_item_uid, :discount, :once_per_cart)

@@ -56,6 +56,54 @@ describe Order::ResponseHelpers do
       expect(response[:card_country]).to eq("China")
     end
 
+    describe "owner_sign_in_remedy" do
+      let(:free_product) { create(:product, user: seller, price_cents: 0) }
+
+      def blocked_guest_purchase(**attributes)
+        build(:free_purchase, link: free_product, purchaser: nil, error_code: PurchaseErrorCode::TEMPORARILY_BLOCKED_PRODUCT, **attributes)
+      end
+
+      it "is sent for a guest refused by the free-download block" do
+        response = test_instance.send(:error_response, "The transaction could not complete.", purchase: blocked_guest_purchase, guest: true)
+
+        expect(response[:owner_sign_in_remedy]).to be(true)
+      end
+
+      it "is sent to a guest whose typed email resolved to an existing account, same as any other guest" do
+        purchase = blocked_guest_purchase(purchaser: create(:user))
+
+        response = test_instance.send(:error_response, "The transaction could not complete.", purchase:, guest: true)
+
+        expect(response[:owner_sign_in_remedy]).to be(true)
+      end
+
+      it "is left out for a signed-in buyer, so the response shape stays unchanged" do
+        purchase = blocked_guest_purchase(purchaser: create(:user))
+
+        response = test_instance.send(:error_response, "The transaction could not complete.", purchase:, guest: false)
+
+        expect(response).not_to have_key(:owner_sign_in_remedy)
+      end
+
+      it "is left out when the caller does not say the request is a guest's" do
+        response = test_instance.send(:error_response, "The transaction could not complete.", purchase: blocked_guest_purchase)
+
+        expect(response).not_to have_key(:owner_sign_in_remedy)
+      end
+
+      it "is left out for a failure that is not the product block" do
+        purchase = blocked_guest_purchase(error_code: PurchaseErrorCode::BLOCKED_EMAIL_DOMAIN)
+
+        response = test_instance.send(:error_response, "The transaction could not complete.", purchase:, guest: true)
+
+        expect(response).not_to have_key(:owner_sign_in_remedy)
+      end
+
+      it "is left out without a purchase" do
+        expect(test_instance.send(:error_response, "Generic error", purchase: nil, guest: true)).not_to have_key(:owner_sign_in_remedy)
+      end
+    end
+
     it "handles nil purchase gracefully" do
       response = test_instance.send(:error_response, "Generic error", purchase: nil)
 

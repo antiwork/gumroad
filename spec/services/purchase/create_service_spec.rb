@@ -3697,6 +3697,7 @@ describe Purchase::CreateService, :vcr do
 
         expect(error).to eq "The transaction could not complete."
         expect(purchase.error_code).to eq PurchaseErrorCode::TEMPORARILY_BLOCKED_PRODUCT
+        expect(purchase.owner_sign_in_lifts_product_block?).to be true
         expect(purchase).not_to be_successful
       end
 
@@ -3759,6 +3760,7 @@ describe Purchase::CreateService, :vcr do
         expect(error).to eq "The transaction could not complete."
         expect(purchase.price_cents).to eq 0
         expect(purchase.error_code).to eq PurchaseErrorCode::TEMPORARILY_BLOCKED_PRODUCT
+        expect(purchase.owner_sign_in_lifts_product_block?).to be false
         expect(purchase).not_to be_successful
         expect(purchase.gift_given.state).to eq "failed"
         expect(purchase.gift_given.giftee_purchase.purchase_state).to eq "gift_receiver_purchase_failed"
@@ -3821,6 +3823,7 @@ describe Purchase::CreateService, :vcr do
 
       expect(error).to eq "The transaction could not complete."
       expect(purchase.error_code).to eq PurchaseErrorCode::TEMPORARILY_BLOCKED_PRODUCT
+      expect(purchase.owner_sign_in_lifts_product_block?).to be true
       expect(purchase).not_to be_successful
     end
 
@@ -3830,6 +3833,19 @@ describe Purchase::CreateService, :vcr do
       expect(error).to eq "The transaction could not complete."
       expect(purchase.purchaser).to be_nil
       expect(purchase.error_code).to eq PurchaseErrorCode::TEMPORARILY_BLOCKED_PRODUCT
+      expect(purchase.owner_sign_in_lifts_product_block?).to be true
+      expect(purchase).not_to be_successful
+    end
+
+    it "still refuses a guest free download that types in an existing non-seller account's email, and that account becomes the purchaser" do
+      other_user = create(:user)
+
+      purchase, error = Purchase::CreateService.new(product: free_product, params: free_download_params(email: other_user.email)).perform
+
+      expect(error).to eq "The transaction could not complete."
+      expect(purchase.purchaser).to eq other_user
+      expect(purchase.error_code).to eq PurchaseErrorCode::TEMPORARILY_BLOCKED_PRODUCT
+      expect(purchase.owner_sign_in_lifts_product_block?).to be true
       expect(purchase).not_to be_successful
     end
 
