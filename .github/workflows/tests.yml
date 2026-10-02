@@ -1181,12 +1181,16 @@ jobs:
         (needs.test_fast.result == 'success' && needs.test_slow.result == 'success')
       )
     steps:
+      # The gate exists only after the asset compile passes (#7316), often minutes after
+      # the tests finish. Poll every 20 s for about 30 minutes: a long wait between
+      # attempts delays the deploy, and a short window leaves it for a person to unblock.
       - name: Unblock corresponding Buildkite build
         uses: nick-fields/retry@v3
         with:
           timeout_seconds: 20
-          retry_wait_seconds: 300
-          max_attempts: 3
+          retry_wait_seconds: 20
+          max_attempts: 90
+          warning_on_retry: false
           command: |
             if [ "$UNBLOCK_DEPLOYMENT" != "true" ]; then
               echo "UNBLOCK_DEPLOYMENT_FROM_BUILDKITE is not set to 'true'. Skipping unblock."
