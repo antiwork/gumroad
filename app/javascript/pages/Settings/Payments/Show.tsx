@@ -697,7 +697,7 @@ export default function PaymentsPage() {
       markFieldInvalid("branch_code");
     }
     if (form.data.bank_account.type === "BoliviaBankAccount" && !form.data.bank_account.bank_code) {
-      markFieldInvalid("branch_code");
+      markFieldInvalid("bank_code");
     }
     if (form.data.bank_account.type === "GhanaBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");

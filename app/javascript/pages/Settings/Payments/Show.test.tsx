@@ -651,6 +651,32 @@ describe("server error naming a field", () => {
   });
 });
 
+describe("Bolivia bank validation", () => {
+  it("flags the bank picker, not the branch code, when no bank is chosen", () => {
+    mocks.usePage.mockReturnValue({
+      props: {
+        ...pageProps({ country_code: "BO", payout_currency: "bob" }, { country: "BO" }),
+        countries: { BO: "Bolivia" },
+        bank_account_details: {
+          show_bank_account: true,
+          show_paypal: false,
+          is_a_card: false,
+          routing_number: null,
+          account_number_visual: null,
+          card: null,
+          card_data_handling_mode: null,
+          bank_account: null,
+        },
+      },
+    });
+    render(<PaymentsPage />);
+    save();
+
+    expect(mocks.put).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Bank").getAttribute("aria-invalid")).toBe("true");
+  });
+});
+
 describe("Bangladesh bank code validation", () => {
   const beftnError = "Enter your bank's 9-digit BEFTN routing number, digits only.";
 

@@ -11,6 +11,56 @@ import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 import { Select } from "$app/components/ui/Select";
 
+const BOLIVIA_BANKS: [string, string][] = [
+  ["001", "Banco Mercantil"],
+  ["002", "Banco Nacional de Bolivia"],
+  ["003", "Banco de Crédito de Bolivia"],
+  ["004", "Banco Do Brasil"],
+  ["005", "Banco BISA"],
+  ["006", "Banco Unión"],
+  ["007", "Banco Económico"],
+  ["008", "Banco Solidario"],
+  ["009", "Banco Ganadero"],
+  ["010", "Banco Los Andes Pro Credit"],
+  ["011", "Mutual la Primera"],
+  ["012", "Mutual Guapay"],
+  ["013", "Mutual la Promotora"],
+  ["014", "Mutual el Progreso"],
+  ["015", "Mutual La Plata"],
+  ["016", "Mutual Potosí"],
+  ["017", "Mutual la Tarija"],
+  ["018", "Mutual Paititi"],
+  ["019", "Mutual del Pueblo"],
+  ["021", "Mutual Manutata"],
+  ["022", "Cooperativa Jesús Nazareno"],
+  ["023", "Cooperativa San Martin"],
+  ["024", "Cooperativa Fátima"],
+  ["025", "Cooperativa San Pedro"],
+  ["026", "Cooperativa Loyola"],
+  ["027", "Cooperativa Hospicio"],
+  ["028", "Cooperativa San Antonio"],
+  ["029", "Cooperativa PIO X"],
+  ["030", "Cooperativa Incahuassi"],
+  ["031", "Cooperativa Quillacollo"],
+  ["032", "Cooperativa San Jose de Punata"],
+  ["033", "Cooperativa Trinidad"],
+  ["034", "Cooperativa Comarapa"],
+  ["035", "Cooperativa San Mateo"],
+  ["036", "Cooperativa El Chorolque"],
+  ["037", "Cooperativa Educadores Gran Chaco"],
+  ["038", "Cooperativa Catedral"],
+  ["039", "Magisterio Rural"],
+  ["040", "Cooperativa San Joaquín"],
+  ["041", "Cooperativa Trapetrol Oriente"],
+  ["042", "Nacional Financiera Boliviana SAN"],
+  ["043", "Financiera Acceso La Paz"],
+  ["044", "Fondo Financiero de la Comunidad"],
+  ["045", "Banco FIE"],
+  ["046", "Banco Fassil"],
+  ["047", "Banco Ecofuturo"],
+  ["049", "Banco Fortaleza"],
+];
+
 export type BankAccount =
   | {
       type: "AchAccount";
@@ -837,6 +887,8 @@ const BankAccountSection = ({
         return "SWIFT/BIC and branch code";
       case BANK_AND_BRANCH_CODE_COUNTRIES.includes(countryCode):
         return "Bank and branch code";
+      case countryCode === "BO":
+        return "Bank";
       case BANK_CODE_COUNTRIES.includes(countryCode):
         return "Bank code";
       case SWIFT_BIC_CODE_COUNTRIES.includes(countryCode):
@@ -1848,21 +1900,23 @@ const BankAccountSection = ({
               ) : user.country_code === "BO" ? (
                 <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
                   <FieldsetTitle>
-                    <Label htmlFor={`${uid}-bank-code`}>Bank code</Label>
+                    <Label htmlFor={`${uid}-bank-code`}>Bank</Label>
                   </FieldsetTitle>
-                  <Input
-                    type="text"
+                  <Select
                     id={`${uid}-bank-code`}
-                    placeholder="Enter the 3-digit bank code"
-                    maxLength={3}
                     required
                     disabled={isFormDisabled}
                     aria-invalid={errorFieldNames.has("bank_code")}
                     onChange={(evt) => updateBankAccount({ bank_code: evt.target.value })}
-                  />
-                  <FieldsetDescription>
-                    Banks in Bolivia don't issue this code. Contact Gumroad support for the 3-digit code for your bank.
-                  </FieldsetDescription>
+                    value={(bankAccount?.type === "BoliviaBankAccount" && bankAccount.bank_code) || "Select"}
+                  >
+                    <option disabled>Select</option>
+                    {BOLIVIA_BANKS.map(([code, name]) => (
+                      <option key={code} value={code}>
+                        {name}
+                      </option>
+                    ))}
+                  </Select>
                 </Fieldset>
               ) : user.country_code === "NG" ? (
                 <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
@@ -2560,7 +2614,12 @@ const BankAccountSection = ({
                     <Input
                       id={`${uid}-saved-routing-number`}
                       disabled
-                      value={bankAccountDetails.routing_number || ""}
+                      value={
+                        (user.country_code === "BO" &&
+                          BOLIVIA_BANKS.find(([code]) => code === bankAccountDetails.routing_number)?.[1]) ||
+                        bankAccountDetails.routing_number ||
+                        ""
+                      }
                     />
                   </Fieldset>
                 )}

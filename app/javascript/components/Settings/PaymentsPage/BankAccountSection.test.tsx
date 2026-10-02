@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -44,14 +44,21 @@ const makeUser = (countryCode: string, supportsIban = false): User => ({
 
 // The section keeps the entered account number in its parent, so a stateful wrapper is what
 // lets these tests exercise the rendered field rather than a single passed-in prop.
-const renderForCountry = (countryCode: string, supportsIban = false) => {
+const renderForCountry = (
+  countryCode: string,
+  supportsIban = false,
+  onUpdate: (next: Partial<BankAccount>) => void = () => {},
+) => {
   const Harness = () => {
     const [bankAccount, setBankAccount] = React.useState<Partial<BankAccount> | null>(null);
     return (
       <BankAccountSection
         bankAccountDetails={bankAccountDetails}
         bankAccount={bankAccount}
-        updateBankAccount={(next) => setBankAccount((prev) => ({ ...prev, ...next }))}
+        updateBankAccount={(next) => {
+          onUpdate(next);
+          setBankAccount((prev) => ({ ...prev, ...next }));
+        }}
         hasConnectedStripe={false}
         user={makeUser(countryCode, supportsIban)}
         isFormDisabled={false}
@@ -233,16 +240,45 @@ describe("BankAccountSection IBAN-box placeholders", () => {
   });
 });
 
-describe("BankAccountSection Bolivia bank code", () => {
-  it("has no copyable-looking placeholder and points sellers to support", () => {
+describe("BankAccountSection Bolivia bank picker", () => {
+  it("lists banks by name and stores the processor's 3-digit code", () => {
     renderForCountry("BO");
 
-    const field = screen.getByLabelText<HTMLInputElement>("Bank code");
-    expect(field.maxLength).toBe(3);
-    expect(/\d{3}/u.test(field.placeholder)).toBe(false);
-    expect(field.placeholder.toLowerCase()).not.toContain("asfi");
-    expect(screen.getByText(/Contact Gumroad support/u)).toBeTruthy();
-    expect(screen.queryByText(/ASFI/u)).toBeNull();
+    const select = screen.getByLabelText<HTMLSelectElement>("Bank");
+    const options = [...select.options].filter((o) => !o.disabled);
+    expect(options).toHaveLength(47);
+    expect(options.find((o) => o.value === "006")?.textContent).toBe("Banco Unión");
+    expect(options.some((o) => o.value === "048" || o.value === "020")).toBe(false);
+    expect(screen.queryByText(/ASFI|support/u)).toBeNull();
+  });
+
+  it("passes the selected bank's 3-digit code to the account state", () => {
+    const updates: Partial<BankAccount>[] = [];
+    renderForCountry("BO", false, (next) => updates.push(next));
+
+    fireEvent.change(screen.getByLabelText("Bank"), { target: { value: "006" } });
+
+    expect(updates).toContainEqual({ bank_code: "006" });
+    expect(screen.getByLabelText<HTMLSelectElement>("Bank").value).toBe("006");
+  });
+
+  it("shows the saved account's bank by name", () => {
+    render(
+      <BankAccountSection
+        bankAccountDetails={{ ...bankAccountDetails, routing_number: "040", account_number_visual: "******6789" }}
+        bankAccount={null}
+        updateBankAccount={() => {}}
+        hasConnectedStripe={false}
+        user={makeUser("BO")}
+        isFormDisabled={false}
+        feeInfoText=""
+        showNewBankAccount={false}
+        setShowNewBankAccount={() => {}}
+        errorFieldNames={new Set()}
+      />,
+    );
+
+    expect(screen.getByLabelText<HTMLInputElement>("Bank").value).toBe("Cooperativa San Joaquín");
   });
 });
 
