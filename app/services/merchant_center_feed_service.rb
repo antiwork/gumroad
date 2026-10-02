@@ -41,10 +41,12 @@ class MerchantCenterFeedService
     max_id ? max_id / SHARD_WIDTH : nil
   end
 
-  # Same preload shape as SitemapService: keeps the per-row seller and cover lookups flat
-  # across a full-catalog walk.
+  # SitemapService's preload shape plus what eligible? reads on every row: price_cents
+  # resolves through alive_prices, and recommendable? reads taxonomy.
   FEED_PRELOADS = [
     :user,
+    :alive_prices,
+    :taxonomy,
     { display_asset_previews: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } } }
   ].freeze
   private_constant :FEED_PRELOADS
@@ -119,13 +121,25 @@ class MerchantCenterFeedService
     # doesn't cover: no adult content, a nonzero price, and a real image resource
     # (social_share_image is the cover image, an oEmbed THUMBNAIL, or a video poster —
     # never the oEmbed iframe URL, which Merchant Center rejects for g:image_link).
+    # The checks before recommendable? need no database query, so the rows they reject skip
+    # its purchase and payout lookups. social_share_image goes after it: for a video cover it
+    # can query and enqueue poster generation.
     def eligible?(product)
-      product.recommendable? &&
-        !product.rated_as_adult? &&
+      product.price_cents.to_i.positive? &&
         !product.user.suspended? &&
-        product.price_cents.to_i.positive? &&
+        cover_image_possible?(product) &&
         usd_price_cents(product).to_i.positive? &&
+        !product.rated_as_adult? &&
+        product.recommendable? &&
         product.social_share_image.present?
+    end
+
+    # Necessary for social_share_image, from preloaded data only: its image, oEmbed thumbnail
+    # and video poster branches. A video cover stays possible until its poster is looked up.
+    def cover_image_possible?(product)
+      product.preview_image_path? ||
+        product.preview_oembed_thumbnail_url.present? ||
+        product.preview_video_path?
     end
 
     # The block receives an emit callable for each eligible product.
