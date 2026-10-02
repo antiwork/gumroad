@@ -268,7 +268,11 @@ class StripePayoutProcessor
       account = balance.merchant_account
       account.holder_of_funds == HolderOfFunds::STRIPE && drainable_retired_account?(account)
     end
-    retired.group_by { |balance| [balance.merchant_account_id, balance.holding_currency.to_s] }.each do |(account_id, currency), group|
+    retired.group_by(&:merchant_account_id).each do |account_id, group|
+      currencies = group.map { _1.holding_currency.to_s }.uniq
+      next unless currencies.one?
+
+      currency = currencies.first
       next unless group.sum(&:holding_amount_cents).positive? && group.sum(&:amount_cents).positive?
       next unless pay_out_currency?(group.first.merchant_account, currency)
 

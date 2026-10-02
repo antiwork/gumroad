@@ -400,6 +400,20 @@ describe StripePayoutProcessor do
           .to include([account, Currency::AUD, [credit]])
         expect(groups.flat_map(&:last)).to match_array([credit, gumroad_held])
       end
+
+      it "keeps a retired account holding two currencies out of the drain groups" do
+        account = create(:merchant_account, user: seller, currency: Currency::AUD, charge_processor_merchant_id: "acct_mixed_aud")
+          .tap(&:delete_charge_processor_account!)
+        aud = create(:balance, user: seller, merchant_account: account, state: "processing", date: 2.days.ago.to_date,
+                               amount_cents: 20_00, holding_currency: Currency::AUD, holding_amount_cents: 30_00)
+        usd = create(:balance, user: seller, merchant_account: account, state: "processing", date: 1.day.ago.to_date,
+                               amount_cents: 10_00, holding_currency: Currency::USD, holding_amount_cents: 10_00)
+
+        drained, remaining = described_class.split_retired_account_groups([aud, usd])
+
+        expect(drained).to be_empty
+        expect(remaining).to match_array([aud, usd])
+      end
     end
 
     context "when the destination is an active Gumroad-managed account" do
