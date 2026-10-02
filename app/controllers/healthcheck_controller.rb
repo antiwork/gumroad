@@ -13,6 +13,11 @@ class HealthcheckController < ApplicationController
   # :index -- the monitoring actions below genuinely report on Redis.
   skip_before_action :redirect_to_custom_subdomain, only: :index
 
+  # PublicSuffix.valid? accepts the poll's IP as a domain, so set_is_user_custom_domain
+  # reaches CustomDomain.find_by_host and checks out a database connection -- another way
+  # for a blip unrelated to serving traffic to hold the readiness gate open.
+  skip_before_action :set_is_user_custom_domain, only: :index
+
   def index
     render plain: "healthcheck"
   end
