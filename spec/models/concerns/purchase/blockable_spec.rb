@@ -2209,11 +2209,11 @@ describe Purchase::Blockable do
       expect(refused_free_download(email: "stranger@example.com").owner_sign_in_lifts_product_block?).to be true
     end
 
-    it "is false for a signed-in buyer who is not the seller, who stays refused" do
+    it "is true for a guest whose typed email resolved to an existing non-seller account, which only the request can tell apart from a signed-in buyer" do
       purchase = refused_free_download(purchaser: create(:user))
 
       expect(purchase.error_code).to eq PurchaseErrorCode::TEMPORARILY_BLOCKED_PRODUCT
-      expect(purchase.owner_sign_in_lifts_product_block?).to be false
+      expect(purchase.owner_sign_in_lifts_product_block?).to be true
     end
 
     it "is false for the signed-in seller, who is not refused" do
@@ -2221,6 +2221,13 @@ describe Purchase::Blockable do
 
       expect(purchase.error_code).to be_nil
       expect(purchase.owner_sign_in_lifts_product_block?).to be false
+    end
+
+    it "is true for a guest who types the seller's email and resolves to no account on the purchase" do
+      purchase = refused_free_download(email: product.user.email)
+
+      expect(purchase.purchaser).to be_nil
+      expect(purchase.owner_sign_in_lifts_product_block?).to be true
     end
 
     it "is false when nothing blocked the purchase" do

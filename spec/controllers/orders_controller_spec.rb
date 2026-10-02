@@ -1219,6 +1219,29 @@ describe OrdersController, :vcr do
           expect(line_item["error_message"]).to eq("The transaction could not complete.")
         end
 
+        it "sends the same response to a guest who types an existing non-seller account's email" do
+          other_user = create(:user)
+
+          post :create, params: free_download_params.merge(email: other_user.email)
+
+          expect(Purchase.last.purchaser).to eq other_user
+          line_item = response.parsed_body["line_items"]["free-download"]
+          expect(line_item).to include(
+            "success" => false,
+            "error_message" => "The transaction could not complete.",
+            "error_code" => PurchaseErrorCode::TEMPORARILY_BLOCKED_PRODUCT,
+            "owner_sign_in_remedy" => true,
+          )
+        end
+
+        it "sends the same response to a guest who types a fresh email" do
+          post :create, params: free_download_params.merge(email: "fresh-guest@example.com")
+
+          line_item = response.parsed_body["line_items"]["free-download"]
+          expect(line_item).to include("error_code" => PurchaseErrorCode::TEMPORARILY_BLOCKED_PRODUCT, "owner_sign_in_remedy" => true)
+          expect(line_item["error_message"]).to eq("The transaction could not complete.")
+        end
+
         it "does not offer the remedy to a signed-in buyer who is not the seller" do
           sign_in create(:user)
 

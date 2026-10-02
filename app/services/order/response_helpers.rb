@@ -19,7 +19,7 @@ module Order::ResponseHelpers
       end
     end
 
-    def error_response(error_message, purchase: nil)
+    def error_response(error_message, purchase: nil, guest: false)
       card_country = purchase&.card_country
       card_country = "CN" if card_country == "C2" # PayPal (wrongly) returns CN2 for China users transacting with USD
 
@@ -35,8 +35,10 @@ module Order::ResponseHelpers
         ip_country: purchase&.ip_country,
         updated_product: purchase.present? ? CheckoutPresenter.new(logged_in_user: nil, ip: purchase.ip_address).checkout_product(purchase.link, purchase.link.cart_item({ rent: purchase.is_rental, option: purchase.variant_attributes.first&.external_id, recurrence: purchase.price&.recurrence, price: purchase.customizable_price? ? purchase.displayed_price_cents : nil }), { recommended_by: purchase.recommended_by.presence }) : nil,
       }
-      # Only sent when it applies, so every other failure keeps its response shape byte for byte.
-      response[:owner_sign_in_remedy] = true if purchase&.owner_sign_in_lifts_product_block?
+      # `guest` is whether the request is unauthenticated, which is not the same as the purchase
+      # lacking a purchaser. Only sent when it applies, so every other failure keeps its response
+      # shape byte for byte.
+      response[:owner_sign_in_remedy] = true if guest && purchase&.owner_sign_in_lifts_product_block?
       response
     end
 end
