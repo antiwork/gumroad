@@ -56,8 +56,12 @@ const OwnerSignInRemedy = () => {
   const location = useOriginalLocation();
   return (
     <p>
-      Testing your own product? <a href={Routes.login_url({ host: appDomain, next: location })}>Sign in</a> to your
-      Gumroad account and try again.
+      Testing your own product?{" "}
+      {/* _top: a checkout framed on another site never keeps the login cookie, so sign in in the top window (as CtaButton does). */}
+      <a href={Routes.login_url({ host: appDomain, next: location })} target="_top">
+        Sign in
+      </a>{" "}
+      to your Gumroad account and try again.
     </p>
   );
 };

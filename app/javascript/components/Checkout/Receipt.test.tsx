@@ -64,6 +64,12 @@ describe("LineItemResultEntry for a failed line item", () => {
     );
   });
 
+  it("opens the sign-in link in the top window so a framed checkout can keep the login cookie", () => {
+    renderEntry(failedResult({ owner_sign_in_remedy: true }));
+
+    expect(screen.getByRole<HTMLAnchorElement>("link", { name: "Sign in" }).getAttribute("target")).toBe("_top");
+  });
+
   it("shows only the generic message when the server does not flag the remedy", () => {
     renderEntry(failedResult());
 
