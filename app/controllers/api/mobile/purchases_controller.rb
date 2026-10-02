@@ -2,6 +2,7 @@
 
 class Api::Mobile::PurchasesController < Api::Mobile::BaseController
   before_action { doorkeeper_authorize! :mobile_api }
+  before_action :require_confirmed_user
   before_action :fetch_purchase, only: [:purchase_attributes, :archive, :unarchive, :destroy]
   DEFAULT_SEARCH_RESULTS_SIZE = 10
   DEFAULT_PER_PAGE = 100
@@ -85,6 +86,13 @@ class Api::Mobile::PurchasesController < Api::Mobile::BaseController
   end
 
   private
+    # Same rule as the web library: an unconfirmed account may not see purchases made with its address.
+    def require_confirmed_user
+      return if current_resource_owner.confirmed?
+
+      render json: { success: false, message: "Please confirm your email address before you can see your purchases." }, status: :forbidden
+    end
+
     def fetch_purchase
       @purchase = current_resource_owner.purchases.find_by_external_id(params[:id])
       render json: { success: false, message: "Could not find purchase" }, status: :not_found if @purchase.nil? || (!@purchase.successful_and_not_reversed? && !@purchase.subscription)

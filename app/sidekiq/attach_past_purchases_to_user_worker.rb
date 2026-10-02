@@ -5,9 +5,10 @@ class AttachPastPurchasesToUserWorker
   sidekiq_options retry: 3, queue: :default
 
   # `email` pins the address the user confirmed; the account email can change before the job runs.
+  # Jobs queued without it (before this signature) fall back to the account email only when confirmed.
   def perform(user_id, email = nil)
     user = User.find(user_id)
-    email ||= user.email
+    email ||= user.email if user.confirmed?
     return if email.blank?
 
     failure = nil
