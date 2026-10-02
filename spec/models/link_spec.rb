@@ -224,7 +224,7 @@ describe Link do
 
   describe "#plaintext_description" do
     def description_for(html)
-      Link.new(description: html).plaintext_description
+      create(:product, description: html).plaintext_description
     end
 
     # Block elements carry no whitespace of their own, so stripping the tags used to fuse
