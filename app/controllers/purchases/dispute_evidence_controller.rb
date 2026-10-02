@@ -101,17 +101,31 @@ class Purchases::DisputeEvidenceController < ApplicationController
 
   private
     # Stripe rejects a longer evidence file outright, and the submission it belongs to is one-shot,
-    # so refuse it while the seller can still shorten it. A PDF we cannot parse keeps today's path.
+    # so refuse it while the seller can still shorten it. Whatever the reader raises on an unusual
+    # PDF must not fail the upload: it keeps today's path, and FightDisputeJob still catches
+    # Stripe's page-limit rejection.
     def ensure_within_page_limit!(blob)
       return unless blob.content_type == "application/pdf"
 
-      page_count = blob.open { PDF::Reader.new(_1.path).page_count }
-      return if page_count <= DisputeEvidence::STRIPE_MAX_FILE_PAGES
+      page_count = pdf_page_count(blob)
+      return if page_count.nil? || page_count <= DisputeEvidence::STRIPE_MAX_FILE_PAGES
 
       raise DisputeEvidence::MergeCustomerCommunicationFilesService::MergeError,
             "Your customer communication is #{page_count} pages long, but our payment processor accepts " \
             "at most #{DisputeEvidence::STRIPE_MAX_FILE_PAGES} pages. Please remove pages or upload a shorter file."
+    end
+
+    def pdf_page_count(blob)
+      blob.open { |file| read_pdf_page_count(file.path, blob) }
+    end
+
+    # Only the reader is guarded, so a failed download still surfaces.
+    def read_pdf_page_count(path, blob)
+      PDF::Reader.new(path).page_count
     rescue PDF::Reader::MalformedPDFError, PDF::Reader::UnsupportedFeatureError, PDF::Reader::EncryptedPDFError
+      nil
+    rescue StandardError, SystemStackError => e
+      ErrorNotifier.notify(e, context: { dispute_evidence_id: @dispute_evidence.id, blob_id: blob.id })
       nil
     end
 
