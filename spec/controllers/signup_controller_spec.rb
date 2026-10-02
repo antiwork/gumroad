@@ -458,19 +458,25 @@ describe SignupController, type: :controller, inertia: true do
       expect(last_user.credit_card).to be(nil)
     end
 
-    it "enqueues a background job to link past purchases by email" do
+    it "links past purchases by email only after the new user confirms the email" do
       user = build(:user, password: "password")
       purchase = create(:purchase, email: user.email)
       create(:purchase, email: user.email, purchaser: create(:user))
 
       post "create", params: { user: { email: user.email, password: "password" } }
 
+      last_user = User.last
+      expect(last_user.email).to eq user.email
+      expect(last_user).not_to be_confirmed
+      expect(AttachPastPurchasesToUserWorker.jobs.size).to eq 0
+      expect(purchase.reload.purchaser_id).to be_nil
+
+      last_user.confirm
+
       expect(AttachPastPurchasesToUserWorker.jobs.size).to eq 1
 
       AttachPastPurchasesToUserWorker.drain
 
-      last_user = User.last
-      expect(last_user.email).to eq user.email
       expect(last_user.purchases.count).to eq 1
       expect(last_user.purchases.first.id).to eq purchase.id
     end
@@ -566,7 +572,7 @@ describe SignupController, type: :controller, inertia: true do
         expect(response.parsed_body["error_message"]).to be(nil)
       end
 
-      it "associates past purchases with the same email to the new user" do
+      it "associates past purchases with the same email to the new user once the email is confirmed" do
         purchase1 = create(:purchase, email: @purchase.email)
         purchase2 = create(:purchase, email: @purchase.email)
         expect(purchase1.purchaser_id).to be_nil
@@ -575,9 +581,16 @@ describe SignupController, type: :controller, inertia: true do
         post :save_to_library, params: { user: { email: @purchase.email, password: "blah123", purchase_id: @purchase.external_id } }
         expect(response).to be_successful
 
+        user = User.last
+        expect(@purchase.reload.purchaser_id).to eq(user.id)
+        expect(AttachPastPurchasesToUserWorker.jobs.size).to eq 0
+        [purchase1, purchase2].each do |purchase|
+          expect(purchase.reload.purchaser_id).to be_nil
+        end
+
+        user.confirm
         AttachPastPurchasesToUserWorker.drain
 
-        user = User.last
         [@purchase, purchase1, purchase2].each do |purchase|
           expect(purchase.reload.purchaser_id).to eq(user.id)
         end

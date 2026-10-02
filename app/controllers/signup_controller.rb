@@ -46,7 +46,6 @@ class SignupController < Devise::RegistrationsController
       end
 
       attach_current_purchase_to_user(chargeable, card_data_handling_mode)
-      AttachPastPurchasesToUserWorker.perform_async(@user.id)
 
       @user.mark_as_invited(params[:referral]) if params[:referral].present?
 
@@ -82,7 +81,6 @@ class SignupController < Devise::RegistrationsController
 
     if @user&.save
       attach_current_purchase_to_user(nil, nil)
-      AttachPastPurchasesToUserWorker.perform_async(@user.id)
       return render json: { success: true }
     end
 

@@ -14,6 +14,53 @@ describe Api::Mobile::PurchasesController do
     }
   end
 
+  describe "unconfirmed account" do
+    before do
+      @purchaser.update_column(:confirmed_at, nil)
+      @purchase = create(:purchase, purchaser: @purchaser)
+    end
+
+    it "refuses to list purchases" do
+      get :index, params: @params
+
+      expect(response).to have_http_status(:forbidden)
+      expect(response.parsed_body).to include(success: false)
+      expect(response.parsed_body).not_to have_key(:products)
+    end
+
+    it "refuses to search purchases" do
+      get :search, params: @params
+
+      expect(response).to have_http_status(:forbidden)
+      expect(response.parsed_body).not_to have_key(:purchases)
+    end
+
+    it "refuses to return, archive, unarchive or delete a purchase" do
+      get :purchase_attributes, params: @params.merge(id: @purchase.external_id)
+      expect(response).to have_http_status(:forbidden)
+
+      post :archive, params: @params.merge(id: @purchase.external_id)
+      expect(response).to have_http_status(:forbidden)
+
+      post :unarchive, params: @params.merge(id: @purchase.external_id)
+      expect(response).to have_http_status(:forbidden)
+
+      delete :destroy, params: @params.merge(id: @purchase.external_id)
+      expect(response).to have_http_status(:forbidden)
+
+      expect(@purchase.reload).to have_attributes(is_archived: false, is_deleted_by_buyer: false)
+    end
+
+    it "serves the same purchases once the account is confirmed" do
+      @purchaser.update_column(:confirmed_at, Time.current)
+
+      get :index, params: @params
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body[:products].map { |p| p[:purchase_id] }).to eq([@purchase.external_id])
+    end
+  end
+
   describe "GET index" do
     before do
       @mobile_friendly_pdf_product = create(:product, user: @user)

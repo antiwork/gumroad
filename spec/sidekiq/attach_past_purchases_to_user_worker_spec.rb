@@ -17,6 +17,34 @@ describe AttachPastPurchasesToUserWorker do
       expect(purchase_already_linked.reload.purchaser).not_to eq(user)
     end
 
+    it "attaches purchases under the given email after the account email has changed" do
+      user = create(:user, email: "confirmed@example.com")
+      purchase = create(:purchase, email: "confirmed@example.com", purchaser: nil)
+      user.update_column(:email, "changed@example.com")
+
+      described_class.new.perform(user.id, "confirmed@example.com")
+
+      expect(purchase.reload.purchaser).to eq(user)
+    end
+
+    it "does not attach purchases to an unconfirmed user when queued without an email" do
+      user = create(:unconfirmed_user)
+      purchase = create(:purchase, email: user.email, purchaser: nil)
+
+      described_class.new.perform(user.id)
+
+      expect(purchase.reload.purchaser).to be_nil
+    end
+
+    it "attaches purchases to a confirmed user when queued without an email" do
+      user = create(:user)
+      purchase = create(:purchase, email: user.email, purchaser: nil)
+
+      described_class.new.perform(user.id)
+
+      expect(purchase.reload.purchaser).to eq(user)
+    end
+
     it "does nothing when user has a blank email" do
       user = create(:user)
       user.update_column(:email, "")

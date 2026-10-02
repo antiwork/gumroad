@@ -899,6 +899,46 @@ describe Purchase::CreateService, :vcr do
     expect(purchase.purchaser).to eq buyer
   end
 
+  describe "attaching a guest purchase to the account with the same email" do
+    let(:free_product) { create(:product, user:, price_cents: 0) }
+    let(:guest_params) do
+      {
+        purchase: {
+          email: account.email,
+          quantity: 1,
+          perceived_price_cents: 0,
+          ip_address: "0.0.0.0",
+          session_id: "a107d0b7ab5ab3c1eeb7d3aaf9792977",
+          is_mobile: false,
+          browser_guid:,
+        }
+      }
+    end
+
+    context "when the account has confirmed the email" do
+      let(:account) { create(:user) }
+
+      it "attaches the purchase to the account" do
+        purchase, error = Purchase::CreateService.new(product: free_product, params: guest_params).perform
+
+        expect(error).to be_nil
+        expect(purchase.purchaser).to eq account
+      end
+    end
+
+    context "when the account has not confirmed the email" do
+      let(:account) { create(:unconfirmed_user) }
+
+      it "leaves the purchase unattached" do
+        purchase, error = Purchase::CreateService.new(product: free_product, params: guest_params).perform
+
+        expect(error).to be_nil
+        expect(purchase).to be_successful
+        expect(purchase.purchaser).to be_nil
+      end
+    end
+  end
+
   context "when the product has a product refund policy enabled" do
     before do
       product.user.update!(refund_policy_enabled: false)
@@ -3158,6 +3198,21 @@ describe Purchase::CreateService, :vcr do
       expect(gift.gifter_purchase).to be_successful
       expect(gift.giftee_purchase.gift_receiver_purchase_successful?).to be true
       expect(gift.giftee_purchase.purchaser_id).to eq user.id
+    end
+
+    it "leaves the giftee purchase unattached until the account with giftee email is confirmed" do
+      user = create(:unconfirmed_user, email: gift_params[:gift][:giftee_email])
+
+      purchase, _ = Purchase::CreateService.new(product:, params: gift_params).perform
+
+      giftee_purchase = purchase.gift_given.giftee_purchase
+      expect(giftee_purchase.gift_receiver_purchase_successful?).to be true
+      expect(giftee_purchase.purchaser_id).to be_nil
+
+      user.confirm
+      AttachPastPurchasesToUserWorker.drain
+
+      expect(giftee_purchase.reload.purchaser_id).to eq user.id
     end
 
     it "creates a giftee and a gifter purchase successfully if user with giftee email doesn't exist" do
