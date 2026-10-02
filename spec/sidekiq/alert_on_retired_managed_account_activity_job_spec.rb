@@ -192,6 +192,21 @@ describe AlertOnRetiredManagedAccountActivityJob do
     expect(InternalNotificationWorker).not_to have_received(:perform_async)
   end
 
+  # A seller who reconnects inside the tail leaves a marker for the later retirement. This check is
+  # still owed its own report, but the later retirement's check is the one that reports from there —
+  # spending its marker here would skip it.
+  it "reports this retirement but leaves a later retirement's marker for its own check" do
+    later_marker = (retired_at + 2.days).utc.iso8601
+    create(:balance, user: seller, merchant_account: managed_account, state: "unpaid", amount_cents: 10_00,
+                     created_at: retired_at + 1.hour)
+    managed_account.update!(retired_activity_check_pending_at: later_marker)
+
+    perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async).once
+    expect(managed_account.reload.retired_activity_check_pending_at).to eq(later_marker)
+  end
+
   # The report exists to name the money event a late refund leaves behind. Purchases fill the report
   # cap on their own, so a leg read only after them would be missing from the count as well as the
   # list.

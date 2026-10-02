@@ -31,18 +31,25 @@ class AlertOnRetiredManagedAccountActivityJob
     # The marker is the claim on the check, so the sweep's copy — dispatched for a scheduled copy
     # that is only delayed — finds it cleared instead of reporting the same activity again.
     def report_landed_activity(merchant_account, retired_at_iso)
-      # A retired account that has come back is not stranded: it is a payout destination again.
+      # A retired account that has come back is not stranded: it is a payout destination again, and
+      # whatever retirement left the marker is moot.
       return clear_pending_marker(merchant_account) if merchant_account.active?
-      return if merchant_account.retired_activity_check_pending_at.blank?
+
+      marker = merchant_account.retired_activity_check_pending_at
+      return if marker.blank? # Already reported.
 
       retired_at = Time.iso8601(retired_at_iso)
       landed = landed_since(merchant_account, retired_at)
-      return clear_pending_marker(merchant_account) if landed.empty?
+      if landed.present?
+        log_landed(merchant_account, retired_at, landed)
+        InternalNotificationWorker.perform_async("payouts", "Activity on a retired Stripe account",
+                                                 message_for(merchant_account, retired_at, landed))
+      end
 
-      log_landed(merchant_account, retired_at, landed)
-      InternalNotificationWorker.perform_async("payouts", "Activity on a retired Stripe account",
-                                               message_for(merchant_account, retired_at, landed))
-      clear_pending_marker(merchant_account)
+      # Only the marker this check was dispatched for is spent here. A seller who reconnects inside
+      # the tail leaves a marker for the later retirement, and that retirement's own check is the one
+      # that reports from its `deleted_at` — clearing it here would skip it.
+      clear_pending_marker(merchant_account) if marker == retired_at_iso
     end
 
     def clear_pending_marker(merchant_account)
