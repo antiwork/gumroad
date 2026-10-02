@@ -21,7 +21,7 @@ describe DispatchPendingRetiredAccountChecksJob do
     described_class.new.perform
 
     expect(AlertOnRetiredManagedAccountActivityJob).to have_received(:perform_async)
-      .with(account.id, account.deleted_at.utc.iso8601)
+      .with(account.id, account.retired_activity_check_pending_at)
   end
 
   # The scheduled check may still be queued; dispatching it twice would alert twice.
@@ -49,7 +49,21 @@ describe DispatchPendingRetiredAccountChecksJob do
     described_class.new.perform
 
     expect(AlertOnRetiredManagedAccountActivityJob).to have_received(:perform_async)
-      .with(account.id, account.deleted_at.utc.iso8601)
+      .with(account.id, account.retired_activity_check_pending_at)
+  end
+
+  # A second switch on the reactivated account moves `deleted_at` and leaves the marker alone. The
+  # check is owed for the retirement the marker names, or its window starts after the activity that
+  # the first retirement stranded — and a check whose retirement never matches its marker never
+  # clears it, so the sweep would re-dispatch it every hour.
+  it "re-dispatches the retirement its marker names, not the account's latest deletion" do
+    marker = due_at - 2.days
+    account = retire_account!(retired_at: due_at - 1.hour, pending_at: marker)
+
+    described_class.new.perform
+
+    expect(AlertOnRetiredManagedAccountActivityJob).to have_received(:perform_async)
+      .with(account.id, marker.utc.iso8601)
   end
 
   it "leaves a managed account the switch never retired alone" do

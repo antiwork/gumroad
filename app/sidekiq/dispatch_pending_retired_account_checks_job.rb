@@ -2,7 +2,8 @@
 
 # Backstop for the delayed retired-account check StripeConnectAccountLinker enqueues after a Connect
 # switch commits: a lost enqueue leaves the marker set with nothing else reading it. Only the linker
-# writes the marker, so this cannot re-dispatch a retirement the switch did not make.
+# writes the marker, so this cannot re-dispatch a retirement the switch did not make, and the marker's
+# value — not the account's latest `deleted_at` — is the retirement the check is owed for.
 class DispatchPendingRetiredAccountChecksJob
   include Sidekiq::Job
   sidekiq_options retry: 5, queue: :low, lock: :until_executed
@@ -27,7 +28,10 @@ class DispatchPendingRetiredAccountChecksJob
                    # schedule has not fired yet from being dispatched twice.
                    .where(deleted_at: ..due.ago)
                    .find_each do |merchant_account|
-      AlertOnRetiredManagedAccountActivityJob.perform_async(merchant_account.id, merchant_account.deleted_at.utc.iso8601)
+      # The marker names the retirement the check is owed for, which is not always the latest one: a
+      # second switch on the reactivated account moves `deleted_at` and leaves the marker alone.
+      AlertOnRetiredManagedAccountActivityJob.perform_async(merchant_account.id,
+                                                            merchant_account.retired_activity_check_pending_at)
     end
   end
 end
