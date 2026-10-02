@@ -8,16 +8,12 @@
 # a replacement that still has unsettled obligations, but a check at the switch cannot see the future:
 # a sale that picks the account while the link commits, a sale that settles later than the linker
 # looks, a refund or a chargeback that arrives on the buyer's clock. This job is the net under that,
-# and the replacement for the charge-time lock the linker used to take — which put a locking read on
-# the primary under every managed-account charge (9,500 a day measured in production on 2026-10-02)
-# to close the smallest of those windows.
+# and it is why the obligations check belongs at the switch (once per retirement, on the rare side)
+# rather than on every charge: the residue above is not a race a per-charge read can order anyway.
 #
-# The linker enqueues this at the settlement tail rather than immediately: one read of everything
-# created since the retirement (`created_at > retired_at`) covers the race and the late settlement in
-# the same pass, so an earlier check finds nothing it would not. Measured over the 90 days to
-# 2026-10-02: of 215 managed-account replacements, 27 retired an account that still held unsettled
-# balances — all of which the linker's own check now refuses — and exactly one had anything land
-# afterwards, a refund five minutes after the switch.
+# It runs at the settlement tail rather than immediately. One read of everything created at or after
+# the retirement covers the race and the late settlement in the same pass, so an earlier run finds
+# nothing this one would not.
 #
 # Reports only. Recovering a stranded balance needs a payout from the retired account, and moving
 # money is a human decision.
@@ -49,31 +45,40 @@ class AlertOnRetiredManagedAccountActivityJob
   end
 
   private
-    # Every leg is indexed on the column it walks: `merchant_account_id` on charges, balance
-    # transactions and balances, and the account's owner on purchases, where `merchant_account_id`
-    # alone is unindexed and would make this a table scan.
+    # Every leg is index-backed. `merchant_account_id` leads the index on charges and on balance
+    # transactions. Balances has no index on it alone — its indexes lead on `state` or `user_id` — so
+    # it is scoped by the account's owner too, which is what `index_on_user_merchant_account_date`
+    # leads on. Purchases has no `merchant_account_id` index either, so it is scoped by the owner.
+    # Both of those legs are inside the owner guard: a retired managed account always has one (the
+    # linker only retires the account of the owner who is linking), and an ownerless account has no
+    # balances or sales to report.
     #
     # Balance transactions are read in their own right rather than only through balances: a late
     # refund or chargeback adds one to a balance that already exists and inserts no new balance row,
-    # which is exactly the arrival measured in production, so a scan of balances alone would miss it.
+    # so a scan of balances alone would miss it.
     def landed_since(merchant_account, retired_at)
       landed = []
       if merchant_account.user_id.present?
         collect(landed, "purchase",
                 Purchase.where(seller_id: merchant_account.user_id, merchant_account_id: merchant_account.id), retired_at)
+        collect(landed, "balance",
+                Balance.where(user_id: merchant_account.user_id, merchant_account_id: merchant_account.id), retired_at)
       end
       collect(landed, "charge", Charge.where(merchant_account_id: merchant_account.id), retired_at)
       collect(landed, "balance_transaction", BalanceTransaction.where(merchant_account_id: merchant_account.id), retired_at)
-      collect(landed, "balance", Balance.where(merchant_account_id: merchant_account.id), retired_at)
       landed.sort_by { |row| row[:created_at] }
     end
 
+    # At or after, not after: `deleted_at` is stored to the second, so a row created in the same second
+    # as the retirement cannot be told apart from one created just before it. This is a report — a
+    # borderline row named twice is better than one dropped.
+    #
     # Stops reading once one row past the report cap is held: the count in the headline is then a
     # floor, and `message_for` says so rather than presenting it as the total.
     def collect(landed, kind, scope, retired_at)
       return if landed.size > MAX_REPORTED
 
-      scope.where("created_at > ?", retired_at).order(:created_at).limit(MAX_REPORTED + 1).each do |record|
+      scope.where("created_at >= ?", retired_at).order(:created_at).limit(MAX_REPORTED + 1).each do |record|
         landed << { kind:, record:, created_at: record.created_at }
       end
     end
@@ -108,7 +113,7 @@ class AlertOnRetiredManagedAccountActivityJob
         "Retiring the account removed it as a payout destination, so a balance that booked to it " \
           "afterwards cannot be paid out from it. These rows are a sale that was in flight when the " \
           "account was retired or that settled late, or a refund or chargeback that arrived " \
-          "afterwards — none of which any lock on the switch can order. Check the account's Stripe " \
+          "afterwards — none of which a check at the switch can order. Check the account's Stripe " \
           "balance before deciding: recovering it needs a payout from the retired account, which is " \
           "a human decision. See gumroad-private#3182.",
       ].compact.join("\n")

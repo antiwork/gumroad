@@ -26,13 +26,13 @@ describe AlertOnRetiredManagedAccountActivityJob do
     captured
   end
 
-  def unapplied_balance_transaction(account: managed_account, user: seller)
-    credit = create(:credit, user:, merchant_account: account, balance: nil, amount_cents: 5_00)
+  def unapplied_balance_transaction
+    credit = create(:credit, user: seller, merchant_account: managed_account, balance: nil, amount_cents: 5_00)
     amount = BalanceTransaction::Amount.new(currency: Currency::USD, gross_cents: 5_00, net_cents: 5_00)
     # BalanceTransaction.create! takes a fixed keyword list and sets created_at itself, so the row is
     # backdated afterwards to place it after the retirement.
-    BalanceTransaction.create!(user:, merchant_account: account, credit:, issued_amount: amount, holding_amount: amount,
-                               update_user_balance: false).tap do |balance_transaction|
+    BalanceTransaction.create!(user: seller, merchant_account: managed_account, credit:, issued_amount: amount,
+                               holding_amount: amount, update_user_balance: false).tap do |balance_transaction|
       balance_transaction.update_column(:created_at, retired_at + 1.hour)
     end
   end
@@ -57,8 +57,8 @@ describe AlertOnRetiredManagedAccountActivityJob do
     expect(reported_body).to include("charge #{charge.id}")
   end
 
-  # The arrival production actually produced: a refund adds a balance transaction against a balance
-  # that already exists, so nothing in `balances` moves and only this leg sees it.
+  # A refund adds a balance transaction against a balance that already exists, so nothing in
+  # `balances` moves and only this leg sees it.
   it "reports a balance transaction that landed after the retirement with no new balance row" do
     balance_transaction = unapplied_balance_transaction
     expect(Balance.where(merchant_account_id: managed_account.id)).to be_empty
@@ -74,6 +74,21 @@ describe AlertOnRetiredManagedAccountActivityJob do
     expect(reported_body).to include("unpaid, 62 usd cents")
   end
 
+  # Balances has no index leading on merchant_account_id, so the balance leg has to carry the owner or
+  # it reads the whole table on a job that exists to be cheap.
+  it "reads balances through the owner as well as the account" do
+    statements = []
+    subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |*, payload|
+      statements << payload[:sql] if payload[:sql].include?("FROM `balances`")
+    end
+    perform
+    ActiveSupport::Notifications.unsubscribe(subscriber)
+
+    expect(statements).not_to be_empty
+    expect(statements).to all(match(/`balances`\.`user_id` = #{seller.id}\b/))
+    expect(statements).to all(match(/`balances`\.`merchant_account_id` = #{managed_account.id}\b/))
+  end
+
   it "ignores rows that landed before the retirement" do
     create(:balance, user: seller, merchant_account: managed_account, state: "unpaid", amount_cents: 10_00,
                      created_at: retired_at - 1.hour)
@@ -81,6 +96,15 @@ describe AlertOnRetiredManagedAccountActivityJob do
     perform
 
     expect(InternalNotificationWorker).not_to have_received(:perform_async)
+  end
+
+  # deleted_at is stored to the second, so a row in the same second as the retirement is inside the
+  # window the report covers.
+  it "counts a row created in the same second as the retirement" do
+    balance = create(:balance, user: seller, merchant_account: managed_account, state: "unpaid", amount_cents: 5_00,
+                               created_at: retired_at)
+
+    expect(reported_body).to include("balance #{balance.id}")
   end
 
   it "ignores activity on another merchant account" do

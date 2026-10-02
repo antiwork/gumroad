@@ -6,11 +6,9 @@
 #
 # What that check cannot see is anything that lands on the account after it runs: a sale that picks
 # the account while this commits, a sale that settles late, a refund or a chargeback that arrives
-# later. No lock orders those — a charge-time lock was tried and dropped, because it put a locking
-# read on the primary under every managed-account charge (~10,000 a day measured in production) to
-# close a millisecond window that 90 days of production data never once produced. Instead the retired
-# account is checked once, at the settlement tail, by AlertOnRetiredManagedAccountActivityJob, which
-# reports every row that landed on it after the retirement.
+# later. Instead the retired account is checked once, at the settlement tail, by
+# AlertOnRetiredManagedAccountActivityJob, which reports every row that landed on it after the
+# retirement.
 class StripeConnectAccountLinker
   def self.link(owner:, auth_uid:, stripe_account:)
     new(owner:, auth_uid:, stripe_account:).link
