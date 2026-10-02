@@ -1,6 +1,13 @@
 # frozen_string_literal: true
 
 class ChargeProcessorInvalidRequestError < ChargeProcessorError
+  # Set by StripeChargeProcessor#fight_chargeback: evidence fields left out of the request.
+  attr_writer :omitted_evidence_fields
+
+  def omitted_evidence_fields
+    @omitted_evidence_fields || []
+  end
+
   def initialize(message = nil, original_error: nil, processor_error_code: nil)
     @explicit_processor_error_code = processor_error_code
     super(message, original_error:)

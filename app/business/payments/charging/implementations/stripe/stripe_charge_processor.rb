@@ -1221,9 +1221,9 @@ class StripeChargeProcessor
   def fight_chargeback(stripe_charge_id, dispute_evidence, merchant_account: nil)
     return [] if merchant_migrated? merchant_account
 
+    omitted_fields = []
     with_stripe_error_handler do
       charge = Stripe::Charge.retrieve(stripe_charge_id)
-      omitted_fields = []
       customer_communication = customer_communication_stripe_file(dispute_evidence, omitted_fields)
 
       evidence = {
@@ -1263,6 +1263,12 @@ class StripeChargeProcessor
       Stripe::Dispute.update(charge.dispute, { evidence: }, { idempotency_key: })
       omitted_fields
     end
+  rescue ChargeProcessorInvalidRequestError => e
+    # A retry whose earlier submission landed gets "maximum number of evidence submissions";
+    # the oversized file fails the same way on every attempt, so this attempt's omissions are
+    # what was sent, and FightDisputeJob still has to tell the seller.
+    e.omitted_evidence_fields = omitted_fields
+    raise
   end
 
   def holder_of_funds(merchant_account)

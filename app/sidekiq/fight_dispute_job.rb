@@ -49,6 +49,9 @@ class FightDisputeJob
         resolution: DisputeEvidence::RESOLUTION_SUBMITTED,
         error_message: e.message.truncate(255)
       )
+      if e.omitted_evidence_fields.include?(:customer_communication)
+        ContactingCreatorMailer.chargeback_evidence_file_omitted(dispute.id).deliver_later
+      end
     else
       raise e
     end

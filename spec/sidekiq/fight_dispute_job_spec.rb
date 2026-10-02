@@ -204,11 +204,28 @@ describe FightDisputeJob do
       end
 
       it "resolves as submitted instead of retrying" do
-        described_class.new.perform(dispute.id)
+        expect do
+          described_class.new.perform(dispute.id)
+        end.to_not have_enqueued_mail(ContactingCreatorMailer, :chargeback_evidence_file_omitted)
 
         dispute_evidence.reload
         expect(dispute_evidence.resolution).to eq(DisputeEvidence::RESOLUTION_SUBMITTED)
         expect(dispute_evidence.error_message).to eq(error_message)
+      end
+
+      context "and the seller's file was left out of that submission" do
+        before do
+          error = ChargeProcessorInvalidRequestError.new(error_message)
+          error.omitted_evidence_fields = [:customer_communication]
+          allow_any_instance_of(Purchase).to receive(:fight_chargeback).and_raise(error)
+        end
+
+        it "still tells the seller" do
+          expect do
+            described_class.new.perform(dispute.id)
+          end.to have_enqueued_mail(ContactingCreatorMailer, :chargeback_evidence_file_omitted).with(dispute.id)
+          expect(dispute_evidence.reload.resolution).to eq(DisputeEvidence::RESOLUTION_SUBMITTED)
+        end
       end
     end
 

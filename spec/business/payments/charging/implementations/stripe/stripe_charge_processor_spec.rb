@@ -5625,5 +5625,16 @@ describe StripeChargeProcessor, "#fight_chargeback shipment evidence" do
       expect(omitted).to eq([])
       expect(sent[:customer_communication]).to eq("file_ok")
     end
+
+    it "carries the omission on an error from the submission itself" do
+      allow(Stripe::File).to receive(:create).and_raise(page_limit_error)
+      allow(ErrorNotifier).to receive(:notify)
+      allow(Stripe::Dispute).to receive(:update)
+        .and_raise(Stripe::InvalidRequestError.new("You've reached the maximum number of evidence submissions for this dispute.", nil, http_status: 400))
+
+      expect do
+        described_class.new.fight_chargeback("ch_test", disputed_purchase.dispute.reload.dispute_evidence)
+      end.to raise_error(ChargeProcessorInvalidRequestError) { |e| expect(e.omitted_evidence_fields).to eq([:customer_communication]) }
+    end
   end
 end
