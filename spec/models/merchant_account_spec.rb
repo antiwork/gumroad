@@ -165,6 +165,20 @@ describe MerchantAccount do
       expect(merchant_account.unsettled_payout_obligations?).to be(false)
     end
 
+    it "is true for a recent in-progress purchase charged on the account" do
+      create(:purchase, seller:, link: create(:product, user: seller), merchant_account:, purchase_state: "in_progress")
+
+      expect(merchant_account.unsettled_payout_obligations?).to be(true)
+    end
+
+    it "ignores stale in-progress purchases and successful ones" do
+      product = create(:product, user: seller)
+      create(:purchase, seller:, link: product, merchant_account:, purchase_state: "in_progress", created_at: 2.hours.ago)
+      create(:purchase, seller:, link: product, merchant_account:, purchase_state: "successful")
+
+      expect(merchant_account.unsettled_payout_obligations?).to be(false)
+    end
+
     it "ignores in-flight payouts against a different account" do
       create(:payment, user: seller, processor: PayoutProcessorType::STRIPE, state: "processing", stripe_connect_account_id: "acct_elsewhere")
 

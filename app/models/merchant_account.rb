@@ -133,17 +133,28 @@ class MerchantAccount < ApplicationRecord
     end
   end
 
+  IN_FLIGHT_CHARGE_WINDOW = 1.hour
+
   # Any unpaid/processing balance counts whatever its amount, as does a committed BalanceTransaction not yet
   # applied to one. That is read first: if it applies between the reads, its Balance row is already committed.
-  # Completed payouts never count, unlike Payment::NON_TERMINAL_STATES.
+  # A recent in-progress purchase counts too. Completed payouts never count, unlike Payment::NON_TERMINAL_STATES.
   def unsettled_payout_obligations?
     return true if balance_transactions.where(balance_id: nil).exists?
     return true if balances.where(state: %w[unpaid processing]).exists?
+    return true if charges_in_flight?
 
     in_flight_payments = Payment.where(user_id:, state: [Payment::CREATING, Payment::PROCESSING])
     in_flight_payments.joins(:balances).where(balances: { merchant_account_id: id }).exists? ||
       (charge_processor_merchant_id.present? && in_flight_payments.where(stripe_connect_account_id: charge_processor_merchant_id).exists?)
   end
+
+  # A sale picks its account before charging and books the balance only on success, and that write takes
+  # no seller lock, so a checkout still in progress could post to this account after it is retired.
+  def charges_in_flight?
+    Purchase.where(seller_id: user_id, merchant_account_id: id, purchase_state: "in_progress")
+            .where("created_at > ?", IN_FLIGHT_CHARGE_WINDOW.ago).exists?
+  end
+  private :charges_in_flight?
 
   def delete_charge_processor_account!
     clear_non_hash_json_data_for_disconnect!
