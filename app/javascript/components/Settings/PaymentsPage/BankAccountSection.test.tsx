@@ -233,16 +233,16 @@ describe("BankAccountSection IBAN-box placeholders", () => {
   });
 });
 
-describe("BankAccountSection Bolivia bank code", () => {
-  it("has no copyable-looking placeholder and points sellers to support", () => {
+describe("BankAccountSection Bolivia bank picker", () => {
+  it("lists banks by name and stores the processor's 3-digit code", () => {
     renderForCountry("BO");
 
-    const field = screen.getByLabelText<HTMLInputElement>("Bank code");
-    expect(field.maxLength).toBe(3);
-    expect(/\d{3}/u.test(field.placeholder)).toBe(false);
-    expect(field.placeholder.toLowerCase()).not.toContain("asfi");
-    expect(screen.getByText(/Contact Gumroad support/u)).toBeTruthy();
-    expect(screen.queryByText(/ASFI/u)).toBeNull();
+    const select = screen.getByLabelText<HTMLSelectElement>("Bank");
+    const options = [...select.options].filter((o) => !o.disabled);
+    expect(options).toHaveLength(47);
+    expect(options.find((o) => o.value === "006")?.textContent).toBe("Banco Unión");
+    expect(options.some((o) => o.value === "048" || o.value === "020")).toBe(false);
+    expect(screen.queryByText(/ASFI|support/u)).toBeNull();
   });
 });
 
