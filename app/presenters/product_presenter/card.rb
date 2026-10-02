@@ -1,6 +1,9 @@
 # frozen_string_literal: true
 
 class ProductPresenter::Card
+  # Room for the featured card's six-line clamp; the frontend ellipsizes the rest.
+  DESCRIPTION_MAX_LENGTH = 300
+
   include Rails.application.routes.url_helpers
   include ProductsHelper
   include CurrencyHelper
@@ -58,7 +61,7 @@ class ProductPresenter::Card
     props[:original_price_cents] = original_price_cents if original_price_cents.present?
 
     if compute_description
-      props[:description] = product.plaintext_description.truncate(100)
+      props[:description] = product.plaintext_description.truncate(DESCRIPTION_MAX_LENGTH)
     end
 
     props

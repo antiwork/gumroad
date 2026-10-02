@@ -26,7 +26,7 @@ describe ProductPresenter::Card do
               avatar_url: ActionController::Base.helpers.image_url("gumroad-default-avatar-5.png"),
               is_verified: false,
             },
-            description: product.plaintext_description.truncate(100),
+            description: product.plaintext_description.truncate(described_class::DESCRIPTION_MAX_LENGTH),
             ratings: { count: 0, average: 0 },
             currency_code: Currency::USD,
             price_cents: 100,
@@ -70,13 +70,22 @@ describe ProductPresenter::Card do
       it "includes description when compute_description is true by default" do
         result = described_class.new(product:).for_web
 
-        expect(result[:description]).to eq(product.plaintext_description.truncate(100))
+        expect(result[:description]).to eq(product.plaintext_description.truncate(described_class::DESCRIPTION_MAX_LENGTH))
       end
 
       it "includes description when compute_description is explicitly true" do
         result = described_class.new(product:).for_web(compute_description: true)
 
-        expect(result[:description]).to eq(product.plaintext_description.truncate(100))
+        expect(result[:description]).to eq(product.plaintext_description.truncate(described_class::DESCRIPTION_MAX_LENGTH))
+      end
+
+      it "keeps up to 300 characters of a long description for the featured card" do
+        product.update!(description: "<p>#{"Fresh card magic every month. " * 20}</p>")
+
+        result = described_class.new(product:).for_web
+
+        expect(result[:description].length).to eq(300)
+        expect(result[:description]).to end_with("...")
       end
 
       it "excludes description when compute_description is false" do
