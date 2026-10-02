@@ -138,10 +138,10 @@ class MerchantAccount < ApplicationRecord
   # it does not close it.
   IN_FLIGHT_PURCHASE_HORIZON = 2.days
 
-  # A sale is read first, then its balance transaction, then its balance: each stage is committed before the
-  # next begins, so a sale that moves between reads is still counted by a later one. Any unpaid/processing
-  # balance counts whatever its amount, as does a committed BalanceTransaction not yet applied to one.
-  # Completed payouts never count, unlike Payment::NON_TERMINAL_STATES.
+  # The caller must hold the seller and account row locks and have made no plain read before them: under
+  # REPEATABLE READ the first plain read fixes the snapshot, which has to postdate the locks. Any
+  # unpaid/processing balance counts whatever its amount, as does a committed BalanceTransaction not yet
+  # applied to one. Completed payouts never count, unlike Payment::NON_TERMINAL_STATES.
   def unsettled_payout_obligations?
     # A sale that has not picked its account yet has a nil merchant_account_id, so it counts too (it may be this one).
     return true if Purchase.in_progress.where(seller_id: user_id, merchant_account_id: [id, nil], created_at: IN_FLIGHT_PURCHASE_HORIZON.ago..).exists?
@@ -157,9 +157,10 @@ class MerchantAccount < ApplicationRecord
 
   # Called right before a charge is created, with the sale's purchase already saved on this account. The locking
   # read waits behind a replacement holding the row (StripeConnectAccountLinker) and sees it committed; a charge
-  # that gets past first has its in_progress purchase counted by the replacement. The lock is released when this
-  # read ends (charges run in autocommit); only the ordering against the replacement is guaranteed. The read is
-  # pinned to the primary: the replacement commits there, and a replica could still show the account as live.
+  # that gets past first has its in_progress purchase counted by the replacement. The shared lock lasts until the
+  # caller's transaction ends: at once in autocommit, but through the whole charge when the caller holds one
+  # (Order::ConfirmService setup-confirmed resume, Subscription::UpdaterService), which can delay a replacement.
+  # Reads the primary: the replacement commits there, and a replica could still show the account as live.
   def verify_live_for_charge!
     return unless user_id.present? && is_a_gumroad_managed_stripe_account?
 
