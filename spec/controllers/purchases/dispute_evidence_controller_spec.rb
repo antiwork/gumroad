@@ -478,6 +478,31 @@ describe Purchases::DisputeEvidenceController, type: :controller, inertia: true 
         expect(flash[:alert]).to eq(alert)
       end
 
+      [NoMethodError.new("undefined method `[]' for nil"), SystemStackError.new("stack level too deep")].each do |error|
+        it "saves the submission and reports the error when the page counter raises #{error.class}" do
+          blob = pdf_blob(3, "unusual.pdf")
+          allow_any_instance_of(PDF::Reader).to receive(:page_count).and_raise(error)
+          expect(ErrorNotifier).to receive(:notify).with(error, context: { dispute_evidence_id: dispute_evidence.id, blob_id: blob.id })
+
+          put :update, params: { purchase_id: evidence_token, dispute_evidence: { customer_communication_file_signed_blob_id: blob.signed_id } }
+
+          dispute_evidence.reload
+          expect(dispute_evidence.customer_communication_file.attached?).to be(true)
+          expect(dispute_evidence.seller_submitted?).to be(true)
+          expect(response).to redirect_to(success_purchase_dispute_evidence_path(evidence_token))
+        end
+      end
+
+      it "does not hide a failed download of the PDF" do
+        blob = pdf_blob(3, "gone.pdf")
+        allow_any_instance_of(ActiveStorage::Blob).to receive(:open).and_raise(ActiveStorage::FileNotFoundError)
+        expect(ErrorNotifier).not_to receive(:notify)
+
+        expect do
+          put :update, params: { purchase_id: evidence_token, dispute_evidence: { customer_communication_file_signed_blob_id: blob.signed_id } }
+        end.to raise_error(ActiveStorage::FileNotFoundError)
+      end
+
       it "accepts a PDF of exactly the limit" do
         put :update, params: { purchase_id: evidence_token, dispute_evidence: { customer_communication_file_signed_blob_id: pdf_blob(50, "max.pdf").signed_id } }
 
