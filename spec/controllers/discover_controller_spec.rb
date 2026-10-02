@@ -112,6 +112,17 @@ describe DiscoverController, type: :controller, inertia: true do
         expect(descriptions.map(&:length)).to eq([ProductPresenter::Card::FEATURED_DESCRIPTION_MAX_LENGTH])
       end
 
+      it "ends a featured description cut after a sentence period in a single ellipsis" do
+        create(:product, :recommendable, taxonomy: Taxonomy.find_by(slug: "3d"), description: "<p>#{"a" * 296}. More text follows here.</p>")
+        Link.import(refresh: true, force: true)
+        request.headers["X-Inertia-Partial-Data"] = "recommended_products"
+
+        get :index, params: { taxonomy: "3d" }
+
+        descriptions = response.parsed_body.fetch("props").fetch("recommended_products").map { _1["description"] }
+        expect(descriptions).to eq(["#{"a" * 296}..."])
+      end
+
       it "returns recommended wishlists in partial props" do
         request.headers["X-Inertia-Partial-Data"] = "recommended_wishlists"
 
