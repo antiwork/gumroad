@@ -138,8 +138,8 @@ class MerchantAccount < ApplicationRecord
   # it does not close it.
   IN_FLIGHT_PURCHASE_HORIZON = 2.days
 
-  # The caller must hold the seller and account row locks and have made no plain read before them: under
-  # REPEATABLE READ the first plain read fixes the snapshot, which has to postdate the locks. Any
+  # The caller must hold the seller row lock and have made no plain read before it: under
+  # REPEATABLE READ the first plain read fixes the snapshot, which has to postdate the lock. Any
   # unpaid/processing balance counts whatever its amount, as does a committed BalanceTransaction not yet
   # applied to one. Completed payouts never count, unlike Payment::NON_TERMINAL_STATES.
   def unsettled_payout_obligations?
@@ -151,23 +151,6 @@ class MerchantAccount < ApplicationRecord
     in_flight_payments = Payment.where(user_id:, state: [Payment::CREATING, Payment::PROCESSING])
     in_flight_payments.joins(:balances).where(balances: { merchant_account_id: id }).exists? ||
       (charge_processor_merchant_id.present? && in_flight_payments.where(stripe_connect_account_id: charge_processor_merchant_id).exists?)
-  end
-
-  REPLACED_ACCOUNT_ERROR_CODE = PurchaseErrorCode::MERCHANT_ACCOUNT_REPLACED
-
-  # Called right before a charge is created, with the sale's purchase already saved on this account. The locking
-  # read waits behind a replacement holding the row (StripeConnectAccountLinker) and sees it committed; a charge
-  # that gets past first has its in_progress purchase counted by the replacement. The shared lock lasts until the
-  # caller's transaction ends: at once in autocommit, but through the whole charge when the caller holds one
-  # (Order::ConfirmService setup-confirmed resume, Subscription::UpdaterService), which can delay a replacement.
-  # Reads the primary: the replacement commits there, and a replica could still show the account as live.
-  def verify_live_for_charge!
-    return unless user_id.present? && is_a_gumroad_managed_stripe_account?
-
-    live = ApplicationRecord.connected_to(role: :writing) { self.class.lock("LOCK IN SHARE MODE").find(id).active? }
-    return if live
-
-    raise ChargeProcessorErrorGeneric.new(REPLACED_ACCOUNT_ERROR_CODE, message: "Merchant account #{id} was replaced before the charge was created")
   end
 
   def delete_charge_processor_account!

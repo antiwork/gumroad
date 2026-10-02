@@ -128,15 +128,6 @@ describe ChargeProcessor do
       )
     end
 
-    it "refuses a managed account that has been retired before reaching the charge processor" do
-      merchant_account.delete_charge_processor_account!
-      expect_any_instance_of(StripeChargeProcessor).not_to receive(:create_payment_intent_or_charge!)
-
-      expect do
-        ChargeProcessor.create_payment_intent_or_charge!(MerchantAccount.find(merchant_account.id), chargeable, 1_00, 0_30, "reference", "description")
-      end.to raise_error(ChargeProcessorErrorGeneric) { |error| expect(error.error_code).to eq(MerchantAccount::REPLACED_ACCOUNT_ERROR_CODE) }
-    end
-
     it "passes mandate_options to create_payment_intent_or_charge! on the correct charge processor" do
       mandate_options = {
         payment_method_options: {

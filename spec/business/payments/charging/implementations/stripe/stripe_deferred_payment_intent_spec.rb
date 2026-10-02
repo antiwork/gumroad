@@ -22,17 +22,6 @@ describe StripeDeferredPaymentIntent do
     )
   end
 
-  describe ".create on a managed account that has been retired" do
-    it "raises before any PaymentIntent is created" do
-      merchant_account = create(:merchant_account, charge_processor_merchant_id: "acct_managed_deferred")
-      merchant_account.delete_charge_processor_account!
-      expect(Stripe::PaymentIntent).not_to receive(:create)
-
-      expect { create_deferred_intent(merchant_account: MerchantAccount.find(merchant_account.id)) }
-        .to raise_error(ChargeProcessorErrorGeneric) { |error| expect(error.error_code).to eq(MerchantAccount::REPLACED_ACCOUNT_ERROR_CODE) }
-    end
-  end
-
   # The core deferred-intent contract is exercised against the platform account (no connected
   # account), mirroring how StripeChargeIntent specs create intents directly on the platform.
   describe ".create on the platform account", :vcr do

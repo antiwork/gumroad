@@ -641,10 +641,8 @@ class User < ApplicationRecord
     merchant_account(PaypalChargeProcessor.charge_processor_id)
   end
 
-  def stripe_account(lock: false)
-    stripe_accounts = merchant_accounts.alive.charge_processor_alive.stripe
-    stripe_accounts = stripe_accounts.lock if lock
-    stripe_accounts.find { |ma| !ma.is_a_stripe_connect_account? }
+  def stripe_account
+    merchant_accounts.alive.charge_processor_alive.stripe.find { |ma| !ma.is_a_stripe_connect_account? }
   end
 
   def merchant_account(charge_processor_id)

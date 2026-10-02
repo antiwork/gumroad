@@ -37,7 +37,6 @@ class StripeDeferredPaymentIntent
   end
 
   def create
-    merchant_account&.verify_live_for_charge!
     with_stripe_error_handler do
       payment_intent = Stripe::PaymentIntent.create(intent_params, request_options)
       StripeChargeIntent.new(payment_intent:, merchant_account:)

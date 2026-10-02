@@ -147,7 +147,6 @@ module ChargeProcessor
                                             processor_amount_cents: nil, processor_currency: nil,
                                             processor_gumroad_amount_cents: nil, stripe_fx_quote_id: nil,
                                             idempotency_key: nil)
-    merchant_account.verify_live_for_charge!
     charge_processor = get_charge_processor(merchant_account.charge_processor_id)
     chargeable_for_charge_processor = chargeable.get_chargeable_for(merchant_account.charge_processor_id)
     charge_options = {

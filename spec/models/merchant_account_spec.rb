@@ -211,50 +211,6 @@ describe MerchantAccount do
     end
   end
 
-  describe "#verify_live_for_charge!" do
-    let(:merchant_account) { create(:merchant_account, charge_processor_merchant_id: "acct_managed_charge") }
-
-    it "passes for a live managed account" do
-      expect { merchant_account.verify_live_for_charge! }.not_to raise_error
-    end
-
-    it "raises a named error once the managed account has been retired" do
-      merchant_account.delete_charge_processor_account!
-
-      expect { merchant_account.verify_live_for_charge! }
-        .to raise_error(ChargeProcessorErrorGeneric) { |error| expect(error.error_code).to eq(MerchantAccount::REPLACED_ACCOUNT_ERROR_CODE) }
-    end
-
-    it "reads the stored state, not the instance in memory" do
-      stale = MerchantAccount.find(merchant_account.id)
-      merchant_account.delete_charge_processor_account!
-
-      expect { stale.verify_live_for_charge! }.to raise_error(ChargeProcessorErrorGeneric)
-    end
-
-    it "takes a shared lock on the account row" do
-      statements = []
-      subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") { |*, payload| statements << payload[:sql] }
-      merchant_account.verify_live_for_charge!
-      ActiveSupport::Notifications.unsubscribe(subscriber)
-
-      expect(statements).to include(a_string_matching(/FROM `merchant_accounts` WHERE `merchant_accounts`.`id` = #{merchant_account.id} .*LOCK IN SHARE MODE/))
-    end
-
-    it "does not touch accounts that are not retired by connecting Stripe" do
-      connect_account = create(:merchant_account_stripe_connect)
-      connect_account.delete_charge_processor_account!
-      paypal_account = create(:merchant_account_paypal)
-      paypal_account.update!(charge_processor_alive_at: nil)
-      platform_account = create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_platform_charge")
-      platform_account.update!(charge_processor_alive_at: nil)
-
-      [connect_account, paypal_account, platform_account].each do |account|
-        expect { account.verify_live_for_charge! }.not_to raise_error
-      end
-    end
-  end
-
   describe "#delete_charge_processor_account!", :vcr do
     it "marks the merchant account as deleted and clears the meta field" do
       merchant_account = create(:merchant_account_stripe)

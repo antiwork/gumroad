@@ -312,104 +312,45 @@ describe StripeConnectAccountLinker, "racing payout writers" do
     end
   end
 
-  def create_in_flight_sale(**attributes)
-    create(:purchase, link: product, seller:, merchant_account: managed_account, purchase_state: "in_progress", **attributes)
-  end
-
-  # Returns the refusal instead of raising, so the thread's join in the cleanup does not re-raise it.
-  def charge_on_managed_account
-    ChargeProcessor.create_payment_intent_or_charge!(MerchantAccount.find(managed_account.id), instance_double(Chargeable, get_chargeable_for: :chargeable), 10_00, 1_00, "ref", "description")
-  rescue ChargeProcessorErrorGeneric => e
-    e
-  end
-
-  context "when a sale and the replacement overlap" do
-    let!(:product) { create(:product, user: seller) }
-
-    let(:processor) { instance_double(StripeChargeProcessor, create_payment_intent_or_charge!: nil) }
-
-    before { allow(ChargeProcessor).to receive(:get_charge_processor).and_return(processor) }
-
-    it "refuses the replacement that waits behind a charge holding the shared lock" do
-      sale, sale_pid = on_new_connection do
-        ActiveRecord::Base.transaction do
-          MerchantAccount.find(managed_account.id).verify_live_for_charge!
-          @in_flight_sale = create_in_flight_sale
-          @held << true
-          @proceed.pop
-        end
+  context "when the replacement retires the managed account" do
+    it "enqueues the settlement-tail check for the retired account, after the retirement commits" do
+      transaction_open_at_enqueue = nil
+      allow(AlertOnRetiredManagedAccountActivityJob).to receive(:perform_in) do |*|
+        transaction_open_at_enqueue = ActiveRecord::Base.connection.transaction_open?
       end
-      wait_for_hold
 
-      linking, linking_pid = on_new_connection { link }
-      wait_until_blocked_on_user_row(linking_pid, sale_pid, table: "merchant_accounts")
-      expect(linking).to be_alive
+      expect(link).to eq(:linked)
 
-      @proceed << true
-      sale.value
-      expect(Timeout.timeout(wait_seconds) { linking.value }).to eq(:unsettled_obligations)
-
-      expect(Purchase.find(@in_flight_sale.id)).to be_in_progress
-      expect(connect_accounts).to be_empty
-      expect(managed_account.reload).to be_active
-    end
-
-    it "refuses a charge that waits behind the replacement before any charge is created" do
-      hold_before(/\AINSERT INTO `merchant_accounts`/)
-      linking, linking_pid = on_new_connection(racing_writer: true) { link }
-      wait_for_hold
-
-      charging, charging_pid = on_new_connection { charge_on_managed_account }
-      wait_until_blocked_on_user_row(charging_pid, linking_pid, table: "merchant_accounts")
-      expect(charging).to be_alive
-
-      @proceed << true
-      expect(Timeout.timeout(wait_seconds) { linking.value }).to eq(:linked)
-      refusal = Timeout.timeout(wait_seconds) { charging.value }
-      expect(refusal).to be_a(ChargeProcessorErrorGeneric)
-      expect(refusal.error_code).to eq(MerchantAccount::REPLACED_ACCOUNT_ERROR_CODE)
-
-      expect(processor).not_to have_received(:create_payment_intent_or_charge!)
-      expect(Balance.where(user_id: seller.id)).to be_empty
-      expect(BalanceTransaction.where(user_id: seller.id)).to be_empty
-      expect(connect_accounts.sole).to be_active
+      expect(AlertOnRetiredManagedAccountActivityJob).to have_received(:perform_in) do |delay, merchant_account_id, retired_at_iso|
+        expect(delay).to eq(AlertOnRetiredManagedAccountActivityJob::SETTLEMENT_TAIL)
+        expect(merchant_account_id).to eq(managed_account.id)
+        expect(Time.iso8601(retired_at_iso)).to be_within(2.seconds).of(managed_account.reload.deleted_at)
+      end
+      # Post-commit: a read inside the linker's transaction is pinned to the snapshot its own
+      # obligations read established, so it could not see a sale that committed in between.
+      expect(transaction_open_at_enqueue).to be(false)
       expect(managed_account.reload).not_to be_active
     end
 
-    it "lets charges on the account run side by side" do
-      first, = on_new_connection do
-        ActiveRecord::Base.transaction do
-          MerchantAccount.find(managed_account.id).verify_live_for_charge!
-          @held << true
-          @proceed.pop
-        end
-      end
-      wait_for_hold
+    it "enqueues nothing when the replacement is refused for unsettled obligations" do
+      create_managed_balance
+      allow(AlertOnRetiredManagedAccountActivityJob).to receive(:perform_in)
 
-      second, = on_new_connection { MerchantAccount.find(managed_account.id).verify_live_for_charge! }
-      expect(Timeout.timeout(wait_seconds) { second.value }).to be_nil
-      expect(first).to be_alive
+      expect(link).to eq(:unsettled_obligations)
 
-      @proceed << true
-      first.value
+      expect(AlertOnRetiredManagedAccountActivityJob).not_to have_received(:perform_in)
+      expect(managed_account.reload).to be_active
     end
 
-    it "does not wait on a payout claim holding the seller lock" do
-      claim, = on_new_connection do
-        ActiveRecord::Base.transaction do
-          claim_payable_balances
-          @held << true
-          @proceed.pop
-        end
-      end
-      wait_for_hold
+    it "enqueues nothing when the callback only signs the seller in to an already-active link" do
+      existing = create(:merchant_account_stripe_connect, user: seller, charge_processor_merchant_id: auth_uid)
+      allow(AlertOnRetiredManagedAccountActivityJob).to receive(:perform_in)
 
-      charging, = on_new_connection { charge_on_managed_account }
-      Timeout.timeout(wait_seconds) { charging.value }
-      expect(processor).to have_received(:create_payment_intent_or_charge!)
+      expect(link).to eq(:linked)
 
-      @proceed << true
-      claim.value
+      expect(AlertOnRetiredManagedAccountActivityJob).not_to have_received(:perform_in)
+      expect(existing.reload).to be_active
+      expect(managed_account.reload).to be_active
     end
   end
 end
