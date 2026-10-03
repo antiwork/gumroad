@@ -545,6 +545,28 @@ describe User, :vcr do
     end
   end
 
+  describe "#resend_confirmation_wait" do
+    let(:user) { create(:user) }
+
+    it "is zero when no confirmation was ever sent" do
+      user.update_column(:confirmation_sent_at, nil)
+
+      expect(user.resend_confirmation_wait).to eq(0)
+    end
+
+    it "counts the seconds left in the one-minute floor" do
+      user.update_column(:confirmation_sent_at, 20.seconds.ago)
+
+      expect(user.resend_confirmation_wait).to be_between(39, 40)
+    end
+
+    it "is zero once the floor has passed" do
+      user.update_column(:confirmation_sent_at, 61.seconds.ago)
+
+      expect(user.resend_confirmation_wait).to eq(0)
+    end
+  end
+
   describe "#display_name" do
     context "when name is present" do
       before do

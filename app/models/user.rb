@@ -1543,9 +1543,15 @@ class User < ApplicationRecord
   # hits SendGrid's suppression API).
   RESEND_CONFIRMATION_ENQUEUE_FLOOR = 1.minute
 
+  def resend_confirmation_wait
+    return 0 if confirmation_sent_at.blank?
+
+    [(confirmation_sent_at + RESEND_CONFIRMATION_ENQUEUE_FLOOR - Time.current).ceil, 0].max
+  end
+
   def resend_confirmation_instructions
     pending_any_confirmation do
-      return if confirmation_sent_at.present? && confirmation_sent_at > RESEND_CONFIRMATION_ENQUEUE_FLOOR.ago
+      return if resend_confirmation_wait > 0
       update_column(:confirmation_sent_at, Time.current)
       ResendConfirmationEmailJob.perform_async(id)
     end
