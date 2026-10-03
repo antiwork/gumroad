@@ -1,14 +1,8 @@
 # frozen_string_literal: true
 
-# Lifts our platform pause (`risk_controls.charges.pause_requested`) on a compliant seller's
-# Gumroad-managed Stripe account (gumroad-private#3221). While it stays set, transfers stay inactive
-# and every payout's funding transfer fails.
-#
-# Only the plain charges-only pause is lifted. Both paused, `rejected.*` and past-due states may be
-# deliberate or real Stripe decisions, so they are left alone and noted on the user.
-#
-# Once lifted, the payout hold that Payment#pause_payouts_after_repeated_failures put on the seller is
-# released too, but only when every failure behind it came from this pause.
+# Lifts our platform pause (`risk_controls.charges.pause_requested`) on a compliant seller's Stripe
+# account, then releases the payout hold it caused (gumroad-private#3221). Only the plain charges-only
+# pause is lifted: any other state may be deliberate or a real Stripe decision, so it gets a note.
 class LiftPlatformStripePauseJob
   include Sidekiq::Job
   sidekiq_options queue: :default, retry: 3, lock: :until_executed
