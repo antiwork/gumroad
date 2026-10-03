@@ -230,9 +230,9 @@ describe LiftPlatformStripePauseJob do
   describe "releasing the failed-payout hold" do
     let(:bank_account) { create(:ach_account, user: seller) }
 
-    CAPABILITY_ERROR = "Your destination account needs to have at least one of the following capabilities enabled: transfers, legacy_payments"
+    let(:capability_error) { "Your destination account needs to have at least one of the following capabilities enabled: transfers, legacy_payments" }
 
-    def failed_payout(reason: Payment::FailureReason::CANNOT_PAY, created_at: 1.hour.ago, error_message: CAPABILITY_ERROR)
+    def failed_payout(reason: Payment::FailureReason::CANNOT_PAY, created_at: 1.hour.ago, error_message: capability_error)
       payment = create(:payment, user: seller, bank_account:, processor: PayoutProcessorType::STRIPE, state: "processing",
                                  stripe_connect_account_id: "acct_pauselift", created_at:)
       payment.error_message = error_message
@@ -280,7 +280,7 @@ describe LiftPlatformStripePauseJob do
       # Counted account-wide after the completed payout above, these would look like three cannot_pay failures.
       payment = create(:payment, user: seller, bank_account: other_bank_account, processor: PayoutProcessorType::STRIPE, state: "processing",
                                  stripe_connect_account_id: "acct_pauselift", created_at: 1.hour.ago)
-      payment.error_message = CAPABILITY_ERROR
+      payment.error_message = capability_error
       payment.mark_failed!(Payment::FailureReason::CANNOT_PAY)
 
       described_class.new.perform(seller.id)
@@ -294,13 +294,13 @@ describe LiftPlatformStripePauseJob do
       Payment::MAX_CONSECUTIVE_FAILED_PAYOUTS.times do |i|
         payment = create(:payment, user: seller, processor: PayoutProcessorType::STRIPE, state: "processing", bank_account: nil,
                                    stripe_connect_account_id: "acct_two", stripe_payout_destination_id: "ba_shared", created_at: 2.hours.ago + i.minutes)
-        payment.error_message = CAPABILITY_ERROR
+        payment.error_message = capability_error
         payment.mark_failed!(Payment::FailureReason::CANNOT_PAY)
       end
       Payment::MAX_CONSECUTIVE_FAILED_PAYOUTS.times do |i|
         payment = create(:payment, user: seller, processor: PayoutProcessorType::STRIPE, state: "processing", bank_account: nil,
                                    stripe_connect_account_id: "acct_one", stripe_payout_destination_id: "ba_shared", created_at: 1.hour.ago + i.minutes)
-        payment.error_message = CAPABILITY_ERROR
+        payment.error_message = capability_error
         payment.mark_failed!(i.zero? ? Payment::FailureReason::INSUFFICIENT_FUNDS : Payment::FailureReason::CANNOT_PAY)
       end
       expect(seller.reload.payouts_paused?).to be(true)
@@ -397,7 +397,7 @@ describe LiftPlatformStripePauseJob do
       Payment::MAX_CONSECUTIVE_FAILED_PAYOUTS.times do |i|
         payment = create(:payment, user: seller, processor: PayoutProcessorType::STRIPE, state: "processing", bank_account: nil,
                                    stripe_connect_account_id: "acct_other", stripe_payout_destination_id: "ba_other", created_at: 1.hour.ago + i.minutes)
-        payment.error_message = CAPABILITY_ERROR
+        payment.error_message = capability_error
         payment.mark_failed!(Payment::FailureReason::CANNOT_PAY)
       end
 
