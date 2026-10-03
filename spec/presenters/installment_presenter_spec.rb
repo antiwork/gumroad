@@ -310,6 +310,15 @@ describe InstallmentPresenter do
         )
       end
 
+      it "is abandoned, with no limit wording to explain it, when the send job was lost" do
+        create(:blast, post: installment, requested_at: 20.days.ago, expired_at: 1.hour.ago, expiry_reason: PostEmailBlast::EXPIRY_ABANDONED, completed_at: nil, first_email_delivered_at: nil, delivery_count: 0)
+
+        props = described_class.new(seller:, installment: installment.reload).props
+
+        expect(props[:delivery]).to eq({ status: "abandoned", delivered_count: 0, remaining_count: nil, scheduled_for: nil, retrying: false })
+        expect(props[:never_reached_anyone]).to eq(true)
+      end
+
       it "flags a post as never reached only while every send expired, not when an earlier send delivered" do
         create(:blast, post: installment, requested_at: 5.days.ago, completed_at: 5.days.ago, first_email_delivered_at: 5.days.ago, delivery_count: 3)
         create(:blast, post: installment, requested_at: 3.days.ago, expired_at: 1.hour.ago, completed_at: nil, first_email_delivered_at: nil, delivery_count: 0)

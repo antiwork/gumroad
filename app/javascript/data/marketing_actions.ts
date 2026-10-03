@@ -41,7 +41,7 @@ export type MarketingChannel = {
 export type MarketingEmailDraft = {
   id: string;
   subject: string;
-  state: "draft" | "scheduled" | "published" | "sending" | "waiting" | "incomplete" | "expired" | "sent";
+  state: "draft" | "scheduled" | "published" | "sending" | "waiting" | "incomplete" | "expired" | "abandoned" | "sent";
   edit_url: string;
 };
 

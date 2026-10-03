@@ -1275,6 +1275,7 @@ describe SendPostBlastEmailsJob, :freeze_time do
       expect(described_class.jobs.count { _1["args"] == [blast.id] }).to eq(0)
       expect(blast.reload).to have_attributes(completed_at: nil, delivery_count: 0)
       expect(blast.expired_at).to be_within(5.seconds).of(Time.current)
+      expect(blast.expiry_reason).to eq(PostEmailBlast::EXPIRY_QUOTA)
       expect(blast.delivery_status).to eq("expired")
       expect($redis.exists?(RedisKey.blast_quota_deferred_until(blast.id))).to eq(false)
     ensure

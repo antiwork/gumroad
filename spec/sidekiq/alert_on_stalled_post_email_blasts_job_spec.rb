@@ -324,7 +324,8 @@ describe AlertOnStalledPostEmailBlastsJob do
           described_class.new.perform
 
           expect(blast.reload.expired_at).to be_present
-          expect(blast.delivery_status).to eq("expired")
+          expect(blast.expiry_reason).to eq(PostEmailBlast::EXPIRY_ABANDONED)
+          expect(blast.delivery_status).to eq("abandoned")
           expect(SendPostBlastEmailsJob).not_to have_received(:perform_async)
         end
 

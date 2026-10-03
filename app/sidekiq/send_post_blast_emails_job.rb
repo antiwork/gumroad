@@ -436,7 +436,7 @@ class SendPostBlastEmailsJob
 
       now = Time.current
       rows = PostEmailBlast.where(id: @blast.id, completed_at: nil, first_email_delivered_at: nil, expired_at: nil)
-                           .update_all(expired_at: now, updated_at: now)
+                           .update_all(expired_at: now, expiry_reason: PostEmailBlast::EXPIRY_QUOTA, updated_at: now)
       if rows.zero? && !PostEmailBlast.where(id: @blast.id).where.not(expired_at: nil).exists?
         # A delivery landed first, so the blast is live. Release the decision instead of blocking it.
         $redis.del(admitted_key) if claimed

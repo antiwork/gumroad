@@ -141,7 +141,7 @@ describe("Email List", :js, :sidekiq_inline, :elasticsearch_wait_for_refresh, ty
       end
 
       it "tells the seller an email was not sent once its daily-limit wait ran past the content window" do
-        create(:blast, post: installment1, requested_at: 3.days.ago, started_at: 3.days.ago, completed_at: nil, first_email_delivered_at: nil, delivery_count: 0, expired_at: 1.hour.ago)
+        create(:blast, post: installment1, requested_at: 3.days.ago, started_at: 3.days.ago, completed_at: nil, first_email_delivered_at: nil, delivery_count: 0, expired_at: 1.hour.ago, expiry_reason: PostEmailBlast::EXPIRY_QUOTA)
 
         visit "#{emails_path}/published"
 
@@ -153,6 +153,23 @@ describe("Email List", :js, :sidekiq_inline, :elasticsearch_wait_for_refresh, ty
         within_modal "Email 1 (sent)" do
           expect(page).to have_text("Status Not sent", normalize_ws: true)
           expect(page).to have_text("Your daily limit for large emails stayed full until this email was out of date.")
+          expect(page).not_to have_button("Resend to non-openers")
+        end
+      end
+
+      it "does not blame the daily limit when the send was lost before any email went out" do
+        create(:blast, post: installment1, requested_at: 20.days.ago, started_at: nil, completed_at: nil, first_email_delivered_at: nil, delivery_count: 0, expired_at: 1.hour.ago, expiry_reason: PostEmailBlast::EXPIRY_ABANDONED)
+
+        visit "#{emails_path}/published"
+
+        within_table "Published" do
+          expect(page).to have_table_row({ "Subject" => "Email 1 (sent)", "Status" => "Not sent" })
+          find(:table_row, { "Subject" => "Email 1 (sent)" }).click
+        end
+
+        within_modal "Email 1 (sent)" do
+          expect(page).to have_text("We lost track of this send before any email went out.")
+          expect(page).not_to have_text("daily limit")
           expect(page).not_to have_button("Resend to non-openers")
         end
       end

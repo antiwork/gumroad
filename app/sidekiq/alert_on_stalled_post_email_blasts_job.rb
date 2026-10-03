@@ -126,7 +126,7 @@ class AlertOnStalledPostEmailBlastsJob
         .where("NOT EXISTS (SELECT 1 FROM sent_post_emails WHERE sent_post_emails.post_id = post_email_blasts.post_id AND sent_post_emails.created_at >= post_email_blasts.requested_at)")
         .order(requested_at: :desc)
         .limit(MAX_CANDIDATES_SCANNED)
-        .each { |blast| PostEmailBlast.where(id: blast.id, completed_at: nil, expired_at: nil, first_email_delivered_at: nil).update_all(expired_at: Time.current, updated_at: Time.current) }
+        .each { |blast| PostEmailBlast.where(id: blast.id, completed_at: nil, expired_at: nil, first_email_delivered_at: nil).update_all(expired_at: Time.current, expiry_reason: PostEmailBlast::EXPIRY_ABANDONED, updated_at: Time.current) }
     end
 
     # Windowed on `requested_at`, which is indexed (through post_id it is not — the standalone
