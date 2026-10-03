@@ -1505,11 +1505,11 @@ class Link < ApplicationRecord
     product_refund_policy || build_product_refund_policy(seller: user)
   end
 
+  PermalinkChangedDuringLock = Class.new(StandardError)
+
   # Takes the seller lock before the product lock when claiming a permalink. If the stored permalink moves
   # before the product locks, raises for a retry rather than take the seller lock out of order.
   # Call inside the editor's bounded lock wait.
-  PermalinkChangedDuringLock = Class.new(StandardError)
-
   def lock_for_permalink_claim!(permalink)
     seller_locked = false
     if user_id.present? && permalink.present? && permalink != Link.where(id:).pick(:custom_permalink)
