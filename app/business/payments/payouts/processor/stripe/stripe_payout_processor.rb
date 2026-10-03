@@ -727,12 +727,8 @@ class StripePayoutProcessor
     # connection loss here is NOT the same as one raised while building the request above.
     payout_requested = true
     stripe_payout = Stripe::Payout.create(params, { stripe_account: payment.stripe_connect_account_id })
-    # A payout with no bank account named — a retired-account drain, or Stripe choosing the bank for a
-    # foreign currency — leaves no local row pointing at where the money went, so record Stripe's own
-    # answer on the payment. Never substitute the seller's active bank: it is on another account.
-    # `bank_account` is the same snapshot that decided whether a destination was sent above (it is
-    # taken after the foreign-currency nil-out), so both halves agree and neither can name a bank the
-    # money did not go to.
+    # No bank named in the request (retired-account drain, foreign currency): record Stripe's answer,
+    # never the seller's active bank, which is on another account.
     if bank_account.nil?
       destination = stripe_payout[:destination]
       payment.stripe_payout_destination_id = destination.is_a?(String) ? destination : destination&.id
