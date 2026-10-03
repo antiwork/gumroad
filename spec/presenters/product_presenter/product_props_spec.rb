@@ -759,6 +759,64 @@ describe ProductPresenter::ProductProps do
       end
     end
 
+    describe "pwyw default_price_cents" do
+      let(:product) { create(:product, user: seller, price_cents: 0, customizable_price: true) }
+
+      def pwyw_props(product)
+        described_class.new(product:).props(seller_custom_domain_url: nil, request:, pundit_user: nil)[:product][:pwyw]
+      end
+
+      it "is nil when the product is not pay what you want" do
+        product.update!(price_cents: 500, customizable_price: false)
+
+        expect(pwyw_props(product)).to be_nil
+      end
+
+      it "is 0 for a free product with no suggested price" do
+        expect(pwyw_props(product)).to eq(suggested_price_cents: nil, default_price_cents: 0)
+      end
+
+      it "is 0 when every option is also free" do
+        category = create(:variant_category, link: product)
+        create(:variant, variant_category: category, price_difference_cents: 0)
+        create(:variant, variant_category: category, price_difference_cents: nil)
+
+        expect(pwyw_props(product)[:default_price_cents]).to eq(0)
+      end
+
+      it "is nil when the product has a price" do
+        product.update!(price_cents: 500)
+
+        expect(pwyw_props(product)[:default_price_cents]).to be_nil
+      end
+
+      it "is nil when the seller suggests a price, so it shows as the placeholder" do
+        product.update!(suggested_price_cents: 500)
+
+        expect(pwyw_props(product)[:default_price_cents]).to be_nil
+      end
+
+      it "is nil when an option costs money" do
+        category = create(:variant_category, link: product)
+        create(:variant, variant_category: category, price_difference_cents: 0)
+        create(:variant, variant_category: category, price_difference_cents: 300)
+
+        expect(pwyw_props(product)[:default_price_cents]).to be_nil
+      end
+
+      it "is nil when renting costs money" do
+        product.update!(purchase_type: :buy_and_rent, rental_price_cents: 100)
+
+        expect(pwyw_props(product)[:default_price_cents]).to be_nil
+      end
+
+      it "is nil for a tiered membership" do
+        membership = create(:membership_product, user: seller, customizable_price: true)
+
+        expect(pwyw_props(membership)[:default_price_cents]).to be_nil
+      end
+    end
+
     context "multi-seat license on a non-membership product" do
       let(:product) { create(:product, native_type: Link::NATIVE_TYPE_COURSE, is_licensed: true, is_multiseat_license: true) }
 

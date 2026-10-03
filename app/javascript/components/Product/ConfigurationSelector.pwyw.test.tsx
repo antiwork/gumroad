@@ -9,7 +9,6 @@ import {
   type PriceSelection,
   type Product,
 } from "$app/components/Product/ConfigurationSelector";
-import { defaultPwywPriceCents } from "$app/components/Product/pricing";
 
 afterEach(cleanup);
 
@@ -112,49 +111,16 @@ describe("free pay-what-you-want default", () => {
     duration_in_minutes: null,
     ...overrides,
   });
-  const freeProduct: Product = { ...pwywProduct, price_cents: 0, pwyw: { suggested_price_cents: null } };
+  const freeProduct: Product = {
+    ...pwywProduct,
+    price_cents: 0,
+    pwyw: { suggested_price_cents: null, default_price_cents: 0 },
+  };
   const freeWithOptions: Product = {
     ...freeProduct,
     options: [freeOption("small", "Small"), freeOption("large", "Large")],
   };
   const chosen: PriceSelection = { ...initialSelection, optionId: "small", price: { error: false, value: 0 } };
-
-  it("is 0 only when nothing the buyer can pick costs money", () => {
-    expect(defaultPwywPriceCents(freeProduct)).toBe(0);
-    expect(defaultPwywPriceCents(freeWithOptions)).toBe(0);
-    expect(defaultPwywPriceCents({ ...freeProduct, price_cents: 500 })).toBeNull();
-    expect(defaultPwywPriceCents({ ...freeProduct, pwyw: { suggested_price_cents: 500 } })).toBeNull();
-    expect(defaultPwywPriceCents({ ...freeProduct, pwyw: null })).toBeNull();
-    expect(defaultPwywPriceCents({ ...freeProduct, is_tiered_membership: true })).toBeNull();
-    expect(defaultPwywPriceCents({ ...freeProduct, is_legacy_subscription: true })).toBeNull();
-    expect(
-      defaultPwywPriceCents({
-        ...freeProduct,
-        options: [freeOption("small", "Small"), freeOption("paid", "Paid", { price_difference_cents: 300 })],
-      }),
-    ).toBeNull();
-    expect(
-      defaultPwywPriceCents({
-        ...freeProduct,
-        options: [
-          freeOption("small", "Small", {
-            recurrence_price_values: { monthly: { price_cents: 300, suggested_price_cents: null } },
-          }),
-        ],
-      }),
-    ).toBeNull();
-    expect(
-      defaultPwywPriceCents({
-        ...freeProduct,
-        options: [
-          freeOption("small", "Small", {
-            recurrence_price_values: { monthly: { price_cents: 0, suggested_price_cents: 300 } },
-          }),
-        ],
-      }),
-    ).toBeNull();
-    expect(defaultPwywPriceCents({ ...freeProduct, rental: { price_cents: 100, rent_only: false } })).toBeNull();
-  });
 
   it("keeps the amount at 0 when the buyer picks another free option", () => {
     const { selections } = renderPwywSelector(freeWithOptions, chosen);
@@ -183,6 +149,7 @@ describe("free pay-what-you-want default", () => {
   it("clears the amount when the buyer picks an option on a product with a paid option", () => {
     const product = {
       ...freeProduct,
+      pwyw: { suggested_price_cents: null, default_price_cents: null },
       options: [freeOption("small", "Small"), freeOption("paid", "Paid", { price_difference_cents: 300 })],
     };
     const { selections } = renderPwywSelector(product, chosen);

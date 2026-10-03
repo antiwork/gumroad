@@ -34,7 +34,7 @@ const freeProduct = (overrides: Partial<Product> = {}): Product => ({
   duration_in_months: null,
   is_sales_limited: false,
   price_cents: 0,
-  pwyw: { suggested_price_cents: null },
+  pwyw: { suggested_price_cents: null, default_price_cents: 0 },
   installment_plan: null,
   ratings: null,
   is_legacy_subscription: false,
@@ -77,11 +77,11 @@ const priceFor = (product: Product, search = "") => {
 };
 
 describe("useSelectionFromUrl price", () => {
-  it("starts a $0 pay-what-you-want product at 0", () => {
+  it("starts at the default amount the server sends", () => {
     expect(priceFor(freeProduct())).toEqual({ value: 0, error: false });
   });
 
-  it("starts at 0 when every option is also free", () => {
+  it("starts at the default amount when the product has options", () => {
     expect(priceFor(freeProduct({ options: [option(), option({ id: "other" })] }))).toEqual({ value: 0, error: false });
   });
 
@@ -97,43 +97,15 @@ describe("useSelectionFromUrl price", () => {
     expect(priceFor(freeProduct(), "?price=abc")).toEqual({ value: null, error: false });
   });
 
-  it("leaves the box empty on a paid pay-what-you-want product", () => {
-    expect(priceFor(freeProduct({ price_cents: 500 }))).toEqual({ value: null, error: false });
-  });
-
-  it("leaves the box empty when the seller suggests a price", () => {
-    expect(priceFor(freeProduct({ pwyw: { suggested_price_cents: 500 } }))).toEqual({ value: null, error: false });
-  });
-
-  it("leaves the box empty when a $0 product has a priced option", () => {
-    expect(priceFor(freeProduct({ options: [option(), option({ id: "paid", price_difference_cents: 300 })] }))).toEqual(
-      {
-        value: null,
-        error: false,
-      },
-    );
-  });
-
-  it("leaves the box empty when a $0 product has a priced recurrence option", () => {
-    const priced = option({ recurrence_price_values: { monthly: { price_cents: 300, suggested_price_cents: null } } });
-    expect(priceFor(freeProduct({ options: [priced] }))).toEqual({ value: null, error: false });
-  });
-
-  it("leaves the box empty when renting costs money", () => {
-    expect(priceFor(freeProduct({ rental: { price_cents: 100, rent_only: false } }))).toEqual({
+  it("leaves the box empty when the server sends no default", () => {
+    expect(priceFor(freeProduct({ pwyw: { suggested_price_cents: 500, default_price_cents: null } }))).toEqual({
       value: null,
       error: false,
     });
+    expect(priceFor(freeProduct({ pwyw: { suggested_price_cents: null } }))).toEqual({ value: null, error: false });
   });
 
-  it("leaves a $0 product that is not pay-what-you-want untouched", () => {
+  it("leaves a product that is not pay-what-you-want untouched", () => {
     expect(priceFor(freeProduct({ pwyw: null }))).toEqual({ value: null, error: false });
-  });
-
-  it("leaves tiered memberships untouched", () => {
-    expect(priceFor(freeProduct({ is_tiered_membership: true, options: [option({ is_pwyw: true })] }))).toEqual({
-      value: null,
-      error: false,
-    });
   });
 });
