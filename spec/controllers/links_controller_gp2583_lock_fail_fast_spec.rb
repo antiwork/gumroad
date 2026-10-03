@@ -62,6 +62,38 @@ describe LinksController, type: :controller do
       end
     end
 
+    it "answers the retryable 409 inside the bound when a permalink claim finds the seller row held" do
+      product
+
+      lock_taken = Queue.new
+      release = Queue.new
+      holder = Thread.new do
+        ActiveRecord::Base.connection_pool.with_connection do
+          ActiveRecord::Base.transaction do
+            User.where(id: seller.id).lock.pluck(:id)
+            lock_taken << true
+            release.pop
+          end
+        end
+      end
+      Timeout.timeout(15) { lock_taken.pop }
+
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      patch :update, params: save_params.merge(custom_permalink: "claimed-slug"), as: :json
+      elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started
+
+      expect(response).to have_http_status(:conflict)
+      expect(response.parsed_body["error_code"]).to eq("product_save_busy")
+      expect(elapsed).to be < 15
+      expect(product.reload.custom_permalink).to be_blank
+    ensure
+      release << true if defined?(release) && release
+      if holder && !holder.join(10)
+        holder.kill
+        holder.join
+      end
+    end
+
     it "restores the session's lock wait timeout, so the pooled connection hands it to no one else" do
       previous = ActiveRecord::Base.connection.select_value("SELECT @@SESSION.innodb_lock_wait_timeout")
 

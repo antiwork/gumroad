@@ -565,6 +565,8 @@ class Link < ApplicationRecord
       @content_moderation_checked_for_publish = true
       Link.transaction do
         AfterCommitEverywhere.after_commit { transaction_committed = true } unless caller_has_transaction
+        # A restore takes the seller row before this product row, as a permalink claim does, so the two cannot deadlock.
+        lock_seller_for_permalink_checks
         current_flags = Link.where(id:).lock.pick(:flags).to_i
         if caller_flags_change
           # Merge only the caller's changed bits because all Link flags share one column.
@@ -1501,6 +1503,13 @@ class Link < ApplicationRecord
 
   def find_or_initialize_product_refund_policy
     product_refund_policy || build_product_refund_policy(seller: user)
+  end
+
+  # Takes the seller row a custom permalink claim will need anyway. The editor save calls this inside its
+  # bounded lock wait, right after the product row, so a held seller row answers the retryable 409 instead of
+  # waiting out the server's default timeout during validation.
+  def lock_seller_for_permalink_claim(permalink)
+    User.where(id: user_id).lock.pick(:id) if user_id.present? && permalink.present? && permalink != custom_permalink
   end
 
   # `.on_profile`: a duplicate's own per-product section starts as a copy of the

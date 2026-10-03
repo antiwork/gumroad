@@ -466,7 +466,10 @@ class LinksController < ApplicationController
         # (dropping stale association caches) so the freshness check below
         # reads committed state. Without it, two saves echoing the same
         # timestamps both pass and the last writer silently wins.
-        with_editor_save_lock_wait_bound { @product.lock! }
+        with_editor_save_lock_wait_bound do
+          @product.lock!
+          @product.lock_seller_for_permalink_claim(product_permitted_params[:custom_permalink])
+        end
 
         # An old editor also sends null when the seller switches installments off.
         # Without an intent marker, refuse the whole save rather than silently

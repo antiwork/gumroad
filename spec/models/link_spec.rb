@@ -319,6 +319,25 @@ describe Link do
       expect(seller_lock).to be < profile_lock
     end
 
+    it "locks the seller before the product row when publishing restores a deleted product" do
+      deleted = create(:product, user: seller, deleted_at: Time.current)
+      statements = []
+      subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") { |*, payload| statements << payload[:sql].to_s }
+
+      begin
+        Link.find(deleted.id).publish!
+      ensure
+        ActiveSupport::Notifications.unsubscribe(subscriber)
+      end
+
+      seller_lock = statements.index { _1.include?("FROM `users`") && _1.include?("FOR UPDATE") }
+      product_lock = statements.index { _1.include?("FROM `links`") && _1.include?("FOR UPDATE") }
+      expect(seller_lock).to be_present
+      expect(product_lock).to be_present
+      expect(seller_lock).to be < product_lock
+      expect(deleted.reload).not_to be_deleted
+    end
+
     it "restores a deleted product that has no conflict" do
       deleted = create(:product, user: seller, deleted_at: Time.current)
 
