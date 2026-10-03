@@ -231,7 +231,8 @@ describe LiftPlatformStripePauseJob do
     let(:bank_account) { create(:ach_account, user: seller) }
 
     def failed_payout(reason: Payment::FailureReason::CANNOT_PAY, created_at: 1.hour.ago)
-      payment = create(:payment, user: seller, bank_account:, processor: PayoutProcessorType::STRIPE, state: "processing", created_at:)
+      payment = create(:payment, user: seller, bank_account:, processor: PayoutProcessorType::STRIPE, state: "processing",
+                                 stripe_connect_account_id: "acct_pauselift", created_at:)
       payment.mark_failed!(reason)
       payment
     end
@@ -274,7 +275,8 @@ describe LiftPlatformStripePauseJob do
       2.times { failed_payout }
       expect(seller.reload.payouts_paused?).to be(true)
       # Counted account-wide after the completed payout above, these would look like three cannot_pay failures.
-      payment = create(:payment, user: seller, bank_account: other_bank_account, processor: PayoutProcessorType::STRIPE, state: "processing", created_at: 1.hour.ago)
+      payment = create(:payment, user: seller, bank_account: other_bank_account, processor: PayoutProcessorType::STRIPE, state: "processing",
+                                 stripe_connect_account_id: "acct_pauselift", created_at: 1.hour.ago)
       payment.mark_failed!(Payment::FailureReason::CANNOT_PAY)
 
       described_class.new.perform(seller.id)
@@ -332,6 +334,73 @@ describe LiftPlatformStripePauseJob do
       described_class.new.perform(seller.id)
 
       expect(seller.reload.payouts_paused_internally).to be(true)
+    end
+
+    it "keeps the hold when an unaccounted payout added to it, even if older failures would qualify" do
+      hold_payouts_after_failures
+      seller.comments.create!(author_name: User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:repeated_failed_payouts],
+                              comment_type: Comment::COMMENT_TYPE_ON_PROBATION, created_at: 30.minutes.ago,
+                              content: "Payouts paused automatically: payout abc #{StripePayoutProcessor::UNACCOUNTED_MONEY_HOLD_MARKER} — reconcile at Stripe.")
+
+      described_class.new.perform(seller.id)
+
+      expect(seller.reload.payouts_paused_internally).to be(true)
+      expect(resume_notes).to be_empty
+    end
+
+    it "keeps the hold when the account still cannot transfer, since the failures may be about verification" do
+      stub_stripe(stripe_account)
+      allow(Stripe::Account).to receive(:update).and_return(stripe_account(charges_paused: false, disabled_reason: nil, transfers: "inactive"))
+      hold_payouts_after_failures
+
+      described_class.new.perform(seller.id)
+
+      expect(seller.reload.payouts_paused_internally).to be(true)
+      expect(resume_notes).to be_empty
+    end
+
+    it "keeps the hold when the account still lists requirements after the lift" do
+      allow(Stripe::Account).to receive(:update).and_return(stripe_account(charges_paused: false, disabled_reason: "requirements.past_due", transfers: "active"))
+      hold_payouts_after_failures
+
+      described_class.new.perform(seller.id)
+
+      expect(seller.reload.payouts_paused_internally).to be(true)
+    end
+
+    it "keeps the hold when the failures came from an account whose pause was not lifted" do
+      hold_payouts_after_failures
+      Payment::MAX_CONSECUTIVE_FAILED_PAYOUTS.times do |i|
+        payment = create(:payment, user: seller, processor: PayoutProcessorType::STRIPE, state: "processing", bank_account: nil,
+                                   stripe_connect_account_id: "acct_other", stripe_payout_destination_id: "ba_other", created_at: 1.hour.ago + i.minutes)
+        payment.mark_failed!(Payment::FailureReason::CANNOT_PAY)
+      end
+
+      described_class.new.perform(seller.id)
+
+      expect(seller.reload.payouts_paused_internally).to be(true)
+      expect(resume_notes).to be_empty
+    end
+
+    it "keeps the hold when another of the seller's accounts is still paused" do
+      create(:merchant_account, user: seller, charge_processor_id: StripeChargeProcessor.charge_processor_id, charge_processor_merchant_id: "acct_second")
+      allow(Stripe::Account).to receive(:retrieve).with("acct_second").and_return(stripe_account(payouts_paused: true))
+      hold_payouts_after_failures
+
+      described_class.new.perform(seller.id)
+
+      expect(seller.reload.payouts_paused_internally).to be(true)
+      expect(resume_notes).to be_empty
+    end
+
+    it "releases the hold once every one of the seller's accounts is clear" do
+      create(:merchant_account, user: seller, charge_processor_id: StripeChargeProcessor.charge_processor_id, charge_processor_merchant_id: "acct_second")
+      allow(Stripe::Account).to receive(:retrieve).with("acct_second").and_return(stripe_account(charges_paused: false, disabled_reason: nil, transfers: "active"))
+      hold_payouts_after_failures
+
+      described_class.new.perform(seller.id)
+
+      expect(seller.reload.payouts_paused?).to be(false)
     end
 
     it "keeps a payout hold an admin placed" do

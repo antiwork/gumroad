@@ -25,13 +25,15 @@ class LiftPlatformStripePauseJob
       user = User.find_by(id: user_id)
       next unless eligible?(user)
 
-      user.merchant_accounts.alive.charge_processor_alive.stripe.each do |merchant_account|
+      states = user.merchant_accounts.alive.charge_processor_alive.stripe.filter_map do |merchant_account|
         next unless merchant_account.is_a_gumroad_managed_stripe_account?
 
         lift_pause(user, merchant_account.charge_processor_merchant_id)
       end
 
-      release_failed_payout_hold(user.id)
+      # A hold may stand for a problem on any of the seller's accounts, so every one of them must be
+      # clear before it is released, not just the account that was lifted first.
+      release_failed_payout_hold(user.id) if states.present? && states.all? { |state| clear?(state) }
     end
   end
 
@@ -70,29 +72,41 @@ class LiftPlatformStripePauseJob
           add_note(user, "#{CONFIRMED_PREFIX} #{stripe_account_id}. An earlier attempt started the lift but did not record its result. " \
                          "Now: #{describe(before)}.")
         end
-        return
+        return before
       end
 
       reason_to_skip = reason_to_skip(before)
       if reason_to_skip
         add_note(user, "Left the platform Stripe pause on #{stripe_account_id}: #{reason_to_skip}. Before: #{describe(before)}.")
-        return
+        return before
       end
 
       # The risk state can change while Stripe answers the retrieve above, so look again right before
       # the write rather than trusting the check at the start of the run. A decision committed after
       # this read is still possible, but the window is a single request instead of the whole job.
-      return unless eligible?(User.find_by(id: user.id))
+      return nil unless eligible?(User.find_by(id: user.id))
 
       # Written before the update so a response lost after Stripe applies it still leaves a trace.
       add_note(user, "#{INTENT_PREFIX} #{stripe_account_id} after the account was marked compliant. Before: #{describe(before)}.") unless pending_note
 
       updated = Stripe::Account.update(stripe_account_id, risk_controls: { charges: { pause_requested: false } })
+      after = state_of(updated)
       add_note(user, "#{LIFTED_PREFIX} #{stripe_account_id} after the account was marked compliant. " \
-                     "Before: #{describe(before)}. After: #{describe(state_of(updated))}.")
+                     "Before: #{describe(before)}. After: #{describe(after)}.")
+      after
     rescue Stripe::InvalidRequestError, Stripe::PermissionError => e
       # Retrying cannot fix a missing or inaccessible account, so record it and move on to the next one.
       add_note(user, "Could not lift the platform Stripe pause on #{stripe_account_id}: #{e.message}")
+      nil
+    end
+
+    # What the platform pause was holding back is working again. Stripe also answers "cannot pay" when
+    # transfers are off for outstanding verification, and lifting the pause does not fix that, so an
+    # account that still cannot transfer, or still lists requirements, does not count as clear. When
+    # Stripe has not caught up yet this errs towards keeping the hold, which an admin can release.
+    def clear?(state)
+      state.present? && !state[:charges_paused] && state[:payouts_paused] == false && state[:disabled_reason].nil? &&
+        !state[:past_due] && state[:transfers] == "active"
     end
 
     # The newest note for this account, when it is a lift that started and never finished.
@@ -108,7 +122,8 @@ class LiftPlatformStripePauseJob
     # Payment#pause_payouts_after_repeated_failures holds the whole account after three failed payouts
     # to one destination, and nothing lifts that hold when the cause goes away. Release it only when
     # it is that hold, it began before our lift, and every failure behind it is a Stripe "cannot pay"
-    # from the funding transfer. A hold from an admin, a chargeback rate or the seller is not ours.
+    # on an account whose pause we lifted. A hold from an admin, a chargeback rate or the seller is not
+    # ours, and neither is one that an unaccounted payout added to.
     def release_failed_payout_hold(user_id)
       user = User.find_by(id: user_id)
       return unless eligible?(user)
@@ -117,11 +132,17 @@ class LiftPlatformStripePauseJob
         next unless eligible?(user)
 
         hold_started_at = user.repeated_failed_payouts_hold_started_at
-        lifted_at = user.comments.with_type_note.where(author_name: AUTHOR_NAME)
-                        .where("content LIKE ? OR content LIKE ?", "#{LIFTED_PREFIX}%", "#{CONFIRMED_PREFIX}%").maximum(:created_at)
-        next if hold_started_at.nil? || lifted_at.nil? || hold_started_at > lifted_at
+        next if hold_started_at.nil? || unaccounted_money_hold?(user)
 
-        next unless hold_caused_by_cannot_pay_failures?(user, lifted_at)
+        lifted_at_by_account = lifted_at_by_account(user)
+        tripping = tripping_failures(user)
+        next if tripping.empty?
+
+        # The earliest lift among the accounts behind the failures: the hold has to predate all of them.
+        lifted_ats = tripping.flatten.map { |payment| lifted_at_by_account[payment.stripe_connect_account_id] }
+        next if lifted_ats.any?(&:nil?) || hold_started_at > lifted_ats.min
+
+        next unless tripping.all? { |failures| failures.all? { |payment| caused_by_platform_pause?(payment, lifted_at_by_account) } }
 
         user.update!(payouts_paused_internally: false, payouts_paused_by: nil)
         user.comments.create!(
@@ -134,24 +155,48 @@ class LiftPlatformStripePauseJob
       end
     end
 
-    # Payment#pause_payouts_after_repeated_failures counts failures per destination, so this does too: every
-    # destination at the threshold could have tripped the hold, and each must consist only of Stripe
-    # "cannot pay" failures from before the lift. Any other cause behind a possible trigger keeps the hold.
-    def hold_caused_by_cannot_pay_failures?(user, lifted_at)
+    # Payment#hold_payouts_for_unaccounted_money! writes its hold under the same author, even when payouts
+    # are already paused, so the newest pausing comment alone cannot show what the hold is for. Money that
+    # may have been paid out needs a person to reconcile it at Stripe, so any such comment since payouts
+    # were last resumed keeps the hold.
+    def unaccounted_money_hold?(user)
+      last_resumed_at = user.comments.with_type_payouts_resumed.maximum(:created_at)
+      comments = user.comments.with_type_on_probation
+                     .where(author_name: User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:repeated_failed_payouts])
+                     .where("content LIKE ?", "%#{StripePayoutProcessor::UNACCOUNTED_MONEY_HOLD_MARKER}%")
+      comments = comments.where("created_at >= ?", last_resumed_at) if last_resumed_at
+      comments.exists?
+    end
+
+    # When each Stripe account's pause was lifted, from the notes: a seller can have more than one account,
+    # and lifting one says nothing about the others.
+    def lifted_at_by_account(user)
+      user.comments.with_type_note.where(author_name: AUTHOR_NAME)
+          .where("content LIKE ? OR content LIKE ?", "#{LIFTED_PREFIX}%", "#{CONFIRMED_PREFIX}%")
+          .pluck(:content, :created_at)
+          .each_with_object({}) do |(content, created_at), result|
+        account_id = content[/acct_\w+/]
+        result[account_id] = [result[account_id], created_at].compact.max if account_id
+      end
+    end
+
+    # Payment#pause_payouts_after_repeated_failures counts failures per destination, so this does too:
+    # every destination at the threshold could have tripped the hold. Returns the counted failures of each.
+    def tripping_failures(user)
       one_per_destination = user.payments.where(state: [Payment::FAILED, Payment::RETURNED])
                                 .group_by { |payment| [payment.processor, payment.bank_account_id, payment.stripe_connect_account_id, payment.stripe_payout_destination_id, payment.payment_address] }
                                 .values.map(&:first)
-      tripping = one_per_destination.filter_map { |payment| payment.failed_payouts_counted_toward_hold&.last }
-                                    .select { |failures| failures.count >= Payment::MAX_CONSECUTIVE_FAILED_PAYOUTS }
-      return false if tripping.empty?
-
-      tripping.all? do |failures|
-        failures.all? do |payment|
-          payment.processor == PayoutProcessorType::STRIPE &&
-            payment.failure_reason == Payment::FailureReason::CANNOT_PAY &&
-            payment.created_at <= lifted_at
-        end
+      one_per_destination.filter_map do |payment|
+        failures = payment.failed_payouts_counted_toward_hold&.last
+        failures.to_a if failures && failures.count >= Payment::MAX_CONSECUTIVE_FAILED_PAYOUTS
       end
+    end
+
+    def caused_by_platform_pause?(payment, lifted_at_by_account)
+      lifted_at = lifted_at_by_account[payment.stripe_connect_account_id]
+      payment.processor == PayoutProcessorType::STRIPE &&
+        payment.failure_reason == Payment::FailureReason::CANNOT_PAY &&
+        lifted_at.present? && payment.created_at <= lifted_at
     end
 
     def reason_to_skip(state)
