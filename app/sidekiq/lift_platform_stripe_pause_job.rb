@@ -114,7 +114,11 @@ class LiftPlatformStripePauseJob
       # The risk state can change while Stripe answers the retrieve above, so look again right before
       # the write rather than trusting the check at the start of the run. A decision committed after
       # this read is still possible, but the window is a single request instead of the whole job.
-      return nil unless eligible?(User.find_by(id: user.id))
+      unless eligible?(User.find_by(id: user.id))
+        # An earlier attempt may have left an intent note, and nothing closes it on a run that ends normally.
+        add_note(user, "Did not lift the platform Stripe pause on #{stripe_account_id}: the seller is no longer eligible.") if pending_note
+        return nil
+      end
 
       # Written before every attempt, so a response lost after Stripe applies it still leaves a trace, and a
       # later confirmation is dated from the attempt that reached Stripe rather than from an earlier failed one.

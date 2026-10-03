@@ -78,6 +78,20 @@ describe LiftPlatformStripePauseJob do
       expect(notes).to be_empty
     end
 
+    it "closes an earlier attempt's intent note when the seller turns ineligible before the retry writes" do
+      stub_stripe(stripe_account)
+      allow(Stripe::Account).to receive(:update).and_raise(Stripe::APIConnectionError.new("timeout"))
+      expect { described_class.new.perform(seller.id) }.to raise_error(Stripe::APIConnectionError)
+      allow(Stripe::Account).to receive(:retrieve).with("acct_pauselift") do
+        seller.update!(user_risk_state: "flagged_for_fraud")
+        stripe_account
+      end
+
+      described_class.new.perform(seller.id)
+
+      expect(notes.last.content).to start_with("Did not lift the platform Stripe pause on acct_pauselift")
+    end
+
     it "does nothing when the account has no platform pause" do
       stub_stripe(stripe_account(charges_paused: false, disabled_reason: nil, transfers: "active"))
 
