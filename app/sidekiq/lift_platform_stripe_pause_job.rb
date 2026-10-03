@@ -12,9 +12,8 @@ class LiftPlatformStripePauseJob
   LIFTED_PREFIX = "Lifted the platform Stripe pause on"
   CONFIRMED_PREFIX = "Confirmed the platform Stripe pause is lifted on"
 
-  # Raised when the hold is ready to be released but Stripe has not turned `transfers` back on yet.
-  # The next payout would fail and re-hold the seller, and nothing else will look at this hold again, so
-  # the job retries a little later instead.
+  # Releasing early would let the next payout fail and re-hold the seller, and nothing else looks at this
+  # hold again, so the job retries later instead.
   TransfersNotActiveYet = Class.new(StandardError)
 
   # Stripe turns `transfers` back on in its own time, so wait minutes between those retries, not seconds.
