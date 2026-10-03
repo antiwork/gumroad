@@ -222,6 +222,91 @@ describe Link do
     end
   end
 
+  describe "custom permalink uniqueness" do
+    let(:seller) { create(:user) }
+    let(:product) { create(:product, user: seller) }
+
+    it "lets a product take the unique permalink of the seller's deleted product" do
+      deleted = create(:product, user: seller, deleted_at: Time.current)
+
+      product.custom_permalink = deleted.unique_permalink
+
+      expect(product).to be_valid
+      expect(product.save).to eq(true)
+    end
+
+    it "rejects the unique permalink of another alive product of the seller" do
+      other = create(:product, user: seller)
+
+      product.custom_permalink = other.unique_permalink
+
+      expect(product).not_to be_valid
+      expect(product.errors[:custom_permalink]).to eq(["is already used by another one of your products"])
+    end
+
+    it "rejects the unique permalink of an unpublished product, which still resolves" do
+      unpublished = create(:product, user: seller, purchase_disabled_at: Time.current)
+
+      product.custom_permalink = unpublished.unique_permalink
+
+      expect(product).not_to be_valid
+      expect(product.errors[:custom_permalink]).to eq(["is already used by another one of your products"])
+    end
+
+    it "rejects the unique permalink of another alive product on a new product" do
+      other = create(:product, user: seller)
+
+      new_product = build(:product, user: seller, custom_permalink: other.unique_permalink)
+
+      expect(new_product).not_to be_valid
+      expect(new_product.errors[:custom_permalink]).to eq(["is already used by another one of your products"])
+    end
+
+    it "does not affect another seller's products" do
+      other_seller_product = create(:product, user: create(:user))
+
+      product.custom_permalink = other_seller_product.unique_permalink
+
+      expect(product).to be_valid
+    end
+
+    it "serves the live product on the reused slug and refuses to restore the deleted one" do
+      deleted = create(:product, user: seller, deleted_at: Time.current)
+      product.update!(custom_permalink: deleted.unique_permalink)
+
+      expect(Link.fetch_leniently(deleted.unique_permalink, user: seller)).to eq(product)
+
+      expect(deleted.update(deleted_at: nil)).to eq(false)
+      expect(deleted.errors[:base]).to eq(["Can't restore this product: another one of your products already uses its URL as a custom permalink"])
+      expect(deleted.reload).to be_deleted
+      expect(Link.fetch_leniently(deleted.unique_permalink, user: seller)).to eq(product)
+    end
+
+    it "refuses to restore a deleted product whose URL an unpublished product uses" do
+      deleted = create(:product, user: seller, deleted_at: Time.current)
+      product.update!(custom_permalink: deleted.unique_permalink)
+      product.unpublish!
+
+      expect(deleted.update(deleted_at: nil)).to eq(false)
+      expect(deleted.reload).to be_deleted
+    end
+
+    it "restores a deleted product once nothing else uses its unique permalink" do
+      deleted = create(:product, user: seller, deleted_at: Time.current)
+      product.update!(custom_permalink: deleted.unique_permalink)
+      product.update!(custom_permalink: "renamed")
+
+      expect(deleted.update(deleted_at: nil)).to eq(true)
+      expect(Link.fetch_leniently(deleted.unique_permalink, user: seller)).to eq(deleted)
+    end
+
+    it "restores a deleted product that has no conflict" do
+      deleted = create(:product, user: seller, deleted_at: Time.current)
+
+      expect(deleted.update(deleted_at: nil)).to eq(true)
+    end
+  end
+
   describe "#plaintext_description" do
     def description_for(html)
       create(:product, description: html).plaintext_description

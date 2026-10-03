@@ -1665,13 +1665,26 @@ class Link < ApplicationRecord
       self.unique_permalink ||= generate_unique_permalink
     end
 
-    # Make sure custom permalink does not duplicate a unique permalink of another product by the same user
+    # Make sure custom permalink does not duplicate a unique permalink of another product by the same user.
+    # A deleted product no longer answers on its URL, so only visible (non-deleted) products hold a slug.
+    # Unpublished and banned products still resolve in fetch_leniently, so they keep theirs.
     def custom_and_unique_permalink_uniqueness
+      other_products_by_user = id.present? ? user.links.where.not(id:) : user.links
+      validate_restored_unique_permalink_is_free(other_products_by_user)
       return if unique_permalink == custom_permalink
 
-      other_products_by_user = id.present? ? user.links.where.not(id:) : user.links
-      duplicates_unique_permalink = other_products_by_user.where(unique_permalink: custom_permalink).exists?
+      duplicates_unique_permalink = other_products_by_user.visible.where(unique_permalink: custom_permalink).exists?
       errors.add(:custom_permalink, "is already used by another one of your products") if duplicates_unique_permalink
+    end
+
+    # A custom permalink may reuse a deleted product's unique_permalink, and unique_permalink never
+    # changes, so restoring that product would make two live products answer on one slug and
+    # fetch_leniently would hand it to the older one.
+    def validate_restored_unique_permalink_is_free(other_products_by_user)
+      return unless will_save_change_to_deleted_at? && deleted_at.nil?
+      return unless other_products_by_user.visible.where(custom_permalink: unique_permalink).exists?
+
+      errors.add(:base, "Can't restore this product: another one of your products already uses its URL as a custom permalink")
     end
 
     def custom_permalink_of_licensed_product
