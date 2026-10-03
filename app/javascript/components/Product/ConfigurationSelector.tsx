@@ -172,7 +172,8 @@ export type Product = {
   quantity_remaining: number | null;
   recurrences: Recurrences | null;
   duration_in_months?: number | null;
-  pwyw: { suggested_price_cents: number | null } | null;
+  // default_price_cents is the amount the box starts with; null leaves it empty. Rails decides it.
+  pwyw: { suggested_price_cents: number | null; default_price_cents?: number | null } | null;
   ppp_details: PurchasingPowerParityDetails | null;
   native_type: ProductNativeType;
   hide_sold_out_variants?: boolean;
@@ -763,6 +764,10 @@ export const ConfigurationSelector = React.forwardRef<
     selection.optionId === initialSelection.optionId &&
     selection.quantity === initialSelection.quantity;
 
+  // A new option or recurrence resets the amount, unless no choice can change the minimum.
+  const priceAfterChoice = (current: PriceSelection["price"]): PriceSelection["price"] =>
+    product.pwyw?.default_price_cents == null ? { value: null, error: false } : current;
+
   const quantityInputUID = React.useId();
 
   const pwywInputRef = React.useRef<HTMLInputElement>(null);
@@ -851,7 +856,13 @@ export const ConfigurationSelector = React.forwardRef<
             <Button
               role="radio"
               aria-checked={selection.optionId === null}
-              onClick={() => setSelection?.({ ...selection, optionId: null, price: { value: null, error: false } })}
+              onClick={() =>
+                setSelection?.({
+                  ...selection,
+                  optionId: null,
+                  price: priceAfterChoice(selection.price),
+                })
+              }
               className="justify-center"
             >
               Other
@@ -885,7 +896,9 @@ export const ConfigurationSelector = React.forwardRef<
         <TypeSafeOptionSelect
           aria-label="Recurrence"
           value={selection.recurrence ?? ""}
-          onChange={(recurrence) => update({ recurrence: recurrence || null, price: { value: null, error: false } })}
+          onChange={(recurrence) =>
+            update(({ price }) => ({ recurrence: recurrence || null, price: priceAfterChoice(price) }))
+          }
           options={product.recurrences.enabled.map(({ recurrence }) => ({
             id: recurrence,
             label: recurrenceNames[recurrence],
@@ -956,7 +969,7 @@ export const ConfigurationSelector = React.forwardRef<
                   selected={option.id === selection.optionId}
                   onClick={() => {
                     if (option.id === selection.optionId) return;
-                    update({ optionId: option.id, price: { value: null, error: false } });
+                    update(({ price }) => ({ optionId: option.id, price: priceAfterChoice(price) }));
                   }}
                   priceCents={basePriceCents + computeOptionPrice(option, selection.recurrence)}
                   name={option.name}
@@ -968,7 +981,7 @@ export const ConfigurationSelector = React.forwardRef<
                   discount={previewDiscount({
                     ...selection,
                     optionId: option.id,
-                    price: { value: null, error: false },
+                    price: priceAfterChoice(selection.price),
                   })}
                   recurrence={selection.recurrence}
                   product={product}

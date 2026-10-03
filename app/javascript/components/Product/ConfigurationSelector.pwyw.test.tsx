@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   ConfigurationSelector,
+  type Option,
   type PriceSelection,
   type Product,
 } from "$app/components/Product/ConfigurationSelector";
@@ -48,10 +49,10 @@ const initialSelection: PriceSelection = {
   payInInstallments: false,
 };
 
-const renderPwywSelector = (product: Product = pwywProduct) => {
+const renderPwywSelector = (product: Product = pwywProduct, startingSelection: PriceSelection = initialSelection) => {
   const selections: PriceSelection[] = [];
   const Harness = () => {
-    const [selection, setSelection] = React.useState(initialSelection);
+    const [selection, setSelection] = React.useState(startingSelection);
     return (
       <ConfigurationSelector
         product={product}
@@ -95,5 +96,66 @@ describe("PWYWInput", () => {
 
     fireEvent.change(input, { target: { value: "7" } });
     expect(selections.at(-1)?.price.value).toBe(700);
+  });
+});
+
+describe("free pay-what-you-want default", () => {
+  const freeOption = (id: string, name: string, overrides: Partial<Option> = {}): Option => ({
+    id,
+    name,
+    quantity_left: null,
+    description: "",
+    price_difference_cents: 0,
+    recurrence_price_values: null,
+    is_pwyw: false,
+    duration_in_minutes: null,
+    ...overrides,
+  });
+  const freeProduct: Product = {
+    ...pwywProduct,
+    price_cents: 0,
+    pwyw: { suggested_price_cents: null, default_price_cents: 0 },
+  };
+  const freeWithOptions: Product = {
+    ...freeProduct,
+    options: [freeOption("small", "Small"), freeOption("large", "Large")],
+  };
+  const chosen: PriceSelection = { ...initialSelection, optionId: "small", price: { error: false, value: 0 } };
+
+  it("keeps the amount at 0 when the buyer picks another free option", () => {
+    const { selections } = renderPwywSelector(freeWithOptions, chosen);
+
+    fireEvent.click(screen.getByRole("radio", { name: /Large/u }));
+
+    expect(selections.at(-1)).toMatchObject({ optionId: "large", price: { value: 0, error: false } });
+  });
+
+  it("keeps an amount the buyer entered when they pick another free option", () => {
+    const { selections } = renderPwywSelector(freeWithOptions, { ...chosen, price: { error: false, value: 500 } });
+
+    fireEvent.click(screen.getByRole("radio", { name: /Large/u }));
+
+    expect(selections.at(-1)).toMatchObject({ optionId: "large", price: { value: 500, error: false } });
+  });
+
+  it("keeps an emptied box empty when the buyer picks another free option", () => {
+    const { selections } = renderPwywSelector(freeWithOptions, { ...chosen, price: { error: false, value: null } });
+
+    fireEvent.click(screen.getByRole("radio", { name: /Large/u }));
+
+    expect(selections.at(-1)).toMatchObject({ optionId: "large", price: { value: null, error: false } });
+  });
+
+  it("clears the amount when the buyer picks an option on a product with a paid option", () => {
+    const product = {
+      ...freeProduct,
+      pwyw: { suggested_price_cents: null, default_price_cents: null },
+      options: [freeOption("small", "Small"), freeOption("paid", "Paid", { price_difference_cents: 300 })],
+    };
+    const { selections } = renderPwywSelector(product, chosen);
+
+    fireEvent.click(screen.getByRole("radio", { name: /Paid/u }));
+
+    expect(selections.at(-1)).toMatchObject({ optionId: "paid", price: { value: null, error: false } });
   });
 });

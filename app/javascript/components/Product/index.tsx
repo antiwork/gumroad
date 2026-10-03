@@ -127,7 +127,7 @@ export type Product = {
   buyer_local_price_cents?: number;
   buyer_local_original_price_cents?: number;
   buyer_currency_display?: BuyerCurrencyDisplay;
-  pwyw: { suggested_price_cents: number | null } | null;
+  pwyw: { suggested_price_cents: number | null; default_price_cents?: number | null } | null;
   installment_plan: InstallmentPlan | null;
   ratings: RatingsWithPercentages | null;
   // Present only while seller_reputation_summary is on for the seller. Always
@@ -265,7 +265,15 @@ export const useSelectionFromUrl = (product: Product) => {
         (product.is_quantity_enabled || product.is_multiseat_license) && parsedQuantity > 0
           ? Math.min(parsedQuantity, getMaxQuantity(product, parsedOption ?? null) ?? Infinity)
           : 1,
-      price: { value: parsedPrice >= 0 ? parsedPrice * 100 : null, error: false },
+      price: {
+        value:
+          parsedPrice >= 0
+            ? parsedPrice * 100
+            : searchParams.has("price")
+              ? null
+              : (product.pwyw?.default_price_cents ?? null),
+        error: false,
+      },
       callStartTime: isNaN(parsedCallStartTime.getTime()) ? null : parsedCallStartTime.toISOString(),
       payInInstallments: parsedPayInInstallments,
     };
