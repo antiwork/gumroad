@@ -15,6 +15,7 @@ describe Link, "concurrent custom permalink claim and restore", :vcr do
     Link.where(id: product_ids).delete_all
     RefundPolicy.where(seller_id: seller.id).delete_all
     UserComplianceInfo.where(user_id: seller.id).delete_all
+    GlobalAffiliate.where(affiliate_user_id: seller.id).delete_all
     User.where(id: seller.id).delete_all
   end
 
