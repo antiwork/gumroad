@@ -116,8 +116,9 @@ class LiftPlatformStripePauseJob
       # this read is still possible, but the window is a single request instead of the whole job.
       return nil unless eligible?(User.find_by(id: user.id))
 
-      # Written before the update so a response lost after Stripe applies it still leaves a trace.
-      add_note(user, "#{INTENT_PREFIX} #{stripe_account_id} after the account was marked compliant. Before: #{describe(before)}.") unless pending_note
+      # Written before every attempt, so a response lost after Stripe applies it still leaves a trace, and a
+      # later confirmation is dated from the attempt that reached Stripe rather than from an earlier failed one.
+      add_note(user, "#{INTENT_PREFIX} #{stripe_account_id} after the account was marked compliant. Before: #{describe(before)}.")
 
       updated = Stripe::Account.update(stripe_account_id, risk_controls: { charges: { pause_requested: false } })
       after = state_of(updated)

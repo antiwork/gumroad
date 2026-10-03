@@ -184,7 +184,7 @@ describe LiftPlatformStripePauseJob do
                                                ])
       end
 
-      it "retries the update without a second intent note when the pause is still set" do
+      it "notes each attempt before the retry updates, so a confirmation is dated from the latest one" do
         allow(Stripe::Account).to receive(:retrieve).with("acct_pauselift").and_return(stripe_account)
         allow(Stripe::Account).to receive(:update).and_raise(Stripe::APIConnectionError.new("timeout"))
         expect { described_class.new.perform(seller.id) }.to raise_error(Stripe::APIConnectionError)
@@ -192,7 +192,7 @@ describe LiftPlatformStripePauseJob do
         allow(Stripe::Account).to receive(:update).and_return(stripe_account(charges_paused: false, disabled_reason: nil, transfers: "active"))
         described_class.new.perform(seller.id)
 
-        expect(notes.map { |note| note.content.split(" on ").first }).to eq(["Lifting the platform Stripe pause", "Lifted the platform Stripe pause"])
+        expect(notes.map { |note| note.content.split(" on ").first }).to eq(["Lifting the platform Stripe pause", "Lifting the platform Stripe pause", "Lifted the platform Stripe pause"])
       end
 
       it "closes out an unfinished lift when retries are exhausted, so a later run cannot confirm it" do
@@ -430,6 +430,19 @@ describe LiftPlatformStripePauseJob do
       allow(Stripe::Account).to receive(:update).and_return(stripe_account(charges_paused: false, disabled_reason: "platform_paused", transfers: "inactive"))
 
       expect { described_class.new.perform(seller.id) }.not_to raise_error
+    end
+
+    it "releases the hold when its failures came between two attempts and the later attempt's response was lost" do
+      allow(Stripe::Account).to receive(:update).and_raise(Stripe::APIConnectionError.new("timeout"))
+      expect { described_class.new.perform(seller.id) }.to raise_error(Stripe::APIConnectionError)
+      # The pause was still set for these, and they tripped the hold before the attempt that reached Stripe.
+      travel_to(20.minutes.from_now) { hold_payouts_after_failures(created_at: Time.current) }
+      travel_to(30.minutes.from_now) { expect { described_class.new.perform(seller.id) }.to raise_error(Stripe::APIConnectionError) }
+      allow(Stripe::Account).to receive(:retrieve).with("acct_pauselift").and_return(stripe_account(charges_paused: false, disabled_reason: nil, transfers: "active"))
+
+      travel_to(2.hours.from_now) { described_class.new.perform(seller.id) }
+
+      expect(seller.reload.payouts_paused?).to be(false)
     end
 
     it "counts a confirmed lift from when it started, so failures after that are not credited to the pause" do
