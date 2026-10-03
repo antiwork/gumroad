@@ -5,9 +5,11 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   ConfigurationSelector,
+  type Option,
   type PriceSelection,
   type Product,
 } from "$app/components/Product/ConfigurationSelector";
+import { defaultPwywPriceCents } from "$app/components/Product/pricing";
 
 afterEach(cleanup);
 
@@ -48,10 +50,10 @@ const initialSelection: PriceSelection = {
   payInInstallments: false,
 };
 
-const renderPwywSelector = (product: Product = pwywProduct) => {
+const renderPwywSelector = (product: Product = pwywProduct, startingSelection: PriceSelection = initialSelection) => {
   const selections: PriceSelection[] = [];
   const Harness = () => {
-    const [selection, setSelection] = React.useState(initialSelection);
+    const [selection, setSelection] = React.useState(startingSelection);
     return (
       <ConfigurationSelector
         product={product}
@@ -95,5 +97,82 @@ describe("PWYWInput", () => {
 
     fireEvent.change(input, { target: { value: "7" } });
     expect(selections.at(-1)?.price.value).toBe(700);
+  });
+});
+
+describe("free pay-what-you-want default", () => {
+  const freeOption = (id: string, name: string, overrides: Partial<Option> = {}): Option => ({
+    id,
+    name,
+    quantity_left: null,
+    description: "",
+    price_difference_cents: 0,
+    recurrence_price_values: null,
+    is_pwyw: false,
+    duration_in_minutes: null,
+    ...overrides,
+  });
+  const freeProduct: Product = { ...pwywProduct, price_cents: 0, pwyw: { suggested_price_cents: null } };
+  const freeWithOptions: Product = {
+    ...freeProduct,
+    options: [freeOption("small", "Small"), freeOption("large", "Large")],
+  };
+  const chosen: PriceSelection = { ...initialSelection, optionId: "small", price: { error: false, value: 0 } };
+
+  it("is 0 only when nothing the buyer can pick costs money", () => {
+    expect(defaultPwywPriceCents(freeProduct)).toBe(0);
+    expect(defaultPwywPriceCents(freeWithOptions)).toBe(0);
+    expect(defaultPwywPriceCents({ ...freeProduct, price_cents: 500 })).toBeNull();
+    expect(defaultPwywPriceCents({ ...freeProduct, pwyw: { suggested_price_cents: 500 } })).toBeNull();
+    expect(defaultPwywPriceCents({ ...freeProduct, pwyw: null })).toBeNull();
+    expect(defaultPwywPriceCents({ ...freeProduct, is_tiered_membership: true })).toBeNull();
+    expect(defaultPwywPriceCents({ ...freeProduct, is_legacy_subscription: true })).toBeNull();
+    expect(
+      defaultPwywPriceCents({
+        ...freeProduct,
+        options: [freeOption("small", "Small"), freeOption("paid", "Paid", { price_difference_cents: 300 })],
+      }),
+    ).toBeNull();
+    expect(
+      defaultPwywPriceCents({
+        ...freeProduct,
+        options: [
+          freeOption("small", "Small", {
+            recurrence_price_values: { monthly: { price_cents: 300, suggested_price_cents: null } },
+          }),
+        ],
+      }),
+    ).toBeNull();
+    expect(
+      defaultPwywPriceCents({
+        ...freeProduct,
+        options: [
+          freeOption("small", "Small", {
+            recurrence_price_values: { monthly: { price_cents: 0, suggested_price_cents: 300 } },
+          }),
+        ],
+      }),
+    ).toBeNull();
+    expect(defaultPwywPriceCents({ ...freeProduct, rental: { price_cents: 100, rent_only: false } })).toBeNull();
+  });
+
+  it("keeps the amount at 0 when the buyer picks another free option", () => {
+    const { selections } = renderPwywSelector(freeWithOptions, chosen);
+
+    fireEvent.click(screen.getByRole("radio", { name: /Large/u }));
+
+    expect(selections.at(-1)).toMatchObject({ optionId: "large", price: { value: 0, error: false } });
+  });
+
+  it("clears the amount when the buyer picks an option on a product with a paid option", () => {
+    const product = {
+      ...freeProduct,
+      options: [freeOption("small", "Small"), freeOption("paid", "Paid", { price_difference_cents: 300 })],
+    };
+    const { selections } = renderPwywSelector(product, chosen);
+
+    fireEvent.click(screen.getByRole("radio", { name: /Paid/u }));
+
+    expect(selections.at(-1)).toMatchObject({ optionId: "paid", price: { value: null, error: false } });
   });
 });

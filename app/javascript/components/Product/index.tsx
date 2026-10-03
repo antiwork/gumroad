@@ -67,7 +67,11 @@ import {
 import { Covers as CoversComponent } from "$app/components/Product/Covers";
 import { DiscountExpirationCountdown } from "$app/components/Product/DiscountExpirationCountdown";
 import { PriceTag } from "$app/components/Product/PriceTag";
-import { getBundleComparisonPriceCents, getStandalonePrice } from "$app/components/Product/pricing";
+import {
+  defaultPwywPriceCents,
+  getBundleComparisonPriceCents,
+  getStandalonePrice,
+} from "$app/components/Product/pricing";
 import { PurchaseButton } from "$app/components/Product/PurchaseButton";
 import { initialOptionId } from "$app/components/Product/purchaseReadiness";
 import { Ribbon } from "$app/components/Product/Ribbon";
@@ -265,7 +269,10 @@ export const useSelectionFromUrl = (product: Product) => {
         (product.is_quantity_enabled || product.is_multiseat_license) && parsedQuantity > 0
           ? Math.min(parsedQuantity, getMaxQuantity(product, parsedOption ?? null) ?? Infinity)
           : 1,
-      price: { value: parsedPrice >= 0 ? parsedPrice * 100 : null, error: false },
+      price: {
+        value: parsedPrice >= 0 ? parsedPrice * 100 : searchParams.has("price") ? null : defaultPwywPriceCents(product),
+        error: false,
+      },
       callStartTime: isNaN(parsedCallStartTime.getTime()) ? null : parsedCallStartTime.toISOString(),
       payInInstallments: parsedPayInInstallments,
     };

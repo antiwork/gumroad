@@ -1,3 +1,5 @@
+import type { Product } from "$app/components/Product/ConfigurationSelector";
+
 // Pricing helpers for the public product page. They live in their own module,
 // away from the page components, so they can be unit tested without rendering
 // the product page.
@@ -38,3 +40,22 @@ export const getBundleComparisonPriceCents = (
   if ((selectedOption?.price_difference_cents ?? 0) !== 0) return null;
   return getStandalonePrice(product);
 };
+
+// Nothing the buyer can pick raises the minimum above $0 and the seller suggests no amount, so an empty box would
+// only make them type "0". A suggested price shows as the empty box's placeholder, so it keeps the box empty.
+export const defaultPwywPriceCents = (product: Product) =>
+  product.pwyw &&
+  (product.pwyw.suggested_price_cents ?? 0) === 0 &&
+  !product.is_tiered_membership &&
+  !product.is_legacy_subscription &&
+  product.price_cents === 0 &&
+  (product.rental?.price_cents ?? 0) === 0 &&
+  product.options.every(
+    (option) =>
+      (option.price_difference_cents ?? 0) === 0 &&
+      Object.values(option.recurrence_price_values ?? {}).every(
+        (value) => value.price_cents === 0 && (value.suggested_price_cents ?? 0) === 0,
+      ),
+  )
+    ? 0
+    : null;
