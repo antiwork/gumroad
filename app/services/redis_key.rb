@@ -152,6 +152,7 @@ class RedisKey
     def seller_large_blast_deferral_window_start_seconds = "seller_large_blast_deferral_window_start_seconds"
     def seller_large_blast_deferral_window_length_seconds = "seller_large_blast_deferral_window_length_seconds"
     def seller_large_blast_quota(seller_id, day) = "seller_large_blast_quota:#{seller_id}:#{day}"
+    def seller_large_workflow_quota(seller_id, day) = "seller_large_workflow_quota:#{seller_id}:#{day}"
     # LIST of JSON {i: installment_id, p: purchase_id, t: epoch} pending an email_infos delivered UPDATE.
     def email_info_delivered_buffer = "email_info:delivered_buffer"
     def email_info_delivered_inflight = "email_info:delivered_inflight"

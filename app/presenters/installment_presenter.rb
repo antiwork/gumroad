@@ -68,6 +68,7 @@ class InstallmentPresenter
         shown_in_profile_sections: seller.seller_profile_posts_sections.filter_map { _1.external_id if _1.shown_posts.include?(installment.id) },
         non_opener_resends: non_opener_resend_props,
         delivery: delivery_props,
+        never_reached_anyone: installment.never_reached_anyone?,
       )
 
       unless installment.published?
@@ -138,6 +139,7 @@ class InstallmentPresenter
           requested_at: blast.requested_at,
           delivery_count: blast.delivery_count,
           completed:,
+          expired: blast.expired_at.present?,
           open_count:,
           open_rate:,
         }

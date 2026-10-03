@@ -12,6 +12,10 @@ class PostEmailBlast < ApplicationRecord
   #   Time the latest email was delivered. Not final until the blast is complete.
   # delivery_count:
   #   Number of emails that were delivered. Not final until the blast is complete.
+  # expired_at:
+  #   Time we gave up on a blast that never sent anything (slot never freed, or send job lost).
+  # expiry_reason:
+  #   Why it expired. Nil reads as quota, for rows from before reasons were recorded.
 
   # recipient_filter:
   #   nil       => normal blast, sent to the full computed audience.
@@ -25,6 +29,9 @@ class PostEmailBlast < ApplicationRecord
 
   validates :recipient_filter, inclusion: { in: [RECIPIENT_FILTER_UNOPENED] }, allow_nil: true
 
+  EXPIRY_QUOTA = "quota"
+  EXPIRY_ABANDONED = "abandoned"
+
   scope :to_non_openers, -> { where(recipient_filter: RECIPIENT_FILTER_UNOPENED) }
 
   def to_non_openers?
@@ -36,6 +43,7 @@ class PostEmailBlast < ApplicationRecord
   def delivery_status
     return "sent" if completed_at.present?
     return "sent" if remaining_recipient_count&.<=(0)
+    return (expiry_reason == EXPIRY_ABANDONED ? "abandoned" : "expired") if expired_at.present?
     return "waiting" if quota_deferred_until&.future?
     return "sending" if [requested_at, last_email_delivered_at].compact.max > AlertOnStalledPostEmailBlastsJob::EMAIL_ACTIVITY_THRESHOLD.ago
 

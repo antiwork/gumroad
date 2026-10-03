@@ -208,6 +208,8 @@ describe InstallmentPresenter do
         shown_on_profile: true,
         has_been_blasted: false,
         non_opener_resends: [],
+        delivery: nil,
+        never_reached_anyone: false,
         shown_in_profile_sections: [section.external_id]
       ))
       expect(props.keys).to_not include(:published_once_already, :member_cancellation, :new_customers_only, :delayed_delivery_time_duration, :delayed_delivery_time_period, :displayed_delayed_delivery_time_period)
@@ -292,6 +294,47 @@ describe InstallmentPresenter do
         Feature.deactivate(:auto_resume_stalled_post_blasts)
       end
 
+      it "marks an expired non-opener resend so the seller is not told it is still in progress" do
+        resend = create(:blast, post: installment, recipient_filter: "unopened", requested_at: 3.days.ago, expired_at: 1.hour.ago, completed_at: nil, delivery_count: 0)
+
+        expect(described_class.new(seller:, installment:).props[:non_opener_resends]).to eq(
+          [{ requested_at: resend.requested_at, delivery_count: 0, completed: false, expired: true, open_count: nil, open_rate: nil }]
+        )
+      end
+
+      it "is expired once the blast ended because the daily quota stayed taken past its content window" do
+        create(:blast, post: installment, requested_at: 3.days.ago, started_at: 3.days.ago, expired_at: 1.hour.ago, completed_at: nil, delivery_count: 0)
+
+        expect(described_class.new(seller:, installment:).props[:delivery]).to eq(
+          { status: "expired", delivered_count: 0, remaining_count: nil, scheduled_for: nil, retrying: false }
+        )
+      end
+
+      it "is abandoned, with no limit wording to explain it, when the send job was lost" do
+        create(:blast, post: installment, requested_at: 20.days.ago, expired_at: 1.hour.ago, expiry_reason: PostEmailBlast::EXPIRY_ABANDONED, completed_at: nil, first_email_delivered_at: nil, delivery_count: 0)
+
+        props = described_class.new(seller:, installment: installment.reload).props
+
+        expect(props[:delivery]).to eq({ status: "abandoned", delivered_count: 0, remaining_count: nil, scheduled_for: nil, retrying: false })
+        expect(props[:never_reached_anyone]).to eq(true)
+      end
+
+      it "flags a post as never reached only while every send expired, not when an earlier send delivered" do
+        create(:blast, post: installment, requested_at: 5.days.ago, completed_at: 5.days.ago, first_email_delivered_at: 5.days.ago, delivery_count: 3)
+        create(:blast, post: installment, requested_at: 3.days.ago, expired_at: 1.hour.ago, completed_at: nil, first_email_delivered_at: nil, delivery_count: 0)
+
+        props = described_class.new(seller:, installment: installment.reload).props
+
+        expect(props[:delivery][:status]).to eq("expired")
+        expect(props[:never_reached_anyone]).to eq(false)
+      end
+
+      it "flags a post as never reached when its only send expired" do
+        create(:blast, post: installment, requested_at: 3.days.ago, expired_at: 1.hour.ago, completed_at: nil, first_email_delivered_at: nil, delivery_count: 0)
+
+        expect(described_class.new(seller:, installment: installment.reload).props[:never_reached_anyone]).to eq(true)
+      end
+
       it "is waiting while the blast is deferred by the daily large-blast quota" do
         blast = create(:blast, :just_requested, post: installment)
         blast.update!(started_at: Time.current)
@@ -322,8 +365,8 @@ describe InstallmentPresenter do
         props = described_class.new(seller:, installment:).props
 
         expect(props[:non_opener_resends]).to eq([
-                                                   { requested_at: older.requested_at, delivery_count: 5, completed: true, open_count: 0, open_rate: 0.0 },
-                                                   { requested_at: newer.requested_at, delivery_count: 0, completed: false, open_count: nil, open_rate: nil }
+                                                   { requested_at: older.requested_at, delivery_count: 5, completed: true, expired: false, open_count: 0, open_rate: 0.0 },
+                                                   { requested_at: newer.requested_at, delivery_count: 0, completed: false, expired: false, open_count: nil, open_rate: nil }
                                                  ])
       end
 
@@ -344,8 +387,8 @@ describe InstallmentPresenter do
         props = described_class.new(seller:, installment:).props
 
         expect(props[:non_opener_resends]).to eq([
-                                                   { requested_at: resend_one.requested_at, delivery_count: 4, completed: true, open_count: 2, open_rate: 50.0 },
-                                                   { requested_at: resend_two.requested_at, delivery_count: 2, completed: true, open_count: 1, open_rate: 50.0 }
+                                                   { requested_at: resend_one.requested_at, delivery_count: 4, completed: true, expired: false, open_count: 2, open_rate: 50.0 },
+                                                   { requested_at: resend_two.requested_at, delivery_count: 2, completed: true, expired: false, open_count: 1, open_rate: 50.0 }
                                                  ])
       end
 
@@ -355,7 +398,7 @@ describe InstallmentPresenter do
         props = described_class.new(seller:, installment:).props
 
         expect(props[:non_opener_resends]).to eq([
-                                                   { requested_at: blast.requested_at, delivery_count: 0, completed: true, open_count: 0, open_rate: nil }
+                                                   { requested_at: blast.requested_at, delivery_count: 0, completed: true, expired: false, open_count: 0, open_rate: nil }
                                                  ])
       end
 
@@ -374,8 +417,8 @@ describe InstallmentPresenter do
         props = described_class.new(seller:, installment:).props
 
         expect(props[:non_opener_resends]).to eq([
-                                                   { requested_at: completed.requested_at, delivery_count: 4, completed: true, open_count: 4, open_rate: 100.0 },
-                                                   { requested_at: in_progress.requested_at, delivery_count: 0, completed: false, open_count: nil, open_rate: nil }
+                                                   { requested_at: completed.requested_at, delivery_count: 4, completed: true, expired: false, open_count: 4, open_rate: 100.0 },
+                                                   { requested_at: in_progress.requested_at, delivery_count: 0, completed: false, expired: false, open_count: nil, open_rate: nil }
                                                  ])
       end
 
@@ -387,7 +430,7 @@ describe InstallmentPresenter do
         props = described_class.new(seller:, installment:).props
 
         expect(props[:non_opener_resends]).to eq([
-                                                   { requested_at: blast.requested_at, delivery_count: 1, completed: true, open_count: 2, open_rate: 100.0 }
+                                                   { requested_at: blast.requested_at, delivery_count: 1, completed: true, expired: false, open_count: 2, open_rate: 100.0 }
                                                  ])
       end
     end

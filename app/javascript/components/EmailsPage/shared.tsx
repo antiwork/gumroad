@@ -1,4 +1,4 @@
-import { Envelope, FileDetail } from "@boxicons/react";
+import { FileDetail } from "@boxicons/react";
 import { router, useForm } from "@inertiajs/react";
 import React from "react";
 
@@ -163,7 +163,6 @@ export const ResendToNonOpenersButton = ({ installment }: { installment: SavedIn
   return (
     <>
       <Button disabled={loadingCount} onClick={openConfirmation}>
-        <Envelope pack="filled" className="size-5" />
         {loadingCount ? "Loading..." : "Resend to non-openers"}
       </Button>
       {confirming ? (
@@ -262,14 +261,23 @@ type EmailSheetActionsProps = {
   onDelete: () => void;
   // Set when the latest send is incomplete; the count is the recipients still owed when known.
   remainingSend?: { count: number | null } | null;
+  // An email that was never sent has no non-openers to resend to.
+  allowResend?: boolean;
 };
 
-export const EmailSheetActions = ({ installment, onDelete, remainingSend = null }: EmailSheetActionsProps) => (
+export const EmailSheetActions = ({
+  installment,
+  onDelete,
+  remainingSend = null,
+  allowResend = true,
+}: EmailSheetActionsProps) => (
   <>
-    <div className="grid grid-flow-col gap-4">
+    <div className="grid gap-4 sm:grid-flow-col">
       {installment.send_emails ? <ViewEmailButton installment={installment} /> : null}
       {remainingSend ? <SendToRemainingButton installment={installment} remainingCount={remainingSend.count} /> : null}
-      {canResendToNonOpeners(installment) ? <ResendToNonOpenersButton installment={installment} /> : null}
+      {allowResend && canResendToNonOpeners(installment) ? (
+        <ResendToNonOpenersButton installment={installment} />
+      ) : null}
       {installment.shown_on_profile ? (
         <NavigationButton href={installment.full_url} target="_blank" rel="noopener noreferrer">
           <FileDetail pack="filled" className="size-5" />

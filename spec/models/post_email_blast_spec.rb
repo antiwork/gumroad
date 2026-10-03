@@ -65,6 +65,38 @@ RSpec.describe PostEmailBlast do
     end
   end
 
+  describe "#delivery_status once expired", :freeze_time do
+    let(:post) { create(:installment) }
+
+    it "is expired, not waiting, even while a stale deferral marker is still ahead" do
+      blast = create(:blast, post:, requested_at: 3.days.ago, expired_at: 1.minute.ago, completed_at: nil)
+      $redis.set(RedisKey.blast_quota_deferred_until(blast.id), 1.hour.from_now.utc.iso8601)
+
+      expect(blast.delivery_status).to eq("expired")
+    ensure
+      $redis.del(RedisKey.blast_quota_deferred_until(blast.id)) if blast
+    end
+
+    it "is expired when the reason is the daily limit, and for a row written before reasons were recorded" do
+      by_quota = create(:blast, post:, requested_at: 3.days.ago, expired_at: 1.minute.ago, expiry_reason: PostEmailBlast::EXPIRY_QUOTA, completed_at: nil)
+      unrecorded = create(:blast, post:, requested_at: 3.days.ago, expired_at: 1.minute.ago, expiry_reason: nil, completed_at: nil)
+
+      expect([by_quota, unrecorded].map(&:delivery_status)).to eq(%w[expired expired])
+    end
+
+    it "is abandoned, not expired, when its send job was lost" do
+      blast = create(:blast, post:, requested_at: 20.days.ago, expired_at: 1.minute.ago, expiry_reason: PostEmailBlast::EXPIRY_ABANDONED, completed_at: nil)
+
+      expect(blast.delivery_status).to eq("abandoned")
+    end
+
+    it "stays sent when the blast completed" do
+      blast = create(:blast, post:, requested_at: 3.days.ago, expired_at: 1.minute.ago, completed_at: 1.minute.ago)
+
+      expect(blast.delivery_status).to eq("sent")
+    end
+  end
+
   describe "Latency metrics", :freeze_time do
     describe "#start_latency" do
       it "returns the difference between requested_at and started_at" do
