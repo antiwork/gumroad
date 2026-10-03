@@ -349,6 +349,23 @@ describe Link do
       expect { Link.transaction { stale.lock_for_permalink_claim!("first-slug") } }.to raise_error(Link::PermalinkChangedDuringLock)
     end
 
+    it "keeps the permalink checks' locking reads on the seller's own rows" do
+      deleted = create(:product, user: seller, deleted_at: Time.current)
+      statements = []
+      subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") { |*, payload| statements << payload[:sql].to_s }
+
+      begin
+        product.update!(custom_permalink: "claimed-slug")
+        Link.find(deleted.id).update!(deleted_at: nil)
+      ensure
+        ActiveSupport::Notifications.unsubscribe(subscriber)
+      end
+
+      permalink_reads = statements.select { _1.include?("FROM `links`") && _1.include?("FOR UPDATE") && _1.include?("permalink` =") }
+      expect(permalink_reads.size).to be >= 3
+      expect(permalink_reads).to all(include("INDEX(links index_links_on_user_id)"))
+    end
+
     it "locks the seller before the product row when publishing restores a deleted product" do
       deleted = create(:product, user: seller, deleted_at: Time.current)
       statements = []

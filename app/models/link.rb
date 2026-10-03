@@ -1693,7 +1693,9 @@ class Link < ApplicationRecord
     # A deleted product no longer answers on its URL, so only visible (non-deleted) products hold a slug.
     # Unpublished and banned products still resolve in fetch_leniently, so they keep theirs.
     def custom_and_unique_permalink_uniqueness
-      other_products_by_user = id.present? ? user.links.where.not(id:) : user.links
+      # The user_id hint keeps the locking reads below on this seller's own rows; the optimizer could otherwise
+      # pick a global permalink index and range-lock other sellers' rows.
+      other_products_by_user = (id.present? ? user.links.where.not(id:) : user.links).optimizer_hints("INDEX(links index_links_on_user_id)")
       validate_restored_unique_permalink_is_free(other_products_by_user)
       validate_claimed_custom_permalink_is_free(other_products_by_user)
       return if unique_permalink == custom_permalink
@@ -1713,12 +1715,11 @@ class Link < ApplicationRecord
     end
 
     # The uniqueness validator reads from the transaction's snapshot, which can predate a claim that committed
-    # while this save waited for the seller lock. A locking read sees it. It locks the seller's own rows by
-    # primary key: the custom_permalink index spans every seller, and a range lock there would block theirs.
+    # while this save waited for the seller lock. A locking read sees it.
     def validate_claimed_custom_permalink_is_free(other_products_by_user)
       return unless claiming_custom_permalink? && serialize_permalink_checks?
       return if errors.added?(:custom_permalink, "is already used by another one of your products")
-      return unless Link.where(id: other_products_by_user.ids, custom_permalink:).lock.exists?
+      return unless other_products_by_user.where(custom_permalink:).lock.exists?
 
       errors.add(:custom_permalink, "is already used by another one of your products")
     end
