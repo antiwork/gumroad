@@ -67,7 +67,7 @@ class LiftPlatformStripePauseJob
   def note_hold_kept(user_id, exception)
     ApplicationRecord.connected_to(role: :writing) do
       user = User.find_by(id: user_id)
-      next if user.nil?
+      next if user.nil? || user.repeated_failed_payouts_hold_started_at.nil?
 
       add_note(user, "Kept the failed-payout hold: #{exception.message} Release it by hand once the account can receive transfers.")
     end

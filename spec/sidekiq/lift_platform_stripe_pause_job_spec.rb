@@ -432,6 +432,12 @@ describe LiftPlatformStripePauseJob do
       expect { described_class.new.perform(seller.id) }.not_to raise_error
     end
 
+    it "adds no kept-hold note when the hold is already gone by the time retries run out" do
+      described_class.sidekiq_retries_exhausted_block.call({ "args" => [seller.id] }, described_class::TransfersNotActiveYet.new("Stripe has not turned transfers back on for the account."))
+
+      expect(notes).to be_empty
+    end
+
     it "notes the kept hold when retries run out" do
       hold_payouts_after_failures
 
