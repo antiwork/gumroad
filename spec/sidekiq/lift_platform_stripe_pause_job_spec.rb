@@ -39,10 +39,42 @@ describe LiftPlatformStripePauseJob do
       described_class.new.perform(seller.id)
 
       expect(Stripe::Account).to have_received(:update).with("acct_pauselift", risk_controls: { charges: { pause_requested: false } })
-      expect(notes.count).to eq(1)
-      expect(notes.last.content).to include("Lifted the platform Stripe pause on acct_pauselift")
-      expect(notes.last.content).to include("charges paused: true").and include("transfers: \"inactive\"")
-      expect(notes.last.content).to include("charges paused: false").and include("transfers: \"active\"")
+      expect(notes.pluck(:content)).to match([
+                                               a_string_starting_with("Lifting the platform Stripe pause on acct_pauselift").and(include("charges paused: true", "transfers: \"inactive\"")),
+                                               a_string_starting_with("Lifted the platform Stripe pause on acct_pauselift").and(include("charges paused: false", "transfers: \"active\"")),
+                                             ])
+    end
+
+    it "keeps the before state on record when Stripe's response is lost" do
+      stub_stripe(stripe_account)
+      allow(Stripe::Account).to receive(:update).and_raise(Stripe::APIConnectionError.new("timeout"))
+
+      expect { described_class.new.perform(seller.id) }.to raise_error(Stripe::APIConnectionError)
+
+      expect(notes.pluck(:content)).to match([a_string_starting_with("Lifting the platform Stripe pause").and(include("charges paused: true"))])
+    end
+
+    it "says so when payouts stay paused internally" do
+      stub_stripe(stripe_account)
+      seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+
+      described_class.new.perform(seller.id)
+
+      expect(Stripe::Account).to have_received(:update)
+      expect(notes.last.content).to start_with("Payouts are still paused on this account")
+    end
+
+    it "does not lift the pause when a new risk decision lands while the account is being read" do
+      allow(Stripe::Account).to receive(:update)
+      allow(Stripe::Account).to receive(:retrieve) do
+        User.find(seller.id).flag_for_fraud!(author_name: "reviewer")
+        stripe_account
+      end
+
+      described_class.new.perform(seller.id)
+
+      expect(Stripe::Account).not_to have_received(:update)
+      expect(notes).to be_empty
     end
 
     it "does nothing when the account has no platform pause" do
@@ -84,6 +116,15 @@ describe LiftPlatformStripePauseJob do
 
     it "does not act on an account that is no longer compliant" do
       seller.update!(user_risk_state: "flagged_for_fraud")
+      stub_stripe(stripe_account)
+
+      described_class.new.perform(seller.id)
+
+      expect(Stripe::Account).not_to have_received(:retrieve)
+    end
+
+    it "does not act on a closed account" do
+      seller.update!(deleted_at: Time.current)
       stub_stripe(stripe_account)
 
       described_class.new.perform(seller.id)

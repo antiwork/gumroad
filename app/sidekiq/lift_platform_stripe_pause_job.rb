@@ -18,8 +18,8 @@ class LiftPlatformStripePauseJob
 
   def perform(user_id)
     user = User.find_by(id: user_id)
-    # Re-flagged between the transition and this run: the pause is no longer ours to lift.
-    return if user.nil? || !user.compliant?
+    # Re-flagged or closed between the transition and this run: the pause is no longer ours to lift.
+    return if user.nil? || user.deleted? || !user.compliant?
 
     user.merchant_accounts.alive.charge_processor_alive.stripe.each do |merchant_account|
       next unless merchant_account.is_a_gumroad_managed_stripe_account?
@@ -42,12 +42,33 @@ class LiftPlatformStripePauseJob
         return
       end
 
+      # A risk decision can land while the account was being read. Re-read the row right before the
+      # write; what remains is the round trip to Stripe, which a lock cannot cover without holding it
+      # across the call.
+      return unless still_ours_to_lift?(user)
+
+      # Written first, so a lost Stripe response (retry then sees a cleared pause and returns) still
+      # leaves the before state on record.
+      add_note(user, "Lifting the platform Stripe pause on #{stripe_account_id} after the account was marked compliant. Before: #{describe(before)}.")
       updated = Stripe::Account.update(stripe_account_id, risk_controls: { charges: { pause_requested: false } })
-      add_note(user, "Lifted the platform Stripe pause on #{stripe_account_id} after the account was marked compliant. " \
-                     "Before: #{describe(before)}. After: #{describe(state_of(updated))}.")
+      add_note(user, "Lifted the platform Stripe pause on #{stripe_account_id}. After: #{describe(state_of(updated))}.")
+      note_payouts_still_paused(user)
     rescue Stripe::InvalidRequestError, Stripe::PermissionError => e
       # Retrying cannot fix a missing or inaccessible account, so record it and move on to the next one.
       add_note(user, "Could not lift the platform Stripe pause on #{stripe_account_id}: #{e.message}")
+    end
+
+    def still_ours_to_lift?(user)
+      user.reload
+      user.compliant? && !user.deleted?
+    end
+
+    # Repeated funding failures can already have paused payouts internally. That hold has its own
+    # release path and may rest on other reasons, so it is surfaced rather than cleared here.
+    def note_payouts_still_paused(user)
+      return unless user.payouts_paused?
+
+      add_note(user, "Payouts are still paused on this account. Check the payout details and resume them by hand if the hold came from the failed transfers.")
     end
 
     def reason_to_skip(state)
