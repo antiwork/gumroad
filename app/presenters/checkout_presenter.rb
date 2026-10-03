@@ -351,7 +351,7 @@ class CheckoutPresenter
       return {} if wishlist_with_products.nil?
 
       wishlist, products = wishlist_with_products
-      affiliate_id = wishlist.user.global_affiliate.external_id_numeric.to_s
+      affiliate_id = wishlist.user.global_affiliate&.external_id_numeric&.to_s
 
       {
         add_products: products.map do |wishlist_product|

@@ -434,6 +434,19 @@ describe CheckoutPresenter do
       )
     end
 
+    it "does not raise when the wishlist owner has no global affiliate" do
+      wishlist = create(:wishlist)
+      product = create(:product)
+      create(:wishlist_product, wishlist:, product:)
+
+      wishlist.user.global_affiliate.mark_deleted!
+      wishlist.user.reload
+
+      props = @instance.checkout_props(params: { wishlist: wishlist.external_id, recommended_by: "discover" }, browser_guid:)
+
+      expect(props[:add_products].map { |item| item[:affiliate_id] }).to all(be_nil)
+    end
+
     it "does not add deleted wishlist products" do
       wishlist = create(:wishlist)
       alive_product = create(:wishlist_product, wishlist:)

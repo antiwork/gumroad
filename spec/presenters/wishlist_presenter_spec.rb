@@ -237,6 +237,18 @@ describe WishlistPresenter do
       )
     end
 
+    context "when the wishlist owner has no global affiliate" do
+      it "does not raise and omits the affiliate id from the product urls" do
+        wishlist.user.global_affiliate.mark_deleted!
+        wishlist.user.reload
+
+        props = described_class.new(wishlist:).public_props(request: nil, pundit_user: nil)
+
+        urls = props[:items].map { |item| item[:product][:url] }
+        expect(urls).to all(satisfy { |url| !url.to_s.include?("affiliate_id") })
+      end
+    end
+
     context "with profile layout" do
       it "includes creator_profile in props" do
         props = described_class.new(wishlist:).public_props(request: nil, pundit_user: nil, layout: Product::Layout::PROFILE)

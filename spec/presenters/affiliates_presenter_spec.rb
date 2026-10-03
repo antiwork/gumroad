@@ -145,6 +145,17 @@ describe AffiliatesPresenter do
         affiliates_disabled_reason: nil,
       })
     end
+
+    context "when the seller has no global affiliate" do
+      it "returns nil for the global affiliate percentage" do
+        seller.global_affiliate.mark_deleted!
+        seller.reload
+
+        props = described_class.new(pundit_user).onboarding_props
+
+        expect(props[:global_affiliate_percentage]).to be_nil
+      end
+    end
   end
 
   describe "#new_affiliate_props" do
