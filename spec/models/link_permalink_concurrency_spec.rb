@@ -77,6 +77,17 @@ describe Link, "concurrent custom permalink claim and restore", :vcr do
     expect(Link.alive.where(user_id: seller.id).map(&:general_permalink)).to match_array([deleted.unique_permalink, claimer.unique_permalink])
   end
 
+  it "refuses a second claim of the same custom permalink when the first commits while it waits" do
+    other = create(:product, user: seller)
+    outcomes = run_overlapping(
+      first: -> { Link.find(claimer.id).update(custom_permalink: "same-slug") },
+      second: -> { Link.find(other.id).update(custom_permalink: "same-slug") }
+    )
+
+    expect(outcomes).to eq(first: true, second: false)
+    expect(Link.where(user_id: seller.id, custom_permalink: "same-slug").count).to eq(1)
+  end
+
   it "refuses the restore when a claim of its URL commits first" do
     outcomes = run_overlapping(
       first: -> { Link.find(claimer.id).update(custom_permalink: deleted.unique_permalink) },

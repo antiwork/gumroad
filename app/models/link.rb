@@ -1505,11 +1505,9 @@ class Link < ApplicationRecord
     product_refund_policy || build_product_refund_policy(seller: user)
   end
 
-  # Locks this product's row for a save that may claim `permalink`, taking the seller row first when it will,
-  # so the claim's own validation never takes the seller row after the product row. The claim is judged against
-  # a fresh read, not this in-memory copy; if the stored permalink still moves before the product row locks,
-  # the seller row can no longer be taken in order, so it raises PermalinkChangedDuringLock before anything is
-  # written and the caller answers a retry. Call it inside the editor's bounded lock wait.
+  # Takes the seller lock before the product lock when claiming a permalink. If the stored permalink moves
+  # before the product locks, raises for a retry rather than take the seller lock out of order.
+  # Call inside the editor's bounded lock wait.
   PermalinkChangedDuringLock = Class.new(StandardError)
 
   def lock_for_permalink_claim!(permalink)
@@ -1697,6 +1695,7 @@ class Link < ApplicationRecord
     def custom_and_unique_permalink_uniqueness
       other_products_by_user = id.present? ? user.links.where.not(id:) : user.links
       validate_restored_unique_permalink_is_free(other_products_by_user)
+      validate_claimed_custom_permalink_is_free(other_products_by_user)
       return if unique_permalink == custom_permalink
 
       duplicates_unique_permalink = other_products_by_user.visible.where(unique_permalink: custom_permalink).lock(serialize_permalink_checks?).exists?
@@ -1711,6 +1710,16 @@ class Link < ApplicationRecord
       return unless other_products_by_user.visible.where(custom_permalink: unique_permalink).lock(serialize_permalink_checks?).exists?
 
       errors.add(:base, "Can't restore this product: another one of your products already uses its URL as a custom permalink")
+    end
+
+    # The uniqueness validator reads from the transaction's snapshot, which can predate a claim that committed
+    # while this save waited for the seller lock. A locking read sees it.
+    def validate_claimed_custom_permalink_is_free(other_products_by_user)
+      return unless claiming_custom_permalink? && serialize_permalink_checks?
+      return if errors.added?(:custom_permalink, "is already used by another one of your products")
+      return unless other_products_by_user.where(custom_permalink:).lock.exists?
+
+      errors.add(:custom_permalink, "is already used by another one of your products")
     end
 
     def restoring_deleted_product?
