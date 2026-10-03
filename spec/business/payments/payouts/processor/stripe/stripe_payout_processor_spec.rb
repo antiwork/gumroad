@@ -81,6 +81,23 @@ describe StripePayoutProcessor do
       expect(Object.new.extend(PayoutsHelper).payout_method_details(payment:)[:account_number]).to eq("******9876")
     end
 
+    it "records the destination Stripe itself named when no local row matches it" do
+      allow(Stripe::Payout).to receive(:create).and_return(
+        payout_response(Stripe::BankAccount.construct_from(id: "ba_unmatched", last4: "4321",
+                                                           fingerprint: "fp_unmatched", bank_name: "Stripe Test Bank"))
+      )
+
+      described_class.perform_payment(payment)
+
+      payment.reload
+      expect(payment.stripe_payout_destination_id).to eq("ba_unmatched")
+      expect(payment.stripe_payout_destination_last4).to eq("4321")
+      expect(payment.stripe_payout_destination_fingerprint).to eq("fp_unmatched")
+      expect(payment.stripe_payout_destination_bank_name).to eq("Stripe Test Bank")
+      # Still not the seller's active bank: it is on the account the payout did not go from.
+      expect(payment.bank_account).to be_nil
+    end
+
     it "omits unverified bank metadata when Stripe selects the foreign destination" do
       expect(Stripe::Payout).to receive(:create) do |params, _options|
         expect(params).not_to have_key(:destination)
@@ -354,9 +371,18 @@ describe StripePayoutProcessor do
         it "drains a positive same-currency balance parked on an account retired through #{attribute}" do
           account = create(:merchant_account, user: seller, currency: Currency::AUD,
                                               charge_processor_merchant_id: "acct_#{attribute}", attribute => value)
+          retired_bank_account = create(:ach_account, user: seller,
+                                                      stripe_connect_account_id: account.charge_processor_merchant_id,
+                                                      stripe_bank_account_id: "ba_#{attribute}")
+          # The seller's live bank account belongs to the account that replaced the retired one, and the
+          # payout is created naming it: the drain has to swap in the retired account's own bank.
+          replacement_bank_account = create(:ach_account, user: seller,
+                                                          stripe_connect_account_id: connected_account.charge_processor_merchant_id,
+                                                          stripe_bank_account_id: "ba_replacement")
           credit = create(:balance, user: seller, merchant_account: account, state: "processing", date: 2.days.ago.to_date,
                                     amount_cents: 300_00, holding_currency: Currency::AUD, holding_amount_cents: 450_00)
           payment = build_payment(seller, [credit], account.charge_processor_merchant_id)
+          payment.bank_account = replacement_bank_account
           allow(Stripe::Balance).to receive(:retrieve).and_return(
             Stripe::Balance.construct_from(available: [{ currency: Currency::AUD, amount: 450_00 }], pending: [])
           )
@@ -368,8 +394,55 @@ describe StripePayoutProcessor do
           expect(payment).not_to be_failed
           expect(payment.stripe_connect_account_id).to eq("acct_#{attribute}")
           expect(payment.amount_cents).to eq(450_00)
-          expect(payment.bank_account).to be_nil
+          expect(payment.bank_account).to eq(retired_bank_account)
         end
+      end
+
+      it "refuses a retireable account with no bank account of its own on record, distinctly from a plain refusal" do
+        account = create(:merchant_account, user: seller, currency: Currency::AUD,
+                                            charge_processor_merchant_id: "acct_no_bank_aud", deleted_at: Time.current)
+        credit = create(:balance, user: seller, merchant_account: account, state: "processing", date: 2.days.ago.to_date,
+                                  amount_cents: 300_00, holding_currency: Currency::AUD, holding_amount_cents: 450_00)
+        payment = build_payment(seller, [credit], account.charge_processor_merchant_id)
+        expect_no_stripe_money_movement
+
+        errors = described_class.prepare_payment_and_set_amount(payment, [credit], account, Currency::AUD)
+
+        expect(errors.sole).to include("is retired", "No bank account on that Stripe account is on record")
+        expect(errors.sole).not_to include("Contact Gumroad Support")
+        payment.reload
+        expect(payment.failure_reason).to eq(Payment::FailureReason::DESTINATION_ACCOUNT_RETIRED)
+        expect(payment.bank_account).to be_nil
+        expect(payment.amount_cents).to eq(0)
+        expect(credit.reload).to be_unpaid
+      end
+
+      it "drains to the retired account's own bank even after the seller added one on the replacement account" do
+        account = create(:merchant_account, user: seller, currency: Currency::AUD,
+                                            charge_processor_merchant_id: "acct_two_banks_aud", deleted_at: Time.current)
+        # Soft-deleted: the switch that retired the account moved the seller's live bank to the
+        # replacement, so the row the drain needs is normally the dead one.
+        retired_bank_account = create(:ach_account, user: seller, deleted_at: 3.days.ago,
+                                                    stripe_connect_account_id: account.charge_processor_merchant_id,
+                                                    stripe_bank_account_id: "ba_older")
+        newest_retired_bank_account = create(:ach_account, user: seller, deleted_at: 2.days.ago,
+                                                           stripe_connect_account_id: account.charge_processor_merchant_id,
+                                                           stripe_bank_account_id: "ba_newer")
+        create(:ach_account, user: seller, deleted_at: 4.days.ago,
+                             stripe_connect_account_id: account.charge_processor_merchant_id,
+                             stripe_bank_account_id: nil)
+        credit = create(:balance, user: seller, merchant_account: account, state: "processing", date: 2.days.ago.to_date,
+                                  amount_cents: 300_00, holding_currency: Currency::AUD, holding_amount_cents: 450_00)
+        payment = build_payment(seller, [credit], account.charge_processor_merchant_id)
+        allow(Stripe::Balance).to receive(:retrieve).and_return(
+          Stripe::Balance.construct_from(available: [{ currency: Currency::AUD, amount: 450_00 }], pending: [])
+        )
+
+        errors = described_class.prepare_payment_and_set_amount(payment, [credit], account, Currency::AUD)
+
+        expect(errors).to eq([])
+        expect(payment.bank_account).to eq(newest_retired_bank_account)
+        expect(payment.bank_account).not_to eq(retired_bank_account)
       end
 
       it "still refuses a retired account whose balances sum negative" do
