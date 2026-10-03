@@ -1505,11 +1505,13 @@ class Link < ApplicationRecord
     product_refund_policy || build_product_refund_policy(seller: user)
   end
 
-  # Takes the seller row a custom permalink claim will need anyway. The editor save calls this inside its
-  # bounded lock wait, right after the product row, so a held seller row answers the retryable 409 instead of
-  # waiting out the server's default timeout during validation.
+  # Takes the seller row a custom permalink claim will need. The editor and API v2 call this before they lock the
+  # product row, inside the editor's bounded lock wait, so a held seller row answers the retryable 409 instead of
+  # waiting out the server's default timeout. It keys on the submitted permalink, not on a change against this
+  # in-memory copy: a concurrent save may have changed the stored value, and a skipped lock here would let the
+  # claim's own validation take the seller row after the product row.
   def lock_seller_for_permalink_claim(permalink)
-    User.where(id: user_id).lock.pick(:id) if user_id.present? && permalink.present? && permalink != custom_permalink
+    User.where(id: user_id).lock.pick(:id) if user_id.present? && permalink.present?
   end
 
   # `.on_profile`: a duplicate's own per-product section starts as a copy of the
