@@ -51,6 +51,18 @@ describe Api::V2::LinksController do
       expect(seller_lock).to be < product_lock
     end
 
+    it "asks the client to retry, and saves nothing, when the permalink moves while the update waits" do
+      allow_any_instance_of(Link).to receive(:lock_for_permalink_claim!).and_raise(Link::PermalinkChangedDuringLock)
+
+      put :update, params: { format: :json, access_token: @token.token, id: @product.external_id, custom_html: "<section>Hi</section>", custom_permalink: "claimed-slug" }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["success"]).to eq(false)
+      expect(response.parsed_body["message"]).to include("retry")
+      expect(@product.reload.custom_permalink).to be_blank
+      expect(@product.custom_html).to be_blank
+    end
+
     it "returns custom HTML from GET" do
       @product.update!(custom_html: "<section>Published HTML</section>")
 

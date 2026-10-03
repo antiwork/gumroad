@@ -735,12 +735,11 @@ class LinksController < ApplicationController
       # catch-all below tells the client to refresh, which is the one thing that
       # cannot work here — the reload queues behind the same lock.
       report_editor_save_lock_contention(e)
-      response.set_header("Retry-After", EDITOR_SAVE_LOCK_RETRY_AFTER_SECONDS.to_s)
-      return render json: {
-        error_message: "Another save for this product is still in progress. Please wait a few seconds, then try again.",
-        error_code: "product_save_busy",
-        retry_after: EDITOR_SAVE_LOCK_RETRY_AFTER_SECONDS,
-      }, status: :conflict
+      return render_product_save_busy
+    rescue Link::PermalinkChangedDuringLock
+      # Another save changed this product's permalink while ours waited; nothing was written. No lock was
+      # contended, so it is not counted as contention.
+      return render_product_save_busy
     rescue => e
       # Catch-all so an unanticipated failure never leaves the editor's save
       # request with no JSON body (gumroad-private#1784) — mirrors `publish`
@@ -1181,6 +1180,15 @@ class LinksController < ApplicationController
       yield
     ensure
       connection.execute("SET SESSION innodb_lock_wait_timeout = #{previous.to_i}") if previous.present?
+    end
+
+    def render_product_save_busy
+      response.set_header("Retry-After", EDITOR_SAVE_LOCK_RETRY_AFTER_SECONDS.to_s)
+      render json: {
+        error_message: "Another save for this product is still in progress. Please wait a few seconds, then try again.",
+        error_code: "product_save_busy",
+        retry_after: EDITOR_SAVE_LOCK_RETRY_AFTER_SECONDS,
+      }, status: :conflict
     end
 
     # Post-commit: a raise here must not reach update's catch-all and report a saved product

@@ -574,6 +574,8 @@ class Api::V2::LinksController < Api::V2::BaseController
       end
     rescue ActiveModel::RangeError
       return render_response(false, message: "One or more numeric values are out of range.")
+    rescue Link::PermalinkChangedDuringLock
+      return render_response(false, message: "This product's custom_permalink changed while the update was waiting. Nothing was saved; retry the request.")
     end
 
     additional_info = params.key?(:custom_html) ? { previous_custom_html: previous_custom_html, sanitization_report: sanitization_report } : {}

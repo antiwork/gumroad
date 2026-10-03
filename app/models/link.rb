@@ -1508,8 +1508,10 @@ class Link < ApplicationRecord
   # Locks this product's row for a save that may claim `permalink`, taking the seller row first when it will,
   # so the claim's own validation never takes the seller row after the product row. The claim is judged against
   # a fresh read, not this in-memory copy; if the stored permalink still moves before the product row locks,
-  # the seller row can no longer be taken in order, so the save fails like any other lock wait: the editor
-  # answers its retryable 409 and nothing was written. Call it inside the editor's bounded lock wait.
+  # the seller row can no longer be taken in order, so it raises PermalinkChangedDuringLock before anything is
+  # written and the caller answers a retry. Call it inside the editor's bounded lock wait.
+  PermalinkChangedDuringLock = Class.new(StandardError)
+
   def lock_for_permalink_claim!(permalink)
     seller_locked = false
     if user_id.present? && permalink.present? && permalink != Link.where(id:).pick(:custom_permalink)
@@ -1520,7 +1522,7 @@ class Link < ApplicationRecord
     lock!
     return if seller_locked || permalink.blank? || permalink == custom_permalink
 
-    raise ActiveRecord::LockWaitTimeout, "custom permalink changed while locking the product"
+    raise PermalinkChangedDuringLock
   end
 
   # `.on_profile`: a duplicate's own per-product section starts as a copy of the

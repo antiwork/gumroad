@@ -94,6 +94,17 @@ describe LinksController, type: :controller do
       end
     end
 
+    it "answers the retryable 409, without counting contention, when the permalink moves while the save waits" do
+      allow_any_instance_of(Link).to receive(:lock_for_permalink_claim!).and_raise(Link::PermalinkChangedDuringLock)
+      expect_any_instance_of(described_class).not_to receive(:report_editor_save_lock_contention)
+
+      patch :update, params: save_params.merge(custom_permalink: "claimed-slug"), as: :json
+
+      expect(response).to have_http_status(:conflict)
+      expect(response.parsed_body["error_code"]).to eq("product_save_busy")
+      expect(response.headers["Retry-After"]).to be_present
+    end
+
     it "does not take the seller row when the request repeats the stored permalink" do
       product.update!(custom_permalink: "kept-slug")
       statements = []

@@ -346,7 +346,7 @@ describe Link do
         original.call(*args)
       end
 
-      expect { Link.transaction { stale.lock_for_permalink_claim!("first-slug") } }.to raise_error(ActiveRecord::LockWaitTimeout)
+      expect { Link.transaction { stale.lock_for_permalink_claim!("first-slug") } }.to raise_error(Link::PermalinkChangedDuringLock)
     end
 
     it "locks the seller before the product row when publishing restores a deleted product" do
