@@ -164,6 +164,22 @@ describe("free pay-what-you-want default", () => {
     expect(selections.at(-1)).toMatchObject({ optionId: "large", price: { value: 0, error: false } });
   });
 
+  it("keeps an amount the buyer entered when they pick another free option", () => {
+    const { selections } = renderPwywSelector(freeWithOptions, { ...chosen, price: { error: false, value: 500 } });
+
+    fireEvent.click(screen.getByRole("radio", { name: /Large/u }));
+
+    expect(selections.at(-1)).toMatchObject({ optionId: "large", price: { value: 500, error: false } });
+  });
+
+  it("keeps an emptied box empty when the buyer picks another free option", () => {
+    const { selections } = renderPwywSelector(freeWithOptions, { ...chosen, price: { error: false, value: null } });
+
+    fireEvent.click(screen.getByRole("radio", { name: /Large/u }));
+
+    expect(selections.at(-1)).toMatchObject({ optionId: "large", price: { value: null, error: false } });
+  });
+
   it("clears the amount when the buyer picks an option on a product with a paid option", () => {
     const product = {
       ...freeProduct,

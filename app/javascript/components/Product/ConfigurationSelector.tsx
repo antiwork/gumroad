@@ -38,7 +38,7 @@ import { Button } from "$app/components/Button";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { NumberInput } from "$app/components/NumberInput";
 import { PriceInput } from "$app/components/PriceInput";
-import { defaultPwywPriceCents } from "$app/components/Product/pricing";
+import { isFreeInEveryConfiguration } from "$app/components/Product/pricing";
 import { needsOptionChoice } from "$app/components/Product/purchaseReadiness";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { Alert } from "$app/components/ui/Alert";
@@ -764,6 +764,10 @@ export const ConfigurationSelector = React.forwardRef<
     selection.optionId === initialSelection.optionId &&
     selection.quantity === initialSelection.quantity;
 
+  // A new option or recurrence resets the amount, unless no choice can change the minimum.
+  const priceAfterChoice = (current: PriceSelection["price"]): PriceSelection["price"] =>
+    isFreeInEveryConfiguration(product) ? current : { value: null, error: false };
+
   const quantityInputUID = React.useId();
 
   const pwywInputRef = React.useRef<HTMLInputElement>(null);
@@ -856,7 +860,7 @@ export const ConfigurationSelector = React.forwardRef<
                 setSelection?.({
                   ...selection,
                   optionId: null,
-                  price: { value: defaultPwywPriceCents(product), error: false },
+                  price: priceAfterChoice(selection.price),
                 })
               }
               className="justify-center"
@@ -893,7 +897,7 @@ export const ConfigurationSelector = React.forwardRef<
           aria-label="Recurrence"
           value={selection.recurrence ?? ""}
           onChange={(recurrence) =>
-            update({ recurrence: recurrence || null, price: { value: defaultPwywPriceCents(product), error: false } })
+            update(({ price }) => ({ recurrence: recurrence || null, price: priceAfterChoice(price) }))
           }
           options={product.recurrences.enabled.map(({ recurrence }) => ({
             id: recurrence,
@@ -965,7 +969,7 @@ export const ConfigurationSelector = React.forwardRef<
                   selected={option.id === selection.optionId}
                   onClick={() => {
                     if (option.id === selection.optionId) return;
-                    update({ optionId: option.id, price: { value: defaultPwywPriceCents(product), error: false } });
+                    update(({ price }) => ({ optionId: option.id, price: priceAfterChoice(price) }));
                   }}
                   priceCents={basePriceCents + computeOptionPrice(option, selection.recurrence)}
                   name={option.name}
@@ -977,7 +981,7 @@ export const ConfigurationSelector = React.forwardRef<
                   discount={previewDiscount({
                     ...selection,
                     optionId: option.id,
-                    price: { value: defaultPwywPriceCents(product), error: false },
+                    price: priceAfterChoice(selection.price),
                   })}
                   recurrence={selection.recurrence}
                   product={product}

@@ -41,10 +41,9 @@ export const getBundleComparisonPriceCents = (
   return getStandalonePrice(product);
 };
 
-// Nothing the buyer can pick raises the minimum above $0 and the seller suggests no amount, so an empty box would
-// only make them type "0". A suggested price shows as the empty box's placeholder, so it keeps the box empty.
-export const defaultPwywPriceCents = (product: Product) =>
-  product.pwyw &&
+// Nothing the buyer can pick raises the minimum above $0 and the seller suggests no amount.
+export const isFreeInEveryConfiguration = (product: Product) =>
+  !!product.pwyw &&
   (product.pwyw.suggested_price_cents ?? 0) === 0 &&
   !product.is_tiered_membership &&
   !product.is_legacy_subscription &&
@@ -56,6 +55,7 @@ export const defaultPwywPriceCents = (product: Product) =>
       Object.values(option.recurrence_price_values ?? {}).every(
         (value) => value.price_cents === 0 && (value.suggested_price_cents ?? 0) === 0,
       ),
-  )
-    ? 0
-    : null;
+  );
+
+// An empty box would only make the buyer type "0", and a suggested price keeps it empty to show as the placeholder.
+export const defaultPwywPriceCents = (product: Product) => (isFreeInEveryConfiguration(product) ? 0 : null);
