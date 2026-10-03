@@ -12,10 +12,16 @@ class LiftPlatformStripePauseJob
   LIFTED_PREFIX = "Lifted the platform Stripe pause on"
   CONFIRMED_PREFIX = "Confirmed the platform Stripe pause is lifted on"
 
+  # Raised when the hold is ready to be released but Stripe has not turned `transfers` back on yet.
+  # The next payout would fail and re-hold the seller, and nothing else will look at this hold again, so
+  # the job retries a little later instead.
+  TransfersNotActiveYet = Class.new(StandardError)
+
   # A lift that started and never finished must not read as pending on a later compliant transition:
   # a "Confirmed" note would claim a lift this job never made, and would unlock the payout-hold release.
   sidekiq_retries_exhausted do |msg, exception|
     new.abandon_pending_lifts(msg["args"].first, exception)
+    new.note_hold_kept(msg["args"].first, exception) if exception.is_a?(TransfersNotActiveYet)
   end
 
   # On the primary: a lagging replica can miss the compliant transition that enqueued this run, or a
@@ -31,7 +37,9 @@ class LiftPlatformStripePauseJob
 
       # A hold may stand for a problem on any of the seller's accounts, so every one of them must be
       # clear before it is released, not just the account that was lifted first.
-      release_failed_payout_hold(user.id) if states.present? && states.all? { |state| clear?(state) }
+      if states.present? && states.all? { |state| clear?(state) }
+        release_failed_payout_hold(user.id, transfers_active: states.all? { |state| state[:transfers] == "active" })
+      end
     end
   end
 
@@ -47,6 +55,15 @@ class LiftPlatformStripePauseJob
         add_note(user, "Gave up lifting the platform Stripe pause on #{stripe_account_id} after repeated errors: #{exception.message}. " \
                        "The pause may or may not have been lifted; check the account in Stripe.")
       end
+    end
+  end
+
+  def note_hold_kept(user_id, exception)
+    ApplicationRecord.connected_to(role: :writing) do
+      user = User.find_by(id: user_id)
+      next if user.nil?
+
+      add_note(user, "Kept the failed-payout hold: #{exception.message} Release it by hand once the account can receive transfers.")
     end
   end
 
@@ -98,9 +115,9 @@ class LiftPlatformStripePauseJob
       nil
     end
 
-    # What the platform pause was holding back is back. Stripe takes a while to turn `transfers` on again, so
-    # that is not asked for: no outstanding requirements is what rules out verification as the cause of the
-    # failures, and `platform_paused` can still show for a moment after the lift.
+    # What the platform pause was holding back is back. No outstanding requirements is what rules out
+    # verification as the cause of the failures, and `platform_paused` can still show for a moment after
+    # the lift. `transfers` is checked separately, at the moment of release.
     def clear?(state)
       state.present? && !state[:charges_paused] && state[:payouts_paused] == false && !state[:past_due] &&
         state[:disabled_reason].in?([nil, "platform_paused"])
@@ -121,7 +138,7 @@ class LiftPlatformStripePauseJob
     # it is that hold, it began before our lift, and every failure behind it is Stripe's "transfers
     # capability is off" answer on an account whose pause we lifted. A hold from an admin, a chargeback
     # rate or the seller is not ours, and neither is one that an unaccounted payout added to.
-    def release_failed_payout_hold(user_id)
+    def release_failed_payout_hold(user_id, transfers_active:)
       user = User.find_by(id: user_id)
       return unless eligible?(user)
 
@@ -140,6 +157,8 @@ class LiftPlatformStripePauseJob
         next if lifted_ats.any?(&:nil?) || hold_started_at > lifted_ats.min
 
         next unless tripping.all? { |failures| failures.all? { |payment| caused_by_platform_pause?(payment, lifted_at_by_account) } }
+
+        raise TransfersNotActiveYet, "Stripe has not turned transfers back on for the account." unless transfers_active
 
         user.update!(payouts_paused_internally: false, payouts_paused_by: nil)
         user.comments.create!(

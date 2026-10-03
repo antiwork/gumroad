@@ -354,13 +354,49 @@ describe LiftPlatformStripePauseJob do
       expect(resume_notes).to be_empty
     end
 
-    it "releases the hold while Stripe is still bringing transfers back, since nothing else blocks the account" do
+    it "retries later, keeping the hold, while Stripe is still bringing transfers back" do
       allow(Stripe::Account).to receive(:update).and_return(stripe_account(charges_paused: false, disabled_reason: "platform_paused", transfers: "inactive"))
       hold_payouts_after_failures
 
+      expect { described_class.new.perform(seller.id) }.to raise_error(described_class::TransfersNotActiveYet)
+
+      expect(seller.reload.payouts_paused_internally).to be(true)
+      expect(resume_notes).to be_empty
+    end
+
+    it "releases the hold on the retry once transfers are active" do
+      allow(Stripe::Account).to receive(:update).and_return(stripe_account(charges_paused: false, disabled_reason: "platform_paused", transfers: "inactive"))
+      hold_payouts_after_failures
+      expect { described_class.new.perform(seller.id) }.to raise_error(described_class::TransfersNotActiveYet)
+
+      allow(Stripe::Account).to receive(:retrieve).with("acct_pauselift").and_return(stripe_account(charges_paused: false, disabled_reason: nil, transfers: "active"))
       described_class.new.perform(seller.id)
 
       expect(seller.reload.payouts_paused?).to be(false)
+      expect(resume_notes.count).to eq(1)
+    end
+
+    it "retries later when only one of the seller's accounts has transfers back" do
+      create(:merchant_account, user: seller, charge_processor_id: StripeChargeProcessor.charge_processor_id, charge_processor_merchant_id: "acct_second")
+      allow(Stripe::Account).to receive(:retrieve).with("acct_second").and_return(stripe_account(charges_paused: false, disabled_reason: nil, transfers: "inactive"))
+      hold_payouts_after_failures
+
+      expect { described_class.new.perform(seller.id) }.to raise_error(described_class::TransfersNotActiveYet)
+      expect(seller.reload.payouts_paused_internally).to be(true)
+    end
+
+    it "does not retry for a seller with no hold to release, even if transfers are not active" do
+      allow(Stripe::Account).to receive(:update).and_return(stripe_account(charges_paused: false, disabled_reason: "platform_paused", transfers: "inactive"))
+
+      expect { described_class.new.perform(seller.id) }.not_to raise_error
+    end
+
+    it "notes the kept hold when retries run out" do
+      hold_payouts_after_failures
+
+      described_class.sidekiq_retries_exhausted_block.call({ "args" => [seller.id] }, described_class::TransfersNotActiveYet.new("Stripe has not turned transfers back on for the account."))
+
+      expect(notes.last.content).to start_with("Kept the failed-payout hold")
     end
 
     it "keeps the hold when the account still has past-due requirements after the lift, since they may be the cause" do
