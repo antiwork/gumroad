@@ -388,7 +388,9 @@ Rails.application.routes.draw do
         resources :installments, only: :show
         resources :consumption_analytics, only: [:create], format: :json
         resources :media_locations, only: [:create], format: :json
-        resources :sessions, only: [:create], format: :json
+        resources :sessions, only: [:create], format: :json do
+          post :resend_confirmation_email, on: :collection
+        end
         resources :feature_flags, only: [:show], format: :json
       end
 

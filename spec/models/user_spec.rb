@@ -545,6 +545,55 @@ describe User, :vcr do
     end
   end
 
+  describe "#resend_confirmation_wait" do
+    let(:user) { create(:user) }
+
+    it "is zero when no confirmation was ever sent" do
+      user.update_column(:confirmation_sent_at, nil)
+
+      expect(user.resend_confirmation_wait).to eq(0)
+    end
+
+    it "counts the seconds left in the one-minute floor" do
+      user.update_column(:confirmation_sent_at, 20.seconds.ago)
+
+      expect(user.resend_confirmation_wait).to be_between(39, 40)
+    end
+
+    it "is zero once the floor has passed" do
+      user.update_column(:confirmation_sent_at, 61.seconds.ago)
+
+      expect(user.resend_confirmation_wait).to eq(0)
+    end
+  end
+
+  describe "#resend_confirmation_instructions" do
+    let(:user) { create(:user) }
+
+    before { user.update_column(:confirmed_at, nil) }
+
+    it "queues one email and returns true" do
+      expect(user.resend_confirmation_instructions).to eq(true)
+      expect(ResendConfirmationEmailJob).to have_enqueued_sidekiq_job(user.id)
+      expect(user.reload.confirmation_sent_at).to be_within(5.seconds).of(Time.current)
+    end
+
+    it "returns false and queues nothing inside the one-minute floor" do
+      user.update_column(:confirmation_sent_at, 10.seconds.ago)
+
+      expect { expect(user.resend_confirmation_instructions).to eq(false) }
+        .not_to change { ResendConfirmationEmailJob.jobs.size }
+    end
+
+    it "queues only one email when two stale copies of the user resend at once" do
+      first = User.find(user.id)
+      second = User.find(user.id)
+
+      expect { first.resend_confirmation_instructions; second.resend_confirmation_instructions }
+        .to change { ResendConfirmationEmailJob.jobs.size }.by(1)
+    end
+  end
+
   describe "#display_name" do
     context "when name is present" do
       before do
