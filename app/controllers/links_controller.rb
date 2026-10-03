@@ -466,9 +466,11 @@ class LinksController < ApplicationController
         # (dropping stale association caches) so the freshness check below
         # reads committed state. Without it, two saves echoing the same
         # timestamps both pass and the last writer silently wins.
+        # Seller row first, as every other permalink claim takes it, so a save that locks nothing earlier cannot
+        # hold the seller row while waiting on this product row.
         with_editor_save_lock_wait_bound do
-          @product.lock!
           @product.lock_seller_for_permalink_claim(product_permitted_params[:custom_permalink])
+          @product.lock!
         end
 
         # An old editor also sends null when the seller switches installments off.
