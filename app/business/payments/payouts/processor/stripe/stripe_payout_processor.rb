@@ -3,6 +3,15 @@
 class StripePayoutProcessor
   extend CurrencyHelper
 
+  # Part of the hold comment hold_payouts_for_unaccounted_money! writes. LiftPlatformStripePauseJob reads it to
+  # tell that hold apart from a repeated-failed-payouts hold, since both use the same comment author.
+  UNACCOUNTED_MONEY_HOLD_MARKER = "could not be accounted for"
+
+  # Stripe's answer when the connected account's `transfers` capability is off. A platform pause causes it,
+  # and so do outstanding requirements. LiftPlatformStripePauseJob uses it to tell those failures from other
+  # `cannot_pay` ones (a refused bank payout, for instance).
+  MISSING_CAPABILITY_MESSAGE = /needs to have at least one of the following capabilities enabled/
+
   DEBIT_CARD_PAYOUT_MAX = 300_000
   INSTANT_PAYOUT_FEE_PERCENT = 3
   # Instant (and daily) payouts can be any settled amount at or above Stripe's
@@ -784,7 +793,7 @@ class StripePayoutProcessor
   def self.hold_payouts_for_unaccounted_money!(payment, failure_reason)
     user = payment.user
     author_name = User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:repeated_failed_payouts]
-    marker = "payout #{payment.external_id} could not be accounted for"
+    marker = "payout #{payment.external_id} #{UNACCOUNTED_MONEY_HOLD_MARKER}"
 
     # This is the last line of defence for money already returned to `unpaid`, and it is reached from
     # three call sites, so it must not depend on each of them handing over a clean record: `lock!`
@@ -820,7 +829,7 @@ class StripePayoutProcessor
     case error.message.to_s
     when /Cannot create live transfers/, /Cannot create payouts/
       Payment::FailureReason::CANNOT_PAY
-    when /needs to have at least one of the following capabilities enabled/
+    when MISSING_CAPABILITY_MESSAGE
       # The connected account has outstanding verification/compliance requirements, so Stripe has
       # disabled its `transfers` capability. Funds cannot be sent until the creator resolves the
       # requirements in their account settings — same creator action as "Cannot create payouts".
