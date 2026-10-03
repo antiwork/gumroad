@@ -86,10 +86,11 @@ class LiftPlatformStripePauseJob
       before = state_of(account)
       pending_note = pending_intent_note(user, stripe_account_id)
 
-      if !(before[:charges_paused] || before[:disabled_reason] == "platform_paused")
-        # Normally no platform pause, and a note on every transition would bury the ones that matter.
-        # The exception is a lift that Stripe applied but whose response never reached us: its retry
-        # lands here, and it is the only run that can still record the outcome.
+      # Our own earlier attempt may already have lifted the pause. Stripe can keep showing `platform_paused`
+      # for a moment afterwards, so a clear charges flag is what counts, not the disabled reason.
+      if !before[:charges_paused] && (pending_note || lifted_by_us?(user, stripe_account_id))
+        # A lift that Stripe applied but whose response never reached us: this retry is the only run
+        # that can still record the outcome. One that is already on record needs nothing more.
         if pending_note
           add_note(user, "#{CONFIRMED_PREFIX} #{stripe_account_id}. An earlier attempt started the lift but did not record its result. " \
                          "Now: #{describe(before)}.")
@@ -97,10 +98,8 @@ class LiftPlatformStripePauseJob
         return before
       end
 
-      # A retry after our own lift (waiting for transfers) can still see `platform_paused` on the account
-      # for a moment. The lift is already on record, so there is nothing to add. A pause that was set again
-      # after an earlier lift is a new one and is handled below.
-      return before if !before[:charges_paused] && lifted_by_us?(user, stripe_account_id)
+      # Normally no platform pause, and a note on every transition would bury the ones that matter.
+      return before unless before[:charges_paused] || before[:disabled_reason] == "platform_paused"
 
       reason_to_skip = reason_to_skip(before)
       if reason_to_skip

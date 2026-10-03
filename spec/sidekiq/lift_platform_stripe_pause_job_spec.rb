@@ -170,6 +170,20 @@ describe LiftPlatformStripePauseJob do
         expect(notes.last.content).to include("charges paused: false")
       end
 
+      it "confirms the lift on the retry even while Stripe still shows platform_paused" do
+        stub_stripe(stripe_account)
+        allow(Stripe::Account).to receive(:update).and_raise(Stripe::APIConnectionError.new("timeout"))
+        expect { described_class.new.perform(seller.id) }.to raise_error(Stripe::APIConnectionError)
+        allow(Stripe::Account).to receive(:retrieve).with("acct_pauselift").and_return(stripe_account(charges_paused: false, disabled_reason: "platform_paused", transfers: "inactive"))
+
+        described_class.new.perform(seller.id)
+
+        expect(notes.pluck(:content)).to match([
+                                                 a_string_starting_with("Lifting the platform Stripe pause"),
+                                                 a_string_starting_with("Confirmed the platform Stripe pause is lifted on acct_pauselift"),
+                                               ])
+      end
+
       it "retries the update without a second intent note when the pause is still set" do
         allow(Stripe::Account).to receive(:retrieve).with("acct_pauselift").and_return(stripe_account)
         allow(Stripe::Account).to receive(:update).and_raise(Stripe::APIConnectionError.new("timeout"))
