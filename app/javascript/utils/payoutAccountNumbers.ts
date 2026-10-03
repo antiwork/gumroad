@@ -36,8 +36,8 @@ export const COUNTRY_ACCOUNT_NUMBER_HINTS: Record<string, CountryAccountNumberHi
   },
   SN: {
     placeholder: "SN08SN0100152000048500003035",
-    pattern: "SN[0-9SN]{20,26}",
-    title: "Enter your IBAN, starting with SN",
+    pattern: "SN[0-9]{2}[0-9A-Z]{2}[0-9]{22}",
+    title: "Enter your 28-character IBAN, starting with SN",
   },
   RS: {
     placeholder: "RS35260005601001611379",
