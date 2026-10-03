@@ -1,30 +1,30 @@
 # frozen_string_literal: true
 
-# Lifts our own platform's charges pause (`risk_controls.charges.pause_requested`) from a seller's
-# Gumroad-managed Stripe account after they are marked compliant (gumroad-private#3221).
+# Lifts our platform pause (`risk_controls.charges.pause_requested`) on a compliant seller's
+# Gumroad-managed Stripe account (gumroad-private#3221). While it stays set, transfers stay inactive
+# and every payout's funding transfer fails.
 #
-# Nothing else clears it. While it stays set, Stripe leaves `capabilities.transfers` inactive, every
-# payout's funding transfer fails, and Payment#pause_payouts_after_repeated_failures then pauses
-# payouts, so the seller looks "under review again" with the money still with us.
-#
-# Only the plain case is lifted: charges paused, payouts not paused, reason `platform_paused`, nothing
-# past due. Anything else (both paused, a `rejected.*` reason, outstanding KYC) may be a deliberate
-# hold or a real Stripe decision, so it is left alone and noted on the user instead.
+# Only the plain charges-only pause is lifted. Both paused, `rejected.*` and past-due states may be
+# deliberate or real Stripe decisions, so they are left alone and noted on the user.
 class LiftPlatformStripePauseJob
   include Sidekiq::Job
   sidekiq_options queue: :default, retry: 3, lock: :until_executed
 
   AUTHOR_NAME = "platform-stripe-pause-lift"
 
+  # On the primary: a lagging replica can miss the compliant transition that enqueued this run, or a
+  # newer flag or closure, and either would make the job skip a seller or lift a pause it should not.
   def perform(user_id)
-    user = User.find_by(id: user_id)
-    # Re-flagged or closed between the transition and this run: the pause is no longer ours to lift.
-    return if user.nil? || user.deleted? || !user.compliant?
+    ApplicationRecord.connected_to(role: :writing) do
+      user = User.find_by(id: user_id)
+      # Re-flagged or closed between the transition and this run: the pause is no longer ours to lift.
+      next if user.nil? || user.deleted? || !user.compliant?
 
-    user.merchant_accounts.alive.charge_processor_alive.stripe.each do |merchant_account|
-      next unless merchant_account.is_a_gumroad_managed_stripe_account?
+      user.merchant_accounts.alive.charge_processor_alive.stripe.each do |merchant_account|
+        next unless merchant_account.is_a_gumroad_managed_stripe_account?
 
-      lift_pause(user, merchant_account.charge_processor_merchant_id)
+        lift_pause(user, merchant_account.charge_processor_merchant_id)
+      end
     end
   end
 

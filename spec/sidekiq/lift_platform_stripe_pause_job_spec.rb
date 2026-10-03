@@ -64,6 +64,17 @@ describe LiftPlatformStripePauseJob do
       expect(notes.last.content).to start_with("Payouts are still paused on this account")
     end
 
+    # Replicas are off in the test environment, so the role itself is the only observable.
+    it "runs on the primary database" do
+      stub_stripe(stripe_account)
+      allow(ApplicationRecord).to receive(:connected_to).and_call_original
+
+      described_class.new.perform(seller.id)
+
+      expect(ApplicationRecord).to have_received(:connected_to).with(role: :writing)
+      expect(Stripe::Account).to have_received(:update)
+    end
+
     it "does not lift the pause when a new risk decision lands while the account is being read" do
       allow(Stripe::Account).to receive(:update)
       allow(Stripe::Account).to receive(:retrieve) do
