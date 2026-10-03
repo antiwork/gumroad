@@ -34,6 +34,11 @@ class Payment < ApplicationRecord
   attr_json_data_accessor :payout_type
   attr_json_data_accessor :gumroad_fee_cents
   attr_json_data_accessor :stripe_payout_destination_id
+  # The external account Stripe named when the payout request named none: recorded so a payout that
+  # moved money to a bank we have no row for still says where it went.
+  attr_json_data_accessor :stripe_payout_destination_last4
+  attr_json_data_accessor :stripe_payout_destination_fingerprint
+  attr_json_data_accessor :stripe_payout_destination_bank_name
   attr_json_data_accessor :error_message
 
   # Payment state transitions:

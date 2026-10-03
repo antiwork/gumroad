@@ -230,8 +230,9 @@ class StripePayoutProcessor
 
   # Never sum cents held in different currencies or on different Stripe accounts.
   def self.payout_groups(user, balances)
+    drained_groups, balances = split_retired_account_groups(balances)
     merchant_account, balances_held_by_gumroad, balances_held_by_stripe = get_payout_details(user, balances)
-    groups = {}
+    groups = drained_groups
 
     # Every Stripe-held group pays out through the account the user-level lookup picked; a balance
     # still parked on a replaced account keeps its own group so preparation fails it as a mismatch
@@ -257,6 +258,43 @@ class StripePayoutProcessor
 
     groups.values
   end
+
+  # Public: Money left on a retired Gumroad-managed account is paid out from that account, as its own
+  # group, when it is all one currency and sums positive. Anything else (debts, mixed currencies) stays
+  # in the user-level group so it is refused as before. Returns `[groups_by_key, remaining_balances]`.
+  def self.split_retired_account_groups(balances)
+    drained = {}
+    retired = balances.select do |balance|
+      account = balance.merchant_account
+      account.holder_of_funds == HolderOfFunds::STRIPE && drainable_retired_account?(account)
+    end
+    retired.group_by(&:merchant_account_id).each do |account_id, group|
+      # Also count balances still unclaimed here: one that failed the payable check must block the drain.
+      currencies = Balance.where(merchant_account_id: account_id, state: %w[unpaid processing]).distinct.pluck(:holding_currency).map(&:to_s)
+      next unless currencies.one?
+
+      currency = currencies.first
+      next unless group.sum(&:holding_amount_cents).positive? && group.sum(&:amount_cents).positive?
+      next unless pay_out_currency?(group.first.merchant_account, currency)
+
+      drained[[account_id, currency]] = [group.first.merchant_account, currency, group]
+    end
+    [drained, balances - drained.values.flat_map(&:last)]
+  end
+
+  def self.drainable_retired_account?(merchant_account)
+    !merchant_account.active? && merchant_account.is_a_gumroad_managed_stripe_account?
+  end
+
+  # Include soft-deleted rows: the retired account's former bank is usually no longer the live bank.
+  def self.bank_account_for_retired_account(merchant_account)
+    merchant_account.user.bank_accounts
+      .where(stripe_connect_account_id: merchant_account.charge_processor_merchant_id)
+      .where.not(stripe_bank_account_id: nil)
+      .order(created_at: :desc, id: :desc)
+      .first
+  end
+  private_class_method :bank_account_for_retired_account
 
   def self.instantly_payable_amount_cents_on_stripe(user)
     active_bank_account = user.active_bank_account
@@ -296,8 +334,23 @@ class StripePayoutProcessor
 
     # Held balances can still name a retired account. Stop before transferring more funds
     # into it, without discarding the ledger obligations attached to those balances.
-    unless merchant_account.active?
-      message = retired_destination_error(merchant_account, balances_held_by_stripe)
+    drains_retired_account = !merchant_account.active? && drainable_retired_account?(merchant_account) &&
+      balances_held_by_gumroad.empty? && balances_held_by_stripe.present? &&
+      balances_held_by_stripe.all? { |b| b.merchant_account_id == merchant_account.id } &&
+      balances_held_by_stripe.sum(&:holding_amount_cents).positive?
+    # A drained payout goes out from the retired account, to the external account that account kept —
+    # not to the seller's current bank, which belongs to whichever account replaced it. Naming that
+    # external account is what makes `perform_payment` address the retired account explicitly.
+    no_bank_on_retired_account = false
+    if drains_retired_account && payment.bank_account&.stripe_connect_account_id != merchant_account.charge_processor_merchant_id
+      payment.bank_account = bank_account_for_retired_account(merchant_account)
+      # With no external account left on record there is nothing to pay out to, and the seller's
+      # current bank is on another account, so refusing is the only option that cannot send the money
+      # to the wrong institution. The drain is not offered.
+      no_bank_on_retired_account = payment.bank_account.nil?
+    end
+    unless merchant_account.active? || (drains_retired_account && !no_bank_on_retired_account)
+      message = retired_destination_error(merchant_account, balances_held_by_stripe, no_destination_bank: no_bank_on_retired_account)
       payment.stripe_connect_account_id = merchant_account.charge_processor_merchant_id
       payment.error_message = message.truncate(1000)
       payment.mark_failed!(Payment::FailureReason::DESTINATION_ACCOUNT_RETIRED)
@@ -520,19 +573,26 @@ class StripePayoutProcessor
   private_class_method :destination_balance_drift_error
 
   # Refusing a retired destination must not depend on Stripe being available.
-  def self.retired_destination_error(merchant_account, balances_held_by_stripe)
+  def self.retired_destination_error(merchant_account, balances_held_by_stripe, no_destination_bank: false)
     retired_via = []
     retired_via << "deleted_at #{merchant_account.deleted_at&.to_date}" if merchant_account.deleted?
     retired_via << "charge_processor_deleted_at #{merchant_account.charge_processor_deleted_at&.to_date}" if merchant_account.charge_processor_deleted?
     retired_via << "charge_processor_alive_at nil" if merchant_account.charge_processor_alive_at.nil?
     held = balances_held_by_stripe.select { |balance| balance.merchant_account_id == merchant_account.id }
     held_summary = held.map { |balance| "Balance #{balance.id}: #{balance.holding_amount_cents} #{balance.holding_currency}" }.join(", ")
+    # A drain needs an external account to name, and the seller's current bank is on another account.
+    # With none on record the refusal is the same one, for a reason support can act on immediately.
+    remedy = if no_destination_bank
+      "No bank account on that Stripe account is on record, so there is nothing to pay these balances " \
+        "out to; add one there or reconcile by hand."
+    else
+      "Contact Gumroad Support to investigate reconciliation before retrying."
+    end
 
     "Cannot process payout: destination Stripe account #{merchant_account.charge_processor_merchant_id} " \
       "(MerchantAccount #{merchant_account.id}) is retired (#{retired_via.join(", ")}). " \
       "#{held.size} Stripe-held balance#{"s" if held.size != 1} still route to it (#{held_summary}). " \
-      "This attempt was blocked before transfer and the balances remain unpaid. " \
-      "Contact Gumroad Support to investigate reconciliation before retrying."
+      "This attempt was blocked before transfer and the balances remain unpaid. #{remedy}"
   end
   private_class_method :retired_destination_error
 
@@ -657,16 +717,27 @@ class StripePayoutProcessor
     }
     if bank_account.present?
       params[:destination] = bank_account.stripe_external_account_id
+    else
+      # Ask for the destination object only when the payout names no bank account: that response is
+      # the only record of where the money went. A named destination is already on the payment.
+      params[:expand] = ["destination"]
     end
     params.merge!(method: payment.payout_type) if payment.payout_type.present?
     # Past this point a bank payout may exist at Stripe even if we never see the response, so a
     # connection loss here is NOT the same as one raised while building the request above.
     payout_requested = true
     stripe_payout = Stripe::Payout.create(params, { stripe_account: payment.stripe_connect_account_id })
-    if foreign_currency
+    # No bank named in the request (retired-account drain, foreign currency): record Stripe's answer,
+    # never the seller's active bank, which is on another account.
+    if bank_account.nil?
       destination = stripe_payout[:destination]
       payment.stripe_payout_destination_id = destination.is_a?(String) ? destination : destination&.id
-      # Stripe chooses the foreign currency's bank. Never substitute the seller's active bank.
+      # Card destinations carry last4/fingerprint too, so this is not bank-account-only.
+      if destination.respond_to?(:last4)
+        payment.stripe_payout_destination_last4 = destination[:last4]
+        payment.stripe_payout_destination_fingerprint = destination[:fingerprint]
+        payment.stripe_payout_destination_bank_name = destination[:bank_name]
+      end
       payment.bank_account = if payment.stripe_payout_destination_id.present?
         payment.user.bank_accounts.find_by(stripe_connect_account_id: payment.stripe_connect_account_id,
                                            stripe_bank_account_id: payment.stripe_payout_destination_id)
