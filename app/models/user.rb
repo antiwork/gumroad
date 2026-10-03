@@ -487,6 +487,7 @@ class User < ApplicationRecord
 
     after_transition any => :compliant, :do => :enable_refunds!
     after_transition any => :compliant, :do => :record_social_connect_hold_released
+    after_transition any => :compliant, :do => :enqueue_platform_stripe_pause_lift
 
     after_transition %i[suspended_for_fraud suspended_for_tos_violation] => %i[compliant on_probation],
                      :do => :enable_links_and_tell_chat

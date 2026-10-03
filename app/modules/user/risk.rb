@@ -109,6 +109,12 @@ module User::Risk
     SocialConnectFunnel.record_hold_released!(self, surface: "mark_compliant")
   end
 
+  # The job calls Stripe, so it waits for the outermost commit: this runs inside the transition's
+  # transaction, and a caller such as LowBalanceFraudCheck can hold a wider one around it.
+  def enqueue_platform_stripe_pause_lift
+    AfterCommitEverywhere.after_commit { LiftPlatformStripePauseJob.perform_async(id) }
+  end
+
   def disable_refunds!
     self.refunds_disabled = true
     save!
