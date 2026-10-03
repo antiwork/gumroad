@@ -98,13 +98,12 @@ class LiftPlatformStripePauseJob
       nil
     end
 
-    # What the platform pause was holding back is working again. Stripe also answers "cannot pay" when
-    # transfers are off for outstanding verification, and lifting the pause does not fix that, so an
-    # account that still cannot transfer, or still lists requirements, does not count as clear. When
-    # Stripe has not caught up yet this errs towards keeping the hold, which an admin can release.
+    # What the platform pause was holding back is back. Stripe takes a while to turn `transfers` on again, so
+    # that is not asked for: no outstanding requirements is what rules out verification as the cause of the
+    # failures, and `platform_paused` can still show for a moment after the lift.
     def clear?(state)
-      state.present? && !state[:charges_paused] && state[:payouts_paused] == false && state[:disabled_reason].nil? &&
-        !state[:past_due] && state[:transfers] == "active"
+      state.present? && !state[:charges_paused] && state[:payouts_paused] == false && !state[:past_due] &&
+        state[:disabled_reason].in?([nil, "platform_paused"])
     end
 
     # The newest note for this account, when it is a lift that started and never finished.
@@ -119,9 +118,9 @@ class LiftPlatformStripePauseJob
 
     # Payment#pause_payouts_after_repeated_failures holds the whole account after three failed payouts
     # to one destination, and nothing lifts that hold when the cause goes away. Release it only when
-    # it is that hold, it began before our lift, and every failure behind it is a Stripe "cannot pay"
-    # on an account whose pause we lifted. A hold from an admin, a chargeback rate or the seller is not
-    # ours, and neither is one that an unaccounted payout added to.
+    # it is that hold, it began before our lift, and every failure behind it is Stripe's "transfers
+    # capability is off" answer on an account whose pause we lifted. A hold from an admin, a chargeback
+    # rate or the seller is not ours, and neither is one that an unaccounted payout added to.
     def release_failed_payout_hold(user_id)
       user = User.find_by(id: user_id)
       return unless eligible?(user)
@@ -194,6 +193,7 @@ class LiftPlatformStripePauseJob
       lifted_at = lifted_at_by_account[payment.stripe_connect_account_id]
       payment.processor == PayoutProcessorType::STRIPE &&
         payment.failure_reason == Payment::FailureReason::CANNOT_PAY &&
+        payment.error_message.to_s.match?(StripePayoutProcessor::MISSING_CAPABILITY_MESSAGE) &&
         lifted_at.present? && payment.created_at <= lifted_at
     end
 

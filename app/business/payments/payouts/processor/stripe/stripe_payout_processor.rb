@@ -7,6 +7,11 @@ class StripePayoutProcessor
   # tell that hold apart from a repeated-failed-payouts hold, since both use the same comment author.
   UNACCOUNTED_MONEY_HOLD_MARKER = "could not be accounted for"
 
+  # Stripe's answer when the connected account's `transfers` capability is off. A platform pause causes it,
+  # and so do outstanding requirements. LiftPlatformStripePauseJob uses it to tell those failures from other
+  # `cannot_pay` ones (a refused bank payout, for instance).
+  MISSING_CAPABILITY_MESSAGE = /needs to have at least one of the following capabilities enabled/
+
   DEBIT_CARD_PAYOUT_MAX = 300_000
   INSTANT_PAYOUT_FEE_PERCENT = 3
   # Instant (and daily) payouts can be any settled amount at or above Stripe's
@@ -824,7 +829,7 @@ class StripePayoutProcessor
     case error.message.to_s
     when /Cannot create live transfers/, /Cannot create payouts/
       Payment::FailureReason::CANNOT_PAY
-    when /needs to have at least one of the following capabilities enabled/
+    when MISSING_CAPABILITY_MESSAGE
       # The connected account has outstanding verification/compliance requirements, so Stripe has
       # disabled its `transfers` capability. Funds cannot be sent until the creator resolves the
       # requirements in their account settings — same creator action as "Cannot create payouts".

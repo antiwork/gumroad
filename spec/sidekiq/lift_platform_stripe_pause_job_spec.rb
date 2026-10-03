@@ -230,9 +230,12 @@ describe LiftPlatformStripePauseJob do
   describe "releasing the failed-payout hold" do
     let(:bank_account) { create(:ach_account, user: seller) }
 
-    def failed_payout(reason: Payment::FailureReason::CANNOT_PAY, created_at: 1.hour.ago)
+    CAPABILITY_ERROR = "Your destination account needs to have at least one of the following capabilities enabled: transfers, legacy_payments"
+
+    def failed_payout(reason: Payment::FailureReason::CANNOT_PAY, created_at: 1.hour.ago, error_message: CAPABILITY_ERROR)
       payment = create(:payment, user: seller, bank_account:, processor: PayoutProcessorType::STRIPE, state: "processing",
                                  stripe_connect_account_id: "acct_pauselift", created_at:)
+      payment.error_message = error_message
       payment.mark_failed!(reason)
       payment
     end
@@ -277,6 +280,7 @@ describe LiftPlatformStripePauseJob do
       # Counted account-wide after the completed payout above, these would look like three cannot_pay failures.
       payment = create(:payment, user: seller, bank_account: other_bank_account, processor: PayoutProcessorType::STRIPE, state: "processing",
                                  stripe_connect_account_id: "acct_pauselift", created_at: 1.hour.ago)
+      payment.error_message = CAPABILITY_ERROR
       payment.mark_failed!(Payment::FailureReason::CANNOT_PAY)
 
       described_class.new.perform(seller.id)
@@ -290,11 +294,13 @@ describe LiftPlatformStripePauseJob do
       Payment::MAX_CONSECUTIVE_FAILED_PAYOUTS.times do |i|
         payment = create(:payment, user: seller, processor: PayoutProcessorType::STRIPE, state: "processing", bank_account: nil,
                                    stripe_connect_account_id: "acct_two", stripe_payout_destination_id: "ba_shared", created_at: 2.hours.ago + i.minutes)
+        payment.error_message = CAPABILITY_ERROR
         payment.mark_failed!(Payment::FailureReason::CANNOT_PAY)
       end
       Payment::MAX_CONSECUTIVE_FAILED_PAYOUTS.times do |i|
         payment = create(:payment, user: seller, processor: PayoutProcessorType::STRIPE, state: "processing", bank_account: nil,
                                    stripe_connect_account_id: "acct_one", stripe_payout_destination_id: "ba_shared", created_at: 1.hour.ago + i.minutes)
+        payment.error_message = CAPABILITY_ERROR
         payment.mark_failed!(i.zero? ? Payment::FailureReason::INSUFFICIENT_FUNDS : Payment::FailureReason::CANNOT_PAY)
       end
       expect(seller.reload.payouts_paused?).to be(true)
@@ -348,10 +354,28 @@ describe LiftPlatformStripePauseJob do
       expect(resume_notes).to be_empty
     end
 
-    it "keeps the hold when the account still cannot transfer, since the failures may be about verification" do
-      stub_stripe(stripe_account)
-      allow(Stripe::Account).to receive(:update).and_return(stripe_account(charges_paused: false, disabled_reason: nil, transfers: "inactive"))
+    it "releases the hold while Stripe is still bringing transfers back, since nothing else blocks the account" do
+      allow(Stripe::Account).to receive(:update).and_return(stripe_account(charges_paused: false, disabled_reason: "platform_paused", transfers: "inactive"))
       hold_payouts_after_failures
+
+      described_class.new.perform(seller.id)
+
+      expect(seller.reload.payouts_paused?).to be(false)
+    end
+
+    it "keeps the hold when the account still has past-due requirements after the lift, since they may be the cause" do
+      allow(Stripe::Account).to receive(:update).and_return(stripe_account(charges_paused: false, disabled_reason: nil, past_due: ["individual.verification.document"], transfers: "inactive"))
+      hold_payouts_after_failures
+
+      described_class.new.perform(seller.id)
+
+      expect(seller.reload.payouts_paused_internally).to be(true)
+      expect(resume_notes).to be_empty
+    end
+
+    it "keeps the hold when the cannot_pay failures were a refused bank payout, not the missing capability" do
+      Payment::MAX_CONSECUTIVE_FAILED_PAYOUTS.times { failed_payout(error_message: "Cannot create payouts to this bank account") }
+      expect(seller.reload.payouts_paused?).to be(true)
 
       described_class.new.perform(seller.id)
 
@@ -373,6 +397,7 @@ describe LiftPlatformStripePauseJob do
       Payment::MAX_CONSECUTIVE_FAILED_PAYOUTS.times do |i|
         payment = create(:payment, user: seller, processor: PayoutProcessorType::STRIPE, state: "processing", bank_account: nil,
                                    stripe_connect_account_id: "acct_other", stripe_payout_destination_id: "ba_other", created_at: 1.hour.ago + i.minutes)
+        payment.error_message = CAPABILITY_ERROR
         payment.mark_failed!(Payment::FailureReason::CANNOT_PAY)
       end
 
