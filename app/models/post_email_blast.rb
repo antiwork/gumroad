@@ -17,8 +17,7 @@ class PostEmailBlast < ApplicationRecord
   #   taken until its content went stale, or its send job was lost and it aged out of the
   #   stalled-blast scan.
   # expiry_reason:
-  #   Why it expired: EXPIRY_QUOTA (the slot stayed taken) or EXPIRY_ABANDONED (the send job
-  #   was lost). Nil on an unexpired blast.
+  #   Why it expired. Nil reads as quota, for rows from before reasons were recorded.
 
   # recipient_filter:
   #   nil       => normal blast, sent to the full computed audience.
