@@ -269,7 +269,8 @@ class StripePayoutProcessor
       account.holder_of_funds == HolderOfFunds::STRIPE && drainable_retired_account?(account)
     end
     retired.group_by(&:merchant_account_id).each do |account_id, group|
-      currencies = group.map { _1.holding_currency.to_s }.uniq
+      # Also count balances still unclaimed here: one that failed the payable check must block the drain.
+      currencies = Balance.where(merchant_account_id: account_id, state: %w[unpaid processing]).distinct.pluck(:holding_currency).map(&:to_s)
       next unless currencies.one?
 
       currency = currencies.first
@@ -285,10 +286,7 @@ class StripePayoutProcessor
     !merchant_account.active? && merchant_account.is_a_gumroad_managed_stripe_account?
   end
 
-  # The external account a retired Gumroad-managed account paid out to while it was live. The row is
-  # usually soft-deleted, since the seller's current bank belongs to whichever account replaced it,
-  # and a seller who changed banks on the retired account leaves more than one: newest first. The row
-  # is what names the destination, so a payout from the retired account does not need it alive.
+  # Include soft-deleted rows: the retired account's former bank is usually no longer the live bank.
   def self.bank_account_for_retired_account(merchant_account)
     merchant_account.user.bank_accounts
       .where(stripe_connect_account_id: merchant_account.charge_processor_merchant_id)
