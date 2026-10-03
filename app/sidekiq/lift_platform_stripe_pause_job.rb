@@ -200,14 +200,20 @@ class LiftPlatformStripePauseJob
     end
 
     # When each Stripe account's pause was lifted, from the notes: a seller can have more than one account,
-    # and lifting one says nothing about the others.
+    # and lifting one says nothing about the others. A "Confirmed" note can come long after Stripe applied
+    # the lift, so it counts from the intent note before it: later failures are not credited to the pause.
     def lifted_at_by_account(user)
-      user.comments.with_type_note.where(author_name: AUTHOR_NAME)
-          .where("content LIKE ? OR content LIKE ?", "#{LIFTED_PREFIX}%", "#{CONFIRMED_PREFIX}%")
-          .pluck(:content, :created_at)
+      intent_at = {}
+      user.comments.with_type_note.where(author_name: AUTHOR_NAME).order(:created_at, :id).pluck(:content, :created_at)
           .each_with_object({}) do |(content, created_at), result|
         account_id = content[/acct_\w+/]
-        result[account_id] = [result[account_id], created_at].compact.max if account_id
+        next unless account_id
+
+        intent_at[account_id] = created_at if content.start_with?(INTENT_PREFIX)
+        next unless content.start_with?(LIFTED_PREFIX, CONFIRMED_PREFIX)
+
+        lifted_at = content.start_with?(CONFIRMED_PREFIX) ? (intent_at[account_id] || created_at) : created_at
+        result[account_id] = [result[account_id], lifted_at].compact.max
       end
     end
 

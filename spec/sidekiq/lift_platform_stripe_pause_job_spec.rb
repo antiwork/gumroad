@@ -432,6 +432,19 @@ describe LiftPlatformStripePauseJob do
       expect { described_class.new.perform(seller.id) }.not_to raise_error
     end
 
+    it "counts a confirmed lift from when it started, so failures after that are not credited to the pause" do
+      allow(Stripe::Account).to receive(:update).and_raise(Stripe::APIConnectionError.new("timeout"))
+      hold_payouts_after_failures(created_at: 10.minutes.from_now)
+      expect { described_class.new.perform(seller.id) }.to raise_error(Stripe::APIConnectionError)
+      allow(Stripe::Account).to receive(:retrieve).with("acct_pauselift").and_return(stripe_account(charges_paused: false, disabled_reason: nil, transfers: "active"))
+
+      travel_to(1.hour.from_now) { described_class.new.perform(seller.id) }
+
+      expect(notes.pluck(:content)).to include(a_string_starting_with("Confirmed the platform Stripe pause is lifted"))
+      expect(seller.reload.payouts_paused_internally).to be(true)
+      expect(resume_notes).to be_empty
+    end
+
     it "adds no kept-hold note when the hold is already gone by the time retries run out" do
       described_class.sidekiq_retries_exhausted_block.call({ "args" => [seller.id] }, described_class::TransfersNotActiveYet.new("Stripe has not turned transfers back on for the account."))
 
