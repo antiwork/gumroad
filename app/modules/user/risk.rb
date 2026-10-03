@@ -480,6 +480,16 @@ module User::Risk
     last_system_payout_pause_comment&.created_at
   end
 
+  # When the current repeated-failed-payouts hold began, or nil when payouts are not held by that
+  # check. Same identification rule as above, for the other pausing author.
+  def repeated_failed_payouts_hold_started_at
+    return nil unless payouts_paused_internally?
+    return nil unless payouts_paused_by_source == PAYOUT_PAUSE_SOURCE_SYSTEM
+
+    comment = last_system_payout_pause_comment
+    comment.created_at if comment&.author_name == SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:repeated_failed_payouts]
+  end
+
   def last_system_payout_pause_comment
     comments.with_type_on_probation
             .where(author_name: SYSTEM_PAYOUT_PAUSING_COMMENT_AUTHORS)
