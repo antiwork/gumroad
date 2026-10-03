@@ -215,6 +215,7 @@ class Link < ApplicationRecord
 
   before_validation :associate_price, on: :create
   before_validation :set_unique_permalink
+  before_validation :lock_seller_for_permalink_checks
   before_validation :release_custom_permalink_if_possible, if: :custom_permalink_changed?
   after_save :stage_renamed_custom_permalink, if: :saved_change_to_custom_permalink?
   after_commit :redirect_renamed_custom_permalinks
@@ -1673,7 +1674,7 @@ class Link < ApplicationRecord
       validate_restored_unique_permalink_is_free(other_products_by_user)
       return if unique_permalink == custom_permalink
 
-      duplicates_unique_permalink = other_products_by_user.visible.where(unique_permalink: custom_permalink).exists?
+      duplicates_unique_permalink = other_products_by_user.visible.where(unique_permalink: custom_permalink).lock(serialize_permalink_checks?).exists?
       errors.add(:custom_permalink, "is already used by another one of your products") if duplicates_unique_permalink
     end
 
@@ -1681,10 +1682,29 @@ class Link < ApplicationRecord
     # changes, so restoring that product would make two live products answer on one slug and
     # fetch_leniently would hand it to the older one.
     def validate_restored_unique_permalink_is_free(other_products_by_user)
-      return unless will_save_change_to_deleted_at? && deleted_at.nil?
-      return unless other_products_by_user.visible.where(custom_permalink: unique_permalink).exists?
+      return unless restoring_deleted_product?
+      return unless other_products_by_user.visible.where(custom_permalink: unique_permalink).lock(serialize_permalink_checks?).exists?
 
       errors.add(:base, "Can't restore this product: another one of your products already uses its URL as a custom permalink")
+    end
+
+    def restoring_deleted_product?
+      will_save_change_to_deleted_at? && deleted_at.nil?
+    end
+
+    def claiming_custom_permalink?
+      custom_permalink.present? && will_save_change_to_custom_permalink?
+    end
+
+    def serialize_permalink_checks?
+      user_id.present? && (restoring_deleted_product? || claiming_custom_permalink?)
+    end
+
+    # The claim and the restore lock different product rows and no constraint spans them, so they take
+    # the seller's row to run one at a time. The checks above then read with FOR UPDATE: under
+    # REPEATABLE READ a plain read could still see the snapshot from before the other save committed.
+    def lock_seller_for_permalink_checks
+      User.where(id: user_id).lock.pick(:id) if serialize_permalink_checks?
     end
 
     def custom_permalink_of_licensed_product
