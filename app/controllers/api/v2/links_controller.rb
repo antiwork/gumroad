@@ -444,8 +444,9 @@ class Api::V2::LinksController < Api::V2::BaseController
         # rental amounts and re-writes them under the new currency, so an overlapping
         # price PUT would otherwise be copied over by a stale read.
         # A permalink claim takes the seller row before the product row everywhere, so take it first here too.
-        @product.lock_seller_for_permalink_claim(params[:custom_permalink]) if params.key?(:custom_permalink)
-        @product.lock! if params.key?(:custom_html) || params.key?(:price_currency_type)
+        if params.key?(:custom_html) || params.key?(:price_currency_type)
+          @product.lock_for_permalink_claim!(params[:custom_permalink])
+        end
 
         attrs = {}
         attrs[:name] = params[:name] if params.key?(:name)

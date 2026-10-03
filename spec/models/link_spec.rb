@@ -319,6 +319,36 @@ describe Link do
       expect(seller_lock).to be < profile_lock
     end
 
+    it "locks the seller first when a stale copy repeats a permalink that has since changed in storage" do
+      product.update!(custom_permalink: "first-slug")
+      stale = Link.find(product.id)
+      Link.where(id: product.id).update_all(custom_permalink: "second-slug")
+      statements = []
+      subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") { |*, payload| statements << payload[:sql].to_s }
+
+      begin
+        Link.transaction { stale.lock_for_permalink_claim!("first-slug") }
+      ensure
+        ActiveSupport::Notifications.unsubscribe(subscriber)
+      end
+
+      seller_lock = statements.index { _1.include?("FROM `users`") && _1.include?("FOR UPDATE") }
+      product_lock = statements.index { _1.include?("FROM `links`") && _1.include?("FOR UPDATE") }
+      expect(seller_lock).to be_present
+      expect(seller_lock).to be < product_lock
+    end
+
+    it "fails the lock rather than take the seller row after the product row when the permalink moves during the lock" do
+      product.update!(custom_permalink: "first-slug")
+      stale = Link.find(product.id)
+      allow(stale).to receive(:lock!).and_wrap_original do |original, *args|
+        Link.where(id: product.id).update_all(custom_permalink: "second-slug")
+        original.call(*args)
+      end
+
+      expect { Link.transaction { stale.lock_for_permalink_claim!("first-slug") } }.to raise_error(ActiveRecord::LockWaitTimeout)
+    end
+
     it "locks the seller before the product row when publishing restores a deleted product" do
       deleted = create(:product, user: seller, deleted_at: Time.current)
       statements = []

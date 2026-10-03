@@ -94,7 +94,7 @@ describe LinksController, type: :controller do
       end
     end
 
-    it "takes the seller row before the product row even when the request repeats the stored permalink" do
+    it "does not take the seller row when the request repeats the stored permalink" do
       product.update!(custom_permalink: "kept-slug")
       statements = []
       subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") { |*, payload| statements << payload[:sql].to_s }
@@ -106,11 +106,7 @@ describe LinksController, type: :controller do
       end
 
       expect(response).to have_http_status(:success)
-      seller_lock = statements.index { _1.include?("FROM `users`") && _1.include?("FOR UPDATE") }
-      product_lock = statements.index { _1.include?("FROM `links`") && _1.include?("FOR UPDATE") }
-      expect(seller_lock).to be_present
-      expect(product_lock).to be_present
-      expect(seller_lock).to be < product_lock
+      expect(statements.grep(/FROM `users`.*FOR UPDATE/m)).to be_empty
     end
 
     it "restores the session's lock wait timeout, so the pooled connection hands it to no one else" do

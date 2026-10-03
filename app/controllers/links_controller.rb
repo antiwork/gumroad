@@ -468,10 +468,7 @@ class LinksController < ApplicationController
         # timestamps both pass and the last writer silently wins.
         # Seller row first, as every other permalink claim takes it, so a save that locks nothing earlier cannot
         # hold the seller row while waiting on this product row.
-        with_editor_save_lock_wait_bound do
-          @product.lock_seller_for_permalink_claim(product_permitted_params[:custom_permalink])
-          @product.lock!
-        end
+        with_editor_save_lock_wait_bound { @product.lock_for_permalink_claim!(product_permitted_params[:custom_permalink]) }
 
         # An old editor also sends null when the seller switches installments off.
         # Without an intent marker, refuse the whole save rather than silently

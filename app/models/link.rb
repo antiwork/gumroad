@@ -1505,13 +1505,22 @@ class Link < ApplicationRecord
     product_refund_policy || build_product_refund_policy(seller: user)
   end
 
-  # Takes the seller row a custom permalink claim will need. The editor and API v2 call this before they lock the
-  # product row, inside the editor's bounded lock wait, so a held seller row answers the retryable 409 instead of
-  # waiting out the server's default timeout. It keys on the submitted permalink, not on a change against this
-  # in-memory copy: a concurrent save may have changed the stored value, and a skipped lock here would let the
-  # claim's own validation take the seller row after the product row.
-  def lock_seller_for_permalink_claim(permalink)
-    User.where(id: user_id).lock.pick(:id) if user_id.present? && permalink.present?
+  # Locks this product's row for a save that may claim `permalink`, taking the seller row first when it will,
+  # so the claim's own validation never takes the seller row after the product row. The claim is judged against
+  # a fresh read, not this in-memory copy; if the stored permalink still moves before the product row locks,
+  # the seller row can no longer be taken in order, so the save fails like any other lock wait: the editor
+  # answers its retryable 409 and nothing was written. Call it inside the editor's bounded lock wait.
+  def lock_for_permalink_claim!(permalink)
+    seller_locked = false
+    if user_id.present? && permalink.present? && permalink != Link.where(id:).pick(:custom_permalink)
+      User.where(id: user_id).lock.pick(:id)
+      seller_locked = true
+    end
+
+    lock!
+    return if seller_locked || permalink.blank? || permalink == custom_permalink
+
+    raise ActiveRecord::LockWaitTimeout, "custom permalink changed while locking the product"
   end
 
   # `.on_profile`: a duplicate's own per-product section starts as a copy of the
