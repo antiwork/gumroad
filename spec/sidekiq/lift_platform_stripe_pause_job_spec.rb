@@ -393,6 +393,17 @@ describe LiftPlatformStripePauseJob do
       expect(resume_notes).to be_empty
     end
 
+    it "keeps the hold when the lift on another of the seller's accounts was rejected by Stripe" do
+      create(:merchant_account, user: seller, charge_processor_id: StripeChargeProcessor.charge_processor_id, charge_processor_merchant_id: "acct_second")
+      allow(Stripe::Account).to receive(:retrieve).with("acct_second").and_raise(Stripe::InvalidRequestError.new("No such account", "id"))
+      hold_payouts_after_failures
+
+      described_class.new.perform(seller.id)
+
+      expect(seller.reload.payouts_paused_internally).to be(true)
+      expect(resume_notes).to be_empty
+    end
+
     it "releases the hold once every one of the seller's accounts is clear" do
       create(:merchant_account, user: seller, charge_processor_id: StripeChargeProcessor.charge_processor_id, charge_processor_merchant_id: "acct_second")
       allow(Stripe::Account).to receive(:retrieve).with("acct_second").and_return(stripe_account(charges_paused: false, disabled_reason: nil, transfers: "active"))

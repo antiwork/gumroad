@@ -25,11 +25,9 @@ class LiftPlatformStripePauseJob
       user = User.find_by(id: user_id)
       next unless eligible?(user)
 
-      states = user.merchant_accounts.alive.charge_processor_alive.stripe.filter_map do |merchant_account|
-        next unless merchant_account.is_a_gumroad_managed_stripe_account?
-
-        lift_pause(user, merchant_account.charge_processor_merchant_id)
-      end
+      # A nil state (the lift failed or was aborted) stays in the list so that it counts against release.
+      accounts = user.merchant_accounts.alive.charge_processor_alive.stripe.select(&:is_a_gumroad_managed_stripe_account?)
+      states = accounts.map { |merchant_account| lift_pause(user, merchant_account.charge_processor_merchant_id) }
 
       # A hold may stand for a problem on any of the seller's accounts, so every one of them must be
       # clear before it is released, not just the account that was lifted first.
