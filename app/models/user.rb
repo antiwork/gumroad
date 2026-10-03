@@ -1551,9 +1551,14 @@ class User < ApplicationRecord
 
   def resend_confirmation_instructions
     pending_any_confirmation do
-      return if resend_confirmation_wait > 0
-      update_column(:confirmation_sent_at, Time.current)
+      sent_at = Time.current
+      claimed = User.where(id:).where("confirmation_sent_at IS NULL OR confirmation_sent_at <= ?", RESEND_CONFIRMATION_ENQUEUE_FLOOR.ago).update_all(confirmation_sent_at: sent_at)
+      return false if claimed.zero?
+
+      self.confirmation_sent_at = sent_at
+      clear_attribute_changes([:confirmation_sent_at])
       ResendConfirmationEmailJob.perform_async(id)
+      true
     end
   end
 

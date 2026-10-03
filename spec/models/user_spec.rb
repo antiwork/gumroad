@@ -567,6 +567,33 @@ describe User, :vcr do
     end
   end
 
+  describe "#resend_confirmation_instructions" do
+    let(:user) { create(:user) }
+
+    before { user.update_column(:confirmed_at, nil) }
+
+    it "queues one email and returns true" do
+      expect(user.resend_confirmation_instructions).to eq(true)
+      expect(ResendConfirmationEmailJob).to have_enqueued_sidekiq_job(user.id)
+      expect(user.reload.confirmation_sent_at).to be_within(5.seconds).of(Time.current)
+    end
+
+    it "returns false and queues nothing inside the one-minute floor" do
+      user.update_column(:confirmation_sent_at, 10.seconds.ago)
+
+      expect { expect(user.resend_confirmation_instructions).to eq(false) }
+        .not_to change { ResendConfirmationEmailJob.jobs.size }
+    end
+
+    it "queues only one email when two stale copies of the user resend at once" do
+      first = User.find(user.id)
+      second = User.find(user.id)
+
+      expect { first.resend_confirmation_instructions; second.resend_confirmation_instructions }
+        .to change { ResendConfirmationEmailJob.jobs.size }.by(1)
+    end
+  end
+
   describe "#display_name" do
     context "when name is present" do
       before do
