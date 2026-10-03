@@ -148,11 +148,8 @@ class LiftPlatformStripePauseJob
       user.comments.with_type_note.where(author_name: AUTHOR_NAME).where("content LIKE ?", "%#{stripe_account_id}%").order(:created_at, :id)
     end
 
-    # Payment#pause_payouts_after_repeated_failures holds the whole account after three failed payouts
-    # to one destination, and nothing lifts that hold when the cause goes away. Release it only when
-    # it is that hold, it began before our lift, and every failure behind it is Stripe's "transfers
-    # capability is off" answer on an account whose pause we lifted. A hold from an admin, a chargeback
-    # rate or the seller is not ours, and neither is one that an unaccounted payout added to.
+    # Nothing lifts the repeated-failed-payouts hold when its cause goes away, so release it here, but only
+    # when the lifted pause plausibly caused it. Any other hold is not ours.
     def release_failed_payout_hold(user_id, transfers_active:)
       user = User.find_by(id: user_id)
       return unless eligible?(user)
@@ -186,10 +183,8 @@ class LiftPlatformStripePauseJob
       end
     end
 
-    # Payment#hold_payouts_for_unaccounted_money! writes its hold under the same author, even when payouts
-    # are already paused, so the newest pausing comment alone cannot show what the hold is for. Money that
-    # may have been paid out needs a person to reconcile it at Stripe, so any such comment since payouts
-    # were last resumed keeps the hold.
+    # The unaccounted-money hold uses the same comment author, even when payouts are already paused, so the
+    # newest comment alone cannot show what the hold is for. A person has to reconcile that money at Stripe.
     def unaccounted_money_hold?(user)
       last_resumed_at = user.comments.with_type_payouts_resumed.maximum(:created_at)
       comments = user.comments.with_type_on_probation
@@ -211,8 +206,7 @@ class LiftPlatformStripePauseJob
       end
     end
 
-    # Payment#pause_payouts_after_repeated_failures counts failures per destination, so this does too:
-    # every destination at the threshold could have tripped the hold. Returns the counted failures of each.
+    # Counted per destination, as the hold itself is: any destination at the threshold could have tripped it.
     def tripping_failures(user)
       one_per_destination = user.payments.where(state: [Payment::FAILED, Payment::RETURNED])
                                 .group_by { |payment| [payment.processor, payment.bank_account_id, payment.stripe_connect_account_id, payment.stripe_payout_destination_id, payment.payment_address] }
