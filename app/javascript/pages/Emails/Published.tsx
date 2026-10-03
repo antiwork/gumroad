@@ -322,7 +322,7 @@ export default function EmailsPublished() {
                 </Card>
                 <EmailSheetActions
                   installment={selectedInstallment}
-                  allowResend={selectedInstallment.delivery?.status !== "expired"}
+                  allowResend={!selectedInstallment.never_reached_anyone}
                   remainingSend={
                     selectedInstallment.delivery?.status === "incomplete" && !selectedInstallment.delivery.retrying
                       ? { count: selectedInstallment.delivery.remaining_count }

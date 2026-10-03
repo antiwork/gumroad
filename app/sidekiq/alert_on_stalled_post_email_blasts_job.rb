@@ -94,6 +94,12 @@ class AlertOnStalledPostEmailBlastsJob
   end
 
   def perform
+    begin
+      expire_abandoned_blasts
+    rescue => e
+      # Housekeeping must not take the alert down with it.
+      ErrorNotifier.notify(e)
+    end
     scan = scan_for_stalled_blasts
     return if scan[:stalled].empty? && !scan[:truncated]
 
@@ -106,6 +112,23 @@ class AlertOnStalledPostEmailBlastsJob
   end
 
   private
+    # The scan below stops at LOOKBACK, so a blast that lost its job before delivering anything
+    # and aged past it would stay unfinished forever. `first_email_delivered_at` comes from
+    # delivery events and can be missing for a blast that did send, so `sent_post_emails` is
+    # the second check: the sender writes a row for each recipient once the provider accepts
+    # the slice. A crash between acceptance and that write is the one gap left, at least 14
+    # days after the request. A non-opener resend writes no rows, so it is left alone. The
+    # lower bound keeps the statement on the requested_at index and leaves older history alone.
+    def expire_abandoned_blasts
+      PostEmailBlast
+        .where(completed_at: nil, expired_at: nil, first_email_delivered_at: nil, recipient_filter: nil)
+        .where(requested_at: (2 * LOOKBACK).ago...LOOKBACK.ago)
+        .where("NOT EXISTS (SELECT 1 FROM sent_post_emails WHERE sent_post_emails.post_id = post_email_blasts.post_id AND sent_post_emails.created_at >= post_email_blasts.requested_at)")
+        .order(requested_at: :desc)
+        .limit(MAX_CANDIDATES_SCANNED)
+        .each { |blast| PostEmailBlast.where(id: blast.id, completed_at: nil, expired_at: nil, first_email_delivered_at: nil).update_all(expired_at: Time.current, updated_at: Time.current) }
+    end
+
     # Windowed on `requested_at`, which is indexed (through post_id it is not — the standalone
     # window read still walks the index-less columns, but requested_at is set at creation and NOT
     # NULL for every real blast) and, unlike `started_at`, is present even when the send job never

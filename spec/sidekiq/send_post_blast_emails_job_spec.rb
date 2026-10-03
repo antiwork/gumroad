@@ -1281,6 +1281,20 @@ describe SendPostBlastEmailsJob, :freeze_time do
       $redis.del(RedisKey.blast_quota_deferred_until(blast.id)) if blast
     end
 
+    it "gives back a slot the blast claimed but never recorded as admitted when it expires" do
+      blast = create(:blast, :just_requested, requested_at: 4.days.ago, post: basic_post_with_audience)
+      slot_key = RedisKey.seller_large_blast_quota(blast.seller_id, Date.current)
+      $redis.set(slot_key, "post_blast:#{blast.id}", ex: 1.hour.to_i)
+      $redis.set(RedisKey.blast_quota_deferred_until(blast.id), 1.minute.ago.iso8601)
+
+      described_class.new.perform(blast.id)
+
+      expect(blast.reload.delivery_status).to eq("expired")
+      expect($redis.exists?(slot_key)).to eq(false)
+    ensure
+      $redis.del(slot_key, RedisKey.blast_quota_deferred_until(blast.id), RedisKey.blast_quota_admitted(blast.id)) if blast
+    end
+
     it "does not send an expired blast when a stray job runs for it" do
       blast = create(:blast, :just_requested, post: basic_post_with_audience)
       blast.update!(expired_at: 1.hour.ago)

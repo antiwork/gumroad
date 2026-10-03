@@ -822,9 +822,10 @@ class Installment < ApplicationRecord
     resendable_to_non_openers_emails(candidates:).size
   end
 
-  # Whether a "resend to non-openers" blast is applicable to this post.
+  # Whether a "resend to non-openers" blast is applicable to this post. A post whose send
+  # expired and never reached anyone has no non-openers.
   def resendable_to_non_openers?
-    published? && send_emails? && seller_or_product_or_variant_type?
+    published? && send_emails? && seller_or_product_or_variant_type? && !never_reached_anyone?
   end
 
   def unique_click_count
@@ -1051,6 +1052,11 @@ class Installment < ApplicationRecord
     posts.sort_by do |post|
       post.workflow_id.present? && post.installment_rule.present? ? DateTime.current + post.installment_rule.delayed_delivery_time : post.published_at
     end.reverse
+  end
+
+  def never_reached_anyone?
+    regular = blasts.reject(&:to_non_openers?)
+    regular.any? { _1.expired_at.present? } && regular.none? { _1.completed_at.present? || _1.first_email_delivered_at.present? }
   end
 
   def has_been_blasted? = blasts.loaded? ? blasts.any? : blasts.exists?

@@ -84,6 +84,19 @@ describe Api::Internal::Installments::NonOpenerResendsController do
       expect(response).to have_http_status(:not_found)
     end
 
+    it "returns 404 for a post whose send expired without reaching anyone" do
+      create(:blast, post: installment, requested_at: 3.days.ago, expired_at: 1.day.ago, completed_at: nil, first_email_delivered_at: nil)
+      get :show, params: { id: installment.external_id }
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "still resends when a later republish blast expired but an earlier send reached people" do
+      create(:blast, post: installment, requested_at: 5.days.ago, completed_at: 5.days.ago, first_email_delivered_at: 5.days.ago)
+      create(:blast, post: installment, requested_at: 3.days.ago, expired_at: 1.day.ago, completed_at: nil, first_email_delivered_at: nil)
+      get :show, params: { id: installment.external_id }
+      expect(response).to be_successful
+    end
+
     it "returns 404 for an unpublished post" do
       draft = create(:product_post, seller:, link: product, bought_products: [product.unique_permalink])
       get :show, params: { id: draft.external_id }

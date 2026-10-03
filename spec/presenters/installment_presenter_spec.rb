@@ -208,6 +208,8 @@ describe InstallmentPresenter do
         shown_on_profile: true,
         has_been_blasted: false,
         non_opener_resends: [],
+        delivery: nil,
+        never_reached_anyone: false,
         shown_in_profile_sections: [section.external_id]
       ))
       expect(props.keys).to_not include(:published_once_already, :member_cancellation, :new_customers_only, :delayed_delivery_time_duration, :delayed_delivery_time_period, :displayed_delayed_delivery_time_period)
@@ -306,6 +308,22 @@ describe InstallmentPresenter do
         expect(described_class.new(seller:, installment:).props[:delivery]).to eq(
           { status: "expired", delivered_count: 0, remaining_count: nil, scheduled_for: nil, retrying: false }
         )
+      end
+
+      it "flags a post as never reached only while every send expired, not when an earlier send delivered" do
+        create(:blast, post: installment, requested_at: 5.days.ago, completed_at: 5.days.ago, first_email_delivered_at: 5.days.ago, delivery_count: 3)
+        create(:blast, post: installment, requested_at: 3.days.ago, expired_at: 1.hour.ago, completed_at: nil, first_email_delivered_at: nil, delivery_count: 0)
+
+        props = described_class.new(seller:, installment: installment.reload).props
+
+        expect(props[:delivery][:status]).to eq("expired")
+        expect(props[:never_reached_anyone]).to eq(false)
+      end
+
+      it "flags a post as never reached when its only send expired" do
+        create(:blast, post: installment, requested_at: 3.days.ago, expired_at: 1.hour.ago, completed_at: nil, first_email_delivered_at: nil, delivery_count: 0)
+
+        expect(described_class.new(seller:, installment: installment.reload).props[:never_reached_anyone]).to eq(true)
       end
 
       it "is waiting while the blast is deferred by the daily large-blast quota" do

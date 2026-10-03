@@ -30,11 +30,26 @@ class SellerLargeBlastQuota
     key = slot_key(seller_id:, kind:)
     return true if $redis.set(key, claim_id, nx: true, ex: ttl_seconds)
 
-    $redis.get(key) == claim_id
+    holder = $redis.get(key)
+    return true if holder == claim_id
+
+    kind != "workflow" && holder.to_s.start_with?(LEGACY_WORKFLOW_CLAIM_PREFIX) && take_over_legacy_workflow_claim(key:, holder:, claim_id:)
   rescue Redis::BaseError, RedisClient::Error => e
     # Fail closed: admitting every large blast during an outage recreates the stampede.
     ErrorNotifier.notify(e, seller_id:)
     false
+  end
+
+  # Before workflow sends had their own slot, they claimed the post blast key. A claim made
+  # earlier on the deploy day is still there, and no workflow reads that key any more, so it
+  # would hold the post blast slot until midnight. Drop this once that day has passed.
+  LEGACY_WORKFLOW_CLAIM_PREFIX = "workflow:"
+
+  TAKE_OVER_SCRIPT = "if redis.call('get', KEYS[1]) == ARGV[1] then redis.call('set', KEYS[1], ARGV[2], 'EX', ARGV[3]) return 1 end return 0"
+
+  def self.take_over_legacy_workflow_claim(key:, holder:, claim_id:)
+    $redis.eval(TAKE_OVER_SCRIPT, keys: [key], argv: [holder, claim_id, ttl_seconds]).to_i == 1 ||
+      $redis.get(key) == claim_id
   end
 
   RELEASE_SCRIPT = "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) end return 0"

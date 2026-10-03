@@ -51,6 +51,39 @@ describe SellerLargeBlastQuota, :freeze_time do
     expect(described_class.allow?(seller_id:, kind: "post_blast", blast_id: second_blast, recipient_count: large)).to eq(false)
   end
 
+  describe "a workflow claim left in the post blast key at rollout" do
+    let(:large) { described_class::DEFAULT_THRESHOLD }
+    let(:key) { RedisKey.seller_large_blast_quota(seller_id, Date.current) }
+
+    before { $redis.set(key, "workflow:33", ex: 1.hour.to_i) }
+
+    it "lets a post blast take the slot, and keeps the day's one-blast cap" do
+      expect(described_class.allow?(seller_id:, kind: "post_blast", blast_id: first_blast, recipient_count: large)).to eq(true)
+      expect($redis.get(key)).to eq("post_blast:#{first_blast}")
+      expect($redis.ttl(key)).to be_between(1, described_class.ttl_seconds)
+
+      expect(described_class.allow?(seller_id:, kind: "post_blast", blast_id: first_blast, recipient_count: large)).to eq(true)
+      expect(described_class.allow?(seller_id:, kind: "post_blast", blast_id: second_blast, recipient_count: large)).to eq(false)
+    end
+
+    it "lets only one of two post blasts take it" do
+      expect(described_class.allow?(seller_id:, kind: "post_blast", blast_id: first_blast, recipient_count: large)).to eq(true)
+      expect(described_class.allow?(seller_id:, kind: "post_blast", blast_id: second_blast, recipient_count: large)).to eq(false)
+    end
+
+    it "does not let a workflow send touch the post blast key" do
+      expect(described_class.allow?(seller_id:, kind: "workflow", blast_id: second_blast, recipient_count: large)).to eq(true)
+      expect($redis.get(key)).to eq("workflow:33")
+    end
+
+    it "does not take a slot held by another post blast" do
+      $redis.set(key, "post_blast:#{first_blast}", ex: 1.hour.to_i)
+
+      expect(described_class.allow?(seller_id:, kind: "post_blast", blast_id: second_blast, recipient_count: large)).to eq(false)
+      expect($redis.get(key)).to eq("post_blast:#{first_blast}")
+    end
+  end
+
   describe ".release" do
     let(:large) { described_class::DEFAULT_THRESHOLD }
 

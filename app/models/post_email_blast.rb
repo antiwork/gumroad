@@ -13,8 +13,9 @@ class PostEmailBlast < ApplicationRecord
   # delivery_count:
   #   Number of emails that were delivered. Not final until the blast is complete.
   # expired_at:
-  #   Time we gave up on a blast whose daily large-send slot stayed taken until its content
-  #   went stale. Nothing was sent: the daily slot is claimed before the first delivery.
+  #   Time we gave up on a blast that never sent anything: its daily large-send slot stayed
+  #   taken until its content went stale, or its send job was lost and it aged out of the
+  #   stalled-blast scan.
 
   # recipient_filter:
   #   nil       => normal blast, sent to the full computed audience.

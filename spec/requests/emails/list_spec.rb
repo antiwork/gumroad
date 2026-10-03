@@ -141,7 +141,7 @@ describe("Email List", :js, :sidekiq_inline, :elasticsearch_wait_for_refresh, ty
       end
 
       it "tells the seller an email was not sent once its daily-limit wait ran past the content window" do
-        create(:blast, post: installment1, requested_at: 3.days.ago, started_at: 3.days.ago, completed_at: nil, delivery_count: 0, expired_at: 1.hour.ago)
+        create(:blast, post: installment1, requested_at: 3.days.ago, started_at: 3.days.ago, completed_at: nil, first_email_delivered_at: nil, delivery_count: 0, expired_at: 1.hour.ago)
 
         visit "#{emails_path}/published"
 

@@ -444,6 +444,8 @@ class SendPostBlastEmailsJob
       end
 
       clear_blast_state(keep_quota_decision: true)
+      # A copy that claimed the slot and died before recording admission leaves it named after this blast.
+      SellerLargeBlastQuota.release(seller_id: @post.seller_id, blast_id: @blast.id, kind: "post_blast")
       Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} expired: the daily large-blast quota stayed taken past the content window")
       true
     end

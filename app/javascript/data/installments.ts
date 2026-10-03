@@ -68,6 +68,8 @@ export type PublishedInstallment = SavedInstallment & {
     scheduled_for: string | null;
     retrying: boolean;
   } | null;
+  // Every send expired, so there are no recipients to resend to.
+  never_reached_anyone: boolean;
 };
 
 export type ScheduledInstallment = SavedInstallment & {
