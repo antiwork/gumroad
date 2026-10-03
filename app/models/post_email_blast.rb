@@ -13,9 +13,7 @@ class PostEmailBlast < ApplicationRecord
   # delivery_count:
   #   Number of emails that were delivered. Not final until the blast is complete.
   # expired_at:
-  #   Time we gave up on a blast that never sent anything: its daily large-send slot stayed
-  #   taken until its content went stale, or its send job was lost and it aged out of the
-  #   stalled-blast scan.
+  #   Time we gave up on a blast that never sent anything (slot never freed, or send job lost).
   # expiry_reason:
   #   Why it expired. Nil reads as quota, for rows from before reasons were recorded.
 

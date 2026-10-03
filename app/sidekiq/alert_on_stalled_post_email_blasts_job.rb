@@ -112,13 +112,9 @@ class AlertOnStalledPostEmailBlastsJob
   end
 
   private
-    # The scan below stops at LOOKBACK, so a blast that lost its job before delivering anything
-    # and aged past it would stay unfinished forever. `first_email_delivered_at` comes from
-    # delivery events and can be missing for a blast that did send, so `sent_post_emails` is
-    # the second check: the sender writes a row for each recipient once the provider accepts
-    # the slice. A crash between acceptance and that write is the one gap left, at least 14
-    # days after the request. A non-opener resend writes no rows, so it is left alone. The
-    # lower bound keeps the statement on the requested_at index and leaves older history alone.
+    # The scan below stops at LOOKBACK, so a blast that lost its job and aged past it would stay
+    # unfinished forever. `first_email_delivered_at` can be missing for a blast that did send,
+    # so `sent_post_emails` rows are the second check. Non-opener resends write none: skipped.
     def expire_abandoned_blasts
       PostEmailBlast
         .where(completed_at: nil, expired_at: nil, first_email_delivered_at: nil, recipient_filter: nil)

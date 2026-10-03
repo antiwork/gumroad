@@ -338,10 +338,8 @@ class SendPostBlastEmailsJob
 
     # Admission to the daily quota is per blast, once, and recorded when granted: the
     # delivery stamp arrives from the ESP later, so a kill in between must not send a
-    # resume back through the quota to claim a second day.
-    #
-    # The same key records the opposite decision, EXPIRED_QUOTA_DECISION. Both writes are
-    # SET NX, so for one blast exactly one of admission and expiry wins, even across copies.
+    # resume back through the quota to claim a second day. Expiry writes this key too (SET NX),
+    # so only one of admission and expiry wins.
     def admitted?
       admitted_key = RedisKey.blast_quota_admitted(@blast.id)
       decision = $redis.get(admitted_key)
@@ -408,9 +406,8 @@ class SendPostBlastEmailsJob
       Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} deferred until #{run_at.utc.iso8601} by the daily large-blast quota")
     end
 
-    # A deferred copy that runs after the content window must not send the stale email just
-    # because its slot is free now. Blasts that were never quota-deferred are not affected,
-    # and neither is one that was already admitted.
+    # A deferred copy that runs after the content window must not send a stale email just
+    # because its slot is free now. Never-deferred and already-admitted blasts are unaffected.
     def stale_quota_deferral?
       return false if @blast.first_email_delivered_at.present?
 
@@ -425,10 +422,8 @@ class SendPostBlastEmailsJob
       stale_quota_deferral? && expire_past_content_window
     end
 
-    # Another deferral would only delay a stale email. Nothing was sent, so this ends the
-    # blast with a reason the seller can see. Another copy may be admitted while this one
-    # decides; whichever writes the quota decision first wins, and the loser leaves the
-    # other's state alone.
+    # Another deferral would only delay a stale email, so this ends the blast with a visible
+    # reason. The first copy to write the quota decision wins; the loser leaves its state alone.
     def expire_past_content_window
       admitted_key = RedisKey.blast_quota_admitted(@blast.id)
       claimed = $redis.set(admitted_key, EXPIRED_QUOTA_DECISION, nx: true, ex: AlertOnStalledPostEmailBlastsJob::LOOKBACK.to_i)

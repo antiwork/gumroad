@@ -40,9 +40,8 @@ class SellerLargeBlastQuota
     false
   end
 
-  # Before workflow sends had their own slot, they claimed the post blast key. A claim made
-  # earlier on the deploy day is still there, and no workflow reads that key any more, so it
-  # would hold the post blast slot until midnight. Drop this once that day has passed.
+  # Workflows used to claim the post blast key. A claim made earlier on the deploy day would
+  # hold the slot until midnight, so it is taken over. Drop this once that day has passed.
   LEGACY_WORKFLOW_CLAIM_PREFIX = "workflow:"
 
   TAKE_OVER_SCRIPT = "if redis.call('get', KEYS[1]) == ARGV[1] then redis.call('set', KEYS[1], ARGV[2], 'EX', ARGV[3]) return 1 end return 0"
