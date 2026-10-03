@@ -31,6 +31,8 @@ Warm hops: `prod_query.sh` multiplexes SSH to the bastion (`ControlPersist`) and
 
 Persistent runner: the first replica-default query on a host boots a long-lived `rails runner` loop (`scripts/prod_runner_loop.rb`) inside the puma container; later queries are spooled to it and skip Rails boot entirely (~1s warm vs ~14s one-shot). The loop forks per query, keeps stdout/stderr separate, idles out after 30 minutes without work, and is replaced automatically when the local `prod_runner_loop.rb` changes. Non-default `PROD_DB_HOST_VAR` sessions (primary writes) always take the one-shot path; `PROD_NO_RUNNER_LOOP=1` opts out.
 
+**The runner loop hangs after the instance pool recycles** (seen 2026-09-29: every instance replaced ~35 min earlier, the whole run stuck on "Connecting to &lt;ip&gt; via bastion" until the caller's timeout, `status: timeout ... replica_lag=unknown`, while `sudo docker ps` on the same host answered instantly and the one-shot path returned in ~60s). Symptom is indistinguishable from a dead fleet — the pool is healthy, only the spool loop is wedged. First remedy: re-run with `PROD_NO_RUNNER_LOOP=1`. Second: `rm -f ~/.cache/gumroad-prod-console/last_ip.*` (a recycled host's cached IP still passes the probe but its container is gone). Do not conclude production is down from the hang.
+
 ## Safety
 
 - **Read-only.** Never write, update, or delete.

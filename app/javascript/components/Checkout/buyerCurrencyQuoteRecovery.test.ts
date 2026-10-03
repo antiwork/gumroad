@@ -11,8 +11,9 @@ import {
   recoverFromInvalidBuyerCurrencyQuote,
   refreshedRatesFromLineItems,
   useLatestCartGetter,
+  withRefreshedOfferCodes,
 } from "$app/components/Checkout/buyerCurrencyQuoteRecovery";
-import type { CartItem, CartState, Product as CartProduct } from "$app/components/Checkout/cartState";
+import type { CartItem, CartState, Product as CartProduct, ProductToAdd } from "$app/components/Checkout/cartState";
 
 const cartProduct = (overrides: Partial<CartProduct> = {}): CartProduct => ({
   id: "product-id",
@@ -77,7 +78,10 @@ const cartWith = (items: CartItem[]): CartState => ({ items, discountCodes: [] }
 // attaches a freshly built `updated_product` whose `exchange_rate` is today's stored rate.
 // Pass `null` for the product to model the shape the server sends when it has no purchase to
 // build one from, which is a refusal the recovery has to survive without a rate to read.
-const refusedLine = (product: CartProduct | null): CartPurchaseResult["lineItems"][string] => ({
+const refusedLine = (
+  product: CartProduct | null,
+  updated: Partial<ProductToAdd> = {},
+): CartPurchaseResult["lineItems"][string] => ({
   success: false,
   error_message: "The local-currency price changed or expired.",
   name: product?.name ?? null,
@@ -100,6 +104,7 @@ const refusedLine = (product: CartProduct | null): CartPurchaseResult["lineItems
         accepted_offer: null,
         pay_in_installments: false,
         force_new_subscription: false,
+        ...updated,
       }
     : null,
 });
@@ -120,6 +125,52 @@ const run = (cart: CartState, lineItems: CartPurchaseResult["lineItems"]) => {
 // be refreshed before the retry — and it is read out of the refusal response, because creating the
 // order soft-deletes the buyer's cart, so there is no cart left on the server to re-read it from.
 describe("recoverFromInvalidBuyerCurrencyQuote", () => {
+  it("re-quotes with the server's current offer while preserving URL attribution", () => {
+    const oldDiscount = {
+      type: "fixed" as const,
+      cents: 500,
+      product_ids: null,
+      expires_at: null,
+      minimum_quantity: null,
+      duration_in_billing_cycles: null,
+      minimum_amount_cents: null,
+    };
+    const currentDiscount = { ...oldDiscount, cents: 300 };
+    const cart = {
+      ...cartWith([cartItem()]),
+      discountCodes: [{ code: "SAVE", products: { eur: oldDiscount }, fromUrl: true }],
+    };
+
+    expect(withRefreshedOfferCodes(cart, [{ code: "SAVE", products: { eur: currentDiscount } }]).discountCodes).toEqual(
+      [{ code: "SAVE", products: { eur: currentDiscount }, fromUrl: true }],
+    );
+  });
+
+  it("keeps the cart's discounts when the refusal carries no replacement offers", () => {
+    // An expired amount token refuses with an empty offer list. Adopting it as the new discount
+    // list would retry the charge at full price.
+    const discountCodes = [
+      {
+        code: "SAVE",
+        products: {
+          eur: {
+            type: "fixed" as const,
+            cents: 500,
+            product_ids: null,
+            expires_at: null,
+            minimum_quantity: null,
+            duration_in_billing_cycles: null,
+            minimum_amount_cents: null,
+          },
+        },
+        fromUrl: true,
+      },
+    ];
+    const cart = { ...cartWith([cartItem()]), discountCodes };
+
+    expect(withRefreshedOfferCodes(cart, []).discountCodes).toEqual(discountCodes);
+  });
+
   it("re-quotes on the server's current rate, not the one the page rendered with", () => {
     const cart = cartWith([cartItem()]);
 
@@ -138,13 +189,66 @@ describe("recoverFromInvalidBuyerCurrencyQuote", () => {
       cartItem({ quantity: 3, price: 2_500, option_id: "variant-1", accepted_offer: { id: "offer-1" } }),
     ]);
 
-    const { requote } = run(cart, linesFor([cartProduct({ exchange_rate: 0.9 })]));
+    const lineItems = {
+      "eur variant-1": refusedLine(cartProduct({ exchange_rate: 0.9 }), {
+        price: 2_500,
+        quantity: 3,
+        option_id: "variant-1",
+        accepted_offer: { id: "offer-1" },
+      }),
+    };
+    const { requote } = run(cart, lineItems);
 
     const item = requote.mock.calls[0]?.[0].items[0];
     expect(item?.quantity).toBe(3);
     expect(item?.price).toBe(2_500);
     expect(item?.option_id).toBe("variant-1");
     expect(item?.accepted_offer).toEqual({ id: "offer-1" });
+  });
+
+  it("retries with the server listed price, not the cart amount that failed the token", () => {
+    const cart = cartWith([cartItem({ price: 2_000 })]);
+    const product = cartProduct({ price_cents: 2_001 });
+    const { setCart, requote } = run(cart, { "eur ": refusedLine(product, { price: 2_001 }) });
+
+    expect(setCart).toHaveBeenCalledTimes(1);
+    expect(setCart.mock.calls[0]?.[0].items[0]?.price).toBe(2_001);
+    expect(requote.mock.calls[0]?.[0].items[0]?.price).toBe(2_001);
+    expect(requote.mock.calls[0]?.[0].items[0]?.product.price_cents).toBe(2_001);
+  });
+
+  // For a PWYW purchase the server rebuilds the line from `Purchase#displayed_price_cents`, which
+  // is the whole perceived amount: unit × quantity plus tip. CartItem.price is one unit before tip
+  // and the checkout multiplies by quantity and adds the tip itself, so writing that total back
+  // would have Pay charge quantity × total (+ tip) on the retry.
+  it("keeps the buyer's per-unit PWYW price rather than adopting the displayed total", () => {
+    const pwyw = { suggested_price_cents: null };
+    const cart = cartWith([cartItem({ product: cartProduct({ pwyw }), price: 2_000, quantity: 3 })]);
+
+    // error_response passes no quantity into cart_item, so the rebuilt line carries the default.
+    for (const quantity of [3, 1]) {
+      const { requote } = run(cart, {
+        "eur ": refusedLine(cartProduct({ pwyw, exchange_rate: 0.9 }), { price: 2_000 * 3 + 500, quantity }),
+      });
+
+      const item = requote.mock.calls[0]?.[0].items[0];
+      expect(item?.price).toBe(2_000);
+      expect(item?.quantity).toBe(3);
+      expect(item?.product.exchange_rate).toBe(0.9);
+    }
+  });
+
+  it("lifts a qty>1 PWYW price to a raised listed minimum, not to the displayed total", () => {
+    const pwyw = { suggested_price_cents: null };
+    const cart = cartWith([cartItem({ product: cartProduct({ pwyw }), price: 2_000, quantity: 3 })]);
+    const product = cartProduct({ pwyw, price_cents: 2_001 });
+
+    const { setCart, requote } = run(cart, { "eur ": refusedLine(product, { price: 2_001 * 3 + 500, quantity: 3 }) });
+
+    expect(setCart).toHaveBeenCalledTimes(1);
+    expect(setCart.mock.calls[0]?.[0].items[0]?.price).toBe(2_001);
+    expect(requote.mock.calls[0]?.[0].items[0]?.price).toBe(2_001);
+    expect(requote.mock.calls[0]?.[0].items[0]?.product.price_cents).toBe(2_001);
   });
 
   // Saving the cart back to the server on every rejected quote would be a pointless write, and

@@ -30,7 +30,7 @@ class Checkout::PaymentMethodListToken
   PURPOSE = "checkout_payment_method_list"
 
   class << self
-    def issue(payment_method_types:, sellers:, quoted_payment_method_types: nil, inr_payment_method_types: nil)
+    def issue(payment_method_types:, sellers:, quoted_payment_method_types: nil, inr_payment_method_types: nil, direct_listed_currency: nil, direct_listed_currency_rate: nil)
       return nil if payment_method_types.blank?
 
       payload = { "types" => payment_method_types.map(&:to_s), "sellers" => seller_ids(sellers) }
@@ -39,6 +39,11 @@ class Checkout::PaymentMethodListToken
       # lets prepare echo the list the Element actually mounted after the upgrade.
       payload["quoted_types"] = quoted_payment_method_types.map(&:to_s) if quoted_payment_method_types.present?
       payload["inr_types"] = inr_payment_method_types.map(&:to_s) if inr_payment_method_types.present?
+      rate = positive_decimal(direct_listed_currency_rate)
+      if direct_listed_currency.present? && rate.present?
+        payload["direct_listed_currency"] = direct_listed_currency.to_s.downcase
+        payload["direct_listed_currency_rate"] = rate.to_s("F")
+      end
 
       verifier.generate(payload, purpose: PURPOSE, expires_in: TTL)
     end
@@ -53,20 +58,37 @@ class Checkout::PaymentMethodListToken
     # A non-USD mount without its remount key returns nil so prepare fails closed instead of
     # echoing the USD list onto an INR/CAD ConfirmationToken.
     def verify(token, sellers:, currency: nil)
-      return nil if token.blank?
+      payload = verified_payload(token, sellers:)
+      return nil unless payload
 
-      payload = verifier.verified(token.to_s, purpose: PURPOSE)
-      return nil unless payload.is_a?(Hash)
+      types_for_currency(payload, currency)
+    end
 
-      types = types_for_currency(payload, currency)
-      return nil unless types
-      return nil unless payload["sellers"] == seller_ids(sellers)
+    def direct_listed_currency_rate(token, sellers:, currency:)
+      payload = verified_payload(token, sellers:)
+      return nil unless payload
+      return nil unless payload["direct_listed_currency"] == currency.to_s.downcase
 
-      types
+      positive_decimal(payload["direct_listed_currency_rate"])
     end
 
     private
       def seller_ids(sellers) = Array(sellers).compact.map(&:id).sort
+
+      def verified_payload(token, sellers:)
+        return nil if token.blank?
+
+        payload = verifier.verified(token.to_s, purpose: PURPOSE)
+        return nil unless payload.is_a?(Hash)
+        return nil unless payload["sellers"] == seller_ids(sellers)
+
+        payload
+      end
+
+      def positive_decimal(value)
+        rate = BigDecimal(value.to_s, exception: false)
+        rate if rate&.positive?
+      end
 
       def verifier = Rails.application.message_verifier(PURPOSE)
 

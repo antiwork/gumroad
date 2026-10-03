@@ -133,6 +133,19 @@ describe("createReducer surcharge refetches", () => {
     },
   };
 
+  // iDEAL forces the element into the listed currency without the direct-listed CARD shape, and
+  // its charge converts each line's tax separately — so it needs the same per-line allocations.
+  const methodForcedCheckoutPayment: CheckoutPaymentConfig = {
+    ...directListedCheckoutPayment,
+    elements_options: {
+      ...directListedCheckoutPayment.elements_options,
+      currency: "eur",
+      listed_currency_display: { currency: "eur", subunit_to_unit: 100 },
+      payment_method_types: ["card", "ideal"],
+      direct_listed_card: false,
+    },
+  };
+
   const renderCheckout = (overrides: Partial<Parameters<typeof createReducer>[0]> = {}) =>
     renderHook(() => createReducer({ ...initialArgs, ...overrides }));
 
@@ -251,6 +264,23 @@ describe("createReducer surcharge refetches", () => {
       payment_details_source: "payment_element",
       payment_element_mount_currency: "cad",
       payment_element_direct_listed_currency: "cad",
+    });
+  });
+
+  it("requests per-line allocations for a method-forced listed mount", async () => {
+    const requests = stubSurchargeRequests();
+    renderCheckout({
+      checkoutPayment: methodForcedCheckoutPayment,
+      products: initialArgs.products.map((product) => ({ ...product, listedChargePriceCents: 1_000 })),
+    });
+
+    await act(() => vi.advanceTimersByTimeAsync(300));
+
+    expect(requests[0]?.payload).toMatchObject({
+      products: [expect.objectContaining({ listed_price_cents: 1_000 })],
+      payment_details_source: "payment_element",
+      payment_element_mount_currency: "eur",
+      payment_element_direct_listed_currency: "eur",
     });
   });
 
