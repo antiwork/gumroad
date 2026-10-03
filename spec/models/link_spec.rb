@@ -300,6 +300,25 @@ describe Link do
       expect(Link.fetch_leniently(deleted.unique_permalink, user: seller)).to eq(deleted)
     end
 
+    it "locks the seller before the profile row when a save that claims a permalink shows the product in sections" do
+      seller.seller_profile.save!
+      product.custom_permalink = "claimed-slug"
+      statements = []
+      subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") { |*, payload| statements << payload[:sql].to_s }
+
+      begin
+        ActiveRecord::Base.transaction { product.show_in_sections!([]) }
+      ensure
+        ActiveSupport::Notifications.unsubscribe(subscriber)
+      end
+
+      seller_lock = statements.index { _1.include?("FROM `users`") && _1.include?("FOR UPDATE") }
+      profile_lock = statements.index { _1.include?("FROM `seller_profiles`") && _1.include?("FOR UPDATE") }
+      expect(seller_lock).to be_present
+      expect(profile_lock).to be_present
+      expect(seller_lock).to be < profile_lock
+    end
+
     it "restores a deleted product that has no conflict" do
       deleted = create(:product, user: seller, deleted_at: Time.current)
 

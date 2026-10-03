@@ -1507,6 +1507,9 @@ class Link < ApplicationRecord
   # original's shown_products, so an unscoped write here can silently strip products
   # from a sibling duplicate's section.
   def show_in_sections!(section_external_ids)
+    # The profile editor locks the seller, then the profile row. Take them in that order here too, ahead of
+    # the profile lock below, so a save that also changes the permalink cannot deadlock with it.
+    lock_seller_for_permalink_checks
     user.with_profile_sections_lock do
       user.seller_profile_products_sections.on_profile.reload.each do |section|
         shown = section.shown_products.include?(id)
