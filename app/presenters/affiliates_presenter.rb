@@ -37,7 +37,7 @@ class AffiliatesPresenter
       creator_subdomain: seller.subdomain,
       products: products_props,
       disable_global_affiliate: seller.disable_global_affiliate?,
-      global_affiliate_percentage: seller.global_affiliate.affiliate_percentage,
+      global_affiliate_percentage: seller.global_affiliate&.affiliate_percentage,
       affiliates_disabled_reason:,
     }
   end

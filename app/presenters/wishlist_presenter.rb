@@ -189,7 +189,7 @@ class WishlistPresenter
           product: wishlist_product.product,
           request:,
           recommended_by: recommended_by || RecommendationType::WISHLIST_RECOMMENDATION,
-          affiliate_id: wishlist.user.global_affiliate.external_id_numeric.to_s,
+          affiliate_id: wishlist.user.global_affiliate&.external_id_numeric&.to_s,
         ),
         option: wishlist_product.variant&.to_option,
         recurrence: wishlist_product.recurrence,

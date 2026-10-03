@@ -34,7 +34,7 @@ type Props = {
   creator_subdomain: string;
   products: SelfServeAffiliateProduct[];
   disable_global_affiliate: boolean;
-  global_affiliate_percentage: number;
+  global_affiliate_percentage: number | null;
   affiliates_disabled_reason: string | null;
 };
 
@@ -222,7 +222,9 @@ export default function AffiliatesOnboarding() {
                 <h2>Gumroad Affiliate Program</h2>
                 <div>
                   Being part of Gumroad Affiliate Program enables other creators to share your products in exchange for
-                  a {props.global_affiliate_percentage}% commission.
+                  {props.global_affiliate_percentage === null
+                    ? " a commission."
+                    : ` a ${props.global_affiliate_percentage}% commission.`}
                 </div>
                 <a href="/help/article/249-affiliate-faq" target="_blank" rel="noreferrer">
                   Learn more
