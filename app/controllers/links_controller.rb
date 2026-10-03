@@ -466,7 +466,9 @@ class LinksController < ApplicationController
         # (dropping stale association caches) so the freshness check below
         # reads committed state. Without it, two saves echoing the same
         # timestamps both pass and the last writer silently wins.
-        with_editor_save_lock_wait_bound { @product.lock! }
+        # Seller row first, as every other permalink claim takes it, so a save that locks nothing earlier cannot
+        # hold the seller row while waiting on this product row.
+        with_editor_save_lock_wait_bound { @product.lock_for_permalink_claim!(product_permitted_params[:custom_permalink]) }
 
         # An old editor also sends null when the seller switches installments off.
         # Without an intent marker, refuse the whole save rather than silently
@@ -733,12 +735,11 @@ class LinksController < ApplicationController
       # catch-all below tells the client to refresh, which is the one thing that
       # cannot work here — the reload queues behind the same lock.
       report_editor_save_lock_contention(e)
-      response.set_header("Retry-After", EDITOR_SAVE_LOCK_RETRY_AFTER_SECONDS.to_s)
-      return render json: {
-        error_message: "Another save for this product is still in progress. Please wait a few seconds, then try again.",
-        error_code: "product_save_busy",
-        retry_after: EDITOR_SAVE_LOCK_RETRY_AFTER_SECONDS,
-      }, status: :conflict
+      return render_product_save_busy
+    rescue Link::PermalinkChangedDuringLock
+      # Another save changed this product's permalink while ours waited; nothing was written. No lock was
+      # contended, so it is not counted as contention.
+      return render_product_save_busy
     rescue => e
       # Catch-all so an unanticipated failure never leaves the editor's save
       # request with no JSON body (gumroad-private#1784) — mirrors `publish`
@@ -1179,6 +1180,15 @@ class LinksController < ApplicationController
       yield
     ensure
       connection.execute("SET SESSION innodb_lock_wait_timeout = #{previous.to_i}") if previous.present?
+    end
+
+    def render_product_save_busy
+      response.set_header("Retry-After", EDITOR_SAVE_LOCK_RETRY_AFTER_SECONDS.to_s)
+      render json: {
+        error_message: "Another save for this product is still in progress. Please wait a few seconds, then try again.",
+        error_code: "product_save_busy",
+        retry_after: EDITOR_SAVE_LOCK_RETRY_AFTER_SECONDS,
+      }, status: :conflict
     end
 
     # Post-commit: a raise here must not reach update's catch-all and report a saved product

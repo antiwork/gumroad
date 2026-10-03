@@ -33,6 +33,55 @@ describe Api::V2::LinksController do
       expect(stored_html).not_to include("javascript:")
     end
 
+    it "locks the seller row before the product row when it also claims a custom permalink" do
+      statements = []
+      subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") { |*, payload| statements << payload[:sql].to_s }
+
+      begin
+        put :update, params: { format: :json, access_token: @token.token, id: @product.external_id, custom_html: "<section>Hi</section>", custom_permalink: "claimed-slug" }
+      ensure
+        ActiveSupport::Notifications.unsubscribe(subscriber)
+      end
+
+      expect(response).to have_http_status(:ok)
+      seller_lock = statements.index { _1.include?("FROM `users`") && _1.include?("FOR UPDATE") }
+      product_lock = statements.index { _1.include?("FROM `links`") && _1.include?("FOR UPDATE") }
+      expect(seller_lock).to be_present
+      expect(product_lock).to be_present
+      expect(seller_lock).to be < product_lock
+    end
+
+    it "locks the seller row before any file row when it claims a permalink and carries files" do
+      file = create(:product_file, link: @product)
+      statements = []
+      subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") { |*, payload| statements << payload[:sql].to_s }
+
+      begin
+        put :update, params: { format: :json, access_token: @token.token, id: @product.external_id, custom_permalink: "claimed-slug", files: [{ id: file.external_id }] }
+      ensure
+        ActiveSupport::Notifications.unsubscribe(subscriber)
+      end
+
+      expect(response).to have_http_status(:ok)
+      seller_lock = statements.index { _1.include?("FROM `users`") && _1.include?("FOR UPDATE") }
+      file_lock = statements.index { _1.include?("FROM `product_files`") && _1.include?("FOR UPDATE") }
+      expect(seller_lock).to be_present
+      expect(file_lock).to be_present
+      expect(seller_lock).to be < file_lock
+    end
+
+    it "asks the client to retry, and saves nothing, when the permalink moves while the update waits" do
+      allow_any_instance_of(Link).to receive(:lock_for_permalink_claim!).and_raise(Link::PermalinkChangedDuringLock)
+
+      put :update, params: { format: :json, access_token: @token.token, id: @product.external_id, custom_html: "<section>Hi</section>", custom_permalink: "claimed-slug" }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["success"]).to eq(false)
+      expect(response.parsed_body["message"]).to include("retry")
+      expect(@product.reload.custom_permalink).to be_blank
+      expect(@product.custom_html).to be_blank
+    end
+
     it "returns custom HTML from GET" do
       @product.update!(custom_html: "<section>Published HTML</section>")
 

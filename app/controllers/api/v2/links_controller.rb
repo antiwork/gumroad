@@ -443,7 +443,11 @@ class Api::V2::LinksController < Api::V2::BaseController
         # A currency change is also a read-copy-write: it reads the current buy and
         # rental amounts and re-writes them under the new currency, so an overlapping
         # price PUT would otherwise be copied over by a stale read.
-        @product.lock! if params.key?(:custom_html) || params.key?(:price_currency_type)
+        # A permalink claim takes the seller row before the product row and before any file rows, so a claim
+        # locks here too.
+        if params.key?(:custom_html) || params.key?(:price_currency_type) || params.key?(:custom_permalink)
+          @product.lock_for_permalink_claim!(params[:custom_permalink])
+        end
 
         attrs = {}
         attrs[:name] = params[:name] if params.key?(:name)
@@ -571,6 +575,8 @@ class Api::V2::LinksController < Api::V2::BaseController
       end
     rescue ActiveModel::RangeError
       return render_response(false, message: "One or more numeric values are out of range.")
+    rescue Link::PermalinkChangedDuringLock
+      return render_response(false, message: "This product's custom_permalink changed while the update was waiting. Nothing was saved; retry the request.")
     end
 
     additional_info = params.key?(:custom_html) ? { previous_custom_html: previous_custom_html, sanitization_report: sanitization_report } : {}

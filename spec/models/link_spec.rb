@@ -222,6 +222,181 @@ describe Link do
     end
   end
 
+  describe "custom permalink uniqueness" do
+    let(:seller) { create(:user) }
+    let(:product) { create(:product, user: seller) }
+
+    it "lets a product take the unique permalink of the seller's deleted product" do
+      deleted = create(:product, user: seller, deleted_at: Time.current)
+
+      product.custom_permalink = deleted.unique_permalink
+
+      expect(product).to be_valid
+      expect(product.save).to eq(true)
+    end
+
+    it "rejects the unique permalink of another alive product of the seller" do
+      other = create(:product, user: seller)
+
+      product.custom_permalink = other.unique_permalink
+
+      expect(product).not_to be_valid
+      expect(product.errors[:custom_permalink]).to eq(["is already used by another one of your products"])
+    end
+
+    it "rejects the unique permalink of an unpublished product, which still resolves" do
+      unpublished = create(:product, user: seller, purchase_disabled_at: Time.current)
+
+      product.custom_permalink = unpublished.unique_permalink
+
+      expect(product).not_to be_valid
+      expect(product.errors[:custom_permalink]).to eq(["is already used by another one of your products"])
+    end
+
+    it "rejects the unique permalink of another alive product on a new product" do
+      other = create(:product, user: seller)
+
+      new_product = build(:product, user: seller, custom_permalink: other.unique_permalink)
+
+      expect(new_product).not_to be_valid
+      expect(new_product.errors[:custom_permalink]).to eq(["is already used by another one of your products"])
+    end
+
+    it "does not affect another seller's products" do
+      other_seller_product = create(:product, user: create(:user))
+
+      product.custom_permalink = other_seller_product.unique_permalink
+
+      expect(product).to be_valid
+    end
+
+    it "serves the live product on the reused slug and refuses to restore the deleted one" do
+      deleted = create(:product, user: seller, deleted_at: Time.current)
+      product.update!(custom_permalink: deleted.unique_permalink)
+
+      expect(Link.fetch_leniently(deleted.unique_permalink, user: seller)).to eq(product)
+
+      expect(deleted.update(deleted_at: nil)).to eq(false)
+      expect(deleted.errors[:base]).to eq(["Can't restore this product: another one of your products already uses its URL as a custom permalink"])
+      expect(deleted.reload).to be_deleted
+      expect(Link.fetch_leniently(deleted.unique_permalink, user: seller)).to eq(product)
+    end
+
+    it "refuses to restore a deleted product whose URL an unpublished product uses" do
+      deleted = create(:product, user: seller, deleted_at: Time.current)
+      product.update!(custom_permalink: deleted.unique_permalink)
+      product.unpublish!
+
+      expect(deleted.update(deleted_at: nil)).to eq(false)
+      expect(deleted.reload).to be_deleted
+    end
+
+    it "restores a deleted product once nothing else uses its unique permalink" do
+      deleted = create(:product, user: seller, deleted_at: Time.current)
+      product.update!(custom_permalink: deleted.unique_permalink)
+      product.update!(custom_permalink: "renamed")
+
+      expect(deleted.update(deleted_at: nil)).to eq(true)
+      expect(Link.fetch_leniently(deleted.unique_permalink, user: seller)).to eq(deleted)
+    end
+
+    it "locks the seller before the profile row when a save that claims a permalink shows the product in sections" do
+      seller.seller_profile.save!
+      product.custom_permalink = "claimed-slug"
+      statements = []
+      subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") { |*, payload| statements << payload[:sql].to_s }
+
+      begin
+        ActiveRecord::Base.transaction { product.show_in_sections!([]) }
+      ensure
+        ActiveSupport::Notifications.unsubscribe(subscriber)
+      end
+
+      seller_lock = statements.index { _1.include?("FROM `users`") && _1.include?("FOR UPDATE") }
+      profile_lock = statements.index { _1.include?("FROM `seller_profiles`") && _1.include?("FOR UPDATE") }
+      expect(seller_lock).to be_present
+      expect(profile_lock).to be_present
+      expect(seller_lock).to be < profile_lock
+    end
+
+    it "fails the lock when a stale copy repeats a permalink that has since changed in storage" do
+      product.update!(custom_permalink: "first-slug")
+      stale = Link.find(product.id)
+      Link.where(id: product.id).update_all(custom_permalink: "second-slug")
+
+      expect { Link.transaction { stale.lock_for_permalink_claim!("first-slug") } }.to raise_error(Link::PermalinkChangedDuringLock)
+    end
+
+    it "takes no plain read before the locks, so the transaction snapshot is not pinned early" do
+      product.update!(custom_permalink: "first-slug")
+      loaded = Link.find(product.id)
+      statements = []
+      subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") { |*, payload| statements << payload[:sql].to_s }
+
+      begin
+        Link.transaction { loaded.lock_for_permalink_claim!("new-slug") }
+      ensure
+        ActiveSupport::Notifications.unsubscribe(subscriber)
+      end
+
+      queries = statements.grep(/\ASELECT/)
+      expect(queries.first).to include("FROM `users`").and include("FOR UPDATE")
+    end
+
+    it "fails the lock rather than take the seller row after the product row when the permalink moves during the lock" do
+      product.update!(custom_permalink: "first-slug")
+      stale = Link.find(product.id)
+      allow(stale).to receive(:lock!).and_wrap_original do |original, *args|
+        Link.where(id: product.id).update_all(custom_permalink: "second-slug")
+        original.call(*args)
+      end
+
+      expect { Link.transaction { stale.lock_for_permalink_claim!("first-slug") } }.to raise_error(Link::PermalinkChangedDuringLock)
+    end
+
+    it "keeps the permalink checks' locking reads on the seller's own rows" do
+      deleted = create(:product, user: seller, deleted_at: Time.current)
+      statements = []
+      subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") { |*, payload| statements << payload[:sql].to_s }
+
+      begin
+        product.update!(custom_permalink: "claimed-slug")
+        Link.find(deleted.id).update!(deleted_at: nil)
+      ensure
+        ActiveSupport::Notifications.unsubscribe(subscriber)
+      end
+
+      permalink_reads = statements.select { _1.include?("FROM `links`") && _1.include?("FOR UPDATE") && _1.include?("permalink` =") }
+      expect(permalink_reads.size).to be >= 3
+      expect(permalink_reads).to all(include("INDEX(links index_links_on_user_id)"))
+    end
+
+    it "locks the seller before the product row when publishing restores a deleted product" do
+      deleted = create(:product, user: seller, deleted_at: Time.current)
+      statements = []
+      subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") { |*, payload| statements << payload[:sql].to_s }
+
+      begin
+        Link.find(deleted.id).publish!
+      ensure
+        ActiveSupport::Notifications.unsubscribe(subscriber)
+      end
+
+      seller_lock = statements.index { _1.include?("FROM `users`") && _1.include?("FOR UPDATE") }
+      product_lock = statements.index { _1.include?("FROM `links`") && _1.include?("FOR UPDATE") }
+      expect(seller_lock).to be_present
+      expect(product_lock).to be_present
+      expect(seller_lock).to be < product_lock
+      expect(deleted.reload).not_to be_deleted
+    end
+
+    it "restores a deleted product that has no conflict" do
+      deleted = create(:product, user: seller, deleted_at: Time.current)
+
+      expect(deleted.update(deleted_at: nil)).to eq(true)
+    end
+  end
+
   describe "#plaintext_description" do
     def description_for(html)
       create(:product, description: html).plaintext_description
