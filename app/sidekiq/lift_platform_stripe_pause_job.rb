@@ -17,6 +17,13 @@ class LiftPlatformStripePauseJob
   # the job retries a little later instead.
   TransfersNotActiveYet = Class.new(StandardError)
 
+  # Stripe turns `transfers` back on in its own time, so wait minutes between those retries, not seconds.
+  # Every other error keeps Sidekiq's default backoff.
+  TRANSFERS_RETRY_DELAYS = [10.minutes, 30.minutes, 60.minutes].freeze
+  sidekiq_retry_in do |count, exception|
+    TRANSFERS_RETRY_DELAYS[count].to_i if exception.is_a?(TransfersNotActiveYet)
+  end
+
   # A lift that started and never finished must not read as pending on a later compliant transition:
   # a "Confirmed" note would claim a lift this job never made, and would unlock the payout-hold release.
   sidekiq_retries_exhausted do |msg, exception|
@@ -90,6 +97,11 @@ class LiftPlatformStripePauseJob
         return before
       end
 
+      # A retry after our own lift (waiting for transfers) can still see `platform_paused` on the account
+      # for a moment. The lift is already on record, so there is nothing to add. A pause that was set again
+      # after an earlier lift is a new one and is handled below.
+      return before if !before[:charges_paused] && lifted_by_us?(user, stripe_account_id)
+
       reason_to_skip = reason_to_skip(before)
       if reason_to_skip
         add_note(user, "Left the platform Stripe pause on #{stripe_account_id}: #{reason_to_skip}. Before: #{describe(before)}.")
@@ -121,6 +133,11 @@ class LiftPlatformStripePauseJob
     def clear?(state)
       state.present? && !state[:charges_paused] && state[:payouts_paused] == false && !state[:past_due] &&
         state[:disabled_reason].in?([nil, "platform_paused"])
+    end
+
+    def lifted_by_us?(user, stripe_account_id)
+      latest = notes_for(user, stripe_account_id).last&.content
+      latest.present? && (latest.start_with?(LIFTED_PREFIX) || latest.start_with?(CONFIRMED_PREFIX))
     end
 
     # The newest note for this account, when it is a lift that started and never finished.

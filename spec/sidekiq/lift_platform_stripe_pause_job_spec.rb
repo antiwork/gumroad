@@ -364,6 +364,33 @@ describe LiftPlatformStripePauseJob do
       expect(resume_notes).to be_empty
     end
 
+    it "waits minutes, not seconds, between retries for transfers" do
+      expect(described_class.sidekiq_retry_in_block.call(0, described_class::TransfersNotActiveYet.new)).to eq(10.minutes.to_i)
+      expect(described_class.sidekiq_retry_in_block.call(2, described_class::TransfersNotActiveYet.new)).to eq(60.minutes.to_i)
+      expect(described_class.sidekiq_retry_in_block.call(0, Stripe::APIConnectionError.new("x"))).to be_nil
+    end
+
+    it "adds no note when a retry still sees the pause after the job lifted it" do
+      allow(Stripe::Account).to receive(:update).and_return(stripe_account(charges_paused: false, disabled_reason: "platform_paused", transfers: "inactive"))
+      hold_payouts_after_failures
+      expect { described_class.new.perform(seller.id) }.to raise_error(described_class::TransfersNotActiveYet)
+      allow(Stripe::Account).to receive(:retrieve).with("acct_pauselift").and_return(stripe_account(charges_paused: false, disabled_reason: "platform_paused", transfers: "inactive"))
+
+      expect { expect { described_class.new.perform(seller.id) }.to raise_error(described_class::TransfersNotActiveYet) }.not_to change { notes.count }
+      expect(notes.pluck(:content)).not_to include(a_string_starting_with("Left the platform Stripe pause"))
+    end
+
+    it "lifts a pause that was set again after an earlier lift" do
+      stub_stripe(stripe_account)
+      described_class.new.perform(seller.id)
+      seller.update!(user_risk_state: "flagged_for_fraud")
+      seller.mark_compliant!(author_id: create(:admin_user).id)
+
+      described_class.new.perform(seller.id)
+
+      expect(Stripe::Account).to have_received(:update).twice
+    end
+
     it "releases the hold on the retry once transfers are active" do
       allow(Stripe::Account).to receive(:update).and_return(stripe_account(charges_paused: false, disabled_reason: "platform_paused", transfers: "inactive"))
       hold_payouts_after_failures
