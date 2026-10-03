@@ -1507,12 +1507,13 @@ class Link < ApplicationRecord
 
   PermalinkChangedDuringLock = Class.new(StandardError)
 
-  # Takes the seller lock before the product lock when claiming a permalink. If the stored permalink moves
-  # before the product locks, raises for a retry rather than take the seller lock out of order.
-  # Call inside the editor's bounded lock wait.
+  # Takes the seller lock before the product lock when claiming a permalink. If the stored permalink moved
+  # since this record loaded, raises for a retry rather than take the seller lock out of order. No plain read
+  # runs first: it would pin the transaction's snapshot ahead of the locks. Call inside the editor's bounded
+  # lock wait.
   def lock_for_permalink_claim!(permalink)
     seller_locked = false
-    if user_id.present? && permalink.present? && permalink != Link.where(id:).pick(:custom_permalink)
+    if user_id.present? && permalink.present? && permalink != custom_permalink
       User.where(id: user_id).lock.pick(:id)
       seller_locked = true
     end
