@@ -1713,11 +1713,12 @@ class Link < ApplicationRecord
     end
 
     # The uniqueness validator reads from the transaction's snapshot, which can predate a claim that committed
-    # while this save waited for the seller lock. A locking read sees it.
+    # while this save waited for the seller lock. A locking read sees it. It locks the seller's own rows by
+    # primary key: the custom_permalink index spans every seller, and a range lock there would block theirs.
     def validate_claimed_custom_permalink_is_free(other_products_by_user)
       return unless claiming_custom_permalink? && serialize_permalink_checks?
       return if errors.added?(:custom_permalink, "is already used by another one of your products")
-      return unless other_products_by_user.where(custom_permalink:).lock.exists?
+      return unless Link.where(id: other_products_by_user.ids, custom_permalink:).lock.exists?
 
       errors.add(:custom_permalink, "is already used by another one of your products")
     end
