@@ -60,9 +60,13 @@ export default function EmailsPublished() {
   const deliveryLabel = (installment: PublishedInstallment) => {
     if (!installment.send_emails) return "n/a";
     if (!installment.delivery) return "Sent";
-    return { sent: "Sent", sending: "Sending", waiting: "Waiting to send", incomplete: "Incomplete" }[
-      installment.delivery.status
-    ];
+    return {
+      sent: "Sent",
+      sending: "Sending",
+      waiting: "Waiting to send",
+      incomplete: "Incomplete",
+      expired: "Not sent",
+    }[installment.delivery.status];
   };
   // On mobile every row is a card, so a finished send keeps the lines it has today and only an
   // unfinished one earns a Status line. Desktop shows the column for every row.
@@ -85,6 +89,8 @@ export default function EmailsPublished() {
               timeStyle: "short",
             })}, when your daily limit for large emails resets.`
           : "Sends when your daily limit for large emails resets.";
+      case "expired":
+        return "Not sent. Your daily limit for large emails stayed full until this email was out of date. Send a new email to reach your audience.";
       case "incomplete": {
         // Emailed shows the post's total, which can differ from this send's own count after a
         // resend; repeat the count only when it adds something.
@@ -305,7 +311,9 @@ export default function EmailsPublished() {
                                     ? `, ${formatStatNumber({ value: resend.open_rate, suffix: "%" })} opened`
                                     : ""
                                 }`
-                              : " — in progress"}
+                              : resend.expired
+                                ? " — not sent"
+                                : " — in progress"}
                           </li>
                         ))}
                       </ul>
@@ -314,6 +322,7 @@ export default function EmailsPublished() {
                 </Card>
                 <EmailSheetActions
                   installment={selectedInstallment}
+                  allowResend={selectedInstallment.delivery?.status !== "expired"}
                   remainingSend={
                     selectedInstallment.delivery?.status === "incomplete" && !selectedInstallment.delivery.retrying
                       ? { count: selectedInstallment.delivery.remaining_count }

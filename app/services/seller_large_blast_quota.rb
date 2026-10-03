@@ -2,8 +2,14 @@
 
 # One large audience send per seller per day. Five six-figure workflow
 # publishes in the same minute is what filled the primary and stalled checkout.
+# Workflow sends and post blasts each get their own slot, so a seller's daily workflow
+# cannot keep their post blasts from ever sending.
 class SellerLargeBlastQuota
   DEFAULT_THRESHOLD = 10_000
+
+  # A post blast still waiting for a slot this long after it was requested ends as not sent:
+  # its content is time-boxed, and deferring again only delays a stale email.
+  CONTENT_WINDOW = 2.days
 
   # Measured from UTC midnight because that is when `claim` frees the next day's slot — run
   # a deferred blast earlier and it hits the same claimed key and defers again. 3-7h past it
@@ -15,13 +21,13 @@ class SellerLargeBlastQuota
   def self.allow?(seller_id:, blast_id:, recipient_count:, kind: "blast")
     return true if recipient_count.to_i < threshold
 
-    claim(seller_id:, claim_id: claim_id_for(kind:, blast_id:))
+    claim(seller_id:, claim_id: claim_id_for(kind:, blast_id:), kind:)
   end
 
-  def self.claim(seller_id:, claim_id:)
+  def self.claim(seller_id:, claim_id:, kind: "blast")
     return true if seller_id.blank? || claim_id.blank?
 
-    key = RedisKey.seller_large_blast_quota(seller_id, Date.current)
+    key = slot_key(seller_id:, kind:)
     return true if $redis.set(key, claim_id, nx: true, ex: ttl_seconds)
 
     $redis.get(key) == claim_id
@@ -29,6 +35,31 @@ class SellerLargeBlastQuota
     # Fail closed: admitting every large blast during an outage recreates the stampede.
     ErrorNotifier.notify(e, seller_id:)
     false
+  end
+
+  RELEASE_SCRIPT = "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) end return 0"
+
+  # Gives the slot back when the blast that claimed it will not send. Only the holder can
+  # release it, so a later claimant's slot is never freed by a stale copy.
+  def self.release(seller_id:, blast_id:, kind: "blast")
+    claim_id = claim_id_for(kind:, blast_id:)
+    return if seller_id.blank? || claim_id.blank?
+
+    $redis.eval(RELEASE_SCRIPT, keys: [slot_key(seller_id:, kind:)], argv: [claim_id])
+  rescue Redis::BaseError, RedisClient::Error => e
+    ErrorNotifier.notify(e, seller_id:)
+  end
+
+  def self.slot_key(seller_id:, kind:)
+    if kind == "workflow"
+      RedisKey.seller_large_workflow_quota(seller_id, Date.current)
+    else
+      RedisKey.seller_large_blast_quota(seller_id, Date.current)
+    end
+  end
+
+  def self.past_content_window?(requested_at:, run_at:)
+    requested_at.present? && run_at > requested_at + CONTENT_WINDOW
   end
 
   def self.claim_id_for(kind:, blast_id:)

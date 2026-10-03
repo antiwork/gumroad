@@ -220,13 +220,14 @@ describe Marketing::Recommendations do
       expect(email_state).to eq("sending")
     end
 
-    %w[sent waiting incomplete].each do |state|
+    %w[sent waiting incomplete expired].each do |state|
       it "uses the existing #{state} blast state instead of publication time" do
         draft.update!(published_at: Time.current)
         blast = draft.blasts.create!(requested_at: 2.days.ago)
         case state
         when "sent" then blast.update!(completed_at: Time.current)
         when "waiting" then $redis.set(RedisKey.blast_quota_deferred_until(blast.id), 1.hour.from_now.iso8601)
+        when "expired" then blast.update!(expired_at: Time.current)
         end
         expect(email_state).to eq(state)
         expect(SendPostBlastEmailsJob.jobs.size).to eq(0)

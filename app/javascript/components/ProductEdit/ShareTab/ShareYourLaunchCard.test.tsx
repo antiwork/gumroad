@@ -355,6 +355,7 @@ describe("ShareYourLaunchCard", () => {
     ["sending", "Sending", "Your launch email about Gumstein Letters is being processed."],
     ["waiting", "Waiting", "Your launch email about Gumstein Letters is waiting to be processed."],
     ["incomplete", "Incomplete", "Your launch email about Gumstein Letters has not finished processing."],
+    ["expired", "Not sent", "Your launch email about Gumstein Letters was not sent"],
   ] as const)("shows truthful %s email state", async (state, label, summary) => {
     await renderCard([
       emailChannel({ draft: { id: "draft1", subject: "Gumstein Letters", state, edit_url: "/emails/draft1/edit" } }),

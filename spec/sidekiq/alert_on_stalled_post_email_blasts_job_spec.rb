@@ -311,6 +311,18 @@ describe AlertOnStalledPostEmailBlastsJob do
         $redis.del(RedisKey.blast_pending_recipients(blast.id)) if blast
       end
 
+      it "ignores an expired blast, which has no sender left to resume" do
+        blast = stalled_blast
+        blast.update!(expired_at: 1.hour.ago)
+        stub_sidekiq
+
+        described_class.new.perform
+
+        expect(SendPostBlastEmailsJob).not_to have_received(:perform_async)
+        expect(InternalNotificationWorker).not_to have_received(:perform_async)
+        expect(described_class.auto_resume_eligible?(blast)).to eq(false)
+      end
+
       it "reports a quota-deferred blast as DEFERRED and leaves it alone" do
         blast = stalled_blast
         $redis.set(RedisKey.blast_quota_deferred_until(blast.id), 5.hours.from_now.iso8601)

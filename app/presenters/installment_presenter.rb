@@ -138,6 +138,7 @@ class InstallmentPresenter
           requested_at: blast.requested_at,
           delivery_count: blast.delivery_count,
           completed:,
+          expired: blast.expired_at.present?,
           open_count:,
           open_rate:,
         }

@@ -867,7 +867,10 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
       end
     end
 
-    after { $redis.del(RedisKey.seller_large_blast_quota(@seller.id, Date.current)) }
+    after do
+      $redis.del(RedisKey.seller_large_blast_quota(@seller.id, Date.current))
+      $redis.del(RedisKey.seller_large_workflow_quota(@seller.id, Date.current))
+    end
 
     it "fans out the first large post and holds the next one until the quota's overnight window" do
       second_post = create(:installment, :published, seller: @seller, link: @product, workflow: @workflow,
@@ -896,6 +899,23 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
 
       expect(SendWorkflowInstallmentWorker.jobs.size).to eq(4)
       expect($redis.get(RedisKey.seller_large_blast_quota(@seller.id, Date.current))).to be_nil
+      expect($redis.get(RedisKey.seller_large_workflow_quota(@seller.id, Date.current))).to be_nil
+    end
+
+    it "claims the workflow slot and leaves the post blast slot free" do
+      described_class.new.perform(@post.id)
+
+      expect(SendWorkflowInstallmentWorker.jobs.size).to eq(4)
+      expect($redis.get(RedisKey.seller_large_workflow_quota(@seller.id, Date.current))).to eq("workflow:#{@post.id}")
+      expect($redis.get(RedisKey.seller_large_blast_quota(@seller.id, Date.current))).to be_nil
+    end
+
+    it "fans out even when a post blast already holds the day's post blast slot" do
+      $redis.set(RedisKey.seller_large_blast_quota(@seller.id, Date.current), "post_blast:1")
+
+      described_class.new.perform(@post.id)
+
+      expect(SendWorkflowInstallmentWorker.jobs.size).to eq(4)
     end
 
     it "holds a started schedule intent until the deferred job, so recovery cannot steal it" do

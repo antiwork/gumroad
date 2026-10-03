@@ -1264,6 +1264,186 @@ describe SendPostBlastEmailsJob, :freeze_time do
       $redis.del(RedisKey.blast_quota_deferred_until(blast.id)) if blast
     end
 
+    it "ends a blast with a visible reason when the next slot is past its content window" do
+      blast = create(:blast, :just_requested, requested_at: 3.days.ago, post: basic_post_with_audience)
+      $redis.set(RedisKey.blast_quota_deferred_until(blast.id), 1.hour.ago.iso8601)
+      allow(SellerLargeBlastQuota).to receive(:allow?).and_return(false)
+
+      described_class.new.perform(blast.id)
+
+      expect(PostSendgridApi.mails).to be_empty
+      expect(described_class.jobs.count { _1["args"] == [blast.id] }).to eq(0)
+      expect(blast.reload).to have_attributes(completed_at: nil, delivery_count: 0)
+      expect(blast.expired_at).to be_within(5.seconds).of(Time.current)
+      expect(blast.delivery_status).to eq("expired")
+      expect($redis.exists?(RedisKey.blast_quota_deferred_until(blast.id))).to eq(false)
+    ensure
+      $redis.del(RedisKey.blast_quota_deferred_until(blast.id)) if blast
+    end
+
+    it "does not send an expired blast when a stray job runs for it" do
+      blast = create(:blast, :just_requested, post: basic_post_with_audience)
+      blast.update!(expired_at: 1.hour.ago)
+      expect(SellerLargeBlastQuota).not_to receive(:allow?)
+
+      described_class.new.perform(blast.id)
+
+      expect(PostSendgridApi.mails).to be_empty
+      expect(blast.reload.completed_at).to be_nil
+    end
+
+    it "still defers a blast whose next slot is inside its content window" do
+      blast = create(:blast, :just_requested, requested_at: 1.day.ago, post: basic_post_with_audience)
+      allow(SellerLargeBlastQuota).to receive(:allow?).and_return(false)
+      run_at = Time.zone.tomorrow.beginning_of_day + 5.hours
+      allow(SellerLargeBlastQuota).to receive(:deferred_run_at).and_return(run_at)
+
+      described_class.new.perform(blast.id)
+
+      expect(described_class).to have_enqueued_sidekiq_job(blast.id).at(run_at)
+      expect(blast.reload.expired_at).to be_nil
+    ensure
+      $redis.del(RedisKey.blast_quota_deferred_until(blast.id)) if blast
+    end
+
+    it "expires a blast that was never deferred when its first deferral would land past the content window" do
+      blast = create(:blast, :just_requested, requested_at: 1.5.days.ago, post: basic_post_with_audience)
+      allow(SellerLargeBlastQuota).to receive(:allow?).and_return(false)
+      allow(SellerLargeBlastQuota).to receive(:deferred_run_at).and_return(Time.current + 1.day)
+
+      described_class.new.perform(blast.id)
+
+      expect(described_class.jobs.count { _1["args"] == [blast.id] }).to eq(0)
+      expect(blast.reload.delivery_status).to eq("expired")
+      expect($redis.exists?(RedisKey.blast_quota_deferred_until(blast.id))).to eq(false)
+    ensure
+      $redis.del(RedisKey.blast_quota_deferred_until(blast.id)) if blast
+    end
+
+    it "does not expire a blast that another copy already admitted" do
+      blast = create(:blast, :just_requested, requested_at: 4.days.ago, post: basic_post_with_audience)
+      $redis.set(RedisKey.blast_quota_admitted(blast.id), Time.current.utc.iso8601)
+      allow(SellerLargeBlastQuota).to receive(:allow?).and_return(false)
+      allow(SellerLargeBlastQuota).to receive(:deferred_run_at).and_return(Time.current + 1.day)
+      allow_any_instance_of(described_class).to receive(:admitted?).and_return(false)
+
+      described_class.new.perform(blast.id)
+
+      expect(blast.reload.expired_at).to be_nil
+      expect($redis.exists?(RedisKey.blast_quota_admitted(blast.id))).to eq(true)
+    ensure
+      $redis.del(RedisKey.blast_quota_admitted(blast.id)) if blast
+    end
+
+    it "does not expire a blast whose first delivery landed during the expiry" do
+      blast = create(:blast, :just_requested, requested_at: 4.days.ago, post: basic_post_with_audience)
+      $redis.set(RedisKey.blast_quota_deferred_until(blast.id), 1.minute.ago.iso8601)
+      job = described_class.new
+      job.instance_variable_set(:@blast, blast)
+      PostEmailBlast.where(id: blast.id).update_all(first_email_delivered_at: Time.current)
+
+      expect(job.send(:expire_past_content_window)).to eq(false)
+
+      expect(blast.reload.expired_at).to be_nil
+      expect($redis.exists?(RedisKey.blast_quota_admitted(blast.id))).to eq(false)
+    ensure
+      $redis.del(RedisKey.blast_quota_admitted(blast.id), RedisKey.blast_quota_deferred_until(blast.id)) if blast
+    end
+
+    it "does not send a blast whose expiry another copy already decided" do
+      blast = create(:blast, :just_requested, post: basic_post_with_audience)
+      $redis.set(RedisKey.blast_quota_admitted(blast.id), "expired")
+      expect(SellerLargeBlastQuota).not_to receive(:allow?)
+
+      described_class.new.perform(blast.id)
+
+      expect(PostSendgridApi.mails).to be_empty
+      expect(blast.reload.delivery_status).to eq("expired")
+      expect(described_class.jobs.count { _1["args"] == [blast.id] }).to eq(0)
+    ensure
+      $redis.del(RedisKey.blast_quota_admitted(blast.id)) if blast
+    end
+
+    it "gives the daily slot back when a copy claims it but an expiry wins the race" do
+      blast = create(:blast, :just_requested, post: basic_post_with_audience)
+      allow(SellerLargeBlastQuota).to receive(:allow?) do
+        $redis.set(RedisKey.blast_quota_admitted(blast.id), "expired")
+        true
+      end
+      expect(SellerLargeBlastQuota).to receive(:release).with(seller_id: blast.post.seller_id, blast_id: blast.id, kind: "post_blast")
+
+      described_class.new.perform(blast.id)
+
+      expect(PostSendgridApi.mails).to be_empty
+    ensure
+      $redis.del(RedisKey.blast_quota_admitted(blast.id)) if blast
+    end
+
+    it "does not re-defer a copy that lost the race to an expiry" do
+      blast = create(:blast, :just_requested, post: basic_post_with_audience)
+      $redis.set(RedisKey.blast_quota_admitted(blast.id), "expired")
+      allow_any_instance_of(described_class).to receive(:admitted?).and_return(false)
+
+      described_class.new.perform(blast.id)
+
+      expect($redis.exists?(RedisKey.blast_quota_deferred_until(blast.id))).to eq(false)
+      expect(described_class.jobs.count { _1["args"] == [blast.id] }).to eq(0)
+    ensure
+      $redis.del(RedisKey.blast_quota_admitted(blast.id)) if blast
+    end
+
+    it "sends a blast that was admitted even when its stale deferral marker is still set" do
+      blast = create(:blast, :just_requested, requested_at: 4.days.ago, post: basic_post_with_audience)
+      $redis.set(RedisKey.blast_quota_admitted(blast.id), Time.current.utc.iso8601)
+      $redis.set(RedisKey.blast_quota_deferred_until(blast.id), 1.minute.ago.iso8601)
+      expect(SellerLargeBlastQuota).not_to receive(:allow?)
+
+      described_class.new.perform(blast.id)
+
+      expect_sent_count 1
+      expect(blast.reload).to have_attributes(expired_at: nil)
+      expect(blast.completed_at).to be_present
+    ensure
+      $redis.del(RedisKey.blast_quota_admitted(blast.id), RedisKey.blast_quota_deferred_until(blast.id)) if blast
+    end
+
+    it "does not expire a blast that already delivered" do
+      blast = create(:blast, :just_requested, requested_at: 4.days.ago, post: basic_post_with_audience)
+      blast.update!(first_email_delivered_at: 1.hour.ago)
+      allow(SellerLargeBlastQuota).to receive(:allow?).and_return(false)
+      allow(SellerLargeBlastQuota).to receive(:deferred_run_at).and_return(Time.current + 1.day)
+      allow_any_instance_of(described_class).to receive(:admitted?).and_return(false)
+
+      described_class.new.perform(blast.id)
+
+      expect(blast.reload.expired_at).to be_nil
+    end
+
+    it "expires a deferred copy that runs after the content window even when its slot is free" do
+      blast = create(:blast, :just_requested, requested_at: 4.days.ago, post: basic_post_with_audience)
+      $redis.set(RedisKey.blast_quota_deferred_until(blast.id), 1.minute.ago.iso8601)
+      expect(SellerLargeBlastQuota).not_to receive(:allow?)
+
+      described_class.new.perform(blast.id)
+
+      expect(PostSendgridApi.mails).to be_empty
+      expect(blast.reload.delivery_status).to eq("expired")
+      expect($redis.exists?(RedisKey.blast_quota_deferred_until(blast.id))).to eq(false)
+    ensure
+      $redis.del(RedisKey.blast_quota_deferred_until(blast.id)) if blast
+    end
+
+    it "sends an old blast that was never quota-deferred" do
+      blast = create(:blast, :just_requested, requested_at: 4.days.ago, post: basic_post_with_audience)
+      allow(SellerLargeBlastQuota).to receive(:allow?).and_return(true)
+
+      described_class.new.perform(blast.id)
+
+      expect_sent_count 1
+      expect(blast.reload).to have_attributes(expired_at: nil)
+      expect(blast.completed_at).to be_present
+    end
+
     it "clears the deferral marker when the blast is admitted" do
       blast = create(:blast, :just_requested, post: basic_post_with_audience)
       $redis.set(RedisKey.blast_quota_deferred_until(blast.id), 1.hour.from_now.iso8601)

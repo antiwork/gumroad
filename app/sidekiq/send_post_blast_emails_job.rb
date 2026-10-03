@@ -28,7 +28,7 @@ class SendPostBlastEmailsJob
     @blast = PostEmailBlast.find(blast_id)
     @post = @blast.post
     Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} post_id=#{@post.id}")
-    return unless @post.alive? && @post.published? && @post.send_emails? && @blast.completed_at.nil?
+    return unless @post.alive? && @post.published? && @post.send_emails? && @blast.completed_at.nil? && @blast.expired_at.nil?
 
     # Captured before the stamp: a first-run crash and a late resume both arrive without a snapshot.
     @resume_without_snapshot = @blast.started_at.present?
@@ -73,6 +73,8 @@ class SendPostBlastEmailsJob
     # count includes people no later slice will decrement.
     @members = drop_members_already_skipped_from_audience(@members)
     return mark_blast_as_completed if @members.empty?
+    return if expire_stale_quota_deferral
+
     unless admitted?
       requeue_for_daily_blast_limit
       return
@@ -337,20 +339,36 @@ class SendPostBlastEmailsJob
     # Admission to the daily quota is per blast, once, and recorded when granted: the
     # delivery stamp arrives from the ESP later, so a kill in between must not send a
     # resume back through the quota to claim a second day.
+    #
+    # The same key records the opposite decision, EXPIRED_QUOTA_DECISION. Both writes are
+    # SET NX, so for one blast exactly one of admission and expiry wins, even across copies.
     def admitted?
       admitted_key = RedisKey.blast_quota_admitted(@blast.id)
-      unless @blast.first_email_delivered_at.present? || $redis.exists?(admitted_key)
+      decision = $redis.get(admitted_key)
+      return false if decision == EXPIRED_QUOTA_DECISION
+
+      unless @blast.first_email_delivered_at.present? || decision
         return false unless SellerLargeBlastQuota.allow?(
           seller_id: @post.seller_id,
           kind: "post_blast",
           blast_id: @blast.id,
           recipient_count: @members.size
         )
-        $redis.set(admitted_key, Time.current.utc.iso8601, ex: AlertOnStalledPostEmailBlastsJob::LOOKBACK.to_i)
+        $redis.set(admitted_key, Time.current.utc.iso8601, nx: true, ex: AlertOnStalledPostEmailBlastsJob::LOOKBACK.to_i)
+        decision = $redis.get(admitted_key)
+        if decision == EXPIRED_QUOTA_DECISION
+          # Lost the race to an expiry after claiming: the slot must not stay held by a blast that never sends.
+          SellerLargeBlastQuota.release(seller_id: @post.seller_id, blast_id: @blast.id, kind: "post_blast")
+          return false
+        end
       end
+      return false if decision == EXPIRED_QUOTA_DECISION
+
       $redis.del(RedisKey.blast_quota_deferred_until(@blast.id))
       true
     end
+
+    EXPIRED_QUOTA_DECISION = "expired"
 
     # Overwrites a marker only once its time has passed. ISO 8601 UTC strings order as times.
     RESERVE_QUOTA_DEFERRAL = <<~LUA
@@ -364,8 +382,13 @@ class SendPostBlastEmailsJob
     # attempts that meet the same closed quota cannot each schedule the blast. The monitor
     # reads the marker as DEFERRED while it is ahead and as a lost job once it has passed.
     def requeue_for_daily_blast_limit
+      # A copy that lost the race to an expiry must not re-create the marker it cleared.
+      return if $redis.get(RedisKey.blast_quota_admitted(@blast.id)) == EXPIRED_QUOTA_DECISION
+
       deferred_key = RedisKey.blast_quota_deferred_until(@blast.id)
       run_at = SellerLargeBlastQuota.deferred_run_at
+      return expire_past_content_window if SellerLargeBlastQuota.past_content_window?(requested_at: @blast.requested_at, run_at:)
+
       argv = [run_at.utc.iso8601, Time.current.utc.iso8601, AlertOnStalledPostEmailBlastsJob::LOOKBACK.to_i]
       unless $redis.eval(RESERVE_QUOTA_DEFERRAL, keys: [deferred_key], argv:).to_i == 1
         Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} already deferred until #{$redis.get(deferred_key)} by the daily large-blast quota")
@@ -383,5 +406,45 @@ class SendPostBlastEmailsJob
         raise "Sidekiq did not requeue the blast for the daily limit"
       end
       Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} deferred until #{run_at.utc.iso8601} by the daily large-blast quota")
+    end
+
+    # A deferred copy that runs after the content window must not send the stale email just
+    # because its slot is free now. Blasts that were never quota-deferred are not affected,
+    # and neither is one that was already admitted.
+    def stale_quota_deferral?
+      return false if @blast.first_email_delivered_at.present?
+
+      decision = $redis.get(RedisKey.blast_quota_admitted(@blast.id))
+      return true if decision == EXPIRED_QUOTA_DECISION
+      return false if decision.present? || !$redis.exists?(RedisKey.blast_quota_deferred_until(@blast.id))
+
+      SellerLargeBlastQuota.past_content_window?(requested_at: @blast.requested_at, run_at: Time.current)
+    end
+
+    def expire_stale_quota_deferral
+      stale_quota_deferral? && expire_past_content_window
+    end
+
+    # Another deferral would only delay a stale email. Nothing was sent, so this ends the
+    # blast with a reason the seller can see. Another copy may be admitted while this one
+    # decides; whichever writes the quota decision first wins, and the loser leaves the
+    # other's state alone.
+    def expire_past_content_window
+      admitted_key = RedisKey.blast_quota_admitted(@blast.id)
+      claimed = $redis.set(admitted_key, EXPIRED_QUOTA_DECISION, nx: true, ex: AlertOnStalledPostEmailBlastsJob::LOOKBACK.to_i)
+      return false unless claimed || $redis.get(admitted_key) == EXPIRED_QUOTA_DECISION
+
+      now = Time.current
+      rows = PostEmailBlast.where(id: @blast.id, completed_at: nil, first_email_delivered_at: nil, expired_at: nil)
+                           .update_all(expired_at: now, updated_at: now)
+      if rows.zero? && !PostEmailBlast.where(id: @blast.id).where.not(expired_at: nil).exists?
+        # A delivery landed first, so the blast is live. Release the decision instead of blocking it.
+        $redis.del(admitted_key) if claimed
+        return false
+      end
+
+      clear_blast_state(keep_quota_decision: true)
+      Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} expired: the daily large-blast quota stayed taken past the content window")
+      true
     end
 end

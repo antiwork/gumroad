@@ -77,7 +77,7 @@ class AlertOnStalledPostEmailBlastsJob
   # scan in reserve because a resume marker holds a blast for one stall window.
   def self.auto_resume_eligible?(blast)
     return false unless Feature.active?(:auto_resume_stalled_post_blasts)
-    return false if blast.completed_at.present? || blast.requested_at.nil? || blast.to_non_openers?
+    return false if blast.completed_at.present? || blast.expired_at.present? || blast.requested_at.nil? || blast.to_non_openers?
     return false unless blast.requested_at > (LOOKBACK - 2 * SCAN_INTERVAL).ago
 
     blast.requested_at > (AUTO_RESUME_WINDOW - SCAN_INTERVAL).ago || recipients_still_owed?(blast)
@@ -112,7 +112,7 @@ class AlertOnStalledPostEmailBlastsJob
     # ran at all — a blast whose enqueue was lost is precisely the row this alert must not skip.
     def scan_for_stalled_blasts
       candidates = PostEmailBlast
-        .where(completed_at: nil)
+        .where(completed_at: nil, expired_at: nil)
         .where(requested_at: LOOKBACK.ago..STALL_THRESHOLD.ago)
         .order(requested_at: :desc)
         .limit(MAX_CANDIDATES_SCANNED + 1)

@@ -65,6 +65,25 @@ RSpec.describe PostEmailBlast do
     end
   end
 
+  describe "#delivery_status once expired", :freeze_time do
+    let(:post) { create(:installment) }
+
+    it "is expired, not waiting, even while a stale deferral marker is still ahead" do
+      blast = create(:blast, post:, requested_at: 3.days.ago, expired_at: 1.minute.ago, completed_at: nil)
+      $redis.set(RedisKey.blast_quota_deferred_until(blast.id), 1.hour.from_now.utc.iso8601)
+
+      expect(blast.delivery_status).to eq("expired")
+    ensure
+      $redis.del(RedisKey.blast_quota_deferred_until(blast.id)) if blast
+    end
+
+    it "stays sent when the blast completed" do
+      blast = create(:blast, post:, requested_at: 3.days.ago, expired_at: 1.minute.ago, completed_at: 1.minute.ago)
+
+      expect(blast.delivery_status).to eq("sent")
+    end
+  end
+
   describe "Latency metrics", :freeze_time do
     describe "#start_latency" do
       it "returns the difference between requested_at and started_at" do
