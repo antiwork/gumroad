@@ -39,6 +39,6 @@ class SenegalBankAccount < BankAccount
       decrypted = account_number_decrypted
       # Match the raw value: Ibandit upcases and strips whitespace, which Stripe would not.
       return if decrypted.present? && IBAN_FORMAT_REGEX.match?(decrypted) && Ibandit::IBAN.new(decrypted).valid_check_digits?
-      errors.add :base, "The account number is invalid. Enter your 28-character IBAN: SN followed by 26 characters."
+      errors.add :base, "The account number is invalid. Enter a 28-character IBAN starting with SN and verify its check digits."
     end
 end

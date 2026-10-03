@@ -34,7 +34,7 @@ describe SenegalBankAccount do
   end
 
   describe "#validate_account_number" do
-    let(:message) { "The account number is invalid. Enter your 28-character IBAN: SN followed by 26 characters." }
+    let(:message) { "The account number is invalid. Enter a 28-character IBAN starting with SN and verify its check digits." }
 
     it "accepts a 28-character IBAN with valid check digits" do
       expect(build(:senegal_bank_account)).to be_valid
