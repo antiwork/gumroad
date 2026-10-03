@@ -730,7 +730,10 @@ class StripePayoutProcessor
     # A payout with no bank account named — a retired-account drain, or Stripe choosing the bank for a
     # foreign currency — leaves no local row pointing at where the money went, so record Stripe's own
     # answer on the payment. Never substitute the seller's active bank: it is on another account.
-    if payment.bank_account.nil?
+    # `bank_account` is the same snapshot that decided whether a destination was sent above (it is
+    # taken after the foreign-currency nil-out), so both halves agree and neither can name a bank the
+    # money did not go to.
+    if bank_account.nil?
       destination = stripe_payout[:destination]
       payment.stripe_payout_destination_id = destination.is_a?(String) ? destination : destination&.id
       # Card destinations carry last4/fingerprint too, so this is not bank-account-only.
