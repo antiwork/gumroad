@@ -257,7 +257,7 @@ export const useSelectionFromUrl = (product: Product) => {
     const parsedPrice = Number(searchParams.get("price") ?? undefined);
     const parsedCallStartTime = new Date(searchParams.get("call_start_time") ?? "");
     const parsedPayInInstallments = searchParams.get("pay_in_installments") === "true" && !!product.installment_plan;
-    return {
+    const selection = {
       recurrence,
       rent: product.rental?.rent_only ?? false,
       optionId,
@@ -265,9 +265,16 @@ export const useSelectionFromUrl = (product: Product) => {
         (product.is_quantity_enabled || product.is_multiseat_license) && parsedQuantity > 0
           ? Math.min(parsedQuantity, getMaxQuantity(product, parsedOption ?? null) ?? Infinity)
           : 1,
-      price: { value: parsedPrice >= 0 ? parsedPrice * 100 : null, error: false },
       callStartTime: isNaN(parsedCallStartTime.getTime()) ? null : parsedCallStartTime.toISOString(),
       payInInstallments: parsedPayInInstallments,
+    };
+    // A $0 product is always pay-what-you-want, so a blank amount box blocks the CTA until the
+    // buyer types "0". Start it at the lowest amount this selection allows — 0 on a free product.
+    const minimumPriceCents = applySelection(product, null, { ...selection, price: { value: null, error: false } })
+      .discountedPriceCents;
+    return {
+      ...selection,
+      price: { value: parsedPrice >= 0 ? parsedPrice * 100 : minimumPriceCents === 0 ? 0 : null, error: false },
     };
   });
 };
