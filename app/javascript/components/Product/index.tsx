@@ -270,8 +270,10 @@ export const useSelectionFromUrl = (product: Product) => {
     };
     // A $0 product is always pay-what-you-want, so a blank amount box blocks the CTA until the
     // buyer types "0". Start it at the lowest amount this selection allows — 0 on a free product.
-    const minimumPriceCents = applySelection(product, null, { ...selection, price: { value: null, error: false } })
-      .discountedPriceCents;
+    const minimumPriceCents = applySelection(product, null, {
+      ...selection,
+      price: { value: null, error: false },
+    }).discountedPriceCents;
     return {
       ...selection,
       price: { value: parsedPrice >= 0 ? parsedPrice * 100 : minimumPriceCents === 0 ? 0 : null, error: false },

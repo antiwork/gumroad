@@ -230,6 +230,16 @@ for (const surface of ["sticky", "inline"] as const) {
       }
     });
 
+    it("lets a free product's CTA continue without the buyer typing an amount", () => {
+      const { bar } = renderLayout({ ...product, price_cents: 0, pwyw: { suggested_price_cents: null } });
+      const input = screen.getByLabelText<HTMLInputElement>("Name a fair price:");
+      expect(input.value).toBe("0");
+      const cta = getCta(bar, surface, "I want this!");
+      expect(fireEvent.click(cta)).toBe(true);
+      expect(checkoutParams(cta).get("price")).toBe("0");
+      expect(showAlert).not.toHaveBeenCalled();
+    });
+
     it.each([false, true])("offers subscription choices for a lapsed=%s subscriber", (lapsed) => {
       session.loggedIn = true;
       const membershipProduct: ProductData = {
