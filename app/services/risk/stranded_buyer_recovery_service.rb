@@ -296,8 +296,7 @@ class Risk::StrandedBuyerRecoveryService
 
     # Innocence is card-proven or it is nothing (see Purchase::Blockable#buyer_has_clean_payment_history?).
     # Every distinct fingerprint is tried, newest first: a blocked buyer cycles cards, so the OLD card
-    # that proves them can sit far down the list. A grouped count first drops cards that cannot reach
-    # the minimum, so the per-card check runs only for plausible anchors.
+    # that proves them can sit far down the list.
     def clean_history_anchors
       @_clean_history_anchors ||= begin
         newest_per_fingerprint = candidate_purchases.select { _1.stripe_fingerprint.present? }
