@@ -38,6 +38,14 @@ describe User::FeatureStatus, ".no_payout_rail_in_compliance_country?" do
     expect(seller.no_payout_rail_in_compliance_country?).to be(false)
   end
 
+  it "is false for China, where PayPal pays into accounts registered there" do
+    set_country("China")
+
+    expect(seller.native_payouts_supported?).to be(false)
+    expect(seller.alive_user_compliance_info.legal_entity_country_code).to eq("CN")
+    expect(seller.no_payout_rail_in_compliance_country?).to be(false)
+  end
+
   it "is false for US outlying areas, whose residents register PayPal under the US" do
     ["Guam", "American Samoa", "Northern Mariana Islands", "United States Virgin Islands"].each do |country|
       set_country(country)
@@ -79,6 +87,12 @@ describe User::FeatureStatus, ".no_payout_rail_in_compliance_country?" do
     it "excludes Zambia and includes the US" do
       expect(PaypalPayoutProcessor::PAYOUT_RECEIVING_COUNTRY_CODES).not_to include("ZM")
       expect(PaypalPayoutProcessor::PAYOUT_RECEIVING_COUNTRY_CODES).to include("US")
+    end
+
+    # PayPal's reference page codes China as C2, but compliance countries are ISO alpha2.
+    it "includes China as CN, not PayPal's C2" do
+      expect(PaypalPayoutProcessor::PAYOUT_RECEIVING_COUNTRY_CODES).to include("CN")
+      expect(PaypalPayoutProcessor::PAYOUT_RECEIVING_COUNTRY_CODES).not_to include("C2")
     end
 
     it "never lists a comprehensively sanctioned country as payable" do
