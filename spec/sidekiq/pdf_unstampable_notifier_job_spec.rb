@@ -56,7 +56,7 @@ describe PdfUnstampableNotifierJob do
           described_class.new.perform(product.id)
         end.not_to have_enqueued_mail(ContactingCreatorMailer, :unstampable_pdf_notification)
         expect(StampPdfForPurchaseJob.jobs.size).to eq(1)
-        expect(StampPdfForPurchaseJob).to have_enqueued_sidekiq_job(purchase.id)
+        expect(StampPdfForPurchaseJob).to have_enqueued_sidekiq_job(purchase.id).on("low")
       end
     end
   end
