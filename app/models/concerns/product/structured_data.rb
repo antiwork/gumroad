@@ -169,9 +169,11 @@ module Product::StructuredData
     end
 
     def product_description
+      # Same cap and word-boundary cut as the product page meta description.
       (custom_summary.presence || strip_tags(html_safe_description).presence)
         .to_s
-        .truncate(160)
+        .squish
+        .truncate(160, separator: " ")
         .presence
     end
 end

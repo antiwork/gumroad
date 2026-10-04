@@ -34,7 +34,7 @@ module PageMeta::Wishlist
     end
 
     def wishlist_meta_description(wishlist)
-      return wishlist.description.squish.truncate(160) if wishlist.description.present?
+      return wishlist.description.squish.truncate(160, separator: " ") if wishlist.description.present?
 
       product_count = wishlist.alive_wishlist_products.distinct.count(:product_id)
       "#{wishlist.name} — a wishlist of #{product_count} #{"digital product".pluralize(product_count)} curated by #{wishlist.user.name_or_username} on Gumroad."
