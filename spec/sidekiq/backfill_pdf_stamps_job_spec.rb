@@ -50,4 +50,23 @@ describe BackfillPdfStampsJob do
 
     expect(PdfStampingService).to have_received(:stamp_for_purchase!).with(older_purchase)
   end
+
+  it "re-enqueues a failed sale on :low so its retries survive inline execution" do
+    allow(PdfStampingService).to receive(:stamp_for_purchase!).with(newer_purchase).and_raise(PdfStampingService::Error, "bad pdf")
+
+    described_class.new.perform(product.id)
+
+    expect(StampPdfForPurchaseJob).to have_enqueued_sidekiq_job(newer_purchase.id).on("low")
+    expect(StampPdfForPurchaseJob).not_to have_enqueued_sidekiq_job(older_purchase.id)
+  end
+
+  it "keeps walking the slice when a sale fails with an error the stamp job does not wrap" do
+    allow(PdfStampingService).to receive(:stamp_for_purchase!).with(newer_purchase)
+      .and_raise(Aws::S3::Errors::ServiceError.new(nil, "upload failed"))
+
+    expect { described_class.new.perform(product.id) }.not_to raise_error
+
+    expect(PdfStampingService).to have_received(:stamp_for_purchase!).with(older_purchase)
+    expect(StampPdfForPurchaseJob).to have_enqueued_sidekiq_job(newer_purchase.id).on("low")
+  end
 end

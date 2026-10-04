@@ -61,6 +61,7 @@ module WithProductFiles
     # on the product, or a sibling version attaching it.
     directly_addressed_files = files_params.filter_map { existing_files_by_external_id[_1[:external_id] || _1[:id]] }
     should_check_pdf_stampability = false
+    backfill_enqueued = false
     file_id_mappings = {}
 
     files_params.each do |file_params|
@@ -82,7 +83,8 @@ module WithProductFiles
 
         next unless modified
 
-        if product_file.new_record?
+        new_file = product_file.new_record?
+        if new_file
           new_product_files << product_file
           file_params[:is_linked_to_existing_file] = true if link && link.user.alive_product_files_excluding_product.where("product_files.url = ? AND product_files.link_id != ?", file_params[:url], link.id).any?
           WithProductFiles.associate_dropbox_file_and_product_file(product_file)
@@ -95,7 +97,12 @@ module WithProductFiles
         thumbnail_signed_id = file_params.delete(:thumbnail)&.dig(:signed_id) || file_params.delete(:thumbnail_signed_id)
         product_file.update!(file_params)
 
-        should_check_pdf_stampability = true if product_file.saved_change_to_pdf_stamp_enabled? && product_file.pdf_stamp_enabled?
+        if product_file.saved_change_to_pdf_stamp_enabled? && product_file.pdf_stamp_enabled?
+          should_check_pdf_stampability = true
+          # An updated file already enqueued its own backfill in
+          # ProductFile#stamp_existing_pdfs_if_needed; a created one did not.
+          backfill_enqueued = true unless new_file
+        end
 
         if external_id.present? && external_id != product_file.external_id
           file_id_mappings[external_id] = product_file.external_id
@@ -124,7 +131,7 @@ module WithProductFiles
     generate_entity_archive! if is_a?(Installment) && needs_updated_entity_archive?
 
     link.content_updated_at = Time.current if new_product_files.any?(&:link_id?)
-    PdfUnstampableNotifierJob.perform_in(5.seconds, link.id) if is_a?(Link) && should_check_pdf_stampability
+    PdfUnstampableNotifierJob.perform_in(5.seconds, link.id, backfill_enqueued) if is_a?(Link) && should_check_pdf_stampability
     link&.enqueue_index_update_for(["filetypes"])
     file_id_mappings
   end

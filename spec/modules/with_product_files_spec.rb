@@ -435,7 +435,7 @@ describe WithProductFiles do
           product.save_files!(product_files_params)
         end.to change { product.product_files.alive.count }.by(2)
 
-        expect(PdfUnstampableNotifierJob).to have_enqueued_sidekiq_job(product.id)
+        expect(PdfUnstampableNotifierJob).to have_enqueued_sidekiq_job(product.id, false)
       end
 
       it "does not enqueue a `PdfUnstampableNotifierJob` job when new non-stampable files are added" do
@@ -457,7 +457,7 @@ describe WithProductFiles do
           product.save_files!(product_files_params)
         end.not_to change { product.product_files.alive.count }
 
-        expect(PdfUnstampableNotifierJob).to have_enqueued_sidekiq_job(product.id)
+        expect(PdfUnstampableNotifierJob).to have_enqueued_sidekiq_job(product.id, true)
       end
 
       it "does not enqueue a `PdfUnstampableNotifierJob` job when existing files are marked as non-stampable" do
