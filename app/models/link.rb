@@ -1200,6 +1200,13 @@ class Link < ApplicationRecord
     matched_signed_in_purchaser ? info : info.except(:license_key)
   end
 
+  # True when the visitor presents a review-reminder link for this product: a purchase
+  # external id together with that purchase's email digest. The custom-HTML landing page
+  # has no review form, so the product page lets a verified review link skip it.
+  def review_link_purchase?(purchase_id, purchase_email_digest)
+    purchase_for_email_digest(purchase_id, purchase_email_digest).present?
+  end
+
   def save_duration!(duration)
     self.duration_in_months = duration.present? ? duration.to_i : nil
     save!

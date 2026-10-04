@@ -282,6 +282,33 @@ describe LinksController, :vcr, type: :controller do
       expect(response.location).to include("/checkout")
       expect(response.body).not_to include(%(src="/l/#{product.unique_permalink}/landing/embed"))
     end
+
+    describe "review-reminder links" do
+      let(:purchase) { create(:purchase, link: product) }
+
+      it "falls through to the standard product page when the review link verifies" do
+        expect(controller).to receive(:prepare_product_page).and_call_original
+
+        get :show, params: { id: product.unique_permalink, purchase_id: purchase.external_id,
+                             purchase_email_digest: purchase.email_digest }
+
+        expect(response).to be_successful
+        expect(response.body).not_to include(%(src="/l/#{product.unique_permalink}/landing/embed"))
+      end
+
+      it "still serves the custom page when the digest does not match the purchase" do
+        get :show, params: { id: product.unique_permalink, purchase_id: purchase.external_id,
+                             purchase_email_digest: "not-the-digest" }
+
+        expect(response.body).to include(%(src="/l/#{product.unique_permalink}/landing/embed"))
+      end
+
+      it "still serves the custom page when only the purchase id is present" do
+        get :show, params: { id: product.unique_permalink, purchase_id: purchase.external_id }
+
+        expect(response.body).to include(%(src="/l/#{product.unique_permalink}/landing/embed"))
+      end
+    end
   end
 
   describe "GET landing_iframe_content" do
