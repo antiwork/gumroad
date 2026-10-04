@@ -301,42 +301,43 @@ describe LinksController, :vcr, type: :controller do
     end
 
     describe "review-reminder links", inertia: true do
-      let(:purchase) { create(:free_purchase, link: product) }
+      let(:product) { create(:product, :bundle, user: seller, custom_html: "<section><h1>Live landing page</h1></section>") }
+      let(:purchase) { create(:free_purchase, link: product, is_bundle_purchase: true) }
+      let(:review_params) { { id: product.unique_permalink, purchase_id: purchase.external_id, purchase_email_digest: purchase.email_digest } }
 
-      it "falls through to the standard product page when the review link verifies" do
+      it "falls through to the standard page and hands the bundle purchase to the review form" do
         expect(controller).to receive(:prepare_product_page).and_call_original
 
-        get :show, params: { id: product.unique_permalink, purchase_id: purchase.external_id,
-                             purchase_email_digest: purchase.email_digest }
+        get :show, params: review_params
 
         expect(response).to be_successful
         expect(response.body).not_to include(%(src="/l/#{product.unique_permalink}/landing/embed"))
-      end
-
-      it "hands the verified purchase to the product page so the review form can render" do
-        get :show, params: { id: product.unique_permalink, purchase_id: purchase.external_id,
-                             purchase_email_digest: purchase.email_digest }
-
         expect(inertia).to render_component("Products/Show")
-        expect(inertia.props[:purchase][:id]).to eq(purchase.external_id)
+        expect(inertia.props[:purchase]).to include(id: purchase.external_id, email_digest: purchase.email_digest, review: nil)
       end
 
-      it "reads the purchase from the primary database" do
-        expect(controller).to receive(:use_primary_database).at_least(:once).and_call_original
+      it "verifies the link on the primary database" do
+        pinned = nil
+        allow_any_instance_of(Link).to receive(:review_link_purchase?).and_wrap_original do |method, *args|
+          pinned = ApplicationRecord.connected_to_stack.any? do |entry|
+            entry[:role] == :writing && entry[:klasses].include?(ApplicationRecord)
+          end
+          method.call(*args)
+        end
 
-        get :show, params: { id: product.unique_permalink, purchase_id: purchase.external_id,
-                             purchase_email_digest: purchase.email_digest }
+        get :show, params: review_params
+
+        expect(pinned).to eq(true)
       end
 
       it "still serves the custom page when the digest does not match the purchase" do
-        get :show, params: { id: product.unique_permalink, purchase_id: purchase.external_id,
-                             purchase_email_digest: "not-the-digest" }
+        get :show, params: review_params.merge(purchase_email_digest: "not-the-digest")
 
         expect(response.body).to include(%(src="/l/#{product.unique_permalink}/landing/embed"))
       end
 
       it "still serves the custom page when only the purchase id is present" do
-        get :show, params: { id: product.unique_permalink, purchase_id: purchase.external_id }
+        get :show, params: review_params.except(:purchase_email_digest)
 
         expect(response.body).to include(%(src="/l/#{product.unique_permalink}/landing/embed"))
       end
