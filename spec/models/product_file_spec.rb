@@ -1469,7 +1469,7 @@ describe ProductFile do
       context "when PDF stamping is newly enabled" do
         it "enqueues a job to stamp existing PDFs if needed" do
           file.update!(pdf_stamp_enabled: true)
-          expect(StampPdfForPurchaseJob).to have_enqueued_sidekiq_job(purchase.id)
+          expect(BackfillPdfStampsJob).to have_enqueued_sidekiq_job(file.link.id)
         end
       end
 
@@ -1478,7 +1478,7 @@ describe ProductFile do
 
         it "does not enqueue a job to stamp existing PDFs" do
           file.update!(pdf_stamp_enabled: false)
-          expect(StampPdfForPurchaseJob).not_to have_enqueued_sidekiq_job(purchase.id)
+          expect(BackfillPdfStampsJob).not_to have_enqueued_sidekiq_job(file.link.id)
         end
       end
     end

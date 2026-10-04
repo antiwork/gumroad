@@ -550,10 +550,7 @@ class ProductFile < ApplicationRecord
       return if link.nil?
       return unless saved_change_to_pdf_stamp_enabled? && pdf_stamp_enabled?
 
-      link.sales.successful_gift_or_nongift.not_is_gift_sender_purchase.not_recurring_charge.includes(:url_redirect).find_each(order: :desc) do |purchase|
-        next if purchase.url_redirect.blank?
-        StampPdfForPurchaseJob.perform_async(purchase.id)
-      end
+      BackfillPdfStampsJob.perform_async(link.id)
     end
 
     def video_file_analysis_completed
