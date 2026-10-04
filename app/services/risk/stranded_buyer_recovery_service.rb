@@ -296,12 +296,25 @@ class Risk::StrandedBuyerRecoveryService
 
     # Innocence is card-proven or it is nothing (see Purchase::Blockable#buyer_has_clean_payment_history?).
     # Every distinct fingerprint is tried, newest first: a blocked buyer cycles cards, so the OLD card
-    # that proves them can sit far down the list. candidate_purchases bounds the scan.
+    # that proves them can sit far down the list. A grouped count first drops cards that cannot reach
+    # the minimum, so the per-card check runs only for plausible anchors.
     def clean_history_anchors
-      @_clean_history_anchors ||= candidate_purchases.select { _1.stripe_fingerprint.present? }
-                                                     .sort_by { -_1.id }
-                                                     .uniq(&:stripe_fingerprint)
-                                                     .select { own_clean_payment_history?(_1) }
+      @_clean_history_anchors ||= begin
+        newest_per_fingerprint = candidate_purchases.select { _1.stripe_fingerprint.present? }
+                                                    .sort_by { -_1.id }
+                                                    .uniq(&:stripe_fingerprint)
+        plausible = plausible_anchor_fingerprints(newest_per_fingerprint.map(&:stripe_fingerprint))
+        newest_per_fingerprint.select { plausible.include?(_1.stripe_fingerprint) && own_clean_payment_history?(_1) }
+      end
+    end
+
+    def plausible_anchor_fingerprints(fingerprints)
+      Purchase.successful.non_free.not_fully_refunded.not_chargedback_or_chargedback_reversed
+              .where(created_at: ..Purchase::Blockable::MIN_PURCHASE_AGE_FOR_CLEAN_HISTORY.ago)
+              .where(stripe_fingerprint: fingerprints)
+              .group(:stripe_fingerprint)
+              .having("COUNT(*) >= ?", Purchase::Blockable::MIN_SUCCESSFUL_PURCHASES_FOR_CLEAN_HISTORY)
+              .pluck(:stripe_fingerprint).to_set
     end
 
     def clean_history_anchor

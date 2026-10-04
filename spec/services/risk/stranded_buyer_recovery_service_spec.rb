@@ -231,6 +231,14 @@ describe Risk::StrandedBuyerRecoveryService do
         expect(call.verdict).to eq(:cleared)
       end
 
+      it "runs the per-card history check only for cards that could reach the minimum" do
+        cycle_cards(30)
+
+        expect_any_instance_of(described_class).to receive(:own_clean_payment_history?).once.and_call_original
+
+        expect(call(dry_run: true).verdict).to eq(:cleared)
+      end
+
       it "still skips when no card has clean history" do
         cycle_cards(12)
         Purchase.where(stripe_fingerprint: proving_fingerprint).update_all(stripe_fingerprint: nil)
