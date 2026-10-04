@@ -275,11 +275,6 @@ class Risk::StrandedBuyerRecoveryService
       block.blocked_by.present?
     end
 
-    # Innocence is card-proven or it is nothing (see Purchase::Blockable#buyer_has_clean_payment_history?).
-    # Tried per distinct fingerprint, newest first, because the stranded buyer's newest card is often
-    # the reissued one with no history yet — the OLD card is what proves them.
-    ANCHOR_FINGERPRINT_LIMIT = 10
-
     # buyer_has_clean_payment_history? is a GLOBAL fingerprint check — it doesn't care whose email
     # the other settled purchases carry. That's fine when called on a purchase an admin already
     # knows is this buyer's; it's not fine here, where candidate_purchases includes any guest row
@@ -299,11 +294,13 @@ class Risk::StrandedBuyerRecoveryService
            .count >= Purchase::Blockable::MIN_SUCCESSFUL_PURCHASES_FOR_CLEAN_HISTORY
     end
 
+    # Innocence is card-proven or it is nothing (see Purchase::Blockable#buyer_has_clean_payment_history?).
+    # Every distinct fingerprint is tried, newest first: a blocked buyer cycles cards, so the OLD card
+    # that proves them can sit far down the list. candidate_purchases bounds the scan.
     def clean_history_anchors
       @_clean_history_anchors ||= candidate_purchases.select { _1.stripe_fingerprint.present? }
                                                      .sort_by { -_1.id }
                                                      .uniq(&:stripe_fingerprint)
-                                                     .first(ANCHOR_FINGERPRINT_LIMIT)
                                                      .select { own_clean_payment_history?(_1) }
     end
 
