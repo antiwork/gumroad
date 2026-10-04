@@ -169,10 +169,10 @@ module Product::StructuredData
     end
 
     def product_description
-      # Same cap and word-boundary cut as the product page meta description, so the
-      # JSON-LD snippet never disagrees with the one in the document head.
+      # Same cap and word-boundary cut as the product page meta description.
       (custom_summary.presence || strip_tags(html_safe_description).presence)
         .to_s
+        .squish
         .truncate(160, separator: " ")
         .presence
     end

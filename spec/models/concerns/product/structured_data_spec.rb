@@ -413,6 +413,23 @@ describe Product::StructuredData do
           end
         end
 
+        context "when words in a long description are separated by newlines" do
+          let(:long_description) { (1..40).map { |i| "word#{i}" }.join("\n") }
+
+          before do
+            product.update!(description: long_description)
+          end
+
+          it "truncates on a word boundary" do
+            description = product.structured_data["description"]
+            prefix = description.delete_suffix("...")
+
+            expect(description.length).to be <= 160
+            expect(long_description.squish).to start_with(prefix)
+            expect(long_description.squish[prefix.length]).to eq(" ")
+          end
+        end
+
         context "when description contains HTML tags" do
           before do
             product.update!(description: "<p>This is <strong>bold</strong> text</p>")
