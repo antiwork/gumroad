@@ -27,10 +27,11 @@ class PaypalPayoutProcessor
   # Not the same question as "does PayPal operate there" — PayPal has a localised site for ~200
   # countries but only pays into accounts in these. Zambia is the case that taught us the
   # difference: PayPal is available, the account exists, and every payout to it comes back 3148.
+  # PayPal's page codes China as C2; this list uses ISO alpha2, so it is CN.
   # Keep this list about RECEIVING only; sending/checkout support lives in
   # PaypalMerchantAccountManager::COUNTRY_CODES_NOT_SUPPORTED_BY_PCP.
   PAYOUT_RECEIVING_COUNTRY_CODES = %w[
-    AD AE AR AT AU BE BG BH BM BR BS BW CA CH CL CO CR CY CZ DE DK DO EC EE ES
+    AD AE AR AT AU BE BG BH BM BR BS BW CA CH CL CN CO CR CY CZ DE DK DO EC EE ES
     FI FO FR GB GE GI GL GR GT HK HN HR HU ID IE IL IN IT JM JO JP KE KW KY KZ
     LI LS LT LU LV MA MC MD MT MU MX MY MZ NI NL NO NZ OM PA PE PH PL PT QA RE
     RO RS SA SE SG SI SK SM SN SV TR TW US UY VE VN ZA
