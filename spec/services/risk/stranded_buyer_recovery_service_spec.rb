@@ -205,6 +205,15 @@ describe Risk::StrandedBuyerRecoveryService do
       expect(result.reason).to eq(:no_clean_payment_history)
     end
 
+    it "finds the proving card even when a blocked buyer has cycled through more than 10 newer cards" do
+      11.times do |i|
+        create(:purchase, email: buyer_email, purchase_state: "successful", stripe_fingerprint: "newer-card-#{i}", created_at: 1.day.ago)
+      end
+
+      result = call
+      expect(result.verdict).to eq(:cleared)
+    end
+
     # account_purchases proves identity via purchaser_id, not email — but that's a proxy for WHO
     # the row belongs to, not a waiver on HOW MANY settled rows the fingerprint needs. A single
     # fresh account purchase must not anchor innocence on its own; it still has to clear the same

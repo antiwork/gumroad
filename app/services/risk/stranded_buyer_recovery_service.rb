@@ -278,7 +278,7 @@ class Risk::StrandedBuyerRecoveryService
     # Innocence is card-proven or it is nothing (see Purchase::Blockable#buyer_has_clean_payment_history?).
     # Tried per distinct fingerprint, newest first, because the stranded buyer's newest card is often
     # the reissued one with no history yet — the OLD card is what proves them.
-    ANCHOR_FINGERPRINT_LIMIT = 10
+    ANCHOR_FINGERPRINT_LIMIT = 50
 
     # buyer_has_clean_payment_history? is a GLOBAL fingerprint check — it doesn't care whose email
     # the other settled purchases carry. That's fine when called on a purchase an admin already
