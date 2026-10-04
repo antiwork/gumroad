@@ -197,6 +197,73 @@ describe Risk::StrandedBuyerRecoveryService do
       expect(result.reason).to eq(:no_clean_payment_history)
     end
 
+    # A blocked buyer cycles cards, so the old card that proves them ends up deep in the
+    # newest-first list. Only that oldest card clears the min-3/60-day bar.
+    context "when the buyer cycled through many cards" do
+      let(:proving_fingerprint) { history.first.stripe_fingerprint }
+
+      # The proving card is the oldest, so it sits at position (count + 1) newest-first. The anchor
+      # is its newest purchase and needs three others on the same card, so add a fourth. These rows
+      # carry the buyer's browser guid, which is how the guid block gets cleared.
+      def cycle_cards(count)
+        failed_purchase.update_columns(stripe_fingerprint: nil)
+        history.each { _1.update_columns(browser_guid:) }
+        create(:purchase, email: buyer_email, purchase_state: "successful", browser_guid:,
+                          stripe_fingerprint: proving_fingerprint, created_at: 6.months.ago)
+        count.times do |index|
+          create(:purchase, email: buyer_email, purchase_state: "successful",
+                            stripe_fingerprint: "cycled-card-#{index}", created_at: 3.months.ago)
+        end
+      end
+
+      it "finds the proving card when it is the 11th distinct fingerprint newest-first" do
+        cycle_cards(10)
+
+        result = nil
+        expect { result = call }.to change { PlatformBlock.active.count }.from(2).to(0)
+
+        expect(result.verdict).to eq(:cleared)
+      end
+
+      it "finds the proving card far beyond the 11th fingerprint" do
+        cycle_cards(30)
+
+        expect(call.verdict).to eq(:cleared)
+      end
+
+      it "runs the per-card history check only for cards that could reach the minimum" do
+        cycle_cards(30)
+
+        expect_any_instance_of(described_class).to receive(:own_clean_payment_history?).once.and_call_original
+
+        expect(call(dry_run: true).verdict).to eq(:cleared)
+      end
+
+      it "still skips when no card has clean history" do
+        cycle_cards(12)
+        Purchase.where(stripe_fingerprint: proving_fingerprint).update_all(stripe_fingerprint: nil)
+
+        result = nil
+        expect { result = call }.not_to change { PlatformBlock.active.count }
+
+        expect(result.verdict).to eq(:skip)
+        expect(result.reason).to eq(:no_clean_payment_history)
+      end
+
+      it "still vetoes on an unreversed chargeback when the proving card is deep in the list" do
+        cycle_cards(10)
+        create(:purchase, email: buyer_email, purchase_state: "successful",
+                          stripe_fingerprint: "disputed-other-card", chargeback_date: 1.month.ago,
+                          created_at: 7.months.ago)
+
+        result = nil
+        expect { result = call }.not_to change { PlatformBlock.active.count }
+
+        expect(result.verdict).to eq(:skip)
+        expect(result.reason).to eq(:unreversed_chargeback)
+      end
+    end
+
     it "skips a buyer with no card-proven history at all" do
       Purchase.where(email: buyer_email).update_all(stripe_fingerprint: nil)
 
