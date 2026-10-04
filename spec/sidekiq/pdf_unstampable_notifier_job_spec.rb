@@ -47,16 +47,16 @@ describe PdfUnstampableNotifierJob do
       before do
         product.product_files.alive.pdf.each { |product_file| product_file.update!(pdf_stamp_enabled: true) }
         purchase.create_url_redirect!
-        StampPdfForPurchaseJob.jobs.clear
+        BackfillPdfStampsJob.jobs.clear
       end
 
-      it "enqueues job to generate stamped pdfs for existing sales" do
+      it "enqueues one backfill job for existing sales" do
         expect(PdfStampingService).to receive(:can_stamp_file?).and_return(true)
         expect do
           described_class.new.perform(product.id)
         end.not_to have_enqueued_mail(ContactingCreatorMailer, :unstampable_pdf_notification)
-        expect(StampPdfForPurchaseJob.jobs.size).to eq(1)
-        expect(StampPdfForPurchaseJob).to have_enqueued_sidekiq_job(purchase.id).on("low")
+        expect(BackfillPdfStampsJob.jobs.size).to eq(1)
+        expect(BackfillPdfStampsJob).to have_enqueued_sidekiq_job(product.id).on("low")
       end
     end
   end

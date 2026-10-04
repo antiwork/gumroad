@@ -27,9 +27,6 @@ class PdfUnstampableNotifierJob
     return if total_files_checked == total_unstampable_files
 
     # if some files have been newly marked as stampable, we need to stamp them for existing sales
-    product.sales.successful_gift_or_nongift.not_is_gift_sender_purchase.not_recurring_charge.includes(:url_redirect).find_each(order: :desc) do |purchase|
-      next if purchase.url_redirect.blank?
-      StampPdfForPurchaseJob.set(queue: :low).perform_async(purchase.id)
-    end
+    BackfillPdfStampsJob.perform_async(product.id)
   end
 end
