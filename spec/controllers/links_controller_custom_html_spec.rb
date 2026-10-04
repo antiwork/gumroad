@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "inertia_rails/rspec"
 
 describe LinksController, :vcr, type: :controller do
   CUSTOM_HTML_CSP = LinksController::CUSTOM_HTML_CSP
@@ -283,8 +284,8 @@ describe LinksController, :vcr, type: :controller do
       expect(response.body).not_to include(%(src="/l/#{product.unique_permalink}/landing/embed"))
     end
 
-    describe "review-reminder links" do
-      let(:purchase) { create(:purchase, link: product) }
+    describe "review-reminder links", inertia: true do
+      let(:purchase) { create(:free_purchase, link: product) }
 
       it "falls through to the standard product page when the review link verifies" do
         expect(controller).to receive(:prepare_product_page).and_call_original
@@ -294,6 +295,21 @@ describe LinksController, :vcr, type: :controller do
 
         expect(response).to be_successful
         expect(response.body).not_to include(%(src="/l/#{product.unique_permalink}/landing/embed"))
+      end
+
+      it "hands the verified purchase to the product page so the review form can render" do
+        get :show, params: { id: product.unique_permalink, purchase_id: purchase.external_id,
+                             purchase_email_digest: purchase.email_digest }
+
+        expect(inertia).to render_component("Products/Show")
+        expect(inertia.props[:purchase][:id]).to eq(purchase.external_id)
+      end
+
+      it "reads the purchase from the primary database" do
+        expect(controller).to receive(:use_primary_database).at_least(:once).and_call_original
+
+        get :show, params: { id: product.unique_permalink, purchase_id: purchase.external_id,
+                             purchase_email_digest: purchase.email_digest }
       end
 
       it "still serves the custom page when the digest does not match the purchase" do
