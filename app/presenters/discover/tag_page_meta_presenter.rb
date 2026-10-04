@@ -21,7 +21,7 @@ class Discover::TagPageMetaPresenter
     tags_sentence = tags.to_sentence
     formatted_result_count = number_with_delimiter(result_count)
     default_description = fetch_discover_meta("descriptions", "default", result_count: formatted_result_count,
-                                                                     tags: tags_sentence)
+                                                                         tags: tags_sentence)
     return default_description unless tags.one?
 
     fetch_discover_meta("descriptions", first_tag_key, result_count: formatted_result_count,
