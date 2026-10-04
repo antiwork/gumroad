@@ -58,6 +58,14 @@ describe PdfUnstampableNotifierJob do
         expect(BackfillPdfStampsJob.jobs.size).to eq(1)
         expect(BackfillPdfStampsJob).to have_enqueued_sidekiq_job(product.id).on("low")
       end
+
+      it "does not start a second chain when the save already enqueued one" do
+        expect(PdfStampingService).to receive(:can_stamp_file?).and_return(true)
+
+        described_class.new.perform(product.id, true)
+
+        expect(BackfillPdfStampsJob.jobs).to be_empty
+      end
     end
   end
 end

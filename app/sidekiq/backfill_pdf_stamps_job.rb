@@ -22,9 +22,12 @@ class BackfillPdfStampsJob
 
       # A nil return means a checkout or click job holds the lock and will stamp it.
       StampPdfForPurchaseJob.perform_inline(purchase.id)
-    rescue PdfStampingService::Error
-      # Already logged by the stamp job; that buyer's download click retries on :critical.
-      next
+    rescue StandardError => e
+      # Inline execution skips the stamp job's retry, and an upload failure is not a
+      # PdfStampingService::Error. Re-enqueue this one sale on :low and keep walking the rest,
+      # so a single bad sale neither loses its stamp nor stops the product's older sales.
+      Rails.logger.error("[#{self.class.name}.#{__method__}] Failed stamping purchase #{purchase.id}: #{e.class}: #{e.message}")
+      StampPdfForPurchaseJob.set(queue: :low).perform_async(purchase.id)
     end
 
     return if purchases.size < BATCH_SIZE
