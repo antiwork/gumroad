@@ -2261,6 +2261,9 @@ class LinksController < ApplicationController
       # Buyer clicked Buy — fall through to the show action's checkout-bearing
       # product page so the existing ?wanted=true flow handles the redirect.
       return if params[:wanted] == "true"
+      # ?native=true opens the standard page while custom HTML is live, for example to
+      # reach the review replies the custom page does not render.
+      return if params[:native] == "true"
       # A review-reminder email links bundle buyers here with the purchase's external id
       # and email digest; the custom page has no review form, so a verified review link
       # falls through to the standard product page instead of failing silently.

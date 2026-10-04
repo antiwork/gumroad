@@ -284,6 +284,22 @@ describe LinksController, :vcr, type: :controller do
       expect(response.body).not_to include(%(src="/l/#{product.unique_permalink}/landing/embed"))
     end
 
+    describe "?native=true", inertia: true do
+      it "serves the standard product page instead of the custom page" do
+        get :show, params: { id: product.unique_permalink, native: "true" }
+
+        expect(response).to be_successful
+        expect(inertia).to render_component("Products/Show")
+        expect(response.body).not_to include(%(src="/l/#{product.unique_permalink}/landing/embed"))
+      end
+
+      it "still serves the custom page for any other value" do
+        get :show, params: { id: product.unique_permalink, native: "false" }
+
+        expect(response.body).to include(%(src="/l/#{product.unique_permalink}/landing/embed"))
+      end
+    end
+
     describe "review-reminder links", inertia: true do
       let(:purchase) { create(:free_purchase, link: product) }
 
