@@ -35,6 +35,13 @@ describe Discover::TagPageMetaPresenter do
         expect(described_class.new([" "], 1000).title).to eq(" ")
       end
     end
+
+    context "when a single tag containing a period is provided" do
+      it "does not raise and returns the default title" do
+        expect { described_class.new(["twitch.tv"], 1000).title }.not_to raise_error
+        expect(described_class.new(["twitch.tv"], 1000).title).to eq("twitch.tv")
+      end
+    end
   end
 
   describe "#meta_description" do
@@ -69,6 +76,14 @@ describe Discover::TagPageMetaPresenter do
     context "when a single whitespace-only tag is provided" do
       it "does not raise and returns the default meta description" do
         expect { described_class.new([" "], 1000).meta_description }.not_to raise_error
+      end
+    end
+
+    context "when a single tag containing a period is provided" do
+      it "does not raise and returns the default meta description" do
+        expect { described_class.new(["twitch.tv"], 1000).meta_description }.not_to raise_error
+        expect(described_class.new(["twitch.tv"], 1000).meta_description).to eq("Browse over 1,000 unique twitch.tv " \
+          "products published by independent creators on Gumroad. Discover the best things to read, watch, create & more!")
       end
     end
   end

@@ -11,21 +11,21 @@ class Discover::TagPageMetaPresenter
   end
 
   def title
-    default_tag_title = fetch_discover_meta("titles.default", tags: tags.join(", "))
+    default_tag_title = fetch_discover_meta("titles", "default", tags: tags.join(", "))
     return default_tag_title unless tags.one?
 
-    fetch_discover_meta("titles.#{first_tag_key}", default: default_tag_title)
+    fetch_discover_meta("titles", first_tag_key, default: default_tag_title)
   end
 
   def meta_description
     tags_sentence = tags.to_sentence
     formatted_result_count = number_with_delimiter(result_count)
-    default_description = fetch_discover_meta("descriptions.default", result_count: formatted_result_count,
-                                                                      tags: tags_sentence)
+    default_description = fetch_discover_meta("descriptions", "default", result_count: formatted_result_count,
+                                                                     tags: tags_sentence)
     return default_description unless tags.one?
 
-    fetch_discover_meta("descriptions.#{first_tag_key}", result_count: formatted_result_count,
-                                                         default: default_description)
+    fetch_discover_meta("descriptions", first_tag_key, result_count: formatted_result_count,
+                                                       default: default_description)
   end
 
   private
@@ -33,9 +33,11 @@ class Discover::TagPageMetaPresenter
       @first_tag_key ||= tags.first.squish.tr(" ", "-").downcase
     end
 
-    def fetch_discover_meta(path, opts)
+    # The tag is one lookup key, never a dotted path: a tag like "twitch.tv" would otherwise
+    # split into extra segments and `dig` into a String leaf.
+    def fetch_discover_meta(section, key, opts)
       default = opts.delete(:default) || ""
-      str = DISCOVER_META_TAGS.dig(*(path.split(".")))
+      str = DISCOVER_META_TAGS.dig(section, key)
 
       return default if !str.is_a?(String) || str.blank?
 
