@@ -31,8 +31,6 @@ class Charge::DirectListedPresentment
   end
 
   def perform
-    allocations = purchases.map { direct_listed_amount_allocation(_1) }
-
     presentment_total_cents = allocations.sum(&:presentment_total_cents)
     presentment_gumroad_amount_cents = allocations.sum(&:presentment_gumroad_amount_cents)
 
@@ -50,6 +48,10 @@ class Charge::DirectListedPresentment
       presentment_gumroad_amount_cents:,
       stripe_fx_quote_id: nil
     )
+  end
+
+  def allocations
+    @allocations ||= purchases.map { direct_listed_amount_allocation(_1) }
   end
 
   private

@@ -3,6 +3,8 @@
 class Order::CreateService
   include Order::ResponseHelpers
 
+  LISTED_CURRENCY_RATE_EXPIRED_MESSAGE = "The listed-currency price changed or expired. Please refresh the page and try again."
+
   attr_accessor :params, :buyer, :order
 
   PARAM_TO_ATTRIBUTE_MAPPINGS = {
@@ -66,6 +68,11 @@ class Order::CreateService
         next
       end
 
+      if listed_payment_element_requires_signed_rate?(product) && direct_listed_currency_rate_hint(product).nil?
+        purchase_responses[line_item_uid] = error_response(LISTED_CURRENCY_RATE_EXPIRED_MESSAGE)
+        next
+      end
+
       begin
         allocation = discount_allocations[line_item_uid]
         allocated_discount = allocation&.dig(
@@ -122,7 +129,8 @@ class Order::CreateService
           submitted_pre_discount_price_cents: submitted_pre_discount_price_cents(line_item_params, allocated_discount),
           once_per_cart_discount_allocation:,
           buyer_currency_quote_line_uid: line_item_uid,
-          buyer_currency_quote_line_index: line_item_index
+          buyer_currency_quote_line_index: line_item_index,
+          direct_listed_currency_rate: direct_listed_currency_rate_hint(product)
         )
 
         # Card params are excluded from build_purchase_params (charging is handled by
@@ -402,6 +410,53 @@ class Order::CreateService
 
     def normalize_discount_code(code)
       OfferCode.normalize_code(code)
+    end
+
+    def listed_payment_element_requires_signed_rate?(product)
+      return false unless listed_payment_element_mount?(product)
+
+      # Before rates were added to the signed method-list token, local-method Elements already
+      # charged their product currency using the live rate. Preserve that rolling-deploy path for
+      # a valid token that proves this was an iDEAL/Bancontact/UPI-style surface. Direct-listed
+      # card mounts still require the signed rate because their displayed allocation depends on it.
+      !method_forced_payment_element_token?(product)
+    end
+
+    def listed_payment_element_mount?(product)
+      return false if params[:buyer_currency_quote].present?
+      return false unless params[:payment_details_source] == PurchasePaymentFlow::PAYMENT_ELEMENT
+
+      mount = params[:payment_element_mount_currency].to_s.downcase
+      listed = product.price_currency_type.to_s.downcase
+      mount.present? && mount == listed && listed != Currency::USD
+    end
+
+    def method_forced_payment_element_token?(product)
+      listed = product.price_currency_type.to_s.downcase
+      types = Checkout::PaymentMethodListToken.verify(
+        params[:payment_method_list_token],
+        sellers: cart_sellers
+      )
+      Array(types).any? do |payment_method_type|
+        Checkout::BuyerCurrencyEligibility.forced_currency_for(payment_method_type) == listed
+      end
+    end
+
+    def direct_listed_currency_rate_hint(product)
+      return unless listed_payment_element_mount?(product)
+
+      Checkout::PaymentMethodListToken.direct_listed_currency_rate(
+        params[:payment_method_list_token],
+        sellers: cart_sellers,
+        currency: product.price_currency_type
+      )
+    end
+
+    def cart_sellers
+      @cart_sellers ||= begin
+        permalinks = params.fetch(:line_items, []).filter_map { _1[:permalink] }.uniq
+        Link.where(unique_permalink: permalinks).includes(:user).map(&:user).uniq
+      end
     end
 
     def build_purchase_params(product, purchase_params)

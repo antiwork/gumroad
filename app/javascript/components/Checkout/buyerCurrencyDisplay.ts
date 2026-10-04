@@ -1,4 +1,4 @@
-import type { SurchargesResponse } from "$app/data/customer_surcharge";
+import type { DirectListedLineAllocation, SurchargesResponse } from "$app/data/customer_surcharge";
 import {
   CurrencyCode,
   formatMinorUnitPriceWithIntl,
@@ -261,6 +261,21 @@ export const getCheckoutPresentmentAmounts = (
   };
 };
 
+// The server's listed-currency split of a direct-listed cart, or null when the response predates
+// the cart it is being read against. Every consumer must agree on what "matching" means: the
+// Element mounts on the sum of these allocations, so a summary that accepted a split the Element
+// rejected (or vice versa) would show a total the buyer is not charged.
+export const getMatchingDirectListedAllocations = (
+  surcharges: Pick<SurchargesResponse, "direct_listed_line_allocations"> | null | undefined,
+  cartPermalinks: readonly string[],
+): DirectListedLineAllocation[] | null => {
+  const allocations = surcharges?.direct_listed_line_allocations;
+  if (!allocations || allocations.length !== cartPermalinks.length) return null;
+  if (!allocations.every((allocation, index) => allocation.permalink === cartPermalinks[index])) return null;
+
+  return allocations;
+};
+
 export const formatPresentmentCents = (
   cents: number,
   buyerCurrencyDisplay: Pick<CheckoutBuyerCurrencyDisplay, "currencyCode" | "subunitToUnit">,
@@ -301,6 +316,8 @@ export const getCheckoutListedCurrencyAmounts = (
     usdTaxCents,
     usdTaxIncludedCents,
     usdShippingCents,
+    listedTaxCents,
+    listedShippingCents,
   }: {
     // The line prices/discounts are already in the listed currency's minor units (that is what the
     // cart holds on this lane); `tipCents` must be converted by the caller, since the tip is
@@ -310,15 +327,20 @@ export const getCheckoutListedCurrencyAmounts = (
     usdTaxCents: number;
     usdTaxIncludedCents: number;
     usdShippingCents: number;
+    // The server's per-line tax/shipping sums, when it sent a split matching this cart. Charge
+    // time converts each line separately, so its rounded sum can differ by a cent from the one
+    // conversion of the aggregate below — prefer the split the charge is actually built from.
+    listedTaxCents?: number | null | undefined;
+    listedShippingCents?: number | null | undefined;
   },
 ): CheckoutListedCurrencyAmounts | null => {
   if (!listedCurrency) return null;
 
   const linePriceCents = lines.map((line) => line.priceCents);
   const discountCents = lines.reduce((sum, line) => sum + Math.max(line.discountCents, 0), 0);
-  const taxCents = toBuyerCurrencyCents(usdTaxCents, listedCurrency);
+  const taxCents = listedTaxCents ?? toBuyerCurrencyCents(usdTaxCents, listedCurrency);
   const taxIncludedCents = toBuyerCurrencyCents(usdTaxIncludedCents, listedCurrency);
-  const shippingCents = toBuyerCurrencyCents(usdShippingCents, listedCurrency);
+  const shippingCents = listedShippingCents ?? toBuyerCurrencyCents(usdShippingCents, listedCurrency);
   const subtotalCents = linePriceCents.reduce((sum, cents) => sum + cents, 0) + tipCents;
 
   return {

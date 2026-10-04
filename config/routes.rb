@@ -469,6 +469,7 @@ Rails.application.routes.draw do
               get :purchases
               get :radar_stats
               get :related
+              get :social_connections
               get :suspension
               get :unpaid_balance
               get :credits

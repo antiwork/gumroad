@@ -80,6 +80,7 @@ const requestData: StartCartPurchaseRequestPayload = {
   recaptchaResponse: null,
   usedStripePaymentElement: true,
   buyerCurrencyQuote: null,
+  directListedAmountToken: null,
   lineItems: [
     {
       uid: "product-a ",
