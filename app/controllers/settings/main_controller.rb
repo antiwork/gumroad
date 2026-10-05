@@ -11,9 +11,22 @@ class Settings::MainController < Settings::BaseController
   end
 
   def update
-    current_seller.with_lock { current_seller.update!(user_params) }
+    submitted_email = params[:user][:email]
+    # Re-entering the address already awaiting confirmation must not rotate the
+    # confirmation token: that silently retires the link already in the inbox.
+    resubmitted_pending_email = submitted_email.present? &&
+      submitted_email != current_seller.email &&
+      submitted_email == current_seller.unconfirmed_email
 
-    if params[:user][:email] == current_seller.email
+    current_seller.with_lock do
+      if resubmitted_pending_email
+        current_seller.update!(user_params.except(:email))
+      else
+        current_seller.update!(user_params)
+      end
+    end
+
+    if submitted_email == current_seller.email
       current_seller.update!(unconfirmed_email: nil)
     end
 

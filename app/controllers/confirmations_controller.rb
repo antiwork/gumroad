@@ -12,7 +12,9 @@ class ConfirmationsController < Devise::ConfirmationsController
     @user = User.find_or_initialize_with_error_by(:confirmation_token, params[:confirmation_token])
 
     if @user.errors.present?
-      flash[:alert] = "You have already been confirmed."
+      # A token that resolves to no user is a superseded or mistyped link, not an
+      # already-confirmed account — that case lands in the branch below.
+      flash[:alert] = "This confirmation link is no longer valid. If you requested a new confirmation email, please use the link in the most recent one."
       return redirect_to root_url
     end
 
@@ -25,6 +27,7 @@ class ConfirmationsController < Devise::ConfirmationsController
       flash[:notice] = "Your account has been successfully confirmed!"
       redirect_to after_confirmation_path_for(:user, @user)
     else
+      flash[:alert] = "You have already been confirmed."
       redirect_to root_url
     end
   end

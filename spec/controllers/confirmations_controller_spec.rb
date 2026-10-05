@@ -57,6 +57,20 @@ describe ConfirmationsController do
         get :show, params: { confirmation_token: @confirmation_token }
         expect(response).to redirect_to root_url
       end
+
+      it "says the account has already been confirmed" do
+        get :show, params: { confirmation_token: @confirmation_token }
+        expect(flash[:alert]).to eq("You have already been confirmed.")
+      end
+    end
+
+    describe "a token that no longer resolves to a user" do
+      it "explains the link is no longer valid rather than claiming the account was confirmed" do
+        get :show, params: { confirmation_token: "superseded-token" }
+
+        expect(response).to redirect_to root_url
+        expect(flash[:alert]).to eq("This confirmation link is no longer valid. If you requested a new confirmation email, please use the link in the most recent one.")
+      end
     end
 
     describe "logged in" do

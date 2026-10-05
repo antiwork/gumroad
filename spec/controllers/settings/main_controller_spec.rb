@@ -153,6 +153,35 @@ describe Settings::MainController, type: :controller, inertia: true do
         end
       end
 
+      describe "the address already awaiting confirmation is saved again" do
+        before do
+          seller.update_columns(email: "test@gumroad.com", unconfirmed_email: "new@gumroad.com", confirmation_token: "existing-token")
+        end
+
+        it "keeps the confirmation token so the link already sent stays valid" do
+          expect do
+            put :update, params: { user: user_params.merge(email: "new@gumroad.com") }
+          end.to_not change { seller.reload.confirmation_token }.from("existing-token")
+          expect(seller.reload.unconfirmed_email).to eq("new@gumroad.com")
+          expect(response).to redirect_to(settings_main_path)
+          expect(response).to have_http_status :see_other
+          expect(flash[:notice]).to eq("Your account has been updated!")
+        end
+
+        it "does not send another confirmation email" do
+          expect do
+            put :update, params: { user: user_params.merge(email: "new@gumroad.com") }
+          end.to_not have_enqueued_mail(UserSignupMailer, :confirmation_instructions)
+        end
+
+        it "still rotates the confirmation token when a different address is submitted" do
+          expect do
+            put :update, params: { user: user_params.merge(email: "another@example.com") }
+          end.to change { seller.reload.confirmation_token }.from("existing-token")
+          expect(seller.reload.unconfirmed_email).to eq("another@example.com")
+        end
+      end
+
       describe "email is changed back to a confirmed email" do
         before(:each) do
           seller.update_columns(email: "test@gumroad.com", unconfirmed_email: "new@gumroad.com")
