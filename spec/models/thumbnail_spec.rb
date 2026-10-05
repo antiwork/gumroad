@@ -7,6 +7,21 @@ describe Thumbnail do
     @product = create(:product)
   end
 
+  # Built from an existing fixture so the branch carries no binary file.
+  def square_webp_path
+    @square_webp_path ||= begin
+      path = Rails.root.join("tmp", "thumbnail_spec_square.webp")
+      image = MiniMagick::Image.open(Rails.root.join("spec/support/fixtures/smilie.png"))
+      image.format("webp")
+      image.write(path.to_s)
+      path
+    end
+  end
+
+  def webp_upload
+    Rack::Test::UploadedFile.new(square_webp_path, "image/webp")
+  end
+
   describe "#validate_file" do
     it "does not save if no file attached" do
       thumbnail = Thumbnail.new(product: @product)
@@ -17,6 +32,15 @@ describe Thumbnail do
     it "saves with a valid file attached" do
       thumbnail = Thumbnail.new(product: @product)
       blob = ActiveStorage::Blob.create_and_upload!(io: fixture_file_upload("smilie.png"), filename: "smilie.png")
+      blob.analyze
+      thumbnail.file.attach(blob)
+      expect(thumbnail.save).to eq(true)
+      expect(thumbnail.errors.full_messages).to be_empty
+    end
+
+    it "saves with a webp file attached" do
+      thumbnail = Thumbnail.new(product: @product)
+      blob = ActiveStorage::Blob.create_and_upload!(io: webp_upload, filename: "smilie.webp")
       blob.analyze
       thumbnail.file.attach(blob)
       expect(thumbnail.save).to eq(true)
@@ -118,6 +142,19 @@ describe Thumbnail do
       thumbnail.file.attach(blob)
       thumbnail.save!
       expect(thumbnail.url).to match(PUBLIC_STORAGE_S3_BUCKET)
+      # `url` falls back to the original file's URL when processing fails, and that URL shares
+      # the bucket, so the bucket match alone cannot tell a variant from the fallback.
+      expect(thumbnail.url).to_not eq(thumbnail.url(variant: :original))
+    end
+
+    it "returns a processed variant url for a webp file" do
+      thumbnail = Thumbnail.new(product: @product)
+      blob = ActiveStorage::Blob.create_and_upload!(io: webp_upload, filename: "smilie.webp")
+      blob.analyze
+      thumbnail.file.attach(blob)
+      thumbnail.save!
+      expect(thumbnail.url).to match(PUBLIC_STORAGE_S3_BUCKET)
+      expect(thumbnail.url).to_not eq(thumbnail.url(variant: :original))
     end
 
     it "returns original file instead of variant for gifs" do

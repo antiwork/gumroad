@@ -59,6 +59,28 @@ describe("Product Edit Thumbnail Scenario", type: :system, js: true) do
     expect(@product.reload.thumbnail).to be_present
   end
 
+  it "accepts a WebP thumbnail that is small enough to skip client-side re-encoding" do
+    # A WebP under the client's size and dimension limits passes through unchanged, so the
+    # server receives image/webp and its allowlist has to accept the format the picker offers.
+    webp = Rails.root.join("tmp", "thumbnail_spec_square.webp")
+    MiniMagick::Image.open(Rails.root.join("spec/support/fixtures/smilie.png"))
+                       .tap { |image| image.format("webp") }
+                       .write(webp.to_s)
+
+    visit("/products/#{@product.unique_permalink}/edit")
+
+    within_section "Thumbnail", section_element: :section do
+      page.attach_file("Upload", webp.to_s, visible: false)
+      expect(page).to have_selector("[role=progressbar]")
+      wait_for_ajax
+      expect(page).to_not have_selector("[role=progressbar]")
+      expect(page).to have_image("Thumbnail image", src: @product.reload.thumbnail.url)
+    end
+    expect(page).to have_no_alert
+
+    expect(@product.reload.thumbnail).to be_present
+  end
+
   context "when product has a saved thumbnail" do
     before do
       create(:thumbnail, product: @product)
