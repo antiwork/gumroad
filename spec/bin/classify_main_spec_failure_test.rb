@@ -60,6 +60,7 @@ SPEC_FAILURE = [["Check out repository", "success"], ["Run tests", "failure"]].f
 SPEC_CANCELLED = [["Check out repository", "success"], ["Run tests", "cancelled"]].freeze
 PASSED = [["Check out repository", "success"], ["Run tests", "success"]].freeze
 HUNG_CHECKOUT = [["Check out repository", "failure"], ["Run tests", "skipped"]].freeze
+MINITEST_FAILURE = [["Check out repository", "success"], ["Run Minitest", "failure"]].freeze
 
 check(
   "one slow shard failed in Run tests",
@@ -68,9 +69,15 @@ check(
 )
 
 check(
-  "one minitest shard failed in Run tests",
-  attempt([job("Test Minitest 1", "failure", SPEC_FAILURE)]),
+  "one minitest shard failed in Run Minitest",
+  attempt([job("Test Minitest 1", "failure", MINITEST_FAILURE)]),
   expect: :rerun
+)
+
+check(
+  "a minitest shard that failed outside Run Minitest",
+  attempt([job("Test Minitest 1", "failure", SPEC_FAILURE)]),
+  expect: :skip
 )
 
 # test_fast is fail-fast: one red shard cancels its siblings mid-run.
@@ -222,6 +229,20 @@ if wanted.all? { |part| gate.include?(part) }
 else
   puts "  FAIL  the workflow gate caps attempts and only runs on a failed main push"
   $failures << "workflow gate: #{gate.inspect}"
+end
+
+# The classifier matches job and step names from tests.yml; a rename there would
+# turn every retry into a silent skip.
+TESTS_WORKFLOW = File.expand_path("../../.github/workflows/tests.yml", __dir__)
+{ "test_fast" => ["Test Fast", "Run tests"], "test_slow" => ["Test Slow", "Run tests"], "test_minitest" => ["Test Minitest", "Run Minitest"] }.each do |key, (prefix, step)|
+  $count += 1
+  definition = YAML.load_file(TESTS_WORKFLOW).fetch("jobs").fetch(key)
+  if definition.fetch("name").start_with?("#{prefix} ") && definition.fetch("steps").any? { |s| s["name"] == step }
+    puts "  ok    tests.yml #{key} is named #{prefix.inspect} and has #{step.inspect}"
+  else
+    puts "  FAIL  tests.yml #{key} is named #{prefix.inspect} and has #{step.inspect}"
+    $failures << "tests.yml #{key}: name #{definition['name'].inspect}"
+  end
 end
 
 puts

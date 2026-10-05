@@ -64,9 +64,34 @@ jobs:
             *) echo "rerun=false" >> "$GITHUB_OUTPUT" ;;
           esac
 
+      # Checked again right before the request: a re-run joins the main
+      # concurrency group, and there it would replace a newer pending run, which
+      # is the run that unblocks the newer deploy. The attempt check stops a
+      # re-run of an attempt that someone started by hand in the meantime.
       - name: Re-run the failed jobs
         if: steps.classify.outputs.rerun == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_ID: ${{ github.event.workflow_run.id }}
-        run: gh run rerun "$RUN_ID" --failed -R "$GITHUB_REPOSITORY"
+          ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          WORKFLOW_ID: ${{ github.event.workflow_run.workflow_id }}
+        run: |
+          set -euo pipefail
+          run=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}" --jq '"\(.run_attempt) \(.status)"')
+          if [ "$run" != "$ATTEMPT completed" ]; then
+            echo "Skip: the run is now at '$run', not '$ATTEMPT completed'."
+            exit 0
+          fi
+          main_sha=$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq .sha)
+          if [ "$main_sha" != "$HEAD_SHA" ]; then
+            echo "Skip: main moved to $main_sha; its own run ships this commit."
+            exit 0
+          fi
+          others=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${WORKFLOW_ID}/runs?branch=main&event=push&per_page=50" \
+            --jq "[.workflow_runs[] | select(.id != ${RUN_ID} and (.status == \"queued\" or .status == \"in_progress\" or .status == \"pending\" or .status == \"waiting\"))] | length")
+          if [ "$others" != "0" ]; then
+            echo "Skip: $others other Tests run(s) on main are queued or running."
+            exit 0
+          fi
+          gh run rerun "$RUN_ID" --failed -R "$GITHUB_REPOSITORY"

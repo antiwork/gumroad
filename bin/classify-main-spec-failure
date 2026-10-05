@@ -20,7 +20,8 @@ EXIT_SKIP = 1
 EXIT_OPERATIONAL = 2
 
 SHARD_NAME = /\ATest (Fast|Slow|Minitest) \d+\z/
-SPEC_STEP = "Run tests"
+# The step that runs the shard's tests, per job in tests.yml.
+SPEC_STEPS = { "Fast" => "Run tests", "Slow" => "Run tests", "Minitest" => "Run Minitest" }.freeze
 
 # More red shards than this reads as a real break, and re-running it only delays
 # the red.
@@ -39,6 +40,10 @@ end
 
 def job_label(job)
   job["name"] || "job #{job['id']}"
+end
+
+def spec_step(job)
+  SPEC_STEPS.fetch(job_label(job)[SHARD_NAME, 1])
 end
 
 def verdict(payload)
@@ -69,8 +74,8 @@ def verdict(payload)
   failed.each do |job|
     return [EXIT_SKIP, "skip: #{job_label(job)} is not a spec shard"] unless job_label(job).match?(SHARD_NAME)
     step = first_failed_step(job)
-    unless job["conclusion"] == "failure" && step && step["name"] == SPEC_STEP && step["conclusion"] == "failure"
-      return [EXIT_SKIP, "skip: #{job_label(job)} failed at #{step&.dig('name').inspect}, not #{SPEC_STEP.inspect}"]
+    unless job["conclusion"] == "failure" && step && step["name"] == spec_step(job) && step["conclusion"] == "failure"
+      return [EXIT_SKIP, "skip: #{job_label(job)} failed at #{step&.dig('name').inspect}, not #{spec_step(job).inspect}"]
     end
   end
 
