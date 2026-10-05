@@ -10,7 +10,15 @@
 #   { "jobs": [ ... GET /repos/{repo}/actions/runs/{id}/attempts/{n}/jobs ... ],
 #     "conclusion": "<the triggering run's own conclusion>",
 #     "event": "push", "head_branch": "main",
-#     "head_sha": "<the run's commit>", "main_sha": "<main's tip now>" }
+#     "head_sha": "<the run's commit>", "main_sha": "<main's tip now>",
+#     "summaries": { "<job_id>": "<the shard log's last RSpec summary line>" } }
+#
+# Knapsack re-runs only the failed examples of a retried RSpec shard, and nothing
+# of a cancelled one. So a retry is safe only when every shard finished and each
+# red RSpec shard failed in examples: an error outside examples (a hook, a load
+# error) has no example to retry, and its re-run would pass with 0 examples.
+#
+# `--rspec-shards` prints the job ids whose summary lines the caller must fetch.
 #
 # Exit codes match bin/classify-hung-checkout: 0 rerun, 1 skip, 2 could not run.
 
@@ -22,6 +30,10 @@ EXIT_OPERATIONAL = 2
 SHARD_NAME = /\ATest (Fast|Slow|Minitest) \d+\z/
 # The step that runs the shard's tests, per job in tests.yml.
 SPEC_STEPS = { "Fast" => "Run tests", "Slow" => "Run tests", "Minitest" => "Run Minitest" }.freeze
+RSPEC_KINDS = %w[Fast Slow].freeze
+# "45 examples, 1 failure" or "45 examples, 1 failure, 2 pending". Anything more
+# ("…, 1 error occurred outside of examples") is not retryable.
+EXAMPLE_FAILURES = /\A\d+ examples?, ([1-9]\d*) failures?(, \d+ pending)?\z/
 
 # More red shards than this reads as a real break, and re-running it only delays
 # the red.
@@ -42,8 +54,16 @@ def job_label(job)
   job["name"] || "job #{job['id']}"
 end
 
+def shard_kind(job)
+  job_label(job)[SHARD_NAME, 1]
+end
+
 def spec_step(job)
-  SPEC_STEPS.fetch(job_label(job)[SHARD_NAME, 1])
+  SPEC_STEPS.fetch(shard_kind(job))
+end
+
+def failed_rspec_shards(jobs)
+  jobs.select { |job| job["conclusion"] == "failure" && RSPEC_KINDS.include?(shard_kind(job)) }
 end
 
 def verdict(payload)
@@ -68,10 +88,12 @@ def verdict(payload)
   red = jobs.select { |job| JOB_RED.include?(job["conclusion"]) }
   return [EXIT_SKIP, "skip: no red job on this attempt"] if red.empty?
 
+  cancelled = red.find { |job| job["conclusion"] == "cancelled" }
+  return [EXIT_SKIP, "skip: #{job_label(cancelled)} was cancelled, and a re-run would not run its remaining tests"] if cancelled
+
   # `timed_out` is a shard that ran out of its own budget; a re-run of a hang
   # proves nothing about the specs.
-  failed = red.reject { |job| job["conclusion"] == "cancelled" }
-  failed.each do |job|
+  red.each do |job|
     return [EXIT_SKIP, "skip: #{job_label(job)} is not a spec shard"] unless job_label(job).match?(SHARD_NAME)
     step = first_failed_step(job)
     unless job["conclusion"] == "failure" && step && step["name"] == spec_step(job) && step["conclusion"] == "failure"
@@ -79,20 +101,23 @@ def verdict(payload)
     end
   end
 
-  # Fail-fast cancels sibling shards behind a red one; a cancelled job elsewhere
-  # means something other than specs stopped the run.
-  stray = (red - failed).find { |job| !job_label(job).match?(SHARD_NAME) }
-  return [EXIT_SKIP, "skip: #{job_label(stray)} was cancelled"] if stray
-
-  return [EXIT_SKIP, "skip: only cancelled shards, no spec failure"] if failed.empty?
-  if failed.size > MAX_FAILED_SHARDS
-    return [EXIT_SKIP, "skip: #{failed.size} shards failed (limit #{MAX_FAILED_SHARDS})"]
+  if red.size > MAX_FAILED_SHARDS
+    return [EXIT_SKIP, "skip: #{red.size} shards failed (limit #{MAX_FAILED_SHARDS})"]
   end
 
-  [0, "rerun: specs failed on #{failed.map { |job| job_label(job) }.join(', ')}"]
+  summaries = payload["summaries"].is_a?(Hash) ? payload["summaries"] : {}
+  failed_rspec_shards(red).each do |job|
+    summary = summaries[job["id"].to_s].to_s.strip
+    unless summary.match?(EXAMPLE_FAILURES)
+      return [EXIT_SKIP, "skip: #{job_label(job)} summary #{summary.inspect} is not an example failure"]
+    end
+  end
+
+  [0, "rerun: specs failed on #{red.map { |job| job_label(job) }.join(', ')}"]
 end
 
-raw = ARGV.first
+raw = ARGV.reject { |arg| arg.start_with?("--") }.first
+rspec_shards_only = ARGV.include?("--rspec-shards")
 
 begin
   payload = JSON.parse(raw ? File.read(raw) : $stdin.read)
@@ -104,6 +129,11 @@ end
 unless payload.is_a?(Hash)
   warn "Main spec-failure classifier could not run: expected a JSON object"
   exit EXIT_OPERATIONAL
+end
+
+if rspec_shards_only
+  failed_rspec_shards(Array(payload["jobs"])).each { |job| puts job["id"] }
+  exit 0
 end
 
 code, message = verdict(payload)

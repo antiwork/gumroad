@@ -6,7 +6,8 @@ name: Rerun main spec failure
 #
 # Disjoint from rerun-hung-checkout.yml: that one refuses any attempt where specs
 # failed, and the classifier here refuses any attempt where something else did.
-# A real break fails the re-run too and stays red.
+# A real break fails the re-run too and stays red. Knapsack re-runs only the
+# failed examples; bin/classify-main-spec-failure says why that limits the scope.
 
 on:
   workflow_run:
@@ -51,9 +52,20 @@ jobs:
             --jq '.jobs[]' | jq -s '{jobs: .}' > jobs.json
           MAIN_SHA=$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq .sha)
 
+          # The RSpec summary line of each failed Fast/Slow shard. A missing line
+          # stays empty, and the classifier refuses it.
+          echo '{}' > summaries.json
+          for id in $(ruby bin/classify-main-spec-failure --rspec-shards jobs.json); do
+            summary=$(gh api --allow-escape-sequences "repos/${GITHUB_REPOSITORY}/actions/jobs/${id}/logs" \
+                        | sed 's/\x1b\[[0-9;]*m//g' | tr -d '\r' \
+                        | grep -aoE '[0-9]+ examples?, [0-9]+ failures?.*$' | tail -1) || summary=""
+            jq --arg id "$id" --arg summary "$summary" '.[$id] = $summary' summaries.json > summaries.tmp
+            mv summaries.tmp summaries.json
+          done
+
           jq --arg conclusion "$CONCLUSION" --arg event "$EVENT" --arg head_branch "$HEAD_BRANCH" \
-             --arg head_sha "$HEAD_SHA" --arg main_sha "$MAIN_SHA" \
-            '. + {conclusion: $conclusion, event: $event, head_branch: $head_branch, head_sha: $head_sha, main_sha: $main_sha}' \
+             --arg head_sha "$HEAD_SHA" --arg main_sha "$MAIN_SHA" --slurpfile summaries summaries.json \
+            '. + {conclusion: $conclusion, event: $event, head_branch: $head_branch, head_sha: $head_sha, main_sha: $main_sha, summaries: $summaries[0]}' \
             jobs.json > attempt.json
           set +e
           ruby bin/classify-main-spec-failure attempt.json

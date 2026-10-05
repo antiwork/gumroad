@@ -25,9 +25,15 @@ def job(name, conclusion, steps)
   { "id" => @next_id, "name" => name, "conclusion" => conclusion, "steps" => built }
 end
 
+# Every red Fast/Slow shard gets an example-failure summary unless a check
+# overrides `summaries`.
 def attempt(jobs, **overrides)
+  summaries = jobs.each_with_object({}) do |job, all|
+    all[job["id"].to_s] = "45 examples, 1 failure" if job["conclusion"] == "failure" && job["name"].match?(/\ATest (Fast|Slow) /)
+  end
   {
     "jobs" => jobs,
+    "summaries" => summaries,
     "conclusion" => "failure",
     "event" => "push",
     "head_branch" => "main",
@@ -36,8 +42,8 @@ def attempt(jobs, **overrides)
   }.merge(overrides.transform_keys(&:to_s))
 end
 
-def run(input)
-  stdout, stderr, status = Open3.capture3("ruby", CLASSIFIER, stdin_data: input)
+def run(input, *argv)
+  stdout, stderr, status = Open3.capture3("ruby", CLASSIFIER, *argv, stdin_data: input)
   [status.exitstatus, stdout + stderr]
 end
 
@@ -80,15 +86,52 @@ check(
   expect: :skip
 )
 
-# test_fast is fail-fast: one red shard cancels its siblings mid-run.
+# Knapsack gives a re-run of a cancelled shard none of its unrun tests, so the
+# retry would pass without running them.
 check(
-  "a fast shard failed and fail-fast cancelled its siblings",
+  "a fast shard failed and its siblings were cancelled",
   attempt([
             job("Test Fast 10", "failure", SPEC_FAILURE),
             job("Test Fast 11", "cancelled", SPEC_CANCELLED),
             job("Test Fast 12", "cancelled", SPEC_CANCELLED)
           ]),
+  expect: :skip
+)
+
+def with_summary(payload, summary)
+  payload["summaries"].transform_values! { summary }
+  payload
+end
+
+check(
+  "a summary with pending examples",
+  with_summary(attempt([job("Test Fast 10", "failure", SPEC_FAILURE)]), "2045 examples, 1 failure, 3 pending"),
   expect: :rerun
+)
+
+# The retry re-runs failed examples only; a hook or load error has none.
+check(
+  "an error outside of examples",
+  with_summary(attempt([job("Test Slow 12", "failure", SPEC_FAILURE)]), "45 examples, 0 failures, 1 error occurred outside of examples"),
+  expect: :skip
+)
+
+check(
+  "failures plus an error outside of examples",
+  with_summary(attempt([job("Test Slow 12", "failure", SPEC_FAILURE)]), "45 examples, 1 failure, 1 error occurred outside of examples"),
+  expect: :skip
+)
+
+check(
+  "a summary with no failures",
+  with_summary(attempt([job("Test Slow 12", "failure", SPEC_FAILURE)]), "0 examples, 0 failures"),
+  expect: :skip
+)
+
+check(
+  "a failed rspec shard with no summary",
+  attempt([job("Test Slow 12", "failure", SPEC_FAILURE)], summaries: {}),
+  expect: :skip
 )
 
 check(
@@ -141,6 +184,13 @@ check(
     [job("Test Slow 12", "failure", SPEC_FAILURE), job("Test Slow 13", "cancelled", SPEC_CANCELLED)],
     conclusion: "cancelled"
   ),
+  expect: :skip
+)
+
+# The run conclusion alone says the run was thrown away.
+check(
+  "a cancelled run whose jobs show only a failed shard",
+  attempt([job("Test Slow 12", "failure", SPEC_FAILURE), job("Test Slow 13", "success", PASSED)], conclusion: "cancelled"),
   expect: :skip
 )
 
@@ -209,6 +259,24 @@ check("a red attempt with no jobs", attempt([]), expect: :skip)
 check("input that is not JSON", "not json", expect: :error)
 check("input that is not an object", "[]", expect: :error)
 
+# The workflow fetches a summary only for the ids this prints, so a shard it
+# misses has no summary and is refused.
+$count += 1
+listed_jobs = [
+  job("Test Fast 10", "failure", SPEC_FAILURE),
+  job("Test Slow 12", "failure", SPEC_FAILURE),
+  job("Test Slow 13", "success", PASSED),
+  job("Test Minitest 1", "failure", MINITEST_FAILURE),
+  job("Build images", "failure", [["Build test image", "failure"]])
+]
+_, listed = run(JSON.dump(attempt(listed_jobs)), "--rspec-shards")
+if listed.split.map(&:to_i) == listed_jobs.first(2).map { |j| j["id"] }
+  puts "  ok    --rspec-shards lists only the failed Fast and Slow shards"
+else
+  puts "  FAIL  --rspec-shards lists only the failed Fast and Slow shards"
+  $failures << "--rspec-shards: got #{listed.strip.inspect}"
+end
+
 # --- The workflow's own gate ----------------------------------------------
 #
 # The attempt cap and the main-push scope live in the job `if`, which nothing
@@ -231,9 +299,20 @@ else
   $failures << "workflow gate: #{gate.inspect}"
 end
 
+TESTS_WORKFLOW = File.expand_path("../../.github/workflows/tests.yml", __dir__)
+
+# A fail-fast cancel on main would leave every retry refused.
+$count += 1
+fail_fast = YAML.load_file(TESTS_WORKFLOW).fetch("jobs").fetch("test_fast").fetch("strategy").fetch("fail-fast").to_s
+if fail_fast.include?("github.event_name != 'push'") && fail_fast.include?("github.ref != 'refs/heads/main'")
+  puts "  ok    tests.yml test_fast does not fail fast on main pushes"
+else
+  puts "  FAIL  tests.yml test_fast does not fail fast on main pushes"
+  $failures << "test_fast fail-fast: #{fail_fast.inspect}"
+end
+
 # The classifier matches job and step names from tests.yml; a rename there would
 # turn every retry into a silent skip.
-TESTS_WORKFLOW = File.expand_path("../../.github/workflows/tests.yml", __dir__)
 { "test_fast" => ["Test Fast", "Run tests"], "test_slow" => ["Test Slow", "Run tests"], "test_minitest" => ["Test Minitest", "Run Minitest"] }.each do |key, (prefix, step)|
   $count += 1
   definition = YAML.load_file(TESTS_WORKFLOW).fetch("jobs").fetch(key)
