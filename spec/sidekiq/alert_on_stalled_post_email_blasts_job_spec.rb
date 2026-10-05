@@ -349,6 +349,18 @@ describe AlertOnStalledPostEmailBlastsJob do
           expect(blast.reload.expired_at).to be_nil
         end
 
+        it "ends a lost blast when only a later blast of the same post recorded recipients" do
+          lost = old_blast(requested_at: (described_class::LOOKBACK + 3.days).ago)
+          later = old_blast(requested_at: (described_class::LOOKBACK + 1.day).ago, first_email_delivered_at: 1.day.ago)
+          SentPostEmail.create!(post:, email: "buyer@example.com", created_at: later.requested_at + 1.minute)
+          stub_sidekiq
+
+          described_class.new.perform
+
+          expect(lost.reload.expiry_reason).to eq(PostEmailBlast::EXPIRY_ABANDONED)
+          expect(later.reload.expired_at).to be_nil
+        end
+
         it "leaves a non-opener resend alone, since resends record no sent_post_emails rows" do
           resend = old_blast(recipient_filter: PostEmailBlast::RECIPIENT_FILTER_UNOPENED)
           stub_sidekiq

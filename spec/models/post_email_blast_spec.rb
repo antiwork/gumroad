@@ -97,6 +97,46 @@ RSpec.describe PostEmailBlast do
     end
   end
 
+  describe ".never_sent" do
+    let(:post) { create(:installment) }
+
+    def lost_blast(requested_at:)
+      create(:post_email_blast, :just_requested, post:, requested_at:)
+    end
+
+    it "includes a blast whose post only recorded recipients for a later blast of the same post" do
+      lost = lost_blast(requested_at: 30.days.ago)
+      later = lost_blast(requested_at: 20.days.ago)
+      SentPostEmail.create!(post:, email: "buyer@example.com", created_at: later.requested_at + 1.minute)
+
+      expect(described_class.never_sent.ids).to eq([lost.id])
+    end
+
+    it "excludes a blast whose post recorded recipients before the next blast was requested" do
+      sent = lost_blast(requested_at: 30.days.ago)
+      lost_blast(requested_at: 20.days.ago)
+      SentPostEmail.create!(post:, email: "buyer@example.com", created_at: sent.requested_at + 1.minute)
+
+      expect(described_class.never_sent.ids).not_to include(sent.id)
+    end
+
+    it "does not end the window at a non-opener resend, which records no recipients" do
+      sent = lost_blast(requested_at: 30.days.ago)
+      create(:post_email_blast, :just_requested, post:, requested_at: 20.days.ago, recipient_filter: PostEmailBlast::RECIPIENT_FILTER_UNOPENED)
+      SentPostEmail.create!(post:, email: "buyer@example.com", created_at: 10.days.ago)
+
+      expect(described_class.never_sent.ids).not_to include(sent.id)
+    end
+
+    it "ignores later blasts of other posts" do
+      sent = lost_blast(requested_at: 30.days.ago)
+      create(:post_email_blast, :just_requested, post: create(:installment), requested_at: 20.days.ago)
+      SentPostEmail.create!(post:, email: "buyer@example.com", created_at: 10.days.ago)
+
+      expect(described_class.never_sent.ids).not_to include(sent.id)
+    end
+  end
+
   describe "Latency metrics", :freeze_time do
     describe "#start_latency" do
       it "returns the difference between requested_at and started_at" do

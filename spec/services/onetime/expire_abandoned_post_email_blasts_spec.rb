@@ -37,6 +37,27 @@ describe Onetime::ExpireAbandonedPostEmailBlasts do
       expect(described_class.process(dry_run: false)).to eq([blast.id])
     end
 
+    it "ends a lost blast of a republished post whose later blast delivered, and leaves the later one" do
+      lost = unsent_blast(requested_at: 3.years.ago)
+      later = unsent_blast(requested_at: 2.years.ago, first_email_delivered_at: 2.years.ago)
+      SentPostEmail.create!(post:, email: "buyer@example.com", created_at: later.requested_at + 1.minute)
+
+      expect(described_class.process(dry_run: false)).to eq([lost.id])
+
+      expect(lost.reload.expired_at).to be_present
+      expect(later.reload.expired_at).to be_nil
+    end
+
+    it "does nothing on a second run" do
+      blast = unsent_blast
+
+      expect(described_class.process(dry_run: false)).to eq([blast.id])
+      expired_at = blast.reload.expired_at
+
+      expect(described_class.process(dry_run: false)).to eq([])
+      expect(blast.reload.expired_at).to eq(expired_at)
+    end
+
     it "leaves alone blasts that sent, completed, are resends, or are inside the lookback" do
       delivered = unsent_blast(first_email_delivered_at: 3.years.ago, delivery_count: 3)
       completed = unsent_blast(completed_at: 3.years.ago)
