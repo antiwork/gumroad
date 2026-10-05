@@ -8,7 +8,15 @@ import { EmptyVersionsNotice } from "$app/components/ProductEdit/ProductTab/Empt
 import { type Product, type Version } from "$app/components/ProductEdit/state";
 
 const context = vi.hoisted(() => {
-  const page: Page = { id: "page", title: null, description: {}, updated_at: "2026-01-01T00:00:00Z" };
+  const paragraph = (text?: string) => ({ type: "paragraph", ...(text ? { content: [{ type: "text", text }] } : {}) });
+  const page: Page = {
+    id: "page",
+    title: null,
+    description: { type: "doc", content: [paragraph("Choir notes")] },
+    updated_at: "2026-01-01T00:00:00Z",
+  };
+  // The shape "Add page" creates: no title, and a single bare paragraph.
+  const blankPage: Page = { ...page, id: "blank-page", description: { type: "doc", content: [paragraph()] } };
   const version = (id: string, name: string, richContent: Page[] = []): Version => ({
     id,
     name,
@@ -87,7 +95,7 @@ const context = vi.hoisted(() => {
     public_files: [],
     community_chat_enabled: false,
   };
-  return { page, version, product };
+  return { page, blankPage, version, product };
 });
 
 vi.mock("$app/components/ProductEdit/state", async (importOriginal) => ({
@@ -139,6 +147,48 @@ it("stays silent when every version shares the product-level content", () => {
 it("stays silent for physical products, whose variants are not downloads", () => {
   context.product.native_type = "physical";
   context.product.variants = [context.version("1", "Medium")];
+
+  render(<EmptyVersionsNotice />);
+
+  expect(screen.queryByRole("status")).toBeNull();
+});
+
+it("still flags a version whose only page is the blank placeholder the editor creates", () => {
+  context.product.variants = [context.version("1", "MEDIUM CHOIR", [context.blankPage])];
+
+  render(<EmptyVersionsNotice />);
+
+  expect(screen.getByRole("status").textContent).toContain("MEDIUM CHOIR");
+});
+
+it("flags a version whose pages are all blank", () => {
+  context.product.variants = [context.version("1", "MEDIUM CHOIR", [context.blankPage, { ...context.blankPage, id: "blank-2" }])];
+
+  render(<EmptyVersionsNotice />);
+
+  expect(screen.getByRole("status").textContent).toContain("MEDIUM CHOIR");
+});
+
+it("leaves a version alone once a page has a body", () => {
+  context.product.variants = [context.version("1", "SMALL CHOIR", [context.blankPage, context.page])];
+
+  render(<EmptyVersionsNotice />);
+
+  expect(screen.queryByRole("status")).toBeNull();
+});
+
+it("leaves a version alone when a page carries only a title", () => {
+  const titled: Page = { ...context.blankPage, title: "Programme notes" };
+  context.product.variants = [context.version("1", "SMALL CHOIR", [titled])];
+
+  render(<EmptyVersionsNotice />);
+
+  expect(screen.queryByRole("status")).toBeNull();
+});
+
+it("counts a page holding a file embed as content", () => {
+  const embed: Page = { ...context.blankPage, description: { type: "doc", content: [{ type: "fileEmbed", attrs: { id: "file" } }] } };
+  context.product.variants = [context.version("1", "SMALL CHOIR", [embed])];
 
   render(<EmptyVersionsNotice />);
 
