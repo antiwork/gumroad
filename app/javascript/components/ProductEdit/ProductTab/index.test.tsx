@@ -150,7 +150,7 @@ const baseProduct: Product = {
 const renderProductTab = (
   product: Product,
   currentSeller: CurrentSeller = seller,
-  updateProduct: (update: Partial<Product>) => void = vi.fn(),
+  updateProduct: (update: Partial<Product> | ((product: Product) => void)) => void = vi.fn(),
 ) =>
   render(
     <DomainSettingsProvider
