@@ -206,6 +206,7 @@ describe StripePayoutProcessor do
       payment.reload
       expect(payment.stripe_transfer_id).to eq("po_drained")
       expect(payment.bank_account).to eq(retired_bank)
+      expect(payment.retired_account_drain).to be(true)
     end
 
     it "keeps the balances unpaid and marks the bank when Stripe no longer has the external account" do
@@ -220,6 +221,7 @@ describe StripePayoutProcessor do
       expect(payment.failure_reason).to eq(Payment::FailureReason::BANK_ACCOUNT_NOT_FOUND_AT_STRIPE)
       expect(credit.reload).to be_unpaid
       expect(retired_bank.reload).to be_deleted
+      expect(payment.retired_account_drain).to be(true)
     end
 
     it "does not pause the seller's active account however often the drain fails" do

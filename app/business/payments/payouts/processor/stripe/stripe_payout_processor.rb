@@ -352,6 +352,7 @@ class StripePayoutProcessor
     # not to the seller's current bank, which belongs to whichever account replaced it. Naming that
     # external account is what makes `perform_payment` address the retired account explicitly.
     no_bank_on_retired_account = false
+    payment.retired_account_drain = true if drains_retired_account
     if drains_retired_account && payment.bank_account&.stripe_connect_account_id != merchant_account.charge_processor_merchant_id
       payment.bank_account = bank_account_for_retired_account(merchant_account)
       # With no external account left on record there is nothing to pay out to, and the seller's
@@ -691,6 +692,7 @@ class StripePayoutProcessor
     # We have transferred the balance held by gumroad to the connected Stripe standard account.
     # No payout needs to be issued in this case.
     merchant_account = payment.user.merchant_accounts.find_by(charge_processor_merchant_id: payment.stripe_connect_account_id)
+    payment.retired_account_drain = true if !merchant_account.active? && drainable_retired_account?(merchant_account)
     if merchant_account.is_a_stripe_connect_account?
       stripe_transfer = Stripe::Transfer.retrieve(payment.stripe_internal_transfer_id)
       payment.stripe_transfer_id = stripe_transfer.destination_payment
