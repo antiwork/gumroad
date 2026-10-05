@@ -1,7 +1,9 @@
 // @vitest-environment happy-dom
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+
+import { searchProductOfferCodes } from "$app/data/offer_code";
 
 import { CurrentSellerProvider, type CurrentSeller } from "$app/components/CurrentSeller";
 import { DomainSettingsProvider } from "$app/components/DomainSettings";
@@ -34,6 +36,7 @@ vi.mock("$app/components/SubtitleList/Row", () => ({ SubtitleFile: () => null })
 vi.mock("$app/components/WithTooltip", () => ({
   WithTooltip: ({ children }: { children?: React.ReactNode }) => <span>{children}</span>,
 }));
+vi.mock("$app/data/offer_code", () => ({ searchProductOfferCodes: vi.fn() }));
 vi.mock("$app/data/publish_product", () => ({ setProductPublished: vi.fn() }));
 vi.mock("$app/components/server-components/Alert", () => ({ showAlert: vi.fn() }));
 
@@ -144,7 +147,11 @@ const baseProduct: Product = {
   community_chat_enabled: false,
 };
 
-const renderProductTab = (product: Product, currentSeller: CurrentSeller = seller) =>
+const renderProductTab = (
+  product: Product,
+  currentSeller: CurrentSeller = seller,
+  updateProduct: (update: Partial<Product>) => void = vi.fn(),
+) =>
   render(
     <DomainSettingsProvider
       value={{
@@ -163,7 +170,7 @@ const renderProductTab = (product: Product, currentSeller: CurrentSeller = selle
             id: "product-id",
             product,
             uniquePermalink: "product-permalink",
-            updateProduct: vi.fn(),
+            updateProduct,
             thumbnail: null,
             refundPolicies: [],
             currencyType: "usd",
@@ -276,5 +283,22 @@ describe("ProductTab automatic discount code control", () => {
     renderProductTab(baseProduct);
 
     expect(screen.getByRole("switch", { name: "Automatically apply discount code" })).toBeTruthy();
+  });
+
+  it("saves the selected code as the membership's default offer code", async () => {
+    vi.mocked(searchProductOfferCodes).mockResolvedValue([defaultOfferCode]);
+    const updateProduct = vi.fn();
+    renderProductTab({ ...baseProduct, native_type: "membership", variants: [] }, seller, updateProduct);
+
+    fireEvent.click(screen.getByRole("switch", { name: "Automatically apply discount code" }));
+    fireEvent.focus(screen.getByPlaceholderText("Begin typing to select a discount code"));
+    fireEvent.click(await screen.findByText("DEFAULT10"));
+
+    await waitFor(() =>
+      expect(updateProduct).toHaveBeenCalledWith({
+        default_offer_code_id: "offer-code-id",
+        default_offer_code: defaultOfferCode,
+      }),
+    );
   });
 });
