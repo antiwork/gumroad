@@ -140,6 +140,68 @@ describe("Email List", :js, :sidekiq_inline, :elasticsearch_wait_for_refresh, ty
         Feature.deactivate(:auto_resume_stalled_post_blasts)
       end
 
+      it "tells the seller an email was not sent once its daily-limit wait ran past the content window" do
+        create(:blast, post: installment1, requested_at: 3.days.ago, started_at: 3.days.ago, completed_at: nil, first_email_delivered_at: nil, delivery_count: 0, expired_at: 1.hour.ago, expiry_reason: PostEmailBlast::EXPIRY_QUOTA)
+
+        visit "#{emails_path}/published"
+
+        within_table "Published" do
+          expect(page).to have_table_row({ "Subject" => "Email 1 (sent)", "Status" => "Not sent" })
+          find(:table_row, { "Subject" => "Email 1 (sent)" }).click
+        end
+
+        within_modal "Email 1 (sent)" do
+          expect(page).to have_text("Status Not sent", normalize_ws: true)
+          expect(page).to have_text("Published #{installment1.published_at.in_time_zone(seller.timezone).strftime("%-m/%-d/%Y, %-I:%M:%S %p")}", normalize_ws: true)
+          expect(page).not_to have_text("Sent #{installment1.published_at.in_time_zone(seller.timezone).strftime("%-m/%-d/%Y, %-I:%M:%S %p")}", normalize_ws: true)
+          expect(page).to have_text("This email never got a turn under your daily limit for large emails, so we stopped trying before it went out late.")
+          expect(page).not_to have_text("Not sent.")
+          expect(page).not_to have_button("Resend to non-openers")
+          expect(page).to have_button("Send now")
+        end
+      end
+
+      it "does not blame the daily limit when the send was lost before any email went out" do
+        create(:blast, post: installment1, requested_at: 20.days.ago, started_at: nil, completed_at: nil, first_email_delivered_at: nil, delivery_count: 0, expired_at: 1.hour.ago, expiry_reason: PostEmailBlast::EXPIRY_ABANDONED)
+
+        visit "#{emails_path}/published"
+
+        within_table "Published" do
+          expect(page).to have_table_row({ "Subject" => "Email 1 (sent)", "Status" => "Not sent" })
+          find(:table_row, { "Subject" => "Email 1 (sent)" }).click
+        end
+
+        within_modal "Email 1 (sent)" do
+          expect(page).to have_text("A problem on our side stopped this email before it reached anyone.")
+          expect(page).to have_text("Published #{installment1.published_at.in_time_zone(seller.timezone).strftime("%-m/%-d/%Y, %-I:%M:%S %p")}", normalize_ws: true)
+          expect(page).not_to have_text("daily limit")
+          expect(page).not_to have_button("Resend to non-openers")
+        end
+      end
+
+      it "lets the seller send an email that was never sent with one click" do
+        expired = create(:blast, post: installment1, requested_at: 3.days.ago, started_at: 3.days.ago, completed_at: nil, first_email_delivered_at: nil, delivery_count: 0, expired_at: 1.hour.ago, expiry_reason: PostEmailBlast::EXPIRY_QUOTA)
+
+        visit "#{emails_path}/published"
+
+        within_table "Published" do
+          find(:table_row, { "Subject" => "Email 1 (sent)" }).click
+        end
+
+        within_modal "Email 1 (sent)" do
+          click_on "Send now"
+        end
+
+        within_modal "Send now?" do
+          expect(page).to have_text('This will send "Email 1 (sent)" now. If your daily limit for large emails is already used, it waits until the limit resets.')
+          click_on "Send"
+        end
+
+        expect(page).to have_alert(text: "Sending to everyone who has not received this yet. This may take a while.")
+        expect(page).not_to have_table_row({ "Subject" => "Email 1 (sent)", "Status" => "Not sent" })
+        expect(installment1.reload.latest_regular_blast).not_to eq(expired)
+      end
+
       it "lets the seller send an incomplete email to the rest once no automatic retry is coming" do
         blast = create(:blast, post: installment1, requested_at: 2.days.ago, started_at: 2.days.ago, first_email_delivered_at: 2.days.ago,
                                last_email_delivered_at: 2.days.ago, completed_at: nil, delivery_count: 6_798)

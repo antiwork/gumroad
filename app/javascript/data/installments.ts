@@ -57,16 +57,19 @@ export type PublishedInstallment = SavedInstallment & {
     requested_at: string;
     delivery_count: number;
     completed: boolean;
+    expired: boolean;
     open_count: number | null;
     open_rate: number | null;
   }[];
   delivery: {
-    status: "sent" | "sending" | "waiting" | "incomplete";
+    status: "sent" | "sending" | "waiting" | "incomplete" | "expired" | "abandoned";
     delivered_count: number;
     remaining_count: number | null;
     scheduled_for: string | null;
     retrying: boolean;
   } | null;
+  // Every send expired, so there are no recipients to resend to.
+  never_reached_anyone: boolean;
 };
 
 export type ScheduledInstallment = SavedInstallment & {

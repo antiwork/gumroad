@@ -12,6 +12,10 @@ class PostEmailBlast < ApplicationRecord
   #   Time the latest email was delivered. Not final until the blast is complete.
   # delivery_count:
   #   Number of emails that were delivered. Not final until the blast is complete.
+  # expired_at:
+  #   Time we gave up on a blast that never sent anything (slot never freed, or send job lost).
+  # expiry_reason:
+  #   Why it expired. Nil reads as quota, for rows from before reasons were recorded.
 
   # recipient_filter:
   #   nil       => normal blast, sent to the full computed audience.
@@ -25,7 +29,44 @@ class PostEmailBlast < ApplicationRecord
 
   validates :recipient_filter, inclusion: { in: [RECIPIENT_FILTER_UNOPENED] }, allow_nil: true
 
+  EXPIRY_QUOTA = "quota"
+  EXPIRY_ABANDONED = "abandoned"
+
   scope :to_non_openers, -> { where(recipient_filter: RECIPIENT_FILTER_UNOPENED) }
+
+  scope :expirable, -> { where(completed_at: nil, expired_at: nil, first_email_delivered_at: nil) }
+
+  # `first_email_delivered_at` can be missing for a blast that did send, so `sent_post_emails`
+  # rows are the second check. They name the post, not the blast: a row counts only until the
+  # post's next original blast, and welcome or workflow sends also write them, so this errs
+  # toward keeping a blast. Non-opener resends write none, so they are excluded.
+  scope :never_sent, -> {
+    expirable.where(recipient_filter: nil)
+      .where(<<~SQL.squish)
+        NOT EXISTS (
+          SELECT 1 FROM sent_post_emails
+          WHERE sent_post_emails.post_id = post_email_blasts.post_id
+            AND sent_post_emails.created_at >= post_email_blasts.requested_at
+            AND sent_post_emails.created_at < COALESCE(
+              (SELECT MIN(later.requested_at) FROM post_email_blasts later
+               WHERE later.post_id = post_email_blasts.post_id
+                 AND later.recipient_filter IS NULL
+                 AND later.requested_at > post_email_blasts.requested_at),
+              '9999-12-31'))
+      SQL
+  }
+
+  # Re-checks `expirable` at write time, so a blast that completed or delivered meanwhile stays live.
+  # `never_sent: true` also re-reads the `sent_post_emails` signal just before the write. That read
+  # is not atomic with the UPDATE, so it narrows the race rather than closing it.
+  def self.expire(ids, reason:, never_sent: false)
+    ids = Array(ids)
+    ids = self.never_sent.where(id: ids).ids if never_sent
+    return 0 if ids.empty?
+
+    now = Time.current
+    expirable.where(id: ids).update_all(expired_at: now, expiry_reason: reason, updated_at: now)
+  end
 
   def to_non_openers?
     recipient_filter == RECIPIENT_FILTER_UNOPENED
@@ -36,11 +77,14 @@ class PostEmailBlast < ApplicationRecord
   def delivery_status
     return "sent" if completed_at.present?
     return "sent" if remaining_recipient_count&.<=(0)
+    return (expiry_reason == EXPIRY_ABANDONED ? "abandoned" : "expired") if expired_at.present?
     return "waiting" if quota_deferred_until&.future?
     return "sending" if [requested_at, last_email_delivered_at].compact.max > AlertOnStalledPostEmailBlastsJob::EMAIL_ACTIVITY_THRESHOLD.ago
 
     "incomplete"
   end
+
+  def ended_unsent? = delivery_status.in?(%w[expired abandoned])
 
   # Recipients the sender still owes, from its pending count; nil once that key is gone.
   def remaining_recipient_count

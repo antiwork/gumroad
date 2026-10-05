@@ -9,6 +9,7 @@ describe SellerLargeBlastQuota, :freeze_time do
 
   after do
     $redis.del(RedisKey.seller_large_blast_quota(seller_id, Date.current))
+    $redis.del(RedisKey.seller_large_workflow_quota(seller_id, Date.current))
     $redis.del(RedisKey.seller_large_blast_threshold)
     $redis.del(RedisKey.seller_large_blast_deferral_window_start_seconds)
     $redis.del(RedisKey.seller_large_blast_deferral_window_length_seconds)
@@ -29,10 +30,86 @@ describe SellerLargeBlastQuota, :freeze_time do
     expect(described_class.allow?(seller_id:, blast_id: first_blast, recipient_count: described_class::DEFAULT_THRESHOLD)).to eq(true)
   end
 
-  it "does not treat a workflow post and a one-off blast as the same claim when their ids match" do
-    expect(described_class.allow?(seller_id:, kind: "post_blast", blast_id: first_blast, recipient_count: described_class::DEFAULT_THRESHOLD)).to eq(true)
-    expect(described_class.allow?(seller_id:, kind: "workflow", blast_id: first_blast, recipient_count: described_class::DEFAULT_THRESHOLD)).to eq(false)
-    expect(described_class.allow?(seller_id:, kind: "post_blast", blast_id: first_blast, recipient_count: described_class::DEFAULT_THRESHOLD)).to eq(true)
+  it "gives workflow sends their own slot, so a workflow send never takes the post blast's slot" do
+    large = described_class::DEFAULT_THRESHOLD
+
+    expect(described_class.allow?(seller_id:, kind: "workflow", blast_id: first_blast, recipient_count: large)).to eq(true)
+    expect(described_class.allow?(seller_id:, kind: "post_blast", blast_id: first_blast, recipient_count: large)).to eq(true)
+
+    expect(described_class.allow?(seller_id:, kind: "workflow", blast_id: second_blast, recipient_count: large)).to eq(false)
+    expect(described_class.allow?(seller_id:, kind: "post_blast", blast_id: second_blast, recipient_count: large)).to eq(false)
+
+    expect(described_class.allow?(seller_id:, kind: "workflow", blast_id: first_blast, recipient_count: large)).to eq(true)
+    expect(described_class.allow?(seller_id:, kind: "post_blast", blast_id: first_blast, recipient_count: large)).to eq(true)
+  end
+
+  it "still allows one large post blast per day while a workflow send holds its own slot" do
+    large = described_class::DEFAULT_THRESHOLD
+    expect(described_class.allow?(seller_id:, kind: "workflow", blast_id: 33, recipient_count: large)).to eq(true)
+
+    expect(described_class.allow?(seller_id:, kind: "post_blast", blast_id: first_blast, recipient_count: large)).to eq(true)
+    expect(described_class.allow?(seller_id:, kind: "post_blast", blast_id: second_blast, recipient_count: large)).to eq(false)
+  end
+
+  describe "a workflow claim left in the post blast key at rollout" do
+    let(:large) { described_class::DEFAULT_THRESHOLD }
+    let(:key) { RedisKey.seller_large_blast_quota(seller_id, Date.current) }
+
+    before { $redis.set(key, "workflow:33", ex: 1.hour.to_i) }
+
+    it "lets a post blast take the slot, and keeps the day's one-blast cap" do
+      expect(described_class.allow?(seller_id:, kind: "post_blast", blast_id: first_blast, recipient_count: large)).to eq(true)
+      expect($redis.get(key)).to eq("post_blast:#{first_blast}")
+      expect($redis.ttl(key)).to be_between(1, described_class.ttl_seconds)
+
+      expect(described_class.allow?(seller_id:, kind: "post_blast", blast_id: first_blast, recipient_count: large)).to eq(true)
+      expect(described_class.allow?(seller_id:, kind: "post_blast", blast_id: second_blast, recipient_count: large)).to eq(false)
+    end
+
+    it "lets only one of two post blasts take it" do
+      expect(described_class.allow?(seller_id:, kind: "post_blast", blast_id: first_blast, recipient_count: large)).to eq(true)
+      expect(described_class.allow?(seller_id:, kind: "post_blast", blast_id: second_blast, recipient_count: large)).to eq(false)
+    end
+
+    it "does not let a workflow send touch the post blast key" do
+      expect(described_class.allow?(seller_id:, kind: "workflow", blast_id: second_blast, recipient_count: large)).to eq(true)
+      expect($redis.get(key)).to eq("workflow:33")
+    end
+
+    it "does not take a slot held by another post blast" do
+      $redis.set(key, "post_blast:#{first_blast}", ex: 1.hour.to_i)
+
+      expect(described_class.allow?(seller_id:, kind: "post_blast", blast_id: second_blast, recipient_count: large)).to eq(false)
+      expect($redis.get(key)).to eq("post_blast:#{first_blast}")
+    end
+  end
+
+  describe ".release" do
+    let(:large) { described_class::DEFAULT_THRESHOLD }
+
+    it "frees the slot for the next blast when the holder releases it" do
+      described_class.allow?(seller_id:, kind: "post_blast", blast_id: first_blast, recipient_count: large)
+
+      described_class.release(seller_id:, kind: "post_blast", blast_id: first_blast)
+
+      expect(described_class.allow?(seller_id:, kind: "post_blast", blast_id: second_blast, recipient_count: large)).to eq(true)
+    end
+
+    it "leaves the slot alone when another blast holds it" do
+      described_class.allow?(seller_id:, kind: "post_blast", blast_id: first_blast, recipient_count: large)
+
+      described_class.release(seller_id:, kind: "post_blast", blast_id: second_blast)
+
+      expect(described_class.allow?(seller_id:, kind: "post_blast", blast_id: second_blast, recipient_count: large)).to eq(false)
+    end
+
+    it "does not touch the workflow slot" do
+      described_class.allow?(seller_id:, kind: "workflow", blast_id: first_blast, recipient_count: large)
+
+      described_class.release(seller_id:, kind: "post_blast", blast_id: first_blast)
+
+      expect(described_class.allow?(seller_id:, kind: "workflow", blast_id: second_blast, recipient_count: large)).to eq(false)
+    end
   end
 
   it "does not admit a large send when Redis is down" do
@@ -79,6 +156,19 @@ describe SellerLargeBlastQuota, :freeze_time do
 
       expect(run_at).to be >= window_start
       expect(run_at).to be < window_end
+    end
+  end
+
+  describe ".past_content_window?" do
+    it "is true once the run lands more than the content window after the request" do
+      requested_at = Time.current
+
+      expect(described_class.past_content_window?(requested_at:, run_at: requested_at + described_class::CONTENT_WINDOW)).to eq(false)
+      expect(described_class.past_content_window?(requested_at:, run_at: requested_at + described_class::CONTENT_WINDOW + 1.second)).to eq(true)
+    end
+
+    it "is false when the request time is unknown" do
+      expect(described_class.past_content_window?(requested_at: nil, run_at: 10.days.from_now)).to eq(false)
     end
   end
 

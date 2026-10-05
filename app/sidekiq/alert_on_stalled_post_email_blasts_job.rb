@@ -77,7 +77,7 @@ class AlertOnStalledPostEmailBlastsJob
   # scan in reserve because a resume marker holds a blast for one stall window.
   def self.auto_resume_eligible?(blast)
     return false unless Feature.active?(:auto_resume_stalled_post_blasts)
-    return false if blast.completed_at.present? || blast.requested_at.nil? || blast.to_non_openers?
+    return false if blast.completed_at.present? || blast.expired_at.present? || blast.requested_at.nil? || blast.to_non_openers?
     return false unless blast.requested_at > (LOOKBACK - 2 * SCAN_INTERVAL).ago
 
     blast.requested_at > (AUTO_RESUME_WINDOW - SCAN_INTERVAL).ago || recipients_still_owed?(blast)
@@ -94,6 +94,12 @@ class AlertOnStalledPostEmailBlastsJob
   end
 
   def perform
+    begin
+      expire_abandoned_blasts
+    rescue => e
+      # Housekeeping must not take the alert down with it.
+      ErrorNotifier.notify(e)
+    end
     scan = scan_for_stalled_blasts
     return if scan[:stalled].empty? && !scan[:truncated]
 
@@ -106,13 +112,27 @@ class AlertOnStalledPostEmailBlastsJob
   end
 
   private
+    # The scan below stops at LOOKBACK, so a blast that lost its job and aged past it would stay
+    # unfinished forever. Older blasts were ended once by Onetime::ExpireAbandonedPostEmailBlasts.
+    def expire_abandoned_blasts
+      PostEmailBlast.expire(
+        PostEmailBlast.never_sent
+          .where(requested_at: (2 * LOOKBACK).ago...LOOKBACK.ago)
+          .order(requested_at: :desc)
+          .limit(MAX_CANDIDATES_SCANNED)
+          .ids,
+        reason: PostEmailBlast::EXPIRY_ABANDONED,
+        never_sent: true
+      )
+    end
+
     # Windowed on `requested_at`, which is indexed (through post_id it is not — the standalone
     # window read still walks the index-less columns, but requested_at is set at creation and NOT
     # NULL for every real blast) and, unlike `started_at`, is present even when the send job never
     # ran at all — a blast whose enqueue was lost is precisely the row this alert must not skip.
     def scan_for_stalled_blasts
       candidates = PostEmailBlast
-        .where(completed_at: nil)
+        .where(completed_at: nil, expired_at: nil)
         .where(requested_at: LOOKBACK.ago..STALL_THRESHOLD.ago)
         .order(requested_at: :desc)
         .limit(MAX_CANDIDATES_SCANNED + 1)

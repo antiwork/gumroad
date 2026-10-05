@@ -311,6 +311,100 @@ describe AlertOnStalledPostEmailBlastsJob do
         $redis.del(RedisKey.blast_pending_recipients(blast.id)) if blast
       end
 
+      describe "a blast older than the lookback that never delivered" do
+        def old_blast(**attrs)
+          create(:post_email_blast, post:, requested_at: (described_class::LOOKBACK + 1.day).ago, started_at: nil, completed_at: nil,
+                                    first_email_delivered_at: nil, last_email_delivered_at: nil, delivery_count: 0, **attrs)
+        end
+
+        it "ends as not sent, so it stops showing as unfinished" do
+          blast = old_blast
+          stub_sidekiq
+
+          described_class.new.perform
+
+          expect(blast.reload.expired_at).to be_present
+          expect(blast.expiry_reason).to eq(PostEmailBlast::EXPIRY_ABANDONED)
+          expect(blast.delivery_status).to eq("abandoned")
+          expect(SendPostBlastEmailsJob).not_to have_received(:perform_async)
+        end
+
+        it "still runs the stalled-blast scan when the expiry query fails" do
+          stalled_blast
+          stub_sidekiq
+          allow(PostEmailBlast).to receive(:never_sent).and_raise(ActiveRecord::StatementInvalid, "lock wait timeout")
+          expect(ErrorNotifier).to receive(:notify).with(instance_of(ActiveRecord::StatementInvalid))
+
+          expect { described_class.new.perform }.not_to raise_error
+          expect(SendPostBlastEmailsJob).to have_received(:perform_async)
+        end
+
+        it "leaves a blast alone when its post already recorded recipients, even without a delivery stamp" do
+          blast = old_blast(started_at: (described_class::LOOKBACK + 1.day).ago)
+          SentPostEmail.create!(post:, email: "buyer@example.com", created_at: blast.requested_at + 1.minute)
+          stub_sidekiq
+
+          described_class.new.perform
+
+          expect(blast.reload.expired_at).to be_nil
+        end
+
+        it "ends a lost blast when only a later blast of the same post recorded recipients" do
+          lost = old_blast(requested_at: (described_class::LOOKBACK + 3.days).ago)
+          later = old_blast(requested_at: (described_class::LOOKBACK + 1.day).ago, first_email_delivered_at: 1.day.ago)
+          SentPostEmail.create!(post:, email: "buyer@example.com", created_at: later.requested_at + 1.minute)
+          stub_sidekiq
+
+          described_class.new.perform
+
+          expect(lost.reload.expiry_reason).to eq(PostEmailBlast::EXPIRY_ABANDONED)
+          expect(later.reload.expired_at).to be_nil
+        end
+
+        it "leaves a non-opener resend alone, since resends record no sent_post_emails rows" do
+          resend = old_blast(recipient_filter: PostEmailBlast::RECIPIENT_FILTER_UNOPENED)
+          stub_sidekiq
+
+          described_class.new.perform
+
+          expect(resend.reload.expired_at).to be_nil
+        end
+
+        it "still ends a blast whose post only recorded recipients before it was requested" do
+          blast = old_blast(started_at: (described_class::LOOKBACK + 1.day).ago)
+          SentPostEmail.create!(post:, email: "buyer@example.com", created_at: blast.requested_at - 1.day)
+          stub_sidekiq
+
+          described_class.new.perform
+
+          expect(blast.reload.expired_at).to be_present
+        end
+
+        it "leaves blasts that delivered, completed or are inside the lookback alone" do
+          delivered = old_blast(first_email_delivered_at: 15.days.ago, delivery_count: 3)
+          completed = old_blast(completed_at: 14.days.ago)
+          recent = stalled_blast
+          ancient = create(:post_email_blast, post:, requested_at: (2 * described_class::LOOKBACK + 1.day).ago, completed_at: nil)
+          stub_sidekiq
+
+          described_class.new.perform
+
+          expect([delivered, completed, recent, ancient].map { _1.reload.expired_at }).to all(be_nil)
+        end
+      end
+
+      it "ignores an expired blast, which has no sender left to resume" do
+        blast = stalled_blast
+        blast.update!(expired_at: 1.hour.ago)
+        stub_sidekiq
+
+        described_class.new.perform
+
+        expect(SendPostBlastEmailsJob).not_to have_received(:perform_async)
+        expect(InternalNotificationWorker).not_to have_received(:perform_async)
+        expect(described_class.auto_resume_eligible?(blast)).to eq(false)
+      end
+
       it "reports a quota-deferred blast as DEFERRED and leaves it alone" do
         blast = stalled_blast
         $redis.set(RedisKey.blast_quota_deferred_until(blast.id), 5.hours.from_now.iso8601)

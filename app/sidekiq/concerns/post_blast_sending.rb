@@ -246,6 +246,10 @@ module PostBlastSending
 
   def mark_blast_as_completed
     @blast.update!(completed_at: Time.current)
+    clear_blast_state
+  end
+
+  def clear_blast_state(keep_quota_decision: false)
     # The blast is done, so the retry-resume snapshot, the non-opener checkpoint, the
     # pending-recipient count and the per-chunk completion set have served their purpose.
     # Also remove the temporary write-in-progress keys in case a previous attempt died
@@ -257,7 +261,7 @@ module PostBlastSending
     $redis.del(*[snapshot_key, "#{snapshot_key}:tmp", checkpoint_key, "#{checkpoint_key}:tmp",
                  RedisKey.blast_pending_recipients(@blast.id), RedisKey.blast_done_slices(@blast.id),
                  RedisKey.blast_active_slice_partition(@blast.id), partition_chunks_key,
-                 RedisKey.blast_quota_deferred_until(@blast.id), RedisKey.blast_quota_admitted(@blast.id),
+                 RedisKey.blast_quota_deferred_until(@blast.id), (RedisKey.blast_quota_admitted(@blast.id) unless keep_quota_decision),
                  RedisKey.blast_skipped_emails(@blast.id)].compact)
   end
 

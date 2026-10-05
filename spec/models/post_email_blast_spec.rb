@@ -65,6 +65,108 @@ RSpec.describe PostEmailBlast do
     end
   end
 
+  describe "#delivery_status once expired", :freeze_time do
+    let(:post) { create(:installment) }
+
+    it "is expired, not waiting, even while a stale deferral marker is still ahead" do
+      blast = create(:blast, post:, requested_at: 3.days.ago, expired_at: 1.minute.ago, completed_at: nil)
+      $redis.set(RedisKey.blast_quota_deferred_until(blast.id), 1.hour.from_now.utc.iso8601)
+
+      expect(blast.delivery_status).to eq("expired")
+    ensure
+      $redis.del(RedisKey.blast_quota_deferred_until(blast.id)) if blast
+    end
+
+    it "is expired when the reason is the daily limit, and for a row written before reasons were recorded" do
+      by_quota = create(:blast, post:, requested_at: 3.days.ago, expired_at: 1.minute.ago, expiry_reason: PostEmailBlast::EXPIRY_QUOTA, completed_at: nil)
+      unrecorded = create(:blast, post:, requested_at: 3.days.ago, expired_at: 1.minute.ago, expiry_reason: nil, completed_at: nil)
+
+      expect([by_quota, unrecorded].map(&:delivery_status)).to eq(%w[expired expired])
+    end
+
+    it "is abandoned, not expired, when its send job was lost" do
+      blast = create(:blast, post:, requested_at: 20.days.ago, expired_at: 1.minute.ago, expiry_reason: PostEmailBlast::EXPIRY_ABANDONED, completed_at: nil)
+
+      expect(blast.delivery_status).to eq("abandoned")
+    end
+
+    it "stays sent when the blast completed" do
+      blast = create(:blast, post:, requested_at: 3.days.ago, expired_at: 1.minute.ago, completed_at: 1.minute.ago)
+
+      expect(blast.delivery_status).to eq("sent")
+    end
+  end
+
+  describe ".never_sent" do
+    let(:post) { create(:installment) }
+
+    def lost_blast(requested_at:)
+      create(:post_email_blast, :just_requested, post:, requested_at:)
+    end
+
+    it "includes a blast whose post only recorded recipients for a later blast of the same post" do
+      lost = lost_blast(requested_at: 30.days.ago)
+      later = lost_blast(requested_at: 20.days.ago)
+      SentPostEmail.create!(post:, email: "buyer@example.com", created_at: later.requested_at + 1.minute)
+
+      expect(described_class.never_sent.ids).to eq([lost.id])
+    end
+
+    it "excludes a blast whose post recorded recipients before the next blast was requested" do
+      sent = lost_blast(requested_at: 30.days.ago)
+      lost_blast(requested_at: 20.days.ago)
+      SentPostEmail.create!(post:, email: "buyer@example.com", created_at: sent.requested_at + 1.minute)
+
+      expect(described_class.never_sent.ids).not_to include(sent.id)
+    end
+
+    it "does not end the window at a non-opener resend, which records no recipients" do
+      sent = lost_blast(requested_at: 30.days.ago)
+      create(:post_email_blast, :just_requested, post:, requested_at: 20.days.ago, recipient_filter: PostEmailBlast::RECIPIENT_FILTER_UNOPENED)
+      SentPostEmail.create!(post:, email: "buyer@example.com", created_at: 10.days.ago)
+
+      expect(described_class.never_sent.ids).not_to include(sent.id)
+    end
+
+    it "ignores later blasts of other posts" do
+      sent = lost_blast(requested_at: 30.days.ago)
+      create(:post_email_blast, :just_requested, post: create(:installment), requested_at: 20.days.ago)
+      SentPostEmail.create!(post:, email: "buyer@example.com", created_at: 10.days.ago)
+
+      expect(described_class.never_sent.ids).not_to include(sent.id)
+    end
+  end
+
+  describe ".expire" do
+    let(:post) { create(:installment) }
+    let!(:blast) { create(:post_email_blast, :just_requested, post:, requested_at: 30.days.ago) }
+
+    it "ends the blasts it is given" do
+      expect(described_class.expire([blast.id], reason: described_class::EXPIRY_QUOTA)).to eq(1)
+      expect(blast.reload.expiry_reason).to eq(described_class::EXPIRY_QUOTA)
+    end
+
+    it "accepts a single id" do
+      expect(described_class.expire(blast.id, reason: described_class::EXPIRY_QUOTA)).to eq(1)
+    end
+
+    it "accepts a single id when never_sent is set" do
+      expect(described_class.expire(blast.id, reason: described_class::EXPIRY_ABANDONED, never_sent: true)).to eq(1)
+    end
+
+    it "skips a blast whose post recorded recipients after the candidates were read when never_sent is set" do
+      ids = described_class.never_sent.ids
+      SentPostEmail.create!(post:, email: "buyer@example.com", created_at: blast.requested_at + 1.minute)
+
+      expect(described_class.expire(ids, reason: described_class::EXPIRY_ABANDONED, never_sent: true)).to eq(0)
+      expect(blast.reload.expired_at).to be_nil
+    end
+
+    it "still ends a blast that has not recorded recipients when never_sent is set" do
+      expect(described_class.expire([blast.id], reason: described_class::EXPIRY_ABANDONED, never_sent: true)).to eq(1)
+    end
+  end
+
   describe "Latency metrics", :freeze_time do
     describe "#start_latency" do
       it "returns the difference between requested_at and started_at" do
