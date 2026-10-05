@@ -6,7 +6,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { CurrentSellerProvider, type CurrentSeller } from "$app/components/CurrentSeller";
 import { DomainSettingsProvider } from "$app/components/DomainSettings";
 import { ProductTab } from "$app/components/ProductEdit/ProductTab";
-import { ProductEditContext, type Product } from "$app/components/ProductEdit/state";
+import { ProductEditContext, type OfferCode, type Product } from "$app/components/ProductEdit/state";
 
 vi.mock("react-router-dom", () => ({
   Link: ({ to, children }: { to: string; children?: React.ReactNode }) => <a href={to}>{children}</a>,
@@ -236,5 +236,45 @@ describe("ProductTab naming fields", () => {
         description: "Shown below the call to action on your product page.",
       }),
     ).toBeTruthy();
+  });
+});
+
+const defaultOfferCode: OfferCode = {
+  id: "offer-code-id",
+  code: "DEFAULT10",
+  name: "DEFAULT10",
+  discount: {
+    type: "percent",
+    percents: 10,
+    product_ids: ["product-id"],
+    expires_at: null,
+    minimum_quantity: null,
+    duration_in_billing_cycles: null,
+    minimum_amount_cents: null,
+  },
+};
+
+describe("ProductTab automatic discount code control", () => {
+  it("renders it for a membership product, whose editor otherwise has no price section", () => {
+    renderProductTab({ ...baseProduct, native_type: "membership", variants: [] });
+
+    expect(screen.getByRole("switch", { name: "Automatically apply discount code" })).toBeTruthy();
+  });
+
+  it("starts the membership control on when the product already has a default code", () => {
+    renderProductTab({
+      ...baseProduct,
+      native_type: "membership",
+      variants: [],
+      default_offer_code: defaultOfferCode,
+    });
+
+    expect(screen.getByRole("switch", { name: "Automatically apply discount code" })).toHaveProperty("checked", true);
+  });
+
+  it("still renders it for a non-membership product", () => {
+    renderProductTab(baseProduct);
+
+    expect(screen.getByRole("switch", { name: "Automatically apply discount code" })).toBeTruthy();
   });
 });
