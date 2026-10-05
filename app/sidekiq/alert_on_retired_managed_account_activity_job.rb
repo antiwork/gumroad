@@ -7,9 +7,8 @@ class AlertOnRetiredManagedAccountActivityJob
   include Sidekiq::Job
   sidekiq_options retry: 2, queue: :low
 
-  # SyncStuckPurchasesJob resolves an in_progress sale for 3 days, so most sales in flight at retirement
-  # have landed by then. UnstickStuckInProgressPurchasesJob can still resolve one up to 90 days old, so
-  # the report covers what is present at this tail, not every late settlement.
+  # Payouts holds a sale at least this long before it can pay it, so everything a retired account can
+  # still receive from a sale in flight at retirement has landed by the run this schedules.
   SETTLEMENT_TAIL = 3.days
 
   # Report at most this many landed rows per leg. The alert exists to be read.
@@ -18,43 +17,20 @@ class AlertOnRetiredManagedAccountActivityJob
   def perform(merchant_account_id, retired_at_iso)
     merchant_account = MerchantAccount.find_by(id: merchant_account_id)
     return if merchant_account.nil?
+    # A retired account that has come back is a payout destination again, so nothing it landed is
+    # stranded.
+    return if merchant_account.active?
 
-    # Locked and inside one transaction: the marker read and its clear cannot be split by another copy
-    # of the check, and a run that dies mid-report rolls the clear back with it.
-    merchant_account.with_lock { report_landed_activity(merchant_account, retired_at_iso) }
+    retired_at = Time.iso8601(retired_at_iso)
+    landed = landed_since(merchant_account, retired_at)
+    return if landed.blank?
+
+    log_landed(merchant_account, retired_at, landed)
+    InternalNotificationWorker.perform_async("payouts", "Activity on a retired Stripe account",
+                                             message_for(merchant_account, retired_at, landed))
   end
 
   private
-    # The marker is the claim on the check, so the sweep's copy — dispatched for a scheduled copy that
-    # is only delayed — finds it cleared instead of reporting the same activity again.
-    def report_landed_activity(merchant_account, retired_at_iso)
-      # A retired account that has come back is a payout destination again, so whatever left the marker
-      # is moot.
-      return clear_pending_marker(merchant_account) if merchant_account.active?
-
-      marker = merchant_account.retired_activity_check_pending_at
-      return if marker.blank? # Already reported.
-
-      retired_at = Time.iso8601(retired_at_iso)
-      landed = landed_since(merchant_account, retired_at)
-      if landed.present?
-        log_landed(merchant_account, retired_at, landed)
-        InternalNotificationWorker.perform_async("payouts", "Activity on a retired Stripe account",
-                                                 message_for(merchant_account, retired_at, landed))
-      end
-
-      # Only the marker this check was dispatched for is spent here. A seller who reconnects inside the
-      # tail leaves a marker for the later retirement, and that retirement's own check is the one that
-      # reports from its `deleted_at` — clearing it here would skip it.
-      clear_pending_marker(merchant_account) if marker == retired_at_iso
-    end
-
-    def clear_pending_marker(merchant_account)
-      return if merchant_account.retired_activity_check_pending_at.blank?
-
-      merchant_account.update!(retired_activity_check_pending_at: nil)
-    end
-
     # Charges and balance transactions are read on `merchant_account_id`, which leads their index.
     # Balances has no index on it alone, so that leg carries the owner too.
     #

@@ -61,9 +61,6 @@ class StripeConnectAccountLinker
 
       if predecessor
         predecessor.delete_charge_processor_account!
-        # Durable re-dispatch marker: a lost enqueue below is recoverable from the row instead of the check
-        # being lost with it.
-        predecessor.update!(retired_activity_check_pending_at: predecessor.deleted_at.utc.iso8601)
         @retired_account_id = predecessor.id
         @retired_at = predecessor.deleted_at
       end

@@ -10,8 +10,7 @@ describe AlertOnRetiredManagedAccountActivityJob do
   let(:retired_at) { Time.zone.parse("2026-08-03T19:46:09Z") }
 
   before do
-    # A check always runs from the marker the linker wrote on the retirement.
-    managed_account.update!(deleted_at: retired_at, retired_activity_check_pending_at: retired_at.utc.iso8601)
+    managed_account.update!(deleted_at: retired_at)
     allow(InternalNotificationWorker).to receive(:perform_async)
   end
 
@@ -19,8 +18,7 @@ describe AlertOnRetiredManagedAccountActivityJob do
     described_class.new.perform(managed_account.id, retired_at.utc.iso8601)
   end
 
-  # The alert body, or nil when the job reported nothing. One run per example: the check is spent
-  # when it reports, so a second copy of the job reports nothing.
+  # The alert body, or nil when the job reported nothing.
   def reported_body
     return @reported_body if defined?(@reported_body)
 
@@ -157,61 +155,16 @@ describe AlertOnRetiredManagedAccountActivityJob do
     expect(InternalNotificationWorker).not_to have_received(:perform_async)
   end
 
-  # While the marker is set, DispatchPendingRetiredAccountChecksJob re-dispatches the check; clearing
-  # it once this has run is what stops it being reported twice.
-  it "clears the re-dispatch marker it ran from" do
-    managed_account.update!(retired_activity_check_pending_at: retired_at.utc.iso8601)
-    create(:balance, user: seller, merchant_account: managed_account, state: "unpaid", amount_cents: 10_00,
-                     created_at: retired_at + 1.hour)
-
-    perform
-
-    expect(managed_account.reload.retired_activity_check_pending_at).to be_nil
-  end
-
-  it "clears the re-dispatch marker when nothing landed" do
-    managed_account.update!(retired_activity_check_pending_at: retired_at.utc.iso8601)
-
-    perform
-
-    expect(managed_account.reload.retired_activity_check_pending_at).to be_nil
-  end
-
-  # The sweep re-dispatches a check whose scheduled copy is only delayed, so two copies of one check
-  # can be queued; the marker is what lets the second one find it already reported.
-  it "reports once when two copies of the check run" do
+  # A lost enqueue is reported by ErrorNotifier, and a duplicate alert costs no money, so the job
+  # reads the account and reports rather than claiming and clearing a marker.
+  it "reports again when it runs twice" do
     create(:balance, user: seller, merchant_account: managed_account, state: "unpaid", amount_cents: 10_00,
                      created_at: retired_at + 1.hour)
 
     perform
     perform
 
-    expect(InternalNotificationWorker).to have_received(:perform_async).once
-  end
-
-  it "reports nothing for a retirement the linker left no marker on" do
-    managed_account.update!(retired_activity_check_pending_at: nil)
-    create(:balance, user: seller, merchant_account: managed_account, state: "unpaid", amount_cents: 10_00,
-                     created_at: retired_at + 1.hour)
-
-    perform
-
-    expect(InternalNotificationWorker).not_to have_received(:perform_async)
-  end
-
-  # A seller who reconnects inside the tail leaves a marker for the later retirement. This check is
-  # still owed its own report, but the later retirement's check is the one that reports from there —
-  # spending its marker here would skip it.
-  it "reports this retirement but leaves a later retirement's marker for its own check" do
-    later_marker = (retired_at + 2.days).utc.iso8601
-    create(:balance, user: seller, merchant_account: managed_account, state: "unpaid", amount_cents: 10_00,
-                     created_at: retired_at + 1.hour)
-    managed_account.update!(retired_activity_check_pending_at: later_marker)
-
-    perform
-
-    expect(InternalNotificationWorker).to have_received(:perform_async).once
-    expect(managed_account.reload.retired_activity_check_pending_at).to eq(later_marker)
+    expect(InternalNotificationWorker).to have_received(:perform_async).twice
   end
 
   # The report exists to name the money event a late refund leaves behind. Balances fill the report

@@ -42,10 +42,6 @@ repair_order_charge_outcomes:
   cron: "20 * * * *" # Every hour
   class: RepairOrderChargeOutcomesJob
   description: Re-derives Order#partially_successful for recent orders whose after-commit enqueue was lost
-dispatch_pending_retired_account_checks:
-  cron: "35 * * * *" # Every hour
-  class: DispatchPendingRetiredAccountChecksJob
-  description: Re-enqueues the retired-account activity check when its after-commit enqueue was lost
 renew_custom_domain_ssl_certificates:
   cron: "0 * * * *" # Every hour
   class: RenewCustomDomainSslCertificates

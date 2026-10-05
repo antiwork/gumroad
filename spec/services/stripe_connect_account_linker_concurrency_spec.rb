@@ -325,16 +325,11 @@ describe StripeConnectAccountLinker, "racing payout writers" do
         expect(delay).to eq(AlertOnRetiredManagedAccountActivityJob::SETTLEMENT_TAIL)
         expect(merchant_account_id).to eq(managed_account.id)
         expect(Time.iso8601(retired_at_iso)).to be_within(2.seconds).of(managed_account.reload.deleted_at)
-        # The check only spends the marker it was dispatched for, so its argument is that marker's value.
-        expect(retired_at_iso).to eq(managed_account.reload.retired_activity_check_pending_at)
       end
       # Post-commit: a read inside the linker's transaction is pinned to the snapshot its own
       # obligations read established, so it could not see a sale that committed in between.
       expect(transaction_open_at_enqueue).to be(false)
       expect(managed_account.reload).not_to be_active
-      # DispatchPendingRetiredAccountChecksJob re-dispatches the check from this marker when the
-      # enqueue above was lost.
-      expect(managed_account.reload.retired_activity_check_pending_at).to be_present
     end
 
     it "enqueues nothing when the replacement is refused for unsettled obligations" do
