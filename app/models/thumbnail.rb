@@ -6,7 +6,7 @@ class Thumbnail < ApplicationRecord
 
   DISPLAY_THUMBNAIL_DIMENSION = 600
   MAX_FILE_SIZE = 5.megabytes
-  ALLOW_CONTENT_TYPES = /jpeg|gif|png|jpg/i
+  ALLOW_CONTENT_TYPES = /jpeg|gif|png|jpg|webp/i
   RemoteFileTooLarge = Class.new(StandardError)
 
   # `touch: true` bumps the product's updated_at whenever a thumbnail is created, replaced or

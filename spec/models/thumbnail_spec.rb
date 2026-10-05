@@ -23,6 +23,15 @@ describe Thumbnail do
       expect(thumbnail.errors.full_messages).to be_empty
     end
 
+    it "saves with a webp file attached" do
+      thumbnail = Thumbnail.new(product: @product)
+      blob = ActiveStorage::Blob.create_and_upload!(io: fixture_file_upload("smilie.webp"), filename: "smilie.webp")
+      blob.analyze
+      thumbnail.file.attach(blob)
+      expect(thumbnail.save).to eq(true)
+      expect(thumbnail.errors.full_messages).to be_empty
+    end
+
     it "errors with invalid file attached" do
       thumbnail = Thumbnail.new(product: @product)
       thumbnail.file.attach(fixture_file_upload("blah.txt"))
@@ -114,6 +123,15 @@ describe Thumbnail do
     it "returns url if file is attached" do
       thumbnail = Thumbnail.new(product: @product)
       blob = ActiveStorage::Blob.create_and_upload!(io: fixture_file_upload("smilie.png"), filename: "smilie.png")
+      blob.analyze
+      thumbnail.file.attach(blob)
+      thumbnail.save!
+      expect(thumbnail.url).to match(PUBLIC_STORAGE_S3_BUCKET)
+    end
+
+    it "returns a processed variant url for a webp file" do
+      thumbnail = Thumbnail.new(product: @product)
+      blob = ActiveStorage::Blob.create_and_upload!(io: fixture_file_upload("smilie.webp"), filename: "smilie.webp")
       blob.analyze
       thumbnail.file.attach(blob)
       thumbnail.save!
