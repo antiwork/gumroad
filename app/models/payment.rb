@@ -512,8 +512,8 @@ class Payment < ApplicationRecord
       return if terminal_paypal_failure?
 
       # A failed payout from a retired account says nothing about the seller's live bank, so it never
-      # trips the hold. The lift job still reads the full history.
-      return if retired_managed_account_ids.include?(stripe_connect_account_id)
+      # trips the hold. Retirement is read now. The lift job still reads the full history.
+      return if stripe_connect_account_id.present? && retired_managed_account_ids.include?(stripe_connect_account_id)
 
       destination, failed_payouts = failed_payouts_counted_toward_hold
       return if destination.nil?

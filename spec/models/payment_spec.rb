@@ -1332,6 +1332,16 @@ describe Payment do
         expect(user.reload.payouts_paused?).to be(false)
         expect(user.comments.with_type_on_probation).to be_empty
       end
+
+      it "still pauses a Stripe payout with no account id when a placeholder retired account has no id" do
+        create(:merchant_account, user:, charge_processor_merchant_id: nil, charge_processor_alive_at: nil)
+
+        Payment::MAX_CONSECUTIVE_FAILED_PAYOUTS.times do
+          create(:payment, user:, bank_account:, processor: PayoutProcessorType::STRIPE, stripe_connect_account_id: nil, state: "processing").mark_failed!
+        end
+
+        expect(user.reload.payouts_paused_internally).to be(true)
+      end
     end
 
     it "still pauses when the threshold is reached by non-transient failures alone" do
