@@ -133,6 +133,26 @@ class MerchantAccount < ApplicationRecord
     end
   end
 
+  # Past this a sale still in_progress no longer blocks a replacement. A sale that settles later than this (the
+  # stuck-purchase sweep reaches back 3 days) can still book to the retired account: the window narrows the gap,
+  # it does not close it.
+  IN_FLIGHT_PURCHASE_HORIZON = 2.days
+
+  # The caller must hold the seller row lock and have made no plain read before it: under
+  # REPEATABLE READ the first plain read fixes the snapshot, which has to postdate the lock. Any
+  # unpaid/processing balance counts whatever its amount, as does a committed BalanceTransaction not yet
+  # applied to one. Completed payouts never count, unlike Payment::NON_TERMINAL_STATES.
+  def unsettled_payout_obligations?
+    # A sale that has not picked its account yet has a nil merchant_account_id, so it counts too (it may be this one).
+    return true if Purchase.in_progress.where(seller_id: user_id, merchant_account_id: [id, nil], created_at: IN_FLIGHT_PURCHASE_HORIZON.ago..).exists?
+    return true if balance_transactions.where(balance_id: nil).exists?
+    return true if balances.where(state: %w[unpaid processing]).exists?
+
+    in_flight_payments = Payment.where(user_id:, state: [Payment::CREATING, Payment::PROCESSING])
+    in_flight_payments.joins(:balances).where(balances: { merchant_account_id: id }).exists? ||
+      (charge_processor_merchant_id.present? && in_flight_payments.where(stripe_connect_account_id: charge_processor_merchant_id).exists?)
+  end
+
   def delete_charge_processor_account!
     clear_non_hash_json_data_for_disconnect!
     mark_deleted!
