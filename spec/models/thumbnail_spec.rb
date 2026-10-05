@@ -142,6 +142,9 @@ describe Thumbnail do
       thumbnail.file.attach(blob)
       thumbnail.save!
       expect(thumbnail.url).to match(PUBLIC_STORAGE_S3_BUCKET)
+      # `url` falls back to the original file's URL when processing fails, and that URL shares
+      # the bucket, so the bucket match alone cannot tell a variant from the fallback.
+      expect(thumbnail.url).to_not eq(thumbnail.url(variant: :original))
     end
 
     it "returns a processed variant url for a webp file" do
@@ -151,6 +154,7 @@ describe Thumbnail do
       thumbnail.file.attach(blob)
       thumbnail.save!
       expect(thumbnail.url).to match(PUBLIC_STORAGE_S3_BUCKET)
+      expect(thumbnail.url).to_not eq(thumbnail.url(variant: :original))
     end
 
     it "returns original file instead of variant for gifs" do
