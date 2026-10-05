@@ -113,16 +113,16 @@ class AlertOnStalledPostEmailBlastsJob
 
   private
     # The scan below stops at LOOKBACK, so a blast that lost its job and aged past it would stay
-    # unfinished forever. `first_email_delivered_at` can be missing for a blast that did send,
-    # so `sent_post_emails` rows are the second check. Non-opener resends write none: skipped.
+    # unfinished forever. Older blasts were ended once by Onetime::ExpireAbandonedPostEmailBlasts.
     def expire_abandoned_blasts
-      PostEmailBlast
-        .where(completed_at: nil, expired_at: nil, first_email_delivered_at: nil, recipient_filter: nil)
-        .where(requested_at: (2 * LOOKBACK).ago...LOOKBACK.ago)
-        .where("NOT EXISTS (SELECT 1 FROM sent_post_emails WHERE sent_post_emails.post_id = post_email_blasts.post_id AND sent_post_emails.created_at >= post_email_blasts.requested_at)")
-        .order(requested_at: :desc)
-        .limit(MAX_CANDIDATES_SCANNED)
-        .each { |blast| PostEmailBlast.where(id: blast.id, completed_at: nil, expired_at: nil, first_email_delivered_at: nil).update_all(expired_at: Time.current, expiry_reason: PostEmailBlast::EXPIRY_ABANDONED, updated_at: Time.current) }
+      PostEmailBlast.expire(
+        PostEmailBlast.never_sent
+          .where(requested_at: (2 * LOOKBACK).ago...LOOKBACK.ago)
+          .order(requested_at: :desc)
+          .limit(MAX_CANDIDATES_SCANNED)
+          .ids,
+        reason: PostEmailBlast::EXPIRY_ABANDONED
+      )
     end
 
     # Windowed on `requested_at`, which is indexed (through post_id it is not — the standalone

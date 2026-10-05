@@ -429,9 +429,7 @@ class SendPostBlastEmailsJob
       claimed = $redis.set(admitted_key, EXPIRED_QUOTA_DECISION, nx: true, ex: AlertOnStalledPostEmailBlastsJob::LOOKBACK.to_i)
       return false unless claimed || $redis.get(admitted_key) == EXPIRED_QUOTA_DECISION
 
-      now = Time.current
-      rows = PostEmailBlast.where(id: @blast.id, completed_at: nil, first_email_delivered_at: nil, expired_at: nil)
-                           .update_all(expired_at: now, expiry_reason: PostEmailBlast::EXPIRY_QUOTA, updated_at: now)
+      rows = PostEmailBlast.expire(@blast.id, reason: PostEmailBlast::EXPIRY_QUOTA)
       if rows.zero? && !PostEmailBlast.where(id: @blast.id).where.not(expired_at: nil).exists?
         # A delivery landed first, so the blast is live. Release the decision instead of blocking it.
         $redis.del(admitted_key) if claimed

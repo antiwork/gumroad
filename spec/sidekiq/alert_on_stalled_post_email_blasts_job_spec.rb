@@ -332,8 +332,7 @@ describe AlertOnStalledPostEmailBlastsJob do
         it "still runs the stalled-blast scan when the expiry query fails" do
           stalled_blast
           stub_sidekiq
-          allow(PostEmailBlast).to receive(:where).and_call_original
-          allow(PostEmailBlast).to receive(:where).with(hash_including(expired_at: nil, recipient_filter: nil)).and_raise(ActiveRecord::StatementInvalid, "lock wait timeout")
+          allow(PostEmailBlast).to receive(:never_sent).and_raise(ActiveRecord::StatementInvalid, "lock wait timeout")
           expect(ErrorNotifier).to receive(:notify).with(instance_of(ActiveRecord::StatementInvalid))
 
           expect { described_class.new.perform }.not_to raise_error

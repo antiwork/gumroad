@@ -34,6 +34,23 @@ class PostEmailBlast < ApplicationRecord
 
   scope :to_non_openers, -> { where(recipient_filter: RECIPIENT_FILTER_UNOPENED) }
 
+  scope :expirable, -> { where(completed_at: nil, expired_at: nil, first_email_delivered_at: nil) }
+
+  # `first_email_delivered_at` can be missing for a blast that did send, so `sent_post_emails`
+  # rows are the second check. Non-opener resends write none, so they are excluded.
+  scope :never_sent, -> {
+    expirable.where(recipient_filter: nil)
+      .where("NOT EXISTS (SELECT 1 FROM sent_post_emails WHERE sent_post_emails.post_id = post_email_blasts.post_id AND sent_post_emails.created_at >= post_email_blasts.requested_at)")
+  }
+
+  # Re-checks `expirable` at write time, so a blast that completed or delivered meanwhile stays live.
+  def self.expire(ids, reason:)
+    return 0 if Array(ids).empty?
+
+    now = Time.current
+    expirable.where(id: ids).update_all(expired_at: now, expiry_reason: reason, updated_at: now)
+  end
+
   def to_non_openers?
     recipient_filter == RECIPIENT_FILTER_UNOPENED
   end
