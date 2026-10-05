@@ -40,6 +40,8 @@ class Payment < ApplicationRecord
   attr_json_data_accessor :stripe_payout_destination_fingerprint
   attr_json_data_accessor :stripe_payout_destination_bank_name
   attr_json_data_accessor :error_message
+  # Set when the payout drains a retired managed account, so its outcome says nothing about the live bank.
+  attr_json_data_accessor :retired_account_drain
 
   # Payment state transitions:
   #
@@ -440,7 +442,8 @@ class Payment < ApplicationRecord
 
   # The failed or returned payouts to this payment's destination that count toward the repeated-failure
   # hold (Payment#pause_payouts_after_repeated_failures), as [destination label, relation]; nil when the
-  # destination cannot be identified.
+  # destination cannot be identified. Drains of a retired account never count: their outcome says
+  # nothing about the live bank, even when they share its bank row.
   def failed_payouts_counted_toward_hold
     if bank_account_id.present?
       destination = "bank account"
@@ -455,6 +458,8 @@ class Payment < ApplicationRecord
     else
       return nil
     end
+
+    payouts_to_destination = payouts_to_destination.where("COALESCE(payments.json_data->>'$.retired_account_drain', '') != 'true'")
 
     last_completed_at = payouts_to_destination.completed.maximum(:created_at)
     failed_payouts = payouts_to_destination.where(state: [FAILED, RETURNED])
@@ -504,6 +509,9 @@ class Payment < ApplicationRecord
       # weekly pause note while the PayPal explanation is newest (EXPLAINED set, so 14159 is
       # covered).
       return if terminal_paypal_failure?
+
+      # A failed drain says nothing about the live bank, so it cannot be the payout that trips the hold.
+      return if retired_account_drain
 
       destination, failed_payouts = failed_payouts_counted_toward_hold
       return if destination.nil?

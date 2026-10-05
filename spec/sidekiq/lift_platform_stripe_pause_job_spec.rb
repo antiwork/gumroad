@@ -339,6 +339,21 @@ describe LiftPlatformStripePauseJob do
       expect(resume_notes).to be_empty
     end
 
+    it "releases the hold when failed drains of a retired account sit on another destination" do
+      retired_bank_account = create(:ach_account, user: seller, stripe_connect_account_id: "acct_retired")
+      Payment::MAX_CONSECUTIVE_FAILED_PAYOUTS.times do
+        create(:payment, user: seller, bank_account: retired_bank_account, processor: PayoutProcessorType::STRIPE, state: "processing",
+                         stripe_connect_account_id: "acct_retired", retired_account_drain: true, created_at: 2.hours.ago)
+          .mark_failed!(Payment::FailureReason::BANK_ACCOUNT_NOT_FOUND_AT_STRIPE)
+      end
+      hold_payouts_after_failures
+
+      described_class.new.perform(seller.id)
+
+      expect(seller.reload.payouts_paused?).to be(false)
+      expect(resume_notes.last.content).to include("Payouts automatically resumed")
+    end
+
     it "keeps the hold when no destination reaches the threshold" do
       seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
       seller.comments.create!(author_name: User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:repeated_failed_payouts],

@@ -173,6 +173,91 @@ describe StripePayoutProcessor do
     end
   end
 
+  describe ".perform_payment for a drained retired account" do
+    let(:seller) { create(:user) }
+    let!(:retired_account) do
+      create(:merchant_account, user: seller, currency: Currency::AUD, charge_processor_merchant_id: "acct_drained_aud")
+        .tap(&:delete_charge_processor_account!)
+    end
+    let!(:retired_bank) do
+      create(:ach_account, user: seller,
+                           stripe_connect_account_id: "acct_drained_aud", stripe_bank_account_id: "ba_drained")
+    end
+    let!(:credit) do
+      create(:balance, user: seller, merchant_account: retired_account, state: "processing", date: 2.days.ago.to_date,
+                       amount_cents: 300_00, holding_currency: Currency::AUD, holding_amount_cents: 450_00)
+    end
+    let(:payment) do
+      create(:payment, user: seller, bank_account: retired_bank, processor: PayoutProcessorType::STRIPE, state: "processing",
+                       stripe_connect_account_id: "acct_drained_aud", currency: Currency::AUD, amount_cents: 450_00,
+                       balances: [credit])
+    end
+
+    it "pays out from the retired account to the retired account's own bank" do
+      expect(Stripe::Payout).to receive(:create) do |params, options|
+        expect(options).to eq(stripe_account: "acct_drained_aud")
+        expect(params[:destination]).to eq(retired_bank.stripe_external_account_id)
+        expect(params).not_to have_key(:expand)
+        Stripe::Payout.construct_from(id: "po_drained", arrival_date: 1.day.from_now.to_i)
+      end
+
+      expect(described_class.perform_payment(payment)).to eq([])
+
+      payment.reload
+      expect(payment.stripe_transfer_id).to eq("po_drained")
+      expect(payment.bank_account).to eq(retired_bank)
+      expect(payment.retired_account_drain).to be(true)
+    end
+
+    it "keeps the balances unpaid and marks the bank when Stripe no longer has the external account" do
+      allow(Stripe::Payout).to receive(:create).and_raise(
+        Stripe::InvalidRequestError.new("No such external account: 'ba_drained'", "external_account")
+      )
+      allow(ErrorNotifier).to receive(:notify)
+
+      described_class.perform_payment(payment)
+
+      expect(payment.reload).to be_failed
+      expect(payment.failure_reason).to eq(Payment::FailureReason::BANK_ACCOUNT_NOT_FOUND_AT_STRIPE)
+      expect(credit.reload).to be_unpaid
+      expect(retired_bank.reload).to be_deleted
+      expect(payment.retired_account_drain).to be(true)
+    end
+
+    it "does not pause the seller's active account however often the drain fails" do
+      create(:merchant_account, user: seller, currency: Currency::AUD, charge_processor_merchant_id: "acct_active_aud")
+      allow(Stripe::Payout).to receive(:create).and_raise(
+        Stripe::InvalidRequestError.new("No such external account: 'ba_drained'", "external_account")
+      )
+      allow(ErrorNotifier).to receive(:notify)
+
+      (Payment::MAX_CONSECUTIVE_FAILED_PAYOUTS + 1).times do
+        attempt = create(:payment, user: seller, bank_account: retired_bank, processor: PayoutProcessorType::STRIPE,
+                                   state: "processing", stripe_connect_account_id: "acct_drained_aud",
+                                   currency: Currency::AUD, amount_cents: 450_00)
+        described_class.perform_payment(attempt)
+        expect(attempt.reload).to be_failed
+      end
+
+      expect(seller.reload.payouts_paused?).to be(false)
+    end
+
+    it "asks Stripe for the destination when the payout names no bank account" do
+      payment.update!(bank_account: nil)
+      expect(Stripe::Payout).to receive(:create) do |params, _options|
+        expect(params).not_to have_key(:destination)
+        expect(params[:expand]).to eq(["destination"])
+        Stripe::Payout.construct_from(id: "po_drained", arrival_date: 1.day.from_now.to_i, destination: "ba_drained")
+      end
+
+      described_class.perform_payment(payment)
+
+      payment.reload
+      expect(payment.stripe_payout_destination_id).to eq("ba_drained")
+      expect(payment.bank_account).to eq(retired_bank)
+    end
+  end
+
   describe ".perform_payment" do
     it "continues payout recovery when the recommendation refresh cannot be enqueued" do
       seller = create(:user, payment_address: nil)
@@ -443,6 +528,48 @@ describe StripePayoutProcessor do
         expect(errors).to eq([])
         expect(payment.bank_account).to eq(newest_retired_bank_account)
         expect(payment.bank_account).not_to eq(retired_bank_account)
+      end
+
+      it "prefers a live bank row on the retired account over a newer deleted one" do
+        account = create(:merchant_account, user: seller, currency: Currency::AUD,
+                                            charge_processor_merchant_id: "acct_live_pref_aud", deleted_at: Time.current)
+        live_bank_account = create(:ach_account, user: seller, created_at: 5.days.ago,
+                                                 stripe_connect_account_id: account.charge_processor_merchant_id,
+                                                 stripe_bank_account_id: "ba_live")
+        create(:ach_account, user: seller, deleted_at: 1.day.ago, created_at: 1.day.ago,
+                             stripe_connect_account_id: account.charge_processor_merchant_id,
+                             stripe_bank_account_id: "ba_newer_deleted")
+        credit = create(:balance, user: seller, merchant_account: account, state: "processing", date: 2.days.ago.to_date,
+                                  amount_cents: 300_00, holding_currency: Currency::AUD, holding_amount_cents: 450_00)
+        payment = build_payment(seller, [credit], account.charge_processor_merchant_id)
+        allow(Stripe::Balance).to receive(:retrieve).and_return(
+          Stripe::Balance.construct_from(available: [{ currency: Currency::AUD, amount: 450_00 }], pending: [])
+        )
+
+        described_class.prepare_payment_and_set_amount(payment, [credit], account, Currency::AUD)
+
+        expect(payment.bank_account).to eq(live_bank_account)
+      end
+
+      it "does not pause the seller when a drain keeps failing before it reaches perform_payment" do
+        create(:ach_account, user: seller, stripe_connect_account_id: retired_account.charge_processor_merchant_id,
+                             stripe_bank_account_id: "ba_retired_short")
+        allow(Stripe::Balance).to receive(:retrieve).and_return(
+          Stripe::Balance.construct_from(available: [{ currency: Currency::AUD, amount: 100_00 }], pending: [])
+        )
+
+        Payment::MAX_CONSECUTIVE_FAILED_PAYOUTS.times do
+          credit = create(:balance, user: seller, merchant_account: retired_account, state: "processing", date: 2.days.ago.to_date,
+                                    amount_cents: 300_00, holding_currency: Currency::AUD, holding_amount_cents: 450_00)
+          payment = build_payment(seller, [credit], retired_account.charge_processor_merchant_id)
+
+          described_class.prepare_payment_and_set_amount(payment, [credit], retired_account, Currency::AUD)
+
+          expect(payment.reload).to be_failed
+          expect(payment.failure_reason).to eq(Payment::FailureReason::INSUFFICIENT_FUNDS)
+          expect(payment.retired_account_drain).to be(true)
+        end
+        expect(seller.reload.payouts_paused?).to be(false)
       end
 
       it "still refuses a retired account whose balances sum negative" do

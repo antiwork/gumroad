@@ -1311,6 +1311,67 @@ describe Payment do
       expect(user.comments.with_type_on_probation).to be_empty
     end
 
+    context "when a payout is a drain of a retired Gumroad-managed account" do
+      let(:retired_account_id) { "acct_retired_hold" }
+
+      def drain_payout(state:, reason: nil)
+        payment = create(:payment, user:, bank_account:, processor: PayoutProcessorType::STRIPE, state: "processing",
+                                   stripe_connect_account_id: retired_account_id, retired_account_drain: true)
+        if state == :completed
+          payment.update!(stripe_transfer_id: "po_drain", processor_fee_cents: 0)
+          payment.mark_completed!
+        else
+          payment.mark_failed!(reason)
+        end
+        payment
+      end
+
+      it "does not pause the seller after repeated failed drains" do
+        (Payment::MAX_CONSECUTIVE_FAILED_PAYOUTS + 1).times { drain_payout(state: :failed, reason: Payment::FailureReason::BANK_ACCOUNT_NOT_FOUND_AT_STRIPE) }
+
+        expect(user.reload.payouts_paused?).to be(false)
+        expect(user.comments.with_type_on_probation).to be_empty
+      end
+
+      it "keeps a completed drain on a shared bank row from resetting the live failure count" do
+        (Payment::MAX_CONSECUTIVE_FAILED_PAYOUTS - 1).times { failed_payout }
+        drain_payout(state: :completed)
+        expect(user.reload.payouts_paused?).to be(false)
+
+        failed_payout
+
+        expect(user.reload.payouts_paused_internally).to be(true)
+      end
+
+      it "keeps failed drains from counting toward the live failure count, however the account is classified later" do
+        (Payment::MAX_CONSECUTIVE_FAILED_PAYOUTS - 1).times { failed_payout }
+        create(:merchant_account, user:, charge_processor_merchant_id: retired_account_id).tap(&:delete_charge_processor_account!)
+        drain_payout(state: :failed, reason: Payment::FailureReason::BANK_ACCOUNT_NOT_FOUND_AT_STRIPE)
+        expect(user.reload.payouts_paused?).to be(false)
+
+        failed_payout
+
+        expect(user.reload.payouts_paused_internally).to be(true)
+        expect(user.comments.with_type_on_probation.last.content).to include("after #{Payment::MAX_CONSECUTIVE_FAILED_PAYOUTS} consecutive failed payouts")
+      end
+
+      it "still counts a live payout that names the same Stripe account id as a drain" do
+        Payment::MAX_CONSECUTIVE_FAILED_PAYOUTS.times do
+          create(:payment, user:, bank_account:, processor: PayoutProcessorType::STRIPE, state: "processing",
+                           stripe_connect_account_id: retired_account_id).mark_failed!
+        end
+
+        expect(user.reload.payouts_paused_internally).to be(true)
+      end
+
+      it "leaves drains out of the failures counted toward the hold" do
+        Payment::MAX_CONSECUTIVE_FAILED_PAYOUTS.times { drain_payout(state: :failed, reason: Payment::FailureReason::BANK_ACCOUNT_NOT_FOUND_AT_STRIPE) }
+        live = failed_payout
+
+        expect(live.failed_payouts_counted_toward_hold.last).to contain_exactly(live)
+      end
+    end
+
     it "still pauses when the threshold is reached by non-transient failures alone" do
       # The nil-reason rows are the point: most failures store nothing in failure_reason, and a
       # `NOT IN` filter without the IS NULL arm drops them and disables this check entirely.
