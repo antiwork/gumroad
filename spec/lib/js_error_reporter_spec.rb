@@ -18,6 +18,8 @@ describe JSErrorReporter do
     @html_tempfiles = []
   end
 
+  after(:all) { @driver.quit }
+
   after(:each) do
     @html_tempfiles.shift.close(true) while @html_tempfiles.size > 0
   end
@@ -37,6 +39,19 @@ describe JSErrorReporter do
     "file://#{tempfile.path}"
   end
 
+  # ChromeDriver logs a page's DevTools events only once it reads them, which can be after Navigate
+  # returns. Read until the expected errors arrive, so a late one does not land in the next example.
+  def read_errors(expected:)
+    errors = []
+    Selenium::WebDriver::Wait.new(timeout: 10).until do
+      errors.concat(JSErrorReporter.instance.read_errors!(@driver))
+      errors.size >= expected
+    end
+    errors
+  rescue Selenium::WebDriver::Error::TimeoutError
+    errors
+  end
+
   it "reports raised Error exceptions with stack trace" do
     url = create_html_file %{
       <script>
@@ -50,7 +65,7 @@ describe JSErrorReporter do
     }
     @driver.navigate.to url
 
-    errors = JSErrorReporter.instance.read_errors! @driver
+    errors = read_errors(expected: 1)
 
     expect(errors.size).to eq 1
     line, first_trace = errors[0].split("\n")
@@ -71,7 +86,7 @@ describe JSErrorReporter do
     }
     @driver.navigate.to url
 
-    errors = JSErrorReporter.instance.read_errors! @driver
+    errors = read_errors(expected: 1)
 
     expect(errors.size).to eq 1
     line, first_trace = errors[0].split("\n")
@@ -88,7 +103,7 @@ describe JSErrorReporter do
 
     @driver.navigate.to url
 
-    errors = JSErrorReporter.instance.read_errors! @driver
+    errors = read_errors(expected: 1)
 
     expect(errors.size).to eq 1
     line, first_trace = errors[0].split("\n")
@@ -110,7 +125,7 @@ describe JSErrorReporter do
 
     @driver.navigate.to url
 
-    errors = JSErrorReporter.instance.read_errors! @driver
+    errors = read_errors(expected: 0)
 
     expect(errors.size).to eq 0
   end
@@ -133,7 +148,7 @@ describe JSErrorReporter do
     }
     @driver.navigate.to url
 
-    errors = JSErrorReporter.instance.read_errors! @driver
+    errors = read_errors(expected: 2)
 
     expect(errors.size).to eq 2
 
