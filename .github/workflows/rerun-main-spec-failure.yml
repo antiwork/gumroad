@@ -53,15 +53,18 @@ jobs:
           MAIN_SHA=$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq .sha)
 
           # The RSpec summary line of each failed Fast/Slow shard. A missing line
-          # stays empty, and the classifier refuses it. Knapsack records failed
-          # examples for the retry through its API; in fallback mode it could
-          # not, so that shard is refused too.
+          # stays empty, and the classifier refuses it. Knapsack stores the failed
+          # examples for the retry with each queue request, so the shard must
+          # show its queue finished (the "retry all the tests" line, which a
+          # timeout or a crash never reaches) and no fallback mode.
           echo '{}' > summaries.json
           for id in $(ruby bin/classify-main-spec-failure --rspec-shards jobs.json); do
             gh api --allow-escape-sequences "repos/${GITHUB_REPOSITORY}/actions/jobs/${id}/logs" \
               | sed 's/\x1b\[[0-9;]*m//g' | tr -d '\r' > shard.log || : > shard.log
             if grep -aqiE 'fallback mode|FallbackModeError' shard.log; then
               summary="knapsack fallback mode"
+            elif ! grep -aqF 'To retry all the tests assigned to this CI node' shard.log; then
+              summary="knapsack queue did not finish"
             else
               summary=$(grep -aoE '[0-9]+ examples?, [0-9]+ failures?.*$' shard.log | tail -1) || summary=""
             fi
