@@ -295,12 +295,13 @@ class StripePayoutProcessor
     !merchant_account.active? && merchant_account.is_a_gumroad_managed_stripe_account?
   end
 
-  # Include soft-deleted rows: the retired account's former bank is usually no longer the live bank.
+  # Include soft-deleted rows, since the retired account's former bank is usually no longer the live
+  # bank, but prefer a live row over a newer deleted one.
   def self.bank_account_for_retired_account(merchant_account)
     merchant_account.user.bank_accounts
       .where(stripe_connect_account_id: merchant_account.charge_processor_merchant_id)
       .where.not(stripe_bank_account_id: nil)
-      .order(created_at: :desc, id: :desc)
+      .order(Arel.sql("bank_accounts.deleted_at IS NULL DESC"), created_at: :desc, id: :desc)
       .first
   end
   private_class_method :bank_account_for_retired_account

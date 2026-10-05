@@ -1311,6 +1311,43 @@ describe Payment do
       expect(user.comments.with_type_on_probation).to be_empty
     end
 
+    context "when the payout is from a retired Gumroad-managed account" do
+      let(:retired_account) do
+        create(:merchant_account, user:, charge_processor_merchant_id: "acct_retired_hold").tap(&:delete_charge_processor_account!)
+      end
+      let(:retired_bank_account) do
+        create(:ach_account, user:, deleted_at: 1.day.ago, stripe_connect_account_id: retired_account.charge_processor_merchant_id)
+      end
+
+      def failed_drain
+        payment = create(:payment, user:, bank_account: retired_bank_account, processor: PayoutProcessorType::STRIPE,
+                                   stripe_connect_account_id: retired_account.charge_processor_merchant_id, state: "processing")
+        payment.mark_failed!(Payment::FailureReason::BANK_ACCOUNT_NOT_FOUND_AT_STRIPE)
+        payment
+      end
+
+      it "does not pause the seller after repeated failed drains" do
+        (Payment::MAX_CONSECUTIVE_FAILED_PAYOUTS + 1).times { failed_drain }
+
+        expect(user.reload.payouts_paused?).to be(false)
+        expect(user.comments.with_type_on_probation).to be_empty
+      end
+
+      it "does not count failed drains toward a hold on a live payout that shares the bank account" do
+        retired_account
+        shared_bank_account = create(:ach_account, user:, stripe_connect_account_id: retired_account.charge_processor_merchant_id)
+        (Payment::MAX_CONSECUTIVE_FAILED_PAYOUTS - 1).times do
+          create(:payment, user:, bank_account: shared_bank_account, processor: PayoutProcessorType::STRIPE,
+                           stripe_connect_account_id: retired_account.charge_processor_merchant_id, state: "processing")
+            .mark_failed!(Payment::FailureReason::BANK_ACCOUNT_NOT_FOUND_AT_STRIPE)
+        end
+        create(:payment, user:, bank_account: shared_bank_account, processor: PayoutProcessorType::STRIPE,
+                         stripe_connect_account_id: "acct_live", state: "processing").mark_failed!
+
+        expect(user.reload.payouts_paused?).to be(false)
+      end
+    end
+
     it "still pauses when the threshold is reached by non-transient failures alone" do
       # The nil-reason rows are the point: most failures store nothing in failure_reason, and a
       # `NOT IN` filter without the IS NULL arm drops them and disables this check entirely.
