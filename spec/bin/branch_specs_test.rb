@@ -199,6 +199,24 @@ check(
   expect_specs: %w[spec/models/widget_spec.rb],
 )
 
+check(
+  "main spec-failure classifier, its test, and workflow do not escalate",
+  base_files: {
+    ".github/workflows/rerun-main-spec-failure.yml" => "old",
+    "bin/classify-main-spec-failure" => "old",
+    "spec/bin/classify_main_spec_failure_test.rb" => "old",
+    "app/models/widget.rb" => "old",
+    "spec/models/widget_spec.rb" => SPEC_STUB,
+  },
+  head_files: {
+    ".github/workflows/rerun-main-spec-failure.yml" => "new",
+    "bin/classify-main-spec-failure" => "new",
+    "spec/bin/classify_main_spec_failure_test.rb" => "new",
+    "app/models/widget.rb" => "new",
+  },
+  expect_specs: %w[spec/models/widget_spec.rb],
+)
+
 # tests.yml is the suite itself and must still force the full suite.
 check(
   "tests.yml still escalates",

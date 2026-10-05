@@ -1,0 +1,106 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Decides whether a failed `Tests` attempt on a `main` push gets one unattended
+# re-run of its failed spec shards. A red `main` run never unblocks its deploy, so
+# one random spec failure holds production until the next merge.
+#
+# Reads the attempt on stdin, or from a file argument:
+#
+#   { "jobs": [ ... GET /repos/{repo}/actions/runs/{id}/attempts/{n}/jobs ... ],
+#     "conclusion": "<the triggering run's own conclusion>",
+#     "event": "push", "head_branch": "main",
+#     "head_sha": "<the run's commit>", "main_sha": "<main's tip now>" }
+#
+# Exit codes match bin/classify-hung-checkout: 0 rerun, 1 skip, 2 could not run.
+
+require "json"
+
+EXIT_SKIP = 1
+EXIT_OPERATIONAL = 2
+
+SHARD_NAME = /\ATest (Fast|Slow|Minitest) \d+\z/
+SPEC_STEP = "Run tests"
+
+# More red shards than this reads as a real break, and re-running it only delays
+# the red.
+MAX_FAILED_SHARDS = 2
+
+FAILED = %w[failure timed_out].freeze
+JOB_RED = %w[failure timed_out startup_failure cancelled].freeze
+
+def steps_of(job)
+  Array(job["steps"]).sort_by { |step| step["number"] || 0 }
+end
+
+def first_failed_step(job)
+  steps_of(job).find { |step| FAILED.include?(step["conclusion"]) }
+end
+
+def job_label(job)
+  job["name"] || "job #{job['id']}"
+end
+
+def verdict(payload)
+  jobs = Array(payload["jobs"])
+
+  # `cancelled` is a run someone threw away on purpose, or a newer push evicted.
+  conclusion = payload["conclusion"]
+  return [EXIT_SKIP, "skip: the attempt concluded #{conclusion.inspect}"] unless conclusion == "failure"
+
+  unless payload["event"] == "push" && payload["head_branch"] == "main"
+    return [EXIT_SKIP, "skip: not a main push (#{payload['event'].inspect} on #{payload['head_branch'].inspect})"]
+  end
+
+  # A newer main commit contains this one, and its own run unblocks the deploy
+  # that ships both. Re-running here would only add a second deploy.
+  head_sha = payload["head_sha"].to_s
+  main_sha = payload["main_sha"].to_s
+  if head_sha.empty? || head_sha != main_sha
+    return [EXIT_SKIP, "skip: #{head_sha[0, 12].inspect} is no longer main's tip (#{main_sha[0, 12].inspect})"]
+  end
+
+  red = jobs.select { |job| JOB_RED.include?(job["conclusion"]) }
+  return [EXIT_SKIP, "skip: no red job on this attempt"] if red.empty?
+
+  # `timed_out` is a shard that ran out of its own budget; a re-run of a hang
+  # proves nothing about the specs.
+  failed = red.reject { |job| job["conclusion"] == "cancelled" }
+  failed.each do |job|
+    return [EXIT_SKIP, "skip: #{job_label(job)} is not a spec shard"] unless job_label(job).match?(SHARD_NAME)
+    step = first_failed_step(job)
+    unless job["conclusion"] == "failure" && step && step["name"] == SPEC_STEP && step["conclusion"] == "failure"
+      return [EXIT_SKIP, "skip: #{job_label(job)} failed at #{step&.dig('name').inspect}, not #{SPEC_STEP.inspect}"]
+    end
+  end
+
+  # Fail-fast cancels sibling shards behind a red one; a cancelled job elsewhere
+  # means something other than specs stopped the run.
+  stray = (red - failed).find { |job| !job_label(job).match?(SHARD_NAME) }
+  return [EXIT_SKIP, "skip: #{job_label(stray)} was cancelled"] if stray
+
+  return [EXIT_SKIP, "skip: only cancelled shards, no spec failure"] if failed.empty?
+  if failed.size > MAX_FAILED_SHARDS
+    return [EXIT_SKIP, "skip: #{failed.size} shards failed (limit #{MAX_FAILED_SHARDS})"]
+  end
+
+  [0, "rerun: specs failed on #{failed.map { |job| job_label(job) }.join(', ')}"]
+end
+
+raw = ARGV.first
+
+begin
+  payload = JSON.parse(raw ? File.read(raw) : $stdin.read)
+rescue JSON::ParserError, Errno::ENOENT => e
+  warn "Main spec-failure classifier could not run: #{e.message}"
+  exit EXIT_OPERATIONAL
+end
+
+unless payload.is_a?(Hash)
+  warn "Main spec-failure classifier could not run: expected a JSON object"
+  exit EXIT_OPERATIONAL
+end
+
+code, message = verdict(payload)
+puts message
+exit code

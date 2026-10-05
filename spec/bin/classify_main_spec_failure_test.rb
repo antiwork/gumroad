@@ -1,0 +1,235 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Tests for bin/classify-main-spec-failure.
+#
+# Plain ruby, no Rails, same as spec/bin/classify_hung_checkout_test.rb.
+#
+#   ruby spec/bin/classify_main_spec_failure_test.rb
+
+require "json"
+require "open3"
+require "yaml"
+
+CLASSIFIER = File.expand_path("../../bin/classify-main-spec-failure", __dir__)
+MAIN_SHA = "2b00057fe05db4549704188b58a46a7217bd1728"
+
+$failures = []
+$count = 0
+
+def job(name, conclusion, steps)
+  @next_id = (@next_id || 100) + 1
+  built = steps.each_with_index.map do |(step_name, step_conclusion), index|
+    { "name" => step_name, "number" => index + 1, "status" => "completed", "conclusion" => step_conclusion }
+  end
+  { "id" => @next_id, "name" => name, "conclusion" => conclusion, "steps" => built }
+end
+
+def attempt(jobs, **overrides)
+  {
+    "jobs" => jobs,
+    "conclusion" => "failure",
+    "event" => "push",
+    "head_branch" => "main",
+    "head_sha" => MAIN_SHA,
+    "main_sha" => MAIN_SHA
+  }.merge(overrides.transform_keys(&:to_s))
+end
+
+def run(input)
+  stdout, stderr, status = Open3.capture3("ruby", CLASSIFIER, stdin_data: input)
+  [status.exitstatus, stdout + stderr]
+end
+
+def check(name, payload, expect:)
+  $count += 1
+  code, output = run(payload.is_a?(String) ? payload : JSON.dump(payload))
+  # Exact codes: the workflow re-runs on 0 only, and 2 must never read as 0.
+  actual = { 0 => :rerun, 1 => :skip, 2 => :error }.fetch(code, :"exit #{code}")
+  if actual == expect
+    puts "  ok    #{name}"
+  else
+    puts "  FAIL  #{name}"
+    $failures << "#{name}\n    expected #{expect}, got #{actual}\n    #{output.strip}"
+  end
+end
+
+puts "classify-main-spec-failure"
+
+SPEC_FAILURE = [["Check out repository", "success"], ["Run tests", "failure"]].freeze
+SPEC_CANCELLED = [["Check out repository", "success"], ["Run tests", "cancelled"]].freeze
+PASSED = [["Check out repository", "success"], ["Run tests", "success"]].freeze
+HUNG_CHECKOUT = [["Check out repository", "failure"], ["Run tests", "skipped"]].freeze
+
+check(
+  "one slow shard failed in Run tests",
+  attempt([job("Test Slow 12", "failure", SPEC_FAILURE), job("Test Slow 13", "success", PASSED)]),
+  expect: :rerun
+)
+
+check(
+  "one minitest shard failed in Run tests",
+  attempt([job("Test Minitest 1", "failure", SPEC_FAILURE)]),
+  expect: :rerun
+)
+
+# test_fast is fail-fast: one red shard cancels its siblings mid-run.
+check(
+  "a fast shard failed and fail-fast cancelled its siblings",
+  attempt([
+            job("Test Fast 10", "failure", SPEC_FAILURE),
+            job("Test Fast 11", "cancelled", SPEC_CANCELLED),
+            job("Test Fast 12", "cancelled", SPEC_CANCELLED)
+          ]),
+  expect: :rerun
+)
+
+check(
+  "two failed shards is the limit",
+  attempt([job("Test Fast 10", "failure", SPEC_FAILURE), job("Test Slow 3", "failure", SPEC_FAILURE)]),
+  expect: :rerun
+)
+
+check(
+  "three failed shards reads as a real break",
+  attempt([
+            job("Test Fast 10", "failure", SPEC_FAILURE),
+            job("Test Slow 3", "failure", SPEC_FAILURE),
+            job("Test Slow 4", "failure", SPEC_FAILURE)
+          ]),
+  expect: :skip
+)
+
+# The run that holds production is the tip's run; an older commit already ships
+# in the newer one.
+check(
+  "the commit is no longer main's tip",
+  attempt([job("Test Slow 12", "failure", SPEC_FAILURE)], main_sha: "4eca2d9d310fe71dc3e9b53113ecd6aa40a92f55"),
+  expect: :skip
+)
+
+check(
+  "a missing head sha",
+  attempt([job("Test Slow 12", "failure", SPEC_FAILURE)], head_sha: ""),
+  expect: :skip
+)
+
+check(
+  "a pull request run",
+  attempt([job("Test Slow 12", "failure", SPEC_FAILURE)], event: "pull_request_target", head_branch: "some-branch"),
+  expect: :skip
+)
+
+check(
+  "a push to another branch",
+  attempt([job("Test Slow 12", "failure", SPEC_FAILURE)], head_branch: "gianfranco/feature"),
+  expect: :skip
+)
+
+# Someone cancelled the run after a shard had already failed; the job list alone
+# would read as a rerun.
+check(
+  "a cancelled run with a failed shard",
+  attempt(
+    [job("Test Slow 12", "failure", SPEC_FAILURE), job("Test Slow 13", "cancelled", SPEC_CANCELLED)],
+    conclusion: "cancelled"
+  ),
+  expect: :skip
+)
+
+check(
+  "a run that passed",
+  attempt([job("Test Slow 12", "success", PASSED)], conclusion: "success"),
+  expect: :skip
+)
+
+# rerun-hung-checkout.yml owns this one.
+check(
+  "a hung checkout on a shard",
+  attempt([job("Test Slow 3", "failure", HUNG_CHECKOUT)]),
+  expect: :skip
+)
+
+check(
+  "a spec failure plus a hung checkout",
+  attempt([job("Test Slow 12", "failure", SPEC_FAILURE), job("Test Slow 3", "failure", HUNG_CHECKOUT)]),
+  expect: :skip
+)
+
+check(
+  "a shard that timed out",
+  attempt([job("Test Slow 12", "timed_out", [["Check out repository", "success"], ["Run tests", "cancelled"]])]),
+  expect: :skip
+)
+
+check(
+  "a failed build job",
+  attempt([job("Build images", "failure", [["Check out repository", "success"], ["Build test image", "failure"]])]),
+  expect: :skip
+)
+
+check(
+  "a lint failure next to a spec failure",
+  attempt([job("Test Slow 12", "failure", SPEC_FAILURE), job("Lint Ruby", "failure", [["Run rubocop", "failure"]])]),
+  expect: :skip
+)
+
+check(
+  "a relevant-specs shard",
+  attempt([job("Test Relevant 2", "failure", SPEC_FAILURE)]),
+  expect: :skip
+)
+
+check(
+  "a cancelled non-shard job",
+  attempt([job("Test Slow 12", "failure", SPEC_FAILURE), job("Build images", "cancelled", [["Build test image", "cancelled"]])]),
+  expect: :skip
+)
+
+check(
+  "only cancelled shards",
+  attempt([job("Test Fast 11", "cancelled", SPEC_CANCELLED)]),
+  expect: :skip
+)
+
+check(
+  "a failed shard whose failing step is not Run tests",
+  attempt([job("Test Fast 4", "failure", [["Check out repository", "success"], ["Log in to Docker Hub", "failure"], ["Run tests", "skipped"]])]),
+  expect: :skip
+)
+
+check("a red attempt with no jobs", attempt([]), expect: :skip)
+check("input that is not JSON", "not json", expect: :error)
+check("input that is not an object", "[]", expect: :error)
+
+# --- The workflow's own gate ----------------------------------------------
+#
+# The attempt cap and the main-push scope live in the job `if`, which nothing
+# above can reach.
+
+WORKFLOW = File.expand_path("../../.github/workflows/rerun-main-spec-failure.yml", __dir__)
+
+$count += 1
+gate = YAML.load_file(WORKFLOW).fetch("jobs").fetch("rerun").fetch("if")
+wanted = [
+  "run_attempt < 2",
+  "conclusion == 'failure'",
+  "event == 'push'",
+  "head_branch == 'main'"
+]
+if wanted.all? { |part| gate.include?(part) }
+  puts "  ok    the workflow gate caps attempts and only runs on a failed main push"
+else
+  puts "  FAIL  the workflow gate caps attempts and only runs on a failed main push"
+  $failures << "workflow gate: #{gate.inspect}"
+end
+
+puts
+if $failures.empty?
+  puts "#{$count} checks passed."
+  exit 0
+end
+
+warn "#{$failures.size} of #{$count} checks FAILED:\n\n"
+$failures.each { |f| warn "  #{f}\n\n" }
+exit 1

@@ -1,0 +1,72 @@
+name: Rerun main spec failure
+
+# Re-runs the failed spec shards of a `Tests` attempt on a `main` push, once.
+# The deploy gate in tests.yml unblocks only a green `main` run, so one random
+# spec failure otherwise holds production until the next merge.
+#
+# Disjoint from rerun-hung-checkout.yml: that one refuses any attempt where specs
+# failed, and the classifier here refuses any attempt where something else did.
+# A real break fails the re-run too and stays red.
+
+on:
+  workflow_run:
+    workflows: ["Tests"]
+    types: [completed]
+
+permissions:
+  actions: write # rerun-failed-jobs; the default token cannot re-run without it
+  contents: read
+
+jobs:
+  rerun:
+    runs-on: ubuntu-latest
+    # run_attempt < 2 is the cap: attempt 1 may be re-run, attempt 2 is final.
+    if: >-
+      github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.run_attempt < 2 &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            bin/classify-main-spec-failure
+          sparse-checkout-cone-mode: false
+
+      - name: Classify the triggering attempt
+        id: classify
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          EVENT: ${{ github.event.workflow_run.event }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          gh api --paginate \
+            "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/attempts/${ATTEMPT}/jobs?per_page=100" \
+            --jq '.jobs[]' | jq -s '{jobs: .}' > jobs.json
+          MAIN_SHA=$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq .sha)
+
+          jq --arg conclusion "$CONCLUSION" --arg event "$EVENT" --arg head_branch "$HEAD_BRANCH" \
+             --arg head_sha "$HEAD_SHA" --arg main_sha "$MAIN_SHA" \
+            '. + {conclusion: $conclusion, event: $event, head_branch: $head_branch, head_sha: $head_sha, main_sha: $main_sha}' \
+            jobs.json > attempt.json
+          set +e
+          ruby bin/classify-main-spec-failure attempt.json
+          status=$?
+          set -e
+          case "$status" in
+            0) echo "rerun=true" >> "$GITHUB_OUTPUT" ;;
+            *) echo "rerun=false" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      - name: Re-run the failed jobs
+        if: steps.classify.outputs.rerun == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: gh run rerun "$RUN_ID" --failed -R "$GITHUB_REPOSITORY"
