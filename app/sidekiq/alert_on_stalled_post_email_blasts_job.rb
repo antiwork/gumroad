@@ -121,7 +121,8 @@ class AlertOnStalledPostEmailBlastsJob
           .order(requested_at: :desc)
           .limit(MAX_CANDIDATES_SCANNED)
           .ids,
-        reason: PostEmailBlast::EXPIRY_ABANDONED
+        reason: PostEmailBlast::EXPIRY_ABANDONED,
+        never_sent: true
       )
     end
 

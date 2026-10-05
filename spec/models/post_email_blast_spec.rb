@@ -137,6 +137,28 @@ RSpec.describe PostEmailBlast do
     end
   end
 
+  describe ".expire" do
+    let(:post) { create(:installment) }
+    let!(:blast) { create(:post_email_blast, :just_requested, post:, requested_at: 30.days.ago) }
+
+    it "ends the blasts it is given" do
+      expect(described_class.expire([blast.id], reason: described_class::EXPIRY_QUOTA)).to eq(1)
+      expect(blast.reload.expiry_reason).to eq(described_class::EXPIRY_QUOTA)
+    end
+
+    it "skips a blast whose post recorded recipients after the candidates were read when never_sent is set" do
+      ids = described_class.never_sent.ids
+      SentPostEmail.create!(post:, email: "buyer@example.com", created_at: blast.requested_at + 1.minute)
+
+      expect(described_class.expire(ids, reason: described_class::EXPIRY_ABANDONED, never_sent: true)).to eq(0)
+      expect(blast.reload.expired_at).to be_nil
+    end
+
+    it "still ends a blast that has not recorded recipients when never_sent is set" do
+      expect(described_class.expire([blast.id], reason: described_class::EXPIRY_ABANDONED, never_sent: true)).to eq(1)
+    end
+  end
+
   describe "Latency metrics", :freeze_time do
     describe "#start_latency" do
       it "returns the difference between requested_at and started_at" do

@@ -91,9 +91,9 @@ export default function EmailsPublished() {
             })}, when your daily limit for large emails resets.`
           : "Sends when your daily limit for large emails resets.";
       case "expired":
-        return "Not sent. Your daily limit for large emails stayed full until this email was out of date. Send a new email to reach your audience.";
+        return "Your daily limit for large emails stayed full until this email was out of date. Send a new email to reach your audience.";
       case "abandoned":
-        return "Not sent. We lost track of this send before any email went out. Send a new email to reach your audience.";
+        return "We lost track of this send before any email went out. Send a new email to reach your audience.";
       case "incomplete": {
         // Emailed shows the post's total, which can differ from this send's own count after a
         // resend; repeat the count only when it adds something.
@@ -253,7 +253,12 @@ export default function EmailsPublished() {
                 <SheetHeader>{selectedInstallment.name}</SheetHeader>
                 <Card>
                   <CardContent>
-                    <h5>Sent</h5>
+                    <h5>
+                      {selectedInstallment.delivery?.status === "expired" ||
+                      selectedInstallment.delivery?.status === "abandoned"
+                        ? "Published"
+                        : "Sent"}
+                    </h5>
                     {new Date(selectedInstallment.published_at).toLocaleString(userAgentInfo.locale, {
                       timeZone: currentSeller.timeZone.name,
                     })}

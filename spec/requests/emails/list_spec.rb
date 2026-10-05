@@ -152,6 +152,8 @@ describe("Email List", :js, :sidekiq_inline, :elasticsearch_wait_for_refresh, ty
 
         within_modal "Email 1 (sent)" do
           expect(page).to have_text("Status Not sent", normalize_ws: true)
+          expect(page).to have_text("Published #{installment1.published_at.in_time_zone(seller.timezone).strftime("%-m/%-d/%Y, %-I:%M:%S %p")}", normalize_ws: true)
+          expect(page).not_to have_text("Sent #{installment1.published_at.in_time_zone(seller.timezone).strftime("%-m/%-d/%Y, %-I:%M:%S %p")}", normalize_ws: true)
           expect(page).to have_text("Your daily limit for large emails stayed full until this email was out of date.")
           expect(page).not_to have_button("Resend to non-openers")
         end
@@ -169,6 +171,7 @@ describe("Email List", :js, :sidekiq_inline, :elasticsearch_wait_for_refresh, ty
 
         within_modal "Email 1 (sent)" do
           expect(page).to have_text("We lost track of this send before any email went out.")
+          expect(page).to have_text("Published #{installment1.published_at.in_time_zone(seller.timezone).strftime("%-m/%-d/%Y, %-I:%M:%S %p")}", normalize_ws: true)
           expect(page).not_to have_text("daily limit")
           expect(page).not_to have_button("Resend to non-openers")
         end

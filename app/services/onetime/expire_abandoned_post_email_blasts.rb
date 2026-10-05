@@ -25,7 +25,7 @@ class Onetime::ExpireAbandonedPostEmailBlasts
         ids = batch.map(&:id)
         unless @dry_run
           ReplicaLagWatcher.watch
-          expired_count += PostEmailBlast.expire(ids, reason: PostEmailBlast::EXPIRY_ABANDONED)
+          expired_count += PostEmailBlast.expire(ids, reason: PostEmailBlast::EXPIRY_ABANDONED, never_sent: true)
         end
         candidate_ids.concat(ids)
       end

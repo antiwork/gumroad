@@ -57,8 +57,13 @@ class PostEmailBlast < ApplicationRecord
   }
 
   # Re-checks `expirable` at write time, so a blast that completed or delivered meanwhile stays live.
-  def self.expire(ids, reason:)
+  # `never_sent: true` also re-reads the `sent_post_emails` signal just before the write. That read
+  # is not atomic with the UPDATE, so it narrows the race rather than closing it.
+  def self.expire(ids, reason:, never_sent: false)
     return 0 if Array(ids).empty?
+
+    ids = self.never_sent.where(id: ids).ids if never_sent
+    return 0 if ids.empty?
 
     now = Time.current
     expirable.where(id: ids).update_all(expired_at: now, expiry_reason: reason, updated_at: now)
