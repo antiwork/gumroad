@@ -179,12 +179,19 @@ describe Settings::MainController, type: :controller, inertia: true do
           end.to_not have_enqueued_mail(UserSignupMailer)
         end
 
-        it "keeps the confirmation token when the pasted address has invisible characters" do
-          expect do
-            put :update, params: { user: user_params.merge(email: "pending@gumroad.com\u00A0\u200B") }
-          end.to_not change { seller.reload.confirmation_token }
+        {
+          "a no-break space" => "\u00A0",
+          "a zero-width space" => "\u200B",
+          "a word joiner" => "\u2060",
+          "a byte order mark" => "\uFEFF",
+        }.each do |name, character|
+          it "keeps the confirmation token when the pasted address ends with #{name}" do
+            expect do
+              put :update, params: { user: user_params.merge(email: "pending@gumroad.com#{character}") }
+            end.to_not change { seller.reload.confirmation_token }
 
-          expect(seller.unconfirmed_email).to eq("pending@gumroad.com")
+            expect(seller.unconfirmed_email).to eq("pending@gumroad.com")
+          end
         end
 
         it "still saves the other settings" do
