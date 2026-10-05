@@ -24,6 +24,7 @@ import { DescriptionEditor, useImageUpload } from "$app/components/ProductEdit/P
 import { DiscordIntegrationEditor } from "$app/components/ProductEdit/ProductTab/DiscordIntegrationEditor";
 import { DurationEditor } from "$app/components/ProductEdit/ProductTab/DurationEditor";
 import { DurationsEditor } from "$app/components/ProductEdit/ProductTab/DurationsEditor";
+import { EmptyVersionsNotice } from "$app/components/ProductEdit/ProductTab/EmptyVersionsNotice";
 import { FreeTrialSelector } from "$app/components/ProductEdit/ProductTab/FreeTrialSelector";
 import { GoogleCalendarIntegrationEditor } from "$app/components/ProductEdit/ProductTab/GoogleCalendarIntegrationEditor";
 import { MaxPurchaseCountToggle } from "$app/components/ProductEdit/ProductTab/MaxPurchaseCountToggle";
@@ -370,6 +371,7 @@ export const ProductTab = () => {
                         versions={product.variants}
                         onChange={(variants) => updateProduct({ variants })}
                       />
+                      <EmptyVersionsNotice />
                     </section>
                   )}
                 </>
