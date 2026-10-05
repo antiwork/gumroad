@@ -146,6 +146,14 @@ RSpec.describe PostEmailBlast do
       expect(blast.reload.expiry_reason).to eq(described_class::EXPIRY_QUOTA)
     end
 
+    it "accepts a single id" do
+      expect(described_class.expire(blast.id, reason: described_class::EXPIRY_QUOTA)).to eq(1)
+    end
+
+    it "accepts a single id when never_sent is set" do
+      expect(described_class.expire(blast.id, reason: described_class::EXPIRY_ABANDONED, never_sent: true)).to eq(1)
+    end
+
     it "skips a blast whose post recorded recipients after the candidates were read when never_sent is set" do
       ids = described_class.never_sent.ids
       SentPostEmail.create!(post:, email: "buyer@example.com", created_at: blast.requested_at + 1.minute)
