@@ -5,6 +5,7 @@
 # same pass. Reports only — recovering a stranded balance is a human decision.
 class AlertOnRetiredManagedAccountActivityJob
   include Sidekiq::Job
+  include DatabaseRoleRouting
   sidekiq_options retry: 2, queue: :low
 
   # Payouts holds a sale at least this long before it can pay it, so everything a retired account can
@@ -15,22 +16,27 @@ class AlertOnRetiredManagedAccountActivityJob
   MAX_REPORTED = 25
 
   def perform(merchant_account_id, retired_at_iso)
-    merchant_account = MerchantAccount.find_by(id: merchant_account_id)
-    return if merchant_account.nil?
-    # A retired account that has come back is a payout destination again, so nothing it landed is
-    # stranded.
-    return if merchant_account.active?
-
-    retired_at = Time.iso8601(retired_at_iso)
-    landed = landed_since(merchant_account, retired_at)
-    return if landed.blank?
-
-    log_landed(merchant_account, retired_at, landed)
-    InternalNotificationWorker.perform_async("payouts", "Activity on a retired Stripe account",
-                                             message_for(merchant_account, retired_at, landed))
+    # A one-time check: a replica that has not caught up would report nothing and never be re-read.
+    with_primary_database { check(merchant_account_id, retired_at_iso) }
   end
 
   private
+    def check(merchant_account_id, retired_at_iso)
+      merchant_account = MerchantAccount.find_by(id: merchant_account_id)
+      return if merchant_account.nil?
+      # A retired account that has come back is a payout destination again, so nothing it landed is
+      # stranded.
+      return if merchant_account.active?
+
+      retired_at = Time.iso8601(retired_at_iso)
+      landed = landed_since(merchant_account, retired_at)
+      return if landed.blank?
+
+      log_landed(merchant_account, retired_at, landed)
+      InternalNotificationWorker.perform_async("payouts", "Activity on a retired Stripe account",
+                                               message_for(merchant_account, retired_at, landed))
+    end
+
     # Charges and balance transactions are read on `merchant_account_id`, which leads their index.
     # Balances has no index on it alone, so that leg carries the owner too.
     #
