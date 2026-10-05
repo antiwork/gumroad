@@ -153,6 +153,47 @@ describe Settings::MainController, type: :controller, inertia: true do
         end
       end
 
+      describe "the pending email is submitted again" do
+        before do
+          seller.update_columns(email: "test@gumroad.com")
+          seller.update!(email: "pending@gumroad.com")
+          seller.reload
+        end
+
+        it "keeps the confirmation token so the emailed link still works" do
+          expect(seller.unconfirmed_email).to eq("pending@gumroad.com")
+
+          expect do
+            put :update, params: { user: user_params.merge(email: "pending@gumroad.com") }
+          end.to_not change { seller.reload.confirmation_token }
+
+          expect(response).to redirect_to(settings_main_path)
+          expect(flash[:notice]).to eq("Your account has been updated!")
+          expect(seller.unconfirmed_email).to eq("pending@gumroad.com")
+          expect(seller.email).to eq("test@gumroad.com")
+        end
+
+        it "does not send another confirmation or email_changed mail" do
+          expect do
+            put :update, params: { user: user_params.merge(email: "Pending@Gumroad.com ") }
+          end.to_not have_enqueued_mail(UserSignupMailer)
+        end
+
+        it "still saves the other settings" do
+          put :update, params: { user: user_params.merge(email: "pending@gumroad.com", timezone: "Tokyo") }
+
+          expect(seller.reload.timezone).to eq("Tokyo")
+        end
+
+        it "issues a new token when a different address is submitted" do
+          expect do
+            put :update, params: { user: user_params.merge(email: "another@gumroad.com") }
+          end.to change { seller.reload.confirmation_token }
+
+          expect(seller.unconfirmed_email).to eq("another@gumroad.com")
+        end
+      end
+
       describe "email is changed back to a confirmed email" do
         before(:each) do
           seller.update_columns(email: "test@gumroad.com", unconfirmed_email: "new@gumroad.com")

@@ -12,7 +12,7 @@ class ConfirmationsController < Devise::ConfirmationsController
     @user = User.find_or_initialize_with_error_by(:confirmation_token, params[:confirmation_token])
 
     if @user.errors.present?
-      flash[:alert] = "You have already been confirmed."
+      flash[:alert] = "This confirmation link is no longer valid. If you requested a new confirmation email, please use the link in the most recent one."
       return redirect_to root_url
     end
 

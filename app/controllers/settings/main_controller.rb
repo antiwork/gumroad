@@ -11,7 +11,7 @@ class Settings::MainController < Settings::BaseController
   end
 
   def update
-    current_seller.with_lock { current_seller.update!(user_params) }
+    current_seller.with_lock { current_seller.update!(user_params_without_pending_email) }
 
     if params[:user][:email] == current_seller.email
       current_seller.update!(unconfirmed_email: nil)
@@ -60,6 +60,17 @@ class Settings::MainController < Settings::BaseController
   end
 
   private
+    # Re-saving the pending address would make Devise issue a new confirmation
+    # token and kill the link already in the user's inbox.
+    def user_params_without_pending_email
+      pending_email = current_seller.unconfirmed_email
+      submitted_email = user_params[:email]
+      return user_params if pending_email.blank? || submitted_email.blank?
+      return user_params unless submitted_email.strip.casecmp?(pending_email)
+
+      user_params.except(:email)
+    end
+
     def user_params
       permitted_params = [
         :email,

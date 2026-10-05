@@ -59,6 +59,15 @@ describe ConfirmationsController do
       end
     end
 
+    describe "unknown or superseded token" do
+      it "redirects home and says the link is no longer valid" do
+        get :show, params: { confirmation_token: "superseded-token" }
+
+        expect(response).to redirect_to root_url
+        expect(flash[:alert]).to eq("This confirmation link is no longer valid. If you requested a new confirmation email, please use the link in the most recent one.")
+      end
+    end
+
     describe "logged in" do
       before do
         sign_in @user
