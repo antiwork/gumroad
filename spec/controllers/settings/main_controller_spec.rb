@@ -179,6 +179,14 @@ describe Settings::MainController, type: :controller, inertia: true do
           end.to_not have_enqueued_mail(UserSignupMailer)
         end
 
+        it "keeps the confirmation token when the pasted address has invisible characters" do
+          expect do
+            put :update, params: { user: user_params.merge(email: "pending@gumroad.com\u00A0\u200B") }
+          end.to_not change { seller.reload.confirmation_token }
+
+          expect(seller.unconfirmed_email).to eq("pending@gumroad.com")
+        end
+
         it "still saves the other settings" do
           put :update, params: { user: user_params.merge(email: "pending@gumroad.com", timezone: "Tokyo") }
 

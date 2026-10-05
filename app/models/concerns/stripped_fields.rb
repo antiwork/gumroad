@@ -70,14 +70,14 @@ module StrippedFields
       object.send("#{field}=", value)
     end
 
-    private
-      def strip(value)
-        value.to_s
-             .gsub(INVISIBLE_FORMAT_CHARS, "")
-             .gsub(UNICODE_SPACES, " ")
-             .strip
-      end
+    def strip(value)
+      value.to_s
+           .gsub(INVISIBLE_FORMAT_CHARS, "")
+           .gsub(UNICODE_SPACES, " ")
+           .strip
+    end
 
+    private
       def remove_duplicate_spaces(value, enabled:)
         value = value.squeeze(" ") if enabled
         value

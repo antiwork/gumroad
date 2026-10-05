@@ -61,12 +61,13 @@ class Settings::MainController < Settings::BaseController
 
   private
     # Re-saving the pending address would make Devise issue a new confirmation
-    # token and kill the link already in the user's inbox.
+    # token and kill the link already in the user's inbox. Compare after the same
+    # stripping the model applies, or an invisible character defeats the check.
     def user_params_without_pending_email
       pending_email = current_seller.unconfirmed_email
       submitted_email = user_params[:email]
       return user_params if pending_email.blank? || submitted_email.blank?
-      return user_params unless submitted_email.strip.casecmp?(pending_email)
+      return user_params unless StrippedFields::StrippedField.strip(submitted_email).casecmp?(pending_email)
 
       user_params.except(:email)
     end
