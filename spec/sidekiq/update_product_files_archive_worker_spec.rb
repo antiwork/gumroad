@@ -396,8 +396,15 @@ describe UpdateProductFilesArchiveWorker, :vcr do
             raise Sidekiq::Shutdown
           end
         end
+        upload_threads = []
+        allow_any_instance_of(Aws::S3::MultipartStreamUploader).to receive(:upload_in_threads).and_wrap_original do |original, *args|
+          original.call(*args).tap { upload_threads.concat(_1) }
+        end
 
         expect { described_class.new.perform(archive.id) }.to raise_error(Sidekiq::Shutdown)
+        # The SDK's part threads outlive the interrupt and still upload part 1. In production they die with
+        # the process; here a late part can land during the requeued run's abort and reopen the upload.
+        upload_threads.each(&:join)
 
         # The SDK aborts only on StandardError, so the interrupted upload stays open.
         expect(archive.reload).to be_in_progress
