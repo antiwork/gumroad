@@ -10,7 +10,12 @@ import { formatStatNumber } from "$app/utils/formatStatNumber";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { EmptyStatePlaceholder } from "$app/components/EmailsPage/EmptyStatePlaceholder";
 import { EmailsLayout } from "$app/components/EmailsPage/Layout";
-import { DeleteEmailModal, EmailSheetActions, LoadMoreButton } from "$app/components/EmailsPage/shared";
+import {
+  DeleteEmailModal,
+  EmailSheetActions,
+  LoadMoreButton,
+  type RemainingSend,
+} from "$app/components/EmailsPage/shared";
 import { useEmailSearch } from "$app/components/EmailsPage/useEmailSearch";
 import { Modal } from "$app/components/Modal";
 import { Card, CardContent } from "$app/components/ui/Card";
@@ -74,6 +79,18 @@ export default function EmailsPublished() {
   const isUnfinished = (installment: PublishedInstallment) =>
     installment.send_emails && installment.delivery !== null && installment.delivery.status !== "sent";
 
+  const remainingSendFor = (delivery: PublishedInstallment["delivery"]): RemainingSend | null => {
+    switch (delivery?.status) {
+      case "incomplete":
+        return delivery.retrying ? null : { kind: "rest", count: delivery.remaining_count };
+      case "expired":
+      case "abandoned":
+        return { kind: "neverSent" };
+      default:
+        return null;
+    }
+  };
+
   const deliveryNote = (delivery: PublishedInstallment["delivery"], sentCount: number | null) => {
     if (!delivery || delivery.status === "sent") return null;
     const people = (count: number) => `${formatStatNumber({ value: count })} ${count === 1 ? "person" : "people"}`;
@@ -91,9 +108,9 @@ export default function EmailsPublished() {
             })}, when your daily limit for large emails resets.`
           : "Sends when your daily limit for large emails resets.";
       case "expired":
-        return "Your daily limit for large emails stayed full until this email was out of date. Send a new email to reach your audience.";
+        return "This email never got a turn under your daily limit for large emails, so we stopped trying before it went out late.";
       case "abandoned":
-        return "We lost track of this send before any email went out. Send a new email to reach your audience.";
+        return "A problem on our side stopped this email before it reached anyone.";
       case "incomplete": {
         // Emailed shows the post's total, which can differ from this send's own count after a
         // resend; repeat the count only when it adds something.
@@ -253,12 +270,7 @@ export default function EmailsPublished() {
                 <SheetHeader>{selectedInstallment.name}</SheetHeader>
                 <Card>
                   <CardContent>
-                    <h5>
-                      {selectedInstallment.delivery?.status === "expired" ||
-                      selectedInstallment.delivery?.status === "abandoned"
-                        ? "Published"
-                        : "Sent"}
-                    </h5>
+                    <h5>{isUnfinished(selectedInstallment) ? "Published" : "Sent"}</h5>
                     {new Date(selectedInstallment.published_at).toLocaleString(userAgentInfo.locale, {
                       timeZone: currentSeller.timeZone.name,
                     })}
@@ -331,11 +343,7 @@ export default function EmailsPublished() {
                 <EmailSheetActions
                   installment={selectedInstallment}
                   allowResend={!selectedInstallment.never_reached_anyone}
-                  remainingSend={
-                    selectedInstallment.delivery?.status === "incomplete" && !selectedInstallment.delivery.retrying
-                      ? { count: selectedInstallment.delivery.remaining_count }
-                      : null
-                  }
+                  remainingSend={remainingSendFor(selectedInstallment.delivery)}
                   onDelete={() =>
                     setDeletingInstallment({
                       id: selectedInstallment.external_id,

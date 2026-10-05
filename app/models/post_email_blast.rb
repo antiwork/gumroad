@@ -84,6 +84,8 @@ class PostEmailBlast < ApplicationRecord
     "incomplete"
   end
 
+  def ended_unsent? = delivery_status.in?(%w[expired abandoned])
+
   # Recipients the sender still owes, from its pending count; nil once that key is gone.
   def remaining_recipient_count
     return @remaining_recipient_count if defined?(@remaining_recipient_count)

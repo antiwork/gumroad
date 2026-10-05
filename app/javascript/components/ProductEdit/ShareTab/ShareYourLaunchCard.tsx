@@ -52,9 +52,9 @@ const EMAIL_DRAFT_SUMMARY: Record<NonNullable<MarketingChannel["draft"]>["state"
   incomplete: (subject) =>
     `Your launch email about ${subject} has not finished processing. Check delivery details in Emails.`,
   expired: (subject) =>
-    `Your launch email about ${subject} was not sent: your daily limit for large emails stayed full until it was out of date. Check details in Emails.`,
+    `Your launch email about ${subject} never got a turn under your daily limit for large emails. You can send it now from Emails.`,
   abandoned: (subject) =>
-    `Your launch email about ${subject} was not sent: we lost track of it before any email went out. Check details in Emails.`,
+    `A problem on our side stopped your launch email about ${subject} before it reached anyone. You can send it now from Emails.`,
   sent: (subject) => `Email processing is complete for ${subject}. Check delivery details in Emails.`,
 };
 

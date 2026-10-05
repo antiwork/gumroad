@@ -5,13 +5,14 @@ class Api::Internal::Installments::RemainingSendsController < Api::Internal::Bas
   before_action :set_installment
   after_action :verify_authorized
 
-  # Resumes an incomplete send at the seller's request. The job skips everyone who already
-  # received the email, so this cannot double-send; the guards below only keep two senders
-  # from running at once.
+  # Resumes an incomplete send, or restarts one that never sent, at the seller's request. The job
+  # skips everyone who already received the email, so this cannot double-send; the guards below
+  # only keep two senders from running at once.
   def create
     authorize @installment, :send_to_remaining?
 
     blast = @installment.latest_regular_blast
+    return send_again if blast&.ended_unsent?
     unless blast&.delivery_status == "incomplete"
       return render json: { success: false, error: "This email is not waiting on any recipients." }, status: :unprocessable_entity
     end
@@ -38,6 +39,21 @@ class Api::Internal::Installments::RemainingSendsController < Api::Internal::Bas
   end
 
   private
+    # A send that ended before reaching anyone gets a new blast, as publishing does. Reviving the
+    # old one would expire it again, because its content window runs from its own requested_at.
+    def send_again
+      blast_id = @installment.with_lock do
+        # A concurrent submit finds the first request's blast here, already sending.
+        next unless @installment.latest_regular_blast&.ended_unsent?
+
+        PostEmailBlast.create!(post: @installment, requested_at: Time.current).id
+      end
+      return render json: { success: false, error: "This email is already sending." }, status: :unprocessable_entity if blast_id.nil?
+
+      SendPostBlastEmailsJob.perform_async(blast_id)
+      render json: { success: true }
+    end
+
     RELEASE_CLAIM_IF_HELD = <<~LUA
       if redis.call("GET", KEYS[1]) == ARGV[1] then
         return redis.call("DEL", KEYS[1])

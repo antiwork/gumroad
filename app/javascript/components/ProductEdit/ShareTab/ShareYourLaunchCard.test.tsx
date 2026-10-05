@@ -358,9 +358,13 @@ describe("ShareYourLaunchCard", () => {
     [
       "expired",
       "Not sent",
-      "Your launch email about Gumstein Letters was not sent: your daily limit for large emails stayed full",
+      "Your launch email about Gumstein Letters never got a turn under your daily limit for large emails.",
     ],
-    ["abandoned", "Not sent", "Your launch email about Gumstein Letters was not sent: we lost track of it"],
+    [
+      "abandoned",
+      "Not sent",
+      "A problem on our side stopped your launch email about Gumstein Letters before it reached anyone.",
+    ],
   ] as const)("shows truthful %s email state", async (state, label, summary) => {
     await renderCard([
       emailChannel({ draft: { id: "draft1", subject: "Gumstein Letters", state, edit_url: "/emails/draft1/edit" } }),

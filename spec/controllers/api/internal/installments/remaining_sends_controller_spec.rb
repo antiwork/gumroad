@@ -94,6 +94,58 @@ describe Api::Internal::Installments::RemainingSendsController do
       expect(SendPostBlastEmailsJob.jobs.size).to eq(0)
     end
 
+    describe "an email that was never sent" do
+      before { blast.update!(first_email_delivered_at: nil, last_email_delivered_at: nil, delivery_count: 0, expired_at: 1.hour.ago, expiry_reason: PostEmailBlast::EXPIRY_QUOTA) }
+
+      it "starts a new send with its own content window and leaves the expired one as history" do
+        freeze_time do
+          expect { post :create, params: { id: installment.external_id } }.to change { installment.blasts.count }.by(1)
+
+          new_blast = installment.reload.latest_regular_blast
+          expect(response.parsed_body).to eq({ "success" => true })
+          expect(new_blast.requested_at).to eq(Time.current)
+          expect(SendPostBlastEmailsJob).to have_enqueued_sidekiq_job(new_blast.id)
+          expect(blast.reload.expired_at).to be_present
+        end
+      end
+
+      it "restarts an abandoned send the same way" do
+        blast.update!(expiry_reason: PostEmailBlast::EXPIRY_ABANDONED)
+
+        expect { post :create, params: { id: installment.external_id } }.to change { installment.blasts.count }.by(1)
+        expect(SendPostBlastEmailsJob.jobs.size).to eq(1)
+      end
+
+      it "starts only one send when the seller submits twice" do
+        post :create, params: { id: installment.external_id }
+        post :create, params: { id: installment.external_id }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(installment.blasts.count).to eq(2)
+        expect(SendPostBlastEmailsJob.jobs.size).to eq(1)
+      end
+
+      it "starts no send when a concurrent submit created one first" do
+        allow_any_instance_of(Installment).to receive(:with_lock).and_wrap_original do |original, *args, &block|
+          create(:blast, :just_requested, post: installment)
+          original.call(*args, &block)
+        end
+
+        post :create, params: { id: installment.external_id }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body["error"]).to eq("This email is already sending.")
+        expect(installment.blasts.count).to eq(2)
+        expect(SendPostBlastEmailsJob.jobs.size).to eq(0)
+      end
+
+      it "ignores a non-opener resend when it decides the email was never sent" do
+        create(:blast, post: installment, requested_at: 1.minute.ago, recipient_filter: PostEmailBlast::RECIPIENT_FILTER_UNOPENED, completed_at: nil)
+
+        expect { post :create, params: { id: installment.external_id } }.to change { installment.blasts.count }.by(1)
+      end
+    end
+
     it "returns 404 for an unpublished post" do
       installment.update!(published_at: nil)
 

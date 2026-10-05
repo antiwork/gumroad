@@ -199,13 +199,19 @@ export const ResendToNonOpenersButton = ({ installment }: { installment: SavedIn
   );
 };
 
+// The rest of an incomplete send (count owed when known), or a send that ended before reaching anyone.
+export type RemainingSend = { kind: "rest"; count: number | null } | { kind: "neverSent" };
+
 export const SendToRemainingButton = ({
   installment,
-  remainingCount,
+  remainingSend,
 }: {
   installment: SavedInstallment;
-  remainingCount: number | null;
+  remainingSend: RemainingSend;
 }) => {
+  const neverSent = remainingSend.kind === "neverSent";
+  const remainingCount = remainingSend.kind === "rest" ? remainingSend.count : null;
+  const label = neverSent ? "Send now" : "Send to the rest";
   const [confirming, setConfirming] = React.useState(false);
   const [sending, setSending] = React.useState(false);
 
@@ -226,18 +232,18 @@ export const SendToRemainingButton = ({
 
   const recipients =
     remainingCount !== null
-      ? `the ${formatStatNumber({ value: remainingCount })} ${remainingCount === 1 ? "person" : "people"} who`
-      : "everyone who";
+      ? `the ${formatStatNumber({ value: remainingCount })} ${remainingCount === 1 ? "person who has" : "people who have"}`
+      : "everyone who has";
 
   return (
     <>
-      <Button onClick={() => setConfirming(true)}>Send to the rest</Button>
+      <Button onClick={() => setConfirming(true)}>{label}</Button>
       {confirming ? (
         <Modal
           open
           allowClose={!sending}
           onClose={() => setConfirming(false)}
-          title="Send to the rest?"
+          title={`${label}?`}
           footer={
             <>
               <Button disabled={sending} onClick={() => setConfirming(false)}>
@@ -249,7 +255,11 @@ export const SendToRemainingButton = ({
             </>
           }
         >
-          <h4>{`This will send "${installment.name}" to ${recipients} ${remainingCount === 1 ? "has" : "have"} not received it yet.`}</h4>
+          <h4>
+            {neverSent
+              ? `This will send "${installment.name}" now. If your daily limit for large emails is already used, it waits until the limit resets.`
+              : `This will send "${installment.name}" to ${recipients} not received it yet.`}
+          </h4>
         </Modal>
       ) : null}
     </>
@@ -259,8 +269,7 @@ export const SendToRemainingButton = ({
 type EmailSheetActionsProps = {
   installment: SavedInstallment;
   onDelete: () => void;
-  // Set when the latest send is incomplete; the count is the recipients still owed when known.
-  remainingSend?: { count: number | null } | null;
+  remainingSend?: RemainingSend | null;
   // An email that was never sent has no non-openers to resend to.
   allowResend?: boolean;
 };
@@ -274,7 +283,7 @@ export const EmailSheetActions = ({
   <>
     <div className="grid gap-4 sm:grid-flow-col">
       {installment.send_emails ? <ViewEmailButton installment={installment} /> : null}
-      {remainingSend ? <SendToRemainingButton installment={installment} remainingCount={remainingSend.count} /> : null}
+      {remainingSend ? <SendToRemainingButton installment={installment} remainingSend={remainingSend} /> : null}
       {allowResend && canResendToNonOpeners(installment) ? (
         <ResendToNonOpenersButton installment={installment} />
       ) : null}
