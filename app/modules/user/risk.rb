@@ -109,6 +109,12 @@ module User::Risk
     SocialConnectFunnel.record_hold_released!(self, surface: "mark_compliant")
   end
 
+  # The job calls Stripe, so it waits for the outermost commit: this runs inside the transition's
+  # transaction, and a caller such as LowBalanceFraudCheck can hold a wider one around it.
+  def enqueue_platform_stripe_pause_lift
+    AfterCommitEverywhere.after_commit { LiftPlatformStripePauseJob.perform_async(id) }
+  end
+
   def disable_refunds!
     self.refunds_disabled = true
     save!
@@ -472,6 +478,16 @@ module User::Risk
   # payouts made under the hold keep counting toward the 25% base instead of shrinking it.
   def chargeback_rate_payout_hold_started_at
     last_system_payout_pause_comment&.created_at
+  end
+
+  # When the current repeated-failed-payouts hold began, or nil when payouts are not held by that
+  # check. Same identification rule as above, for the other pausing author.
+  def repeated_failed_payouts_hold_started_at
+    return nil unless payouts_paused_internally?
+    return nil unless payouts_paused_by_source == PAYOUT_PAUSE_SOURCE_SYSTEM
+
+    comment = last_system_payout_pause_comment
+    comment.created_at if comment&.author_name == SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:repeated_failed_payouts]
   end
 
   def last_system_payout_pause_comment
