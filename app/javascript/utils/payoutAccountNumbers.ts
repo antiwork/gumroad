@@ -81,10 +81,13 @@ export const COUNTRY_ACCOUNT_NUMBER_HINTS: Record<string, CountryAccountNumberHi
     inputMode: "numeric",
     title: "Enter your 20-digit RIB, digits only",
   },
+  // EthiopiaBankAccount takes 13 to 16 digits, so this entry exists to refuse the alphanumeric
+  // values Stripe's ET rail rejects, not to replace a wrong example.
   ET: {
     placeholder: "0000000012345",
-    pattern: "[0-9A-Za-z]{13,16}",
-    title: "Enter your 13 to 16 character account number",
+    pattern: "[0-9]{13,16}",
+    inputMode: "numeric",
+    title: "Enter your 13 to 16 digit account number, digits only",
   },
   BD: {
     placeholder: "1234567890123",

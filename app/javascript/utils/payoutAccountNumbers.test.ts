@@ -57,6 +57,13 @@ describe("accountNumberFormatError", () => {
     expect(accountNumberFormatError("TZ", "000012345678901")).toBe(COUNTRY_ACCOUNT_NUMBER_HINTS.TZ?.title);
   });
 
+  it("rejects an Ethiopia account number that carries a letter or the wrong length", () => {
+    expect(accountNumberFormatError("ET", "0001234567ABCD")).toBe(COUNTRY_ACCOUNT_NUMBER_HINTS.ET?.title);
+    expect(accountNumberFormatError("ET", "ET00000012345678")).toBe(COUNTRY_ACCOUNT_NUMBER_HINTS.ET?.title);
+    expect(accountNumberFormatError("ET", "000000001234")).toBe(COUNTRY_ACCOUNT_NUMBER_HINTS.ET?.title);
+    expect(accountNumberFormatError("ET", "00000000123456789")).toBe(COUNTRY_ACCOUNT_NUMBER_HINTS.ET?.title);
+  });
+
   // These numbers are valid today: UpdatePayoutMethod strips the separators before it validates,
   // so a seller pasting the form their bank prints saves successfully. This check has to agree.
   it.each([
@@ -66,6 +73,7 @@ describe("accountNumberFormatError", () => {
     ["AR", "0110 0006 0000 0000 0000 00"],
     ["MZ", "0012 3456 7890 1234 5678 9"],
     ["TZ", "0123 4567 89"],
+    ["ET", "0000 0000 1234 5"],
   ])("accepts %s's number written with the separators its bank prints", (countryCode, accountNumber) => {
     expect(accountNumberFormatError(countryCode, accountNumber)).toBeNull();
   });

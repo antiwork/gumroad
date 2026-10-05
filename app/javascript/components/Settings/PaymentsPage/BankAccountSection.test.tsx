@@ -102,7 +102,7 @@ const COUNTRY_EXAMPLES: {
   { code: "MK", label: "IBAN", example: "MK49250120000058907", pattern: "[0-9A-Za-z]{19}" },
   { code: "GA", label: "Account #", example: "00001234567890123456789", pattern: "[0-9]{23}" },
   { code: "DZ", label: "Account #", example: "00001234567890123456", pattern: "[0-9]{20}" },
-  { code: "ET", label: "Account #", example: "0000000012345", pattern: "[0-9A-Za-z]{13,16}" },
+  { code: "ET", label: "Account #", example: "0000000012345", pattern: "[0-9]{13,16}" },
   { code: "BD", label: "Account #", example: "1234567890123", pattern: "[0-9A-Za-z]{13,17}" },
   { code: "AM", label: "Account #", example: "00001234567890", pattern: "[0-9]{11,16}" },
   { code: "AR", label: "Account number", example: "0110000600000000000000", pattern: "[0-9]{22}" },
