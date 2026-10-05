@@ -155,14 +155,14 @@ describe Settings::MainController, type: :controller, inertia: true do
 
       describe "the address already awaiting confirmation is saved again" do
         before do
-          seller.update_columns(email: "test@gumroad.com", unconfirmed_email: "new@gumroad.com", confirmation_token: "existing-token")
+          seller.update_columns(email: "test@example.com", unconfirmed_email: "new@example.com", confirmation_token: "existing-token")
         end
 
         it "keeps the confirmation token so the link already sent stays valid" do
           expect do
-            put :update, params: { user: user_params.merge(email: "new@gumroad.com") }
+            put :update, params: { user: user_params.merge(email: "new@example.com") }
           end.to_not change { seller.reload.confirmation_token }.from("existing-token")
-          expect(seller.reload.unconfirmed_email).to eq("new@gumroad.com")
+          expect(seller.reload.unconfirmed_email).to eq("new@example.com")
           expect(response).to redirect_to(settings_main_path)
           expect(response).to have_http_status :see_other
           expect(flash[:notice]).to eq("Your account has been updated!")
@@ -170,7 +170,7 @@ describe Settings::MainController, type: :controller, inertia: true do
 
         it "does not send another confirmation email" do
           expect do
-            put :update, params: { user: user_params.merge(email: "new@gumroad.com") }
+            put :update, params: { user: user_params.merge(email: "new@example.com") }
           end.to_not have_enqueued_mail(UserSignupMailer, :confirmation_instructions)
         end
 
@@ -183,12 +183,12 @@ describe Settings::MainController, type: :controller, inertia: true do
 
         it "keeps the confirmation token when the pending address comes back with surrounding whitespace" do
           expect do
-            put :update, params: { user: user_params.merge(email: "  new@gumroad.com  ") }
+            put :update, params: { user: user_params.merge(email: "  new@example.com  ") }
           end.to_not change { seller.reload.confirmation_token }.from("existing-token")
         end
 
         it "still saves the other submitted settings" do
-          put :update, params: { user: user_params.merge(email: "new@gumroad.com", username: "gum") }
+          put :update, params: { user: user_params.merge(email: "new@example.com", username: "gum") }
 
           expect(seller.reload.username).to eq("gum")
           expect(response).to have_http_status :see_other
@@ -198,13 +198,13 @@ describe Settings::MainController, type: :controller, inertia: true do
           allow_any_instance_of(User).to receive(:with_lock).and_wrap_original do |method, *args, &block|
             # A second Settings save lands after this request started but before
             # it takes the lock, so the pre-lock read is already stale.
-            User.where(id: seller.id).update_all(unconfirmed_email: "second@gumroad.com")
+            User.where(id: seller.id).update_all(unconfirmed_email: "second@example.com")
             method.call(*args, &block)
           end
 
-          put :update, params: { user: user_params.merge(email: "new@gumroad.com") }
+          put :update, params: { user: user_params.merge(email: "new@example.com") }
 
-          expect(seller.reload.unconfirmed_email).to eq("new@gumroad.com")
+          expect(seller.reload.unconfirmed_email).to eq("new@example.com")
         end
       end
 
