@@ -15,9 +15,11 @@ const FILE_DELIVERING_TYPES: ProductNativeType[] = ["digital", "course", "ebook"
 // it has a title, or a body node that renders something. An empty paragraph or
 // heading does not — and that bare paragraph is the page "Add page" creates, so
 // a version holding only those still delivers nothing.
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
+
 const nodeHasContent = (node: unknown): boolean => {
-  if (!node || typeof node !== "object") return false;
-  const { type, text, content } = node as { type?: string; text?: string; content?: unknown };
+  if (!isRecord(node)) return false;
+  const { type, text, content } = node;
   if (typeof text === "string" && text.length > 0) return true;
   if (Array.isArray(content)) return content.some(nodeHasContent);
   return type !== "paragraph" && type !== "heading";
@@ -25,7 +27,7 @@ const nodeHasContent = (node: unknown): boolean => {
 
 const pageHasContent = (page: { title: string | null; description: object }) => {
   if (page.title) return true;
-  const content = (page.description as { content?: unknown }).content;
+  const content = isRecord(page.description) ? page.description.content : undefined;
   return Array.isArray(content) && content.some(nodeHasContent);
 };
 
@@ -37,7 +39,9 @@ export const EmptyVersionsNotice = () => {
   // version's own empty list is not a gap.
   if (product.has_same_rich_content_for_all_variants) return null;
 
-  const emptyVersions = product.variants.filter((variant) => !variant.has_files && !variant.rich_content.some(pageHasContent));
+  const emptyVersions = product.variants.filter(
+    (variant) => !variant.has_files && !variant.rich_content.some(pageHasContent),
+  );
   if (emptyVersions.length === 0) return null;
 
   const names = emptyVersions.map((variant) => `“${variant.name || "Untitled"}”`).join(", ");

@@ -162,7 +162,9 @@ it("still flags a version whose only page is the blank placeholder the editor cr
 });
 
 it("flags a version whose pages are all blank", () => {
-  context.product.variants = [context.version("1", "MEDIUM CHOIR", [context.blankPage, { ...context.blankPage, id: "blank-2" }])];
+  context.product.variants = [
+    context.version("1", "MEDIUM CHOIR", [context.blankPage, { ...context.blankPage, id: "blank-2" }]),
+  ];
 
   render(<EmptyVersionsNotice />);
 
@@ -187,7 +189,10 @@ it("leaves a version alone when a page carries only a title", () => {
 });
 
 it("counts a page holding a file embed as content", () => {
-  const embed: Page = { ...context.blankPage, description: { type: "doc", content: [{ type: "fileEmbed", attrs: { id: "file" } }] } };
+  const embed: Page = {
+    ...context.blankPage,
+    description: { type: "doc", content: [{ type: "fileEmbed", attrs: { id: "file" } }] },
+  };
   context.product.variants = [context.version("1", "SMALL CHOIR", [embed])];
 
   render(<EmptyVersionsNotice />);
