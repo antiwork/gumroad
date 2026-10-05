@@ -27,7 +27,13 @@ class ConfirmationsController < Devise::ConfirmationsController
       flash[:notice] = "Your account has been successfully confirmed!"
       redirect_to after_confirmation_path_for(:user, @user)
     else
-      flash[:alert] = "You have already been confirmed."
+      # The token resolved, so the link is current; the failure is in applying the
+      # pending address (already confirmed, or the address was taken since).
+      flash[:alert] = if @user.errors.added?(:email, :already_confirmed)
+        "You have already been confirmed."
+      else
+        @user.errors.full_messages.to_sentence
+      end
       redirect_to root_url
     end
   end

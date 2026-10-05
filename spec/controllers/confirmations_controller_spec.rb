@@ -73,6 +73,19 @@ describe ConfirmationsController do
       end
     end
 
+    describe "a token that resolves but cannot confirm the pending address" do
+      it "reports why the confirmation failed instead of claiming the account was confirmed" do
+        create(:user, email: "taken@example.com")
+        @user.update_columns(unconfirmed_email: "taken@example.com")
+
+        get :show, params: { confirmation_token: @user.confirmation_token }
+
+        expect(response).to redirect_to root_url
+        expect(flash[:alert]).to eq("An account already exists with this email.")
+        expect(@user.reload.unconfirmed_email).to eq("taken@example.com")
+      end
+    end
+
     describe "logged in" do
       before do
         sign_in @user
