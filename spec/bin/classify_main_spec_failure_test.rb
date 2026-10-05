@@ -128,6 +128,14 @@ check(
   expect: :skip
 )
 
+# The workflow writes this in place of the summary when the shard log shows
+# Knapsack in fallback mode.
+check(
+  "a shard whose Knapsack ran in fallback mode",
+  with_summary(attempt([job("Test Slow 12", "failure", SPEC_FAILURE)]), "knapsack fallback mode"),
+  expect: :skip
+)
+
 check(
   "a failed rspec shard with no summary",
   attempt([job("Test Slow 12", "failure", SPEC_FAILURE)], summaries: {}),
