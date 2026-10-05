@@ -1332,20 +1332,6 @@ describe Payment do
         expect(user.reload.payouts_paused?).to be(false)
         expect(user.comments.with_type_on_probation).to be_empty
       end
-
-      it "does not count failed drains toward a hold on a live payout that shares the bank account" do
-        retired_account
-        shared_bank_account = create(:ach_account, user:, stripe_connect_account_id: retired_account.charge_processor_merchant_id)
-        (Payment::MAX_CONSECUTIVE_FAILED_PAYOUTS - 1).times do
-          create(:payment, user:, bank_account: shared_bank_account, processor: PayoutProcessorType::STRIPE,
-                           stripe_connect_account_id: retired_account.charge_processor_merchant_id, state: "processing")
-            .mark_failed!(Payment::FailureReason::BANK_ACCOUNT_NOT_FOUND_AT_STRIPE)
-        end
-        create(:payment, user:, bank_account: shared_bank_account, processor: PayoutProcessorType::STRIPE,
-                         stripe_connect_account_id: "acct_live", state: "processing").mark_failed!
-
-        expect(user.reload.payouts_paused?).to be(false)
-      end
     end
 
     it "still pauses when the threshold is reached by non-transient failures alone" do
