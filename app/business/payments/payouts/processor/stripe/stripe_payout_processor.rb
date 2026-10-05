@@ -692,7 +692,8 @@ class StripePayoutProcessor
     # We have transferred the balance held by gumroad to the connected Stripe standard account.
     # No payout needs to be issued in this case.
     merchant_account = payment.user.merchant_accounts.find_by(charge_processor_merchant_id: payment.stripe_connect_account_id)
-    payment.retired_account_drain = true if !merchant_account.active? && drainable_retired_account?(merchant_account)
+    # Also covers payouts prepared before the flag existed, and accounts retired between prepare and perform.
+    payment.retired_account_drain = true if drainable_retired_account?(merchant_account)
     if merchant_account.is_a_stripe_connect_account?
       stripe_transfer = Stripe::Transfer.retrieve(payment.stripe_internal_transfer_id)
       payment.stripe_transfer_id = stripe_transfer.destination_payment

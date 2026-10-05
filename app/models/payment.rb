@@ -442,8 +442,9 @@ class Payment < ApplicationRecord
 
   # The failed or returned payouts to this payment's destination that count toward the repeated-failure
   # hold (Payment#pause_payouts_after_repeated_failures), as [destination label, relation]; nil when the
-  # destination cannot be identified.
-  def failed_payouts_counted_toward_hold(exclude_drains: false)
+  # destination cannot be identified. Drains of a retired account never count: their outcome says
+  # nothing about the live bank, even when they share its bank row.
+  def failed_payouts_counted_toward_hold
     if bank_account_id.present?
       destination = "bank account"
       payouts_to_destination = user.payments.where(bank_account_id:)
@@ -458,9 +459,7 @@ class Payment < ApplicationRecord
       return nil
     end
 
-    if exclude_drains
-      payouts_to_destination = payouts_to_destination.where("COALESCE(payments.json_data->>'$.retired_account_drain', '') != 'true'")
-    end
+    payouts_to_destination = payouts_to_destination.where("COALESCE(payments.json_data->>'$.retired_account_drain', '') != 'true'")
 
     last_completed_at = payouts_to_destination.completed.maximum(:created_at)
     failed_payouts = payouts_to_destination.where(state: [FAILED, RETURNED])
@@ -511,11 +510,10 @@ class Payment < ApplicationRecord
       # covered).
       return if terminal_paypal_failure?
 
-      # A drain of a retired account says nothing about the seller's live bank: it neither trips the
-      # hold nor counts toward one. The lift job still reads the full history.
+      # A failed drain says nothing about the live bank, so it cannot be the payout that trips the hold.
       return if retired_account_drain
 
-      destination, failed_payouts = failed_payouts_counted_toward_hold(exclude_drains: true)
+      destination, failed_payouts = failed_payouts_counted_toward_hold
       return if destination.nil?
 
       failed_count = failed_payouts.count

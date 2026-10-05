@@ -551,6 +551,27 @@ describe StripePayoutProcessor do
         expect(payment.bank_account).to eq(live_bank_account)
       end
 
+      it "does not pause the seller when a drain keeps failing before it reaches perform_payment" do
+        create(:ach_account, user: seller, stripe_connect_account_id: retired_account.charge_processor_merchant_id,
+                             stripe_bank_account_id: "ba_retired_short")
+        allow(Stripe::Balance).to receive(:retrieve).and_return(
+          Stripe::Balance.construct_from(available: [{ currency: Currency::AUD, amount: 100_00 }], pending: [])
+        )
+
+        Payment::MAX_CONSECUTIVE_FAILED_PAYOUTS.times do
+          credit = create(:balance, user: seller, merchant_account: retired_account, state: "processing", date: 2.days.ago.to_date,
+                                    amount_cents: 300_00, holding_currency: Currency::AUD, holding_amount_cents: 450_00)
+          payment = build_payment(seller, [credit], retired_account.charge_processor_merchant_id)
+
+          described_class.prepare_payment_and_set_amount(payment, [credit], retired_account, Currency::AUD)
+
+          expect(payment.reload).to be_failed
+          expect(payment.failure_reason).to eq(Payment::FailureReason::INSUFFICIENT_FUNDS)
+          expect(payment.retired_account_drain).to be(true)
+        end
+        expect(seller.reload.payouts_paused?).to be(false)
+      end
+
       it "still refuses a retired account whose balances sum negative" do
         account = create(:merchant_account, user: seller, currency: Currency::AUD, charge_processor_merchant_id: "acct_neg_aud")
           .tap(&:delete_charge_processor_account!)

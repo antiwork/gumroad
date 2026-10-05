@@ -1364,12 +1364,11 @@ describe Payment do
         expect(user.reload.payouts_paused_internally).to be(true)
       end
 
-      it "leaves drains in the history that the platform-pause lift job reads" do
-        (Payment::MAX_CONSECUTIVE_FAILED_PAYOUTS - 1).times { drain_payout(state: :failed, reason: Payment::FailureReason::BANK_ACCOUNT_NOT_FOUND_AT_STRIPE) }
-        last = drain_payout(state: :failed, reason: Payment::FailureReason::BANK_ACCOUNT_NOT_FOUND_AT_STRIPE)
+      it "leaves drains out of the failures counted toward the hold" do
+        Payment::MAX_CONSECUTIVE_FAILED_PAYOUTS.times { drain_payout(state: :failed, reason: Payment::FailureReason::BANK_ACCOUNT_NOT_FOUND_AT_STRIPE) }
+        live = failed_payout
 
-        expect(last.failed_payouts_counted_toward_hold.last.count).to eq(Payment::MAX_CONSECUTIVE_FAILED_PAYOUTS)
-        expect(last.failed_payouts_counted_toward_hold(exclude_drains: true).last.count).to eq(0)
+        expect(live.failed_payouts_counted_toward_hold.last).to contain_exactly(live)
       end
     end
 
