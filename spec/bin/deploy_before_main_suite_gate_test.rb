@@ -347,9 +347,9 @@ WRAPPER_OWN = wrapper_run_record(9, WRAPPER_SHA, "in_progress", nil, "2026-10-06
 WRAPPER_GREEN = wrapper_run_record(1, "fbf8836d0", "completed", "success", "2026-10-06T14:55:22Z", "2026-10-06T15:11:59Z")
 WRAPPER_PULLS = [{ "number" => 8194, "merged_at" => "2026-10-06T17:17:19Z", "merge_commit_sha" => WRAPPER_SHA, "head" => { "sha" => "headsha" } }].freeze
 
-def run_wrapper(recent:, older: {}, in_progress: [], fail: [])
+def run_wrapper(recent:, older: {}, in_progress: [], fail: [], date_fails: false)
   Dir.mktmpdir do |dir|
-    { "gh" => GH_STUB, "date" => DATE_STUB }.each do |name, body|
+    { "gh" => GH_STUB, "date" => date_fails ? "#!/usr/bin/env bash\nexit 1\n" : DATE_STUB }.each do |name, body|
       File.write(File.join(dir, name), body)
       File.chmod(0o755, File.join(dir, name))
     end
@@ -428,6 +428,26 @@ wrapper_check(
 )
 
 wrapper_check("a failed request stops the decision", recent: [WRAPPER_OWN, WRAPPER_GREEN], fail: ["recent"], expect_code: 2)
+
+# A failed date inside a URL would leave an empty bound and an unbounded query.
+$count += 1
+code, _, calls = run_wrapper(recent: [WRAPPER_OWN, WRAPPER_GREEN], date_fails: true)
+if code == 2 && calls.empty?
+  puts "  ok    a failed date call stops the decision before any query"
+else
+  puts "  FAIL  a failed date call stops the decision before any query"
+  $failures << "failed date: exit #{code}, queries #{calls.inspect}"
+end
+
+# A stale list retries every 20 seconds, so it must cost one request, not all of them.
+$count += 1
+code, _, calls = run_wrapper(recent: [WRAPPER_GREEN])
+if code == 2 && calls.size == 1
+  puts "  ok    a stale list stops after the recent query"
+else
+  puts "  FAIL  a stale list stops after the recent query"
+  $failures << "stale list: exit #{code}, queries #{calls.inspect}"
+end
 
 $count += 1
 _, _, calls = run_wrapper(recent: [WRAPPER_OWN, WRAPPER_GREEN])
