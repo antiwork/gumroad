@@ -1,0 +1,85 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Decides whether a main push may unblock its deploy before its own Tests run
+# finishes. Reads on stdin, or from a file argument:
+#
+#   { "sha": "<the pushed commit>",
+#     "runs": [ ... recent Tests workflow runs for main pushes ... ],
+#     "pulls": [ ... GET /repos/{repo}/commits/{sha}/pulls ... ],
+#     "ci_green": "<state of ci/green on the merged PR's head, or empty>" }
+#
+# The freeze needs no stored state: while the newest finished main run is red,
+# or a re-run of one is in flight, every deploy waits for its own suite. The
+# next green run lifts it.
+#
+# Prints one `deploy-before-main-suite decision=… reason=…` line. Exit codes:
+# 0 early, 1 wait for the suite, 2 could not run.
+
+require "json"
+require "time"
+
+EXIT_WAIT = 1
+EXIT_OPERATIONAL = 2
+
+def created_at(run)
+  Time.iso8601(run["created_at"].to_s)
+rescue ArgumentError
+  Time.at(0)
+end
+
+def merged_pull(pulls, sha)
+  pulls.find { |pull| pull["merged_at"] && pull["merge_commit_sha"] == sha }
+end
+
+def verdict(payload)
+  sha = payload["sha"].to_s
+  return [EXIT_WAIT, "no_sha", {}] if sha.empty?
+
+  # Cancelled runs were evicted from the main lane or thrown away; they say
+  # nothing about main.
+  runs = Array(payload["runs"]).reject { |run| run["head_sha"] == sha || run["conclusion"] == "cancelled" }
+
+  retrying = runs.find { |run| run["run_attempt"].to_i > 1 && run["status"] != "completed" }
+  return [EXIT_WAIT, "frozen_retry_in_progress", { run: retrying["id"] }] if retrying
+
+  newest = runs.select { |run| run["status"] == "completed" }.max_by { |run| created_at(run) }
+  return [EXIT_WAIT, "frozen_no_finished_run", {}] unless newest
+  unless newest["conclusion"] == "success"
+    return [EXIT_WAIT, "frozen_main_red", { run: newest["id"], run_sha: newest["head_sha"].to_s[0, 12] }]
+  end
+
+  pull = merged_pull(Array(payload["pulls"]), sha)
+  return [EXIT_WAIT, "no_merged_pr", {}] unless pull
+
+  ci_green = payload["ci_green"].to_s
+  return [EXIT_WAIT, "pr_not_green", { pr: pull["number"], ci_green: ci_green }] unless ci_green == "success"
+
+  [0, "early", { pr: pull["number"], main_run: newest["id"] }]
+end
+
+raw = ARGV.first
+
+begin
+  # API payloads carry commit messages; the runner's locale may not be UTF-8.
+  payload = JSON.parse(raw ? File.read(raw, encoding: "UTF-8") : $stdin.read.force_encoding("UTF-8"))
+rescue JSON::ParserError, Errno::ENOENT, EncodingError => e
+  warn "deploy-before-main-suite gate could not run: #{e.message}"
+  exit EXIT_OPERATIONAL
+end
+
+unless payload.is_a?(Hash)
+  warn "deploy-before-main-suite gate could not run: expected a JSON object"
+  exit EXIT_OPERATIONAL
+end
+
+begin
+  code, reason, details = verdict(payload)
+rescue StandardError => e
+  warn "deploy-before-main-suite gate could not run: #{e.class}: #{e.message}"
+  exit EXIT_OPERATIONAL
+end
+decision = code.zero? ? "early" : "wait"
+fields = details.map { |key, value| "#{key}=#{value}" }.join(" ")
+puts ["deploy-before-main-suite decision=#{decision} reason=#{reason} sha=#{payload['sha'].to_s[0, 12]}", fields].reject(&:empty?).join(" ")
+exit code

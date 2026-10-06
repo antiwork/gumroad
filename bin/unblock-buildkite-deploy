@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# Unblocks the `require-approval` gate of the Buildkite build for COMMIT_SHA.
+# Exits 0 once the gate is unblocked (now or earlier), 1 while it is not there
+# yet or a call failed, so callers poll it with a retry.
+#
+# Env: BUILDKITE_API_TOKEN, COMMIT_SHA, ORG_SLUG, PIPELINE_SLUG.
+#
+# No time-of-day deploy block here: .buildkite/scripts/deploy_production.sh
+# waits on /healthcheck/long_running_jobs, so deploys hold only on the nights a
+# long job is actually running.
+set -uo pipefail
+
+API="https://api.buildkite.com/v2/organizations/$ORG_SLUG/pipelines/$PIPELINE_SLUG"
+
+echo "Looking for Buildkite build for commit $COMMIT_SHA on pipeline $ORG_SLUG/$PIPELINE_SLUG..."
+BUILD_DATA=$(curl -s -H "Authorization: Bearer $BUILDKITE_API_TOKEN" \
+  "$API/builds?commit=$COMMIT_SHA&include_retried_jobs=true")
+
+# The gate job exists only once the image builds and asset compiles pass; until
+# then the build reports "running".
+BUILD_NUMBER=$(echo "$BUILD_DATA" | jq -r --arg commit "$COMMIT_SHA" '[.[] | select(.commit == $commit and (.state == "running" or .state == "blocked"))] | sort_by(.created_at) | last | .number // empty')
+
+if [ -z "$BUILD_NUMBER" ]; then
+  echo "No running or blocked Buildkite build found for commit $COMMIT_SHA on pipeline $ORG_SLUG/$PIPELINE_SLUG."
+  exit 1
+fi
+
+echo "Found Buildkite build number: $BUILD_NUMBER. Fetching job details..."
+BUILD_DETAIL_DATA=$(curl -s -H "Authorization: Bearer $BUILDKITE_API_TOKEN" "$API/builds/$BUILD_NUMBER")
+
+BLOCK_JOB_STATE=$(echo "$BUILD_DETAIL_DATA" | jq -r '[.jobs[] | select(.type == "manual" and .step_key == "require-approval")] | first | .state // empty')
+
+if [ "$BLOCK_JOB_STATE" = "unblocked" ]; then
+  echo "Block job 'require-approval' in build $BUILD_NUMBER is already unblocked. Nothing to do."
+  exit 0
+fi
+
+if [ "$BLOCK_JOB_STATE" != "blocked" ]; then
+  echo "Block job 'require-approval' in build $BUILD_NUMBER is not unblockable yet (state: ${BLOCK_JOB_STATE:-absent})."
+  exit 1
+fi
+
+BLOCK_JOB_ID=$(echo "$BUILD_DETAIL_DATA" | jq -r '[.jobs[] | select(.type == "manual" and .step_key == "require-approval")] | first | .id // empty')
+
+echo "Found block job ID: $BLOCK_JOB_ID for build $BUILD_NUMBER. Attempting to unblock job..."
+RESPONSE_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X PUT \
+  -H "Authorization: Bearer $BUILDKITE_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{}' \
+  "$API/builds/$BUILD_NUMBER/jobs/$BLOCK_JOB_ID/unblock")
+
+if [ "$RESPONSE_CODE" -ge 200 ] && [ "$RESPONSE_CODE" -lt 300 ]; then
+  echo "Successfully sent unblock request for job $BLOCK_JOB_ID in build $BUILD_NUMBER. Response code: $RESPONSE_CODE"
+  exit 0
+fi
+
+echo "Error sending unblock request for job $BLOCK_JOB_ID in build $BUILD_NUMBER. Response code: $RESPONSE_CODE"
+ERROR_DETAILS=$(curl -s -H "Authorization: Bearer $BUILDKITE_API_TOKEN" "$API/builds/$BUILD_NUMBER/jobs/$BLOCK_JOB_ID")
+echo "API Response details for failed unblock: $ERROR_DETAILS"
+exit 1
