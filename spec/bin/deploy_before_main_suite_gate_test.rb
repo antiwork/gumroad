@@ -400,10 +400,10 @@ wrapper_check(
 )
 wrapper_check(
   "a red re-run from the oldest slice freezes",
-  recent: [WRAPPER_OWN, WRAPPER_GREEN], older: { "T-31d..T-28d" => [old_red_rerun] }, expect_code: 1, reason: "frozen_main_red"
+  recent: [WRAPPER_OWN, WRAPPER_GREEN], expect_code: 1, reason: "frozen_main_red",
+  older: { "T-31d..T-28d" => [wrapper_run_record(6, "oldest", "completed", "failure", "2026-09-07T10:00:00Z", "2026-10-06T16:00:00Z", attempt: 2)] }
 )
 
-# The older slices keep re-runs only.
 old_red_first_attempt = wrapper_run_record(4, "old", "completed", "failure", "2026-09-26T10:00:00Z", "2026-10-06T16:00:00Z")
 wrapper_check(
   "a first attempt from the older slices is ignored",
@@ -418,7 +418,6 @@ wrapper_check(
 
 wrapper_check("a failed request stops the decision", recent: [WRAPPER_OWN, WRAPPER_GREEN], fail: ["recent"], expect_code: 2)
 
-# The recent window plus four slices that tile the 31 days with no gap.
 $count += 1
 _, _, calls = run_wrapper(recent: [WRAPPER_OWN, WRAPPER_GREEN])
 windows = calls.filter_map { |path| path[/created=([^&]+)/, 1] }
