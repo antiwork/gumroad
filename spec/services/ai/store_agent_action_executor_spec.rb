@@ -183,6 +183,72 @@ describe Ai::StoreAgentActionExecutor do
       end
     end
 
+    # The empty list is the whole point of this endpoint, and it is also the payload the default
+    # form encoding of the body destroys, so it is asserted through the real dispatch path.
+    context "update_product_sections (write replayed through the API)" do
+      let(:product) { create(:product, user: seller) }
+      let!(:first) { create(:seller_profile_products_section, seller:, product:) }
+      let!(:second) { create(:seller_profile_products_section, seller:, product:) }
+
+      it "removes every section when the confirmed change sends an empty list" do
+        product.update!(sections: [first.id, second.id], main_section_index: 1)
+
+        result = executor.execute(
+          type: "api_write",
+          params: api_write(
+            endpoint: "update_product_sections",
+            path_params: { "id" => product.external_id },
+            params: { "sections" => [], "main_section_index" => 0 },
+          ),
+        )
+
+        expect(result[:success]).to be(true)
+        expect(result[:object]).to be_present
+        expect(product.reload.sections).to eq([])
+        expect(product.seller_profile_sections).to be_empty
+        expect(product.main_section_index).to eq(0)
+        expect(SellerProfileSection.where(id: [first.id, second.id])).to be_empty
+      end
+
+      it "reorders the sections it is told to keep and deletes the rest" do
+        product.update!(sections: [first.id, second.id], main_section_index: 1)
+
+        result = executor.execute(
+          type: "api_write",
+          params: api_write(
+            endpoint: "update_product_sections",
+            path_params: { "id" => product.external_id },
+            params: { "sections" => [second.external_id] },
+          ),
+        )
+
+        expect(result[:success]).to be(true)
+        expect(product.reload.sections).to eq([second.id])
+        expect(SellerProfileSection.exists?(first.id)).to be(false)
+        # No main_section_index in the confirmed change, so the product keeps the position it had.
+        expect(product.main_section_index).to eq(1)
+      end
+
+      it "leaves sections untouched when a section belongs to another product" do
+        product.update!(sections: [first.id, second.id], main_section_index: 1)
+        foreign = create(:seller_profile_products_section, seller:, product: create(:product, user: seller))
+
+        result = executor.execute(
+          type: "api_write",
+          params: api_write(
+            endpoint: "update_product_sections",
+            path_params: { "id" => product.external_id },
+            params: { "sections" => [first.external_id, foreign.external_id] },
+          ),
+        )
+
+        expect(result[:success]).to be(false)
+        expect(result[:message]).to eq("One or more sections do not belong to this product.")
+        expect(product.reload.sections).to contain_exactly(first.id, second.id)
+        expect(SellerProfileSection.exists?(foreign.id)).to be(true)
+      end
+    end
+
     context "delete_resource_subscription" do
       let!(:agent_application) do
         create(

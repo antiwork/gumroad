@@ -2056,6 +2056,56 @@ describe Ai::StoreAgentService do
           expect(result[:proposed_action]).to be_nil
         end
       end
+
+      describe "structured read preconditions" do
+        it "blocks a product-sections write until get_product succeeds for the same product" do
+          captured = nil
+          first = true
+          expect(api_client).not_to receive(:get)
+          expect(Rails.logger).to receive(:warn).with(described_class::MISSING_REQUIRED_READ_MESSAGE)
+          expect(ErrorNotifier).to receive(:notify).with(
+            described_class::MISSING_REQUIRED_READ_MESSAGE,
+            exclude_request_context: true,
+            write_endpoint: "update_product_sections",
+            required_read_endpoint: "get_product",
+            required_read_path: "/products/:id",
+          )
+          allow(client).to receive(:messages) do |args|
+            if first
+              first = false
+              tool_result("api_write", {
+                            "endpoint" => "update_product_sections",
+                            "path_params" => { "id" => "product-a" },
+                            "params" => { "sections" => [] },
+                          })
+            else
+              captured = captured_tool_result(args)
+              text_result("I need to read the product's sections first.")
+            end
+          end
+
+          result = service.respond(messages: [{ role: "user", content: "Remove the section above my product" }])
+
+          expect(result[:proposed_action]).to be_nil
+          expect(captured["error"]).to include(
+            "successful full read",
+            "Call get_product with api_read",
+            "Status or metadata-only reads do not count",
+          )
+          # This read is structured, not a page body, so there is no custom-page escape hatch.
+          expect(captured["error"]).not_to include("custom-page")
+          expect(captured["corrective_action"]).to eq(
+            "tool" => "api_read",
+            "endpoint" => "get_product",
+            "path_params" => { "id" => "product-a" },
+            "after_success" => {
+              "action" => "retry_write",
+              "endpoint" => "update_product_sections",
+              "timing" => "this_turn",
+            },
+          )
+        end
+      end
     end
 
     context "when the model proposes more than one write in a single turn" do

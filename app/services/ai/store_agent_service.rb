@@ -1542,24 +1542,8 @@ class Ai::StoreAgentService
           log_missing_required_read(endpoint:, required_read:)
           return [
             {
-              error: "#{endpoint.id} requires a successful full read of this exact target first. Only if the seller explicitly requested this custom-page work, call #{required_read.id} with api_read, wait for its result, then retry #{endpoint.id} in this turn. Otherwise, do not read the page body and do not retry the write. Status or metadata-only reads do not count.",
-              corrective_action: {
-                condition: "The seller explicitly requested this custom-page work.",
-                if_requested: {
-                  tool: "api_read",
-                  endpoint: required_read.id,
-                  path_params: path_params.slice(*required_read.path_params),
-                  after_success: {
-                    action: "retry_write",
-                    endpoint: endpoint.id,
-                    timing: "this_turn",
-                  },
-                },
-                otherwise: {
-                  action: "do_not_read_or_retry",
-                  instruction: "Do not read the page body and do not retry the write.",
-                },
-              },
+              error: required_read_error(endpoint:, required_read:),
+              corrective_action: required_read_corrective_action(endpoint:, required_read:, path_params:),
             },
             nil,
           ]
@@ -1626,6 +1610,47 @@ class Ai::StoreAgentService
         required_read_endpoint: required_read.id,
         required_read_path: required_read.path,
       )
+    end
+
+    # A required read whose response IS a whole custom page is expensive to fetch, so its block
+    # message keeps the custom-page guardrail: only read it when the seller asked for that page work.
+    PAGE_BODY_READ_ENDPOINTS = %w[get_user_custom_html get_product_custom_html].freeze
+
+    def required_read_error(endpoint:, required_read:)
+      first = "#{endpoint.id} requires a successful full read of this exact target first."
+      return "#{first} Only if the seller explicitly requested this custom-page work, call #{required_read.id} with api_read, wait for its result, then retry #{endpoint.id} in this turn. Otherwise, do not read the page body and do not retry the write. Status or metadata-only reads do not count." if page_body_read?(required_read)
+
+      "#{first} Call #{required_read.id} with api_read, wait for its result, then retry #{endpoint.id} in this turn. Status or metadata-only reads do not count."
+    end
+
+    # A page-body read may be skipped when the seller did not ask for it, so its corrective action has
+    # two branches. Every other required read is just the precondition: one unconditional read-then-retry
+    # step, with no escape hatch.
+    def required_read_corrective_action(endpoint:, required_read:, path_params:)
+      read_then_retry = {
+        tool: "api_read",
+        endpoint: required_read.id,
+        path_params: path_params.slice(*required_read.path_params),
+        after_success: {
+          action: "retry_write",
+          endpoint: endpoint.id,
+          timing: "this_turn",
+        },
+      }
+      return read_then_retry unless page_body_read?(required_read)
+
+      {
+        condition: "The seller explicitly requested this custom-page work.",
+        if_requested: read_then_retry,
+        otherwise: {
+          action: "do_not_read_or_retry",
+          instruction: "Do not read the page body and do not retry the write.",
+        },
+      }
+    end
+
+    def page_body_read?(required_read)
+      PAGE_BODY_READ_ENDPOINTS.include?(required_read.id)
     end
 
     # A human-readable description of the pending change for the confirmation card. Built from the

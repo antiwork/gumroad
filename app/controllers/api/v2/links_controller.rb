@@ -40,11 +40,11 @@ class Api::V2::LinksController < Api::V2::BaseController
   UPLOADED_FILE_CHECK_CONCURRENCY = 8
 
   before_action(only: [:show, :index, :custom_html, :comps]) { doorkeeper_authorize!(*Doorkeeper.configuration.public_api_read_scopes.concat([:view_public])) }
-  before_action(only: [:create, :update, :disable, :enable, :destroy, :preview_custom_html, :edit_custom_html]) { doorkeeper_authorize! :edit_products }
+  before_action(only: [:create, :update, :disable, :enable, :destroy, :preview_custom_html, :edit_custom_html, :update_sections]) { doorkeeper_authorize! :edit_products }
   before_action :reject_unsupported_upload_fields, only: [:update, :create]
   before_action :resolve_category_param, only: [:update, :create]
-  before_action :set_link_id_to_id, only: [:show, :update, :disable, :enable, :destroy, :preview_custom_html, :custom_html, :edit_custom_html]
-  before_action :fetch_product, only: [:show, :update, :disable, :enable, :destroy, :preview_custom_html, :custom_html, :edit_custom_html]
+  before_action :set_link_id_to_id, only: [:show, :update, :disable, :enable, :destroy, :preview_custom_html, :custom_html, :edit_custom_html, :update_sections]
+  before_action :fetch_product, only: [:show, :update, :disable, :enable, :destroy, :preview_custom_html, :custom_html, :edit_custom_html, :update_sections]
   before_action :ensure_custom_html_pages_enabled, only: [:custom_html, :edit_custom_html]
 
   def index
@@ -614,6 +614,52 @@ class Api::V2::LinksController < Api::V2::BaseController
 
   def destroy
     success_with_product if @product.delete!
+  end
+
+  # Set which per-product profile sections render on this product's page, and in what order. Mirrors
+  # the dashboard's section editor: the body is the COMPLETE ordered list of ids the product keeps, so
+  # a section left out is destroyed. main_section_index is where the product itself sits, so sections
+  # listed before it render above the product.
+  def update_sections
+    sections = params[:sections]
+    unless sections.is_a?(Array) && sections.all? { |id| id.is_a?(String) }
+      return render_response(false, message: "sections must be an array of section ids.")
+    end
+
+    section_ids = sections.map { |id| ObfuscateIds.decrypt(id) }
+    if section_ids.any?(&:nil?)
+      return render_response(false, message: "One or more sections were not found.")
+    end
+    if section_ids.uniq.length != section_ids.length
+      return render_response(false, message: "sections must not list the same section twice.")
+    end
+
+    # Only the product's own sections may be listed. A foreign or already-deleted id would be written
+    # into the product's json_data and silently render nothing, so refuse it instead of storing it.
+    unknown_ids = section_ids - @product.seller_profile_sections.pluck(:id)
+    if unknown_ids.any?
+      return render_response(false, message: "One or more sections do not belong to this product.")
+    end
+
+    main_section_index = nil
+    if params.key?(:main_section_index)
+      value = params[:main_section_index]
+      unless (value.is_a?(Integer) || value.is_a?(String)) && value.to_s.match?(/\A\d+\z/)
+        return render_response(false, message: "main_section_index must be a non-negative integer.")
+      end
+      main_section_index = value.to_i
+    end
+
+    ActiveRecord::Base.transaction do
+      @product.sections = section_ids
+      @product.main_section_index = main_section_index if main_section_index
+      @product.save!
+      @product.seller_profile_sections.where.not(id: section_ids).destroy_all
+    end
+
+    success_with_product(@product.reload)
+  rescue ActiveRecord::RecordInvalid
+    error_with_product(@product)
   end
 
   # Dry-run sanitize: returns what `custom_html` would look like after the

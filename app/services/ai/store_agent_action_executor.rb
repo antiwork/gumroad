@@ -77,7 +77,7 @@ class Ai::StoreAgentActionExecutor
       return failure(error, reason: "invalid_parameters", retry_safe: true)
     end
 
-    response = api_client.write(endpoint.method, path, body)
+    response = api_client.write(endpoint.method, path, body, json_body: endpoint.json_body?)
 
     result = interpret(endpoint, response)
     if result[:success] && (receipt = Ai::StoreAgentHtmlUndo.receipt(endpoint: endpoint.id, path_params: params[:path_params].to_h, body: body.stringify_keys, response:))
