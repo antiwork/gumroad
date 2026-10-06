@@ -12,12 +12,15 @@ class BlackFridayStatsService
     end
 
     def calculate_stats
-      # TODO: Implement actual stats calculation
-      # For now, returning placeholder values
+      offer_codes = OfferCode.alive.where(code: SearchProducts::BLACK_FRIDAY_CODE)
+      active_offer_codes = offer_codes.reject(&:inactive?)
+      percentages = active_offer_codes.filter_map(&:amount_percentage)
+
       {
-        active_deals_count: 0,
-        revenue_cents: 0,
-        average_discount_percentage: 0
+        active_deals_count: active_offer_codes.size,
+        # Includes codes that have since expired: revenue already earned during the sale still counts.
+        revenue_cents: Purchase.offer_code_statistics.where(offer_code_id: offer_codes.select(:id)).sum(:price_cents),
+        average_discount_percentage: percentages.empty? ? 0 : (percentages.sum.to_f / percentages.size).round
       }
     end
   end
