@@ -108,7 +108,7 @@ class Ai::StoreAgentActionExecutor
         failure("You don't have permission to do that.", reason: "permission_denied", status:)
       elsif response["reason"] == "stale_known_sections"
         # The sections write refuses under the product lock before it changes anything.
-        failure(response["message"], reason: "stale_known_sections", retry_safe: true)
+        failure("A section was added after this change was prepared. Ask the agent to prepare this change again.", reason: "stale_known_sections", retry_safe: true)
       else
         failure(
           response["message"].presence || response["error"].presence || "That change couldn't be saved.",
