@@ -632,6 +632,13 @@ class Api::V2::LinksController < Api::V2::BaseController
       return render_response(false, message: "sections must not list the same section twice.")
     end
 
+    known_ids = nil
+    if params.key?(:known_section_ids)
+      known = params[:known_section_ids]
+      known_ids = known.map { |id| ObfuscateIds.decrypt(id) } if known.is_a?(Array) && known.all? { |id| id.is_a?(String) }
+      return render_response(false, message: "known_section_ids must be an array of section ids.") if known_ids.nil? || known_ids.any?(&:nil?)
+    end
+
     main_section_index = nil
     if params.key?(:main_section_index)
       value = params[:main_section_index]
@@ -645,8 +652,14 @@ class Api::V2::LinksController < Api::V2::BaseController
     @product.with_lock do
       # Checked under the product lock so a concurrent writer cannot add or remove a section between
       # this check and the destroy below. A foreign id would otherwise be stored and render nothing.
-      if (section_ids - @product.seller_profile_sections.pluck(:id)).any?
+      current_ids = @product.seller_profile_sections.pluck(:id)
+      if (section_ids - current_ids).any?
         error = "One or more sections do not belong to this product."
+        raise ActiveRecord::Rollback
+      end
+      # known_section_ids is what the seller reviewed; a newer section was never shown as deleted.
+      if known_ids && (current_ids - section_ids - known_ids).any?
+        error = "A section was added after this change was prepared. Read the product again and retry."
         raise ActiveRecord::Rollback
       end
 

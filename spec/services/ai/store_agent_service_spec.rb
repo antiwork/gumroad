@@ -2090,6 +2090,17 @@ describe Ai::StoreAgentService do
           )
         end
 
+        it "pins the sections the card showed so a later section is not deleted on confirm" do
+          product.update!(sections: [kept.id, dropped.id])
+
+          action = propose_sections([kept.external_id])
+
+          expect(action[:params]["params"]).to match(
+            "sections" => [kept.external_id],
+            "known_section_ids" => contain_exactly(kept.external_id, dropped.external_id),
+          )
+        end
+
         it "says every section will be deleted for an empty list" do
           product.update!(sections: [kept.id, dropped.id])
 

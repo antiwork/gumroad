@@ -15,9 +15,10 @@ describe Api::V2::LinksController do
     create(:seller_profile_products_section, seller:, product:)
   end
 
-  def put_sections(sections:, main_section_index: :omitted, product: @product, token: @token)
+  def put_sections(sections:, main_section_index: :omitted, known_section_ids: :omitted, product: @product, token: @token)
     params = { format: :json, access_token: token.token, id: product.external_id, sections: }
     params[:main_section_index] = main_section_index unless main_section_index == :omitted
+    params[:known_section_ids] = known_section_ids unless known_section_ids == :omitted
     # Only a JSON body can carry an empty `sections` array; form encoding turns `[]` into `[""]`.
     put :update_sections, params:, as: :json
   end
@@ -153,6 +154,58 @@ describe Api::V2::LinksController do
       expect(response.parsed_body["message"]).to eq("One or more sections do not belong to this product.")
       expect(@product.reload.sections).to eq([kept.id])
       expect(SellerProfileSection.exists?(foreign.id)).to eq(true)
+    end
+
+    describe "known_section_ids" do
+      it "refuses to destroy a section added after the list was read" do
+        kept = create_section
+        added_later = create_section
+        @product.update!(sections: [kept.id, added_later.id])
+
+        put_sections(sections: [kept.external_id], known_section_ids: [kept.external_id])
+
+        expect(response.parsed_body["success"]).to eq(false)
+        expect(response.parsed_body["message"]).to eq("A section was added after this change was prepared. Read the product again and retry.")
+        expect(@product.reload.sections).to eq([kept.id, added_later.id])
+        expect(SellerProfileSection.exists?(added_later.id)).to eq(true)
+      end
+
+      it "still destroys a section that was in the list the seller reviewed" do
+        kept = create_section
+        dropped = create_section
+        @product.update!(sections: [kept.id, dropped.id])
+
+        put_sections(sections: [kept.external_id], known_section_ids: [kept.external_id, dropped.external_id])
+
+        expect(response.parsed_body["success"]).to eq(true)
+        expect(SellerProfileSection.exists?(dropped.id)).to eq(false)
+      end
+
+      it "accepts a known list that includes a section deleted since" do
+        kept = create_section
+        gone = create_section
+        gone_external_id = gone.external_id
+        @product.update!(sections: [kept.id, gone.id])
+        gone.destroy!
+
+        put_sections(sections: [kept.external_id], known_section_ids: [kept.external_id, gone_external_id])
+
+        expect(response.parsed_body["success"]).to eq(true)
+        expect(@product.reload.sections).to eq([kept.id])
+      end
+
+      [["not-a-real-id"], "abc", [1]].each do |value|
+        it "refuses #{value.inspect} without changing anything" do
+          section = create_section
+          @product.update!(sections: [section.id])
+
+          put_sections(sections: [], known_section_ids: value)
+
+          expect(response.parsed_body["success"]).to eq(false)
+          expect(response.parsed_body["message"]).to eq("known_section_ids must be an array of section ids.")
+          expect(SellerProfileSection.exists?(section.id)).to eq(true)
+        end
+      end
     end
 
     it "refuses an id it cannot decrypt" do

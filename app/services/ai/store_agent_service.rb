@@ -1568,6 +1568,8 @@ class Ai::StoreAgentService
       normalize_product_currency_param!(endpoint, body)
 
       summary = write_summary(endpoint, path_params, body)
+      fields = write_fields(endpoint, path_params, body)
+      body = with_known_section_ids(endpoint, path_params, body)
       action = ProposedAction.new(
         type: "api_write",
         # Everything the executor needs to replay the exact same call after the creator confirms.
@@ -1575,7 +1577,7 @@ class Ai::StoreAgentService
         summary:,
         # The operation itself (e.g. "Delete a discount code."), shown as the card's heading.
         title: endpoint.summary,
-        fields: write_fields(endpoint, path_params, body),
+        fields:,
       )
       [{ proposed: true, summary: }, action]
     end
@@ -1730,6 +1732,13 @@ class Ai::StoreAgentService
       rows << { label: "Redemption", value: "Anyone with the code; no subscriber check" } if endpoint.id == "create_offer_code"
 
       rows
+    end
+
+    # Pins the sections the card showed, so confirming later cannot delete one added in between.
+    def with_known_section_ids(endpoint, path_params, body)
+      return body unless endpoint.id == "update_product_sections" && (product = target_product(endpoint, path_params))
+
+      body.merge("known_section_ids" => product.seller_profile_sections.map(&:external_id))
     end
 
     # Names the sections a sections write keeps and the ones it destroys, so the seller sees the

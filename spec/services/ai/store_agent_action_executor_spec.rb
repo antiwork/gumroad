@@ -229,6 +229,25 @@ describe Ai::StoreAgentActionExecutor do
         expect(product.main_section_index).to eq(1)
       end
 
+      it "refuses a confirmed change that would delete a section added after the card was shown" do
+        product.update!(sections: [first.id, second.id])
+        shown_ids = [first.external_id, second.external_id]
+        added_later = create(:seller_profile_products_section, seller:, product:)
+
+        result = executor.execute(
+          type: "api_write",
+          params: api_write(
+            endpoint: "update_product_sections",
+            path_params: { "id" => product.external_id },
+            params: { "sections" => [first.external_id], "known_section_ids" => shown_ids },
+          ),
+        )
+
+        expect(result[:success]).to be(false)
+        expect(result[:message]).to eq("A section was added after this change was prepared. Read the product again and retry.")
+        expect(SellerProfileSection.where(id: [first.id, second.id, added_later.id]).count).to eq(3)
+      end
+
       it "leaves sections untouched when a section belongs to another product" do
         product.update!(sections: [first.id, second.id], main_section_index: 1)
         foreign = create(:seller_profile_products_section, seller:, product: create(:product, user: seller))
