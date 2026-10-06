@@ -79,4 +79,14 @@
   .grecaptcha-badge {
     visibility: hidden;
   }
+
+  // epub.js sizes `.epub-view` (and the iframe inside it) to the full width of every spread in the
+  // current section, then turns pages by scrolling `.epub-container` horizontally. The
+  // `* { max-width: 100% }` reset above caps that width at a single spread, so the container never
+  // gains scrollable overflow and each page turn falls through to the next section instead of the
+  // next page (gumroad-private#3275). Reader internals only; the container itself stays capped.
+  .epub-container .epub-view,
+  .epub-container .epub-view iframe {
+    max-width: none;
+  }
 }
