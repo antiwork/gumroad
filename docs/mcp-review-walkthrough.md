@@ -17,6 +17,9 @@ tool results; the expectations below are not evidence that a case passed.
 - At [ChatGPT Plugins](https://chatgpt.com/plugins), use **Add → Create custom MCP
   server**, URL `https://gumroad.com/chatgpt/v1/mcp`, and OAuth. Use the isolated
   account when authorizing. Inspect the consent screen before accepting it.
+  In advanced OAuth settings, choose DCR and keep only `view_profile`,
+  `view_sales`, `edit_products`, and `view_payouts`; deselect `account` and
+  `view_public`.
 - Verify the discovered inventory: `get_account`, `list_products`, `get_product`,
   `create_draft_product`, `publish_product`, `unpublish_product`, `list_sales`,
   and `list_payouts`. Start a new conversation with this connector selected.
