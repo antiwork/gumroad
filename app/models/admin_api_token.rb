@@ -85,15 +85,17 @@ class AdminApiToken < ApplicationRecord
     update!(revoked_at: Time.current)
   end
 
-  # Revokes this token and returns a replacement for the same actor, scope and expiry, so a service
-  # token can be replaced through the API. A second call on a revoked row returns nil, so two
-  # concurrent rotations cannot mint two tokens.
+  # Rotation replaces a service credential. A human token's age limit is derived from its own
+  # created_at, so a replacement would reset the 90-day cap; anything with an expiry is refused.
+  # A second call on a revoked row returns nil, so two concurrent rotations cannot mint two tokens.
   def rotate!
+    return nil if expires_at.present?
+
     with_lock do
       next if revoked_at.present?
 
       revoke!
-      self.class.mint_with_plaintext!(actor_user_id:, scope:, expires_at:)
+      self.class.mint_with_plaintext!(actor_user_id:, scope:)
     end
   end
 

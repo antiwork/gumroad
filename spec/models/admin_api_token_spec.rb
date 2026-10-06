@@ -73,13 +73,11 @@ describe AdminApiToken do
       expect(described_class.authenticate(plaintext_token)).to eq(replacement)
     end
 
-    it "carries the original expiry onto the replacement, so rotation never extends a human token" do
-      expires_at = 3.days.from_now
-      _, admin_api_token = described_class.mint_with_plaintext!(actor_user_id: create(:admin_user).id, expires_at:)
+    it "refuses a token that expires, so a human token's 90-day age limit cannot be reset" do
+      _, admin_api_token = described_class.mint_with_plaintext!(actor_user_id: create(:admin_user).id, expires_at: 3.days.from_now)
 
-      _, replacement = admin_api_token.rotate!
-
-      expect(replacement.expires_at).to be_within(1.second).of(expires_at)
+      expect { admin_api_token.rotate! }.not_to change { described_class.count }
+      expect(admin_api_token.reload.revoked_at).to be_nil
     end
 
     it "returns nil for an already revoked token, so a second rotation cannot mint one" do
@@ -87,7 +85,7 @@ describe AdminApiToken do
       admin_api_token.revoke!
 
       expect(admin_api_token.rotate!).to be_nil
-      expect(described_class.count).to eq(1)
+      expect(described_class.where(revoked_at: nil).count).to eq(0)
     end
   end
 

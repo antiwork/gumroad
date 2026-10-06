@@ -185,6 +185,15 @@ describe Api::Internal::Admin::AuthController do
       expect(AdminApiToken.authenticate(other_plaintext_token)).to be_present
     end
 
+    it "does not rotate a human token, whose replacement would reset its age limit" do
+      plaintext_token, = AdminApiToken.mint_with_plaintext!(actor_user_id: create(:admin_user).id, expires_at: 30.days.from_now)
+      request.headers["Authorization"] = "Bearer #{plaintext_token}"
+
+      post :rotate
+
+      expect(response).to have_http_status(:not_found)
+    end
+
     it "does not rotate an already revoked token" do
       bearer_plaintext_token, = AdminApiToken.mint_with_plaintext!(actor_user_id: create(:admin_user).id, expires_at: 30.days.from_now)
       _agent_plaintext_token, agent_token = AdminApiToken.mint_with_plaintext!(actor_user_id: create(:admin_user).id, scope: AdminApiToken::PIRACY_SCOPE)
