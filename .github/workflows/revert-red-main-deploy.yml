@@ -218,7 +218,9 @@ jobs:
           REVERT_URL: ${{ needs.open.outputs.url }}
         run: |
           set -euo pipefail
-          if [ "$NOTIFY" = "true" ]; then
+          if [ "$NOTIFY" = "true" ] && [ "$REASON" = "deploy_state_unknown" ]; then
+            body="@${PR_AUTHOR} the full Tests suite on \`main\` failed on ${SHA}: ${RUN_URL}. Production does not contain it yet, and Buildkite could not say whether its deploy is running. Please check the deploy before you choose to revert."
+          elif [ "$NOTIFY" = "true" ]; then
             body="@${PR_AUTHOR} the full Tests suite on \`main\` failed on ${SHA} after it deployed, and the automation could not confirm the failure (${REASON}): ${RUN_URL}. Please re-run the failed jobs, or revert."
           elif [ "$OPENED" = "true" ]; then
             body="@${PR_AUTHOR} the full Tests suite on \`main\` failed for good on ${SHA} after it deployed: ${RUN_URL}. A revert PR is open: ${REVERT_URL}"

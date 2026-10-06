@@ -17,9 +17,10 @@
 #
 # `--rspec-shards` prints the job ids whose summary lines the caller must fetch.
 # `--test-step-failures` prints the shards that failed in their test step, whose
-# summary lines `--spec-failed` needs. `--spec-failed` prints whether one of
-# them reported failing tests: a timeout also fails the step, but never prints
-# a summary, and says nothing about the code.
+# summary lines `--spec-failed` needs. `--spec-failed` prints true when one of
+# them reported failing tests, null when one printed no summary (a timeout, or
+# a load error that stopped the runner: it cannot tell which), and false
+# otherwise.
 #
 # Exit codes match bin/classify-hung-checkout: 0 rerun, 1 skip, 2 could not run.
 
@@ -81,8 +82,15 @@ def reported_failures?(summary)
   !match.nil? && match.captures.any? { |count| count.to_i.positive? }
 end
 
-def spec_failed?(jobs, summaries)
-  test_step_failures(jobs).any? { |job| reported_failures?(summaries[job["id"].to_s]) }
+def summary_counts?(summary)
+  summary.to_s.strip.match?(RSPEC_SUMMARY) || summary.to_s.strip.match?(MINITEST_SUMMARY)
+end
+
+def spec_failed(jobs, summaries)
+  failed = test_step_failures(jobs).map { |job| summaries[job["id"].to_s] }
+  return true if failed.any? { |summary| reported_failures?(summary) }
+  return nil if failed.any? { |summary| !summary_counts?(summary) }
+  false
 end
 
 def failed_rspec_shards(jobs)
@@ -162,7 +170,7 @@ if test_step_failures_only
 end
 
 if spec_failed_only
-  puts spec_failed?(Array(payload["jobs"]), payload["summaries"].is_a?(Hash) ? payload["summaries"] : {})
+  puts JSON.dump(spec_failed(Array(payload["jobs"]), payload["summaries"].is_a?(Hash) ? payload["summaries"] : {}))
   exit 0
 end
 

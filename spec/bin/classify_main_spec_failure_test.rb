@@ -310,7 +310,9 @@ end
   "an rspec shard with an error outside examples" => [[job("Test Slow 12", "failure", SPEC_FAILURE)], "0 examples, 0 failures, 1 error occurred outside of examples", "true"],
   "a minitest shard with failures" => [[job("Test Minitest 1", "failure", MINITEST_FAILURE)], "1342 runs, 4447 assertions, 1 failures, 0 errors, 0 skips", "true"],
   "a minitest shard with errors" => [[job("Test Minitest 1", "failure", MINITEST_FAILURE)], "1342 runs, 4447 assertions, 0 failures, 2 errors, 0 skips", "true"],
-  "a test step that timed out with no summary" => [[job("Test Slow 12", "failure", SPEC_FAILURE)], "", "false"],
+  # A timeout and a load error that stopped the runner both leave no summary.
+  "a test step with no summary" => [[job("Test Slow 12", "failure", SPEC_FAILURE)], "", "null"],
+  "a minitest step with no summary" => [[job("Test Minitest 1", "failure", MINITEST_FAILURE)], "", "null"],
   "a summary with no failures" => [[job("Test Slow 12", "failure", SPEC_FAILURE)], "45 examples, 0 failures", "false"],
   "a hung checkout" => [[job("Test Slow 3", "failure", HUNG_CHECKOUT)], "45 examples, 1 failure", "false"],
   "a failed build job" => [[job("Build images", "failure", [["Build test image", "failure"]])], "45 examples, 1 failure", "false"],

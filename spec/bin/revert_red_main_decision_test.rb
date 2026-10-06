@@ -123,6 +123,13 @@ workflow_check(
   tell["if"].inspect
 )
 
+tell_run = tell["steps"].first["run"].to_s
+workflow_check(
+  "an unknown deploy state gets its own message",
+  tell_run.include?('[ "$REASON" = "deploy_state_unknown" ]') && tell_run.include?("Please check the deploy"),
+  "Tell the original PR"
+)
+
 workflow_check(
   "the original PR also hears about an unconfirmed failure",
   tell["if"].to_s.include?("needs.decide.outputs.notify == 'true'"),
