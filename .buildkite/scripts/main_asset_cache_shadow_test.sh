@@ -107,6 +107,20 @@ run_script; rc=$?
 
 [ ! -e .main-asset-cache-shadow ] && ok "it leaves no work directory behind" || fail "it leaves no work directory behind"
 
+# A block step waits for every step above it: above the approval gate, the
+# shadow step would hold every deploy.
+ruby -ryaml -e '
+  steps = YAML.load_file(".buildkite/pipeline.yml")["steps"]
+  index = ->(key) { steps.index { |step| step["key"] == key } }
+  shadow = steps[index.("asset-cache-shadow")]
+  deploy = steps[index.("production-deployment")]
+  ok = index.("asset-cache-shadow") > index.("require-approval") &&
+       shadow["depends_on"] == "compile-assets" && shadow["soft_fail"] == true &&
+       !Array(deploy["depends_on"]).include?("asset-cache-shadow")
+  exit(ok ? 0 : 1)
+' && ok "the shadow step sits below the approval gate, and the deploy does not wait for it" \
+  || fail "the shadow step sits below the approval gate, and the deploy does not wait for it"
+
 echo
 echo "PASSED=$PASS FAILED=$FAIL"
 [ "$FAIL" = 0 ]

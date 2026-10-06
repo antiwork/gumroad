@@ -42,16 +42,6 @@ steps:
           username: gumroad
           password-env: QUAY_PASSWORD
 
-  # Shadow mode for a main asset cache: compares, never ships. The deploy does
-  # not depend on it, so it cannot slow or change one.
-  - label: ":mag: Asset cache shadow"
-    key: asset-cache-shadow
-    branches: "main"
-    depends_on: compile-assets
-    command: ".buildkite/scripts/main_asset_cache_shadow.sh"
-    soft_fail: true
-    timeout_in_minutes: 15
-
   - block: "Approval required for production deployment"
     key: require-approval
     branches: "main"
@@ -102,3 +92,15 @@ steps:
       - docker-login#v3.0.0:
           username: "gumroadteam"
           password-env: DOCKERHUB_PASSWORD
+
+  # Shadow mode for a main asset cache: compares, never ships. Last on purpose:
+  # a block step waits for every step above it, so placed before the approval
+  # gate this would hold every deploy. The explicit depends_on lets it start as
+  # soon as the compile ends, without waiting for the gate.
+  - label: ":mag: Asset cache shadow"
+    key: asset-cache-shadow
+    branches: "main"
+    depends_on: compile-assets
+    command: ".buildkite/scripts/main_asset_cache_shadow.sh"
+    soft_fail: true
+    timeout_in_minutes: 15
