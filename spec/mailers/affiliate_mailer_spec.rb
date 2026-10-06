@@ -129,13 +129,15 @@ describe AffiliateMailer do
         expect(ApplicationRecord).to receive(:connected_to).with(role: :writing).and_call_original
 
         reads = []
-        subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |_name, _start, _finish, _id, payload|
+        callback = lambda { |_name, _start, _finish, _id, payload|
           pinned = ApplicationRecord.connected_to_stack.any? { |entry| entry[:role] == :writing && entry[:klasses].include?(ApplicationRecord) }
           reads << [payload[:name], pinned] if ["Purchase Load", "AffiliateCredit Load"].include?(payload[:name])
+        }
+
+        body = nil
+        ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+          body = AffiliateMailer.notify_affiliate_of_sale(purchase.id).body.encoded
         end
-        mail = AffiliateMailer.notify_affiliate_of_sale(purchase.id)
-        body = mail.body.encoded
-        ActiveSupport::Notifications.unsubscribe(subscriber)
 
         expect(body).to include "Your cut"
         expect(reads.map(&:first)).to include("Purchase Load", "AffiliateCredit Load")
