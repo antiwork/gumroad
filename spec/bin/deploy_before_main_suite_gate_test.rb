@@ -6,6 +6,7 @@
 require "json"
 require "open3"
 require "tempfile"
+require "tmpdir"
 require "yaml"
 
 GATE = File.expand_path("../../bin/deploy-before-main-suite-gate", __dir__)
@@ -283,20 +284,118 @@ workflow_check(
   sparse.inspect
 )
 
-# A 30-day created window returned only runs from three weeks earlier, which hid
-# a red main from the freeze.
-wrapper = File.read(File.expand_path("../../bin/deploy-before-main-suite", __dir__))
-workflow_check(
-  "the run list stays within a window the API answers currently",
-  wrapper.include?("created=>=$(day 7)") && wrapper.include?('for slice in "7 14" "14 21" "21 28" "28 31"') &&
-    wrapper.include?("select(.run_attempt > 1)"),
-  "the created windows"
+
+# --- The wrapper -----------------------------------------------------------
+#
+# Runs bin/deploy-before-main-suite against a stub gh (and a GNU-style date) on
+# PATH. The stub applies each call's real --jq filter to canned API answers, so
+# the wrapper's queries, filters, and control flow all run.
+
+WRAPPER = File.expand_path("../../bin/deploy-before-main-suite", __dir__)
+WRAPPER_SHA = "75a2d8e4f44f0000000000000000000000000000"
+
+
+GH_STUB = <<~'SH'
+  #!/usr/bin/env bash
+  path=""
+  filter="."
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      api | --paginate) ;;
+      --jq) shift; filter="$1" ;;
+      *) path="$1" ;;
+    esac
+    shift
+  done
+  echo "$path" >> "$STUB_DIR/calls"
+  case "$path" in
+    *"created=>="*) fixture=recent ;;
+    *"created="*) fixture=older ;;
+    *"status=in_progress"*) fixture=status_in_progress ;;
+    *"status="*) fixture=no_runs ;;
+    */actions/runs/*) fixture="run-${path##*/}" ;;
+    */pulls) fixture=pulls ;;
+    */status) fixture=status ;;
+    *) echo "unexpected path $path" >&2; exit 1 ;;
+  esac
+  [ -f "$STUB_DIR/fail-$fixture" ] && { echo "HTTP 502" >&2; exit 1; }
+  # gh --jq prints strings raw and everything else as JSON.
+  jq -rc "$filter" "$STUB_DIR/$fixture.json"
+SH
+
+DATE_STUB = <<~'SH'
+  #!/usr/bin/env bash
+  echo "2026-10-01T00:00:00Z"
+SH
+
+def wrapper_run_record(id, sha, status, conclusion, created_at, updated_at, attempt: 1)
+  { "id" => id, "head_sha" => sha, "status" => status, "conclusion" => conclusion,
+    "created_at" => created_at, "updated_at" => updated_at, "run_attempt" => attempt }
+end
+
+WRAPPER_OWN = wrapper_run_record(9, WRAPPER_SHA, "in_progress", nil, "2026-10-06T17:17:22Z", "2026-10-06T17:17:31Z")
+WRAPPER_GREEN = wrapper_run_record(1, "fbf8836d0", "completed", "success", "2026-10-06T14:55:22Z", "2026-10-06T15:11:59Z")
+WRAPPER_PULLS = [{ "number" => 8194, "merged_at" => "2026-10-06T17:17:19Z", "merge_commit_sha" => WRAPPER_SHA, "head" => { "sha" => "headsha" } }].freeze
+
+def run_wrapper(recent:, older: [], in_progress: [], fail: [])
+  Dir.mktmpdir do |dir|
+    { "gh" => GH_STUB, "date" => DATE_STUB }.each do |name, body|
+      File.write(File.join(dir, name), body)
+      File.chmod(0o755, File.join(dir, name))
+    end
+    fixtures = {
+      "recent" => { "workflow_runs" => recent },
+      "older" => { "workflow_runs" => older },
+      "status_in_progress" => { "workflow_runs" => in_progress },
+      "no_runs" => { "workflow_runs" => [] },
+      "pulls" => WRAPPER_PULLS,
+      "status" => { "statuses" => [{ "context" => "ci/green", "state" => "success" }] }
+    }
+    (recent + older + in_progress).each { |run| fixtures["run-#{run['id']}"] = run }
+    fixtures.each { |name, data| File.write(File.join(dir, "#{name}.json"), JSON.dump(data)) }
+    fail.each { |name| File.write(File.join(dir, "fail-#{name}"), "") }
+    env = { "PATH" => "#{dir}:#{ENV.fetch('PATH')}", "STUB_DIR" => dir, "GITHUB_REPOSITORY" => "o/r", "COMMIT_SHA" => WRAPPER_SHA }
+    output, status = Open3.capture2e(env, "bash", WRAPPER)
+    [status.exitstatus, output]
+  end
+end
+
+def wrapper_check(name, expect_code:, reason: nil, **fixtures)
+  $count += 1
+  code, output = run_wrapper(**fixtures)
+  if code == expect_code && (reason.nil? || output.include?(reason))
+    puts "  ok    #{name}"
+  else
+    puts "  FAIL  #{name}"
+    $failures << "#{name}: expected exit #{expect_code}#{" with #{reason}" if reason}, got #{code}\n    #{output.strip}"
+  end
+end
+
+puts
+puts "deploy-before-main-suite (the wrapper, against a stub gh)"
+
+wrapper_check("a current list with a green main", recent: [WRAPPER_OWN, WRAPPER_GREEN], expect_code: 0, reason: "decision=early")
+
+wrapper_check(
+  "a list without this commit's own run is stale",
+  recent: [WRAPPER_GREEN], expect_code: 2, reason: "the list is stale"
 )
-workflow_check(
-  "a run list without this commit's own run counts as stale",
-  wrapper.include?("any(.head_sha == $sha)") && wrapper.include?("the list is stale"),
-  "the stale-list check"
+
+# Created ten days ago, re-run today, red after the latest green run.
+old_red_rerun = wrapper_run_record(3, "old", "completed", "failure", "2026-09-26T10:00:00Z", "2026-10-06T16:00:00Z", attempt: 2)
+wrapper_check("a red re-run of an older run freezes", recent: [WRAPPER_OWN, WRAPPER_GREEN], older: [old_red_rerun], expect_code: 1, reason: "frozen_main_red")
+
+# The older slices keep re-runs only.
+old_red_first_attempt = wrapper_run_record(4, "old", "completed", "failure", "2026-09-26T10:00:00Z", "2026-10-06T16:00:00Z")
+wrapper_check("a first attempt from the older slices is ignored", recent: [WRAPPER_OWN, WRAPPER_GREEN], older: [old_red_first_attempt], expect_code: 0, reason: "decision=early")
+
+old_rerun_running = wrapper_run_record(5, "old", "in_progress", nil, "2026-09-26T10:00:00Z", "2026-10-06T16:00:00Z", attempt: 2)
+wrapper_check(
+  "an active re-run of an older run freezes",
+  recent: [WRAPPER_OWN, WRAPPER_GREEN], in_progress: [old_rerun_running], expect_code: 1, reason: "frozen_retry_in_progress"
 )
+
+wrapper_check("a failed request stops the decision", recent: [WRAPPER_OWN, WRAPPER_GREEN], fail: ["older"], expect_code: 2)
 
 puts
 if $failures.empty?
