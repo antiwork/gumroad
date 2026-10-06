@@ -1,12 +1,12 @@
 name: Rerun hung checkout
 
 # Re-runs the failed jobs of a `Tests` attempt when the only thing that went
-# wrong was actions/checkout sitting at its 5-minute timeout. That failure is
-# unrelated to the commit, and it lands on shards at random, so the red it
-# leaves is noise a human has to clear by hand.
+# wrong was a timeout before the tests started: actions/checkout at its 5-minute
+# limit, or the test image pull timing out three times (Docker Hub). Those
+# failures are unrelated to the commit and land on shards at random.
 #
 # Scoped hard on purpose: the classifier refuses unless every red job on the
-# triggering attempt is either a hung checkout or a sibling fail-fast cancelled
+# triggering attempt is one of those timeouts or a sibling fail-fast cancelled
 # behind one, so a spec failure is never re-run into a pass.
 
 on:

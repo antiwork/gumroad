@@ -153,6 +153,56 @@ check(
   expect: :skip
 )
 
+# Docker Hub pull timeouts: three 5-minute attempts, then the retry action's
+# own failure annotation. The tests never started.
+PULL_TIMEOUT = [["Check out repository", "success", 10], ["Start services and pull test image", "failure", 916], ["Run tests", "skipped", 0]].freeze
+PULL_MESSAGE = "Final attempt failed. Timeout of 300000ms hit"
+
+pull = job("Test Slow 15", "failure", PULL_TIMEOUT)
+check(
+  "an image pull that timed out three times",
+  { "jobs" => [pull], "annotations" => { pull["id"].to_s => [PULL_MESSAGE] }, "conclusion" => "failure" },
+  expect: :rerun
+)
+
+quick_pull = job("Test Slow 15", "failure", [["Check out repository", "success", 10], ["Start services and pull test image", "failure", 40], ["Run tests", "skipped", 0]])
+check(
+  "an image pull that failed fast",
+  { "jobs" => [quick_pull], "annotations" => { quick_pull["id"].to_s => [PULL_MESSAGE] }, "conclusion" => "failure" },
+  expect: :skip
+)
+
+# Earlier attempts timed out, but the last one failed for a real reason.
+pull_real_error = job("Test Slow 15", "failure", PULL_TIMEOUT)
+check(
+  "an image pull whose final attempt failed for another reason",
+  { "jobs" => [pull_real_error],
+    "annotations" => { pull_real_error["id"].to_s => ["Attempt 1 failed. Reason: Timeout of 300000ms hit", "Final attempt failed. Child_process exited with error code 1"] },
+    "conclusion" => "failure" },
+  expect: :skip
+)
+
+check(
+  "a slow image pull with no timeout annotation",
+  { "jobs" => [job("Test Slow 15", "failure", PULL_TIMEOUT)], "conclusion" => "failure" },
+  expect: :skip
+)
+
+# The checkout's message on a pull step is not the pull's proof.
+pull_wrong_message = job("Test Slow 15", "failure", PULL_TIMEOUT)
+check(
+  "a pull timeout proved by the wrong annotation",
+  { "jobs" => [pull_wrong_message], "annotations" => hang_annotations(pull_wrong_message), "conclusion" => "failure" },
+  expect: :skip
+)
+
+pull_blocked = job("Test Slow 15", "failure", PULL_TIMEOUT)
+check(
+  "a pull timeout plus a sibling whose specs failed",
+  { "jobs" => [pull_blocked, job("Test Slow 16", "failure", SPEC_FAILURE)], "annotations" => { pull_blocked["id"].to_s => [PULL_MESSAGE] }, "conclusion" => "failure" },
+  expect: :skip
+)
+
 # A concurrency cancel: red, but nothing hung.
 check(
   "a cancelled attempt that never scheduled a job",
