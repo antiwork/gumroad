@@ -141,6 +141,7 @@ jobs:
           SHA: ${{ github.event.workflow_run.head_sha }}
           RETRIED: ${{ needs.rerun.outputs.retried == 'true' }}
           RETRY_WANTED: ${{ needs.rerun.outputs.wanted == 'true' }}
+          RERUN_RESULT: ${{ needs.rerun.result }}
         run: |
           set -uo pipefail
           assess() {
@@ -179,9 +180,10 @@ jobs:
           elif [ ! -s error.txt ]; then
             echo "could not classify the attempt" > error.txt
           fi
-          # Wanted but not started: the retry request itself failed.
+          # Wanted, not started, and the job failed: the retry request itself
+          # failed. A deliberate skip (main moved) leaves the job green.
           retry_failed=false
-          if [ "$RETRY_WANTED" = "true" ] && [ "$RETRIED" != "true" ]; then
+          if [ "$RETRY_WANTED" = "true" ] && [ "$RETRIED" != "true" ] && [ "$RERUN_RESULT" = "failure" ]; then
             retry_failed=true
           fi
           jq -n --argjson run_id "$RUN_ID" --argjson attempt "$ATTEMPT" --arg sha "$SHA" \

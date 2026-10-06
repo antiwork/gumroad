@@ -64,10 +64,19 @@ jobs:
           gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" > run.json
           production=$(gh api "repos/${GITHUB_REPOSITORY}/compare/${sha}...production-release" --jq .status)
           # Deploying: a build still running past its opened gate. A finished
-          # build counts only through production-release.
-          deploying=$(curl -fsS -H "Authorization: Bearer ${BUILDKITE_API_TOKEN}" \
-              "https://api.buildkite.com/v2/organizations/${ORG_SLUG}/pipelines/${PIPELINE_SLUG}/builds?commit=${sha}" \
-            | jq --arg sha "$sha" '[.[] | select(.commit == $sha and .state == "running") | .jobs[]? | select(.type == "manual" and .step_key == "require-approval" and .state == "unblocked")] | length > 0')
+          # build counts only through production-release. Asked only when
+          # production does not already contain the commit; null when Buildkite
+          # cannot answer.
+          deploying=false
+          case "$production" in
+            ahead|identical) ;;
+            *)
+              deploying=$(curl -fsS -H "Authorization: Bearer ${BUILDKITE_API_TOKEN}" \
+                  "https://api.buildkite.com/v2/organizations/${ORG_SLUG}/pipelines/${PIPELINE_SLUG}/builds?commit=${sha}" \
+                | jq --arg sha "$sha" '[.[] | select(.commit == $sha and .state == "running") | .jobs[]? | select(.type == "manual" and .step_key == "require-approval" and .state == "unblocked")] | length > 0') \
+                || deploying=null
+              ;;
+          esac
 
           jq -n --slurpfile run run.json --slurpfile verdict verdict/verdict.json \
             --arg production "$production" --argjson deploying "$deploying" \

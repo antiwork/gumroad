@@ -70,6 +70,11 @@ check("an infrastructure failure", payload(spec_failed: false), expect: :skip, r
 check("the retry request failed", payload(retry_failed: true), expect: :notify, reason: "retry_failed")
 check("the verdict could not read the run", payload(spec_failed: nil, error: "could not read the log of job 1"), expect: :notify, reason: "verdict_incomplete")
 check("a verdict with no spec answer", payload(spec_failed: nil), expect: :notify, reason: "verdict_incomplete")
+check("Buildkite could not say whether it is deploying", payload(production: "behind", deploying: nil), expect: :notify, reason: "deploy_state_unknown")
+check(
+  "an infrastructure failure with an unknown deploy state",
+  payload(production: "behind", deploying: nil, spec_failed: false), expect: :skip, reason: "not_deployed"
+)
 check("an unconfirmed failure that never deployed", payload(retry_failed: true, production: "behind", deploying: false), expect: :skip, reason: "not_deployed")
 check("an unknown production state", payload(production: ""), expect: :error, reason: "unknown_production_state")
 check("no run", payload(run: nil), expect: :error)
@@ -129,6 +134,13 @@ RETRY = YAML.load_file(File.expand_path("../../.github/workflows/rerun-main-spec
 verdict = RETRY.dig("jobs", "verdict")
 rerun_step = RETRY.dig("jobs", "rerun", "steps").find { |step| step["name"] == "Re-run the failed jobs" }
 record = verdict["steps"].find { |step| step["name"] == "Record the verdict" }
+# A deliberate skip (main moved) leaves the rerun job green; only a failed
+# request counts as retry_failed.
+workflow_check(
+  "retry_failed needs the rerun job to have failed",
+  record["run"].to_s.include?('[ "$RERUN_RESULT" = "failure" ]') && record.dig("env", "RERUN_RESULT").to_s.include?("needs.rerun.result"),
+  "Record the verdict"
+)
 # A verdict that errors out leaves no artifact, and the revert workflow skips.
 workflow_check(
   "the verdict step records errors instead of failing",
