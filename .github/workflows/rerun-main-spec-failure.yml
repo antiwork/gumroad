@@ -129,10 +129,9 @@ jobs:
             bin/classify-main-spec-failure
           sparse-checkout-cone-mode: false
 
-      # spec_failed is what a revert needs: an infrastructure failure says
-      # nothing about the code, and rerun-hung-checkout.yml never retries an
-      # attempt where specs failed. This step always writes a verdict: an
-      # error goes into it, so the revert workflow can ask a person instead.
+      # Never fails: an error goes into the verdict, so the revert workflow asks
+      # a person instead of skipping. rerun-hung-checkout.yml never retries an
+      # attempt where specs failed, so spec_failed also rules that retry out.
       - name: Record the verdict
         env:
           GH_TOKEN: ${{ github.token }}
@@ -194,7 +193,17 @@ jobs:
           cat verdict.json
 
       - uses: actions/upload-artifact@v4
+        id: upload
+        continue-on-error: true
         with:
           name: main-failure-verdict
           path: verdict.json
           retention-days: 7
+
+      - uses: actions/upload-artifact@v4
+        if: steps.upload.outcome == 'failure'
+        with:
+          name: main-failure-verdict
+          path: verdict.json
+          retention-days: 7
+          overwrite: true

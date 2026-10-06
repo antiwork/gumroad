@@ -1,11 +1,8 @@
 name: Revert red main deploy
 
-# A main commit that fails its Tests run for good after it deployed gets a
-# revert PR, opened as gumclaw so it runs CI like any other PR. A person reviews
-# and merges it. Early deploys already wait while main is red.
-#
-# Triggered by "Rerun main spec failure", whose verdict artifact says whether a
-# retry started for that exact Tests run and attempt.
+# The revert PR is opened as gumclaw: one opened with the default token gets no
+# CI runs. The retry workflow's verdict artifact ties the decision to one Tests
+# run and attempt.
 
 on:
   workflow_run:
@@ -45,12 +42,20 @@ jobs:
           PIPELINE_SLUG: ${{ secrets.BUILDKITE_PIPELINE_SLUG }}
         run: |
           set -euo pipefail
-          # No verdict: the triggering Tests run was not a failed main push.
+          # No verdict and no verdict job: the Tests run was not a failed main
+          # push. A verdict job that ran without one leaves no commit to name,
+          # so this run fails where someone can see it.
           if [ "$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${VERDICT_RUN_ID}/artifacts" \
                 --jq '[.artifacts[] | select(.name == "main-failure-verdict")] | length')" = "0" ]; then
-            echo "No verdict on run ${VERDICT_RUN_ID}."
-            echo "revert=false" >> "$GITHUB_OUTPUT"
-            exit 0
+            verdict_job=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${VERDICT_RUN_ID}/jobs" \
+              --jq '[.jobs[] | select(.name == "verdict")] | first | .conclusion // "absent"')
+            if [ "$verdict_job" = "skipped" ] || [ "$verdict_job" = "absent" ]; then
+              echo "No verdict on run ${VERDICT_RUN_ID}."
+              echo "revert=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "::error::The verdict job of run ${VERDICT_RUN_ID} ended ${verdict_job} without a verdict; check that main failure by hand."
+            exit 1
           fi
           gh run download "$VERDICT_RUN_ID" --repo "$GITHUB_REPOSITORY" --name main-failure-verdict --dir verdict
           if [ "$(jq -r .retried verdict/verdict.json)" = "true" ]; then

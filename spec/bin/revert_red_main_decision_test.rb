@@ -116,6 +116,13 @@ workflow_check(
 open_actions = jobs.dig("open", "steps").filter_map { |step| step["uses"] }
 workflow_check("the open job uses only actions/checkout", open_actions.all? { |uses| uses.start_with?("actions/checkout@") }, open_actions.inspect)
 
+decide_run = jobs.dig("decide", "steps").find { |step| step["name"] == "Decide" }["run"].to_s
+workflow_check(
+  "a verdict job that ran without a verdict fails the run",
+  decide_run.include?('select(.name == "verdict")') && decide_run.include?("::error::"),
+  "Decide step"
+)
+
 tell = jobs["tell"]
 workflow_check(
   "the original PR hears about it even when the open job fails",
