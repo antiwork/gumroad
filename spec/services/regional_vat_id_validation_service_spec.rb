@@ -21,6 +21,18 @@ describe RegionalVatIdValidationService do
     expect(described_class.new("51824753556", country_code: Compliance::Countries::AUS.alpha2).process).to be(false)
   end
 
+  it "retries the vendor on the next call instead of caching the failure" do
+    allow(Rails).to receive(:cache).and_return(ActiveSupport::Cache::MemoryStore.new)
+    ok = { "valid" => true, "active" => true }
+    calls = [-> { raise Net::ReadTimeout }, -> { ok }]
+    allow(HTTParty).to receive(:post) { calls.shift.call }
+    service = described_class.new("51824753556", country_code: Compliance::Countries::AUS.alpha2)
+
+    expect(service.process).to be(false)
+    expect(service.process).to be(true)
+    expect(HTTParty).to have_received(:post).twice
+  end
+
   it "does not swallow programming errors" do
     allow_any_instance_of(AbnValidationService).to receive(:process).and_raise(NoMethodError)
 

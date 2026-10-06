@@ -40,7 +40,7 @@ class RegionalVatIdValidationService
     # Most branches above call a third-party tax-ID HTTP service. An unreachable vendor
     # must not raise into the checkout/surcharge quote that called us, so fail closed —
     # the result a vendor error response already produces — instead of 500ing the buyer.
-    Rails.logger.error("RegionalVatIdValidationService failed: #{e.class}")
+    Rails.logger.error("RegionalVatIdValidationService failed for country #{country_code}: #{e.class}: #{e.message}")
     false
   end
 end
