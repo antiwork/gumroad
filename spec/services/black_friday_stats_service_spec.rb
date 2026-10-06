@@ -4,12 +4,58 @@ require "spec_helper"
 
 describe BlackFridayStatsService do
   describe ".calculate_stats" do
-    it "returns placeholder values with zero counts" do
-      stats = described_class.calculate_stats
+    let(:code) { SearchProducts::BLACK_FRIDAY_CODE }
 
-      expect(stats[:active_deals_count]).to eq(0)
-      expect(stats[:revenue_cents]).to eq(0)
-      expect(stats[:average_discount_percentage]).to eq(0)
+    before do
+      allow_any_instance_of(OfferCode).to receive(:reindex_associated_products)
+    end
+
+    it "returns zeros when no Black Friday offer codes exist" do
+      create(:percentage_offer_code, code: "SUMMER", amount_percentage: 40)
+
+      expect(described_class.calculate_stats).to eq(active_deals_count: 0, revenue_cents: 0, average_discount_percentage: 0)
+    end
+
+    it "counts only alive Black Friday offer codes that are currently valid" do
+      create(:percentage_offer_code, code:, amount_percentage: 20)
+      create(:offer_code, code:, amount_cents: 100)
+      create(:percentage_offer_code, code:, amount_percentage: 50).mark_deleted!
+      create(:percentage_offer_code, code:, amount_percentage: 50, valid_at: 1.day.from_now)
+      create(:percentage_offer_code, code:, amount_percentage: 50, valid_at: 3.days.ago, expires_at: 1.day.ago)
+      create(:percentage_offer_code, code: "SUMMER", amount_percentage: 50)
+
+      expect(described_class.calculate_stats[:active_deals_count]).to eq(2)
+    end
+
+    it "averages the percentage of active percentage-off codes, ignoring fixed-amount codes" do
+      create(:percentage_offer_code, code:, amount_percentage: 20)
+      create(:percentage_offer_code, code:, amount_percentage: 25)
+      create(:offer_code, code:, amount_cents: 100)
+
+      expect(described_class.calculate_stats[:average_discount_percentage]).to eq(23)
+    end
+
+    it "uses the top tier percentage for tiered discounts instead of the placeholder amount_percentage" do
+      create(:percentage_offer_code, code:, amount_percentage: 20)
+      create(:tiered_offer_code, code:, ownership_duration_tiers: [{ "months" => 0, "amount_percentage" => 10 }, { "months" => 12, "amount_percentage" => 50 }])
+
+      expect(described_class.calculate_stats[:average_discount_percentage]).to eq(35)
+    end
+
+    it "sums revenue from successful purchases made with Black Friday codes, including expired ones" do
+      active_code = create(:percentage_offer_code, code:, amount_percentage: 25)
+      expired_code = create(:percentage_offer_code, code:, amount_percentage: 25, valid_at: 3.days.ago, expires_at: 1.day.ago)
+      deleted_code = create(:percentage_offer_code, code:, amount_percentage: 25)
+      other_code = create(:percentage_offer_code, code: "SUMMER", amount_percentage: 25)
+
+      create_list(:purchase, 2, link: active_code.products.first, offer_code: active_code, price_cents: 750)
+      create(:purchase, link: expired_code.products.first, offer_code: expired_code, price_cents: 300)
+      create(:failed_purchase, link: active_code.products.first, offer_code: active_code, price_cents: 10_000)
+      create(:purchase, link: deleted_code.products.first, offer_code: deleted_code, price_cents: 10_000)
+      create(:purchase, link: other_code.products.first, offer_code: other_code, price_cents: 10_000)
+      deleted_code.mark_deleted!
+
+      expect(described_class.calculate_stats[:revenue_cents]).to eq(1_800)
     end
   end
 
