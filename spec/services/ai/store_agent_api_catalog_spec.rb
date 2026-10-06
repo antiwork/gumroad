@@ -455,9 +455,8 @@ describe Ai::StoreAgentApiCatalog do
       expect(described_class.find("update_product_sections").requires_read).to eq("get_product")
     end
 
-    it "sends the sections write as a JSON body so an empty list survives" do
-      expect(described_class.find("update_product_sections").json_body?).to eq(true)
-      expect(described_class.find("update_product").json_body?).to eq(false)
+    it "is the only endpoint that opts into a JSON body" do
+      expect(described_class::ENDPOINTS.filter_map { _1.id if _1.json_body? }).to eq(["update_product_sections"])
     end
 
     it "keeps known_section_ids server-only: refused from the model, accepted on a replayed proposal, hidden from the manifest" do

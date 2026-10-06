@@ -660,7 +660,7 @@ class Api::V2::LinksController < Api::V2::BaseController
       end
       # known_section_ids is what the seller reviewed; a newer section was never shown as deleted.
       if known_ids && (current_ids - section_ids - known_ids).any?
-        error = "A section was added after this change was prepared. Read the product again and retry."
+        error = "A section was added after this change was prepared. Ask the agent to prepare this change again."
         stale_known_sections = true
         raise ActiveRecord::Rollback
       end
