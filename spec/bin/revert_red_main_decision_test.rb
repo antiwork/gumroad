@@ -19,8 +19,9 @@ RED_RUN = { "id" => 37404168421, "head_sha" => "f69c0d04c49600000000000000000000
             "conclusion" => "failure", "event" => "push", "head_branch" => "main", "run_attempt" => 2,
             "display_title" => "Fix the café — checkout" }.freeze
 
-def payload(run: RED_RUN, spec_failed: true, attempt: 2, production: "ahead", deploying: true)
-  { "run" => run, "verdict" => { "attempt" => attempt, "spec_failed" => spec_failed }, "production" => production, "deploying" => deploying }
+def payload(run: RED_RUN, spec_failed: true, attempt: 2, production: "ahead", deploying: true, retry_failed: false, error: nil)
+  { "run" => run, "verdict" => { "attempt" => attempt, "spec_failed" => spec_failed, "retry_failed" => retry_failed, "error" => error },
+    "production" => production, "deploying" => deploying }
 end
 
 # As the workflow calls it: a file argument, under a C locale.
@@ -36,7 +37,7 @@ end
 def check(name, input, expect:, reason: nil)
   $count += 1
   code, output = run(input.is_a?(String) ? input : JSON.dump(input))
-  actual = { 0 => :revert, 1 => :skip, 2 => :error }.fetch(code, :"exit #{code}")
+  actual = { 0 => :revert, 1 => :skip, 2 => :error, 3 => :notify }.fetch(code, :"exit #{code}")
   if actual == expect && (reason.nil? || output.include?("reason=#{reason}"))
     puts "  ok    #{name}"
   else
@@ -64,7 +65,12 @@ check("a pull request run", payload(run: RED_RUN.merge("event" => "pull_request_
 check("a push to another branch", payload(run: RED_RUN.merge("head_branch" => "feature")), expect: :skip, reason: "not_main_push")
 
 check("an infrastructure failure", payload(spec_failed: false), expect: :skip, reason: "no_spec_failure")
-check("no spec verdict", payload(spec_failed: nil), expect: :skip, reason: "no_spec_failure")
+
+# The commit shipped, but nothing confirms the failure is final: ask a person.
+check("the retry request failed", payload(retry_failed: true), expect: :notify, reason: "retry_failed")
+check("the verdict could not read the run", payload(spec_failed: nil, error: "could not read the log of job 1"), expect: :notify, reason: "verdict_incomplete")
+check("a verdict with no spec answer", payload(spec_failed: nil), expect: :notify, reason: "verdict_incomplete")
+check("an unconfirmed failure that never deployed", payload(retry_failed: true, production: "behind", deploying: false), expect: :skip, reason: "not_deployed")
 check("an unknown production state", payload(production: ""), expect: :error, reason: "unknown_production_state")
 check("no run", payload(run: nil), expect: :error)
 check("input that is not JSON", "not json", expect: :error)
@@ -112,10 +118,23 @@ workflow_check(
   tell["if"].inspect
 )
 
+workflow_check(
+  "the original PR also hears about an unconfirmed failure",
+  tell["if"].to_s.include?("needs.decide.outputs.notify == 'true'"),
+  tell["if"].inspect
+)
+
 # The verdict keys the revert to the exact Tests run and attempt.
 RETRY = YAML.load_file(File.expand_path("../../.github/workflows/rerun-main-spec-failure.yml", __dir__))
 verdict = RETRY.dig("jobs", "verdict")
 rerun_step = RETRY.dig("jobs", "rerun", "steps").find { |step| step["name"] == "Re-run the failed jobs" }
+record = verdict["steps"].find { |step| step["name"] == "Record the verdict" }
+# A verdict that errors out leaves no artifact, and the revert workflow skips.
+workflow_check(
+  "the verdict step records errors instead of failing",
+  !record["run"].to_s.include?("set -e") && record["run"].to_s.include?("error.txt") && record["env"].key?("RETRY_WANTED"),
+  "Record the verdict"
+)
 workflow_check(
   "the retry workflow records whether it started a retry",
   verdict && verdict["if"].to_s.include?("always()") &&

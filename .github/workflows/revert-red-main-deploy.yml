@@ -21,6 +21,8 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       revert: ${{ steps.decide.outputs.revert }}
+      notify: ${{ steps.decide.outputs.notify }}
+      reason: ${{ steps.decide.outputs.reason }}
       sha: ${{ steps.decide.outputs.sha }}
       run_url: ${{ steps.decide.outputs.run_url }}
       pr_number: ${{ steps.decide.outputs.pr_number }}
@@ -76,16 +78,18 @@ jobs:
           set -e
           echo "$line"
           echo "$line" >> "$GITHUB_STEP_SUMMARY"
+          reason=$(echo "$line" | sed -n 's/.* reason=\([^ ]*\).*/\1/p')
           case "$status" in
-            0) ;;
+            0) echo "revert=true" >> "$GITHUB_OUTPUT" ;;
             1) echo "revert=false" >> "$GITHUB_OUTPUT"; exit 0 ;;
+            3) echo "notify=true" >> "$GITHUB_OUTPUT" ;;
             *) exit 1 ;;
           esac
 
           gh api "repos/${GITHUB_REPOSITORY}/commits/${sha}/pulls" \
             --jq "[.[] | select(.merged_at != null and .merge_commit_sha == \"${sha}\")] | first // {}" > pr.json
           {
-            echo "revert=true"
+            echo "reason=${reason}"
             echo "sha=${sha}"
             echo "run_url=$(jq -r .html_url run.json)"
             echo "pr_number=$(jq -r '.number // empty' pr.json)"
@@ -185,7 +189,9 @@ jobs:
   # hears about the failure either way.
   tell:
     needs: [decide, open]
-    if: ${{ !cancelled() && needs.decide.outputs.revert == 'true' && needs.decide.outputs.pr_number != '' && needs.open.outputs.opened != 'existing' }}
+    if: >-
+      ${{ !cancelled() && needs.decide.outputs.pr_number != '' && needs.open.outputs.opened != 'existing' &&
+      (needs.decide.outputs.revert == 'true' || needs.decide.outputs.notify == 'true') }}
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
@@ -197,14 +203,17 @@ jobs:
           RUN_URL: ${{ needs.decide.outputs.run_url }}
           PR_NUMBER: ${{ needs.decide.outputs.pr_number }}
           PR_AUTHOR: ${{ needs.decide.outputs.pr_author }}
+          NOTIFY: ${{ needs.decide.outputs.notify }}
+          REASON: ${{ needs.decide.outputs.reason }}
           OPENED: ${{ needs.open.outputs.opened }}
           REVERT_URL: ${{ needs.open.outputs.url }}
         run: |
           set -euo pipefail
-          if [ "$OPENED" = "true" ]; then
-            next="A revert PR is open: ${REVERT_URL}"
+          if [ "$NOTIFY" = "true" ]; then
+            body="@${PR_AUTHOR} the full Tests suite on \`main\` failed on ${SHA} after it deployed, and the automation could not confirm the failure (${REASON}): ${RUN_URL}. Please re-run the failed jobs, or revert."
+          elif [ "$OPENED" = "true" ]; then
+            body="@${PR_AUTHOR} the full Tests suite on \`main\` failed for good on ${SHA} after it deployed: ${RUN_URL}. A revert PR is open: ${REVERT_URL}"
           else
-            next="No revert PR could open (no gumclaw token, or the revert conflicts). Please revert or fix forward."
+            body="@${PR_AUTHOR} the full Tests suite on \`main\` failed for good on ${SHA} after it deployed: ${RUN_URL}. No revert PR could open (no gumclaw token, or the revert conflicts). Please revert or fix forward."
           fi
-          gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body \
-            "@${PR_AUTHOR} the full Tests suite on \`main\` failed for good on ${SHA} after it deployed: ${RUN_URL}. ${next}"
+          gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body "$body"

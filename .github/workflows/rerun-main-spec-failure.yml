@@ -16,6 +16,7 @@ jobs:
   rerun:
     runs-on: ubuntu-latest
     outputs:
+      wanted: ${{ steps.classify.outputs.rerun }}
       retried: ${{ steps.rerun.outputs.retried }}
     # run_attempt < 2 is the cap: attempt 1 may be re-run, attempt 2 is final.
     if: >-
@@ -130,7 +131,8 @@ jobs:
 
       # spec_failed is what a revert needs: an infrastructure failure says
       # nothing about the code, and rerun-hung-checkout.yml never retries an
-      # attempt where specs failed.
+      # attempt where specs failed. This step always writes a verdict: an
+      # error goes into it, so the revert workflow can ask a person instead.
       - name: Record the verdict
         env:
           GH_TOKEN: ${{ github.token }}
@@ -138,38 +140,55 @@ jobs:
           ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
           SHA: ${{ github.event.workflow_run.head_sha }}
           RETRIED: ${{ needs.rerun.outputs.retried == 'true' }}
+          RETRY_WANTED: ${{ needs.rerun.outputs.wanted == 'true' }}
         run: |
-          set -euo pipefail
-          # A failed fetch must not read as "no spec failed".
-          for try in 1 2 3; do
-            if gh api --paginate \
+          set -uo pipefail
+          assess() {
+            local try id summary
+            for try in 1 2 3; do
+              gh api --paginate \
                 "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/attempts/${ATTEMPT}/jobs?per_page=100" \
-                --jq '.jobs[]' > jobs.ndjson; then
-              break
-            fi
-            [ "$try" = 3 ] && exit 1
-            sleep 15
-          done
-          jq -s '{jobs: .}' jobs.ndjson > jobs.json
+                --jq '.jobs[]' > jobs.ndjson && break
+              [ "$try" = 3 ] && { echo "could not list the attempt's jobs" > error.txt; return 1; }
+              sleep 15
+            done
+            jq -s '{jobs: .}' jobs.ndjson > jobs.json || return 1
 
-          # The summary line of each shard that failed in its test step. A
-          # timed-out shard has none, so it does not count as a spec failure.
-          echo '{}' > summaries.json
-          for id in $(ruby bin/classify-main-spec-failure --test-step-failures jobs.json); do
-            # Not `gh api`: it refuses logs with escape codes, and its override flag may be too new for the runner.
-            curl -fsSL -H "Authorization: Bearer ${GH_TOKEN}" \
-              "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/jobs/${id}/logs" -o shard.raw || exit 1
-            summary=$(sed 's/\x1b\[[0-9;]*m//g' shard.raw | tr -d '\r' \
-              | grep -aoE '[0-9]+ examples?, [0-9]+ failures?.*$|[0-9]+ runs, [0-9]+ assertions, [0-9]+ failures, [0-9]+ errors, [0-9]+ skips' \
-              | tail -1) || summary=""
-            jq --arg id "$id" --arg summary "$summary" '.[$id] = $summary' summaries.json > summaries.tmp
-            mv summaries.tmp summaries.json
-          done
-          jq --slurpfile summaries summaries.json '. + {summaries: $summaries[0]}' jobs.json > verdict-input.json
-          spec_failed=$(ruby bin/classify-main-spec-failure --spec-failed verdict-input.json)
+            # The summary line of each shard that failed in its test step. A
+            # timed-out shard has none, so it does not count as a spec failure.
+            echo '{}' > summaries.json
+            for id in $(ruby bin/classify-main-spec-failure --test-step-failures jobs.json); do
+              # Not `gh api`: it refuses logs with escape codes, and its override flag may be too new for the runner.
+              curl -fsSL -H "Authorization: Bearer ${GH_TOKEN}" \
+                "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/jobs/${id}/logs" -o shard.raw \
+                || { echo "could not read the log of job ${id}" > error.txt; return 1; }
+              summary=$(sed 's/\x1b\[[0-9;]*m//g' shard.raw | tr -d '\r' \
+                | grep -aoE '[0-9]+ examples?, [0-9]+ failures?.*$|[0-9]+ runs, [0-9]+ assertions, [0-9]+ failures, [0-9]+ errors, [0-9]+ skips' \
+                | tail -1) || summary=""
+              jq --arg id "$id" --arg summary "$summary" '.[$id] = $summary' summaries.json > summaries.tmp || return 1
+              mv summaries.tmp summaries.json
+            done
+            jq --slurpfile summaries summaries.json '. + {summaries: $summaries[0]}' jobs.json > verdict-input.json || return 1
+            ruby bin/classify-main-spec-failure --spec-failed verdict-input.json > spec_failed.txt || return 1
+          }
+
+          : > error.txt
+          spec_failed=null
+          if assess; then
+            spec_failed=$(cat spec_failed.txt)
+          elif [ ! -s error.txt ]; then
+            echo "could not classify the attempt" > error.txt
+          fi
+          # Wanted but not started: the retry request itself failed.
+          retry_failed=false
+          if [ "$RETRY_WANTED" = "true" ] && [ "$RETRIED" != "true" ]; then
+            retry_failed=true
+          fi
           jq -n --argjson run_id "$RUN_ID" --argjson attempt "$ATTEMPT" --arg sha "$SHA" \
-            --argjson retried "$RETRIED" --argjson spec_failed "$spec_failed" \
-            '{run_id: $run_id, attempt: $attempt, sha: $sha, retried: $retried, spec_failed: $spec_failed}' > verdict.json
+            --argjson retried "$RETRIED" --argjson retry_failed "$retry_failed" \
+            --argjson spec_failed "$spec_failed" --arg error "$(cat error.txt)" \
+            '{run_id: $run_id, attempt: $attempt, sha: $sha, retried: $retried, retry_failed: $retry_failed,
+              spec_failed: $spec_failed, error: (if $error == "" then null else $error end)}' > verdict.json
           cat verdict.json
 
       - uses: actions/upload-artifact@v4

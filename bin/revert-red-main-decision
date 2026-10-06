@@ -6,21 +6,25 @@
 #
 #   { "run": { ... GET /repos/{repo}/actions/runs/{id}, read after the retry
 #              decision ... },
-#     "verdict": { "attempt": n, "spec_failed": bool, ... the retry workflow's
-#                  verdict for that attempt ... },
+#     "verdict": { "attempt": n, "spec_failed": bool or null, "retry_failed": bool,
+#                  "error": string or null, ... the retry workflow's verdict
+#                  for that attempt ... },
 #     "production": "<compare status of sha...production-release>",
 #     "deploying": <true when a running build of the commit opened its gate> }
 #
 # A revert is for a commit that failed its suite for good and already shipped,
 # or is shipping. A commit that never deployed waits on red main as before.
+# When a shipped commit's failure cannot be confirmed (the retry request
+# failed, or the verdict could not read the run), a person is asked instead.
 #
 # Prints one `revert-red-main decision=… reason=…` line. Exit codes: 0 revert,
-# 1 no revert, 2 could not run.
+# 1 no revert, 2 could not run, 3 ask a person.
 
 require "json"
 
 EXIT_SKIP = 1
 EXIT_OPERATIONAL = 2
+EXIT_NOTIFY = 3
 
 SHIPPED = %w[ahead identical].freeze
 NOT_SHIPPED = %w[behind diverged].freeze
@@ -37,15 +41,18 @@ def verdict(payload)
   # The verdict describes one attempt; a newer one brings its own verdict.
   verdict = payload["verdict"].is_a?(Hash) ? payload["verdict"] : {}
   return [EXIT_SKIP, "attempt_moved"] unless verdict["attempt"].to_i == run["run_attempt"].to_i
-  # Infrastructure failures say nothing about the code.
-  return [EXIT_SKIP, "no_spec_failure"] unless verdict["spec_failed"] == true
 
   production = payload["production"].to_s
   return [EXIT_OPERATIONAL, "unknown_production_state"] unless (SHIPPED + NOT_SHIPPED).include?(production)
-  return [0, "shipped"] if SHIPPED.include?(production)
-  return [0, "shipping"] if payload["deploying"] == true
+  shipped = SHIPPED.include?(production) ? "shipped" : ("shipping" if payload["deploying"] == true)
+  return [EXIT_SKIP, "not_deployed"] unless shipped
 
-  [EXIT_SKIP, "not_deployed"]
+  return [EXIT_NOTIFY, "retry_failed"] if verdict["retry_failed"] == true
+  return [EXIT_NOTIFY, "verdict_incomplete"] if verdict["error"] || ![true, false].include?(verdict["spec_failed"])
+  # Infrastructure failures say nothing about the code.
+  return [EXIT_SKIP, "no_spec_failure"] unless verdict["spec_failed"] == true
+
+  [0, shipped]
 end
 
 raw = ARGV.first
@@ -59,7 +66,7 @@ rescue JSON::ParserError, Errno::ENOENT, EncodingError, StandardError => e
   exit EXIT_OPERATIONAL
 end
 
-decision = { 0 => "revert", EXIT_SKIP => "skip" }.fetch(code, "error")
+decision = { 0 => "revert", EXIT_SKIP => "skip", EXIT_NOTIFY => "notify" }.fetch(code, "error")
 run = payload["run"].is_a?(Hash) ? payload["run"] : {}
 puts "revert-red-main decision=#{decision} reason=#{reason} sha=#{run['head_sha'].to_s[0, 12]} run=#{run['id']} attempt=#{run['run_attempt']}"
 exit code
