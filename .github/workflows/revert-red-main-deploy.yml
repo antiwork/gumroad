@@ -1,0 +1,247 @@
+name: Revert red main deploy
+
+# The revert PR is opened as gumclaw: one opened with the default token gets no
+# CI runs. The retry workflow's verdict artifact ties the decision to one Tests
+# run and attempt.
+
+on:
+  workflow_run:
+    workflows: ["Rerun main spec failure"]
+    types: [completed]
+
+permissions:
+  actions: read # the verdict artifact and the Tests run
+  contents: read # compare with production-release
+
+jobs:
+  decide:
+    runs-on: ubuntu-latest
+    outputs:
+      revert: ${{ steps.decide.outputs.revert }}
+      notify: ${{ steps.decide.outputs.notify }}
+      reason: ${{ steps.decide.outputs.reason }}
+      sha: ${{ steps.decide.outputs.sha }}
+      run_url: ${{ steps.decide.outputs.run_url }}
+      pr_number: ${{ steps.decide.outputs.pr_number }}
+      pr_author: ${{ steps.decide.outputs.pr_author }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            bin/revert-red-main-decision
+          sparse-checkout-cone-mode: false
+
+      - name: Decide
+        id: decide
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERDICT_RUN_ID: ${{ github.event.workflow_run.id }}
+          VERDICT_RUN_TITLE: ${{ github.event.workflow_run.display_title }}
+          BUILDKITE_API_TOKEN: ${{ secrets.BUILDKITE_API_TOKEN }}
+          ORG_SLUG: gumroad-inc
+          PIPELINE_SLUG: ${{ secrets.BUILDKITE_PIPELINE_SLUG }}
+        run: |
+          set -euo pipefail
+          # No verdict and no verdict job: the Tests run was not a failed main
+          # push. A verdict job that ran without one gets a verdict marked
+          # missing, built from this run's title, so the decision can still ask
+          # a person; the fresh run read below still catches a started retry.
+          mkdir -p verdict
+          if [ "$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${VERDICT_RUN_ID}/artifacts" \
+                --jq '[.artifacts[] | select(.name == "main-failure-verdict")] | length')" = "0" ]; then
+            verdict_job=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${VERDICT_RUN_ID}/jobs" \
+              --jq '[.jobs[] | select(.name == "verdict")] | first | .conclusion // "absent"')
+            if [ "$verdict_job" = "skipped" ] || [ "$verdict_job" = "absent" ]; then
+              echo "No verdict on run ${VERDICT_RUN_ID}."
+              echo "revert=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            if [[ ! "$VERDICT_RUN_TITLE" =~ for\ run\ ([0-9]+)\ attempt\ ([0-9]+)$ ]]; then
+              echo "::error::The verdict job of run ${VERDICT_RUN_ID} ended ${verdict_job} without a verdict, and its title names no Tests run."
+              exit 1
+            fi
+            tests_run="${BASH_REMATCH[1]}"
+            tests_attempt="${BASH_REMATCH[2]}"
+            gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${tests_run}" \
+              | jq --argjson attempt "$tests_attempt" --arg error "the verdict job ended ${verdict_job} without a verdict" \
+                '{run_id: .id, attempt: $attempt, sha: .head_sha, retried: false, retry_failed: false, spec_failed: null, error: $error}' \
+              > verdict/verdict.json
+          else
+            gh run download "$VERDICT_RUN_ID" --repo "$GITHUB_REPOSITORY" --name main-failure-verdict --dir verdict
+          fi
+          if [ "$(jq -r .retried verdict/verdict.json)" = "true" ]; then
+            echo "A retry started; its own completion decides."
+            echo "revert=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          run_id=$(jq -r .run_id verdict/verdict.json)
+          sha=$(jq -r .sha verdict/verdict.json)
+
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" > run.json
+          production=$(gh api "repos/${GITHUB_REPOSITORY}/compare/${sha}...production-release" --jq .status)
+          # Deploying: a build still running past its opened gate. A finished
+          # build counts only through production-release. Asked only when
+          # production does not already contain the commit; null when Buildkite
+          # cannot answer.
+          deploying=false
+          case "$production" in
+            ahead|identical) ;;
+            *)
+              deploying=$(curl -fsS -H "Authorization: Bearer ${BUILDKITE_API_TOKEN}" \
+                  "https://api.buildkite.com/v2/organizations/${ORG_SLUG}/pipelines/${PIPELINE_SLUG}/builds?commit=${sha}" \
+                | jq --arg sha "$sha" '[.[] | select(.commit == $sha and .state == "running") | .jobs[]? | select(.type == "manual" and .step_key == "require-approval" and .state == "unblocked")] | length > 0') \
+                || deploying=null
+              ;;
+          esac
+
+          jq -n --slurpfile run run.json --slurpfile verdict verdict/verdict.json \
+            --arg production "$production" --argjson deploying "$deploying" \
+            '{run: $run[0], verdict: $verdict[0], production: $production, deploying: $deploying}' > decision.json
+          set +e
+          line=$(ruby bin/revert-red-main-decision decision.json)
+          status=$?
+          set -e
+          echo "$line"
+          echo "$line" >> "$GITHUB_STEP_SUMMARY"
+          reason=$(echo "$line" | sed -n 's/.* reason=\([^ ]*\).*/\1/p')
+          case "$status" in
+            0) echo "revert=true" >> "$GITHUB_OUTPUT" ;;
+            1) echo "revert=false" >> "$GITHUB_OUTPUT"; exit 0 ;;
+            3) echo "notify=true" >> "$GITHUB_OUTPUT" ;;
+            *) exit 1 ;;
+          esac
+
+          gh api "repos/${GITHUB_REPOSITORY}/commits/${sha}/pulls" \
+            --jq "[.[] | select(.merged_at != null and .merge_commit_sha == \"${sha}\")] | first // {}" > pr.json
+          {
+            echo "reason=${reason}"
+            echo "sha=${sha}"
+            echo "run_url=$(jq -r .html_url run.json)"
+            echo "pr_number=$(jq -r '.number // empty' pr.json)"
+            echo "pr_author=$(jq -r '.user.login // empty' pr.json)"
+          } >> "$GITHUB_OUTPUT"
+
+  # Holds gumclaw's token, so it runs no code from the repository: only
+  # actions/checkout, git, and gh.
+  open:
+    needs: decide
+    if: needs.decide.outputs.revert == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      opened: ${{ steps.revert.outputs.opened }}
+      url: ${{ steps.revert.outputs.url }}
+    steps:
+      - name: Check the token
+        id: token
+        env:
+          GH_TOKEN: ${{ secrets.GUMCLAW_GITHUB_PAT }}
+        run: |
+          # A PR opened with the default token gets no CI runs, so without
+          # gumclaw's token only the original PR hears about it.
+          if [ -z "$GH_TOKEN" ]; then
+            echo "GUMCLAW_GITHUB_PAT is not set."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.token.outputs.present == 'true'
+        with:
+          ref: main
+          token: ${{ secrets.GUMCLAW_GITHUB_PAT }}
+
+      - name: Open the revert PR
+        id: revert
+        if: steps.token.outputs.present == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GUMCLAW_GITHUB_PAT }}
+          SHA: ${{ needs.decide.outputs.sha }}
+          RUN_URL: ${{ needs.decide.outputs.run_url }}
+          PR_NUMBER: ${{ needs.decide.outputs.pr_number }}
+          PR_AUTHOR: ${{ needs.decide.outputs.pr_author }}
+        run: |
+          set -euo pipefail
+          branch="revert-red-main-${SHA:0:12}"
+          # Same-repo PRs into main only: a fork can pick the same branch name.
+          existing=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$branch" --base main --state all \
+            --json url,isCrossRepository --jq '[.[] | select(.isCrossRepository | not)] | .[0].url // empty')
+          if [ -n "$existing" ]; then
+            echo "A revert PR already exists: $existing"
+            echo "opened=existing" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # The failed commit and its parent are all a revert needs, however old.
+          git fetch --no-tags --depth=2 origin "$SHA"
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null; then
+            # A push from an earlier attempt whose PR creation failed.
+            git fetch --no-tags origin "$branch"
+            git switch -c "$branch" FETCH_HEAD
+          else
+            login=$(gh api user --jq .login)
+            id=$(gh api user --jq .id)
+            git config user.name "$login"
+            git config user.email "${id}+${login}@users.noreply.github.com"
+            git switch -c "$branch"
+            if ! git revert --no-edit "$SHA"; then
+              git revert --abort || true
+              echo "The revert of $SHA does not apply cleanly."
+              echo "opened=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            git push origin "$branch"
+          fi
+
+          {
+            echo "The full Tests suite on \`main\` failed for good on ${SHA}, after it deployed: ${RUN_URL}"
+            echo
+            if [ -n "$PR_NUMBER" ]; then
+              echo "This reverts #${PR_NUMBER}. @${PR_AUTHOR}, please check the failure before you merge or close this PR."
+              echo
+            fi
+            echo "Early deploys wait while \`main\` is red, so the next commits deploy only after their own suite passes."
+          } > body.md
+          url=$(gh pr create --repo "$GITHUB_REPOSITORY" --base main --head "$branch" \
+            --title "$(git log -1 --format=%s)" --body-file body.md)
+          echo "Opened $url"
+          {
+            echo "opened=true"
+            echo "url=$url"
+          } >> "$GITHUB_OUTPUT"
+
+  # Also after a failed open job (a stale token, a rejected push): the author
+  # hears about the failure either way.
+  tell:
+    needs: [decide, open]
+    if: >-
+      ${{ !cancelled() && needs.decide.outputs.pr_number != '' && needs.open.outputs.opened != 'existing' &&
+      (needs.decide.outputs.revert == 'true' || needs.decide.outputs.notify == 'true') }}
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Tell the original PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ needs.decide.outputs.sha }}
+          RUN_URL: ${{ needs.decide.outputs.run_url }}
+          PR_NUMBER: ${{ needs.decide.outputs.pr_number }}
+          PR_AUTHOR: ${{ needs.decide.outputs.pr_author }}
+          NOTIFY: ${{ needs.decide.outputs.notify }}
+          REASON: ${{ needs.decide.outputs.reason }}
+          OPENED: ${{ needs.open.outputs.opened }}
+          REVERT_URL: ${{ needs.open.outputs.url }}
+        run: |
+          set -euo pipefail
+          if [ "$NOTIFY" = "true" ] && [ "$REASON" = "deploy_state_unknown" ]; then
+            body="@${PR_AUTHOR} the full Tests suite on \`main\` failed on ${SHA}: ${RUN_URL}. Production does not contain it yet, and Buildkite could not say whether its deploy is running. Please check the deploy before you choose to revert."
+          elif [ "$NOTIFY" = "true" ]; then
+            body="@${PR_AUTHOR} the full Tests suite on \`main\` failed on ${SHA} after it deployed, and the automation could not confirm the failure (${REASON}): ${RUN_URL}. Please re-run the failed jobs, or revert."
+          elif [ "$OPENED" = "true" ]; then
+            body="@${PR_AUTHOR} the full Tests suite on \`main\` failed for good on ${SHA} after it deployed: ${RUN_URL}. A revert PR is open: ${REVERT_URL}"
+          else
+            body="@${PR_AUTHOR} the full Tests suite on \`main\` failed for good on ${SHA} after it deployed: ${RUN_URL}. No revert PR could open (no gumclaw token, or the revert conflicts). Please revert or fix forward."
+          fi
+          gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body "$body"

@@ -828,6 +828,9 @@ changed.each do |path|
   elsif path == "bin/branch-specs" || path == "spec/bin/branch_specs_test.rb"
     # Standalone ruby test (ruby spec/bin/branch_specs_test.rb), not rspec.
     next
+  elsif path == "bin/revert-red-main-decision" || path == "spec/bin/revert_red_main_decision_test.rb"
+    # Same: standalone ruby (ruby spec/bin/revert_red_main_decision_test.rb), not rspec.
+    next
   elsif path == "bin/classify-hung-checkout" || path == "spec/bin/classify_hung_checkout_test.rb"
     # Same: standalone ruby (ruby spec/bin/classify_hung_checkout_test.rb), not rspec.
     next

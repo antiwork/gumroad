@@ -1,4 +1,7 @@
 name: Rerun main spec failure
+# revert-red-main-deploy.yml reads the Tests run from this title when the
+# verdict artifact is missing.
+run-name: Rerun main spec failure for run ${{ github.event.workflow_run.id }} attempt ${{ github.event.workflow_run.run_attempt }}
 
 # Knapsack re-runs only a shard's failed examples, so a retry is safe only when
 # bin/classify-main-spec-failure proves every unpassed test runs again.
@@ -15,6 +18,9 @@ permissions:
 jobs:
   rerun:
     runs-on: ubuntu-latest
+    outputs:
+      wanted: ${{ steps.classify.outputs.rerun }}
+      retried: ${{ steps.rerun.outputs.retried }}
     # run_attempt < 2 is the cap: attempt 1 may be re-run, attempt 2 is final.
     if: >-
       github.event.workflow_run.conclusion == 'failure' &&
@@ -86,6 +92,7 @@ jobs:
       # tests.yml puts a main re-run in its own concurrency lane, so it cannot
       # replace a newer pending run.
       - name: Re-run the failed jobs
+        id: rerun
         if: steps.classify.outputs.rerun == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -105,3 +112,101 @@ jobs:
             exit 0
           fi
           gh run rerun "$RUN_ID" --failed -R "$GITHUB_REPOSITORY"
+          echo "retried=true" >> "$GITHUB_OUTPUT"
+
+  # revert-red-main-deploy.yml reads this to know the failure is final: no
+  # retry started for this exact run and attempt.
+  verdict:
+    needs: rerun
+    runs-on: ubuntu-latest
+    if: >-
+      always() &&
+      github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            bin/classify-main-spec-failure
+          sparse-checkout-cone-mode: false
+
+      # Never fails: an error goes into the verdict, so the revert workflow asks
+      # a person instead of skipping. rerun-hung-checkout.yml never retries an
+      # attempt where specs failed, so spec_failed also rules that retry out.
+      - name: Record the verdict
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          RETRIED: ${{ needs.rerun.outputs.retried == 'true' }}
+          RETRY_WANTED: ${{ needs.rerun.outputs.wanted == 'true' }}
+          RERUN_RESULT: ${{ needs.rerun.result }}
+        run: |
+          set -uo pipefail
+          assess() {
+            local try id summary
+            for try in 1 2 3; do
+              gh api --paginate \
+                "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/attempts/${ATTEMPT}/jobs?per_page=100" \
+                --jq '.jobs[]' > jobs.ndjson && break
+              [ "$try" = 3 ] && { echo "could not list the attempt's jobs" > error.txt; return 1; }
+              sleep 15
+            done
+            jq -s '{jobs: .}' jobs.ndjson > jobs.json || return 1
+
+            # The summary line of each shard that failed in its test step. A
+            # timed-out shard has none, so it does not count as a spec failure.
+            echo '{}' > summaries.json
+            for id in $(ruby bin/classify-main-spec-failure --test-step-failures jobs.json); do
+              # Not `gh api`: it refuses logs with escape codes, and its override flag may be too new for the runner.
+              curl -fsSL -H "Authorization: Bearer ${GH_TOKEN}" \
+                "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/jobs/${id}/logs" -o shard.raw \
+                || { echo "could not read the log of job ${id}" > error.txt; return 1; }
+              summary=$(sed 's/\x1b\[[0-9;]*m//g' shard.raw | tr -d '\r' \
+                | grep -aoE '[0-9]+ examples?, [0-9]+ failures?.*$|[0-9]+ runs, [0-9]+ assertions, [0-9]+ failures, [0-9]+ errors, [0-9]+ skips' \
+                | tail -1) || summary=""
+              jq --arg id "$id" --arg summary "$summary" '.[$id] = $summary' summaries.json > summaries.tmp || return 1
+              mv summaries.tmp summaries.json
+            done
+            jq --slurpfile summaries summaries.json '. + {summaries: $summaries[0]}' jobs.json > verdict-input.json || return 1
+            ruby bin/classify-main-spec-failure --spec-failed verdict-input.json > spec_failed.txt || return 1
+          }
+
+          : > error.txt
+          spec_failed=null
+          if assess; then
+            spec_failed=$(cat spec_failed.txt)
+          elif [ ! -s error.txt ]; then
+            echo "could not classify the attempt" > error.txt
+          fi
+          # Wanted, not started, and the job failed: the retry request itself
+          # failed. A deliberate skip (main moved) leaves the job green.
+          retry_failed=false
+          if [ "$RETRY_WANTED" = "true" ] && [ "$RETRIED" != "true" ] && [ "$RERUN_RESULT" = "failure" ]; then
+            retry_failed=true
+          fi
+          jq -n --argjson run_id "$RUN_ID" --argjson attempt "$ATTEMPT" --arg sha "$SHA" \
+            --argjson retried "$RETRIED" --argjson retry_failed "$retry_failed" \
+            --argjson spec_failed "$spec_failed" --arg error "$(cat error.txt)" \
+            '{run_id: $run_id, attempt: $attempt, sha: $sha, retried: $retried, retry_failed: $retry_failed,
+              spec_failed: $spec_failed, error: (if $error == "" then null else $error end)}' > verdict.json
+          cat verdict.json
+
+      - uses: actions/upload-artifact@v4
+        id: upload
+        continue-on-error: true
+        with:
+          name: main-failure-verdict
+          path: verdict.json
+          retention-days: 7
+
+      - uses: actions/upload-artifact@v4
+        if: steps.upload.outcome == 'failure'
+        with:
+          name: main-failure-verdict
+          path: verdict.json
+          retention-days: 7
+          overwrite: true

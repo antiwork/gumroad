@@ -16,6 +16,11 @@
 # error) has no example to retry, and its re-run would pass with 0 examples.
 #
 # `--rspec-shards` prints the job ids whose summary lines the caller must fetch.
+# `--test-step-failures` prints the shards that failed in their test step, whose
+# summary lines `--spec-failed` needs. `--spec-failed` prints true when one of
+# them reported failing tests, null when one printed no summary (a timeout, or
+# a load error that stopped the runner: it cannot tell which), and false
+# otherwise.
 #
 # Exit codes match bin/classify-hung-checkout: 0 rerun, 1 skip, 2 could not run.
 
@@ -57,6 +62,44 @@ end
 
 def spec_step(job)
   SPEC_STEPS.fetch(shard_kind(job))
+end
+
+# An error outside examples (a load error, a hook) counts here: the code caused
+# it, even though a retry could not re-run it.
+RSPEC_SUMMARY = /\A\d+ examples?, (\d+) failures?(?:, \d+ pending)?(?:, (\d+) errors? occurred outside of examples)?\z/
+MINITEST_SUMMARY = /\A\d+ runs, \d+ assertions, (\d+) failures, (\d+) errors, \d+ skips\z/
+
+def test_step_failures(jobs)
+  jobs.select do |job|
+    next false unless job["conclusion"] == "failure" && job_label(job).match?(SHARD_NAME)
+    step = first_failed_step(job)
+    step && step["name"] == spec_step(job)
+  end
+end
+
+def reported_failures?(summary)
+  match = summary.to_s.strip.match(RSPEC_SUMMARY) || summary.to_s.strip.match(MINITEST_SUMMARY)
+  !match.nil? && match.captures.any? { |count| count.to_i.positive? }
+end
+
+def summary_counts?(summary)
+  summary.to_s.strip.match?(RSPEC_SUMMARY) || summary.to_s.strip.match?(MINITEST_SUMMARY)
+end
+
+# A job that hit its own time limit while its test step ran: the job reads
+# `timed_out` and the step `cancelled`, with no summary to read.
+def test_step_timeouts(jobs)
+  jobs.select do |job|
+    next false unless job["conclusion"] == "timed_out" && job_label(job).match?(SHARD_NAME)
+    steps_of(job).any? { |step| step["name"] == spec_step(job) && %w[failure cancelled].include?(step["conclusion"]) }
+  end
+end
+
+def spec_failed(jobs, summaries)
+  failed = test_step_failures(jobs).map { |job| summaries[job["id"].to_s] }
+  return true if failed.any? { |summary| reported_failures?(summary) }
+  return nil if failed.any? { |summary| !summary_counts?(summary) } || test_step_timeouts(jobs).any?
+  false
 end
 
 def failed_rspec_shards(jobs)
@@ -115,6 +158,8 @@ end
 
 raw = ARGV.reject { |arg| arg.start_with?("--") }.first
 rspec_shards_only = ARGV.include?("--rspec-shards")
+spec_failed_only = ARGV.include?("--spec-failed")
+test_step_failures_only = ARGV.include?("--test-step-failures")
 
 begin
   payload = JSON.parse(raw ? File.read(raw) : $stdin.read)
@@ -126,6 +171,16 @@ end
 unless payload.is_a?(Hash)
   warn "Main spec-failure classifier could not run: expected a JSON object"
   exit EXIT_OPERATIONAL
+end
+
+if test_step_failures_only
+  test_step_failures(Array(payload["jobs"])).each { |job| puts job["id"] }
+  exit 0
+end
+
+if spec_failed_only
+  puts JSON.dump(spec_failed(Array(payload["jobs"]), payload["summaries"].is_a?(Hash) ? payload["summaries"] : {}))
+  exit 0
 end
 
 if rspec_shards_only

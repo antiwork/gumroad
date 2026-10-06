@@ -1,0 +1,76 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Decides whether a failed `main` Tests run gets a revert PR. Reads on stdin, or
+# from a file argument:
+#
+#   { "run": { ... GET /repos/{repo}/actions/runs/{id}, read after the retry
+#              decision ... },
+#     "verdict": { "attempt": n, "spec_failed": bool or null, "retry_failed": bool,
+#                  "error": string or null, ... the retry workflow's verdict
+#                  for that attempt ... },
+#     "production": "<compare status of sha...production-release>",
+#     "deploying": <true when a running build of the commit opened its gate,
+#                   null when Buildkite could not answer> }
+#
+# A revert is for a commit that failed its suite for good and already shipped,
+# or is shipping. A commit that never deployed waits on red main as before.
+# When a shipped commit's failure cannot be confirmed (the retry request
+# failed, or the verdict could not read the run), a person is asked instead.
+#
+# Prints one `revert-red-main decision=… reason=…` line. Exit codes: 0 revert,
+# 1 no revert, 2 could not run, 3 ask a person.
+
+require "json"
+
+EXIT_SKIP = 1
+EXIT_OPERATIONAL = 2
+EXIT_NOTIFY = 3
+
+SHIPPED = %w[ahead identical].freeze
+NOT_SHIPPED = %w[behind diverged].freeze
+
+def verdict(payload)
+  run = payload["run"]
+  return [EXIT_OPERATIONAL, "no_run"] unless run.is_a?(Hash)
+
+  # A retry started after the first failure; its own completion decides.
+  return [EXIT_SKIP, "retry_in_progress"] unless run["status"] == "completed"
+  return [EXIT_SKIP, "not_failed"] unless run["conclusion"] == "failure"
+  return [EXIT_SKIP, "not_main_push"] unless run["event"] == "push" && run["head_branch"] == "main"
+
+  # The verdict describes one attempt; a newer one brings its own verdict.
+  verdict = payload["verdict"].is_a?(Hash) ? payload["verdict"] : {}
+  return [EXIT_SKIP, "attempt_moved"] unless verdict["attempt"].to_i == run["run_attempt"].to_i
+
+  production = payload["production"].to_s
+  return [EXIT_OPERATIONAL, "unknown_production_state"] unless (SHIPPED + NOT_SHIPPED).include?(production)
+  shipped = SHIPPED.include?(production) ? "shipped" : ("shipping" if payload["deploying"] == true)
+  unless shipped
+    return [EXIT_NOTIFY, "deploy_state_unknown"] if payload["deploying"].nil? && verdict["spec_failed"] != false
+    return [EXIT_SKIP, "not_deployed"]
+  end
+
+  return [EXIT_NOTIFY, "retry_failed"] if verdict["retry_failed"] == true
+  return [EXIT_NOTIFY, "verdict_incomplete"] if verdict["error"] || ![true, false].include?(verdict["spec_failed"])
+  # Infrastructure failures say nothing about the code.
+  return [EXIT_SKIP, "no_spec_failure"] unless verdict["spec_failed"] == true
+
+  [0, shipped]
+end
+
+raw = ARGV.first
+
+begin
+  payload = JSON.parse(raw ? File.read(raw, encoding: "UTF-8") : $stdin.read.force_encoding("UTF-8"))
+  raise TypeError, "expected a JSON object" unless payload.is_a?(Hash)
+  code, reason = verdict(payload)
+rescue JSON::ParserError, Errno::ENOENT, EncodingError, StandardError => e
+  warn "revert-red-main decision could not run: #{e.class}: #{e.message}"
+  exit EXIT_OPERATIONAL
+end
+
+decision = { 0 => "revert", EXIT_SKIP => "skip", EXIT_NOTIFY => "notify" }.fetch(code, "error")
+run = payload["run"].is_a?(Hash) ? payload["run"] : {}
+puts "revert-red-main decision=#{decision} reason=#{reason} sha=#{run['head_sha'].to_s[0, 12]} run=#{run['id']} attempt=#{run['run_attempt']}"
+exit code

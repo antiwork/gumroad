@@ -297,6 +297,50 @@ else
   $failures << "--rspec-shards: got #{listed.strip.inspect}"
 end
 
+# --spec-failed feeds the revert verdict: only failing tests in a shard's test
+# step say something about the code; a timeout fails the step without a summary.
+def spec_failed_with(jobs, summary)
+  payload = attempt(jobs)
+  payload["summaries"] = jobs.to_h { |j| [j["id"].to_s, summary] }
+  payload
+end
+
+{
+  "an rspec shard with failing examples" => [[job("Test Slow 12", "failure", SPEC_FAILURE)], "45 examples, 1 failure", "true"],
+  "an rspec shard with an error outside examples" => [[job("Test Slow 12", "failure", SPEC_FAILURE)], "0 examples, 0 failures, 1 error occurred outside of examples", "true"],
+  "a minitest shard with failures" => [[job("Test Minitest 1", "failure", MINITEST_FAILURE)], "1342 runs, 4447 assertions, 1 failures, 0 errors, 0 skips", "true"],
+  "a minitest shard with errors" => [[job("Test Minitest 1", "failure", MINITEST_FAILURE)], "1342 runs, 4447 assertions, 0 failures, 2 errors, 0 skips", "true"],
+  # A timeout and a load error that stopped the runner both leave no summary.
+  "a test step with no summary" => [[job("Test Slow 12", "failure", SPEC_FAILURE)], "", "null"],
+  "a minitest step with no summary" => [[job("Test Minitest 1", "failure", MINITEST_FAILURE)], "", "null"],
+  "a shard that hit its job time limit in its test step" => [[job("Test Minitest 1", "timed_out", [["Check out repository", "success"], ["Run Minitest", "cancelled"]])], "", "null"],
+  "a time-limited shard next to real failures" => [[job("Test Slow 12", "failure", SPEC_FAILURE), job("Test Minitest 1", "timed_out", [["Run Minitest", "cancelled"]])], "45 examples, 1 failure", "true"],
+  "a shard that timed out before its test step" => [[job("Test Slow 12", "timed_out", [["Check out repository", "cancelled"], ["Run tests", "skipped"]])], "", "false"],
+  "a summary with no failures" => [[job("Test Slow 12", "failure", SPEC_FAILURE)], "45 examples, 0 failures", "false"],
+  "a hung checkout" => [[job("Test Slow 3", "failure", HUNG_CHECKOUT)], "45 examples, 1 failure", "false"],
+  "a failed build job" => [[job("Build images", "failure", [["Build test image", "failure"]])], "45 examples, 1 failure", "false"],
+  "only cancelled shards" => [[job("Test Fast 11", "cancelled", SPEC_CANCELLED)], "45 examples, 1 failure", "false"]
+}.each do |name, (jobs, summary, expected)|
+  $count += 1
+  _, printed = run(JSON.dump(spec_failed_with(jobs, summary)), "--spec-failed")
+  if printed.strip == expected
+    puts "  ok    --spec-failed: #{name}"
+  else
+    puts "  FAIL  --spec-failed: #{name}"
+    $failures << "--spec-failed #{name}: expected #{expected}, got #{printed.strip.inspect}"
+  end
+end
+
+$count += 1
+listed_jobs = [job("Test Slow 12", "failure", SPEC_FAILURE), job("Test Minitest 1", "failure", MINITEST_FAILURE), job("Test Slow 3", "failure", HUNG_CHECKOUT)]
+_, listed = run(JSON.dump(attempt(listed_jobs)), "--test-step-failures")
+if listed.split.map(&:to_i) == listed_jobs.first(2).map { |j| j["id"] }
+  puts "  ok    --test-step-failures lists the shards that failed in their test step"
+else
+  puts "  FAIL  --test-step-failures lists the shards that failed in their test step"
+  $failures << "--test-step-failures: got #{listed.strip.inspect}"
+end
+
 # --- The workflow's own gate ----------------------------------------------
 #
 # The attempt cap and the main-push scope live in the job `if`, which nothing

@@ -194,6 +194,9 @@ jobs:
       - name: Self-test reuse-full-suite
         run: bash script/test-reuse-full-suite
 
+      - name: Self-test the revert decision for red main deploys
+        run: ruby spec/bin/revert_red_main_decision_test.rb
+
   build:
     name: Build images${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository && ' (internal PR noop)' || '' }}
     runs-on: blacksmith-8vcpu-ubuntu-2204
