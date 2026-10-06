@@ -10036,10 +10036,11 @@ describe StripeMerchantAccountManager, :vcr do
               stripe_account["business_type"] = "company"
               stripe_account
             end
+            full_individual = described_class.send(:account_hash, user, nil, user_compliance_info_2, passphrase: "1234")[:individual]
 
             expect(Stripe::Account).to receive(:update).with(
               user.stripe_account.charge_processor_merchant_id,
-              hash_including(business_type: "individual", company: { name: user_compliance_info_2.first_and_last_name }, individual: hash_including(:email))
+              hash_including(business_type: "individual", company: { name: user_compliance_info_2.first_and_last_name }, individual: full_individual.except(:ssn_last_4))
             )
             subject.update_account(user, passphrase: "1234")
           end
@@ -15590,11 +15591,12 @@ describe StripeMerchantAccountManager, :vcr do
       # No Stripe account is created; every call the update makes is stubbed below.
       let(:merchant_account) { create(:merchant_account, user:) }
 
-      def stub_stripe_account(previous_info)
+      def stub_stripe_account(previous_info, **attributes)
         stripe_account = Stripe::Account.construct_from(
           id: merchant_account.charge_processor_merchant_id,
           object: "account",
           metadata: { user_compliance_info_id: previous_info.external_id },
+          **attributes,
           capabilities: {},
           requirements: { currently_due: [], eventually_due: [], past_due: [] }
         )
@@ -15647,6 +15649,70 @@ describe StripeMerchantAccountManager, :vcr do
         ).ordered
 
         described_class.update_account(user, passphrase:)
+      end
+
+      context "when Stripe holds a company but our previous record is individual" do
+        let(:previous) { create(:user_compliance_info, user:) }
+        let(:current_factory) { :user_compliance_info }
+
+        before do
+          previous.mark_deleted!
+          create(current_factory, user:)
+        end
+
+        it "clears an LLC structure in a separate call before sending business_type individual" do
+          stub_stripe_account(previous, business_type: "company", company: { structure: "llc" })
+
+          expect(Stripe::Account).to receive(:update).with(
+            merchant_account.charge_processor_merchant_id,
+            { company: { structure: "" } }
+          ).ordered
+          expect(Stripe::Account).to receive(:update).with(
+            merchant_account.charge_processor_merchant_id,
+            hash_including(business_type: "individual")
+          ).ordered
+
+          described_class.update_account(user, passphrase:)
+        end
+
+        it "does not clear the structure when Stripe holds none" do
+          stub_stripe_account(previous, business_type: "company", company: { structure: nil })
+
+          expect(Stripe::Account).not_to receive(:update).with(anything, { company: { structure: "" } })
+          expect(Stripe::Account).to receive(:update).with(
+            merchant_account.charge_processor_merchant_id,
+            hash_including(business_type: "individual")
+          )
+
+          described_class.update_account(user, passphrase:)
+        end
+
+        context "when the seller is in Canada" do
+          let(:current_factory) { :user_compliance_info_canada }
+
+          it "does not clear the structure, which is only mapped for US accounts" do
+            stub_stripe_account(previous, business_type: "company", company: { structure: "llc" })
+
+            expect(Stripe::Account).not_to receive(:update).with(anything, { company: { structure: "" } })
+            expect(Stripe::Account).to receive(:update).with(
+              merchant_account.charge_processor_merchant_id,
+              hash_including(business_type: "individual")
+            )
+
+            described_class.update_account(user, passphrase:)
+          end
+        end
+
+        it "leaves a non_profit account's type alone" do
+          stub_stripe_account(previous, business_type: "non_profit")
+
+          expect(Stripe::Account).to receive(:update).with(
+            merchant_account.charge_processor_merchant_id,
+            hash_not_including(:business_type)
+          )
+
+          described_class.update_account(user, passphrase:)
+        end
       end
     end
   end
