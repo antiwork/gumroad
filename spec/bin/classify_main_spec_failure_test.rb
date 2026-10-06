@@ -375,18 +375,18 @@ else
   $failures << "test_fast fail-fast: #{fail_fast.inspect}"
 end
 
-# In the shared main lane, a re-run would replace a newer pending run.
+# In a shared main lane, a re-run would replace another commit's pending run.
 $count += 1
 group = YAML.load_file(TESTS_WORKFLOW).fetch("concurrency").fetch("group").to_s
-if group.include?("github.run_attempt != '1'") && group.include?("github.ref == 'refs/heads/main'")
-  puts "  ok    tests.yml gives a main re-run its own concurrency lane"
+if group.include?("github.ref == 'refs/heads/main' && format('-{0}', github.sha)")
+  puts "  ok    tests.yml gives each main commit its own concurrency lane"
 else
-  puts "  FAIL  tests.yml gives a main re-run its own concurrency lane"
+  puts "  FAIL  tests.yml gives each main commit its own concurrency lane"
   $failures << "tests.yml concurrency group: #{group.inspect}"
 end
 
-# Its own lane lets a re-run pass after a newer commit shipped this one; the
-# unblock script must then leave the older build alone.
+# Separate lanes let an older commit's suite pass after a newer commit shipped
+# it; the unblock script must then leave the older build alone.
 $count += 1
 unblock = YAML.load_file(TESTS_WORKFLOW).fetch("jobs").fetch("unblock_deployment_from_buildkite").fetch("steps")
                 .find { |step| step["name"] == "Unblock corresponding Buildkite build" }

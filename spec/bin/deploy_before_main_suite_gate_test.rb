@@ -100,6 +100,24 @@ check(
 
 check("no main run in the window", payload(runs: []), expect: :wait, reason: "frozen_no_finished_run")
 
+# Each commit has its own lane, so an older commit's suite can finish after a
+# newer commit's.
+check(
+  "an older commit's green run finishing after a newer commit's red run",
+  payload(runs: [OWN_RUN,
+                 run_record(2, "older", "completed", "success", "2026-10-06T14:00:00Z", updated_at: "2026-10-06T14:40:00Z"),
+                 run_record(3, "newer", "completed", "failure", "2026-10-06T14:10:00Z", updated_at: "2026-10-06T14:30:00Z")]),
+  expect: :wait, reason: "frozen_main_red"
+)
+
+check(
+  "an older commit's red run finishing after a newer commit's green run",
+  payload(runs: [OWN_RUN,
+                 run_record(2, "older", "completed", "failure", "2026-10-06T14:00:00Z", updated_at: "2026-10-06T14:40:00Z"),
+                 run_record(3, "newer", "completed", "success", "2026-10-06T14:10:00Z", updated_at: "2026-10-06T14:30:00Z")]),
+  expect: :wait, reason: "frozen_main_red"
+)
+
 check(
   "this commit's own suite already failed",
   payload(runs: [run_record(9, SHA, "completed", "failure", "2026-10-06T14:55:22Z"), GREEN_PREVIOUS]),
@@ -199,10 +217,19 @@ check(
   expect: :wait, reason: "frozen_main_red"
 )
 
+# The newest commit with a result still failed; an older commit going green
+# does not fix it.
 check(
-  "an older run re-run to green lifts the freeze",
+  "an older commit re-run to green while a newer commit is red",
   payload(runs: [OWN_RUN, run_record(1, "older1", "completed", "failure", "2026-10-06T14:33:27Z"),
                  run_record(3, "older3", "completed", "success", "2026-10-06T10:00:00Z", attempt: 2, updated_at: "2026-10-06T15:00:00Z")]),
+  expect: :wait, reason: "frozen_main_red"
+)
+
+check(
+  "the newest commit re-run to green lifts the freeze",
+  payload(runs: [OWN_RUN, run_record(3, "older3", "completed", "success", "2026-10-06T10:00:00Z"),
+                 run_record(1, "older1", "completed", "success", "2026-10-06T14:33:27Z", attempt: 2, updated_at: "2026-10-06T15:00:00Z")]),
   expect: :early
 )
 

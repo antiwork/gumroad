@@ -29,6 +29,12 @@ rescue ArgumentError
   Time.at(0)
 end
 
+def created_at(run)
+  Time.iso8601(run["created_at"].to_s)
+rescue ArgumentError
+  Time.at(0)
+end
+
 def merged_pull(pulls, sha)
   pulls.find { |pull| pull["merged_at"] && pull["merge_commit_sha"] == sha }
 end
@@ -59,13 +65,15 @@ def verdict(payload)
   failed_own = own.find { |run| run["status"] == "completed" && run["conclusion"] != "success" }
   return [EXIT_WAIT, "own_suite_failed", { run: failed_own["id"] }] if failed_own
 
-  # Newest by finish time: a re-run of an old run that fails now outranks a
+  # Main is red when either of two finished runs is: the newest commit's, since
+  # each commit has its own lane and an older one can finish later; or the one
+  # that finished last, since a re-run of an old run that fails now outranks a
   # newer run that passed earlier.
-  newest = runs.select { |run| run["status"] == "completed" }.max_by { |run| updated_at(run) }
-  return [EXIT_WAIT, "frozen_no_finished_run", {}] unless newest
-  unless newest["conclusion"] == "success"
-    return [EXIT_WAIT, "frozen_main_red", { run: newest["id"], run_sha: newest["head_sha"].to_s[0, 12] }]
-  end
+  finished = runs.select { |run| run["status"] == "completed" }
+  return [EXIT_WAIT, "frozen_no_finished_run", {}] if finished.empty?
+  newest = finished.max_by { |run| created_at(run) }
+  red = [newest, finished.max_by { |run| updated_at(run) }].find { |run| run["conclusion"] != "success" }
+  return [EXIT_WAIT, "frozen_main_red", { run: red["id"], run_sha: red["head_sha"].to_s[0, 12] }] if red
 
   pull = merged_pull(Array(payload["pulls"]), sha)
   return [EXIT_WAIT, "no_merged_pr", {}] unless pull

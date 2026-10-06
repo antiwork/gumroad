@@ -14,8 +14,8 @@ permissions:
   pull-requests: read # the merged PR for this commit
   statuses: read # ci/green on that PR's head
 
-# Its own lane per commit: the main Tests lane is serial, so a job there would
-# wait for the previous commit's suite.
+# Its own lane per commit: in a shared lane a newer push would replace a pending
+# decision.
 concurrency:
   group: deploy-before-main-suite-${{ github.sha }}
 
