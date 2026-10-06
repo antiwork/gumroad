@@ -6,12 +6,29 @@ dir=$(mktemp -d)
 trap 'rm -rf "$dir"' EXIT
 runs_api="repos/${GITHUB_REPOSITORY}/actions/workflows/tests.yml/runs?branch=main&event=push&per_page=100"
 
-# The branch filter alone returns stale runs; the created filter keeps the list
-# current. A re-run keeps its old created_at, and GitHub allows re-runs for 30
-# days, so look back that far. Active runs come separately. Any failed request
-# stops the decision, since a missing run could hide a retry.
-since=$(date -u -d '30 days ago' +%Y-%m-%dT%H:%M:%SZ) || exit 2
-gh api --paginate "${runs_api}&created=>=${since}" --jq '.workflow_runs' > "$dir/runs-recent.json" || exit 2
+# The runs API goes stale for a branch filter alone and for created windows
+# past about two weeks, so the 30 days GitHub allows re-runs for are read in
+# 7-day slices. Any failed request stops the decision: a missing run could hide
+# a retry.
+day() { date -u -d "$1 days ago" +%Y-%m-%dT%H:%M:%SZ; }
+# Computed here, not inside the URLs: a failed date there would leave an empty bound.
+bounds=()
+for days in 7 14 21 28 31; do
+  bound=$(day "$days") || exit 2
+  bounds+=("$bound")
+done
+gh api --paginate "${runs_api}&created=>=${bounds[0]}" --jq '.workflow_runs' > "$dir/runs-recent.json" || exit 2
+# A current list holds this commit's own Tests run, created at the push. Without
+# it the list is stale, and a red run in it could be missing. Checked before the
+# other queries so a stale retry stays cheap.
+if ! jq -se --arg sha "$COMMIT_SHA" 'add | any(.head_sha == $sha)' "$dir/runs-recent.json" >/dev/null; then
+  echo "The recent Tests runs do not include ${COMMIT_SHA}; the list is stale."
+  exit 2
+fi
+for i in 0 1 2 3; do
+  gh api --paginate "${runs_api}&created=${bounds[$((i + 1))]}..${bounds[$i]}" \
+    --jq '.workflow_runs' > "$dir/runs-older-${i}.json" || exit 2
+done
 for status in in_progress queued waiting requested pending; do
   gh api --paginate "${runs_api}&status=${status}" --jq '.workflow_runs' > "$dir/runs-${status}.json" || exit 2
 done
