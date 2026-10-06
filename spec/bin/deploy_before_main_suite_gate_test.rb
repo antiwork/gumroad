@@ -144,6 +144,12 @@ check(
   expect: :early
 )
 
+check(
+  "a cancelled retry of a failed run keeps the freeze",
+  payload(runs: [OWN_RUN, GREEN_PREVIOUS, run_record(2, "older2", "completed", "cancelled", "2026-10-06T14:50:00Z", attempt: 2)]),
+  expect: :wait, reason: "frozen_main_red"
+)
+
 # An old run re-run today keeps its old created_at.
 check(
   "a re-run of an old main run is in progress",

@@ -47,10 +47,11 @@ def verdict(payload)
     return [EXIT_WAIT, reason, { run: retrying["id"] }]
   end
 
-  # Cancelled runs were evicted from the main lane or thrown away; they say
-  # nothing about main.
+  # A cancelled first attempt was evicted from the main lane or thrown away and
+  # says nothing about main. A cancelled retry leaves its failure unresolved.
   latest = observations.group_by { |run| run["id"] }.values.map { |copies| copies.max_by { |run| run["run_attempt"].to_i } }
-  own, runs = latest.reject { |run| run["conclusion"] == "cancelled" }.partition { |run| run["head_sha"] == sha }
+  evicted = ->(run) { run["conclusion"] == "cancelled" && run["run_attempt"].to_i <= 1 }
+  own, runs = latest.reject(&evicted).partition { |run| run["head_sha"] == sha }
 
   # This commit's own suite already failed: it has spoken.
   failed_own = own.find { |run| run["status"] == "completed" && run["conclusion"] != "success" }
