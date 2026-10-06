@@ -10039,7 +10039,7 @@ describe StripeMerchantAccountManager, :vcr do
 
             expect(Stripe::Account).to receive(:update).with(
               user.stripe_account.charge_processor_merchant_id,
-              hash_including(business_type: "individual", company: { name: user_compliance_info_2.first_and_last_name }, individual: hash_including(:address))
+              hash_including(business_type: "individual", company: { name: user_compliance_info_2.first_and_last_name }, individual: hash_including(:email))
             )
             subject.update_account(user, passphrase: "1234")
           end
