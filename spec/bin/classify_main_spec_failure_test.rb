@@ -297,6 +297,50 @@ else
   $failures << "--rspec-shards: got #{listed.strip.inspect}"
 end
 
+# --spec-failed feeds the revert verdict: only failing tests in a shard's test
+# step say something about the code; a timeout fails the step without a summary.
+def spec_failed_with(jobs, summary)
+  payload = attempt(jobs)
+  payload["summaries"] = jobs.to_h { |j| [j["id"].to_s, summary] }
+  payload
+end
+
+{
+  "an rspec shard with failing examples" => [[job("Test Slow 12", "failure", SPEC_FAILURE)], "45 examples, 1 failure", "true"],
+  "an rspec shard with an error outside examples" => [[job("Test Slow 12", "failure", SPEC_FAILURE)], "0 examples, 0 failures, 1 error occurred outside of examples", "true"],
+  "a minitest shard with failures" => [[job("Test Minitest 1", "failure", MINITEST_FAILURE)], "1342 runs, 4447 assertions, 1 failures, 0 errors, 0 skips", "true"],
+  "a minitest shard with errors" => [[job("Test Minitest 1", "failure", MINITEST_FAILURE)], "1342 runs, 4447 assertions, 0 failures, 2 errors, 0 skips", "true"],
+  # A timeout and a load error that stopped the runner both leave no summary.
+  "a test step with no summary" => [[job("Test Slow 12", "failure", SPEC_FAILURE)], "", "null"],
+  "a minitest step with no summary" => [[job("Test Minitest 1", "failure", MINITEST_FAILURE)], "", "null"],
+  "a shard that hit its job time limit in its test step" => [[job("Test Minitest 1", "timed_out", [["Check out repository", "success"], ["Run Minitest", "cancelled"]])], "", "null"],
+  "a time-limited shard next to real failures" => [[job("Test Slow 12", "failure", SPEC_FAILURE), job("Test Minitest 1", "timed_out", [["Run Minitest", "cancelled"]])], "45 examples, 1 failure", "true"],
+  "a shard that timed out before its test step" => [[job("Test Slow 12", "timed_out", [["Check out repository", "cancelled"], ["Run tests", "skipped"]])], "", "false"],
+  "a summary with no failures" => [[job("Test Slow 12", "failure", SPEC_FAILURE)], "45 examples, 0 failures", "false"],
+  "a hung checkout" => [[job("Test Slow 3", "failure", HUNG_CHECKOUT)], "45 examples, 1 failure", "false"],
+  "a failed build job" => [[job("Build images", "failure", [["Build test image", "failure"]])], "45 examples, 1 failure", "false"],
+  "only cancelled shards" => [[job("Test Fast 11", "cancelled", SPEC_CANCELLED)], "45 examples, 1 failure", "false"]
+}.each do |name, (jobs, summary, expected)|
+  $count += 1
+  _, printed = run(JSON.dump(spec_failed_with(jobs, summary)), "--spec-failed")
+  if printed.strip == expected
+    puts "  ok    --spec-failed: #{name}"
+  else
+    puts "  FAIL  --spec-failed: #{name}"
+    $failures << "--spec-failed #{name}: expected #{expected}, got #{printed.strip.inspect}"
+  end
+end
+
+$count += 1
+listed_jobs = [job("Test Slow 12", "failure", SPEC_FAILURE), job("Test Minitest 1", "failure", MINITEST_FAILURE), job("Test Slow 3", "failure", HUNG_CHECKOUT)]
+_, listed = run(JSON.dump(attempt(listed_jobs)), "--test-step-failures")
+if listed.split.map(&:to_i) == listed_jobs.first(2).map { |j| j["id"] }
+  puts "  ok    --test-step-failures lists the shards that failed in their test step"
+else
+  puts "  FAIL  --test-step-failures lists the shards that failed in their test step"
+  $failures << "--test-step-failures: got #{listed.strip.inspect}"
+end
+
 # --- The workflow's own gate ----------------------------------------------
 #
 # The attempt cap and the main-push scope live in the job `if`, which nothing
@@ -331,29 +375,28 @@ else
   $failures << "test_fast fail-fast: #{fail_fast.inspect}"
 end
 
-# In the shared main lane, a re-run would replace a newer pending run.
+# In a shared main lane, a re-run would replace another commit's pending run.
 $count += 1
 group = YAML.load_file(TESTS_WORKFLOW).fetch("concurrency").fetch("group").to_s
-if group.include?("github.run_attempt != '1'") && group.include?("github.ref == 'refs/heads/main'")
-  puts "  ok    tests.yml gives a main re-run its own concurrency lane"
+if group.include?("github.ref == 'refs/heads/main' && format('-{0}', github.sha)")
+  puts "  ok    tests.yml gives each main commit its own concurrency lane"
 else
-  puts "  FAIL  tests.yml gives a main re-run its own concurrency lane"
+  puts "  FAIL  tests.yml gives each main commit its own concurrency lane"
   $failures << "tests.yml concurrency group: #{group.inspect}"
 end
 
-# Its own lane lets a re-run pass after a newer commit shipped this one; the
-# unblock step must then leave the older build alone.
+# Separate lanes let an older commit's suite pass after a newer commit shipped
+# it; the unblock script must then leave the older build alone.
 $count += 1
 unblock = YAML.load_file(TESTS_WORKFLOW).fetch("jobs").fetch("unblock_deployment_from_buildkite").fetch("steps")
                 .find { |step| step["name"] == "Unblock corresponding Buildkite build" }
-command = unblock.dig("with", "command").to_s
-if command.include?('if [ "$RUN_ATTEMPT" != "1" ]') && command.include?("compare/$COMMIT_SHA...production-release") &&
-   command.include?("ahead|identical)") &&
-   unblock.dig("env", "RUN_ATTEMPT").to_s.include?("github.run_attempt")
-  puts "  ok    tests.yml skips the unblock for a re-run that production already contains"
+script = File.read(File.expand_path("../../bin/unblock-buildkite-deploy", __dir__))
+if unblock.dig("with", "command").to_s.include?("bin/unblock-buildkite-deploy") &&
+   script.include?("compare/$COMMIT_SHA...production-release") && script.include?("ahead|identical)")
+  puts "  ok    the unblock skips a commit that production already contains"
 else
-  puts "  FAIL  tests.yml skips the unblock for a re-run that production already contains"
-  $failures << "unblock step: missing the re-run production check"
+  puts "  FAIL  the unblock skips a commit that production already contains"
+  $failures << "unblock step: missing the production check"
 end
 
 # The classifier matches job and step names from tests.yml; a rename there would

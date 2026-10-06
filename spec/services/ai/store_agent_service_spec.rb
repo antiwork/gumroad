@@ -2056,6 +2056,141 @@ describe Ai::StoreAgentService do
           expect(result[:proposed_action]).to be_nil
         end
       end
+
+      describe "product sections confirmation card" do
+        let(:product) { create(:product, user: seller) }
+        let(:kept) { create(:seller_profile_products_section, seller:, product:, header: "Keep me") }
+        let(:dropped) { create(:seller_profile_products_section, seller:, product:, header: "Drop me") }
+
+        def propose_sections(ids)
+          expect(api_client).to receive(:get).with("/products/#{CGI.escape(product.external_id)}", {}).and_return(
+            { "success" => true, "product" => { "id" => product.external_id }, "http_status" => 200 },
+          )
+          replies = [
+            tool_result("api_read", { "endpoint" => "get_product", "path_params" => { "id" => product.external_id } }),
+            tool_result("api_write", {
+                          "endpoint" => "update_product_sections",
+                          "path_params" => { "id" => product.external_id },
+                          "params" => { "sections" => ids },
+                        }),
+            text_result("Ready.", outcome: "proposal_ready"),
+          ]
+          allow(client).to receive(:messages) { replies.shift }
+          service.respond(messages: [{ role: "user", content: "Remove the section above my product" }]).fetch(:proposed_action)
+        end
+
+        it "names the sections that will be deleted" do
+          product.update!(sections: [kept.id, dropped.id])
+
+          action = propose_sections([kept.external_id])
+
+          expect(action[:fields]).to include(
+            { label: "Sections", value: "Keep me" },
+            { label: "Deleted", value: "1 section will be deleted: Drop me" },
+          )
+        end
+
+        it "pins the sections the card showed so a later section is not deleted on confirm" do
+          product.update!(sections: [kept.id, dropped.id])
+
+          action = propose_sections([kept.external_id])
+
+          expect(action[:params]["params"]).to match(
+            "sections" => [kept.external_id],
+            "known_section_ids" => contain_exactly(kept.external_id, dropped.external_id),
+          )
+        end
+
+        it "refuses a model-supplied known_section_ids" do
+          product.update!(sections: [kept.id, dropped.id])
+          allow(api_client).to receive(:get).and_return({ "success" => true, "product" => {}, "http_status" => 200 })
+
+          captured = nil
+          replies = [
+            tool_result("api_read", { "endpoint" => "get_product", "path_params" => { "id" => product.external_id } }),
+            tool_result("api_write", {
+                          "endpoint" => "update_product_sections",
+                          "path_params" => { "id" => product.external_id },
+                          "params" => { "sections" => [], "known_section_ids" => [] },
+                        }),
+            text_result("I could not prepare that."),
+          ]
+          allow(client).to receive(:messages) do |args|
+            captured = captured_tool_result(args)
+            replies.shift
+          end
+
+          result = service.respond(messages: [{ role: "user", content: "Remove the sections" }])
+
+          expect(result[:proposed_action]).to be_nil
+          expect(captured["error"]).to include("Unknown param known_section_ids")
+        end
+
+        it "says every section will be deleted for an empty list" do
+          product.update!(sections: [kept.id, dropped.id])
+
+          action = propose_sections([])
+
+          expect(action[:fields]).to include(
+            { label: "Sections", value: "(none)" },
+            { label: "Deleted", value: "2 sections will be deleted: Keep me, Drop me" },
+          )
+        end
+      end
+
+      describe "structured read preconditions" do
+        it "treats exactly the two custom page reads as page-body reads" do
+          expect(described_class::PAGE_BODY_READ_ENDPOINTS).to contain_exactly("get_user_custom_html", "get_product_custom_html")
+        end
+
+        it "blocks a product-sections write until get_product succeeds for the same product" do
+          captured = nil
+          first = true
+          expect(api_client).not_to receive(:get)
+          expect(Rails.logger).to receive(:warn).with(described_class::MISSING_REQUIRED_READ_MESSAGE)
+          expect(ErrorNotifier).to receive(:notify).with(
+            described_class::MISSING_REQUIRED_READ_MESSAGE,
+            exclude_request_context: true,
+            write_endpoint: "update_product_sections",
+            required_read_endpoint: "get_product",
+            required_read_path: "/products/:id",
+          )
+          allow(client).to receive(:messages) do |args|
+            if first
+              first = false
+              tool_result("api_write", {
+                            "endpoint" => "update_product_sections",
+                            "path_params" => { "id" => "product-a" },
+                            "params" => { "sections" => [] },
+                          })
+            else
+              captured = captured_tool_result(args)
+              text_result("I need to read the product's sections first.")
+            end
+          end
+
+          result = service.respond(messages: [{ role: "user", content: "Remove the section above my product" }])
+
+          expect(result[:proposed_action]).to be_nil
+          expect(captured["error"]).to include(
+            "successful full read",
+            "Call get_product with api_read",
+            "Status or metadata-only reads do not count",
+          )
+          # This read is structured, not a page body, so there is no custom-page escape hatch.
+          expect(captured["error"]).not_to include("custom-page")
+          expect(captured["corrective_action"]).to eq(
+            "tool" => "api_read",
+            "endpoint" => "get_product",
+            "path_params" => { "id" => "product-a" },
+            "after_success" => {
+              "action" => "retry_write",
+              "endpoint" => "update_product_sections",
+              "timing" => "this_turn",
+            },
+          )
+        end
+      end
     end
 
     context "when the model proposes more than one write in a single turn" do

@@ -33,7 +33,7 @@ module Ai::StoreAgentObjectFormatter
     case endpoint.id
     when "list_products"
       Array(response["products"]).filter_map { |p| product(p) }
-    when "get_product", "create_product", "update_product", "enable_product", "disable_product"
+    when "get_product", "create_product", "update_product", "enable_product", "disable_product", "update_product_sections"
       [product(response["product"] || response)].compact
     when "list_offer_codes"
       discounts(Array(response["offer_codes"] || response["products"]), seller:, limit:, existing_objects:)

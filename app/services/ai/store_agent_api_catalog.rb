@@ -26,9 +26,13 @@
 # is exactly what the system-prompt manifest teaches the model, so the agent only drives the surface
 # it was told about.
 module Ai::StoreAgentApiCatalog
-  Endpoint = Struct.new(:id, :method, :path, :read, :scope, :admin_only, :summary, :path_params, :params, :forced_params, :requires_read, :server_params, keyword_init: true) do
+  Endpoint = Struct.new(:id, :method, :path, :read, :scope, :admin_only, :summary, :path_params, :params, :forced_params, :requires_read, :server_params, :json_body, keyword_init: true) do
     def read? = read == true
     def write? = !read?
+
+    # Form encoding turns an empty list into `[""]`, so a write that must accept `[]` needs a JSON body.
+    # Opt-in per endpoint: v2 params such as `metadata_only` expect the string "true", not a JSON boolean.
+    def json_body? = json_body == true
 
     # True if this endpoint may only be driven by an owner/admin (not a marketing member), even
     # though the underlying v2 endpoint's scope (e.g. view_sales) is broader. Used for capabilities
@@ -70,9 +74,9 @@ module Ai::StoreAgentApiCatalog
     # then fails downstream with a confusing validation error. Both the propose path (service) and
     # the confirm path (executor) refuse such bodies up front using this list.
     #
-    # `server_params` are body keys only the server may set (the undo checksums): the executor
-    # replays a persisted proposal carrying them, and the verified undo path stages them, but an
-    # ordinary model-authored api_write is refused and the manifest never lists them.
+    # `server_params` are body keys only the server may set (the undo checksums, the sections the
+    # card showed): the executor replays them from a persisted proposal, but a model-authored
+    # api_write carrying them is refused and the manifest never lists them.
     def unknown_param_keys(body, server_params_allowed: false)
       allowed = params + forced_params.keys
       allowed += server_params if server_params_allowed
@@ -118,7 +122,7 @@ module Ai::StoreAgentApiCatalog
   end
 
   # Build one endpoint row. read defaults to false (i.e. a write that must be confirmed).
-  def self.ep(id, method, path, summary, read: false, scope: nil, admin_only: false, path_params: [], params: [], forced_params: {}, requires_read: nil, server_params: [])
+  def self.ep(id, method, path, summary, read: false, scope: nil, admin_only: false, path_params: [], params: [], forced_params: {}, requires_read: nil, server_params: [], json_body: false)
     Endpoint.new(
       id:,
       method:,
@@ -132,6 +136,7 @@ module Ai::StoreAgentApiCatalog
       forced_params: forced_params.transform_keys(&:to_s).freeze,
       requires_read:,
       server_params:,
+      json_body:,
     )
   end
 
@@ -198,7 +203,7 @@ module Ai::StoreAgentApiCatalog
     # ---- Products ----
     ep("list_products", :get, "/products", "List the creator's products with price, status, and stats. Returns 10 per page, newest first; when the response includes next_page_key, pass it back as page_key to fetch the next page.", read: true, scope: "view_sales",
                                                                                                                                                                                                                                        params: %w[page_key]),
-    ep("get_product", :get, "/products/:id", "Get one product by its id.", read: true, scope: "view_sales", path_params: %w[id]),
+    ep("get_product", :get, "/products/:id", "Get one product by its id. Also returns the product's per-product profile sections — the ordered `sections` array, each with its id, type, and header — and main_section_index, the position of the product itself, so sections listed before it render ABOVE the product. This is the product page's own layout, not the storefront profile's. Read it before changing the sections.", read: true, scope: "view_sales", path_params: %w[id]),
     ep("create_product", :post, "/products", "Create a new product. It is published and for sale immediately unless you pass draft=true (or published=false) to save an unpublished draft. When publishing is blocked (unconfirmed email, no payout method, content moderation), the product is still created as a draft and the response includes a warning saying why.", scope: "edit_products",
                                                                                                                                                                                                                                                                                                                                                                            params: %w[name price description custom_permalink price_currency_type max_purchase_count draft published]),
     ep("update_product", :put, "/products/:id", "Update a product's fields (name, price, description, etc.).", scope: "edit_products",
@@ -206,6 +211,9 @@ module Ai::StoreAgentApiCatalog
     ep("delete_product", :delete, "/products/:id", "Delete a product permanently.", scope: "edit_products", path_params: %w[id]),
     ep("enable_product", :put, "/products/:id/enable", "Publish a product so it is available for sale.", scope: "edit_products", path_params: %w[id]),
     ep("disable_product", :put, "/products/:id/disable", "Unpublish a product so it is no longer for sale.", scope: "edit_products", path_params: %w[id]),
+
+    # ---- Per-product profile sections ---- (read through get_product's `sections`)
+    ep("update_product_sections", :put, "/products/:id/sections", "Set which per-product profile sections render on a product page, and in what order. sections is the COMPLETE ordered list of section ids to keep — reorder them here, and any section of this product you leave out is DELETED. Send an empty list to remove every section (this is how a stale section stuck above a product is cleared). main_section_index is the position of the product itself, so sections listed before it render ABOVE the product; pass 0 to move them all below it. Read get_product first and send back every section you mean to keep.", scope: "edit_products", path_params: %w[id], params: %w[sections main_section_index], requires_read: "get_product", server_params: %w[known_section_ids], json_body: true),
 
     # ---- Product custom landing pages ----
     # A product's landing page is a separate surface from the profile page (see the /user/custom_html

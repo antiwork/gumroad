@@ -77,7 +77,7 @@ class Ai::StoreAgentActionExecutor
       return failure(error, reason: "invalid_parameters", retry_safe: true)
     end
 
-    response = api_client.write(endpoint.method, path, body)
+    response = api_client.write(endpoint.method, path, body, json_body: endpoint.json_body?)
 
     result = interpret(endpoint, response)
     if result[:success] && (receipt = Ai::StoreAgentHtmlUndo.receipt(endpoint: endpoint.id, path_params: params[:path_params].to_h, body: body.stringify_keys, response:))
@@ -106,6 +106,9 @@ class Ai::StoreAgentActionExecutor
         # before the response was rendered, so it must not make the one-shot claim retry-safe. Only
         # the executor's permission check above, which runs before dispatch, can make that guarantee.
         failure("You don't have permission to do that.", reason: "permission_denied", status:)
+      elsif response["reason"] == "stale_known_sections"
+        # The sections write refuses under the product lock before it changes anything.
+        failure("A section was added after this change was prepared. Ask the agent to prepare this change again.", reason: "stale_known_sections", retry_safe: true)
       else
         failure(
           response["message"].presence || response["error"].presence || "That change couldn't be saved.",

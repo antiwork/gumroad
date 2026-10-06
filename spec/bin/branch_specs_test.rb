@@ -135,6 +135,21 @@ check(
   expect_specs: %w[spec/requests/rack_attack_spec.rb],
 )
 
+# Piracy recipient registry -> the registry and screening specs
+check(
+  "piracy recipient registry maps to its service specs instead of escalating",
+  base_files: {
+    "spec/services/piracy_reports/recipient_registry_spec.rb" => SPEC_STUB,
+    "spec/services/piracy_reports/screen_service_spec.rb" => SPEC_STUB,
+    "config/piracy_recipients.yml" => "old",
+  },
+  head_files: { "config/piracy_recipients.yml" => "new" },
+  expect_specs: %w[
+    spec/services/piracy_reports/recipient_registry_spec.rb
+    spec/services/piracy_reports/screen_service_spec.rb
+  ],
+)
+
 # Nested oauth/device_authorizations controller -> flattened request spec name
 check(
   "nested oauth controller maps to flattened request spec",
@@ -178,6 +193,24 @@ check(
   expect_escalate: true,
 )
 
+check(
+  "revert decision script, its test, and workflow do not escalate",
+  base_files: {
+    ".github/workflows/revert-red-main-deploy.yml" => "old",
+    "bin/revert-red-main-decision" => "old",
+    "spec/bin/revert_red_main_decision_test.rb" => "old",
+    "app/models/widget.rb" => "old",
+    "spec/models/widget_spec.rb" => SPEC_STUB,
+  },
+  head_files: {
+    ".github/workflows/revert-red-main-deploy.yml" => "new",
+    "bin/revert-red-main-decision" => "new",
+    "spec/bin/revert_red_main_decision_test.rb" => "new",
+    "app/models/widget.rb" => "new",
+  },
+  expect_specs: %w[spec/models/widget_spec.rb],
+)
+
 # Hung-checkout files are standalone ruby + a workflow that only invokes
 # them, so they must not trip the mapping-gap escalate the way an unmapped
 # helper would. Sibling model+spec so the run is not an empty selection.
@@ -212,6 +245,30 @@ check(
     ".github/workflows/rerun-main-spec-failure.yml" => "new",
     "bin/classify-main-spec-failure" => "new",
     "spec/bin/classify_main_spec_failure_test.rb" => "new",
+    "app/models/widget.rb" => "new",
+  },
+  expect_specs: %w[spec/models/widget_spec.rb],
+)
+
+check(
+  "deploy gate and unblock scripts, their tests, and workflow do not escalate",
+  base_files: {
+    ".github/workflows/deploy-before-main-suite.yml" => "old",
+    "bin/deploy-before-main-suite" => "old",
+    "bin/deploy-before-main-suite-gate" => "old",
+    "spec/bin/deploy_before_main_suite_gate_test.rb" => "old",
+    "bin/unblock-buildkite-deploy" => "old",
+    "spec/bin/unblock_buildkite_deploy_test.rb" => "old",
+    "app/models/widget.rb" => "old",
+    "spec/models/widget_spec.rb" => SPEC_STUB,
+  },
+  head_files: {
+    ".github/workflows/deploy-before-main-suite.yml" => "new",
+    "bin/deploy-before-main-suite" => "new",
+    "bin/deploy-before-main-suite-gate" => "new",
+    "spec/bin/deploy_before_main_suite_gate_test.rb" => "new",
+    "bin/unblock-buildkite-deploy" => "new",
+    "spec/bin/unblock_buildkite_deploy_test.rb" => "new",
     "app/models/widget.rb" => "new",
   },
   expect_specs: %w[spec/models/widget_spec.rb],

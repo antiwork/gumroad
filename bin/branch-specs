@@ -247,6 +247,11 @@ CONFIG_SPEC_MAP = {
   "config/initializers/alterity.rb" => %w[spec/config/initializers/alterity_spec.rb],
   "config/initializers/instant_ddl_first.rb" => %w[spec/config/initializers/instant_ddl_first_spec.rb],
   "config/initializers/active_storage_jobs.rb" => %w[spec/config/initializers/active_storage_jobs_spec.rb],
+  # Read only by PiracyReports::RecipientRegistry. The registry spec validates every real entry.
+  "config/piracy_recipients.yml" => %w[
+    spec/services/piracy_reports/recipient_registry_spec.rb
+    spec/services/piracy_reports/screen_service_spec.rb
+  ],
 }.freeze
 
 # Support files with mappings; any OTHER spec/support change escalates.
@@ -828,11 +833,18 @@ changed.each do |path|
   elsif path == "bin/branch-specs" || path == "spec/bin/branch_specs_test.rb"
     # Standalone ruby test (ruby spec/bin/branch_specs_test.rb), not rspec.
     next
+  elsif path == "bin/revert-red-main-decision" || path == "spec/bin/revert_red_main_decision_test.rb"
+    # Same: standalone ruby (ruby spec/bin/revert_red_main_decision_test.rb), not rspec.
+    next
   elsif path == "bin/classify-hung-checkout" || path == "spec/bin/classify_hung_checkout_test.rb"
     # Same: standalone ruby (ruby spec/bin/classify_hung_checkout_test.rb), not rspec.
     next
   elsif path == "bin/classify-main-spec-failure" || path == "spec/bin/classify_main_spec_failure_test.rb"
     # Same: standalone ruby (ruby spec/bin/classify_main_spec_failure_test.rb), not rspec.
+    next
+  elsif ["bin/deploy-before-main-suite", "bin/deploy-before-main-suite-gate", "spec/bin/deploy_before_main_suite_gate_test.rb",
+         "bin/unblock-buildkite-deploy", "spec/bin/unblock_buildkite_deploy_test.rb"].include?(path)
+    # Same: standalone ruby self-tests that the Migration versions job runs.
     next
   elsif path == "bin/reuse-full-suite" || path == "script/test-reuse-full-suite"
     # Standalone bash; script/test-reuse-full-suite runs on every PR.

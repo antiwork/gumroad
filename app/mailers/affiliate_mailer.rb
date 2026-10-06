@@ -238,7 +238,12 @@ class AffiliateMailer < ApplicationMailer
       @quantity = @purchase.quantity
       @variants = @purchase.variants_list
       @variants_count = @purchase.variant_names&.count || 0
-      @cut = MoneyFormatter.format(@purchase.affiliate_credit_cents + @purchase.affiliate_credit.fee_cents, :usd, no_cents_if_whole: true, symbol: true)
+      # The balance credits the cut MINUS the collaborator's share of the Gumroad fee, so show that
+      # deduction; a bare "Your cut" overstates what actually lands in the balance.
+      @fee_share_cents = @purchase.affiliate_credit.fee_cents
+      @cut = MoneyFormatter.format(@purchase.affiliate_credit_cents + @fee_share_cents, :usd, no_cents_if_whole: true, symbol: true)
+      @fee_share_formatted = MoneyFormatter.format(@fee_share_cents, :usd, no_cents_if_whole: true, symbol: true)
+      @credited_formatted = MoneyFormatter.format(@purchase.affiliate_credit_cents, :usd, no_cents_if_whole: true, symbol: true)
 
       @subject = "You made a sale!"
       set_notify_of_sale_headers(is_preorder: @is_preorder)

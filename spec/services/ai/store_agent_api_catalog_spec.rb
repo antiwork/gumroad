@@ -437,6 +437,53 @@ describe Ai::StoreAgentApiCatalog do
     end
   end
 
+  describe "product profile sections endpoint" do
+    it "exposes the per-product section write so a stale section above a product can be cleared" do
+      endpoint = described_class.find("update_product_sections")
+
+      expect(endpoint).to be_present
+      expect(endpoint.write?).to eq(true)
+      expect(endpoint.method).to eq(:put)
+      expect(endpoint.path).to eq("/products/:id/sections")
+      expect(endpoint.scope).to eq("edit_products")
+      expect(endpoint.path_params).to eq(%w[id])
+      expect(endpoint.params).to eq(%w[sections main_section_index])
+    end
+
+    # The body REPLACES the list, so an unread list silently deletes sections the model never saw.
+    it "requires the full product read before the sections write" do
+      expect(described_class.find("update_product_sections").requires_read).to eq("get_product")
+    end
+
+    it "is the only endpoint that opts into a JSON body" do
+      expect(described_class::ENDPOINTS.filter_map { _1.id if _1.json_body? }).to eq(["update_product_sections"])
+    end
+
+    it "keeps known_section_ids server-only: refused from the model, accepted on a replayed proposal, hidden from the manifest" do
+      endpoint = described_class.find("update_product_sections")
+      body = { "sections" => [], "known_section_ids" => [] }
+
+      expect(endpoint.unknown_param_keys_error(body)).to include("Unknown param known_section_ids")
+      expect(endpoint.unknown_param_keys_error(body, server_params_allowed: true)).to be_nil
+      expect(described_class.manifest(:write)).not_to include("known_section_ids")
+    end
+
+    it "tells the model that an omitted section is deleted and where main_section_index puts the product" do
+      summary = described_class.find("update_product_sections").summary
+
+      expect(summary).to match(/COMPLETE ordered list/)
+      expect(summary).to include("DELETED")
+      expect(summary).to include("ABOVE the product")
+    end
+
+    it "states in the product read that its sections and main_section_index are part of the payload" do
+      summary = described_class.find("get_product").summary
+
+      expect(summary).to include("sections")
+      expect(summary).to include("main_section_index")
+    end
+  end
+
   describe "public media endpoints" do
     it "exposes an upload write so the agent can host a creator's image for use on a custom page" do
       endpoint = described_class.find("upload_media")

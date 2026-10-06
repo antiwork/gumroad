@@ -42,14 +42,15 @@ class Ai::StoreAgentApiClient
   end
 
   # Run a mutating request (post/put/patch/delete). Used by the executor AFTER the creator confirms.
-  def write(method, path, params = {})
-    request(method.to_sym, path, params)
+  # json_body sends a JSON body; see Ai::StoreAgentApiCatalog::Endpoint#json_body?.
+  def write(method, path, params = {}, json_body: false)
+    request(method.to_sym, path, params, json_body:)
   end
 
   private
     attr_reader :seller, :pundit_user
 
-    def request(method, path, params)
+    def request(method, path, params, json_body: false)
       # The dispatch below runs a real, full-stack request in-process on the CURRENT thread, which
       # re-enters rack-mini-profiler. Mini-profiler keeps its per-request context in a thread-local and
       # nils it at the end of every request — including this nested one — which would wipe the OUTER
@@ -72,12 +73,13 @@ class Ai::StoreAgentApiClient
       # hold for the duration of the nested request so its autoloads resolve. (No-op in production,
       # where code is eager-loaded and the interlock never blocks.)
       ActiveSupport::Dependencies.interlock.permit_concurrent_loads do
+        request_options = json_body ? { params:, headers:, as: :json } : { params:, headers: }
         case method
         when :get then session.get(full_path, params:, headers:)
-        when :post then session.post(full_path, params:, headers:)
-        when :put then session.put(full_path, params:, headers:)
-        when :patch then session.patch(full_path, params:, headers:)
-        when :delete then session.delete(full_path, params:, headers:)
+        when :post then session.post(full_path, **request_options)
+        when :put then session.put(full_path, **request_options)
+        when :patch then session.patch(full_path, **request_options)
+        when :delete then session.delete(full_path, **request_options)
         else
           return { "success" => false, "message" => "Unsupported method #{method}." }
         end

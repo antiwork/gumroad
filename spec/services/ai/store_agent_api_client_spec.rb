@@ -120,4 +120,35 @@ describe Ai::StoreAgentApiClient do
       expect(described_class::AGENT_APP_SCOPES).not_to eq(Doorkeeper.configuration.public_scopes.to_s)
     end
   end
+
+  # Only an endpoint that opts in gets a JSON body. Everything else keeps the form encoding the v2
+  # API's string-parsed boolean params depend on (`params[:metadata_only] == "true"`), so this is
+  # green for a scalar body and JSON only when asked.
+  describe "#write body encoding" do
+    let(:client) { described_class.new(seller:, pundit_user:) }
+
+    def captured_put_options(json_body:)
+      captured = nil
+      session = double("integration session")
+      allow(ActionDispatch::Integration::Session).to receive(:new).and_return(session)
+      allow(session).to receive(:host!)
+      allow(session).to receive(:put) { |_path, **options| captured = options }
+      allow(session).to receive(:response).and_return(double(body: "{}", status: 200))
+
+      client.write(:put, "/products/product-id/sections", { "sections" => [] }, json_body:)
+
+      captured
+    end
+
+    it "form-encodes the body by default" do
+      options = captured_put_options(json_body: false)
+
+      expect(options).not_to have_key(:as)
+      expect(options[:params]).to eq("sections" => [])
+    end
+
+    it "sends a JSON body when the endpoint opts in, so an empty list survives the transport" do
+      expect(captured_put_options(json_body: true)).to include(as: :json)
+    end
+  end
 end

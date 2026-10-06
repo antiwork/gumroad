@@ -1,0 +1,69 @@
+name: Deploy before main suite
+
+# The Tests workflow still unblocks after its own suite; whichever path comes
+# first unblocks, and the other finds the gate already open. To stop early
+# deploys, disable this workflow.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  actions: read # Tests runs, for the freeze
+  contents: read # compare with production-release
+  pull-requests: read # the merged PR for this commit
+  statuses: read # ci/green on that PR's head
+
+# Its own lane per commit: in a shared lane a newer push would replace a pending
+# decision.
+concurrency:
+  group: deploy-before-main-suite-${{ github.sha }}
+
+jobs:
+  unblock:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            bin/deploy-before-main-suite
+            bin/deploy-before-main-suite-gate
+            bin/unblock-buildkite-deploy
+          sparse-checkout-cone-mode: false
+
+      # Poll until the gate is ready, then decide with fresh data right before
+      # the unblock: main can turn red while the assets compile.
+      - name: Unblock corresponding Buildkite build
+        timeout-minutes: 30
+        uses: nick-fields/retry@v3
+        with:
+          timeout_seconds: 120
+          retry_wait_seconds: 20
+          max_attempts: 90
+          warning_on_retry: false
+          command: |
+            if [ "$UNBLOCK_DEPLOYMENT" != "true" ]; then
+              echo "UNBLOCK_DEPLOYMENT_FROM_BUILDKITE is not set to 'true'. Skipping unblock."
+              exit 0
+            fi
+            bin/unblock-buildkite-deploy --ready
+            case $? in
+              0) exit 0 ;;
+              3) ;;
+              *) exit 1 ;;
+            esac
+            bin/deploy-before-main-suite
+            case $? in
+              0) bin/unblock-buildkite-deploy ;;
+              1) echo "Waiting for this commit's own Tests run."; exit 0 ;;
+              *) exit 1 ;;
+            esac
+        env:
+          UNBLOCK_DEPLOYMENT: ${{ secrets.UNBLOCK_DEPLOYMENT_FROM_BUILDKITE }}
+          BUILDKITE_API_TOKEN: ${{ secrets.BUILDKITE_API_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+          COMMIT_SHA: ${{ github.sha }}
+          ORG_SLUG: gumroad-inc
+          PIPELINE_SLUG: ${{ secrets.BUILDKITE_PIPELINE_SLUG }}
