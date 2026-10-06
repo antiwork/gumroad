@@ -37,6 +37,45 @@ For each scene, keep the prompt, relevant tool invocation, and completed respons
 legible before advancing. Follow the live UI instead of reusing element numbers
 from an earlier recording.
 
+### Browser-only results video
+
+When the OS recorder captures the wrong desktop/window, make a clearly labeled
+walkthrough of the completed live results with `scripts/mcp-review-video.mjs`.
+This captures actual browser pixels through Codex computer use. It is a sequence
+of screenshots with chosen reading durations, not continuous execution footage.
+Do not present it as evidence that the OAuth interaction or a tool approval was
+recorded live. Keep the full recording workflow above for that requirement.
+
+In the computer-use REPL, select and inspect the intended browser/app target,
+then use absolute paths for the helper and output directory:
+
+```js
+var helper = await import("/path/to/gumroad/scripts/mcp-review-video.mjs");
+var scenes = [];
+scenes.push(await helper.captureScene(chrome, "/path/to/private-output", "account", 12));
+// Navigate through the actual results with computer use; inspect each scene.
+scenes.push(await helper.captureScene(chrome, "/path/to/private-output", "draft", 15));
+await helper.finishVideoManifest("/path/to/private-output", scenes);
+```
+
+Capture the tool inventory, connected account, sales/payout results, draft
+confirmation and creation, publish result, final state, and unsupported-action
+response. Use a new scene name each time; existing images are never overwritten.
+Check every image before encoding. Encode with FFmpeg, omitting microphone audio
+and labeling the result visibly:
+
+```sh
+ffmpeg -f concat -safe 0 -i /path/to/private-output/scenes.ffconcat \
+  -vf "scale=1920:-2,drawbox=x=0:y=0:w=iw:h=86:color=black:t=fill,drawtext=text='Gumroad MCP - screenshot walkthrough of live results':fontsize=25:fontcolor=white:x=40:y=25" \
+  -r 5 -c:v libx264 -crf 18 -pix_fmt yuv420p -an -movflags +faststart \
+  /path/to/private-output/walkthrough.mp4
+```
+
+The manifest records capture times and display durations. Keep it with the
+private source images; commit only the helper and this script.
+
+## Scene prompts
+
 | Scene | Prompt / on-screen action | Expected behavior and narration |
 | --- | --- | --- |
 | Connect | Show the connector name and discovered tools after OAuth returns. | “Gumroad connects with OAuth. This demonstration uses an isolated review account.” Do not claim public directory approval. |
