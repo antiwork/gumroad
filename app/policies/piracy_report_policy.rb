@@ -5,17 +5,16 @@ class PiracyReportPolicy < ApplicationPolicy
     create?
   end
 
-  # The flag is the whole gate: a seller without it has no surface to report from.
   def create?
-    Feature.active?(:piracy_reports, seller)
+    Feature.active?(:piracy_reports, seller) && user.role_admin_for?(seller)
   end
 
   def show?
     sign?
   end
 
-  # The notice carries the seller's legal name, so only the seller on the report can read or sign it.
+  # The notice carries the seller's legal name, so only the owner or an admin can read or sign it.
   def sign?
-    when_record_available { record.seller_id == seller&.id }
+    user.role_admin_for?(seller) && when_record_available { record.seller_id == seller&.id }
   end
 end

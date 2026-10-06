@@ -159,6 +159,14 @@ describe PiracyReport do
       expect(report.errors[:signed_by_name]).to be_present
     end
 
+    it "refuses a name longer than the column" do
+      report = create(:piracy_report, :awaiting_signature)
+
+      expect(report.record_signature!("a" * 256)).to be(false)
+      expect(report.reload.state).to eq("awaiting_signature")
+      expect(report.errors[:signed_by_name]).to include("is too long")
+    end
+
     it "refuses a report that is not waiting for a signature" do
       report = create(:piracy_report, :screening)
 

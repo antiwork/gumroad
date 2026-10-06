@@ -22,6 +22,14 @@ describe PiracyReports::ScreenService do
     described_class.new(report: on, params: params.with_indifferent_access).call
   end
 
+  describe "a repeated request" do
+    it "queues the signature email once" do
+      call(pass_params)
+
+      expect { expect(call(pass_params)).not_to be_success }.not_to have_enqueued_mail(PiracyReportMailer, :signature_request)
+    end
+  end
+
   describe "a pass verdict" do
     it "takes the recipient from the registry, renders the notice and moves to awaiting_signature" do
       result = call(pass_params)

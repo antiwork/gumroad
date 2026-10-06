@@ -188,4 +188,18 @@ describe PiracyReportsController, type: :controller, inertia: true do
       expect(response).to redirect_to(products_path)
     end
   end
+
+  context "with user signed in as support for seller" do
+    include_context "with user signed in as support for seller"
+
+    it "cannot read or sign the owner's notice" do
+      report = create(:piracy_report, :awaiting_signature, seller:, product:)
+
+      get :show, params: { id: report.external_id }
+      expect(response).to redirect_to(dashboard_url)
+
+      post :sign, params: { id: report.external_id, signed_by_name: "Jane Doe" }
+      expect(report.reload.state).to eq("awaiting_signature")
+    end
+  end
 end

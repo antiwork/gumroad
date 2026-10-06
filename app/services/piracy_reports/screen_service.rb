@@ -20,7 +20,7 @@ class PiracyReports::ScreenService
   # The email goes out after the lock, so the job cannot read the row before the transition commits.
   def call
     result = report.with_lock { screen }
-    PiracyReportMailer.signature_request(report.id).deliver_later if report.awaiting_signature?
+    PiracyReportMailer.signature_request(report.id).deliver_later if result.success? && report.awaiting_signature?
     result
   end
 
