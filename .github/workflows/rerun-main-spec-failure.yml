@@ -1,0 +1,107 @@
+name: Rerun main spec failure
+
+# Knapsack re-runs only a shard's failed examples, so a retry is safe only when
+# bin/classify-main-spec-failure proves every unpassed test runs again.
+
+on:
+  workflow_run:
+    workflows: ["Tests"]
+    types: [completed]
+
+permissions:
+  actions: write # rerun-failed-jobs; the default token cannot re-run without it
+  contents: read
+
+jobs:
+  rerun:
+    runs-on: ubuntu-latest
+    # run_attempt < 2 is the cap: attempt 1 may be re-run, attempt 2 is final.
+    if: >-
+      github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.run_attempt < 2 &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            bin/classify-main-spec-failure
+          sparse-checkout-cone-mode: false
+
+      - name: Classify the triggering attempt
+        id: classify
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          EVENT: ${{ github.event.workflow_run.event }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          gh api --paginate \
+            "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/attempts/${ATTEMPT}/jobs?per_page=100" \
+            --jq '.jobs[]' | jq -s '{jobs: .}' > jobs.json
+          MAIN_SHA=$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq .sha)
+
+          # Knapsack stores a shard's failures for the retry only if its queue ended
+          # normally, without fallback mode.
+          echo '{}' > summaries.json
+          for id in $(ruby bin/classify-main-spec-failure --rspec-shards jobs.json); do
+            # Not `gh api`: it refuses logs with escape codes, and its override flag may be too new for the runner.
+            if ! curl -fsSL -H "Authorization: Bearer ${GH_TOKEN}" \
+                "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/jobs/${id}/logs" -o shard.raw; then
+              echo "::warning::Could not fetch the log of job ${id}; not retrying."
+              : > shard.raw
+            fi
+            sed 's/\x1b\[[0-9;]*m//g' shard.raw | tr -d '\r' > shard.log
+            if [ ! -s shard.log ]; then
+              summary="log unavailable"
+            elif grep -aqiE 'fallback mode|FallbackModeError' shard.log; then
+              summary="knapsack fallback mode"
+            elif ! grep -aqF 'To retry all the tests assigned to this CI node' shard.log; then
+              summary="knapsack queue did not finish"
+            else
+              summary=$(grep -aoE '[0-9]+ examples?, [0-9]+ failures?.*$' shard.log | tail -1) || summary=""
+            fi
+            jq --arg id "$id" --arg summary "$summary" '.[$id] = $summary' summaries.json > summaries.tmp
+            mv summaries.tmp summaries.json
+          done
+
+          jq --arg conclusion "$CONCLUSION" --arg event "$EVENT" --arg head_branch "$HEAD_BRANCH" \
+             --arg head_sha "$HEAD_SHA" --arg main_sha "$MAIN_SHA" --slurpfile summaries summaries.json \
+            '. + {conclusion: $conclusion, event: $event, head_branch: $head_branch, head_sha: $head_sha, main_sha: $main_sha, summaries: $summaries[0]}' \
+            jobs.json > attempt.json
+          set +e
+          ruby bin/classify-main-spec-failure attempt.json
+          status=$?
+          set -e
+          case "$status" in
+            0) echo "rerun=true" >> "$GITHUB_OUTPUT" ;;
+            *) echo "rerun=false" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      # tests.yml puts a main re-run in its own concurrency lane, so it cannot
+      # replace a newer pending run.
+      - name: Re-run the failed jobs
+        if: steps.classify.outputs.rerun == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          run=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}" --jq '"\(.run_attempt) \(.status)"')
+          if [ "$run" != "$ATTEMPT completed" ]; then
+            echo "Skip: the run is now at '$run', not '$ATTEMPT completed'."
+            exit 0
+          fi
+          main_sha=$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq .sha)
+          if [ "$main_sha" != "$HEAD_SHA" ]; then
+            echo "Skip: main moved to $main_sha; its own run ships this commit."
+            exit 0
+          fi
+          gh run rerun "$RUN_ID" --failed -R "$GITHUB_REPOSITORY"

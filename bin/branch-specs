@@ -831,6 +831,9 @@ changed.each do |path|
   elsif path == "bin/classify-hung-checkout" || path == "spec/bin/classify_hung_checkout_test.rb"
     # Same: standalone ruby (ruby spec/bin/classify_hung_checkout_test.rb), not rspec.
     next
+  elsif path == "bin/classify-main-spec-failure" || path == "spec/bin/classify_main_spec_failure_test.rb"
+    # Same: standalone ruby (ruby spec/bin/classify_main_spec_failure_test.rb), not rspec.
+    next
   elsif path == "bin/reuse-full-suite" || path == "script/test-reuse-full-suite"
     # Standalone bash; script/test-reuse-full-suite runs on every PR.
     next

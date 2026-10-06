@@ -12,7 +12,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request_target' && github.event.pull_request.number || github.ref }}
+  # A re-run of a main run gets its own lane: in the shared one it would replace
+  # a newer pending run, the one that unblocks the newer deploy.
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request_target' && github.event.pull_request.number || github.ref }}${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.run_attempt != '1' && format('-attempt-{0}-{1}', github.sha, github.run_attempt) || '' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request_target' || github.ref != 'refs/heads/main' }}
 
 jobs:
@@ -184,6 +186,9 @@ jobs:
       # runs on every PR and needs no bundle, same as the self-test.
       - name: Self-test the branch-specs selector
         run: ruby spec/bin/branch_specs_test.rb
+
+      - name: Self-test the main spec-failure classifier
+        run: ruby spec/bin/classify_main_spec_failure_test.rb
 
       # Hosted here so a reuse-only PR cannot ship on the user_spec.rb floor.
       - name: Self-test reuse-full-suite
@@ -611,7 +616,10 @@ jobs:
       needs.run_scope.outputs.full == 'true' &&
       needs.reuse_scope.outputs.reuse != 'true'
     strategy:
-      fail-fast: true
+      # Not on main: Knapsack hands a cancelled shard's unrun tests to nobody, so
+      # a re-run of a fail-fast cancel passes with 0 examples. Main runs must
+      # finish every shard for rerun-main-spec-failure.yml to retry safely.
+      fail-fast: ${{ github.event_name != 'push' || github.ref != 'refs/heads/main' }}
       matrix:
         ci_node_total: [18]
         ci_node_index: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]
@@ -1198,6 +1206,27 @@ jobs:
               exit 0
             fi
 
+            # A re-run runs in its own lane and can pass after a newer commit already
+            # shipped this one; the rollback guard would then fail its deploy.
+            if [ "$RUN_ATTEMPT" != "1" ]; then
+              if ! COMPARE=$(curl -fsS -H "Authorization: Bearer $GITHUB_TOKEN" \
+                  "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/compare/$COMMIT_SHA...production-release"); then
+                echo "Could not compare $COMMIT_SHA with production-release."
+                exit 1
+              fi
+              case "$(echo "$COMPARE" | jq -r '.status // empty')" in
+                ahead|identical)
+                  echo "production-release already contains $COMMIT_SHA. Skipping unblock."
+                  exit 0
+                  ;;
+                behind|diverged) ;;
+                *)
+                  echo "Unexpected compare result for $COMMIT_SHA."
+                  exit 1
+                  ;;
+              esac
+            fi
+
             # No time-of-day deploy block here. Deploys used to be blocked
             # outright between midnight and 6am ET, because that is when the
             # long nightly jobs run (finance/tax report generation, monthly
@@ -1265,6 +1294,8 @@ jobs:
         env:
           UNBLOCK_DEPLOYMENT: ${{ secrets.UNBLOCK_DEPLOYMENT_FROM_BUILDKITE }}
           BUILDKITE_API_TOKEN: ${{ secrets.BUILDKITE_API_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
           COMMIT_SHA: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
           ORG_SLUG: gumroad-inc
           PIPELINE_SLUG: ${{ secrets.BUILDKITE_PIPELINE_SLUG }}
