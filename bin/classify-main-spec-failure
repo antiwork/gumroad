@@ -16,6 +16,8 @@
 # error) has no example to retry, and its re-run would pass with 0 examples.
 #
 # `--rspec-shards` prints the job ids whose summary lines the caller must fetch.
+# `--spec-failed` prints whether any shard failed in its test step, the only
+# failure that says something about the code.
 #
 # Exit codes match bin/classify-hung-checkout: 0 rerun, 1 skip, 2 could not run.
 
@@ -57,6 +59,14 @@ end
 
 def spec_step(job)
   SPEC_STEPS.fetch(shard_kind(job))
+end
+
+def spec_failed?(jobs)
+  jobs.any? do |job|
+    next false unless job["conclusion"] == "failure" && job_label(job).match?(SHARD_NAME)
+    step = first_failed_step(job)
+    step && step["name"] == spec_step(job)
+  end
 end
 
 def failed_rspec_shards(jobs)
@@ -115,6 +125,7 @@ end
 
 raw = ARGV.reject { |arg| arg.start_with?("--") }.first
 rspec_shards_only = ARGV.include?("--rspec-shards")
+spec_failed_only = ARGV.include?("--spec-failed")
 
 begin
   payload = JSON.parse(raw ? File.read(raw) : $stdin.read)
@@ -126,6 +137,11 @@ end
 unless payload.is_a?(Hash)
   warn "Main spec-failure classifier could not run: expected a JSON object"
   exit EXIT_OPERATIONAL
+end
+
+if spec_failed_only
+  puts spec_failed?(Array(payload["jobs"]))
+  exit 0
 end
 
 if rspec_shards_only

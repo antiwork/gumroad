@@ -297,6 +297,25 @@ else
   $failures << "--rspec-shards: got #{listed.strip.inspect}"
 end
 
+# --spec-failed feeds the revert verdict: only a failure in a shard's test step
+# says something about the code.
+{
+  "a shard that failed in its test step" => [[job("Test Slow 12", "failure", SPEC_FAILURE)], "true"],
+  "a minitest shard that failed in Run Minitest" => [[job("Test Minitest 1", "failure", MINITEST_FAILURE)], "true"],
+  "a hung checkout" => [[job("Test Slow 3", "failure", HUNG_CHECKOUT)], "false"],
+  "a failed build job" => [[job("Build images", "failure", [["Build test image", "failure"]])], "false"],
+  "only cancelled shards" => [[job("Test Fast 11", "cancelled", SPEC_CANCELLED)], "false"]
+}.each do |name, (jobs, expected)|
+  $count += 1
+  _, printed = run(JSON.dump(attempt(jobs)), "--spec-failed")
+  if printed.strip == expected
+    puts "  ok    --spec-failed: #{name}"
+  else
+    puts "  FAIL  --spec-failed: #{name}"
+    $failures << "--spec-failed #{name}: expected #{expected}, got #{printed.strip.inspect}"
+  end
+end
+
 # --- The workflow's own gate ----------------------------------------------
 #
 # The attempt cap and the main-push scope live in the job `if`, which nothing

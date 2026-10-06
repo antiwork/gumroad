@@ -6,6 +6,7 @@
 #
 #   { "run": { ... GET /repos/{repo}/actions/runs/{id}, read after the retry
 #              decision ... },
+#     "spec_failed": <true when a shard failed in its test step>,
 #     "production": "<compare status of sha...production-release>",
 #     "gate_unblocked": <true when the commit's Buildkite deploy gate opened> }
 #
@@ -31,6 +32,8 @@ def verdict(payload)
   return [EXIT_SKIP, "retry_in_progress"] unless run["status"] == "completed"
   return [EXIT_SKIP, "not_failed"] unless run["conclusion"] == "failure"
   return [EXIT_SKIP, "not_main_push"] unless run["event"] == "push" && run["head_branch"] == "main"
+  # Infrastructure failures say nothing about the code.
+  return [EXIT_SKIP, "no_spec_failure"] unless payload["spec_failed"] == true
 
   production = payload["production"].to_s
   return [EXIT_OPERATIONAL, "unknown_production_state"] unless (SHIPPED + NOT_SHIPPED).include?(production)

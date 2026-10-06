@@ -65,8 +65,9 @@ jobs:
               "https://api.buildkite.com/v2/organizations/${ORG_SLUG}/pipelines/${PIPELINE_SLUG}/builds?commit=${sha}" \
             | jq --arg sha "$sha" '[.[] | select(.commit == $sha) | .jobs[]? | select(.type == "manual" and .step_key == "require-approval" and .state == "unblocked")] | length > 0')
 
-          jq -n --slurpfile run run.json --arg production "$production" --argjson gate_unblocked "$gate_unblocked" \
-            '{run: $run[0], production: $production, gate_unblocked: $gate_unblocked}' > decision.json
+          jq -n --slurpfile run run.json --slurpfile verdict verdict/verdict.json \
+            --arg production "$production" --argjson gate_unblocked "$gate_unblocked" \
+            '{run: $run[0], spec_failed: $verdict[0].spec_failed, production: $production, gate_unblocked: $gate_unblocked}' > decision.json
           set +e
           line=$(ruby bin/revert-red-main-decision decision.json)
           status=$?
@@ -131,7 +132,9 @@ jobs:
         run: |
           set -euo pipefail
           branch="revert-red-main-${SHA:0:12}"
-          existing=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$branch" --state all --json url --jq '.[0].url // empty')
+          # Same-repo PRs into main only: a fork can pick the same branch name.
+          existing=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$branch" --base main --state all \
+            --json url,isCrossRepository --jq '[.[] | select(.isCrossRepository | not)] | .[0].url // empty')
           if [ -n "$existing" ]; then
             echo "A revert PR already exists: $existing"
             echo "opened=existing" >> "$GITHUB_OUTPUT"
@@ -168,7 +171,7 @@ jobs:
             fi
             echo "Early deploys wait while \`main\` is red, so the next commits deploy only after their own suite passes."
           } > body.md
-          url=$(gh pr create --repo "$GITHUB_REPOSITORY" --base main --head "$branch" --label run-all-specs \
+          url=$(gh pr create --repo "$GITHUB_REPOSITORY" --base main --head "$branch" \
             --title "$(git log -1 --format=%s)" --body-file body.md)
           echo "Opened $url"
           {

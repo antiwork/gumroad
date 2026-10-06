@@ -19,8 +19,8 @@ RED_RUN = { "id" => 37404168421, "head_sha" => "f69c0d04c49600000000000000000000
             "conclusion" => "failure", "event" => "push", "head_branch" => "main", "run_attempt" => 2,
             "display_title" => "Fix the café — checkout" }.freeze
 
-def payload(run: RED_RUN, production: "ahead", gate_unblocked: true)
-  { "run" => run, "production" => production, "gate_unblocked" => gate_unblocked }
+def payload(run: RED_RUN, spec_failed: true, production: "ahead", gate_unblocked: true)
+  { "run" => run, "spec_failed" => spec_failed, "production" => production, "gate_unblocked" => gate_unblocked }
 end
 
 # As the workflow calls it: a file argument, under a C locale.
@@ -60,6 +60,8 @@ check("a cancelled run", payload(run: RED_RUN.merge("conclusion" => "cancelled")
 check("a pull request run", payload(run: RED_RUN.merge("event" => "pull_request_target")), expect: :skip, reason: "not_main_push")
 check("a push to another branch", payload(run: RED_RUN.merge("head_branch" => "feature")), expect: :skip, reason: "not_main_push")
 
+check("an infrastructure failure", payload(spec_failed: false), expect: :skip, reason: "no_spec_failure")
+check("no spec verdict", payload(spec_failed: nil), expect: :skip, reason: "no_spec_failure")
 check("an unknown production state", payload(production: ""), expect: :error, reason: "unknown_production_state")
 check("no run", payload(run: nil), expect: :error)
 check("input that is not JSON", "not json", expect: :error)

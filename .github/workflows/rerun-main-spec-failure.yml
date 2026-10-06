@@ -121,15 +121,40 @@ jobs:
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_branch == 'main'
     steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            bin/classify-main-spec-failure
+          sparse-checkout-cone-mode: false
+
+      # spec_failed is what a revert needs: an infrastructure failure says
+      # nothing about the code, and rerun-hung-checkout.yml never retries an
+      # attempt where specs failed.
       - name: Record the verdict
         env:
+          GH_TOKEN: ${{ github.token }}
           RUN_ID: ${{ github.event.workflow_run.id }}
           ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
           SHA: ${{ github.event.workflow_run.head_sha }}
           RETRIED: ${{ needs.rerun.outputs.retried == 'true' }}
         run: |
-          jq -n --argjson run_id "$RUN_ID" --argjson attempt "$ATTEMPT" --arg sha "$SHA" --argjson retried "$RETRIED" \
-            '{run_id: $run_id, attempt: $attempt, sha: $sha, retried: $retried}' > verdict.json
+          set -euo pipefail
+          # A failed fetch must not read as "no spec failed".
+          for try in 1 2 3; do
+            if gh api --paginate \
+                "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/attempts/${ATTEMPT}/jobs?per_page=100" \
+                --jq '.jobs[]' > jobs.ndjson; then
+              break
+            fi
+            [ "$try" = 3 ] && exit 1
+            sleep 15
+          done
+          jq -s '{jobs: .}' jobs.ndjson > jobs.json
+          spec_failed=$(ruby bin/classify-main-spec-failure --spec-failed jobs.json)
+          jq -n --argjson run_id "$RUN_ID" --argjson attempt "$ATTEMPT" --arg sha "$SHA" \
+            --argjson retried "$RETRIED" --argjson spec_failed "$spec_failed" \
+            '{run_id: $run_id, attempt: $attempt, sha: $sha, retried: $retried, spec_failed: $spec_failed}' > verdict.json
           cat verdict.json
 
       - uses: actions/upload-artifact@v4
