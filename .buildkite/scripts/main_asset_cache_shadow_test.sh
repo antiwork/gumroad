@@ -43,10 +43,11 @@ chmod +x "$WORK/bin/"*
 
 # A production image with every cached path.
 make_image() {
-  local dir=$1 marker=$2
+  local dir=$1 marker=$2 map=${3:-map}
   rm -rf "$dir"
   mkdir -p "$dir/public/vite/assets" "$dir/public/js" "$dir/public/assets/pages" "$dir/app/javascript/utils" "$dir/app/javascript/json_schemas"
   echo "bundle $marker" > "$dir/public/vite/assets/app.js"
+  echo "$map" > "$dir/public/vite/assets/app.js.map"
   echo "widget" > "$dir/public/js/widget.js"
   echo "css" > "$dir/public/pages-tailwind.css"
   echo "{}" > "$dir/public/pages-tailwind-manifest.json"
@@ -75,12 +76,25 @@ ls "$WORK/bucket/buildkite-branch-cache/main-asset-cache/"*.tar.gz.sha256 >/dev/
 tar -tzf "$WORK/bucket/buildkite-branch-cache/main-asset-cache/"*.tar.gz | grep -q "app/javascript/utils/routes.js" && ok "the saved files include routes.js" || fail "the saved files include routes.js"
 
 run_script; rc=$?
-[ $rc = 0 ] && [ "$(result_of)" = result=hit ] && grep -q "files=8 mismatched=0" "$WORK/out" && ok "the same files again are a hit" || fail "the same files again are a hit (rc=$rc $(cat "$WORK/out" | tail -1))"
+[ $rc = 0 ] && [ "$(result_of)" = result=hit ] && grep -q "files=9 mismatched=0 maps_differing=0" "$WORK/out" && ok "the same files again are a hit" || fail "the same files again are a hit (rc=$rc $(cat "$WORK/out" | tail -1))"
 grep -q "result=hit" "$WORK/annotations" && ok "a hit is annotated" || fail "a hit is annotated"
 
 make_image "$WORK/image" two
 run_script; rc=$?
 [ $rc = 1 ] && [ "$(result_of)" = result=mismatch ] && grep -q "public/vite/assets/app.js" "$WORK/out" && ok "different files are a mismatch that names the file" || fail "different files are a mismatch that names the file (rc=$rc $(result_of))"
+
+make_image "$WORK/image" one other-mappings
+run_script; rc=$?
+[ $rc = 0 ] && [ "$(result_of)" = result=hit ] && grep -q "mismatched=0 maps_differing=1" "$WORK/out" && ok "a source map that differs alone is a hit that counts it" || fail "a source map that differs alone is a hit that counts it (rc=$rc $(result_of))"
+
+make_image "$WORK/image" two other-mappings
+run_script; rc=$?
+[ $rc = 1 ] && [ "$(result_of)" = result=mismatch ] && grep -q "public/vite/assets/app.js;" "$WORK/out" && ! grep -q "app.js.map" "$WORK/out" && ok "a mismatch names the differing JavaScript, not its map" || fail "a mismatch names the differing JavaScript, not its map (rc=$rc $(result_of))"
+
+make_image "$WORK/image" one
+rm "$WORK/image/public/vite/assets/app.js.map"
+run_script; rc=$?
+[ $rc = 1 ] && [ "$(result_of)" = result=mismatch ] && grep -q "app.js.map" "$WORK/out" && ok "a missing source map is a mismatch" || fail "a missing source map is a mismatch (rc=$rc $(result_of))"
 
 make_image "$WORK/image" one
 rm "$WORK/image/app/javascript/utils/routes.js"
