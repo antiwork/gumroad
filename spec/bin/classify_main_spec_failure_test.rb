@@ -331,6 +331,16 @@ else
   $failures << "test_fast fail-fast: #{fail_fast.inspect}"
 end
 
+# In the shared main lane, a re-run would replace a newer pending run.
+$count += 1
+group = YAML.load_file(TESTS_WORKFLOW).fetch("concurrency").fetch("group").to_s
+if group.include?("github.run_attempt != '1'") && group.include?("github.ref == 'refs/heads/main'")
+  puts "  ok    tests.yml gives a main re-run its own concurrency lane"
+else
+  puts "  FAIL  tests.yml gives a main re-run its own concurrency lane"
+  $failures << "tests.yml concurrency group: #{group.inspect}"
+end
+
 # The classifier matches job and step names from tests.yml; a rename there would
 # turn every retry into a silent skip.
 { "test_fast" => ["Test Fast", "Run tests"], "test_slow" => ["Test Slow", "Run tests"], "test_minitest" => ["Test Minitest", "Run Minitest"] }.each do |key, (prefix, step)|
