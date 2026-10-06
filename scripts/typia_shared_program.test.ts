@@ -64,15 +64,25 @@ describe("typia transform in a one-shot build", () => {
 });
 
 describe("typia transform in dev", () => {
-  it("keeps a program per file, which does not see the global .d.ts", async () => {
+  const devTransform = async (beforeTransform?: () => Promise<unknown>) => {
     const server = await createServer({ ...config(), server: { middlewareMode: true }, appType: "custom" });
     try {
-      const code = (await server.transformRequest("/index.ts"))?.code ?? "";
-      // The unresolved type becomes `any`: a validator that accepts anything.
-      expect(code).toContain("__is = (input2) => true");
-      expect(code).not.toContain('".count"');
+      await beforeTransform?.();
+      return (await server.transformRequest("/index.ts"))?.code ?? "";
     } finally {
       await server.close();
     }
+  };
+
+  it("keeps a program per file, which does not see the global .d.ts", async () => {
+    const code = await devTransform();
+    // The unresolved type becomes `any`: a validator that accepts anything.
+    expect(code).toContain("__is = (input2) => true");
+    expect(code).not.toContain('".count"');
+  }, 60_000);
+
+  it("keeps a program per file while a build runs in the same process", async () => {
+    const code = await devTransform(() => buildOutput(["index"]));
+    expect(code).toContain("__is = (input2) => true");
   }, 60_000);
 });

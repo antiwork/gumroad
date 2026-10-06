@@ -1,17 +1,26 @@
 diff --git a/node_modules/@typia/unplugin/dist/core.js b/node_modules/@typia/unplugin/dist/core.js
-index e61604c..41c4c0f 100644
+index e61604c..eaa0e2f 100644
 --- a/node_modules/@typia/unplugin/dist/core.js
 +++ b/node_modules/@typia/unplugin/dist/core.js
+@@ -493,7 +493,7 @@ const sourceCache = /* @__PURE__ */ new Map();
+ * @param aliases - Path aliases to be resolved
+ * @returns The transformed code.
+ */
+-async function transformTypia(_id, _source, unpluginContext, options, aliases) {
++async function transformTypia(_id, _source, unpluginContext, options, aliases, shared) {
+ 	try {
+ 		var _usingCtx = _usingCtx$1();
+ 		const id = wrap(resolve(_id));
 @@ -502,7 +502,7 @@ async function transformTypia(_id, _source, unpluginContext, options, aliases) {
  		const cacheEnable = options.cache;
  		/** Parse tsconfig compilerOptions */
  		compilerOptions = await getTsCompilerOption(cacheEnable, options?.tsconfig);
 -		const { program, tsSource } = await getProgramAndSource(id, source, compilerOptions, aliases, cacheEnable);
-+		const { program, tsSource } = await getProgramAndSource(id, source, compilerOptions, aliases, cacheEnable, options.typia, options?.tsconfig);
++		const { program, tsSource } = await getProgramAndSource(id, source, compilerOptions, aliases, cacheEnable, options.typia, options?.tsconfig, shared);
  		const { diagnostics, transformed, file } = _usingCtx.u(transform$1(id, program, tsSource, options.typia));
  		warnDiagnostic(diagnostics, transformed, unpluginContext);
  		return wrap(printer.printFile(file));
-@@ -541,7 +541,57 @@ async function getTsCompilerOption(cacheEnable = true, tsconfigId) {
+@@ -541,7 +541,58 @@ async function getTsCompilerOption(cacheEnable = true, tsconfigId) {
  * @param cacheEnable - Whether to enable cache. @default true
  * @returns The program and source.
  */
@@ -26,12 +35,13 @@ index e61604c..41c4c0f 100644
 +* order they are first asked for, which sets the order of union members in the
 +* output. So every typia file is transformed once, sorted, before any real
 +* transform: without that, two builds of one commit differ.
++*
++* `shared` is per plugin instance, so a dev server and a build in one process
++* do not share a mode or a program.
 +*/
-+let sharedProgramEnabled = false;
-+let sharedProgram;
-+function getSharedProgram(compilerOptions, aliases, typiaOptions, tsconfigId) {
-+	sharedProgram ??= buildSharedProgram(compilerOptions, aliases, typiaOptions, tsconfigId);
-+	return sharedProgram;
++function getSharedProgram(shared, compilerOptions, aliases, typiaOptions, tsconfigId) {
++	shared.program ??= buildSharedProgram(compilerOptions, aliases, typiaOptions, tsconfigId);
++	return shared.program;
 +}
 +async function buildSharedProgram(compilerOptions, aliases, typiaOptions, tsconfigId) {
 +	const configPath = tsconfigId != null ? resolve(tsconfigId) : await resolveTSConfig();
@@ -60,35 +70,50 @@ index e61604c..41c4c0f 100644
 +	};
 +	return host;
 +}
-+async function getProgramAndSource(id, source, compilerOptions, aliases, cacheEnable = true, typiaOptions, tsconfigId) {
-+	if (sharedProgramEnabled) {
-+		const program = await getSharedProgram(compilerOptions, aliases, typiaOptions, tsconfigId);
-+		const shared = program.getSourceFile(id);
++async function getProgramAndSource(id, source, compilerOptions, aliases, cacheEnable = true, typiaOptions, tsconfigId, shared) {
++	if (shared?.enabled) {
++		const program = await getSharedProgram(shared, compilerOptions, aliases, typiaOptions, tsconfigId);
++		const sharedSource = program.getSourceFile(id);
 +		// A file another plugin rewrote first is not what the program read from disk.
-+		if (shared != null && shared.text === source) return { program, tsSource: shared };
++		if (sharedSource != null && sharedSource.text === source) return { program, tsSource: sharedSource };
 +	}
  	const tsSource = ts.createSourceFile(id, source, compilerOptions.target ?? ts.ScriptTarget.ES2020);
  	const host = ts.createCompilerHost(compilerOptions);
  	/** When alias defined in config, resolve module with alias */
-@@ -690,8 +740,8 @@ const unpluginFactory = (rawOptions = {}) => {
+@@ -640,6 +691,7 @@ const unpluginFactory = (rawOptions = {}) => {
+ 	const { cache: cacheOptions, log: logOption } = options;
+ 	const showLog = logOption === "verbose" && cacheOptions;
+ 	let viteConfig;
++	const shared = { enabled: false, program: void 0 };
+ 	/** Generate code with source map. */
+ 	function generateCodeWithMap({ source, code, id }) {
+ 		/** Generate Magic string */
+@@ -690,14 +742,14 @@ const unpluginFactory = (rawOptions = {}) => {
  	async function transformCodeWithTypiaTransform({ id, source, ctx, options }) {
  		try {
  			var _usingCtx = _usingCtx$1();
 -			/** Get cache */
 -			const cache = _usingCtx.u(cacheOptions ? new Cache(id, source) : void 0);
 +			/** Get cache. Gumroad patch: not in a shared-program build, whose output differs from per-file output under the same key. */
-+			const cache = _usingCtx.u(cacheOptions && !sharedProgramEnabled ? new Cache(id, source) : void 0);
++			const cache = _usingCtx.u(cacheOptions && !shared.enabled ? new Cache(id, source) : void 0);
  			let code = cache?.data;
  			if (showLog) if (code != null) log("success", `Cache hit: ${id}`);
  			else log("warn", `Cache miss: ${id}`);
-@@ -716,8 +766,10 @@ const unpluginFactory = (rawOptions = {}) => {
+ 			/** Transform if cache not exists */
+ 			if (code == null) {
+-				code = await transformTypia(id, source, ctx, options, viteConfig?.resolve?.alias);
++				code = await transformTypia(id, source, ctx, options, viteConfig?.resolve?.alias, shared);
+ 				if (showLog) if (code != null) log("success", `Transformed: ${id}`);
+ 				else log("error", `Transform is null: ${id}`);
+ 				/** Save cache */
+@@ -716,8 +768,10 @@ const unpluginFactory = (rawOptions = {}) => {
  		enforce: options.enforce,
  		vite: { configResolved(config) {
  			viteConfig = config;
-+			sharedProgramEnabled = config.command === "build" && !config.build.watch;
++			shared.enabled = config.command === "build" && !config.build.watch;
  		} },
  		buildStart() {
-+			sharedProgram = void 0;
++			shared.program = void 0;
  			if (logOption !== false) log("box", cacheOptions ? `Cache enabled` : `Cache disabled`);
  		},
  		transformInclude(id) {
