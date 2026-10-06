@@ -150,6 +150,16 @@ check(
   expect: :wait, reason: "frozen_main_red"
 )
 
+# The listed copy says in progress; the copy read again just before the
+# decision says it failed.
+check(
+  "a run that finished red while the lists were read",
+  payload(runs: [OWN_RUN, GREEN_PREVIOUS,
+                 run_record(2, "older2", "in_progress", nil, "2026-10-06T14:50:00Z").merge("updated_at" => "2026-10-06T15:05:00Z"),
+                 run_record(2, "older2", "completed", "failure", "2026-10-06T14:50:00Z").merge("updated_at" => "2026-10-06T15:07:00Z")]),
+  expect: :wait, reason: "frozen_main_red"
+)
+
 # An old run re-run today keeps its old created_at.
 check(
   "a re-run of an old main run is in progress",

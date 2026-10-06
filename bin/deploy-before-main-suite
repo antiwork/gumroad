@@ -17,6 +17,12 @@ gh api "${runs_api}&created=>=${since}" --jq '.workflow_runs' > "$dir/runs-recen
 for status in in_progress queued waiting requested pending; do
   gh api --paginate "${runs_api}&status=${status}" --jq '.workflow_runs' > "$dir/runs-${status}.json" || exit 2
 done
+# A run can finish between the queries above; read each unfinished one again
+# last, so its newest state is the one the gate keeps.
+jq -s 'add' "$dir"/runs-*.json > "$dir/runs-listed.json" || exit 2
+for id in $(jq -r '[.[] | select(.status != "completed") | .id] | unique | .[]' "$dir/runs-listed.json"); do
+  gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${id}" --jq '[.]' > "$dir/runs-fresh-${id}.json" || exit 2
+done
 jq -s 'add' "$dir"/runs-*.json > "$dir/runs.json" || exit 2
 
 # GitHub can link a fresh merge commit to its PR a few seconds late.
