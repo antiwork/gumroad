@@ -10,6 +10,7 @@ import { SettingPage } from "$app/parsers/settings";
 import type { ComplianceInfo, PayoutMethod, FormFieldName, User, PayoutDebitCardData } from "$app/types/payments";
 import { COLOMBIA_ID_NUMBER_ERROR_MESSAGE, isValidColombiaIdNumber } from "$app/utils/colombiaIdNumbers";
 import { formatPriceCentsWithCurrencySymbol, formatPriceCentsWithoutCurrencySymbol } from "$app/utils/currency";
+import { GUATEMALA_NIT_ERROR_MESSAGE, isValidGuatemalaNit } from "$app/utils/guatemalaNit";
 import { accountNumberFormatError } from "$app/utils/payoutAccountNumbers";
 import { normalizeUsTaxId, personalTaxIdError, usesUsTaxId } from "$app/utils/personalTaxId";
 import { countryRequiresPostalCode } from "$app/utils/postalCodes";
@@ -1020,6 +1021,14 @@ export default function PaymentsPage() {
     ) {
       markFieldInvalid("individual_tax_id");
       setClientErrorMessage({ message: COLOMBIA_ID_NUMBER_ERROR_MESSAGE });
+    }
+    if (
+      individualIdCountryMatches("GT") &&
+      form.data.user.individual_tax_id &&
+      !isValidGuatemalaNit(form.data.user.individual_tax_id)
+    ) {
+      markFieldInvalid("individual_tax_id");
+      setClientErrorMessage({ message: GUATEMALA_NIT_ERROR_MESSAGE });
     }
     if (form.data.user.is_business) {
       const businessTypes = getBusinessTypes(form.data.user.business_country, {

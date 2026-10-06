@@ -136,6 +136,9 @@ class UpdateUserComplianceInfo
         colombia_id_error = colombia_individual_id_error(old_compliance_info)
         return { success: false, error_message: colombia_id_error } if colombia_id_error
 
+        guatemala_nit_error = guatemala_individual_nit_error(old_compliance_info)
+        return { success: false, error_message: guatemala_nit_error } if guatemala_nit_error
+
         saved = false
         new_compliance_info = nil
         # A rejected revision must roll back its deletion of the old revision,
@@ -391,6 +394,14 @@ class UpdateUserComplianceInfo
       return unless individual_id_country_matches?(old_compliance_info, Compliance::Countries::COL.alpha2)
       return if Compliance::ColombiaIdNumber.valid?(submitted)
       Compliance::ColombiaIdNumber::ERROR_MESSAGE
+    end
+
+    def guatemala_individual_nit_error(old_compliance_info)
+      submitted = submitted_tax_id_for(:individual_tax_id)
+      return if submitted.blank?
+      return unless individual_id_country_matches?(old_compliance_info, Compliance::Countries::GTM.alpha2)
+      return if Compliance::GuatemalaNit.valid?(submitted)
+      Compliance::GuatemalaNit::ERROR_MESSAGE
     end
 
     # A personal tax ID belongs to the representative, so its shape is only knowable from the
