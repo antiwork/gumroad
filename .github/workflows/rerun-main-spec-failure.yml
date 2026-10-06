@@ -151,7 +151,22 @@ jobs:
             sleep 15
           done
           jq -s '{jobs: .}' jobs.ndjson > jobs.json
-          spec_failed=$(ruby bin/classify-main-spec-failure --spec-failed jobs.json)
+
+          # The summary line of each shard that failed in its test step. A
+          # timed-out shard has none, so it does not count as a spec failure.
+          echo '{}' > summaries.json
+          for id in $(ruby bin/classify-main-spec-failure --test-step-failures jobs.json); do
+            # Not `gh api`: it refuses logs with escape codes, and its override flag may be too new for the runner.
+            curl -fsSL -H "Authorization: Bearer ${GH_TOKEN}" \
+              "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/jobs/${id}/logs" -o shard.raw || exit 1
+            summary=$(sed 's/\x1b\[[0-9;]*m//g' shard.raw | tr -d '\r' \
+              | grep -aoE '[0-9]+ examples?, [0-9]+ failures?.*$|[0-9]+ runs, [0-9]+ assertions, [0-9]+ failures, [0-9]+ errors, [0-9]+ skips' \
+              | tail -1) || summary=""
+            jq --arg id "$id" --arg summary "$summary" '.[$id] = $summary' summaries.json > summaries.tmp
+            mv summaries.tmp summaries.json
+          done
+          jq --slurpfile summaries summaries.json '. + {summaries: $summaries[0]}' jobs.json > verdict-input.json
+          spec_failed=$(ruby bin/classify-main-spec-failure --spec-failed verdict-input.json)
           jq -n --argjson run_id "$RUN_ID" --argjson attempt "$ATTEMPT" --arg sha "$SHA" \
             --argjson retried "$RETRIED" --argjson spec_failed "$spec_failed" \
             '{run_id: $run_id, attempt: $attempt, sha: $sha, retried: $retried, spec_failed: $spec_failed}' > verdict.json
