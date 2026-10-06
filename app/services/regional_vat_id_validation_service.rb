@@ -36,5 +36,11 @@ class RegionalVatIdValidationService
     else
       VatValidationService.new(vat_id).process
     end
+  rescue HTTParty::Error, SocketError, Timeout::Error, JSON::ParserError, SystemCallError, OpenSSL::SSL::SSLError, EOFError => e
+    # A third-party tax-ID vendor being unreachable must not raise into the checkout quote
+    # that called us: fail closed, the result a vendor error response already produces.
+    # Log the country, not e.message — some vendor URLs embed the submitted tax id.
+    Rails.logger.error("RegionalVatIdValidationService failed: country=#{country_code} #{e.class}")
+    false
   end
 end
