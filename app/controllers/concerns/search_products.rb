@@ -99,6 +99,9 @@ module SearchProducts
         search_params[key] = scalar_search_value(search_params[key]) if search_params.key?(key)
       end
 
+      # Discover and product search split this on "/"; `?taxonomy[]=x` would otherwise 500.
+      search_params[:taxonomy] = scalar_search_value(search_params[:taxonomy])&.to_s if search_params.key?(:taxonomy)
+
       search_params[:from] = search_params[:from].to_i if search_params[:from].present?
       # search_options computes MAX_RESULT_WINDOW - size and clamps against it, so an oversized
       # or negative size raises on the range rather than returning nothing.
