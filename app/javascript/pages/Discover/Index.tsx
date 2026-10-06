@@ -119,12 +119,11 @@ const ProductsCarouselSkeleton = () => (
   </section>
 );
 
-const BlackFridayBanner = ({
+// Exported for tests.
+export const BlackFridayBanner = ({
   stats,
-  currencyCode,
 }: {
   stats: { active_deals_count: number; revenue_cents: number; average_discount_percentage: number };
-  currencyCode: CurrencyCode;
 }) => (
   <div className="flex h-full shrink-0 items-center gap-x-4 [&>*]:flex-shrink-0">
     <span className="mx-2 inline-block text-lg text-black">✦</span>
@@ -144,7 +143,7 @@ const BlackFridayBanner = ({
         <span className="mx-2 inline-block text-lg text-black">✦</span>
         <span className="flex items-center text-xl font-medium text-black">
           <span className="mr-1.5 font-bold">
-            {formatPriceCentsWithCurrencySymbol(currencyCode, stats.revenue_cents, { symbolFormat: "short" })}
+            {formatPriceCentsWithCurrencySymbol("usd", stats.revenue_cents, { symbolFormat: "short" })}
           </span>
           IN SALES SO FAR
         </span>
@@ -421,9 +420,7 @@ function DiscoverIndex() {
                   <>
                     {(() => {
                       const stats = props.black_friday_stats;
-                      return Array.from({ length: 5 }, (_, i) => (
-                        <BlackFridayBanner key={i} stats={stats} currencyCode={props.currency_code} />
-                      ));
+                      return Array.from({ length: 5 }, (_, i) => <BlackFridayBanner key={i} stats={stats} />);
                     })()}
                   </>
                 ) : null}

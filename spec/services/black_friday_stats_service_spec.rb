@@ -35,6 +35,13 @@ describe BlackFridayStatsService do
       expect(described_class.calculate_stats[:average_discount_percentage]).to eq(23)
     end
 
+    it "uses the top tier percentage for tiered discounts instead of the placeholder amount_percentage" do
+      create(:percentage_offer_code, code:, amount_percentage: 20)
+      create(:tiered_offer_code, code:, ownership_duration_tiers: [{ "months" => 0, "amount_percentage" => 10 }, { "months" => 12, "amount_percentage" => 50 }])
+
+      expect(described_class.calculate_stats[:average_discount_percentage]).to eq(35)
+    end
+
     it "sums revenue from successful purchases made with Black Friday codes, including expired ones" do
       active_code = create(:percentage_offer_code, code:, amount_percentage: 25)
       expired_code = create(:percentage_offer_code, code:, amount_percentage: 25, valid_at: 3.days.ago, expires_at: 1.day.ago)

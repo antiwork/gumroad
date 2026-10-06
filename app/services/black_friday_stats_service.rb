@@ -14,7 +14,16 @@ class BlackFridayStatsService
     def calculate_stats
       offer_codes = OfferCode.alive.where(code: SearchProducts::BLACK_FRIDAY_CODE)
       active_offer_codes = offer_codes.reject(&:inactive?)
-      percentages = active_offer_codes.filter_map(&:amount_percentage)
+      percentages = active_offer_codes.filter_map do |offer_code|
+        # Tiered codes keep their percentages in ownership_duration_tiers and leave
+        # amount_percentage at its placeholder, so use the top tier, matching
+        # configured_discount_for_display.
+        if offer_code.tiered?
+          offer_code.normalized_ownership_duration_tiers.map { _1["amount_percentage"] }.max
+        else
+          offer_code.amount_percentage
+        end
+      end
 
       {
         active_deals_count: active_offer_codes.size,
