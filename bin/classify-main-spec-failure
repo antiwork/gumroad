@@ -1,11 +1,8 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# Decides whether a failed `Tests` attempt on a `main` push gets one unattended
-# re-run of its failed spec shards. A red `main` run never unblocks its deploy, so
-# one random spec failure holds production until the next merge.
-#
-# Reads the attempt on stdin, or from a file argument:
+# Decides whether a failed `Tests` attempt on a `main` push gets one re-run of
+# its failed jobs. Reads the attempt on stdin, or from a file argument:
 #
 #   { "jobs": [ ... GET /repos/{repo}/actions/runs/{id}/attempts/{n}/jobs ... ],
 #     "conclusion": "<the triggering run's own conclusion>",

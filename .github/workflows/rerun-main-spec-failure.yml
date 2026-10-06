@@ -1,13 +1,7 @@
 name: Rerun main spec failure
 
-# Re-runs the failed spec shards of a `Tests` attempt on a `main` push, once.
-# The deploy gate in tests.yml unblocks only a green `main` run, so one random
-# spec failure otherwise holds production until the next merge.
-#
-# Disjoint from rerun-hung-checkout.yml: that one refuses any attempt where specs
-# failed, and the classifier here refuses any attempt where something else did.
-# A real break fails the re-run too and stays red. Knapsack re-runs only the
-# failed examples; bin/classify-main-spec-failure says why that limits the scope.
+# Knapsack re-runs only a shard's failed examples, so a retry is safe only when
+# bin/classify-main-spec-failure proves every unpassed test runs again.
 
 on:
   workflow_run:
@@ -52,16 +46,22 @@ jobs:
             --jq '.jobs[]' | jq -s '{jobs: .}' > jobs.json
           MAIN_SHA=$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq .sha)
 
-          # The RSpec summary line of each failed Fast/Slow shard. A missing line
-          # stays empty, and the classifier refuses it. Knapsack stores the failed
-          # examples for the retry with each queue request, so the shard must
-          # show its queue finished (the "retry all the tests" line, which a
-          # timeout or a crash never reaches) and no fallback mode.
+          # Knapsack sends a batch's failed examples with the next queue request,
+          # so only a shard that logged its queue end (a timeout or crash never
+          # does) and no fallback mode has them stored for the retry. curl, not
+          # gh api: gh refuses a log with escape codes unless a flag the runner's
+          # gh may lack is passed.
           echo '{}' > summaries.json
           for id in $(ruby bin/classify-main-spec-failure --rspec-shards jobs.json); do
-            gh api --allow-escape-sequences "repos/${GITHUB_REPOSITORY}/actions/jobs/${id}/logs" \
-              | sed 's/\x1b\[[0-9;]*m//g' | tr -d '\r' > shard.log || : > shard.log
-            if grep -aqiE 'fallback mode|FallbackModeError' shard.log; then
+            if ! curl -fsSL -H "Authorization: Bearer ${GH_TOKEN}" \
+                "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/jobs/${id}/logs" -o shard.raw; then
+              echo "::warning::Could not fetch the log of job ${id}; not retrying."
+              : > shard.raw
+            fi
+            sed 's/\x1b\[[0-9;]*m//g' shard.raw | tr -d '\r' > shard.log
+            if [ ! -s shard.log ]; then
+              summary="log unavailable"
+            elif grep -aqiE 'fallback mode|FallbackModeError' shard.log; then
               summary="knapsack fallback mode"
             elif ! grep -aqF 'To retry all the tests assigned to this CI node' shard.log; then
               summary="knapsack queue did not finish"
@@ -85,10 +85,9 @@ jobs:
             *) echo "rerun=false" >> "$GITHUB_OUTPUT" ;;
           esac
 
-      # Checked again right before the request: a re-run joins the main
-      # concurrency group, and there it would replace a newer pending run, which
-      # is the run that unblocks the newer deploy. The attempt check stops a
-      # re-run of an attempt that someone started by hand in the meantime.
+      # A re-run joins the main concurrency group and replaces its pending run.
+      # With no other main run active at the check, a newer run is pending only
+      # if two pushes land between the check and the request.
       - name: Re-run the failed jobs
         if: steps.classify.outputs.rerun == 'true'
         env:
