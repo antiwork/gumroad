@@ -572,6 +572,13 @@ describe DiscoverController, type: :controller, inertia: true do
         expect(meta_tags["title"][:inner_content]).to eq("some tag | Software Development » Programming » C# | Gumroad")
       end
 
+      it "renders the taxonomy title when taxonomy is sent as an array query param" do
+        get :index, params: { taxonomy: ["software-development/programming/c-sharp"] }
+
+        expect(response).to have_http_status(:ok)
+        expect(meta_tags["title"][:inner_content]).to eq("Software Development » Programming » C# — digital products by independent creators | Gumroad")
+      end
+
       it "sets the tag description, not the site-wide boilerplate, when tags and taxonomy are both present" do
         get :index, params: { tags: "3d models", taxonomy: "3d" }
 

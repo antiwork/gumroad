@@ -188,6 +188,16 @@ describe SearchProducts do
         get :index, params: { from: ["10", "20"] }
         expect(JSON.parse(response.body)["from"]).to eq(10)
       end
+
+      it "keeps the first taxonomy path when taxonomy is sent as an array" do
+        get :index, params: { taxonomy: ["3d/3d-modeling", "design"] }
+        expect(JSON.parse(response.body)["taxonomy"]).to eq("3d/3d-modeling")
+      end
+
+      it "drops taxonomy when it is sent as a nested hash" do
+        get :index, params: { taxonomy: { "a" => "3d" } }
+        expect(JSON.parse(response.body)["taxonomy"]).to be_nil
+      end
     end
   end
 end
