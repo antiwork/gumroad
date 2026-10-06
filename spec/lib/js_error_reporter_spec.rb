@@ -18,7 +18,7 @@ describe JSErrorReporter do
     @html_tempfiles = []
   end
 
-  after(:all) { @driver.quit }
+  after(:all) { @driver&.quit }
 
   after(:each) do
     @html_tempfiles.shift.close(true) while @html_tempfiles.size > 0
