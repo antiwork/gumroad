@@ -37,14 +37,17 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           VERDICT_RUN_ID: ${{ github.event.workflow_run.id }}
+          VERDICT_RUN_TITLE: ${{ github.event.workflow_run.display_title }}
           BUILDKITE_API_TOKEN: ${{ secrets.BUILDKITE_API_TOKEN }}
           ORG_SLUG: gumroad-inc
           PIPELINE_SLUG: ${{ secrets.BUILDKITE_PIPELINE_SLUG }}
         run: |
           set -euo pipefail
           # No verdict and no verdict job: the Tests run was not a failed main
-          # push. A verdict job that ran without one leaves no commit to name,
-          # so this run fails where someone can see it.
+          # push. A verdict job that ran without one gets a verdict marked
+          # missing, built from this run's title, so the decision can still ask
+          # a person; the fresh run read below still catches a started retry.
+          mkdir -p verdict
           if [ "$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${VERDICT_RUN_ID}/artifacts" \
                 --jq '[.artifacts[] | select(.name == "main-failure-verdict")] | length')" = "0" ]; then
             verdict_job=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${VERDICT_RUN_ID}/jobs" \
@@ -54,10 +57,19 @@ jobs:
               echo "revert=false" >> "$GITHUB_OUTPUT"
               exit 0
             fi
-            echo "::error::The verdict job of run ${VERDICT_RUN_ID} ended ${verdict_job} without a verdict; check that main failure by hand."
-            exit 1
+            if [[ ! "$VERDICT_RUN_TITLE" =~ for\ run\ ([0-9]+)\ attempt\ ([0-9]+)$ ]]; then
+              echo "::error::The verdict job of run ${VERDICT_RUN_ID} ended ${verdict_job} without a verdict, and its title names no Tests run."
+              exit 1
+            fi
+            tests_run="${BASH_REMATCH[1]}"
+            tests_attempt="${BASH_REMATCH[2]}"
+            gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${tests_run}" \
+              | jq --argjson attempt "$tests_attempt" --arg error "the verdict job ended ${verdict_job} without a verdict" \
+                '{run_id: .id, attempt: $attempt, sha: .head_sha, retried: false, retry_failed: false, spec_failed: null, error: $error}' \
+              > verdict/verdict.json
+          else
+            gh run download "$VERDICT_RUN_ID" --repo "$GITHUB_REPOSITORY" --name main-failure-verdict --dir verdict
           fi
-          gh run download "$VERDICT_RUN_ID" --repo "$GITHUB_REPOSITORY" --name main-failure-verdict --dir verdict
           if [ "$(jq -r .retried verdict/verdict.json)" = "true" ]; then
             echo "A retry started; its own completion decides."
             echo "revert=false" >> "$GITHUB_OUTPUT"

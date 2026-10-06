@@ -84,6 +84,7 @@ check("input that is not an object", "[]", expect: :error)
 # --- The workflow ----------------------------------------------------------
 
 WORKFLOW = YAML.load_file(File.expand_path("../../.github/workflows/revert-red-main-deploy.yml", __dir__))
+RETRY = YAML.load_file(File.expand_path("../../.github/workflows/rerun-main-spec-failure.yml", __dir__))
 
 def workflow_check(name, ok, detail)
   $count += 1
@@ -117,10 +118,19 @@ open_actions = jobs.dig("open", "steps").filter_map { |step| step["uses"] }
 workflow_check("the open job uses only actions/checkout", open_actions.all? { |uses| uses.start_with?("actions/checkout@") }, open_actions.inspect)
 
 decide_run = jobs.dig("decide", "steps").find { |step| step["name"] == "Decide" }["run"].to_s
+# Without the artifact, the Tests run comes from the retry run's title, and a
+# verdict marked missing still reaches the decision (and a notify).
 workflow_check(
-  "a verdict job that ran without a verdict fails the run",
-  decide_run.include?('select(.name == "verdict")') && decide_run.include?("::error::"),
+  "a missing verdict still reaches the decision",
+  decide_run.include?('select(.name == "verdict")') && decide_run.include?("VERDICT_RUN_TITLE") &&
+    decide_run.include?("spec_failed: null, error: $error"),
   "Decide step"
+)
+title = RETRY["run-name"].to_s
+workflow_check(
+  "the retry run's title names the Tests run and attempt",
+  title.end_with?("for run ${{ github.event.workflow_run.id }} attempt ${{ github.event.workflow_run.run_attempt }}"),
+  title.inspect
 )
 
 tell = jobs["tell"]
@@ -144,7 +154,6 @@ workflow_check(
 )
 
 # The verdict keys the revert to the exact Tests run and attempt.
-RETRY = YAML.load_file(File.expand_path("../../.github/workflows/rerun-main-spec-failure.yml", __dir__))
 verdict = RETRY.dig("jobs", "verdict")
 rerun_step = RETRY.dig("jobs", "rerun", "steps").find { |step| step["name"] == "Re-run the failed jobs" }
 record = verdict["steps"].find { |step| step["name"] == "Record the verdict" }

@@ -1,4 +1,7 @@
 name: Rerun main spec failure
+# revert-red-main-deploy.yml reads the Tests run from this title when the
+# verdict artifact is missing.
+run-name: Rerun main spec failure for run ${{ github.event.workflow_run.id }} attempt ${{ github.event.workflow_run.run_attempt }}
 
 # Knapsack re-runs only a shard's failed examples, so a retry is safe only when
 # bin/classify-main-spec-failure proves every unpassed test runs again.
