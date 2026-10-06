@@ -12,9 +12,10 @@ permissions:
   contents: read
 
 concurrency:
-  # A re-run of a main run gets its own lane: in the shared one it would replace
-  # a newer pending run, the one that unblocks the newer deploy.
-  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request_target' && github.event.pull_request.number || github.ref }}${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.run_attempt != '1' && format('-attempt-{0}-{1}', github.sha, github.run_attempt) || '' }}
+  # One lane per main commit: a shared lane runs one commit at a time and lets
+  # a newer push replace a pending run, so a burst of merges queued every suite
+  # behind the last. A re-run of a commit stays in that commit's lane.
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request_target' && github.event.pull_request.number || github.ref }}${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && format('-{0}', github.sha) || '' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request_target' || github.ref != 'refs/heads/main' }}
 
 jobs:
@@ -1207,7 +1208,7 @@ jobs:
 
       # The gate appears only after the asset compile passes (#7316). Poll every 20 s, and cap
       # the step at 30 minutes: a shorter window leaves the deploy for a person to unblock, and
-      # slow attempts could otherwise run longer while this run holds the main concurrency group.
+      # slow attempts could otherwise stretch 90 attempts to about an hour.
       - name: Unblock corresponding Buildkite build
         timeout-minutes: 30
         uses: nick-fields/retry@v3

@@ -89,8 +89,8 @@ jobs:
             *) echo "rerun=false" >> "$GITHUB_OUTPUT" ;;
           esac
 
-      # tests.yml puts a main re-run in its own concurrency lane, so it cannot
-      # replace a newer pending run.
+      # tests.yml gives each main commit its own concurrency lane, so a re-run
+      # cannot replace another commit's pending run.
       - name: Re-run the failed jobs
         id: rerun
         if: steps.classify.outputs.rerun == 'true'
