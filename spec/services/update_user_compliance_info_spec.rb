@@ -825,6 +825,22 @@ describe UpdateUserComplianceInfo do
         end
       end
 
+      it "stores the dash-stripped value that was checked" do
+        expect(process_with("482-9137-4")[:success]).to be true
+
+        expect(user.reload.alive_user_compliance_info.individual_tax_id.decrypt("1234")).to eq("48291374")
+      end
+
+      it "validates an ID submitted as ssn_last_four" do
+        expect(StripeMerchantAccountManager).not_to receive(:handle_new_user_compliance_info)
+
+        params = ActionController::Parameters.new(is_business: false, ssn_last_four: "4829137")
+        result = described_class.new(compliance_params: params, user:).process
+
+        expect(result[:success]).to be false
+        expect(result[:error_message]).to eq(Compliance::GuatemalaNit::ERROR_MESSAGE)
+      end
+
       %w[4829137 482913K 482913-4 482913749K 4829137490].each do |value|
         it "rejects #{value}, which Stripe refuses" do
           expect(StripeMerchantAccountManager).not_to receive(:handle_new_user_compliance_info)

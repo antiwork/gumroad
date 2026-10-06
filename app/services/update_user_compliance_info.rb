@@ -364,6 +364,7 @@ class UpdateUserComplianceInfo
       # separators, and the length guard counts digits. Storing the separators would send Stripe a
       # longer string than the guard measured, so strip them and keep the two in agreement.
       return Compliance::ColombiaIdNumber.normalize(stripped) if country_code == Compliance::Countries::COL.alpha2
+      return Compliance::GuatemalaNit.normalize(stripped) if country_code == Compliance::Countries::GTM.alpha2
       stripped
     end
 
@@ -397,7 +398,7 @@ class UpdateUserComplianceInfo
     end
 
     def guatemala_individual_nit_error(old_compliance_info)
-      submitted = submitted_tax_id_for(:individual_tax_id)
+      submitted = submitted_tax_id_for(:individual_tax_id).presence || submitted_tax_id_for(:ssn_last_four).presence
       return if submitted.blank?
       return unless individual_id_country_matches?(old_compliance_info, Compliance::Countries::GTM.alpha2)
       return if Compliance::GuatemalaNit.valid?(submitted)
