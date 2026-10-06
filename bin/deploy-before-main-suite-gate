@@ -37,19 +37,24 @@ def verdict(payload)
   sha = payload["sha"].to_s
   return [EXIT_WAIT, "no_sha", {}] if sha.empty?
 
+  observations = Array(payload["runs"])
+
+  # Every copy of a run counts here: the active-runs query can see a retry that
+  # the older snapshot of the same run does not.
+  retrying = observations.find { |run| run["run_attempt"].to_i > 1 && run["status"] != "completed" }
+  if retrying
+    reason = retrying["head_sha"] == sha ? "own_retry_in_progress" : "frozen_retry_in_progress"
+    return [EXIT_WAIT, reason, { run: retrying["id"] }]
+  end
+
   # Cancelled runs were evicted from the main lane or thrown away; they say
   # nothing about main.
-  all_runs = Array(payload["runs"]).uniq { |run| run["id"] }.reject { |run| run["conclusion"] == "cancelled" }
-  own, runs = all_runs.partition { |run| run["head_sha"] == sha }
+  latest = observations.group_by { |run| run["id"] }.values.map { |copies| copies.max_by { |run| run["run_attempt"].to_i } }
+  own, runs = latest.reject { |run| run["conclusion"] == "cancelled" }.partition { |run| run["head_sha"] == sha }
 
-  # This commit's own suite already failed, or is being retried: it has spoken.
+  # This commit's own suite already failed: it has spoken.
   failed_own = own.find { |run| run["status"] == "completed" && run["conclusion"] != "success" }
   return [EXIT_WAIT, "own_suite_failed", { run: failed_own["id"] }] if failed_own
-  retrying_own = own.find { |run| run["run_attempt"].to_i > 1 && run["status"] != "completed" }
-  return [EXIT_WAIT, "own_retry_in_progress", { run: retrying_own["id"] }] if retrying_own
-
-  retrying = runs.find { |run| run["run_attempt"].to_i > 1 && run["status"] != "completed" }
-  return [EXIT_WAIT, "frozen_retry_in_progress", { run: retrying["id"] }] if retrying
 
   newest = runs.select { |run| run["status"] == "completed" }.max_by { |run| created_at(run) }
   return [EXIT_WAIT, "frozen_no_finished_run", {}] unless newest

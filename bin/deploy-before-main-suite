@@ -9,15 +9,15 @@ dir=$(mktemp -d)
 trap 'rm -rf "$dir"' EXIT
 runs_api="repos/${GITHUB_REPOSITORY}/actions/workflows/tests.yml/runs?branch=main&event=push&per_page=100"
 
-{
-  # The branch filter alone returns stale runs; the created filter keeps the
-  # list current. Active runs come separately: a re-run keeps its old created_at.
-  since=$(date -u -d '2 days ago' +%Y-%m-%dT%H:%M:%SZ)
-  gh api "${runs_api}&created=>=${since}" --jq '.workflow_runs'
-  for status in in_progress queued waiting; do
-    gh api --paginate "${runs_api}&status=${status}" --jq '.workflow_runs'
-  done
-} | jq -s 'add' > "$dir/runs.json" || exit 2
+# The branch filter alone returns stale runs; the created filter keeps the list
+# current. Active runs come separately: a re-run keeps its old created_at. Any
+# failed request stops the decision, since a missing run could hide a retry.
+since=$(date -u -d '2 days ago' +%Y-%m-%dT%H:%M:%SZ) || exit 2
+gh api "${runs_api}&created=>=${since}" --jq '.workflow_runs' > "$dir/runs-recent.json" || exit 2
+for status in in_progress queued waiting; do
+  gh api --paginate "${runs_api}&status=${status}" --jq '.workflow_runs' > "$dir/runs-${status}.json" || exit 2
+done
+jq -s 'add' "$dir"/runs-*.json > "$dir/runs.json" || exit 2
 
 # GitHub can link a fresh merge commit to its PR a few seconds late.
 head=""

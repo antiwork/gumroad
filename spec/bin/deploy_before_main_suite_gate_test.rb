@@ -128,6 +128,22 @@ check(
   expect: :early
 )
 
+# The recent snapshot shows the failed run as finished; the active query, later,
+# shows it re-running.
+check(
+  "a newer copy of a run shows its retry",
+  payload(runs: [OWN_RUN, run_record(2, "older2", "completed", "failure", "2026-10-06T14:40:00Z"), GREEN_PREVIOUS.merge("created_at" => "2026-10-06T14:50:00Z"),
+                 run_record(2, "older2", "in_progress", nil, "2026-10-06T14:40:00Z", attempt: 2)]),
+  expect: :wait, reason: "frozen_retry_in_progress"
+)
+
+check(
+  "a passed retry wins over the failed first attempt",
+  payload(runs: [OWN_RUN, run_record(2, "older2", "completed", "failure", "2026-10-06T14:50:00Z"),
+                 run_record(2, "older2", "completed", "success", "2026-10-06T14:50:00Z", attempt: 2)]),
+  expect: :early
+)
+
 # An old run re-run today keeps its old created_at.
 check(
   "a re-run of an old main run is in progress",
