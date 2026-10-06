@@ -1170,6 +1170,12 @@ Rails.application.routes.draw do
       resources :utm_links, only: [:index, :new, :create, :edit, :update, :destroy]
     end
 
+    # piracy reports
+    get "/dashboard/piracy_reports/new", to: "piracy_reports#new", as: :new_piracy_report
+    post "/dashboard/piracy_reports", to: "piracy_reports#create", as: :piracy_reports
+    get "/dashboard/piracy_reports/:id", to: "piracy_reports#show", as: :piracy_report
+    post "/dashboard/piracy_reports/:id/sign", to: "piracy_reports#sign", as: :sign_piracy_report
+
     # shipments
     post "/shipments/:purchase_id/mark_as_shipped", to: "shipments#mark_as_shipped", as: :mark_as_shipped
 

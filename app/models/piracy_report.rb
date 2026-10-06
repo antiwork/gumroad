@@ -42,6 +42,24 @@ class PiracyReport < ApplicationRecord
     event :fail_screening do
       transition screening: :declined
     end
+
+    event :sign do
+      transition awaiting_signature: :signed
+    end
+  end
+
+  # The seller signs the text frozen on the row, so the signature and the digest travel together.
+  # The lock makes the transition and the signature one step against a second submit.
+  def record_signature!(name)
+    with_lock do
+      errors.add(:base, "This report is not ready to sign") unless awaiting_signature?
+      errors.add(:base, "The notice has not been generated yet") if notice_text.blank?
+      errors.add(:signed_by_name, "must be your full legal name") if name.to_s.strip.blank?
+      next false if errors.any?
+
+      assign_attributes(signed_by_name: name.to_s.squish, signed_at: Time.current)
+      sign
+    end
   end
 
   def self.parse_http_url(value)

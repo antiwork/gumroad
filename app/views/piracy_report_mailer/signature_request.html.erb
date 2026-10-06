@@ -1,0 +1,17 @@
+<%= header_section(@subject) %>
+<div>
+  <p>
+    Your report about <strong><%= @product_name %></strong> passed our review.
+  </p>
+  <p>
+    The notice below is what we will send to the site hosting the copy, on your behalf. Read it before
+    you sign it:
+  </p>
+  <p>
+    <%= link_to "Review and sign the notice", @sign_url, class: "button primary" %>
+  </p>
+  <p>
+    Once you sign, we send the notice from support@gumroad.com with you in CC, and we email you again
+    when the site responds.
+  </p>
+</div>
