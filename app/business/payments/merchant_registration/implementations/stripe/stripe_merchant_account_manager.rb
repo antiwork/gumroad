@@ -499,10 +499,17 @@ module StripeMerchantAccountManager
       diff_attributes[:individual][:dob] = current_attributes[:individual][:dob]
     end
 
-    if last_user_compliance_info&.is_business? && user_compliance_info.is_individual?
+    # Stripe's own type wins over our previous record: a type changed outside Gumroad (e.g. via the
+    # hosted remediation form) is otherwise never diffed, and Stripe rejects `individual[...]` on a company.
+    live_company_for_individual = user_compliance_info.is_individual? && stripe_account["business_type"] == "company"
+    diff_attributes[:business_type] = "individual" if live_company_for_individual
+
+    if (last_user_compliance_info&.is_business? || live_company_for_individual) && user_compliance_info.is_individual?
       # Clear structure first - Stripe rejects company[structure] when business_type is "individual"
-      if last_user_compliance_info.legal_entity_country_code == Compliance::Countries::USA.alpha2 &&
-        US_COMPANY_STRUCTURES.key?(last_user_compliance_info.business_type)
+      if (last_user_compliance_info&.is_business? &&
+        last_user_compliance_info.legal_entity_country_code == Compliance::Countries::USA.alpha2 &&
+        US_COMPANY_STRUCTURES.key?(last_user_compliance_info.business_type)) ||
+        (live_company_for_individual && stripe_account.dig("company", "structure").present?)
         on_provider_mutation&.call
         Stripe::Account.update(stripe_account.id, { company: { structure: "" } })
       end
