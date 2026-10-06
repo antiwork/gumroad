@@ -27,25 +27,29 @@ require "time"
 EXIT_SKIP = 1
 EXIT_OPERATIONAL = 2
 
-# Only these two steps carry `timeout-minutes: 5` on a checkout in tests.yml.
-# `Check out fork fixtures` is deliberately absent: it also has the timeout, but
-# it pulls untrusted fork refs and is not a step we re-run on a guess.
-HANG_STEPS = ["Check out repository", "Check out trusted workflow files"].freeze
-
-# The observed hangs sat at exactly 300.0s. The window allows for the runner's
-# clock resolution without admitting a checkout that failed fast for some other
-# reason and happened to be slow.
-HANG_SECONDS = (270.0..330.0)
+# Steps whose timeout says nothing about the commit, each with the time a
+# timed-out run of it takes and the annotation that proves the timeout. The
+# window admits clock resolution, not a step that failed for another reason and
+# happened to be slow.
+#
+# `Check out fork fixtures` is deliberately absent: it also has the checkout
+# timeout, but it pulls untrusted fork refs and is not a step we re-run on a
+# guess.
+HANGS = {
+  # The observed checkout hangs sat at exactly 300.0s.
+  "Check out repository" => [270.0..330.0, "The action 'Check out repository' has timed out after 5 minutes"],
+  "Check out trusted workflow files" => [270.0..330.0, "The action 'Check out trusted workflow files' has timed out after 5 minutes"],
+  # nick-fields/retry: three 5-minute attempts, 5 seconds apart. The observed
+  # Docker Hub pull timeouts took 916s.
+  "Start services and pull test image" => [880.0..960.0, "Final attempt failed. Timeout of 300000ms hit"]
+}.freeze
+HANG_STEPS = HANGS.keys.freeze
 
 # `timed_out` is a failure, not a cancellation: a job that ran out of its own
 # budget is a red we must not paper over.
 FAILED = %w[failure timed_out].freeze
 BAD = (FAILED + %w[cancelled]).freeze
 JOB_FAILED = %w[failure timed_out startup_failure cancelled].freeze
-
-def timeout_message(step_name)
-  "The action '#{step_name}' has timed out after 5 minutes"
-end
 
 def steps_of(job)
   Array(job["steps"]).sort_by { |step| step["number"] || 0 }
@@ -82,13 +86,13 @@ def candidate?(job)
   step = first_bad_step(job)
   return false unless step && HANG_STEPS.include?(step["name"])
   seconds = step_seconds(step)
-  !seconds.nil? && HANG_SECONDS.cover?(seconds)
+  !seconds.nil? && HANGS.fetch(step["name"]).first.cover?(seconds)
 end
 
 def hung?(job, annotations)
   return false unless candidate?(job)
   return false if run_tests_started?(job)
-  wanted = timeout_message(first_bad_step(job)["name"])
+  wanted = HANGS.fetch(first_bad_step(job)["name"]).last
   Array(annotations[job["id"].to_s]).any? { |message| message.to_s.include?(wanted) }
 end
 
@@ -117,7 +121,7 @@ def verdict(jobs, annotations, conclusion = nil)
 
   failing = jobs.select { |job| JOB_FAILED.include?(job["conclusion"]) }
   hangs = failing.select { |job| hung?(job, annotations) }
-  return [EXIT_SKIP, "skip: no hung checkout on this attempt"] if hangs.empty?
+  return [EXIT_SKIP, "skip: no checkout or image-pull timeout on this attempt"] if hangs.empty?
 
   # Everything else that went red has to be collateral: fail-fast cancelling a
   # sibling mid-`Run tests` is not evidence of anything. A job that reached
@@ -126,7 +130,7 @@ def verdict(jobs, annotations, conclusion = nil)
   offender = collateral.find { |job| job["conclusion"] != "cancelled" }
   return [EXIT_SKIP, "skip: #{job_label(offender)} concluded #{offender['conclusion']}"] if offender
 
-  [0, "rerun: checkout hung on #{hangs.map { |job| job_label(job) }.join(', ')}"]
+  [0, "rerun: timed out on #{hangs.map { |job| "#{job_label(job)} (#{first_bad_step(job)['name']})" }.join(', ')}"]
 end
 
 raw = ARGV.reject { |arg| arg.start_with?("--") }.first

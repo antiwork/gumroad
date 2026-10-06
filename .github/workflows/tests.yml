@@ -190,6 +190,9 @@ jobs:
       - name: Self-test the main spec-failure classifier
         run: ruby spec/bin/classify_main_spec_failure_test.rb
 
+      - name: Self-test the timeout re-run classifier
+        run: ruby spec/bin/classify_hung_checkout_test.rb
+
       - name: Self-test the deploy-before-main-suite gate
         run: ruby spec/bin/deploy_before_main_suite_gate_test.rb
 
