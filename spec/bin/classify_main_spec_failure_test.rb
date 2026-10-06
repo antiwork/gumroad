@@ -341,18 +341,19 @@ else
   $failures << "tests.yml concurrency group: #{group.inspect}"
 end
 
-# Its own lane lets a re-run pass after a newer commit deployed; the unblock
-# step must then leave the older build alone.
+# Its own lane lets a re-run pass after a newer commit shipped this one; the
+# unblock step must then leave the older build alone.
 $count += 1
 unblock = YAML.load_file(TESTS_WORKFLOW).fetch("jobs").fetch("unblock_deployment_from_buildkite").fetch("steps")
                 .find { |step| step["name"] == "Unblock corresponding Buildkite build" }
 command = unblock.dig("with", "command").to_s
-if command.include?('if [ "$RUN_ATTEMPT" != "1" ]') && command.include?('if [ "$MAIN_SHA" != "$COMMIT_SHA" ]') &&
+if command.include?('if [ "$RUN_ATTEMPT" != "1" ]') && command.include?("compare/$COMMIT_SHA...production-release") &&
+   command.include?("ahead|identical)") &&
    unblock.dig("env", "RUN_ATTEMPT").to_s.include?("github.run_attempt")
-  puts "  ok    tests.yml skips the unblock for a re-run once main moved"
+  puts "  ok    tests.yml skips the unblock for a re-run that production already contains"
 else
-  puts "  FAIL  tests.yml skips the unblock for a re-run once main moved"
-  $failures << "unblock step: missing the re-run main check"
+  puts "  FAIL  tests.yml skips the unblock for a re-run that production already contains"
+  $failures << "unblock step: missing the re-run production check"
 end
 
 # The classifier matches job and step names from tests.yml; a rename there would
