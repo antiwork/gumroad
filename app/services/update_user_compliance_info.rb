@@ -136,6 +136,9 @@ class UpdateUserComplianceInfo
         colombia_id_error = colombia_individual_id_error(old_compliance_info)
         return { success: false, error_message: colombia_id_error } if colombia_id_error
 
+        guatemala_nit_error = guatemala_individual_nit_error(old_compliance_info)
+        return { success: false, error_message: guatemala_nit_error } if guatemala_nit_error
+
         saved = false
         new_compliance_info = nil
         # A rejected revision must roll back its deletion of the old revision,
@@ -147,7 +150,7 @@ class UpdateUserComplianceInfo
             dup_and_save_compliance_info(old_compliance_info)
           else
             old_compliance_info.dup_and_save do |new_compliance_info|
-              assign_compliance_params(new_compliance_info)
+              assign_compliance_params(new_compliance_info, old_compliance_info)
             end
           end
           raise ActiveRecord::Rollback unless saved
@@ -179,7 +182,7 @@ class UpdateUserComplianceInfo
     end
 
   private
-    def assign_compliance_params(new_compliance_info)
+    def assign_compliance_params(new_compliance_info, old_compliance_info)
       new_compliance_info.first_name =              compliance_params[:first_name]              if compliance_params[:first_name].present?
       new_compliance_info.last_name =               compliance_params[:last_name]               if compliance_params[:last_name].present?
       new_compliance_info.first_name_kanji =        compliance_params[:first_name_kanji]        if compliance_params[:first_name_kanji].present?
@@ -211,8 +214,9 @@ class UpdateUserComplianceInfo
       new_compliance_info.business_zip_code =       compliance_params[:business_zip_code]       if compliance_params[:business_zip_code].present?
       new_compliance_info.business_type =           compliance_params[:business_type]           if compliance_params[:business_type].present?
       new_compliance_info.is_business =             compliance_params[:is_business]             unless compliance_params[:is_business].nil?
-      new_compliance_info.individual_tax_id =       normalize_individual_tax_id(submitted_tax_id_for(:ssn_last_four), country_code: new_compliance_info.legal_entity_country_code)     if submitted_tax_id_for(:ssn_last_four).present?
-      new_compliance_info.individual_tax_id =       normalize_individual_tax_id(submitted_tax_id_for(:individual_tax_id), country_code: new_compliance_info.legal_entity_country_code) if submitted_tax_id_for(:individual_tax_id).present?
+      individual_id_country_code = individual_id_normalization_country_code(old_compliance_info)
+      new_compliance_info.individual_tax_id =       normalize_individual_tax_id(submitted_tax_id_for(:ssn_last_four), country_code: individual_id_country_code)     if submitted_tax_id_for(:ssn_last_four).present?
+      new_compliance_info.individual_tax_id =       normalize_individual_tax_id(submitted_tax_id_for(:individual_tax_id), country_code: individual_id_country_code) if submitted_tax_id_for(:individual_tax_id).present?
       if submitted_tax_id_for(:business_tax_id).present?
         new_compliance_info.business_tax_id = normalize_business_tax_id(
           submitted_tax_id_for(:business_tax_id),
@@ -233,7 +237,7 @@ class UpdateUserComplianceInfo
       saved = nil
 
       ActiveRecord::Base.transaction do
-        assign_compliance_params(new_compliance_info)
+        assign_compliance_params(new_compliance_info, old_compliance_info)
         saved = old_compliance_info.mark_deleted(validate: false)
         raise ActiveRecord::Rollback unless saved
         saved = new_compliance_info.save
@@ -314,7 +318,7 @@ class UpdateUserComplianceInfo
       raw_individual_tax_id = submitted_tax_id_for(:individual_tax_id).presence || submitted_tax_id_for(:ssn_last_four).presence
       submitted_individual_tax_id = normalize_individual_tax_id(
         raw_individual_tax_id,
-        country_code: old_compliance_info.legal_entity_country_code,
+        country_code: individual_id_normalization_country_code(old_compliance_info),
       )
       # A value the seller typed that normalizes away entirely ("n/a", "-") counts as a change so
       # the country guards below get to reject it. Treating it as "nothing changed" would return
@@ -361,6 +365,7 @@ class UpdateUserComplianceInfo
       # separators, and the length guard counts digits. Storing the separators would send Stripe a
       # longer string than the guard measured, so strip them and keep the two in agreement.
       return Compliance::ColombiaIdNumber.normalize(stripped) if country_code == Compliance::Countries::COL.alpha2
+      return Compliance::GuatemalaNit.normalize(stripped) if country_code == Compliance::Countries::GTM.alpha2
       stripped
     end
 
@@ -393,12 +398,29 @@ class UpdateUserComplianceInfo
       Compliance::ColombiaIdNumber::ERROR_MESSAGE
     end
 
+    def guatemala_individual_nit_error(old_compliance_info)
+      submitted = submitted_tax_id_for(:individual_tax_id).presence || submitted_tax_id_for(:ssn_last_four).presence
+      return if submitted.blank?
+      return unless individual_id_country_matches?(old_compliance_info, Compliance::Countries::GTM.alpha2)
+      return if Compliance::GuatemalaNit.valid?(submitted)
+      Compliance::GuatemalaNit::ERROR_MESSAGE
+    end
+
     # A personal tax ID belongs to the representative, so its shape is only knowable from the
     # representative's own country: an SG business whose representative lives elsewhere has no
     # NRIC/FIN to enter, and Stripe takes their passport instead.
     def individual_id_country_matches?(old_compliance_info, country_code)
       effective_legal_entity_country_code(old_compliance_info) == country_code &&
         representative_country_code(old_compliance_info) == country_code
+    end
+
+    # normalize_individual_tax_id rewrites a number to its digits-only form so the stored value keeps
+    # the shape the country guard measured. That only holds for IDs the guard governs, which requires
+    # the representative to live in the country too: a foreign representative's document keeps its
+    # separators (a Peru DNI carries its verification digit after a dash).
+    def individual_id_normalization_country_code(old_compliance_info)
+      country_code = effective_legal_entity_country_code(old_compliance_info)
+      country_code if individual_id_country_matches?(old_compliance_info, country_code)
     end
 
     # The submitted country wins over the stored one, mirroring the forms that echo every stored

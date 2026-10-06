@@ -805,6 +805,81 @@ describe UpdateUserComplianceInfo do
       end
     end
 
+    context "with a Guatemalan individual" do
+      let!(:user) do
+        create(:user).tap do |u|
+          create(:user_compliance_info, user: u, country: "Guatemala", state: nil, city: "Guatemala City", zip_code: "01001", individual_tax_id: "12345678")
+        end
+      end
+
+      def process_with(individual_tax_id)
+        params = ActionController::Parameters.new(is_business: false, individual_tax_id:)
+        described_class.new(compliance_params: params, user:).process
+      end
+
+      %w[4829137K 4829137-K 48291374K 48291374 482913749].each do |value|
+        it "accepts #{value}, which Stripe accepts" do
+          expect(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info)
+
+          expect(process_with(value)[:success]).to be true
+        end
+      end
+
+      it "stores the dash-stripped value that was checked" do
+        expect(process_with("482-9137-4")[:success]).to be true
+
+        expect(user.reload.alive_user_compliance_info.individual_tax_id.decrypt("1234")).to eq("48291374")
+      end
+
+      it "validates an ID submitted as ssn_last_four" do
+        expect(StripeMerchantAccountManager).not_to receive(:handle_new_user_compliance_info)
+
+        params = ActionController::Parameters.new(is_business: false, ssn_last_four: "4829137")
+        result = described_class.new(compliance_params: params, user:).process
+
+        expect(result[:success]).to be false
+        expect(result[:error_message]).to eq(Compliance::GuatemalaNit::ERROR_MESSAGE)
+      end
+
+      %w[4829137 482913K 482913-4 482913749K 4829137490].each do |value|
+        it "rejects #{value}, which Stripe refuses" do
+          expect(StripeMerchantAccountManager).not_to receive(:handle_new_user_compliance_info)
+
+          result = nil
+          expect { result = process_with(value) }.not_to change { UserComplianceInfo.count }
+
+          expect(result[:success]).to be false
+          expect(result[:error_message]).to eq(Compliance::GuatemalaNit::ERROR_MESSAGE)
+        end
+      end
+
+      context "as a business whose representative lives outside Guatemala" do
+        let!(:user) do
+          create(:user).tap do |u|
+            create(
+              :user_compliance_info_business,
+              user: u,
+              country: "Peru",
+              business_country: "Guatemala",
+              business_type: UserComplianceInfo::BusinessTypes::CORPORATION,
+              individual_tax_id: "12345678",
+            )
+          end
+        end
+
+        it "stores the representative's own document as entered, separators and all" do
+          params = ActionController::Parameters.new(is_business: true, individual_tax_id: "12345678-9")
+
+          expect(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info)
+
+          result = described_class.new(compliance_params: params, user:).process
+
+          expect(result[:success]).to be true
+          expect(user.reload.alive_user_compliance_info.individual_tax_id.decrypt("1234")).to eq("12345678-9")
+        end
+      end
+    end
+
     context "with a Colombian individual" do
       def create_colombian_individual_user(individual_tax_id:)
         create(:user).tap do |u|
@@ -1009,6 +1084,7 @@ describe UpdateUserComplianceInfo do
         result = described_class.new(compliance_params: params, user:).process
 
         expect(result[:success]).to be true
+        expect(user.reload.alive_user_compliance_info.individual_tax_id.decrypt("1234")).to eq("B12345")
       end
     end
 
