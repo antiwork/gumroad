@@ -17,8 +17,11 @@ class PiracyReports::ScreenService
   end
 
   # The lock reloads the report, so a concurrent second request sees the first one's result.
+  # The email goes out after the lock, so the job cannot read the row before the transition commits.
   def call
-    report.with_lock { screen }
+    result = report.with_lock { screen }
+    PiracyReportMailer.signature_request(report.id).deliver_later if result.success? && report.awaiting_signature?
+    result
   end
 
   private

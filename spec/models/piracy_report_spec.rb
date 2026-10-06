@@ -128,4 +128,59 @@ describe PiracyReport do
       expect { report.pass_screening! }.to raise_error(StateMachines::InvalidTransition)
     end
   end
+
+  describe "#record_signature!" do
+    it "signs the report and keeps the notice it signed" do
+      report = create(:piracy_report, :awaiting_signature)
+
+      expect(report.record_signature!("Jane Doe")).to be(true)
+      expect(report.reload).to have_attributes(
+        state: "signed",
+        signed_by_name: "Jane Doe",
+        notice_text: "Notice text",
+        notice_digest: Digest::SHA256.hexdigest("Notice text")
+      )
+      expect(report.signed_at).to be_present
+    end
+
+    it "trims the name" do
+      report = create(:piracy_report, :awaiting_signature)
+
+      report.record_signature!("  Jane   Doe  ")
+
+      expect(report.reload.signed_by_name).to eq("Jane Doe")
+    end
+
+    it "refuses a blank name without changing the state" do
+      report = create(:piracy_report, :awaiting_signature)
+
+      expect(report.record_signature!("   ")).to be(false)
+      expect(report.reload.state).to eq("awaiting_signature")
+      expect(report.errors[:signed_by_name]).to be_present
+    end
+
+    it "refuses a name longer than the column" do
+      report = create(:piracy_report, :awaiting_signature)
+
+      expect(report.record_signature!("a" * 256)).to be(false)
+      expect(report.reload.state).to eq("awaiting_signature")
+      expect(report.errors[:signed_by_name]).to include("is too long")
+    end
+
+    it "refuses a report that is not waiting for a signature" do
+      report = create(:piracy_report, :screening)
+
+      expect(report.record_signature!("Jane Doe")).to be(false)
+      expect(report.reload.state).to eq("screening")
+      expect(report.errors[:base]).to include("This report is not ready to sign")
+    end
+
+    it "cannot be signed twice" do
+      report = create(:piracy_report, :awaiting_signature)
+      report.record_signature!("Jane Doe")
+
+      expect(report.record_signature!("Someone Else")).to be(false)
+      expect(report.reload.signed_by_name).to eq("Jane Doe")
+    end
+  end
 end
