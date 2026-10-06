@@ -1206,6 +1206,16 @@ jobs:
               exit 0
             fi
 
+            # A re-run runs in its own lane and can pass after a newer commit has
+            # deployed; that commit's own run ships this one.
+            if [ "$RUN_ATTEMPT" != "1" ]; then
+              MAIN_SHA=$(curl -fsS -H "Authorization: Bearer $GITHUB_TOKEN" "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/commits/main" | jq -r .sha) || exit 1
+              if [ "$MAIN_SHA" != "$COMMIT_SHA" ]; then
+                echo "main moved to $MAIN_SHA since this re-run started. Skipping unblock."
+                exit 0
+              fi
+            fi
+
             # No time-of-day deploy block here. Deploys used to be blocked
             # outright between midnight and 6am ET, because that is when the
             # long nightly jobs run (finance/tax report generation, monthly
@@ -1273,6 +1283,8 @@ jobs:
         env:
           UNBLOCK_DEPLOYMENT: ${{ secrets.UNBLOCK_DEPLOYMENT_FROM_BUILDKITE }}
           BUILDKITE_API_TOKEN: ${{ secrets.BUILDKITE_API_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
           COMMIT_SHA: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
           ORG_SLUG: gumroad-inc
           PIPELINE_SLUG: ${{ secrets.BUILDKITE_PIPELINE_SLUG }}

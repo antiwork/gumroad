@@ -341,6 +341,20 @@ else
   $failures << "tests.yml concurrency group: #{group.inspect}"
 end
 
+# Its own lane lets a re-run pass after a newer commit deployed; the unblock
+# step must then leave the older build alone.
+$count += 1
+unblock = YAML.load_file(TESTS_WORKFLOW).fetch("jobs").fetch("unblock_deployment_from_buildkite").fetch("steps")
+                .find { |step| step["name"] == "Unblock corresponding Buildkite build" }
+command = unblock.dig("with", "command").to_s
+if command.include?('if [ "$RUN_ATTEMPT" != "1" ]') && command.include?('if [ "$MAIN_SHA" != "$COMMIT_SHA" ]') &&
+   unblock.dig("env", "RUN_ATTEMPT").to_s.include?("github.run_attempt")
+  puts "  ok    tests.yml skips the unblock for a re-run once main moved"
+else
+  puts "  FAIL  tests.yml skips the unblock for a re-run once main moved"
+  $failures << "unblock step: missing the re-run main check"
+end
+
 # The classifier matches job and step names from tests.yml; a rename there would
 # turn every retry into a silent skip.
 { "test_fast" => ["Test Fast", "Run tests"], "test_slow" => ["Test Slow", "Run tests"], "test_minitest" => ["Test Minitest", "Run Minitest"] }.each do |key, (prefix, step)|
