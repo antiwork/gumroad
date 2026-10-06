@@ -493,7 +493,8 @@ module StripeMerchantAccountManager
     # while our last record says individual, so the diff would miss the type. Only "company" counts:
     # non_profit and government_entity accounts are left alone.
     live_company_for_individual = user_compliance_info.is_individual? && stripe_account["business_type"] == "company"
-    # Send the whole individual: our last record never held this type on Stripe, so a diff could omit fields it lacks.
+    # Send the whole individual: Stripe's person is not the one our last record described, so a diff could omit
+    # fields it lacks. Stripe test mode accepted this even for an already-verified individual.
     diff_attributes[:individual] = current_attributes[:individual].deep_dup if live_company_for_individual
 
     # If we have a full SSN, don't send the last 4 digits at the same time. If the last 4 digits are from a previous
