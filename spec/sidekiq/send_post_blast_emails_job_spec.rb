@@ -1308,7 +1308,10 @@ describe SendPostBlastEmailsJob, :freeze_time do
     end
 
     it "still defers a blast whose next slot is inside its content window" do
-      blast = create(:blast, :just_requested, requested_at: 1.day.ago, post: basic_post_with_audience)
+      # The overnight slot is up to 29h away, so the blast has to be requested recently
+      # enough that the slot always lands inside its 2-day content window, whatever time
+      # of day the suite runs. A day-old request falls outside it before 05:00 UTC.
+      blast = create(:blast, :just_requested, requested_at: 6.hours.ago, post: basic_post_with_audience)
       allow(SellerLargeBlastQuota).to receive(:allow?).and_return(false)
       run_at = Time.zone.tomorrow.beginning_of_day + 5.hours
       allow(SellerLargeBlastQuota).to receive(:deferred_run_at).and_return(run_at)
