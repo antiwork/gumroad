@@ -79,4 +79,11 @@
   .grecaptcha-badge {
     visibility: hidden;
   }
+
+  // epub.js needs its views wider than the container to scroll between spreads; the global
+  // max-width reset must not cap them. Keep the container itself capped.
+  .epub-container .epub-view,
+  .epub-container .epub-view iframe {
+    max-width: none;
+  }
 }

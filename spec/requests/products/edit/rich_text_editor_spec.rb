@@ -700,7 +700,7 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
     end
   end
 
-  describe "More like this block" do
+  describe "More like this block", :elasticsearch_wait_for_refresh do
     let(:product) { create(:product, user: seller) }
     before { visit edit_link_path(product) + "/content" }
 
