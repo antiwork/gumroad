@@ -15706,19 +15706,16 @@ describe StripeMerchantAccountManager, :vcr do
         context "when the account is US but the seller's record has since moved country" do
           let(:current_factory) { :user_compliance_info_canada }
 
+          # A Canadian record on a US account splits the identity fields into their own update, so the
+          # strict ordered expectations used elsewhere would trip on that extra call.
           it "clears on the account's country, not the record's" do
             stub_stripe_account(previous, business_type: "company", company: { structure: "llc" }, country: "US")
-
-            expect(Stripe::Account).to receive(:update).with(
-              merchant_account.charge_processor_merchant_id,
-              { company: { structure: "" } }
-            ).ordered
-            expect(Stripe::Account).to receive(:update).with(
-              merchant_account.charge_processor_merchant_id,
-              hash_including(business_type: "individual")
-            ).ordered
+            allow(Stripe::Account).to receive(:update)
 
             described_class.update_account(user, passphrase:)
+
+            expect(Stripe::Account).to have_received(:update).with(merchant_account.charge_processor_merchant_id, { company: { structure: "" } }).ordered
+            expect(Stripe::Account).to have_received(:update).with(merchant_account.charge_processor_merchant_id, hash_including(business_type: "individual")).ordered
           end
         end
 
