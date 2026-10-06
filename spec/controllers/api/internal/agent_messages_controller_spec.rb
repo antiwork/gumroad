@@ -726,6 +726,19 @@ describe Api::Internal::AgentMessagesController do
         expect(proposal_message.reload.metadata["action_status"]).to eq("unknown")
       end
 
+      it "releases the claim but does not offer a retry when the sections card is stale" do
+        executor_double = instance_double(Ai::StoreAgentActionExecutor)
+        allow(Ai::StoreAgentActionExecutor).to receive(:new).and_return(executor_double)
+        allow(executor_double).to receive(:execute)
+          .and_return(success: false, message: "A section was added.", failure_reason: "stale_known_sections", retry_safe: true)
+
+        post :execute, params: valid_params, format: :json
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body).to eq("success" => false, "message" => "A section was added.")
+        expect(proposal_message.reload.metadata["action_status"]).to be_nil
+      end
+
       it "rejects a tampered payload before dispatch" do
         expect(Ai::StoreAgentActionExecutor).not_to receive(:new)
 

@@ -1542,24 +1542,8 @@ class Ai::StoreAgentService
           log_missing_required_read(endpoint:, required_read:)
           return [
             {
-              error: "#{endpoint.id} requires a successful full read of this exact target first. Only if the seller explicitly requested this custom-page work, call #{required_read.id} with api_read, wait for its result, then retry #{endpoint.id} in this turn. Otherwise, do not read the page body and do not retry the write. Status or metadata-only reads do not count.",
-              corrective_action: {
-                condition: "The seller explicitly requested this custom-page work.",
-                if_requested: {
-                  tool: "api_read",
-                  endpoint: required_read.id,
-                  path_params: path_params.slice(*required_read.path_params),
-                  after_success: {
-                    action: "retry_write",
-                    endpoint: endpoint.id,
-                    timing: "this_turn",
-                  },
-                },
-                otherwise: {
-                  action: "do_not_read_or_retry",
-                  instruction: "Do not read the page body and do not retry the write.",
-                },
-              },
+              error: required_read_error(endpoint:, required_read:),
+              corrective_action: required_read_corrective_action(endpoint:, required_read:, path_params:),
             },
             nil,
           ]
@@ -1584,6 +1568,10 @@ class Ai::StoreAgentService
       normalize_product_currency_param!(endpoint, body)
 
       summary = write_summary(endpoint, path_params, body)
+      # One read feeds both the card and the pin, so they cannot disagree about which sections exist.
+      sections = sections_snapshot(endpoint, path_params)
+      fields = write_fields(endpoint, path_params, body, sections:)
+      body = body.merge("known_section_ids" => sections.map(&:external_id)) if sections
       action = ProposedAction.new(
         type: "api_write",
         # Everything the executor needs to replay the exact same call after the creator confirms.
@@ -1591,7 +1579,7 @@ class Ai::StoreAgentService
         summary:,
         # The operation itself (e.g. "Delete a discount code."), shown as the card's heading.
         title: endpoint.summary,
-        fields: write_fields(endpoint, path_params, body),
+        fields:,
       )
       [{ proposed: true, summary: }, action]
     end
@@ -1628,6 +1616,51 @@ class Ai::StoreAgentService
       )
     end
 
+    # A required read whose response IS a whole custom page is expensive to fetch, so its block
+    # message keeps the custom-page guardrail: only read it when the seller asked for that page work.
+    PAGE_BODY_READ_ENDPOINTS = Ai::StoreAgentApiCatalog::ENDPOINTS
+      .select { _1.write? && _1.id.include?("custom_html") }
+      .filter_map(&:requires_read)
+      .uniq
+      .freeze
+
+    def required_read_error(endpoint:, required_read:)
+      first = "#{endpoint.id} requires a successful full read of this exact target first."
+      return "#{first} Only if the seller explicitly requested this custom-page work, call #{required_read.id} with api_read, wait for its result, then retry #{endpoint.id} in this turn. Otherwise, do not read the page body and do not retry the write. Status or metadata-only reads do not count." if page_body_read?(required_read)
+
+      "#{first} Call #{required_read.id} with api_read, wait for its result, then retry #{endpoint.id} in this turn. Status or metadata-only reads do not count."
+    end
+
+    # A page-body read may be skipped when the seller did not ask for it, so its corrective action has
+    # two branches. Every other required read is just the precondition: one unconditional read-then-retry
+    # step, with no escape hatch.
+    def required_read_corrective_action(endpoint:, required_read:, path_params:)
+      read_then_retry = {
+        tool: "api_read",
+        endpoint: required_read.id,
+        path_params: path_params.slice(*required_read.path_params),
+        after_success: {
+          action: "retry_write",
+          endpoint: endpoint.id,
+          timing: "this_turn",
+        },
+      }
+      return read_then_retry unless page_body_read?(required_read)
+
+      {
+        condition: "The seller explicitly requested this custom-page work.",
+        if_requested: read_then_retry,
+        otherwise: {
+          action: "do_not_read_or_retry",
+          instruction: "Do not read the page body and do not retry the write.",
+        },
+      }
+    end
+
+    def page_body_read?(required_read)
+      PAGE_BODY_READ_ENDPOINTS.include?(required_read.id)
+    end
+
     # A human-readable description of the pending change for the confirmation card. Built from the
     # catalog summary plus the concrete ids/params so the creator sees exactly what will happen.
     def write_summary(endpoint, path_params, body)
@@ -1648,7 +1681,7 @@ class Ai::StoreAgentService
     # rendered nicely — the discount amount + type as one row, cents as currency, and product ids as
     # names — but nothing is dropped. Values are coerced to strings (non-scalar tool output is
     # JSON-encoded rather than formatted), so a hallucinated array/object can't raise here.
-    def write_fields(endpoint, path_params, body)
+    def write_fields(endpoint, path_params, body, sections: nil)
       body = body.dup
       offer_code = endpoint.id.include?("offer_code")
       product = target_product(endpoint, path_params)
@@ -1691,6 +1724,10 @@ class Ai::StoreAgentService
         rows << { label: "Discount", value: discount_amount(body.delete("amount_off"), offer_type, currency).presence || BLANK_VALUE }
       end
       body.each do |key, value|
+        if endpoint.id == "update_product_sections" && key == "sections" && value.is_a?(Array)
+          rows.concat(section_rows(sections || [], value))
+          next
+        end
         rows << if universal_offer_code && key == "universal"
           { label: "Applies to", value: coverage }
         else
@@ -1700,6 +1737,26 @@ class Ai::StoreAgentService
       rows << { label: "Max uses", value: "Unlimited" } if endpoint.id == "create_offer_code" && !body.key?("max_purchase_count")
       rows << { label: "Redemption", value: "Anyone with the code; no subscriber check" } if endpoint.id == "create_offer_code"
 
+      rows
+    end
+
+    # The sections the card will show. Pinned as known_section_ids so confirming later cannot delete
+    # one that was added in between.
+    def sections_snapshot(endpoint, path_params)
+      return unless endpoint.id == "update_product_sections" && (product = target_product(endpoint, path_params))
+
+      product.seller_profile_sections.to_a
+    end
+
+    # Names the sections a sections write keeps and the ones it destroys, so the seller sees the
+    # deletion before confirming. An unresolvable id shows raw.
+    def section_rows(current, external_ids)
+      by_external_id = current.index_by(&:external_id)
+      label = ->(section) { section.header.presence || section.type.to_s.delete_prefix("SellerProfile").delete_suffix("Section").underscore.humanize }
+      kept = external_ids.map { |id| by_external_id[id.to_s] }
+      rows = [{ label: "Sections", value: external_ids.empty? ? "(none)" : external_ids.each_with_index.map { |id, i| kept[i] ? label.(kept[i]) : id.to_s }.join(" → ") }]
+      deleted = current - kept.compact
+      rows << { label: "Deleted", value: "#{deleted.size} #{"section".pluralize(deleted.size)} will be deleted: #{deleted.map(&label).join(", ")}" } if deleted.any?
       rows
     end
 

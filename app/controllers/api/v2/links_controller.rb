@@ -40,11 +40,11 @@ class Api::V2::LinksController < Api::V2::BaseController
   UPLOADED_FILE_CHECK_CONCURRENCY = 8
 
   before_action(only: [:show, :index, :custom_html, :comps]) { doorkeeper_authorize!(*Doorkeeper.configuration.public_api_read_scopes.concat([:view_public])) }
-  before_action(only: [:create, :update, :disable, :enable, :destroy, :preview_custom_html, :edit_custom_html]) { doorkeeper_authorize! :edit_products }
+  before_action(only: [:create, :update, :disable, :enable, :destroy, :preview_custom_html, :edit_custom_html, :update_sections]) { doorkeeper_authorize! :edit_products }
   before_action :reject_unsupported_upload_fields, only: [:update, :create]
   before_action :resolve_category_param, only: [:update, :create]
-  before_action :set_link_id_to_id, only: [:show, :update, :disable, :enable, :destroy, :preview_custom_html, :custom_html, :edit_custom_html]
-  before_action :fetch_product, only: [:show, :update, :disable, :enable, :destroy, :preview_custom_html, :custom_html, :edit_custom_html]
+  before_action :set_link_id_to_id, only: [:show, :update, :disable, :enable, :destroy, :preview_custom_html, :custom_html, :edit_custom_html, :update_sections]
+  before_action :fetch_product, only: [:show, :update, :disable, :enable, :destroy, :preview_custom_html, :custom_html, :edit_custom_html, :update_sections]
   before_action :ensure_custom_html_pages_enabled, only: [:custom_html, :edit_custom_html]
 
   def index
@@ -616,6 +616,69 @@ class Api::V2::LinksController < Api::V2::BaseController
     success_with_product if @product.delete!
   end
 
+  # Mirrors the dashboard's section editor: `sections` is the COMPLETE ordered list the product keeps,
+  # so a section left out is destroyed. Sections listed before main_section_index render above the product.
+  def update_sections
+    sections = raw_sections_param
+    unless sections.is_a?(Array) && sections.all? { |id| id.is_a?(String) }
+      return render_response(false, message: "sections must be an array of section ids.")
+    end
+
+    section_ids = sections.map { |id| ObfuscateIds.decrypt(id) }
+    if section_ids.any?(&:nil?)
+      return render_response(false, message: "One or more sections were not found.")
+    end
+    if section_ids.uniq.length != section_ids.length
+      return render_response(false, message: "sections must not list the same section twice.")
+    end
+
+    known_ids = nil
+    if params.key?(:known_section_ids)
+      known = params[:known_section_ids]
+      known_ids = known.map { |id| ObfuscateIds.decrypt(id) } if known.is_a?(Array) && known.all? { |id| id.is_a?(String) }
+      return render_response(false, message: "known_section_ids must be an array of section ids.") if known_ids.nil? || known_ids.any?(&:nil?)
+    end
+
+    main_section_index = nil
+    if params.key?(:main_section_index)
+      value = params[:main_section_index]
+      unless (value.is_a?(Integer) || value.is_a?(String)) && value.to_s.match?(/\A\d+\z/)
+        return render_response(false, message: "main_section_index must be a non-negative integer.")
+      end
+      main_section_index = [value.to_i, section_ids.length].min
+    end
+
+    error = nil
+    stale_known_sections = false
+    @product.with_lock do
+      # Checked under the product lock so a concurrent writer cannot add or remove a section between
+      # this check and the destroy below. A foreign id would otherwise be stored and render nothing.
+      current_ids = @product.seller_profile_sections.pluck(:id)
+      if (section_ids - current_ids).any?
+        error = "One or more sections do not belong to this product."
+        raise ActiveRecord::Rollback
+      end
+      # known_section_ids is what the seller reviewed; a newer section was never shown as deleted.
+      if known_ids && (current_ids - section_ids - known_ids).any?
+        error = "A section was added after this change was prepared. Read the product again and prepare a fresh sections list."
+        stale_known_sections = true
+        raise ActiveRecord::Rollback
+      end
+
+      @product.sections = section_ids
+      @product.main_section_index = main_section_index if main_section_index
+      @product.save!
+      @product.seller_profile_sections.where.not(id: section_ids).destroy_all
+    end
+    if error
+      return render_response(false, stale_known_sections ? { message: error, reason: "stale_known_sections" } : { message: error })
+    end
+
+    success_with_product(@product.reload)
+  rescue ActiveRecord::RecordInvalid
+    error_with_product(@product)
+  end
+
   # Dry-run sanitize: returns what `custom_html` would look like after the
   # sanitizer runs, without writing. Lets agents iterate on prompts without
   # rewriting the live page every attempt. Mirrors `update`'s blank-to-nil
@@ -697,6 +760,17 @@ class Api::V2::LinksController < Api::V2::BaseController
   end
 
   private
+    # Rails deep-munge drops nils from JSON arrays, so `[null]` reaches `params` as `[]` and would
+    # clear every section. Read `sections` from the raw JSON body, where the nil is still visible.
+    def raw_sections_param
+      return params[:sections] unless request.media_type == "application/json"
+
+      body = JSON.parse(request.raw_post)
+      body.is_a?(Hash) ? body["sections"] : nil
+    rescue JSON::ParserError
+      nil
+    end
+
     def success_with_product(product = nil)
       success_with_object(:product, product)
     end

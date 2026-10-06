@@ -209,6 +209,8 @@ class Api::Mobile::AgentController < Api::Mobile::BaseController
         # response can follow an external side effect, so post-dispatch outcomes stay claimed.
         if result[:retry_safe]
           action_status, retryable = release_retry_safe_agent_action_claim!(proposal_message)
+          # The pinned card can never succeed again; the seller needs a fresh proposal, not a retry.
+          retryable = false if result[:failure_reason] == "stale_known_sections"
         else
           action_status = record_agent_action_outcome_unknown!(proposal_message)
         end

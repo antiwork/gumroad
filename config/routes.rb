@@ -137,6 +137,10 @@ Rails.application.routes.draw do
           post "custom_html/edit", action: :edit_custom_html
         end
       end
+      # A product's per-product profile sections: which sections render on the product page and in what
+      # order. Unnamed on purpose — api_routes is drawn twice, and an explicitly named route raises
+      # "already in use" on the second draw (see the member block above).
+      put "products/:id/sections", to: "links#update_sections"
       get "products/:product_id/marketing/recommendations", to: "marketing_actions#recommendations"
       post "products/:product_id/marketing_actions", to: "marketing_actions#create"
       resources :marketing_actions, only: [:show] do
