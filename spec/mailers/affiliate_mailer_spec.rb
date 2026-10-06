@@ -125,12 +125,21 @@ describe AffiliateMailer do
 
       it "reads the purchase and its affiliate credit from the primary" do
         # The job runs on a replica-reading worker and the credit is created with the sale, so the
-        # mailer has to read the purchase from the primary.
+        # mailer has to read the credit with the purchase, from the primary.
         expect(ApplicationRecord).to receive(:connected_to).with(role: :writing).and_call_original
 
+        reads = []
+        subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |_name, _start, _finish, _id, payload|
+          pinned = ApplicationRecord.connected_to_stack.any? { |entry| entry[:role] == :writing && entry[:klasses].include?(ApplicationRecord) }
+          reads << [payload[:name], pinned] if ["Purchase Load", "AffiliateCredit Load"].include?(payload[:name])
+        end
         mail = AffiliateMailer.notify_affiliate_of_sale(purchase.id)
+        body = mail.body.encoded
+        ActiveSupport::Notifications.unsubscribe(subscriber)
 
-        expect(mail.body.encoded).to include "Your cut"
+        expect(body).to include "Your cut"
+        expect(reads.map(&:first)).to include("Purchase Load", "AffiliateCredit Load")
+        expect(reads.map(&:last).uniq).to eq([true])
       end
 
       it "includes variant information if the purchase is for a variant" do
