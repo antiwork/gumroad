@@ -90,6 +90,19 @@ export const downloadEpubArchive = async (
   return archive.buffer;
 };
 
+// epub.js and pdf.js both paginate by measuring the element they render into. A percentage
+// height that resolves against an indefinite ancestor collapses to 0 — e.g. a `flex-1` child
+// inside a `min-h-screen` flex column whose only in-flow content is absolutely positioned — and
+// a long chapter then paginates to a single spread that clips mid-word while the page-turn jumps
+// a whole section (gumroad-private#3275). Pin a definite pixel height whenever the measurement
+// is unusable so a reader can never render against a collapsed box.
+export const ensureDefiniteReaderHeight = (container: HTMLElement, viewportHeight: number): number => {
+  const measuredHeight = container.clientHeight;
+  if (measuredHeight > 0) return measuredHeight;
+  container.style.height = `${viewportHeight}px`;
+  return viewportHeight;
+};
+
 const getCurrentEpubLocation = (rendition: Rendition): EpubLocation | null => {
   // epub.js types this as always present, but it is undefined until the first
   // relocation event for some books and rendering modes.
@@ -230,6 +243,7 @@ const PdfReader = ({
       if (!contentRef.current) return;
 
       const container = contentRef.current;
+      ensureDefiniteReaderHeight(container, window.innerHeight);
 
       const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
       pdfjs.GlobalWorkerOptions.workerSrc = typia.assert<{ default: string }>(
@@ -334,7 +348,7 @@ const PdfReader = ({
   return (
     <div style={{ display: "contents" }}>
       {isLoading ? <ReaderLoadingOverlay /> : null}
-      <div role="application" className="scoped-tailwind-preflight flex min-h-screen flex-col">
+      <div role="application" className="scoped-tailwind-preflight flex h-dvh flex-col">
         <div role="menubar" className="flex text-sm md:text-base">
           <div className="border-r">
             <button aria-label="Back" onClick={() => history.back()} className="cursor-pointer p-4 all-unset">
@@ -406,7 +420,7 @@ const PdfReader = ({
           />
         </WithTooltip>
 
-        <div className="main relative flex-1 overflow-auto bg-background" role="document">
+        <div className="main relative min-h-0 flex-1 overflow-auto bg-background" role="document">
           <div className="pdf-reader-container">
             <div ref={contentRef} style={{ position: "absolute", height: "100%", width: "100%" }}>
               <div className="pdfViewer"></div>
@@ -596,6 +610,9 @@ const EpubReader = ({
         linearSectionIndexesRef.current = linearSectionIndexes;
         setSectionCount(linearSectionCount);
 
+        // Pin the container before epub.js measures it: a collapsed box would otherwise be
+        // paginated against for the whole session (epub.js only re-measures on a resize event).
+        ensureDefiniteReaderHeight(container, window.innerHeight);
         const rendition = openedBook.renderTo(container, { width: "100%", height: "100%" });
         renditionRef.current = rendition;
         let isInitialFallbackSuppressed = true;
@@ -734,7 +751,7 @@ const EpubReader = ({
   return (
     <div style={{ display: "contents" }}>
       {readerError ? <ReaderErrorOverlay /> : isLoading ? <ReaderLoadingOverlay /> : null}
-      <div role="application" className="scoped-tailwind-preflight flex min-h-screen flex-col">
+      <div role="application" className="scoped-tailwind-preflight flex h-dvh flex-col">
         <div role="menubar" className="flex text-sm md:text-base">
           <div className="border-r">
             <button aria-label="Back" onClick={() => history.back()} className="cursor-pointer p-4 all-unset">
@@ -832,7 +849,7 @@ const EpubReader = ({
         ) : null}
 
         <div
-          className="main relative flex-1 overflow-auto"
+          className="main relative min-h-0 flex-1 overflow-auto"
           role="document"
           style={{ background: epubThemes[theme].background }}
         >

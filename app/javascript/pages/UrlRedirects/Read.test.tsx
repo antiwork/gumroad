@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import Read, { canResumePdfFromLocation, downloadEpubArchive } from "./Read";
+import Read, { canResumePdfFromLocation, downloadEpubArchive, ensureDefiniteReaderHeight } from "./Read";
 
 const mocks = vi.hoisted(() => {
   const linkServiceOptions: Record<string, unknown>[] = [];
@@ -578,5 +578,44 @@ describe("EPUB reader lifecycle", () => {
     expect(harness.book.destroy).not.toHaveBeenCalled();
     unmount();
     expect(harness.book.destroy).toHaveBeenCalledOnce();
+  });
+
+  it("renders the book into a container with a definite pixel height", async () => {
+    // #3275: `height: 100%` on the epub container resolves against the reader's flex column, and
+    // when that resolves to nothing epub.js paginates a whole chapter into a single spread that
+    // clips mid-word. The container is pinned before epub.js measures it, and the pin has to
+    // survive the re-render that hides the loading overlay.
+    render(<Read />);
+    await waitFor(() => expect(harness.rendition.display).toHaveBeenCalled());
+    await waitFor(() => expect(screen.queryByText("One moment while we prepare your reading experience")).toBeNull());
+
+    const container = document.querySelector('[role="document"] > div');
+    if (!(container instanceof HTMLElement)) throw new Error("reader container is not an element");
+    expect(container.style.height).toBe(`${window.innerHeight}px`);
+  });
+
+  it("lays the reader out in a definite-height flex column", async () => {
+    render(<Read />);
+    await waitFor(() => expect(harness.book.renderTo).toHaveBeenCalled());
+
+    expect(document.querySelector('[role="application"]')?.className).toContain("h-dvh");
+    expect(document.querySelector(".main")?.className).toContain("min-h-0");
+  });
+});
+
+describe("reader height chain", () => {
+  it("pins a definite pixel height when the container measures zero", () => {
+    const container = document.createElement("div");
+
+    expect(ensureDefiniteReaderHeight(container, 720)).toBe(720);
+    expect(container.style.height).toBe("720px");
+  });
+
+  it("keeps a measurable container's height untouched", () => {
+    const container = document.createElement("div");
+    Object.defineProperty(container, "clientHeight", { value: 540 });
+
+    expect(ensureDefiniteReaderHeight(container, 720)).toBe(540);
+    expect(container.style.height).toBe("");
   });
 });
