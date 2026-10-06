@@ -43,7 +43,11 @@ class AffiliateMailer < ApplicationMailer
   end
 
   def notify_affiliate_of_sale(purchase_id)
-    @purchase = Purchase.find(purchase_id)
+    # A worker's replica read can see the purchase but not the credit created with it, and the render
+    # dereferences nil, so the credit has to come back with the purchase from the primary.
+    @purchase = ApplicationRecord.connected_to(role: :writing) do
+      Purchase.includes(:affiliate_credit).find(purchase_id)
+    end
     @affiliate = @purchase.affiliate
 
     if @affiliate.collaborator?
