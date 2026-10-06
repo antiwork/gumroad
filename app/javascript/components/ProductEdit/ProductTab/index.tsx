@@ -20,6 +20,7 @@ import { CoverEditor } from "$app/components/ProductEdit/ProductTab/CoverEditor"
 import { CustomButtonTextOptionInput } from "$app/components/ProductEdit/ProductTab/CustomButtonTextOptionInput";
 import { CustomPermalinkInput } from "$app/components/ProductEdit/ProductTab/CustomPermalinkInput";
 import { CustomSummaryInput } from "$app/components/ProductEdit/ProductTab/CustomSummaryInput";
+import { DefaultDiscountCodeSelector } from "$app/components/ProductEdit/ProductTab/DefaultDiscountCodeSelector";
 import { DescriptionEditor, useImageUpload } from "$app/components/ProductEdit/ProductTab/DescriptionEditor";
 import { DiscordIntegrationEditor } from "$app/components/ProductEdit/ProductTab/DiscordIntegrationEditor";
 import { DurationEditor } from "$app/components/ProductEdit/ProductTab/DurationEditor";
@@ -261,6 +262,16 @@ export const ProductTab = () => {
                 <section className="grid gap-8 border-t border-border p-4 md:p-8">
                   <h2>Tiers</h2>
                   <TiersEditor tiers={product.variants} onChange={(variants) => updateProduct({ variants })} />
+                  <DefaultDiscountCodeSelector
+                    uniquePermalink={uniquePermalink}
+                    selectedOfferCode={product.default_offer_code}
+                    onChange={(offerCode) =>
+                      updateProduct({
+                        default_offer_code_id: offerCode ? offerCode.id : null,
+                        default_offer_code: offerCode,
+                      })
+                    }
+                  />
                 </section>
               ) : (
                 <>
