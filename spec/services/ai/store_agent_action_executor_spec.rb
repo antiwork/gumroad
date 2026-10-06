@@ -245,7 +245,7 @@ describe Ai::StoreAgentActionExecutor do
 
         expect(result).to include(
           success: false,
-          message: "A section was added after this change was prepared. Ask the agent to prepare this change again.",
+          message: "A section was added after this change was prepared. Read the product again and prepare a fresh sections list.",
           failure_reason: "stale_known_sections",
           retry_safe: true,
         )

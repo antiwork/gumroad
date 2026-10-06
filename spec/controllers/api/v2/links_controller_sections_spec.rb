@@ -163,7 +163,7 @@ describe Api::V2::LinksController do
         put_sections(sections: [kept.external_id], known_section_ids: [kept.external_id])
 
         expect(response.parsed_body["success"]).to eq(false)
-        expect(response.parsed_body["message"]).to eq("A section was added after this change was prepared. Ask the agent to prepare this change again.")
+        expect(response.parsed_body["message"]).to eq("A section was added after this change was prepared. Read the product again and prepare a fresh sections list.")
         expect(response.parsed_body["reason"]).to eq("stale_known_sections")
         expect(@product.reload.sections).to eq([kept.id, added_later.id])
         expect(SellerProfileSection.exists?(added_later.id)).to eq(true)
