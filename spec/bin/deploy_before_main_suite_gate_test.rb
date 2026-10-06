@@ -283,6 +283,20 @@ workflow_check(
   sparse.inspect
 )
 
+# A 30-day created window returned only runs from three weeks earlier, which hid
+# a red main from the freeze.
+wrapper = File.read(File.expand_path("../../bin/deploy-before-main-suite", __dir__))
+workflow_check(
+  "the run list stays within a window the API answers currently",
+  wrapper.include?("date -u -d '7 days ago'") && !wrapper.match?(/\d{2,} days ago/),
+  "the created window"
+)
+workflow_check(
+  "a run list without this commit's own run counts as stale",
+  wrapper.include?("any(.head_sha == $sha)") && wrapper.include?("the list is stale"),
+  "the stale-list check"
+)
+
 puts
 if $failures.empty?
   puts "#{$count} checks passed."
