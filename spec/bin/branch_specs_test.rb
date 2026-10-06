@@ -235,6 +235,30 @@ check(
   expect_specs: %w[spec/models/widget_spec.rb],
 )
 
+check(
+  "deploy gate and unblock scripts, their tests, and workflow do not escalate",
+  base_files: {
+    ".github/workflows/deploy-before-main-suite.yml" => "old",
+    "bin/deploy-before-main-suite" => "old",
+    "bin/deploy-before-main-suite-gate" => "old",
+    "spec/bin/deploy_before_main_suite_gate_test.rb" => "old",
+    "bin/unblock-buildkite-deploy" => "old",
+    "spec/bin/unblock_buildkite_deploy_test.rb" => "old",
+    "app/models/widget.rb" => "old",
+    "spec/models/widget_spec.rb" => SPEC_STUB,
+  },
+  head_files: {
+    ".github/workflows/deploy-before-main-suite.yml" => "new",
+    "bin/deploy-before-main-suite" => "new",
+    "bin/deploy-before-main-suite-gate" => "new",
+    "spec/bin/deploy_before_main_suite_gate_test.rb" => "new",
+    "bin/unblock-buildkite-deploy" => "new",
+    "spec/bin/unblock_buildkite_deploy_test.rb" => "new",
+    "app/models/widget.rb" => "new",
+  },
+  expect_specs: %w[spec/models/widget_spec.rb],
+)
+
 # tests.yml is the suite itself and must still force the full suite.
 check(
   "tests.yml still escalates",

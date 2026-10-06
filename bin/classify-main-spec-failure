@@ -162,8 +162,9 @@ spec_failed_only = ARGV.include?("--spec-failed")
 test_step_failures_only = ARGV.include?("--test-step-failures")
 
 begin
-  payload = JSON.parse(raw ? File.read(raw) : $stdin.read)
-rescue JSON::ParserError, Errno::ENOENT => e
+  # API payloads carry commit messages; the runner's locale may not be UTF-8.
+  payload = JSON.parse(raw ? File.read(raw, encoding: "UTF-8") : $stdin.read.force_encoding("UTF-8"))
+rescue JSON::ParserError, Errno::ENOENT, EncodingError => e
   warn "Main spec-failure classifier could not run: #{e.message}"
   exit EXIT_OPERATIONAL
 end

@@ -190,6 +190,12 @@ jobs:
       - name: Self-test the main spec-failure classifier
         run: ruby spec/bin/classify_main_spec_failure_test.rb
 
+      - name: Self-test the deploy-before-main-suite gate
+        run: ruby spec/bin/deploy_before_main_suite_gate_test.rb
+
+      - name: Self-test the Buildkite unblock script
+        run: ruby spec/bin/unblock_buildkite_deploy_test.rb
+
       # Hosted here so a reuse-only PR cannot ship on the user_spec.rb floor.
       - name: Self-test reuse-full-suite
         run: bash script/test-reuse-full-suite
@@ -1192,6 +1198,13 @@ jobs:
         (needs.test_fast.result == 'success' && needs.test_slow.result == 'success')
       )
     steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            bin/unblock-buildkite-deploy
+          sparse-checkout-cone-mode: false
+
       # The gate appears only after the asset compile passes (#7316). Poll every 20 s, and cap
       # the step at 30 minutes: a shorter window leaves the deploy for a person to unblock, and
       # slow attempts could otherwise run longer while this run holds the main concurrency group.
@@ -1209,96 +1222,11 @@ jobs:
               exit 0
             fi
 
-            # A re-run runs in its own lane and can pass after a newer commit already
-            # shipped this one; the rollback guard would then fail its deploy.
-            if [ "$RUN_ATTEMPT" != "1" ]; then
-              if ! COMPARE=$(curl -fsS -H "Authorization: Bearer $GITHUB_TOKEN" \
-                  "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/compare/$COMMIT_SHA...production-release"); then
-                echo "Could not compare $COMMIT_SHA with production-release."
-                exit 1
-              fi
-              case "$(echo "$COMPARE" | jq -r '.status // empty')" in
-                ahead|identical)
-                  echo "production-release already contains $COMMIT_SHA. Skipping unblock."
-                  exit 0
-                  ;;
-                behind|diverged) ;;
-                *)
-                  echo "Unexpected compare result for $COMMIT_SHA."
-                  exit 1
-                  ;;
-              esac
-            fi
-
-            # No time-of-day deploy block here. Deploys used to be blocked
-            # outright between midnight and 6am ET, because that is when the
-            # long nightly jobs run (finance/tax report generation, monthly
-            # closes) and a deploy recycles the worker pods they run on, which
-            # silently killed multi-hour jobs. That window has been replaced by
-            # asking the app whether such a job is actually running:
-            # /healthcheck/long_running_jobs answers 503 while one is in
-            # flight, and .buildkite/scripts/deploy_production.sh waits on it
-            # (as it already did for payout batches). Deploys are therefore
-            # held only on the nights something long is genuinely running,
-            # instead of on every night.
-            echo "Looking for Buildkite build for commit $COMMIT_SHA on pipeline $ORG_SLUG/$PIPELINE_SLUG..."
-            # Fetch builds for the specific commit, including jobs
-            BUILD_DATA=$(curl -s -H "Authorization: Bearer $BUILDKITE_API_TOKEN" \
-              "https://api.buildkite.com/v2/organizations/$ORG_SLUG/pipelines/$PIPELINE_SLUG/builds?commit=$COMMIT_SHA&include_retried_jobs=true")
-
-            # The gate job only exists once every earlier step (image builds, asset compiles)
-            # has passed; until then the build reports "running". Select the build by either
-            # state and inspect the gate job directly, retrying until it is actually blocked.
-            BUILD_NUMBER=$(echo "$BUILD_DATA" | jq -r --arg commit "$COMMIT_SHA" '[.[] | select(.commit == $commit and (.state == "running" or .state == "blocked"))] | sort_by(.created_at) | last | .number // empty')
-
-            if [ -z "$BUILD_NUMBER" ]; then
-              echo "No running or blocked Buildkite build found for commit $COMMIT_SHA on pipeline $ORG_SLUG/$PIPELINE_SLUG."
-              exit 1
-            fi
-
-            echo "Found Buildkite build number: $BUILD_NUMBER. Fetching job details..."
-            # Fetch detailed data for the specific build to get job IDs
-            BUILD_DETAIL_DATA=$(curl -s -H "Authorization: Bearer $BUILDKITE_API_TOKEN" \
-               "https://api.buildkite.com/v2/organizations/$ORG_SLUG/pipelines/$PIPELINE_SLUG/builds/$BUILD_NUMBER")
-
-            BLOCK_JOB_STATE=$(echo "$BUILD_DETAIL_DATA" | jq -r '[.jobs[] | select(.type == "manual" and .step_key == "require-approval")] | first | .state // empty')
-
-            if [ "$BLOCK_JOB_STATE" = "unblocked" ]; then
-              echo "Block job 'require-approval' in build $BUILD_NUMBER is already unblocked. Nothing to do."
-              exit 0
-            fi
-
-            if [ "$BLOCK_JOB_STATE" != "blocked" ]; then
-              echo "Block job 'require-approval' in build $BUILD_NUMBER is not unblockable yet (state: ${BLOCK_JOB_STATE:-absent})."
-              exit 1
-            fi
-
-            BLOCK_JOB_ID=$(echo "$BUILD_DETAIL_DATA" | jq -r '[.jobs[] | select(.type == "manual" and .step_key == "require-approval")] | first | .id // empty')
-
-            echo "Found block job ID: $BLOCK_JOB_ID for build $BUILD_NUMBER. Attempting to unblock job..."
-            # Send the unblock request using PUT to the job-specific endpoint
-            RESPONSE_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X PUT \
-              -H "Authorization: Bearer $BUILDKITE_API_TOKEN" \
-              -H "Content-Type: application/json" \
-              -d '{}' \
-              "https://api.buildkite.com/v2/organizations/$ORG_SLUG/pipelines/$PIPELINE_SLUG/builds/$BUILD_NUMBER/jobs/$BLOCK_JOB_ID/unblock")
-
-            # Check the response code
-            if [ "$RESPONSE_CODE" -ge 200 ] && [ "$RESPONSE_CODE" -lt 300 ]; then
-              echo "Successfully sent unblock request for job $BLOCK_JOB_ID in build $BUILD_NUMBER. Response code: $RESPONSE_CODE"
-            else
-              echo "Error sending unblock request for job $BLOCK_JOB_ID in build $BUILD_NUMBER. Response code: $RESPONSE_CODE"
-              # Attempt to fetch error details from Buildkite if available
-              ERROR_DETAILS=$(curl -s -H "Authorization: Bearer $BUILDKITE_API_TOKEN" \
-                "https://api.buildkite.com/v2/organizations/$ORG_SLUG/pipelines/$PIPELINE_SLUG/builds/$BUILD_NUMBER/jobs/$BLOCK_JOB_ID")
-              echo "API Response details for failed unblock: $ERROR_DETAILS"
-              exit 1 # Exit with error if the API call failed
-            fi
+            bin/unblock-buildkite-deploy
         env:
           UNBLOCK_DEPLOYMENT: ${{ secrets.UNBLOCK_DEPLOYMENT_FROM_BUILDKITE }}
           BUILDKITE_API_TOKEN: ${{ secrets.BUILDKITE_API_TOKEN }}
           GITHUB_TOKEN: ${{ github.token }}
-          RUN_ATTEMPT: ${{ github.run_attempt }}
           COMMIT_SHA: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
           ORG_SLUG: gumroad-inc
           PIPELINE_SLUG: ${{ secrets.BUILDKITE_PIPELINE_SLUG }}

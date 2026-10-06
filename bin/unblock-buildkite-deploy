@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+# Unblocks the `require-approval` gate of the Buildkite build for COMMIT_SHA.
+#
+# Exit codes, for callers that poll it with a retry:
+#   0  the gate is unblocked (now or earlier), or production already contains
+#      COMMIT_SHA so there is nothing to deploy
+#   1  not there yet, or a call failed: retry
+#   3  with --ready only: the gate is waiting to be unblocked (nothing sent)
+#
+# Env: BUILDKITE_API_TOKEN, COMMIT_SHA, ORG_SLUG, PIPELINE_SLUG, GITHUB_TOKEN,
+# GITHUB_API_URL, GITHUB_REPOSITORY.
+#
+# No time-of-day deploy block here: .buildkite/scripts/deploy_production.sh
+# waits on /healthcheck/long_running_jobs, so deploys hold only on the nights a
+# long job is actually running.
+set -uo pipefail
+
+READY_ONLY=false
+[ "${1:-}" = "--ready" ] && READY_ONLY=true
+
+API="https://api.buildkite.com/v2/organizations/$ORG_SLUG/pipelines/$PIPELINE_SLUG"
+
+# Deploys can now finish out of order: a newer commit deployed early already
+# ships this one, and the deploy's rollback guard would fail this build.
+if ! COMPARE=$(curl -fsS -H "Authorization: Bearer $GITHUB_TOKEN" \
+    "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/compare/$COMMIT_SHA...production-release"); then
+  echo "Could not compare $COMMIT_SHA with production-release."
+  exit 1
+fi
+case "$(echo "$COMPARE" | jq -r '.status // empty')" in
+  ahead|identical)
+    echo "production-release already contains $COMMIT_SHA. Nothing to unblock."
+    exit 0
+    ;;
+  behind|diverged) ;;
+  *)
+    echo "Unexpected compare result for $COMMIT_SHA."
+    exit 1
+    ;;
+esac
+
+echo "Looking for Buildkite build for commit $COMMIT_SHA on pipeline $ORG_SLUG/$PIPELINE_SLUG..."
+BUILD_DATA=$(curl -s -H "Authorization: Bearer $BUILDKITE_API_TOKEN" \
+  "$API/builds?commit=$COMMIT_SHA&include_retried_jobs=true")
+
+# Prefer the newest active build. With none, the newest finished one: an early
+# deploy can finish before the main suite does.
+BUILD=$(echo "$BUILD_DATA" | jq -c --arg commit "$COMMIT_SHA" '[.[] | select(.commit == $commit)] | sort_by(.created_at)
+  | ((map(select(.state == "running" or .state == "blocked")) | last) // last) // empty')
+BUILD_NUMBER=$(echo "$BUILD" | jq -r '.number // empty')
+BUILD_STATE=$(echo "$BUILD" | jq -r '.state // empty')
+
+if [ -z "$BUILD_NUMBER" ]; then
+  echo "No Buildkite build found for commit $COMMIT_SHA on pipeline $ORG_SLUG/$PIPELINE_SLUG."
+  exit 1
+fi
+
+echo "Found Buildkite build number: $BUILD_NUMBER ($BUILD_STATE). Fetching job details..."
+BUILD_DETAIL_DATA=$(curl -s -H "Authorization: Bearer $BUILDKITE_API_TOKEN" "$API/builds/$BUILD_NUMBER")
+
+# The gate job exists only once the image builds and asset compiles pass.
+BLOCK_JOB_STATE=$(echo "$BUILD_DETAIL_DATA" | jq -r '[.jobs[] | select(.type == "manual" and .step_key == "require-approval")] | first | .state // empty')
+
+if [ "$BLOCK_JOB_STATE" = "unblocked" ]; then
+  echo "Block job 'require-approval' in build $BUILD_NUMBER is already unblocked. Nothing to do."
+  exit 0
+fi
+
+if [ "$BLOCK_JOB_STATE" != "blocked" ] || { [ "$BUILD_STATE" != "running" ] && [ "$BUILD_STATE" != "blocked" ]; }; then
+  echo "Block job 'require-approval' in build $BUILD_NUMBER is not unblockable yet (gate: ${BLOCK_JOB_STATE:-absent}, build: ${BUILD_STATE:-unknown})."
+  exit 1
+fi
+
+if [ "$READY_ONLY" = true ]; then
+  echo "Block job 'require-approval' in build $BUILD_NUMBER is ready to unblock."
+  exit 3
+fi
+
+BLOCK_JOB_ID=$(echo "$BUILD_DETAIL_DATA" | jq -r '[.jobs[] | select(.type == "manual" and .step_key == "require-approval")] | first | .id // empty')
+
+echo "Found block job ID: $BLOCK_JOB_ID for build $BUILD_NUMBER. Attempting to unblock job..."
+RESPONSE_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X PUT \
+  -H "Authorization: Bearer $BUILDKITE_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{}' \
+  "$API/builds/$BUILD_NUMBER/jobs/$BLOCK_JOB_ID/unblock")
+
+if [ "$RESPONSE_CODE" -ge 200 ] && [ "$RESPONSE_CODE" -lt 300 ]; then
+  echo "Successfully sent unblock request for job $BLOCK_JOB_ID in build $BUILD_NUMBER. Response code: $RESPONSE_CODE"
+  exit 0
+fi
+
+echo "Error sending unblock request for job $BLOCK_JOB_ID in build $BUILD_NUMBER. Response code: $RESPONSE_CODE"
+ERROR_DETAILS=$(curl -s -H "Authorization: Bearer $BUILDKITE_API_TOKEN" "$API/builds/$BUILD_NUMBER/jobs/$BLOCK_JOB_ID")
+echo "API Response details for failed unblock: $ERROR_DETAILS"
+exit 1
