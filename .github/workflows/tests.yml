@@ -207,6 +207,9 @@ jobs:
       - name: Self-test the revert decision for red main deploys
         run: ruby spec/bin/revert_red_main_decision_test.rb
 
+      - name: Self-test the main asset cache shadow
+        run: bash .buildkite/scripts/main_asset_cache_shadow_test.sh
+
   build:
     name: Build images${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository && ' (internal PR noop)' || '' }}
     runs-on: blacksmith-8vcpu-ubuntu-2204

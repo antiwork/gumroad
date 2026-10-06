@@ -42,6 +42,13 @@ file_digests() {
   (cd "$1" && for p in $MAIN_ASSET_CACHE_PATHS; do [ -e "$p" ] && find "$p" -type f; done | LC_ALL=C sort | xargs -r sha256sum)
 }
 
+# sha256sum prints a 64-character digest and two spaces before the path.
+paths_of() { cut -c67- "$1"; }
+# Two builds of one commit write identical JavaScript but slightly different
+# `mappings` in its source maps. A cached map still maps that JavaScript, so a
+# map that differs is counted, and a map that is missing or extra is a mismatch.
+without_maps() { grep -v '\.map$' "$1" || true; }
+
 report() {
   local result=$1 detail=$2 style=${3:-info}
   local line="main-asset-cache-shadow result=$result tag=${TAG:-none} $detail"
@@ -85,12 +92,16 @@ if preview_asset_cache_restore "$TAG"; then
   fi
   rm -f "$PREVIEW_ASSET_CACHE_TARBALL"
   file_digests "$WORK/cached" > "$WORK/cached.sha256"
-  if cmp -s "$WORK/real.sha256" "$WORK/cached.sha256"; then
-    report hit "files=$files mismatched=0" success
+  differences=$({
+    diff <(paths_of "$WORK/cached.sha256") <(paths_of "$WORK/real.sha256")
+    diff <(without_maps "$WORK/cached.sha256") <(without_maps "$WORK/real.sha256")
+  } | grep '^[<>]')
+  if [ -z "$differences" ]; then
+    maps_differing=$(diff "$WORK/cached.sha256" "$WORK/real.sha256" | grep -c '^>')
+    report hit "files=$files mismatched=0 maps_differing=$maps_differing" success
     exit 0
   fi
-  differing=$(diff "$WORK/cached.sha256" "$WORK/real.sha256" | grep -c '^[<>]')
-  report mismatch "files=$files differing_lines=$differing first: $(diff "$WORK/cached.sha256" "$WORK/real.sha256" | grep '^[<>]' | head -5 | tr '\n' ';')" error
+  report mismatch "files=$files differing_lines=$(grep -c . <<<"$differences") first: $(head -5 <<<"$differences" | tr '\n' ';')" error
   exit 1
 fi
 
