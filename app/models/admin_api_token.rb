@@ -81,6 +81,22 @@ class AdminApiToken < ApplicationRecord
     revoked_at.blank? && !expired?
   end
 
+  def revoke!
+    update!(revoked_at: Time.current)
+  end
+
+  # Revokes this token and returns a replacement for the same actor, scope and expiry, so a service
+  # token can be replaced through the API. A second call on a revoked row returns nil, so two
+  # concurrent rotations cannot mint two tokens.
+  def rotate!
+    with_lock do
+      next if revoked_at.present?
+
+      revoke!
+      self.class.mint_with_plaintext!(actor_user_id:, scope:, expires_at:)
+    end
+  end
+
   def legacy_admin_token?
     legacy_admin_token = self.class.legacy_admin_token
     legacy_admin_token.present? && id == legacy_admin_token.id

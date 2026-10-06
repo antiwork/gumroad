@@ -19,12 +19,27 @@ class Api::Internal::Admin::AuthController < Api::Internal::Admin::BaseControlle
   end
 
   def revoke
-    admin_api_token = token_to_revoke
-    return render json: { success: false, message: "admin token not found" }, status: :not_found if admin_api_token.blank?
+    admin_api_token = token_to_manage
+    return render_admin_token_not_found if admin_api_token.blank?
 
     record_admin_write(action: "auth.revoke", target: admin_api_token) do
-      admin_api_token.update!(revoked_at: Time.current)
+      admin_api_token.revoke!
       render json: { success: true }
+    end
+  end
+
+  def rotate
+    admin_api_token = token_to_manage
+    return render_admin_token_not_found if admin_api_token.blank?
+
+    record_admin_write(action: "auth.rotate", target: admin_api_token) do
+      rotated = admin_api_token.rotate!
+      if rotated.blank?
+        render_admin_token_not_found
+      else
+        plaintext_token, replacement = rotated
+        render json: { success: true, token: plaintext_token, token_external_id: replacement.external_id }
+      end
     end
   end
 
@@ -33,10 +48,22 @@ class Api::Internal::Admin::AuthController < Api::Internal::Admin::BaseControlle
       render json: { success: false, message: "authorization code is invalid" }, status: :unauthorized
     end
 
-    def token_to_revoke
+    def render_admin_token_not_found
+      render json: { success: false, message: "admin token not found" }, status: :not_found
+    end
+
+    # A token may always act on itself. A service token (any scope but admin) can also be reached by
+    # external id, so a leaked agent token has a kill switch without a console session; another
+    # actor's admin token stays out of reach.
+    def token_to_manage
       external_id = params[:external_id].presence
       return Current.admin_token if external_id.blank?
 
-      AdminApiToken.active.find_by(external_id:, actor_user_id: Current.admin_actor.id)
+      token = AdminApiToken.active.find_by(external_id:)
+      return nil if token.blank?
+      return token if token.actor_user_id == Current.admin_actor.id
+      return nil if token.scope == AdminApiToken::ADMIN_SCOPE
+
+      token
     end
 end

@@ -51,6 +51,46 @@ describe AdminApiToken do
     end
   end
 
+  describe "#revoke!" do
+    it "stamps the token revoked" do
+      _, admin_api_token = described_class.mint_with_plaintext!(actor_user_id: create(:admin_user).id)
+
+      admin_api_token.revoke!
+
+      expect(admin_api_token.reload.revoked_at).to be_present
+    end
+  end
+
+  describe "#rotate!" do
+    it "revokes the token and returns a replacement for the same actor and scope" do
+      actor = create(:admin_user)
+      _, admin_api_token = described_class.mint_with_plaintext!(actor_user_id: actor.id, scope: described_class::PIRACY_SCOPE)
+
+      plaintext_token, replacement = admin_api_token.rotate!
+
+      expect(admin_api_token.reload.revoked_at).to be_present
+      expect(replacement).to have_attributes(actor_user: actor, scope: described_class::PIRACY_SCOPE)
+      expect(described_class.authenticate(plaintext_token)).to eq(replacement)
+    end
+
+    it "carries the original expiry onto the replacement, so rotation never extends a human token" do
+      expires_at = 3.days.from_now
+      _, admin_api_token = described_class.mint_with_plaintext!(actor_user_id: create(:admin_user).id, expires_at:)
+
+      _, replacement = admin_api_token.rotate!
+
+      expect(replacement.expires_at).to be_within(1.second).of(expires_at)
+    end
+
+    it "returns nil for an already revoked token, so a second rotation cannot mint one" do
+      _, admin_api_token = described_class.mint_with_plaintext!(actor_user_id: create(:admin_user).id)
+      admin_api_token.revoke!
+
+      expect(admin_api_token.rotate!).to be_nil
+      expect(described_class.count).to eq(1)
+    end
+  end
+
   describe ".seed_legacy_admin_token!" do
     it "creates the legacy admin token from the configured shared token" do
       actor = create(:admin_user)

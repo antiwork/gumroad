@@ -31,7 +31,7 @@ class Api::Internal::Admin::BaseController < Api::Internal::BaseController
 
   # Each controller accepts tokens of exactly one scope, so a narrow-scope token (the piracy
   # agent's) can never reach the general admin endpoints, and the reverse. Narrow-scope tokens are
-  # minted from the console, and revoking one is a console action too, so auth#revoke stays admin only.
+  # minted from the console, but auth#revoke and auth#rotate can kill or replace one by external id.
   class_attribute :required_token_scope, default: AdminApiToken::ADMIN_SCOPE
 
   skip_before_action :verify_authenticity_token
