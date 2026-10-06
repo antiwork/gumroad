@@ -17,6 +17,20 @@
           </td>
           <td><%= @cut %></td>
         </tr>
+        <% if @fee_share_cents.positive? %>
+          <tr>
+            <td>
+              <h4>Your share of fees</h4>
+            </td>
+            <td>-<%= @fee_share_formatted %></td>
+          </tr>
+          <tr>
+            <td>
+              <h4>Added to your balance</h4>
+            </td>
+            <td><%= @credited_formatted %></td>
+          </tr>
+        <% end %>
         <% if @quantity.present? %>
           <tr>
             <td>

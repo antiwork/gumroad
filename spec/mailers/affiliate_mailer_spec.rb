@@ -95,6 +95,30 @@ describe AffiliateMailer do
         expect(mail.body.encoded).to include "1"
       end
 
+      it "shows the fee deduction so the emailed figures reconcile with the balance" do
+        mail = AffiliateMailer.notify_affiliate_of_sale(purchase.id)
+        body = mail.body.encoded
+        credited_cents = purchase.affiliate_credit_cents
+        fee_share_cents = purchase.affiliate_credit.fee_cents
+
+        expect(fee_share_cents).to be_positive
+        expect(body).to include "Your share of fees"
+        expect(body).to include "Added to your balance"
+        expect(body).to include MoneyFormatter.format(fee_share_cents, :usd, no_cents_if_whole: true, symbol: true)
+        expect(body).to include MoneyFormatter.format(credited_cents, :usd, no_cents_if_whole: true, symbol: true)
+        # "Your cut" minus the fee share is exactly the amount credited to the balance.
+        expect(body).to include MoneyFormatter.format(credited_cents + fee_share_cents, :usd, no_cents_if_whole: true, symbol: true)
+      end
+
+      it "omits the fee breakdown when the collaborator owes no fee share" do
+        purchase.affiliate_credit.update_column(:fee_cents, 0)
+
+        mail = AffiliateMailer.notify_affiliate_of_sale(purchase.id)
+
+        expect(mail.body.encoded).to_not include "Your share of fees"
+        expect(mail.body.encoded).to_not include "Added to your balance"
+      end
+
       it "includes variant information if the purchase is for a variant" do
         purchase.variant_attributes = [
           create(:variant, variant_category: create(:variant_category, link: product), name: "Blue"),
