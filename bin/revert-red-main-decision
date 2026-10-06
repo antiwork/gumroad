@@ -1,0 +1,57 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Decides whether a failed `main` Tests run gets a revert PR. Reads on stdin, or
+# from a file argument:
+#
+#   { "run": { ... GET /repos/{repo}/actions/runs/{id}, read after the retry
+#              decision ... },
+#     "production": "<compare status of sha...production-release>",
+#     "gate_unblocked": <true when the commit's Buildkite deploy gate opened> }
+#
+# A revert is for a commit that failed its suite for good and already shipped,
+# or is shipping. A commit that never deployed waits on red main as before.
+#
+# Prints one `revert-red-main decision=… reason=…` line. Exit codes: 0 revert,
+# 1 no revert, 2 could not run.
+
+require "json"
+
+EXIT_SKIP = 1
+EXIT_OPERATIONAL = 2
+
+SHIPPED = %w[ahead identical].freeze
+NOT_SHIPPED = %w[behind diverged].freeze
+
+def verdict(payload)
+  run = payload["run"]
+  return [EXIT_OPERATIONAL, "no_run"] unless run.is_a?(Hash)
+
+  # A retry started after the first failure; its own completion decides.
+  return [EXIT_SKIP, "retry_in_progress"] unless run["status"] == "completed"
+  return [EXIT_SKIP, "not_failed"] unless run["conclusion"] == "failure"
+  return [EXIT_SKIP, "not_main_push"] unless run["event"] == "push" && run["head_branch"] == "main"
+
+  production = payload["production"].to_s
+  return [EXIT_OPERATIONAL, "unknown_production_state"] unless (SHIPPED + NOT_SHIPPED).include?(production)
+  return [0, "shipped"] if SHIPPED.include?(production)
+  return [0, "shipping"] if payload["gate_unblocked"] == true
+
+  [EXIT_SKIP, "not_deployed"]
+end
+
+raw = ARGV.first
+
+begin
+  payload = JSON.parse(raw ? File.read(raw, encoding: "UTF-8") : $stdin.read.force_encoding("UTF-8"))
+  raise TypeError, "expected a JSON object" unless payload.is_a?(Hash)
+  code, reason = verdict(payload)
+rescue JSON::ParserError, Errno::ENOENT, EncodingError, StandardError => e
+  warn "revert-red-main decision could not run: #{e.class}: #{e.message}"
+  exit EXIT_OPERATIONAL
+end
+
+decision = { 0 => "revert", EXIT_SKIP => "skip" }.fetch(code, "error")
+run = payload["run"].is_a?(Hash) ? payload["run"] : {}
+puts "revert-red-main decision=#{decision} reason=#{reason} sha=#{run['head_sha'].to_s[0, 12]} run=#{run['id']} attempt=#{run['run_attempt']}"
+exit code

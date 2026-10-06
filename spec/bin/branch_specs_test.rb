@@ -178,6 +178,24 @@ check(
   expect_escalate: true,
 )
 
+check(
+  "revert decision script, its test, and workflow do not escalate",
+  base_files: {
+    ".github/workflows/revert-red-main-deploy.yml" => "old",
+    "bin/revert-red-main-decision" => "old",
+    "spec/bin/revert_red_main_decision_test.rb" => "old",
+    "app/models/widget.rb" => "old",
+    "spec/models/widget_spec.rb" => SPEC_STUB,
+  },
+  head_files: {
+    ".github/workflows/revert-red-main-deploy.yml" => "new",
+    "bin/revert-red-main-decision" => "new",
+    "spec/bin/revert_red_main_decision_test.rb" => "new",
+    "app/models/widget.rb" => "new",
+  },
+  expect_specs: %w[spec/models/widget_spec.rb],
+)
+
 # Hung-checkout files are standalone ruby + a workflow that only invokes
 # them, so they must not trip the mapping-gap escalate the way an unmapped
 # helper would. Sibling model+spec so the run is not an empty selection.

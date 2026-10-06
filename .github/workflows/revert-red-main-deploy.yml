@@ -1,0 +1,175 @@
+name: Revert red main deploy
+
+# A main commit that fails its Tests run for good after it deployed gets a
+# revert PR, opened as gumclaw so it runs CI like any other PR. A person reviews
+# and merges it. Early deploys already wait while main is red.
+
+on:
+  workflow_run:
+    workflows: ["Tests"]
+    types: [completed]
+
+permissions:
+  actions: read # the Tests run and the retry workflow's runs
+  contents: read # compare with production-release
+  pull-requests: write # comment on the original PR when no revert PR opens
+
+concurrency:
+  group: revert-red-main-${{ github.event.workflow_run.head_sha }}
+
+jobs:
+  revert:
+    runs-on: ubuntu-latest
+    if: >-
+      github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            bin/revert-red-main-decision
+          sparse-checkout-cone-mode: false
+
+      - name: Decide
+        id: decide
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          FINISHED_AT: ${{ github.event.workflow_run.updated_at }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          BUILDKITE_API_TOKEN: ${{ secrets.BUILDKITE_API_TOKEN }}
+          ORG_SLUG: gumroad-inc
+          PIPELINE_SLUG: ${{ secrets.BUILDKITE_PIPELINE_SLUG }}
+        run: |
+          set -euo pipefail
+          # A first failure can get one retry from rerun-main-spec-failure.yml.
+          # Wait until that workflow has looked at this failure, for up to 15
+          # minutes, then read the Tests run again: a started retry decides.
+          if [ "$ATTEMPT" = "1" ]; then
+            for _ in $(seq 1 45); do
+              looked=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/rerun-main-spec-failure.yml/runs?head_sha=${SHA}&status=completed" \
+                --jq "[.workflow_runs[] | select(.created_at >= \"${FINISHED_AT}\")] | length")
+              [ "$looked" != "0" ] && break
+              sleep 20
+            done
+          fi
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}" > run.json
+          production=$(gh api "repos/${GITHUB_REPOSITORY}/compare/${SHA}...production-release" --jq .status)
+          gate_unblocked=$(curl -fsS -H "Authorization: Bearer ${BUILDKITE_API_TOKEN}" \
+              "https://api.buildkite.com/v2/organizations/${ORG_SLUG}/pipelines/${PIPELINE_SLUG}/builds?commit=${SHA}" \
+            | jq --arg sha "$SHA" '[.[] | select(.commit == $sha) | .jobs[]? | select(.type == "manual" and .step_key == "require-approval" and .state == "unblocked")] | length > 0')
+
+          jq -n --slurpfile run run.json --arg production "$production" --argjson gate_unblocked "$gate_unblocked" \
+            '{run: $run[0], production: $production, gate_unblocked: $gate_unblocked}' > decision.json
+          set +e
+          line=$(ruby bin/revert-red-main-decision decision.json)
+          status=$?
+          set -e
+          echo "$line"
+          echo "$line" >> "$GITHUB_STEP_SUMMARY"
+          case "$status" in
+            0) echo "revert=true" >> "$GITHUB_OUTPUT" ;;
+            1) echo "revert=false" >> "$GITHUB_OUTPUT" ;;
+            *) exit 1 ;;
+          esac
+
+      - name: Find the original PR
+        id: original
+        if: steps.decide.outputs.revert == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/commits/${SHA}/pulls" \
+            --jq "[.[] | select(.merged_at != null and .merge_commit_sha == \"${SHA}\")] | first // {}" > pr.json
+          {
+            echo "number=$(jq -r '.number // empty' pr.json)"
+            echo "author=$(jq -r '.user.login // empty' pr.json)"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        if: steps.decide.outputs.revert == 'true'
+        with:
+          ref: main
+          fetch-depth: 200
+          path: repo
+          token: ${{ secrets.GUMCLAW_GITHUB_PAT || github.token }}
+
+      - name: Open the revert PR
+        id: revert
+        if: steps.decide.outputs.revert == 'true'
+        working-directory: repo
+        env:
+          GH_TOKEN: ${{ secrets.GUMCLAW_GITHUB_PAT }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          PR_NUMBER: ${{ steps.original.outputs.number }}
+          PR_AUTHOR: ${{ steps.original.outputs.author }}
+        run: |
+          set -euo pipefail
+          # A PR opened with the default token gets no CI runs, so without
+          # gumclaw's token the next step only comments on the original PR. The
+          # token is used by git and gh only: nothing from the repo runs here.
+          if [ -z "$GH_TOKEN" ]; then
+            echo "GUMCLAW_GITHUB_PAT is not set."
+            echo "opened=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          branch="revert-red-main-${SHA:0:12}"
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null; then
+            echo "Revert branch $branch already exists."
+            echo "opened=existing" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          login=$(gh api user --jq .login)
+          id=$(gh api user --jq .id)
+          git config user.name "$login"
+          git config user.email "${id}+${login}@users.noreply.github.com"
+          git switch -c "$branch"
+          if ! git revert --no-edit "$SHA"; then
+            git revert --abort || true
+            echo "The revert of $SHA does not apply cleanly."
+            echo "opened=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git push origin "$branch"
+
+          {
+            echo "The full Tests suite on \`main\` failed for good on ${SHA}, after it deployed: ${RUN_URL}"
+            echo
+            [ -n "$PR_NUMBER" ] && echo "This reverts #${PR_NUMBER}. @${PR_AUTHOR}, please check the failure before you merge or close this PR."
+            echo
+            echo "Early deploys wait while \`main\` is red, so the next commits deploy only after their own suite passes."
+          } > body.md
+          url=$(gh pr create --repo "$GITHUB_REPOSITORY" --base main --head "$branch" --label run-all-specs \
+            --title "$(git log -1 --format=%s)" --body-file body.md)
+          echo "Opened $url"
+          echo "opened=true" >> "$GITHUB_OUTPUT"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      # Also after a failed revert step (a stale token, a rejected push): the
+      # author hears about the failure either way.
+      - name: Tell the original PR
+        if: ${{ !cancelled() && steps.decide.outputs.revert == 'true' && steps.original.outputs.number != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          PR_NUMBER: ${{ steps.original.outputs.number }}
+          PR_AUTHOR: ${{ steps.original.outputs.author }}
+          OPENED: ${{ steps.revert.outputs.opened }}
+          REVERT_URL: ${{ steps.revert.outputs.url }}
+        run: |
+          set -euo pipefail
+          case "$OPENED" in
+            true) next="A revert PR is open: ${REVERT_URL}" ;;
+            existing) exit 0 ;;
+            *) next="No revert PR could open (no gumclaw token, or the revert conflicts). Please revert or fix forward." ;;
+          esac
+          gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body \
+            "@${PR_AUTHOR} the full Tests suite on \`main\` failed for good on ${SHA} after it deployed: ${RUN_URL}. ${next}"
