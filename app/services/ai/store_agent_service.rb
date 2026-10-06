@@ -1716,6 +1716,10 @@ class Ai::StoreAgentService
         rows << { label: "Discount", value: discount_amount(body.delete("amount_off"), offer_type, currency).presence || BLANK_VALUE }
       end
       body.each do |key, value|
+        if endpoint.id == "update_product_sections" && key == "sections" && value.is_a?(Array)
+          rows.concat(section_rows(product, value))
+          next
+        end
         rows << if universal_offer_code && key == "universal"
           { label: "Applies to", value: coverage }
         else
@@ -1725,6 +1729,19 @@ class Ai::StoreAgentService
       rows << { label: "Max uses", value: "Unlimited" } if endpoint.id == "create_offer_code" && !body.key?("max_purchase_count")
       rows << { label: "Redemption", value: "Anyone with the code; no subscriber check" } if endpoint.id == "create_offer_code"
 
+      rows
+    end
+
+    # Names the sections a sections write keeps and the ones it destroys, so the seller sees the
+    # deletion before confirming. An unresolvable id shows raw.
+    def section_rows(product, external_ids)
+      current = product ? product.seller_profile_sections.to_a : []
+      by_external_id = current.index_by(&:external_id)
+      label = ->(section) { section.header.presence || section.type.to_s.delete_prefix("SellerProfile").delete_suffix("Section").underscore.humanize }
+      kept = external_ids.map { |id| by_external_id[id.to_s] }
+      rows = [{ label: "Sections", value: external_ids.empty? ? "(none)" : external_ids.each_with_index.map { |id, i| kept[i] ? label.(kept[i]) : id.to_s }.join(" → ") }]
+      deleted = current - kept.compact
+      rows << { label: "Deleted", value: "#{deleted.size} #{"section".pluralize(deleted.size)} will be deleted: #{deleted.map(&label).join(", ")}" } if deleted.any?
       rows
     end
 

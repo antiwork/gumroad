@@ -2057,6 +2057,51 @@ describe Ai::StoreAgentService do
         end
       end
 
+      describe "product sections confirmation card" do
+        let(:product) { create(:product, user: seller) }
+        let(:kept) { create(:seller_profile_products_section, seller:, product:, header: "Keep me") }
+        let(:dropped) { create(:seller_profile_products_section, seller:, product:, header: "Drop me") }
+
+        def propose_sections(ids)
+          expect(api_client).to receive(:get).with("/products/#{CGI.escape(product.external_id)}", {}).and_return(
+            { "success" => true, "product" => { "id" => product.external_id }, "http_status" => 200 },
+          )
+          replies = [
+            tool_result("api_read", { "endpoint" => "get_product", "path_params" => { "id" => product.external_id } }),
+            tool_result("api_write", {
+                          "endpoint" => "update_product_sections",
+                          "path_params" => { "id" => product.external_id },
+                          "params" => { "sections" => ids },
+                        }),
+            text_result("Ready.", outcome: "proposal_ready"),
+          ]
+          allow(client).to receive(:messages) { replies.shift }
+          service.respond(messages: [{ role: "user", content: "Remove the section above my product" }]).fetch(:proposed_action)
+        end
+
+        it "names the sections that will be deleted" do
+          product.update!(sections: [kept.id, dropped.id])
+
+          action = propose_sections([kept.external_id])
+
+          expect(action[:fields]).to include(
+            { label: "Sections", value: "Keep me" },
+            { label: "Deleted", value: "1 section will be deleted: Drop me" },
+          )
+        end
+
+        it "says every section will be deleted for an empty list" do
+          product.update!(sections: [kept.id, dropped.id])
+
+          action = propose_sections([])
+
+          expect(action[:fields]).to include(
+            { label: "Sections", value: "(none)" },
+            { label: "Deleted", value: "2 sections will be deleted: Keep me, Drop me" },
+          )
+        end
+      end
+
       describe "structured read preconditions" do
         it "blocks a product-sections write until get_product succeeds for the same product" do
           captured = nil

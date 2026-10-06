@@ -616,12 +616,10 @@ class Api::V2::LinksController < Api::V2::BaseController
     success_with_product if @product.delete!
   end
 
-  # Set which per-product profile sections render on this product's page, and in what order. Mirrors
-  # the dashboard's section editor: the body is the COMPLETE ordered list of ids the product keeps, so
-  # a section left out is destroyed. main_section_index is where the product itself sits, so sections
-  # listed before it render above the product.
+  # Mirrors the dashboard's section editor: `sections` is the COMPLETE ordered list the product keeps,
+  # so a section left out is destroyed. Sections listed before main_section_index render above the product.
   def update_sections
-    sections = params[:sections]
+    sections = raw_sections_param
     unless sections.is_a?(Array) && sections.all? { |id| id.is_a?(String) }
       return render_response(false, message: "sections must be an array of section ids.")
     end
@@ -634,28 +632,30 @@ class Api::V2::LinksController < Api::V2::BaseController
       return render_response(false, message: "sections must not list the same section twice.")
     end
 
-    # Only the product's own sections may be listed. A foreign or already-deleted id would be written
-    # into the product's json_data and silently render nothing, so refuse it instead of storing it.
-    unknown_ids = section_ids - @product.seller_profile_sections.pluck(:id)
-    if unknown_ids.any?
-      return render_response(false, message: "One or more sections do not belong to this product.")
-    end
-
     main_section_index = nil
     if params.key?(:main_section_index)
       value = params[:main_section_index]
       unless (value.is_a?(Integer) || value.is_a?(String)) && value.to_s.match?(/\A\d+\z/)
         return render_response(false, message: "main_section_index must be a non-negative integer.")
       end
-      main_section_index = value.to_i
+      main_section_index = [value.to_i, section_ids.length].min
     end
 
-    ActiveRecord::Base.transaction do
+    error = nil
+    @product.with_lock do
+      # Checked under the product lock so a concurrent writer cannot add or remove a section between
+      # this check and the destroy below. A foreign id would otherwise be stored and render nothing.
+      if (section_ids - @product.seller_profile_sections.pluck(:id)).any?
+        error = "One or more sections do not belong to this product."
+        raise ActiveRecord::Rollback
+      end
+
       @product.sections = section_ids
       @product.main_section_index = main_section_index if main_section_index
       @product.save!
       @product.seller_profile_sections.where.not(id: section_ids).destroy_all
     end
+    return render_response(false, message: error) if error
 
     success_with_product(@product.reload)
   rescue ActiveRecord::RecordInvalid
@@ -743,6 +743,17 @@ class Api::V2::LinksController < Api::V2::BaseController
   end
 
   private
+    # Rails deep-munge drops nils from JSON arrays, so `[null]` reaches `params` as `[]` and would
+    # clear every section. Read `sections` from the raw JSON body, where the nil is still visible.
+    def raw_sections_param
+      return params[:sections] unless request.media_type == "application/json"
+
+      body = JSON.parse(request.raw_post)
+      body.is_a?(Hash) ? body["sections"] : nil
+    rescue JSON::ParserError
+      nil
+    end
+
     def success_with_product(product = nil)
       success_with_object(:product, product)
     end

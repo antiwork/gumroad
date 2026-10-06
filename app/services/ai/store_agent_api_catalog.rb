@@ -30,13 +30,8 @@ module Ai::StoreAgentApiCatalog
     def read? = read == true
     def write? = !read?
 
-    # True when the agent must dispatch this write with a JSON body. The agent's in-process client
-    # form-encodes a plain Hash, which cannot carry an empty list: `sections: []` becomes
-    # `sections[]=` and Rails parses that back as `[""]`, a single blank id. Set this on an endpoint
-    # whose body can legitimately be an empty list and the transport would otherwise change its
-    # meaning. Opt-in per endpoint rather than client-wide, because the v2 API parses booleans as
-    # strings (`params[:metadata_only] == "true"`), so a JSON body elsewhere would send `true`
-    # instead of `"true"` and silently flip those params.
+    # Form encoding turns an empty list into `[""]`, so a write that must accept `[]` needs a JSON body.
+    # Opt-in per endpoint: v2 params such as `metadata_only` expect the string "true", not a JSON boolean.
     def json_body? = json_body == true
 
     # True if this endpoint may only be driven by an owner/admin (not a marketing member), even
@@ -217,9 +212,7 @@ module Ai::StoreAgentApiCatalog
     ep("enable_product", :put, "/products/:id/enable", "Publish a product so it is available for sale.", scope: "edit_products", path_params: %w[id]),
     ep("disable_product", :put, "/products/:id/disable", "Unpublish a product so it is no longer for sale.", scope: "edit_products", path_params: %w[id]),
 
-    # ---- Per-product profile sections ----
-    # The sections a product page renders above/below the product itself. Readable through get_product
-    # (its `sections` array); this is the only write path.
+    # ---- Per-product profile sections ---- (read through get_product's `sections`)
     ep("update_product_sections", :put, "/products/:id/sections", "Set which per-product profile sections render on a product page, and in what order. sections is the COMPLETE ordered list of section ids to keep — reorder them here, and any section of this product you leave out is DELETED. Send an empty list to remove every section (this is how a stale section stuck above a product is cleared). main_section_index is the position of the product itself, so sections listed before it render ABOVE the product; pass 0 to move them all below it. Read get_product first and send back every section you mean to keep.", scope: "edit_products", path_params: %w[id], params: %w[sections main_section_index], requires_read: "get_product", json_body: true),
 
     # ---- Product custom landing pages ----

@@ -18,8 +18,7 @@ describe Api::V2::LinksController do
   def put_sections(sections:, main_section_index: :omitted, product: @product, token: @token)
     params = { format: :json, access_token: token.token, id: product.external_id, sections: }
     params[:main_section_index] = main_section_index unless main_section_index == :omitted
-    # The agent's api_write replays a JSON body, and only a JSON body can carry an empty `sections`
-    # array (form encoding drops it entirely, so `sections: []` would arrive as nil).
+    # Only a JSON body can carry an empty `sections` array; form encoding turns `[]` into `[""]`.
     put :update_sections, params:, as: :json
   end
 
@@ -98,6 +97,51 @@ describe Api::V2::LinksController do
       expect(@product.reload.sections).to eq([section.id])
     end
 
+    it "refuses a null element instead of clearing every section" do
+      section = create_section
+      @product.update!(sections: [section.id])
+
+      put_sections(sections: [nil])
+
+      expect(response.parsed_body["success"]).to eq(false)
+      expect(response.parsed_body["message"]).to eq("sections must be an array of section ids.")
+      expect(@product.reload.sections).to eq([section.id])
+      expect(SellerProfileSection.exists?(section.id)).to eq(true)
+    end
+
+    it "refuses a non-string element" do
+      section = create_section
+      @product.update!(sections: [section.id])
+
+      put_sections(sections: [section.id])
+
+      expect(response.parsed_body["success"]).to eq(false)
+      expect(@product.reload.sections).to eq([section.id])
+    end
+
+    it "refuses a request without a sections list" do
+      section = create_section
+      @product.update!(sections: [section.id])
+
+      put :update_sections, params: { format: :json, access_token: @token.token, id: @product.external_id }, as: :json
+
+      expect(response.parsed_body["success"]).to eq(false)
+      expect(SellerProfileSection.exists?(section.id)).to eq(true)
+    end
+
+    # Sections that never made it into json_data are invisible to get_product, but the dashboard
+    # also destroys them when the saved list omits them.
+    it "destroys an orphaned section that is not in the product's saved list" do
+      kept = create_section
+      orphan = create_section
+      @product.update!(sections: [kept.id])
+
+      put_sections(sections: [kept.external_id])
+
+      expect(response.parsed_body["success"]).to eq(true)
+      expect(SellerProfileSection.exists?(orphan.id)).to eq(false)
+    end
+
     it "refuses a section that belongs to another product" do
       kept = create_section
       @product.update!(sections: [kept.id])
@@ -131,6 +175,29 @@ describe Api::V2::LinksController do
       expect(response.parsed_body["success"]).to eq(false)
       expect(response.parsed_body["message"]).to eq("sections must not list the same section twice.")
       expect(@product.reload.sections).to eq([section.id])
+    end
+
+    it "clamps main_section_index to the number of sections" do
+      section = create_section
+      @product.update!(sections: [section.id], main_section_index: 0)
+
+      put_sections(sections: [section.external_id], main_section_index: 99)
+
+      expect(response.parsed_body["success"]).to eq(true)
+      expect(@product.reload.main_section_index).to eq(1)
+    end
+
+    [1.5, [1], nil, "", "1.5", "abc"].each do |value|
+      it "refuses #{value.inspect} as main_section_index" do
+        section = create_section
+        @product.update!(sections: [section.id], main_section_index: 1)
+
+        put_sections(sections: [section.external_id], main_section_index: value)
+
+        expect(response.parsed_body["success"]).to eq(false)
+        expect(response.parsed_body["message"]).to eq("main_section_index must be a non-negative integer.")
+        expect(@product.reload.main_section_index).to eq(1)
+      end
     end
 
     it "refuses a negative main_section_index" do

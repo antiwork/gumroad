@@ -455,16 +455,8 @@ describe Ai::StoreAgentApiCatalog do
       expect(described_class.find("update_product_sections").requires_read).to eq("get_product")
     end
 
-    # An empty list is the documented way to clear a stale section, and the agent's default
-    # form-encoded body would deliver it as a single blank id, so this endpoint opts into a JSON body.
-    it "opts into a JSON body so an empty list survives the agent's transport" do
-      expect(described_class.find("update_product_sections").json_body?).to eq(true)
-    end
-
-    it "leaves every other endpoint on the default form encoding" do
-      expect(described_class::ENDPOINTS.reject { _1.json_body? }.map(&:id)).to contain_exactly(
-        *described_class::ENDPOINTS.map(&:id) - ["update_product_sections"]
-      )
+    it "is the only endpoint that opts into a JSON body" do
+      expect(described_class::ENDPOINTS.filter_map { _1.id if _1.json_body? }).to eq(["update_product_sections"])
     end
 
     it "tells the model that an omitted section is deleted and where main_section_index puts the product" do
