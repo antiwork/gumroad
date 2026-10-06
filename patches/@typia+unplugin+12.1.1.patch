@@ -1,5 +1,5 @@
 diff --git a/node_modules/@typia/unplugin/dist/core.js b/node_modules/@typia/unplugin/dist/core.js
-index e61604c..16f7a8d 100644
+index e61604c..41c4c0f 100644
 --- a/node_modules/@typia/unplugin/dist/core.js
 +++ b/node_modules/@typia/unplugin/dist/core.js
 @@ -502,7 +502,7 @@ async function transformTypia(_id, _source, unpluginContext, options, aliases) {
@@ -11,7 +11,7 @@ index e61604c..16f7a8d 100644
  		const { diagnostics, transformed, file } = _usingCtx.u(transform$1(id, program, tsSource, options.typia));
  		warnDiagnostic(diagnostics, transformed, unpluginContext);
  		return wrap(printer.printFile(file));
-@@ -541,7 +541,67 @@ async function getTsCompilerOption(cacheEnable = true, tsconfigId) {
+@@ -541,7 +541,57 @@ async function getTsCompilerOption(cacheEnable = true, tsconfigId) {
  * @param cacheEnable - Whether to enable cache. @default true
  * @returns The program and source.
  */
@@ -36,7 +36,7 @@ index e61604c..16f7a8d 100644
 +async function buildSharedProgram(compilerOptions, aliases, typiaOptions, tsconfigId) {
 +	const configPath = tsconfigId != null ? resolve(tsconfigId) : await resolveTSConfig();
 +	const parsed = ts.parseJsonConfigFileContent(ts.readConfigFile(configPath, (path) => ts.sys.readFile(path)).config, ts.sys, dirname(configPath));
-+	const program = ts.createProgram(parsed.fileNames, compilerOptions, createHost(compilerOptions, aliases, true, null, null));
++	const program = ts.createProgram(parsed.fileNames, compilerOptions, createHost(compilerOptions, aliases));
 +	for (const fileName of [...parsed.fileNames].sort()) {
 +		const sourceFile = program.getSourceFile(fileName);
 +		if (sourceFile == null || !sourceFile.text.includes("typia")) continue;
@@ -44,7 +44,9 @@ index e61604c..16f7a8d 100644
 +	}
 +	return program;
 +}
-+function createHost(compilerOptions, aliases, cacheEnable, id, tsSource) {
++// Reads every file from disk: the module-level sourceCache would keep stale
++// declarations across builds in one process.
++function createHost(compilerOptions, aliases) {
 +	const host = ts.createCompilerHost(compilerOptions);
 +	if (aliases != null && aliases.length > 0)
 +	host.resolveModuleNameLiterals = (moduleLiterals, containingFile, _, options) => {
@@ -55,18 +57,6 @@ index e61604c..16f7a8d 100644
 +			if (alias == null) return module;
 +			return ts.resolveModuleName(resolve(lit.text.replace(alias.find, alias.replacement)), containingFile, options, host, host.getModuleResolutionCache?.());
 +		});
-+	};
-+	host.getSourceFile = (fileName, languageVersion) => {
-+		if (id != null && fileName === id) return tsSource;
-+		if (cacheEnable) {
-+			const cache = sourceCache.get(fileName);
-+			if (cache != null) return cache;
-+		}
-+		const source = ts.sys.readFile(fileName);
-+		if (source == null) return;
-+		const result = ts.createSourceFile(fileName, source, languageVersion);
-+		if (cacheEnable) sourceCache.set(fileName, result);
-+		return result;
 +	};
 +	return host;
 +}
@@ -80,7 +70,7 @@ index e61604c..16f7a8d 100644
  	const tsSource = ts.createSourceFile(id, source, compilerOptions.target ?? ts.ScriptTarget.ES2020);
  	const host = ts.createCompilerHost(compilerOptions);
  	/** When alias defined in config, resolve module with alias */
-@@ -690,8 +750,8 @@ const unpluginFactory = (rawOptions = {}) => {
+@@ -690,8 +740,8 @@ const unpluginFactory = (rawOptions = {}) => {
  	async function transformCodeWithTypiaTransform({ id, source, ctx, options }) {
  		try {
  			var _usingCtx = _usingCtx$1();
@@ -91,7 +81,7 @@ index e61604c..16f7a8d 100644
  			let code = cache?.data;
  			if (showLog) if (code != null) log("success", `Cache hit: ${id}`);
  			else log("warn", `Cache miss: ${id}`);
-@@ -716,8 +776,10 @@ const unpluginFactory = (rawOptions = {}) => {
+@@ -716,8 +766,10 @@ const unpluginFactory = (rawOptions = {}) => {
  		enforce: options.enforce,
  		vite: { configResolved(config) {
  			viteConfig = config;
