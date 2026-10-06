@@ -123,6 +123,16 @@ describe AffiliateMailer do
         expect(rows["Your cut"]).to eq(format_usd(credited_cents))
       end
 
+      it "reads the purchase and its affiliate credit from the primary" do
+        # The job runs on a replica-reading worker and the credit is created with the sale, so the
+        # mailer has to read the purchase from the primary.
+        expect(ApplicationRecord).to receive(:connected_to).with(role: :writing).and_call_original
+
+        mail = AffiliateMailer.notify_affiliate_of_sale(purchase.id)
+
+        expect(mail.body.encoded).to include "Your cut"
+      end
+
       it "includes variant information if the purchase is for a variant" do
         purchase.variant_attributes = [
           create(:variant, variant_category: create(:variant_category, link: product), name: "Blue"),
