@@ -2101,6 +2101,31 @@ describe Ai::StoreAgentService do
           )
         end
 
+        it "refuses a model-supplied known_section_ids" do
+          product.update!(sections: [kept.id, dropped.id])
+          allow(api_client).to receive(:get).and_return({ "success" => true, "product" => {}, "http_status" => 200 })
+
+          captured = nil
+          replies = [
+            tool_result("api_read", { "endpoint" => "get_product", "path_params" => { "id" => product.external_id } }),
+            tool_result("api_write", {
+                          "endpoint" => "update_product_sections",
+                          "path_params" => { "id" => product.external_id },
+                          "params" => { "sections" => [], "known_section_ids" => [] },
+                        }),
+            text_result("I could not prepare that."),
+          ]
+          allow(client).to receive(:messages) do |args|
+            captured = captured_tool_result(args)
+            replies.shift
+          end
+
+          result = service.respond(messages: [{ role: "user", content: "Remove the sections" }])
+
+          expect(result[:proposed_action]).to be_nil
+          expect(captured["error"]).to include("Unknown param known_section_ids")
+        end
+
         it "says every section will be deleted for an empty list" do
           product.update!(sections: [kept.id, dropped.id])
 
@@ -2114,6 +2139,10 @@ describe Ai::StoreAgentService do
       end
 
       describe "structured read preconditions" do
+        it "treats exactly the two custom page reads as page-body reads" do
+          expect(described_class::PAGE_BODY_READ_ENDPOINTS).to contain_exactly("get_user_custom_html", "get_product_custom_html")
+        end
+
         it "blocks a product-sections write until get_product succeeds for the same product" do
           captured = nil
           first = true

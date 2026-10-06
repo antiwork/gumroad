@@ -164,6 +164,7 @@ describe Api::V2::LinksController do
 
         expect(response.parsed_body["success"]).to eq(false)
         expect(response.parsed_body["message"]).to eq("A section was added after this change was prepared. Read the product again and retry.")
+        expect(response.parsed_body["reason"]).to eq("stale_known_sections")
         expect(@product.reload.sections).to eq([kept.id, added_later.id])
         expect(SellerProfileSection.exists?(added_later.id)).to eq(true)
       end

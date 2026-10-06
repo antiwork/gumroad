@@ -106,6 +106,9 @@ class Ai::StoreAgentActionExecutor
         # before the response was rendered, so it must not make the one-shot claim retry-safe. Only
         # the executor's permission check above, which runs before dispatch, can make that guarantee.
         failure("You don't have permission to do that.", reason: "permission_denied", status:)
+      elsif response["reason"] == "stale_known_sections"
+        # The sections write refuses under the product lock before it changes anything.
+        failure(response["message"], reason: "stale_known_sections", retry_safe: true)
       else
         failure(
           response["message"].presence || response["error"].presence || "That change couldn't be saved.",

@@ -649,6 +649,7 @@ class Api::V2::LinksController < Api::V2::BaseController
     end
 
     error = nil
+    stale_known_sections = false
     @product.with_lock do
       # Checked under the product lock so a concurrent writer cannot add or remove a section between
       # this check and the destroy below. A foreign id would otherwise be stored and render nothing.
@@ -660,6 +661,7 @@ class Api::V2::LinksController < Api::V2::BaseController
       # known_section_ids is what the seller reviewed; a newer section was never shown as deleted.
       if known_ids && (current_ids - section_ids - known_ids).any?
         error = "A section was added after this change was prepared. Read the product again and retry."
+        stale_known_sections = true
         raise ActiveRecord::Rollback
       end
 
@@ -668,7 +670,9 @@ class Api::V2::LinksController < Api::V2::BaseController
       @product.save!
       @product.seller_profile_sections.where.not(id: section_ids).destroy_all
     end
-    return render_response(false, message: error) if error
+    if error
+      return render_response(false, stale_known_sections ? { message: error, reason: "stale_known_sections" } : { message: error })
+    end
 
     success_with_product(@product.reload)
   rescue ActiveRecord::RecordInvalid

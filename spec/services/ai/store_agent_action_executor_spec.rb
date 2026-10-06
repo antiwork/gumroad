@@ -243,9 +243,30 @@ describe Ai::StoreAgentActionExecutor do
           ),
         )
 
-        expect(result[:success]).to be(false)
-        expect(result[:message]).to eq("A section was added after this change was prepared. Read the product again and retry.")
+        expect(result).to include(
+          success: false,
+          message: "A section was added after this change was prepared. Read the product again and retry.",
+          failure_reason: "stale_known_sections",
+          retry_safe: true,
+        )
         expect(SellerProfileSection.where(id: [first.id, second.id, added_later.id]).count).to eq(3)
+      end
+
+      it "applies a confirmed change when no section was added since the card was shown" do
+        product.update!(sections: [first.id, second.id])
+
+        result = executor.execute(
+          type: "api_write",
+          params: api_write(
+            endpoint: "update_product_sections",
+            path_params: { "id" => product.external_id },
+            params: { "sections" => [first.external_id], "known_section_ids" => [first.external_id, second.external_id] },
+          ),
+        )
+
+        expect(result[:success]).to be(true)
+        expect(product.reload.sections).to eq([first.id])
+        expect(SellerProfileSection.exists?(second.id)).to be(false)
       end
 
       it "leaves sections untouched when a section belongs to another product" do

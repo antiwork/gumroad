@@ -1618,7 +1618,11 @@ class Ai::StoreAgentService
 
     # A required read whose response IS a whole custom page is expensive to fetch, so its block
     # message keeps the custom-page guardrail: only read it when the seller asked for that page work.
-    PAGE_BODY_READ_ENDPOINTS = %w[get_user_custom_html get_product_custom_html].freeze
+    PAGE_BODY_READ_ENDPOINTS = Ai::StoreAgentApiCatalog::ENDPOINTS
+      .select { _1.write? && _1.id.include?("custom_html") }
+      .filter_map(&:requires_read)
+      .uniq
+      .freeze
 
     def required_read_error(endpoint:, required_read:)
       first = "#{endpoint.id} requires a successful full read of this exact target first."
