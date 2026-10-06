@@ -15,6 +15,8 @@ permissions:
 jobs:
   rerun:
     runs-on: ubuntu-latest
+    outputs:
+      retried: ${{ steps.rerun.outputs.retried }}
     # run_attempt < 2 is the cap: attempt 1 may be re-run, attempt 2 is final.
     if: >-
       github.event.workflow_run.conclusion == 'failure' &&
@@ -86,6 +88,7 @@ jobs:
       # tests.yml puts a main re-run in its own concurrency lane, so it cannot
       # replace a newer pending run.
       - name: Re-run the failed jobs
+        id: rerun
         if: steps.classify.outputs.rerun == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -105,3 +108,32 @@ jobs:
             exit 0
           fi
           gh run rerun "$RUN_ID" --failed -R "$GITHUB_REPOSITORY"
+          echo "retried=true" >> "$GITHUB_OUTPUT"
+
+  # revert-red-main-deploy.yml reads this to know the failure is final: no
+  # retry started for this exact run and attempt.
+  verdict:
+    needs: rerun
+    runs-on: ubuntu-latest
+    if: >-
+      always() &&
+      github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main'
+    steps:
+      - name: Record the verdict
+        env:
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          RETRIED: ${{ needs.rerun.outputs.retried == 'true' }}
+        run: |
+          jq -n --argjson run_id "$RUN_ID" --argjson attempt "$ATTEMPT" --arg sha "$SHA" --argjson retried "$RETRIED" \
+            '{run_id: $run_id, attempt: $attempt, sha: $sha, retried: $retried}' > verdict.json
+          cat verdict.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: main-failure-verdict
+          path: verdict.json
+          retention-days: 7

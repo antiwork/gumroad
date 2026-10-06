@@ -79,44 +79,44 @@ def workflow_check(name, ok, detail)
   end
 end
 
-job = WORKFLOW.dig("jobs", "revert")
-gate = job["if"].to_s
+trigger = WORKFLOW[true] || WORKFLOW["on"]
 workflow_check(
-  "the workflow runs only for a failed main push",
-  ["conclusion == 'failure'", "event == 'push'", "head_branch == 'main'"].all? { |part| gate.include?(part) },
-  gate.inspect
+  "the workflow follows the retry workflow",
+  trigger.dig("workflow_run", "workflows") == ["Rerun main spec failure"],
+  trigger.inspect
 )
 
-steps = job["steps"]
-step = ->(name) { steps.find { |s| s["name"] == name } }
+jobs = WORKFLOW["jobs"]
+token_jobs = jobs.select { |_, job| job.to_s.include?("GUMCLAW_GITHUB_PAT") }.keys
+workflow_check("only the open job holds gumclaw's token", token_jobs == ["open"], token_jobs.inspect)
 
-decide = step.call("Decide")["run"].to_s
+# A repo script in the token's job could plant a wrapper through GITHUB_PATH.
+open_runs = jobs.dig("open", "steps").map { |step| step["run"].to_s }.join("\n")
 workflow_check(
-  "a first failure waits for the retry workflow before deciding",
-  decide.include?('if [ "$ATTEMPT" = "1" ]') && decide.include?("rerun-main-spec-failure.yml/runs") &&
-    decide.index("rerun-main-spec-failure.yml/runs") < decide.index("actions/runs/${RUN_ID}"),
-  "Decide step"
+  "the open job runs no repo script",
+  !open_runs.match?(%r{(^|\s)(\./|bin/|script/|ruby |bash |sh )}),
+  "a repo script in the open job"
 )
+open_actions = jobs.dig("open", "steps").filter_map { |step| step["uses"] }
+workflow_check("the open job uses only actions/checkout", open_actions.all? { |uses| uses.start_with?("actions/checkout@") }, open_actions.inspect)
 
-revert = step.call("Open the revert PR")
+tell = jobs["tell"]
 workflow_check(
-  "the revert PR is opened with gumclaw's token",
-  revert.dig("env", "GH_TOKEN").to_s.include?("secrets.GUMCLAW_GITHUB_PAT"),
-  revert["env"].inspect
-)
-
-# The step that holds gumclaw's token must not run anything from the repo.
-workflow_check(
-  "the token step runs no repo script",
-  !revert["run"].to_s.match?(%r{(^|\s)(\./|bin/|script/|ruby |bash |sh )}),
-  "Open the revert PR runs a repo script"
-)
-
-tell = step.call("Tell the original PR")
-workflow_check(
-  "the original PR hears about it even when the revert step fails",
-  tell["if"].to_s.include?("!cancelled()") && tell.dig("env", "GH_TOKEN").to_s.include?("github.token"),
+  "the original PR hears about it even when the open job fails",
+  tell["if"].to_s.include?("!cancelled()") && tell.to_s.include?("github.token") && !tell.to_s.include?("GUMCLAW"),
   tell["if"].inspect
+)
+
+# The verdict keys the revert to the exact Tests run and attempt.
+RETRY = YAML.load_file(File.expand_path("../../.github/workflows/rerun-main-spec-failure.yml", __dir__))
+verdict = RETRY.dig("jobs", "verdict")
+rerun_step = RETRY.dig("jobs", "rerun", "steps").find { |step| step["name"] == "Re-run the failed jobs" }
+workflow_check(
+  "the retry workflow records whether it started a retry",
+  verdict && verdict["if"].to_s.include?("always()") &&
+    verdict["steps"].any? { |step| step.dig("with", "name") == "main-failure-verdict" } &&
+    rerun_step["run"].to_s.index("gh run rerun").to_i < rerun_step["run"].to_s.index("retried=true").to_i,
+  verdict.inspect
 )
 
 puts
