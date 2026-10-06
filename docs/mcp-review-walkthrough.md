@@ -81,7 +81,7 @@ private source images; commit only the helper and this script.
 | Connect | Show the connector name and discovered tools after OAuth returns. | “Gumroad connects with OAuth. This demonstration uses an isolated review account.” Do not claim public directory approval. |
 | Account | “Show the connected Gumroad account and its currency.” | `get_account` identifies the intended account. Stop if it is the wrong creator. |
 | Products | “What products do I have on Gumroad? Show their names, prices, and published states.” | `list_products` returns only this account's products. |
-| Product detail | “Show the details of [ID returned above].” | `get_product` uses a real returned identifier. |
+| Product detail | “Show the details of [ID returned above].” | `get_product` uses a real returned identifier. If the account has no products, use the ID returned by the Draft scene instead. |
 | Sales | “Show my 10 most recent successful sales.” | `list_sales`; an empty result is valid. “This synthetic account has no sales.” Do not call a limited result a complete date-range report. |
 | Draft | “Create an unpublished draft named [run label] for USD $12 with the description ‘Synthetic connector review fixture. Not offered for sale.’ Confirm the name and price before creating it.” | Confirm the requested values in the live conversation. If the account is not USD, clarify before proceeding. `create_draft_product` uses `price_cents: 1200` for USD. |
 | Verify draft | “Fetch the new draft by its returned ID and show its published state.” | `get_product` confirms `published: false`. Optionally show the same product in Gumroad's editor. |
