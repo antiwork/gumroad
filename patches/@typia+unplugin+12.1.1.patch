@@ -1,5 +1,5 @@
 diff --git a/node_modules/@typia/unplugin/dist/core.js b/node_modules/@typia/unplugin/dist/core.js
-index e61604c..e7b1eb4 100644
+index e61604c..16f7a8d 100644
 --- a/node_modules/@typia/unplugin/dist/core.js
 +++ b/node_modules/@typia/unplugin/dist/core.js
 @@ -502,7 +502,7 @@ async function transformTypia(_id, _source, unpluginContext, options, aliases) {
@@ -7,7 +7,7 @@ index e61604c..e7b1eb4 100644
  		/** Parse tsconfig compilerOptions */
  		compilerOptions = await getTsCompilerOption(cacheEnable, options?.tsconfig);
 -		const { program, tsSource } = await getProgramAndSource(id, source, compilerOptions, aliases, cacheEnable);
-+		const { program, tsSource } = await getProgramAndSource(id, source, compilerOptions, aliases, cacheEnable, options.typia);
++		const { program, tsSource } = await getProgramAndSource(id, source, compilerOptions, aliases, cacheEnable, options.typia, options?.tsconfig);
  		const { diagnostics, transformed, file } = _usingCtx.u(transform$1(id, program, tsSource, options.typia));
  		warnDiagnostic(diagnostics, transformed, unpluginContext);
  		return wrap(printer.printFile(file));
@@ -29,12 +29,12 @@ index e61604c..e7b1eb4 100644
 +*/
 +let sharedProgramEnabled = false;
 +let sharedProgram;
-+function getSharedProgram(compilerOptions, aliases, typiaOptions) {
-+	sharedProgram ??= buildSharedProgram(compilerOptions, aliases, typiaOptions);
++function getSharedProgram(compilerOptions, aliases, typiaOptions, tsconfigId) {
++	sharedProgram ??= buildSharedProgram(compilerOptions, aliases, typiaOptions, tsconfigId);
 +	return sharedProgram;
 +}
-+async function buildSharedProgram(compilerOptions, aliases, typiaOptions) {
-+	const configPath = await resolveTSConfig();
++async function buildSharedProgram(compilerOptions, aliases, typiaOptions, tsconfigId) {
++	const configPath = tsconfigId != null ? resolve(tsconfigId) : await resolveTSConfig();
 +	const parsed = ts.parseJsonConfigFileContent(ts.readConfigFile(configPath, (path) => ts.sys.readFile(path)).config, ts.sys, dirname(configPath));
 +	const program = ts.createProgram(parsed.fileNames, compilerOptions, createHost(compilerOptions, aliases, true, null, null));
 +	for (const fileName of [...parsed.fileNames].sort()) {
@@ -70,9 +70,9 @@ index e61604c..e7b1eb4 100644
 +	};
 +	return host;
 +}
-+async function getProgramAndSource(id, source, compilerOptions, aliases, cacheEnable = true, typiaOptions) {
++async function getProgramAndSource(id, source, compilerOptions, aliases, cacheEnable = true, typiaOptions, tsconfigId) {
 +	if (sharedProgramEnabled) {
-+		const program = await getSharedProgram(compilerOptions, aliases, typiaOptions);
++		const program = await getSharedProgram(compilerOptions, aliases, typiaOptions, tsconfigId);
 +		const shared = program.getSourceFile(id);
 +		// A file another plugin rewrote first is not what the program read from disk.
 +		if (shared != null && shared.text === source) return { program, tsSource: shared };
@@ -91,11 +91,14 @@ index e61604c..e7b1eb4 100644
  			let code = cache?.data;
  			if (showLog) if (code != null) log("success", `Cache hit: ${id}`);
  			else log("warn", `Cache miss: ${id}`);
-@@ -716,6 +776,7 @@ const unpluginFactory = (rawOptions = {}) => {
+@@ -716,8 +776,10 @@ const unpluginFactory = (rawOptions = {}) => {
  		enforce: options.enforce,
  		vite: { configResolved(config) {
  			viteConfig = config;
 +			sharedProgramEnabled = config.command === "build" && !config.build.watch;
  		} },
  		buildStart() {
++			sharedProgram = void 0;
  			if (logOption !== false) log("box", cacheOptions ? `Cache enabled` : `Cache disabled`);
+ 		},
+ 		transformInclude(id) {
