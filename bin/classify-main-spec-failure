@@ -86,10 +86,19 @@ def summary_counts?(summary)
   summary.to_s.strip.match?(RSPEC_SUMMARY) || summary.to_s.strip.match?(MINITEST_SUMMARY)
 end
 
+# A job that hit its own time limit while its test step ran: the job reads
+# `timed_out` and the step `cancelled`, with no summary to read.
+def test_step_timeouts(jobs)
+  jobs.select do |job|
+    next false unless job["conclusion"] == "timed_out" && job_label(job).match?(SHARD_NAME)
+    steps_of(job).any? { |step| step["name"] == spec_step(job) && %w[failure cancelled].include?(step["conclusion"]) }
+  end
+end
+
 def spec_failed(jobs, summaries)
   failed = test_step_failures(jobs).map { |job| summaries[job["id"].to_s] }
   return true if failed.any? { |summary| reported_failures?(summary) }
-  return nil if failed.any? { |summary| !summary_counts?(summary) }
+  return nil if failed.any? { |summary| !summary_counts?(summary) } || test_step_timeouts(jobs).any?
   false
 end
 

@@ -313,6 +313,9 @@ end
   # A timeout and a load error that stopped the runner both leave no summary.
   "a test step with no summary" => [[job("Test Slow 12", "failure", SPEC_FAILURE)], "", "null"],
   "a minitest step with no summary" => [[job("Test Minitest 1", "failure", MINITEST_FAILURE)], "", "null"],
+  "a shard that hit its job time limit in its test step" => [[job("Test Minitest 1", "timed_out", [["Check out repository", "success"], ["Run Minitest", "cancelled"]])], "", "null"],
+  "a time-limited shard next to real failures" => [[job("Test Slow 12", "failure", SPEC_FAILURE), job("Test Minitest 1", "timed_out", [["Run Minitest", "cancelled"]])], "45 examples, 1 failure", "true"],
+  "a shard that timed out before its test step" => [[job("Test Slow 12", "timed_out", [["Check out repository", "cancelled"], ["Run tests", "skipped"]])], "", "false"],
   "a summary with no failures" => [[job("Test Slow 12", "failure", SPEC_FAILURE)], "45 examples, 0 failures", "false"],
   "a hung checkout" => [[job("Test Slow 3", "failure", HUNG_CHECKOUT)], "45 examples, 1 failure", "false"],
   "a failed build job" => [[job("Build images", "failure", [["Build test image", "failure"]])], "45 examples, 1 failure", "false"],
