@@ -135,6 +135,21 @@ check(
   expect_specs: %w[spec/requests/rack_attack_spec.rb],
 )
 
+# Piracy recipient registry -> the registry and screening specs
+check(
+  "piracy recipient registry maps to its service specs instead of escalating",
+  base_files: {
+    "spec/services/piracy_reports/recipient_registry_spec.rb" => SPEC_STUB,
+    "spec/services/piracy_reports/screen_service_spec.rb" => SPEC_STUB,
+    "config/piracy_recipients.yml" => "old",
+  },
+  head_files: { "config/piracy_recipients.yml" => "new" },
+  expect_specs: %w[
+    spec/services/piracy_reports/recipient_registry_spec.rb
+    spec/services/piracy_reports/screen_service_spec.rb
+  ],
+)
+
 # Nested oauth/device_authorizations controller -> flattened request spec name
 check(
   "nested oauth controller maps to flattened request spec",
