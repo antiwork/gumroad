@@ -3,6 +3,16 @@
 require "spec_helper"
 
 describe AffiliateMailer do
+  # Pins each figure to its labelled row, so a swapped or unsigned amount fails the test.
+  def email_rows(mail)
+    mail.body.encoded.scan(%r{<td>\s*<h4>(.*?)</h4>\s*</td>\s*<td>(.*?)</td>}m)
+        .each_with_object({}) { |(label, value), rows| rows[CGI.unescapeHTML(label.strip)] = CGI.unescapeHTML(value.strip) }
+  end
+
+  def format_usd(cents)
+    MoneyFormatter.format(cents, :usd, no_cents_if_whole: true, symbol: true)
+  end
+
   describe "#notify_affiliate_of_sale" do
     let(:seller) { create(:named_user) }
     let(:product_name) { "Affiliated Product" }
@@ -93,6 +103,24 @@ describe AffiliateMailer do
         expect(mail.body.encoded).to include "$8"
         expect(mail.body.encoded).to include "Quantity"
         expect(mail.body.encoded).to include "1"
+      end
+
+      it "shows the fee deduction so the emailed figures reconcile with the balance" do
+        credited_cents = purchase.affiliate_credit_cents
+        fee_share_cents = purchase.affiliate_credit.fee_cents
+        expect(fee_share_cents).to be_positive
+
+        rows = email_rows(AffiliateMailer.notify_affiliate_of_sale(purchase.id))
+        expect(rows["Your cut"]).to eq(format_usd(credited_cents + fee_share_cents))
+        expect(rows["Your share of fees"]).to eq("-#{format_usd(fee_share_cents)}")
+        expect(rows["Added to your balance"]).to eq(format_usd(credited_cents))
+
+        # With no fee share the breakdown is omitted and "Your cut" is the credited amount.
+        purchase.affiliate_credit.update_column(:fee_cents, 0)
+        rows = email_rows(AffiliateMailer.notify_affiliate_of_sale(purchase.id))
+        expect(rows).to_not have_key "Your share of fees"
+        expect(rows).to_not have_key "Added to your balance"
+        expect(rows["Your cut"]).to eq(format_usd(credited_cents))
       end
 
       it "includes variant information if the purchase is for a variant" do
