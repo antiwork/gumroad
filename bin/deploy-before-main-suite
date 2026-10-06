@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
-# Gathers what bin/deploy-before-main-suite-gate needs for COMMIT_SHA and runs
-# it. Exits as the gate does: 0 early, 1 wait for the suite, 2 could not decide.
-#
-# Env: GH_TOKEN, GITHUB_REPOSITORY, COMMIT_SHA.
+# Exits as the gate does: 0 early, 1 wait for the suite, 2 could not decide.
 set -euo pipefail
 
 dir=$(mktemp -d)
