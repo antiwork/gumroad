@@ -606,7 +606,8 @@ module StripeMerchantAccountManager
     # note — see the isolation spec). Ids are snapshotted BEFORE the update for the same reason
     # clear_identity_rejection_notes takes ids rather than re-querying: a note from an overlapping
     # resync is a diagnostic this save has no result for.
-    switching_to_individual = !user_compliance_info.is_business? && last_user_compliance_info&.is_business?
+    switching_to_individual = !user_compliance_info.is_business? &&
+                              (last_user_compliance_info&.is_business? || live_company_for_individual)
     obsolete_representative_note_ids = switching_to_individual ? identity_rejection_note_ids(user, scope: :representative) : []
 
     # Mark before sending: a failed response can hide a successful Stripe update.

@@ -15669,7 +15669,7 @@ describe StripeMerchantAccountManager, :vcr do
           ).ordered
           expect(Stripe::Account).to receive(:update).with(
             merchant_account.charge_processor_merchant_id,
-            hash_including(business_type: "individual")
+            hash_including(business_type: "individual", individual: hash_including(:first_name, :last_name, :dob))
           ).ordered
 
           described_class.update_account(user, passphrase:)
@@ -15701,6 +15701,19 @@ describe StripeMerchantAccountManager, :vcr do
 
             described_class.update_account(user, passphrase:)
           end
+        end
+
+        it "retires the representative's rejection note, since the company is gone" do
+          representative_note = user.add_payout_note(
+            content: "#{StripeMerchantAccountManager::IDENTITY_REJECTION_NOTE_PREFIX} (representative) — still outstanding",
+            seller_visible: false
+          )
+          stub_stripe_account(previous, business_type: "company")
+          allow(Stripe::Account).to receive(:update)
+
+          described_class.update_account(user, passphrase:)
+
+          expect(representative_note.reload.deleted_at).to be_present
         end
 
         it "leaves a non_profit account's type alone" do
