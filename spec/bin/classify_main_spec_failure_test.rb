@@ -342,18 +342,17 @@ else
 end
 
 # Its own lane lets a re-run pass after a newer commit shipped this one; the
-# unblock step must then leave the older build alone.
+# unblock script must then leave the older build alone.
 $count += 1
 unblock = YAML.load_file(TESTS_WORKFLOW).fetch("jobs").fetch("unblock_deployment_from_buildkite").fetch("steps")
                 .find { |step| step["name"] == "Unblock corresponding Buildkite build" }
-command = unblock.dig("with", "command").to_s
-if command.include?('if [ "$RUN_ATTEMPT" != "1" ]') && command.include?("compare/$COMMIT_SHA...production-release") &&
-   command.include?("ahead|identical)") &&
-   unblock.dig("env", "RUN_ATTEMPT").to_s.include?("github.run_attempt")
-  puts "  ok    tests.yml skips the unblock for a re-run that production already contains"
+script = File.read(File.expand_path("../../bin/unblock-buildkite-deploy", __dir__))
+if unblock.dig("with", "command").to_s.include?("bin/unblock-buildkite-deploy") &&
+   script.include?("compare/$COMMIT_SHA...production-release") && script.include?("ahead|identical)")
+  puts "  ok    the unblock skips a commit that production already contains"
 else
-  puts "  FAIL  tests.yml skips the unblock for a re-run that production already contains"
-  $failures << "unblock step: missing the re-run production check"
+  puts "  FAIL  the unblock skips a commit that production already contains"
+  $failures << "unblock step: missing the production check"
 end
 
 # The classifier matches job and step names from tests.yml; a rename there would

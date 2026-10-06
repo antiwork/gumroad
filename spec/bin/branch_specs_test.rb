@@ -221,6 +221,7 @@ check(
   "deploy gate and unblock scripts, their tests, and workflow do not escalate",
   base_files: {
     ".github/workflows/deploy-before-main-suite.yml" => "old",
+    "bin/deploy-before-main-suite" => "old",
     "bin/deploy-before-main-suite-gate" => "old",
     "spec/bin/deploy_before_main_suite_gate_test.rb" => "old",
     "bin/unblock-buildkite-deploy" => "old",
@@ -230,6 +231,7 @@ check(
   },
   head_files: {
     ".github/workflows/deploy-before-main-suite.yml" => "new",
+    "bin/deploy-before-main-suite" => "new",
     "bin/deploy-before-main-suite-gate" => "new",
     "spec/bin/deploy_before_main_suite_gate_test.rb" => "new",
     "bin/unblock-buildkite-deploy" => "new",

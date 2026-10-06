@@ -103,6 +103,38 @@ check(
 
 check("no main run in the window", payload(runs: []), expect: :wait, reason: "frozen_no_finished_run")
 
+check(
+  "this commit's own suite already failed",
+  payload(runs: [run_record(9, SHA, "completed", "failure", "2026-10-06T14:55:22Z"), GREEN_PREVIOUS]),
+  expect: :wait, reason: "own_suite_failed"
+)
+
+check(
+  "this commit's own suite is being retried",
+  payload(runs: [run_record(9, SHA, "in_progress", nil, "2026-10-06T14:55:22Z", attempt: 2), GREEN_PREVIOUS]),
+  expect: :wait, reason: "own_retry_in_progress"
+)
+
+check(
+  "this commit's own suite passed",
+  payload(runs: [run_record(9, SHA, "completed", "success", "2026-10-06T14:55:22Z"), GREEN_PREVIOUS]),
+  expect: :early
+)
+
+# Active runs are fetched separately and can repeat a recent run.
+check(
+  "the same run listed twice",
+  payload(runs: [OWN_RUN, GREEN_PREVIOUS, GREEN_PREVIOUS]),
+  expect: :early
+)
+
+# An old run re-run today keeps its old created_at.
+check(
+  "a re-run of an old main run is in progress",
+  payload(runs: [OWN_RUN, GREEN_PREVIOUS, run_record(3, "ancient", "in_progress", nil, "2026-09-01T10:00:00Z", attempt: 2)]),
+  expect: :wait, reason: "frozen_retry_in_progress"
+)
+
 check("no PR for the commit", payload(pulls: []), expect: :wait, reason: "no_merged_pr")
 
 check(
@@ -156,11 +188,22 @@ group = WORKFLOW.dig("concurrency", "group").to_s
 workflow_check("each commit gets its own concurrency lane", group.include?("github.sha"), group.inspect)
 
 steps = WORKFLOW.dig("jobs", "unblock", "steps")
-unblock = steps.find { |step| step["name"] == "Unblock corresponding Buildkite build" }
+command = steps.find { |step| step["name"] == "Unblock corresponding Buildkite build" }&.dig("with", "command").to_s
+order = ["bin/unblock-buildkite-deploy --ready", "\nbin/deploy-before-main-suite\n", "0) bin/unblock-buildkite-deploy ;;"].map { |part| command.index(part) }
+# The freeze must be decided after the gate is ready, right before the unblock.
+workflow_check("the step polls, then decides, then unblocks", order.none?(&:nil?) && order == order.sort, order.inspect)
 workflow_check(
-  "the unblock step runs only on an early decision",
-  unblock && unblock["if"] == "steps.decide.outputs.early == 'true'",
-  unblock&.dig("if").inspect
+  "a wait decision stops the early path without failing",
+  command.include?(%q{1) echo "Waiting for this commit's own Tests run."; exit 0 ;;}),
+  command
+)
+
+checkout = steps.find { |step| step["uses"].to_s.start_with?("actions/checkout") }
+sparse = checkout&.dig("with", "sparse-checkout").to_s.split
+workflow_check(
+  "the checkout has every script the step calls",
+  %w[bin/deploy-before-main-suite bin/deploy-before-main-suite-gate bin/unblock-buildkite-deploy].all? { |path| sparse.include?(path) },
+  sparse.inspect
 )
 
 puts

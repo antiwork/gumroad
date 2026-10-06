@@ -5,7 +5,8 @@
 # finishes. Reads on stdin, or from a file argument:
 #
 #   { "sha": "<the pushed commit>",
-#     "runs": [ ... recent Tests workflow runs for main pushes ... ],
+#     "runs": [ ... Tests workflow runs for main pushes: recent ones plus
+#               every active one, duplicates allowed ... ],
 #     "pulls": [ ... GET /repos/{repo}/commits/{sha}/pulls ... ],
 #     "ci_green": "<state of ci/green on the merged PR's head, or empty>" }
 #
@@ -38,7 +39,14 @@ def verdict(payload)
 
   # Cancelled runs were evicted from the main lane or thrown away; they say
   # nothing about main.
-  runs = Array(payload["runs"]).reject { |run| run["head_sha"] == sha || run["conclusion"] == "cancelled" }
+  all_runs = Array(payload["runs"]).uniq { |run| run["id"] }.reject { |run| run["conclusion"] == "cancelled" }
+  own, runs = all_runs.partition { |run| run["head_sha"] == sha }
+
+  # This commit's own suite already failed, or is being retried: it has spoken.
+  failed_own = own.find { |run| run["status"] == "completed" && run["conclusion"] != "success" }
+  return [EXIT_WAIT, "own_suite_failed", { run: failed_own["id"] }] if failed_own
+  retrying_own = own.find { |run| run["run_attempt"].to_i > 1 && run["status"] != "completed" }
+  return [EXIT_WAIT, "own_retry_in_progress", { run: retrying_own["id"] }] if retrying_own
 
   retrying = runs.find { |run| run["run_attempt"].to_i > 1 && run["status"] != "completed" }
   return [EXIT_WAIT, "frozen_retry_in_progress", { run: retrying["id"] }] if retrying

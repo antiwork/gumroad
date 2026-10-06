@@ -9,8 +9,8 @@ on:
     branches: [main]
 
 permissions:
-  actions: read # recent Tests runs, for the freeze
-  contents: read
+  actions: read # Tests runs, for the freeze
+  contents: read # compare with production-release
   pull-requests: read # the merged PR for this commit
   statuses: read # ci/green on that PR's head
 
@@ -27,57 +27,18 @@ jobs:
         with:
           persist-credentials: false
           sparse-checkout: |
+            bin/deploy-before-main-suite
             bin/deploy-before-main-suite-gate
             bin/unblock-buildkite-deploy
           sparse-checkout-cone-mode: false
 
-      - name: Decide
-        id: decide
-        env:
-          GH_TOKEN: ${{ github.token }}
-          SHA: ${{ github.sha }}
-        run: |
-          set -euo pipefail
-          # The branch filter alone returns stale runs; the created filter keeps
-          # the list current and sorted.
-          since=$(date -u -d '2 days ago' +%Y-%m-%dT%H:%M:%SZ)
-          gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/tests.yml/runs?branch=main&event=push&created=>=${since}&per_page=100" \
-            --jq '.workflow_runs' > runs.json
-          # GitHub can link a fresh merge commit to its PR a few seconds late.
-          head=""
-          for _ in 1 2 3 4 5 6; do
-            gh api "repos/${GITHUB_REPOSITORY}/commits/${SHA}/pulls" > pulls.json
-            head=$(jq -r --arg sha "$SHA" '[.[] | select(.merged_at != null and .merge_commit_sha == $sha)] | first | .head.sha // empty' pulls.json)
-            [ -n "$head" ] && break
-            sleep 10
-          done
-          ci_green=""
-          if [ -n "$head" ]; then
-            ci_green=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${head}/status" \
-              --jq '[.statuses[] | select(.context == "ci/green")] | first | .state // empty')
-          fi
-
-          jq -n --arg sha "$SHA" --arg ci_green "$ci_green" \
-            --slurpfile runs runs.json --slurpfile pulls pulls.json \
-            '{sha: $sha, runs: $runs[0], pulls: $pulls[0], ci_green: $ci_green}' > gate.json
-          set +e
-          line=$(ruby bin/deploy-before-main-suite-gate gate.json)
-          status=$?
-          set -e
-          echo "$line"
-          echo "$line" >> "$GITHUB_STEP_SUMMARY"
-          case "$status" in
-            0) echo "early=true" >> "$GITHUB_OUTPUT" ;;
-            1) echo "early=false" >> "$GITHUB_OUTPUT" ;;
-            *) exit 1 ;;
-          esac
-
+      # Poll until the gate is ready, then decide with fresh data right before
+      # the unblock: main can turn red while the assets compile.
       - name: Unblock corresponding Buildkite build
-        if: steps.decide.outputs.early == 'true'
         timeout-minutes: 30
         uses: nick-fields/retry@v3
         with:
-          timeout_seconds: 20
+          timeout_seconds: 120
           retry_wait_seconds: 20
           max_attempts: 90
           warning_on_retry: false
@@ -86,10 +47,23 @@ jobs:
               echo "UNBLOCK_DEPLOYMENT_FROM_BUILDKITE is not set to 'true'. Skipping unblock."
               exit 0
             fi
-            bin/unblock-buildkite-deploy
+            bin/unblock-buildkite-deploy --ready
+            case $? in
+              0) exit 0 ;;
+              3) ;;
+              *) exit 1 ;;
+            esac
+            bin/deploy-before-main-suite
+            case $? in
+              0) bin/unblock-buildkite-deploy ;;
+              1) echo "Waiting for this commit's own Tests run."; exit 0 ;;
+              *) exit 1 ;;
+            esac
         env:
           UNBLOCK_DEPLOYMENT: ${{ secrets.UNBLOCK_DEPLOYMENT_FROM_BUILDKITE }}
           BUILDKITE_API_TOKEN: ${{ secrets.BUILDKITE_API_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
           COMMIT_SHA: ${{ github.sha }}
           ORG_SLUG: gumroad-inc
           PIPELINE_SLUG: ${{ secrets.BUILDKITE_PIPELINE_SLUG }}

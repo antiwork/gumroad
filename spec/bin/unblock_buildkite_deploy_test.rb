@@ -21,7 +21,10 @@ STUB = <<~'SH'
   #!/usr/bin/env bash
   echo "$*" >> "$STUB_DIR/calls"
   args="$*"
-  if [[ "$args" == *"-X PUT"* ]]; then
+  if [[ "$args" == *"/compare/"* ]]; then
+    [ "$STUB_COMPARE" = "fail" ] && exit 22
+    printf '{"status":"%s"}' "$STUB_COMPARE"
+  elif [[ "$args" == *"-X PUT"* ]]; then
     printf '%s' "$STUB_PUT_CODE"
   elif [[ "$args" == *"/builds?commit="* ]]; then
     cat "$STUB_DIR/builds.json"
@@ -34,17 +37,18 @@ def gate_job(state)
   { "type" => "manual", "step_key" => "require-approval", "state" => state, "id" => "job-1" }
 end
 
-def run_script(builds:, build: { "jobs" => [] }, put_code: "200")
+def run_script(builds:, build: { "jobs" => [] }, put_code: "200", compare: "behind", ready: false)
   Dir.mktmpdir do |dir|
     File.write(File.join(dir, "curl"), STUB)
     File.chmod(0o755, File.join(dir, "curl"))
     File.write(File.join(dir, "builds.json"), JSON.dump(builds))
     File.write(File.join(dir, "build.json"), JSON.dump(build))
     env = {
-      "PATH" => "#{dir}:#{ENV.fetch('PATH')}", "STUB_DIR" => dir, "STUB_PUT_CODE" => put_code,
-      "BUILDKITE_API_TOKEN" => "token", "COMMIT_SHA" => SHA, "ORG_SLUG" => "org", "PIPELINE_SLUG" => "pipe"
+      "PATH" => "#{dir}:#{ENV.fetch('PATH')}", "STUB_DIR" => dir, "STUB_PUT_CODE" => put_code, "STUB_COMPARE" => compare,
+      "BUILDKITE_API_TOKEN" => "token", "COMMIT_SHA" => SHA, "ORG_SLUG" => "org", "PIPELINE_SLUG" => "pipe",
+      "GITHUB_TOKEN" => "gh", "GITHUB_API_URL" => "https://api.github.invalid", "GITHUB_REPOSITORY" => "o/r"
     }
-    _, status = Open3.capture2e(env, "bash", SCRIPT)
+    _, status = Open3.capture2e(env, "bash", SCRIPT, *(ready ? ["--ready"] : []))
     calls = File.exist?(File.join(dir, "calls")) ? File.read(File.join(dir, "calls")) : ""
     [status.exitstatus, calls.include?("-X PUT")]
   end
@@ -74,9 +78,36 @@ check(
   builds: [blocked_build.first.merge("commit" => "other")], expect_code: 1, expect_put: false
 )
 check(
-  "a finished build does not count",
-  builds: [blocked_build.first.merge("state" => "passed")], expect_code: 1, expect_put: false
+  "a finished build whose gate never opened is retried",
+  builds: [blocked_build.first.merge("state" => "failed")], build: { "jobs" => [gate_job("blocked")] }, expect_code: 1, expect_put: false
 )
+
+# An early deploy can finish before the main suite does.
+check(
+  "a finished build whose gate is open is done",
+  builds: [blocked_build.first.merge("state" => "passed")], build: { "jobs" => [gate_job("unblocked")] }, expect_code: 0, expect_put: false
+)
+
+check(
+  "an active build wins over a newer finished rebuild",
+  builds: [blocked_build.first, blocked_build.first.merge("state" => "failed", "number" => 25154, "created_at" => "2026-10-06T15:30:00Z")],
+  build: { "jobs" => [gate_job("blocked")] }, expect_code: 0, expect_put: true
+)
+
+%w[ahead identical].each do |status|
+  check(
+    "production already contains the commit (#{status})",
+    builds: blocked_build, build: { "jobs" => [gate_job("blocked")] }, compare: status, expect_code: 0, expect_put: false
+  )
+end
+
+check("diverged history still unblocks", builds: blocked_build, build: { "jobs" => [gate_job("blocked")] }, compare: "diverged", expect_code: 0, expect_put: true)
+check("a failed compare is retried", builds: blocked_build, build: { "jobs" => [gate_job("blocked")] }, compare: "fail", expect_code: 1, expect_put: false)
+check("an unknown compare result is retried", builds: blocked_build, build: { "jobs" => [gate_job("blocked")] }, compare: "weird", expect_code: 1, expect_put: false)
+
+check("--ready reports a waiting gate without unblocking", builds: blocked_build, build: { "jobs" => [gate_job("blocked")] }, ready: true, expect_code: 3, expect_put: false)
+check("--ready is done when the gate is open", builds: blocked_build, build: { "jobs" => [gate_job("unblocked")] }, ready: true, expect_code: 0, expect_put: false)
+check("--ready retries when the gate is not there yet", builds: blocked_build, ready: true, expect_code: 1, expect_put: false)
 check(
   "a failed unblock request is retried",
   builds: blocked_build, build: { "jobs" => [gate_job("blocked")] }, put_code: "500", expect_code: 1, expect_put: true
