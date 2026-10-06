@@ -510,10 +510,12 @@ module StripeMerchantAccountManager
 
     if (last_user_compliance_info&.is_business? || live_company_for_individual) && user_compliance_info.is_individual?
       # Clear structure first - Stripe rejects company[structure] when business_type is "individual"
+      # The live-company arm keys on the ACCOUNT's country, not the compliance record's: the structure
+      # sits on the account, and the two diverge once the seller's legal entity moves.
       if (last_user_compliance_info&.is_business? &&
         last_user_compliance_info.legal_entity_country_code == Compliance::Countries::USA.alpha2 &&
         US_COMPANY_STRUCTURES.key?(last_user_compliance_info.business_type)) ||
-        (live_company_for_individual && country_code == Compliance::Countries::USA.alpha2 &&
+        (live_company_for_individual && stripe_account_country(stripe_account) == Compliance::Countries::USA.alpha2 &&
         stripe_account["company"] && stripe_account["company"]["structure"].present?)
         on_provider_mutation&.call
         Stripe::Account.update(stripe_account.id, { company: { structure: "" } })

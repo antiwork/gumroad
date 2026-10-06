@@ -15661,7 +15661,7 @@ describe StripeMerchantAccountManager, :vcr do
         end
 
         it "clears an LLC structure in a separate call before sending business_type individual" do
-          stub_stripe_account(previous, business_type: "company", company: { structure: "llc" })
+          stub_stripe_account(previous, business_type: "company", company: { structure: "llc" }, country: "US")
 
           expect(Stripe::Account).to receive(:update).with(
             merchant_account.charge_processor_merchant_id,
@@ -15676,7 +15676,7 @@ describe StripeMerchantAccountManager, :vcr do
         end
 
         it "does not clear the structure when Stripe holds none" do
-          stub_stripe_account(previous, business_type: "company", company: { structure: nil })
+          stub_stripe_account(previous, business_type: "company", company: { structure: nil }, country: "US")
 
           expect(Stripe::Account).not_to receive(:update).with(anything, { company: { structure: "" } })
           expect(Stripe::Account).to receive(:update).with(
@@ -15690,14 +15690,33 @@ describe StripeMerchantAccountManager, :vcr do
         context "when the seller is in Canada" do
           let(:current_factory) { :user_compliance_info_canada }
 
-          it "does not clear the structure, which is only mapped for US accounts" do
-            stub_stripe_account(previous, business_type: "company", company: { structure: "llc" })
+          it "does not clear a non-US account's structure" do
+            stub_stripe_account(previous, business_type: "company", company: { structure: "llc" }, country: "CA")
 
             expect(Stripe::Account).not_to receive(:update).with(anything, { company: { structure: "" } })
             expect(Stripe::Account).to receive(:update).with(
               merchant_account.charge_processor_merchant_id,
               hash_including(business_type: "individual")
             )
+
+            described_class.update_account(user, passphrase:)
+          end
+        end
+
+        context "when the account is US but the seller's record has since moved country" do
+          let(:current_factory) { :user_compliance_info_canada }
+
+          it "clears on the account's country, not the record's" do
+            stub_stripe_account(previous, business_type: "company", company: { structure: "llc" }, country: "US")
+
+            expect(Stripe::Account).to receive(:update).with(
+              merchant_account.charge_processor_merchant_id,
+              { company: { structure: "" } }
+            ).ordered
+            expect(Stripe::Account).to receive(:update).with(
+              merchant_account.charge_processor_merchant_id,
+              hash_including(business_type: "individual")
+            ).ordered
 
             described_class.update_account(user, passphrase:)
           end
