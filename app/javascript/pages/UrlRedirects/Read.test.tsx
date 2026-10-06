@@ -4,7 +4,12 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import Read, { canResumePdfFromLocation, downloadEpubArchive, ensureDefiniteReaderHeight } from "./Read";
+import Read, {
+  canResumePdfFromLocation,
+  downloadEpubArchive,
+  ensureDefiniteReaderHeight,
+  syncPinnedReaderHeight,
+} from "./Read";
 
 const mocks = vi.hoisted(() => {
   const linkServiceOptions: Record<string, unknown>[] = [];
@@ -581,10 +586,9 @@ describe("EPUB reader lifecycle", () => {
   });
 
   it("renders the book into a container with a definite pixel height", async () => {
-    // #3275: `height: 100%` on the epub container resolves against the reader's flex column, and
-    // when that resolves to nothing epub.js paginates a whole chapter into a single spread that
-    // clips mid-word. The container is pinned before epub.js measures it, and the pin has to
-    // survive the re-render that hides the loading overlay.
+    // The container is pinned before epub.js measures it, and the pin has to survive the re-render
+    // that hides the loading overlay. happy-dom has no layout, so this cannot show pagination —
+    // that needs the local reader capture.
     render(<Read />);
     await waitFor(() => expect(harness.rendition.display).toHaveBeenCalled());
     await waitFor(() => expect(screen.queryByText("One moment while we prepare your reading experience")).toBeNull());
@@ -617,5 +621,31 @@ describe("reader height chain", () => {
 
     expect(ensureDefiniteReaderHeight(container, 720)).toBe(540);
     expect(container.style.height).toBe("");
+  });
+
+  it("moves a pinned height with the window on resize", () => {
+    const originalInnerHeight = window.innerHeight;
+    const container = document.createElement("div");
+    container.style.height = "720px";
+    const release = syncPinnedReaderHeight(container);
+
+    Object.defineProperty(window, "innerHeight", { value: 640, configurable: true });
+    window.dispatchEvent(new Event("resize"));
+    expect(container.style.height).toBe("640px");
+
+    release();
+    Object.defineProperty(window, "innerHeight", { value: originalInnerHeight, configurable: true });
+    window.dispatchEvent(new Event("resize"));
+    expect(container.style.height).toBe("640px");
+  });
+
+  it("leaves an unpinned container alone on resize", () => {
+    const container = document.createElement("div");
+    const release = syncPinnedReaderHeight(container);
+
+    window.dispatchEvent(new Event("resize"));
+    expect(container.style.height).toBe("");
+
+    release();
   });
 });

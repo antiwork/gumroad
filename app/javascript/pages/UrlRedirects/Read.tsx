@@ -90,17 +90,24 @@ export const downloadEpubArchive = async (
   return archive.buffer;
 };
 
-// epub.js and pdf.js both paginate by measuring the element they render into. A percentage
-// height that resolves against an indefinite ancestor collapses to 0 — e.g. a `flex-1` child
-// inside a `min-h-screen` flex column whose only in-flow content is absolutely positioned — and
-// a long chapter then paginates to a single spread that clips mid-word while the page-turn jumps
-// a whole section (gumroad-private#3275). Pin a definite pixel height whenever the measurement
-// is unusable so a reader can never render against a collapsed box.
+// epub.js and pdf.js paginate by measuring the element they render into. A percentage height that
+// resolves against an indefinite ancestor collapses to 0, and a long chapter then paginates to a
+// single spread that clips mid-word, so pin a definite pixel height when the measurement is unusable.
 export const ensureDefiniteReaderHeight = (container: HTMLElement, viewportHeight: number): number => {
   const measuredHeight = container.clientHeight;
   if (measuredHeight > 0) return measuredHeight;
   container.style.height = `${viewportHeight}px`;
   return viewportHeight;
+};
+
+// Both engines re-measure only on a resize event, so a pinned height has to move with the window —
+// a pin left at its first value would paginate the next resize against the old reading area.
+export const syncPinnedReaderHeight = (container: HTMLElement): (() => void) => {
+  const handleResize = () => {
+    if (container.style.height) container.style.height = `${window.innerHeight}px`;
+  };
+  window.addEventListener("resize", handleResize);
+  return () => window.removeEventListener("resize", handleResize);
 };
 
 const getCurrentEpubLocation = (rendition: Rendition): EpubLocation | null => {
@@ -219,6 +226,7 @@ const PdfReader = ({
     // document to a viewer nobody can see, keeping the whole parsed PDF in memory.
     let isCancelled = false;
     let teardown: (() => void) | undefined;
+    let releaseHeightSync: (() => void) | undefined;
 
     const resumeFromLastLocation = (pageCount: number) => {
       const storedCookieLocation = getMediaLocationFromCookies(read_id);
@@ -244,6 +252,7 @@ const PdfReader = ({
 
       const container = contentRef.current;
       ensureDefiniteReaderHeight(container, window.innerHeight);
+      releaseHeightSync = syncPinnedReaderHeight(container);
 
       const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
       pdfjs.GlobalWorkerOptions.workerSrc = typia.assert<{ default: string }>(
@@ -325,6 +334,7 @@ const PdfReader = ({
 
     return () => {
       isCancelled = true;
+      releaseHeightSync?.();
       teardown?.();
       pdfViewerRef.current = null;
     };
@@ -534,6 +544,7 @@ const EpubReader = ({
   React.useEffect(() => {
     let book: Book | null = null;
     let cancelled = false;
+    let releaseHeightSync: (() => void) | undefined;
     const archiveDownloadController = new AbortController();
     const isCancelled = () => cancelled;
     const destroyBook = () => {
@@ -611,8 +622,9 @@ const EpubReader = ({
         setSectionCount(linearSectionCount);
 
         // Pin the container before epub.js measures it: a collapsed box would otherwise be
-        // paginated against for the whole session (epub.js only re-measures on a resize event).
+        // paginated against for the whole session.
         ensureDefiniteReaderHeight(container, window.innerHeight);
+        releaseHeightSync = syncPinnedReaderHeight(container);
         const rendition = openedBook.renderTo(container, { width: "100%", height: "100%" });
         renditionRef.current = rendition;
         let isInitialFallbackSuppressed = true;
@@ -721,6 +733,7 @@ const EpubReader = ({
 
     return () => {
       window.removeEventListener("pagehide", handlePageHide);
+      releaseHeightSync?.();
       linearSectionIndexesRef.current = [];
       cleanupReader();
       if (cleanupReaderRef.current === cleanupReader) cleanupReaderRef.current = () => undefined;
