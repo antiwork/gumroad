@@ -90,21 +90,30 @@ export const downloadEpubArchive = async (
   return archive.buffer;
 };
 
+// The container is an absolutely positioned 100%-height child of the reading area, so the space it
+// can actually fill is that area's height — not the viewport, which also holds the menubar and the
+// other reader chrome and would let the engines paginate past the fold.
+const getReadingAreaHeight = (container: HTMLElement): number => {
+  const readingArea = container.closest<HTMLElement>('[role="document"]');
+  return readingArea?.clientHeight || window.innerHeight;
+};
+
 // epub.js and pdf.js paginate by measuring the element they render into. A percentage height that
 // resolves against an indefinite ancestor collapses to 0, and a long chapter then paginates to a
 // single spread that clips mid-word, so pin a definite pixel height when the measurement is unusable.
-export const ensureDefiniteReaderHeight = (container: HTMLElement, viewportHeight: number): number => {
+export const ensureDefiniteReaderHeight = (container: HTMLElement): number => {
   const measuredHeight = container.clientHeight;
   if (measuredHeight > 0) return measuredHeight;
-  container.style.height = `${viewportHeight}px`;
-  return viewportHeight;
+  const pinnedHeight = getReadingAreaHeight(container);
+  container.style.height = `${pinnedHeight}px`;
+  return pinnedHeight;
 };
 
 // Both engines re-measure only on a resize event, so a pinned height has to move with the window —
 // a pin left at its first value would paginate the next resize against the old reading area.
 export const syncPinnedReaderHeight = (container: HTMLElement): (() => void) => {
   const handleResize = () => {
-    if (container.style.height) container.style.height = `${window.innerHeight}px`;
+    if (container.style.height) container.style.height = `${getReadingAreaHeight(container)}px`;
   };
   window.addEventListener("resize", handleResize);
   return () => window.removeEventListener("resize", handleResize);
@@ -251,7 +260,7 @@ const PdfReader = ({
       if (!contentRef.current) return;
 
       const container = contentRef.current;
-      ensureDefiniteReaderHeight(container, window.innerHeight);
+      ensureDefiniteReaderHeight(container);
       releaseHeightSync = syncPinnedReaderHeight(container);
 
       const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
@@ -623,7 +632,7 @@ const EpubReader = ({
 
         // Pin the container before epub.js measures it: a collapsed box would otherwise be
         // paginated against for the whole session.
-        ensureDefiniteReaderHeight(container, window.innerHeight);
+        ensureDefiniteReaderHeight(container);
         releaseHeightSync = syncPinnedReaderHeight(container);
         const rendition = openedBook.renderTo(container, { width: "100%", height: "100%" });
         renditionRef.current = rendition;
