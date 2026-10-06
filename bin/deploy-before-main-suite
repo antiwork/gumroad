@@ -7,12 +7,18 @@ trap 'rm -rf "$dir"' EXIT
 runs_api="repos/${GITHUB_REPOSITORY}/actions/workflows/tests.yml/runs?branch=main&event=push&per_page=100"
 
 # The branch filter alone returns stale runs, and so does a created filter much
-# past two weeks (a 30-day window returned only runs from three weeks earlier).
-# Seven days stays current. A re-run keeps its old created_at; active re-runs
-# come from the status queries below. Any failed request stops the decision,
-# since a missing run could hide a retry.
-since=$(date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ) || exit 2
-gh api --paginate "${runs_api}&created=>=${since}" --jq '.workflow_runs' > "$dir/runs-recent.json" || exit 2
+# past two weeks (a 30-day window returned only runs from three weeks earlier),
+# so the 30 days GitHub allows re-runs for are read in 7-day slices. A re-run
+# keeps its old created_at: the older slices keep only re-runs, and active ones
+# also come from the status queries below. Any failed request stops the
+# decision, since a missing run could hide a retry.
+day() { date -u -d "$1 days ago" +%Y-%m-%dT%H:%M:%SZ; }
+gh api --paginate "${runs_api}&created=>=$(day 7)" --jq '.workflow_runs' > "$dir/runs-recent.json" || exit 2
+for slice in "7 14" "14 21" "21 28" "28 31"; do
+  read -r newer older <<< "$slice"
+  gh api --paginate "${runs_api}&created=$(day "$older")..$(day "$newer")" \
+    --jq '[.workflow_runs[] | select(.run_attempt > 1)]' > "$dir/runs-older-${newer}.json" || exit 2
+done
 # A current list holds this commit's own Tests run, created at the push. Without
 # it the list is stale, and a red run in it could be missing.
 if ! jq -se --arg sha "$COMMIT_SHA" 'add | any(.head_sha == $sha)' "$dir/runs-recent.json" >/dev/null; then

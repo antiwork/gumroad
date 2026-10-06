@@ -288,8 +288,9 @@ workflow_check(
 wrapper = File.read(File.expand_path("../../bin/deploy-before-main-suite", __dir__))
 workflow_check(
   "the run list stays within a window the API answers currently",
-  wrapper.include?("date -u -d '7 days ago'") && !wrapper.match?(/\d{2,} days ago/),
-  "the created window"
+  wrapper.include?("created=>=$(day 7)") && wrapper.include?('for slice in "7 14" "14 21" "21 28" "28 31"') &&
+    wrapper.include?("select(.run_attempt > 1)"),
+  "the created windows"
 )
 workflow_check(
   "a run list without this commit's own run counts as stale",
