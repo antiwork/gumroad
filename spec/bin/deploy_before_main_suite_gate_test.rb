@@ -404,10 +404,21 @@ wrapper_check(
   older: { "T-31d..T-28d" => [wrapper_run_record(6, "oldest", "completed", "failure", "2026-09-07T10:00:00Z", "2026-10-06T16:00:00Z", attempt: 2)] }
 )
 
-old_red_first_attempt = wrapper_run_record(4, "old", "completed", "failure", "2026-09-26T10:00:00Z", "2026-10-06T16:00:00Z")
+old_red_first_attempt = wrapper_run_record(4, "old", "completed", "failure", "2026-09-26T10:00:00Z", "2026-09-26T10:20:00Z")
 wrapper_check(
-  "a first attempt from the older slices is ignored",
+  "an older red run before a newer green one does not freeze",
   recent: [WRAPPER_OWN, WRAPPER_GREEN], older: { "T-14d..T-7d" => [old_red_first_attempt] }, expect_code: 0, reason: "decision=early"
+)
+
+# A quiet week: nothing finished in the recent window, and the latest finished
+# run, a first attempt, failed after an earlier retry passed.
+wrapper_check(
+  "the latest older first attempt decides when the recent week has none",
+  recent: [WRAPPER_OWN], expect_code: 1, reason: "frozen_main_red",
+  older: { "T-14d..T-7d" => [
+    old_red_first_attempt,
+    wrapper_run_record(7, "older", "completed", "success", "2026-09-24T10:00:00Z", "2026-09-25T10:00:00Z", attempt: 2)
+  ] }
 )
 
 old_rerun_running = wrapper_run_record(5, "old", "in_progress", nil, "2026-09-26T10:00:00Z", "2026-10-06T16:00:00Z", attempt: 2)

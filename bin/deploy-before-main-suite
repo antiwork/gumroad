@@ -8,15 +8,14 @@ runs_api="repos/${GITHUB_REPOSITORY}/actions/workflows/tests.yml/runs?branch=mai
 
 # The runs API goes stale for a branch filter alone and for created windows
 # past about two weeks, so the 30 days GitHub allows re-runs for are read in
-# 7-day slices; the older slices keep only re-runs, which keep their old
-# created_at. Any failed request stops the decision: a missing run could hide a
-# retry.
+# 7-day slices. Any failed request stops the decision: a missing run could hide
+# a retry.
 day() { date -u -d "$1 days ago" +%Y-%m-%dT%H:%M:%SZ; }
 gh api --paginate "${runs_api}&created=>=$(day 7)" --jq '.workflow_runs' > "$dir/runs-recent.json" || exit 2
 for slice in "7 14" "14 21" "21 28" "28 31"; do
   read -r newer older <<< "$slice"
   gh api --paginate "${runs_api}&created=$(day "$older")..$(day "$newer")" \
-    --jq '[.workflow_runs[] | select(.run_attempt > 1)]' > "$dir/runs-older-${newer}.json" || exit 2
+    --jq '.workflow_runs' > "$dir/runs-older-${newer}.json" || exit 2
 done
 # A current list holds this commit's own Tests run, created at the push. Without
 # it the list is stale, and a red run in it could be missing.
