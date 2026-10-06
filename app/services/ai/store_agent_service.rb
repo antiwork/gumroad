@@ -1568,8 +1568,10 @@ class Ai::StoreAgentService
       normalize_product_currency_param!(endpoint, body)
 
       summary = write_summary(endpoint, path_params, body)
-      fields = write_fields(endpoint, path_params, body)
-      body = with_known_section_ids(endpoint, path_params, body)
+      # One read feeds both the card and the pin, so they cannot disagree about which sections exist.
+      sections = sections_snapshot(endpoint, path_params)
+      fields = write_fields(endpoint, path_params, body, sections:)
+      body = body.merge("known_section_ids" => sections.map(&:external_id)) if sections
       action = ProposedAction.new(
         type: "api_write",
         # Everything the executor needs to replay the exact same call after the creator confirms.
@@ -1675,7 +1677,7 @@ class Ai::StoreAgentService
     # rendered nicely — the discount amount + type as one row, cents as currency, and product ids as
     # names — but nothing is dropped. Values are coerced to strings (non-scalar tool output is
     # JSON-encoded rather than formatted), so a hallucinated array/object can't raise here.
-    def write_fields(endpoint, path_params, body)
+    def write_fields(endpoint, path_params, body, sections: nil)
       body = body.dup
       offer_code = endpoint.id.include?("offer_code")
       product = target_product(endpoint, path_params)
@@ -1719,7 +1721,7 @@ class Ai::StoreAgentService
       end
       body.each do |key, value|
         if endpoint.id == "update_product_sections" && key == "sections" && value.is_a?(Array)
-          rows.concat(section_rows(product, value))
+          rows.concat(section_rows(sections || [], value))
           next
         end
         rows << if universal_offer_code && key == "universal"
@@ -1734,17 +1736,17 @@ class Ai::StoreAgentService
       rows
     end
 
-    # Pins the sections the card showed, so confirming later cannot delete one added in between.
-    def with_known_section_ids(endpoint, path_params, body)
-      return body unless endpoint.id == "update_product_sections" && (product = target_product(endpoint, path_params))
+    # The sections the card will show. Pinned as known_section_ids so confirming later cannot delete
+    # one that was added in between.
+    def sections_snapshot(endpoint, path_params)
+      return unless endpoint.id == "update_product_sections" && (product = target_product(endpoint, path_params))
 
-      body.merge("known_section_ids" => product.seller_profile_sections.map(&:external_id))
+      product.seller_profile_sections.to_a
     end
 
     # Names the sections a sections write keeps and the ones it destroys, so the seller sees the
     # deletion before confirming. An unresolvable id shows raw.
-    def section_rows(product, external_ids)
-      current = product ? product.seller_profile_sections.to_a : []
+    def section_rows(current, external_ids)
       by_external_id = current.index_by(&:external_id)
       label = ->(section) { section.header.presence || section.type.to_s.delete_prefix("SellerProfile").delete_suffix("Section").underscore.humanize }
       kept = external_ids.map { |id| by_external_id[id.to_s] }
