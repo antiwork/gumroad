@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "moduleResolution": "bundler",
+    "module": "es2022",
+    "target": "es2021",
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "types": []
+  },
+  "include": ["."]
+}
