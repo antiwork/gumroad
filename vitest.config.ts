@@ -18,7 +18,7 @@ export default defineConfig({
     },
   },
   test: {
-    include: ["app/javascript/**/*.test.{ts,tsx}"],
+    include: ["app/javascript/**/*.test.{ts,tsx}", "scripts/**/*.test.ts"],
     environment: "node",
   },
 });
