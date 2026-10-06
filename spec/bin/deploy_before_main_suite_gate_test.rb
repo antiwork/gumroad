@@ -310,7 +310,11 @@ GH_STUB = <<~'SH'
   echo "$path" >> "$STUB_DIR/calls"
   case "$path" in
     *"created=>="*) fixture=recent ;;
-    *"created="*) fixture=older ;;
+    *"created="*)
+      range="${path##*created=}"
+      fixture="older_${range%%&*}"
+      [ -f "$STUB_DIR/$fixture.json" ] || fixture=no_runs
+      ;;
     *"status=in_progress"*) fixture=status_in_progress ;;
     *"status="*) fixture=no_runs ;;
     */actions/runs/*) fixture="run-${path##*/}" ;;
@@ -323,9 +327,15 @@ GH_STUB = <<~'SH'
   jq -rc "$filter" "$STUB_DIR/$fixture.json"
 SH
 
+# `date -u -d "N days ago" +FMT` prints T-Nd, so each slice's bounds show in the
+# recorded calls.
 DATE_STUB = <<~'SH'
   #!/usr/bin/env bash
-  echo "2026-10-01T00:00:00Z"
+  while [ $# -gt 0 ]; do
+    [ "$1" = "-d" ] && { shift; echo "T-${1%% *}d"; exit 0; }
+    shift
+  done
+  exit 1
 SH
 
 def wrapper_run_record(id, sha, status, conclusion, created_at, updated_at, attempt: 1)
@@ -337,7 +347,7 @@ WRAPPER_OWN = wrapper_run_record(9, WRAPPER_SHA, "in_progress", nil, "2026-10-06
 WRAPPER_GREEN = wrapper_run_record(1, "fbf8836d0", "completed", "success", "2026-10-06T14:55:22Z", "2026-10-06T15:11:59Z")
 WRAPPER_PULLS = [{ "number" => 8194, "merged_at" => "2026-10-06T17:17:19Z", "merge_commit_sha" => WRAPPER_SHA, "head" => { "sha" => "headsha" } }].freeze
 
-def run_wrapper(recent:, older: [], in_progress: [], fail: [])
+def run_wrapper(recent:, older: {}, in_progress: [], fail: [])
   Dir.mktmpdir do |dir|
     { "gh" => GH_STUB, "date" => DATE_STUB }.each do |name, body|
       File.write(File.join(dir, name), body)
@@ -345,24 +355,25 @@ def run_wrapper(recent:, older: [], in_progress: [], fail: [])
     end
     fixtures = {
       "recent" => { "workflow_runs" => recent },
-      "older" => { "workflow_runs" => older },
       "status_in_progress" => { "workflow_runs" => in_progress },
       "no_runs" => { "workflow_runs" => [] },
       "pulls" => WRAPPER_PULLS,
       "status" => { "statuses" => [{ "context" => "ci/green", "state" => "success" }] }
     }
-    (recent + older + in_progress).each { |run| fixtures["run-#{run['id']}"] = run }
+    older.each { |range, runs| fixtures["older_#{range}"] = { "workflow_runs" => runs } }
+    (recent + older.values.flatten + in_progress).each { |run| fixtures["run-#{run['id']}"] = run }
     fixtures.each { |name, data| File.write(File.join(dir, "#{name}.json"), JSON.dump(data)) }
     fail.each { |name| File.write(File.join(dir, "fail-#{name}"), "") }
     env = { "PATH" => "#{dir}:#{ENV.fetch('PATH')}", "STUB_DIR" => dir, "GITHUB_REPOSITORY" => "o/r", "COMMIT_SHA" => WRAPPER_SHA }
     output, status = Open3.capture2e(env, "bash", WRAPPER)
-    [status.exitstatus, output]
+    calls = File.exist?(File.join(dir, "calls")) ? File.read(File.join(dir, "calls")).lines(chomp: true) : []
+    [status.exitstatus, output, calls]
   end
 end
 
 def wrapper_check(name, expect_code:, reason: nil, **fixtures)
   $count += 1
-  code, output = run_wrapper(**fixtures)
+  code, output, = run_wrapper(**fixtures)
   if code == expect_code && (reason.nil? || output.include?(reason))
     puts "  ok    #{name}"
   else
@@ -383,11 +394,21 @@ wrapper_check(
 
 # Created ten days ago, re-run today, red after the latest green run.
 old_red_rerun = wrapper_run_record(3, "old", "completed", "failure", "2026-09-26T10:00:00Z", "2026-10-06T16:00:00Z", attempt: 2)
-wrapper_check("a red re-run of an older run freezes", recent: [WRAPPER_OWN, WRAPPER_GREEN], older: [old_red_rerun], expect_code: 1, reason: "frozen_main_red")
+wrapper_check(
+  "a red re-run of an older run freezes",
+  recent: [WRAPPER_OWN, WRAPPER_GREEN], older: { "T-14d..T-7d" => [old_red_rerun] }, expect_code: 1, reason: "frozen_main_red"
+)
+wrapper_check(
+  "a red re-run from the oldest slice freezes",
+  recent: [WRAPPER_OWN, WRAPPER_GREEN], older: { "T-31d..T-28d" => [old_red_rerun] }, expect_code: 1, reason: "frozen_main_red"
+)
 
 # The older slices keep re-runs only.
 old_red_first_attempt = wrapper_run_record(4, "old", "completed", "failure", "2026-09-26T10:00:00Z", "2026-10-06T16:00:00Z")
-wrapper_check("a first attempt from the older slices is ignored", recent: [WRAPPER_OWN, WRAPPER_GREEN], older: [old_red_first_attempt], expect_code: 0, reason: "decision=early")
+wrapper_check(
+  "a first attempt from the older slices is ignored",
+  recent: [WRAPPER_OWN, WRAPPER_GREEN], older: { "T-14d..T-7d" => [old_red_first_attempt] }, expect_code: 0, reason: "decision=early"
+)
 
 old_rerun_running = wrapper_run_record(5, "old", "in_progress", nil, "2026-09-26T10:00:00Z", "2026-10-06T16:00:00Z", attempt: 2)
 wrapper_check(
@@ -395,7 +416,19 @@ wrapper_check(
   recent: [WRAPPER_OWN, WRAPPER_GREEN], in_progress: [old_rerun_running], expect_code: 1, reason: "frozen_retry_in_progress"
 )
 
-wrapper_check("a failed request stops the decision", recent: [WRAPPER_OWN, WRAPPER_GREEN], fail: ["older"], expect_code: 2)
+wrapper_check("a failed request stops the decision", recent: [WRAPPER_OWN, WRAPPER_GREEN], fail: ["recent"], expect_code: 2)
+
+# The recent window plus four slices that tile the 31 days with no gap.
+$count += 1
+_, _, calls = run_wrapper(recent: [WRAPPER_OWN, WRAPPER_GREEN])
+windows = calls.filter_map { |path| path[/created=([^&]+)/, 1] }
+expected = [">=T-7d", "T-14d..T-7d", "T-21d..T-14d", "T-28d..T-21d", "T-31d..T-28d"]
+if windows == expected
+  puts "  ok    the wrapper reads the recent week and four older slices"
+else
+  puts "  FAIL  the wrapper reads the recent week and four older slices"
+  $failures << "created windows: #{windows.inspect}"
+end
 
 puts
 if $failures.empty?
