@@ -61,13 +61,15 @@ jobs:
 
           gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" > run.json
           production=$(gh api "repos/${GITHUB_REPOSITORY}/compare/${sha}...production-release" --jq .status)
-          gate_unblocked=$(curl -fsS -H "Authorization: Bearer ${BUILDKITE_API_TOKEN}" \
+          # Deploying: a build still running past its opened gate. A finished
+          # build counts only through production-release.
+          deploying=$(curl -fsS -H "Authorization: Bearer ${BUILDKITE_API_TOKEN}" \
               "https://api.buildkite.com/v2/organizations/${ORG_SLUG}/pipelines/${PIPELINE_SLUG}/builds?commit=${sha}" \
-            | jq --arg sha "$sha" '[.[] | select(.commit == $sha) | .jobs[]? | select(.type == "manual" and .step_key == "require-approval" and .state == "unblocked")] | length > 0')
+            | jq --arg sha "$sha" '[.[] | select(.commit == $sha and .state == "running") | .jobs[]? | select(.type == "manual" and .step_key == "require-approval" and .state == "unblocked")] | length > 0')
 
           jq -n --slurpfile run run.json --slurpfile verdict verdict/verdict.json \
-            --arg production "$production" --argjson gate_unblocked "$gate_unblocked" \
-            '{run: $run[0], spec_failed: $verdict[0].spec_failed, production: $production, gate_unblocked: $gate_unblocked}' > decision.json
+            --arg production "$production" --argjson deploying "$deploying" \
+            '{run: $run[0], verdict: $verdict[0], production: $production, deploying: $deploying}' > decision.json
           set +e
           line=$(ruby bin/revert-red-main-decision decision.json)
           status=$?

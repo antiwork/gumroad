@@ -6,9 +6,10 @@
 #
 #   { "run": { ... GET /repos/{repo}/actions/runs/{id}, read after the retry
 #              decision ... },
-#     "spec_failed": <true when a shard failed in its test step>,
+#     "verdict": { "attempt": n, "spec_failed": bool, ... the retry workflow's
+#                  verdict for that attempt ... },
 #     "production": "<compare status of sha...production-release>",
-#     "gate_unblocked": <true when the commit's Buildkite deploy gate opened> }
+#     "deploying": <true when a running build of the commit opened its gate> }
 #
 # A revert is for a commit that failed its suite for good and already shipped,
 # or is shipping. A commit that never deployed waits on red main as before.
@@ -32,13 +33,17 @@ def verdict(payload)
   return [EXIT_SKIP, "retry_in_progress"] unless run["status"] == "completed"
   return [EXIT_SKIP, "not_failed"] unless run["conclusion"] == "failure"
   return [EXIT_SKIP, "not_main_push"] unless run["event"] == "push" && run["head_branch"] == "main"
+
+  # The verdict describes one attempt; a newer one brings its own verdict.
+  verdict = payload["verdict"].is_a?(Hash) ? payload["verdict"] : {}
+  return [EXIT_SKIP, "attempt_moved"] unless verdict["attempt"].to_i == run["run_attempt"].to_i
   # Infrastructure failures say nothing about the code.
-  return [EXIT_SKIP, "no_spec_failure"] unless payload["spec_failed"] == true
+  return [EXIT_SKIP, "no_spec_failure"] unless verdict["spec_failed"] == true
 
   production = payload["production"].to_s
   return [EXIT_OPERATIONAL, "unknown_production_state"] unless (SHIPPED + NOT_SHIPPED).include?(production)
   return [0, "shipped"] if SHIPPED.include?(production)
-  return [0, "shipping"] if payload["gate_unblocked"] == true
+  return [0, "shipping"] if payload["deploying"] == true
 
   [EXIT_SKIP, "not_deployed"]
 end

@@ -19,8 +19,8 @@ RED_RUN = { "id" => 37404168421, "head_sha" => "f69c0d04c49600000000000000000000
             "conclusion" => "failure", "event" => "push", "head_branch" => "main", "run_attempt" => 2,
             "display_title" => "Fix the café — checkout" }.freeze
 
-def payload(run: RED_RUN, spec_failed: true, production: "ahead", gate_unblocked: true)
-  { "run" => run, "spec_failed" => spec_failed, "production" => production, "gate_unblocked" => gate_unblocked }
+def payload(run: RED_RUN, spec_failed: true, attempt: 2, production: "ahead", deploying: true)
+  { "run" => run, "verdict" => { "attempt" => attempt, "spec_failed" => spec_failed }, "production" => production, "deploying" => deploying }
 end
 
 # As the workflow calls it: a file argument, under a C locale.
@@ -49,9 +49,12 @@ puts "revert-red-main-decision"
 
 check("a failed commit that production contains", payload, expect: :revert, reason: "shipped")
 check("a failed commit that production is at", payload(production: "identical"), expect: :revert, reason: "shipped")
-check("a failed commit whose deploy is running", payload(production: "behind", gate_unblocked: true), expect: :revert, reason: "shipping")
-check("a failed commit that never deployed", payload(production: "behind", gate_unblocked: false), expect: :skip, reason: "not_deployed")
-check("diverged history and a closed gate", payload(production: "diverged", gate_unblocked: false), expect: :skip, reason: "not_deployed")
+check("a failed commit whose deploy is running", payload(production: "behind", deploying: true), expect: :revert, reason: "shipping")
+check("a failed commit that never deployed", payload(production: "behind", deploying: false), expect: :skip, reason: "not_deployed")
+check("diverged history and no deploy", payload(production: "diverged", deploying: false), expect: :skip, reason: "not_deployed")
+
+# Attempt 1 failed a spec; a manual attempt 2 then failed somewhere else.
+check("the run moved to a newer attempt", payload(attempt: 1), expect: :skip, reason: "attempt_moved")
 
 # Read after the retry decision: a started retry decides on its own completion.
 check("a retry is running", payload(run: RED_RUN.merge("status" => "in_progress", "conclusion" => nil)), expect: :skip, reason: "retry_in_progress")
