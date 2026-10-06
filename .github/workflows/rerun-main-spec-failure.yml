@@ -50,7 +50,7 @@ jobs:
           # normally, without fallback mode.
           echo '{}' > summaries.json
           for id in $(ruby bin/classify-main-spec-failure --rspec-shards jobs.json); do
-            # Not `gh api`: it refuses logs with escape codes on older gh.
+            # Not `gh api`: it refuses logs with escape codes, and its override flag may be too new for the runner.
             if ! curl -fsSL -H "Authorization: Bearer ${GH_TOKEN}" \
                 "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/jobs/${id}/logs" -o shard.raw; then
               echo "::warning::Could not fetch the log of job ${id}; not retrying."
