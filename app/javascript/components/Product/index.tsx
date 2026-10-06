@@ -709,7 +709,7 @@ export const Product = ({
           ) : null}
           {product.streamable ? (
             <Alert role="status" variant="info">
-              Watch link provided after purchase
+              Video link provided after purchase
             </Alert>
           ) : null}
           {product.summary || product.attributes.length > 0 ? (

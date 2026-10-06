@@ -72,7 +72,7 @@ describe("File embeds in product content editor", type: :system, js: true) do
     expect(@product.product_files.last.stream_only?).to eq(true)
 
     visit @product.long_url
-    expect(page).to have_text("Watch link provided after purchase")
+    expect(page).to have_text("Video link provided after purchase")
 
     visit edit_link_path(@product.unique_permalink) + "/content"
     within find_embed(name: "sample") do
@@ -86,7 +86,7 @@ describe("File embeds in product content editor", type: :system, js: true) do
     expect(@product.product_files.last.stream_only?).to eq(false)
 
     visit @product.long_url
-    expect(page).to have_text("Watch link provided after purchase")
+    expect(page).to have_text("Video link provided after purchase")
   end
 
   it "displays file size after save properly" do
