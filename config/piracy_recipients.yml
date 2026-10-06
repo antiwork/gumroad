@@ -7,4 +7,9 @@
 #   name: Example Net Inc.
 #   email: copyright@example.net
 #   source_url: https://dmca.copyright.gov/osp/...
-{}
+
+# Test fixture for the piracy screening agent. Remove when the end-to-end test is done.
+piracy-test-antiwork.vercel.app:
+  name: Antiwork piracy screening test
+  email: gianfranco@gumroad.com
+  source_url: https://piracy-test-antiwork.vercel.app/dmca
