@@ -15,8 +15,9 @@ class ProductReviewStat < ApplicationRecord
   }.freeze
   TEMPLATE = new.freeze
 
+  # The count columns allow NULL; the frontend types each count as a number.
   def rating_counts
-    RATING_COLUMN_MAP.transform_values { |column| attributes[column] }
+    RATING_COLUMN_MAP.transform_values { |column| attributes[column].to_i }
   end
 
   def rating_percentages

@@ -8,11 +8,21 @@ describe ProductReviewStat do
       review_stat = build(:product_review_stat, ratings_of_one_count: 7, ratings_of_three_count: 11)
       expect(review_stat.rating_counts).to eq(1 => 7, 2 => 0, 3 => 11, 4 => 0, 5 => 0)
     end
+
+    it "returns zero for a NULL count column" do
+      review_stat = build(:product_review_stat, ratings_of_two_count: nil)
+      expect(review_stat.rating_counts).to eq(1 => 0, 2 => 0, 3 => 0, 4 => 0, 5 => 0)
+    end
   end
 
   describe "#rating_percentages" do
     it "returns zero when there are no ratings" do
       review_stat = build(:product_review_stat)
+      expect(review_stat.rating_percentages).to eq(1 => 0, 2 => 0, 3 => 0, 4 => 0, 5 => 0)
+    end
+
+    it "returns five numbers when there are no ratings and a count column is NULL" do
+      review_stat = build(:product_review_stat, ratings_of_five_count: nil)
       expect(review_stat.rating_percentages).to eq(1 => 0, 2 => 0, 3 => 0, 4 => 0, 5 => 0)
     end
 
