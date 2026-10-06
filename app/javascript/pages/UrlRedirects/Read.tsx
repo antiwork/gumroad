@@ -90,6 +90,35 @@ export const downloadEpubArchive = async (
   return archive.buffer;
 };
 
+// The container is an absolutely positioned 100%-height child of the reading area, so the space it
+// can actually fill is that area's height — not the viewport, which also holds the menubar and the
+// other reader chrome and would let the engines paginate past the fold.
+const getReadingAreaHeight = (container: HTMLElement): number => {
+  const readingArea = container.closest<HTMLElement>('[role="document"]');
+  return readingArea?.clientHeight || window.innerHeight;
+};
+
+// epub.js and pdf.js paginate by measuring the element they render into. A percentage height that
+// resolves against an indefinite ancestor collapses to 0, and a long chapter then paginates to a
+// single spread that clips mid-word, so pin a definite pixel height when the measurement is unusable.
+export const ensureDefiniteReaderHeight = (container: HTMLElement): number => {
+  const measuredHeight = container.clientHeight;
+  if (measuredHeight > 0) return measuredHeight;
+  const pinnedHeight = getReadingAreaHeight(container);
+  container.style.height = `${pinnedHeight}px`;
+  return pinnedHeight;
+};
+
+// Both engines re-measure only on a resize event, so a pinned height has to move with the window —
+// a pin left at its first value would paginate the next resize against the old reading area.
+export const syncPinnedReaderHeight = (container: HTMLElement): (() => void) => {
+  const handleResize = () => {
+    if (container.style.height) container.style.height = `${getReadingAreaHeight(container)}px`;
+  };
+  window.addEventListener("resize", handleResize);
+  return () => window.removeEventListener("resize", handleResize);
+};
+
 const getCurrentEpubLocation = (rendition: Rendition): EpubLocation | null => {
   // epub.js types this as always present, but it is undefined until the first
   // relocation event for some books and rendering modes.
@@ -206,6 +235,7 @@ const PdfReader = ({
     // document to a viewer nobody can see, keeping the whole parsed PDF in memory.
     let isCancelled = false;
     let teardown: (() => void) | undefined;
+    let releaseHeightSync: (() => void) | undefined;
 
     const resumeFromLastLocation = (pageCount: number) => {
       const storedCookieLocation = getMediaLocationFromCookies(read_id);
@@ -230,6 +260,8 @@ const PdfReader = ({
       if (!contentRef.current) return;
 
       const container = contentRef.current;
+      ensureDefiniteReaderHeight(container);
+      releaseHeightSync = syncPinnedReaderHeight(container);
 
       const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
       pdfjs.GlobalWorkerOptions.workerSrc = typia.assert<{ default: string }>(
@@ -311,6 +343,7 @@ const PdfReader = ({
 
     return () => {
       isCancelled = true;
+      releaseHeightSync?.();
       teardown?.();
       pdfViewerRef.current = null;
     };
@@ -334,7 +367,7 @@ const PdfReader = ({
   return (
     <div style={{ display: "contents" }}>
       {isLoading ? <ReaderLoadingOverlay /> : null}
-      <div role="application" className="scoped-tailwind-preflight flex min-h-screen flex-col">
+      <div role="application" className="scoped-tailwind-preflight flex h-dvh flex-col">
         <div role="menubar" className="flex text-sm md:text-base">
           <div className="border-r">
             <button aria-label="Back" onClick={() => history.back()} className="cursor-pointer p-4 all-unset">
@@ -406,7 +439,7 @@ const PdfReader = ({
           />
         </WithTooltip>
 
-        <div className="main relative flex-1 overflow-auto bg-background" role="document">
+        <div className="main relative min-h-0 flex-1 overflow-auto bg-background" role="document">
           <div className="pdf-reader-container">
             <div ref={contentRef} style={{ position: "absolute", height: "100%", width: "100%" }}>
               <div className="pdfViewer"></div>
@@ -520,6 +553,7 @@ const EpubReader = ({
   React.useEffect(() => {
     let book: Book | null = null;
     let cancelled = false;
+    let releaseHeightSync: (() => void) | undefined;
     const archiveDownloadController = new AbortController();
     const isCancelled = () => cancelled;
     const destroyBook = () => {
@@ -596,6 +630,10 @@ const EpubReader = ({
         linearSectionIndexesRef.current = linearSectionIndexes;
         setSectionCount(linearSectionCount);
 
+        // Pin the container before epub.js measures it: a collapsed box would otherwise be
+        // paginated against for the whole session.
+        ensureDefiniteReaderHeight(container);
+        releaseHeightSync = syncPinnedReaderHeight(container);
         const rendition = openedBook.renderTo(container, { width: "100%", height: "100%" });
         renditionRef.current = rendition;
         let isInitialFallbackSuppressed = true;
@@ -704,6 +742,7 @@ const EpubReader = ({
 
     return () => {
       window.removeEventListener("pagehide", handlePageHide);
+      releaseHeightSync?.();
       linearSectionIndexesRef.current = [];
       cleanupReader();
       if (cleanupReaderRef.current === cleanupReader) cleanupReaderRef.current = () => undefined;
@@ -734,7 +773,7 @@ const EpubReader = ({
   return (
     <div style={{ display: "contents" }}>
       {readerError ? <ReaderErrorOverlay /> : isLoading ? <ReaderLoadingOverlay /> : null}
-      <div role="application" className="scoped-tailwind-preflight flex min-h-screen flex-col">
+      <div role="application" className="scoped-tailwind-preflight flex h-dvh flex-col">
         <div role="menubar" className="flex text-sm md:text-base">
           <div className="border-r">
             <button aria-label="Back" onClick={() => history.back()} className="cursor-pointer p-4 all-unset">
@@ -832,7 +871,7 @@ const EpubReader = ({
         ) : null}
 
         <div
-          className="main relative flex-1 overflow-auto"
+          className="main relative min-h-0 flex-1 overflow-auto"
           role="document"
           style={{ background: epubThemes[theme].background }}
         >
