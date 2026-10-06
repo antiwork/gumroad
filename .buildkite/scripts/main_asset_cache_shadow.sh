@@ -78,7 +78,11 @@ if [ "$files" = "0" ]; then
 fi
 
 if preview_asset_cache_restore "$TAG"; then
-  tar -xzf "$PREVIEW_ASSET_CACHE_TARBALL" -C "$WORK/cached"
+  if ! tar -xzf "$PREVIEW_ASSET_CACHE_TARBALL" -C "$WORK/cached"; then
+    rm -f "$PREVIEW_ASSET_CACHE_TARBALL"
+    report error "could not extract the cached files" warning
+    exit 0
+  fi
   rm -f "$PREVIEW_ASSET_CACHE_TARBALL"
   file_digests "$WORK/cached" > "$WORK/cached.sha256"
   if cmp -s "$WORK/real.sha256" "$WORK/cached.sha256"; then
@@ -90,11 +94,15 @@ if preview_asset_cache_restore "$TAG"; then
   exit 1
 fi
 
-# A miss: save these files, so the next commit with the same inputs is a hit.
 tarball="$WORK/main-asset-cache.tar.gz"
 present=()
 for p in $MAIN_ASSET_CACHE_PATHS; do [ -e "$WORK/real/$p" ] && present+=("$p"); done
-tar -czf "$tarball" -C "$WORK/real" "${present[@]}"
+# A partial archive would upload with a matching checksum and read as a
+# mismatch later.
+if ! tar -czf "$tarball" -C "$WORK/real" "${present[@]}"; then
+  report error "could not archive the compiled files" warning
+  exit 0
+fi
 sha256sum "$tarball" | cut -d " " -f1 > "$tarball.sha256"
 # The sidecar goes up after the tarball: restore treats a tarball without one
 # as a miss.

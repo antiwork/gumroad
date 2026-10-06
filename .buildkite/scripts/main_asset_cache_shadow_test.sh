@@ -105,6 +105,28 @@ for f in "$WORK/bucket/buildkite-branch-cache/main-asset-cache/"*.tar.gz; do ech
 run_script; rc=$?
 [ $rc = 0 ] && [ "$(result_of)" = result=miss ] && ok "a tarball that fails its checksum is a miss" || fail "a tarball that fails its checksum is a miss (rc=$rc $(result_of))"
 
+# A cached tarball that verifies but will not extract is an error, not a
+# comparison against nothing.
+rm -rf "$WORK/bucket"; make_image "$WORK/image" one
+run_script
+for f in "$WORK/bucket/buildkite-branch-cache/main-asset-cache/"*.tar.gz; do
+  echo "not a tarball" > "$f"; sha256sum "$f" | cut -d " " -f1 > "$f.sha256"
+done
+run_script; rc=$?
+[ $rc = 0 ] && [ "$(result_of)" = result=error ] && ok "a cached tarball that will not extract is an error" || fail "a cached tarball that will not extract is an error (rc=$rc $(result_of))"
+
+# A failed archive uploads nothing.
+rm -rf "$WORK/bucket"; make_image "$WORK/image" one
+mkdir -p "$WORK/failtar"
+cat > "$WORK/failtar/tar" <<'STUB'
+#!/bin/bash
+[ "$1" = "-czf" ] && exit 1
+exec "$REAL_TAR" "$@"
+STUB
+chmod +x "$WORK/failtar/tar"
+run_script PATH="$WORK/failtar:$WORK/bin:$PATH" REAL_TAR="$(command -v tar)"; rc=$?
+[ $rc = 0 ] && [ "$(result_of)" = result=error ] && [ ! -d "$WORK/bucket/buildkite-branch-cache/main-asset-cache" ] && ok "a failed archive is an error and uploads nothing" || fail "a failed archive is an error and uploads nothing (rc=$rc $(result_of))"
+
 [ ! -e .main-asset-cache-shadow ] && ok "it leaves no work directory behind" || fail "it leaves no work directory behind"
 
 # A block step waits for every step above it: above the approval gate, the

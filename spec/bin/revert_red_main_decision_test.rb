@@ -133,15 +133,25 @@ workflow_check(
   title.inspect
 )
 
-# Later steps keep a build running after its deploy finished, so shipping is
-# read from the deploy job, not the build.
-workflow_check(
-  "shipping means the deploy job is queued or running",
-  decide_run.include?('select(.step_key == "production-deployment"') && decide_run.include?('IN("waiting", "limiting", "limited", "scheduled", "assigned", "accepted", "running")') &&
-    decide_run.include?('select(any(.jobs[]?; .step_key == "require-approval" and .state == "unblocked"))') &&
-    !decide_run.include?('.state == "running") | .jobs'),
-  "Decide step"
-)
+# The Decide step's own Buildkite filter, run against builds: later steps keep a
+# build running after its deploy finished, so shipping is read from the deploy
+# job, past an opened gate.
+deploying_filter = decide_run[/\| jq --arg sha "\$sha" '(.+?)'\) \\/m, 1].to_s
+def build_with(gate:, deploy:, shadow: nil)
+  jobs = [{ "step_key" => "require-approval", "state" => gate }, { "step_key" => "production-deployment", "state" => deploy }]
+  jobs << { "step_key" => "asset-cache-shadow", "state" => shadow } if shadow
+  { "commit" => "abc", "state" => "running", "jobs" => jobs }
+end
+{
+  "a closed gate with a waiting deploy job" => [[build_with(gate: "blocked", deploy: "waiting")], "false"],
+  "an open gate with a deploy queued behind another" => [[build_with(gate: "unblocked", deploy: "limited")], "true"],
+  "an open gate with a running deploy" => [[build_with(gate: "unblocked", deploy: "running")], "true"],
+  "a finished deploy while the shadow step still runs" => [[build_with(gate: "unblocked", deploy: "finished", shadow: "running")], "false"],
+  "another commit's deploy" => [[build_with(gate: "unblocked", deploy: "running").merge("commit" => "other")], "false"]
+}.each do |name, (builds, expected)|
+  out, status = Open3.capture2("jq", "--arg", "sha", "abc", deploying_filter, stdin_data: JSON.dump(builds))
+  workflow_check("deploying: #{name}", !deploying_filter.empty? && status.success? && out.strip == expected, "got #{out.strip.inspect}")
+end
 
 tell = jobs["tell"]
 workflow_check(
