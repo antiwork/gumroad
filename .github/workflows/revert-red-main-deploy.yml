@@ -80,17 +80,20 @@ jobs:
 
           gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" > run.json
           production=$(gh api "repos/${GITHUB_REPOSITORY}/compare/${sha}...production-release" --jq .status)
-          # Deploying: a build still running past its opened gate. A finished
-          # build counts only through production-release. Asked only when
-          # production does not already contain the commit; null when Buildkite
-          # cannot answer.
+          # Deploying: past an opened gate, the commit's production-deployment
+          # job is queued or running. Not the build's state: later steps (the asset cache shadow)
+          # keep a build running after its deploy finished, shipped or not. A
+          # finished deploy counts only through production-release. Asked only
+          # when production does not already contain the commit; null when
+          # Buildkite cannot answer.
           deploying=false
           case "$production" in
             ahead|identical) ;;
             *)
               deploying=$(curl -fsS -H "Authorization: Bearer ${BUILDKITE_API_TOKEN}" \
                   "https://api.buildkite.com/v2/organizations/${ORG_SLUG}/pipelines/${PIPELINE_SLUG}/builds?commit=${sha}" \
-                | jq --arg sha "$sha" '[.[] | select(.commit == $sha and .state == "running") | .jobs[]? | select(.type == "manual" and .step_key == "require-approval" and .state == "unblocked")] | length > 0') \
+                | jq --arg sha "$sha" '[.[] | select(.commit == $sha) | select(any(.jobs[]?; .step_key == "require-approval" and .state == "unblocked"))
+                    | .jobs[]? | select(.step_key == "production-deployment" and (.state | IN("waiting", "limiting", "limited", "scheduled", "assigned", "accepted", "running")))] | length > 0') \
                 || deploying=null
               ;;
           esac
