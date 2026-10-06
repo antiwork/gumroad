@@ -52,8 +52,6 @@ describe Api::V2::LinksController do
       expect(SellerProfileSection.exists?(dropped.id)).to eq(false)
     end
 
-    # The reported case: a legacy per-product section renders a grid of other products ABOVE the
-    # product, and no self-serve surface can remove it.
     it "clears every section when the list is empty" do
       only = create_section
       @product.update!(sections: [only.id], main_section_index: 1)
