@@ -133,6 +133,16 @@ workflow_check(
   title.inspect
 )
 
+# Later steps keep a build running after its deploy finished, so shipping is
+# read from the deploy job, not the build.
+workflow_check(
+  "shipping means the deploy job is queued or running",
+  decide_run.include?('select(.step_key == "production-deployment"') && decide_run.include?('IN("waiting", "limiting", "limited", "scheduled", "assigned", "accepted", "running")') &&
+    decide_run.include?('select(any(.jobs[]?; .step_key == "require-approval" and .state == "unblocked"))') &&
+    !decide_run.include?('.state == "running") | .jobs'),
+  "Decide step"
+)
+
 tell = jobs["tell"]
 workflow_check(
   "the original PR hears about it even when the open job fails",
