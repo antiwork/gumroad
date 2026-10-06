@@ -46,13 +46,11 @@ jobs:
             --jq '.jobs[]' | jq -s '{jobs: .}' > jobs.json
           MAIN_SHA=$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq .sha)
 
-          # Knapsack sends a batch's failed examples with the next queue request,
-          # so only a shard that logged its queue end (a timeout or crash never
-          # does) and no fallback mode has them stored for the retry. curl, not
-          # gh api: gh refuses a log with escape codes unless a flag the runner's
-          # gh may lack is passed.
+          # Knapsack stores a shard's failures for the retry only if its queue ended
+          # normally, without fallback mode.
           echo '{}' > summaries.json
           for id in $(ruby bin/classify-main-spec-failure --rspec-shards jobs.json); do
+            # Not `gh api`: it refuses logs with escape codes on older gh.
             if ! curl -fsSL -H "Authorization: Bearer ${GH_TOKEN}" \
                 "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/jobs/${id}/logs" -o shard.raw; then
               echo "::warning::Could not fetch the log of job ${id}; not retrying."
