@@ -509,7 +509,7 @@ module StripeMerchantAccountManager
       if (last_user_compliance_info&.is_business? &&
         last_user_compliance_info.legal_entity_country_code == Compliance::Countries::USA.alpha2 &&
         US_COMPANY_STRUCTURES.key?(last_user_compliance_info.business_type)) ||
-        (live_company_for_individual && stripe_account.dig("company", "structure").present?)
+        (live_company_for_individual && stripe_account["company"] && stripe_account["company"]["structure"].present?)
         on_provider_mutation&.call
         Stripe::Account.update(stripe_account.id, { company: { structure: "" } })
       end
