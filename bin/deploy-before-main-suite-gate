@@ -5,8 +5,8 @@
 # finishes. Reads on stdin, or from a file argument:
 #
 #   { "sha": "<the pushed commit>",
-#     "runs": [ ... Tests workflow runs for main pushes: recent ones plus
-#               every active one, duplicates allowed ... ],
+#     "runs": [ ... Tests workflow runs for main pushes: those created in the
+#               last 30 days plus every active one, duplicates allowed ... ],
 #     "pulls": [ ... GET /repos/{repo}/commits/{sha}/pulls ... ],
 #     "ci_green": "<state of ci/green on the merged PR's head, or empty>" }
 #
@@ -23,12 +23,6 @@ require "time"
 EXIT_WAIT = 1
 EXIT_OPERATIONAL = 2
 
-def created_at(run)
-  Time.iso8601(run["created_at"].to_s)
-rescue ArgumentError
-  Time.at(0)
-end
-
 def updated_at(run)
   Time.iso8601(run["updated_at"].to_s)
 rescue ArgumentError
@@ -43,11 +37,14 @@ def verdict(payload)
   sha = payload["sha"].to_s
   return [EXIT_WAIT, "no_sha", {}] if sha.empty?
 
-  observations = Array(payload["runs"])
+  # The same run can appear several times (recent list, active list, a fresh
+  # read). The copy with the highest attempt, then the latest update, is the
+  # truth; at a tie a finished copy beats a stale unfinished one.
+  latest = Array(payload["runs"]).group_by { |run| run["id"] }.values.map do |copies|
+    copies.max_by { |run| [run["run_attempt"].to_i, updated_at(run), run["status"] == "completed" ? 1 : 0] }
+  end
 
-  # Every copy of a run counts here: the active-runs query can see a retry that
-  # the older snapshot of the same run does not.
-  retrying = observations.find { |run| run["run_attempt"].to_i > 1 && run["status"] != "completed" }
+  retrying = latest.find { |run| run["run_attempt"].to_i > 1 && run["status"] != "completed" }
   if retrying
     reason = retrying["head_sha"] == sha ? "own_retry_in_progress" : "frozen_retry_in_progress"
     return [EXIT_WAIT, reason, { run: retrying["id"] }]
@@ -55,9 +52,6 @@ def verdict(payload)
 
   # A cancelled first attempt was evicted from the main lane or thrown away and
   # says nothing about main. A cancelled retry leaves its failure unresolved.
-  latest = observations.group_by { |run| run["id"] }.values.map do |copies|
-    copies.max_by { |run| [run["run_attempt"].to_i, updated_at(run)] }
-  end
   evicted = ->(run) { run["conclusion"] == "cancelled" && run["run_attempt"].to_i <= 1 }
   own, runs = latest.reject(&evicted).partition { |run| run["head_sha"] == sha }
 
@@ -65,7 +59,9 @@ def verdict(payload)
   failed_own = own.find { |run| run["status"] == "completed" && run["conclusion"] != "success" }
   return [EXIT_WAIT, "own_suite_failed", { run: failed_own["id"] }] if failed_own
 
-  newest = runs.select { |run| run["status"] == "completed" }.max_by { |run| created_at(run) }
+  # Newest by finish time: a re-run of an old run that fails now outranks a
+  # newer run that passed earlier.
+  newest = runs.select { |run| run["status"] == "completed" }.max_by { |run| updated_at(run) }
   return [EXIT_WAIT, "frozen_no_finished_run", {}] unless newest
   unless newest["conclusion"] == "success"
     return [EXIT_WAIT, "frozen_main_red", { run: newest["id"], run_sha: newest["head_sha"].to_s[0, 12] }]

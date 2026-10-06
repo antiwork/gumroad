@@ -1,11 +1,7 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# Tests for bin/deploy-before-main-suite-gate.
-#
-# Plain ruby, no Rails, same as spec/bin/classify_main_spec_failure_test.rb.
-#
-#   ruby spec/bin/deploy_before_main_suite_gate_test.rb
+# Plain ruby, no Rails, like spec/bin/classify_main_spec_failure_test.rb.
 
 require "json"
 require "open3"
@@ -18,9 +14,9 @@ SHA = "fbf8836d0aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 $failures = []
 $count = 0
 
-def run_record(id, sha, status, conclusion, created_at, attempt: 1)
+def run_record(id, sha, status, conclusion, created_at, attempt: 1, updated_at: created_at)
   { "id" => id, "head_sha" => sha, "status" => status, "conclusion" => conclusion,
-    "created_at" => created_at, "run_attempt" => attempt }
+    "created_at" => created_at, "updated_at" => updated_at, "run_attempt" => attempt }
 end
 
 GREEN_PREVIOUS = run_record(1, "older1", "completed", "success", "2026-10-06T14:33:27Z")
@@ -59,14 +55,14 @@ check("the last main run passed and the PR is green", payload, expect: :early, r
 
 check(
   "the last main run failed",
-  payload(runs: [OWN_RUN, run_record(1, "older1", "completed", "failure", "2026-10-06T14:33:27Z"), GREEN_PREVIOUS.merge("id" => 0, "created_at" => "2026-10-06T13:10:15Z")]),
+  payload(runs: [OWN_RUN, run_record(1, "older1", "completed", "failure", "2026-10-06T14:33:27Z"), run_record(0, "older0", "completed", "success", "2026-10-06T13:10:15Z")]),
   expect: :wait, reason: "frozen_main_red"
 )
 
-# The API order is not trusted; created_at decides which run is newest.
+# The API order is not trusted; the finish time decides which run is newest.
 check(
   "the newest run is listed last",
-  payload(runs: [GREEN_PREVIOUS.merge("id" => 0, "created_at" => "2026-10-06T13:10:15Z"), run_record(1, "older1", "completed", "failure", "2026-10-06T14:33:27Z")]),
+  payload(runs: [run_record(0, "older0", "completed", "success", "2026-10-06T13:10:15Z"), run_record(1, "older1", "completed", "failure", "2026-10-06T14:33:27Z")]),
   expect: :wait, reason: "frozen_main_red"
 )
 
@@ -132,7 +128,7 @@ check(
 # shows it re-running.
 check(
   "a newer copy of a run shows its retry",
-  payload(runs: [OWN_RUN, run_record(2, "older2", "completed", "failure", "2026-10-06T14:40:00Z"), GREEN_PREVIOUS.merge("created_at" => "2026-10-06T14:50:00Z"),
+  payload(runs: [OWN_RUN, run_record(2, "older2", "completed", "failure", "2026-10-06T14:40:00Z"), run_record(1, "older1", "completed", "success", "2026-10-06T14:50:00Z"),
                  run_record(2, "older2", "in_progress", nil, "2026-10-06T14:40:00Z", attempt: 2)]),
   expect: :wait, reason: "frozen_retry_in_progress"
 )
@@ -155,9 +151,58 @@ check(
 check(
   "a run that finished red while the lists were read",
   payload(runs: [OWN_RUN, GREEN_PREVIOUS,
-                 run_record(2, "older2", "in_progress", nil, "2026-10-06T14:50:00Z").merge("updated_at" => "2026-10-06T15:05:00Z"),
-                 run_record(2, "older2", "completed", "failure", "2026-10-06T14:50:00Z").merge("updated_at" => "2026-10-06T15:07:00Z")]),
+                 run_record(2, "older2", "in_progress", nil, "2026-10-06T14:50:00Z", updated_at: "2026-10-06T15:05:00Z"),
+                 run_record(2, "older2", "completed", "failure", "2026-10-06T14:50:00Z", updated_at: "2026-10-06T15:07:00Z")]),
   expect: :wait, reason: "frozen_main_red"
+)
+
+# A retry that finishes between the active-run listing and the fresh read: the
+# unfinished copy must not count.
+check(
+  "a retry that finished green after it was listed as running",
+  payload(runs: [OWN_RUN, GREEN_PREVIOUS,
+                 run_record(2, "older2", "in_progress", nil, "2026-10-06T14:50:00Z", attempt: 2, updated_at: "2026-10-06T15:05:00Z"),
+                 run_record(2, "older2", "completed", "success", "2026-10-06T14:50:00Z", attempt: 2, updated_at: "2026-10-06T15:07:00Z")]),
+  expect: :early
+)
+
+check(
+  "a stale unfinished copy listed after the finished retry",
+  payload(runs: [OWN_RUN, GREEN_PREVIOUS,
+                 run_record(2, "older2", "completed", "success", "2026-10-06T14:50:00Z", attempt: 2, updated_at: "2026-10-06T15:07:00Z"),
+                 run_record(2, "older2", "in_progress", nil, "2026-10-06T14:50:00Z", attempt: 2, updated_at: "2026-10-06T15:05:00Z")]),
+  expect: :early
+)
+
+check(
+  "a retry that finished red after it was listed as running",
+  payload(runs: [OWN_RUN, GREEN_PREVIOUS,
+                 run_record(2, "older2", "in_progress", nil, "2026-10-06T14:50:00Z", attempt: 2, updated_at: "2026-10-06T15:05:00Z"),
+                 run_record(2, "older2", "completed", "failure", "2026-10-06T14:50:00Z", attempt: 2, updated_at: "2026-10-06T15:07:00Z")]),
+  expect: :wait, reason: "frozen_main_red"
+)
+
+# An older run re-run to red after a newer run passed: its created_at is old,
+# but it finished last.
+check(
+  "an older run re-run red after a newer run passed",
+  payload(runs: [OWN_RUN, GREEN_PREVIOUS,
+                 run_record(3, "older3", "completed", "failure", "2026-10-06T10:00:00Z", attempt: 2, updated_at: "2026-10-06T15:00:00Z")]),
+  expect: :wait, reason: "frozen_main_red"
+)
+
+check(
+  "a re-run created weeks ago finished red after a newer run passed",
+  payload(runs: [OWN_RUN, GREEN_PREVIOUS,
+                 run_record(3, "ancient", "completed", "failure", "2026-09-10T10:00:00Z", attempt: 2, updated_at: "2026-10-06T15:00:00Z")]),
+  expect: :wait, reason: "frozen_main_red"
+)
+
+check(
+  "an older run re-run to green lifts the freeze",
+  payload(runs: [OWN_RUN, run_record(1, "older1", "completed", "failure", "2026-10-06T14:33:27Z"),
+                 run_record(3, "older3", "completed", "success", "2026-10-06T10:00:00Z", attempt: 2, updated_at: "2026-10-06T15:00:00Z")]),
+  expect: :early
 )
 
 # An old run re-run today keeps its old created_at.

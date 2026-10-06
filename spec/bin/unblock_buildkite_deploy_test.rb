@@ -1,9 +1,7 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# Tests for bin/unblock-buildkite-deploy, against a stub curl on PATH.
-#
-#   ruby spec/bin/unblock_buildkite_deploy_test.rb
+# Runs the script against a stub curl on PATH; no network.
 
 require "json"
 require "open3"
