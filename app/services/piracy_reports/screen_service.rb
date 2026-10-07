@@ -33,7 +33,11 @@ class PiracyReports::ScreenService
       errors = input_errors
       return Result.new(report:, errors:) if errors.any?
 
-      verdict == "pass" ? pass : fail_report(checks_from_agent)
+      case verdict
+      when "pass" then pass
+      when "fail" then fail_report(checks_from_agent)
+      else flag_for_review
+      end
     end
 
     def verdict
@@ -56,7 +60,7 @@ class PiracyReports::ScreenService
 
     def input_errors
       errors = []
-      errors << "verdict must be pass or fail" unless %w[pass fail].include?(verdict)
+      errors << "verdict must be pass, fail or review" unless PiracyReport::SCREENING_VERDICTS.include?(verdict)
       errors.concat(check_errors)
       errors.concat(pass_errors) if verdict == "pass"
       errors << "a fail verdict needs at least one failed check" if verdict == "fail" && checks_from_agent.values.none? { _1["passed"] == false }
@@ -121,6 +125,13 @@ class PiracyReports::ScreenService
 
     def no_recipient_error
       "No verified recipient for #{report.url_host}. The report stays in screening until one is added to config/piracy_recipients.yml."
+    end
+
+    # The agent cannot decide, so the report waits in `screening` with its reasons for a person to
+    # send pass or fail. Only a `requested` report wakes the agent, so it never re-screens its own.
+    def flag_for_review
+      report.update!(screening_verdict: "review", screening_checks: { "agent" => checks_from_agent }, screened_at: Time.current)
+      Result.new(report:, errors: [])
     end
 
     def fail_report(agent_checks, rails_errors: [])

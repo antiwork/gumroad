@@ -12,6 +12,7 @@ class PiracyReport < ApplicationRecord
 
   HOSTED_ON_GUMROAD_ERROR = "Pages hosted on Gumroad are reported through the terms of service process"
   SOURCES = %w[dashboard support].freeze
+  SCREENING_VERDICTS = %w[pass fail review].freeze
   # Judgment checks only the agent can make. What Rails can prove is in PiracyReports::Eligibility.
   SCREENING_CHECKS = %w[
     page_offers_work
@@ -49,13 +50,18 @@ class PiracyReport < ApplicationRecord
     end
   end
 
-  # A report the agent approved but the registry cannot route: it stays in `screening`, the one
-  # state it can sit in indefinitely. `screened_at` is what separates it from a report the agent
-  # has not looked at yet, so the queue can be found without re-screening it.
-  scope :blocked_on_recipient, -> { where(state: "screening").where.not(screened_at: nil) }
+  # Two kinds of report stay in `screening` after the agent has answered, and both wait on a person:
+  # a pass on a host the registry cannot route, and a `review` verdict the agent could not decide.
+  # The verdict tells them apart from each other and from a report the agent has not looked at yet.
+  scope :blocked_on_recipient, -> { where(state: "screening", screening_verdict: "pass") }
+  scope :needs_review, -> { where(state: "screening", screening_verdict: "review") }
 
   def blocked_on_recipient?
-    screening? && screened_at.present?
+    screening? && screening_verdict == "pass"
+  end
+
+  def needs_review?
+    screening? && screening_verdict == "review"
   end
 
   # The seller signs the text frozen on the row, so the signature and the digest travel together.

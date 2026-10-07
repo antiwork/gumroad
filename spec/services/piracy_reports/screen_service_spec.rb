@@ -199,8 +199,51 @@ describe PiracyReports::ScreenService do
     end
   end
 
-  it "rejects a verdict other than pass or fail" do
-    expect(call(pass_params.merge("verdict" => "maybe")).errors).to include("verdict must be pass or fail")
+  describe "a review verdict" do
+    it "keeps the report in screening with the agent's reasons, for a person to decide" do
+      checks = { "not_licensee_or_related_party" => { "passed" => false, "reason" => "Affiliate link to the seller's store." } }
+
+      expect(call({ "verdict" => "review", "checks" => checks })).to be_success
+      report.reload
+      expect(report).to have_attributes(state: "screening", screening_verdict: "review", notice_text: nil, recipient_email: nil)
+      expect(report.screened_at).to be_present
+      expect(report.screening_checks).to eq("agent" => checks)
+      expect(PiracyReport.needs_review).to contain_exactly(report)
+      expect(PiracyReport.blocked_on_recipient).to be_empty
+    end
+
+    it "lets a person send pass or fail afterwards, replacing the agent's review" do
+      call({ "verdict" => "review", "checks" => { "page_offers_work" => { "passed" => true, "reason" => "Page returns 404." } } })
+      expect(report.reload).to be_needs_review
+
+      expect(call(pass_params)).to be_success
+      report.reload
+      expect(report).to have_attributes(state: "awaiting_signature", screening_verdict: "pass")
+      expect(report.screening_checks).to eq("agent" => passing_checks)
+    end
+
+    it "lets a person decline it afterwards, removing it from the review queue" do
+      call({ "verdict" => "review", "checks" => { "page_offers_work" => { "passed" => true, "reason" => "Page returns 404." } } })
+      expect(report.reload).to be_needs_review
+      checks = { "page_offers_work" => { "passed" => false, "reason" => "The page is gone." } }
+
+      expect(call({ "verdict" => "fail", "checks" => checks })).to be_success
+      report.reload
+      expect(report).to have_attributes(state: "declined", screening_verdict: "fail")
+      expect(report.screening_checks).to eq("agent" => checks, "rails" => [])
+      expect(PiracyReport.needs_review).to be_empty
+    end
+
+    it "still requires a reason for each check" do
+      result = call({ "verdict" => "review", "checks" => { "page_offers_work" => { "passed" => true, "reason" => "" } } })
+
+      expect(result.errors).to eq(["check page_offers_work needs a reason"])
+      expect(report.reload.screening_verdict).to be_nil
+    end
+  end
+
+  it "rejects a verdict other than pass, fail or review" do
+    expect(call(pass_params.merge("verdict" => "maybe")).errors).to include("verdict must be pass, fail or review")
   end
 
   it "refuses a report that is not being screened" do
