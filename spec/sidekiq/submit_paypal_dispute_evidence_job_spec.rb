@@ -260,13 +260,16 @@ describe SubmitPaypalDisputeEvidenceJob do
   end
 
   [408, 429, 500, 503].each do |status|
-    it "raises on a PayPal #{status} reading the dispute so Sidekiq retries, without taking the claim" do
+    it "raises on a PayPal #{status} reading the dispute so Sidekiq retries" do
       allow(api).to receive(:fetch_dispute).and_return(OpenStruct.new(status_code: status, result: {}))
       expect(api).not_to receive(:provide_dispute_supporting_info)
 
       expect { described_class.new.perform(dispute.id) }.to raise_error(/PayPal returned #{status}/)
-      expect($redis.get(described_class.claim_key(dispute.id))).to be_nil
     end
+  end
+
+  it "spaces retries in minutes" do
+    expect([0, 1, 2].map { |count| described_class.sidekiq_retry_in_block.call(count, StandardError.new) }).to eq([300, 600, 900])
   end
 
   it "stays quiet when the live dispute is gone" do

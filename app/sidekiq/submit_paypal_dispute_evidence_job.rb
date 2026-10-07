@@ -16,6 +16,8 @@ class SubmitPaypalDisputeEvidenceJob
   # No until_executed lock: the same dispute is deliberately enqueued twice (10 minutes and 7 days
   # out), and the Redis claim below is what keeps it to one submission.
   sidekiq_options retry: 3, queue: :default
+  # Minutes, not seconds: a PayPal outage or rate-limit window outlasts Sidekiq's default backoff.
+  sidekiq_retry_in { |count| 5.minutes.to_i * (count + 1) }
 
   FEATURE_FLAG = :submit_paypal_dispute_evidence
   ACTION_REL = "provide_supporting_info"
