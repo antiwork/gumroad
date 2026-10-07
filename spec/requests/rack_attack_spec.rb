@@ -408,6 +408,65 @@ describe "Rack::Attack throttle", type: :request do
     end
   end
 
+  describe "params-based throttles when the query string exceeds Rack's limits" do
+    # A query string nested past Rack's param depth limit makes `req.params` raise
+    # Rack::QueryParser::QueryLimitError, which would 500 the middleware instead
+    # of letting ActionDispatch answer with a 400.
+    def too_deeply_nested_request(path, method: "GET")
+      Rack::Attack::Request.new(
+        Rack::MockRequest.env_for(
+          "#{path}?#{('a' + '[b]' * 40)}=1",
+          method: method,
+          input: "",
+          "HTTP_CF_CONNECTING_IP" => "203.0.113.96"
+        )
+      )
+    end
+
+    def over_limit_query_throttled?(request)
+      Rack::Attack.configuration.throttled?(request)
+    end
+
+    before { reset_rack_attack! }
+    after { reset_rack_attack! }
+
+    it "does not raise for a params-keyed throttle path (/follow)" do
+      expect do
+        over_limit_query_throttled?(too_deeply_nested_request("/follow", method: "POST"))
+      end.not_to raise_error
+    end
+
+    it "does not raise for the login throttle path (/login.json)" do
+      expect do
+        over_limit_query_throttled?(too_deeply_nested_request("/login.json", method: "POST"))
+      end.not_to raise_error
+    end
+
+    it "does not raise for the sales API pagination throttle path (/api/v2/sales)" do
+      expect do
+        over_limit_query_throttled?(too_deeply_nested_request("/api/v2/sales"))
+      end.not_to raise_error
+    end
+
+    it "does not raise for the oauth device token throttle path (/oauth/token)" do
+      expect do
+        over_limit_query_throttled?(too_deeply_nested_request("/oauth/token", method: "POST"))
+      end.not_to raise_error
+    end
+
+    it "still rate-limits senders on the invalid_params path" do
+      travel_to(Time.current) do
+        path = "/over-limit-query-probe"
+
+        5.times do |i|
+          expect(over_limit_query_throttled?(too_deeply_nested_request(path))).to be(false), "request #{i + 1} unexpectedly throttled"
+        end
+
+        expect(over_limit_query_throttled?(too_deeply_nested_request(path))).to be(true)
+      end
+    end
+  end
+
   describe "GET /api/v2/sales throttle with a nested (JSON:API) page param" do
     before { reset_rack_attack! }
     after { reset_rack_attack! }
