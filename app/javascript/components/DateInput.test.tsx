@@ -2,12 +2,22 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { parseISO } from "date-fns";
 import * as React from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { CurrentSeller, CurrentSellerProvider } from "$app/components/CurrentSeller";
 import { DateInput } from "$app/components/DateInput";
 
 afterEach(cleanup);
+
+// DST-gap cases only reproduce the bug when the browser zone observes the gap.
+const originalTZ = process.env.TZ;
+beforeAll(() => {
+  process.env.TZ = "America/New_York";
+});
+afterAll(() => {
+  if (originalTZ === undefined) delete process.env.TZ;
+  else process.env.TZ = originalTZ;
+});
 
 const seller = (timeZone: string): CurrentSeller => ({
   id: "seller-1",
