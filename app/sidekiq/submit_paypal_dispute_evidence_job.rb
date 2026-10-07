@@ -54,7 +54,7 @@ class SubmitPaypalDisputeEvidenceJob
     return if merchant_account&.charge_processor_merchant_id.blank?
 
     notes = self.class.evidence_notes(purchases)
-    return if notes.nil?
+    return Rails.logger.info("SubmitPaypalDisputeEvidenceJob: no note for dispute #{dispute.id} (no recorded access, or too many orders to fit)") if notes.nil?
 
     api = PaypalRestApi.new
     live = api.fetch_dispute(dispute_id: dispute.charge_processor_dispute_id, merchant_account:)
@@ -72,7 +72,7 @@ class SubmitPaypalDisputeEvidenceJob
       response = api.provide_dispute_supporting_info(dispute_id: dispute.charge_processor_dispute_id, merchant_account:, notes:)
       if api.successful_response?(response)
         confirmed = true
-        $redis.set(key, Time.current.to_i, ex: CLAIM_TTL)
+        persist_claim(key)
         Rails.logger.info("SubmitPaypalDisputeEvidenceJob: submitted delivery record for dispute #{dispute.id}")
       else
         ErrorNotifier.notify("SubmitPaypalDisputeEvidenceJob: PayPal rejected supporting info for dispute #{dispute.id} (#{response.status_code})")
@@ -82,6 +82,14 @@ class SubmitPaypalDisputeEvidenceJob
       # reached PayPal releases it so a retry or the 7-day run can send it.
       $redis.del(key) unless confirmed
     end
+  end
+
+  # The note is already with PayPal, so a Redis error here must not fail the job into a retry
+  # that posts it again; the live-case check in `perform` still catches a repeat.
+  def persist_claim(key)
+    $redis.set(key, Time.current.to_i, ex: CLAIM_TTL)
+  rescue Redis::BaseError => e
+    ErrorNotifier.notify(e)
   end
 
   def self.action_offered?(result)
@@ -101,13 +109,16 @@ class SubmitPaypalDisputeEvidenceJob
   end
 
   # Returns nil when no disputed item was ever opened: a note that says "never downloaded"
-  # would only help the buyer, so that case is left to the seller.
+  # would only help the buyer, so that case is left to the seller. Orders with no recorded
+  # access are left out of the note rather than described as unopened.
   def self.evidence_notes(purchases)
-    sections = purchases.map do |purchase|
-      ["#{purchase.link.name.truncate(MAX_NAME_LENGTH)} (Gumroad order #{purchase.external_id}, paid #{fmt(purchase.created_at)}): ",
-       access_events(access_purchases(purchase))]
+    sections = purchases.filter_map do |purchase|
+      access = access_events(access_purchases(purchase))
+      next if access.first.empty?
+
+      ["#{purchase.link.name.truncate(MAX_NAME_LENGTH)} (Gumroad order #{purchase.external_id}, paid #{fmt(purchase.created_at)}): ", access]
     end
-    return nil if sections.all? { |_, (accesses, _)| accesses.empty? }
+    return nil if sections.empty?
 
     fit_to_budget(sections)
   end
@@ -118,7 +129,7 @@ class SubmitPaypalDisputeEvidenceJob
   # proof entry; returns nil rather than send a note that would carry no proof for one of them.
   def self.fit_to_budget(sections)
     keep = sections.map { |_, (accesses, _)| accesses.size }
-    floor = sections.map { |_, (accesses, _)| accesses.any? ? 1 : 0 }
+    floor = Array.new(sections.size, 1)
     loop do
       note = render_note(sections, keep)
       return note if note.length <= MAX_NOTES_LENGTH
@@ -134,8 +145,8 @@ class SubmitPaypalDisputeEvidenceJob
     lines = sections.each_with_index.map do |(prefix, (accesses, omitted)), i|
       shown = accesses.first(keep[i])
       dropped = omitted + accesses.size - shown.size
-      body = shown.any? ? shown.join("; ") : (accesses.empty? ? "no access recorded" : "")
-      body += "#{body.empty? ? '' : '; '}#{dropped} more entries not listed" if dropped.positive?
+      body = shown.join("; ")
+      body += "; #{dropped} more entries not listed" if dropped.positive?
       prefix + body
     end
     [NOTES_HEADER, *lines, "All times UTC."].join("\n")

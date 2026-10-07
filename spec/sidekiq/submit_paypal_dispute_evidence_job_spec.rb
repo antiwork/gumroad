@@ -170,4 +170,46 @@ describe SubmitPaypalDisputeEvidenceJob do
     expect(notes.length).to be <= described_class::MAX_NOTES_LENGTH
     purchases.each { |p| expect(notes).to match(/Gumroad order #{p.external_id}, paid [^)]+\): file downloaded 2026-09-26 20:00:00/) }
   end
+
+  it "leaves an order with no recorded access out of the note instead of calling it unopened" do
+    unopened = create(:purchase, link: create(:product, user: seller, name: "Unopened Pack"), seller:, merchant_account:)
+
+    notes = described_class.evidence_notes([purchase, unopened])
+    expect(notes).to include "Gumroad order #{purchase.external_id}"
+    expect(notes).not_to include unopened.external_id
+    expect(notes).not_to include "no access recorded"
+    expect(described_class.evidence_notes([unopened])).to be_nil
+  end
+
+  it "reads PayPal's parsed response, where nested values are OpenStructs" do
+    parsed = PayPalHttp::HttpClient.new(nil).send(:_parse_values, JSON.parse({
+      links: [{ rel: "self" }, { rel: "provide_supporting_info" }],
+      supporting_info: [{ notes: "#{described_class::NOTES_HEADER}\nRecipe Pack", source: "SUBMITTED_BY_PARTNER" }],
+    }.to_json))
+
+    expect(described_class.action_offered?(parsed)).to be true
+    expect(described_class.already_submitted?(parsed)).to be true
+    expect(described_class.already_submitted?(PayPalHttp::HttpClient.new(nil).send(:_parse_values, { "links" => [] }))).to be false
+  end
+
+  it "does not fail or retry when the long claim cannot be written after PayPal accepted the note" do
+    allow(api).to receive(:fetch_dispute).and_return(offered)
+    allow(api).to receive(:provide_dispute_supporting_info).and_return(accepted)
+    allow($redis).to receive(:set).and_call_original
+    allow($redis).to receive(:set).with(described_class.claim_key(dispute.id), anything, ex: described_class::CLAIM_TTL).and_raise(Redis::BaseError, "down")
+    expect(ErrorNotifier).to receive(:notify).once
+
+    expect { described_class.new.perform(dispute.id) }.not_to raise_error
+    expect($redis.get(described_class.claim_key(dispute.id))).to be_present
+  end
+
+  it "sends nothing rather than an oversized note when too many orders share the charge" do
+    purchases = Array.new(12) do |n|
+      p = create(:purchase, link: create(:product, user: seller, name: "#{n}".ljust(255, "x")), seller:, merchant_account:)
+      create(:consumption_event, purchase_id: p.id, link_id: p.link.id, url_redirect_id: 1, product_file_id: nil, event_type: "download", consumed_at: Time.utc(2026, 9, 26, 20))
+      p
+    end
+
+    expect(described_class.evidence_notes(purchases)).to be_nil
+  end
 end
