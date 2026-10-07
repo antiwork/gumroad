@@ -86,6 +86,13 @@ class SellerProfile < ApplicationRecord
     accessible_accent[:text]
   end
 
+  # Email clients cannot read the CSS variables in custom_styles, so filled email buttons get the
+  # accent as literal colours.
+  def email_primary_button_style
+    colors = accessible_accent
+    "background-color: #{colors[:accent]}; color: #{colors[:text]}; border-color: #000000; box-shadow: 0.25rem 0.25rem 0 #000000;"
+  end
+
   # The text colour for body copy sitting directly on the seller's background colour.
   def text_color_on_background
     ContrastColor.for(background_color)

@@ -33,10 +33,11 @@ Do not include route helpers (`root_url`), because the URL options (e.g. the hos
           <% end %>
         </div>
 
+        <% primary_button_style = @post.user.seller_profile.email_primary_button_style %>
         <% if @has_download_button %>
           <div>
             <p>
-              <a class="button primary" href="{{download_url}}">{{t_view_attachments_prompt}}</a>
+              <a class="button primary" href="{{download_url}}" style="<%= primary_button_style %>">{{t_view_attachments_prompt}}</a>
             </p>
           </div>
         <% end %>
@@ -44,7 +45,7 @@ Do not include route helpers (`root_url`), because the URL options (e.g. the hos
         <% if @has_comment_button %>
           <div>
             <p>
-              <a class="button primary" href="{{post_url}}#comments" target="_blank">{{t_post_a_comment}}</a>
+              <a class="button primary" href="{{post_url}}#comments" target="_blank" style="<%= primary_button_style %>">{{t_post_a_comment}}</a>
             </p>
           </div>
         <% end %>

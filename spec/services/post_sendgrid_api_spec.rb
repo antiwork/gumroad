@@ -39,6 +39,50 @@ describe PostSendgridApi, :freeze_time do
     end
   end
 
+  describe "button colours" do
+    let(:inserted_button) { %(<a href="https://example.com/" class="tiptap__button button primary" style="background-color: #ff90e8; color: #000000;">Read more</a>) }
+
+    def inserted_button_node = html_doc(sent_email_content).at_xpath(%(//a[@href="https://example.com/"]))
+
+    before do
+      @post.update!(message: "<p>post body</p>#{inserted_button}", allow_comments: true, shown_on_profile: true)
+    end
+
+    it "fills inserted and comment buttons with the seller's accent" do
+      @post.seller.seller_profile.update!(highlight_color: "#2563eb")
+      send_default_email
+
+      comment_button = html_doc(sent_email_content).at_xpath(%(//a[text()="Reply with a comment"]))
+      [inserted_button_node, comment_button].each do |button|
+        expect(button["style"]).to include("background-color: #2563eb", "color: #ffffff")
+        expect(button["style"]).not_to include("#ff90e8")
+      end
+    end
+
+    it "fills the 'View content' button with the seller's accent" do
+      @post.seller.seller_profile.update!(highlight_color: "#2563eb")
+      @post.product_files << create(:product_file, link: nil, installment: @post)
+      url_redirect = create(:url_redirect, installment: @post)
+      send_emails(recipients: [{ email: "c1@example.com", url_redirect: }])
+
+      button = html_doc(sent_email_content).at_xpath(%(//a[@href="#{url_redirect.download_page_url}"]))
+      expect(button["style"]).to include("background-color: #2563eb", "color: #ffffff")
+    end
+
+    it "uses the readable variant of an accent that cannot carry text" do
+      @post.seller.seller_profile.update!(highlight_color: "#009a49")
+      send_default_email
+
+      expect(inserted_button_node["style"]).to include("background-color: #008941", "color: #ffffff")
+    end
+
+    it "keeps Gumroad pink for a seller who never changed the accent" do
+      send_default_email
+
+      expect(inserted_button_node["style"]).to include("background-color: #ff90e8", "color: #000000")
+    end
+  end
+
   describe "preheader text" do
     before { send_default_email }
 

@@ -379,6 +379,12 @@ class Installment < ApplicationRecord
       node.replace(%(<p><a href="#{target_url}" target="_blank" rel="noopener noreferrer">#{content}</a></p>))
     end
 
+    # The editor saves buttons with Gumroad pink inline, so the seller's accent replaces it here.
+    if seller.present?
+      button_style = seller.seller_profile.email_primary_button_style
+      doc.search("a.tiptap__button").each { _1["style"] = button_style }
+    end
+
     doc.to_html
   end
 
