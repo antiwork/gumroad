@@ -3,6 +3,11 @@
 # Copyright Office directory (https://dmca.copyright.gov/osp/) or the site's own DMCA page,
 # and record that page as source_url.
 #
+# Every entry below was read from the Copyright Office directory on 2026-10-07. `name` is the
+# service provider as the directory lists it, with its punctuation and its "(f/k/a ...)" history
+# normalized. `email` is the designated agent the directory records. `source_url` is the record
+# the entry was read from, so the next reader can re-check it.
+#
 # example.net:
 #   name: Example Net Inc.
 #   email: copyright@example.net
@@ -13,3 +18,76 @@ piracy-test-antiwork.vercel.app:
   name: Antiwork piracy screening test
   email: gianfranco@gumroad.com
   source_url: https://piracy-test-antiwork.vercel.app/dmca
+
+# Google's one designation covers Drive, Sites and Blogger, so a shared file, a published site
+# and a blog all reach the same agent. Blogger is the reason for the second key: it lives on
+# blogspot.com, which is not under google.com.
+google.com:
+  name: Google LLC
+  email: dmca-agent@google.com
+  source_url: https://dmca.copyright.gov/dmca/publish/history.html?search=Google+LLC&id=18b733849581703204a3229ddd03c10b
+blogspot.com:
+  name: Google LLC
+  email: dmca-agent@google.com
+  source_url: https://dmca.copyright.gov/dmca/publish/history.html?search=Google+LLC&id=18b733849581703204a3229ddd03c10b
+
+# GitHub Pages serves from github.io, which is not under github.com.
+github.com:
+  name: GitHub, Inc.
+  email: copyright@github.com
+  source_url: https://dmca.copyright.gov/dmca/publish/history.html?search=GitHub%2c+Inc.&id=4710bdf51e77bb3efee4632d21a8f3ed
+github.io:
+  name: GitHub, Inc.
+  email: copyright@github.com
+  source_url: https://dmca.copyright.gov/dmca/publish/history.html?search=GitHub%2c+Inc.&id=4710bdf51e77bb3efee4632d21a8f3ed
+
+dropbox.com:
+  name: Dropbox, Inc.
+  email: copyright@dropbox.com
+  source_url: https://dmca.copyright.gov/dmca/publish/history.html?search=Dropbox%2c+Inc.&id=3c0075cdd377972b704125dcb5a44df5
+
+mega.nz:
+  name: MEGA Privacy Kft
+  email: copyright@mega.nz
+  source_url: https://dmca.copyright.gov/dmca/publish/history.html?search=MEGA+Privacy+Kft&id=71bb148448b27a2f2f76717bbf7ed583
+
+mediafire.com:
+  name: MediaFire, LLC
+  email: copyright@mediafire.com
+  source_url: https://dmca.copyright.gov/dmca/publish/history.html?search=MediaFire&id=39a139711ad47a0b9457d7e461cb797f
+
+archive.org:
+  name: Internet Archive
+  email: info@archive.org
+  source_url: https://dmca.copyright.gov/dmca/publish/history.html?search=Internet+Archive&id=450075ef77c43e64081704b51810202a
+
+scribd.com:
+  name: Scribd, Inc.
+  email: jason@scribd.com
+  source_url: https://dmca.copyright.gov/dmca/publish/history.html?search=Scribd%2c+Inc.&id=db02a9a23fac9e14edb3c9f7cb811608
+
+udemy.com:
+  name: Udemy, Inc.
+  email: takedowns@udemy.com
+  source_url: https://dmca.copyright.gov/dmca/publish/history.html?search=Udemy%2c+Inc.&id=05e8ff3f6804a8eac42f49652be0feef
+
+# Automattic runs WordPress.com, where a pirated copy often lands as a blog post.
+wordpress.com:
+  name: Automattic Inc.
+  email: dmca@automattic.com
+  source_url: https://dmca.copyright.gov/dmca/publish/history.html?search=Automattic+Inc.&id=e9e9fbffe36d3913e808c24f8c4d1c81
+
+vimeo.com:
+  name: Vimeo.com, Inc.
+  email: DMCA@vimeo.com
+  source_url: https://dmca.copyright.gov/dmca/publish/history.html?search=Vimeo%2c+Inc.&id=2998919b2d28479d386cad6ae5bbbf57
+
+# Discord's one designation covers discord.com and the discordapp.com file host.
+discord.com:
+  name: Discord, Inc.
+  email: copyright@discordapp.com
+  source_url: https://dmca.copyright.gov/dmca/publish/history.html?search=Discord%2c+Inc.&id=447d1ff8fe8d44abbe6b203ceb5777ff
+discordapp.com:
+  name: Discord, Inc.
+  email: copyright@discordapp.com
+  source_url: https://dmca.copyright.gov/dmca/publish/history.html?search=Discord%2c+Inc.&id=447d1ff8fe8d44abbe6b203ceb5777ff
