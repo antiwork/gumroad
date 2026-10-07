@@ -92,7 +92,7 @@ class SendYearInReviewEmailJob
           [
             views[country_name] || 0, # Views
             sales[country_name], # Sales
-            total_amount_cents.nonzero? ? total_amount_cents / 100 : 0, # Total
+            total_amount_cents.nonzero? ? total_amount_cents / 100.0 : 0, # Total
           ]
         ]
       end
@@ -125,7 +125,7 @@ class SendYearInReviewEmailJob
         [
           data_by_date[:views][permalink].sum, # Views
           data_by_date[:sales][permalink].sum, # Sales
-          top_product_totals[permalink] / 100, # Total
+          top_product_totals[permalink] / 100.0, # Total
         ]
       end
 

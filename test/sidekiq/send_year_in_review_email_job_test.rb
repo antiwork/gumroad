@@ -95,6 +95,154 @@ class SendYearInReviewEmailJobTest < ActiveSupport::TestCase
     assert_report_link(mail, seller, date)
   end
 
+  test "perform counts a country with a sub-dollar sale and retains its product total" do
+    date = Date.new(2027, 2, 22)
+    seller = seller_with_annual_report(year: date.year, created_at: (date - 1.year).to_time)
+    User.any_instance.stubs(:rank).returns(nil)
+    travel_to(date) do
+      product = create_product(user: seller, name: "Fifty-cent fixture", price_cents: 99)
+      purchase = create_payment_with_purchase(seller, date, product:, amount_cents: 99, ip_country: "United States").fetch(:purchase)
+      create_refund(purchase:, amount_cents: 49, total_transaction_cents: 49)
+      purchase.update!(stripe_partially_refunded: true)
+      add_page_view(product, Time.current.iso8601, country: "United States")
+    end
+    refresh_page_views!
+    index_model_records(Purchase)
+
+    travel_to(Time.utc(date.year + 1, 2, 22)) do
+      SendYearInReviewEmailJob.new.perform(seller.id, date.year)
+    end
+
+    body = sanitized_body(ActionMailer::Base.deliveries.last)
+    assert_includes body, "You sold products in 1 country"
+    assert_includes body, "United States 1 1 $0.50"
+    assert_match(/Fifty-cent fixture \( \S+ \) -+ Views 1 Sales 1 Total 0\.50/, body)
+    assert_includes body, "You earned a total of $0.50"
+  end
+
+  test "country stats retain fractional cents, signed values and existing ordering" do
+    data = {
+      views: { "product" => { "United States" => 2, "Romania" => 1, "Canada" => 1, "Singapore" => 1, "Elsewhere" => 1 } },
+      sales: { "product" => { "United States" => 2, "Romania" => 1, "Canada" => 1, "Singapore" => 1, "Elsewhere" => 1 } },
+      totals: {
+        "first" => { "United States" => 50, "Romania" => 101, "Canada" => -50, "Singapore" => 0, "Elsewhere" => 99 },
+        "second" => { "United States" => 49 }
+      }
+    }
+    stats = SendYearInReviewEmailJob.new.send(:build_stats_by_country, data)
+    expected = {
+      Compliance::Countries.country_with_flag_by_name("Romania") => [1, 1, 1.01],
+      Compliance::Countries.country_with_flag_by_name("United States") => [2, 2, 0.99],
+      Compliance::Countries.country_with_flag_by_name("Canada") => [1, 1, -0.5],
+      Compliance::Countries.elsewhere_with_flag => [1, 1, 0.99]
+    }
+
+    assert_equal expected, stats
+    assert_equal expected.keys, stats.keys
+    assert_equal expected, JSON.parse(JSON.generate(stats))
+  end
+
+  test "top product stats retain fractional amounts without changing selection" do
+    seller = create_user(currency_type: "jpy")
+    product = create_product(user: seller, name: "Fractional fixture", price_cents: 99)
+    data = {
+      views: { product.unique_permalink => [2, 1] },
+      sales: { product.unique_permalink => [1, 1] },
+      totals: { product.unique_permalink => [50, 49] }
+    }
+
+    products = SendYearInReviewEmailJob.new.send(:map_top_selling_products, seller, data)
+
+    assert_equal 1, products.size
+    assert_equal [3, 2, 0.99], products.sole.fetch(:stats)
+    assert_equal [3, 2, 0.99], JSON.parse(JSON.generate(products.sole)).fetch("stats")
+  end
+
+  test "whole-dollar and zero country totals keep their existing meanings" do
+    data = {
+      views: { "product" => { "United States" => 1, "Romania" => 1 } },
+      sales: { "product" => { "United States" => 1, "Romania" => 1 } },
+      totals: { "product" => { "United States" => 10_000, "Romania" => 0 } }
+    }
+    stats = SendYearInReviewEmailJob.new.send(:build_stats_by_country, data)
+
+    assert_equal({ Compliance::Countries.country_with_flag_by_name("United States") => [1, 1, 100] }, stats)
+  end
+
+  test "perform displays exact cent totals for small net sales" do
+    date = Date.new(2027, 2, 22)
+    User.any_instance.stubs(:rank).returns(nil)
+    [1, 9, 99].each do |net_cents|
+      seller = seller_with_annual_report(year: date.year, created_at: (date - 1.year).to_time)
+      travel_to(date) do
+        product = create_product(user: seller, name: "Small-net fixture", price_cents: 99)
+        purchase = create_payment_with_purchase(seller, date, product:, amount_cents: 99, ip_country: "United States").fetch(:purchase)
+        if net_cents < 99
+          create_refund(purchase:, amount_cents: 99 - net_cents, total_transaction_cents: 99 - net_cents)
+          purchase.update!(stripe_partially_refunded: true)
+        end
+      end
+      index_model_records(Purchase)
+
+      travel_to(Time.utc(date.year + 1, 2, 22)) do
+        SendYearInReviewEmailJob.new.perform(seller.id, date.year)
+      end
+
+      body = sanitized_body(ActionMailer::Base.deliveries.last)
+      total = format("%.2f", net_cents / 100.0)
+      assert_includes body, "You sold products in 1 country"
+      assert_includes body, "United States 0 1 $#{total}"
+      assert_match(/Small-net fixture \( \S+ \) -+ Views 0 Sales 1 Total #{Regexp.escape(total)}/, body)
+    end
+  end
+
+  test "the mailer retains signed fractional money and compact larger totals" do
+    seller = create_user
+    product = create_product(user: seller, name: "Signed-net fixture")
+    analytics_data = {
+      total_views_count: 1, total_sales_count: 1, total_unique_customers_count: 1, total_products_sold_count: 1,
+      total_amount_cents: -9,
+      top_selling_products: [ProductPresenter.card_for_email(product:).merge(stats: [1, 1, -0.09])],
+      by_country: {
+        "United States" => [1, 1, -0.09], "Romania" => [1, 1, 1200], "Canada" => [1, 1, 1], "Elsewhere" => [0, 0, 0]
+      },
+      total_countries_with_sales_count: 3
+    }
+
+    mail = CreatorMailer.year_in_review(seller:, year: 2027, analytics_data:).message
+    html = Nokogiri::HTML((mail.html_part || mail).decoded)
+    body = html.text.gsub(/\s+/, " ")
+    product_card = html.css(".product-checkout-cell").sole
+
+    assert_includes body, "United States 1 1 $-0.09"
+    assert_equal "Signed-net fixture", product_card.at_css("h4").text.strip
+    assert_equal %w[1 1 -0.09], product_card.css(".product-stats > span").map { |span| span.text.strip }
+    assert_includes body, "Romania 1 1 $1.2K"
+    assert_includes body, "Canada 1 1 $1"
+    assert_includes body, "Elsewhere 0 0 $0"
+  end
+
+  test "the mailer formats a fractional country total in its native currency" do
+    seller = create_user(currency_type: "eur")
+    Redis::Namespace.new(:currencies, redis: $redis).set("EUR", "0.9")
+    product = create_product(user: seller, name: "Native-currency fixture")
+    analytics_data = {
+      total_views_count: 1, total_sales_count: 1, total_unique_customers_count: 1, total_products_sold_count: 1,
+      total_amount_cents: 99,
+      top_selling_products: [ProductPresenter.card_for_email(product:).merge(stats: [1, 1, 0.99])],
+      by_country: { "United States" => [1, 1, 0.99] }, total_countries_with_sales_count: 1
+    }
+    mail = CreatorMailer.year_in_review(seller:, year: 2027, analytics_data:).message
+    html = Nokogiri::HTML((mail.html_part || mail).decoded)
+    body = html.text.gsub(/\s+/, " ")
+    product_card = html.css(".product-checkout-cell").sole
+
+    assert_includes body, "United States 1 1 €0.89"
+    assert_includes body, "You earned a total of €0.89"
+    assert_equal "Native-currency fixture", product_card.at_css("h4").text.strip
+    assert_equal %w[1 1 0.99], product_card.css(".product-stats > span").map { |span| span.text.strip }
+  end
+
   test "perform renders the AI-generated buy list" do
     date = Date.new(2022, 2, 22)
     seller = seller_with_annual_report(year: date.year, created_at: (date - 1.year).to_time)
