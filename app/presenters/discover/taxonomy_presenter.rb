@@ -317,7 +317,7 @@ class Discover::TaxonomyPresenter
     "video-assets-and-loops" => "Video Assets & Loops",
     "video-production-and-editing" => "Video Production & Editing",
     "videography" => "Videography",
-    "vocal" => "Vocal",
+    "vocal" => "Singing",
     "voiceover" => "Voiceover",
     "vrchat" => "VRChat",
     "vscode" => "VSCode",
