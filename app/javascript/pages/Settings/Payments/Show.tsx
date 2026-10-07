@@ -12,7 +12,7 @@ import { COLOMBIA_ID_NUMBER_ERROR_MESSAGE, isValidColombiaIdNumber } from "$app/
 import { formatPriceCentsWithCurrencySymbol, formatPriceCentsWithoutCurrencySymbol } from "$app/utils/currency";
 import { GUATEMALA_NIT_ERROR_MESSAGE, isValidGuatemalaNit } from "$app/utils/guatemalaNit";
 import { accountNumberFormatError } from "$app/utils/payoutAccountNumbers";
-import { normalizeUsTaxId, personalTaxIdError, usesUsTaxId } from "$app/utils/personalTaxId";
+import { normalizeUsTaxId, personalTaxIdError, usesHongKongPassport, usesUsTaxId } from "$app/utils/personalTaxId";
 import { countryRequiresPostalCode } from "$app/utils/postalCodes";
 import { asyncVoid } from "$app/utils/promise";
 
@@ -989,6 +989,11 @@ export default function PaymentsPage() {
     const representativeCountry = form.data.user.country ?? props.compliance_info.country;
     const individualIdCountryMatches = (country: string) =>
       representativeCountry === country && (!form.data.user.is_business || form.data.user.business_country === country);
+
+    if (usesHongKongPassport(form.data.user) && form.data.user.individual_tax_id && !form.data.user.nationality) {
+      markFieldInvalid("nationality");
+      setClientErrorMessage({ message: "Choose the country that issued your passport." });
+    }
 
     const peruDniRequired = individualIdCountryMatches("PE");
     if (

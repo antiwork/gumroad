@@ -805,6 +805,59 @@ describe UpdateUserComplianceInfo do
       end
     end
 
+    context "with a Hong Kong company" do
+      def create_hong_kong_business_user(country:)
+        create(:user).tap do |u|
+          create(
+            :user_compliance_info_business,
+            user: u,
+            country:,
+            business_country: "Hong Kong",
+            business_type: UserComplianceInfo::BusinessTypes::CORPORATION,
+            individual_tax_id: "A1234567",
+          )
+        end
+      end
+
+      def process_with(user, **extra)
+        params = ActionController::Parameters.new(is_business: true, **extra)
+        described_class.new(compliance_params: params, user:).process
+      end
+
+      it "stores a passport number and its issuing country for a representative who lives outside Hong Kong" do
+        user = create_hong_kong_business_user(country: "United Kingdom")
+        expect(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info)
+
+        result = process_with(user, individual_tax_id: "GB1234567", nationality: "GB")
+
+        expect(result[:success]).to be true
+        info = user.reload.alive_user_compliance_info
+        expect(info.individual_tax_id.decrypt(GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))).to eq("GB1234567")
+        expect(info.nationality).to eq("GB")
+        expect(info.country).to eq("United Kingdom")
+        expect(info.business_country).to eq("Hong Kong")
+      end
+
+      it "rejects a passport number without an issuing country" do
+        user = create_hong_kong_business_user(country: "United Kingdom")
+        expect(StripeMerchantAccountManager).not_to receive(:handle_new_user_compliance_info)
+
+        result = process_with(user, individual_tax_id: "GB1234567")
+
+        expect(result[:success]).to be false
+        expect(result[:error_message]).to eq("Choose the country that issued your passport.")
+      end
+
+      it "does not ask a Hong Kong resident for an issuing country" do
+        user = create_hong_kong_business_user(country: "Hong Kong")
+        expect(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info)
+
+        result = process_with(user, individual_tax_id: "B7654321")
+
+        expect(result[:success]).to be true
+      end
+    end
+
     context "with a Guatemalan individual" do
       let!(:user) do
         create(:user).tap do |u|

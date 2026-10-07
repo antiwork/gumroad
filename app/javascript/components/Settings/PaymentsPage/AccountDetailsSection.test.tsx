@@ -142,6 +142,39 @@ describe("AccountDetailsSection foreign representative tax ID", () => {
   });
 });
 
+describe("AccountDetailsSection Hong Kong passport", () => {
+  const hongKongUser = () =>
+    makeUser({ country_code: "HK", individual_tax_id_needed_countries: ["HK"], individual_tax_id_entered: false });
+
+  it("asks a Hong Kong company's representative who lives abroad for a passport number and issuing country", () => {
+    renderSection(hongKongUser(), { is_business: true, business_country: "HK", country: "GB" });
+
+    expect(screen.getByLabelText("Passport number")).toBeTruthy();
+    expect(screen.queryByLabelText("Hong Kong ID Number")).toBeNull();
+    expect(screen.getByLabelText("Passport issuing country")).toBeTruthy();
+  });
+
+  it("keeps the Hong Kong ID number for a representative who lives in Hong Kong", () => {
+    renderSection(hongKongUser(), { is_business: true, business_country: "HK", country: "HK" });
+
+    expect(screen.getByLabelText("Hong Kong ID Number")).toBeTruthy();
+    expect(screen.queryByLabelText("Passport number")).toBeNull();
+    expect(screen.queryByLabelText("Passport issuing country")).toBeNull();
+  });
+
+  it("does not require the issuing country until a passport number is typed", () => {
+    renderSection(hongKongUser(), { is_business: true, business_country: "HK", country: "GB" });
+
+    expect(screen.getByLabelText<HTMLSelectElement>("Passport issuing country").required).toBe(false);
+  });
+
+  it("does not ask an individual seller in Hong Kong for a passport", () => {
+    renderSection(hongKongUser(), { is_business: false, business_country: null, country: "HK" });
+
+    expect(screen.queryByLabelText("Passport number")).toBeNull();
+  });
+});
+
 describe("AccountDetailsSection SSN field", () => {
   it("accepts only four digits on the permitted US-resident last-four path", () => {
     renderSection(makeUser({ individual_tax_id_entered: false }));

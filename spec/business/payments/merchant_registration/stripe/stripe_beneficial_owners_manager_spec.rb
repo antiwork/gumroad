@@ -293,6 +293,41 @@ describe StripeBeneficialOwnersManager do
         .to raise_error(StripeBeneficialOwnersManager::MissingRequiredFieldError, /Nationality is required/)
     end
 
+    context "with a Hong Kong company" do
+      before do
+        user.alive_user_compliance_info.mark_deleted!
+        create(:user_compliance_info_business, user:, business_country: "Hong Kong", country: "Hong Kong")
+        allow(Stripe::Account).to receive(:create_person).and_return(other_owner_person)
+      end
+
+      it "requires the passport issuing country when the owner lives outside Hong Kong" do
+        foreign = params.deep_dup
+        foreign[:address] = foreign[:address].merge(country: "GB")
+        foreign[:nationality] = ""
+        expect { described_class.create(user, foreign) }
+          .to raise_error(StripeBeneficialOwnersManager::MissingRequiredFieldError, /Passport issuing country is required/)
+      end
+
+      it "sends the passport number as id_number with the issuing country as nationality" do
+        foreign = params.deep_dup
+        foreign[:address] = foreign[:address].merge(country: "GB", state: nil)
+        foreign[:id_number] = "GB1234567"
+        foreign[:nationality] = "GB"
+        expect(Stripe::Account).to receive(:create_person) do |_account_id, attrs|
+          expect(attrs).to include(id_number: "GB1234567", nationality: "GB")
+          other_owner_person
+        end
+        described_class.create(user, foreign)
+      end
+
+      it "does not ask for an issuing country when the owner lives in Hong Kong" do
+        local = params.deep_dup
+        local[:address] = { line1: "1 Queen's Rd", city: "Central", postal_code: "999077", country: "HK" }
+        local[:nationality] = ""
+        expect { described_class.create(user, local) }.not_to raise_error
+      end
+    end
+
     it "sends kanji/kana name + address_kanji + address_kana for JP business sellers" do
       user.alive_user_compliance_info.mark_deleted!
       create(:user_compliance_info, user: user, country: "Japan", is_business: true,

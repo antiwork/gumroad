@@ -7,7 +7,12 @@ import {
   COLOMBIA_ID_NUMBER_ERROR_MESSAGE,
   isValidColombiaIdNumber,
 } from "$app/utils/colombiaIdNumbers";
-import { PERSONAL_ID_NUMBER_CONFIG, stripeRequirementLabel, type TaxIdConfig } from "$app/utils/personalTaxId";
+import {
+  HONG_KONG_PASSPORT_ID_CONFIG,
+  PERSONAL_ID_NUMBER_CONFIG,
+  stripeRequirementLabel,
+  type TaxIdConfig,
+} from "$app/utils/personalTaxId";
 import { countryRequiresPostalCode } from "$app/utils/postalCodes";
 import { request, ResponseError } from "$app/utils/request";
 
@@ -498,6 +503,11 @@ const BeneficialOwnersSection = ({
   };
 
   const updateForm = (patch: Partial<FormState>) => setFormState((prev) => ({ ...prev, ...patch }));
+
+  // A person of a Hong Kong company who lives abroad has no HKID, so they give a passport number
+  // and the country that issued it (sent to Stripe as the nationality).
+  const hongKongPassport =
+    defaultCountry === "HK" && formState.address_country !== "" && formState.address_country !== "HK";
 
   const validateJpKanaFields = (): string | null => {
     if (editState?.mode === "edit" && editState.owner.relationship.representative) return null;
@@ -1153,21 +1163,23 @@ const BeneficialOwnersSection = ({
                   </Select>
                 </Fieldset>
 
-                {NATIONALITY_REQUIRED_COUNTRIES.includes(defaultCountry ?? "") ? (
+                {NATIONALITY_REQUIRED_COUNTRIES.includes(defaultCountry ?? "") || hongKongPassport ? (
                   <Fieldset>
                     <FieldsetTitle>
-                      <Label htmlFor={`${uid}-nationality`}>Nationality</Label>
+                      <Label htmlFor={`${uid}-nationality`}>
+                        {hongKongPassport ? "Passport issuing country" : "Nationality"}
+                      </Label>
                     </FieldsetTitle>
                     <Select
                       id={`${uid}-nationality`}
-                      required
+                      required={!hongKongPassport || editState.mode !== "edit"}
                       disabled={isFormDisabled}
                       aria-describedby={`${uid}-nationality-note`}
                       value={formState.nationality || ""}
                       onChange={(event) => updateForm({ nationality: event.target.value })}
                     >
                       <option value="" disabled>
-                        Nationality
+                        {hongKongPassport ? "Issuing country" : "Nationality"}
                       </option>
                       {Object.entries(countries).map(([code, name]) => (
                         <option key={code} value={code} disabled={name.includes("(not supported)")}>
@@ -1185,7 +1197,11 @@ const BeneficialOwnersSection = ({
                 {(() => {
                   const isUs = defaultCountry === "US";
                   const taxIdConfig =
-                    isUs && useGovernmentIdForUs ? PERSONAL_ID_NUMBER_CONFIG : taxIdConfigFor(defaultCountry);
+                    isUs && useGovernmentIdForUs
+                      ? PERSONAL_ID_NUMBER_CONFIG
+                      : hongKongPassport
+                        ? HONG_KONG_PASSPORT_ID_CONFIG
+                        : taxIdConfigFor(defaultCountry);
                   // Only creating an owner requires an ID number (the server enforces it via
                   // REQUIRED_CREATE_ONLY_FIELDS). Requiring it on edit stranded sellers completing a
                   // co-director's DOB and address — a third party's ID number they cannot obtain, for
