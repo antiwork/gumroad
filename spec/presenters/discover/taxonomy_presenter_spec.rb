@@ -73,6 +73,10 @@ describe Discover::TaxonomyPresenter do
       expect(Taxonomy.where(parent: music).pluck(:slug)).to include("music-theory", "composition")
       expect(Discover::TaxonomyPresenter::TAXONOMY_LABELS).to include("music-theory" => "Music Theory", "composition" => "Composition")
     end
+
+    it "labels the vocal taxonomy Singing" do
+      expect(Discover::TaxonomyPresenter::TAXONOMY_LABELS["vocal"]).to eq("Singing")
+    end
   end
 
   describe "#taxonomies_for_category_picker" do
