@@ -1,5 +1,5 @@
 diff --git a/node_modules/@typia/unplugin/dist/core.js b/node_modules/@typia/unplugin/dist/core.js
-index e61604c..cffa38c 100644
+index e61604c..c9675cd 100644
 --- a/node_modules/@typia/unplugin/dist/core.js
 +++ b/node_modules/@typia/unplugin/dist/core.js
 @@ -493,7 +493,7 @@ const sourceCache = /* @__PURE__ */ new Map();
@@ -80,7 +80,7 @@ index e61604c..cffa38c 100644
  	const tsSource = ts.createSourceFile(id, source, compilerOptions.target ?? ts.ScriptTarget.ES2020);
  	const host = ts.createCompilerHost(compilerOptions);
  	/** When alias defined in config, resolve module with alias */
-@@ -634,49 +685,85 @@ function createFilter$1(include, exclude) {
+@@ -634,49 +685,86 @@ function createFilter$1(include, exclude) {
  	return createFilter(include, exclude);
  }
  /** The main unplugin instance. */
@@ -88,10 +88,11 @@ index e61604c..cffa38c 100644
 +* Gumroad patch: a whole-file character diff stopped at a 1-second deadline, so the output varied
 +* with CPU load. Lines are aligned by their trimmed text, then each aligned piece gets a character
 +* diff with no deadline: small, so fast, the same on every machine, and fine-grained for maps.
-+* Fixed limits, not a clock, bound the work.
++* Fixed size limits, not a clock, bound the work; above them a piece is one replacement.
 +*/
-+const MAX_PIECE_DIFF = 2e4;
++const MAX_ALIGNED_LINES = 2e4;
 +const MAX_LINE_IDS = 65534;
++const MAX_PIECE_PRODUCT = 2e8;
 +function alignedDiff(source, code) {
 +	const split = (text) => text.match(/[^\n]*\n|[^\n]+$/g) ?? [];
 +	const ids = new Map();
@@ -104,7 +105,7 @@ index e61604c..cffa38c 100644
 +		if (from === to) return from ? [[0, from]] : [];
 +		if (!from) return [[1, to]];
 +		if (!to) return [[-1, from]];
-+		if (Math.min(from.length, to.length) > MAX_PIECE_DIFF) return [[-1, from], [1, to]];
++		if (from.length * to.length > MAX_PIECE_PRODUCT) return [[-1, from], [1, to]];
 +		const diff = Diff.diff(from, to, { diffTimeout: 0 });
 +		Diff.diffCleanupSemantic(diff);
 +		return diff;
@@ -113,7 +114,7 @@ index e61604c..cffa38c 100644
 +	const b = split(code);
 +	const chars1 = a.map(key).join("");
 +	const chars2 = b.map(key).join("");
-+	if (ids.size > MAX_LINE_IDS) return piece(source, code);
++	if (ids.size > MAX_LINE_IDS || a.length + b.length > MAX_ALIGNED_LINES) return piece(source, code);
 +	const result = [];
 +	let i = 0;
 +	let j = 0;
@@ -201,7 +202,7 @@ index e61604c..cffa38c 100644
  		if (!s.hasChanged()) return;
  		return {
  			code: s.toString(),
-@@ -690,14 +777,14 @@ const unpluginFactory = (rawOptions = {}) => {
+@@ -690,14 +778,14 @@ const unpluginFactory = (rawOptions = {}) => {
  	async function transformCodeWithTypiaTransform({ id, source, ctx, options }) {
  		try {
  			var _usingCtx = _usingCtx$1();
@@ -219,7 +220,7 @@ index e61604c..cffa38c 100644
  				if (showLog) if (code != null) log("success", `Transformed: ${id}`);
  				else log("error", `Transform is null: ${id}`);
  				/** Save cache */
-@@ -716,8 +803,10 @@ const unpluginFactory = (rawOptions = {}) => {
+@@ -716,8 +804,10 @@ const unpluginFactory = (rawOptions = {}) => {
  		enforce: options.enforce,
  		vite: { configResolved(config) {
  			viteConfig = config;
@@ -230,7 +231,7 @@ index e61604c..cffa38c 100644
  			if (logOption !== false) log("box", cacheOptions ? `Cache enabled` : `Cache disabled`);
  		},
  		transformInclude(id) {
-@@ -768,6 +857,6 @@ const unpluginFactory = (rawOptions = {}) => {
+@@ -768,6 +858,6 @@ const unpluginFactory = (rawOptions = {}) => {
  */
  const unplugin = /* @__PURE__ */ createUnplugin(unpluginFactory);
  //#endregion

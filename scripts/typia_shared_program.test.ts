@@ -146,6 +146,16 @@ describe("rebuilding typia's output as an edit of the source", () => {
     ["inserts between re-indented lines", "  a\n  b\n  c\n", "x\n    a\ny\n    b\n    c\nz"],
     ["more distinct lines than line ids", Array.from({ length: 70_000 }, (_, i) => `line${i}\n`).join(""), "new\n"],
     ["a replaced line above the diff limit", `${"x".repeat(30_000)}\n`, `${"y".repeat(30_000)}\n`],
+    [
+      "more lines than the alignment limit",
+      Array.from({ length: 12_000 }, (_, i) => `a${i}\n`).join(""),
+      Array.from({ length: 12_000 }, (_, i) => `b${i}\n`).join(""),
+    ],
+    [
+      "two-letter text above the piece limit",
+      Array.from({ length: 15_000 }, (_, i) => ((i * 7919) % 3 ? "a" : "b")).join(""),
+      Array.from({ length: 15_000 }, (_, i) => ((i * 104_729) % 5 ? "b" : "a")).join(""),
+    ],
   ];
 
   it.each(rebuildCases)("rebuilds the output exactly: %s", async (_name, source, code) => {
