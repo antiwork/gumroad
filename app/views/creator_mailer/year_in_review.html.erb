@@ -58,7 +58,7 @@
           </span>
           <span>
             <%= image_tag("email/solid-currency-dollar.png", alt: "Total") %>
-            <%= number_to_si(total) %>
+            <%= total.abs < 1 ? Money.from_amount(total, Currency::USD).format(no_cents_if_whole: true, symbol: false) : number_to_si(total) %>
           </span>
         </div>
       <% end %>
@@ -103,7 +103,7 @@
             <%= number_to_si(sales) %>
           </td>
           <td style="text-align: right; white-space: nowrap;">
-            <%= "#{money.symbol}#{number_to_si(money.dollars)}" %>
+            <%= money.dollars.abs < 1 ? money.format(no_cents_if_whole: true, symbol: true) : "#{money.symbol}#{number_to_si(money.dollars)}" %>
           </td>
         </tr>
       <% end %>
