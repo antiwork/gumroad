@@ -29,7 +29,7 @@ class SendYearInReviewEmailJob
 
     analytics_data[:gpt_buy_list] = self.class.get_buy_list_from_total(
       total_amount_cents: analytics_data[:total_amount_cents],
-      currency: seller.currency_type
+      currency: Currency::USD
     )
 
     data_by_state = CreatorAnalytics::CachingProxy.new(seller).data_for_dates(range.begin, range.end, by: :state)
