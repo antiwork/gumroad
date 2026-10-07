@@ -12,18 +12,17 @@ class ComputedSalesAnalyticsDay < ApplicationRecord
   def self.fetch_data_from_key(key)
     record = find_by(key:)
     return JSON.parse(record.data) if record
-    record = new
-    record.key = key
-    record.data = yield.to_json
-    record.save!
+
+    # Callers query Elasticsearch, so compute before the creation transaction.
+    data = yield.to_json
+    record = create_or_find_by!(key:) { |entry| entry.data = data }
     JSON.parse(record.data)
   end
 
   def self.upsert_data_from_key(key, data)
-    record = find_by(key:) || new
-    record.key ||= key
-    record.data = data.to_json
-    record.save!
+    serialized_data = data.to_json
+    record = find_by(key:) || create_or_find_by!(key:) { |entry| entry.data = serialized_data }
+    record.update!(data: serialized_data)
     record
   end
 end
