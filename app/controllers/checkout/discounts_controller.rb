@@ -168,7 +168,7 @@ class Checkout::DiscountsController < Sellers::BaseController
     end
 
     def clean_params
-      params[:currency_type] = nil if params[:currency_type].blank?
+      params[:currency_type] = nil if params.key?(:currency_type) && params[:currency_type].blank?
       if offer_code_params[:amount_percentage].present?
         params[:amount_cents] = nil
         params[:currency_type] = nil

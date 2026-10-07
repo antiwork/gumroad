@@ -723,6 +723,54 @@ describe Checkout::DiscountsController do
       expect(percent_code.amount_cents).to eq(nil)
     end
 
+    context "with a fixed currency-restricted offer code" do
+      let!(:euro_product) { create(:product, user: seller, price_cents: 2000, price_currency_type: "eur") }
+      let!(:usd_product) { create(:product, user: seller, price_cents: 2000, price_currency_type: "usd") }
+      let(:fixed_code) { create(:universal_offer_code, user: seller, code: "EUROSAVE", amount_cents: 200, currency_type: "eur") }
+
+      it "preserves the currency and product eligibility on a name-only update" do
+        put :update, params: { id: fixed_code.external_id, name: "Renamed euro discount" }, as: :json
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to eq(true)
+        fixed_code.reload
+        expect(fixed_code.name).to eq("Renamed euro discount")
+        expect(fixed_code.currency_type).to eq("eur")
+        expect(fixed_code.amount_cents).to eq(200)
+        expect(fixed_code.applicable?(euro_product)).to be(true)
+        expect(fixed_code.applicable?(usd_product)).to be(false)
+        expect(response.parsed_body["offer_codes"].find { _1["id"] == fixed_code.external_id }["currency_type"]).to eq("eur")
+      end
+
+      it "preserves the currency when updating only the fixed amount" do
+        put :update, params: { id: fixed_code.external_id, amount_cents: 300 }, as: :json
+
+        expect(response.parsed_body["success"]).to eq(true)
+        expect(fixed_code.reload.amount_cents).to eq(300)
+        expect(fixed_code.currency_type).to eq("eur")
+        expect(fixed_code.applicable?(usd_product)).to be(false)
+      end
+
+      it "continues clearing an explicitly blank currency" do
+        put :update, params: { id: fixed_code.external_id, currency_type: "" }, as: :json
+
+        expect(response.parsed_body["success"]).to eq(true)
+        expect(fixed_code.reload.currency_type).to be_nil
+        expect(fixed_code.amount_cents).to eq(200)
+        expect(fixed_code.applicable?(usd_product)).to be(true)
+      end
+
+      it "clears the fixed currency and amount when changing to a percentage discount" do
+        put :update, params: { id: fixed_code.external_id, amount_percentage: 10 }, as: :json
+
+        expect(response.parsed_body["success"]).to eq(true)
+        expect(fixed_code.reload.currency_type).to be_nil
+        expect(fixed_code.amount_cents).to be_nil
+        expect(fixed_code.amount_percentage).to eq(10)
+        expect(fixed_code.applicable?(usd_product)).to be(true)
+      end
+    end
+
     it "returns an error and keeps the product list when removing a product whose default discount is the offer code" do
       subject_product = create(:product, user: seller, price_cents: 2000)
       offer_code.update!(universal: false, products: [subject_product])

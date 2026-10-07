@@ -692,6 +692,31 @@ describe("Checkout discounts page", type: :system, js: true) do
   end
 
   describe "editing offer codes" do
+    it "retains the displayed currency after an authenticated name-only update" do
+      fixed_code = create(:universal_offer_code, user: seller, name: "Euro discount", code: "EUROSAVE", amount_cents: 200, currency_type: Currency::EUR)
+      visit checkout_discounts_path
+
+      result = page.evaluate_async_script(<<~JS, checkout_discount_path(fixed_code.external_id))
+        const done = arguments[arguments.length - 1];
+        fetch(arguments[0], {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "X-CSRF-Token": document.querySelector('meta[name="csrf-token"]')?.content || ""
+          },
+          body: JSON.stringify({ name: "Renamed euro discount" })
+        }).then((response) => response.json()).then(done).catch((error) => done({ error: error.message }));
+      JS
+
+      expect(result["success"]).to eq(true)
+      refresh
+      within find(:table_row, { "Discount" => "Renamed euro discount" }) do
+        expect(page).to have_text("€2 off of all products")
+      end
+      expect(fixed_code.reload.currency_type).to eq(Currency::EUR)
+    end
+
     it "updates the offer code" do
       # Allows us to test editing an offer code that already has `valid_at`
       # set with fewer date picker interactions
