@@ -17,7 +17,7 @@ export const PERSONAL_ID_NUMBER_CONFIG: TaxIdConfig = {
 
 export const HONG_KONG_PASSPORT_ID_CONFIG: TaxIdConfig = {
   label: "Passport number",
-  placeholder: "Passport number",
+  placeholder: "123456789",
   idSuffix: "passport-number",
 };
 

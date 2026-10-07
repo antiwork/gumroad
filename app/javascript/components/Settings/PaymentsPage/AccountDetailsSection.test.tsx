@@ -9,6 +9,13 @@ import AccountDetailsSection from "$app/components/Settings/PaymentsPage/Account
 
 afterEach(cleanup);
 
+// happy-dom's compareDocumentPosition does not report source order, so read the form controls back
+// in the order the DOM actually has them.
+const passportFieldsInOrder = (number: HTMLElement, issuingCountry: HTMLElement): HTMLElement[] =>
+  Array.from(document.querySelectorAll<HTMLElement>("input, select")).filter(
+    (field) => field === number || field === issuingCountry,
+  );
+
 const makeUser = (overrides: Partial<User> = {}): User => ({
   country_supports_native_payouts: true,
   no_payout_rail_in_country: false,
@@ -152,6 +159,32 @@ describe("AccountDetailsSection Hong Kong passport", () => {
     expect(screen.getByLabelText("Passport number")).toBeTruthy();
     expect(screen.queryByLabelText("Hong Kong ID Number")).toBeNull();
     expect(screen.getByLabelText("Passport issuing country")).toBeTruthy();
+  });
+
+  it("puts the passport number, with its explanation, before the issuing country", () => {
+    renderSection(hongKongUser(), { is_business: true, business_country: "HK", country: "GB" });
+
+    const number = screen.getByLabelText("Passport number");
+    const issuingCountry = screen.getByLabelText("Passport issuing country");
+
+    expect(passportFieldsInOrder(number, issuingCountry)).toEqual([number, issuingCountry]);
+    expect(screen.getByText(/Enter your passport number instead of a Hong Kong ID number/u)).toBeTruthy();
+  });
+
+  it("shows an example passport number instead of repeating the label", () => {
+    renderSection(hongKongUser(), { is_business: true, business_country: "HK", country: "GB" });
+
+    expect(screen.getByLabelText<HTMLInputElement>("Passport number").placeholder).toBe("123456789");
+  });
+
+  it("explains the omitted countries on the issuing-country note only", () => {
+    renderSection(hongKongUser(), { is_business: true, business_country: "HK", country: "GB" });
+
+    const note = screen.getByText(
+      "Nationals of Cuba, Iran, North Korea and Syria cannot be verified, so those countries are not listed.",
+    );
+
+    expect(screen.getByLabelText("Passport issuing country").getAttribute("aria-describedby")).toBe(note.id);
   });
 
   it("keeps the Hong Kong ID number for a representative who lives in Hong Kong", () => {
@@ -328,7 +361,7 @@ describe("AccountDetailsSection nationality field", () => {
     renderSection(makeUser({ country_code: "AE" }));
 
     const note = screen.getByText(
-      "Nationals of Cuba, Iran, North Korea and Syria cannot be verified, so their nationalities are not listed.",
+      "Nationals of Cuba, Iran, North Korea and Syria cannot be verified, so those countries are not listed.",
     );
 
     expect(screen.getByLabelText("Nationality").getAttribute("aria-describedby")).toBe(note.id);
