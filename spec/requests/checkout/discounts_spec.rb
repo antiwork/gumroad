@@ -692,6 +692,33 @@ describe("Checkout discounts page", type: :system, js: true) do
   end
 
   describe "editing offer codes" do
+    it "saves a valid seller datetime during the browser's DST gap" do
+      seller.update!(timezone: "UTC")
+      visit checkout_discounts_path
+      original_time_zone = get_client_time_zone
+      page.driver.browser.execute_cdp("Emulation.setTimezoneOverride", timezoneId: "America/New_York")
+      expect(get_client_time_zone).to eq("America/New_York")
+
+      within find(:table_row, { "Discount" => "Discount 2" }) do
+        click_on "Edit"
+      end
+      date = find_field("Valid from")
+      date.set(Time.utc(2027, 3, 14, 2, 30))
+      date.send_keys(:tab)
+      click_on "Save changes"
+
+      expect(page).to have_alert(text: "Successfully updated discount!")
+      expect(offer_code2.reload.valid_at).to eq(Time.utc(2027, 3, 14, 2, 30))
+
+      refresh
+      within find(:table_row, { "Discount" => "Discount 2" }) do
+        click_on "Edit"
+      end
+      expect(page).to have_field("Valid from", with: "2027-03-14T02:30")
+    ensure
+      page.driver.browser.execute_cdp("Emulation.setTimezoneOverride", timezoneId: original_time_zone) if original_time_zone
+    end
+
     it "updates the offer code" do
       # Allows us to test editing an offer code that already has `valid_at`
       # set with fewer date picker interactions
