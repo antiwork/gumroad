@@ -95,13 +95,13 @@ class Product::ComputeCallAvailabilitiesService
     end
 
     def calls_per_day
-      @_calls_per_day ||= product_taken_availabilities.each_with_object(Hash.new(0)) do |interval, hash|
-        # Do not count end time's date towards the number of calls, to allow for
-        # maximum number of sales.
-        # Even if the call spans 3+ days (however unlikely), the middle day
-        # would be fully booked and would not have any more availabilities.
-        hash[interval[:start_time].to_date] += 1
-      end
+      # Finished calls still count toward today's limit.
+      @_calls_per_day ||= product.sold_calls.occupies_availability
+        .where(start_time: Time.current.beginning_of_day..)
+        .pluck(:start_time)
+        .each_with_object(Hash.new(0)) do |start_time, counts|
+          counts[start_time.to_date] += 1
+        end
     end
 
     def all_availabilities
@@ -110,10 +110,6 @@ class Product::ComputeCallAvailabilitiesService
 
     def taken_availabilities
       @_taken_availabilities ||= fetch_intervals(seller_sold_calls.occupies_availability.upcoming.ordered_chronologically)
-    end
-
-    def product_taken_availabilities
-      @_product_taken_availabilities ||= fetch_intervals(product.sold_calls.occupies_availability.upcoming.ordered_chronologically)
     end
 
     def seller_sold_calls

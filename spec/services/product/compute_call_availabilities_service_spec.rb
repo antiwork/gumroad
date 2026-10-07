@@ -97,6 +97,32 @@ describe Product::ComputeCallAvailabilitiesService, :freeze_time do
     )
   end
 
+  it "counts adjacent bookings separately toward the daily maximum in the seller's timezone" do
+    seller.update!(timezone: "Pacific Time (US & Canada)")
+    call_limitation_info.update!(maximum_calls_per_day: 2, minimum_notice_in_minutes: 0)
+    start_time = Time.find_zone(seller.timezone).local(2015, 4, 2, 16)
+    create_call_availability(start_time: start_time - 1.hour, end_time: start_time + 4.hours)
+    create(:call, start_time:, end_time: start_time + 1.hour, link: call_product)
+    create(:call, start_time: start_time + 1.hour, end_time: start_time + 2.hours, link: call_product)
+
+    expect(call_product.sold_calls.occupies_availability.count).to eq(2)
+    expect(service.perform).to eq([])
+  end
+
+  it "counts finished bookings toward the seller's daily maximum" do
+    seller.update!(timezone: "Pacific Time (US & Canada)")
+    call_limitation_info.update!(maximum_calls_per_day: 1, minimum_notice_in_minutes: 0)
+    start_time = Time.find_zone(seller.timezone).local(2015, 4, 1, 9)
+    travel_to(start_time - 1.hour)
+    create_call_availability(start_time:, end_time: start_time + 9.hours)
+    create(:call, start_time:, end_time: start_time + 1.hour, link: call_product)
+    travel_to(start_time + 3.hours)
+
+    expect(call_limitation_info.can_take_more_calls_on?(Time.current)).to be false
+    expect(call_product.sold_calls.occupies_availability.upcoming).to be_empty
+    expect(service.perform).to eq([])
+  end
+
   it "excludes availabilities that are sold" do
     # Ensure overlapping availabilities are not double counted.
     create_call_availability(start_time: 10.hours.from_now, end_time: 16.hours.from_now)
