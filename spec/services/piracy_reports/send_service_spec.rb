@@ -17,7 +17,7 @@ describe PiracyReports::SendService do
 
     expect(result).to be_success
     mail = ActionMailer::Base.deliveries.last
-    expect(mail.to).to eq(["copyright@example.net"])
+    expect(mail.to).to eq(["copyright@example.com"])
     expect(mail.cc).to eq([report.seller.email])
     expect(mail.from).to eq([ApplicationMailer::SUPPORT_EMAIL])
     expect(mail.reply_to).to eq([report.reload.reply_to_address])
@@ -33,7 +33,7 @@ describe PiracyReports::SendService do
     report.reload
     expect(report).to be_sent
     expect(report.sent_at).to be_present
-    expect(report.sent_to_email).to eq("copyright@example.net")
+    expect(report.sent_to_email).to eq("copyright@example.com")
     expect(report.final_notice_digest).to eq(report.notice_digest)
     expect(report.sent_message_id).to be_present
     expect(report.delivery_status).to eq("sent")

@@ -19,7 +19,7 @@ FactoryBot.define do
       state { "awaiting_signature" }
       screening_verdict { "pass" }
       recipient_name { "Example Net Inc." }
-      recipient_email { "copyright@example.net" }
+      recipient_email { "copyright@example.com" }
       recipient_source_url { "https://dmca.copyright.gov/osp/example" }
       notice_text { "Notice text" }
       notice_digest { Digest::SHA256.hexdigest("Notice text") }
@@ -29,7 +29,7 @@ FactoryBot.define do
       state { "signed" }
       screening_verdict { "pass" }
       recipient_name { "Example Net Inc." }
-      recipient_email { "copyright@example.net" }
+      recipient_email { "copyright@example.com" }
       recipient_source_url { "https://dmca.copyright.gov/osp/example" }
       notice_text { signed_notice_text }
       notice_digest { Digest::SHA256.hexdigest(signed_notice_text) }
@@ -44,10 +44,10 @@ FactoryBot.define do
       signed
       state { "sent" }
       sent_at { Time.current }
-      sent_to_email { "copyright@example.net" }
+      sent_to_email { "copyright@example.com" }
       final_notice_digest { Digest::SHA256.hexdigest(signed_notice_text) }
       delivery_status { "sent" }
-      sent_message_id { "message-id@example.net" }
+      sent_message_id { "message-id@example.com" }
       reply_token { SecureRandom.urlsafe_base64(PiracyReport::REPLY_TOKEN_LENGTH) }
     end
   end

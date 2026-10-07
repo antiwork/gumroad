@@ -6,6 +6,7 @@ class Api::Internal::Admin::PiracyReportsController < Api::Internal::Admin::Base
   MAX_LIST_RESULTS = 100
   MAX_PRODUCT_FILES = 50
   MAX_DESCRIPTION_LENGTH = 2000
+  MAX_RESOLUTION_LENGTH = 32
   SCREEN_PARAM_KEYS = %w[verdict checks].freeze
 
   # Params are read as strings so a nested value like state[x]=y cannot reach a query as a hash.
@@ -102,8 +103,12 @@ class Api::Internal::Admin::PiracyReportsController < Api::Internal::Admin::Base
     end
   end
 
+  # The host's receipt date starts the restoration clock, so it is required rather than defaulted
+  # to now: a reply recorded days after it arrived would otherwise start the seller's window late.
   def counter_notice
-    received_at = params[:received_at].present? ? parse_time(params[:received_at]) : Time.current
+    return render json: { success: false, message: "received_at is required" }, status: :bad_request if params[:received_at].blank?
+
+    received_at = parse_time(params[:received_at])
     return render json: { success: false, message: "received_at must be a timestamp" }, status: :bad_request if received_at.nil?
 
     record_admin_write(action: "piracy_reports.counter_notice", target: @report) do
@@ -119,19 +124,33 @@ class Api::Internal::Admin::PiracyReportsController < Api::Internal::Admin::Base
     end
   end
 
+  # The outcome is checked before the transition, because a resolved report takes no further writes:
+  # an empty or over-long value would otherwise close the report with nothing usable on it.
   def resolve
     record_admin_write(action: "piracy_reports.resolve", target: @report) do
-      @report.with_lock do
-        @report.assign_attributes(resolved_at: Time.current, resolution: params[:resolution].to_s.presence)
-        @report.resolve!
+      if (error = resolution_error)
+        render json: { success: false, message: error }, status: :unprocessable_entity
+      else
+        @report.with_lock do
+          @report.assign_attributes(resolved_at: Time.current, resolution: params[:resolution].to_s.strip)
+          @report.resolve!
+        end
+        render json: { success: true, report: serialize_detail(@report) }
       end
-      render json: { success: true, report: serialize_detail(@report) }
     rescue StateMachines::InvalidTransition => e
       render json: { success: false, message: e.message }, status: :unprocessable_entity
     end
   end
 
   private
+    def resolution_error
+      resolution = params[:resolution].to_s.strip
+      return "resolution is required" if resolution.blank?
+      return "resolution must be #{MAX_RESOLUTION_LENGTH} characters or fewer" if resolution.length > MAX_RESOLUTION_LENGTH
+
+      nil
+    end
+
     def find_report_or_render
       @report = PiracyReport.find_by(external_id: params[:id].to_s)
       render json: { success: false, message: "Piracy report not found" }, status: :not_found if @report.blank?

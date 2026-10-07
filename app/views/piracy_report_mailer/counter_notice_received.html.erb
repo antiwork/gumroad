@@ -6,9 +6,13 @@
   </p>
   <%= simple_format(@report.counter_notice_body) %>
   <p>
-    The page can come back <strong>10 to 14 business days</strong> after the site received this
-    response, unless you file a court action and tell the site's agent about it. If you want to
-    pursue this, talk to a lawyer before that window closes.
+    <% if @report.counter_notice_received_at %>
+      The site received this response on
+      <strong><%= @report.counter_notice_received_at.strftime("%-d %B %Y") %></strong>.
+    <% end %>
+    The page can come back <strong>10 to 14 business days</strong> after the site received it,
+    unless you file a court action and tell the site's agent about it. If you want to pursue this,
+    talk to a lawyer before that window closes.
   </p>
   <p>Reply to this email if you have questions.</p>
 </div>

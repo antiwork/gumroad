@@ -32,7 +32,8 @@ describe PiracyReportMailer do
   end
 
   describe "counter_notice_received" do
-    let(:report) { create(:piracy_report, :sent, counter_notice_body: "I own this page.") }
+    let(:received_at) { Time.zone.parse("2026-10-01T12:00:00Z") }
+    let(:report) { create(:piracy_report, :sent, counter_notice_body: "I own this page.", counter_notice_received_at: received_at) }
 
     subject(:mail) { described_class.counter_notice_received(report.id) }
 
@@ -41,6 +42,8 @@ describe PiracyReportMailer do
       expect(mail.subject).to eq("A site responded to your takedown notice for #{report.product.name}")
       expect(mail.body.encoded).to include("10 to 14 business days")
       expect(mail.body.encoded).to include("I own this page.")
+      # The window runs from the host's receipt date, so the seller has to be told that date too.
+      expect(mail.body.encoded).to include(received_at.strftime("%-d %B %Y"))
     end
   end
 end

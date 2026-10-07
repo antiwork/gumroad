@@ -266,7 +266,7 @@ describe Api::Internal::Admin::PiracyReportsController do
     let(:pass_params) { { id: report.external_id, verdict: "pass", checks: } }
 
     before do
-      entry = PiracyReports::RecipientRegistry::Entry.new(name: "Example Net Inc.", email: "copyright@example.net", source_url: "https://dmca.copyright.gov/osp/example")
+      entry = PiracyReports::RecipientRegistry::Entry.new(name: "Example Net Inc.", email: "copyright@example.com", source_url: "https://dmca.copyright.gov/osp/example")
       allow(PiracyReports::RecipientRegistry).to receive(:entries).and_return("example.net" => entry)
     end
 
@@ -288,7 +288,7 @@ describe Api::Internal::Admin::PiracyReportsController do
 
       expect(response.body).not_to include(seller.email)
       expect(response.parsed_body["report"]).not_to have_key("notice_text")
-      expect(response.parsed_body["report"]["recipient"]).to eq("name" => "Example Net Inc.", "email" => "copyright@example.net", "source_url" => "https://dmca.copyright.gov/osp/example")
+      expect(response.parsed_body["report"]["recipient"]).to eq("name" => "Example Net Inc.", "email" => "copyright@example.com", "source_url" => "https://dmca.copyright.gov/osp/example")
     end
 
     it "returns 422 and keeps the report in screening when the host has no registry entry" do
@@ -385,10 +385,17 @@ describe Api::Internal::Admin::PiracyReportsController do
       expect(report.reload.state).to eq("sent")
     end
 
+    it "returns 400 when the host's receipt date is missing" do
+      post :counter_notice, params: { id: report.external_id, body: "I own this page." }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(report.reload.state).to eq("sent")
+    end
+
     it "returns 422 when no notice has gone out" do
       unsent = create(:piracy_report, :signed)
 
-      post :counter_notice, params: { id: unsent.external_id, body: "I own this page." }
+      post :counter_notice, params: { id: unsent.external_id, body: "I own this page.", received_at: "2026-10-01T12:00:00Z" }
 
       expect(response).to have_http_status(:unprocessable_entity)
       expect(unsent.reload.state).to eq("signed")
@@ -416,6 +423,27 @@ describe Api::Internal::Admin::PiracyReportsController do
 
       expect(response).to have_http_status(:unprocessable_entity)
       expect(report.reload.state).to eq("signed")
+    end
+
+    it "returns 422 for an outcome that is empty" do
+      report = create(:piracy_report, :sent)
+
+      post :resolve, params: { id: report.external_id, resolution: "   " }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body["message"]).to eq("resolution is required")
+      expect(report.reload.state).to eq("sent")
+    end
+
+    it "returns 422 for an outcome longer than the column" do
+      report = create(:piracy_report, :sent)
+
+      # 33 characters, one past the 32 the resolution column holds.
+      post :resolve, params: { id: report.external_id, resolution: "a" * 33 }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body["message"]).to include("32 characters or fewer")
+      expect(report.reload.state).to eq("sent")
     end
   end
 end

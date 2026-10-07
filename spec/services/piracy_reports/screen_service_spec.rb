@@ -8,7 +8,7 @@ describe PiracyReports::ScreenService do
   let(:product) { seller_and_product.last }
   let(:report) { create(:piracy_report, :screening, seller:, product:, url: "https://example.net/design-course") }
   let(:registry) do
-    { "example.net" => PiracyReports::RecipientRegistry::Entry.new(name: "Example Net Inc.", email: "copyright@example.net", source_url: "https://dmca.copyright.gov/osp/example") }
+    { "example.net" => PiracyReports::RecipientRegistry::Entry.new(name: "Example Net Inc.", email: "copyright@example.com", source_url: "https://dmca.copyright.gov/osp/example") }
   end
 
   let(:passing_checks) do
@@ -36,7 +36,7 @@ describe PiracyReports::ScreenService do
 
       expect(result).to be_success
       report.reload
-      expect(report).to have_attributes(state: "awaiting_signature", screening_verdict: "pass", recipient_name: "Example Net Inc.", recipient_email: "copyright@example.net", recipient_source_url: "https://dmca.copyright.gov/osp/example")
+      expect(report).to have_attributes(state: "awaiting_signature", screening_verdict: "pass", recipient_name: "Example Net Inc.", recipient_email: "copyright@example.com", recipient_source_url: "https://dmca.copyright.gov/osp/example")
       expect(report.notice_digest).to eq(Digest::SHA256.hexdigest(report.notice_text))
     end
 
@@ -44,7 +44,7 @@ describe PiracyReports::ScreenService do
       call(pass_params.merge("recipient_email" => "legal@attacker.example.org", "infringing_urls" => ["https://example.net/someone-elses-file"]))
 
       report.reload
-      expect(report.recipient_email).to eq("copyright@example.net")
+      expect(report.recipient_email).to eq("copyright@example.com")
       expect(report.notice_text).not_to include("attacker")
       expect(report.notice_text).not_to include("someone-elses-file")
     end
@@ -105,7 +105,7 @@ describe PiracyReports::ScreenService do
       cdn = create(:piracy_report, :screening, seller:, product:, url: "https://files.example.net/course.zip")
 
       expect(call(pass_params, on: cdn)).to be_success
-      expect(cdn.reload.recipient_email).to eq("copyright@example.net")
+      expect(cdn.reload.recipient_email).to eq("copyright@example.com")
     end
 
     it "declines with Rails' reasons when the seller stopped being eligible after filing" do
