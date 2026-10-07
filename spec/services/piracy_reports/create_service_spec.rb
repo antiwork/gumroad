@@ -163,12 +163,11 @@ describe PiracyReports::CreateService do
       expect(call(seller:, product:).errors).to include("The product is not published")
     end
 
-    # The sales bar is the account-wide one the store agent uses, so the product itself needs no sale.
-    it "accepts a product with no sale of its own once the seller passes the store agent's gate" do
+    it "rejects a product with no successful sales, even when the seller passes the store agent's gate" do
       seller, = create_piracy_seller_with_product
       product = create(:product, user: seller)
 
-      expect(call(seller:, product:)).to be_success
+      expect(call(seller:, product:).errors).to eq(["The product has no successful sales"])
     end
   end
 end

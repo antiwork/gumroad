@@ -1,7 +1,8 @@
 # frozen_string_literal: true
 
 # Piracy reports are part of the "premium" tier, so a seller earns them with the store agent's
-# predicate (User#eligible_for_store_agent?) rather than a bar of their own.
+# predicate (User#eligible_for_store_agent?). The product also needs a sale of its own: an
+# account-wide bar alone lets a seller re-upload someone else's work and file against the original.
 class PiracyReports::Eligibility
   def self.store_agent_gate_error
     minimum = MoneyFormatter.format(User::MIN_SALES_CENTS_VALUE_FOR_STORE_AGENT, :usd, no_cents_if_whole: true, symbol: true)
@@ -23,6 +24,7 @@ class PiracyReports::Eligibility
       errors << "The product does not belong to the seller" unless product.user_id == seller.id
       errors << "The product is not published" unless product.published?
       errors << "The product has a collaborator" if product.confirmed_collaborator.present?
+      errors << "The product has no successful sales" if successful_sales_count < PiracyReport::MIN_SUCCESSFUL_SALES
     end
   end
 
@@ -36,5 +38,9 @@ class PiracyReports::Eligibility
     # The notice prints the owner's legal name, which the agent's gate does not require.
     def owner_identified?
       seller.alive_user_compliance_info&.legal_entity_name.present?
+    end
+
+    def successful_sales_count
+      Purchase.successful.where(link_id: product.id).limit(PiracyReport::MIN_SUCCESSFUL_SALES).count
     end
 end

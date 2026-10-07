@@ -2,6 +2,7 @@
 
 class PiracyReport < ApplicationRecord
   MONTHLY_LIMIT = 5
+  MIN_SUCCESSFUL_SALES = 1
   MAX_REASON_LENGTH = 280
   # The reported URL prints in the notice as written, so it gets a tighter bound than the column.
   MAX_REPORTED_URL_LENGTH = 500
