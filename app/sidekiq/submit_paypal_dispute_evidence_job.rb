@@ -26,6 +26,8 @@ class SubmitPaypalDisputeEvidenceJob
   # PayPal's supporting-info schema caps `notes` at 2,000 characters; an oversized note is
   # rejected whole, so the complete note is fitted to this budget.
   MAX_NOTES_LENGTH = 2_000
+  # Product names may be 255 characters; a short name leaves room for the access proof.
+  MAX_NAME_LENGTH = 60
   NOTES_HEADER = "Digital product delivered instantly by Gumroad, the seller's checkout platform. Gumroad's access log for this order:"
   ACCESS_LABELS = {
     ConsumptionEvent::EVENT_TYPE_VIEW => "download page opened",
@@ -102,7 +104,7 @@ class SubmitPaypalDisputeEvidenceJob
   # would only help the buyer, so that case is left to the seller.
   def self.evidence_notes(purchases)
     sections = purchases.map do |purchase|
-      ["#{purchase.link.name} (Gumroad order #{purchase.external_id}, paid #{fmt(purchase.created_at)}): ",
+      ["#{purchase.link.name.truncate(MAX_NAME_LENGTH)} (Gumroad order #{purchase.external_id}, paid #{fmt(purchase.created_at)}): ",
        access_events(access_purchases(purchase))]
     end
     return nil if sections.all? { |_, (accesses, _)| accesses.empty? }
@@ -112,18 +114,19 @@ class SubmitPaypalDisputeEvidenceJob
 
   # Builds the note within MAX_NOTES_LENGTH. Entries are already proof-first per purchase
   # (downloads/reads before page opens), so trimming drops the tail of each purchase's list
-  # in turn and says how many entries were left out.
+  # in turn and says how many entries were left out. Every accessed purchase keeps its first
+  # proof entry; returns nil rather than send a note that would carry no proof for one of them.
   def self.fit_to_budget(sections)
     keep = sections.map { |_, (accesses, _)| accesses.size }
+    floor = sections.map { |_, (accesses, _)| accesses.any? ? 1 : 0 }
     loop do
       note = render_note(sections, keep)
       return note if note.length <= MAX_NOTES_LENGTH
 
-      longest = keep.each_with_index.max_by { |count, _| count }&.last
-      if longest.nil? || keep[longest].zero?
-        return note.truncate(MAX_NOTES_LENGTH, omission: "\n(truncated)")
-      end
-      keep[longest] -= 1
+      trimmable = keep.each_index.select { |i| keep[i] > floor[i] }
+      return nil if trimmable.empty?
+
+      keep[trimmable.max_by { |i| keep[i] }] -= 1
     end
   end
 

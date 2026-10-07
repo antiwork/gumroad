@@ -158,4 +158,16 @@ describe SubmitPaypalDisputeEvidenceJob do
     expect(notes.scan("file downloaded 2026-09-26 20:00:00").size).to eq 3
     expect(notes).to match(/\d+ more entries not listed/)
   end
+
+  it "keeps a download for every item when many items have maximum-length names" do
+    purchases = Array.new(7) do |n|
+      p = create(:purchase, link: create(:product, user: seller, name: "#{n}" + "x" * 254), seller:, merchant_account:)
+      3.times { |i| create(:consumption_event, purchase_id: p.id, link_id: p.link.id, url_redirect_id: 1, product_file_id: nil, event_type: "download", consumed_at: Time.utc(2026, 9, 26, 20, i)) }
+      p
+    end
+
+    notes = described_class.evidence_notes(purchases)
+    expect(notes.length).to be <= described_class::MAX_NOTES_LENGTH
+    purchases.each { |p| expect(notes).to match(/Gumroad order #{p.external_id}, paid [^)]+\): file downloaded 2026-09-26 20:00:00/) }
+  end
 end
