@@ -66,6 +66,15 @@ describe Discover::TaxonomyPresenter do
     end
   end
 
+  describe "music categories" do
+    it "adds Music Theory and Composition under Music & Sound Design with labels" do
+      music = Taxonomy.find_by_path(["music-and-sound-design"])
+
+      expect(Taxonomy.where(parent: music).pluck(:slug)).to include("music-theory", "composition")
+      expect(Discover::TaxonomyPresenter::TAXONOMY_LABELS).to include("music-theory" => "Music Theory", "composition" => "Composition")
+    end
+  end
+
   describe "#taxonomies_for_category_picker" do
     it "sorts taxonomies alphabetically by breadcrumb so each root is followed by its descendants" do
       picker_taxonomies = presenter.taxonomies_for_category_picker
