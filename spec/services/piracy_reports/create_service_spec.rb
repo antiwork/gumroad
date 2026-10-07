@@ -109,6 +109,25 @@ describe PiracyReports::CreateService do
       expect(call(seller:, product:).errors).to include(PiracyReports::Eligibility.store_agent_gate_error)
     end
 
+    it "rejects a seller with no completed payout" do
+      seller = create(:user)
+      create(:user_compliance_info, user: seller)
+      Feature.activate_user(:piracy_reports, seller)
+      allow_any_instance_of(User).to receive(:sales_cents_total).and_return(User::MIN_SALES_CENTS_VALUE_FOR_STORE_AGENT)
+      product = create(:product, user: seller)
+
+      result = nil
+      expect { result = call(seller:, product:) }.not_to change(PiracyReport, :count)
+      expect(result.errors).to include(PiracyReports::Eligibility.store_agent_gate_error)
+    end
+
+    it "reports the suspension itself, not the earned-access steps" do
+      seller, product = create_piracy_seller_with_product
+      seller.update!(user_risk_state: "suspended_for_fraud")
+
+      expect(call(seller:, product:).errors).to eq(["The seller's account is suspended"])
+    end
+
     it "rejects a seller under the store agent's sales bar" do
       seller, product = create_piracy_seller_with_product
       allow_any_instance_of(User).to receive(:sales_cents_total).and_return(User::MIN_SALES_CENTS_VALUE_FOR_STORE_AGENT - 1)

@@ -16,7 +16,9 @@ class PiracyReports::Eligibility
   def errors
     [].tap do |errors|
       errors << "Piracy reports are not enabled for this seller" unless Feature.active?(:piracy_reports, seller)
-      errors << self.class.store_agent_gate_error unless seller.eligible_for_store_agent?
+      errors << "The seller's account is suspended" if seller.suspended?
+      # A suspended seller gets the real blocker instead of steps that cannot clear it.
+      errors << self.class.store_agent_gate_error unless seller.suspended? || seller.eligible_for_store_agent?
       errors << "The seller's payout record has no legal name to print in the notice" unless owner_identified?
       errors << "The product does not belong to the seller" unless product.user_id == seller.id
       errors << "The product is not published" unless product.published?
