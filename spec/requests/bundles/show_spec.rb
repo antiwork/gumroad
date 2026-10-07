@@ -77,4 +77,35 @@ describe("Bundle page", type: :system, js: true) do
       end
     end
   end
+
+  it "shows content missed by a partial update in the buyer's library after retrying" do
+    buyer = create(:user)
+    purchase = create(:purchase, link: bundle, purchaser: buyer, is_bundle_purchase: true, created_at: 3.days.ago)
+    missing_product = create(:product, user: seller, name: "New workbook")
+    create(:bundle_product, bundle:, product: missing_product, updated_at: 2.days.ago)
+    bundle_product.update!(updated_at: 3.days.ago)
+    versioned_bundle_product.update!(updated_at: 2.days.ago)
+    travel_to(3.days.ago) do
+      Purchase::CreateBundleProductPurchaseService.new(purchase, bundle_product).perform
+    end
+    travel_to(1.day.ago) do
+      Purchase::CreateBundleProductPurchaseService.new(purchase, versioned_bundle_product).perform
+    end
+    login_as buyer
+    visit library_path(bundles: bundle.external_id)
+    expect(page).to have_product_card(product)
+    expect(page).to have_product_card(versioned_product)
+    expect(page).not_to have_product_card(missing_product)
+
+    UpdateBundlePurchasesContentJob.new.perform(bundle.id)
+    visit library_path(bundles: bundle.external_id)
+
+    missing_purchase = purchase.product_purchases.find_by!(link: missing_product)
+    expect(missing_purchase).to be_successful
+    expect(page).to have_product_card(product)
+    expect(page).to have_product_card(versioned_product)
+    within find_product_card(missing_product) do
+      expect(page).to have_link(missing_product.name, href: missing_purchase.url_redirect.download_page_url)
+    end
+  end
 end
