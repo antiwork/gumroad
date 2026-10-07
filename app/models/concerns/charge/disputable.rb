@@ -480,6 +480,14 @@ module Charge::Disputable
 
       FightDisputeJob.perform_async(dispute.id) if dispute_evidence.present?
 
+      # PayPal Connect: answer with our delivery record where PayPal lets us. A case often only
+      # opens to supporting info once it moves to review, so look again a week later; the job's
+      # own claim keeps the note to one submission.
+      if charge_processor == PaypalChargeProcessor.charge_processor_id
+        SubmitPaypalDisputeEvidenceJob.perform_in(10.minutes, dispute.id)
+        SubmitPaypalDisputeEvidenceJob.perform_in(7.days, dispute.id)
+      end
+
       # Completion marker: a replayed webhook only re-runs these side effects while this is nil.
       dispute.update!(formalized_side_effects_finished_at: Time.current)
     end

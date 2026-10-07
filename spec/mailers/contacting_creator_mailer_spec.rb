@@ -558,7 +558,10 @@ describe ContactingCreatorMailer do
           mail = ContactingCreatorMailer.chargeback_notice(dispute.id)
 
           expect(mail.body.encoded).to include "A customer of yours (#{purchase.email}) has disputed their purchase of #{purchase.link.name} for #{purchase.formatted_disputed_amount}."
-          expect(mail.body.encoded).to include "Unfortunately, we’re unable to fight disputes on purchases via PayPal Connect since we don’t have access to your PayPal account."
+          expect(mail.body.encoded).to_not include "send PayPal our delivery record for this order"
+          Feature.activate(:submit_paypal_dispute_evidence)
+          expect(ContactingCreatorMailer.chargeback_notice(dispute.id).body.encoded).to include "send PayPal our delivery record for this order"
+          expect(mail.body.encoded).not_to include "we don’t have access to your PayPal account"
         end
       end
     end
@@ -619,7 +622,10 @@ describe ContactingCreatorMailer do
           charge.disputed_purchases.each do |purchase|
             expect(mail.body.encoded).to include purchase.link.name
           end
-          expect(mail.body.encoded).to include "Unfortunately, we’re unable to fight disputes on purchases via PayPal Connect since we don’t have access to your PayPal account."
+          expect(mail.body.encoded).to_not include "send PayPal our delivery record for this order"
+          Feature.activate(:submit_paypal_dispute_evidence)
+          expect(ContactingCreatorMailer.chargeback_notice(dispute.id).body.encoded).to include "send PayPal our delivery record for this order"
+          expect(mail.body.encoded).not_to include "we don’t have access to your PayPal account"
         end
       end
     end
