@@ -199,6 +199,134 @@ describe CartPresenter do
     end
 
     context "with discount codes and offers" do
+      context "when the saved cart has different options of the same product" do
+        let(:seller) { create(:user) }
+        let(:product) { create(:product_with_digital_versions, user: seller, price_cents: 1000, quantity_enabled: true) }
+        let(:basic_option) { product.alive_variants.first }
+        let(:team_option) { product.alive_variants.second }
+        let(:discount_codes) { [{ "code" => "SAVEMONEY", "fromUrl" => false }] }
+        let(:cart) { create(:cart, user:, discount_codes:) }
+        let!(:offer_code) do
+          create(:percentage_offer_code, code: "SAVEMONEY", user: seller, products: [product], amount_percentage: 20, minimum_quantity: 3)
+        end
+        let!(:team_cart_product) { create(:cart_product, cart:, product:, option: team_option, quantity: 2, price: 2000) }
+        let!(:basic_cart_product) { create(:cart_product, cart:, product:, option: basic_option, quantity: 1, price: 1000) }
+
+        before do
+          team_option.update!(price_difference_cents: 1000)
+        end
+
+        def live_discount_products(code)
+          products = cart.visible_cart_products.each_with_index.to_h do |cart_product, index|
+            [index, {
+              permalink: cart_product.product.unique_permalink,
+              quantity: cart_product.quantity,
+              variant_external_id: cart_product.option&.external_id || "",
+            }]
+          end
+          OfferCodeDiscountComputingService.new(code, products, buyer: user).process[:products_data].transform_values { _1[:discount] }
+        end
+
+        it "preserves a qualifying percentage discount and both saved option lines" do
+          props = presenter.cart_props
+
+          expect(props[:discountCodes]).to eq([
+                                                { code: "SAVEMONEY", fromUrl: false, products: live_discount_products(offer_code.code) }
+                                              ])
+          expect(props[:discountCodes].sole[:products]).to include(
+            product.unique_permalink => a_hash_including(type: "percent", percents: 20, minimum_quantity: 3)
+          )
+          expect(props[:items]).to match([
+                                           a_hash_including(option_id: basic_option.external_id, quantity: 1, price: 1000),
+                                           a_hash_including(option_id: team_option.external_id, quantity: 2, price: 2000),
+                                         ])
+          expect(cart.reload.discount_codes).to eq(discount_codes)
+        end
+
+        it "does not offer a percentage code whose remaining uses cannot cover the combined quantity" do
+          offer_code.update!(minimum_quantity: nil, max_purchase_count: 2)
+
+          expect(live_discount_products(offer_code.code)).to eq({})
+          expect(presenter.cart_props[:discountCodes].sole[:products]).to eq({})
+        end
+
+        it "keeps different products and persisted codes independent" do
+          other_product = create(:product, price_cents: 2000)
+          other_code = create(:offer_code, products: [other_product], code: "OTHER", amount_cents: 250)
+          create(:cart_product, cart:, product: other_product, quantity: 7)
+          cart.update!(discount_codes: discount_codes + [{ "code" => other_code.code, "fromUrl" => true }])
+
+          expect(presenter.cart_props[:discountCodes]).to match([
+                                                                  { code: "SAVEMONEY", fromUrl: false, products: { product.unique_permalink => a_hash_including(type: "percent", percents: 20) } },
+                                                                  { code: "OTHER", fromUrl: true, products: { other_product.unique_permalink => a_hash_including(type: "fixed", cents: 250) } },
+                                                                ])
+
+          offer_code.update!(minimum_quantity: 4)
+          expect(presenter.cart_props[:discountCodes].first[:products]).to eq({})
+        end
+
+        it "does not count removed option lines toward the minimum quantity" do
+          basic_cart_product.mark_deleted!
+
+          props = presenter.cart_props
+          expect(props[:discountCodes].sole[:products]).to eq({})
+          expect(props[:items]).to match([a_hash_including(option_id: team_option.external_id, quantity: 2)])
+        end
+
+        it "does not offer discounts for an archived product" do
+          product.update!(archived: true)
+
+          props = presenter.cart_props
+          expect(props[:discountCodes].sole[:products]).to eq({})
+          expect(props[:items]).to eq([])
+        end
+
+        context "with an option-scoped discount" do
+          before do
+            offer_code.update!(minimum_quantity: 2, variants: [basic_option])
+          end
+
+          it "does not use quantities from options outside the discount's scope" do
+            expect(live_discount_products(offer_code.code)).to eq({})
+            expect(presenter.cart_props[:discountCodes].sole[:products]).to eq({})
+          end
+
+          it "preserves the discount when the eligible option alone meets the minimum" do
+            basic_cart_product.update!(quantity: 2)
+
+            products = presenter.cart_props[:discountCodes].sole[:products]
+            expect(products).to eq(live_discount_products(offer_code.code))
+            expect(products).to include(
+              product.unique_permalink => a_hash_including(
+                type: "percent", percents: 20, option_ids_by_product: { product.external_id => [basic_option.external_id] }
+              )
+            )
+          end
+        end
+
+        context "with a fixed-amount discount" do
+          before do
+            offer_code.update!(amount_percentage: nil, amount_cents: 500)
+          end
+
+          it "preserves the fixed discount across the combined quantity" do
+            products = presenter.cart_props[:discountCodes].sole[:products]
+            expect(products).to eq(live_discount_products(offer_code.code))
+            expect(products).to include(product.unique_permalink => a_hash_including(type: "fixed", cents: 500, minimum_quantity: 3))
+          end
+
+          it "preserves a once-per-cart discount without spending a use per unit" do
+            offer_code.update!(once_per_cart: true, max_purchase_count: 1)
+
+            products = presenter.cart_props[:discountCodes].sole[:products]
+            expect(products).to eq(live_discount_products(offer_code.code))
+            expect(products).to include(
+              product.unique_permalink => a_hash_including(type: "fixed", cents: 500, once_per_cart: true, once_per_cart_amount_cents: 500)
+            )
+          end
+        end
+      end
+
       context "when the stored code has leading whitespace" do
         let(:discount_codes) { [{ "code" => " SAVEMONEY", "fromUrl" => false }] }
         let(:cart) { create(:cart, user:, discount_codes:) }
