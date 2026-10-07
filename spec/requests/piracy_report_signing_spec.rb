@@ -1,0 +1,30 @@
+# frozen_string_literal: true
+
+require "spec_helper"
+
+describe "Signing a piracy report notice", type: :system, js: true do
+  let(:seller_and_product) { create_piracy_seller_with_product }
+  let(:seller) { seller_and_product.first }
+  let(:product) { seller_and_product.last }
+  let(:report) do
+    create(:piracy_report, :awaiting_signature, seller:, product:, url: "https://example.net/design-course",
+                                                recipient_name: "Example Net Inc.", recipient_email: "copyright@example.net")
+  end
+
+  before do
+    report.update!(notice_text: PiracyReports::NoticeRenderer.new(report).call)
+    login_as(seller)
+  end
+
+  it "signs once every confirmation is checked, and puts the signature in the notice" do
+    visit piracy_report_path(report.external_id)
+
+    PiracyReport::SIGNATURE_CONFIRMATIONS.each_value { |text| check(text) }
+    fill_in "Type your full legal name to sign", with: "Jane Doe"
+    click_on "Sign notice"
+
+    expect(page).to have_text("Signed by Jane Doe")
+    expect(find("pre#notice")).to have_text("Signed: /s/ Jane Doe")
+    expect(report.reload).to have_attributes(state: "signed", signature_statement_version: PiracyReport::SIGNATURE_STATEMENT_VERSION)
+  end
+end

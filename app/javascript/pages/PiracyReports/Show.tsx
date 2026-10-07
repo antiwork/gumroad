@@ -3,6 +3,7 @@ import * as React from "react";
 
 import { Button } from "$app/components/Button";
 import { Alert } from "$app/components/ui/Alert";
+import { Checkbox } from "$app/components/ui/Checkbox";
 import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
@@ -22,12 +23,18 @@ type PiracyReportsShowProps = {
     signed_by_name: string | null;
   };
   product: { name: string; url: string };
+  confirmations: { key: string; text: string }[];
 };
 
 export default function PiracyReportsShow() {
-  const { report, product } = usePage<PiracyReportsShowProps>().props;
+  const { report, product, confirmations } = usePage<PiracyReportsShowProps>().props;
 
-  const form = useForm({ signed_by_name: "" });
+  const form = useForm<{ signed_by_name: string; confirmations: string[] }>({ signed_by_name: "", confirmations: [] });
+  const toggleConfirmation = (key: string, checked: boolean) =>
+    form.setData(
+      "confirmations",
+      checked ? [...form.data.confirmations, key] : form.data.confirmations.filter((confirmed) => confirmed !== key),
+    );
   const canSign = report.state === "awaiting_signature" && report.notice_text !== null;
 
   const submit = (event: React.FormEvent<HTMLFormElement>) => {
@@ -64,7 +71,11 @@ export default function PiracyReportsShow() {
             <FieldsetTitle>
               <Label htmlFor="notice">The notice</Label>
             </FieldsetTitle>
-            <FieldsetDescription>This is exactly what we send. It is fixed once you sign it.</FieldsetDescription>
+            <FieldsetDescription>
+              {canSign
+                ? "This is the notice we send. When you sign, we add your typed name and the date as the signature."
+                : "This is the notice we send."}
+            </FieldsetDescription>
             <pre id="notice" className="max-h-96 overflow-auto rounded border border-border p-4 whitespace-pre-wrap">
               {report.notice_text}
             </pre>
@@ -73,13 +84,22 @@ export default function PiracyReportsShow() {
         {canSign ? (
           <form onSubmit={submit} className="grid gap-4">
             <Fieldset>
+              <FieldsetTitle>Before you sign, confirm each statement</FieldsetTitle>
+              {confirmations.map(({ key, text }) => (
+                <Label key={key} className="items-start">
+                  <Checkbox
+                    checked={form.data.confirmations.includes(key)}
+                    onChange={(event) => toggleConfirmation(key, event.target.checked)}
+                    required
+                  />
+                  {text}
+                </Label>
+              ))}
+            </Fieldset>
+            <Fieldset>
               <FieldsetTitle>
-                <Label htmlFor="signed_by_name">Sign with your full legal name</Label>
+                <Label htmlFor="signed_by_name">Type your full legal name to sign</Label>
               </FieldsetTitle>
-              <FieldsetDescription>
-                Your signature confirms the statements in the notice are accurate and that you authorize Gumroad to send
-                it on your behalf.
-              </FieldsetDescription>
               <Input
                 id="signed_by_name"
                 value={form.data.signed_by_name}
@@ -90,7 +110,7 @@ export default function PiracyReportsShow() {
             </Fieldset>
             <div>
               <Button type="submit" color="primary" disabled={form.processing}>
-                {form.processing ? "Signing..." : "Sign and send"}
+                {form.processing ? "Signing..." : "Sign notice"}
               </Button>
             </div>
           </form>

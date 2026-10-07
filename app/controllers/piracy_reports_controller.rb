@@ -41,13 +41,14 @@ class PiracyReportsController < Sellers::BaseController
     render inertia: "PiracyReports/Show", props: {
       report: report_props,
       product: { name: @report.product.name, url: @report.product.long_url },
+      confirmations: PiracyReport::SIGNATURE_CONFIRMATIONS.map { |key, text| { key:, text: } },
     }
   end
 
   def sign
     authorize @report
 
-    if @report.record_signature!(params[:signed_by_name])
+    if @report.record_signature!(params[:signed_by_name], confirmations: params[:confirmations], ip: request.remote_ip)
       redirect_to piracy_report_path(@report.external_id), notice: "Signed. We will send the notice."
     else
       redirect_to piracy_report_path(@report.external_id), alert: @report.errors.full_messages.to_sentence
@@ -71,7 +72,7 @@ class PiracyReportsController < Sellers::BaseController
         state: @report.state,
         url: @report.url,
         created_at: @report.created_at.iso8601,
-        # The seller signs exactly this text, so it is what a later send checks against the digest.
+        # The seller signs this text. Signing appends the signature line and updates the digest.
         notice_text: @report.notice_text,
         notice_digest: @report.notice_digest,
         signed_at: @report.signed_at&.iso8601,

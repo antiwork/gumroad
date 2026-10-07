@@ -145,23 +145,42 @@ describe PiracyReport do
   end
 
   describe "#record_signature!" do
-    it "signs the report and keeps the notice it signed" do
+    let(:all_confirmations) { PiracyReport::SIGNATURE_CONFIRMATIONS.keys }
+
+    def sign(report, name = "Jane Doe", confirmations: all_confirmations, ip: "203.0.113.7")
+      report.record_signature!(name, confirmations:, ip:)
+    end
+
+    it "signs the report, records what the seller agreed to, and puts the signature in the notice" do
       report = create(:piracy_report, :awaiting_signature)
 
-      expect(report.record_signature!("Jane Doe")).to be(true)
+      travel_to(Time.utc(2026, 10, 7, 12)) { expect(sign(report)).to be(true) }
+
+      signed_text = "Notice text\n\nSigned: /s/ Jane Doe, October 7, 2026\n"
       expect(report.reload).to have_attributes(
         state: "signed",
         signed_by_name: "Jane Doe",
-        notice_text: "Notice text",
-        notice_digest: Digest::SHA256.hexdigest("Notice text")
+        signed_ip: "203.0.113.7",
+        signature_statement_version: PiracyReport::SIGNATURE_STATEMENT_VERSION,
+        notice_text: signed_text,
+        notice_digest: Digest::SHA256.hexdigest(signed_text)
       )
-      expect(report.signed_at).to be_present
+      expect(report.signed_at).to eq(Time.utc(2026, 10, 7, 12))
+    end
+
+    it "refuses to sign unless every confirmation is checked" do
+      report = create(:piracy_report, :awaiting_signature)
+
+      expect(sign(report, confirmations: all_confirmations - ["fair_use_considered"])).to be(false)
+      expect(sign(report, confirmations: nil)).to be(false)
+      expect(report.errors[:base]).to include("Check every confirmation to sign")
+      expect(report.reload).to have_attributes(state: "awaiting_signature", notice_text: "Notice text", signed_ip: nil)
     end
 
     it "trims the name" do
       report = create(:piracy_report, :awaiting_signature)
 
-      report.record_signature!("  Jane   Doe  ")
+      sign(report, "  Jane   Doe  ")
 
       expect(report.reload.signed_by_name).to eq("Jane Doe")
     end
@@ -169,15 +188,26 @@ describe PiracyReport do
     it "refuses a blank name without changing the state" do
       report = create(:piracy_report, :awaiting_signature)
 
-      expect(report.record_signature!("   ")).to be(false)
+      expect(sign(report, "   ")).to be(false)
       expect(report.reload.state).to eq("awaiting_signature")
       expect(report.errors[:signed_by_name]).to be_present
+    end
+
+    it "drops invisible characters, so a name of only zero-width or bidi characters is blank" do
+      report = create(:piracy_report, :awaiting_signature)
+
+      expect(sign(report, "\u200B\u202E")).to be(false)
+      expect(report.errors[:signed_by_name]).to be_present
+
+      other = create(:piracy_report, :awaiting_signature)
+      expect(sign(other, "Jane\u202E Doe")).to be(true)
+      expect(other.reload.signed_by_name).to eq("Jane Doe")
     end
 
     it "refuses a name longer than the column" do
       report = create(:piracy_report, :awaiting_signature)
 
-      expect(report.record_signature!("a" * 256)).to be(false)
+      expect(sign(report, "a" * 256)).to be(false)
       expect(report.reload.state).to eq("awaiting_signature")
       expect(report.errors[:signed_by_name]).to include("is too long")
     end
@@ -185,16 +215,16 @@ describe PiracyReport do
     it "refuses a report that is not waiting for a signature" do
       report = create(:piracy_report, :screening)
 
-      expect(report.record_signature!("Jane Doe")).to be(false)
+      expect(sign(report)).to be(false)
       expect(report.reload.state).to eq("screening")
       expect(report.errors[:base]).to include("This report is not ready to sign")
     end
 
     it "cannot be signed twice" do
       report = create(:piracy_report, :awaiting_signature)
-      report.record_signature!("Jane Doe")
+      sign(report)
 
-      expect(report.record_signature!("Someone Else")).to be(false)
+      expect(sign(report, "Someone Else")).to be(false)
       expect(report.reload.signed_by_name).to eq("Jane Doe")
     end
   end
