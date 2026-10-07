@@ -30,6 +30,37 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
     create(:payment_completed, user: seller)
   end
 
+  it "preserves mixed product and variant exclusions when reopening a filtered draft" do
+    variant_category = create(:variant_category, link: product2)
+    variant = create(:variant, variant_category:, name: "Version B")
+
+    visit new_email_path(template: "filtered_customers", not_bought: [product.unique_permalink, variant.external_id])
+    within :fieldset, "Has not yet bought" do
+      expect(page).to have_button("Sample product")
+      expect(page).to have_button("Another product - Version B")
+    end
+    fill_in "Title", with: "Mixed exclusions draft"
+    set_rich_text_editor_input(find("[aria-label='Email message']"), to_text: "Hello")
+    click_on "Save"
+    expect(page).to have_alert(text: "Email created!")
+
+    draft = seller.installments.find_by!(name: "Mixed exclusions draft")
+    expect(draft.not_bought_products).to eq([product.unique_permalink])
+    expect(draft.not_bought_variants).to eq([variant.external_id])
+
+    visit edit_email_path(draft.external_id)
+    within :fieldset, "Has not yet bought" do
+      expect(page).to have_button("Sample product")
+      expect(page).to have_button("Another product - Version B")
+    end
+    fill_in "Title", with: "Renamed mixed exclusions draft", fill_options: { clear: :backspace }
+    click_on "Save"
+    expect(page).to have_alert(text: "Changes saved!")
+    expect(draft.reload.name).to eq("Renamed mixed exclusions draft")
+    expect(draft.not_bought_products).to eq([product.unique_permalink])
+    expect(draft.not_bought_variants).to eq([variant.external_id])
+  end
+
   it "allows editing an unpublished email" do
     # Ensure that an archived product with successful sales is shown in the "Bought", "Has not yet bought", etc. filters
     product.update!(archived: true)

@@ -263,9 +263,10 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
         ? [installment.unique_permalink]
         : [...(installment.bought_products ?? []), ...(installment.bought_variants ?? [])];
   });
-  const [notBought, setNotBought] = React.useState<string[]>(
-    installment?.not_bought_products ?? installment?.not_bought_variants ?? [],
-  );
+  const [notBought, setNotBought] = React.useState<string[]>([
+    ...(installment?.not_bought_products ?? []),
+    ...(installment?.not_bought_variants ?? []),
+  ]);
   const [paidMoreThanCents, setPaidMoreThanCents] = React.useState<number | null>(
     installment?.paid_more_than_cents ?? null,
   );
