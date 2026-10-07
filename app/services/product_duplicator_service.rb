@@ -235,16 +235,18 @@ class ProductDuplicatorService
     end
 
     def duplicate_variant_categories_and_variants
-      if product.is_tiered_membership
-        tier_category = duplicated_product.variant_categories.alive.first
-        if tier_category
-          tier_category.mark_deleted!
-        end
+      if product.is_tiered_membership || product.native_type == Link::NATIVE_TYPE_CALL
+        default_category = duplicated_product.variant_categories.alive.first
+        default_category&.mark_deleted!
       end
 
+      call_has_durations = product.native_type == Link::NATIVE_TYPE_CALL && product.alive_variants.exists?
       product.variant_categories.each do |variant_category|
         new_variant_category = variant_category.dup
         new_variant_category.link = duplicated_product
+        if call_has_durations && variant_category.alive? && variant_category.alive_variants.empty?
+          new_variant_category.deleted_at = Time.current
+        end
         new_variant_category.save!
         variant_category.variants.each do |variant|
           new_variant = variant.dup
