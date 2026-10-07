@@ -2,9 +2,13 @@
 
 require "spec_helper"
 
-describe AlertOnPiracyReportsBlockedOnRecipientJob do
+describe AlertOnStuckPiracyReportsJob do
   def blocked_report(url: "https://unlisted.example.org/course")
-    create(:piracy_report, :screening, url:, screened_at: Time.current)
+    create(:piracy_report, :screening, url:, screening_verdict: "pass", screened_at: Time.current)
+  end
+
+  def review_report(url: "https://undecided.example.org/course")
+    create(:piracy_report, :screening, url:, screening_verdict: "review", screened_at: Time.current)
   end
 
   def message
@@ -23,7 +27,7 @@ describe AlertOnPiracyReportsBlockedOnRecipientJob do
 
     expect(InternalNotificationWorker).to have_received(:perform_async) do |room, subject, body|
       expect(room).to eq("risk")
-      expect(subject).to eq("Piracy reports blocked on a missing recipient")
+      expect(subject).to eq("Piracy reports waiting in screening")
       expect(body).to include("1 piracy report passed screening but the reported host has no verified contact")
       expect(body).to include(report.external_id)
       expect(body).to include("unlisted.example.org")
@@ -31,7 +35,27 @@ describe AlertOnPiracyReportsBlockedOnRecipientJob do
     end
   end
 
-  it "stays silent when no report is blocked" do
+  it "reports a report the agent could not decide, in its own section" do
+    blocked = blocked_report
+    undecided = review_report
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async).once do |_room, _subject, body|
+      blocked_part, review_part = body.split("\n\n1 piracy report could not be decided")
+      expect(blocked_part).to include(blocked.external_id)
+      expect(blocked_part).not_to include(undecided.external_id)
+      expect(review_part).to include(undecided.external_id, "undecided.example.org", "submit pass or fail")
+    end
+  end
+
+  it "starts with the review section when no report is blocked" do
+    undecided = review_report
+
+    expect(message).to start_with("1 piracy report could not be decided by the screening agent.\n\n• #{undecided.external_id}")
+  end
+
+  it "stays silent when no report is blocked or waiting for review" do
     create(:piracy_report, :screening)
     create(:piracy_report, :awaiting_signature)
 
