@@ -19,11 +19,13 @@ fi
 
 export PUPPETEER_SKIP_DOWNLOAD="true"
 
-npm install
+# vite_ruby's assets:precompile otherwise runs this same `npm ci` a second time.
+export VITE_RUBY_SKIP_ASSETS_PRECOMPILE_INSTALL=true
+NODE_ENV=development npm ci
 
-npm run setup
-
-bundle exec rake assets:precompile
+# One Rails boot. js:export must run first: Vite reads routes.js. assets:precompile
+# builds the pages Tailwind itself (lib/tasks/pages_tailwind.rake).
+bundle exec rake js:export assets:precompile
 
 remove_assets_dir() {
   ASSETS_DIRECTORY=$1
