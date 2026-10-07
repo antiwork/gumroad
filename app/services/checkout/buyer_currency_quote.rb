@@ -66,6 +66,7 @@ class Checkout::BuyerCurrencyQuote
                         :charge_seller_tax_cents, :charge_gumroad_tax_cents,
                         :charge_shipping_cents, :later_charge_kind,
                         :later_charge_price_cents, :listed_currency_rate,
+                        :australian_gst,
                         keyword_init: true) do
     # Builds a line from one product's surcharge calculation. The submitted price includes
     # the buyer's tip share, so the tip is carved back out here; the tax lands in the same
@@ -137,7 +138,8 @@ class Checkout::BuyerCurrencyQuote
         charge_shipping_cents: (charge_shipping_usd_cents.nil? ? shipping_usd_cents : charge_shipping_usd_cents).round.to_i,
         later_charge_kind:,
         later_charge_price_cents:,
-        listed_currency_rate:
+        listed_currency_rate:,
+        australian_gst: !seller_responsible && tax_cents.positive? && Charge::PresentmentAllocator.australian_gst_rate?(tax_result.zip_tax_rate)
       )
     end
 
@@ -473,7 +475,7 @@ class Checkout::BuyerCurrencyQuote
     # A negative component means the submitted request was malformed (prices and tips
     # are sanitized above, but defense in depth: never lock a quote whose lines could
     # not represent a real cart).
-    return false if line_items.any? { |line| line.to_h.except(:permalink, :uid, :product, :later_charge_kind, :listed_currency_rate).values.compact.any?(&:negative?) }
+    return false if line_items.any? { |line| line.to_h.except(:permalink, :uid, :product, :later_charge_kind, :listed_currency_rate, :australian_gst).values.compact.any?(&:negative?) }
     # A line item can carry a nil product when the caller built it from a product lookup
     # that found nothing (seen from an ad-hoc QA script — Sentry GUMROAD-Z5). The surcharge
     # endpoint already withholds the quote for unknown products, but the service must not
@@ -900,7 +902,8 @@ class Checkout::BuyerCurrencyQuote
         lines: charge_line_items.map do |line_item|
           Charge::PresentmentAllocator::Line.new(
             canonical_total_cents: line_item.canonical_total_cents,
-            canonical_component_cents: line_item.canonical_component_cents
+            canonical_component_cents: line_item.canonical_component_cents,
+            australian_gst: line_item.australian_gst
           )
         end
       ).each_with_index.map do |line_allocation, index|

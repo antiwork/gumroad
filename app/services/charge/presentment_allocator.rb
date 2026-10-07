@@ -12,23 +12,31 @@ class Charge::PresentmentAllocator
                           keyword_init: true)
 
   # One cart line's canonical (USD) money, with its components always in the order
-  # price, tip, seller tax, Gumroad tax, shipping.
-  Line = Struct.new(:canonical_total_cents, :canonical_component_cents, keyword_init: true)
+  # price, tip, seller tax, Gumroad tax, shipping. australian_gst marks a line whose Gumroad
+  # tax is Australian GST (see .australian_gst_rate?).
+  Line = Struct.new(:canonical_total_cents, :canonical_component_cents, :australian_gst, keyword_init: true)
   LineAllocation = Struct.new(:presentment_total_cents, :presentment_component_cents, keyword_init: true)
 
   # Which components a price-ending rounding difference is allowed to land on: the price,
   # the tip and the shipping, and never either tax component (indexes 2 and 3). The
   # difference is spread proportionally across all three at once, not preferentially.
   #
-  # Tax is excluded because the tax figures are not ours to move. They are computed from
-  # the canonical USD amounts, they are what the seller remits or what Gumroad remits as
-  # marketplace facilitator, and they appear as tax on the checkout page, on the receipt
-  # and on the persisted presentment rows. If the rounding difference were spread over
-  # every component proportionally, part of a purely cosmetic price adjustment would be
-  # labelled as tax collected — e.g. a CA$16.49 total showing CA$2.15 of tax where the
-  # exact conversion gives CA$2.14. The difference is Gumroad's, so it is carried on the
-  # non-tax lines and the tax lines keep the exact converted figure.
+  # Tax is excluded because the remitted tax is computed on the canonical USD amounts, so a
+  # cosmetic price ending must not be labelled as tax collected. The one exception is
+  # Australian GST, whose displayed figure is re-derived afterwards as one-eleventh of the
+  # GST-inclusive amount (see .apply_australian_gst_display).
   ROUNDING_ABSORBING_COMPONENT_INDEXES = [0, 1, 4].freeze
+
+  AUSTRALIAN_GST_RATE = BigDecimal("0.1")
+
+  # Gumroad-collected 10% GST for an Australian buyer. Both the quote (from the tax
+  # calculation) and the charge (from the purchase) ask this of the same ZipTaxRate row.
+  def self.australian_gst_rate?(zip_tax_rate)
+    zip_tax_rate.present? &&
+      zip_tax_rate.country == Compliance::Countries::AUS.alpha2 &&
+      !zip_tax_rate.is_seller_responsible &&
+      zip_tax_rate.combined_rate.to_d == AUSTRALIAN_GST_RATE
+  end
 
   # The one rounding procedure for splitting a presentment total across cart lines and,
   # within each line, across its money components. Checkout::BuyerCurrencyQuote runs this
@@ -59,6 +67,7 @@ class Charge::PresentmentAllocator
     end
     component_shares = apply_rounding_delta(component_shares, rounding_delta_cents.to_i) unless rounding_delta_cents.to_i.zero?
     component_shares = apply_presentment_component_overrides(component_shares, presentment_component_overrides) if presentment_component_overrides.present?
+    component_shares = apply_australian_gst_display(component_shares, lines)
 
     component_shares.map do |shares|
       LineAllocation.new(presentment_total_cents: shares.sum, presentment_component_cents: shares)
@@ -126,6 +135,30 @@ class Charge::PresentmentAllocator
   end
   private_class_method :apply_presentment_component_overrides
 
+  # The ATO computes GST on a taxable supply as one-eleventh of the GST-inclusive price, so a
+  # buyer checks the displayed GST against the displayed total. Per line, because every
+  # purchase gets its own receipt; line totals are untouched, so the cart still sums to the
+  # charged amount. Shipping is outside the GST base (tax is computed on the price only), and
+  # the difference moves to the price so the base itself does not change. Display only: the
+  # remitted GST is the canonical USD gumroad_tax_cents.
+  def self.apply_australian_gst_display(component_shares, lines)
+    component_shares.each_with_index.map do |shares, index|
+      next shares unless lines[index].australian_gst
+      next shares unless shares[3].positive? && shares[2].zero?
+
+      gst_inclusive_cents = shares[0] + shares[1] + shares[3]
+      gst_cents = (BigDecimal(gst_inclusive_cents) / 11).round.to_i
+      difference = gst_cents - shares[3]
+      next shares if difference.zero? || shares[0] < difference
+
+      shares.dup.tap do |adjusted|
+        adjusted[3] = gst_cents
+        adjusted[0] -= difference
+      end
+    end
+  end
+  private_class_method :apply_australian_gst_display
+
   attr_reader :purchases, :presentment_total_cents, :presentment_gumroad_amount_cents, :rounding_delta_cents, :presentment_component_overrides
 
   # presentment_total_cents is the EXACT converted total; rounding_delta_cents is how far
@@ -148,7 +181,8 @@ class Charge::PresentmentAllocator
       lines: purchases.map do |purchase|
         Line.new(
           canonical_total_cents: purchase.total_transaction_cents,
-          canonical_component_cents: canonical_component_cents(purchase)
+          canonical_component_cents: canonical_component_cents(purchase),
+          australian_gst: purchase.gumroad_tax_cents.to_i.positive? && self.class.australian_gst_rate?(purchase.zip_tax_rate)
         )
       end
     )
