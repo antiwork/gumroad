@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build, createServer, type InlineConfig, type Rollup } from "vite";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 // Covers patches/@typia+unplugin+12.1.1.patch: a one-shot build shares one program
 // (so a global type resolves), and dev keeps a program per file.
@@ -46,6 +46,19 @@ describe("typia transform in a one-shot build", () => {
     // typia ran, but the unresolved type became `any`: the assert returns its input unchecked.
     expect(code).toContain("errorFactory");
     expect(code).not.toContain('".count"');
+  }, 60_000);
+
+  it("produces the same output when the machine is slow", async () => {
+    const expected = await buildOutput(["guardian"]);
+    expect(expected.guardian).not.toContain('expected: "Guardian "');
+    // Every clock read jumps 10 s, as if each step of a transform were slow.
+    let now = Date.prototype.getTime.call(new Date());
+    const clock = vi.spyOn(Date.prototype, "getTime").mockImplementation(() => (now += 10_000));
+    try {
+      expect(await buildOutput(["guardian"])).toEqual(expected);
+    } finally {
+      clock.mockRestore();
+    }
   }, 60_000);
 
   it("orders union members the same whichever file is transformed first", async () => {

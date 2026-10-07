@@ -1,5 +1,5 @@
 diff --git a/node_modules/@typia/unplugin/dist/core.js b/node_modules/@typia/unplugin/dist/core.js
-index e61604c..481cdd7 100644
+index e61604c..0134946 100644
 --- a/node_modules/@typia/unplugin/dist/core.js
 +++ b/node_modules/@typia/unplugin/dist/core.js
 @@ -493,7 +493,7 @@ const sourceCache = /* @__PURE__ */ new Map();
@@ -80,7 +80,7 @@ index e61604c..481cdd7 100644
  	const tsSource = ts.createSourceFile(id, source, compilerOptions.target ?? ts.ScriptTarget.ES2020);
  	const host = ts.createCompilerHost(compilerOptions);
  	/** When alias defined in config, resolve module with alias */
-@@ -640,6 +691,7 @@ const unpluginFactory = (rawOptions = {}) => {
+@@ -640,14 +691,19 @@ const unpluginFactory = (rawOptions = {}) => {
  	const { cache: cacheOptions, log: logOption } = options;
  	const showLog = logOption === "verbose" && cacheOptions;
  	let viteConfig;
@@ -88,7 +88,38 @@ index e61604c..481cdd7 100644
  	/** Generate code with source map. */
  	function generateCodeWithMap({ source, code, id }) {
  		/** Generate Magic string */
-@@ -690,14 +742,14 @@ const unpluginFactory = (rawOptions = {}) => {
+ 		const s = new MagicString(source);
+ 		/** Generate diff */
+-		const diff = Diff.diff(source, code);
+-		/** Cleanup diff */
+-		Diff.diffCleanupSemantic(diff);
++		/**
++		* Gumroad patch: the character diff stopped at a 1-second deadline, so output varied with CPU
++		* load. A line diff with no deadline is fast, machine-independent, and rebuilds the code exactly.
++		*/
++		const lines = Diff.diffLinesToChars(source, code);
++		const diff = Diff.diff(lines.chars1, lines.chars2, { diffTimeout: 0 }, false);
++		Diff.diffCharsToLines(diff, lines.lineArray);
+ 		let offset = 0;
+ 		for (let index = 0; index < diff.length; index++) {
+ 			const [type, text] = diff[index];
+@@ -663,14 +719,7 @@ const unpluginFactory = (rawOptions = {}) => {
+ 				/** If next is equal to 1, then overwrite */
+ 				if (next != null && next[0] === 1) {
+ 					const replaceText = next[1];
+-					/**
+-					* Get first non-whitespace character of text (maybe bug of
+-					* magic-string) text.search(/\S/) ignore `\n`, but it is important
+-					* (https://github.com/ryoppippi/unplugin-typia/issues/434)
+-					*/
+-					const firstNonWhitespaceIndexOfText = text.startsWith("\n") ? 0 : text.search(/\S/);
+-					const offsetStart = offset + (firstNonWhitespaceIndexOfText > 0 ? firstNonWhitespaceIndexOfText : 0);
+-					s.update(offsetStart, offset + textLength, replaceText);
++					s.update(offset, offset + textLength, replaceText);
+ 					/** Skip next */
+ 					index += 1;
+ 				} else s.remove(offset, offset + textLength);
+@@ -690,14 +739,14 @@ const unpluginFactory = (rawOptions = {}) => {
  	async function transformCodeWithTypiaTransform({ id, source, ctx, options }) {
  		try {
  			var _usingCtx = _usingCtx$1();
@@ -106,7 +137,7 @@ index e61604c..481cdd7 100644
  				if (showLog) if (code != null) log("success", `Transformed: ${id}`);
  				else log("error", `Transform is null: ${id}`);
  				/** Save cache */
-@@ -716,8 +768,10 @@ const unpluginFactory = (rawOptions = {}) => {
+@@ -716,8 +765,10 @@ const unpluginFactory = (rawOptions = {}) => {
  		enforce: options.enforce,
  		vite: { configResolved(config) {
  			viteConfig = config;
