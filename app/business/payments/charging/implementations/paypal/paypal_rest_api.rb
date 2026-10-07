@@ -130,6 +130,23 @@ class PaypalRestApi
     execute_request
   end
 
+  # Reads a dispute on the seller's PayPal account. The response's `links` list the actions
+  # PayPal will accept from us on this case right now (e.g. `provide_supporting_info`).
+  def fetch_dispute(dispute_id:, merchant_account:)
+    @request = new_request(path: "/v1/customer/disputes/#{dispute_id}", verb: "GET")
+    @request.headers["Paypal-Auth-Assertion"] = paypal_auth_assertion_header(merchant_account.charge_processor_merchant_id)
+    execute_request
+  end
+
+  # Adds a written note to a dispute that is under review, on the seller's behalf.
+  def provide_dispute_supporting_info(dispute_id:, merchant_account:, notes:)
+    @request = new_request(path: "/v1/customer/disputes/#{dispute_id}/provide-supporting-info", verb: "POST")
+    @request.headers["Content-Type"] = "multipart/form-data"
+    @request.headers["Paypal-Auth-Assertion"] = paypal_auth_assertion_header(merchant_account.charge_processor_merchant_id)
+    @request.body = { "input" => PayPalHttp::FormPart.new({ notes: }, { "Content-Type": "application/json" }) }
+    execute_request
+  end
+
   private
     def purchase_unit(purchase_unit_info)
       currency = purchase_unit_info[:currency]
