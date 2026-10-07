@@ -28,6 +28,8 @@ class Charge::PresentmentAllocator
   ROUNDING_ABSORBING_COMPONENT_INDEXES = [0, 1, 4].freeze
 
   AUSTRALIAN_GST_RATE = BigDecimal("0.1")
+  # GST on a GST-inclusive amount is amount * rate / (1 + rate), i.e. one-eleventh at 10%.
+  AUSTRALIAN_GST_INCLUSIVE_DIVISOR = (1 + AUSTRALIAN_GST_RATE) / AUSTRALIAN_GST_RATE
 
   # Gumroad-collected 10% GST for an Australian buyer. Both the quote (from the tax
   # calculation) and the charge (from the purchase) ask this of the same ZipTaxRate row.
@@ -147,7 +149,7 @@ class Charge::PresentmentAllocator
       next shares unless shares[3].positive? && shares[2].zero?
 
       gst_inclusive_cents = shares[0] + shares[1] + shares[3]
-      gst_cents = (BigDecimal(gst_inclusive_cents) / 11).round.to_i
+      gst_cents = (BigDecimal(gst_inclusive_cents) / AUSTRALIAN_GST_INCLUSIVE_DIVISOR).round.to_i
       difference = gst_cents - shares[3]
       next shares if difference.zero? || shares[0] < difference
 
