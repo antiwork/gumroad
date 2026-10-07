@@ -361,7 +361,7 @@ describe("AccountDetailsSection nationality field", () => {
     renderSection(makeUser({ country_code: "AE" }));
 
     const note = screen.getByText(
-      "Nationals of Cuba, Iran, North Korea and Syria cannot be verified, so those countries are not listed.",
+      "Nationals of Cuba, Iran, North Korea and Syria cannot be verified, so their nationalities are not listed.",
     );
 
     expect(screen.getByLabelText("Nationality").getAttribute("aria-describedby")).toBe(note.id);

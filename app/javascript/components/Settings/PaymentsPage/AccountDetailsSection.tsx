@@ -354,7 +354,9 @@ const AccountDetailsSection = ({
         ))}
       </Select>
       <FieldsetDescription id={`${uid}-nationality-note`}>
-        Nationals of Cuba, Iran, North Korea and Syria cannot be verified, so those countries are not listed.
+        {hongKongPassport
+          ? "Nationals of Cuba, Iran, North Korea and Syria cannot be verified, so those countries are not listed."
+          : "Nationals of Cuba, Iran, North Korea and Syria cannot be verified, so their nationalities are not listed."}
       </FieldsetDescription>
     </Fieldset>
   ) : null;
