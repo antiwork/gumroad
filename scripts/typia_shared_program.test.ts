@@ -136,6 +136,25 @@ describe("typia transform in a one-shot build", () => {
   }, 60_000);
 });
 
+describe("rebuilding typia's output as an edit of the source", () => {
+  const rebuildCases: [string, string, string][] = [
+    ["two inserts at one offset", "b\n", "x\n  b\n"],
+    ["CRLF source, LF output", "a\r\nb\r\n", "  a\n  b\n"],
+    ["no final newline", "a\nb", "a\nb\nc"],
+    ["empty source", "", "x\n"],
+    ["empty output", "x\n", ""],
+    ["inserts between re-indented lines", "  a\n  b\n  c\n", "x\n    a\ny\n    b\n    c\nz"],
+    ["more distinct lines than line ids", Array.from({ length: 70_000 }, (_, i) => `line${i}\n`).join(""), "new\n"],
+    ["a replaced line above the diff limit", `${"x".repeat(30_000)}\n`, `${"y".repeat(30_000)}\n`],
+  ];
+
+  it.each(rebuildCases)("rebuilds the output exactly: %s", async (_name, source, code) => {
+    const { gumroadRebuild } = await import("../node_modules/@typia/unplugin/dist/core.js");
+    const expected = code === "new\n" ? `new\n${source}` : code;
+    expect(gumroadRebuild(source, expected).toString()).toBe(expected);
+  });
+});
+
 describe("typia transform in dev", () => {
   const devTransform = async (beforeTransform?: () => Promise<unknown>) => {
     const server = await createServer({ ...config(), server: { middlewareMode: true }, appType: "custom" });

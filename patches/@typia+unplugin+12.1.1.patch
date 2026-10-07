@@ -1,5 +1,5 @@
 diff --git a/node_modules/@typia/unplugin/dist/core.js b/node_modules/@typia/unplugin/dist/core.js
-index e61604c..baaaadc 100644
+index e61604c..cffa38c 100644
 --- a/node_modules/@typia/unplugin/dist/core.js
 +++ b/node_modules/@typia/unplugin/dist/core.js
 @@ -493,7 +493,7 @@ const sourceCache = /* @__PURE__ */ new Map();
@@ -80,7 +80,7 @@ index e61604c..baaaadc 100644
  	const tsSource = ts.createSourceFile(id, source, compilerOptions.target ?? ts.ScriptTarget.ES2020);
  	const host = ts.createCompilerHost(compilerOptions);
  	/** When alias defined in config, resolve module with alias */
-@@ -634,20 +685,59 @@ function createFilter$1(include, exclude) {
+@@ -634,49 +685,85 @@ function createFilter$1(include, exclude) {
  	return createFilter(include, exclude);
  }
  /** The main unplugin instance. */
@@ -88,7 +88,10 @@ index e61604c..baaaadc 100644
 +* Gumroad patch: a whole-file character diff stopped at a 1-second deadline, so the output varied
 +* with CPU load. Lines are aligned by their trimmed text, then each aligned piece gets a character
 +* diff with no deadline: small, so fast, the same on every machine, and fine-grained for maps.
++* Fixed limits, not a clock, bound the work.
 +*/
++const MAX_PIECE_DIFF = 2e4;
++const MAX_LINE_IDS = 65534;
 +function alignedDiff(source, code) {
 +	const split = (text) => text.match(/[^\n]*\n|[^\n]+$/g) ?? [];
 +	const ids = new Map();
@@ -101,18 +104,22 @@ index e61604c..baaaadc 100644
 +		if (from === to) return from ? [[0, from]] : [];
 +		if (!from) return [[1, to]];
 +		if (!to) return [[-1, from]];
++		if (Math.min(from.length, to.length) > MAX_PIECE_DIFF) return [[-1, from], [1, to]];
 +		const diff = Diff.diff(from, to, { diffTimeout: 0 });
 +		Diff.diffCleanupSemantic(diff);
 +		return diff;
 +	};
 +	const a = split(source);
 +	const b = split(code);
++	const chars1 = a.map(key).join("");
++	const chars2 = b.map(key).join("");
++	if (ids.size > MAX_LINE_IDS) return piece(source, code);
 +	const result = [];
 +	let i = 0;
 +	let j = 0;
 +	let removed = "";
 +	let added = "";
-+	for (const [type, text] of Diff.diff(a.map(key).join(""), b.map(key).join(""), { diffTimeout: 0 }, false)) {
++	for (const [type, text] of Diff.diff(chars1, chars2, { diffTimeout: 0 }, false)) {
 +		if (type === -1) removed += a.slice(i, i += text.length).join("");
 +		else if (type === 1) added += b.slice(j, j += text.length).join("");
 +		else {
@@ -122,7 +129,29 @@ index e61604c..baaaadc 100644
 +		}
 +	}
 +	result.push(...piece(removed, added));
++	// Edits at one offset must arrive merged: rebuild() prepends each insert, so two would swap.
++	Diff.diffCleanupMerge(result);
 +	return result;
++}
++function rebuild(source, code) {
++	const s = new MagicString(source);
++	const diff = alignedDiff(source, code);
++	let offset = 0;
++	for (let index = 0; index < diff.length; index++) {
++		const [type, text] = diff[index];
++		const textLength = text.length;
++		if (type === 0) offset += textLength;
++		else if (type === 1) s.prependLeft(offset, text);
++		else if (type === -1) {
++			const next = diff.at(index + 1);
++			if (next != null && next[0] === 1) {
++				s.update(offset, offset + textLength, next[1]);
++				index += 1;
++			} else s.remove(offset, offset + textLength);
++			offset += textLength;
++		}
++	}
++	return s;
 +}
  const unpluginFactory = (rawOptions = {}) => {
  	const options = resolveOptions(rawOptions);
@@ -133,20 +162,27 @@ index e61604c..baaaadc 100644
 +	const shared = { enabled: false, program: void 0 };
  	/** Generate code with source map. */
  	function generateCodeWithMap({ source, code, id }) {
- 		/** Generate Magic string */
- 		const s = new MagicString(source);
- 		/** Generate diff */
+-		/** Generate Magic string */
+-		const s = new MagicString(source);
+-		/** Generate diff */
 -		const diff = Diff.diff(source, code);
 -		/** Cleanup diff */
 -		Diff.diffCleanupSemantic(diff);
-+		const diff = alignedDiff(source, code);
- 		let offset = 0;
- 		for (let index = 0; index < diff.length; index++) {
- 			const [type, text] = diff[index];
-@@ -663,14 +753,7 @@ const unpluginFactory = (rawOptions = {}) => {
- 				/** If next is equal to 1, then overwrite */
- 				if (next != null && next[0] === 1) {
- 					const replaceText = next[1];
+-		let offset = 0;
+-		for (let index = 0; index < diff.length; index++) {
+-			const [type, text] = diff[index];
+-			const textLength = text.length;
+-			/** Skip */
+-			if (type === 0) offset += textLength;
+-			else if (type === 1)
+- /** Add text */
+-			s.prependLeft(offset, text);
+-			else if (type === -1) {
+-				/** Remove text */
+-				const next = diff.at(index + 1);
+-				/** If next is equal to 1, then overwrite */
+-				if (next != null && next[0] === 1) {
+-					const replaceText = next[1];
 -					/**
 -					* Get first non-whitespace character of text (maybe bug of
 -					* magic-string) text.search(/\S/) ignore `\n`, but it is important
@@ -155,11 +191,17 @@ index e61604c..baaaadc 100644
 -					const firstNonWhitespaceIndexOfText = text.startsWith("\n") ? 0 : text.search(/\S/);
 -					const offsetStart = offset + (firstNonWhitespaceIndexOfText > 0 ? firstNonWhitespaceIndexOfText : 0);
 -					s.update(offsetStart, offset + textLength, replaceText);
-+					s.update(offset, offset + textLength, replaceText);
- 					/** Skip next */
- 					index += 1;
- 				} else s.remove(offset, offset + textLength);
-@@ -690,14 +773,14 @@ const unpluginFactory = (rawOptions = {}) => {
+-					/** Skip next */
+-					index += 1;
+-				} else s.remove(offset, offset + textLength);
+-				offset += textLength;
+-			}
+-		}
++		const s = rebuild(source, code);
+ 		if (!s.hasChanged()) return;
+ 		return {
+ 			code: s.toString(),
+@@ -690,14 +777,14 @@ const unpluginFactory = (rawOptions = {}) => {
  	async function transformCodeWithTypiaTransform({ id, source, ctx, options }) {
  		try {
  			var _usingCtx = _usingCtx$1();
@@ -177,7 +219,7 @@ index e61604c..baaaadc 100644
  				if (showLog) if (code != null) log("success", `Transformed: ${id}`);
  				else log("error", `Transform is null: ${id}`);
  				/** Save cache */
-@@ -716,8 +799,10 @@ const unpluginFactory = (rawOptions = {}) => {
+@@ -716,8 +803,10 @@ const unpluginFactory = (rawOptions = {}) => {
  		enforce: options.enforce,
  		vite: { configResolved(config) {
  			viteConfig = config;
@@ -188,6 +230,15 @@ index e61604c..baaaadc 100644
  			if (logOption !== false) log("box", cacheOptions ? `Cache enabled` : `Cache disabled`);
  		},
  		transformInclude(id) {
+@@ -768,6 +857,6 @@ const unpluginFactory = (rawOptions = {}) => {
+ */
+ const unplugin = /* @__PURE__ */ createUnplugin(unpluginFactory);
+ //#endregion
+-export { wrap as a, resolveOptions as i, unplugin as n, transformTypia as r, createFilter$1 as t };
++export { wrap as a, resolveOptions as i, unplugin as n, transformTypia as r, createFilter$1 as t, rebuild as gumroadRebuild };
+ 
+ //# sourceMappingURL=core.js.map
+\ No newline at end of file
 diff --git a/node_modules/@typia/unplugin/dist/options.d.ts b/node_modules/@typia/unplugin/dist/options.d.ts
 index 9ed739d..c99f9b5 100644
 --- a/node_modules/@typia/unplugin/dist/options.d.ts
