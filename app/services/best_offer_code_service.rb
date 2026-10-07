@@ -1,11 +1,13 @@
 # frozen_string_literal: true
 
 class BestOfferCodeService
-  def initialize(product:, url_code: nil, quantity: 1, buyer: nil)
+  def initialize(product:, url_code: nil, quantity: 1, buyer: nil, checkout_products: nil)
     @product = product
     @url_code = url_code.presence
     @quantity = quantity
     @buyer = buyer
+    @checkout_products = checkout_products
+    @checkout_code_savings = {}
     @default_code = @product.default_offer_code&.code
   end
 
@@ -25,8 +27,8 @@ class BestOfferCodeService
     return url_code_result if !default_code_valid
     return default_code_result if !url_code_valid
 
-    url_code_amount = amount_off_from_discount(url_code_result[:discount])
-    default_code_amount = amount_off_from_discount(default_code_result[:discount])
+    url_code_amount = @checkout_products ? @checkout_code_savings.fetch(@url_code) : amount_off_from_discount(url_code_result[:discount])
+    default_code_amount = @checkout_products ? @checkout_code_savings.fetch(@default_code) : amount_off_from_discount(default_code_result[:discount])
 
     url_code_amount > default_code_amount ? url_code_result : default_code_result
   end
@@ -43,24 +45,49 @@ class BestOfferCodeService
 
       response = OfferCodeDiscountComputingService.new(
         normalized_code,
-        {
+        @checkout_products || {
           @product.unique_permalink => {
             permalink: @product.unique_permalink,
             quantity: [@quantity, offer_code.minimum_quantity.to_i || 0].max
           }
         },
-        buyer: @buyer
+        buyer: @buyer,
+        key_by_input: !@checkout_products.nil?
       ).process
 
       if response[:error_code].present?
         return { valid: false, error_code: response[:error_code] }
       end
 
+      discount = if @checkout_products
+        entries = response[:products_data]
+        @checkout_code_savings[code] = checkout_savings(entries)
+        value = entries.values.first[:discount]
+        value[:once_per_cart] ? value.merge(cents: entries.values.sum { _1[:discount][:cents] }) : value
+      else
+        response[:products_data][@product.unique_permalink][:discount]
+      end
+
       {
         valid: true,
         code: code,
-        discount: response[:products_data][@product.unique_permalink][:discount]
+        discount:
       }
+    end
+
+    def checkout_savings(entries)
+      entries.sum do |input_key, data|
+        product = @checkout_products.fetch(input_key)
+        quantity = product[:quantity].to_i
+        next 0 if quantity.zero?
+
+        discount = data[:discount]
+        next discount[:cents] if discount[:once_per_cart]
+
+        unit_price = product.fetch(:price_cents) / quantity
+        amount = discount[:type] == "fixed" ? [discount[:cents], unit_price].min : (unit_price * discount[:percents] / 100.0).round
+        amount * quantity
+      end
     end
 
     def amount_off_from_discount(discount)

@@ -262,6 +262,92 @@ describe("ProductShowScenario", type: :system, js: true) do
           expect(page).to have_selector("[aria-label='Discount code']", text: default_offer_code.code, wait: 5)
           expect(page).to have_text("Total US$90", normalize_ws: true, wait: 5)
         end
+
+        it "keeps an eligible URL discount when the default requires more units" do
+          product.update!(price_cents: 1000, quantity_enabled: true)
+          default_offer_code.update!(amount_cents: nil, amount_percentage: 30, minimum_quantity: 3)
+          url_offer_code = create(:percentage_offer_code, user: seller, products: [product], code: "SAVE10", amount_percentage: 10)
+
+          visit "#{product.long_url}/#{url_offer_code.code}?wanted=true&quantity=1"
+
+          expect(page).to have_current_path(/^\/checkout/, wait: 10)
+          expect(page).to have_selector("[aria-label='Discount code']", text: url_offer_code.code)
+          expect(page).to have_text("Total US$9", normalize_ws: true)
+        end
+
+        it "keeps an eligible URL discount when checkout caps the requested quantity to available stock" do
+          product.update!(price_cents: 1000, quantity_enabled: true, max_purchase_count: 2)
+          default_offer_code.update!(amount_cents: nil, amount_percentage: 30, minimum_quantity: 3)
+          url_offer_code = create(:percentage_offer_code, user: seller, products: [product], code: "SAVE10", amount_percentage: 10)
+
+          visit "#{product.long_url}/#{url_offer_code.code}?wanted=true&quantity=3"
+
+          expect(page).to have_current_path(/^\/checkout/, wait: 10)
+          within_cart_item product.name do
+            expect(page).to have_text("Qty: 2")
+          end
+          expect(page).to have_selector("[aria-label='Discount code']", text: url_offer_code.code)
+          expect(page).to have_text("Total US$18", normalize_ws: true)
+        end
+
+        it "keeps a bulk discount qualified by another option already in the buyer's cart" do
+          product.update!(price_cents: 1000, quantity_enabled: true)
+          default_offer_code.update!(amount_cents: nil, amount_percentage: 30, minimum_quantity: 3)
+          url_offer_code = create(:percentage_offer_code, user: seller, products: [product], code: "SAVE10", amount_percentage: 10)
+          category = create(:variant_category, link: product)
+          existing_option = create(:variant, variant_category: category, name: "Standard")
+          incoming_option = create(:variant, variant_category: category, name: "Deluxe")
+          buyer = create(:user)
+          cart = create(:cart, user: buyer)
+          create(:cart_product, cart:, product:, option: existing_option, quantity: 2)
+          login_as buyer
+
+          visit "#{product.long_url}/#{url_offer_code.code}?wanted=true&quantity=1&option=#{incoming_option.external_id}"
+
+          expect(page).to have_current_path(/^\/checkout/, wait: 10)
+          expect(page).to have_text("Version: Standard")
+          expect(page).to have_text("Version: Deluxe")
+          expect(page).to have_selector("[aria-label='Discount code']", text: default_offer_code.code)
+          expect(page).to have_text("Total US$21", normalize_ws: true)
+        end
+
+        it "compares scoped discounts with the actual once-per-cart savings" do
+          product.update!(price_cents: 1000, quantity_enabled: true)
+          default_offer_code.update!(amount_cents: 700, once_per_cart: true)
+          category = create(:variant_category, link: product)
+          existing_option = create(:variant, variant_category: category, name: "Standard")
+          incoming_option = create(:variant, variant_category: category, name: "Deluxe")
+          url_offer_code = create(:percentage_offer_code, user: seller, products: [product], code: "SCOPED30", amount_percentage: 30, variants: [existing_option])
+          buyer = create(:user)
+          cart = create(:cart, user: buyer)
+          create(:cart_product, cart:, product:, option: existing_option, quantity: 2)
+          login_as buyer
+
+          visit "#{product.long_url}/#{url_offer_code.code}?wanted=true&quantity=1&option=#{incoming_option.external_id}"
+
+          expect(page).to have_current_path(/^\/checkout/, wait: 10)
+          expect(page).to have_selector("[aria-label='Discount code']", text: default_offer_code.code)
+          expect(page).to have_text("Total US$23", normalize_ws: true)
+        end
+
+        it "compares scoped discounts without counting uncovered units for a fixed code" do
+          product.update!(price_cents: 1000, quantity_enabled: true)
+          default_offer_code.update!(amount_cents: nil, amount_percentage: 10)
+          category = create(:variant_category, link: product)
+          existing_option = create(:variant, variant_category: category, name: "Standard")
+          incoming_option = create(:variant, variant_category: category, name: "Deluxe")
+          url_offer_code = create(:offer_code, user: seller, products: [product], code: "SCOPED2", amount_cents: 200, variants: [incoming_option])
+          buyer = create(:user)
+          cart = create(:cart, user: buyer)
+          create(:cart_product, cart:, product:, option: existing_option, quantity: 2)
+          login_as buyer
+
+          visit "#{product.long_url}/#{url_offer_code.code}?wanted=true&quantity=1&option=#{incoming_option.external_id}"
+
+          expect(page).to have_current_path(/^\/checkout/, wait: 10)
+          expect(page).to have_selector("[aria-label='Discount code']", text: default_offer_code.code)
+          expect(page).to have_text("Total US$27", normalize_ws: true)
+        end
       end
     end
   end

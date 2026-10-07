@@ -263,6 +263,15 @@ describe BestOfferCodeService do
         product.update!(default_offer_code: default_offer_code)
       end
 
+      context "when a better bulk code is only a product-page preview" do
+        let(:quantity) { 1 }
+        let(:url_offer_code) { create(:offer_code, products: [product], code: "URL_BULK", amount_cents: 400, minimum_quantity: 3, currency_type: product.price_currency_type) }
+
+        it "continues advertising the bulk discount before its minimum is selected" do
+          expect(subject.result).to include(valid: true, code: url_offer_code.code, discount: include(cents: 400, minimum_quantity: 3))
+        end
+      end
+
       context "when quantity meets minimum for url_code" do
         let(:quantity) { 2 }
 
@@ -425,6 +434,79 @@ describe BestOfferCodeService do
       it "uses quantity of 1 by default" do
         expect(subject.result&.dig(:code)).to eq(url_offer_code.code)
         expect(subject.result&.dig(:valid)).to be(true)
+      end
+    end
+
+    context "with checkout entries" do
+      let(:category) { create(:variant_category, link: product) }
+      let(:existing_option) { create(:variant, variant_category: category) }
+      let(:incoming_price_difference) { 0 }
+      let(:incoming_option) { create(:variant, variant_category: category, price_difference_cents: incoming_price_difference) }
+      let(:url_offer_code) { create(:percentage_offer_code, user: seller, products: [product], code: "SCOPED30", amount_percentage: 30, variants: [existing_option]) }
+      let(:default_offer_code) { create(:offer_code, user: seller, products: [product], code: "ONCE7", amount_cents: 700, once_per_cart: true) }
+      let(:checkout_products) do
+        {
+          "incoming" => { permalink: product.unique_permalink, quantity: 1, variant_external_id: incoming_option.external_id, price_cents: product.cart_item(option: incoming_option.external_id)[:price] },
+          "existing" => { permalink: product.unique_permalink, quantity: 2, variant_external_id: existing_option.external_id, price_cents: product.cart_item(option: existing_option.external_id)[:price] * 2 },
+        }
+      end
+
+      before { product.update!(default_offer_code:) }
+
+      subject(:result) { described_class.new(product:, url_code: url_offer_code.code, quantity: 3, checkout_products:).result }
+
+      it "compares the scoped percentage's eligible units with the once-per-cart savings" do
+        expect(result).to include(valid: true, code: default_offer_code.code)
+        expect(result.keys).to contain_exactly(:valid, :code, :discount)
+      end
+
+      context "with a scoped per-unit fixed code" do
+        let(:url_offer_code) { create(:offer_code, user: seller, products: [product], code: "SCOPED2", amount_cents: 200, variants: [incoming_option]) }
+        let(:default_offer_code) { create(:percentage_offer_code, user: seller, products: [product], code: "ALL10", amount_percentage: 10) }
+
+        it "does not multiply its savings by units outside its scope" do
+          expect(result).to include(valid: true, code: default_offer_code.code)
+        end
+      end
+
+      context "with a higher-priced incoming option" do
+        let(:incoming_price_difference) { 3000 }
+        let(:url_offer_code) { create(:percentage_offer_code, user: seller, products: [product], code: "SCOPED50", amount_percentage: 50, variants: [incoming_option]) }
+        let(:default_offer_code) { create(:offer_code, user: seller, products: [product], code: "ONCE17", amount_cents: 1700, once_per_cart: true) }
+
+        it "compares savings at the actual eligible option price" do
+          expect(result).to include(valid: true, code: url_offer_code.code)
+        end
+      end
+
+      context "when eligible per-unit percentage rounding differs from rounding the total" do
+        let(:product) { create(:product, user: seller, price_cents: 199, price_currency_type: "usd") }
+        let(:url_offer_code) { create(:percentage_offer_code, user: seller, products: [product], code: "SCOPED50", amount_percentage: 50, variants: [existing_option]) }
+        let(:default_offer_code) { create(:offer_code, user: seller, products: [product], code: "ONCE199", amount_cents: 199, once_per_cart: true) }
+
+        it "preserves checkout's per-unit rounding across the eligible quantity" do
+          expect(result).to include(valid: true, code: url_offer_code.code)
+        end
+      end
+
+      context "when a once-per-cart amount is carried to a multi-unit line" do
+        let(:url_offer_code) { create(:percentage_offer_code, user: seller, products: [product], code: "ALL60", amount_percentage: 60) }
+        let(:default_offer_code) { create(:offer_code, user: seller, products: [product], code: "ONCE15", amount_cents: 1500, once_per_cart: true) }
+
+        it "counts each allocation once instead of multiplying it by the line quantity" do
+          allocations = OfferCodeDiscountComputingService.new(default_offer_code.code, checkout_products, key_by_input: true).process[:products_data]
+          expect(allocations.transform_values { _1[:discount][:cents] }).to eq("incoming" => 1000, "existing" => 500)
+          expect(result).to include(valid: true, code: url_offer_code.code)
+        end
+      end
+
+      context "with a per-unit fixed discount larger than its eligible unit price" do
+        let(:url_offer_code) { create(:offer_code, user: seller, products: [product], code: "SCOPED20", amount_cents: 2000, variants: [incoming_option]) }
+        let(:default_offer_code) { create(:percentage_offer_code, user: seller, products: [product], code: "ALL60", amount_percentage: 60) }
+
+        it "caps the savings at the eligible unit price" do
+          expect(result).to include(valid: true, code: default_offer_code.code)
+        end
       end
     end
 

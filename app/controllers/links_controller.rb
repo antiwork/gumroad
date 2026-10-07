@@ -161,11 +161,13 @@ class LinksController < ApplicationController
 
       unless (@product.customizable_price || cart_item[:option]&.[](:is_pwyw)) &&
              (params[:price].blank? || params[:price] < cart_item[:price])
+        checkout_products = checkout_discount_products(cart_item)
         discount_result = BestOfferCodeService.new(
           product: @product,
           url_code: params[:offer_code] || params[:code],
-          quantity: (params[:quantity] || 1).to_i,
-          buyer: logged_in_user
+          quantity: checkout_products.values.sum { _1[:quantity] },
+          buyer: logged_in_user,
+          checkout_products:
         ).result
         code = discount_result&.dig(:code) if discount_result&.dig(:valid)
         redirect_params = params.permit!.except(:code, :offer_code)
@@ -885,6 +887,37 @@ class LinksController < ApplicationController
   end
 
   private
+    def checkout_discount_products(cart_item)
+      cart = Cart.fetch_by(user: logged_in_user, browser_guid: cookies[:_gumroad_guid])
+      cart_products = cart&.visible_cart_products&.includes(:option)&.to_a || []
+      products = cart_products.first(Cart::MAX_ALLOWED_CART_PRODUCTS).filter_map do |cart_product|
+        next unless cart_product.product_id == @product.id
+
+        saved_item = @product.cart_item(price: cart_product.price, option: cart_product.option&.external_id, rent: cart_product.rent, recurrence: cart_product.recurrence)
+        { permalink: @product.unique_permalink, quantity: cart_product.quantity, variant_external_id: saved_item[:option]&.[](:id) || "", price_cents: saved_item[:price] * cart_product.quantity }
+      end
+
+      # Match checkout's arrival defaults and stock cap before checking the code minimum.
+      quantity = cart_item[:quantity].to_i.nonzero? || 1
+      quantity_left = cart_item[:option] ? cart_item[:option][:quantity_left] : @product.remaining_for_sale_count
+      quantity = [quantity, quantity_left].compact.min
+      incoming = { permalink: @product.unique_permalink, quantity:, variant_external_id: cart_item[:option]&.[](:id) || "", price_cents: cart_item[:price] * quantity }
+      recurring = @product.recurrences.present?
+      replacement_index = recurring ? (0 if products.any?) : products.index { _1[:variant_external_id] == incoming[:variant_external_id] }
+
+      return products.each_with_index.to_h { |product, index| [index.to_s, product] } if cart_products.size + (replacement_index ? 0 : 1) > Cart::MAX_ALLOWED_CART_PRODUCTS
+
+      if recurring
+        products = [incoming]
+      elsif replacement_index
+        products[replacement_index] = incoming
+      else
+        products.unshift(incoming)
+      end
+
+      products.each_with_index.to_h { |product, index| [index.to_s, product] }
+    end
+
     def external_analytics_view_id(analytics_view_payload:)
       Digest::SHA256.hexdigest([@product.id, analytics_view_payload.fetch("event_id")].join("\0"))
     end
