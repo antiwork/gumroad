@@ -23,7 +23,7 @@ class CallLimitationInfo < ApplicationRecord
 
   def can_take_more_calls_on?(start_time)
     return true if maximum_calls_per_day.nil?
-    call.sold_calls.starts_on_date(start_time, call.user.timezone).count < maximum_calls_per_day
+    call.sold_calls.occupies_availability.starts_on_date(start_time, call.user.timezone).count < maximum_calls_per_day
   end
 
   private

@@ -80,6 +80,19 @@ describe Call do
       expect(call.errors.full_messages).to include("Selected time is no longer available")
     end
 
+    it "accepts a replacement booking after a full refund releases the daily maximum", :freeze_time do
+      call_limitation_info.update!(maximum_calls_per_day: 1, minimum_notice_in_minutes: nil)
+      start_time = 1.day.from_now
+      existing_call = create(:call, start_time:, end_time: start_time + 1.hour, link:)
+      existing_call.purchase.update!(stripe_refunded: true)
+      create(:refund, purchase: existing_call.purchase)
+
+      expect(Call.occupies_availability.where(id: existing_call.id)).to be_empty
+      expect do
+        create(:call, start_time:, end_time: start_time + 1.hour, link:)
+      end.to change { link.sold_calls.occupies_availability.count }.from(0).to(1)
+    end
+
     it "rejects a slot already sold on the seller's other call product" do
       other_product = create(:call_product, :available_for_a_year, user: link.user)
       create(:call, start_time: 1.day.from_now, end_time: 1.day.from_now + 1.hour, link: other_product)

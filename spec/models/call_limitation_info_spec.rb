@@ -36,6 +36,33 @@ describe CallLimitationInfo do
         expect(call_limitation_info.can_take_more_calls_on?(tomorrow_noon)).to be false
         expect(call_limitation_info.can_take_more_calls_on?(tomorrow_noon.next_day)).to be true
       end
+
+      %w[failed test_successful].each do |purchase_state|
+        it "ignores #{purchase_state} purchases when counting the daily maximum" do
+          create(:call, start_time: tomorrow_noon, end_time: tomorrow_noon + 1.hour,
+                        purchase: build(:call_purchase, link: call_product, purchase_state:))
+          create(:call, start_time: tomorrow_noon + 1.hour, end_time: tomorrow_noon + 2.hours, link: call_product)
+
+          expect(call_limitation_info.can_take_more_calls_on?(tomorrow_noon)).to be true
+        end
+      end
+
+      it "ignores fully refunded purchases when counting the daily maximum" do
+        create(:call, start_time: tomorrow_noon, end_time: tomorrow_noon + 1.hour,
+                      purchase: build(:call_purchase, :refunded, link: call_product))
+        create(:call, start_time: tomorrow_noon + 1.hour, end_time: tomorrow_noon + 2.hours, link: call_product)
+
+        expect(call_limitation_info.can_take_more_calls_on?(tomorrow_noon)).to be true
+      end
+
+      it "counts in-progress and partially refunded purchases toward the daily maximum" do
+        create(:call, start_time: tomorrow_noon, end_time: tomorrow_noon + 1.hour,
+                      purchase: build(:call_purchase, link: call_product, purchase_state: "in_progress"))
+        create(:call, start_time: tomorrow_noon + 1.hour, end_time: tomorrow_noon + 2.hours,
+                      purchase: build(:call_purchase, link: call_product, stripe_partially_refunded: true))
+
+        expect(call_limitation_info.can_take_more_calls_on?(tomorrow_noon)).to be false
+      end
     end
   end
 
