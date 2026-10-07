@@ -538,6 +538,24 @@ describe("Discover", js: true, type: :system) do
       expect(affiliate_cookie).to be_present
     end
 
+    it "links to the subcategories of the current category" do
+      visit "#{discover_host}/software-development"
+
+      within("nav[aria-label='Subcategories']") do
+        expect(page).to have_link("Programming", href: "/software-development/programming")
+        click_on "Programming"
+      end
+      expect(page).to have_current_path("/software-development/programming")
+      expect(page).to have_selector("[aria-label='Breadcrumbs']", text: "Software Development\n/Programming")
+
+      within("nav[aria-label='Subcategories']") do
+        click_on "C#"
+      end
+      expect(page).to have_current_path("/software-development/programming/c-sharp")
+      expect(page).to have_selector("[aria-label='Breadcrumbs']", text: "Software Development\n/Programming\n/C#")
+      expect(page).not_to have_selector("nav[aria-label='Subcategories']")
+    end
+
     describe "discover nav" do
       it "sets aria-current on the active category" do
         visit "#{discover_host}/business-and-money"

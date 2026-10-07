@@ -12,6 +12,7 @@ import { Search } from "$app/components/Discover/Search";
 import { useDomains } from "$app/components/DomainSettings";
 import { Logo } from "$app/components/Logo";
 import { Avatar } from "$app/components/ui/Avatar";
+import { Pill } from "$app/components/ui/Pill";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 
 const UserActionButtons: React.FC = () => {
@@ -199,16 +200,33 @@ export const Layout: React.FC<{
         </div>
 
         {showTaxonomy && taxonomyPath ? (
-          <TaxonomyCategoryBreadcrumbs
-            taxonomyPath={taxonomyPath}
-            taxonomies={taxonomiesForNav}
-            onClickTaxonomy={onTaxonomyChange}
-          />
+          <>
+            <TaxonomyCategoryBreadcrumbs
+              taxonomyPath={taxonomyPath}
+              taxonomies={taxonomiesForNav}
+              onClickTaxonomy={onTaxonomyChange}
+            />
+            <SubcategoryLinks
+              taxonomyPath={taxonomyPath}
+              taxonomies={taxonomiesForNav}
+              onClickTaxonomy={onTaxonomyChange}
+            />
+          </>
         ) : null}
       </header>
       {children}
     </div>
   );
+};
+
+const handleTaxonomyLinkClick = (
+  e: React.MouseEvent<HTMLAnchorElement>,
+  taxonomySlugPath: string,
+  onClickTaxonomy: (taxonomySlugPath?: string) => void,
+) => {
+  if (e.ctrlKey || e.metaKey || e.shiftKey) return;
+  e.preventDefault();
+  onClickTaxonomy(taxonomySlugPath);
 };
 
 const TaxonomyCategoryBreadcrumbs = ({
@@ -239,11 +257,7 @@ const TaxonomyCategoryBreadcrumbs = ({
             ) : null}
             <a
               href={`/${taxonomySlugPath}`}
-              onClick={(e) => {
-                if (e.ctrlKey || e.shiftKey) return;
-                e.preventDefault();
-                onClickTaxonomy(taxonomySlugPath);
-              }}
+              onClick={(e) => handleTaxonomyLinkClick(e, taxonomySlugPath, onClickTaxonomy)}
               aria-current={isPage ? "page" : undefined}
               itemProp="item"
               className={classNames({ "no-underline": isPage })}
@@ -257,3 +271,47 @@ const TaxonomyCategoryBreadcrumbs = ({
     </ol>
   </div>
 );
+
+const SubcategoryLinks = ({
+  taxonomyPath,
+  taxonomies,
+  onClickTaxonomy,
+}: {
+  taxonomyPath: string;
+  taxonomies: Taxonomy[];
+  onClickTaxonomy: (taxonomySlugPath?: string) => void;
+}) => {
+  // Slugs repeat across branches (e.g. "blender"), so resolve the path one level at a time.
+  let currentKey: string | null = null;
+  for (const slug of taxonomyPath.split("/")) {
+    const parentKey: string | null = currentKey;
+    const match: Taxonomy | undefined = taxonomies.find((t) => t.slug === slug && t.parent_key === parentKey);
+    if (!match) return null;
+    currentKey = match.key;
+  }
+  const children = taxonomies.filter((t) => t.parent_key === currentKey);
+  if (children.length === 0) return null;
+
+  return (
+    <nav aria-label="Subcategories" className="mt-4">
+      <ul className="-mx-4 flex max-w-none list-none gap-2 overflow-x-auto px-4 lg:mx-0 lg:flex-wrap lg:overflow-visible lg:px-0">
+        {children.map((child) => {
+          const childPath = `${taxonomyPath}/${child.slug}`;
+          return (
+            <li key={child.key} className="shrink-0">
+              <Pill asChild>
+                <a
+                  href={`/${childPath}`}
+                  onClick={(e) => handleTaxonomyLinkClick(e, childPath, onClickTaxonomy)}
+                  className="no-underline hover:shadow"
+                >
+                  {child.label}
+                </a>
+              </Pill>
+            </li>
+          );
+        })}
+      </ul>
+    </nav>
+  );
+};
