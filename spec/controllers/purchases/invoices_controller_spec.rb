@@ -369,12 +369,14 @@ describe Purchases::InvoicesController, :vcr, type: :controller, inertia: true d
             @purchase.purchase_sales_tax_info = PurchaseSalesTaxInfo.new(country_code: Compliance::Countries::IRL.alpha2, business_vat_id: "IE6388047V")
             @purchase.save!
 
-            allow(InvoicePresenter).to receive(:new).and_call_original
-
             post :create, params: payload.merge(vat_id: "IE6388047V", purchase_id: @purchase.external_id, email: @purchase.email)
 
             expect(Refund.last).to eq nil
-            expect(InvoicePresenter).to have_received(:new).with(anything, hash_including(business_vat_id: "IE6388047V", show_reverse_charge_note: true))
+            expect(session["invoice_file_url_#{@purchase.external_id}"]).to eq(@s3_obj_public_url)
+
+            pdf_text = PDF::Reader.new(StringIO.new(@generated_pdf)).page(1).text.squish
+            expect(pdf_text).to include("IE6388047V")
+            expect(pdf_text).to include("Reverse Charge - You are required to account for the VAT")
           end
 
           it "refunds tax for a valid ABN id" do
