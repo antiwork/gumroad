@@ -364,6 +364,19 @@ describe Purchases::InvoicesController, :vcr, type: :controller, inertia: true d
             expect(pdf_text).not_to include("Reverse Charge - You are required to account for the GST")
           end
 
+          it "keeps the reverse charge note when a valid VAT id is re-entered on an already zero-rated purchase" do
+            @purchase.update!(gumroad_tax_cents: 0)
+            @purchase.purchase_sales_tax_info = PurchaseSalesTaxInfo.new(country_code: Compliance::Countries::IRL.alpha2, business_vat_id: "IE6388047V")
+            @purchase.save!
+
+            allow(InvoicePresenter).to receive(:new).and_call_original
+
+            post :create, params: payload.merge(vat_id: "IE6388047V", purchase_id: @purchase.external_id, email: @purchase.email)
+
+            expect(Refund.last).to eq nil
+            expect(InvoicePresenter).to have_received(:new).with(anything, hash_including(business_vat_id: "IE6388047V", show_reverse_charge_note: true))
+          end
+
           it "refunds tax for a valid ABN id" do
             purchase_sales_tax_info = PurchaseSalesTaxInfo.new(country_code: Compliance::Countries::AUS.alpha2)
             @purchase.update!(purchase_sales_tax_info:)

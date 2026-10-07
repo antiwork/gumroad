@@ -29,14 +29,18 @@ class Purchases::InvoicesController < ApplicationController
     submitted_vat_id = invoice_params[:vat_id]&.strip.presence
     refundable_vat_id = nil
     refundable_vat_id = submitted_vat_id if @chargeable.taxed_by_gumroad? && is_vat_id_valid?(submitted_vat_id)
+    already_reverse_charged = submitted_vat_id.present? && !@chargeable.taxed_by_gumroad? &&
+                              @chargeable.purchase_sales_tax_info&.business_vat_id.present? && is_vat_id_valid?(submitted_vat_id)
     business_vat_id =
       if refundable_vat_id
         refundable_vat_id
+      elsif already_reverse_charged
+        submitted_vat_id
       elsif submitted_vat_id && InvoicePresenter::FormInfo::BUSINESS_ID_COUNTRY_CODES.include?(selected_country_code)
         submitted_vat_id
       end
-    business_vat_id_country_code = selected_country_code if business_vat_id.present? && refundable_vat_id.blank?
-    show_reverse_charge_note = refundable_vat_id.present? if business_vat_id.present?
+    business_vat_id_country_code = selected_country_code if business_vat_id.present? && refundable_vat_id.blank? && !already_reverse_charged
+    show_reverse_charge_note = (refundable_vat_id.present? || already_reverse_charged) if business_vat_id.present?
 
     invoice_presenter = InvoicePresenter.new(
       @chargeable,
