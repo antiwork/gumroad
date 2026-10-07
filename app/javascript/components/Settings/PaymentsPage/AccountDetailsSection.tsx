@@ -326,6 +326,41 @@ const AccountDetailsSection = ({
   const mustReenterFullSsn =
     user.has_outstanding_full_ssn_requirement && user.individual_tax_id_is_last_four && ssnRequirementCountry === "US";
 
+  // A Hong Kong company's foreign representative types the passport number before the country that
+  // issued it, so the issuing country renders after the number instead of above it.
+  const issuingCountryField = showNationalityField ? (
+    <Fieldset state={errorFieldNames.has("nationality") ? "danger" : undefined}>
+      <FieldsetTitle>
+        <Label htmlFor={`${uid}-nationality`}>{hongKongPassport ? "Passport issuing country" : "Nationality"}</Label>
+      </FieldsetTitle>
+      {/* No wrapper div: a plain block around the Select keeps its `inline-grid`
+          root at content width, so the control renders narrower than the fields
+          beside it. As a direct child of the flex column it stretches like they do. */}
+      <Select
+        id={`${uid}-nationality`}
+        disabled={isFormDisabled}
+        aria-invalid={errorFieldNames.has("nationality")}
+        aria-describedby={`${uid}-nationality-note`}
+        value={complianceInfo.nationality || ""}
+        onChange={(evt) => updateComplianceInfo({ nationality: evt.target.value })}
+      >
+        <option value="" disabled>
+          Select country
+        </option>
+        {Object.entries(countries).map(([code, name]) => (
+          <option key={code} value={code} disabled={name.includes("(not supported)")}>
+            {name}
+          </option>
+        ))}
+      </Select>
+      <FieldsetDescription id={`${uid}-nationality-note`}>
+        {hongKongPassport
+          ? "Nationals of Cuba, Iran, North Korea and Syria cannot be verified, so those countries are not listed."
+          : "Nationals of Cuba, Iran, North Korea and Syria cannot be verified, so their nationalities are not listed."}
+      </FieldsetDescription>
+    </Fieldset>
+  ) : null;
+
   return (
     <section className="grid gap-8">
       {showAccountTypeSection ? (
@@ -1174,40 +1209,7 @@ const AccountDetailsSection = ({
           </Fieldset>
         </div>
       </Fieldset>
-      {showNationalityField ? (
-        <Fieldset state={errorFieldNames.has("nationality") ? "danger" : undefined}>
-          <FieldsetTitle>
-            <Label htmlFor={`${uid}-nationality`}>
-              {hongKongPassport ? "Passport issuing country" : "Nationality"}
-            </Label>
-          </FieldsetTitle>
-          {/* No wrapper div: a plain block around the Select keeps its `inline-grid`
-              root at content width, so the control renders narrower than the fields
-              beside it. As a direct child of the flex column it stretches like they do. */}
-          <Select
-            id={`${uid}-nationality`}
-            disabled={isFormDisabled}
-            aria-invalid={errorFieldNames.has("nationality")}
-            aria-describedby={`${uid}-nationality-note`}
-            value={complianceInfo.nationality || ""}
-            onChange={(evt) => updateComplianceInfo({ nationality: evt.target.value })}
-          >
-            <option value="" disabled>
-              Select country
-            </option>
-            {Object.entries(countries).map(([code, name]) => (
-              <option key={code} value={code} disabled={name.includes("(not supported)")}>
-                {name}
-              </option>
-            ))}
-          </Select>
-          <FieldsetDescription id={`${uid}-nationality-note`}>
-            {hongKongPassport
-              ? "Choose the country that issued your passport. Nationals of Cuba, Iran, North Korea and Syria cannot be verified, so those countries are not listed."
-              : "Nationals of Cuba, Iran, North Korea and Syria cannot be verified, so their nationalities are not listed."}
-          </FieldsetDescription>
-        </Fieldset>
-      ) : null}
+      {hongKongPassport ? null : issuingCountryField}
       {needsIndividualTaxId && individualTaxIdConfig ? (
         <Fieldset
           state={errorFieldNames.has("individual_tax_id") || individualTaxIdValidationError ? "danger" : undefined}
@@ -1314,6 +1316,7 @@ const AccountDetailsSection = ({
           </div>
         </Fieldset>
       ) : null}
+      {hongKongPassport ? issuingCountryField : null}
     </section>
   );
 };

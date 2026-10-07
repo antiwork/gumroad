@@ -615,6 +615,39 @@ const BeneficialOwnersSection = ({
     [owners],
   );
 
+  // A Hong Kong company's foreign representative types the passport number before the country that
+  // issued it, so the issuing country renders after the number instead of above it.
+  const issuingCountryField =
+    NATIONALITY_REQUIRED_COUNTRIES.includes(defaultCountry ?? "") || hongKongPassport ? (
+      <Fieldset>
+        <FieldsetTitle>
+          <Label htmlFor={`${uid}-nationality`}>{hongKongPassport ? "Passport issuing country" : "Nationality"}</Label>
+        </FieldsetTitle>
+        <Select
+          id={`${uid}-nationality`}
+          required={!hongKongPassport || editState?.mode !== "edit"}
+          disabled={isFormDisabled}
+          aria-describedby={`${uid}-nationality-note`}
+          value={formState.nationality || ""}
+          onChange={(event) => updateForm({ nationality: event.target.value })}
+        >
+          <option value="" disabled>
+            {hongKongPassport ? "Select country" : "Nationality"}
+          </option>
+          {Object.entries(countries).map(([code, name]) => (
+            <option key={code} value={code} disabled={name.includes("(not supported)")}>
+              {name}
+            </option>
+          ))}
+        </Select>
+        <FieldsetDescription id={`${uid}-nationality-note`}>
+          {hongKongPassport
+            ? "Nationals of Cuba, Iran, North Korea and Syria cannot be verified, so those countries are not listed."
+            : "Nationals of Cuba, Iran, North Korea and Syria cannot be verified, so their nationalities are not listed."}
+        </FieldsetDescription>
+      </Fieldset>
+    ) : null;
+
   return (
     <section className="grid gap-4">
       <header className="grid gap-2">
@@ -1163,36 +1196,7 @@ const BeneficialOwnersSection = ({
                   </Select>
                 </Fieldset>
 
-                {NATIONALITY_REQUIRED_COUNTRIES.includes(defaultCountry ?? "") || hongKongPassport ? (
-                  <Fieldset>
-                    <FieldsetTitle>
-                      <Label htmlFor={`${uid}-nationality`}>
-                        {hongKongPassport ? "Passport issuing country" : "Nationality"}
-                      </Label>
-                    </FieldsetTitle>
-                    <Select
-                      id={`${uid}-nationality`}
-                      required={!hongKongPassport || editState.mode !== "edit"}
-                      disabled={isFormDisabled}
-                      aria-describedby={`${uid}-nationality-note`}
-                      value={formState.nationality || ""}
-                      onChange={(event) => updateForm({ nationality: event.target.value })}
-                    >
-                      <option value="" disabled>
-                        {hongKongPassport ? "Issuing country" : "Nationality"}
-                      </option>
-                      {Object.entries(countries).map(([code, name]) => (
-                        <option key={code} value={code} disabled={name.includes("(not supported)")}>
-                          {name}
-                        </option>
-                      ))}
-                    </Select>
-                    <FieldsetDescription id={`${uid}-nationality-note`}>
-                      Nationals of Cuba, Iran, North Korea and Syria cannot be verified, so their nationalities are not
-                      listed.
-                    </FieldsetDescription>
-                  </Fieldset>
-                ) : null}
+                {hongKongPassport ? null : issuingCountryField}
 
                 {(() => {
                   const isUs = defaultCountry === "US";
@@ -1217,7 +1221,9 @@ const BeneficialOwnersSection = ({
                           <Label htmlFor={`${uid}-${taxIdConfig.idSuffix}`}>{taxIdConfig.label}</Label>
                         </FieldsetTitle>
                         <FieldsetDescription>
-                          We are required to collect this information to satisfy regulatory obligations.
+                          {hongKongPassport
+                            ? "Enter their passport number instead of a Hong Kong ID number, since they live outside Hong Kong."
+                            : "We are required to collect this information to satisfy regulatory obligations."}
                         </FieldsetDescription>
                         {hasTaxIdOnFile && !isEditingTaxId ? (
                           <div className="flex flex-col gap-2">
@@ -1269,6 +1275,8 @@ const BeneficialOwnersSection = ({
                     </Fieldset>
                   );
                 })()}
+
+                {hongKongPassport ? issuingCountryField : null}
               </>
             )}
 

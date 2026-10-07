@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -19,6 +19,13 @@ beforeAll(() => {
 });
 
 afterEach(cleanup);
+
+// happy-dom's compareDocumentPosition does not report source order, so read the form controls back
+// in the order the DOM actually has them.
+const passportFieldsInOrder = (number: HTMLElement, issuingCountry: HTMLElement): HTMLElement[] =>
+  Array.from(document.querySelectorAll<HTMLElement>("input, select")).filter(
+    (field) => field === number || field === issuingCountry,
+  );
 
 // A co-director with no ID number on file: exactly the shape Stripe asks us to complete with a DOB,
 // an address and a title, and never asks for an ID number for.
@@ -141,7 +148,9 @@ describe("BeneficialOwnersSection nationality note", () => {
     renderSection([], "AE");
     fireEvent.click(await screen.findByRole("button", { name: "Add beneficial owner" }));
 
-    const note = await screen.findByText(/Nationals of Cuba, Iran, North Korea and Syria/u);
+    const note = await screen.findByText(
+      "Nationals of Cuba, Iran, North Korea and Syria cannot be verified, so their nationalities are not listed.",
+    );
 
     expect(screen.getByLabelText("Nationality").getAttribute("aria-describedby")).toBe(note.id);
   });
@@ -175,6 +184,48 @@ describe("BeneficialOwnersSection Hong Kong passport", () => {
     expect(await screen.findByLabelText("Passport number")).toBeTruthy();
     expect(screen.queryByLabelText("Hong Kong ID Number")).toBeNull();
     expect(screen.getByLabelText<HTMLSelectElement>("Passport issuing country").required).toBe(true);
+  });
+
+  it("puts the passport number before the issuing country", async () => {
+    await openAddForm();
+
+    fireEvent.change(screen.getByLabelText("Country"), { target: { value: "GB" } });
+
+    const number = await screen.findByLabelText("Passport number");
+    const issuingCountry = screen.getByLabelText("Passport issuing country");
+
+    expect(passportFieldsInOrder(number, issuingCountry)).toEqual([number, issuingCountry]);
+    expect(within(issuingCountry).getByRole("option", { name: "Select country" })).toBeTruthy();
+  });
+
+  it("explains why a passport is asked for under the passport number", async () => {
+    await openAddForm();
+    expect(
+      screen.getByText("We are required to collect this information to satisfy regulatory obligations."),
+    ).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText("Country"), { target: { value: "GB" } });
+
+    expect(
+      await screen.findByText(
+        "Enter their passport number instead of a Hong Kong ID number, since they live outside Hong Kong.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.queryByText("We are required to collect this information to satisfy regulatory obligations."),
+    ).toBeNull();
+  });
+
+  it("explains the omitted countries on the issuing-country note only", async () => {
+    await openAddForm();
+
+    fireEvent.change(screen.getByLabelText("Country"), { target: { value: "GB" } });
+
+    const note = await screen.findByText(
+      "Nationals of Cuba, Iran, North Korea and Syria cannot be verified, so those countries are not listed.",
+    );
+
+    expect(screen.getByLabelText("Passport issuing country").getAttribute("aria-describedby")).toBe(note.id);
   });
 
   it("does not require the issuing country when editing an owner abroad who has none on file", async () => {
