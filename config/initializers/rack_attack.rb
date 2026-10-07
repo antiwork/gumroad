@@ -65,12 +65,12 @@ class Rack::Attack
   def self.throttle_with_exponential_backoff(name:, requests:, period:, max_level: 5, &block_proc)
     block = Proc.new do |req|
       block_proc.call(req)
-    rescue Rack::QueryParser::InvalidParameterError, TypeError, Rack::Multipart::EmptyContentError
-      # Malformed request bodies (bad form encoding, or a multipart POST with an
-      # empty/truncated body) make `req.params` raise. These requests come from
-      # scanners and broken clients, not real users — skip this throttle rule for
-      # them instead of crashing the middleware with a 500. The dedicated
-      # "invalid_params" throttle below still rate-limits these senders.
+    rescue Rack::QueryParser::InvalidParameterError, Rack::QueryParser::QueryLimitError, TypeError, Rack::Multipart::EmptyContentError
+      # Malformed requests (bad form encoding, an empty multipart body, or a query
+      # string nested past Rack's depth/param limits) make `req.params` raise.
+      # Scanners and broken clients send these, so skip this rule rather than
+      # 500ing the middleware; the "invalid_params" throttle below still
+      # rate-limits the senders.
       nil
     end
 
@@ -127,7 +127,7 @@ class Rack::Attack
     req.params # test that params are valid
 
     false
-  rescue Rack::QueryParser::InvalidParameterError, Rack::Multipart::EmptyContentError
+  rescue Rack::QueryParser::InvalidParameterError, Rack::QueryParser::QueryLimitError, Rack::Multipart::EmptyContentError
     "#{req.path}:#{req.remote_ip}"
   end
 
@@ -245,7 +245,7 @@ class Rack::Attack
         "#{req.remote_ip}:#{Digest::SHA256.hexdigest(request_params["device_code"].to_s)}"
       end
     end
-  rescue Rack::QueryParser::InvalidParameterError, TypeError, Rack::Multipart::EmptyContentError
+  rescue Rack::QueryParser::InvalidParameterError, Rack::QueryParser::QueryLimitError, TypeError, Rack::Multipart::EmptyContentError
     nil
   end
 
@@ -403,7 +403,7 @@ class Rack::Attack
     page = req.params["page"]
     page_number = page.is_a?(Integer) || page.is_a?(String) ? page.to_i : 0
     req.remote_ip if req.path.ends_with?("/v2/sales") && page_number > 10
-  rescue Rack::QueryParser::InvalidParameterError, TypeError, Rack::Multipart::EmptyContentError, NoMethodError
+  rescue Rack::QueryParser::InvalidParameterError, Rack::QueryParser::QueryLimitError, TypeError, Rack::Multipart::EmptyContentError, NoMethodError
     nil
   end
 
@@ -415,7 +415,7 @@ class Rack::Attack
       # return the login if present, nil otherwise
       req.params["user"] && req.params["user"]["login"].presence
     end
-  rescue Rack::QueryParser::InvalidParameterError, TypeError, Rack::Multipart::EmptyContentError
+  rescue Rack::QueryParser::InvalidParameterError, Rack::QueryParser::QueryLimitError, TypeError, Rack::Multipart::EmptyContentError
     nil
   end
 

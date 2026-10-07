@@ -408,6 +408,49 @@ describe "Rack::Attack throttle", type: :request do
     end
   end
 
+  describe "params-based throttles when the query string exceeds Rack's limits" do
+    # A query string nested past Rack's param depth limit makes `req.params` raise
+    # Rack::QueryParser::QueryLimitError, which would 500 the middleware instead
+    # of letting ActionDispatch answer with a 400.
+    def too_deeply_nested_request(path)
+      Rack::Attack::Request.new(
+        Rack::MockRequest.env_for(
+          "#{path}?#{('a' + '[b]' * 40)}=1",
+          method: "GET",
+          input: "",
+          "HTTP_CF_CONNECTING_IP" => "203.0.113.96"
+        )
+      )
+    end
+
+    before { reset_rack_attack! }
+    after { reset_rack_attack! }
+
+    it "does not raise for a params-keyed throttle path (/follow)" do
+      expect do
+        Rack::Attack.configuration.throttled?(too_deeply_nested_request("/follow"))
+      end.not_to raise_error
+    end
+
+    it "does not raise for the login throttle path (/login.json)" do
+      expect do
+        Rack::Attack.configuration.throttled?(too_deeply_nested_request("/login.json"))
+      end.not_to raise_error
+    end
+
+    it "does not raise for the sales API pagination throttle path (/api/v2/sales)" do
+      expect do
+        Rack::Attack.configuration.throttled?(too_deeply_nested_request("/api/v2/sales"))
+      end.not_to raise_error
+    end
+
+    it "does not raise on the invalid_params path" do
+      expect do
+        Rack::Attack.configuration.throttled?(too_deeply_nested_request("/"))
+      end.not_to raise_error
+    end
+  end
+
   describe "GET /api/v2/sales throttle with a nested (JSON:API) page param" do
     before { reset_rack_attack! }
     after { reset_rack_attack! }
