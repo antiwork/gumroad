@@ -70,38 +70,14 @@ describe AddMusicTheoryAndCompositionTaxonomies do
   end
 
   describe "#down" do
-    it "removes the rows it created" do
-      migration.up
-
-      migration.down
-
-      described_class::SLUGS.each do |slug|
-        expect(Taxonomy.find_by_path([described_class::PARENT_SLUG, slug])).to be_nil
-      end
-    end
-
-    it "keeps a row a seller has already categorised a product under" do
+    it "keeps the rows, so a rollback cannot orphan a product saved under one" do
       migration.up
       in_use = Taxonomy.find_by_path(%w[music-and-sound-design music-theory])
-      create(:product, taxonomy: in_use)
+      product = create(:product, taxonomy: in_use)
 
-      migration.down
+      expect { migration.down }.not_to change(Taxonomy, :count)
 
-      expect(in_use.reload).to be_present
-      expect(Taxonomy.find_by_path(%w[music-and-sound-design composition])).to be_nil
-    end
-
-    it "busts the nav cache" do
-      migration.up
-      Rails.cache.write("taxonomies_for_nav", [{ slug: "stale" }])
-
-      migration.down
-
-      expect(Rails.cache.read("taxonomies_for_nav")).to be_nil
-    end
-
-    it "does nothing when the rows are already absent" do
-      expect { migration.down }.not_to raise_error
+      expect(product.reload.taxonomy).to eq(in_use)
     end
   end
 end

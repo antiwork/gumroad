@@ -1,10 +1,9 @@
 # frozen_string_literal: true
 
-# Adds Music Theory and Composition under Music & Sound Design in every environment.
+# Adds Music Theory and Composition under Music & Sound Design.
 #
-# The seed file alone never reaches production: db/seeds.rb skips this seed directory there and
-# deploys run db:migrate, not db:seed (antiwork/gumroad-private#1738, as in #6870). The seed entries
-# stay for fresh development and test databases; this migration lands the rows in production.
+# Deploys also run taxonomy:seed, which loads the same seed rows. This migration lands them as soon
+# as db:migrate finishes, so they exist even if that non-fatal seed step fails (gumroad-private#3320).
 class AddMusicTheoryAndCompositionTaxonomies < ActiveRecord::Migration[7.1]
   PARENT_SLUG = "music-and-sound-design"
   SLUGS = %w[music-theory composition].freeze
@@ -27,18 +26,10 @@ class AddMusicTheoryAndCompositionTaxonomies < ActiveRecord::Migration[7.1]
     bust_taxonomy_cache
   end
 
-  # Keeps any row a product already points at, so a rollback cannot drop a seller's categorisation.
+  # Irreversible on purpose: a rollback that deletes a category can race a seller saving a product
+  # under it and leave a dangling taxonomy_id. The additive rows are harmless to keep.
   def down
-    parent = Taxonomy.find_by_path([PARENT_SLUG])
-    return if parent.nil?
-
-    rows = Taxonomy.where(parent:, slug: SLUGS).to_a
-    in_use = Link.where(taxonomy_id: rows.map(&:id)).distinct.pluck(:taxonomy_id)
-
-    say "Keeping #{in_use.size} taxonomy row(s) still referenced by products" if in_use.any?
-
-    rows.reject { |row| in_use.include?(row.id) }.each(&:destroy!)
-    bust_taxonomy_cache
+    say "Keeping #{SLUGS.join(", ")}: removing a category could orphan products saved under it"
   end
 
   private
