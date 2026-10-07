@@ -236,6 +236,11 @@ FANOUT = {
     spec/requests/products/show
   ],
   # Renderers: links_controller custom HTML + users_controller.rb:425 profile wrapper.
+  # Rendered by the two post email services, not by a mailer.
+  %r{\Aapp/views/posts/post_email\.html\.erb\z} => %w[
+    spec/services/post_sendgrid_api_spec.rb
+    spec/services/post_resend_api_spec.rb
+  ],
 }.freeze
 
 # Config files with dedicated, local coverage. Boot-global files (domain.rb,
