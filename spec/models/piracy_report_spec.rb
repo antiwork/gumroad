@@ -129,18 +129,18 @@ describe PiracyReport do
     end
   end
 
-  describe ".blocked_on_recipient" do
-    it "finds only the reports that were screened and stayed in screening" do
+  describe ".blocked_on_recipient and .needs_review" do
+    it "splits the reports waiting in screening by the agent's verdict" do
       unscreened = create(:piracy_report, :screening)
-      blocked = create(:piracy_report, :screening, screened_at: Time.current)
-      declined = create(:piracy_report, :screening, screened_at: Time.current).tap(&:fail_screening!)
-      passed = create(:piracy_report, :awaiting_signature, screened_at: Time.current)
+      blocked = create(:piracy_report, :screening, screening_verdict: "pass", screened_at: Time.current)
+      review = create(:piracy_report, :screening, screening_verdict: "review", screened_at: Time.current)
+      declined = create(:piracy_report, :screening, screening_verdict: "fail", screened_at: Time.current).tap(&:fail_screening!)
+      passed = create(:piracy_report, :awaiting_signature, screening_verdict: "pass", screened_at: Time.current)
 
       expect(described_class.blocked_on_recipient).to contain_exactly(blocked)
-      expect(blocked.blocked_on_recipient?).to be(true)
-      expect(unscreened.blocked_on_recipient?).to be(false)
-      expect(declined.reload.blocked_on_recipient?).to be(false)
-      expect(passed.blocked_on_recipient?).to be(false)
+      expect(described_class.needs_review).to contain_exactly(review)
+      expect([blocked, review, unscreened, declined.reload, passed].map(&:blocked_on_recipient?)).to eq([true, false, false, false, false])
+      expect([blocked, review, unscreened, declined, passed].map(&:needs_review?)).to eq([false, true, false, false, false])
     end
   end
 
