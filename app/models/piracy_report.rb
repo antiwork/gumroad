@@ -7,6 +7,7 @@ class PiracyReport < ApplicationRecord
   # The reported URL prints in the notice as written, so it gets a tighter bound than the column.
   MAX_REPORTED_URL_LENGTH = 500
   MAX_SIGNED_BY_NAME_LENGTH = 255
+  REPLY_TOKEN_LENGTH = 16
   # The seller checks every one of these to sign, and the report records which version they saw.
   # Changing any text means a new version.
   SIGNATURE_STATEMENT_VERSION = "2026-10-07"
@@ -58,7 +59,25 @@ class PiracyReport < ApplicationRecord
     event :sign do
       transition awaiting_signature: :signed
     end
+
+    event :send_notice do
+      transition signed: :sent
+    end
+
+    event :receive_counter_notice do
+      transition sent: :counter_noticed
+    end
+
+    event :resolve do
+      transition sent: :resolved
+      transition counter_noticed: :resolved
+    end
   end
+
+  # A notice only leaves over the exact text the seller signed, with the signature on it. The
+  # state machine can move the row to `sent` on its own, so the gate has to be a validation.
+  validate :delivery_is_signed, if: :sent?
+  before_validation :generate_reply_token, if: :sent?
 
   # Two kinds of report stay in `screening` after the agent has answered, and both wait on a person:
   # a pass on a host the registry cannot route, and a `review` verdict the agent could not decide.
@@ -98,6 +117,14 @@ class PiracyReport < ApplicationRecord
       )
       sign
     end
+  end
+
+  # A counter-notice replies to the notice's own address, so it reaches the report it answers
+  # instead of the shared support queue.
+  def reply_to_address
+    return if reply_token.blank?
+
+    "support+#{reply_token}@#{DEFAULT_EMAIL_DOMAIN}"
   end
 
   def self.parse_http_url(value)
@@ -156,6 +183,24 @@ class PiracyReport < ApplicationRecord
         self.external_id = Array.new(EXTERNAL_ID_LENGTH) { EXTERNAL_ID_ALPHABET[SecureRandom.random_number(EXTERNAL_ID_ALPHABET.length)] }.join
         break unless self.class.exists?(external_id:)
       end
+    end
+
+    def generate_reply_token
+      return if reply_token.present?
+
+      loop do
+        self.reply_token = SecureRandom.urlsafe_base64(REPLY_TOKEN_LENGTH)
+        break unless self.class.exists?(reply_token:)
+      end
+    end
+
+    def delivery_is_signed
+      errors.add(:base, "The notice was not signed") if signed_at.blank? || signed_by_name.blank?
+      # A signature taken under other confirmations does not cover the text about to go out.
+      errors.add(:base, "The notice was signed under different confirmations") unless signature_statement_version.to_s == SIGNATURE_STATEMENT_VERSION
+      errors.add(:base, "The notice changed after it was signed") unless notice_digest.present? && Digest::SHA256.hexdigest(notice_text.to_s) == notice_digest
+      errors.add(:sent_to_email, "is missing") if sent_to_email.blank?
+      errors.add(:reply_token, "is missing") if reply_token.blank?
     end
 
     def set_normalized_url_digest

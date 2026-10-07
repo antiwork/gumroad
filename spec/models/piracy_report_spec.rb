@@ -236,4 +236,41 @@ describe PiracyReport do
       expect(report.reload.signed_by_name).to eq("Jane Doe")
     end
   end
+
+  describe "the gate on sending" do
+    # The state machine can move the row to `sent` on its own, so the gate has to be a validation.
+    def mark_sent(report)
+      report.assign_attributes(state: "sent", sent_at: Time.current, sent_to_email: report.recipient_email)
+      report
+    end
+
+    it "refuses to save as sent over text that changed after it was signed" do
+      report = create(:piracy_report, :signed)
+      report.update_columns(notice_text: "Notice text\n\nSigned: /s/ Someone Else, January 1, 2026\n")
+
+      expect(mark_sent(report)).not_to be_valid
+      expect(report.errors[:base]).to include("The notice changed after it was signed")
+    end
+
+    it "refuses to save as sent without a signature" do
+      report = create(:piracy_report, :signed, signed_at: nil, signed_by_name: nil, signature_statement_version: nil)
+
+      expect(mark_sent(report)).not_to be_valid
+      expect(report.errors[:base]).to include("The notice was not signed")
+    end
+
+    it "refuses to save as sent under different confirmations" do
+      report = create(:piracy_report, :signed, signature_statement_version: "2026-01-01")
+
+      expect(mark_sent(report)).not_to be_valid
+      expect(report.errors[:base]).to include("The notice was signed under different confirmations")
+    end
+
+    it "accepts the signed text and gives the report a reply address of its own" do
+      report = create(:piracy_report, :sent)
+
+      expect(report.reply_token).to be_present
+      expect(report.reply_to_address).to eq("support+#{report.reply_token}@#{DEFAULT_EMAIL_DOMAIN}")
+    end
+  end
 end

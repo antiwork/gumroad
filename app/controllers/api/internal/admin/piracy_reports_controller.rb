@@ -9,7 +9,7 @@ class Api::Internal::Admin::PiracyReportsController < Api::Internal::Admin::Base
   SCREEN_PARAM_KEYS = %w[verdict checks].freeze
 
   # Params are read as strings so a nested value like state[x]=y cannot reach a query as a hash.
-  before_action :find_report_or_render, only: %i[show start_screening screen]
+  before_action :find_report_or_render, only: %i[show start_screening screen send_notice counter_notice resolve]
 
   def index
     reports = PiracyReport.includes(:seller, :product).order(:id)
@@ -89,6 +89,48 @@ class Api::Internal::Admin::PiracyReportsController < Api::Internal::Admin::Base
     end
   end
 
+  # Sends the signed notice. The gate is on the record, so this cannot mail text the seller did not sign.
+  def send_notice
+    record_admin_write(action: "piracy_reports.send_notice", target: @report) do
+      result = PiracyReports::SendService.new(report: @report).call
+
+      if result.success?
+        render json: { success: true, report: serialize_detail(result.report) }
+      else
+        render json: { success: false, message: result.errors.to_sentence, errors: result.errors }, status: :unprocessable_entity
+      end
+    end
+  end
+
+  def counter_notice
+    received_at = params[:received_at].present? ? parse_time(params[:received_at]) : Time.current
+    return render json: { success: false, message: "received_at must be a timestamp" }, status: :bad_request if received_at.nil?
+
+    record_admin_write(action: "piracy_reports.counter_notice", target: @report) do
+      result = PiracyReports::CounterNoticeService.new(
+        report: @report, body: params[:body], received_at:
+      ).call
+
+      if result.success?
+        render json: { success: true, report: serialize_detail(result.report) }
+      else
+        render json: { success: false, message: result.errors.to_sentence, errors: result.errors }, status: :unprocessable_entity
+      end
+    end
+  end
+
+  def resolve
+    record_admin_write(action: "piracy_reports.resolve", target: @report) do
+      @report.with_lock do
+        @report.assign_attributes(resolved_at: Time.current, resolution: params[:resolution].to_s.presence)
+        @report.resolve!
+      end
+      render json: { success: true, report: serialize_detail(@report) }
+    rescue StateMachines::InvalidTransition => e
+      render json: { success: false, message: e.message }, status: :unprocessable_entity
+    end
+  end
+
   private
     def find_report_or_render
       @report = PiracyReport.find_by(external_id: params[:id].to_s)
@@ -133,7 +175,14 @@ class Api::Internal::Admin::PiracyReportsController < Api::Internal::Admin::Base
         screened_at: report.screened_at.as_json,
         recipient: { name: report.recipient_name, email: report.recipient_email, source_url: report.recipient_source_url },
         # The notice holds the seller's legal name and email; the agent gets only its digest.
-        notice_digest: report.notice_digest
+        notice_digest: report.notice_digest,
+        sent_at: report.sent_at.as_json,
+        sent_to_email: report.sent_to_email,
+        delivery_status: report.delivery_status,
+        counter_notice_received_at: report.counter_notice_received_at.as_json,
+        counter_notice_forwarded_at: report.counter_notice_forwarded_at.as_json,
+        resolved_at: report.resolved_at.as_json,
+        resolution: report.resolution
       )
     end
 

@@ -324,4 +324,98 @@ describe Api::Internal::Admin::PiracyReportsController do
       expect(response.parsed_body["message"]).to eq("The report is not being screened")
     end
   end
+
+  describe "POST send_notice" do
+    before { Feature.activate(PiracyReports::SendService::FLAG) }
+
+    it "sends the signed notice and audits the write" do
+      report = create(:piracy_report, :signed)
+
+      expect do
+        post :send_notice, params: { id: report.external_id }
+      end.to change { AdminApiAuditLog.count }.by(1)
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["report"]["state"]).to eq("sent")
+      expect(report.reload.sent_at).to be_present
+      expect(AdminApiAuditLog.last).to have_attributes(action: "piracy_reports.send_notice", target_external_id: report.external_id)
+    end
+
+    it "returns 422 with the reasons when the notice changed after it was signed" do
+      report = create(:piracy_report, :signed)
+      report.update_columns(notice_text: "#{report.notice_text}\nOne more page.\n")
+
+      post :send_notice, params: { id: report.external_id }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body["errors"]).to include("The notice changed after it was signed")
+      expect(report.reload.state).to eq("signed")
+    end
+
+    it "returns 422 while the kill switch is off" do
+      Feature.deactivate(PiracyReports::SendService::FLAG)
+      report = create(:piracy_report, :signed)
+
+      post :send_notice, params: { id: report.external_id }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body["errors"]).to include("Sending is turned off")
+      expect(report.reload.state).to eq("signed")
+    end
+  end
+
+  describe "POST counter_notice" do
+    let(:report) { create(:piracy_report, :sent) }
+
+    it "records the counter-notice, tells the seller, and audits the write" do
+      expect do
+        post :counter_notice, params: { id: report.external_id, body: "I own this page.", received_at: "2026-10-01T12:00:00Z" }
+      end.to change { AdminApiAuditLog.count }.by(1).and have_enqueued_mail(PiracyReportMailer, :counter_notice_received)
+
+      expect(response).to have_http_status(:ok)
+      expect(report.reload).to have_attributes(state: "counter_noticed", counter_notice_body: "I own this page.")
+      expect(report.counter_notice_received_at).to eq(Time.zone.parse("2026-10-01T12:00:00Z"))
+      expect(AdminApiAuditLog.last).to have_attributes(action: "piracy_reports.counter_notice", target_external_id: report.external_id)
+    end
+
+    it "returns 400 for a received_at that is not a timestamp" do
+      post :counter_notice, params: { id: report.external_id, body: "I own this page.", received_at: "yesterday-ish" }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(report.reload.state).to eq("sent")
+    end
+
+    it "returns 422 when no notice has gone out" do
+      unsent = create(:piracy_report, :signed)
+
+      post :counter_notice, params: { id: unsent.external_id, body: "I own this page." }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(unsent.reload.state).to eq("signed")
+    end
+  end
+
+  describe "POST resolve" do
+    it "records the outcome and audits the write" do
+      report = create(:piracy_report, :sent)
+
+      expect do
+        post :resolve, params: { id: report.external_id, resolution: "restored" }
+      end.to change { AdminApiAuditLog.count }.by(1)
+
+      expect(response).to have_http_status(:ok)
+      expect(report.reload).to have_attributes(state: "resolved", resolution: "restored")
+      expect(report.resolved_at).to be_present
+      expect(AdminApiAuditLog.last).to have_attributes(action: "piracy_reports.resolve", target_external_id: report.external_id)
+    end
+
+    it "returns 422 for a report whose notice never went out" do
+      report = create(:piracy_report, :signed)
+
+      post :resolve, params: { id: report.external_id, resolution: "restored" }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(report.reload.state).to eq("signed")
+    end
+  end
 end

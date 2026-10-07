@@ -1,0 +1,14 @@
+<%= header_section(@subject) %>
+<div>
+  <p>
+    A site responded to the takedown notice we sent for <strong><%= @product_name %></strong>.
+    Their response is below.
+  </p>
+  <%= simple_format(@report.counter_notice_body) %>
+  <p>
+    The page can come back <strong>10 to 14 business days</strong> after the site received this
+    response, unless you file a court action and tell the site's agent about it. If you want to
+    pursue this, talk to a lawyer before that window closes.
+  </p>
+  <p>Reply to this email if you have questions.</p>
+</div>
