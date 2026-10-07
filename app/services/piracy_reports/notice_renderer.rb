@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# The text is frozen on the report and digested, so the seller signs exactly what is later sent.
+# The text is frozen on the report and digested. Signing appends only the signature line.
 class PiracyReports::NoticeRenderer
   def initialize(report)
     @report = report

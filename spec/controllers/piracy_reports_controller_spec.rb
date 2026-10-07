@@ -130,6 +130,8 @@ describe PiracyReportsController, type: :controller, inertia: true do
           notice_text: "Notice text",
           signed_at: nil
         )
+        expect(inertia.props[:confirmations]).to eq(PiracyReport::SIGNATURE_CONFIRMATIONS.map { |key, text| { key:, text: } })
+        expect(inertia.props[:confirmations_version]).to eq(PiracyReport::SIGNATURE_STATEMENT_VERSION)
       end
 
       it "renders the review state before screening finishes" do
@@ -151,25 +153,38 @@ describe PiracyReportsController, type: :controller, inertia: true do
     end
 
     describe "POST sign" do
-      it "records the signature and freezes the notice" do
-        report = create(:piracy_report, :awaiting_signature, seller:, product:)
+      let(:confirmations) { PiracyReport::SIGNATURE_CONFIRMATIONS.keys }
 
-        post :sign, params: { id: report.external_id, signed_by_name: "  Jane  Doe " }
+      it "records the signature, the confirmations version and the IP, and signs the notice" do
+        report = create(:piracy_report, :awaiting_signature, seller:, product:)
+        request.remote_ip = "203.0.113.7"
+
+        post :sign, params: { id: report.external_id, signed_by_name: "  Jane  Doe ", confirmations:, confirmations_version: PiracyReport::SIGNATURE_STATEMENT_VERSION }
 
         expect(report.reload).to have_attributes(
           state: "signed",
-          signed_by_name: "Jane Doe"
+          signed_by_name: "Jane Doe",
+          signed_ip: "203.0.113.7",
+          signature_statement_version: PiracyReport::SIGNATURE_STATEMENT_VERSION
         )
-        expect(report.signed_at).to be_present
-        expect(report.notice_text).to eq("Notice text")
-        expect(report.notice_digest).to eq(Digest::SHA256.hexdigest("Notice text"))
+        expect(report.notice_text).to start_with("Notice text\n\nSigned: /s/ Jane Doe, ")
+        expect(report.notice_digest).to eq(Digest::SHA256.hexdigest(report.notice_text))
         expect(response).to redirect_to(piracy_report_path(report.external_id))
+      end
+
+      it "refuses to sign when a confirmation is unchecked" do
+        report = create(:piracy_report, :awaiting_signature, seller:, product:)
+
+        post :sign, params: { id: report.external_id, signed_by_name: "Jane Doe", confirmations: confirmations.first(4), confirmations_version: PiracyReport::SIGNATURE_STATEMENT_VERSION }
+
+        expect(report.reload.state).to eq("awaiting_signature")
+        expect(flash[:alert]).to include("Check every confirmation to sign")
       end
 
       it "refuses a blank name" do
         report = create(:piracy_report, :awaiting_signature, seller:, product:)
 
-        post :sign, params: { id: report.external_id, signed_by_name: "   " }
+        post :sign, params: { id: report.external_id, signed_by_name: "   ", confirmations:, confirmations_version: PiracyReport::SIGNATURE_STATEMENT_VERSION }
 
         expect(report.reload.state).to eq("awaiting_signature")
         expect(flash[:alert]).to include("full legal name")
@@ -178,7 +193,7 @@ describe PiracyReportsController, type: :controller, inertia: true do
       it "refuses a report that is not waiting for a signature" do
         report = create(:piracy_report, seller:, product:)
 
-        post :sign, params: { id: report.external_id, signed_by_name: "Jane Doe" }
+        post :sign, params: { id: report.external_id, signed_by_name: "Jane Doe", confirmations:, confirmations_version: PiracyReport::SIGNATURE_STATEMENT_VERSION }
 
         expect(report.reload.state).to eq("requested")
         expect(flash[:alert]).to include("not ready to sign")
@@ -187,7 +202,7 @@ describe PiracyReportsController, type: :controller, inertia: true do
       it "does not sign another seller's report" do
         report = create(:piracy_report, :awaiting_signature)
 
-        post :sign, params: { id: report.external_id, signed_by_name: "Jane Doe" }
+        post :sign, params: { id: report.external_id, signed_by_name: "Jane Doe", confirmations:, confirmations_version: PiracyReport::SIGNATURE_STATEMENT_VERSION }
 
         expect(report.reload.state).to eq("awaiting_signature")
         expect(response).to redirect_to(products_path)
@@ -207,7 +222,7 @@ describe PiracyReportsController, type: :controller, inertia: true do
       get :show, params: { id: report.external_id }
       expect(response).to redirect_to(dashboard_url)
 
-      post :sign, params: { id: report.external_id, signed_by_name: "Jane Doe" }
+      post :sign, params: { id: report.external_id, signed_by_name: "Jane Doe", confirmations: PiracyReport::SIGNATURE_CONFIRMATIONS.keys, confirmations_version: PiracyReport::SIGNATURE_STATEMENT_VERSION }
       expect(report.reload.state).to eq("awaiting_signature")
     end
   end

@@ -7,6 +7,16 @@ class PiracyReport < ApplicationRecord
   # The reported URL prints in the notice as written, so it gets a tighter bound than the column.
   MAX_REPORTED_URL_LENGTH = 500
   MAX_SIGNED_BY_NAME_LENGTH = 255
+  # The seller checks every one of these to sign, and the report records which version they saw.
+  # Changing any text means a new version.
+  SIGNATURE_STATEMENT_VERSION = "2026-10-07"
+  SIGNATURE_CONFIRMATIONS = {
+    "details_shared" => "The notice shows my legal name and email address. The site can share the notice with the person who posted the page, and the notice may be published, for example on Lumen.",
+    "own_statements" => "I have read this notice, and I make its statements myself, including the statement under penalty of perjury.",
+    "misrepresentation_liability" => "If I knowingly misrepresent that this page infringes my work, I can be liable for damages, costs and attorneys' fees under 17 U.S.C. § 512(f).",
+    "fair_use_considered" => "I considered whether the page could be a licensed use or a fair use of my work, such as a review, a commentary or a short excerpt.",
+    "authorize_gumroad" => "I authorize Gumroad to send this notice by email for me, and to put my typed name on it as my signature.",
+  }.freeze
   EXTERNAL_ID_LENGTH = 21
   EXTERNAL_ID_ALPHABET = "_-0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
@@ -66,15 +76,26 @@ class PiracyReport < ApplicationRecord
 
   # The seller signs the text frozen on the row, so the signature and the digest travel together.
   # The lock makes the transition and the signature one step against a second submit.
-  def record_signature!(name)
+  def record_signature!(name, confirmations:, statement_version:, ip:)
     with_lock do
       errors.add(:base, "This report is not ready to sign") unless awaiting_signature?
       errors.add(:base, "The notice has not been generated yet") if notice_text.blank?
-      errors.add(:signed_by_name, "must be your full legal name") if name.to_s.strip.blank?
-      errors.add(:signed_by_name, "is too long") if name.to_s.squish.length > MAX_SIGNED_BY_NAME_LENGTH
+      errors.add(:base, "Check every confirmation to sign") unless (SIGNATURE_CONFIRMATIONS.keys - Array(confirmations).map(&:to_s)).empty?
+      # A page left open across a wording change must not record agreement to text the seller never saw.
+      errors.add(:base, "The confirmations changed. Reload the page and read them again.") unless statement_version.to_s == SIGNATURE_STATEMENT_VERSION
+      # Invisible format characters (zero-width, bidi overrides) could blank or disguise the signature.
+      signed_by_name = name.to_s.gsub(/\p{Cf}/, "").squish
+      errors.add(:signed_by_name, "must be your full legal name") if signed_by_name.blank?
+      errors.add(:signed_by_name, "is too long") if signed_by_name.length > MAX_SIGNED_BY_NAME_LENGTH
       next false if errors.any?
 
-      assign_attributes(signed_by_name: name.to_s.squish, signed_at: Time.current)
+      signed_at = Time.current
+      # § 512(c)(3)(A)(i) needs the signature in the notice itself, so it becomes part of the sent text.
+      signed_text = "#{notice_text.rstrip}\n\nSigned: /s/ #{signed_by_name}, #{signed_at.strftime("%B %-d, %Y")}\n"
+      assign_attributes(
+        signed_by_name:, signed_at:, signed_ip: ip, signature_statement_version: SIGNATURE_STATEMENT_VERSION,
+        notice_text: signed_text, notice_digest: Digest::SHA256.hexdigest(signed_text)
+      )
       sign
     end
   end
