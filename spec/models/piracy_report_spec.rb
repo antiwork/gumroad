@@ -129,6 +129,21 @@ describe PiracyReport do
     end
   end
 
+  describe ".blocked_on_recipient" do
+    it "finds only the reports that were screened and stayed in screening" do
+      unscreened = create(:piracy_report, :screening)
+      blocked = create(:piracy_report, :screening, screened_at: Time.current)
+      declined = create(:piracy_report, :screening, screened_at: Time.current).tap(&:fail_screening!)
+      passed = create(:piracy_report, :awaiting_signature, screened_at: Time.current)
+
+      expect(described_class.blocked_on_recipient).to contain_exactly(blocked)
+      expect(blocked.blocked_on_recipient?).to be(true)
+      expect(unscreened.blocked_on_recipient?).to be(false)
+      expect(declined.reload.blocked_on_recipient?).to be(false)
+      expect(passed.blocked_on_recipient?).to be(false)
+    end
+  end
+
   describe "#record_signature!" do
     it "signs the report and keeps the notice it signed" do
       report = create(:piracy_report, :awaiting_signature)

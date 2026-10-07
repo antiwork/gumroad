@@ -49,6 +49,15 @@ class PiracyReport < ApplicationRecord
     end
   end
 
+  # A report the agent approved but the registry cannot route: it stays in `screening`, the one
+  # state it can sit in indefinitely. `screened_at` is what separates it from a report the agent
+  # has not looked at yet, so the queue can be found without re-screening it.
+  scope :blocked_on_recipient, -> { where(state: "screening").where.not(screened_at: nil) }
+
+  def blocked_on_recipient?
+    screening? && screened_at.present?
+  end
+
   # The seller signs the text frozen on the row, so the signature and the digest travel together.
   # The lock makes the transition and the signature one step against a second submit.
   def record_signature!(name)

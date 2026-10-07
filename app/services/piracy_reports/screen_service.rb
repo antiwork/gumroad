@@ -89,7 +89,7 @@ class PiracyReports::ScreenService
       return fail_report(checks_from_agent, rails_errors:) if rails_errors.any?
 
       recipient = PiracyReports::RecipientRegistry.for_host(report.url_host)
-      return Result.new(report:, errors: [no_recipient_error]) if recipient.nil?
+      return block_on_recipient if recipient.nil?
 
       report.assign_attributes(
         screening_verdict: "pass",
@@ -104,6 +104,19 @@ class PiracyReports::ScreenService
       report.notice_digest = Digest::SHA256.hexdigest(report.notice_text)
       report.pass_screening!
       Result.new(report:, errors: [])
+    end
+
+    # The agent approved the page but the host has no verified contact, so the report cannot move.
+    # The pass is recorded even though the state stays `screening`, so the row is not left looking
+    # like one the agent never screened — otherwise nothing can tell the queue apart from the work.
+    def block_on_recipient
+      report.assign_attributes(
+        screening_verdict: "pass",
+        screening_checks: { "agent" => checks_from_agent, "rails" => [no_recipient_error] },
+        screened_at: Time.current
+      )
+      report.save!
+      Result.new(report:, errors: [no_recipient_error])
     end
 
     def no_recipient_error

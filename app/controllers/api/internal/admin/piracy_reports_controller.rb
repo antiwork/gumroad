@@ -110,6 +110,8 @@ class Api::Internal::Admin::PiracyReportsController < Api::Internal::Admin::Base
       {
         report_id: report.external_id,
         state: report.state,
+        # A pass the registry cannot route. Carried so the queue is visible without naming the contact.
+        blocked_on_recipient: report.blocked_on_recipient?,
         source: report.source,
         url: report.url,
         user_id: report.seller.external_id,

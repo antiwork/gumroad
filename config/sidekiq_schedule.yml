@@ -270,6 +270,11 @@ alert_sellers_of_undelivered_receipts:
   class: AlertSellersOfUndeliveredReceiptsJob
   queue: low
   description: Tells sellers about buyers whose receipt has no evidence of being delivered
+alert_on_piracy_reports_blocked_on_recipient:
+  cron: "45 11 * * *" # UTC 11:45
+  class: AlertOnPiracyReportsBlockedOnRecipientJob
+  queue: low
+  description: Reports piracy reports that passed screening but whose host has no verified takedown contact in config/piracy_recipients.yml
 
 # Weekly (Payouts)
 payouts_cross_border_stripe:
