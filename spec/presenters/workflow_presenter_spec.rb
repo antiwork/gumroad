@@ -31,6 +31,76 @@ describe WorkflowPresenter do
     let(:product) { create(:product, user: seller) }
     let(:workflow) { create(:workflow, seller:, link: product) }
 
+    [
+      { currency: "eur", rate: "0.885", lower: 50, upper: 115, displayed_lower: "0.44", displayed_upper: "1.02" },
+      { currency: "jpy", rate: "150", lower: 150, upper: 350, displayed_lower: "225", displayed_upper: "525" },
+    ].each do |values|
+      it "displays USD price bounds in the seller's #{values[:currency]} currency" do
+        Redis::Namespace.new(:currencies, redis: $redis).set(values[:currency].upcase, values[:rate])
+        seller.update!(currency_type: values[:currency])
+        workflow.update!(paid_more_than_cents: values[:lower], paid_less_than_cents: values[:upper])
+
+        props = described_class.new(seller:, workflow:).edit_page_react_props.fetch(:workflow)
+
+        expect(props[:paid_more_than]).to eq(values[:displayed_lower])
+        expect(props[:paid_less_than]).to eq(values[:displayed_upper])
+        expect(props[:price_filter_currency]).to eq(values[:currency])
+        expect(props[:price_filters_available]).to be(true)
+        expect(workflow.reload.paid_more_than_cents).to eq(values[:lower])
+        expect(workflow.paid_less_than_cents).to eq(values[:upper])
+      end
+    end
+
+    it "uses one cached exchange rate for both displayed bounds" do
+      seller.update!(currency_type: "eur")
+      workflow.update!(paid_more_than_cents: 9990, paid_less_than_cents: 9991)
+      allow($redis).to receive(:get).and_call_original
+      allow($redis).to receive(:get).with("currencies:EUR").and_return("0.885", "0.884")
+
+      props = described_class.new(seller:, workflow:).edit_page_react_props.fetch(:workflow)
+
+      expect(props[:paid_more_than]).to eq("88.41")
+      expect(props[:paid_less_than]).to eq("88.42")
+    end
+
+    it "shows stored USD bounds as unavailable for editing when the seller's exchange rate is missing" do
+      seller.update!(currency_type: "eur")
+      workflow.update!(paid_more_than_cents: 50, paid_less_than_cents: 115)
+      Redis::Namespace.new(:currencies, redis: $redis).del("EUR")
+      expect(workflow).not_to receive(:query_rate)
+
+      props = described_class.new(seller:, workflow:).edit_page_react_props.fetch(:workflow)
+
+      expect(props[:price_filter_currency]).to eq("usd")
+      expect(props[:price_filters_available]).to be(false)
+      expect(props[:paid_more_than]).to eq("0.50")
+      expect(props[:paid_less_than]).to eq("1.15")
+    end
+
+    it "keeps stored USD bounds readable when the rate cache cannot be reached" do
+      seller.update!(currency_type: "eur")
+      workflow.update!(paid_more_than_cents: 50, paid_less_than_cents: 115)
+      allow($redis).to receive(:get).and_call_original
+      allow($redis).to receive(:get).with("currencies:EUR").and_raise(RedisClient::CannotConnectError.new("Unavailable"))
+      expect(workflow).not_to receive(:query_rate)
+
+      props = described_class.new(seller:, workflow:).edit_page_react_props.fetch(:workflow)
+
+      expect(props[:price_filter_currency]).to eq("usd")
+      expect(props[:price_filters_available]).to be(false)
+      expect(props[:paid_more_than]).to eq("0.50")
+      expect(props[:paid_less_than]).to eq("1.15")
+    end
+
+    it "does not read exchange rates for the shared workflow list and email props" do
+      seller.update!(currency_type: "eur")
+      workflow.update!(paid_more_than_cents: 50)
+      expect(workflow).not_to receive(:cached_rate)
+      expect(workflow).not_to receive(:get_rate)
+
+      expect(described_class.new(seller:, workflow:).workflow_props[:paid_more_than]).to eq("0.50")
+    end
+
     it "includes the necessary workflow details" do
       props = described_class.new(seller:, workflow:).workflow_props
 

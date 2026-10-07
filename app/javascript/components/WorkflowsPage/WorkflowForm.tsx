@@ -10,17 +10,17 @@ import {
   ProductOption,
   VariantOption,
 } from "$app/types/workflow";
+import { formatPriceCentsWithoutCurrencySymbolAndComma, parseCurrencyUnitStringToCents } from "$app/utils/currency";
 
 import { Button } from "$app/components/Button";
-import { NumberInput } from "$app/components/NumberInput";
+import { PriceInput } from "$app/components/PriceInput";
 import { TagInput } from "$app/components/TagInput";
+import { Alert } from "$app/components/ui/Alert";
 import { Checkbox } from "$app/components/ui/Checkbox";
 import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { FormSection } from "$app/components/ui/FormSection";
 import { Input } from "$app/components/ui/Input";
-import { InputGroup } from "$app/components/ui/InputGroup";
 import { Label } from "$app/components/ui/Label";
-import { Pill } from "$app/components/ui/Pill";
 import { Select } from "$app/components/ui/Select";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -80,8 +80,8 @@ type WorkflowFormState = {
   affiliatedProducts: string[];
   bought: string[];
   notBought: string[];
-  paidMoreThan: number | null;
-  paidLessThan: number | null;
+  paidMoreThanCents: number | null;
+  paidLessThanCents: number | null;
   afterDate: string;
   beforeDate: string;
   fromCountry: string;
@@ -94,6 +94,11 @@ type WorkflowFormProps = {
 
 const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
   const wasPublishedPreviously = !!workflow?.first_published_at;
+  // Failed saves preserve edited values, so their currency must stay with the opening form snapshot.
+  const [{ currency: priceFilterCurrency, available: priceFiltersAvailable }] = React.useState(() => ({
+    currency: workflow?.price_filter_currency ?? context.currency_type,
+    available: workflow?.price_filters_available ?? true,
+  }));
   const [formState, setFormState] = React.useState<WorkflowFormState>(() => {
     if (!workflow)
       return {
@@ -103,8 +108,8 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
         affiliatedProducts: [],
         bought: [],
         notBought: [],
-        paidMoreThan: null,
-        paidLessThan: null,
+        paidMoreThanCents: null,
+        paidLessThanCents: null,
         afterDate: "",
         beforeDate: "",
         fromCountry: "",
@@ -123,12 +128,16 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
       affiliatedProducts: workflow.affiliate_products ?? [],
       bought,
       notBought: workflow.not_bought_products || workflow.not_bought_variants || [],
-      paidMoreThan: workflow.paid_more_than ? parseInt(workflow.paid_more_than.replaceAll(",", ""), 10) : null,
-      paidLessThan: workflow.paid_less_than ? parseInt(workflow.paid_less_than.replaceAll(",", ""), 10) : null,
+      paidMoreThanCents: parseCurrencyUnitStringToCents(priceFilterCurrency, workflow.paid_more_than ?? null),
+      paidLessThanCents: parseCurrencyUnitStringToCents(priceFilterCurrency, workflow.paid_less_than ?? null),
       afterDate: workflow.created_after ?? "",
       beforeDate: workflow.created_before ?? "",
       fromCountry: workflow.bought_from ?? "",
     };
+  });
+  const initialPriceFilters = React.useRef({
+    paidMoreThanCents: formState.paidMoreThanCents,
+    paidLessThanCents: formState.paidLessThanCents,
   });
   const form = useForm({});
   const [invalidFields, setInvalidFields] = React.useState<Set<keyof WorkflowFormState>>(() => new Set());
@@ -151,9 +160,9 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
 
     Object.keys(value).forEach((field) => {
       if (!updatedInvalidFields.has(field)) return;
-      if (field === "paidMoreThan" || field === "paidLessThan") {
-        updatedInvalidFields.delete("paidMoreThan");
-        updatedInvalidFields.delete("paidLessThan");
+      if (field === "paidMoreThanCents" || field === "paidLessThanCents") {
+        updatedInvalidFields.delete("paidMoreThanCents");
+        updatedInvalidFields.delete("paidLessThanCents");
       } else if (field === "afterDate" || field === "beforeDate") {
         updatedInvalidFields.delete("afterDate");
         updatedInvalidFields.delete("beforeDate");
@@ -179,12 +188,12 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
 
     if (
       triggerSupportsPaidFilters &&
-      formState.paidMoreThan &&
-      formState.paidLessThan &&
-      formState.paidMoreThan > formState.paidLessThan
+      formState.paidMoreThanCents != null &&
+      formState.paidLessThanCents != null &&
+      formState.paidMoreThanCents > formState.paidLessThanCents
     ) {
-      invalidFieldNames.add("paidMoreThan");
-      invalidFieldNames.add("paidLessThan");
+      invalidFieldNames.add("paidMoreThanCents");
+      invalidFieldNames.add("paidLessThanCents");
       invalidFieldRefs.push(paidMoreThanInputRef);
     }
 
@@ -204,6 +213,25 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
     invalidFieldRefs[0]?.current?.focus();
 
     return invalidFieldNames.size === 0;
+  };
+
+  const pastePrice = (event: React.ClipboardEvent<HTMLFormElement>) => {
+    const input = event.target;
+    if (!(input instanceof HTMLInputElement) || input.disabled) return;
+    if (input.id !== "paid_more_than" && input.id !== "paid_less_than") return;
+    const pasted = event.clipboardData.getData("text").trim();
+    if (!/^\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?$/u.test(pasted)) return;
+
+    const value =
+      input.value.slice(0, input.selectionStart ?? 0) +
+      pasted.replaceAll(",", "") +
+      input.value.slice(input.selectionEnd ?? input.value.length);
+    event.preventDefault();
+    if (!/^\d+(?:\.\d{0,2})?$/u.test(value) || (input.maxLength >= 0 && value.length > input.maxLength)) return;
+    const cents = parseCurrencyUnitStringToCents(priceFilterCurrency, value);
+    if (cents == null || !Number.isFinite(cents)) return;
+
+    updateFormState(input.id === "paid_more_than" ? { paidMoreThanCents: cents } : { paidLessThanCents: cents });
   };
 
   const handleSave = (saveActionName: SaveActionName = "save") => {
@@ -249,8 +277,25 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
         permalink: productPermalink,
         not_bought_products: notBought.productIds,
         not_bought_variants: notBought.variantIds,
-        paid_more_than: triggerSupportsPaidFilters ? formState.paidMoreThan : null,
-        paid_less_than: triggerSupportsPaidFilters ? formState.paidLessThan : null,
+        paid_more_than:
+          triggerSupportsPaidFilters && formState.paidMoreThanCents != null
+            ? formatPriceCentsWithoutCurrencySymbolAndComma(priceFilterCurrency, formState.paidMoreThanCents)
+            : null,
+        paid_less_than:
+          triggerSupportsPaidFilters && formState.paidLessThanCents != null
+            ? formatPriceCentsWithoutCurrencySymbolAndComma(priceFilterCurrency, formState.paidLessThanCents)
+            : null,
+        unchanged_price_filters:
+          workflow && triggerSupportsPaidFilters
+            ? [
+                ...(formState.paidMoreThanCents === initialPriceFilters.current.paidMoreThanCents
+                  ? ["paid_more_than"]
+                  : []),
+                ...(formState.paidLessThanCents === initialPriceFilters.current.paidLessThanCents
+                  ? ["paid_less_than"]
+                  : []),
+              ]
+            : [],
         created_after: triggerSupportsDateFilters ? formState.afterDate : "",
         created_before: triggerSupportsDateFilters ? formState.beforeDate : "",
         bought_from: triggerSupportsFromCountryFilter ? formState.fromCountry : null,
@@ -324,7 +369,7 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
         </>
       }
     >
-      <form className="space-y-4">
+      <form className="space-y-4" onPaste={pastePrice}>
         <FormSection
           header={<>Workflows allow you to send scheduled emails to a subset of your audience based on a trigger.</>}
         >
@@ -536,6 +581,12 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
               />
             </Fieldset>
           ) : null}
+          {triggerSupportsPaidFilters && !priceFiltersAvailable ? (
+            <Alert variant="warning">
+              Price filters are shown in USD and can't be edited in this session. Save other workflow details, then
+              reload when currency conversion is available to edit prices.
+            </Alert>
+          ) : null}
           {triggerSupportsPaidFilters ? (
             <div
               style={{
@@ -544,52 +595,32 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
                 gridTemplateColumns: "repeat(auto-fit, max(var(--dynamic-grid), 50% - var(--spacer-3) / 2))",
               }}
             >
-              <Fieldset state={invalidFields.has("paidMoreThan") ? "danger" : undefined}>
+              <Fieldset state={invalidFields.has("paidMoreThanCents") ? "danger" : undefined}>
                 <FieldsetTitle>
                   <Label htmlFor="paid_more_than">Paid more than</Label>
                 </FieldsetTitle>
-                <NumberInput
-                  onChange={(paidMoreThan) => updateFormState({ paidMoreThan })}
-                  value={formState.paidMoreThan}
-                >
-                  {(inputProps) => (
-                    <InputGroup disabled={wasPublishedPreviously}>
-                      <Pill className="-ml-2 shrink-0">{context.currency_symbol}</Pill>
-                      <Input
-                        id="paid_more_than"
-                        type="text"
-                        disabled={wasPublishedPreviously}
-                        ref={paidMoreThanInputRef}
-                        autoComplete="off"
-                        placeholder="0"
-                        {...inputProps}
-                      />
-                    </InputGroup>
-                  )}
-                </NumberInput>
+                <PriceInput
+                  id="paid_more_than"
+                  currencyCode={priceFilterCurrency}
+                  cents={formState.paidMoreThanCents}
+                  onChange={(paidMoreThanCents) => updateFormState({ paidMoreThanCents })}
+                  disabled={wasPublishedPreviously || !priceFiltersAvailable}
+                  ref={paidMoreThanInputRef}
+                  placeholder="0"
+                />
               </Fieldset>
-              <Fieldset state={invalidFields.has("paidLessThan") ? "danger" : undefined}>
+              <Fieldset state={invalidFields.has("paidLessThanCents") ? "danger" : undefined}>
                 <FieldsetTitle>
                   <Label htmlFor="paid_less_than">Paid less than</Label>
                 </FieldsetTitle>
-                <NumberInput
-                  onChange={(paidLessThan) => updateFormState({ paidLessThan })}
-                  value={formState.paidLessThan}
-                >
-                  {(inputProps) => (
-                    <InputGroup disabled={wasPublishedPreviously}>
-                      <Pill className="-ml-2 shrink-0">{context.currency_symbol}</Pill>
-                      <Input
-                        id="paid_less_than"
-                        type="text"
-                        disabled={wasPublishedPreviously}
-                        autoComplete="off"
-                        placeholder="∞"
-                        {...inputProps}
-                      />
-                    </InputGroup>
-                  )}
-                </NumberInput>
+                <PriceInput
+                  id="paid_less_than"
+                  currencyCode={priceFilterCurrency}
+                  cents={formState.paidLessThanCents}
+                  onChange={(paidLessThanCents) => updateFormState({ paidLessThanCents })}
+                  disabled={wasPublishedPreviously || !priceFiltersAvailable}
+                  placeholder="∞"
+                />
               </Fieldset>
             </div>
           ) : null}

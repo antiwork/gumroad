@@ -17,7 +17,24 @@ class WorkflowPresenter
   end
 
   def edit_page_react_props
-    { workflow: workflow_props, context: workflow_form_context_props }
+    { workflow: workflow_form_props, context: workflow_form_context_props }
+  end
+
+  def workflow_form_props
+    props = workflow_props
+    rate = workflow.cached_rate(seller.currency_type)
+    currency = rate.present? ? seller.currency_type : Currency::USD
+    props.merge!(price_filter_currency: currency.to_s, price_filters_available: rate.present?)
+
+    %i[paid_more_than paid_less_than].each do |attribute|
+      usd_cents = workflow.public_send("#{attribute}_cents")
+      next if usd_cents.nil?
+
+      cents = rate.present? ? workflow.usd_cents_to_currency(currency, usd_cents, rate) : usd_cents
+      props[attribute] = Money.new(cents, currency).format(no_cents_if_whole: true, symbol: false)
+    end
+
+    props
   end
 
   def workflow_props
@@ -89,6 +106,7 @@ class WorkflowPresenter
       end,
       timezone: ActiveSupport::TimeZone[user_presenter.user.timezone].now.strftime("%Z"),
       currency_symbol: user_presenter.user.currency_symbol,
+      currency_type: user_presenter.user.currency_type.to_s,
       countries: [Compliance::Countries::USA.common_name] + Compliance::Countries.for_select.flat_map { |_, name| Compliance::Countries::USA.common_name === name ? [] : name },
       aws_access_key_id: AWS_ACCESS_KEY,
       s3_url: s3_bucket_url,

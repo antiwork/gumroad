@@ -1,3 +1,5 @@
+import type { CurrencyCode } from "$app/utils/currency";
+
 import type { FileItem } from "$app/components/EmailAttachments";
 export type WorkflowType = "audience" | "seller" | "product" | "variant" | "follower" | "affiliate" | "abandoned_cart";
 export type LegacyWorkflowTrigger = "member_cancellation" | null;
@@ -63,6 +65,8 @@ export type Workflow = {
   not_bought_variants?: string[];
   paid_more_than?: string;
   paid_less_than?: string;
+  price_filter_currency?: CurrencyCode;
+  price_filters_available?: boolean;
   created_after?: string;
   created_before?: string;
   bought_from?: string;
@@ -94,6 +98,7 @@ export type WorkflowFormContext = {
   affiliate_product_options: ProductOption[];
   timezone: string;
   currency_symbol: string;
+  currency_type: CurrencyCode;
   countries: string[];
   aws_access_key_id: string;
   s3_url: string;

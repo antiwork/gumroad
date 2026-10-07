@@ -116,6 +116,33 @@ describe WorkflowsController, type: :controller, inertia: true do
       let(:request_params) { { id: workflow.external_id, workflow: { name: "Updated Workflow" } } }
     end
 
+    [
+      { currency: "eur", rate: "0.885", next_rate: "1.10", lower: 50, upper: 115, displayed_lower: "0.44", displayed_upper: "1.02" },
+      { currency: "jpy", rate: "150", next_rate: "200", lower: 150, upper: 350, displayed_lower: "225", displayed_upper: "525" },
+    ].each do |values|
+      it "accepts unchanged #{values[:currency]} price filters without changing stored USD bounds" do
+        Redis::Namespace.new(:currencies, redis: $redis).set(values[:currency].upcase, values[:rate])
+        seller.update!(currency_type: values[:currency])
+        workflow.update!(workflow_type: Workflow::SELLER_TYPE, link: nil,
+                         paid_more_than_cents: values[:lower], paid_less_than_cents: values[:upper])
+        Redis::Namespace.new(:currencies, redis: $redis).set(values[:currency].upcase, values[:next_rate])
+
+        patch :update, params: {
+          id: workflow.external_id,
+          workflow: {
+            name: "Renamed workflow", workflow_type: Workflow::SELLER_TYPE,
+            paid_more_than: values[:displayed_lower], paid_less_than: values[:displayed_upper],
+            unchanged_price_filters: %w[paid_more_than paid_less_than],
+          }
+        }
+
+        expect(response).to have_http_status(:see_other)
+        expect(workflow.reload.name).to eq("Renamed workflow")
+        expect(workflow.paid_more_than_cents).to eq(values[:lower])
+        expect(workflow.paid_less_than_cents).to eq(values[:upper])
+      end
+    end
+
     context "with valid params" do
       it "303 redirects to workflow emails page with a success message" do
         patch :update, params: { id: workflow.external_id, workflow: { name: "Updated Workflow" } }

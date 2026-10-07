@@ -12,6 +12,116 @@ describe Workflow::ManageService do
     let(:seller) { create(:user) }
     let(:product) { create(:product, user: seller) }
 
+    [
+      { currency: "eur", rate: "0.885", next_rate: "1.10", lower: 50, upper: 115, displayed_lower: "0.44", displayed_upper: "1.02", changed_lower: "0.50", changed_lower_cents: 56 },
+      { currency: "jpy", rate: "150", next_rate: "200", lower: 150, upper: 350, displayed_lower: "225", displayed_upper: "525", changed_lower: "300", changed_lower_cents: 200 },
+    ].each do |values|
+      context "with #{values[:currency]} price filters" do
+        let(:seller) { create(:user, currency_type: values[:currency]) }
+        let(:workflow) { create(:seller_workflow, seller:, paid_more_than_cents: values[:lower], paid_less_than_cents: values[:upper]) }
+        let(:params) do
+          {
+            name: "Renamed workflow",
+            workflow_type: Workflow::SELLER_TYPE,
+            paid_more_than: values[:displayed_lower],
+            paid_less_than: values[:displayed_upper],
+            unchanged_price_filters: %w[paid_more_than paid_less_than],
+          }
+        end
+
+        before do
+          Redis::Namespace.new(:currencies, redis: $redis).set(values[:currency].upcase, values[:rate])
+        end
+
+        it "preserves the stored USD bounds when the displayed values are unchanged" do
+          expect(described_class.new(seller:, params:, product: nil, workflow:).process).to eq([true, nil])
+
+          expect(workflow.reload.name).to eq("Renamed workflow")
+          expect(workflow.paid_more_than_cents).to eq(values[:lower])
+          expect(workflow.paid_less_than_cents).to eq(values[:upper])
+        end
+
+        if values[:currency] == "eur"
+          it "preserves USD cents when the displayed seller-currency amount rounded during conversion" do
+            workflow.update!(paid_more_than_cents: 4)
+            params[:paid_more_than] = "0.04"
+
+            expect(described_class.new(seller:, params:, product: nil, workflow:).process).to eq([true, nil])
+            expect(workflow.reload.paid_more_than_cents).to eq(4)
+            expect(workflow.paid_less_than_cents).to eq(values[:upper])
+          end
+        end
+
+        it "preserves unchanged USD bounds when the exchange rate moves after rendering" do
+          workflow
+          Redis::Namespace.new(:currencies, redis: $redis).set(values[:currency].upcase, values[:next_rate])
+
+          expect(described_class.new(seller:, params:, product: nil, workflow:).process).to eq([true, nil])
+          expect(workflow.reload.paid_more_than_cents).to eq(values[:lower])
+          expect(workflow.paid_less_than_cents).to eq(values[:upper])
+        end
+
+        it "preserves a bound changed by another editor after this workflow was loaded" do
+          Workflow.find(workflow.id).update!(paid_more_than_cents: values[:lower] + 25)
+
+          expect(described_class.new(seller:, params:, product: nil, workflow:).process).to eq([true, nil])
+          expect(workflow.reload.paid_more_than_cents).to eq(values[:lower] + 25)
+          expect(workflow.paid_less_than_cents).to eq(values[:upper])
+        end
+
+        it "keeps a concurrently cleared bound absent despite the old displayed value" do
+          Workflow.find(workflow.id).update!(paid_more_than_cents: nil)
+
+          expect(described_class.new(seller:, params:, product: nil, workflow:).process).to eq([true, nil])
+          expect(workflow.reload.paid_more_than_cents).to be_nil
+          expect(workflow.paid_less_than_cents).to eq(values[:upper])
+        end
+
+        it "converts an edited bound once and preserves the other USD bound" do
+          params[:paid_more_than] = values[:changed_lower]
+          params[:unchanged_price_filters] = ["paid_less_than"]
+
+          expect(described_class.new(seller:, params:, product: nil, workflow:).process).to eq([true, nil])
+          expect(workflow.reload.paid_more_than_cents).to eq(values[:changed_lower_cents])
+          expect(workflow.paid_less_than_cents).to eq(values[:upper])
+        end
+
+        it "clears an edited bound without dropping the other USD bound" do
+          params[:paid_more_than] = nil
+          params[:unchanged_price_filters] = ["paid_less_than"]
+
+          expect(described_class.new(seller:, params:, product: nil, workflow:).process).to eq([true, nil])
+          expect(workflow.reload.paid_more_than_cents).to be_nil
+          expect(workflow.paid_less_than_cents).to eq(values[:upper])
+        end
+
+        it "clears both price filters when the trigger no longer supports them" do
+          params[:workflow_type] = Workflow::FOLLOWER_TYPE
+
+          expect(described_class.new(seller:, params:, product: nil, workflow:).process).to eq([true, nil])
+          expect(workflow.reload.paid_more_than_cents).to be_nil
+          expect(workflow.paid_less_than_cents).to be_nil
+        end
+
+        it "retains major-unit conversion for existing clients without unchanged flags" do
+          params[:paid_more_than] = values[:changed_lower]
+          params.delete(:unchanged_price_filters)
+
+          expect(described_class.new(seller:, params:, product: nil, workflow:).process).to eq([true, nil])
+          expect(workflow.reload.paid_more_than_cents).to eq(values[:changed_lower_cents])
+        end
+
+        it "converts new-workflow major-unit filters even if unchanged flags are submitted" do
+          params[:paid_more_than] = values[:changed_lower]
+
+          service = described_class.new(seller:, params:, product: nil, workflow: nil)
+          expect(service.process).to eq([true, nil])
+          expect(service.workflow.reload.paid_more_than_cents).to eq(values[:changed_lower_cents])
+          expect(service.workflow.paid_less_than_cents).to eq(values[:upper])
+        end
+      end
+    end
+
     context "when workflow does not exist" do
       let(:params) { { name: "My workflow", permalink: product.unique_permalink, workflow_type: Workflow::PRODUCT_TYPE, send_to_past_customers: false } }
 

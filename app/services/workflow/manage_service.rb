@@ -14,6 +14,7 @@ class Workflow::ManageService
   end
 
   def process
+    workflow.reload if workflow.persisted? && params[:unchanged_price_filters].present?
     workflow.name = params[:name]
 
     if workflow.new_record? && params[:workflow_type] == Workflow::ABANDONED_CART_TYPE && !seller.eligible_for_abandoned_cart_workflows?
@@ -26,7 +27,7 @@ class Workflow::ManageService
       workflow.base_variant = params[:workflow_type] == Workflow::VARIANT_TYPE ? BaseVariant.find_by_external_id(params[:variant_external_id]) : nil
       workflow.link = product_or_variant_type? ? product : nil
       workflow.send_to_past_customers = params[:send_to_past_customers]
-      workflow.add_and_validate_filters(params, seller)
+      workflow.add_and_validate_filters(filter_params, seller)
       if workflow.errors.any?
         return [false, workflow.errors.full_messages.first]
       end
@@ -73,6 +74,19 @@ class Workflow::ManageService
 
   private
     attr_reader :params, :seller, :product
+
+    def filter_params
+      return params if workflow.new_record? || params[:unchanged_price_filters].blank?
+
+      params_for_filters = params.dup
+      %i[paid_more_than paid_less_than].each do |attribute|
+        next unless params[:unchanged_price_filters].include?(attribute.to_s)
+
+        params_for_filters.delete(attribute)
+        params_for_filters["#{attribute}_cents".to_sym] = workflow.public_send("#{attribute}_cents")
+      end
+      params_for_filters
+    end
 
     def sync_installments!
       workflow.installments.alive.find_each do |installment|

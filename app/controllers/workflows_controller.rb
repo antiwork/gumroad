@@ -44,7 +44,7 @@ class WorkflowsController < Sellers::BaseController
   def edit
     workflow_presenter = WorkflowPresenter.new(seller: current_seller, workflow: @workflow)
     render inertia: "Workflows/Edit", props: {
-      workflow: -> { workflow_presenter.workflow_props },
+      workflow: -> { workflow_presenter.workflow_form_props },
       context: -> { workflow_presenter.workflow_form_context_props }
     }
   end
@@ -109,6 +109,7 @@ class WorkflowsController < Sellers::BaseController
         :send_to_past_customers, :save_action_name,
         bought_products: [], not_bought_products: [], affiliate_products: [],
         bought_variants: [], not_bought_variants: [],
+        unchanged_price_filters: [],
       )
     end
 end

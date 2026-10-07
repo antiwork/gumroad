@@ -123,6 +123,29 @@ describe("Workflows", js: true, type: :system) do
       create(:payment_completed, user: seller)
     end
 
+    it "preserves decimal price filters through creation and editing" do
+      visit new_workflow_path
+      fill_in "Name", with: "Decimal price workflow"
+      fill_in "Paid more than", with: "0.50"
+      fill_in "Paid less than", with: "1.15"
+      click_on "Save and continue"
+      expect(page).to have_alert(text: "Changes saved!")
+
+      workflow = seller.workflows.find_by!(name: "Decimal price workflow")
+      expect(workflow.paid_more_than_cents).to eq(50)
+      expect(workflow.paid_less_than_cents).to eq(115)
+
+      visit edit_workflow_path(workflow.external_id)
+      expect(page).to have_field("Paid more than", with: "0.50")
+      expect(page).to have_field("Paid less than", with: "1.15")
+      fill_in "Name", with: "Renamed decimal price workflow", fill_options: { clear: :backspace }
+      click_on "Save changes"
+      expect(page).to have_alert(text: "Changes saved!")
+      expect(workflow.reload.name).to eq("Renamed decimal price workflow")
+      expect(workflow.paid_more_than_cents).to eq(50)
+      expect(workflow.paid_less_than_cents).to eq(115)
+    end
+
     it "performs validations" do
       visit workflows_path
       click_on "New workflow", match: :first

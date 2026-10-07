@@ -87,6 +87,7 @@ const context: WorkflowFormContext = {
   affiliate_product_options: [],
   timezone: "UTC",
   currency_symbol: "$",
+  currency_type: "usd",
   countries: [],
   aws_access_key_id: "key",
   s3_url: "https://s3.example/bucket",
