@@ -15,6 +15,36 @@ const config = (root = fixture, sharedProgram?: boolean): InlineConfig => ({
   plugins: [UnpluginTypia({ cache: false, log: false, tsconfig: path.join(root, "tsconfig.json"), sharedProgram })],
 });
 
+// The source and line of each generated line's first mapping segment, from a v3 source map.
+const firstMappings = (mappings: string) => {
+  const digits = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  let source = 0;
+  let sourceLine = 0;
+  return mappings.split(";").map((line) => {
+    let first: { source: number; line: number } | null = null;
+    for (const segment of line.split(",").filter(Boolean)) {
+      const fields: number[] = [];
+      let value = 0;
+      let shift = 0;
+      for (const char of segment) {
+        const digit = digits.indexOf(char);
+        value += (digit & 31) << shift;
+        if (digit & 32) shift += 5;
+        else {
+          fields.push(value & 1 ? -(value >> 1) : value >> 1);
+          value = 0;
+          shift = 0;
+        }
+      }
+      if (fields.length < 4) continue;
+      source += fields[1] ?? 0;
+      sourceLine += fields[2] ?? 0;
+      first ??= { source, line: sourceLine };
+    }
+    return first;
+  });
+};
+
 // Returns each entry's code, keyed by entry name.
 const buildOutput = async (entries: string[], root = fixture, sharedProgram?: boolean) => {
   const result = await build({
@@ -59,6 +89,29 @@ describe("typia transform in a one-shot build", () => {
     } finally {
       clock.mockRestore();
     }
+  }, 60_000);
+
+  it("maps a re-indented line to its own source line", async () => {
+    const result = await build({
+      ...config(),
+      build: {
+        write: false,
+        minify: false,
+        sourcemap: true,
+        lib: { entry: { guardian: path.join(fixture, "guardian.ts") }, formats: ["es"] },
+      },
+    });
+    const outputs: Rollup.RollupOutput[] = Array.isArray(result) ? result : "output" in result ? [result] : [];
+    const chunk = outputs
+      .flatMap(({ output }) => output)
+      .find((item) => item.type === "chunk" && item.name === "guardian");
+    if (chunk?.type !== "chunk" || !chunk.map) throw new Error("no guardian chunk with a source map");
+    const needle = '"saved, but incomplete"';
+    const generatedLine = chunk.code.split("\n").findIndex((text) => text.includes(needle));
+    const mapped = firstMappings(chunk.map.mappings)[generatedLine];
+    expect(mapped && chunk.map.sources[mapped.source]).toMatch(/guardian\.ts$/u);
+    const sourceLines = fs.readFileSync(path.join(fixture, "guardian.ts"), "utf8").split("\n");
+    expect(mapped?.line).toBe(sourceLines.findIndex((text) => text.includes(needle)));
   }, 60_000);
 
   it("orders union members the same whichever file is transformed first", async () => {

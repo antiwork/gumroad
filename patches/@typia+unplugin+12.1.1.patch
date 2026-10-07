@@ -1,5 +1,5 @@
 diff --git a/node_modules/@typia/unplugin/dist/core.js b/node_modules/@typia/unplugin/dist/core.js
-index e61604c..0134946 100644
+index e61604c..baaaadc 100644
 --- a/node_modules/@typia/unplugin/dist/core.js
 +++ b/node_modules/@typia/unplugin/dist/core.js
 @@ -493,7 +493,7 @@ const sourceCache = /* @__PURE__ */ new Map();
@@ -80,7 +80,53 @@ index e61604c..0134946 100644
  	const tsSource = ts.createSourceFile(id, source, compilerOptions.target ?? ts.ScriptTarget.ES2020);
  	const host = ts.createCompilerHost(compilerOptions);
  	/** When alias defined in config, resolve module with alias */
-@@ -640,14 +691,19 @@ const unpluginFactory = (rawOptions = {}) => {
+@@ -634,20 +685,59 @@ function createFilter$1(include, exclude) {
+ 	return createFilter(include, exclude);
+ }
+ /** The main unplugin instance. */
++/**
++* Gumroad patch: a whole-file character diff stopped at a 1-second deadline, so the output varied
++* with CPU load. Lines are aligned by their trimmed text, then each aligned piece gets a character
++* diff with no deadline: small, so fast, the same on every machine, and fine-grained for maps.
++*/
++function alignedDiff(source, code) {
++	const split = (text) => text.match(/[^\n]*\n|[^\n]+$/g) ?? [];
++	const ids = new Map();
++	const key = (line) => {
++		const text = line.trim();
++		if (!ids.has(text)) ids.set(text, String.fromCharCode(ids.size + 1));
++		return ids.get(text);
++	};
++	const piece = (from, to) => {
++		if (from === to) return from ? [[0, from]] : [];
++		if (!from) return [[1, to]];
++		if (!to) return [[-1, from]];
++		const diff = Diff.diff(from, to, { diffTimeout: 0 });
++		Diff.diffCleanupSemantic(diff);
++		return diff;
++	};
++	const a = split(source);
++	const b = split(code);
++	const result = [];
++	let i = 0;
++	let j = 0;
++	let removed = "";
++	let added = "";
++	for (const [type, text] of Diff.diff(a.map(key).join(""), b.map(key).join(""), { diffTimeout: 0 }, false)) {
++		if (type === -1) removed += a.slice(i, i += text.length).join("");
++		else if (type === 1) added += b.slice(j, j += text.length).join("");
++		else {
++			result.push(...piece(removed, added));
++			removed = added = "";
++			for (let k = 0; k < text.length; k++) result.push(...piece(a[i++], b[j++]));
++		}
++	}
++	result.push(...piece(removed, added));
++	return result;
++}
+ const unpluginFactory = (rawOptions = {}) => {
+ 	const options = resolveOptions(rawOptions);
+ 	const filter = createFilter$1(options.include, options.exclude);
  	const { cache: cacheOptions, log: logOption } = options;
  	const showLog = logOption === "verbose" && cacheOptions;
  	let viteConfig;
@@ -93,17 +139,11 @@ index e61604c..0134946 100644
 -		const diff = Diff.diff(source, code);
 -		/** Cleanup diff */
 -		Diff.diffCleanupSemantic(diff);
-+		/**
-+		* Gumroad patch: the character diff stopped at a 1-second deadline, so output varied with CPU
-+		* load. A line diff with no deadline is fast, machine-independent, and rebuilds the code exactly.
-+		*/
-+		const lines = Diff.diffLinesToChars(source, code);
-+		const diff = Diff.diff(lines.chars1, lines.chars2, { diffTimeout: 0 }, false);
-+		Diff.diffCharsToLines(diff, lines.lineArray);
++		const diff = alignedDiff(source, code);
  		let offset = 0;
  		for (let index = 0; index < diff.length; index++) {
  			const [type, text] = diff[index];
-@@ -663,14 +719,7 @@ const unpluginFactory = (rawOptions = {}) => {
+@@ -663,14 +753,7 @@ const unpluginFactory = (rawOptions = {}) => {
  				/** If next is equal to 1, then overwrite */
  				if (next != null && next[0] === 1) {
  					const replaceText = next[1];
@@ -119,7 +159,7 @@ index e61604c..0134946 100644
  					/** Skip next */
  					index += 1;
  				} else s.remove(offset, offset + textLength);
-@@ -690,14 +739,14 @@ const unpluginFactory = (rawOptions = {}) => {
+@@ -690,14 +773,14 @@ const unpluginFactory = (rawOptions = {}) => {
  	async function transformCodeWithTypiaTransform({ id, source, ctx, options }) {
  		try {
  			var _usingCtx = _usingCtx$1();
@@ -137,7 +177,7 @@ index e61604c..0134946 100644
  				if (showLog) if (code != null) log("success", `Transformed: ${id}`);
  				else log("error", `Transform is null: ${id}`);
  				/** Save cache */
-@@ -716,8 +765,10 @@ const unpluginFactory = (rawOptions = {}) => {
+@@ -716,8 +799,10 @@ const unpluginFactory = (rawOptions = {}) => {
  		enforce: options.enforce,
  		vite: { configResolved(config) {
  			viteConfig = config;
