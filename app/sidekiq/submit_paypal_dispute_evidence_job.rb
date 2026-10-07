@@ -58,7 +58,17 @@ class SubmitPaypalDisputeEvidenceJob
 
     api = PaypalRestApi.new
     live = api.fetch_dispute(dispute_id: dispute.charge_processor_dispute_id, merchant_account:)
-    return Rails.logger.info("SubmitPaypalDisputeEvidenceJob: dispute #{dispute.id} read failed (#{live.status_code})") unless api.successful_response?(live)
+    unless api.successful_response?(live)
+      status = live.status_code.to_i
+      # A short outage or rate limit may clear within the Sidekiq retries. A missing grant will
+      # not, so report it once a day per merchant account instead of on every dispute.
+      raise "SubmitPaypalDisputeEvidenceJob: PayPal returned #{status} reading dispute #{dispute.id}" if self.class.transient_status?(status)
+
+      if [401, 403].include?(status) && $redis.set("paypal_dispute_read_denied:#{merchant_account.id}", status, nx: true, ex: 1.day.to_i)
+        ErrorNotifier.notify("SubmitPaypalDisputeEvidenceJob: PayPal denied reading dispute #{dispute.id} (#{status}) for merchant account #{merchant_account.id}")
+      end
+      return Rails.logger.info("SubmitPaypalDisputeEvidenceJob: dispute #{dispute.id} read failed (#{status})")
+    end
     return unless self.class.action_offered?(live.result)
     # The claim cannot tell a lost success response from a failure, so the case itself is the
     # final check: never post a second copy of a note PayPal already holds.
@@ -75,6 +85,9 @@ class SubmitPaypalDisputeEvidenceJob
         persist_claim(key)
         Rails.logger.info("SubmitPaypalDisputeEvidenceJob: submitted delivery record for dispute #{dispute.id}")
       else
+        # The claim is released below either way; a transient status also retries through Sidekiq.
+        raise "SubmitPaypalDisputeEvidenceJob: PayPal returned #{response.status_code} sending supporting info for dispute #{dispute.id}" if self.class.transient_status?(response.status_code.to_i)
+
         ErrorNotifier.notify("SubmitPaypalDisputeEvidenceJob: PayPal rejected supporting info for dispute #{dispute.id} (#{response.status_code})")
       end
     ensure
@@ -91,6 +104,8 @@ class SubmitPaypalDisputeEvidenceJob
   rescue Redis::BaseError => e
     ErrorNotifier.notify(e)
   end
+
+  def self.transient_status?(status) = status >= 500 || [408, 429].include?(status)
 
   def self.action_offered?(result)
     links = result.respond_to?(:links) ? result.links : (result.is_a?(Hash) ? result["links"] : nil)

@@ -212,4 +212,77 @@ describe SubmitPaypalDisputeEvidenceJob do
 
     expect(described_class.evidence_notes(purchases)).to be_nil
   end
+
+  [401, 403].each do |status|
+    it "notifies and does not write when the live dispute read returns #{status}" do
+      $redis.del("paypal_dispute_read_denied:#{merchant_account.id}")
+      allow(api).to receive(:fetch_dispute).and_return(OpenStruct.new(status_code: status, result: {}))
+      expect(api).not_to receive(:provide_dispute_supporting_info)
+      expect(ErrorNotifier).to receive(:notify).once
+
+      2.times { described_class.new.perform(dispute.id) }
+    end
+  end
+
+  it "notifies once per merchant account, not once per dispute" do
+    $redis.del("paypal_dispute_read_denied:#{merchant_account.id}")
+    other_account = create(:merchant_account_paypal, user: create(:user), charge_processor_merchant_id: "PAYERID456")
+    other_purchase = create(:purchase, link: create(:product, user: other_account.user), seller: other_account.user, merchant_account: other_account, charge_processor_id: PaypalChargeProcessor.charge_processor_id)
+    other_dispute = create(:dispute, purchase: other_purchase, charge_processor_id: PaypalChargeProcessor.charge_processor_id, charge_processor_dispute_id: "PP-R-ABC-2", state: "formalized")
+    create(:consumption_event, purchase_id: other_purchase.id, link_id: other_purchase.link_id, url_redirect_id: 1, product_file_id: nil, event_type: "download")
+    $redis.del("paypal_dispute_read_denied:#{other_account.id}")
+    allow(api).to receive(:fetch_dispute).and_return(OpenStruct.new(status_code: 403, result: {}))
+    expect(ErrorNotifier).to receive(:notify).twice
+
+    2.times { described_class.new.perform(dispute.id) }
+    2.times { described_class.new.perform(other_dispute.id) }
+  end
+
+  [408, 429, 503].each do |status|
+    it "raises on a PayPal #{status} sending the note and releases the claim so the retry can send it" do
+      allow(api).to receive(:fetch_dispute).and_return(offered)
+      allow(api).to receive(:provide_dispute_supporting_info).and_return(OpenStruct.new(status_code: status, result: {}), accepted)
+
+      expect { described_class.new.perform(dispute.id) }.to raise_error(/PayPal returned #{status} sending/)
+      expect($redis.get(described_class.claim_key(dispute.id))).to be_nil
+
+      described_class.new.perform(dispute.id)
+      expect(api).to have_received(:provide_dispute_supporting_info).twice
+    end
+  end
+
+  it "stays quiet on a client error that is not an access problem" do
+    allow(api).to receive(:fetch_dispute).and_return(OpenStruct.new(status_code: 422, result: {}))
+    expect(api).not_to receive(:provide_dispute_supporting_info)
+    expect(ErrorNotifier).not_to receive(:notify)
+
+    expect { described_class.new.perform(dispute.id) }.not_to raise_error
+  end
+
+  [408, 429, 500, 503].each do |status|
+    it "raises on a PayPal #{status} reading the dispute so Sidekiq retries, without taking the claim" do
+      allow(api).to receive(:fetch_dispute).and_return(OpenStruct.new(status_code: status, result: {}))
+      expect(api).not_to receive(:provide_dispute_supporting_info)
+
+      expect { described_class.new.perform(dispute.id) }.to raise_error(/PayPal returned #{status}/)
+      expect($redis.get(described_class.claim_key(dispute.id))).to be_nil
+    end
+  end
+
+  it "stays quiet when the live dispute is gone" do
+    allow(api).to receive(:fetch_dispute).and_return(OpenStruct.new(status_code: 404, result: {}))
+    expect(api).not_to receive(:provide_dispute_supporting_info)
+    expect(ErrorNotifier).not_to receive(:notify)
+
+    described_class.new.perform(dispute.id)
+  end
+
+  it "reads the offered action from a PayPal client response object" do
+    expect(described_class.action_offered?(OpenStruct.new(links: [OpenStruct.new(rel: "provide_supporting_info")]))).to be true
+    expect(described_class.action_offered?(OpenStruct.new(links: [OpenStruct.new(rel: "accept_claim")]))).to be false
+  end
+
+  it "labels every consumption event type" do
+    expect(described_class::ACCESS_LABELS.keys).to match_array(ConsumptionEvent::EVENT_TYPES)
+  end
 end
