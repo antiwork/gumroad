@@ -222,6 +222,18 @@ describe PiracyReports::ScreenService do
       expect(report.screening_checks).to eq("agent" => passing_checks)
     end
 
+    it "lets a person decline it afterwards, removing it from the review queue" do
+      call({ "verdict" => "review", "checks" => { "page_offers_work" => { "passed" => true, "reason" => "Page returns 404." } } })
+      expect(report.reload).to be_needs_review
+      checks = { "page_offers_work" => { "passed" => false, "reason" => "The page is gone." } }
+
+      expect(call({ "verdict" => "fail", "checks" => checks })).to be_success
+      report.reload
+      expect(report).to have_attributes(state: "declined", screening_verdict: "fail")
+      expect(report.screening_checks).to eq("agent" => checks, "rails" => [])
+      expect(PiracyReport.needs_review).to be_empty
+    end
+
     it "still requires a reason for each check" do
       result = call({ "verdict" => "review", "checks" => { "page_offers_work" => { "passed" => true, "reason" => "" } } })
 
