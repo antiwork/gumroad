@@ -11,8 +11,9 @@ class SidekiqUtility
   end
 
   def stop_process
-    # Set process to quiet mode.
-    sidekiq_process.quiet!
+    processes = instance_processes
+    Rails.logger.warn("[SidekiqUtility] No Sidekiq process found for instance #{instance_id} or hostname #{hostname}. Proceeding with instance termination.") if processes.empty?
+    processes.each(&:quiet!)
 
     wait_for_sidekiq_to_process_existing_jobs
 
@@ -21,14 +22,18 @@ class SidekiqUtility
 
   private
     def wait_for_sidekiq_to_process_existing_jobs
-      while sidekiq_process["busy"].nonzero? do
+      loop do
+        processes = instance_processes
+        break if processes.sum { |process| process["busy"] }.zero?
+
         # Break the loop and proceed with termination if waiting times out.
         break if timeout_exceeded?
 
         # Fix for stuck HandleSendgridEventJob jobs
         # TODO: Remove this once we fix the root cause of the stuck jobs
+        identities = processes.map { |process| process["identity"] }
         workers = Sidekiq::Workers.new.select do |process_id, _, _|
-          process_id == sidekiq_process["identity"]
+          identities.include?(process_id)
         end
 
         ignored_classes = ["HandleSendgridEventJob"]
@@ -85,8 +90,11 @@ class SidekiqUtility
        end
     end
 
-    def sidekiq_process
-      @process_set.find { |process| process["hostname"] == hostname }
+    # Processes started before the instance label shipped only match by hostname.
+    def instance_processes
+      label = "instance:#{instance_id}"
+      labeled = @process_set.select { |process| Array(process["labels"]).include?(label) }
+      labeled.presence || @process_set.select { |process| process["hostname"] == hostname }
     end
 
     def lifecycle_params

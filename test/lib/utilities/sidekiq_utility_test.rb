@@ -57,12 +57,23 @@ class SidekiqUtilityTest < ActiveSupport::TestCase
     assert_equal Socket.gethostname, @sidekiq_utility.send(:hostname)
   end
 
-  test "finds the process for the current hostname" do
-    process_set = [{ "hostname" => "test1" }, { "hostname" => "test2" }]
+  test "finds every process labeled with this instance" do
+    process_set = [
+      { "hostname" => "worker-1", "labels" => ["instance:sample_instance_id"] },
+      { "hostname" => "worker-2", "labels" => ["instance:sample_instance_id"] },
+      { "hostname" => "worker-3", "labels" => ["instance:other_instance_id"] },
+    ]
+    @sidekiq_utility.instance_variable_set(:@process_set, process_set)
+
+    assert_equal ["worker-1", "worker-2"], @sidekiq_utility.send(:instance_processes).map { |process| process["hostname"] }
+  end
+
+  test "falls back to the current hostname when no process carries the instance label" do
+    process_set = [{ "hostname" => "test1", "labels" => [] }, { "hostname" => "test2" }]
     @sidekiq_utility.stubs(:hostname).returns("test1")
     @sidekiq_utility.instance_variable_set(:@process_set, process_set)
 
-    assert_equal "test1", @sidekiq_utility.send(:sidekiq_process)["hostname"]
+    assert_equal ["test1"], @sidekiq_utility.send(:instance_processes).map { |process| process["hostname"] }
   end
 
   test "creates an AWS Auto Scaling client with instance credentials" do
@@ -102,7 +113,7 @@ class SidekiqUtilityTest < ActiveSupport::TestCase
   end
 
   test "does not heartbeat after the graceful shutdown deadline" do
-    @sidekiq_utility.stubs(:sidekiq_process).returns({ "busy" => 2, "identity" => "test_identity" })
+    @sidekiq_utility.stubs(:instance_processes).returns([{ "busy" => 2, "identity" => "test_identity" }])
     @sidekiq_utility.stubs(:timeout_exceeded?).returns(true)
     @asg_double.expects(:record_lifecycle_action_heartbeat).never
 
@@ -115,7 +126,7 @@ class SidekiqUtilityTest < ActiveSupport::TestCase
   # because the worker went idle instead, this would still pass while covering
   # a different branch.
   test "heartbeats until the graceful shutdown deadline is reached" do
-    @sidekiq_utility.stubs(:sidekiq_process).returns({ "busy" => 2, "identity" => "test_identity" })
+    @sidekiq_utility.stubs(:instance_processes).returns([{ "busy" => 2, "identity" => "test_identity" }])
     @sidekiq_utility.stubs(:timeout_exceeded?).returns(false, false, true)
     @sidekiq_utility.stubs(:sleep)
     @asg_double.expects(:record_lifecycle_action_heartbeat).twice
@@ -124,7 +135,7 @@ class SidekiqUtilityTest < ActiveSupport::TestCase
   end
 
   test "stops waiting when every running job is a stuck SendGrid event job" do
-    @sidekiq_utility.stubs(:sidekiq_process).returns({ "busy" => 1, "identity" => "test_identity" })
+    @sidekiq_utility.stubs(:instance_processes).returns([{ "busy" => 1, "identity" => "test_identity" }])
     Sidekiq::Workers.stubs(:new).returns([
                                            ["test_identity", "worker1", { "payload" => { "class" => "HandleSendgridEventJob" }.to_json }],
                                          ])
@@ -135,7 +146,7 @@ class SidekiqUtilityTest < ActiveSupport::TestCase
   end
 
   test "stops waiting when the lifecycle heartbeat reports an inactive action" do
-    @sidekiq_utility.stubs(:sidekiq_process).returns({ "busy" => 1, "identity" => "test_identity" })
+    @sidekiq_utility.stubs(:instance_processes).returns([{ "busy" => 1, "identity" => "test_identity" }])
     @sidekiq_utility.stubs(:timeout_exceeded?).returns(false)
     Sidekiq::Workers.stubs(:new).returns([])
     error = Aws::AutoScaling::Errors::ValidationError.new(nil, "No active Lifecycle Action found")
@@ -146,9 +157,9 @@ class SidekiqUtilityTest < ActiveSupport::TestCase
   end
 
   test "continues heartbeating when another job is still running" do
-    @sidekiq_utility.stubs(:sidekiq_process).returns(
-      { "busy" => 2, "identity" => "test_identity" },
-      { "busy" => 1, "identity" => "test_identity" },
+    @sidekiq_utility.stubs(:instance_processes).returns(
+      [{ "busy" => 2, "identity" => "test_identity" }],
+      [{ "busy" => 1, "identity" => "test_identity" }],
     )
     @sidekiq_utility.stubs(:timeout_exceeded?).returns(false, true)
     @sidekiq_utility.stubs(:sleep)
@@ -162,9 +173,55 @@ class SidekiqUtilityTest < ActiveSupport::TestCase
     @sidekiq_utility.send(:wait_for_sidekiq_to_process_existing_jobs)
   end
 
-  test "sets the process to quiet mode" do
+  test "stops waiting once every process on the instance is idle" do
+    @sidekiq_utility.stubs(:instance_processes).returns([{ "busy" => 0, "identity" => "a" }, { "busy" => 0, "identity" => "b" }])
+    @asg_double.expects(:record_lifecycle_action_heartbeat).never
+
+    @sidekiq_utility.send(:wait_for_sidekiq_to_process_existing_jobs)
+  end
+
+  test "keeps waiting while any process on the instance is busy" do
+    @sidekiq_utility.stubs(:instance_processes).returns(
+      [{ "busy" => 0, "identity" => "a" }, { "busy" => 1, "identity" => "b" }],
+      [{ "busy" => 0, "identity" => "a" }, { "busy" => 0, "identity" => "b" }],
+    )
+    @sidekiq_utility.stubs(:timeout_exceeded?).returns(false)
+    @sidekiq_utility.stubs(:sleep)
+    Sidekiq::Workers.stubs(:new).returns([["b", "worker1", { "payload" => { "class" => "OtherJob" }.to_json }]])
+    @asg_double.expects(:record_lifecycle_action_heartbeat).once
+
+    @sidekiq_utility.send(:wait_for_sidekiq_to_process_existing_jobs)
+  end
+
+  test "ignores stuck SendGrid jobs only when every busy job on the instance is one" do
+    @sidekiq_utility.stubs(:instance_processes).returns([{ "busy" => 1, "identity" => "a" }, { "busy" => 1, "identity" => "b" }])
+    Sidekiq::Workers.stubs(:new).returns([
+                                           ["a", "worker1", { "payload" => { "class" => "HandleSendgridEventJob" }.to_json }],
+                                           ["b", "worker1", { "payload" => { "class" => "HandleSendgridEventJob" }.to_json }],
+                                           ["elsewhere", "worker1", { "payload" => { "class" => "OtherJob" }.to_json }],
+                                         ])
+    Rails.logger.expects(:info).with("[SidekiqUtility] HandleSendgridEventJob jobs are stuck. Proceeding with instance termination.")
+    @asg_double.expects(:record_lifecycle_action_heartbeat).never
+
+    @sidekiq_utility.send(:wait_for_sidekiq_to_process_existing_jobs)
+  end
+
+  test "sets every process on the instance to quiet mode" do
     prepare_stop_process
+    second_process = stub("second_sidekiq_process")
+    second_process.expects(:quiet!)
+    @sidekiq_utility.stubs(:instance_processes).returns([@sidekiq_process_double, second_process])
     @sidekiq_process_double.expects(:quiet!)
+
+    @sidekiq_utility.stop_process
+  end
+
+  test "warns and proceeds with termination when no process belongs to the instance" do
+    prepare_stop_process
+    @sidekiq_utility.stubs(:instance_processes).returns([])
+    @sidekiq_utility.stubs(:hostname).returns("test1")
+    Rails.logger.expects(:warn).with("[SidekiqUtility] No Sidekiq process found for instance sample_instance_id or hostname test1. Proceeding with instance termination.")
+    @sidekiq_utility.expects(:proceed_with_instance_termination)
 
     @sidekiq_utility.stop_process
   end
@@ -187,7 +244,7 @@ class SidekiqUtilityTest < ActiveSupport::TestCase
     def prepare_stop_process
       process_double = stub("sidekiq_process", quiet!: nil)
       @sidekiq_process_double = process_double
-      @sidekiq_utility.stubs(:sidekiq_process).returns(process_double)
+      @sidekiq_utility.stubs(:instance_processes).returns([process_double])
       @sidekiq_utility.stubs(:wait_for_sidekiq_to_process_existing_jobs)
       @sidekiq_utility.stubs(:proceed_with_instance_termination)
     end
