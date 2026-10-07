@@ -185,13 +185,15 @@ describe Api::Internal::Admin::AuthController do
       expect(AdminApiToken.authenticate(other_plaintext_token)).to be_present
     end
 
-    it "does not rotate a human token, whose replacement would reset its age limit" do
-      plaintext_token, = AdminApiToken.mint_with_plaintext!(actor_user_id: create(:admin_user).id, expires_at: 30.days.from_now)
+    it "refuses to rotate a token that expires and says to revoke it instead" do
+      plaintext_token, admin_api_token = AdminApiToken.mint_with_plaintext!(actor_user_id: create(:admin_user).id, expires_at: 30.days.from_now)
       request.headers["Authorization"] = "Bearer #{plaintext_token}"
 
-      post :rotate
+      expect { post :rotate }.not_to change { AdminApiToken.count }
 
-      expect(response).to have_http_status(:not_found)
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body).to eq({ "success" => false, "message" => "only a token without an expiry can be rotated; revoke it instead" })
+      expect(admin_api_token.reload.revoked_at).to be_nil
     end
 
     it "does not rotate an already revoked token" do

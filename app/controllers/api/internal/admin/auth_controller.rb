@@ -33,8 +33,9 @@ class Api::Internal::Admin::AuthController < Api::Internal::Admin::BaseControlle
     return render_admin_token_not_found if admin_api_token.blank?
 
     record_admin_write(action: "auth.rotate", target: admin_api_token) do
-      rotated = admin_api_token.rotate!
-      if rotated.blank?
+      if admin_api_token.expires_at.present?
+        render json: { success: false, message: "only a token without an expiry can be rotated; revoke it instead" }, status: :unprocessable_entity
+      elsif (rotated = admin_api_token.rotate!).blank?
         render_admin_token_not_found
       else
         plaintext_token, replacement = rotated
@@ -52,9 +53,9 @@ class Api::Internal::Admin::AuthController < Api::Internal::Admin::BaseControlle
       render json: { success: false, message: "admin token not found" }, status: :not_found
     end
 
-    # A token may always act on itself. A service token (any scope but admin) can also be reached by
-    # external id, so a leaked agent token has a kill switch without a console session; another
-    # actor's admin token stays out of reach.
+    # Only admin tokens reach this controller. One may act on itself or on any service token (any
+    # scope but admin) by external id, so a leaked agent token has a kill switch without a console
+    # session; another actor's admin token stays out of reach.
     def token_to_manage
       external_id = params[:external_id].presence
       return Current.admin_token if external_id.blank?
