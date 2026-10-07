@@ -35,7 +35,7 @@ describe SubmitPaypalDisputeEvidenceJob do
       expect(dispute_id).to eq "PP-R-ABC-1"
       expect(merchant_account.charge_processor_merchant_id).to eq "PAYERID123"
       expect(notes).to include "Recipe Pack (Gumroad order #{purchase.external_id}, paid 2026-09-26 19:35:26)"
-      expect(notes).to include "download page opened 2026-09-26 19:35:51; file downloaded 2026-09-26 19:35:53"
+      expect(notes).to include "file downloaded 2026-09-26 19:35:53; download page opened 2026-09-26 19:35:51"
       accepted
     end
 
@@ -122,7 +122,7 @@ describe SubmitPaypalDisputeEvidenceJob do
 
     notes = described_class.evidence_notes([purchase])
     expect(notes).to include "file downloaded 2026-09-26 20:00:00"
-    expect(notes).to include "3 more page opens or accesses not listed"
+    expect(notes).to include "3 more entries not listed"
   end
 
   it "counts downloads recorded against bundle member purchases" do
@@ -133,5 +133,29 @@ describe SubmitPaypalDisputeEvidenceJob do
     create(:consumption_event, purchase_id: member.id, link_id: member.link.id, url_redirect_id: 1, product_file_id: nil, event_type: "download", consumed_at: Time.utc(2026, 9, 26, 21, 0))
 
     expect(described_class.evidence_notes([purchase])).to include "file downloaded 2026-09-26 21:00:00"
+  end
+
+  it "does not post again when PayPal already holds our note" do
+    held = OpenStruct.new(status_code: 200, result: { "links" => [{ "rel" => "provide_supporting_info" }],
+                                                      "supporting_info" => [{ "notes" => "#{described_class::NOTES_HEADER}\n..." }] })
+    allow(api).to receive(:fetch_dispute).and_return(held)
+    expect(api).not_to receive(:provide_dispute_supporting_info)
+
+    described_class.new.perform(dispute.id)
+  end
+
+  it "fits a multi-purchase note within PayPal's 2,000-character limit and keeps each download" do
+    purchases = Array.new(3) do |n|
+      p = create(:purchase, link: create(:product, user: seller, name: "A very long perfume recipe product name number #{n} " * 2), seller:, merchant_account:)
+      20.times { |i| create(:consumption_event, purchase_id: p.id, link_id: p.link.id, url_redirect_id: 1, product_file_id: nil, event_type: "download", consumed_at: Time.utc(2026, 9, 26, 20, i)) }
+      5.times { |i| create(:consumption_event, purchase_id: p.id, link_id: p.link.id, url_redirect_id: 1, product_file_id: nil, event_type: "view", consumed_at: Time.utc(2026, 9, 26, 19, i)) }
+      p
+    end
+
+    notes = described_class.evidence_notes(purchases)
+    expect(notes.length).to be <= described_class::MAX_NOTES_LENGTH
+    purchases.each { |p| expect(notes).to include "Gumroad order #{p.external_id}" }
+    expect(notes.scan("file downloaded 2026-09-26 20:00:00").size).to eq 3
+    expect(notes).to match(/\d+ more entries not listed/)
   end
 end

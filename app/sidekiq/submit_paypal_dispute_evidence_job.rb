@@ -23,6 +23,10 @@ class SubmitPaypalDisputeEvidenceJob
   IN_FLIGHT_CLAIM_TTL = 15.minutes.to_i
   MAX_VIEWS_PER_PURCHASE = 5
   MAX_ACCESSES_PER_PURCHASE = 20
+  # PayPal's supporting-info schema caps `notes` at 2,000 characters; an oversized note is
+  # rejected whole, so the complete note is fitted to this budget.
+  MAX_NOTES_LENGTH = 2_000
+  NOTES_HEADER = "Digital product delivered instantly by Gumroad, the seller's checkout platform. Gumroad's access log for this order:"
   ACCESS_LABELS = {
     ConsumptionEvent::EVENT_TYPE_VIEW => "download page opened",
     ConsumptionEvent::EVENT_TYPE_DOWNLOAD => "file downloaded",
@@ -54,6 +58,9 @@ class SubmitPaypalDisputeEvidenceJob
     live = api.fetch_dispute(dispute_id: dispute.charge_processor_dispute_id, merchant_account:)
     return Rails.logger.info("SubmitPaypalDisputeEvidenceJob: dispute #{dispute.id} read failed (#{live.status_code})") unless api.successful_response?(live)
     return unless self.class.action_offered?(live.result)
+    # The claim cannot tell a lost success response from a failure, so the case itself is the
+    # final check: never post a second copy of a note PayPal already holds.
+    return if self.class.already_submitted?(live.result)
 
     key = self.class.claim_key(dispute.id)
     return unless $redis.set(key, Time.current.to_i, nx: true, ex: IN_FLIGHT_CLAIM_TTL)
@@ -63,7 +70,7 @@ class SubmitPaypalDisputeEvidenceJob
       response = api.provide_dispute_supporting_info(dispute_id: dispute.charge_processor_dispute_id, merchant_account:, notes:)
       if api.successful_response?(response)
         confirmed = true
-        $redis.expire(key, CLAIM_TTL)
+        $redis.set(key, Time.current.to_i, ex: CLAIM_TTL)
         Rails.logger.info("SubmitPaypalDisputeEvidenceJob: submitted delivery record for dispute #{dispute.id}")
       else
         ErrorNotifier.notify("SubmitPaypalDisputeEvidenceJob: PayPal rejected supporting info for dispute #{dispute.id} (#{response.status_code})")
@@ -83,23 +90,52 @@ class SubmitPaypalDisputeEvidenceJob
     end
   end
 
+  def self.already_submitted?(result)
+    info = result.respond_to?(:supporting_info) ? result.supporting_info : (result.is_a?(Hash) ? result["supporting_info"] : nil)
+    Array(info).any? do |entry|
+      notes = entry.respond_to?(:notes) ? entry.notes : entry["notes"]
+      notes.to_s.start_with?(NOTES_HEADER)
+    end
+  end
+
   # Returns nil when no disputed item was ever opened: a note that says "never downloaded"
   # would only help the buyer, so that case is left to the seller.
   def self.evidence_notes(purchases)
-    lines = []
-    any_access = false
-    purchases.each do |purchase|
-      accesses = access_events(access_purchases(purchase))
-      any_access ||= accesses.any?
-      line = "#{purchase.link.name} (Gumroad order #{purchase.external_id}, paid #{fmt(purchase.created_at)}): "
-      line += accesses.any? ? accesses.join("; ") : "no access recorded"
-      lines << line
+    sections = purchases.map do |purchase|
+      ["#{purchase.link.name} (Gumroad order #{purchase.external_id}, paid #{fmt(purchase.created_at)}): ",
+       access_events(access_purchases(purchase))]
     end
-    return nil unless any_access
+    return nil if sections.all? { |_, (accesses, _)| accesses.empty? }
 
-    ["Digital product delivered instantly by Gumroad, the seller's checkout platform. Gumroad's access log for this order:",
-     *lines,
-     "All times UTC."].join("\n")
+    fit_to_budget(sections)
+  end
+
+  # Builds the note within MAX_NOTES_LENGTH. Entries are already proof-first per purchase
+  # (downloads/reads before page opens), so trimming drops the tail of each purchase's list
+  # in turn and says how many entries were left out.
+  def self.fit_to_budget(sections)
+    keep = sections.map { |_, (accesses, _)| accesses.size }
+    loop do
+      note = render_note(sections, keep)
+      return note if note.length <= MAX_NOTES_LENGTH
+
+      longest = keep.each_with_index.max_by { |count, _| count }&.last
+      if longest.nil? || keep[longest].zero?
+        return note.truncate(MAX_NOTES_LENGTH, omission: "\n(truncated)")
+      end
+      keep[longest] -= 1
+    end
+  end
+
+  def self.render_note(sections, keep)
+    lines = sections.each_with_index.map do |(prefix, (accesses, omitted)), i|
+      shown = accesses.first(keep[i])
+      dropped = omitted + accesses.size - shown.size
+      body = shown.any? ? shown.join("; ") : (accesses.empty? ? "no access recorded" : "")
+      body += "#{body.empty? ? '' : '; '}#{dropped} more entries not listed" if dropped.positive?
+      prefix + body
+    end
+    [NOTES_HEADER, *lines, "All times UTC."].join("\n")
   end
 
   # Access rows of a bundle are written against its member purchases, not the wrapper.
@@ -109,20 +145,18 @@ class SubmitPaypalDisputeEvidenceJob
     [purchase, *purchase.product_purchases]
   end
 
-  # Downloads and reads are the proof, so page opens are capped on their own and a note that
-  # drops anything says so.
+  # Downloads and reads are the proof, so they come first and page opens are capped on their
+  # own. Each query is bounded; only the omitted count is a COUNT over the rest.
   def self.access_events(purchases)
-    rows = ConsumptionEvent.where(purchase_id: purchases.map(&:id), event_type: ACCESS_LABELS.keys)
-                           .order(Arel.sql("COALESCE(consumed_at, created_at), id"))
-                           .pluck(:event_type, :consumed_at, :created_at)
-                           .map { |type, consumed_at, created_at| [type, consumed_at || created_at] }
-    views, others = rows.partition { |type, _| type == ConsumptionEvent::EVENT_TYPE_VIEW }
-    kept_others = others.first(MAX_ACCESSES_PER_PURCHASE)
-    kept_views = views.first(MAX_VIEWS_PER_PURCHASE)
-    entries = (kept_views + kept_others).sort_by { |_, at| at }.map { |type, at| "#{ACCESS_LABELS.fetch(type)} #{fmt(at)}" }
-    omitted = rows.size - kept_views.size - kept_others.size
-    entries << "#{omitted} more page opens or accesses not listed" if omitted.positive?
-    entries
+    scope = ConsumptionEvent.where(purchase_id: purchases.map(&:id))
+    order = Arel.sql("COALESCE(consumed_at, created_at), id")
+    others = scope.where(event_type: ACCESS_LABELS.keys - [ConsumptionEvent::EVENT_TYPE_VIEW])
+    views = scope.where(event_type: ConsumptionEvent::EVENT_TYPE_VIEW)
+    kept = others.order(order).limit(MAX_ACCESSES_PER_PURCHASE).pluck(:event_type, :consumed_at, :created_at) +
+           views.order(order).limit(MAX_VIEWS_PER_PURCHASE).pluck(:event_type, :consumed_at, :created_at)
+    entries = kept.map { |type, consumed_at, created_at| [type, consumed_at || created_at] }
+                  .map { |type, at| "#{ACCESS_LABELS.fetch(type)} #{fmt(at)}" }
+    [entries, others.count + views.count - kept.size]
   end
 
   def self.fmt(time) = time.utc.strftime("%Y-%m-%d %H:%M:%S")
