@@ -46,12 +46,13 @@ const firstMappings = (mappings: string) => {
 };
 
 // Returns each entry's code, keyed by entry name.
-const buildOutput = async (entries: string[], root = fixture, sharedProgram?: boolean) => {
+const buildOutput = async (entries: string[], root = fixture, sharedProgram?: boolean, sourcemap = false) => {
   const result = await build({
     ...config(root, sharedProgram),
     build: {
       write: false,
       minify: false,
+      sourcemap,
       lib: {
         entry: Object.fromEntries(entries.map((name) => [name, path.join(root, `${name}.ts`)])),
         formats: ["es"],
@@ -62,7 +63,11 @@ const buildOutput = async (entries: string[], root = fixture, sharedProgram?: bo
   return Object.fromEntries(
     outputs
       .flatMap(({ output }) => output)
-      .flatMap((chunk) => (chunk.type === "chunk" ? [[chunk.name, chunk.code]] : [])),
+      .flatMap((chunk) =>
+        chunk.type === "chunk"
+          ? [[chunk.name, sourcemap ? { code: chunk.code, map: chunk.map?.toString() } : chunk.code]]
+          : [],
+      ),
   );
 };
 
@@ -79,13 +84,14 @@ describe("typia transform in a one-shot build", () => {
   }, 60_000);
 
   it("produces the same output when the machine is slow", async () => {
-    const expected = await buildOutput(["guardian"]);
-    expect(expected.guardian).not.toContain('expected: "Guardian "');
+    const expected = await buildOutput(["guardian"], fixture, undefined, true);
+    expect(expected.guardian.code).not.toContain('expected: "Guardian "');
+    expect(expected.guardian.map).toBeTruthy();
     // Every clock read jumps 10 s, as if each step of a transform were slow.
     let now = Date.prototype.getTime.call(new Date());
     const clock = vi.spyOn(Date.prototype, "getTime").mockImplementation(() => (now += 10_000));
     try {
-      expect(await buildOutput(["guardian"])).toEqual(expected);
+      expect(await buildOutput(["guardian"], fixture, undefined, true)).toEqual(expected);
     } finally {
       clock.mockRestore();
     }
