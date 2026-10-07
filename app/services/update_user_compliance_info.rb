@@ -38,6 +38,7 @@ class UpdateUserComplianceInfo
   # "id_number mismatch" the seller cannot see or fix. Validate the shape up front so the
   # seller gets an actionable error at save time instead. Case-insensitive: Stripe accepts
   # lowercase, so we don't reject it.
+  HONG_KONG_PASSPORT_COUNTRY_ERROR = "Choose the country that issued your passport."
   SINGAPORE_NRIC_FIN_PATTERN = /\A[STFGM]\d{7}[A-Z]\z/i
   ENCRYPTED_FIELD_LABELS = {
     individual_tax_id: "Individual tax id",
@@ -138,6 +139,9 @@ class UpdateUserComplianceInfo
 
         guatemala_nit_error = guatemala_individual_nit_error(old_compliance_info)
         return { success: false, error_message: guatemala_nit_error } if guatemala_nit_error
+
+        passport_country_error = hong_kong_passport_issuing_country_error(old_compliance_info)
+        return { success: false, error_message: passport_country_error } if passport_country_error
 
         saved = false
         new_compliance_info = nil
@@ -404,6 +408,24 @@ class UpdateUserComplianceInfo
       return unless individual_id_country_matches?(old_compliance_info, Compliance::Countries::GTM.alpha2)
       return if Compliance::GuatemalaNit.valid?(submitted)
       Compliance::GuatemalaNit::ERROR_MESSAGE
+    end
+
+    # A Hong Kong company's representative who lives abroad enters a passport number in place of a
+    # HKID. Stripe wants the issuing country with it; the form stores that as the nationality.
+    def hong_kong_passport_issuing_country_error(old_compliance_info)
+      return if submitted_tax_id_for(:individual_tax_id).blank?
+      return unless hong_kong_company_with_foreign_representative?(old_compliance_info)
+      return if (compliance_params[:nationality].presence || old_compliance_info.nationality).present?
+
+      HONG_KONG_PASSPORT_COUNTRY_ERROR
+    end
+
+    def hong_kong_company_with_foreign_representative?(old_compliance_info)
+      return false unless effective_is_business?
+
+      representative_country = representative_country_code(old_compliance_info)
+      effective_legal_entity_country_code(old_compliance_info) == Compliance::Countries::HKG.alpha2 &&
+        representative_country.present? && representative_country != Compliance::Countries::HKG.alpha2
     end
 
     # A personal tax ID belongs to the representative, so its shape is only knowable from the

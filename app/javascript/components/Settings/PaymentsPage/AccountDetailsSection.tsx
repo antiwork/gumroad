@@ -9,6 +9,7 @@ import {
   PERSONAL_ID_NUMBER_CONFIG,
   personalTaxIdError,
   type TaxIdConfig,
+  usesHongKongPassport,
 } from "$app/utils/personalTaxId";
 import { countryRequiresPostalCode } from "$app/utils/postalCodes";
 
@@ -299,7 +300,9 @@ const AccountDetailsSection = ({
 
   // Stripe's requirement set decides when it wants individual.nationality, so the field cannot
   // be gated on the four countries it used to be hardcoded to — those keep showing it.
+  const hongKongPassport = usesHongKongPassport(complianceInfo);
   const showNationalityField =
+    hongKongPassport ||
     user.has_outstanding_nationality_requirement ||
     user.country_code === "AE" ||
     user.country_code === "SG" ||
@@ -1174,7 +1177,9 @@ const AccountDetailsSection = ({
       {showNationalityField ? (
         <Fieldset state={errorFieldNames.has("nationality") ? "danger" : undefined}>
           <FieldsetTitle>
-            <Label htmlFor={`${uid}-nationality`}>Nationality</Label>
+            <Label htmlFor={`${uid}-nationality`}>
+              {hongKongPassport ? "Passport issuing country" : "Nationality"}
+            </Label>
           </FieldsetTitle>
           {/* No wrapper div: a plain block around the Select keeps its `inline-grid`
               root at content width, so the control renders narrower than the fields
@@ -1197,7 +1202,9 @@ const AccountDetailsSection = ({
             ))}
           </Select>
           <FieldsetDescription id={`${uid}-nationality-note`}>
-            Nationals of Cuba, Iran, North Korea and Syria cannot be verified, so their nationalities are not listed.
+            {hongKongPassport
+              ? "Choose the country that issued your passport. Nationals of Cuba, Iran, North Korea and Syria cannot be verified, so those countries are not listed."
+              : "Nationals of Cuba, Iran, North Korea and Syria cannot be verified, so their nationalities are not listed."}
           </FieldsetDescription>
         </Fieldset>
       ) : null}
@@ -1217,6 +1224,18 @@ const AccountDetailsSection = ({
                 {!hasIdDocumentAlternative
                   ? " If you have neither, use Stripe's verification link to upload a passport when offered."
                   : null}
+              </FieldsetDescription>
+            ) : null}
+            {hongKongPassport ? (
+              <FieldsetDescription className="text-muted">
+                Enter your passport number instead of a Hong Kong ID number, since you live outside Hong Kong.
+              </FieldsetDescription>
+            ) : null}
+            {complianceInfo.is_business &&
+            complianceInfo.business_country === "HK" &&
+            complianceInfo.country === "HK" ? (
+              <FieldsetDescription className="text-muted">
+                No Hong Kong ID? Set the country above to where you live, and enter your passport number instead.
               </FieldsetDescription>
             ) : null}
             {hasIdDocumentAlternative && !isFormDisabled ? (

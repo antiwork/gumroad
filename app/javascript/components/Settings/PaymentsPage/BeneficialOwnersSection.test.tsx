@@ -59,7 +59,7 @@ const renderSection = (owners: unknown[], defaultCountry = "GB") => {
   );
   return render(
     <BeneficialOwnersSection
-      countries={{ GB: "United Kingdom", AE: "United Arab Emirates" }}
+      countries={{ GB: "United Kingdom", AE: "United Arab Emirates", HK: "Hong Kong" }}
       states={{ us: [], ca: [], au: [], mx: [], ae: [], ir: [], br: [], jp: [] }}
       defaultCountry={defaultCountry}
       minDobYear={1900}
@@ -151,5 +151,37 @@ describe("BeneficialOwnersSection nationality note", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Add beneficial owner" }));
 
     expect(screen.queryByText(/Nationals of Cuba/u)).toBeNull();
+  });
+});
+
+describe("BeneficialOwnersSection Hong Kong passport", () => {
+  const openAddForm = async () => {
+    renderSection([], "HK");
+    fireEvent.click(await screen.findByRole("button", { name: "Add beneficial owner" }));
+    await screen.findByLabelText("Hong Kong ID Number");
+  };
+
+  it("keeps the Hong Kong ID number while the owner's address is in Hong Kong", async () => {
+    await openAddForm();
+
+    expect(screen.queryByLabelText("Passport issuing country")).toBeNull();
+  });
+
+  it("asks for a passport number and issuing country once the address is outside Hong Kong", async () => {
+    await openAddForm();
+
+    fireEvent.change(screen.getByLabelText("Country"), { target: { value: "GB" } });
+
+    expect(await screen.findByLabelText("Passport number")).toBeTruthy();
+    expect(screen.queryByLabelText("Hong Kong ID Number")).toBeNull();
+    expect(screen.getByLabelText<HTMLSelectElement>("Passport issuing country").required).toBe(true);
+  });
+
+  it("does not require the issuing country when editing an owner abroad who has none on file", async () => {
+    renderSection([ownerWithoutIdNumber], "HK");
+    fireEvent.click(await screen.findByRole("button", { name: "Edit Chloe Flexman" }));
+
+    const select = await screen.findByLabelText<HTMLSelectElement>("Passport issuing country");
+    expect(select.required).toBe(false);
   });
 });

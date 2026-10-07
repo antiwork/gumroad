@@ -15,6 +15,20 @@ export const PERSONAL_ID_NUMBER_CONFIG: TaxIdConfig = {
   idSuffix: "personal-id-number",
 };
 
+export const HONG_KONG_PASSPORT_ID_CONFIG: TaxIdConfig = {
+  label: "Passport number",
+  placeholder: "Passport number",
+  idSuffix: "passport-number",
+};
+
+// A Hong Kong company's representative who lives abroad has no HKID. Stripe takes their passport
+// number as `id_number` and the issuing country (stored as nationality) alongside it.
+export const usesHongKongPassport = (complianceInfo: ComplianceInfo): boolean =>
+  complianceInfo.is_business &&
+  complianceInfo.business_country === "HK" &&
+  !!complianceInfo.country &&
+  complianceInfo.country !== "HK";
+
 export const usesUsTaxId = (complianceInfo: ComplianceInfo, user: User): boolean => {
   const accountCountry = complianceInfo.is_business ? complianceInfo.business_country : complianceInfo.country;
   return (
@@ -45,6 +59,8 @@ export const stripeRequirementLabel = (key: string): string => {
 };
 
 export const getIndividualTaxIdConfig = (complianceInfo: ComplianceInfo, user: User): TaxIdConfig => {
+  if (usesHongKongPassport(complianceInfo)) return HONG_KONG_PASSPORT_ID_CONFIG;
+
   if (complianceInfo.country === "US") {
     return user.need_full_ssn
       ? {
