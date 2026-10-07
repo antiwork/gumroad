@@ -72,6 +72,32 @@ describe "Checkout offer codes", :js, type: :system do
     end
   end
 
+  it "keeps a qualifying quantity discount when a cart with two options is reloaded" do
+    seller = create(:user, display_offer_code_field: true)
+    product = create(:product_with_digital_versions, user: seller, price_cents: 1000, name: "Versioned workbook")
+    basic_option, team_option = product.alive_variants.to_a
+    basic_option.update!(name: "Basic")
+    team_option.update!(name: "Team", price_difference_cents: 1000)
+    offer_code = create(:percentage_offer_code, user: seller, products: [product], code: "BUY2", amount_percentage: 20, minimum_quantity: 2)
+
+    visit product.long_url
+    add_to_cart(product, option: basic_option.name)
+    visit product.long_url
+    add_to_cart(product, option: team_option.name)
+    expect(page).to have_selector("[role=listitem] h4", text: product.name, count: 2)
+    fill_in "Discount code", with: offer_code.code
+    click_on "Apply"
+    expect(page).to have_text("Discounts BUY2 US$-6", normalize_ws: true)
+    wait_until_true { Cart.last&.discount_codes&.any? { _1["code"] == offer_code.code } && Cart.last.alive_cart_products.count == 2 }
+
+    visit checkout_path
+
+    expect(page).to have_selector("[role=listitem] h4", text: product.name, count: 2)
+    expect(page).to have_text("Version: Basic")
+    expect(page).to have_text("Version: Team")
+    expect(page).to have_text("Discounts BUY2 US$-6", normalize_ws: true)
+  end
+
   describe "when product is removed from cart" do
     let(:seller) { create(:user, display_offer_code_field: true) }
     let!(:product1) { create(:product, user: seller, name: "Product 1", price_cents: 1000) }

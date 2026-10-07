@@ -28,13 +28,20 @@ class CartPresenter
         ] }
       ).load
 
+    discount_products = cart_products.to_h do |cart_product|
+      [cart_product.id, {
+        permalink: cart_product.product.unique_permalink,
+        quantity: cart_product.quantity,
+        variant_external_id: cart_product.option&.external_id || "",
+      }]
+    end
+
     {
       email: cart.email.presence,
       returnUrl: cart.return_url.presence || "",
       rejectPppDiscount: cart.reject_ppp_discount,
       discountCodes: cart.discount_codes.map do |discount_code|
-        products = cart_products.each_with_object({}) { |cart_product, hash| hash[cart_product.product.unique_permalink] = { permalink: cart_product.product.unique_permalink, quantity: cart_product.quantity } }
-        result = OfferCodeDiscountComputingService.new(OfferCode.normalize_code(discount_code["code"]), products, buyer: logged_in_user).process
+        result = OfferCodeDiscountComputingService.new(OfferCode.normalize_code(discount_code["code"]), discount_products, buyer: logged_in_user).process
 
         {
           code: discount_code["code"],
