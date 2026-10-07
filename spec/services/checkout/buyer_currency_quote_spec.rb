@@ -366,10 +366,17 @@ describe Checkout::BuyerCurrencyQuote do
         line_item = described_class::LineItem.from_surcharge(permalink: product.unique_permalink, product:, tax_result:,
                                                              tip_cents: 0, shipping_usd_cents: 0)
         expect(line_item.australian_gst).to be(true)
+        allow(StripeFxQuote).to receive(:create).with(
+          to_currency: Currency::USD,
+          from_currency: Currency::AUD,
+          stripe_account_id: merchant_account.charge_processor_merchant_id,
+          destination_account_id: nil
+        ).and_return(StripeFxQuote::Quote.new(id: "fxq_aud", expires_at: 30.minutes.from_now, fx_rate: BigDecimal("0.66")))
 
-        result = described_class.create(line_items: [line_item], canonical_total_cents: 10_99, ip: "24.48.0.1")
+        result = described_class.create(line_items: [line_item], canonical_total_cents: 10_99, ip: "1.1.1.1", currency: Currency::AUD)
         allocation = result.line_allocations.sole
 
+        expect(result.currency).to eq(Currency::AUD)
         expect(result.rounding_delta_cents).not_to eq(0)
         expect(allocation.presentment_total_cents).to eq(result.presentment_total_cents)
         expect(allocation.presentment_gumroad_tax_cents).to eq((BigDecimal(allocation.presentment_total_cents) / 11).round)
