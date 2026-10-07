@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -195,6 +195,7 @@ describe("BeneficialOwnersSection Hong Kong passport", () => {
     const issuingCountry = screen.getByLabelText("Passport issuing country");
 
     expect(passportFieldsInOrder(number, issuingCountry)).toEqual([number, issuingCountry]);
+    expect(within(issuingCountry).getByRole("option", { name: "Select country" })).toBeTruthy();
   });
 
   it("explains why a passport is asked for under the passport number", async () => {

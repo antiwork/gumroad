@@ -632,7 +632,7 @@ const BeneficialOwnersSection = ({
           onChange={(event) => updateForm({ nationality: event.target.value })}
         >
           <option value="" disabled>
-            {hongKongPassport ? "Issuing country" : "Nationality"}
+            {hongKongPassport ? "Select country" : "Nationality"}
           </option>
           {Object.entries(countries).map(([code, name]) => (
             <option key={code} value={code} disabled={name.includes("(not supported)")}>
