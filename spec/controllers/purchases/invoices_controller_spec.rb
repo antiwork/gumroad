@@ -367,7 +367,7 @@ describe Purchases::InvoicesController, :vcr, type: :controller, inertia: true d
           context "when the purchase was already zero-rated with a stored VAT id" do
             before do
               @purchase.update!(gumroad_tax_cents: 0)
-              @purchase.purchase_sales_tax_info = PurchaseSalesTaxInfo.new(country_code: Compliance::Countries::IRL.alpha2, business_vat_id: "IE6388047V")
+              @purchase.purchase_sales_tax_info = build(:purchase_sales_tax_info, country_code: Compliance::Countries::IRL.alpha2, business_vat_id: "IE6388047V")
               @purchase.save!
             end
 
