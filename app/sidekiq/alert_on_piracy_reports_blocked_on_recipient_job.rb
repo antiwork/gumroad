@@ -1,11 +1,6 @@
 # frozen_string_literal: true
 
-# Reports piracy reports the screening agent approved but the registry cannot route: the reported
-# host has no entry in config/piracy_recipients.yml, so the report stays in `screening` forever.
-#
-# Nothing else watches that queue, so the first real creator report parks silently and no notice
-# ever goes out. The alert exists to be read by whoever owns the registry: each listed host needs
-# a verified takedown contact added before the report can move on.
+# No other job watches reports waiting indefinitely for a verified recipient.
 class AlertOnPiracyReportsBlockedOnRecipientJob
   include Sidekiq::Job
   sidekiq_options retry: 2, queue: :low
@@ -38,7 +33,8 @@ class AlertOnPiracyReportsBlockedOnRecipientJob
         "",
         "Each host needs a verified takedown contact added to config/piracy_recipients.yml — check the " \
           "Copyright Office directory (https://dmca.copyright.gov/osp/) or the site's own DMCA page, and " \
-          "record it as source_url. Until then the report stays in `screening` and no notice is sent.",
+          "record it as source_url. After deploying the registry change, submit each report's pass verdict " \
+          "and checks again through the admin screening API to prepare the notice and request the seller's signature.",
       ].compact.join("\n")
     end
 end
