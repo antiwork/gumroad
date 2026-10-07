@@ -189,6 +189,9 @@ describe SalesRelatedProductsInfo, "concurrent sales count upserts" do
   end
 
   context "when InnoDB picks the upsert as a deadlock victim" do
+    # Each wait returns as soon as its condition holds; the budget only bounds a stuck run.
+    LOCK_WAIT_BUDGET_SECONDS = 20
+
     let(:product_id) { base_id + 1 }
     let(:first_pair) { [product_id, base_id + 2] }
     let(:second_pair) { [product_id, base_id + 3] }
@@ -200,12 +203,25 @@ describe SalesRelatedProductsInfo, "concurrent sales count upserts" do
       "smaller_product_id = #{pair[0]} AND larger_product_id = #{pair[1]}"
     end
 
+    def table_lock_waiter_ids(connection)
+      connection.select_values(<<~SQL).map(&:to_i)
+        SELECT requesting_thread.PROCESSLIST_ID FROM performance_schema.data_lock_waits AS lock_waits
+        INNER JOIN performance_schema.data_locks AS requested_lock
+          ON requested_lock.ENGINE_LOCK_ID = lock_waits.REQUESTING_ENGINE_LOCK_ID
+        INNER JOIN performance_schema.threads AS requesting_thread
+          ON requesting_thread.THREAD_ID = lock_waits.REQUESTING_THREAD_ID
+        WHERE requested_lock.OBJECT_SCHEMA = DATABASE()
+          AND requested_lock.OBJECT_NAME = #{connection.quote(described_class.table_name)}
+      SQL
+    end
+
     # Another session holds second_pair and, once the upsert has locked first_pair and is waiting
     # on second_pair, updates first_pair. Its 40 inserted rows make it the heavier transaction, so
     # InnoDB rolls back the upsert's. Returns what the block raised, if anything.
     def deadlock_upsert
       process_id = ApplicationRecord.connection.select_value("SELECT CONNECTION_ID()").to_i
       holding = Queue.new
+      upserting = Queue.new
       other = Thread.new do
         Thread.current.report_on_exception = false
         ApplicationRecord.connection_pool.with_connection do |connection|
@@ -213,38 +229,34 @@ describe SalesRelatedProductsInfo, "concurrent sales count upserts" do
             seed_pairs(Array.new(40) { [base_id + 100 + _1, base_id + 200] })
             connection.execute("SELECT id FROM #{described_class.table_name} WHERE #{where_pair(second_pair)} FOR UPDATE")
             holding << true
-            blocked = 200.times.any? do
-              waiting = connection.uncached do
-                connection.select_value(<<~SQL)
-                  SELECT COUNT(*) FROM performance_schema.data_lock_waits AS lock_waits
-                  INNER JOIN performance_schema.data_locks AS requested_lock
-                    ON requested_lock.ENGINE_LOCK_ID = lock_waits.REQUESTING_ENGINE_LOCK_ID
-                  INNER JOIN performance_schema.threads AS requesting_thread
-                    ON requesting_thread.THREAD_ID = lock_waits.REQUESTING_THREAD_ID
-                  WHERE requesting_thread.PROCESSLIST_ID = #{process_id}
-                    AND requested_lock.OBJECT_SCHEMA = DATABASE()
-                    AND requested_lock.OBJECT_NAME = #{connection.quote(described_class.table_name)}
+            raise "the block never started" unless upserting.pop(timeout: LOCK_WAIT_BUDGET_SECONDS)
+            deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + LOCK_WAIT_BUDGET_SECONDS
+            until (waiting_ids = connection.uncached { table_lock_waiter_ids(connection) }).include?(process_id)
+              if Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
+                upsert_thread = connection.uncached { connection.select_rows(<<~SQL) }
+                  SELECT PROCESSLIST_COMMAND, PROCESSLIST_STATE, PROCESSLIST_INFO FROM performance_schema.threads
+                  WHERE PROCESSLIST_ID = #{process_id}
                 SQL
+                raise "the upsert never blocked on second_pair within #{LOCK_WAIT_BUDGET_SECONDS}s " \
+                      "(connection #{process_id}: #{upsert_thread.inspect}; connections waiting on the table: #{waiting_ids.inspect})"
               end
-              break true if waiting.to_i.positive?
               sleep(0.025)
-              false
             end
-            raise "the upsert never blocked on second_pair" unless blocked
             connection.execute("UPDATE #{described_class.table_name} SET sales_count = sales_count + 100 WHERE #{where_pair(first_pair)}")
           end
         end
       end
-      expect(holding.pop(timeout: 10)).to be(true)
+      expect(holding.pop(timeout: LOCK_WAIT_BUDGET_SECONDS)).to be(true)
       deadlocks = 0
       callback = ->(*, payload) { deadlocks += 1 if payload[:exception_object].is_a?(ActiveRecord::Deadlocked) }
       error = ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+        upserting << true
         yield
         nil
       rescue StandardError => e
         e
       end
-      expect(other.join(30)).to be_truthy
+      expect(other.join(LOCK_WAIT_BUDGET_SECONDS * 2)).to be_truthy
       other.value
       expect(deadlocks).to eq(1)
       error

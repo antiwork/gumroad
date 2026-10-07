@@ -432,6 +432,28 @@ describe Charge::Disputable, :vcr do
         expect(FightDisputeJob).to have_enqueued_sidekiq_job(purchase.dispute.id)
       end
 
+      it "does not enqueue the PayPal delivery record job for a Stripe dispute" do
+        Purchase.handle_charge_event(event)
+
+        expect(SubmitPaypalDisputeEvidenceJob.jobs).to be_empty
+      end
+
+      context "when the purchase was made with PayPal Connect" do
+        before { purchase.update_columns(charge_processor_id: PaypalChargeProcessor.charge_processor_id) }
+
+        it "enqueues the PayPal delivery record job 10 minutes and 7 days out, once per delivery" do
+          Purchase.handle_charge_event(event)
+
+          dispute_id = purchase.reload.dispute.id
+          expect(SubmitPaypalDisputeEvidenceJob.jobs.map { |j| j["args"] }).to eq([[dispute_id], [dispute_id]])
+          delays = SubmitPaypalDisputeEvidenceJob.jobs.map { |j| j["at"] - Time.current.to_f }
+          expect(delays).to contain_exactly(be_within(60).of(600), be_within(60).of(604_800))
+
+          Purchase.handle_charge_event(event)
+          expect(SubmitPaypalDisputeEvidenceJob.jobs.size).to eq 2
+        end
+      end
+
       it "checks the seller's payout gate" do
         expect_any_instance_of(Purchase).to receive(:pause_payouts_for_seller_based_on_chargeback_rate!)
         Purchase.handle_charge_event(event)

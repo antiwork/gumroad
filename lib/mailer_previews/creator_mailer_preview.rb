@@ -76,7 +76,7 @@ class CreatorMailerPreview < ActionMailer::Preview
     end
 
     def analytics_data
-      gpt_buy_list = SendYearInReviewEmailJob.get_buy_list_from_total(total_amount_cents: 4000, currency: seller.currency_type)
+      gpt_buy_list = SendYearInReviewEmailJob.get_buy_list_from_total(total_amount_cents: 4000, currency: Currency::USD)
 
       {
         total_views_count: 144,

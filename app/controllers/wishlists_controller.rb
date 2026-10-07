@@ -71,12 +71,18 @@ class WishlistsController < ApplicationController
     wishlist = current_seller.wishlists.alive.find_by_external_id!(params[:id])
     authorize wishlist
 
-    if wishlist.update(params.require(:wishlist).permit(:name, :description, :discover_opted_out))
-      redirect_to wishlists_path, notice: "Wishlist updated!", status: :see_other
-    else
-      redirect_to wishlists_path,
-                  inertia: { errors: { base: wishlist.errors.full_messages } },
-                  status: :see_other
+    respond_to do |format|
+      if wishlist.update(params.require(:wishlist).permit(:name, :description, :discover_opted_out))
+        format.html { redirect_to wishlists_path, notice: "Wishlist updated!", status: :see_other }
+        format.json { head :no_content }
+      else
+        format.html do
+          redirect_to wishlists_path,
+                      inertia: { errors: { base: wishlist.errors.full_messages } },
+                      status: :see_other
+        end
+        format.json { render json: { error: wishlist.errors.full_messages.first }, status: :unprocessable_entity }
+      end
     end
   end
 

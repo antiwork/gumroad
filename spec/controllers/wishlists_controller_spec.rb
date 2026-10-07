@@ -252,6 +252,45 @@ describe WishlistsController, type: :controller, inertia: true do
       expect(response).to redirect_to(wishlists_path)
       expect(response).to have_http_status(:see_other)
     end
+
+    context "when json is requested" do
+      it "returns success without redirecting after an update" do
+        put :update, format: :json, params: { id: wishlist.external_id, wishlist: { name: "New Name", description: "New Description" } }
+
+        expect(response).to have_http_status(:no_content)
+        expect(response.headers["Location"]).to be_nil
+        expect(wishlist.reload).to have_attributes(name: "New Name", description: "New Description")
+      end
+
+      it "returns the validation error without changing the persisted wishlist" do
+        expect do
+          put :update, format: :json, params: { id: wishlist.external_id, wishlist: { name: "", description: "Rejected description" } }
+        end.not_to change { wishlist.reload.attributes.slice("name", "description") }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body).to eq("error" => "Name can't be blank")
+        expect(response.headers["Location"]).to be_nil
+      end
+
+      it "accepts a corrected edit after a validation failure" do
+        put :update, format: :json, params: { id: wishlist.external_id, wishlist: { name: "" } }
+
+        put :update, format: :json, params: { id: wishlist.external_id, wishlist: { name: "Corrected name", description: nil } }
+
+        expect(response).to have_http_status(:no_content)
+        expect(wishlist.reload).to have_attributes(name: "Corrected name", description: nil)
+      end
+
+      it "returns the description length error without changing the persisted wishlist" do
+        expect do
+          put :update, format: :json, params: { id: wishlist.external_id, wishlist: { description: "x" * 3_001 } }
+        end.not_to change { wishlist.reload.attributes.slice("name", "description") }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body).to eq("error" => "Description is too long (maximum is 3000 characters)")
+        expect(response.headers["Location"]).to be_nil
+      end
+    end
   end
 
   describe "DELETE destroy" do

@@ -27,7 +27,20 @@ export const DateInput = ({
   const formatDate = (date: Date | null) => {
     if (!date) return withTime ? "mm/dd/yyyy hh:mm" : "mm/dd/yyyy";
     const dateFormat = withTime ? "yyyy-MM-dd'T'HH:mm" : "yyyy-MM-dd";
-    return seller && withTime ? formatInTimeZone(date, seller.timeZone.name, dateFormat) : format(date, dateFormat);
+    if (!seller || !withTime) return format(date, dateFormat);
+
+    // Intl parts avoid a browser-local Date that can normalize the seller's clock.
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: seller.timeZone.name,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).formatToParts(date);
+    const fields = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+    return `${fields.year?.padStart(4, "0")}-${fields.month}-${fields.day}T${fields.hour}:${fields.minute}`;
   };
   // when using `value` below React breaks the date picker, so implementing this manually here
   const ref = React.useRef<HTMLInputElement>(null);
@@ -45,8 +58,9 @@ export const DateInput = ({
       min={min ? formatDate(min) : undefined}
       max={max ? formatDate(max) : undefined}
       onBlur={(e) => {
-        let parsed = parseISO(e.target.value);
-        if (seller && withTime) parsed = fromZonedTime(parsed, seller.timeZone.name);
+        // Parse the seller's wall clock before a browser DST gap can normalize it.
+        const parsed =
+          seller && withTime ? fromZonedTime(e.target.value, seller.timeZone.name) : parseISO(e.target.value);
         if (!isNaN(parsed.getTime()) && parsed.getFullYear() >= 1000) onChange?.(parsed);
         else onChange?.(null);
       }}

@@ -26,6 +26,9 @@ class SendYearInReviewEmailJobTest < ActiveSupport::TestCase
   }.freeze
 
   setup do
+    %w[9000_usd 9000_jpy 9000_eur 4000_usd 4000_jpy].each do |key|
+      Rails.cache.delete("gpt_buy_list_#{key}")
+    end
     # The email layout links a Vite-built stylesheet, and premailer inlines it by
     # loading that file off disk — which means the assets have to have been built.
     # The RSpec lane runs in an image that has them; this suite runs on a bare
@@ -110,6 +113,61 @@ class SendYearInReviewEmailJobTest < ActiveSupport::TestCase
     ["A nice desk lamp", "A hardcover notebook", "A cozy throw blanket", "A set of headphones", "A gourmet coffee kit"].each do |suggestion|
       assert_includes body, suggestion
     end
+  end
+
+  test "perform sends canonical dollar earnings to the buy list for a yen seller" do
+    seller, year = seller_with_budget_sale(currency: "jpy")
+    expect_buy_list_budget("$90")
+
+    travel_to(Time.utc(year + 1, 2, 22)) do
+      SendYearInReviewEmailJob.new.perform(seller.id, year)
+    end
+
+    assert_includes sanitized_body(ActionMailer::Base.deliveries.last), "A nice desk lamp"
+  end
+
+  test "perform sends canonical dollar earnings to the buy list for a euro seller" do
+    seller, year = seller_with_budget_sale(currency: "eur")
+    expect_buy_list_budget("$90")
+
+    travel_to(Time.utc(year + 1, 2, 22)) do
+      SendYearInReviewEmailJob.new.perform(seller.id, year)
+    end
+
+    assert_includes sanitized_body(ActionMailer::Base.deliveries.last), "A nice desk lamp"
+  end
+
+  test "perform reuses a dollar buy list instead of a legacy yen budget cache" do
+    seller, year = seller_with_budget_sale(currency: "jpy")
+    Rails.cache.write("gpt_buy_list_9000_usd", ["Dollar-budget fixture"])
+    Rails.cache.write("gpt_buy_list_9000_jpy", ["Legacy yen-budget fixture"])
+    OpenAI::Client.expects(:new).never
+
+    travel_to(Time.utc(year + 1, 2, 22)) do
+      SendYearInReviewEmailJob.new.perform(seller.id, year)
+    end
+
+    body = sanitized_body(ActionMailer::Base.deliveries.last)
+    assert_includes body, "Dollar-budget fixture"
+    assert_not_includes body, "Legacy yen-budget fixture"
+    assert_equal ["Legacy yen-budget fixture"], Rails.cache.read("gpt_buy_list_9000_jpy")
+  end
+
+  test "the buy list helper preserves its explicit non-dollar currency API" do
+    expect_buy_list_budget("€90")
+
+    assert_equal ["A nice desk lamp", "A hardcover notebook", "A cozy throw blanket", "A set of headphones", "A gourmet coffee kit"],
+                 SendYearInReviewEmailJob.get_buy_list_from_total(total_amount_cents: 9000, currency: "eur")
+  end
+
+  test "the official preview sends its canonical dollar budget for a yen seller" do
+    require Rails.root.join("lib/mailer_previews/creator_mailer_preview")
+    seller = create_user(currency_type: "jpy")
+    preview = CreatorMailerPreview.new
+    preview.stubs(:seller).returns(seller)
+    expect_buy_list_budget("$40")
+
+    assert_equal 4000, preview.send(:analytics_data).fetch(:total_amount_cents)
   end
 
   test "perform tells a 1099-eligible US seller their form is ready" do
@@ -201,6 +259,31 @@ class SendYearInReviewEmailJobTest < ActiveSupport::TestCase
   end
 
   private
+    def expect_buy_list_budget(budget)
+      parameters = {
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: "Print a numbered list of 5 things that I could buy with #{budget}. Don't include their prices. Don't start the answer with any introduction, just list the items." }],
+        max_tokens: 125
+      }
+      client = mock("OpenAI transport")
+      client.expects(:chat).with(parameters:).returns(BUY_LIST_RESPONSE)
+      OpenAI::Client.stubs(:new).returns(client)
+    end
+
+    def seller_with_budget_sale(currency:)
+      date = Date.new(2027, 2, 22)
+      seller = seller_with_annual_report(year: date.year, created_at: (date - 1.year).to_time)
+      seller.update!(currency_type: currency)
+      User.any_instance.stubs(:rank).returns(nil)
+      Redis::Namespace.new(:currencies, redis: $redis).set(currency.upcase, currency == "jpy" ? "150" : "0.9")
+      travel_to(date) do
+        product = create_product(user: seller, name: "Budget fixture")
+        create_payment_with_purchase(seller, date, product:, amount_cents: 9000, ip_country: "United States")
+      end
+      index_model_records(Purchase)
+      [seller, date.year]
+    end
+
     # Like Mail::Body#sanitized (spec/support/mail_body_extensions.rb), but
     # unfolds quoted-printable soft breaks ("=\r\n") first — they land at
     # positions that depend on the random test subdomain length.

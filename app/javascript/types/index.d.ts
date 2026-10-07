@@ -19,6 +19,7 @@ declare namespace NodeJS {
       DOMAIN: string;
       PROTOCOL: string;
       NODE_ENV: string;
+      TZ?: string;
     };
   }
 }

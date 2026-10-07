@@ -262,6 +262,29 @@ describe "Wishlist show page", :js, type: :system do
     end
   end
 
+  it "reports rejected wishlist edits and saves a corrected name" do
+    login_as wishlist.user
+    visit wishlist_url(wishlist.external_id_numeric, host: wishlist.user.subdomain_with_protocol)
+    click_button "Edit"
+
+    fill_in "Name", with: "", fill_options: { clear: :backspace }
+    find_field("Name").send_keys(:tab)
+
+    expect(page).to have_alert(text: "Name can't be blank")
+    expect(wishlist.reload.name).to eq("My Wishlist")
+    expect(page).to have_selector("h1", text: "My Wishlist")
+
+    fill_in "Name", with: "Corrected Wishlist", fill_options: { clear: :backspace }
+    find_field("Name").send_keys(:tab)
+
+    expect(page).to have_alert(text: "Changes saved!")
+    click_on "Close"
+    refresh
+
+    expect(wishlist.reload).to have_attributes(name: "Corrected Wishlist", description: "My wishlist description")
+    expect(page).to have_selector("h1", text: "Corrected Wishlist")
+  end
+
   it "supports editing your own wishlist" do
     visit wishlist_url(wishlist.external_id_numeric, host: wishlist.user.subdomain_with_protocol)
     expect(page).not_to have_button("Edit")
