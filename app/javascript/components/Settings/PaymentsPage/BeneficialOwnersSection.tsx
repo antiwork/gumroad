@@ -1221,7 +1221,9 @@ const BeneficialOwnersSection = ({
                           <Label htmlFor={`${uid}-${taxIdConfig.idSuffix}`}>{taxIdConfig.label}</Label>
                         </FieldsetTitle>
                         <FieldsetDescription>
-                          We are required to collect this information to satisfy regulatory obligations.
+                          {hongKongPassport
+                            ? "Enter their passport number instead of a Hong Kong ID number, since they live outside Hong Kong."
+                            : "We are required to collect this information to satisfy regulatory obligations."}
                         </FieldsetDescription>
                         {hasTaxIdOnFile && !isEditingTaxId ? (
                           <div className="flex flex-col gap-2">

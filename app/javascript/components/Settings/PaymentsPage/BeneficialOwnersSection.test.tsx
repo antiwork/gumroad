@@ -197,6 +197,24 @@ describe("BeneficialOwnersSection Hong Kong passport", () => {
     expect(passportFieldsInOrder(number, issuingCountry)).toEqual([number, issuingCountry]);
   });
 
+  it("explains why a passport is asked for under the passport number", async () => {
+    await openAddForm();
+    expect(
+      screen.getByText("We are required to collect this information to satisfy regulatory obligations."),
+    ).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText("Country"), { target: { value: "GB" } });
+
+    expect(
+      await screen.findByText(
+        "Enter their passport number instead of a Hong Kong ID number, since they live outside Hong Kong.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.queryByText("We are required to collect this information to satisfy regulatory obligations."),
+    ).toBeNull();
+  });
+
   it("explains the omitted countries on the issuing-country note only", async () => {
     await openAddForm();
 
