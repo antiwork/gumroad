@@ -45,7 +45,7 @@ describe AlertOnStuckPiracyReportsJob do
       blocked_part, review_part = body.split("\n\n1 piracy report could not be decided")
       expect(blocked_part).to include(blocked.external_id)
       expect(blocked_part).not_to include(undecided.external_id)
-      expect(review_part).to include(undecided.external_id, "undecided.example.org", "submit pass or fail")
+      expect(review_part).to include(undecided.external_id, "undecided.example.org", "Gumclaw works this queue")
     end
   end
 

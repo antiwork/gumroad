@@ -41,8 +41,8 @@ class AlertOnStuckPiracyReportsJob
         "#{count_phrase(reports)} could not be decided by the screening agent.",
         *listing(reports),
         "",
-        "Read the agent's reasons in each report's screening_checks, open the reported page, and submit pass " \
-          "or fail through the admin screening API.",
+        "Gumclaw works this queue with its own piracy token: it sends each case, with the agent's reasons and the " \
+          "reported page, to the piracy reports owner, then submits their pass or fail through the screening API.",
       ].join("\n")
     end
 
