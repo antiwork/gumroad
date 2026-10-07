@@ -166,4 +166,49 @@ describe "Calls Edit", type: :system, js: true do
     expect(call_limitation_info.minimum_notice_in_minutes).to eq(1440)
     expect(call_limitation_info.maximum_calls_per_day).to eq(5)
   end
+
+  it "moves every availability interval when its grouped date changes" do
+    seller.update!(timezone: "UTC")
+    create(:call_availability, call:, start_time: Time.zone.parse("2026-10-14 09:00"), end_time: Time.zone.parse("2026-10-14 10:00"))
+    create(:call_availability, call:, start_time: Time.zone.parse("2026-10-14 14:00"), end_time: Time.zone.parse("2026-10-14 15:00"))
+    create(:call_availability, call:, start_time: Time.zone.parse("2026-10-18 12:00"), end_time: Time.zone.parse("2026-10-18 13:00"))
+
+    visit edit_link_path(call.unique_permalink)
+    within "[aria-label='10/14/2026']" do
+      date_input = find_field("Date")
+      date_input.set(Date.new(2026, 10, 16))
+      date_input.send_keys(:tab)
+    end
+    click_on "Save changes"
+    expect(page).to have_alert(text: "Changes saved!")
+
+    expected_intervals = [
+      [Time.zone.parse("2026-10-16 09:00"), Time.zone.parse("2026-10-16 10:00")],
+      [Time.zone.parse("2026-10-16 14:00"), Time.zone.parse("2026-10-16 15:00")],
+      [Time.zone.parse("2026-10-18 12:00"), Time.zone.parse("2026-10-18 13:00")],
+    ]
+    expect(call.call_availabilities.reload.ordered_chronologically.pluck(:start_time, :end_time)).to eq(expected_intervals)
+
+    refresh
+    within "[aria-label='10/16/2026']" do
+      expect(page).to have_field("From", with: "09:00")
+      expect(page).to have_field("From", with: "14:00")
+    end
+    expect(page).not_to have_selector("[aria-label='10/14/2026']")
+  end
+
+  it "preserves an overnight availability interval when its date changes" do
+    seller.update!(timezone: "UTC")
+    create(:call_availability, call:, start_time: Time.zone.parse("2026-10-14 23:00"), end_time: Time.zone.parse("2026-10-15 00:00"))
+
+    visit edit_link_path(call.unique_permalink)
+    date_input = find_field("Date")
+    date_input.set(Date.new(2026, 10, 16))
+    date_input.send_keys(:tab)
+    click_on "Save changes"
+    expect(page).to have_alert(text: "Changes saved!")
+    availability = call.call_availabilities.reload.sole
+    expect(availability.start_time).to eq(Time.zone.parse("2026-10-16 23:00"))
+    expect(availability.end_time).to eq(Time.zone.parse("2026-10-17 00:00"))
+  end
 end
