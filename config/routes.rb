@@ -405,6 +405,7 @@ Rails.application.routes.draw do
           namespace :auth do
             post :exchange
             post :revoke
+            post :rotate
           end
           get :whoami, to: "whoami#show"
 
