@@ -364,19 +364,33 @@ describe Purchases::InvoicesController, :vcr, type: :controller, inertia: true d
             expect(pdf_text).not_to include("Reverse Charge - You are required to account for the GST")
           end
 
-          it "keeps the reverse charge note when a valid VAT id is re-entered on an already zero-rated purchase" do
-            @purchase.update!(gumroad_tax_cents: 0)
-            @purchase.purchase_sales_tax_info = PurchaseSalesTaxInfo.new(country_code: Compliance::Countries::IRL.alpha2, business_vat_id: "IE6388047V")
-            @purchase.save!
+          context "when the purchase was already zero-rated with a stored VAT id" do
+            before do
+              @purchase.update!(gumroad_tax_cents: 0)
+              @purchase.purchase_sales_tax_info = PurchaseSalesTaxInfo.new(country_code: Compliance::Countries::IRL.alpha2, business_vat_id: "IE6388047V")
+              @purchase.save!
+            end
 
-            post :create, params: payload.merge(vat_id: "IE6388047V", purchase_id: @purchase.external_id, email: @purchase.email)
+            it "keeps the reverse charge note when the stored VAT id is re-entered" do
+              post :create, params: payload.deep_merge(address_fields: { country_code: "IE" }).merge(vat_id: "ie 6388047v", purchase_id: @purchase.external_id, email: @purchase.email)
 
-            expect(Refund.last).to eq nil
-            expect(session["invoice_file_url_#{@purchase.external_id}"]).to eq(@s3_obj_public_url)
+              expect(Refund.last).to eq nil
+              expect(flash[:notice]).to eq("The invoice will be downloaded automatically.")
+              expect(session["invoice_file_url_#{@purchase.external_id}"]).to eq(@s3_obj_public_url)
 
-            pdf_text = PDF::Reader.new(StringIO.new(@generated_pdf)).page(1).text.squish
-            expect(pdf_text).to include("IE6388047V")
-            expect(pdf_text).to include("Reverse Charge - You are required to account for the VAT")
+              pdf_text = PDF::Reader.new(StringIO.new(@generated_pdf)).page(1).text.squish
+              expect(pdf_text).to include("Reverse Charge - You are required to account for the VAT")
+              expect(pdf_text).to include("IE6388047V")
+            end
+
+            it "does not show the reverse charge note for a different VAT id" do
+              post :create, params: payload.deep_merge(address_fields: { country_code: "IE" }).merge(vat_id: "IE1234567X", purchase_id: @purchase.external_id, email: @purchase.email)
+
+              expect(Refund.last).to eq nil
+              pdf_text = PDF::Reader.new(StringIO.new(@generated_pdf)).page(1).text.squish
+              expect(pdf_text).to include("IE1234567X")
+              expect(pdf_text).not_to include("Reverse Charge - You are required to account for the VAT")
+            end
           end
 
           it "refunds tax for a valid ABN id" do

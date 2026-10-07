@@ -29,13 +29,13 @@ class Purchases::InvoicesController < ApplicationController
     submitted_vat_id = invoice_params[:vat_id]&.strip.presence
     refundable_vat_id = nil
     refundable_vat_id = submitted_vat_id if @chargeable.taxed_by_gumroad? && is_vat_id_valid?(submitted_vat_id)
-    already_reverse_charged = submitted_vat_id.present? && !@chargeable.taxed_by_gumroad? &&
-                              @chargeable.purchase_sales_tax_info&.business_vat_id.present? && is_vat_id_valid?(submitted_vat_id)
+    # Zero-rated at checkout with a stored VAT ID: keep the note when that same ID is re-entered, without refunding.
+    already_reverse_charged = !@chargeable.taxed_by_gumroad? && stored_vat_id?(submitted_vat_id)
     business_vat_id =
       if refundable_vat_id
         refundable_vat_id
       elsif already_reverse_charged
-        submitted_vat_id
+        @chargeable.purchase_sales_tax_info.business_vat_id
       elsif submitted_vat_id && InvoicePresenter::FormInfo::BUSINESS_ID_COUNTRY_CODES.include?(selected_country_code)
         submitted_vat_id
       end
@@ -164,6 +164,14 @@ class Purchases::InvoicesController < ApplicationController
       return false unless raw_vat_id.present?
       country_code, state_code = @chargeable.purchase_sales_tax_info&.values_at(:country_code, :state_code) || [nil, nil]
       RegionalVatIdValidationService.new(raw_vat_id, country_code:, state_code:).process
+    end
+
+    def stored_vat_id?(raw_vat_id)
+      stored_vat_id = @chargeable.purchase_sales_tax_info&.business_vat_id
+      return false if raw_vat_id.blank? || stored_vat_id.blank?
+
+      normalize = ->(id) { id.gsub(/[\s.-]/, "").upcase }
+      normalize.(raw_vat_id) == normalize.(stored_vat_id)
     end
 
     def require_email_confirmation
