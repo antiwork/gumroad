@@ -1,5 +1,6 @@
 import { Plus, Trash } from "@boxicons/react";
-import { fromZonedTime, toZonedTime, format } from "date-fns-tz";
+import { addHours, differenceInCalendarDays } from "date-fns";
+import { fromZonedTime } from "date-fns-tz";
 import * as React from "react";
 
 import { Button } from "$app/components/Button";
@@ -16,18 +17,6 @@ let newAvailabilityId = 0;
 
 type ParsedAvailability = Omit<Availability, "start_time" | "end_time"> & { start_time: Date; end_time: Date };
 
-const formatTime = (date: Date) => format(date, "HH:mm");
-
-const setTime = (date: Date, timeString: string) => {
-  const [hours, minutes] = timeString.split(":").map(Number);
-  if (hours == null || minutes == null) return date;
-
-  const updatedDate = new Date(date);
-  updatedDate.setHours(hours, minutes, 0, 0);
-
-  return updatedDate;
-};
-
 export const AvailabilityEditor = ({
   availabilities: serializedAvailabilities,
   onChange,
@@ -38,17 +27,41 @@ export const AvailabilityEditor = ({
   const seller = useCurrentSeller();
   if (!seller) return;
   const timeZone = seller.timeZone.name;
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  });
+  const zonedParts = (date: Date) => {
+    const fields = Object.fromEntries(formatter.formatToParts(date).map(({ type, value }) => [type, value]));
+    return { date: `${fields.year}-${fields.month}-${fields.day}`, time: `${fields.hour}:${fields.minute}` };
+  };
+  const calendarDate = (date: Date) => new Date(`${zonedParts(date).date}T12:00:00`);
+  const formatTime = (date: Date) => zonedParts(date).time;
+  const setTime = (date: Date, timeString: string) =>
+    timeString ? fromZonedTime(`${zonedParts(date).date}T${timeString}`, timeZone) : date;
+  const shiftDate = (date: Date, days: number) => {
+    const parts = zonedParts(date);
+    // UTC calendar arithmetic avoids the browser's DST gaps.
+    const wallTime = new Date(`${parts.date}T${parts.time}Z`);
+    wallTime.setUTCDate(wallTime.getUTCDate() + days);
+    return fromZonedTime(wallTime.toISOString().slice(0, -1), timeZone).toISOString();
+  };
 
   const availabilities = serializedAvailabilities.map((availability) => ({
     ...availability,
-    start_time: toZonedTime(new Date(availability.start_time), timeZone),
-    end_time: toZonedTime(new Date(availability.end_time), timeZone),
+    start_time: new Date(availability.start_time),
+    end_time: new Date(availability.end_time),
   }));
 
   const groupedAvailabilities = availabilities
     .reduce((acc: ParsedAvailability[][], availability) => {
       const existingGroup = acc.find(
-        (group) => group[0]?.start_time.toDateString() === availability.start_time.toDateString(),
+        (group) => group[0] && zonedParts(group[0].start_time).date === zonedParts(availability.start_time).date,
       );
       if (existingGroup) existingGroup.push(availability);
       else acc.push([availability]);
@@ -57,19 +70,19 @@ export const AvailabilityEditor = ({
     .map((group) => group.sort((a, b) => a.start_time.getTime() - b.start_time.getTime()))
     .sort((a, b) => (a[0]?.start_time.getTime() ?? 0) - (b[0]?.start_time.getTime() ?? 0));
 
-  const serializeDate = (date: Date) => fromZonedTime(date.toISOString(), timeZone).toISOString();
+  const serializeDate = (date: Date) => date.toISOString();
 
   const addAvailability = (date: Date, intervalInHours = 1) => {
-    date.setMinutes(0, 0, 0);
-    const startTime = new Date(date);
-    const endTime = new Date(date.setHours(date.getHours() + intervalInHours));
+    const parts = zonedParts(date);
+    const startTime = new Date(`${parts.date}T${parts.time.slice(0, 2)}:00:00Z`);
+    const endTime = addHours(startTime, intervalInHours);
 
     onChange([
       ...serializedAvailabilities,
       {
         id: (newAvailabilityId++).toString(),
-        start_time: serializeDate(startTime),
-        end_time: serializeDate(endTime),
+        start_time: fromZonedTime(startTime.toISOString().slice(0, -1), timeZone).toISOString(),
+        end_time: fromZonedTime(endTime.toISOString().slice(0, -1), timeZone).toISOString(),
         newlyAdded: true,
       },
     ]);
@@ -89,6 +102,12 @@ export const AvailabilityEditor = ({
     );
 
   const lastAvailabilityStartTime = groupedAvailabilities[groupedAvailabilities.length - 1]?.[0]?.start_time;
+  const addDay = () => {
+    const date = new Date(`${zonedParts(lastAvailabilityStartTime ?? new Date()).date}T00:00:00Z`);
+    if (lastAvailabilityStartTime) date.setUTCDate(date.getUTCDate() + 1);
+    date.setUTCHours(DEFAULT_INTERVAL_START_HOURS);
+    addAvailability(fromZonedTime(date.toISOString().slice(0, -1), timeZone), DEFAULT_INTERVAL_LENGTH);
+  };
 
   return availabilities.length ? (
     <>
@@ -101,25 +120,32 @@ export const AvailabilityEditor = ({
         {groupedAvailabilities.map((group, idx) => {
           const lastGroupEndTime = group[group.length - 1]?.end_time;
           return (
-            <section style={{ display: "contents" }} aria-label={group[0]?.start_time.toLocaleDateString()} key={idx}>
+            <section
+              style={{ display: "contents" }}
+              aria-label={group[0] ? calendarDate(group[0].start_time).toLocaleDateString() : undefined}
+              key={idx}
+            >
               {group.map((availability, idx) => (
                 <section key={availability.id} aria-label={`Availability ${idx + 1}`} style={{ display: "contents" }}>
                   {idx === 0 ? (
                     <DateInput
-                      value={availability.start_time}
+                      value={calendarDate(availability.start_time)}
                       onChange={(value) => {
-                        if (value) {
-                          const updatedStartTime = new Date(availability.start_time);
-                          updatedStartTime.setFullYear(value.getFullYear(), value.getMonth(), value.getDate());
+                        if (!value) return;
 
-                          const updatedEndTime = new Date(availability.end_time);
-                          updatedEndTime.setFullYear(value.getFullYear(), value.getMonth(), value.getDate());
-
-                          updateAvailability(availability.id, {
-                            start_time: updatedStartTime,
-                            end_time: updatedEndTime,
-                          });
-                        }
+                        const days = differenceInCalendarDays(value, calendarDate(availability.start_time));
+                        if (days === 0) return;
+                        const updatedDay = new Map(
+                          group.map((interval) => [
+                            interval.id,
+                            {
+                              ...interval,
+                              start_time: shiftDate(interval.start_time, days),
+                              end_time: shiftDate(interval.end_time, days),
+                            },
+                          ]),
+                        );
+                        onChange(serializedAvailabilities.map((interval) => updatedDay.get(interval.id) ?? interval));
                       }}
                       aria-label="Date"
                     />
@@ -165,29 +191,13 @@ export const AvailabilityEditor = ({
           );
         })}
       </section>
-      <AddButton
-        onClick={() => {
-          let date = new Date();
-          if (lastAvailabilityStartTime) {
-            date = lastAvailabilityStartTime;
-            date.setDate(date.getDate() + 1);
-            date.setHours(DEFAULT_INTERVAL_START_HOURS);
-          }
-          addAvailability(date, DEFAULT_INTERVAL_LENGTH);
-        }}
-      />
+      <AddButton onClick={addDay} />
     </>
   ) : (
     <Placeholder>
       <h2>Add day of availability</h2>
       Adjust your availability to reflect specific dates and times
-      <AddButton
-        onClick={() => {
-          const date = new Date();
-          date.setHours(DEFAULT_INTERVAL_START_HOURS);
-          addAvailability(date, DEFAULT_INTERVAL_LENGTH);
-        }}
-      />
+      <AddButton onClick={addDay} />
     </Placeholder>
   );
 };
