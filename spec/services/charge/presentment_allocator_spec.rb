@@ -10,6 +10,7 @@ describe Charge::PresentmentAllocator do
                                  tip:,
                                  tax_cents: 80,
                                  gumroad_tax_cents: 20,
+                                 zip_tax_rate: nil,
                                  shipping_cents: 2_00)
 
       allocation = described_class.new(
@@ -95,6 +96,7 @@ describe Charge::PresentmentAllocator do
                                                  tip:,
                                                  tax_cents: 80,
                                                  gumroad_tax_cents: 20,
+                                                 zip_tax_rate: nil,
                                                  shipping_cents: 2_00)
       plain_purchase = instance_double(Purchase,
                                        total_transaction_cents: 5_00,
@@ -298,6 +300,7 @@ describe Charge::PresentmentAllocator do
                                  tip: nil,
                                  tax_cents: 60,
                                  gumroad_tax_cents: 40,
+                                 zip_tax_rate: nil,
                                  shipping_cents: 0)
 
       exact = described_class.new(
@@ -425,6 +428,140 @@ describe Charge::PresentmentAllocator do
           rounding_delta_cents: 5
         ).allocations
       end.to raise_error(ArgumentError, /no non-tax component/)
+    end
+  end
+
+  describe "Australian GST display" do
+    let(:au_gst_rate) { create(:zip_tax_rate, country: "AU", combined_rate: 0.10, state: nil, zip_code: nil, is_seller_responsible: false) }
+
+    def gst_purchase(total_transaction_cents:, gumroad_tax_cents:, zip_tax_rate:, shipping_cents: 0, tip: nil)
+      instance_double(Purchase,
+                      total_transaction_cents:,
+                      total_transaction_amount_for_gumroad_cents: 0,
+                      tip:,
+                      tax_cents: 0,
+                      gumroad_tax_cents:,
+                      shipping_cents:,
+                      zip_tax_rate:)
+    end
+
+    it "shows GST as one-eleventh of the charged total when the price ending moves it" do
+      # Exact conversion A$121.34 + A$12.13 GST = A$133.47; the seller's ending moves the
+      # charge to A$133.77, whose one-eleventh is A$12.16.
+      purchase = gst_purchase(total_transaction_cents: 133_47, gumroad_tax_cents: 12_13, zip_tax_rate: au_gst_rate)
+
+      allocation = described_class.new(
+        purchases: [purchase],
+        presentment_total_cents: 133_47,
+        presentment_gumroad_amount_cents: 0,
+        rounding_delta_cents: 30
+      ).allocations.sole
+
+      expect(allocation).to have_attributes(presentment_total_cents: 133_77,
+                                            presentment_gumroad_tax_cents: 12_16,
+                                            presentment_price_cents: 121_61,
+                                            presentment_seller_tax_cents: 0)
+    end
+
+    it "shows GST as one-eleventh of the total when the price ending rounds down" do
+      purchase = gst_purchase(total_transaction_cents: 16_50, gumroad_tax_cents: 1_50, zip_tax_rate: au_gst_rate)
+
+      allocation = described_class.new(
+        purchases: [purchase],
+        presentment_total_cents: 25_08,
+        presentment_gumroad_amount_cents: 0,
+        rounding_delta_cents: -9
+      ).allocations.sole
+
+      expect(allocation.presentment_total_cents).to eq(24_99)
+      expect(allocation.presentment_gumroad_tax_cents).to eq((BigDecimal(24_99) / 11).round)
+      expect(allocation.presentment_price_cents + allocation.presentment_gumroad_tax_cents).to eq(24_99)
+    end
+
+    it "derives GST from the GST-inclusive amount only, leaving shipping out of the base" do
+      purchase = gst_purchase(total_transaction_cents: 16_00, gumroad_tax_cents: 1_00, shipping_cents: 5_00, zip_tax_rate: au_gst_rate)
+
+      allocation = described_class.new(
+        purchases: [purchase],
+        presentment_total_cents: 24_00,
+        presentment_gumroad_amount_cents: 0,
+        rounding_delta_cents: 49
+      ).allocations.sole
+
+      gst_inclusive = allocation.presentment_price_cents + allocation.presentment_gumroad_tax_cents
+      expect(allocation.presentment_gumroad_tax_cents).to eq((BigDecimal(gst_inclusive) / 11).round)
+      expect(allocation.presentment_total_cents).to eq(24_49)
+      expect(allocation.presentment_price_cents + allocation.presentment_gumroad_tax_cents + allocation.presentment_shipping_cents).to eq(24_49)
+    end
+
+    it "applies one-eleventh per line in a multi-line cart, so each receipt checks out and the lines still sum to the charge" do
+      gst_line = gst_purchase(total_transaction_cents: 133_47, gumroad_tax_cents: 12_13, zip_tax_rate: au_gst_rate)
+      second_gst_line = gst_purchase(total_transaction_cents: 22_00, gumroad_tax_cents: 2_00, zip_tax_rate: au_gst_rate)
+
+      allocations = described_class.new(
+        purchases: [gst_line, second_gst_line],
+        presentment_total_cents: 155_47,
+        presentment_gumroad_amount_cents: 0,
+        rounding_delta_cents: 52
+      ).allocations
+
+      expect(allocations.sum(&:presentment_total_cents)).to eq(155_99)
+      allocations.each do |allocation|
+        expect(allocation.presentment_gumroad_tax_cents).to eq((BigDecimal(allocation.presentment_total_cents) / 11).round)
+        expect(allocation.presentment_price_cents + allocation.presentment_gumroad_tax_cents).to eq(allocation.presentment_total_cents)
+      end
+    end
+
+    it "leaves the shared allocation unchanged for a non-Australian Gumroad-collected tax" do
+      eu_vat_rate = create(:zip_tax_rate, country: "DE", combined_rate: 0.19, state: nil, zip_code: nil, is_seller_responsible: false)
+      purchase = gst_purchase(total_transaction_cents: 119_00, gumroad_tax_cents: 19_00, zip_tax_rate: eu_vat_rate)
+
+      allocation = described_class.new(
+        purchases: [purchase],
+        presentment_total_cents: 133_47,
+        presentment_gumroad_amount_cents: 0,
+        rounding_delta_cents: 30
+      ).allocations.sole
+
+      # Exact converted VAT (19/119 of 133.47) stays; the whole difference sits on the price.
+      expect(allocation.presentment_gumroad_tax_cents).to eq(21_31)
+      expect(allocation.presentment_price_cents).to eq(112_46)
+      expect(allocation.presentment_total_cents).to eq(133_77)
+    end
+
+    it "leaves an Australian rate that is not Gumroad-collected 10% GST unchanged" do
+      seller_rate = create(:zip_tax_rate, country: "AU", combined_rate: 0.10, state: nil, zip_code: nil, is_seller_responsible: true)
+      other_rate = create(:zip_tax_rate, country: "AU", combined_rate: 0.15, state: nil, zip_code: nil, is_seller_responsible: false)
+
+      expect(described_class.australian_gst_rate?(au_gst_rate)).to be(true)
+      expect(described_class.australian_gst_rate?(seller_rate)).to be(false)
+      expect(described_class.australian_gst_rate?(other_rate)).to be(false)
+      expect(described_class.australian_gst_rate?(create(:zip_tax_rate, country: "NZ", combined_rate: 0.10, state: nil, zip_code: nil, is_seller_responsible: false))).to be(false)
+      expect(described_class.australian_gst_rate?(nil)).to be(false)
+    end
+
+    it "produces the same split from quote-time lines as from charge-time purchases" do
+      purchase = gst_purchase(total_transaction_cents: 133_47, gumroad_tax_cents: 12_13, zip_tax_rate: au_gst_rate)
+      charge_time = described_class.new(
+        purchases: [purchase],
+        presentment_total_cents: 133_47,
+        presentment_gumroad_amount_cents: 0,
+        rounding_delta_cents: 30
+      ).allocations.sole
+
+      quote_time = described_class.allocate_lines(
+        presentment_total_cents: 133_47,
+        rounding_delta_cents: 30,
+        lines: [described_class::Line.new(canonical_total_cents: 133_47,
+                                          canonical_component_cents: [121_34, 0, 0, 12_13, 0],
+                                          australian_gst: true)]
+      ).sole
+
+      expect(quote_time.presentment_component_cents).to eq([charge_time.presentment_price_cents,
+                                                            charge_time.presentment_tip_cents,
+                                                            charge_time.presentment_seller_tax_cents,
+                                                            charge_time.presentment_gumroad_tax_cents,
+                                                            charge_time.presentment_shipping_cents])
     end
   end
 end

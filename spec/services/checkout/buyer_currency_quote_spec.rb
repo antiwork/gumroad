@@ -360,6 +360,52 @@ describe Checkout::BuyerCurrencyQuote do
         expect(result).to have_attributes(presentment_total_cents: 12_00, rounding_delta_cents: -50)
       end
 
+      it "displays Australian GST as one-eleventh of each rounded line total, matching the charge-time split" do
+        au_gst_rate = create(:zip_tax_rate, country: "AU", combined_rate: 0.10, state: nil, zip_code: nil, is_seller_responsible: false)
+        tax_result = SalesTaxCalculation.new(price_cents: 9_99, tax_cents: 1_00, zip_tax_rate: au_gst_rate)
+        line_item = described_class::LineItem.from_surcharge(permalink: product.unique_permalink, product:, tax_result:,
+                                                             tip_cents: 0, shipping_usd_cents: 0)
+        expect(line_item.australian_gst).to be(true)
+        allow(StripeFxQuote).to receive(:create).with(
+          to_currency: Currency::USD,
+          from_currency: Currency::AUD,
+          stripe_account_id: merchant_account.charge_processor_merchant_id,
+          destination_account_id: nil
+        ).and_return(StripeFxQuote::Quote.new(id: "fxq_aud", expires_at: 30.minutes.from_now, fx_rate: BigDecimal("0.66")))
+
+        result = described_class.create(line_items: [line_item], canonical_total_cents: 10_99, ip: "1.1.1.1", currency: Currency::AUD)
+        allocation = result.line_allocations.sole
+
+        expect(result.currency).to eq(Currency::AUD)
+        expect(result.rounding_delta_cents).not_to eq(0)
+        expect(allocation.presentment_total_cents).to eq(result.presentment_total_cents)
+        expect(allocation.presentment_gumroad_tax_cents).to eq((BigDecimal(allocation.presentment_total_cents) / 11).round)
+
+        purchase = instance_double(Purchase, total_transaction_cents: 10_99, total_transaction_amount_for_gumroad_cents: 0, tip: nil,
+                                             tax_cents: 0, gumroad_tax_cents: 1_00, shipping_cents: 0, zip_tax_rate: au_gst_rate)
+        charge_time = Charge::PresentmentAllocator.new(
+          purchases: [purchase],
+          presentment_total_cents: result.presentment_total_cents - result.rounding_delta_cents,
+          presentment_gumroad_amount_cents: 0,
+          rounding_delta_cents: result.rounding_delta_cents
+        ).allocations.sole
+        expect(charge_time).to have_attributes(presentment_price_cents: allocation.presentment_price_cents,
+                                               presentment_gumroad_tax_cents: allocation.presentment_gumroad_tax_cents)
+      end
+
+      it "keeps the exact converted tax for a non-Australian Gumroad-collected rate" do
+        vat_rate = create(:zip_tax_rate, country: "DE", combined_rate: 0.10, state: nil, zip_code: nil, is_seller_responsible: false)
+        tax_result = SalesTaxCalculation.new(price_cents: 9_99, tax_cents: 1_00, zip_tax_rate: vat_rate)
+        line_item = described_class::LineItem.from_surcharge(permalink: product.unique_permalink, product:, tax_result:,
+                                                             tip_cents: 0, shipping_usd_cents: 0)
+        expect(line_item.australian_gst).to be(false)
+
+        result = described_class.create(line_items: [line_item], canonical_total_cents: 10_99, ip: "24.48.0.1")
+
+        # 1.00 USD at 0.8 USD per CAD unit is exactly CA$1.25; the ending difference stays on the price.
+        expect(result.line_allocations.sole.presentment_gumroad_tax_cents).to eq(1_25)
+      end
+
       it "quotes the exact converted amount when the seller opted out" do
         seller.update!(disable_buyer_currency_rounding: true)
 
