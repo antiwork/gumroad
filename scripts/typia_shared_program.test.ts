@@ -8,17 +8,17 @@ import { describe, expect, it } from "vitest";
 // Covers patches/@typia+unplugin+12.1.1.patch: a one-shot build shares one program
 // (so a global type resolves), and dev keeps a program per file.
 const fixture = path.join(path.dirname(fileURLToPath(import.meta.url)), "__fixtures__/typia_shared_program");
-const config = (root = fixture): InlineConfig => ({
+const config = (root = fixture, sharedProgram?: boolean): InlineConfig => ({
   root,
   configFile: false,
   logLevel: "silent",
-  plugins: [UnpluginTypia({ cache: false, log: false, tsconfig: path.join(root, "tsconfig.json") })],
+  plugins: [UnpluginTypia({ cache: false, log: false, tsconfig: path.join(root, "tsconfig.json"), sharedProgram })],
 });
 
 // Returns each entry's code, keyed by entry name.
-const buildOutput = async (entries: string[], root = fixture) => {
+const buildOutput = async (entries: string[], root = fixture, sharedProgram?: boolean) => {
   const result = await build({
-    ...config(root),
+    ...config(root, sharedProgram),
     build: {
       write: false,
       minify: false,
@@ -39,6 +39,13 @@ const buildOutput = async (entries: string[], root = fixture) => {
 describe("typia transform in a one-shot build", () => {
   it("checks a field of a type declared only in a global .d.ts", async () => {
     expect((await buildOutput(["index"])).index).toContain('".count"');
+  }, 60_000);
+
+  it("keeps a program per file when sharedProgram is false", async () => {
+    const code = (await buildOutput(["index"], fixture, false)).index;
+    // typia ran, but the unresolved type became `any`: the assert returns its input unchecked.
+    expect(code).toContain("errorFactory");
+    expect(code).not.toContain('".count"');
   }, 60_000);
 
   it("orders union members the same whichever file is transformed first", async () => {

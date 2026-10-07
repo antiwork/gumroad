@@ -12,7 +12,8 @@ const entry = widgets[target];
 if (!entry) throw new Error(`Unknown WIDGET_TARGET: ${target}. Expected one of: ${Object.keys(widgets).join(", ")}`);
 
 export default defineConfig({
-  plugins: [UnpluginTypia({ cache: true })],
+  // Two typia files: a shared program would type-check the whole app first.
+  plugins: [UnpluginTypia({ cache: true, sharedProgram: false })],
   publicDir: false,
   build: {
     outDir: "public/js",
