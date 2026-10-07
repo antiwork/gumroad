@@ -20,7 +20,18 @@ class SubmitPaypalDisputeEvidenceJob
   FEATURE_FLAG = :submit_paypal_dispute_evidence
   ACTION_REL = "provide_supporting_info"
   CLAIM_TTL = 120.days.to_i
-  MAX_EVENTS_PER_PURCHASE = 10
+  IN_FLIGHT_CLAIM_TTL = 15.minutes.to_i
+  MAX_VIEWS_PER_PURCHASE = 5
+  MAX_ACCESSES_PER_PURCHASE = 20
+  ACCESS_LABELS = {
+    ConsumptionEvent::EVENT_TYPE_VIEW => "download page opened",
+    ConsumptionEvent::EVENT_TYPE_DOWNLOAD => "file downloaded",
+    ConsumptionEvent::EVENT_TYPE_DOWNLOAD_ALL => "all files downloaded",
+    ConsumptionEvent::EVENT_TYPE_FOLDER_DOWNLOAD => "folder downloaded",
+    ConsumptionEvent::EVENT_TYPE_READ => "document read",
+    ConsumptionEvent::EVENT_TYPE_WATCH => "video watched",
+    ConsumptionEvent::EVENT_TYPE_LISTEN => "audio listened to",
+  }.freeze
 
   def self.claim_key(dispute_id) = "paypal_dispute_evidence_submitted:#{dispute_id}"
 
@@ -45,16 +56,22 @@ class SubmitPaypalDisputeEvidenceJob
     return unless self.class.action_offered?(live.result)
 
     key = self.class.claim_key(dispute.id)
-    return unless $redis.set(key, Time.current.to_i, nx: true, ex: CLAIM_TTL)
+    return unless $redis.set(key, Time.current.to_i, nx: true, ex: IN_FLIGHT_CLAIM_TTL)
 
-    response = api.provide_dispute_supporting_info(dispute_id: dispute.charge_processor_dispute_id, merchant_account:, notes:)
-    if api.successful_response?(response)
-      Rails.logger.info("SubmitPaypalDisputeEvidenceJob: submitted delivery record for dispute #{dispute.id}")
-    else
-      # PayPal refused the note, so nothing reached the case: release the claim so a later run
-      # can try again once the case accepts information.
-      $redis.del(key)
-      ErrorNotifier.notify("SubmitPaypalDisputeEvidenceJob: PayPal rejected supporting info for dispute #{dispute.id} (#{response.status_code})")
+    confirmed = false
+    begin
+      response = api.provide_dispute_supporting_info(dispute_id: dispute.charge_processor_dispute_id, merchant_account:, notes:)
+      if api.successful_response?(response)
+        confirmed = true
+        $redis.expire(key, CLAIM_TTL)
+        Rails.logger.info("SubmitPaypalDisputeEvidenceJob: submitted delivery record for dispute #{dispute.id}")
+      else
+        ErrorNotifier.notify("SubmitPaypalDisputeEvidenceJob: PayPal rejected supporting info for dispute #{dispute.id} (#{response.status_code})")
+      end
+    ensure
+      # Only a confirmed submission keeps the claim; a rejection or an error before the note
+      # reached PayPal releases it so a retry or the 7-day run can send it.
+      $redis.del(key) unless confirmed
     end
   end
 
@@ -72,12 +89,10 @@ class SubmitPaypalDisputeEvidenceJob
     lines = []
     any_access = false
     purchases.each do |purchase|
-      events = ConsumptionEvent.where(purchase_id: purchase.id,
-                                      event_type: [ConsumptionEvent::EVENT_TYPE_VIEW, ConsumptionEvent::EVENT_TYPE_DOWNLOAD, ConsumptionEvent::EVENT_TYPE_DOWNLOAD_ALL])
-                               .order(:created_at).limit(MAX_EVENTS_PER_PURCHASE).pluck(:event_type, :created_at)
-      any_access ||= events.any?
+      accesses = access_events(access_purchases(purchase))
+      any_access ||= accesses.any?
       line = "#{purchase.link.name} (Gumroad order #{purchase.external_id}, paid #{fmt(purchase.created_at)}): "
-      line += events.any? ? events.map { |type, at| "#{type == ConsumptionEvent::EVENT_TYPE_VIEW ? "download page opened" : "file downloaded"} #{fmt(at)}" }.join("; ") : "no access recorded"
+      line += accesses.any? ? accesses.join("; ") : "no access recorded"
       lines << line
     end
     return nil unless any_access
@@ -85,6 +100,29 @@ class SubmitPaypalDisputeEvidenceJob
     ["Digital product delivered instantly by Gumroad, the seller's checkout platform. Gumroad's access log for this order:",
      *lines,
      "All times UTC."].join("\n")
+  end
+
+  # Access rows of a bundle are written against its member purchases, not the wrapper.
+  def self.access_purchases(purchase)
+    return [purchase] unless purchase.is_bundle_purchase?
+
+    [purchase, *purchase.product_purchases]
+  end
+
+  # Downloads and reads are the proof, so page opens are capped on their own and a note that
+  # drops anything says so.
+  def self.access_events(purchases)
+    rows = ConsumptionEvent.where(purchase_id: purchases.map(&:id), event_type: ACCESS_LABELS.keys)
+                           .order(Arel.sql("COALESCE(consumed_at, created_at), id"))
+                           .pluck(:event_type, :consumed_at, :created_at)
+                           .map { |type, consumed_at, created_at| [type, consumed_at || created_at] }
+    views, others = rows.partition { |type, _| type == ConsumptionEvent::EVENT_TYPE_VIEW }
+    kept_others = others.first(MAX_ACCESSES_PER_PURCHASE)
+    kept_views = views.first(MAX_VIEWS_PER_PURCHASE)
+    entries = (kept_views + kept_others).sort_by { |_, at| at }.map { |type, at| "#{ACCESS_LABELS.fetch(type)} #{fmt(at)}" }
+    omitted = rows.size - kept_views.size - kept_others.size
+    entries << "#{omitted} more page opens or accesses not listed" if omitted.positive?
+    entries
   end
 
   def self.fmt(time) = time.utc.strftime("%Y-%m-%d %H:%M:%S")

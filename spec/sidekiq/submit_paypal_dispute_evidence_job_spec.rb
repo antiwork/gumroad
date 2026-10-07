@@ -25,8 +25,8 @@ describe SubmitPaypalDisputeEvidenceJob do
     allow(PaypalRestApi).to receive(:new).and_return(api)
     allow(api).to receive(:successful_response?) { |r| (200...300).include?(r.status_code) }
     $redis.del(described_class.claim_key(dispute.id))
-    create(:consumption_event, purchase_id: purchase.id, link_id: product.id, url_redirect_id: 1, product_file_id: nil, event_type: "view", created_at: Time.utc(2026, 9, 26, 19, 35, 51))
-    create(:consumption_event, purchase_id: purchase.id, link_id: product.id, url_redirect_id: 1, product_file_id: nil, event_type: "download", created_at: Time.utc(2026, 9, 26, 19, 35, 53))
+    create(:consumption_event, purchase_id: purchase.id, link_id: product.id, url_redirect_id: 1, product_file_id: nil, event_type: "view", consumed_at: Time.utc(2026, 9, 26, 19, 35, 51))
+    create(:consumption_event, purchase_id: purchase.id, link_id: product.id, url_redirect_id: 1, product_file_id: nil, event_type: "download", consumed_at: Time.utc(2026, 9, 26, 19, 35, 53))
   end
 
   it "sends the delivery record when PayPal offers provide_supporting_info" do
@@ -86,5 +86,52 @@ describe SubmitPaypalDisputeEvidenceJob do
     expect(PaypalRestApi).not_to receive(:new)
 
     described_class.new.perform(dispute.id)
+  end
+
+  it "releases the claim when the request raises before PayPal receives the note" do
+    allow(api).to receive(:fetch_dispute).and_return(offered)
+    allow(api).to receive(:provide_dispute_supporting_info).and_raise(Redis::BaseError, "down")
+
+    expect { described_class.new.perform(dispute.id) }.to raise_error(Redis::BaseError)
+    expect($redis.get(described_class.claim_key(dispute.id))).to be_nil
+  end
+
+  it "keeps a confirmed claim long-lived" do
+    allow(api).to receive(:fetch_dispute).and_return(offered)
+    allow(api).to receive(:provide_dispute_supporting_info).and_return(accepted)
+
+    described_class.new.perform(dispute.id)
+    expect($redis.ttl(described_class.claim_key(dispute.id))).to be > 1.day.to_i
+  end
+
+  it "includes reads and streams and reports consumed_at" do
+    ConsumptionEvent.where(purchase_id: purchase.id).delete_all
+    create(:consumption_event, purchase_id: purchase.id, link_id: product.id, url_redirect_id: 1, product_file_id: nil, event_type: "read",
+                               created_at: Time.utc(2026, 9, 27), consumed_at: Time.utc(2026, 9, 26, 20, 0, 0))
+
+    notes = described_class.evidence_notes([purchase])
+    expect(notes).to include "document read 2026-09-26 20:00:00"
+  end
+
+  it "keeps download proof when page opens exceed the cap" do
+    ConsumptionEvent.where(purchase_id: purchase.id).delete_all
+    8.times do |i|
+      create(:consumption_event, purchase_id: purchase.id, link_id: product.id, url_redirect_id: 1, product_file_id: nil, event_type: "view", consumed_at: Time.utc(2026, 9, 26, 19, 40 + i))
+    end
+    create(:consumption_event, purchase_id: purchase.id, link_id: product.id, url_redirect_id: 1, product_file_id: nil, event_type: "download", consumed_at: Time.utc(2026, 9, 26, 20, 0))
+
+    notes = described_class.evidence_notes([purchase])
+    expect(notes).to include "file downloaded 2026-09-26 20:00:00"
+    expect(notes).to include "3 more page opens or accesses not listed"
+  end
+
+  it "counts downloads recorded against bundle member purchases" do
+    ConsumptionEvent.where(purchase_id: purchase.id).delete_all
+    member = create(:free_purchase, link: create(:product, user: seller, price_cents: 0))
+    allow(purchase).to receive(:is_bundle_purchase?).and_return(true)
+    allow(purchase).to receive(:product_purchases).and_return([member])
+    create(:consumption_event, purchase_id: member.id, link_id: member.link.id, url_redirect_id: 1, product_file_id: nil, event_type: "download", consumed_at: Time.utc(2026, 9, 26, 21, 0))
+
+    expect(described_class.evidence_notes([purchase])).to include "file downloaded 2026-09-26 21:00:00"
   end
 end

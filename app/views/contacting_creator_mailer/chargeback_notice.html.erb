@@ -12,7 +12,7 @@
       <% end %>
     <% end %>
     <p>
-      The dispute is handled in your PayPal account, so please respond to it there. Where PayPal lets us add information to the case, we'll send PayPal our delivery record for this order (when the customer opened the download page and downloaded each file). If PayPal asks you for proof of delivery, reply to this email and we'll send you that record to attach.
+      The dispute is handled in your PayPal account, so please respond to it there.<% if Feature.active?(:submit_paypal_dispute_evidence) %> Where PayPal lets us add information to the case, we'll send PayPal our delivery record for this order (when the customer opened the download page and downloaded each file).<% end %> If PayPal asks you for proof of delivery, reply to this email and we'll send you that record to attach.
     </p>
     <p>
       You can go <%= link_to "here", "https://www.paypal.com/us/webapps/mpp/security/resolve-disputes" %> for more information or reach out to PayPal's support team for further assistance.
