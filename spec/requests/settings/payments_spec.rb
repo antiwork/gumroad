@@ -6983,6 +6983,8 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         before do
           user.active_bank_account.mark_deleted!
           create(:korea_bank_account, user:)
+          # Saving settings creates the Stripe account; test-mode Stripe rejects the recipient agreement for KR.
+          allow(StripeMerchantAccountManager).to receive(:create_account)
         end
 
         it "shows the minimum payout threshold for the country" do
