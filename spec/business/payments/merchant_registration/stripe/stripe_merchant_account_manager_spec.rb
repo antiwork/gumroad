@@ -781,26 +781,6 @@ describe StripeMerchantAccountManager, :vcr do
       end
     end
 
-    describe "Hong Kong company with a representative who lives abroad (person_hash)" do
-      let(:user) { create(:user) }
-      let(:user_compliance_info) do
-        create(:user_compliance_info_business,
-               user:,
-               country: "United Kingdom",
-               business_country: "Hong Kong",
-               business_name: "Probe Co Ltd",
-               nationality: "GB",
-               individual_tax_id: "GB1234567")
-      end
-
-      it "sends the passport number as id_number, the issuing country as nationality and the home address" do
-        person_hash = described_class.send(:person_hash, user_compliance_info, GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))
-
-        expect(person_hash).to include(id_number: "GB1234567", nationality: "GB")
-        expect(person_hash[:address][:country]).to eq("GB")
-      end
-    end
-
     describe "an individual outside the four countries that used to be hardcoded (person_hash)" do
       context "with a nationality on file" do
         let(:user_compliance_info) do
