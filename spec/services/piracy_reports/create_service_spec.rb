@@ -106,21 +106,21 @@ describe PiracyReports::CreateService do
       seller, product = create_piracy_seller_with_product
       seller.update!(confirmed_at: nil)
 
-      expect(call(seller:, product:).errors).to include("The seller's email is not confirmed")
+      expect(call(seller:, product:).errors).to include(PiracyReports::Eligibility.store_agent_gate_error)
     end
 
-    it "rejects a seller without payout setup" do
+    it "rejects a seller under the store agent's sales bar" do
       seller, product = create_piracy_seller_with_product
-      seller.alive_user_compliance_info.destroy!
+      allow_any_instance_of(User).to receive(:sales_cents_total).and_return(User::MIN_SALES_CENTS_VALUE_FOR_STORE_AGENT - 1)
 
-      expect(call(seller:, product:).errors).to include("The seller has not completed payout setup")
+      expect(call(seller:, product:).errors).to include(PiracyReports::Eligibility.store_agent_gate_error)
     end
 
     it "rejects a seller whose payout record has no legal name to print in the notice" do
       seller, product = create_piracy_seller_with_product
       seller.alive_user_compliance_info.update_columns(first_name: nil, last_name: nil)
 
-      expect(call(seller:, product:).errors).to include("The seller has not completed payout setup")
+      expect(call(seller:, product:).errors).to include("The seller's payout record has no legal name to print in the notice")
     end
 
     it "accepts a seller whose payout record has no street address, since the notice does not print it" do
@@ -144,11 +144,12 @@ describe PiracyReports::CreateService do
       expect(call(seller:, product:).errors).to include("The product is not published")
     end
 
-    it "rejects a product with no successful sales" do
+    # The sales bar is the account-wide one the store agent uses, so the product itself needs no sale.
+    it "accepts a product with no sale of its own once the seller passes the store agent's gate" do
       seller, = create_piracy_seller_with_product
       product = create(:product, user: seller)
 
-      expect(call(seller:, product:).errors).to include("The product has no successful sales")
+      expect(call(seller:, product:)).to be_success
     end
   end
 end
