@@ -536,6 +536,7 @@ describe Charge::PresentmentAllocator do
       expect(described_class.australian_gst_rate?(au_gst_rate)).to be(true)
       expect(described_class.australian_gst_rate?(seller_rate)).to be(false)
       expect(described_class.australian_gst_rate?(other_rate)).to be(false)
+      expect(described_class.australian_gst_rate?(create(:zip_tax_rate, country: "NZ", combined_rate: 0.10, state: nil, zip_code: nil, is_seller_responsible: false))).to be(false)
       expect(described_class.australian_gst_rate?(nil)).to be(false)
     end
 
