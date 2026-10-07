@@ -3,7 +3,7 @@ set -e
 
 GREEN="\033[0;32m"
 NC="\033[0m"
-logger() {
+copy_secrets_logger() {
   echo -e "${GREEN}$(date "+%Y/%m/%d %H:%M:%S") copy_secrets.sh: $1${NC}"
 }
 
@@ -22,16 +22,16 @@ CREDENTIALS_PATHS=(
 
 copy_secrets() {
   if [ -z "$CREDENTIALS_REPO" ]; then
-    logger "Error: CREDENTIALS_REPO environment variable is not set"
+    copy_secrets_logger "Error: CREDENTIALS_REPO environment variable is not set"
     return 1
   fi
 
   if ! command -v git-lfs >/dev/null 2>&1; then
-    logger "Error: git-lfs is not installed. The credentials repo stores *.mmdb files (e.g. lib/GeoIP2-City.mmdb) via Git LFS; install git-lfs on the agent."
+    copy_secrets_logger "Error: git-lfs is not installed. The credentials repo stores *.mmdb files (e.g. lib/GeoIP2-City.mmdb) via Git LFS; install git-lfs on the agent."
     return 1
   fi
 
-  logger "Cloning credentials repo"
+  copy_secrets_logger "Cloning credentials repo"
   CREDENTIALS_TMP_DIR="/tmp/gumroad-credentials"
   rm -rf "$CREDENTIALS_TMP_DIR"
   # Sparse so the monorepo's unrelated trees are never written to the agent's disk. The
@@ -39,7 +39,7 @@ copy_secrets() {
   git clone --depth 1 --sparse $CREDENTIALS_REPO "$CREDENTIALS_TMP_DIR"
   git -C "$CREDENTIALS_TMP_DIR" sparse-checkout set deployment config lib nomad
 
-  logger "Fetching Git LFS objects"
+  copy_secrets_logger "Fetching Git LFS objects"
   git -C "$CREDENTIALS_TMP_DIR" lfs install --local
   git -C "$CREDENTIALS_TMP_DIR" lfs pull
 
@@ -51,20 +51,20 @@ copy_secrets() {
   local src_root="$CREDENTIALS_TMP_DIR"
   if [ -d "$CREDENTIALS_TMP_DIR/deployment" ]; then
     src_root="$CREDENTIALS_TMP_DIR/deployment"
-    logger "Using the monorepo layout (deployment/)"
+    copy_secrets_logger "Using the monorepo layout (deployment/)"
   else
-    logger "Using the standalone layout"
+    copy_secrets_logger "Using the standalone layout"
   fi
 
   local rel
   for rel in "${CREDENTIALS_PATHS[@]}"; do
     if [ ! -e "$src_root/$rel" ]; then
-      logger "Error: $rel is missing from the credentials repo. Refusing to deploy without it."
+      copy_secrets_logger "Error: $rel is missing from the credentials repo. Refusing to deploy without it."
       return 1
     fi
   done
 
-  logger "Copying files"
+  copy_secrets_logger "Copying files"
   cd "$src_root"
 
   for rel in "${CREDENTIALS_PATHS[@]}"; do
@@ -85,14 +85,14 @@ copy_secrets() {
   cd "$app_dir"
   rm -rf "$CREDENTIALS_TMP_DIR"
 
-  logger "Verifying Git LFS files resolved"
+  copy_secrets_logger "Verifying Git LFS files resolved"
   while IFS= read -r -d '' mmdb; do
     if head -c 64 "$mmdb" | grep -q "git-lfs"; then
-      logger "Error: $mmdb is a Git LFS pointer, not the real file. LFS objects were not fetched."
+      copy_secrets_logger "Error: $mmdb is a Git LFS pointer, not the real file. LFS objects were not fetched."
       return 1
     fi
   done < <(find "$app_dir/lib" -name '*.mmdb' -print0)
 
-  logger "Secrets copied successfully"
+  copy_secrets_logger "Secrets copied successfully"
   return 0
 }
