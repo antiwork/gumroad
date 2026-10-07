@@ -67,6 +67,18 @@ describe Api::Internal::Admin::PiracyReportsController do
       expect(response.parsed_body["reports"].pluck("report_id")).to eq([old.external_id])
     end
 
+    it "marks a report that passed screening with no verified recipient" do
+      blocked = create(:piracy_report, :screening, screened_at: Time.current)
+      unscreened = create(:piracy_report, :screening)
+
+      get :index, params: { state: "screening" }
+
+      expect(response.parsed_body["reports"].index_by { _1["report_id"] }).to include(
+        blocked.external_id => hash_including("blocked_on_recipient" => true),
+        unscreened.external_id => hash_including("blocked_on_recipient" => false)
+      )
+    end
+
     it "loads sellers and products in bulk, so the query count does not grow with the report count" do
       queries = lambda do
         count = 0

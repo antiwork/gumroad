@@ -88,13 +88,17 @@ describe PiracyReports::ScreenService do
       expect(report.reload.notice_text).to include(%("#{long_name}"))
     end
 
-    it "keeps the report in screening when the host has no registry entry" do
+    it "keeps the report in screening and records the pass when the host has no registry entry" do
       other = create(:piracy_report, :screening, seller:, product:, url: "https://unlisted.example.org/course")
 
       result = call(pass_params, on: other)
 
       expect(result.errors).to eq(["No verified recipient for unlisted.example.org. The report stays in screening until one is added to config/piracy_recipients.yml."])
-      expect(other.reload).to have_attributes(state: "screening", notice_text: nil, recipient_email: nil)
+      other.reload
+      expect(other).to have_attributes(state: "screening", notice_text: nil, recipient_email: nil, screening_verdict: "pass")
+      expect(other.screened_at).to be_present
+      expect(other.screening_checks["rails"]).to eq([result.errors.first])
+      expect(PiracyReport.blocked_on_recipient).to contain_exactly(other)
     end
 
     it "uses the entry for a parent domain when the reported file is on a subdomain" do
