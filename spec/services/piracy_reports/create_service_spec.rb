@@ -106,21 +106,40 @@ describe PiracyReports::CreateService do
       seller, product = create_piracy_seller_with_product
       seller.update!(confirmed_at: nil)
 
-      expect(call(seller:, product:).errors).to include("The seller's email is not confirmed")
+      expect(call(seller:, product:).errors).to include(PiracyReports::Eligibility.store_agent_gate_error)
     end
 
-    it "rejects a seller without payout setup" do
-      seller, product = create_piracy_seller_with_product
-      seller.alive_user_compliance_info.destroy!
+    it "rejects a seller with no completed payout" do
+      seller = create(:user)
+      create(:user_compliance_info, user: seller)
+      Feature.activate_user(:piracy_reports, seller)
+      allow_any_instance_of(User).to receive(:sales_cents_total).and_return(User::MIN_SALES_CENTS_VALUE_FOR_STORE_AGENT)
+      product = create(:product, user: seller)
 
-      expect(call(seller:, product:).errors).to include("The seller has not completed payout setup")
+      result = nil
+      expect { result = call(seller:, product:) }.not_to change(PiracyReport, :count)
+      expect(result.errors).to include(PiracyReports::Eligibility.store_agent_gate_error)
+    end
+
+    it "reports the suspension itself, not the earned-access steps" do
+      seller, product = create_piracy_seller_with_product
+      seller.update!(user_risk_state: "suspended_for_fraud")
+
+      expect(call(seller:, product:).errors).to eq(["The seller's account is suspended"])
+    end
+
+    it "rejects a seller under the store agent's sales bar" do
+      seller, product = create_piracy_seller_with_product
+      allow_any_instance_of(User).to receive(:sales_cents_total).and_return(User::MIN_SALES_CENTS_VALUE_FOR_STORE_AGENT - 1)
+
+      expect(call(seller:, product:).errors).to include(PiracyReports::Eligibility.store_agent_gate_error)
     end
 
     it "rejects a seller whose payout record has no legal name to print in the notice" do
       seller, product = create_piracy_seller_with_product
       seller.alive_user_compliance_info.update_columns(first_name: nil, last_name: nil)
 
-      expect(call(seller:, product:).errors).to include("The seller has not completed payout setup")
+      expect(call(seller:, product:).errors).to include("The seller's payout record has no legal name to print in the notice")
     end
 
     it "accepts a seller whose payout record has no street address, since the notice does not print it" do
@@ -144,11 +163,11 @@ describe PiracyReports::CreateService do
       expect(call(seller:, product:).errors).to include("The product is not published")
     end
 
-    it "rejects a product with no successful sales" do
+    it "rejects a product with no successful sales, even when the seller passes the store agent's gate" do
       seller, = create_piracy_seller_with_product
       product = create(:product, user: seller)
 
-      expect(call(seller:, product:).errors).to include("The product has no successful sales")
+      expect(call(seller:, product:).errors).to eq(["The product has no successful sales"])
     end
   end
 end

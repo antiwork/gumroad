@@ -15,6 +15,10 @@ describe PiracyReportsController, type: :controller, inertia: true do
   before do
     create(:user_compliance_info, user: seller)
     Feature.activate_user(:piracy_reports, seller)
+    create(:payment_completed, user: seller)
+    # The controller resolves its own seller object, so the store agent's sales bar is stubbed on
+    # the class, as the store agent's own controller specs do.
+    allow_any_instance_of(User).to receive(:sales_cents_total).and_return(User::MIN_SALES_CENTS_VALUE_FOR_STORE_AGENT)
     create(:purchase, link: product)
   end
 
@@ -37,11 +41,11 @@ describe PiracyReportsController, type: :controller, inertia: true do
       end
 
       it "lists the reasons the seller cannot report yet" do
-        Purchase.where(link_id: product.id).delete_all
+        seller.update!(confirmed_at: nil)
 
         get :new, params: { product_id: product.unique_permalink }
 
-        expect(inertia.props[:eligibility_errors]).to include("The product has no successful sales")
+        expect(inertia.props[:eligibility_errors]).to include(PiracyReports::Eligibility.store_agent_gate_error)
       end
 
       it "redirects when the product belongs to someone else" do
