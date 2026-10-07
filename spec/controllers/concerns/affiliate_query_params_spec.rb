@@ -46,5 +46,17 @@ describe AffiliateQueryParams do
         expect(instance.fetch_affiliate_id(params)).to eq(1)
       end
     end
+
+    context "when the affiliate query param is a nested hash" do
+      it "returns nil without raising when affiliate_id is a nested hash" do
+        params = ActionController::Parameters.new(affiliate_id: { value: "1" })
+        expect(instance.fetch_affiliate_id(params)).to be_nil
+      end
+
+      it "returns nil without raising when a is a nested hash" do
+        params = ActionController::Parameters.new(a: { value: "1" })
+        expect(instance.fetch_affiliate_id(params)).to be_nil
+      end
+    end
   end
 end
