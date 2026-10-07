@@ -10,7 +10,6 @@ import { InputGroup } from "$app/components/ui/InputGroup";
 import { Label } from "$app/components/ui/Label";
 import { Pill } from "$app/components/ui/Pill";
 import { useOnChange } from "$app/components/useOnChange";
-import { useOnOutsideClick } from "$app/components/useOnOutsideClick";
 
 const UNITS = ["minutes", "hours", "days"] as const;
 type Unit = (typeof UNITS)[number];
@@ -53,26 +52,37 @@ export const CallLimitationsEditor = ({
   const { minimum_notice_in_minutes, maximum_calls_per_day } = callLimitations;
 
   const [minimumNotice, setMinimumNotice] = React.useState(getMinimumNotice(minimum_notice_in_minutes));
-  useOnChange(() => setMinimumNotice(getMinimumNotice(minimum_notice_in_minutes)), [minimum_notice_in_minutes]);
-  const inputRef = React.useRef<HTMLDivElement>(null);
-  useOnOutsideClick([inputRef], () =>
-    updateCallLimitations({ minimum_notice_in_minutes: getNoticeInMinutes(minimumNotice) }),
-  );
+  useOnChange(() => {
+    if (minimum_notice_in_minutes !== getNoticeInMinutes(minimumNotice)) {
+      setMinimumNotice(getMinimumNotice(minimum_notice_in_minutes));
+    }
+  }, [minimum_notice_in_minutes]);
+
+  const updateMinimumNotice = (notice: MinimumNotice) => {
+    setMinimumNotice(notice);
+    updateCallLimitations({ minimum_notice_in_minutes: getNoticeInMinutes(notice) });
+  };
 
   return (
     <>
       <Fieldset>
         <Label htmlFor={`${uid}-notice-period`}>Notice period</Label>
-        <NumberInput value={minimumNotice.value} onChange={(value) => setMinimumNotice({ ...minimumNotice, value })}>
+        <NumberInput value={minimumNotice.value} onChange={(value) => updateMinimumNotice({ ...minimumNotice, value })}>
           {(props) => (
-            <InputGroup ref={inputRef}>
+            <InputGroup
+              onBlur={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget)) {
+                  setMinimumNotice(getMinimumNotice(getNoticeInMinutes(minimumNotice)));
+                }
+              }}
+            >
               <Input id={`${uid}-notice-period`} placeholder="15" {...props} />
               <Pill asChild className="relative -mr-2 shrink-0 cursor-pointer">
                 <Label>
                   <span>{minimumNotice.unit}</span>
                   <TypeSafeOptionSelect
                     aria-label="Units"
-                    onChange={(unit) => setMinimumNotice({ ...minimumNotice, unit })}
+                    onChange={(unit) => updateMinimumNotice({ ...minimumNotice, unit })}
                     value={minimumNotice.unit}
                     options={UNITS.map((unit) => ({ id: unit, label: unit }))}
                     className="absolute inset-0 z-1 m-0! cursor-pointer opacity-0"
