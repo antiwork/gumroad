@@ -9,7 +9,12 @@ logger() {
 }
 
 logger "Uploading public/vite to S3"
-aws s3 sync /app/public/vite s3://${ASSETS_S3_BUCKET}/vite --acl public-read --cache-control max-age=31536000,immutable
+# A new build gives every file a new mtime, so a plain sync uploads them all.
+# Names under assets/ carry a content hash: the same name and size is the same
+# file. A source map can differ at the same size; the old one maps the same code.
+aws s3 sync /app/public/vite s3://${ASSETS_S3_BUCKET}/vite --size-only --exclude '.vite/*' --acl public-read --cache-control max-age=31536000,immutable
+# The manifests keep fixed names.
+aws s3 sync /app/public/vite/.vite s3://${ASSETS_S3_BUCKET}/vite/.vite --acl public-read --cache-control max-age=31536000,immutable
 logger "Done uploading public/vite to S3"
 
 logger "Uploading public/js to S3"
