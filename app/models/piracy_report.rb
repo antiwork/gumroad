@@ -76,11 +76,13 @@ class PiracyReport < ApplicationRecord
 
   # The seller signs the text frozen on the row, so the signature and the digest travel together.
   # The lock makes the transition and the signature one step against a second submit.
-  def record_signature!(name, confirmations:, ip:)
+  def record_signature!(name, confirmations:, statement_version:, ip:)
     with_lock do
       errors.add(:base, "This report is not ready to sign") unless awaiting_signature?
       errors.add(:base, "The notice has not been generated yet") if notice_text.blank?
       errors.add(:base, "Check every confirmation to sign") unless (SIGNATURE_CONFIRMATIONS.keys - Array(confirmations).map(&:to_s)).empty?
+      # A page left open across a wording change must not record agreement to text the seller never saw.
+      errors.add(:base, "The confirmations changed. Reload the page and read them again.") unless statement_version.to_s == SIGNATURE_STATEMENT_VERSION
       # Invisible format characters (zero-width, bidi overrides) could blank or disguise the signature.
       signed_by_name = name.to_s.gsub(/\p{Cf}/, "").squish
       errors.add(:signed_by_name, "must be your full legal name") if signed_by_name.blank?

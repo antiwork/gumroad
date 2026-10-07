@@ -147,8 +147,8 @@ describe PiracyReport do
   describe "#record_signature!" do
     let(:all_confirmations) { PiracyReport::SIGNATURE_CONFIRMATIONS.keys }
 
-    def sign(report, name = "Jane Doe", confirmations: all_confirmations, ip: "203.0.113.7")
-      report.record_signature!(name, confirmations:, ip:)
+    def sign(report, name = "Jane Doe", confirmations: all_confirmations, statement_version: PiracyReport::SIGNATURE_STATEMENT_VERSION, ip: "203.0.113.7")
+      report.record_signature!(name, confirmations:, statement_version:, ip:)
     end
 
     it "signs the report, records what the seller agreed to, and puts the signature in the notice" do
@@ -191,6 +191,14 @@ describe PiracyReport do
       expect(sign(report, "   ")).to be(false)
       expect(report.reload.state).to eq("awaiting_signature")
       expect(report.errors[:signed_by_name]).to be_present
+    end
+
+    it "refuses to sign when the page showed an older version of the confirmations" do
+      report = create(:piracy_report, :awaiting_signature)
+
+      expect(sign(report, statement_version: "2026-01-01")).to be(false)
+      expect(report.errors[:base]).to include("The confirmations changed. Reload the page and read them again.")
+      expect(report.reload.state).to eq("awaiting_signature")
     end
 
     it "drops invisible characters, so a name of only zero-width or bidi characters is blank" do

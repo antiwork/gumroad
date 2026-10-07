@@ -42,13 +42,16 @@ class PiracyReportsController < Sellers::BaseController
       report: report_props,
       product: { name: @report.product.name, url: @report.product.long_url },
       confirmations: PiracyReport::SIGNATURE_CONFIRMATIONS.map { |key, text| { key:, text: } },
+      confirmations_version: PiracyReport::SIGNATURE_STATEMENT_VERSION,
     }
   end
 
   def sign
     authorize @report
 
-    if @report.record_signature!(params[:signed_by_name], confirmations: params[:confirmations], ip: request.remote_ip)
+    if @report.record_signature!(
+      params[:signed_by_name], confirmations: params[:confirmations], statement_version: params[:confirmations_version], ip: request.remote_ip
+    )
       redirect_to piracy_report_path(@report.external_id), notice: "Signed. We will send the notice."
     else
       redirect_to piracy_report_path(@report.external_id), alert: @report.errors.full_messages.to_sentence

@@ -24,12 +24,17 @@ type PiracyReportsShowProps = {
   };
   product: { name: string; url: string };
   confirmations: { key: string; text: string }[];
+  confirmations_version: string;
 };
 
 export default function PiracyReportsShow() {
-  const { report, product, confirmations } = usePage<PiracyReportsShowProps>().props;
+  const { report, product, confirmations, confirmations_version } = usePage<PiracyReportsShowProps>().props;
 
-  const form = useForm<{ signed_by_name: string; confirmations: string[] }>({ signed_by_name: "", confirmations: [] });
+  const form = useForm<{ signed_by_name: string; confirmations: string[]; confirmations_version: string }>({
+    signed_by_name: "",
+    confirmations: [],
+    confirmations_version,
+  });
   const toggleConfirmation = (key: string, checked: boolean) =>
     form.setData(
       "confirmations",

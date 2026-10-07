@@ -130,6 +130,10 @@ FANOUT = {
   %r{\Aapp/views/help_center/} => HELP_CENTER_SPECS,
   %r{\Aapp/javascript/components/HelpCenterPage} => HELP_CENTER_SPECS,
   %r{\Aapp/javascript/pages/HelpCenter/} => HELP_CENTER_SPECS,
+  %r{\Aapp/javascript/pages/PiracyReports/} => %w[
+    spec/requests/piracy_report_signing_spec.rb
+    spec/controllers/piracy_reports_controller_spec.rb
+  ],
   # Recurring run-all-specs gaps (ProductEdit, Settings, API docs, Analytics,
   # Audience, Bundles, Dashboard). These trees have no co-located rspec.
   %r{\Aapp/javascript/components/ProductEdit/} => PRODUCT_FLOW_SPECS,

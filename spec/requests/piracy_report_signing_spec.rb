@@ -8,7 +8,7 @@ describe "Signing a piracy report notice", type: :system, js: true do
   let(:product) { seller_and_product.last }
   let(:report) do
     create(:piracy_report, :awaiting_signature, seller:, product:, url: "https://example.net/design-course",
-                                                recipient_name: "Example Net Inc.", recipient_email: "copyright@example.net")
+                                                recipient_name: "Example Net Inc.", recipient_email: "copyright@example.com")
   end
 
   before do

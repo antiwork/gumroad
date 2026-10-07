@@ -135,6 +135,21 @@ check(
   expect_specs: %w[spec/requests/rack_attack_spec.rb],
 )
 
+# Piracy report pages -> the signing system spec and the controller spec
+check(
+  "piracy report pages map to their system and controller specs",
+  base_files: {
+    "spec/requests/piracy_report_signing_spec.rb" => SPEC_STUB,
+    "spec/controllers/piracy_reports_controller_spec.rb" => SPEC_STUB,
+    "app/javascript/pages/PiracyReports/Show.tsx" => "old",
+  },
+  head_files: { "app/javascript/pages/PiracyReports/Show.tsx" => "new" },
+  expect_specs: %w[
+    spec/controllers/piracy_reports_controller_spec.rb
+    spec/requests/piracy_report_signing_spec.rb
+  ],
+)
+
 # Piracy recipient registry -> the registry and screening specs
 check(
   "piracy recipient registry maps to its service specs instead of escalating",
