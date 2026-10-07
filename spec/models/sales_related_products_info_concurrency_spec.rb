@@ -189,6 +189,9 @@ describe SalesRelatedProductsInfo, "concurrent sales count upserts" do
   end
 
   context "when InnoDB picks the upsert as a deadlock victim" do
+    # Each wait returns as soon as its condition holds; the budget only bounds a stuck run.
+    LOCK_WAIT_BUDGET_SECONDS = 20
+
     let(:product_id) { base_id + 1 }
     let(:first_pair) { [product_id, base_id + 2] }
     let(:second_pair) { [product_id, base_id + 3] }
@@ -216,8 +219,6 @@ describe SalesRelatedProductsInfo, "concurrent sales count upserts" do
     # on second_pair, updates first_pair. Its 40 inserted rows make it the heavier transaction, so
     # InnoDB rolls back the upsert's. Returns what the block raised, if anything.
     def deadlock_upsert
-      # Each wait returns as soon as its condition holds; the budget only bounds a stuck run.
-      lock_wait_budget = 20
       process_id = ApplicationRecord.connection.select_value("SELECT CONNECTION_ID()").to_i
       holding = Queue.new
       upserting = Queue.new
@@ -228,15 +229,15 @@ describe SalesRelatedProductsInfo, "concurrent sales count upserts" do
             seed_pairs(Array.new(40) { [base_id + 100 + _1, base_id + 200] })
             connection.execute("SELECT id FROM #{described_class.table_name} WHERE #{where_pair(second_pair)} FOR UPDATE")
             holding << true
-            raise "the block never started" unless upserting.pop(timeout: lock_wait_budget)
-            deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + lock_wait_budget
+            raise "the block never started" unless upserting.pop(timeout: LOCK_WAIT_BUDGET_SECONDS)
+            deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + LOCK_WAIT_BUDGET_SECONDS
             until (waiting_ids = connection.uncached { table_lock_waiter_ids(connection) }).include?(process_id)
               if Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
                 upsert_thread = connection.uncached { connection.select_rows(<<~SQL) }
                   SELECT PROCESSLIST_COMMAND, PROCESSLIST_STATE, PROCESSLIST_INFO FROM performance_schema.threads
                   WHERE PROCESSLIST_ID = #{process_id}
                 SQL
-                raise "the upsert never blocked on second_pair within #{lock_wait_budget}s " \
+                raise "the upsert never blocked on second_pair within #{LOCK_WAIT_BUDGET_SECONDS}s " \
                       "(connection #{process_id}: #{upsert_thread.inspect}; connections waiting on the table: #{waiting_ids.inspect})"
               end
               sleep(0.025)
@@ -245,7 +246,7 @@ describe SalesRelatedProductsInfo, "concurrent sales count upserts" do
           end
         end
       end
-      expect(holding.pop(timeout: lock_wait_budget)).to be(true)
+      expect(holding.pop(timeout: LOCK_WAIT_BUDGET_SECONDS)).to be(true)
       deadlocks = 0
       callback = ->(*, payload) { deadlocks += 1 if payload[:exception_object].is_a?(ActiveRecord::Deadlocked) }
       error = ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
@@ -255,7 +256,7 @@ describe SalesRelatedProductsInfo, "concurrent sales count upserts" do
       rescue StandardError => e
         e
       end
-      expect(other.join(lock_wait_budget * 2)).to be_truthy
+      expect(other.join(LOCK_WAIT_BUDGET_SECONDS * 2)).to be_truthy
       other.value
       expect(deadlocks).to eq(1)
       error
