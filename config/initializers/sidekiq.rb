@@ -31,6 +31,9 @@ Sidekiq.configure_server do |config|
   # The number of jobs that are stored after retries are exhausted.
   config[:dead_max_jobs] = 20_000_000
 
+  # SidekiqUtility drains every process on an instance by this label.
+  config[:labels] << "instance:#{ENV["EC2_INSTANCE_ID"]}" if ENV["EC2_INSTANCE_ID"].present?
+
   SidekiqUniqueJobs::Server.configure(config)
 end
 
