@@ -18,6 +18,39 @@ describe CreatorAnalytics::CachingProxy do
       CreatorAnalytics::Web.new(user: @user, dates: (start_date .. end_date).to_a).public_send("by_#{by}")
     end
 
+    it "ignores referral totals cached before domains with the same display name were combined" do
+      create(:large_seller, user: @user)
+      date = @dates.first
+      %w[t.co twitter.com].each.with_index do |domain, index|
+        add_page_view(@product, Time.utc(2019, 1, 30, 12), referrer_domain: domain)
+        create(:purchase, link: @product, created_at: Time.utc(2019, 1, 30, 12), referrer: "https://#{domain}", price_cents: (index + 1) * 100)
+      end
+      ProductPageView.__elasticsearch__.refresh_index!
+      index_model_records(Purchase)
+
+      permalink = @product.unique_permalink
+      legacy_data = web_data(:referral, date, date)
+      legacy_data[:by_referral] = {
+        views: { permalink => { "Twitter" => [1] } },
+        sales: { permalink => { "Twitter" => [1] } },
+        totals: { permalink => { "Twitter" => [200] } }
+      }
+      legacy_record = create(:computed_sales_analytics_day,
+                             key: "#{@service.send(:user_cache_key)}_by_referral_for_#{date}",
+                             data: legacy_data.to_json)
+
+      result = @service.data_for_dates(date, date, by: :referral)
+      expect(result[:by_referral]).to eq(
+        views: { permalink => { "Twitter" => [2] } },
+        sales: { permalink => { "Twitter" => [2] } },
+        totals: { permalink => { "Twitter" => [300] } }
+      )
+
+      @service.overwrite_cache(date, by: :referral)
+      expect(legacy_record.reload.data).to eq(legacy_data.to_json)
+      expect(@service.data_for_dates(date, date, by: :referral)).to eq(result)
+    end
+
     it "returns merged mix of cached and generated data" do
       allow(@service).to receive(:use_cache?).and_return(true)
 
@@ -230,6 +263,12 @@ describe CreatorAnalytics::CachingProxy do
       user = create(:user, timezone: "Rome")
       cache_key = described_class.new(user).send(:cache_key_for_data, Date.new(2020, 12, 3))
       expect(cache_key).to eq("seller_analytics_v0_user_#{user.id}_Rome_by_date_for_2020-12-03")
+    end
+
+    it "keeps the existing state cache namespace" do
+      user = create(:user, timezone: "Rome")
+      cache_key = described_class.new(user).send(:cache_key_for_data, Date.new(2020, 12, 3), by: :state)
+      expect(cache_key).to eq("seller_analytics_v0_user_#{user.id}_Rome_by_state_for_2020-12-03")
     end
   end
 

@@ -155,6 +155,42 @@ describe CreatorAnalytics::Web do
   end
 
   describe "#by_referral" do
+    %w[day hour].each do |interval|
+      it "combines domains with the same display name within each #{interval} bucket" do
+        %w[api.twitter.com t.co twitter.com].each.with_index do |domain, index|
+          (index + 1).times do
+            add_page_view(@products[0], Time.utc(2021, 1, 2, 10, 15), referrer_domain: domain)
+            create(:purchase, link: @products[0], created_at: Time.utc(2021, 1, 2, 10, 15), referrer: "https://#{domain}", price_cents: (index + 1) * 100)
+          end
+        end
+        add_page_view(@products[0], Time.utc(2021, 1, 2, 11), referrer_domain: "t.co")
+        create(:purchase, link: @products[0], created_at: Time.utc(2021, 1, 2, 11), referrer: "https://t.co", price_cents: 400)
+        add_page_view(@products[1], Time.utc(2021, 1, 2, 10), referrer_domain: "twitter.com")
+        create(:purchase, link: @products[1], created_at: Time.utc(2021, 1, 2, 10), referrer: "https://twitter.com", price_cents: 500)
+        ProductPageView.__elasticsearch__.refresh_index!
+        index_model_records(Purchase)
+
+        dates = interval == "day" ? (Date.new(2021, 1, 1)..Date.new(2021, 1, 3)).to_a : [Date.new(2021, 1, 2)]
+        result = described_class.new(user: @user, dates:, interval:).by_referral.fetch(:by_referral)
+
+        if interval == "day"
+          expect(result[:views][@products[0].unique_permalink]).to eq("Twitter" => [0, 7, 0], "Google" => [0, 0, 2], "direct" => [1, 0, 1])
+          expect(result[:sales][@products[0].unique_permalink]).to eq("Twitter" => [0, 7, 0], "Google" => [0, 0, 1], "direct" => [1, 0, 1])
+          expect(result[:totals][@products[0].unique_permalink]).to eq("Twitter" => [0, 1800, 0], "Google" => [0, 0, 100], "direct" => [100, 0, 100])
+          expect(result[:views][@products[1].unique_permalink]["Twitter"]).to eq([0, 1, 0])
+          expect(result[:sales][@products[1].unique_permalink]["Twitter"]).to eq([0, 1, 0])
+          expect(result[:totals][@products[1].unique_permalink]["Twitter"]).to eq([0, 500, 0])
+        else
+          expect(result[:views][@products[0].unique_permalink]).to eq("Twitter" => [0] * 10 + [6, 1] + [0] * 12)
+          expect(result[:sales][@products[0].unique_permalink]).to eq("Twitter" => [0] * 10 + [6, 1] + [0] * 12)
+          expect(result[:totals][@products[0].unique_permalink]).to eq("Twitter" => [0] * 10 + [1400, 400] + [0] * 12)
+          expect(result[:views][@products[1].unique_permalink]).to eq("Twitter" => [0] * 10 + [1] + [0] * 13)
+          expect(result[:sales][@products[1].unique_permalink]).to eq("Twitter" => [0] * 10 + [1] + [0] * 13)
+          expect(result[:totals][@products[1].unique_permalink]).to eq("Twitter" => [0] * 10 + [500] + [0] * 13)
+        end
+      end
+    end
+
     it "returns expected data" do
       expected_result = {
         dates_and_months: [

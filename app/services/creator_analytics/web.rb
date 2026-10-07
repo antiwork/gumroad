@@ -84,7 +84,7 @@ class CreatorAnalytics::Web
       referrer_name = referrer_domain_to_name(referrer)
       result[:by_referral][:views][product_permalink] ||= {}
       result[:by_referral][:views][product_permalink][referrer_name] ||= [0] * dates_strings.size
-      result[:by_referral][:views][product_permalink][referrer_name][dates_strings.index(date)] = count
+      result[:by_referral][:views][product_permalink][referrer_name][dates_strings.index(date)] += count
     end
 
     sales_data.each do |(product_id, referrer, date), values|
@@ -92,10 +92,10 @@ class CreatorAnalytics::Web
       referrer_name = referrer_domain_to_name(referrer)
       result[:by_referral][:sales][product_permalink] ||= {}
       result[:by_referral][:sales][product_permalink][referrer_name] ||= [0] * dates_strings.size
-      result[:by_referral][:sales][product_permalink][referrer_name][dates_strings.index(date)] = values[:count]
+      result[:by_referral][:sales][product_permalink][referrer_name][dates_strings.index(date)] += values[:count]
       result[:by_referral][:totals][product_permalink] ||= {}
       result[:by_referral][:totals][product_permalink][referrer_name] ||= [0] * dates_strings.size
-      result[:by_referral][:totals][product_permalink][referrer_name][dates_strings.index(date)] = values[:total]
+      result[:by_referral][:totals][product_permalink][referrer_name][dates_strings.index(date)] += values[:total]
     end
 
     result

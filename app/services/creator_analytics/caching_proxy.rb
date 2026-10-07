@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class CreatorAnalytics::CachingProxy
+  REFERRAL_CACHE_VERSION = 1
+
   include Formatters::Helpers
   include Formatters::ByDate
   include Formatters::ByState
@@ -65,7 +67,8 @@ class CreatorAnalytics::CachingProxy
     end
 
     def cache_key_for_data(date, by: :date)
-      "#{user_cache_key}_by_#{by}_for_#{date}"
+      key = "#{user_cache_key}_by_#{by}_for_#{date}"
+      by == :referral ? "#{key}_v#{REFERRAL_CACHE_VERSION}" : key
     end
 
     # Today, from the user's timezone point of view
