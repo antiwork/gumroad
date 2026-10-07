@@ -160,13 +160,19 @@ class SendYearInReviewEmailJobTest < ActiveSupport::TestCase
 
   test "whole-dollar and zero country totals keep their existing meanings" do
     data = {
-      views: { "product" => { "United States" => 1, "Romania" => 1 } },
-      sales: { "product" => { "United States" => 1, "Romania" => 1 } },
-      totals: { "product" => { "United States" => 10_000, "Romania" => 0 } }
+      views: { "product" => { "United States" => 1, "Romania" => 1, "Canada" => 1 } },
+      sales: { "product" => { "United States" => 1, "Romania" => 1, "Canada" => 1 } },
+      totals: { "product" => { "United States" => 10_000, "Romania" => 0, "Canada" => 1 } }
     }
     stats = SendYearInReviewEmailJob.new.send(:build_stats_by_country, data)
 
-    assert_equal({ Compliance::Countries.country_with_flag_by_name("United States") => [1, 1, 100] }, stats)
+    assert_equal(
+      {
+        Compliance::Countries.country_with_flag_by_name("United States") => [1, 1, 100],
+        Compliance::Countries.country_with_flag_by_name("Canada") => [1, 1, 0.01]
+      },
+      stats
+    )
   end
 
   test "perform displays exact cent totals for small net sales" do
