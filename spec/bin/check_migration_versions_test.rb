@@ -84,10 +84,11 @@ end
 # Operational failures must be distinguishable from findings, because the push
 # guard writes a failing required status on a finding and nothing on anything
 # else. Exit 1 here would block every clean PR on a transient git failure.
-def check_operational(name, argv:, **repo_args)
+def check_operational(name, argv:, mutate: nil, **repo_args)
   $count += 1
   Dir.mktmpdir do |dir|
     build_repo(dir, **repo_args)
+    mutate&.call(dir)
     stdout, stderr, status = Open3.capture3("ruby", CHECKER, *argv, chdir: dir)
     combined = stdout + stderr
 
@@ -217,6 +218,19 @@ check_operational(
 check_operational(
   "unresolvable head ref exits operational, not as a collision",
   argv: %w[base no-such-ref],
+  base_migrations: %w[20261206000010_a.rb],
+  head_migrations: %w[20261206000010_a.rb 20261206000011_b.rb]
+)
+
+# ci-green.yml clones without file contents, so git fetches schema.rb on demand.
+# A failed fetch must not read as "no schema.rb", which skips the schema rules.
+check_operational(
+  "an unreadable schema.rb exits operational instead of skipping the schema rules",
+  argv: %w[base HEAD],
+  mutate: lambda { |dir|
+    blob = Open3.capture2("git", "rev-parse", "base:db/schema.rb", chdir: dir).first.strip
+    FileUtils.rm_f(File.join(dir, ".git", "objects", blob[0, 2], blob[2..]))
+  },
   base_migrations: %w[20261206000010_a.rb],
   head_migrations: %w[20261206000010_a.rb 20261206000011_b.rb]
 )
