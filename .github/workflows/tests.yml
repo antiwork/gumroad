@@ -109,7 +109,20 @@ jobs:
         with:
           node-version-file: package.json
           cache: npm
+      # Saved only by main pushes: a fork PR's pull_request_target run writes to the
+      # base branch's cache scope and must not be able to plant node_modules there.
+      - uses: actions/cache/restore@v4
+        id: node_modules
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package.json', 'package-lock.json', '.npmrc', 'patches/**') }}
       - run: npm ci
+        if: steps.node_modules.outputs.cache-hit != 'true'
+      - uses: actions/cache/save@v4
+        if: steps.node_modules.outputs.cache-hit != 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        with:
+          path: node_modules
+          key: ${{ steps.node_modules.outputs.cache-primary-key }}
       - run: npm run lint-fast
       - run: npm test
         env:
@@ -133,7 +146,18 @@ jobs:
         with:
           node-version-file: package.json
           cache: npm
+      - uses: actions/cache/restore@v4
+        id: node_modules
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package.json', 'package-lock.json', '.npmrc', 'patches/**') }}
       - run: npm ci
+        if: steps.node_modules.outputs.cache-hit != 'true'
+      - uses: actions/cache/save@v4
+        if: steps.node_modules.outputs.cache-hit != 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        with:
+          path: node_modules
+          key: ${{ steps.node_modules.outputs.cache-primary-key }}
       # tsc needs the gitignored js:export output (app/javascript/utils/routes.*
       # and app/javascript/json_schemas/*). The export boots Rails off the
       # committed .env.test but tolerates every backing service being down, so
