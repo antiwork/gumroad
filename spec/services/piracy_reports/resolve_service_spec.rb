@@ -56,6 +56,18 @@ describe PiracyReports::ResolveService do
     expect(report.reload.outcome_notified_at).to be_present
   end
 
+  it "queues the outcome email once when an overlapping request arrives while it is being queued" do
+    overlapping = nil
+    allow(PiracyReportMailer).to receive(:resolved).and_wrap_original do |original, *args|
+      overlapping = described_class.new(report: PiracyReport.find(report.id), outcome: "removed").call
+      original.call(*args)
+    end
+
+    expect { expect(described_class.new(report:, outcome: "removed").call).to be_success }
+      .to have_enqueued_mail(PiracyReportMailer, :resolved).exactly(:once)
+    expect(overlapping.errors).to eq(["The report already has an outcome"])
+  end
+
   it "rejects an unknown outcome and a report that was never sent" do
     expect(described_class.new(report:, outcome: "won").call.errors).to eq(["outcome must be one of removed, no_response, restored, withdrawn"])
 

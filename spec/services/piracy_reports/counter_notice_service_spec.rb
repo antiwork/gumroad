@@ -41,6 +41,23 @@ describe PiracyReports::CounterNoticeService do
     expect(report.reload.counter_notice_body).to eq("First counter-notice.")
   end
 
+  it "treats a body that is not a string as missing, so a hash or list is never forwarded as text" do
+    expect(call(body: ["x"]).errors).to eq(["body is required"])
+    expect(call(body: { a: "x" }).errors).to eq(["body is required"])
+    expect(report.reload.state).to eq("sent")
+  end
+
+  it "queues the seller email once when an overlapping request arrives while it is being queued" do
+    overlapping = nil
+    allow(PiracyReportMailer).to receive(:counter_notice_received).and_wrap_original do |original, *args|
+      overlapping = call(on: PiracyReport.find(report.id))
+      original.call(*args)
+    end
+
+    expect { expect(call).to be_success }.to have_enqueued_mail(PiracyReportMailer, :counter_notice_received).exactly(:once)
+    expect(overlapping.errors).to eq(["A counter-notice is already recorded for this report"])
+  end
+
   it "refuses a counter-notice after an outcome that cannot change" do
     report.update!(state: "resolved", outcome: "withdrawn", outcome_reason: "Licensed.", resolved_at: 1.day.ago)
 

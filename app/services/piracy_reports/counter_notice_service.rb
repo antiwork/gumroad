@@ -11,7 +11,7 @@ class PiracyReports::CounterNoticeService
 
   def initialize(report:, body:, received_on:)
     @report = report
-    @body = body.to_s.strip
+    @body = body.is_a?(String) ? body.strip : ""
     @received_on = received_on
   end
 
