@@ -1063,11 +1063,11 @@ jobs:
     # no Docker login, so untrusted code can never sit in front of a
     # credential-bearing step (a $GITHUB_PATH write here can't reach
     # test_relevant — PATH edits don't cross jobs). The list crosses over as
-    # a plain data output.
+    # a plain data output. Fork PRs only: test_relevant_runner selects its own.
     name: Compute relevant specs
     runs-on: ubicloud-standard-2
     needs: run_scope
-    if: ${{ needs.run_scope.outputs.full != 'true' && (github.event_name != 'pull_request_target' || github.event.pull_request.head.repo.full_name != github.repository) }}
+    if: ${{ needs.run_scope.outputs.full != 'true' && github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name != github.repository }}
     outputs:
       files_csv: ${{ steps.specs.outputs.files_csv }}
     steps:
@@ -1082,36 +1082,7 @@ jobs:
           persist-credentials: false
       - name: Compute relevant specs
         id: specs
-        run: |
-          # Best-effort: checkout (fetch-depth 0) already has origin/main, and this
-          # anonymous fetch (persist-credentials off) intermittently gets a
-          # credential prompt from GitHub, which would fail the job for nothing.
-          git fetch --no-tags --quiet origin main || echo "origin/main refresh failed; using the ref from checkout"
-          set +e
-          SPECS=$(ruby bin/branch-specs)
-          STATUS=$?
-          set -e
-          # Exit 3 = the selector refused to certify a trimmed run (dependency/
-          # config/migration/factory change, mapping gap, or oversized
-          # selection). The full suite is required: add the run-all-specs label.
-          if [ "$STATUS" -eq 3 ]; then
-            echo "::error::bin/branch-specs escalated — this diff needs the full suite. Add the run-all-specs label to this PR and re-run."
-            exit 1
-          elif [ "$STATUS" -ne 0 ]; then
-            echo "bin/branch-specs failed with status $STATUS"
-            exit "$STATUS"
-          fi
-          COUNT=$(echo "$SPECS" | grep -c . || true)
-          # An empty list here means the diff touched nothing rspec-affecting
-          # (selector escalates on app-code diffs that map to nothing).
-          if [ "$COUNT" -eq 0 ]; then
-            echo "No rspec-affecting changes; running the schema smoke spec as a floor."
-            SPECS="spec/models/user_spec.rb"
-            COUNT=1
-          fi
-          echo "Running $COUNT spec file(s):"
-          echo "$SPECS" | sed 's/^/  /'
-          echo "files_csv=$(echo "$SPECS" | paste -sd, -)" >> "$GITHUB_OUTPUT"
+        run: bin/ci-relevant-specs
 
   test_relevant:
     name: Test Relevant ${{ matrix.ci_node_index }}${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository && ' (internal PR noop)' || '' }}
@@ -1280,10 +1251,12 @@ jobs:
   test_relevant_runner:
     name: Test Relevant ${{ matrix.ci_node_index }}
     runs-on: ubicloud-standard-4
-    needs: [run_scope, relevant_specs]
+    needs: run_scope
     # Branch pushes in this repository run the relevant specs on the runner, so
     # they skip the test image build and pull. Fork PRs keep the image job above:
-    # this job runs the branch's code next to the Knapsack token.
+    # this job runs the branch's code next to the Knapsack token. For the same
+    # reason each shard selects its specs itself instead of waiting for
+    # relevant_specs, which keeps fork code away from secrets.
     if: needs.run_scope.outputs.full != 'true' && github.event_name == 'push'
     timeout-minutes: 30
     strategy:
@@ -1311,6 +1284,13 @@ jobs:
         timeout-minutes: 5
         with:
           persist-credentials: false
+          # bin/branch-specs diffs against origin/main; it needs history, not old file contents.
+          fetch-depth: 0
+          filter: blob:none
+      # Before the setup below, so a diff that needs the full suite fails at once.
+      - name: Select relevant specs
+        id: specs
+        run: bin/ci-relevant-specs
       - name: Login to Docker Hub
         uses: nick-fields/retry@v3
         with:
@@ -1331,6 +1311,8 @@ jobs:
       # The runner's own, newer Chrome fails specs that pass on the image's.
       - name: Install system packages
         run: |
+          # Unpacking otherwise syncs every file to disk; the runner is thrown away.
+          echo force-unsafe-io | sudo tee /etc/dpkg/dpkg.cfg.d/force-unsafe-io > /dev/null
           sudo apt-get update -qq
           sudo apt-get install -yq --no-install-recommends \
             ffmpeg file fonts-dejavu fonts-takao fonts-wqy-microhei fonts-wqy-zenhei \
@@ -1452,7 +1434,7 @@ jobs:
           KNAPSACK_PRO_CI_NODE_TOTAL: ${{ matrix.ci_node_total }}
           KNAPSACK_PRO_CI_NODE_INDEX: ${{ matrix.ci_node_index }}
           KNAPSACK_PRO_LOG_LEVEL: info
-          KNAPSACK_PRO_TEST_FILE_LIST: ${{ needs.relevant_specs.outputs.files_csv }}
+          KNAPSACK_PRO_TEST_FILE_LIST: ${{ steps.specs.outputs.files_csv }}
           KNAPSACK_PRO_COMMIT_HASH: ${{ github.sha }}
           KNAPSACK_PRO_BRANCH: ${{ github.ref_name }}
           KNAPSACK_PRO_CI_NODE_BUILD_ID: ${{ github.run_id }}
