@@ -14,22 +14,34 @@ fail() { FAIL=$((FAIL + 1)); echo "  FAIL $1"; }
 
 # The stub answers describe-auto-scaling-groups from SIZES_<asg> ("desired max", or
 # FAIL), and from REREAD_<asg> on later reads when set. It fails set-desired-capacity
-# for the ASG named in SET_FAIL and logs each set. Any other call is logged and fails.
+# for the ASG named in SET_FAIL and logs each set. Any other call or argument, or a read
+# without the query and output the script parses, is logged and fails.
 mkdir -p "$WORK/bin"
 cat > "$WORK/bin/aws" <<'STUB'
 #!/bin/bash
+unsupported() {
+  echo "UNSUPPORTED $*" >> "$CALLS"
+  echo "unsupported aws call: $*" >&2
+  exit 2
+}
 call="$1 $2"
-shift 2
-asg="" capacity=""
+[ $# -ge 2 ] && shift 2 || unsupported "$@"
+asg="" capacity="" query="" output=""
 while [ $# -gt 0 ]; do
-  case "$1" in
-    --auto-scaling-group-names|--auto-scaling-group-name) asg=$2; shift ;;
-    --desired-capacity) capacity=$2; shift ;;
+  case "$call $1" in
+    "autoscaling describe-auto-scaling-groups --auto-scaling-group-names") asg=$2 ;;
+    "autoscaling describe-auto-scaling-groups --query") query=$2 ;;
+    "autoscaling describe-auto-scaling-groups --output") output=$2 ;;
+    "autoscaling set-desired-capacity --auto-scaling-group-name") asg=$2 ;;
+    "autoscaling set-desired-capacity --desired-capacity") capacity=$2 ;;
+    *) unsupported "$call" "$@" ;;
   esac
-  shift
+  shift 2
 done
 case "$call" in
   "autoscaling describe-auto-scaling-groups")
+    [ -n "$asg" ] && [ "$query" = "AutoScalingGroups[0].[DesiredCapacity,MaxSize]" ] && [ "$output" = "text" ] \
+      || unsupported "$call --query '$query' --output '$output'"
     reads="$CALLS.reads.$asg"
     echo x >> "$reads"
     var="SIZES_${asg//-/_}" reread="REREAD_${asg//-/_}"
@@ -38,12 +50,10 @@ case "$call" in
     [ "$sizes" = "FAIL" ] && { echo "AccessDenied" >&2; exit 255; }
     printf '%s\n' "$sizes" ;;
   "autoscaling set-desired-capacity")
+    [ -n "$asg" ] && [[ "$capacity" =~ ^[0-9]+$ ]] || unsupported "$call without a group or a capacity"
     [ "${SET_FAIL:-}" = "$asg" ] && { echo "ValidationError" >&2; exit 255; }
     echo "$asg $capacity" >> "$CALLS" ;;
-  *)
-    echo "UNSUPPORTED $call" >> "$CALLS"
-    echo "unsupported aws call: $call" >&2
-    exit 2 ;;
+  *) unsupported "$call" ;;
 esac
 STUB
 # Pins the release baseline the way the main-branch steps do; nothing else is needed here.
@@ -91,6 +101,16 @@ export "$blue=4	20" "$green=7	14" REREAD_production_web_cluster_blue_asg="12	20"
 run
 [ "$STATUS" -eq 0 ] && [ "$(cat "$WORK/calls")" = "production-web-cluster-green-asg 14" ] \
   && ok "skips the write when the cluster grew past the target since the first read" || fail "re-read before the write: $(cat "$WORK/calls")"
+
+export "$blue=4	14" REREAD_production_web_cluster_blue_asg=FAIL
+run
+[ "$STATUS" -eq 0 ] && [ "$(cat "$WORK/calls")" = "production-web-cluster-green-asg 14" ] && grep -q "could not re-read production-web-cluster-blue-asg" "$WORK/out" \
+  && ok "a failed re-read skips the write, so a stale target never lands" || fail "a failed re-read: $(cat "$WORK/calls")"
+
+export REREAD_production_web_cluster_blue_asg="None	None"
+run
+[ "$STATUS" -eq 0 ] && [ "$(cat "$WORK/calls")" = "production-web-cluster-green-asg 14" ] \
+  && ok "an unexpected re-read skips the write" || fail "an unexpected re-read: $(cat "$WORK/calls")"
 unset REREAD_production_web_cluster_blue_asg
 
 export "$blue=FAIL" "$green=7	14"

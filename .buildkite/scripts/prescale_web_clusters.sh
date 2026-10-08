@@ -45,8 +45,16 @@ for asg in "${WEB_ASGS[@]}"; do
   # target tracking or the deploy's scale_up may have raised the cluster since the first
   # read. The pipeline's concurrency group keeps two builds' pre-scale steps from racing,
   # and during a deploy its min-size pin makes AWS reject any write below it.
-  if current=$(read_sizes "$asg") && read -r current _ <<< "$current" \
-      && [[ "$current" =~ ^[0-9]+$ ]] && [ "$current" -ge "$target" ]; then
+  if ! sizes=$(read_sizes "$asg"); then
+    logger "WARNING: could not re-read $asg ($sizes); leaving it to the deploy's scale_up"
+    continue
+  fi
+  read -r current _ <<< "$sizes"
+  if [[ ! "$current" =~ ^[0-9]+$ ]]; then
+    logger "WARNING: unexpected sizes for $asg on re-read ('$sizes'); leaving it to the deploy's scale_up"
+    continue
+  fi
+  if [ "$current" -ge "$target" ]; then
     logger "$asg is already at $current; nothing to do"
     continue
   fi
