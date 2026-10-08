@@ -154,6 +154,22 @@ describe PiracyReport do
     end
   end
 
+  describe "delivery" do
+    it "builds the per-report Reply-To on support@" do
+      report = build(:piracy_report, reply_token: "abc123")
+
+      expect(report.reply_to_address).to eq("support+piracy-abc123@#{DEFAULT_EMAIL_DOMAIN}")
+    end
+
+    it "treats a sent notice with no delivery event after the window as unconfirmed" do
+      unconfirmed = create(:piracy_report, :signed, state: "sent", sent_at: 25.hours.ago)
+      create(:piracy_report, :signed, state: "sent", sent_at: 1.hour.ago)
+      create(:piracy_report, :signed, state: "sent", sent_at: 25.hours.ago, delivered_at: 24.hours.ago)
+
+      expect(described_class.delivery_unconfirmed).to contain_exactly(unconfirmed)
+    end
+  end
+
   describe ".blocked_on_recipient and .needs_review" do
     it "splits the reports waiting in screening by the agent's verdict" do
       unscreened = create(:piracy_report, :screening)

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# No other job watches reports that wait in screening for a person.
+# No other job watches piracy reports that wait for a person.
 class AlertOnStuckPiracyReportsJob
   include Sidekiq::Job
   sidekiq_options retry: 2, queue: :low
@@ -11,11 +11,12 @@ class AlertOnStuckPiracyReportsJob
   def perform
     blocked = PiracyReport.blocked_on_recipient.order(:id).limit(MAX_REPORTED + 1).to_a
     review = PiracyReport.needs_review.order(:id).limit(MAX_REPORTED + 1).to_a
-    return if blocked.empty? && review.empty?
+    undelivered = PiracyReport.delivery_failed.or(PiracyReport.delivery_unconfirmed).order(:id).limit(MAX_REPORTED + 1).to_a
+    return if blocked.empty? && review.empty? && undelivered.empty?
 
     InternalNotificationWorker.perform_async(
-      "risk", "Piracy reports waiting in screening",
-      [blocked_section(blocked), review_section(review)].compact.join("\n\n")
+      "risk", "Piracy reports waiting for a person",
+      [blocked_section(blocked), review_section(review), delivery_section(undelivered)].compact.join("\n\n")
     )
   end
 
@@ -43,6 +44,25 @@ class AlertOnStuckPiracyReportsJob
         "",
         "Gumclaw works this queue with its own piracy token: it sends each case, with the agent's reasons and the " \
           "reported page, to the piracy reports owner, then submits their pass or fail through the screening API.",
+      ].join("\n")
+    end
+
+    def delivery_section(reports)
+      return if reports.empty?
+
+      lines = reports.first(MAX_REPORTED).map do |report|
+        problem = report.delivery_failed_at ? "bounced" : "no delivery event"
+        "• #{report.external_id} — #{report.url_host} (seller #{report.seller_id}), sent #{report.sent_at.to_date}, #{problem}"
+      end
+      lines << "Only the first #{MAX_REPORTED} are listed." if reports.size > MAX_REPORTED
+
+      [
+        "#{count_phrase(reports)} sent a notice that did not reach the host.",
+        "",
+        *lines,
+        "",
+        "Check the host's takedown contact. If it changed, update config/piracy_recipients.yml and tell the seller " \
+          "through support; the notice is not sent again automatically.",
       ].join("\n")
     end
 

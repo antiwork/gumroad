@@ -274,7 +274,12 @@ alert_on_stuck_piracy_reports:
   cron: "45 11 * * *" # UTC 11:45
   class: AlertOnStuckPiracyReportsJob
   queue: low
-  description: Reports piracy reports that wait in screening for a person, either for a verified takedown contact or for a pass or fail the agent could not decide
+  description: Reports piracy reports that wait for a person, either in screening or after a notice did not reach the host
+send_signed_piracy_notices:
+  cron: "*/15 * * * *"
+  class: SendSignedPiracyNoticesJob
+  queue: low
+  description: Sends signed piracy takedown notices while the piracy_reports_sending flag is on
 
 # Weekly (Payouts)
 payouts_cross_border_stripe:

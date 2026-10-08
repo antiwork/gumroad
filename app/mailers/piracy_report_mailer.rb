@@ -16,4 +16,28 @@ class PiracyReportMailer < ApplicationMailer
 
     mail to: @seller.email, subject: @subject
   end
+
+  # The exact text the seller signed, as plain text, so nothing reflows or rewrites it.
+  def notice(piracy_report_id)
+    @report = PiracyReport.find(piracy_report_id)
+
+    mail(
+      to: @report.sent_to_email,
+      cc: @report.last_contact_email,
+      from: SUPPORT_EMAIL_WITH_NAME,
+      reply_to: @report.reply_to_address,
+      subject: "Notice of claimed copyright infringement under 17 U.S.C. § 512(c)(3)"
+    ) do |format|
+      format.text { render plain: @report.notice_text }
+    end
+  end
+
+  def notice_sent(piracy_report_id)
+    @report = PiracyReport.find(piracy_report_id)
+    @product_name = @report.product.name
+    @subject = "We sent your takedown notice for #{@product_name}"
+    @report_url = piracy_report_url(@report.external_id)
+
+    mail to: @report.last_contact_email, subject: @subject
+  end
 end

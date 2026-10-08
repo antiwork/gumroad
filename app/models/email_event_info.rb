@@ -51,6 +51,8 @@ class EmailEventInfo
   # Sentinel key for clicks on the "view content" link rather than a real url.
   VIEW_ATTACHMENTS_URL = "view_attachments_url"
   CUSTOMER_MAILER = "CustomerMailer"
+  PIRACY_REPORT_MAILER = "PiracyReportMailer"
+  PIRACY_NOTICE_MAILER_METHOD = "notice"
 
   attr_reader :mailer_method, :mailer_class, :installment_id, :click_url
 
@@ -76,6 +78,15 @@ class EmailEventInfo
   def for_receipt_email?
     mailer_class == CUSTOMER_MAILER &&
     mailer_method.in?(TRACKED_RECEIPT_MAILER_METHODS)
+  end
+
+  def for_piracy_notice?
+    mailer_class == PIRACY_REPORT_MAILER && mailer_method == PIRACY_NOTICE_MAILER_METHOD
+  end
+
+  # The notice mailer takes the report id as its only argument.
+  def piracy_report_id
+    mailer_args.to_s[/\d+/]&.to_i
   end
 
   def for_abandoned_cart_email?

@@ -22,6 +22,9 @@ class PiracyReport < ApplicationRecord
 
   HOSTED_ON_GUMROAD_ERROR = "Pages hosted on Gumroad are reported through the terms of service process"
   SOURCES = %w[dashboard support].freeze
+  REPLY_TOKEN_LENGTH = 16
+  # A sent notice with no delivered or bounced event after this long was probably dropped silently.
+  DELIVERY_CONFIRMATION_WINDOW = 24.hours
   SCREENING_VERDICTS = %w[pass fail review].freeze
   # Judgment checks only the agent can make. What Rails can prove is in PiracyReports::Eligibility.
   SCREENING_CHECKS = %w[
@@ -61,6 +64,10 @@ class PiracyReport < ApplicationRecord
       transition awaiting_signature: :signed
     end
 
+    event :send_notice do
+      transition signed: :sent
+    end
+
     event :cancel do
       transition CANCELLABLE_STATES.map(&:to_sym) => :cancelled
     end
@@ -71,6 +78,11 @@ class PiracyReport < ApplicationRecord
   # The verdict tells them apart from each other and from a report the agent has not looked at yet.
   scope :blocked_on_recipient, -> { where(state: "screening", screening_verdict: "pass") }
   scope :needs_review, -> { where(state: "screening", screening_verdict: "review") }
+  # A later delivered event wins: a timeout can record a failure for a notice the provider still delivered.
+  scope :delivery_failed, -> { where(state: "sent", delivered_at: nil).where.not(delivery_failed_at: nil) }
+  scope :delivery_unconfirmed, lambda {
+    where(state: "sent", delivered_at: nil, delivery_failed_at: nil).where(sent_at: ...DELIVERY_CONFIRMATION_WINDOW.ago)
+  }
   scope :cancellable, -> { where(state: CANCELLABLE_STATES) }
 
   def blocked_on_recipient?
@@ -149,6 +161,11 @@ class PiracyReport < ApplicationRecord
 
   def self.created_this_month_count(seller)
     where(seller_id: seller.id, created_at: Time.current.beginning_of_month..).count
+  end
+
+  # Replies to the notice reach support@ tagged with the report, so gumclaw can match them.
+  def reply_to_address
+    "support+piracy-#{reply_token}@#{DEFAULT_EMAIL_DOMAIN}"
   end
 
   def url_host

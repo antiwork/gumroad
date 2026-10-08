@@ -80,6 +80,7 @@ class PiracyReportsController < Sellers::BaseController
         notice_digest: @report.notice_digest,
         signed_at: @report.signed_at&.iso8601,
         signed_by_name: @report.signed_by_name,
+        sent_at: @report.sent_at&.iso8601,
       }
     end
 end

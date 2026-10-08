@@ -27,7 +27,7 @@ describe AlertOnStuckPiracyReportsJob do
 
     expect(InternalNotificationWorker).to have_received(:perform_async) do |room, subject, body|
       expect(room).to eq("risk")
-      expect(subject).to eq("Piracy reports waiting in screening")
+      expect(subject).to eq("Piracy reports waiting for a person")
       expect(body).to include("1 piracy report passed screening but the reported host has no verified contact")
       expect(body).to include(report.external_id)
       expect(body).to include("unlisted.example.org")
@@ -53,6 +53,15 @@ describe AlertOnStuckPiracyReportsJob do
     undecided = review_report
 
     expect(message).to start_with("1 piracy report could not be decided by the screening agent.\n\n• #{undecided.external_id}")
+  end
+
+  it "lists sent notices that bounced or have no delivery event after the window" do
+    bounced = create(:piracy_report, :signed, state: "sent", sent_at: 2.hours.ago, delivery_failed_at: 1.hour.ago)
+    silent = create(:piracy_report, :signed, state: "sent", sent_at: 25.hours.ago)
+    create(:piracy_report, :signed, state: "sent", sent_at: 25.hours.ago, delivered_at: 24.hours.ago)
+
+    expect(message).to include("2 piracy reports sent a notice that did not reach the host.")
+    expect(message).to include("#{bounced.external_id} — example.net", "bounced", "#{silent.external_id} — example.net", "no delivery event")
   end
 
   it "stays silent when no report is blocked or waiting for review" do
