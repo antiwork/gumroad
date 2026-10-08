@@ -125,7 +125,10 @@ class UpdateUserComplianceInfo
         old_compliance_info.reload if old_compliance_info.persisted? && encrypted_compliance_info_params_present?
         unless compliance_info_changed
           UserComplianceInfoRequest.handle_new_user_compliance_info(old_compliance_info)
-          return { success: true } unless old_compliance_info.nationality_resubmission_required?
+          unless old_compliance_info.nationality_resubmission_required?
+            StripeMerchantAccountManager.attest_owners_provided_if_blocking(user)
+            return { success: true }
+          end
         end
 
         peru_dni_error = peru_individual_dni_error(old_compliance_info)

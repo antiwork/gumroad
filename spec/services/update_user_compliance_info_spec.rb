@@ -74,6 +74,71 @@ describe UpdateUserComplianceInfo do
       end
     end
 
+    context "when an unchanged save is made by a company seller" do
+      let!(:individual_info) { create(:user_compliance_info, user:) }
+      let!(:compliance_info) do
+        individual_info.mark_deleted!
+        create(:user_compliance_info_business, user:)
+      end
+      let!(:merchant_account) { create(:merchant_account, user:, charge_processor_merchant_id: "acct_unchanged_save") }
+      let(:params) { ActionController::Parameters.new(first_name: compliance_info.first_name, last_name: compliance_info.last_name) }
+
+      def stripe_account(owners_provided_in:)
+        Stripe::Account.construct_from(
+          id: "acct_unchanged_save",
+          object: "account",
+          business_type: "company",
+          company: { owners_provided: false },
+          requirements: { currently_due: owners_provided_in ? ["company.owners_provided"] : [], past_due: [], eventually_due: [] }
+        )
+      end
+
+      def sole_owner(percent)
+        Stripe::Person.construct_from(
+          id: "person_representative",
+          object: "person",
+          account: "acct_unchanged_save",
+          relationship: { representative: true, owner: true, percent_ownership: percent }
+        )
+      end
+
+      def stub_stripe(owners_provided_in: true, percent: 100)
+        allow(Stripe::Account).to receive(:retrieve).with("acct_unchanged_save").and_return(stripe_account(owners_provided_in:))
+        allow(Stripe::Account).to receive(:list_persons)
+          .with("acct_unchanged_save", relationship: { owner: true }, limit: 100)
+          .and_return("data" => [sole_owner(percent)])
+      end
+
+      # No Stripe sync runs for an unchanged save, so this is the only chance to state the owner list
+      # on a company Stripe holds on company.owners_provided (gumroad-private#3353).
+      it "tells Stripe the owner list is complete without syncing the account" do
+        stub_stripe
+        expect(StripeMerchantAccountManager).not_to receive(:update_account)
+        expect(Stripe::Account).to receive(:update).with("acct_unchanged_save", { company: { owners_provided: true } })
+
+        result = nil
+        expect do
+          result = described_class.new(compliance_params: params, user:).process
+        end.not_to change { UserComplianceInfo.count }
+
+        expect(result[:success]).to be true
+      end
+
+      it "leaves a list that covers only part of the company alone" do
+        stub_stripe(percent: 25)
+        expect(Stripe::Account).not_to receive(:update)
+
+        expect(described_class.new(compliance_params: params, user:).process[:success]).to be true
+      end
+
+      it "does not look at Stripe on a save that changes the compliance info" do
+        allow(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info)
+        expect(StripeMerchantAccountManager).not_to receive(:attest_owners_provided_if_blocking)
+
+        described_class.new(compliance_params: ActionController::Parameters.new(first_name: "Changed"), user:).process
+      end
+    end
+
     context "when submitted compliance values match the current compliance info" do
       let!(:compliance_info) { create(:user_compliance_info, user:) }
 

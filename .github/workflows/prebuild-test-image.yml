@@ -1,47 +1,33 @@
 name: Prebuild test image
 
-# Builds the test image for branch pushes outside Tests, so ci/green does not wait
-# for it. The tag hashes the tree, so main's build finds the image ready when the
-# merged tree matches the branch's, which skips about four minutes of the deploy path.
+# Builds the test image for a branch after its Tests run passes, so main's build
+# finds it ready when the merged tree matches the branch's (the tag hashes the
+# tree), which skips about four minutes of the deploy path. A workflow_run run
+# belongs to the default branch, so it does not show among the PR's checks.
 on:
-  push:
-    branches:
-      - "**"
-      - "!main"
-    tags-ignore:
-      - "**"
+  workflow_run:
+    workflows: ["Tests"]
+    types: [completed]
 
 permissions:
   contents: read
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
-  # A run-all-specs branch builds the image in Tests, where its full suite uses it.
-  image_scope:
-    name: Image scope
-    runs-on: ubicloud-standard-2
-    permissions:
-      pull-requests: read
-    outputs:
-      build: ${{ steps.scope.outputs.build }}
-    steps:
-      - id: scope
-        env:
-          GH_TOKEN: ${{ github.token }}
-          SHA: ${{ github.sha }}
-        run: |
-          LABELS=$(gh api "repos/$GITHUB_REPOSITORY/commits/$SHA/pulls" --jq '[.[].labels[].name] | join("\n")' || true)
-          if echo "$LABELS" | grep -qx 'run-all-specs'; then
-            echo "build=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "build=true" >> "$GITHUB_OUTPUT"
-          fi
-
+  # Branch pushes in this repository only: a fork's code must not run next to the
+  # secrets this build uses. A run-all-specs branch already built the image in
+  # Tests, so the build finds the tag and stops.
   build:
-    needs: image_scope
-    if: needs.image_scope.outputs.build == 'true'
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch != 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    # On the job, so a skipped completion (a failed or fork run) cannot cancel an
+    # eligible build.
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.event.workflow_run.head_branch }}
+      cancel-in-progress: true
     uses: ./.github/workflows/build-test-image.yml
+    with:
+      ref: ${{ github.event.workflow_run.head_sha }}
     secrets: inherit
