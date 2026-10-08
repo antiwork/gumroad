@@ -1065,11 +1065,12 @@ jobs:
       WEB_REPO: antiwork/gumroad-web
     runs-on: ubicloud-standard-4
     needs: [build, run_scope, relevant_specs]
-    # Branch/PR counterpart of test_fast/test_slow: the same docker setup and
+    # Fork PR counterpart of test_fast/test_slow: the same docker setup and
     # Knapsack queue distribution, restricted to the specs relevant_specs
     # mapped from the diff plus the money-path smoke set. Main pushes and
-    # run-all-specs PRs run the full suite instead.
-    if: needs.run_scope.outputs.full != 'true' && (github.event_name != 'pull_request_target' || github.event.pull_request.head.repo.full_name != github.repository)
+    # run-all-specs PRs run the full suite instead. Branch pushes in this
+    # repository use test_relevant_runner below.
+    if: needs.run_scope.outputs.full != 'true' && github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name != github.repository
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -1220,6 +1221,130 @@ jobs:
           docker rm -f $(docker ps -aq -f name=${{ env.COMPOSE_PROJECT_NAME }}) 2>/dev/null || true
           docker volume rm $(docker volume ls -q -f name=${{ env.COMPOSE_PROJECT_NAME }}) 2>/dev/null || true
           docker network rm ${{ env.COMPOSE_PROJECT_NAME }}_default 2>/dev/null || true
+
+  test_relevant_runner:
+    name: Test Relevant ${{ matrix.ci_node_index }}
+    runs-on: ubicloud-standard-4
+    needs: [run_scope, relevant_specs]
+    # Branch pushes in this repository run the relevant specs on the runner, so
+    # they skip the test image build and pull. Fork PRs keep the image job above:
+    # this job runs the branch's code next to the Knapsack token.
+    if: needs.run_scope.outputs.full != 'true' && github.event_name == 'push'
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        ci_node_total: [12]
+        ci_node_index: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+    env:
+      COMPOSE_FILE: docker/docker-compose-test-and-ci.yml:docker/docker-compose-ci-runner.yml
+      COMPOSE_PROJECT_NAME: relevant_${{ matrix.ci_node_index }}
+      RAILS_ENV: test
+      BUNDLE_GEMS__CONTRIBSYS__COM: ${{ secrets.BUNDLE_GEMS__CONTRIBSYS__COM }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        timeout-minutes: 5
+        with:
+          persist-credentials: false
+      - name: Login to Docker Hub
+        uses: nick-fields/retry@v3
+        with:
+          timeout_seconds: 120
+          max_attempts: 3
+          retry_wait_seconds: 10
+          command: echo "$DOCKERHUB_PASSWORD" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
+      # In the background, so the image pulls and the MinIO health check overlap
+      # with the setup steps below. "Prepare test database" waits for it.
+      - name: Start services
+        run: (docker compose up -d > /tmp/compose.log 2>&1; echo $? > /tmp/compose.status) &
+      # What the test image adds to the runner: docker/base/Dockerfile.test, the
+      # wkhtmltopdf binary from docker/base/Dockerfile, and docker/web/Dockerfile.test's
+      # ImageMagick limits.
+      - name: Install system packages
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -yq --no-install-recommends \
+            ffmpeg file fonts-dejavu fonts-takao fonts-wqy-microhei fonts-wqy-zenhei \
+            imagemagick libtag1-dev pdftk qpdf
+          curl -fsSL https://github.com/wkhtmltopdf/wkhtmltopdf/releases/download/0.12.4/wkhtmltox-0.12.4_linux-generic-amd64.tar.xz \
+            | tar xJ -C /tmp
+          sudo install -m 755 /tmp/wkhtmltox/bin/wkhtmltopdf /usr/local/bin/wkhtmltopdf
+          sudo sed -r -i \
+            -e 's/(name="memory" value=")[^"]+"/\11GiB"/' \
+            -e 's/(name="disk" value=")[^"]+"/\18GiB"/' \
+            -e 's/(name="width" value=")[^"]+"/\150KP"/' \
+            -e 's/(name="height" value=")[^"]+"/\150KP"/' \
+            /etc/ImageMagick-6/policy.xml
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: package.json
+          cache: npm
+      # Shares lint_js's cache, which only main pushes save.
+      - uses: actions/cache/restore@v4
+        id: node_modules
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package.json', 'package-lock.json', '.npmrc', 'patches/**') }}
+      - run: npm ci
+        if: steps.node_modules.outputs.cache-hit != 'true'
+      - name: Prepare test database
+        run: |
+          for _ in $(seq 1 90); do [ -f /tmp/compose.status ] && break; sleep 2; done
+          cat /tmp/compose.log
+          [ "$(cat /tmp/compose.status 2>/dev/null)" = 0 ] || { echo "docker compose up did not finish"; exit 1; }
+          for _ in $(seq 1 60); do
+            docker compose exec -T db_test mysqladmin ping -uroot -ppassword --silent 2>/dev/null \
+              && curl -fsS http://localhost:9200/_cluster/health > /dev/null 2>&1 \
+              && curl -fsS http://localhost:9000/minio/health/ready > /dev/null 2>&1 \
+              && break
+            sleep 2
+          done
+          bin/rails db:prepare
+          docker wait "$(docker compose ps -aq copyfixturefiles)"
+      - name: Run tests
+        timeout-minutes: 25
+        run: bundle exec rake "knapsack_pro:queue:rspec[--format RSpec::Github::Formatter --tag ~skip --format progress]"
+        env:
+          RUBY_YJIT_ENABLE: 1
+          KNAPSACK_PRO_TEST_SUITE_TOKEN_RSPEC: ${{ secrets.KNAPSACK_PRO_TEST_SUITE_TOKEN_RSPEC_FAST }}
+          KNAPSACK_PRO_CI_NODE_TOTAL: ${{ matrix.ci_node_total }}
+          KNAPSACK_PRO_CI_NODE_INDEX: ${{ matrix.ci_node_index }}
+          KNAPSACK_PRO_LOG_LEVEL: info
+          KNAPSACK_PRO_TEST_FILE_LIST: ${{ needs.relevant_specs.outputs.files_csv }}
+          KNAPSACK_PRO_COMMIT_HASH: ${{ github.sha }}
+          KNAPSACK_PRO_BRANCH: ${{ github.ref_name }}
+          KNAPSACK_PRO_CI_NODE_BUILD_ID: ${{ github.run_id }}
+          KNAPSACK_PRO_CI_NODE_RETRY_COUNT: ${{ github.run_attempt }}
+          KNAPSACK_PRO_FIXED_QUEUE_SPLIT: true
+          CI: true
+          # Selects the headless Chrome drivers in spec/support/capybara_driver.rb.
+          IN_DOCKER: true
+          RAILS_LOG_LEVEL: info
+          NODE_ENV: test
+      - name: Archive capybara artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: capybara-screenshots-relevant-${{ matrix.ci_node_index }}-attempt-${{ github.run_attempt }}
+          path: tmp/capybara/*.png
+          retention-days: 7
+          if-no-files-found: ignore
+      - name: Archive test logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-logs-relevant-${{ matrix.ci_node_index }}-attempt-${{ github.run_attempt }}
+          path: log/test.log
+          retention-days: 7
+          if-no-files-found: ignore
 
   unblock_deployment_from_buildkite:
     name: Unblock deployment from Buildkite
