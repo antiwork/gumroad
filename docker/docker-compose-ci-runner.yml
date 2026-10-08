@@ -1,0 +1,19 @@
+# Layered over docker-compose-test-and-ci.yml for spec jobs that run on the CI
+# runner instead of in the test image: publishes each service on the fixed
+# localhost port that .env.test expects.
+services:
+  db_test:
+    ports:
+      - "3306:3306"
+  redis:
+    ports:
+      - "6379:6379"
+  dynamodb:
+    ports:
+      - "8002:8000"
+  elasticsearch:
+    ports:
+      - "9200:9200"
+  minio:
+    ports:
+      - "9000:9000"

@@ -9,7 +9,7 @@ import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 import { PageHeader } from "$app/components/ui/PageHeader";
 
-type ReportState = "requested" | "screening" | "awaiting_signature" | "signed" | "declined";
+type ReportState = "requested" | "screening" | "awaiting_signature" | "signed" | "declined" | "cancelled";
 
 type PiracyReportsShowProps = {
   report: {
@@ -69,6 +69,11 @@ export default function PiracyReportsShow() {
         {report.state === "signed" ? (
           <Alert variant="success">
             Signed by {report.signed_by_name}. We will send the notice and email you when the site responds.
+          </Alert>
+        ) : null}
+        {report.state === "cancelled" ? (
+          <Alert variant="warning">
+            We closed this report because your account was closed, so nothing was sent. We keep the record.
           </Alert>
         ) : null}
         {report.notice_text === null ? null : (

@@ -29,6 +29,8 @@ class PiracyReport < ApplicationRecord
     not_other_authorized_use
     not_licensee_or_related_party
   ].freeze
+  # Every state before the notice leaves. Closing the account cancels a report in one of these.
+  CANCELLABLE_STATES = %w[requested screening awaiting_signature signed].freeze
 
   belongs_to :seller, class_name: "User"
   belongs_to :product, class_name: "Link"
@@ -58,6 +60,10 @@ class PiracyReport < ApplicationRecord
     event :sign do
       transition awaiting_signature: :signed
     end
+
+    event :cancel do
+      transition CANCELLABLE_STATES.map(&:to_sym) => :cancelled
+    end
   end
 
   # Two kinds of report stay in `screening` after the agent has answered, and both wait on a person:
@@ -65,6 +71,7 @@ class PiracyReport < ApplicationRecord
   # The verdict tells them apart from each other and from a report the agent has not looked at yet.
   scope :blocked_on_recipient, -> { where(state: "screening", screening_verdict: "pass") }
   scope :needs_review, -> { where(state: "screening", screening_verdict: "review") }
+  scope :cancellable, -> { where(state: CANCELLABLE_STATES) }
 
   def blocked_on_recipient?
     screening? && screening_verdict == "pass"

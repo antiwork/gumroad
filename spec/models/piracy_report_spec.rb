@@ -127,6 +127,31 @@ describe PiracyReport do
 
       expect { report.pass_screening! }.to raise_error(StateMachines::InvalidTransition)
     end
+
+    it "closes a report that has not gone out, from every state before sending" do
+      described_class::CANCELLABLE_STATES.each do |state|
+        report = create(:piracy_report, state: state)
+
+        expect(report.can_cancel?).to be(true), "expected a report in #{state} to be cancellable"
+        expect(report.cancel!).to be(true)
+        expect(report.reload.state).to eq("cancelled")
+      end
+    end
+
+    it "leaves a report the agent has already decided alone" do
+      declined = create(:piracy_report, :screening).tap(&:fail_screening!)
+
+      expect(declined.can_cancel?).to be(false)
+      expect(declined.cancel).to be(false)
+      expect(declined.reload.state).to eq("declined")
+    end
+
+    it "cannot be closed twice" do
+      report = create(:piracy_report, state: "cancelled")
+
+      expect(report.can_cancel?).to be(false)
+      expect { report.cancel! }.to raise_error(StateMachines::InvalidTransition)
+    end
   end
 
   describe ".blocked_on_recipient and .needs_review" do

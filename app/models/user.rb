@@ -866,6 +866,12 @@ class User < ApplicationRecord
     user_compliance_infos.alive.each { |info| info.mark_deleted!(validate: false) }
     bank_accounts.alive.each { |account| account.mark_deleted!(validate: false) }
 
+    # Piracy reports are kept: a sent notice's record must outlive the account. Only reports that
+    # never went out are cancelled, under a lock so a concurrent screening decision is not overwritten.
+    PiracyReport.cancellable.where(seller_id: id).find_each do |report|
+      report.with_lock { report.cancel! if report.can_cancel? }
+    end
+
     if custom_domain&.persisted? && !custom_domain.deleted?
       custom_domain.mark_deleted!(validate: false)
     end
