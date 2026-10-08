@@ -232,6 +232,27 @@ jobs:
         env:
           RAILS_ENV: test
       - run: npm run typecheck
+      # Downloads the files test_relevant_runner installs (bin/ci-test-packages), on
+      # the same runner type, so its shards download nothing.
+      - name: Restore the test packages
+        id: test_packages
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/test-packages
+          key: test-packages-v1-${{ runner.os }}-${{ hashFiles('bin/ci-test-packages') }}
+      # Best-effort: the shards download whatever the cache lacks, so a failed
+      # download must not fail main's checks.
+      - name: Download the test packages
+        id: download_test_packages
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.test_packages.outputs.cache-hit != 'true'
+        continue-on-error: true
+        run: bin/ci-test-packages download ~/test-packages
+      - uses: actions/cache/save@v4
+        if: steps.download_test_packages.outcome == 'success'
+        with:
+          path: ~/test-packages
+          key: ${{ steps.test_packages.outputs.cache-primary-key }}
       - name: Build the runner test assets
         if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.test_assets.outputs.cache-hit != 'true'
         # pages_tailwind:build first, as in test_relevant_runner.
@@ -1080,35 +1101,14 @@ jobs:
       # with the setup steps below. "Prepare test database" waits for it.
       - name: Start services
         run: (docker compose up -d > /tmp/compose.log 2>&1; echo $? > /tmp/compose.status) &
-      # What the test image adds to the runner: docker/base/Dockerfile.test, the
-      # wkhtmltopdf binary and the pinned Chrome and ChromeDriver from
-      # docker/base/Dockerfile, and docker/web/Dockerfile.test's ImageMagick limits.
-      # The runner's own, newer Chrome fails specs that pass on the image's.
+      # Saved by the typecheck job on main, so apt downloads nothing on a hit.
+      - name: Restore the test packages
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/test-packages
+          key: test-packages-v1-${{ runner.os }}-${{ hashFiles('bin/ci-test-packages') }}
       - name: Install system packages
-        run: |
-          # Unpacking otherwise syncs every file to disk; the runner is thrown away.
-          echo force-unsafe-io | sudo tee /etc/dpkg/dpkg.cfg.d/force-unsafe-io > /dev/null
-          sudo apt-get update -qq
-          sudo apt-get install -yq --no-install-recommends \
-            ffmpeg file fonts-dejavu fonts-takao fonts-wqy-microhei fonts-wqy-zenhei \
-            imagemagick libtag1-dev pdftk qpdf
-          curl -fsSL https://github.com/wkhtmltopdf/wkhtmltopdf/releases/download/0.12.4/wkhtmltox-0.12.4_linux-generic-amd64.tar.xz \
-            | tar xJ -C /tmp
-          sudo install -m 755 /tmp/wkhtmltox/bin/wkhtmltopdf /usr/local/bin/wkhtmltopdf
-          CHROME_VERSION=125.0.6422.76-1
-          curl -fsSL --retry 4 -o /tmp/chrome.deb "https://public-files.gumroad.com/google-chrome-stable_${CHROME_VERSION}_amd64.deb"
-          sudo apt-get install -yq --allow-downgrades /tmp/chrome.deb
-          curl -fsSL --retry 4 -o /tmp/chromedriver.zip "https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VERSION%-1}/linux64/chromedriver-linux64.zip"
-          unzip -q -o /tmp/chromedriver.zip -d /tmp
-          sudo install -m 755 /tmp/chromedriver-linux64/chromedriver /usr/local/bin/chromedriver
-          google-chrome --version
-          chromedriver --version
-          sudo sed -r -i \
-            -e 's/(name="memory" value=")[^"]+"/\11GiB"/' \
-            -e 's/(name="disk" value=")[^"]+"/\18GiB"/' \
-            -e 's/(name="width" value=")[^"]+"/\150KP"/' \
-            -e 's/(name="height" value=")[^"]+"/\150KP"/' \
-            /etc/ImageMagick-6/policy.xml
+        run: bin/ci-test-packages install ~/test-packages
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:
