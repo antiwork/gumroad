@@ -866,6 +866,12 @@ class User < ApplicationRecord
     user_compliance_infos.alive.each { |info| info.mark_deleted!(validate: false) }
     bank_accounts.alive.each { |account| account.mark_deleted!(validate: false) }
 
+    # Piracy reports are the one thing here that is not deleted. The record of a notice we sent out
+    # for a seller has to outlive their account, so only the reports that never went out are closed:
+    # the seller who filed them can no longer sign, and they would otherwise wait for a person
+    # forever. A report already with a host keeps its history and its clock.
+    PiracyReport.cancellable.where(seller_id: id).find_each { |report| report.cancel! }
+
     if custom_domain&.persisted? && !custom_domain.deleted?
       custom_domain.mark_deleted!(validate: false)
     end

@@ -54,6 +54,16 @@ describe GdprDataErasureService do
       expect(user.deleted_at).to be_present
     end
 
+    it "closes a piracy report that never went out, and keeps the row" do
+      report = create(:piracy_report, :awaiting_signature, seller: user)
+
+      result = described_class.new(user, performed_by: admin).perform!
+
+      expect(result[:success]).to eq(true)
+      # `reload` raises if the row is gone: erasure closes the report, it does not delete it.
+      expect(report.reload.state).to eq("cancelled")
+    end
+
     [false, true].each do |already_deleted|
       it "revokes the OAuth access tokens of every application with already_deleted=#{already_deleted}" do
         access_token = create("doorkeeper/access_token", application: create(:oauth_application), resource_owner_id: user.id, scopes: "view_sales")
