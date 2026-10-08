@@ -70,7 +70,7 @@ class PiracyReports::SendService
       # RescueSmtpErrors makes deliver_now return a rejected send's exception instead of raising it.
       raise mail if mail.is_a?(Exception)
 
-      report.update!(sent_message_id: mail.message_id)
+      record_message_id(mail)
       Result.new(report:, errors: [])
     rescue StandardError => e
       report.update!(delivery_failed_at: Time.current)
@@ -78,7 +78,13 @@ class PiracyReports::SendService
       Result.new(report:, errors: ["The notice could not be sent: #{e.message}"])
     end
 
-    # The notice already reached the host, so a failure here must not mark the send as failed.
+    # The notice already reached the host, so a bookkeeping failure must not mark the send as failed.
+    def record_message_id(mail)
+      report.update!(sent_message_id: mail.message_id)
+    rescue StandardError => e
+      ErrorNotifier.notify(e, context: { piracy_report_id: report.id })
+    end
+
     def notify_seller
       PiracyReportMailer.notice_sent(report.id).deliver_later
     rescue StandardError => e
