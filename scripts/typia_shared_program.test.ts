@@ -223,17 +223,25 @@ describe("typia transform in vitest", () => {
     expect(code).not.toContain('".count"');
   }, 60_000);
 
-  it("checks a global .d.ts type in a real vitest run", () => {
-    const vitest = path.join(fixture, "../../../node_modules/vitest/vitest.mjs");
-    // Without this run's own VITEST* variables, so the nested vitest starts as a fresh one.
-    const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("VITEST")));
-    const result = spawnSync(process.execPath, [vitest, "run", "--config", path.join(fixture, "vitest.config.mjs")], {
-      cwd: fixture,
-      env,
-      encoding: "utf8",
-      // Below the test's own timeout, which cannot fire while spawnSync blocks the event loop.
-      timeout: 50_000,
-    });
-    expect(result.status, `${result.stdout}${result.stderr}`).toBe(0);
-  }, 60_000);
+  // spawnSync blocks the event loop, so the test's own timeout cannot fire while it runs;
+  // the child's lower limit ends a stalled run first.
+  const NESTED_RUN_TEST_TIMEOUT_MS = 60_000;
+  const NESTED_RUN_KILL_AFTER_MS = 50_000;
+
+  it(
+    "checks a global .d.ts type in a real vitest run",
+    () => {
+      const vitest = path.join(fixture, "../../../node_modules/vitest/vitest.mjs");
+      // Without this run's own VITEST* variables, so the nested vitest starts as a fresh one.
+      const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("VITEST")));
+      const result = spawnSync(process.execPath, [vitest, "run", "--config", path.join(fixture, "vitest.config.mjs")], {
+        cwd: fixture,
+        env,
+        encoding: "utf8",
+        timeout: NESTED_RUN_KILL_AFTER_MS,
+      });
+      expect(result.status, `${result.stdout}${result.stderr}`).toBe(0);
+    },
+    NESTED_RUN_TEST_TIMEOUT_MS,
+  );
 });
