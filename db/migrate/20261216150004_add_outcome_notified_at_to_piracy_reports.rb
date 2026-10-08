@@ -9,8 +9,7 @@ class AddOutcomeNotifiedAtToPiracyReports < ActiveRecord::Migration[7.1]
     add_index :piracy_reports, INDEX_COLUMNS unless index_exists?(:piracy_reports, INDEX_COLUMNS)
   end
 
-  def down
-    remove_index :piracy_reports, INDEX_COLUMNS if index_exists?(:piracy_reports, INDEX_COLUMNS)
-    remove_column :piracy_reports, :outcome_notified_at if column_exists?(:piracy_reports, :outcome_notified_at)
-  end
+  # Leaves both in place: a database that ran that earlier draft records the same 20261216150003 version
+  # and still needs them, and nothing tells the two apart. Unused, they are harmless.
+  def down; end
 end
