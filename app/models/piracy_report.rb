@@ -29,9 +29,7 @@ class PiracyReport < ApplicationRecord
     not_other_authorized_use
     not_licensee_or_related_party
   ].freeze
-  # Every state before the notice leaves. Closing the account withdraws the seller's instruction,
-  # so a report waiting in one of these is closed rather than left waiting for a signature that
-  # can no longer come.
+  # Every state before the notice leaves. Closing the account cancels a report in one of these.
   CANCELLABLE_STATES = %w[requested screening awaiting_signature signed].freeze
 
   belongs_to :seller, class_name: "User"
