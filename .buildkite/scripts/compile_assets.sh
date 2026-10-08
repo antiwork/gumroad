@@ -192,8 +192,7 @@ if [[ ${BUILDKITE_PARALLEL_JOB:-0} = 0 && $BUILDKITE_BRANCH != "main" ]]; then
   push_image staging || exit 1
 fi
 
-# Uploads the image's compiled assets to the production bucket, the same way
-# `make build_production` does with PUSH_ASSETS=true.
+# Keep in step with `make build_production` with PUSH_ASSETS=true.
 push_production_assets() {
   local image=$1 container_id status=0
   container_id=$(docker run -d --entrypoint="bash" --volume /app "$image") || return 1
