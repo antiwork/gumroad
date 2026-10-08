@@ -22,8 +22,9 @@ RESOLVE_EXTENSIONS = ["", ".ts", ".tsx", ".js", ".jsx", ".mts", ".d.ts", ".json"
 ALIASES = { "$app/" => "app/javascript/", "$assets/" => "public/", "$vendor/" => "vendor/assets/javascripts/" }.freeze
 SPECIFIER = /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+|\brequire\s*\(\s*|\bvi\.mock\s*\(\s*|\bimportActual\s*(?:<[^>]*>)?\s*\(\s*)["']([^"']+)["']/
 GLOB_CALL = /import\.meta\.glob\b/
-# Tests that read repository files at runtime depend on files no import names.
-READS_FILES = /\breadFileSync\b|\breadFile\s*\(|\breaddirSync\b|\bglobSync\b|import\.meta\.glob|["']node:fs["']|["']fs["']/
+# Modules that read repository files at runtime depend on files no import names, so
+# every test that reaches one always runs. import.meta.glob is followed as edges instead.
+READS_FILES = /\breadFileSync\b|\breadFile\s*\(|\breaddirSync\b|\bglobSync\b|["']node:fs["']|["']fs["']/
 
 FULL_SUITE_PATHS = [
   %r{\Apackage(-lock)?\.json\z},
@@ -197,15 +198,18 @@ def plan(records, files: source_files)
 
   dependents = dependents_index(files)
   globs = glob_index(files)
-  starts = changed.flat_map { |path| [path, path.sub(/\.[^.\/]+\z/, "")] }.uniq
-  reached = Set.new(starts)
-  queue = starts.dup
-  until queue.empty?
-    path = queue.shift
-    (dependents[path].to_a + glob_importers(globs, path)).each { |file| queue << file if reached.add?(file) }
+  walk = lambda do |starts|
+    reached = Set.new(starts)
+    queue = starts.dup
+    until queue.empty?
+      path = queue.shift
+      (dependents[path].to_a + glob_importers(globs, path)).each { |file| queue << file if reached.add?(file) }
+    end
+    reached.select { |file| TEST_FILE.match?(file) && File.file?(file) }
   end
-  reading = files.select { |file| TEST_FILE.match?(file) && READS_FILES.match?(read(file)) }
-  tests = (reached.select { |file| TEST_FILE.match?(file) && File.file?(file) } + reading).uniq.sort
+  starts = changed.flat_map { |path| [path, path.sub(/\.[^.\/]+\z/, "")] }.uniq
+  reading = walk.call(files.select { |file| READS_FILES.match?(read(file)) })
+  tests = (walk.call(starts) + reading).uniq.sort
   tests.empty? ? [:none, []] : [:tests, tests]
 end
 

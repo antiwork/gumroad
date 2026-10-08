@@ -47,6 +47,7 @@ check("tests that read repository files always run") { mode == "tests" && tests.
 
 mode, tests = plan(["M", "app/models/user.rb"])
 check("a Ruby-only change runs only the file-reading tests") { mode == "tests" && tests.include?(FILE_READING_TEST) && !tests.include?("app/javascript/widget/utils.test.ts") }
+check("a test that reads files only through an import always runs") { tests.include?("app/javascript/stylesheets/__tests__/pages_tailwind_classes.test.ts") }
 
 mode, tests = plan(["M", "app/javascript/pages/Checkout/Show.tsx"])
 check("an import with a Vite query (?raw) counts") { mode == "tests" && tests.include?("app/javascript/pages/Checkout/cartItemUidMapping.test.ts") }
