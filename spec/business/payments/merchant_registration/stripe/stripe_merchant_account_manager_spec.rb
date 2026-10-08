@@ -15138,6 +15138,79 @@ describe StripeMerchantAccountManager, :vcr do
       expect(attested).to be(false)
     end
 
+    # The seller's own save: it replaces the business record the Stripe marker names with a newer one,
+    # so the record before the live one is a business and the switch history no longer shows. Stripe's
+    # live state is all that is left to decide from (gumroad-private#3353).
+    context "when a save has replaced the business record the Stripe marker names" do
+      let!(:saved_business_info) do
+        business_info.dup_and_save! { |info| info.business_name = "Renamed Co" }
+      end
+
+      def sole_owner_percent(percent)
+        Stripe::Person.construct_from(
+          id: "person_representative",
+          object: "person",
+          account: "acct_stuck_migration",
+          relationship: { representative: true, owner: true, percent_ownership: percent }
+        )
+      end
+
+      def run_update(owners:)
+        allow(Stripe::Account).to receive(:list_persons)
+          .with("acct_stuck_migration", relationship: { owner: true }, limit: 100)
+          .and_return("data" => owners)
+        account = stuck_account(owners_provided_in: :past_due)
+        allow(Stripe::Account).to receive(:retrieve).with("acct_stuck_migration").and_return(account)
+        attested = false
+        seeded = nil
+        allow(Stripe::Account).to receive(:update) do |_id, params|
+          attested = true if params.dig(:company, :owners_provided)
+          account
+        end
+        allow(Stripe::Account).to receive(:update_person) do |_id, _person_id, attributes|
+          seeded = attributes[:relationship]
+          true
+        end
+
+        described_class.update_account(user, passphrase: "1234")
+
+        [attested, seeded]
+      end
+
+      it "attests the owner list when the representative already holds 100%" do
+        attested, seeded = run_update(owners: [sole_owner_percent(100)])
+
+        expect(attested).to be(true)
+        expect(seeded).to eq(representative: true)
+      end
+
+      it "does not attest a list that accounts for only part of the company" do
+        attested, = run_update(owners: [sole_owner_percent(25)])
+
+        expect(attested).to be(false)
+      end
+
+      it "does not attest, or seed, an empty owner list" do
+        attested, seeded = run_update(owners: [])
+
+        expect(attested).to be(false)
+        expect(seeded).not_to have_key(:percent_ownership)
+      end
+
+      it "does not attest when the ownership read fails" do
+        allow(ErrorNotifier).to receive(:notify)
+        allow(Stripe::Account).to receive(:list_persons)
+          .with("acct_stuck_migration", relationship: { owner: true }, limit: 100)
+          .and_raise(Stripe::APIError.new("Stripe is down"))
+        account = stuck_account(owners_provided_in: :past_due)
+        allow(Stripe::Account).to receive(:retrieve).with("acct_stuck_migration").and_return(account)
+        expect(Stripe::Account).not_to receive(:update).with(anything, hash_including(company: { owners_provided: true }))
+        allow(Stripe::Account).to receive(:update).and_return(account)
+
+        described_class.update_account(user, passphrase: "1234")
+      end
+    end
+
     # A zero-ownership list on an account the seller has entered people into is a shape they
     # configured — the beneficial-owners form can clear the representative's own share — so seeding
     # 100% there would overwrite a claim they deliberately gave up.
@@ -15333,6 +15406,115 @@ describe StripeMerchantAccountManager, :vcr do
       expect(ErrorNotifier).to receive(:notify).with(instance_of(Stripe::APIError))
 
       expect { described_class.send(:attest_owners_provided, account_id) }.not_to raise_error
+    end
+  end
+
+  describe ".attest_owners_provided_if_blocking" do
+    let(:user) { create(:user) }
+    let!(:business_info) { create(:user_compliance_info_business, user:) }
+    let!(:merchant_account) { create(:merchant_account, user:, charge_processor_merchant_id: "acct_unchanged_save") }
+
+    def account_with(owners_provided_in:, owners_provided: false)
+      requirements = { currently_due: [], past_due: [], eventually_due: [] }
+      requirements[owners_provided_in] = ["company.owners_provided"] if owners_provided_in
+      Stripe::Account.construct_from(
+        id: "acct_unchanged_save",
+        object: "account",
+        business_type: "company",
+        company: { owners_provided: },
+        requirements:
+      )
+    end
+
+    def stub_owners(percent)
+      owners = percent ? [Stripe::Person.construct_from(
+        id: "person_representative",
+        object: "person",
+        account: "acct_unchanged_save",
+        relationship: { representative: true, owner: true, percent_ownership: percent }
+      )] : []
+      allow(Stripe::Account).to receive(:list_persons)
+        .with("acct_unchanged_save", relationship: { owner: true }, limit: 100)
+        .and_return("data" => owners)
+    end
+
+    def stub_account(account)
+      allow(Stripe::Account).to receive(:retrieve).with("acct_unchanged_save").and_return(account)
+    end
+
+    it "tells Stripe the owner list is complete when it holds the whole company and Stripe is blocked on it" do
+      stub_account(account_with(owners_provided_in: :currently_due))
+      stub_owners(100)
+
+      expect(Stripe::Account).to receive(:update).with("acct_unchanged_save", { company: { owners_provided: true } })
+
+      described_class.attest_owners_provided_if_blocking(user)
+    end
+
+    it "does nothing for a seller who is not a business" do
+      business_info.mark_deleted!
+      create(:user_compliance_info, user:)
+
+      expect(Stripe::Account).not_to receive(:retrieve)
+      expect(Stripe::Account).not_to receive(:update)
+
+      described_class.attest_owners_provided_if_blocking(user)
+    end
+
+    it "does nothing for a seller without a Stripe account" do
+      merchant_account.destroy!
+
+      expect(Stripe::Account).not_to receive(:retrieve)
+
+      described_class.attest_owners_provided_if_blocking(user.reload)
+    end
+
+    it "does nothing when the requirement is only eventually due" do
+      stub_account(account_with(owners_provided_in: :eventually_due))
+      stub_owners(100)
+
+      expect(Stripe::Account).not_to receive(:update)
+
+      described_class.attest_owners_provided_if_blocking(user)
+    end
+
+    it "does nothing once Stripe has the statement" do
+      stub_account(account_with(owners_provided_in: nil, owners_provided: true))
+
+      expect(Stripe::Account).not_to receive(:list_persons)
+      expect(Stripe::Account).not_to receive(:update)
+
+      described_class.attest_owners_provided_if_blocking(user)
+    end
+
+    it "does not attest an empty owner list or one that covers only part of the company" do
+      stub_account(account_with(owners_provided_in: :past_due))
+      expect(Stripe::Account).not_to receive(:update)
+
+      stub_owners(nil)
+      described_class.attest_owners_provided_if_blocking(user)
+
+      stub_owners(25)
+      described_class.attest_owners_provided_if_blocking(user)
+    end
+
+    it "never sends person or account details" do
+      stub_account(account_with(owners_provided_in: :past_due))
+      stub_owners(100)
+      allow(Stripe::Account).to receive(:update)
+
+      expect(Stripe::Account).not_to receive(:update_person)
+      expect(Stripe::Account).not_to receive(:create_person)
+
+      described_class.attest_owners_provided_if_blocking(user)
+    end
+
+    it "reports a Stripe failure without raising, so the seller's save still succeeds" do
+      allow(Stripe::Account).to receive(:retrieve).and_raise(Stripe::APIError.new("Stripe is down"))
+
+      expect(ErrorNotifier).to receive(:notify).with(instance_of(Stripe::APIError))
+
+      expect { described_class.attest_owners_provided_if_blocking(user) }.not_to raise_error
     end
   end
 

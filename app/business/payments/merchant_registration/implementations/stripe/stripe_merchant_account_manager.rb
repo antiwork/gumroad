@@ -550,32 +550,34 @@ module StripeMerchantAccountManager
     # company.owners_provided, but the metadata marker has already moved forward, so
     # switching_to_business is false on later attempts and nothing repairs it again. Detect the
     # shape from Stripe's live state instead, so the next payout-settings save heals it.
-    #
-    # An empty owner list alone is a legitimate resting state for an ordinary business account
-    # (nobody filled the beneficial-owners form, or no one holds a reportable share) — seeding a
-    # 100% owner there would invent a claim the seller never made. Requiring the record
-    # IMMEDIATELY BEFORE the live one to be an individual is what distinguishes an interrupted
-    # migration from that: a seller who switched years ago and saved again has a business record
-    # in that slot, so a legitimate company isn't mistaken for a stuck switch.
     owners_provided_blocking = user_compliance_info.is_business? && !switching_to_business &&
-                               owners_provided_blocking_payouts?(stripe_account) &&
-                               switched_from_individual_immediately_before?(user, user_compliance_info)
+                               owners_provided_blocking_payouts?(stripe_account)
 
     # nil means the read failed, which is not the same as "nobody owns anything" — the seeding stays
     # off in that case rather than guessing.
     recorded_ownership_percent = owners_provided_blocking ? recorded_ownership_percent_on(stripe_account.id) : nil
+
+    # Seeding a 100% owner is only right for an interrupted individual-to-business switch. An empty
+    # owner list alone is a legitimate resting state for an ordinary business, so the record
+    # IMMEDIATELY BEFORE the live one must be an individual: a seller who switched years ago and saved
+    # again has a business record in that slot. A save moves that slot, so attestation must not
+    # depend on it.
+    #
     # An owner list holding nobody but the representative, whose share was never set at all, is the
     # fingerprint of a switch that died before it seeded. Once the seller has added anyone under
     # Settings → Payments, a zero-ownership list is a shape they configured, and a representative
     # whose share Stripe holds AS zero is one the seller set to zero themselves — the beneficial-owners
     # form sends 0 when Owner is unchecked. Re-seeding 100% in either case would overwrite a claim
     # they deliberately gave up.
-    stuck_mid_migration = (recorded_ownership_percent&.zero? && sole_unseeded_representative?(stripe_account.id)) || false
+    stuck_mid_migration = (owners_provided_blocking && recorded_ownership_percent&.zero? &&
+                           switched_from_individual_immediately_before?(user, user_compliance_info) &&
+                           sole_unseeded_representative?(stripe_account.id)) || false
     seed_representative_ownership = switching_to_business || stuck_mid_migration
 
-    # The other half of the stuck population: a representative who already holds a share, on an
-    # account still blocked only because nothing ever attested the list. Seeding would be wrong
-    # here — attestation is the whole fix — so the two conditions can't share one flag.
+    # The other half of the stuck population: owners Stripe already holds that add up to the whole
+    # company, on an account still blocked only because nothing ever attested the list. Seeding would
+    # be wrong here — attestation is the whole fix — and the history of compliance records says
+    # nothing about it, so it is decided from the ownership alone.
     #
     # A positive share isn't a COMPLETE list: a rep holding 25% still leaves 75% with owners
     # nobody entered, and attesting there would falsely tell Stripe the list is finished. Only the
@@ -736,6 +738,20 @@ module StripeMerchantAccountManager
       Stripe::Account.update(stripe_account.id, force_utf8_encoding(remaining_attributes)),
       remaining_attributes
     )
+  end
+
+  # The attestation for a save that changes nothing: UpdateUserComplianceInfo returns before any
+  # Stripe sync then, so a company already blocked on company.owners_provided would never be looked
+  # at. Read-only unless Stripe says it is blocked and the owners it holds cover the whole company.
+  def self.attest_owners_provided_if_blocking(user)
+    return if user.has_stripe_account_connected?
+    return unless user.alive_user_compliance_info&.is_business?
+    return unless user_has_stripe_connect_merchant_account?(user)
+
+    stripe_account = Stripe::Account.retrieve(user.stripe_account.charge_processor_merchant_id)
+    attest_owners_provided(stripe_account.id) if owners_provided_blocking_payouts?(stripe_account)
+  rescue Stripe::StripeError => e
+    ErrorNotifier.notify(e)
   end
 
   private_class_method
