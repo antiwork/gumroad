@@ -4,8 +4,10 @@ on:
   push:
     branches:
       - "**"
+    # A deploy pushes production-<sha>/<date> and v<date>.<n> to a commit that
+    # already passed on main.
     tags-ignore:
-      - "production-*"
+      - "**"
   pull_request_target:
 
 permissions:
