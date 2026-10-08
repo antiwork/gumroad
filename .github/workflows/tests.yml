@@ -25,9 +25,10 @@ jobs:
     name: CI Gate${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository && ' (internal PR noop)' || '' }}
     runs-on: ubicloud-standard-2
     environment: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name != github.repository && 'ci-protected' || '' }}
-    # The one run-all-specs lookup of the run. Both the image build and run_scope
-    # read it: two lookups could disagree when the label lands between them, and a
-    # skipped build would then skip the full suite while ci/green turned green.
+    # The one run-all-specs lookup of the run. The image build, run_scope and
+    # test_relevant_runner read it: two lookups could disagree when the label lands
+    # between them, and a skipped build would then skip the full suite while
+    # ci/green turned green.
     permissions:
       pull-requests: read
     outputs:
@@ -1045,13 +1046,15 @@ jobs:
   test_relevant_runner:
     name: Test Relevant ${{ matrix.ci_node_index }}
     runs-on: ubicloud-standard-4
-    needs: run_scope
+    # ci_gate holds the run-all-specs answer and the base commit, so the shards
+    # start without waiting for run_scope.
+    needs: ci_gate
     # Branch pushes in this repository run the relevant specs on the runner, so
     # they skip the test image build and pull. Fork PRs keep the image job above:
     # this job runs the branch's code next to the Knapsack token. For the same
     # reason each shard selects its specs itself instead of waiting for
     # relevant_specs, which keeps fork code away from secrets.
-    if: needs.run_scope.outputs.full != 'true' && github.event_name == 'push'
+    if: needs.ci_gate.outputs.full != 'true' && github.event_name == 'push'
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -1085,7 +1088,7 @@ jobs:
         id: specs
         run: bin/ci-relevant-specs "$BASE_SHA"
         env:
-          BASE_SHA: ${{ needs.run_scope.outputs.base_sha }}
+          BASE_SHA: ${{ needs.ci_gate.outputs.base_sha }}
       - name: Login to Docker Hub
         uses: nick-fields/retry@v3
         with:
