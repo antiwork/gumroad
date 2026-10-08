@@ -14,8 +14,9 @@ fail() { FAIL=$((FAIL + 1)); echo "  FAIL $1"; }
 
 # The stub answers describe-auto-scaling-groups from SIZES_<asg> ("desired max", or
 # FAIL). It fails set-desired-capacity
-# for the ASG named in SET_FAIL and logs each set. Any other call or argument, or a read
-# without the query and output the script parses, is logged and fails.
+# for the ASG named in SET_FAIL and logs each set. Any other call or argument, a read
+# without the query and output the script parses, or a call whose time limits could
+# outlast the step's timeout across its 4 calls, is logged and fails.
 mkdir -p "$WORK/bin"
 cat > "$WORK/bin/aws" <<'STUB'
 #!/bin/bash
@@ -26,9 +27,11 @@ unsupported() {
 }
 call="$1 $2"
 [ $# -ge 2 ] && shift 2 || unsupported "$@"
-asg="" capacity="" query="" output=""
+asg="" capacity="" query="" output="" connect="" read_timeout=""
 while [ $# -gt 0 ]; do
   case "$call $1" in
+    "autoscaling "*" --cli-connect-timeout") connect=$2 ;;
+    "autoscaling "*" --cli-read-timeout") read_timeout=$2 ;;
     "autoscaling describe-auto-scaling-groups --auto-scaling-group-names") asg=$2 ;;
     "autoscaling describe-auto-scaling-groups --query") query=$2 ;;
     "autoscaling describe-auto-scaling-groups --output") output=$2 ;;
@@ -38,6 +41,9 @@ while [ $# -gt 0 ]; do
   esac
   shift 2
 done
+[[ "$connect" =~ ^[0-9]+$ && "$read_timeout" =~ ^[0-9]+$ && "${AWS_MAX_ATTEMPTS:-}" =~ ^[0-9]+$ ]] \
+  && [ $((AWS_MAX_ATTEMPTS * (connect + read_timeout) * 4)) -lt 300 ] \
+  || unsupported "$call without time limits that end inside the 5-minute step timeout"
 case "$call" in
   "autoscaling describe-auto-scaling-groups")
     [ -n "$asg" ] && [ "$query" = "AutoScalingGroups[0].[DesiredCapacity,MaxSize]" ] && [ "$output" = "text" ] \

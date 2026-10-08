@@ -20,9 +20,13 @@ source .buildkite/scripts/deploy_relevance.sh
 skip_if_production_noop "prescale_web_clusters.sh"
 
 WEB_ASGS=(production-web-cluster-blue-asg production-web-cluster-green-asg)
+# Buildkite marks a timed-out step as errored, which soft_fail does not cover. These bound
+# each call to 3 attempts of 20 s, so the 4 calls end inside the step's 5-minute timeout.
+export AWS_MAX_ATTEMPTS=3
+AWS_LIMITS=(--cli-connect-timeout 5 --cli-read-timeout 15)
 
 for asg in "${WEB_ASGS[@]}"; do
-  if ! sizes=$(aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names "$asg" \
+  if ! sizes=$(aws autoscaling describe-auto-scaling-groups "${AWS_LIMITS[@]}" --auto-scaling-group-names "$asg" \
       --query 'AutoScalingGroups[0].[DesiredCapacity,MaxSize]' --output text 2>&1); then
     logger "WARNING: could not read $asg ($sizes); leaving it to the deploy's scale_up"
     continue
@@ -42,7 +46,7 @@ for asg in "${WEB_ASGS[@]}"; do
     continue
   fi
 
-  if output=$(aws autoscaling set-desired-capacity --auto-scaling-group-name "$asg" --desired-capacity "$max" 2>&1); then
+  if output=$(aws autoscaling set-desired-capacity "${AWS_LIMITS[@]}" --auto-scaling-group-name "$asg" --desired-capacity "$max" 2>&1); then
     logger "Raised $asg from $desired to $max"
   else
     logger "WARNING: could not raise $asg to $max ($output); leaving it to the deploy's scale_up"
