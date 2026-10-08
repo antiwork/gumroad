@@ -212,7 +212,8 @@ jobs:
       - run: npm run typecheck
       - name: Build the runner test assets
         if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.test_assets.outputs.cache-hit != 'true'
-        run: bundle exec rake assets:precompile
+        # pages_tailwind:build first, as in test_relevant_runner.
+        run: bundle exec rake pages_tailwind:build assets:precompile
         env:
           RAILS_ENV: test
           NODE_ENV: test
@@ -1414,12 +1415,13 @@ jobs:
           [ "$ready" = true ] || { echo "MySQL, Elasticsearch or MinIO did not become ready"; exit 1; }
           # The same preparation the build job bakes into the test image (the
           # database, the Vite test build, the widget bundles and the pages CSS), in
-          # one Rails boot as docker/web/compile_assets.sh does. assets:precompile
-          # builds the pages CSS itself, and npm ci already ran above.
+          # one Rails boot as docker/web/compile_assets.sh does. npm ci already ran
+          # above. pages_tailwind:build goes first because it writes into
+          # app/javascript, which Vite's digest covers; assets:precompile then skips it.
           if [ "$ASSETS_RESTORED" = true ]; then
             bundle exec rake js:export db:setup
           else
-            VITE_RUBY_SKIP_ASSETS_PRECOMPILE_INSTALL=true bundle exec rake js:export db:setup assets:precompile
+            VITE_RUBY_SKIP_ASSETS_PRECOMPILE_INSTALL=true bundle exec rake js:export db:setup pages_tailwind:build assets:precompile
           fi
           # docker wait prints the exit code instead of returning it.
           copy_status=$(docker wait "$(docker compose ps -aq copyfixturefiles)")
