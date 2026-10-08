@@ -233,7 +233,7 @@ describe CollabProductsPagePresenter, :vcr do
         total_collaborations: 5,
       }
 
-      expect(props.keys).to match_array [:stats, :archived_tab_visible, :products, :products_pagination, :memberships, :memberships_pagination, :collaborators_disabled_reason]
+      expect(props.keys).to match_array [:stats, :archived_tab_visible, :piracy_reports_tab_visible, :products, :products_pagination, :memberships, :memberships_pagination, :collaborators_disabled_reason]
       expect(props[:stats]).to match stats
       expect(props[:products_pagination]).to match({ page: 1, pages: 1 })
       expect(props[:memberships_pagination]).to match({ page: 1, pages: 1 })
