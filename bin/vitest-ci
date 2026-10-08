@@ -1,0 +1,67 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Runs the vitest tests a branch needs: the ones related to the files it changed
+# since it left BASE (default origin/main), or the whole suite when a change can
+# affect tests the import graph does not reach.
+#
+#   bin/vitest-ci [BASE]
+#   bin/vitest-ci --plan < name-status-lines   # print the decision only (tests)
+
+require "open3"
+
+FULL_SUITE_PATHS = [
+  %r{\Apackage(-lock)?\.json\z},
+  %r{\A\.npmrc\z},
+  %r{\Apatches/},
+  %r{\Avitest\.config\.ts\z},
+  %r{\Avite\.config(\.widget)?\.ts\z},
+  %r{\Atsconfig\.json\z},
+  %r{(\A|/)__fixtures__/},
+  %r{\Abin/vitest-ci\z},
+  %r{\A\.github/workflows/tests\.yml\z},
+].freeze
+SCRIPT_FILE = /\.(c|m)?(j|t)sx?\z/
+
+# Each line is `git diff --name-status -M` output: "M\tpath", "D\tpath" or "R100\told\tnew".
+def plan(lines)
+  changed = []
+  lines.each do |line|
+    status, *paths = line.chomp.split("\t")
+    next if status.nil? || paths.empty?
+    return [:full, "#{paths.join(' -> ')} changed"] if paths.any? { |path| FULL_SUITE_PATHS.any? { |pattern| pattern.match?(path) } }
+    if status.start_with?("D", "R") && paths.any? { |path| SCRIPT_FILE.match?(path) }
+      return [:full, "#{paths.join(' -> ')} was #{status.start_with?('D') ? 'deleted' : 'renamed'}"]
+    end
+    changed << paths.last unless status.start_with?("D")
+  end
+  changed.empty? ? [:none, "no changed files"] : [:related, changed.uniq]
+end
+
+def git(*args)
+  out, status = Open3.capture2("git", *args)
+  abort("git #{args.join(' ')} failed") unless status.success?
+  out
+end
+
+if ARGV.first == "--plan"
+  mode, detail = plan($stdin.each_line)
+  puts mode
+  puts detail
+  exit
+end
+
+base = ARGV.first || "origin/main"
+merge_base = git("merge-base", base, "HEAD").strip
+mode, detail = plan(git("diff", "--name-status", "-M", merge_base, "HEAD").each_line)
+
+case mode
+when :full
+  puts "vitest-ci: whole suite (#{detail})"
+  exec("npx", "vitest", "run")
+when :none
+  puts "vitest-ci: no changed files since #{base}; nothing to run"
+else
+  puts "vitest-ci: tests related to #{detail.size} changed file(s) since #{base}"
+  exec("npx", "vitest", "related", "--run", "--passWithNoTests", *detail)
+end
