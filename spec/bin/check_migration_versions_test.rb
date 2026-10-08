@@ -23,6 +23,7 @@ def version_of(filename)
   filename[/\A\d+/]
 end
 
+# A schema of :absent leaves db/schema.rb out of that commit.
 def build_repo(dir, base_migrations:, head_migrations:, base_schema: nil, head_schema: nil)
   base_schema ||= base_migrations.map { |name| version_of(name) }.max
   head_schema ||= head_migrations.map { |name| version_of(name) }.max
@@ -40,9 +41,13 @@ def build_repo(dir, base_migrations:, head_migrations:, base_schema: nil, head_s
       FileUtils.rm_rf("db/migrate")
       FileUtils.mkdir_p("db/migrate")
       migrations.each { |name| File.write("db/migrate/#{name}", "# noop\n") }
-      s = schema_version.to_s
-      grouped = s.length == 14 ? [s[0, 4], s[4, 2], s[6, 2], s[8, 6]].join("_") : s
-      File.write("db/schema.rb", "ActiveRecord::Schema[7.1].define(version: #{grouped}) do\nend\n")
+      if schema_version == :absent
+        FileUtils.rm_f("db/schema.rb")
+      else
+        s = schema_version.to_s
+        grouped = s.length == 14 ? [s[0, 4], s[4, 2], s[6, 2], s[8, 6]].join("_") : s
+        File.write("db/schema.rb", "ActiveRecord::Schema[7.1].define(version: #{grouped}) do\nend\n")
+      end
       system("git add -A", exception: true)
       system("git commit -q -m x --allow-empty", exception: true)
     end
@@ -220,6 +225,27 @@ check_operational(
   argv: %w[base no-such-ref],
   base_migrations: %w[20261206000010_a.rb],
   head_migrations: %w[20261206000010_a.rb 20261206000011_b.rb]
+)
+
+# An absent schema.rb is a state to tolerate: the schema rules do not apply, but
+# the version rules still do.
+check(
+  "no schema.rb skips the schema rules",
+  base_migrations: %w[20261206000010_a.rb 20261206000012_c.rb],
+  head_migrations: %w[20261206000010_a.rb 20261206000011_b.rb 20261206000012_c.rb],
+  base_schema: :absent,
+  head_schema: :absent,
+  expect: :pass
+)
+
+check(
+  "no schema.rb still fails a duplicate version",
+  base_migrations: %w[20261206000014_a.rb],
+  head_migrations: %w[20261206000014_a.rb 20261206000015_b.rb 20261206000015_c.rb],
+  base_schema: :absent,
+  head_schema: :absent,
+  expect: :fail,
+  expect_output: "Duplicate migration version 20261206000015"
 )
 
 # ci-green.yml clones without file contents, so git fetches schema.rb on demand.
