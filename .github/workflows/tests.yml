@@ -232,6 +232,27 @@ jobs:
         env:
           RAILS_ENV: test
       - run: npm run typecheck
+      # Downloads the files test_relevant_runner installs (bin/ci-test-packages), on
+      # the same runner type, so its shards download nothing.
+      - name: Restore the test packages
+        id: test_packages
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/test-packages
+          key: test-packages-v1-${{ runner.os }}-${{ hashFiles('bin/ci-test-packages') }}
+      # Best-effort: the shards download whatever the cache lacks, so a failed
+      # download must not fail main's checks.
+      - name: Download the test packages
+        id: download_test_packages
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.test_packages.outputs.cache-hit != 'true'
+        continue-on-error: true
+        run: bin/ci-test-packages download ~/test-packages
+      - uses: actions/cache/save@v4
+        if: steps.download_test_packages.outcome == 'success'
+        with:
+          path: ~/test-packages
+          key: ${{ steps.test_packages.outputs.cache-primary-key }}
       - name: Build the runner test assets
         if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.test_assets.outputs.cache-hit != 'true'
         # pages_tailwind:build first, as in test_relevant_runner.
@@ -326,6 +347,8 @@ jobs:
 
       - name: Self-test serving production assets from the main asset cache
         run: bash .buildkite/scripts/main_asset_cache_compile_test.sh
+      - name: Self-test the web pre-scale step
+        run: bash .buildkite/scripts/prescale_web_clusters_test.sh
 
   # Branch pushes build the test image in the Prebuild test image workflow, after
   # this one, so ci/green does not wait for it. A branch run builds it here only
@@ -348,77 +371,45 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ci_node_total: [6]
-        ci_node_index: [0, 1, 2, 3, 4, 5]
-
-    # Service images are pulled before any step can `docker login`, so each
-    # service carries credentials — anonymous pulls share the runner IP's
-    # 10-pulls/hour budget.
-    services:
-      mysql:
-        image: mysql:8.4.11
-        credentials:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_PASSWORD }}
-        env:
-          MYSQL_ROOT_PASSWORD: password
-          MYSQL_DATABASE: gumroad_test
-        ports:
-          - 3306:3306
-        options: >-
-          --health-cmd="mysqladmin ping -h localhost -uroot -ppassword"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=10
-      redis:
-        image: redis:7
-        credentials:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_PASSWORD }}
-        ports:
-          - 6379:6379
-      stripe_mock:
-        image: stripemock/stripe-mock:latest
-        credentials:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_PASSWORD }}
-        ports:
-          - 12111:12111
-          - 12112:12112
-      # DynamoDB Local for the email engagement store: the test env reads and
-      # dual-writes it unconditionally. Default image command works; port
-      # matches .env.test's localhost:8002.
-      dynamodb:
-        image: amazon/dynamodb-local:3.3.1
-        credentials:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_PASSWORD }}
-        ports:
-          - 8002:8000
-      # Elasticsearch for the handful of ported tests that index records and query
-      # them back (product search, page-view analytics). Matches the version and
-      # heap the RSpec docker-compose stack uses. Most Minitest tests never touch
-      # it — test_helper stubs the ES client by default and tests opt into this real
-      # cluster via Thread.current[:minitest_real_es] (see RealElasticsearchBridge).
-      elasticsearch:
-        image: elasticsearch:7.9.3
-        credentials:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_PASSWORD }}
-        env:
-          discovery.type: single-node
-          ES_JAVA_OPTS: -Xms512m -Xmx512m
-        ports:
-          - 9200:9200
-      # MinIO (S3-compatible object storage) is started as a step below rather than
-      # a service: the MinIO image needs a `server /data` command
-      # that GitHub Actions service containers can't supply.
+        ci_node_total: [8]
+        ci_node_index: [0, 1, 2, 3, 4, 5, 6, 7]
 
     env:
       RAILS_ENV: test
       BUNDLE_GEMS__CONTRIBSYS__COM: ${{ secrets.BUNDLE_GEMS__CONTRIBSYS__COM }}
 
     steps:
+      # Before checkout, so no branch or fork code runs while the Docker Hub login
+      # exists. GitHub service containers cannot pass mysqld flags, and these skip
+      # the disk syncs the tests do not need; the default collation stays. MySQL
+      # and Elasticsearch finish starting while the steps below run.
+      - name: Start services
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
+        run: |
+          for attempt in 1 2 3; do
+            echo "$DOCKERHUB_PASSWORD" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin && break
+            [ "$attempt" = 3 ] && exit 1
+            sleep 10
+          done
+          docker run -d --name mysql -p 3306:3306 --tmpfs /var/lib/mysql:size=1G \
+            -e MYSQL_ROOT_PASSWORD=password -e MYSQL_DATABASE=gumroad_test mysql:8.4.11 \
+            --innodb-flush-log-at-trx-commit=0 --innodb-doublewrite=0 --sync-binlog=0 \
+            --innodb-flush-method=nosync --skip-log-bin &
+          docker run -d --name redis -p 6379:6379 redis:7 &
+          docker run -d --name stripe_mock -p 12111:12111 -p 12112:12112 stripemock/stripe-mock:latest &
+          docker run -d --name dynamodb -p 8002:8000 amazon/dynamodb-local:3.3.1 &
+          docker run -d --name elasticsearch -p 9200:9200 -e discovery.type=single-node \
+            -e "ES_JAVA_OPTS=-Xms512m -Xmx512m" elasticsearch:7.9.3 &
+          docker run -d --name minio -p 9000:9000 -p 9001:9001 \
+            -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
+            cgr.dev/chainguard/minio@sha256:bd014394a80898e68c149f2311fdf8d5a2c2f3bb2c33b9327ae6d02b4b065ae1 server /data --console-address ":9001" &
+          status=0
+          for job in $(jobs -p); do wait "$job" || status=1; done
+          docker logout
+          exit "$status"
+
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
@@ -429,14 +420,23 @@ jobs:
         with:
           bundler-cache: true
 
+      # Over TCP: during its first start, MySQL answers on the socket before it
+      # listens on the port.
+      - name: Wait for MySQL
+        run: |
+          for _ in $(seq 1 60); do
+            docker exec mysql mysql --protocol=tcp -h127.0.0.1 -uroot -ppassword -e "SELECT 1" > /dev/null 2>&1 && exit 0
+            sleep 2
+          done
+          docker logs mysql | tail -20
+          echo "MySQL did not become ready"
+          exit 1
+
       - name: Prepare test database and assets
         run: bundle exec rake db:prepare
 
-      - name: Start MinIO (S3-compatible object storage)
+      - name: Set up MinIO buckets
         run: |
-          docker run -d --name minio -p 9000:9000 -p 9001:9001 \
-            -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
-            cgr.dev/chainguard/minio@sha256:bd014394a80898e68c149f2311fdf8d5a2c2f3bb2c33b9327ae6d02b4b065ae1 server /data --console-address ":9001"
           for i in $(seq 1 30); do curl -fsS http://localhost:9000/minio/health/ready >/dev/null 2>&1 && break; sleep 2; done
           curl -fsS http://localhost:9000/minio/health/ready || { echo "MinIO did not become ready"; exit 1; }
           # Provision the buckets the app's :test storage service expects (see
@@ -1106,35 +1106,14 @@ jobs:
       # with the setup steps below. "Prepare test database" waits for it.
       - name: Start services
         run: (docker compose up -d > /tmp/compose.log 2>&1; echo $? > /tmp/compose.status) &
-      # What the test image adds to the runner: docker/base/Dockerfile.test, the
-      # wkhtmltopdf binary and the pinned Chrome and ChromeDriver from
-      # docker/base/Dockerfile, and docker/web/Dockerfile.test's ImageMagick limits.
-      # The runner's own, newer Chrome fails specs that pass on the image's.
+      # Saved by the typecheck job on main, so apt downloads nothing on a hit.
+      - name: Restore the test packages
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/test-packages
+          key: test-packages-v1-${{ runner.os }}-${{ hashFiles('bin/ci-test-packages') }}
       - name: Install system packages
-        run: |
-          # Unpacking otherwise syncs every file to disk; the runner is thrown away.
-          echo force-unsafe-io | sudo tee /etc/dpkg/dpkg.cfg.d/force-unsafe-io > /dev/null
-          sudo apt-get update -qq
-          sudo apt-get install -yq --no-install-recommends \
-            ffmpeg file fonts-dejavu fonts-takao fonts-wqy-microhei fonts-wqy-zenhei \
-            imagemagick libtag1-dev pdftk qpdf
-          curl -fsSL https://github.com/wkhtmltopdf/wkhtmltopdf/releases/download/0.12.4/wkhtmltox-0.12.4_linux-generic-amd64.tar.xz \
-            | tar xJ -C /tmp
-          sudo install -m 755 /tmp/wkhtmltox/bin/wkhtmltopdf /usr/local/bin/wkhtmltopdf
-          CHROME_VERSION=125.0.6422.76-1
-          curl -fsSL --retry 4 -o /tmp/chrome.deb "https://public-files.gumroad.com/google-chrome-stable_${CHROME_VERSION}_amd64.deb"
-          sudo apt-get install -yq --allow-downgrades /tmp/chrome.deb
-          curl -fsSL --retry 4 -o /tmp/chromedriver.zip "https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VERSION%-1}/linux64/chromedriver-linux64.zip"
-          unzip -q -o /tmp/chromedriver.zip -d /tmp
-          sudo install -m 755 /tmp/chromedriver-linux64/chromedriver /usr/local/bin/chromedriver
-          google-chrome --version
-          chromedriver --version
-          sudo sed -r -i \
-            -e 's/(name="memory" value=")[^"]+"/\11GiB"/' \
-            -e 's/(name="disk" value=")[^"]+"/\18GiB"/' \
-            -e 's/(name="width" value=")[^"]+"/\150KP"/' \
-            -e 's/(name="height" value=")[^"]+"/\150KP"/' \
-            /etc/ImageMagick-6/policy.xml
+        run: bin/ci-test-packages install ~/test-packages
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:

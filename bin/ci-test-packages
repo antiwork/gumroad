@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+# Installs on a CI runner what the test image adds to it, for test_relevant_runner
+# in .github/workflows/tests.yml: the packages from docker/base/Dockerfile.test, the
+# wkhtmltopdf binary and the pinned Chrome and ChromeDriver from
+# docker/base/Dockerfile, and the ImageMagick limits from docker/web/Dockerfile.test.
+# The runner's own, newer Chrome fails specs that pass on the image's.
+#
+#   bin/ci-test-packages download DIR   # fetch every file into DIR, for a cache
+#   bin/ci-test-packages install DIR    # install, using the files in DIR when present
+#
+# apt still resolves every package, so a stale DIR only costs downloads: a cached
+# .deb whose version apt no longer wants is ignored.
+
+set -euo pipefail
+
+PACKAGES=(ffmpeg file fonts-dejavu fonts-takao fonts-wqy-microhei fonts-wqy-zenhei imagemagick libtag1-dev pdftk qpdf)
+CHROME_VERSION=125.0.6422.76-1
+CHROME_URL="https://public-files.gumroad.com/google-chrome-stable_${CHROME_VERSION}_amd64.deb"
+CHROMEDRIVER_URL="https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VERSION%-1}/linux64/chromedriver-linux64.zip"
+WKHTMLTOPDF_URL=https://github.com/wkhtmltopdf/wkhtmltopdf/releases/download/0.12.4/wkhtmltox-0.12.4_linux-generic-amd64.tar.xz
+
+mode=${1:?usage: bin/ci-test-packages download|install DIR}
+dir=${2:?usage: bin/ci-test-packages download|install DIR}
+mkdir -p "$dir/archives/partial"
+
+fetch() {
+  local url=$1 file=$2
+  [ -s "$file" ] && return 0
+  curl -fsSL --retry 4 -o "$file.part" "$url"
+  mv "$file.part" "$file"
+}
+
+fetch "$CHROME_URL" "$dir/chrome.deb"
+fetch "$CHROMEDRIVER_URL" "$dir/chromedriver.zip"
+fetch "$WKHTMLTOPDF_URL" "$dir/wkhtmltox.tar.xz"
+
+# Unpacking otherwise syncs every file to disk; the runner is thrown away.
+echo force-unsafe-io | sudo tee /etc/dpkg/dpkg.cfg.d/force-unsafe-io > /dev/null
+sudo apt-get update -qq
+
+case "$mode" in
+  download)
+    sudo apt-get install -yq --no-install-recommends --allow-downgrades --download-only \
+      -o Dir::Cache::archives="$dir/archives" "${PACKAGES[@]}" "$dir/chrome.deb"
+    sudo rm -f "$dir/archives/lock"
+    sudo chown -R "$(id -u):$(id -g)" "$dir"
+    ;;
+  install)
+    if compgen -G "$dir/archives/*.deb" > /dev/null; then
+      sudo cp "$dir"/archives/*.deb /var/cache/apt/archives/
+    fi
+    sudo apt-get install -yq --no-install-recommends --allow-downgrades "${PACKAGES[@]}" "$dir/chrome.deb"
+    tar xJf "$dir/wkhtmltox.tar.xz" -C /tmp
+    sudo install -m 755 /tmp/wkhtmltox/bin/wkhtmltopdf /usr/local/bin/wkhtmltopdf
+    unzip -q -o "$dir/chromedriver.zip" -d /tmp
+    sudo install -m 755 /tmp/chromedriver-linux64/chromedriver /usr/local/bin/chromedriver
+    google-chrome --version
+    chromedriver --version
+    sudo sed -r -i \
+      -e 's/(name="memory" value=")[^"]+"/\11GiB"/' \
+      -e 's/(name="disk" value=")[^"]+"/\18GiB"/' \
+      -e 's/(name="width" value=")[^"]+"/\150KP"/' \
+      -e 's/(name="height" value=")[^"]+"/\150KP"/' \
+      /etc/ImageMagick-6/policy.xml
+    ;;
+  *)
+    echo "usage: bin/ci-test-packages download|install DIR" >&2
+    exit 64
+    ;;
+esac
