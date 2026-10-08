@@ -34,7 +34,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          # bin/check-migration-versions lists db/migrate and reads two files, so
+          # history without file contents is enough; a file it cannot fetch fails
+          # it (exit 2), which leaves ci/green pending.
           fetch-depth: 0
+          filter: blob:none
           persist-credentials: false
 
       # ci/green is the only status the main ruleset requires, so this is the

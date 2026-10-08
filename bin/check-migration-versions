@@ -53,14 +53,13 @@ end
 # The version schema.rb claims to be at. Everything at or below it is treated as
 # already applied when a fresh database loads the schema.
 #
-# A failure here means the file is absent at that ref, not that the ref is bad:
-# migrations_at has already resolved both refs by the time this runs. Absent
-# schema.rb is a repo state to tolerate (rules 3 and 4 just do not apply), so it
-# returns nil rather than raising operational.
+# Absent schema.rb is a repo state to tolerate (rules 3 and 4 just do not apply),
+# so it returns nil. Presence comes from the tree, because in a clone without file
+# contents (ci-green.yml) `git show` can also fail on a fetch, which must raise.
 def schema_version_at(ref)
+  return nil if git("ls-tree", "--name-only", ref, "--", "db/schema.rb").strip.empty?
+
   git("show", "#{ref}:db/schema.rb")[/define\(version:\s*([\d_]+)\)/, 1]&.delete("_")&.to_i
-rescue OperationalError
-  nil
 end
 
 # Rails writes schema.rb versions as YYYY_MM_DD_HHMMSS.
@@ -73,6 +72,8 @@ end
 begin
   base = migrations_at(BASE_REF)
   head = migrations_at(HEAD_REF)
+  base_schema_version = schema_version_at(BASE_REF)
+  head_schema_version = schema_version_at(HEAD_REF)
 rescue OperationalError => e
   warn "Migration version check could not run: #{e.message}"
   exit EXIT_OPERATIONAL
@@ -113,7 +114,6 @@ end
 #    collide today, but a fresh database loads schema.rb and marks every version
 #    at or below that line as applied, so this migration would silently never
 #    run there while running normally on existing databases.
-base_schema_version = schema_version_at(BASE_REF)
 if base_schema_version
   buried = (head.keys - base.keys).select { |version| version <= base_schema_version }
   unless buried.empty?
@@ -130,7 +130,6 @@ end
 #    missing whatever the migrations past that line create. This is also what
 #    turns the `define(version:` line into a git conflict against main, so a
 #    stale branch cannot merge a migration numbered under main's schema.
-head_schema_version = schema_version_at(HEAD_REF)
 newest = head.keys.max
 if head_schema_version && newest && head_schema_version != newest
   failures << <<~MSG
