@@ -126,15 +126,17 @@ const ActionsPopover = ({
                 {isArchiving ? "Archiving..." : "Archive"}
               </MenuItem>
             ) : null}
-            <MenuItem
-              onClick={() => {
-                setOpen(false);
-                router.visit(Routes.new_piracy_report_path({ product_id: product.permalink }));
-              }}
-            >
-              <AlertShield className="size-5" />
-              Report piracy
-            </MenuItem>
+            {product.can_report_piracy ? (
+              <MenuItem
+                onClick={() => {
+                  setOpen(false);
+                  router.visit(Routes.new_piracy_report_path({ product_id: product.permalink }));
+                }}
+              >
+                <AlertShield className="size-5" />
+                Report piracy
+              </MenuItem>
+            ) : null}
             <MenuItem
               variant="danger"
               inert={!product.can_destroy || isDeleting}
