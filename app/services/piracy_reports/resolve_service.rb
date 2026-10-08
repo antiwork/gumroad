@@ -16,14 +16,19 @@ class PiracyReports::ResolveService
     @reason = reason.to_s.strip.presence
   end
 
-  # outcome_notified_at is set only once the seller email is queued, so a retry with the same
-  # outcome after a failed queue sends the email instead of being refused.
+  # outcome_notified_at claims the seller email under the lock, so overlapping requests cannot both
+  # send it. A failed queue releases the claim, so a retry with the same outcome finishes the email.
+  # The outcome travels with the job: a counter-notice can reopen the report before the job runs.
   def call
     result = report.with_lock { record }
     return result unless result.success?
 
-    PiracyReportMailer.resolved(report.id).deliver_later
-    report.update!(outcome_notified_at: Time.current)
+    begin
+      PiracyReportMailer.resolved(report.id, outcome).deliver_later
+    rescue StandardError
+      report.update!(outcome_notified_at: nil)
+      raise
+    end
     result
   end
 
@@ -31,7 +36,10 @@ class PiracyReports::ResolveService
     attr_reader :report, :outcome, :reason
 
     def record
-      return Result.new(report:, errors: []) if unnotified_retry?
+      if unnotified_retry?
+        report.update!(outcome_notified_at: Time.current)
+        return Result.new(report:, errors: [])
+      end
       return Result.new(report:, errors: ["The report already has an outcome"]) if report.resolved?
       return Result.new(report:, errors: ["The report has no notice out with a host"]) unless report.can_resolve?
 
@@ -42,7 +50,7 @@ class PiracyReports::ResolveService
       errors << "reason is too long" if reason.to_s.length > MAX_REASON_LENGTH
       return Result.new(report:, errors:) if errors.any?
 
-      report.assign_attributes(outcome:, outcome_reason: reason, resolved_at: Time.current, outcome_notified_at: nil)
+      report.assign_attributes(outcome:, outcome_reason: reason, resolved_at: Time.current, outcome_notified_at: Time.current)
       report.resolve!
       Result.new(report:, errors: [])
     end

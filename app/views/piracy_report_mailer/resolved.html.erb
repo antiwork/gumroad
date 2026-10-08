@@ -1,7 +1,7 @@
 <%= header_section(@subject) %>
 <div>
   <p>
-    <% case @report.outcome %>
+    <% case @outcome %>
     <% when "removed" %>
       The site removed the page you reported for <strong><%= @product_name %></strong>.
     <% when "no_response" %>

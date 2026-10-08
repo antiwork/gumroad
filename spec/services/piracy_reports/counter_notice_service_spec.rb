@@ -33,6 +33,14 @@ describe PiracyReports::CounterNoticeService do
     expect(PiracyReports::ResolveService.new(report:, outcome: "restored").call).to be_success
   end
 
+  it "refuses a second counter-notice after a reopened report closes again, so the first is never overwritten" do
+    call(body: "First counter-notice.")
+    PiracyReports::ResolveService.new(report:, outcome: "no_response").call
+
+    expect(call(body: "Second counter-notice.").errors).to eq(["A counter-notice is already recorded for this report"])
+    expect(report.reload.counter_notice_body).to eq("First counter-notice.")
+  end
+
   it "refuses a counter-notice after an outcome that cannot change" do
     report.update!(state: "resolved", outcome: "withdrawn", outcome_reason: "Licensed.", resolved_at: 1.day.ago)
 

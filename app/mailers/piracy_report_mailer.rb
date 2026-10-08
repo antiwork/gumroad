@@ -50,8 +50,9 @@ class PiracyReportMailer < ApplicationMailer
     mail to: @report.last_contact_email, subject: @subject
   end
 
-  def resolved(piracy_report_id)
+  def resolved(piracy_report_id, outcome)
     @report = find_on_primary(piracy_report_id)
+    @outcome = outcome
     @product_name = @report.product.name
     @subject = "Your takedown notice for #{@product_name} is closed"
     @report_url = piracy_report_url(@report.external_id)

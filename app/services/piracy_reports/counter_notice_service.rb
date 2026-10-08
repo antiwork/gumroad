@@ -15,14 +15,18 @@ class PiracyReports::CounterNoticeService
     @received_on = received_on
   end
 
-  # forwarded_at is set only once the seller email is queued, so a retry after a failed queue
-  # finishes the forward instead of being refused as a duplicate.
+  # forwarded_at claims the seller email under the lock, so overlapping requests cannot both send it.
+  # A failed queue releases the claim, so a retry finishes the forward.
   def call
     result = report.with_lock { record }
     return result unless result.success?
 
-    PiracyReportMailer.counter_notice_received(report.id).deliver_later
-    report.update!(counter_notice_forwarded_at: Time.current)
+    begin
+      PiracyReportMailer.counter_notice_received(report.id).deliver_later
+    rescue StandardError
+      report.update!(counter_notice_forwarded_at: nil)
+      raise
+    end
     result
   end
 
@@ -30,11 +34,11 @@ class PiracyReports::CounterNoticeService
     attr_reader :report, :body, :received_on
 
     def record
-      if report.counter_noticed?
-        return Result.new(report:, errors: []) if report.counter_notice_forwarded_at.nil?
-
-        return Result.new(report:, errors: ["A counter-notice is already recorded for this report"])
+      if report.counter_noticed? && report.counter_notice_forwarded_at.nil?
+        report.update!(counter_notice_forwarded_at: Time.current)
+        return Result.new(report:, errors: [])
       end
+      return Result.new(report:, errors: ["A counter-notice is already recorded for this report"]) if report.counter_notice_body.present?
       return Result.new(report:, errors: ["The report has no notice out with a host"]) unless open_to_counter_notice?
 
       date = parsed_received_on
@@ -45,7 +49,7 @@ class PiracyReports::CounterNoticeService
       return Result.new(report:, errors:) if errors.any?
 
       report.assign_attributes(
-        counter_notice_body: body, counter_notice_received_on: date, counter_notice_forwarded_at: nil,
+        counter_notice_body: body, counter_notice_received_on: date, counter_notice_forwarded_at: Time.current,
         outcome: nil, outcome_reason: nil, resolved_at: nil, outcome_notified_at: nil
       )
       report.receive_counter_notice!

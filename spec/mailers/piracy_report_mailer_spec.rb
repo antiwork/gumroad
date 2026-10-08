@@ -74,8 +74,10 @@ describe PiracyReportMailer do
   describe "resolved" do
     it "tells the seller the outcome" do
       report = create(:piracy_report, :signed, state: "resolved", outcome: "removed", last_contact_email: "seller@example.com")
+      # A counter-notice can reopen the report before the queued email runs.
+      report.update!(state: "counter_noticed", outcome: nil)
 
-      mail = described_class.resolved(report.id)
+      mail = described_class.resolved(report.id, "removed")
 
       expect(mail.subject).to eq("Your takedown notice for #{report.product.name} is closed")
       expect(mail.body.encoded).to include("The site removed the page")

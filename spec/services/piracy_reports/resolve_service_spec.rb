@@ -7,7 +7,7 @@ describe PiracyReports::ResolveService do
 
   it "records the outcome and tells the seller" do
     expect { expect(described_class.new(report:, outcome: "removed").call).to be_success }
-      .to have_enqueued_mail(PiracyReportMailer, :resolved).with(report.id)
+      .to have_enqueued_mail(PiracyReportMailer, :resolved).with(report.id, "removed")
 
     expect(report.reload).to have_attributes(state: "resolved", outcome: "removed")
     expect(report.resolved_at).to be_present
