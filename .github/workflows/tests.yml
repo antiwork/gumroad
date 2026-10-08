@@ -1325,10 +1325,11 @@ jobs:
             sleep 2
           done
           [ "$ready" = true ] || { echo "MySQL, Elasticsearch or MinIO did not become ready"; exit 1; }
-          # The same preparation the build job bakes into the test image: the
-          # database, the Vite test build, the widget bundles and the pages CSS.
-          npm run setup
-          bundle exec rake db:setup assets:precompile
+          # The same preparation the build job bakes into the test image (the
+          # database, the Vite test build, the widget bundles and the pages CSS), in
+          # one Rails boot as docker/web/compile_assets.sh does. assets:precompile
+          # builds the pages CSS itself, and npm ci already ran above.
+          VITE_RUBY_SKIP_ASSETS_PRECOMPILE_INSTALL=true bundle exec rake js:export db:setup assets:precompile
           # docker wait prints the exit code instead of returning it.
           copy_status=$(docker wait "$(docker compose ps -aq copyfixturefiles)")
           [ "$copy_status" = 0 ] || { docker compose logs copyfixturefiles; exit 1; }
@@ -1469,10 +1470,11 @@ jobs:
             sleep 2
           done
           [ "$ready" = true ] || { echo "MySQL, Elasticsearch or MinIO did not become ready"; exit 1; }
-          # The same preparation the build job bakes into the test image: the
-          # database, the Vite test build, the widget bundles and the pages CSS.
-          npm run setup
-          bundle exec rake db:setup assets:precompile
+          # The same preparation the build job bakes into the test image (the
+          # database, the Vite test build, the widget bundles and the pages CSS), in
+          # one Rails boot as docker/web/compile_assets.sh does. assets:precompile
+          # builds the pages CSS itself, and npm ci already ran above.
+          VITE_RUBY_SKIP_ASSETS_PRECOMPILE_INSTALL=true bundle exec rake js:export db:setup assets:precompile
           # docker wait prints the exit code instead of returning it.
           copy_status=$(docker wait "$(docker compose ps -aq copyfixturefiles)")
           [ "$copy_status" = 0 ] || { docker compose logs copyfixturefiles; exit 1; }
@@ -1613,10 +1615,11 @@ jobs:
             sleep 2
           done
           [ "$ready" = true ] || { echo "MySQL, Elasticsearch or MinIO did not become ready"; exit 1; }
-          # The same preparation the build job bakes into the test image: the
-          # database, the Vite test build, the widget bundles and the pages CSS.
-          npm run setup
-          bundle exec rake db:setup assets:precompile
+          # The same preparation the build job bakes into the test image (the
+          # database, the Vite test build, the widget bundles and the pages CSS), in
+          # one Rails boot as docker/web/compile_assets.sh does. assets:precompile
+          # builds the pages CSS itself, and npm ci already ran above.
+          VITE_RUBY_SKIP_ASSETS_PRECOMPILE_INSTALL=true bundle exec rake js:export db:setup assets:precompile
           # docker wait prints the exit code instead of returning it.
           copy_status=$(docker wait "$(docker compose ps -aq copyfixturefiles)")
           [ "$copy_status" = 0 ] || { docker compose logs copyfixturefiles; exit 1; }
