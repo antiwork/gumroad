@@ -241,11 +241,15 @@ jobs:
         with:
           path: ~/test-packages
           key: test-packages-v1-${{ runner.os }}-${{ hashFiles('bin/ci-test-packages') }}
+      # Best-effort: the shards download whatever the cache lacks, so a failed
+      # download must not fail main's checks.
       - name: Download the test packages
+        id: download_test_packages
         if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.test_packages.outputs.cache-hit != 'true'
+        continue-on-error: true
         run: bin/ci-test-packages download ~/test-packages
       - uses: actions/cache/save@v4
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.test_packages.outputs.cache-hit != 'true'
+        if: steps.download_test_packages.outcome == 'success'
         with:
           path: ~/test-packages
           key: ${{ steps.test_packages.outputs.cache-primary-key }}
