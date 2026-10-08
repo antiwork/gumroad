@@ -24,11 +24,11 @@ CI runs the whole `test/` tree as the `test_minitest` job in
 native GitHub Actions services, including Elasticsearch and MinIO). The job is
 wired into the Buildkite deployment gate alongside `test_fast`/`test_slow`.
 
-The job is a 2-shard matrix; each shard runs the files
-`bin/minitest-shard <index> <total>` assigns it, split by file size so adding
-tests re-balances on the next run. Raise `ci_node_total` and extend
-`ci_node_index` to add shards. Locally, run the tree in one go with
-`bin/rails test`.
+The job is a 6-shard matrix. Each shard loads the whole tree and runs the tests
+whose name hashes to its index (`MINITEST_SHARD=<index>/<total>`, see
+`test/support/test_shard.rb`), so a large test file spreads across all shards.
+Raise `ci_node_total` and extend `ci_node_index` to add shards. Locally, run the
+tree in one go with `bin/rails test`.
 
 ## Rules
 
