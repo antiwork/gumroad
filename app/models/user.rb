@@ -870,7 +870,12 @@ class User < ApplicationRecord
     # for a seller has to outlive their account, so only the reports that never went out are closed:
     # the seller who filed them can no longer sign, and they would otherwise wait for a person
     # forever. A report already with a host keeps its history and its clock.
-    PiracyReport.cancellable.where(seller_id: id).find_each { |report| report.cancel! }
+    #
+    # Locked and re-read before the cancel: screening can decide a report between this scope's
+    # SELECT and the save, and an unlocked cancel would overwrite that decision.
+    PiracyReport.cancellable.where(seller_id: id).find_each do |report|
+      report.with_lock { report.cancel! if report.can_cancel? }
+    end
 
     if custom_domain&.persisted? && !custom_domain.deleted?
       custom_domain.mark_deleted!(validate: false)

@@ -1264,6 +1264,19 @@ describe User, :vcr do
         expect(another_seller.reload.state).to eq("awaiting_signature")
       end
 
+      it "does not overwrite a decision the agent made while the account was closing" do
+        report = create(:piracy_report, :screening, seller: @user)
+        # The agent declines the report after the closure pass has read it but before it saves.
+        allow_any_instance_of(PiracyReport).to receive(:with_lock).and_wrap_original do |original, *args, &block|
+          PiracyReport.where(id: report.id).update_all(state: "declined")
+          original.call(*args, &block)
+        end
+
+        expect(@user.reload.deactivate!).to eq(true)
+
+        expect(report.reload.state).to eq("declined")
+      end
+
       it "removes a deleted product from invalid profile sections" do
         products_section = create(:seller_profile_products_section, seller: @user, shown_products: [@product.id])
         products_section.update_column(:json_data, products_section.json_data.merge("default_product_sort" => "obsolete"))
