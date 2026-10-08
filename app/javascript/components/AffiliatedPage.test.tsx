@@ -49,6 +49,7 @@ const props: AffiliatedPageProps = {
     affiliate_query_param: "affiliate_id",
   },
   archived_tab_visible: false,
+  piracy_reports_tab_visible: false,
   affiliates_disabled_reason: null,
 };
 

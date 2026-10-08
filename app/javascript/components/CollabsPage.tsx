@@ -31,6 +31,7 @@ export type CollabsPageProps = {
     total_collaborations: number;
   };
   archived_tab_visible: boolean;
+  piracy_reports_tab_visible: boolean;
   collaborators_disabled_reason: string | null;
 };
 
@@ -39,12 +40,18 @@ const CollabsPage = ({
   memberships_data: { memberships, pagination: membershipsPagination },
   stats,
   archived_tab_visible: archivedTabVisible,
+  piracy_reports_tab_visible: piracyReportsTabVisible,
   collaborators_disabled_reason: collaboratorsDisabledReason,
 }: CollabsPageProps) => {
   const userAgentInfo = useUserAgentInfo();
 
   return (
-    <ProductsLayout selectedTab="collabs" title="Products" archivedTabVisible={archivedTabVisible}>
+    <ProductsLayout
+      selectedTab="collabs"
+      title="Products"
+      archivedTabVisible={archivedTabVisible}
+      piracyReportsTabVisible={piracyReportsTabVisible}
+    >
       <section className="p-4 md:p-8">
         {memberships.length === 0 && products.length === 0 ? (
           <Placeholder>

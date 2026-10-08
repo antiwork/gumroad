@@ -38,6 +38,7 @@ describe PiracyReportsController, type: :controller, inertia: true do
         expect(inertia.props[:reports].map { _1[:id] }).to eq([newer.external_id, older.external_id])
         expect(inertia.props[:reports].first).to include(product_name: product.name, url: "https://example.net/newer", state: "awaiting_signature", outcome: nil)
         expect(inertia.props[:can_report]).to be(true)
+        expect(inertia.props[:archived_tab_visible]).to be(false)
       end
 
       it "still lists past reports when the seller can no longer file one" do

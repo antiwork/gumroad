@@ -4,16 +4,16 @@
 class PiracyReportsController < Sellers::BaseController
   layout "inertia"
 
-  MAX_LISTED = 100
-
   before_action :set_product, only: [:new, :create]
   before_action :set_report, only: [:show, :sign]
 
   def index
     authorize PiracyReport
 
-    reports = PiracyReport.where(seller_id: current_seller.id).includes(:product).order(id: :desc).limit(MAX_LISTED)
+    # MONTHLY_LIMIT keeps this list short, so it needs no pages.
+    reports = PiracyReport.where(seller_id: current_seller.id).includes(:product).order(id: :desc)
     render inertia: "PiracyReports/Index", props: {
+      archived_tab_visible: current_seller.archived_products_count > 0,
       can_report: policy(PiracyReport).new?,
       reports: reports.map do |report|
         { id: report.external_id, product_name: report.product.name, url: report.url, state: report.state, outcome: report.outcome, updated_at: report.updated_at.iso8601 }

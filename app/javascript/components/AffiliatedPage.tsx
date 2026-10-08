@@ -61,6 +61,7 @@ export type AffiliatedPageProps = {
     affiliate_query_param: string;
   };
   archived_tab_visible: boolean;
+  piracy_reports_tab_visible: boolean;
   affiliates_disabled_reason: string | null;
 };
 
@@ -278,6 +279,7 @@ const AffiliatedPage = ({
   stats: initialStats,
   global_affiliates_data: globalAffiliatesData,
   archived_tab_visible: archivedTabVisible,
+  piracy_reports_tab_visible: piracyReportsTabVisible,
   pagination: initialPaginationState,
   affiliates_disabled_reason: affiliatesDisabledReason,
 }: AffiliatedPageProps) => {
@@ -359,6 +361,7 @@ const AffiliatedPage = ({
         )
       }
       archivedTabVisible={archivedTabVisible}
+      piracyReportsTabVisible={piracyReportsTabVisible}
     >
       {isShowingGlobalAffiliates && globalAffiliatesData.global_affiliate_id != null ? (
         <GlobalAffiliates

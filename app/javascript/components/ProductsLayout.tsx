@@ -4,7 +4,7 @@ import * as React from "react";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
 
-export type Tab = "products" | "discover" | "affiliated" | "collabs" | "archived";
+export type Tab = "products" | "discover" | "affiliated" | "collabs" | "archived" | "piracy_reports";
 
 export const ProductsLayout = ({
   selectedTab,
@@ -12,12 +12,14 @@ export const ProductsLayout = ({
   ctaButton,
   children,
   archivedTabVisible,
+  piracyReportsTabVisible = false,
 }: {
   selectedTab: Tab;
   ctaButton?: React.ReactNode;
   title?: string | undefined;
   children: React.ReactNode;
   archivedTabVisible: boolean;
+  piracyReportsTabVisible?: boolean;
 }) => (
   <div>
     <PageHeader title={title || "Products"} actions={ctaButton}>
@@ -44,6 +46,14 @@ export const ProductsLayout = ({
           <Tab isSelected={selectedTab === "archived"} asChild>
             <Link href={Routes.products_archived_index_path()} className="no-underline">
               Archived
+            </Link>
+          </Tab>
+        ) : null}
+
+        {piracyReportsTabVisible ? (
+          <Tab isSelected={selectedTab === "piracy_reports"} asChild>
+            <Link href={Routes.piracy_reports_path()} className="no-underline">
+              Piracy reports
             </Link>
           </Tab>
         ) : null}

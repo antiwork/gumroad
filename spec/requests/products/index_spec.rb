@@ -177,6 +177,21 @@ describe "Products Page Scenario", type: :system, js: true do
         end
       end
     end
+
+    it "shows the Piracy reports tab only to sellers who filed a report, even without the feature" do
+      product = create(:product, user: seller)
+
+      visit products_path
+      expect(page).to have_selector(:tab_button, "Affiliated")
+      expect(page).not_to have_selector(:tab_button, "Piracy reports")
+
+      create(:piracy_report, seller:, product:, url: "https://example.net/design-course")
+      visit products_path
+      find(:tab_button, "Piracy reports").click
+
+      expect(page).to have_current_path(piracy_reports_path)
+      expect(page).to have_table_row({ "Product" => product.name, "Page" => "https://example.net/design-course" })
+    end
   end
 
   describe "duplication" do

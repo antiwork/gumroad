@@ -179,6 +179,11 @@ class PiracyReport < ApplicationRecord
     where(seller_id: seller.id, created_at: Time.current.beginning_of_month..).count
   end
 
+  # Sellers who lost the piracy_reports flag still need a way back to the reports they filed.
+  def self.filed_by?(seller)
+    where(seller_id: seller.id).exists?
+  end
+
   # Replies to the notice reach support@ tagged with the report, so gumclaw can match them.
   def reply_to_address
     "support+piracy-#{reply_token}@#{DEFAULT_EMAIL_DOMAIN}"

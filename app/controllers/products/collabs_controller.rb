@@ -19,6 +19,7 @@ class Products::CollabsController < Sellers::BaseController
     render inertia: "Products/Collabs/Index", props: {
       stats: -> { presenter.initial_page_props[:stats] },
       archived_tab_visible: -> { presenter.initial_page_props[:archived_tab_visible] },
+      piracy_reports_tab_visible: -> { presenter.initial_page_props[:piracy_reports_tab_visible] },
       collaborators_disabled_reason: -> { presenter.initial_page_props[:collaborators_disabled_reason] },
       products_data: -> {
         {

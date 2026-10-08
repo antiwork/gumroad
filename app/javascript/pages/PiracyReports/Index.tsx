@@ -8,12 +8,13 @@ import {
   PiracyReportState,
 } from "$app/data/piracy_reports";
 
-import { PageHeader } from "$app/components/ui/PageHeader";
+import { ProductsLayout } from "$app/components/ProductsLayout";
 import { Pill } from "$app/components/ui/Pill";
 import { Placeholder } from "$app/components/ui/Placeholder";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 
 type PiracyReportsIndexProps = {
+  archived_tab_visible: boolean;
   can_report: boolean;
   reports: {
     id: string;
@@ -26,11 +27,15 @@ type PiracyReportsIndexProps = {
 };
 
 export default function PiracyReportsIndex() {
-  const { can_report, reports } = usePage<PiracyReportsIndexProps>().props;
+  const { archived_tab_visible, can_report, reports } = usePage<PiracyReportsIndexProps>().props;
 
   return (
-    <>
-      <PageHeader title="Piracy reports" showTitleOnMobile />
+    <ProductsLayout
+      selectedTab="piracy_reports"
+      title="Products"
+      archivedTabVisible={archived_tab_visible}
+      piracyReportsTabVisible
+    >
       <div className="p-4 md:p-8">
         {reports.length === 0 ? (
           <Placeholder>
@@ -71,6 +76,6 @@ export default function PiracyReportsIndex() {
           </Table>
         )}
       </div>
-    </>
+    </ProductsLayout>
   );
 }
