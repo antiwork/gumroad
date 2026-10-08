@@ -1336,6 +1336,9 @@ jobs:
           KNAPSACK_PRO_COMMIT_HASH: ${{ github.sha }}
           KNAPSACK_PRO_BRANCH: ${{ github.ref_name }}
           KNAPSACK_PRO_CI_NODE_BUILD_ID: ${{ github.run_id }}
+          # Knapsack 10 keys the queue on this. It would read GITHUB_RUN_ID, which every
+          # runner job in this run shares.
+          KNAPSACK_PRO_TEST_QUEUE_ID: ${{ github.run_id }}-relevant
           KNAPSACK_PRO_CI_NODE_RETRY_COUNT: ${{ github.run_attempt }}
           KNAPSACK_PRO_FIXED_QUEUE_SPLIT: true
           CI: true
@@ -1470,6 +1473,8 @@ jobs:
           KNAPSACK_PRO_COMMIT_HASH: ${{ github.sha }}
           KNAPSACK_PRO_BRANCH: ${{ github.ref_name }}
           KNAPSACK_PRO_CI_NODE_BUILD_ID: ${{ github.run_id }}-runner
+          KNAPSACK_PRO_TEST_QUEUE_ID: ${{ github.run_id }}-runner-slow
+          KNAPSACK_PRO_TEST_QUEUE_ID: ${{ github.run_id }}-runner-fast
           KNAPSACK_PRO_CI_NODE_RETRY_COUNT: ${{ github.run_attempt }}
           KNAPSACK_PRO_FIXED_QUEUE_SPLIT: true
           CI: true
