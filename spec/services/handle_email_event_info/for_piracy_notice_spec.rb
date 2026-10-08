@@ -70,4 +70,18 @@ describe HandleEmailEventInfo::ForPiracyNotice do
 
     expect(report.reload).to have_attributes(delivered_at: nil, delivery_failed_at: nil)
   end
+
+  it "keeps the first delivery time, and a later bounce does not remove a delivery" do
+    sendgrid_event(:delivered, email: "copyright@example.com")
+    report.update!(delivered_at: 3.hours.ago)
+    sendgrid_event(:delivered, email: "copyright@example.com")
+    sendgrid_event(:bounced, email: "copyright@example.com")
+
+    expect(report.reload.delivered_at).to be_within(1.second).of(3.hours.ago)
+    expect(PiracyReport.delivery_failed).to be_empty
+  end
+
+  it "ignores an event for an unknown report" do
+    expect { resend_event(:delivered, report_id: 0) }.not_to raise_error
+  end
 end

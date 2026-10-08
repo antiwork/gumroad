@@ -78,6 +78,31 @@ describe PiracyReports::SendService do
     expect(report.reload.delivery_failed_at).to be_present
   end
 
+  it "keeps a delivered send successful when recording the message id fails" do
+    allow_any_instance_of(PiracyReport).to receive(:update!).and_wrap_original do |original, *args|
+      raise ActiveRecord::StatementInvalid, "lost connection" if args.first.key?(:sent_message_id)
+
+      original.call(*args)
+    end
+
+    expect(call).to be_success
+    expect(report.reload).to have_attributes(state: "sent", delivery_failed_at: nil)
+  end
+
+  it "refuses when the registry entry for the host was removed" do
+    registry.clear
+
+    expect(call.errors).to eq(["The host's registry contact changed after screening"])
+    expect(report.reload.state).to eq("signed")
+  end
+
+  it "refuses when the registry contact's name changed" do
+    registry["example.net"] = registry["example.net"].with(name: "Another Host LLC")
+
+    expect(call.errors).to eq(["The host's registry contact changed after screening"])
+    expect(report.reload.state).to eq("signed")
+  end
+
   it "keeps a delivered send successful when the seller's confirmation fails to queue" do
     allow(PiracyReportMailer).to receive(:notice_sent).and_raise(Redis::CannotConnectError)
 
