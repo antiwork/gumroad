@@ -179,6 +179,7 @@ class DashboardProductsPagePresenter
         "can_duplicate" => Pundit.policy!(pundit_user, [:product_duplicates, product]).create?,
         "can_archive" => Pundit.policy!(pundit_user, [:products, :archived, product]).create?,
         "can_unarchive" => Pundit.policy!(pundit_user, [:products, :archived, product]).destroy?,
+        "can_report_piracy" => Pundit.policy!(pundit_user, PiracyReport).new?,
       }
     end
 
