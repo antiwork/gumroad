@@ -297,6 +297,14 @@ check(
   expect_escalate: true,
 )
 
+# Tests builds its image from this workflow, so a recipe change needs the full suite.
+check(
+  "the test image build workflow escalates",
+  base_files: { ".github/workflows/build-test-image.yml" => "old" },
+  head_files: { ".github/workflows/build-test-image.yml" => "new" },
+  expect_escalate: true,
+)
+
 # Co-located vitest module is not a mapping gap
 check(
   "TS module with co-located .test.ts does not escalate",

@@ -25,22 +25,10 @@ jobs:
     name: CI Gate${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository && ' (internal PR noop)' || '' }}
     runs-on: ubicloud-standard-2
     environment: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name != github.repository && 'ci-protected' || '' }}
-    steps:
-      - run: true
-
-  run_scope:
-    # Decides whether this run gets the full Fast/Slow suite or the trimmed
-    # test_relevant job. Full suite: every push to main (deploy gate), or a
-    # PR carrying the run-all-specs label. Push events have no PR payload,
-    # so the label is looked up via the commit's PRs.
-    #
-    # Fork PRs hit this job via pull_request_target (token is the base repo).
-    # No checkout here — only label lookup. Reuse of a prior Fast/Slow run
-    # lives in reuse_scope, which is main-push only.
-    name: Run scope
-    runs-on: ubicloud-standard-2
-    needs: ci_gate
-    if: ${{ github.event_name != 'pull_request_target' || github.event.pull_request.head.repo.full_name != github.repository }}
+    # The one run-all-specs lookup of the run. The image build, run_scope and
+    # test_relevant_runner read it: two lookups could disagree when the label lands
+    # between them, and a skipped build would then skip the full suite while
+    # ci/green turned green.
     permissions:
       pull-requests: read
     outputs:
@@ -76,6 +64,27 @@ jobs:
           SHA=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
           [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::could not resolve main's commit"; exit 1; }
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+
+  run_scope:
+    # Decides whether this run gets the full Fast/Slow suite or the trimmed
+    # test_relevant job. Full suite: every push to main (deploy gate), or a
+    # PR carrying the run-all-specs label. Push events have no PR payload,
+    # so the label is looked up via the commit's PRs.
+    #
+    # The label lookup itself runs in ci_gate, so the image build reads the same
+    # answer. Reuse of a prior Fast/Slow run lives in reuse_scope, which is
+    # main-push only.
+    name: Run scope
+    runs-on: ubicloud-standard-2
+    needs: ci_gate
+    if: ${{ github.event_name != 'pull_request_target' || github.event.pull_request.head.repo.full_name != github.repository }}
+    outputs:
+      full: ${{ steps.scope.outputs.full }}
+    steps:
+      - id: scope
+        env:
+          FULL: ${{ needs.ci_gate.outputs.full }}
+        run: echo "full=$FULL" >> "$GITHUB_OUTPUT"
 
   reuse_scope:
     # Main-only. Asks whether this exact git tree already passed Fast+Slow on
@@ -185,8 +194,8 @@ jobs:
           key: ${{ steps.node_modules.outputs.cache-primary-key }}
       # Builds and saves the test assets that test_relevant_runner restores. It runs
       # on main, on the same runner type, because the build job's Vite cache lives
-      # with another runner provider. Same inputs as that cache's key, hashed before
-      # js:export writes into app/javascript.
+      # with another runner provider. The key hashes that cache's inputs, with this
+      # file as the recipe, before js:export writes into app/javascript.
       - name: Restore the runner test assets
         id: test_assets
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -315,271 +324,17 @@ jobs:
       - name: Self-test the main asset cache shadow
         run: bash .buildkite/scripts/main_asset_cache_shadow_test.sh
 
+  # Branch pushes build the test image in the Prebuild test image workflow, so
+  # ci/green does not wait for it. A branch run builds it here only when its own
+  # full-suite jobs use it.
   build:
     name: Build images${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository && ' (internal PR noop)' || '' }}
-    runs-on: blacksmith-8vcpu-ubuntu-2204
     needs: ci_gate
-    if: ${{ github.event_name != 'pull_request_target' || github.event.pull_request.head.repo.full_name != github.repository }}
-    env:
-      DOCKER_BUILDKIT: 1
-    outputs:
-      test_image_tag: ${{ steps.test_image_tag.outputs.tag }}
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-        timeout-minutes: 5
-        with:
-          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
-          persist-credentials: false
-      - name: Login to Docker Hub
-        uses: nick-fields/retry@v3
-        with:
-          timeout_seconds: 120
-          max_attempts: 3
-          retry_wait_seconds: 10
-          command: echo "$DOCKERHUB_PASSWORD" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
-        env:
-          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-          DOCKERHUB_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
-      - name: Build and push base image
-        env:
-          WEB_BASE_REPO: antiwork/gumroad-web_base
-        run: |
-          set -e
-          GREEN='\033[0;32m'
-          NC='\033[0m'
-          logger() {
-            echo -e "${GREEN}$(date '+%Y/%m/%d %H:%M:%S') build.sh: $1${NC}"
-          }
-          logger "pulling ruby:$(cat .ruby-version)-slim-bookworm"
-          docker pull --quiet ruby:$(cat .ruby-version)-slim-bookworm
-          WEB_BASE_SHA=$(WEB_BASE_DOCKERFILE_FROM=ruby:$(cat .ruby-version)-slim-bookworm docker/base/generate_tag_for_web_base.sh)
-          if ! docker manifest inspect $WEB_BASE_REPO:$WEB_BASE_SHA > /dev/null 2>&1; then
-            logger "Building $WEB_BASE_REPO:$WEB_BASE_SHA"
-            NEW_BASE_REPO=$WEB_BASE_REPO \
-              WEB_BASE_DOCKERFILE_FROM=ruby:$(cat .ruby-version)-slim-bookworm \
-              BUNDLE_GEMS__CONTRIBSYS__COM=${{ secrets.BUNDLE_GEMS__CONTRIBSYS__COM }} \
-              make build_base
-
-            logger "Pushing $WEB_BASE_REPO:$WEB_BASE_SHA"
-            for i in {1..3}; do
-              logger "Push attempt $i"
-              if docker push --quiet $WEB_BASE_REPO:$WEB_BASE_SHA; then
-                logger "Pushed $WEB_BASE_REPO:$WEB_BASE_SHA"
-                break
-              elif [ $i -eq 3 ]; then
-                logger "Failed to push $WEB_BASE_REPO:$WEB_BASE_SHA"
-                exit 1
-              else
-                sleep 5
-              fi
-            done
-          else
-            logger "$WEB_BASE_REPO:$WEB_BASE_SHA already exists"
-          fi
-      - name: Compute content-addressed test image tag
-        id: test_image_tag
-        env:
-          WEB_BASE_REPO: antiwork/gumroad-web_base
-          WEB_REPO: antiwork/gumroad-web
-        run: |
-          set -e
-          # Resolve the base test SHA (used as a hash input).
-          WEB_BASE_TEST_SHA=$(WEB_BASE_DOCKERFILE_FROM=ruby:$(cat .ruby-version)-slim-bookworm docker/base/generate_tag_for_web_base_test.sh)
-          TAG=test-$(BASE_TEST_SHA=$WEB_BASE_TEST_SHA docker/base/generate_tag_for_test_image.sh)
-          echo "tag=$TAG" >> $GITHUB_OUTPUT
-          echo "Computed test image tag: $TAG"
-          if docker manifest inspect "$WEB_REPO:$TAG" > /dev/null 2>&1; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-          fi
-      - name: Set up Docker Buildx
-        uses: useblacksmith/setup-docker-builder@v1
-        with:
-          max-cache-size-mb: "204800"
-      # vite_ruby skips `vite build` when public/vite-test and its digest are restored.
-      # Keep the inputs in sync with preview_asset_cache_inputs() in
-      # .buildkite/scripts/preview_asset_cache.sh. No restore-keys: vite_ruby's digest
-      # ignores the Tailwind @source paths, so a prefix restore could keep stale CSS.
-      - name: Restore Vite test build cache
-        id: vite_cache
-        if: steps.test_image_tag.outputs.exists != 'true'
-        uses: actions/cache/restore@v4
-        with:
-          path: /tmp/vite-cache
-          key: >-
-            vite-test-v1-${{ hashFiles(
-              'app/javascript/**', 'app/views/**',
-              'config/routes.rb', 'config/routes/**', 'config/domain.rb',
-              'config/application.rb', 'config/boot.rb', 'config/environment.rb',
-              'config/environments/**', 'config/redis.rb',
-              'lib/catch_bad_request_errors.rb', 'lib/utilities/global_config.rb',
-              'config/initializers/js-routes.rb', 'config/vite.json', 'config/vite/**',
-              'config/currencies.json', 'lib/json_schemas/**', 'lib/tasks/**', 'Rakefile',
-              'public/**', 'vendor/assets/**', 'patches/**', 'scripts/build_pages_tailwind.mjs',
-              'docker/base/**', 'docker/web/Dockerfile.test', '.github/workflows/tests.yml',
-              'package.json', 'package-lock.json', '.npmrc', 'tsconfig.json',
-              'vite.config.ts', 'vite.config.widget.ts', 'postcss.config.js',
-              'Gemfile.lock', '.ruby-version') }}
-      - name: Build and push test image
-        env:
-          WEB_BASE_REPO: antiwork/gumroad-web_base
-          WEB_BASE_TEST_REPO: antiwork/gumroad-web_base_test
-          WEB_REPO: antiwork/gumroad-web
-          TEST_IMAGE_TAG: ${{ steps.test_image_tag.outputs.tag }}
-          TEST_EXISTS: ${{ steps.test_image_tag.outputs.exists }}
-          # Fork PRs run in main's cache scope, so only pushes write the cache.
-          SAVE_VITE_CACHE: ${{ github.event_name == 'push' && steps.vite_cache.outputs.cache-hit != 'true' }}
-        run: |
-          set -e
-          GREEN='\033[0;32m'
-          NC='\033[0m'
-          logger() {
-            echo -e "${GREEN}$(date '+%Y/%m/%d %H:%M:%S') build.sh: $1${NC}"
-          }
-          docker pull --quiet ruby:$(cat .ruby-version)-slim-bookworm
-          WEB_BASE_TEST_SHA=$(WEB_BASE_DOCKERFILE_FROM=ruby:$(cat .ruby-version)-slim-bookworm docker/base/generate_tag_for_web_base_test.sh)
-
-          # Check if the images already exist (content-addressed cache hit).
-          # TEST_EXISTS comes from the tag step, which also gates the Vite cache.
-          BASE_TEST_EXISTS=false
-          docker manifest inspect $WEB_BASE_TEST_REPO:$WEB_BASE_TEST_SHA > /dev/null 2>&1 && BASE_TEST_EXISTS=true
-
-          if [ "$TEST_EXISTS" = "true" ]; then
-            logger "$WEB_REPO:$TEST_IMAGE_TAG already exists — nothing to build"
-          else
-            # Build web_base_test if needed
-            if [ "$BASE_TEST_EXISTS" = "false" ]; then
-              logger "building $WEB_BASE_TEST_REPO:$WEB_BASE_TEST_SHA"
-              NEW_BASE_REPO=$WEB_BASE_REPO NEW_WEB_BASE_TEST_REPO=$WEB_BASE_TEST_REPO \
-                WEB_BASE_DOCKERFILE_FROM=ruby:$(cat .ruby-version)-slim-bookworm \
-                make build_base_test
-              logger "pushing $WEB_BASE_TEST_REPO:$WEB_BASE_TEST_SHA"
-              for i in {1..3}; do
-                if docker push --quiet $WEB_BASE_TEST_REPO:$WEB_BASE_TEST_SHA; then
-                  logger "Pushed $WEB_BASE_TEST_REPO:$WEB_BASE_TEST_SHA"; break
-                elif [ $i -eq 3 ]; then exit 1; else sleep 5; fi
-              done
-            else
-              logger "$WEB_BASE_TEST_REPO:$WEB_BASE_TEST_SHA already exists"
-            fi
-
-            # Build test image. Blacksmith's setup-docker-builder provides a
-            # sticky-disk-backed BuildKit builder that persists the layer cache
-            # across runs automatically — no explicit --cache-from/--cache-to needed.
-            logger "building $WEB_REPO:$TEST_IMAGE_TAG"
-            WEB_BASE_SHA=$(WEB_BASE_DOCKERFILE_FROM=ruby:$(cat .ruby-version)-slim-bookworm docker/base/generate_tag_for_web_base.sh)
-            # Pull the FROM images that the multi-stage Dockerfile needs.
-            docker pull --quiet $WEB_BASE_REPO:$WEB_BASE_SHA &
-            docker pull --quiet $WEB_BASE_TEST_REPO:$WEB_BASE_TEST_SHA &
-            wait
-            WEB_DOCKERFILE_FROM=$WEB_BASE_REPO:$WEB_BASE_SHA \
-              WEB_BASE_TEST_DOCKERFILE_FROM=$WEB_BASE_TEST_REPO:$WEB_BASE_TEST_SHA \
-            docker buildx build \
-              --load \
-              --build-arg WEB_DOCKERFILE_FROM \
-              --build-arg WEB_BASE_TEST_DOCKERFILE_FROM \
-              --build-arg BUILDKIT_INLINE_CACHE=1 \
-              --file docker/web/Dockerfile.test \
-              -t $WEB_REPO:test-${TEST_IMAGE_TAG#test-} \
-              .
-            docker tag $WEB_REPO:test-${TEST_IMAGE_TAG#test-} $WEB_REPO:$TEST_IMAGE_TAG
-
-            # Run asset precompile + docker commit (Makefile's post-build steps).
-            COMPOSE_PROJECT_NAME=web_${{ github.run_id }}_${{ github.run_attempt }} \
-              docker compose -f docker/docker-compose-test-and-ci.yml up -d db_test redis elasticsearch
-            docker run --rm --entrypoint="" \
-              --network web_${{ github.run_id }}_${{ github.run_attempt }}_default \
-              $WEB_REPO:$TEST_IMAGE_TAG \
-              docker/ci/wait_on_connection.sh db_test 3306
-
-            # Copy the cached Vite build into the container before precompile.
-            # The copy must land in the container filesystem, because docker
-            # commit ignores mounted paths.
-            VITE_CACHE_MOUNT=""
-            if [ -d /tmp/vite-cache/public_vite_test ]; then
-              logger "Restoring cached Vite test build"
-              VITE_CACHE_MOUNT="-v /tmp/vite-cache:/tmp/vite-cache:ro"
-            else
-              logger "No Vite test build cache — full Vite build will run"
-            fi
-
-            # shellcheck disable=SC2086
-            docker run \
-              --network web_${{ github.run_id }}_${{ github.run_attempt }}_default \
-              --entrypoint="" \
-              --shm-size="2g" \
-              --memory-swappiness="0" \
-              -e RAILS_ENV="test" \
-              $VITE_CACHE_MOUNT \
-              --label routes_compiled=true \
-              --name worker_web_${{ github.run_id }}_${{ github.run_attempt }} \
-              $WEB_REPO:$TEST_IMAGE_TAG \
-              bash -c '
-                if [ -d /tmp/vite-cache/public_vite_test ]; then
-                  mkdir -p /app/tmp/cache
-                  cp -a /tmp/vite-cache/public_vite_test /app/public/vite-test
-                  cp -a /tmp/vite-cache/tmp_cache_vite /app/tmp/cache/vite
-                  chown -R app:app /app/public/vite-test /app/tmp/cache
-                fi
-                su -c "npm run setup && bundle exec rake db:setup assets:precompile --trace" app
-              '
-
-            CONTAINER=worker_web_${{ github.run_id }}_${{ github.run_attempt }}
-            if [ "$SAVE_VITE_CACHE" = "true" ]; then
-              logger "Saving Vite test build for the cache"
-              mkdir -p /tmp/vite-cache
-              if ! { docker cp "$CONTAINER:/app/public/vite-test" /tmp/vite-cache/public_vite_test \
-                  && docker cp "$CONTAINER:/app/tmp/cache/vite" /tmp/vite-cache/tmp_cache_vite; }; then
-                logger "Vite test build copy failed (non-fatal) — nothing will be cached"
-                rm -rf /tmp/vite-cache
-              fi
-            fi
-
-            # Bake the prepared test database into the image. The db:setup
-            # above left a fully prepared gumroad_test in this stack's MySQL;
-            # snapshotting it here lets every test shard restore the dump in
-            # seconds instead of re-running db:prepare from scratch (see
-            # docker/ci/dump_test_db.sh and docker/ci/restore_test_db.sh).
-            # Non-fatal: if the dump fails, shards detect the missing file
-            # and fall back to rake db:prepare.
-            logger "Baking prepared test database dump into the image"
-            if docker/ci/dump_test_db.sh web_${{ github.run_id }}_${{ github.run_attempt }}_default /tmp/prepared_test_db.sql.gz \
-               && docker cp /tmp/prepared_test_db.sql.gz $CONTAINER:/app/db/prepared_test_db.sql.gz; then
-              logger "Test database dump baked into image"
-            else
-              logger "Test database dump/copy failed (non-fatal) — shards will fall back to db:prepare"
-            fi
-
-            docker ps -lq \
-              --filter='label=routes_compiled=true' \
-              --filter='exited=0' \
-              --filter="name=worker_web_${{ github.run_id }}_${{ github.run_attempt }}" \
-              | xargs -I{} docker commit {} $WEB_REPO:$TEST_IMAGE_TAG
-            COMPOSE_PROJECT_NAME=web_${{ github.run_id }}_${{ github.run_attempt }} \
-              docker compose -f docker/docker-compose-test-and-ci.yml down
-
-            # Push the final image to Docker Hub.
-            logger "pushing $WEB_REPO:$TEST_IMAGE_TAG"
-            for i in {1..3}; do
-              if docker push --quiet $WEB_REPO:$TEST_IMAGE_TAG; then
-                logger "Pushed $WEB_REPO:$TEST_IMAGE_TAG"; break
-              elif [ $i -eq 3 ]; then exit 1; else sleep 5; fi
-            done
-
-            # Update floating test-cache tag.
-            docker tag $WEB_REPO:$TEST_IMAGE_TAG $WEB_REPO:test-cache
-            docker push --quiet $WEB_REPO:test-cache 2>/dev/null \
-              && logger "Pushed $WEB_REPO:test-cache" \
-              || logger "Failed to push test-cache (non-fatal)"
-          fi
-      - name: Save Vite test build cache
-        if: github.event_name == 'push' && steps.test_image_tag.outputs.exists != 'true' && steps.vite_cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: /tmp/vite-cache
-          key: ${{ steps.vite_cache.outputs.cache-primary-key }}
+    if: |
+      (github.event_name != 'pull_request_target' || github.event.pull_request.head.repo.full_name != github.repository) &&
+      (github.event_name != 'push' || github.ref == 'refs/heads/main' || needs.ci_gate.outputs.full == 'true')
+    uses: ./.github/workflows/build-test-image.yml
+    secrets: inherit
 
   test_minitest:
     name: Test Minitest ${{ matrix.ci_node_index }}${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository && ' (internal PR noop)' || '' }}
@@ -1291,13 +1046,15 @@ jobs:
   test_relevant_runner:
     name: Test Relevant ${{ matrix.ci_node_index }}
     runs-on: ubicloud-standard-4
-    needs: run_scope
+    # ci_gate holds the run-all-specs answer and the base commit, so the shards
+    # start without waiting for run_scope.
+    needs: ci_gate
     # Branch pushes in this repository run the relevant specs on the runner, so
     # they skip the test image build and pull. Fork PRs keep the image job above:
     # this job runs the branch's code next to the Knapsack token. For the same
     # reason each shard selects its specs itself instead of waiting for
     # relevant_specs, which keeps fork code away from secrets.
-    if: needs.run_scope.outputs.full != 'true' && github.event_name == 'push'
+    if: needs.ci_gate.outputs.full != 'true' && github.event_name == 'push'
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -1331,7 +1088,7 @@ jobs:
         id: specs
         run: bin/ci-relevant-specs "$BASE_SHA"
         env:
-          BASE_SHA: ${{ needs.run_scope.outputs.base_sha }}
+          BASE_SHA: ${{ needs.ci_gate.outputs.base_sha }}
       - name: Login to Docker Hub
         uses: nick-fields/retry@v3
         with:
