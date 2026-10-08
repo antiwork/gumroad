@@ -5,6 +5,11 @@ class PiracyReportPolicy < ApplicationPolicy
     user.role_admin_for?(seller)
   end
 
+  # The Products tab shows only when there is a list this user can open.
+  def tab?
+    index? && PiracyReport.filed_by?(seller)
+  end
+
   def new?
     create?
   end

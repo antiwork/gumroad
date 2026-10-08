@@ -23,7 +23,6 @@ class AffiliatedProductsPresenter
       global_affiliates_data:,
       discover_url: UrlService.discover_domain_with_protocol,
       archived_tab_visible: @user.archived_products_count > 0,
-      piracy_reports_tab_visible: PiracyReport.filed_by?(@user),
       affiliates_disabled_reason: @user.has_brazilian_stripe_connect_account? ? "Affiliates with Brazilian Stripe accounts are not supported." : nil,
     }
   end
