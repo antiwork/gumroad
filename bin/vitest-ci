@@ -21,6 +21,7 @@ SOURCE_FILE = /\.(c|m)?(j|t)sx?\z/
 RESOLVE_EXTENSIONS = ["", ".ts", ".tsx", ".js", ".jsx", ".mts", ".d.ts", ".json"].freeze
 ALIASES = { "$app/" => "app/javascript/", "$assets/" => "public/", "$vendor/" => "vendor/assets/javascripts/" }.freeze
 SPECIFIER = /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+|\brequire\s*\(\s*|\bvi\.mock\s*\(\s*|\bimportActual\s*(?:<[^>]*>)?\s*\(\s*)["']([^"']+)["']/
+GLOB_CALL = /import\.meta\.glob\b/
 # Tests that read repository files at runtime depend on files no import names.
 READS_FILES = /\breadFileSync\b|\breadFile\s*\(|\breaddirSync\b|\bglobSync\b|import\.meta\.glob|["']node:fs["']|["']fs["']/
 
@@ -59,16 +60,21 @@ end
 
 # The file an import names, or, when no file exists there (a path a branch deleted),
 # the normalized path itself, so the importer can still be found from it.
-def resolve(from, specifier)
-  specifier = specifier.sub(/[?#].*\z/, "")
+def normalize(from, specifier)
   base =
     if (prefix = ALIASES.keys.find { |key| specifier.start_with?(key) })
       ALIASES[prefix] + specifier.delete_prefix(prefix)
     elsif specifier.start_with?(".")
       File.join(File.dirname(from), specifier)
+    elsif specifier.start_with?("/")
+      specifier.delete_prefix("/")
     end
+  base && File.expand_path(base, Dir.pwd).delete_prefix("#{Dir.pwd}/")
+end
+
+def resolve(from, specifier)
+  base = normalize(from, specifier.sub(/[?#].*\z/, ""))
   return nil unless base
-  base = File.expand_path(base, Dir.pwd).delete_prefix("#{Dir.pwd}/")
   candidates = RESOLVE_EXTENSIONS.map { |ext| base + ext } + ["/index.ts", "/index.tsx", "/index.js"].map { |ext| base + ext }
   candidates.find { |path| File.file?(path) } || base
 end
@@ -84,6 +90,99 @@ def dependents_index(files)
   dependents
 end
 
+# For each `import.meta.glob(` call in `source`, [first argument text, whole call text]
+# or nil when the call does not parse. String contents and escapes are skipped so a
+# `)` or `,` inside a pattern does not end an argument.
+def glob_arguments(source)
+  source.to_enum(:scan, GLOB_CALL).map do
+    rest = Regexp.last_match.post_match
+    start = rest.index("(") or next
+    depth = 0
+    quote = nil
+    escaped = false
+    first = nil
+    result = nil
+    rest[start..].each_char.with_index do |char, offset|
+      if escaped then escaped = false
+      elsif quote
+        escaped = char == "\\"
+        quote = nil if char == quote
+      elsif "\"'`".include?(char) then quote = char
+      elsif "([{".include?(char) then depth += 1
+      elsif ")]}".include?(char)
+        depth -= 1
+        if depth.zero?
+          result = [first || rest[start + 1, offset - 1], rest[start + 1, offset - 1]]
+          break
+        end
+      elsif char == "," && depth == 1
+        first ||= rest[start + 1, offset - 1]
+      end
+    end
+    result
+  end
+end
+
+# Translates a glob to a regexp: `**/` spans zero or more directories, a trailing `**`
+# spans everything, `{a,b}` alternates, and `[...]` matches either the bracketed text
+# literally (a `[id].tsx` file) or as a character class.
+def glob_regexp(pattern)
+  out = +""
+  braces = 0
+  chars = pattern.chars
+  until chars.empty?
+    char = chars.shift
+    out <<
+      if char == "*" && chars.first == "*"
+        chars.shift
+        chars.first == "/" ? (chars.shift && "(?:.*/)?") : ".*"
+      elsif char == "*" then "[^/]*"
+      elsif char == "?" then "[^/]"
+      elsif char == "{" then (braces += 1) && "(?:"
+      elsif char == "}" && braces.positive? then (braces -= 1) && ")"
+      elsif char == "," && braces.positive? then "|"
+      elsif char == "[" && (close = chars.index("]"))
+        body = chars.shift(close + 1)[0...-1].join
+        negation = body.start_with?("!") ? "^" : ""
+        body = body.delete_prefix("!")
+        "(?:#{negation.empty? ? Regexp.escape("[#{body}]") : '(?!)'}|[#{negation}#{body.gsub(/[\\\[\]]/) { |c| "\\#{c}" }}])"
+      else Regexp.escape(char)
+      end
+  end
+  Regexp.new("\\A#{out}\\z")
+end
+
+# `import.meta.glob` imports every file its patterns match, so a file that matches
+# one is a dependency of the call's importer. Matching the changed path itself also
+# covers files a branch adds, deletes or renames. A call this cannot read matches
+# every path, which runs more tests, never fewer. Returns one lambda per call, from a
+# path to true or false.
+def glob_matchers(file, source)
+  glob_arguments(source).map do |first, call|
+    patterns = first ? first.scan(/(["'`])(.*?)\1/).map(&:last) : []
+    # Extglobs, escapes and a `base` option change what a pattern means; do not guess.
+    next ->(_path) { true } if patterns.empty? || patterns.any? { |pattern| pattern.match?(/[@+*?!]\(|\\/) } || call.match?(/\bbase\s*:/)
+    negated, included = patterns.partition { |pattern| pattern.start_with?("!") }
+    regexps = ->(list) { list.filter_map { |pattern| normalize(file, pattern) }.map { |pattern| glob_regexp(pattern) } }
+    includes = regexps.call(included)
+    excludes = regexps.call(negated.map { |pattern| pattern.delete_prefix("!") })
+    ->(path) { includes.any? { |regexp| regexp.match?(path) } && excludes.none? { |regexp| regexp.match?(path) } }
+  rescue RegexpError
+    ->(_path) { true }
+  end
+end
+
+def glob_index(files)
+  files.filter_map do |file|
+    source = read(file)
+    [file, glob_matchers(file, source)] if GLOB_CALL.match?(source)
+  end
+end
+
+def glob_importers(globs, path)
+  globs.filter_map { |file, matchers| file if matchers.any? { |matcher| matcher.call(path) } }
+end
+
 def plan(records, files: source_files)
   return [:none, []] if records.empty?
   changed = []
@@ -97,11 +196,13 @@ def plan(records, files: source_files)
   end
 
   dependents = dependents_index(files)
+  globs = glob_index(files)
   starts = changed.flat_map { |path| [path, path.sub(/\.[^.\/]+\z/, "")] }.uniq
   reached = Set.new(starts)
   queue = starts.dup
   until queue.empty?
-    dependents[queue.shift].each { |file| queue << file if reached.add?(file) }
+    path = queue.shift
+    (dependents[path].to_a + glob_importers(globs, path)).each { |file| queue << file if reached.add?(file) }
   end
   reading = files.select { |file| TEST_FILE.match?(file) && READS_FILES.match?(read(file)) }
   tests = (reached.select { |file| TEST_FILE.match?(file) && File.file?(file) } + reading).uniq.sort

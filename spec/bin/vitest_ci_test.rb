@@ -60,6 +60,60 @@ check("a deleted fixture still selects the test that imported it") { mode == "te
 mode, tests = plan(["R100", "spec/fixtures/accent_contrast_pairs.json", "spec/fixtures/renamed_pairs.json"])
 check("a renamed fixture still selects the test that imported it") { mode == "tests" && tests.include?("app/javascript/utils/color.test.ts") }
 
+THUMBNAIL = "app/javascript/components/Product/Thumbnail.test.tsx"
+
+mode, tests = plan(["M", "public/images/native_types/thumbnails/audiobook.png"])
+check("an image an import.meta.glob matches selects the test of its importer") { mode == "tests" && tests.include?(THUMBNAIL) }
+
+mode, tests = plan(["A", "public/images/native_types/thumbnails/new_type.png"])
+check("an added file matching an import.meta.glob selects the test of its importer") { mode == "tests" && tests.include?(THUMBNAIL) }
+
+mode, tests = plan(["M", "public/images/discover/art.png"])
+check("a file outside an import.meta.glob does not select its importer's test") { mode == "tests" && !tests.include?(THUMBNAIL) && tests.include?("app/javascript/utils/discover.test.ts") }
+
+# The glob matcher itself, on synthetic sources, loaded into its own module so the
+# script's `plan` does not replace this file's.
+GLOBS = Module.new
+GLOBS.module_eval(File.read(SCRIPT).split(/^def git\b/).first)
+GLOB_HELPERS = Object.new.extend(GLOBS)
+
+def glob_matches?(source, path, from: "app/javascript/a.tsx")
+  GLOB_HELPERS.glob_matchers(from, source).any? { |matcher| matcher.call(path) }
+end
+
+check("a glob array with a negated pattern excludes the negated files") do
+  source = %q{import.meta.glob(["./pages/**/*.tsx", "!./pages/**/*.test.tsx"])}
+  glob_matches?(source, "app/javascript/pages/x/Y.tsx") && !glob_matches?(source, "app/javascript/pages/x/Y.test.tsx")
+end
+check("a negated pattern applies only to its own import.meta.glob call") do
+  source = %q{import.meta.glob("./a/*.ts"); import.meta.glob(["./b/*.ts", "!./a/*.ts"])}
+  glob_matches?(source, "app/javascript/a/x.ts")
+end
+check("a glob with a generic, a [id] file name and options still parses") do
+  source = %q{import.meta.glob<Record<string, string>>("./p/[id].tsx", { eager: true })}
+  glob_matches?(source, "app/javascript/p/[id].tsx")
+end
+check("a trailing ** and {a,b} alternation match nested files") do
+  glob_matches?(%q{import.meta.glob("$assets/images/**")}, "public/images/a/b/c.png", from: "app/javascript/a.tsx") &&
+    glob_matches?(%q{import.meta.glob("./i/*.{png,svg}")}, "app/javascript/i/x.svg") &&
+    !glob_matches?(%q{import.meta.glob("./i/*.{png,svg}")}, "app/javascript/i/x.jpg")
+end
+
+check("a [!a] class negates, and an unreadable pattern (extglob, base option) matches every path") do
+  !glob_matches?(%q{import.meta.glob("./[!a]/x.ts")}, "app/javascript/a/x.ts") && glob_matches?(%q{import.meta.glob("./[!a]/x.ts")}, "app/javascript/b/x.ts") &&
+    glob_matches?(%q{import.meta.glob("./x/@(a|b).ts")}, "app/javascript/other/z.ts") &&
+    glob_matches?(%q{import.meta.glob("./x/*.ts", { base: "/foo" })}, "app/javascript/other/z.ts")
+end
+check("an apostrophe in a comment or an escaped quote cannot leak a later call's patterns") do
+  source = %q{import.meta.glob("./a/\"*.ts", {/* don't */ eager: true}); import.meta.glob(["./b/*.ts", "!./a/*.ts"])}
+  glob_matches?(source, "app/javascript/b/x.ts")
+end
+
+check("an invalid bracket class or an escaped pattern matches every path instead of failing") do
+  glob_matches?(%q{import.meta.glob("./a[]/*.ts")}, "app/javascript/other/z.ts") &&
+    glob_matches?(%q{import.meta.glob("./p/\\[id\\].tsx")}, "app/javascript/other/z.ts")
+end
+
 mode, = plan
 check("a branch with no changes runs nothing") { mode == "none" }
 
