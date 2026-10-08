@@ -9,11 +9,14 @@ class Api::Internal::Admin::PiracyReportsController < Api::Internal::Admin::Base
   SCREEN_PARAM_KEYS = %w[verdict checks].freeze
 
   # Params are read as strings so a nested value like state[x]=y cannot reach a query as a hash.
-  before_action :find_report_or_render, only: %i[show start_screening screen]
+  before_action :find_report_or_render, only: %i[show start_screening screen counter_notice resolve]
 
   def index
     reports = PiracyReport.includes(:seller, :product).order(:id)
     reports = reports.where(state: params[:state].to_s) if params[:state].present?
+    # Matches a reply that reached support+piracy-<token>@ to the report it answers. A blank token
+    # matches nothing, so a failed parse can never return every report.
+    reports = params[:reply_token].present? ? reports.where(reply_token: params[:reply_token].to_s) : reports.none if params.key?(:reply_token)
 
     if params[:user_id].present?
       user = User.find_by(external_id: params[:user_id].to_s)
@@ -89,7 +92,29 @@ class Api::Internal::Admin::PiracyReportsController < Api::Internal::Admin::Base
     end
   end
 
+  def counter_notice
+    record_admin_write(action: "piracy_reports.counter_notice", target: @report) do
+      result = PiracyReports::CounterNoticeService.new(report: @report, body: params[:body], received_on: params[:received_on]).call
+      render_result(result)
+    end
+  end
+
+  def resolve
+    record_admin_write(action: "piracy_reports.resolve", target: @report) do
+      result = PiracyReports::ResolveService.new(report: @report, outcome: params[:outcome], reason: params[:reason]).call
+      render_result(result)
+    end
+  end
+
   private
+    def render_result(result)
+      if result.success?
+        render json: { success: true, report: serialize_summary(@report) }
+      else
+        render json: { success: false, message: result.errors.to_sentence, errors: result.errors }, status: :unprocessable_entity
+      end
+    end
+
     def find_report_or_render
       @report = PiracyReport.find_by(external_id: params[:id].to_s)
       render json: { success: false, message: "Piracy report not found" }, status: :not_found if @report.blank?
@@ -116,6 +141,8 @@ class Api::Internal::Admin::PiracyReportsController < Api::Internal::Admin::Base
         sent_at: report.sent_at&.as_json,
         delivered_at: report.delivered_at&.as_json,
         delivery_failed_at: report.delivery_failed_at&.as_json,
+        counter_notice_received_on: report.counter_notice_received_on&.as_json,
+        outcome: report.outcome,
         source: report.source,
         url: report.url,
         user_id: report.seller.external_id,

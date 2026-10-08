@@ -9,7 +9,16 @@ import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 import { PageHeader } from "$app/components/ui/PageHeader";
 
-type ReportState = "requested" | "screening" | "awaiting_signature" | "signed" | "sent" | "declined" | "cancelled";
+type ReportState =
+  | "requested"
+  | "screening"
+  | "awaiting_signature"
+  | "signed"
+  | "sent"
+  | "counter_noticed"
+  | "resolved"
+  | "declined"
+  | "cancelled";
 
 type PiracyReportsShowProps = {
   report: {
@@ -21,11 +30,20 @@ type PiracyReportsShowProps = {
     notice_digest: string | null;
     signed_at: string | null;
     sent_at: string | null;
+    counter_notice_received_on: string | null;
+    outcome: "removed" | "no_response" | "restored" | "withdrawn" | null;
     signed_by_name: string | null;
   };
   product: { name: string; url: string };
   confirmations: { key: string; text: string }[];
   confirmations_version: string;
+};
+
+const OUTCOME_TEXT = {
+  removed: "The site removed the page.",
+  no_response: "The site did not respond to the notice.",
+  restored: "The site put the page back after a counter-notice.",
+  withdrawn: "This notice was withdrawn.",
 };
 
 export default function PiracyReportsShow() {
@@ -72,6 +90,19 @@ export default function PiracyReportsShow() {
             We sent the notice on {new Date(report.sent_at).toLocaleDateString()}. We will email you when the site
             responds.
           </Alert>
+        ) : null}
+        {report.state === "counter_noticed" && report.counter_notice_received_on !== null ? (
+          <Alert variant="warning">
+            The site got a counter-notice on{" "}
+            {new Date(`${report.counter_notice_received_on}T00:00:00Z`).toLocaleDateString(undefined, {
+              timeZone: "UTC",
+            })}
+            . We emailed it to you. The page can come back 10 to 14 business days after that date unless you file a
+            court action.
+          </Alert>
+        ) : null}
+        {report.state === "resolved" && report.outcome !== null ? (
+          <Alert variant="info">{OUTCOME_TEXT[report.outcome]}</Alert>
         ) : null}
         {report.state === "signed" ? (
           <Alert variant="success">

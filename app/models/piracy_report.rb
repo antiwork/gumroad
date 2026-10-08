@@ -23,6 +23,8 @@ class PiracyReport < ApplicationRecord
   HOSTED_ON_GUMROAD_ERROR = "Pages hosted on Gumroad are reported through the terms of service process"
   SOURCES = %w[dashboard support].freeze
   REPLY_TOKEN_LENGTH = 16
+  OUTCOMES = %w[removed no_response restored withdrawn].freeze
+  MAX_COUNTER_NOTICE_LENGTH = 20_000
   # A sent notice with no delivered or bounced event after this long was probably dropped silently.
   DELIVERY_CONFIRMATION_WINDOW = 24.hours
   SCREENING_VERDICTS = %w[pass fail review].freeze
@@ -66,6 +68,14 @@ class PiracyReport < ApplicationRecord
 
     event :send_notice do
       transition signed: :sent
+    end
+
+    event :receive_counter_notice do
+      transition sent: :counter_noticed
+    end
+
+    event :resolve do
+      transition %i[sent counter_noticed] => :resolved
     end
 
     event :cancel do

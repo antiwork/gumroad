@@ -6,7 +6,9 @@ class Api::Internal::Admin::BaseController < Api::Internal::BaseController
 
   ADMIN_AUDIT_REDACTED_PARAM_PATTERN = /password|secret|token|two_factor|otp|webhook_url|license_key|email/i
   ADMIN_AUDIT_ACTION_REDACTED_PARAM_KEYS = {
-    "purchases.reassign" => %w[from to]
+    "purchases.reassign" => %w[from to],
+    # The counter-notice carries the counter-notifier's name and address; the report keeps it.
+    "piracy_reports.counter_notice" => %w[body]
   }.freeze
   # Some params match the redaction pattern above but are the very thing the
   # audit row exists to record. For SendGrid suppression removal the email

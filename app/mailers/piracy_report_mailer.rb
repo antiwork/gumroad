@@ -41,6 +41,24 @@ class PiracyReportMailer < ApplicationMailer
     mail to: @report.last_contact_email, subject: @subject
   end
 
+  def counter_notice_received(piracy_report_id)
+    @report = find_on_primary(piracy_report_id)
+    @product_name = @report.product.name
+    @subject = "The site responded to your takedown notice for #{@product_name}"
+    @report_url = piracy_report_url(@report.external_id)
+
+    mail to: @report.last_contact_email, subject: @subject
+  end
+
+  def resolved(piracy_report_id)
+    @report = find_on_primary(piracy_report_id)
+    @product_name = @report.product.name
+    @subject = "Your takedown notice for #{@product_name} is closed"
+    @report_url = piracy_report_url(@report.external_id)
+
+    mail to: @report.last_contact_email, subject: @subject
+  end
+
   private
     # The send writes these fields just before the mail jobs run; a worker replica may not have them yet.
     def find_on_primary(piracy_report_id)

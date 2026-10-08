@@ -80,6 +80,14 @@ describe AlertOnStuckPiracyReportsJob do
     expect(InternalNotificationWorker).not_to have_received(:perform_async)
   end
 
+  it "lists sellers with repeated counter-notices" do
+    seller = create(:user)
+    2.times { create(:piracy_report, :signed, seller:, state: "counter_noticed", counter_notice_received_on: 10.days.ago.to_date) }
+    create(:piracy_report, :signed, state: "counter_noticed", counter_notice_received_on: 10.days.ago.to_date)
+
+    expect(message).to include("1 seller received 2 or more counter-notices", "seller #{seller.id}: 2 counter-notices")
+  end
+
   it "stays silent when no report is blocked or waiting for review" do
     create(:piracy_report, :screening)
     create(:piracy_report, :awaiting_signature)
