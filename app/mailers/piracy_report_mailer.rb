@@ -6,6 +6,9 @@ class PiracyReportMailer < ApplicationMailer
 
   def signature_request(piracy_report_id)
     @report = PiracyReport.find(piracy_report_id)
+    # Closing the account can cancel the report while this mail waits in the queue.
+    return unless @report.awaiting_signature?
+
     @seller = @report.seller
     @product_name = @report.product.name
     @subject = "Review and sign the takedown notice for #{@product_name}"

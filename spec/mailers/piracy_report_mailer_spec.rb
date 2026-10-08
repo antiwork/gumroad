@@ -14,5 +14,16 @@ describe PiracyReportMailer do
       expect(mail.body.encoded).to include(piracy_report_url(report.external_id))
       expect(mail.body.encoded).to include(report.product.name)
     end
+
+    it "sends nothing once the report has been closed" do
+      # Proves deliveries are counted at all, so the closed-report assertion below is not vacuous.
+      expect { described_class.signature_request(report.id).deliver_now }
+        .to change { ActionMailer::Base.deliveries.count }.by(1)
+
+      report.cancel!
+
+      expect { described_class.signature_request(report.id).deliver_now }
+        .not_to change { ActionMailer::Base.deliveries.count }
+    end
   end
 end

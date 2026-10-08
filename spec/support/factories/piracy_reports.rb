@@ -20,5 +20,13 @@ FactoryBot.define do
       notice_text { "Notice text" }
       notice_digest { Digest::SHA256.hexdigest("Notice text") }
     end
+    trait :signed do
+      awaiting_signature
+      state { "signed" }
+      signed_at { Time.current }
+      signed_by_name { "Jane Doe" }
+      signed_ip { "203.0.113.7" }
+      signature_statement_version { PiracyReport::SIGNATURE_STATEMENT_VERSION }
+    end
   end
 end
