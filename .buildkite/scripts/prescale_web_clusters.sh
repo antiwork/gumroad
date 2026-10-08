@@ -16,13 +16,19 @@ logger() {
   echo -e "${GREEN}$(date "+%Y/%m/%d %H:%M:%S") prescale_web_clusters.sh: $1${NC}"
 }
 
+DEADLINE_SECONDS=${PRESCALE_DEADLINE_SECONDS:-240}
+KILL_AFTER_SECONDS=5
+AWS_ATTEMPTS=3
+AWS_CONNECT_TIMEOUT_SECONDS=5
+AWS_READ_TIMEOUT_SECONDS=15
+
 # Buildkite marks a timed-out step as errored, which soft_fail does not cover, so the
 # whole step, the relevance check's git fetch included, runs under a deadline of its own
 # that ends well inside the step's timeout.
 if [ -z "${PRESCALE_UNDER_DEADLINE:-}" ] && command -v timeout >/dev/null 2>&1; then
-  PRESCALE_UNDER_DEADLINE=1 timeout -k 5 "${PRESCALE_DEADLINE_SECONDS:-240}" bash "$0"
+  PRESCALE_UNDER_DEADLINE=1 timeout -k "$KILL_AFTER_SECONDS" "$DEADLINE_SECONDS" bash "$0"
   status=$?
-  [ "$status" -eq 0 ] || logger "WARNING: stopped after ${PRESCALE_DEADLINE_SECONDS:-240} s (exit $status); leaving the clusters to the deploy's scale_up"
+  [ "$status" -eq 0 ] || logger "WARNING: stopped after $DEADLINE_SECONDS s (exit $status); leaving the clusters to the deploy's scale_up"
   exit 0
 fi
 
@@ -30,9 +36,9 @@ source .buildkite/scripts/deploy_relevance.sh
 skip_if_production_noop "prescale_web_clusters.sh"
 
 WEB_ASGS=(production-web-cluster-blue-asg production-web-cluster-green-asg)
-# Each call gets 3 attempts of at most 20 s, so one stalled call cannot use up the deadline.
-export AWS_MAX_ATTEMPTS=3
-AWS_LIMITS=(--cli-connect-timeout 5 --cli-read-timeout 15)
+# Bounded per call, so one stalled call cannot use up the deadline.
+export AWS_MAX_ATTEMPTS=$AWS_ATTEMPTS
+AWS_LIMITS=(--cli-connect-timeout "$AWS_CONNECT_TIMEOUT_SECONDS" --cli-read-timeout "$AWS_READ_TIMEOUT_SECONDS")
 
 for asg in "${WEB_ASGS[@]}"; do
   if ! sizes=$(aws autoscaling describe-auto-scaling-groups "${AWS_LIMITS[@]}" --auto-scaling-group-names "$asg" \
