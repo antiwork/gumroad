@@ -19,7 +19,7 @@ class PiracyReportMailer < ApplicationMailer
 
   # The exact text the seller signed, as plain text, so nothing reflows or rewrites it.
   def notice(piracy_report_id)
-    @report = PiracyReport.find(piracy_report_id)
+    @report = find_on_primary(piracy_report_id)
 
     mail(
       to: @report.sent_to_email,
@@ -33,11 +33,17 @@ class PiracyReportMailer < ApplicationMailer
   end
 
   def notice_sent(piracy_report_id)
-    @report = PiracyReport.find(piracy_report_id)
+    @report = find_on_primary(piracy_report_id)
     @product_name = @report.product.name
     @subject = "We sent your takedown notice for #{@product_name}"
     @report_url = piracy_report_url(@report.external_id)
 
     mail to: @report.last_contact_email, subject: @subject
   end
+
+  private
+    # The send writes these fields just before the mail jobs run; a worker replica may not have them yet.
+    def find_on_primary(piracy_report_id)
+      ApplicationRecord.connected_to(role: :writing) { PiracyReport.find(piracy_report_id) }
+    end
 end

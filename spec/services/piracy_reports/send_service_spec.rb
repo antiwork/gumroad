@@ -3,9 +3,9 @@
 require "spec_helper"
 
 describe PiracyReports::SendService do
-  let(:report) { create(:piracy_report, :signed) }
+  let(:report) { create(:piracy_report, :signed, recipient_email: "copyright@example.com") }
   let(:registry) do
-    { "example.net" => PiracyReports::RecipientRegistry::Entry.new(name: "Example Net Inc.", email: "copyright@example.net", source_url: "https://dmca.copyright.gov/osp/example") }
+    { "example.net" => PiracyReports::RecipientRegistry::Entry.new(name: "Example Net Inc.", email: "copyright@example.com", source_url: "https://dmca.copyright.gov/osp/example") }
   end
 
   before do
@@ -23,13 +23,13 @@ describe PiracyReports::SendService do
       .and have_enqueued_mail(PiracyReportMailer, :notice_sent).with(report.id)
 
     report.reload
-    expect(report).to have_attributes(state: "sent", sent_to_email: "copyright@example.net", last_contact_email: report.seller.email)
+    expect(report).to have_attributes(state: "sent", sent_to_email: "copyright@example.com", last_contact_email: report.seller.email)
     expect(report.reply_token).to match(/\A[a-z0-9]{16}\z/)
     expect(report.sent_at).to be_present
     expect(report.sent_message_id).to be_present
 
     mail = ActionMailer::Base.deliveries.last
-    expect(mail.to).to eq(["copyright@example.net"])
+    expect(mail.to).to eq(["copyright@example.com"])
     expect(mail.cc).to eq([report.seller.email])
     expect(mail.from).to eq([ApplicationMailer::SUPPORT_EMAIL])
     expect(mail.reply_to).to eq(["support+piracy-#{report.reply_token}@#{DEFAULT_EMAIL_DOMAIN}"])
@@ -58,7 +58,7 @@ describe PiracyReports::SendService do
   end
 
   it "refuses when the host's registry contact changed after screening" do
-    registry["example.net"] = registry["example.net"].with(email: "dmca@example.net")
+    registry["example.net"] = registry["example.net"].with(email: "dmca@example.com")
 
     expect(call.errors).to eq(["The host's registry contact changed after screening"])
     expect(report.reload.state).to eq("signed")
@@ -76,6 +76,19 @@ describe PiracyReports::SendService do
 
     expect(call.errors).to eq(["The notice could not be sent: 550 mailbox unavailable"])
     expect(report.reload.delivery_failed_at).to be_present
+  end
+
+  it "keeps a delivered send successful when the seller's confirmation fails to queue" do
+    allow(PiracyReportMailer).to receive(:notice_sent).and_raise(Redis::CannotConnectError)
+
+    expect(call).to be_success
+    expect(report.reload).to have_attributes(state: "sent", delivery_failed_at: nil)
+  end
+
+  it "explains why a signed report is not going out" do
+    registry["example.net"] = registry["example.net"].with(email: "dmca@example.com")
+
+    expect(described_class.new(report:).blocking_reason).to eq("The host's registry contact changed after screening")
   end
 
   it "keeps the report sent and records the failure when delivery raises, so it is not retried" do

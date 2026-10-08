@@ -3,12 +3,12 @@
 require "spec_helper"
 
 describe SendSignedPiracyNoticesJob do
-  let!(:signed) { create(:piracy_report, :signed) }
+  let!(:signed) { create(:piracy_report, :signed, recipient_email: "copyright@example.com") }
   let!(:awaiting) { create(:piracy_report, :awaiting_signature) }
 
   before do
     allow(PiracyReports::RecipientRegistry).to receive(:entries).and_return(
-      "example.net" => PiracyReports::RecipientRegistry::Entry.new(name: "Example Net Inc.", email: "copyright@example.net", source_url: "https://dmca.copyright.gov/osp/example")
+      "example.net" => PiracyReports::RecipientRegistry::Entry.new(name: "Example Net Inc.", email: "copyright@example.com", source_url: "https://dmca.copyright.gov/osp/example")
     )
   end
 

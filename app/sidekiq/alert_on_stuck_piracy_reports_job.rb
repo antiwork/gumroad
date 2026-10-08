@@ -7,16 +7,19 @@ class AlertOnStuckPiracyReportsJob
 
   # Report at most this many per group. The alert exists to be read.
   MAX_REPORTED = 25
+  # The send job runs every 15 minutes, so a signed report older than this is blocked, not queued.
+  UNSENT_GRACE = 1.hour
 
   def perform
     blocked = PiracyReport.blocked_on_recipient.order(:id).limit(MAX_REPORTED + 1).to_a
     review = PiracyReport.needs_review.order(:id).limit(MAX_REPORTED + 1).to_a
     undelivered = PiracyReport.delivery_failed.or(PiracyReport.delivery_unconfirmed).order(:id).limit(MAX_REPORTED + 1).to_a
-    return if blocked.empty? && review.empty? && undelivered.empty?
+    unsent = unsent_signed_reports
+    return if blocked.empty? && review.empty? && undelivered.empty? && unsent.empty?
 
     InternalNotificationWorker.perform_async(
       "risk", "Piracy reports waiting for a person",
-      [blocked_section(blocked), review_section(review), delivery_section(undelivered)].compact.join("\n\n")
+      [blocked_section(blocked), review_section(review), delivery_section(undelivered), unsent_section(unsent)].compact.join("\n\n")
     )
   end
 
@@ -64,6 +67,25 @@ class AlertOnStuckPiracyReportsJob
         "Check the host's takedown contact. If it changed, update config/piracy_recipients.yml and tell the seller " \
           "through support; the notice is not sent again automatically.",
       ].join("\n")
+    end
+
+    # While sending is off, every signed report waits on purpose, so only list them when it is on.
+    def unsent_signed_reports
+      return [] unless Feature.active?(PiracyReports::SendService::FLAG)
+
+      PiracyReport.where(state: "signed", signed_at: ...UNSENT_GRACE.ago).order(:id).limit(MAX_REPORTED + 1).to_a
+    end
+
+    def unsent_section(reports)
+      return if reports.empty?
+
+      lines = reports.first(MAX_REPORTED).map do |report|
+        reason = PiracyReports::SendService.new(report:).blocking_reason || "no reason recorded; the next send run may pick it up"
+        "• #{report.external_id} — #{report.url_host} (seller #{report.seller_id}), signed #{report.signed_at.to_date}: #{reason}"
+      end
+      lines << "Only the first #{MAX_REPORTED} are listed." if reports.size > MAX_REPORTED
+
+      ["#{count_phrase(reports)} signed but not sent.", "", *lines].join("\n")
     end
 
     def count_phrase(reports)

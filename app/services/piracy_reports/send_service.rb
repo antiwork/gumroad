@@ -21,7 +21,14 @@ class PiracyReports::SendService
     result = report.with_lock { claim }
     return result unless result.success?
 
-    deliver
+    result = deliver
+    notify_seller if result.success?
+    result
+  end
+
+  # Why a signed report is not going out, for the daily alert. Nil when nothing blocks it.
+  def blocking_reason
+    gate_errors.first
   end
 
   private
@@ -64,11 +71,17 @@ class PiracyReports::SendService
       raise mail if mail.is_a?(Exception)
 
       report.update!(sent_message_id: mail.message_id)
-      PiracyReportMailer.notice_sent(report.id).deliver_later
       Result.new(report:, errors: [])
     rescue StandardError => e
       report.update!(delivery_failed_at: Time.current)
       ErrorNotifier.notify(e, context: { piracy_report_id: report.id })
       Result.new(report:, errors: ["The notice could not be sent: #{e.message}"])
+    end
+
+    # The notice already reached the host, so a failure here must not mark the send as failed.
+    def notify_seller
+      PiracyReportMailer.notice_sent(report.id).deliver_later
+    rescue StandardError => e
+      ErrorNotifier.notify(e, context: { piracy_report_id: report.id })
     end
 end

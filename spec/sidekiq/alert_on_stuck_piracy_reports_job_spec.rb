@@ -64,6 +64,22 @@ describe AlertOnStuckPiracyReportsJob do
     expect(message).to include("#{bounced.external_id} — example.net", "bounced", "#{silent.external_id} — example.net", "no delivery event")
   end
 
+  it "lists signed reports that sending has not picked up, with the reason, while sending is on" do
+    Feature.activate(:piracy_reports_sending)
+    allow(PiracyReports::RecipientRegistry).to receive(:entries).and_return({})
+    stuck = create(:piracy_report, :signed, signed_at: 2.hours.ago)
+
+    expect(message).to include("1 piracy report signed but not sent.", stuck.external_id, "The host's registry contact changed after screening")
+  end
+
+  it "does not list signed reports while sending is off" do
+    create(:piracy_report, :signed, signed_at: 2.hours.ago)
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).not_to have_received(:perform_async)
+  end
+
   it "stays silent when no report is blocked or waiting for review" do
     create(:piracy_report, :screening)
     create(:piracy_report, :awaiting_signature)

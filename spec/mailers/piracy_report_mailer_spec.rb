@@ -29,14 +29,14 @@ describe PiracyReportMailer do
 
   describe "notice" do
     let(:report) do
-      create(:piracy_report, :signed, state: "sent", reply_token: "abc123", sent_to_email: "copyright@example.net", last_contact_email: "seller@example.com")
+      create(:piracy_report, :signed, state: "sent", reply_token: "abc123", sent_to_email: "copyright@example.com", last_contact_email: "seller@example.com")
     end
 
     subject(:mail) { described_class.notice(report.id) }
 
     it "sends the signed text as plain text from support@, to the host, with the seller in CC and the report's Reply-To" do
       expect(mail.from).to eq([ApplicationMailer::SUPPORT_EMAIL])
-      expect(mail.to).to eq(["copyright@example.net"])
+      expect(mail.to).to eq(["copyright@example.com"])
       expect(mail.cc).to eq(["seller@example.com"])
       expect(mail.reply_to).to eq(["support+piracy-abc123@#{DEFAULT_EMAIL_DOMAIN}"])
       expect(mail.content_type).to start_with("text/plain")

@@ -3,7 +3,7 @@
 require "spec_helper"
 
 describe HandleEmailEventInfo::ForPiracyNotice do
-  let(:report) { create(:piracy_report, :signed, state: "sent", sent_at: 2.hours.ago, sent_to_email: "copyright@example.net", last_contact_email: "seller@example.com") }
+  let(:report) { create(:piracy_report, :signed, state: "sent", sent_at: 2.hours.ago, sent_to_email: "copyright@example.com", last_contact_email: "seller@example.com") }
 
   def sendgrid_event(event, email:)
     HandleSendgridEventJob.new.perform(
@@ -18,14 +18,39 @@ describe HandleEmailEventInfo::ForPiracyNotice do
     )
   end
 
+  def resend_event(event, report_id:)
+    HandleResendEventJob.new.perform(
+      "type" => EmailEventInfo::EVENTS[event][MailerInfo::EMAIL_PROVIDER_RESEND],
+      "data" => {
+        "created_at" => "2026-10-08 12:00:00+00",
+        "to" => ["copyright@example.com"],
+        "headers" => [
+          { "name" => MailerInfo.header_name(:mailer_class), "value" => MailerInfo.encrypt("PiracyReportMailer") },
+          { "name" => MailerInfo.header_name(:mailer_method), "value" => MailerInfo.encrypt("notice") },
+          { "name" => MailerInfo.header_name(:mailer_args), "value" => MailerInfo.encrypt("[#{report_id}]") }
+        ]
+      }
+    )
+  end
+
+  it "records delivery and bounces reported by Resend" do
+    bounced = create(:piracy_report, :signed, state: "sent", sent_at: 2.hours.ago, sent_to_email: "copyright@example.com")
+
+    resend_event(:delivered, report_id: report.id)
+    resend_event(:bounced, report_id: bounced.id)
+
+    expect(report.reload.delivered_at).to eq(Time.utc(2026, 10, 8, 12))
+    expect(bounced.reload.delivery_failed_at).to eq(Time.utc(2026, 10, 8, 12))
+  end
+
   it "records delivery to the host" do
-    sendgrid_event(:delivered, email: "copyright@example.net")
+    sendgrid_event(:delivered, email: "copyright@example.com")
 
     expect(report.reload.delivered_at).to eq(Time.utc(2026, 10, 8, 12))
   end
 
   it "records a bounce from the host, which puts the report in the person queue" do
-    sendgrid_event(:bounced, email: "copyright@example.net")
+    sendgrid_event(:bounced, email: "copyright@example.com")
 
     expect(report.reload.delivery_failed_at).to eq(Time.utc(2026, 10, 8, 12))
     expect(PiracyReport.delivery_failed).to contain_exactly(report)
@@ -34,7 +59,7 @@ describe HandleEmailEventInfo::ForPiracyNotice do
   it "drops a recorded failure from the person queue once the host's copy is delivered" do
     report.update!(delivery_failed_at: 1.hour.ago)
 
-    sendgrid_event(:delivered, email: "copyright@example.net")
+    sendgrid_event(:delivered, email: "copyright@example.com")
 
     expect(PiracyReport.delivery_failed).to be_empty
   end
