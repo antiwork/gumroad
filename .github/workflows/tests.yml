@@ -170,6 +170,38 @@ jobs:
         with:
           path: node_modules
           key: ${{ steps.node_modules.outputs.cache-primary-key }}
+      # Builds and saves the test assets that test_relevant_runner restores. It runs
+      # on main, on the same runner type, because the build job's Vite cache lives
+      # with another runner provider. Same inputs as that cache's key, hashed before
+      # js:export writes into app/javascript.
+      - name: Restore the runner test assets
+        id: test_assets
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            public/vite-test
+            tmp/cache/vite
+            public/js/gumroad-bundle.js
+            public/js/gumroad-embed-bundle.js
+            public/pages-tailwind.css
+            public/pages-tailwind-manifest.json
+            public/assets/pages
+            app/javascript/stylesheets/pages_tailwind.generated.html
+          key: >-
+            runner-test-assets-v1-${{ runner.os }}-${{ hashFiles(
+              'app/javascript/**', 'app/views/**',
+              'config/routes.rb', 'config/routes/**', 'config/domain.rb',
+              'config/application.rb', 'config/boot.rb', 'config/environment.rb',
+              'config/environments/**', 'config/redis.rb',
+              'lib/catch_bad_request_errors.rb', 'lib/utilities/global_config.rb',
+              'config/initializers/js-routes.rb', 'config/vite.json', 'config/vite/**',
+              'config/currencies.json', 'lib/json_schemas/**', 'lib/tasks/**', 'Rakefile',
+              'public/**', 'vendor/assets/**', 'patches/**', 'scripts/build_pages_tailwind.mjs',
+              'docker/base/**', 'docker/web/Dockerfile.test', '.github/workflows/tests.yml',
+              'package.json', 'package-lock.json', '.npmrc', 'tsconfig.json',
+              'vite.config.ts', 'vite.config.widget.ts', 'postcss.config.js',
+              'Gemfile.lock', '.ruby-version') }}
       # tsc needs the gitignored js:export output (app/javascript/utils/routes.*
       # and app/javascript/json_schemas/*). The export boots Rails off the
       # committed .env.test but tolerates every backing service being down, so
@@ -178,6 +210,26 @@ jobs:
         env:
           RAILS_ENV: test
       - run: npm run typecheck
+      - name: Build the runner test assets
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.test_assets.outputs.cache-hit != 'true'
+        run: bundle exec rake assets:precompile
+        env:
+          RAILS_ENV: test
+          NODE_ENV: test
+          VITE_RUBY_SKIP_ASSETS_PRECOMPILE_INSTALL: true
+      - uses: actions/cache/save@v4
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.test_assets.outputs.cache-hit != 'true'
+        with:
+          path: |
+            public/vite-test
+            tmp/cache/vite
+            public/js/gumroad-bundle.js
+            public/js/gumroad-embed-bundle.js
+            public/pages-tailwind.css
+            public/pages-tailwind-manifest.json
+            public/assets/pages
+            app/javascript/stylesheets/pages_tailwind.generated.html
+          key: ${{ steps.test_assets.outputs.cache-primary-key }}
 
   lint_ruby:
     name: Lint Ruby
@@ -1313,6 +1365,35 @@ jobs:
           key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package.json', 'package-lock.json', '.npmrc', 'patches/**') }}
       - run: npm ci
         if: steps.node_modules.outputs.cache-hit != 'true'
+      # Saved by the typecheck job on main, or by shard 0 of an earlier push to
+      # this branch.
+      - name: Restore the test assets
+        id: test_assets
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            public/vite-test
+            tmp/cache/vite
+            public/js/gumroad-bundle.js
+            public/js/gumroad-embed-bundle.js
+            public/pages-tailwind.css
+            public/pages-tailwind-manifest.json
+            public/assets/pages
+            app/javascript/stylesheets/pages_tailwind.generated.html
+          key: >-
+            runner-test-assets-v1-${{ runner.os }}-${{ hashFiles(
+              'app/javascript/**', 'app/views/**',
+              'config/routes.rb', 'config/routes/**', 'config/domain.rb',
+              'config/application.rb', 'config/boot.rb', 'config/environment.rb',
+              'config/environments/**', 'config/redis.rb',
+              'lib/catch_bad_request_errors.rb', 'lib/utilities/global_config.rb',
+              'config/initializers/js-routes.rb', 'config/vite.json', 'config/vite/**',
+              'config/currencies.json', 'lib/json_schemas/**', 'lib/tasks/**', 'Rakefile',
+              'public/**', 'vendor/assets/**', 'patches/**', 'scripts/build_pages_tailwind.mjs',
+              'docker/base/**', 'docker/web/Dockerfile.test', '.github/workflows/tests.yml',
+              'package.json', 'package-lock.json', '.npmrc', 'tsconfig.json',
+              'vite.config.ts', 'vite.config.widget.ts', 'postcss.config.js',
+              'Gemfile.lock', '.ruby-version') }}
       - name: Prepare test database and assets
         run: |
           for _ in $(seq 1 90); do [ -f /tmp/compose.status ] && break; sleep 2; done
@@ -1335,10 +1416,29 @@ jobs:
           # database, the Vite test build, the widget bundles and the pages CSS), in
           # one Rails boot as docker/web/compile_assets.sh does. assets:precompile
           # builds the pages CSS itself, and npm ci already ran above.
-          VITE_RUBY_SKIP_ASSETS_PRECOMPILE_INSTALL=true bundle exec rake js:export db:setup assets:precompile
+          if [ "$ASSETS_RESTORED" = true ]; then
+            bundle exec rake js:export db:setup
+          else
+            VITE_RUBY_SKIP_ASSETS_PRECOMPILE_INSTALL=true bundle exec rake js:export db:setup assets:precompile
+          fi
           # docker wait prints the exit code instead of returning it.
           copy_status=$(docker wait "$(docker compose ps -aq copyfixturefiles)")
           [ "$copy_status" = 0 ] || { docker compose logs copyfixturefiles; exit 1; }
+        env:
+          ASSETS_RESTORED: ${{ steps.test_assets.outputs.cache-hit }}
+      - uses: actions/cache/save@v4
+        if: steps.test_assets.outputs.cache-hit != 'true' && matrix.ci_node_index == 0
+        with:
+          path: |
+            public/vite-test
+            tmp/cache/vite
+            public/js/gumroad-bundle.js
+            public/js/gumroad-embed-bundle.js
+            public/pages-tailwind.css
+            public/pages-tailwind-manifest.json
+            public/assets/pages
+            app/javascript/stylesheets/pages_tailwind.generated.html
+          key: ${{ steps.test_assets.outputs.cache-primary-key }}
       - name: Run tests
         timeout-minutes: 25
         run: bundle exec rake "knapsack_pro:queue:rspec[--format RSpec::Github::Formatter --tag ~skip --format progress]"
