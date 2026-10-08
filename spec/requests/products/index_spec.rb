@@ -107,7 +107,9 @@ describe "Products Page Scenario", type: :system, js: true do
       find(:tab_button, "Piracy reports").click
 
       expect(page).to have_current_path(piracy_reports_path)
-      expect(page).to have_table_row({ "Product" => product.name, "Page" => "https://example.net/design-course" })
+      within find(:table_row, { "Reported page" => "example.net/design-course" }) do
+        expect(page).to have_text(product.name)
+      end
     end
   end
 

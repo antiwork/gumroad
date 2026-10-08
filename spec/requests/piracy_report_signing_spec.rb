@@ -33,10 +33,10 @@ describe "Signing a piracy report notice", type: :system, js: true do
     expect(page).to have_text("Ready for you to sign")
     expect(page).to have_text("You reported the page")
 
-    click_on "All piracy reports"
+    click_on "Back to piracy reports"
 
-    expect(page).to have_table_row({ "Product" => product.name, "Status" => "Ready for you to sign" })
-    click_on product.name
+    expect(page).to have_table_row({ "Reported page" => "example.net/design-course", "Status" => "Ready for you to sign" })
+    click_on "example.net/design-course"
     expect(page).to have_current_path(piracy_report_path(report.external_id))
   end
 end

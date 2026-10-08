@@ -47,3 +47,5 @@ export const formatPiracyReportDate = (value: string, locale: string, month: "lo
     day: "numeric",
     timeZone: "UTC",
   });
+
+export const withoutProtocol = (url: string) => url.replace(/^https?:\/\//u, "");

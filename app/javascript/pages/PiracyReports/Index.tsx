@@ -6,6 +6,7 @@ import {
   piracyReportStatus,
   PiracyReportOutcome,
   PiracyReportState,
+  withoutProtocol,
 } from "$app/data/piracy_reports";
 
 import { ProductsLayout } from "$app/components/ProductsLayout";
@@ -46,8 +47,7 @@ export default function PiracyReportsIndex() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Product</TableHead>
-                <TableHead>Page</TableHead>
+                <TableHead>Reported page</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Updated</TableHead>
               </TableRow>
@@ -57,16 +57,16 @@ export default function PiracyReportsIndex() {
                 const status = piracyReportStatus(report.state, report.outcome);
                 return (
                   <TableRow key={report.id}>
-                    <TableCell className="relative">
+                    <TableCell hideLabel className="relative">
                       <StretchedLink asChild>
                         <Link href={Routes.piracy_report_path(report.id)}>
-                          <h4 className="font-bold" dir="auto">
-                            {report.product_name}
-                          </h4>
+                          <h4 className="font-bold break-all">{withoutProtocol(report.url)}</h4>
                         </Link>
                       </StretchedLink>
+                      <small className="block" dir="auto">
+                        {report.product_name}
+                      </small>
                     </TableCell>
-                    <TableCell className="break-all">{report.url}</TableCell>
                     <TableCell>
                       <Pill size="small" color={status.color}>
                         {status.label}
