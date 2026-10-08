@@ -1241,6 +1241,11 @@ jobs:
       COMPOSE_PROJECT_NAME: relevant_${{ matrix.ci_node_index }}
       RAILS_ENV: test
       BUNDLE_GEMS__CONTRIBSYS__COM: ${{ secrets.BUNDLE_GEMS__CONTRIBSYS__COM }}
+      # From docker/web/Dockerfile.test, which sets them for the asset build too.
+      NODE_ENV: test
+      RAILS_LOG_LEVEL: info
+      # Also selects the headless Chrome drivers in spec/support/capybara_driver.rb.
+      IN_DOCKER: true
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -1300,13 +1305,19 @@ jobs:
           for _ in $(seq 1 90); do [ -f /tmp/compose.status ] && break; sleep 2; done
           cat /tmp/compose.log
           [ "$(cat /tmp/compose.status 2>/dev/null)" = 0 ] || { echo "docker compose up did not finish"; exit 1; }
+          # Over TCP: during its first start, MySQL answers on the socket before it
+          # listens on the port.
+          ready=false
           for _ in $(seq 1 60); do
-            docker compose exec -T db_test mysqladmin ping -uroot -ppassword --silent 2>/dev/null \
+            if docker compose exec -T db_test mysql --protocol=tcp -h127.0.0.1 -uroot -ppassword -e "SELECT 1" > /dev/null 2>&1 \
               && curl -fsS http://localhost:9200/_cluster/health > /dev/null 2>&1 \
-              && curl -fsS http://localhost:9000/minio/health/ready > /dev/null 2>&1 \
-              && break
+              && curl -fsS http://localhost:9000/minio/health/ready > /dev/null 2>&1; then
+              ready=true
+              break
+            fi
             sleep 2
           done
+          [ "$ready" = true ] || { echo "MySQL, Elasticsearch or MinIO did not become ready"; exit 1; }
           # The same preparation the build job bakes into the test image: the
           # database, the Vite test build, the widget bundles and the pages CSS.
           npm run setup
@@ -1328,10 +1339,6 @@ jobs:
           KNAPSACK_PRO_CI_NODE_RETRY_COUNT: ${{ github.run_attempt }}
           KNAPSACK_PRO_FIXED_QUEUE_SPLIT: true
           CI: true
-          # Selects the headless Chrome drivers in spec/support/capybara_driver.rb.
-          IN_DOCKER: true
-          RAILS_LOG_LEVEL: info
-          NODE_ENV: test
       - name: Archive capybara artifacts
         if: failure()
         uses: actions/upload-artifact@v4
@@ -1366,6 +1373,11 @@ jobs:
       COMPOSE_PROJECT_NAME: fast_${{ matrix.ci_node_index }}
       RAILS_ENV: test
       BUNDLE_GEMS__CONTRIBSYS__COM: ${{ secrets.BUNDLE_GEMS__CONTRIBSYS__COM }}
+      # From docker/web/Dockerfile.test, which sets them for the asset build too.
+      NODE_ENV: test
+      RAILS_LOG_LEVEL: info
+      # Also selects the headless Chrome drivers in spec/support/capybara_driver.rb.
+      IN_DOCKER: true
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -1425,13 +1437,19 @@ jobs:
           for _ in $(seq 1 90); do [ -f /tmp/compose.status ] && break; sleep 2; done
           cat /tmp/compose.log
           [ "$(cat /tmp/compose.status 2>/dev/null)" = 0 ] || { echo "docker compose up did not finish"; exit 1; }
+          # Over TCP: during its first start, MySQL answers on the socket before it
+          # listens on the port.
+          ready=false
           for _ in $(seq 1 60); do
-            docker compose exec -T db_test mysqladmin ping -uroot -ppassword --silent 2>/dev/null \
+            if docker compose exec -T db_test mysql --protocol=tcp -h127.0.0.1 -uroot -ppassword -e "SELECT 1" > /dev/null 2>&1 \
               && curl -fsS http://localhost:9200/_cluster/health > /dev/null 2>&1 \
-              && curl -fsS http://localhost:9000/minio/health/ready > /dev/null 2>&1 \
-              && break
+              && curl -fsS http://localhost:9000/minio/health/ready > /dev/null 2>&1; then
+              ready=true
+              break
+            fi
             sleep 2
           done
+          [ "$ready" = true ] || { echo "MySQL, Elasticsearch or MinIO did not become ready"; exit 1; }
           # The same preparation the build job bakes into the test image: the
           # database, the Vite test build, the widget bundles and the pages CSS.
           npm run setup
@@ -1455,10 +1473,6 @@ jobs:
           KNAPSACK_PRO_CI_NODE_RETRY_COUNT: ${{ github.run_attempt }}
           KNAPSACK_PRO_FIXED_QUEUE_SPLIT: true
           CI: true
-          # Selects the headless Chrome drivers in spec/support/capybara_driver.rb.
-          IN_DOCKER: true
-          RAILS_LOG_LEVEL: info
-          NODE_ENV: test
       - name: Archive capybara artifacts
         if: failure()
         uses: actions/upload-artifact@v4
@@ -1493,6 +1507,11 @@ jobs:
       COMPOSE_PROJECT_NAME: slow_${{ matrix.ci_node_index }}
       RAILS_ENV: test
       BUNDLE_GEMS__CONTRIBSYS__COM: ${{ secrets.BUNDLE_GEMS__CONTRIBSYS__COM }}
+      # From docker/web/Dockerfile.test, which sets them for the asset build too.
+      NODE_ENV: test
+      RAILS_LOG_LEVEL: info
+      # Also selects the headless Chrome drivers in spec/support/capybara_driver.rb.
+      IN_DOCKER: true
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -1552,13 +1571,19 @@ jobs:
           for _ in $(seq 1 90); do [ -f /tmp/compose.status ] && break; sleep 2; done
           cat /tmp/compose.log
           [ "$(cat /tmp/compose.status 2>/dev/null)" = 0 ] || { echo "docker compose up did not finish"; exit 1; }
+          # Over TCP: during its first start, MySQL answers on the socket before it
+          # listens on the port.
+          ready=false
           for _ in $(seq 1 60); do
-            docker compose exec -T db_test mysqladmin ping -uroot -ppassword --silent 2>/dev/null \
+            if docker compose exec -T db_test mysql --protocol=tcp -h127.0.0.1 -uroot -ppassword -e "SELECT 1" > /dev/null 2>&1 \
               && curl -fsS http://localhost:9200/_cluster/health > /dev/null 2>&1 \
-              && curl -fsS http://localhost:9000/minio/health/ready > /dev/null 2>&1 \
-              && break
+              && curl -fsS http://localhost:9000/minio/health/ready > /dev/null 2>&1; then
+              ready=true
+              break
+            fi
             sleep 2
           done
+          [ "$ready" = true ] || { echo "MySQL, Elasticsearch or MinIO did not become ready"; exit 1; }
           # The same preparation the build job bakes into the test image: the
           # database, the Vite test build, the widget bundles and the pages CSS.
           npm run setup
@@ -1581,10 +1606,6 @@ jobs:
           KNAPSACK_PRO_CI_NODE_RETRY_COUNT: ${{ github.run_attempt }}
           KNAPSACK_PRO_FIXED_QUEUE_SPLIT: true
           CI: true
-          # Selects the headless Chrome drivers in spec/support/capybara_driver.rb.
-          IN_DOCKER: true
-          RAILS_LOG_LEVEL: info
-          NODE_ENV: test
       - name: Archive capybara artifacts
         if: failure()
         uses: actions/upload-artifact@v4
