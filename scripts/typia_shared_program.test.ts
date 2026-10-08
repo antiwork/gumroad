@@ -194,3 +194,31 @@ describe("typia transform in dev", () => {
     expect(code).toContain("__is = (input2) => true");
   }, 60_000);
 });
+
+describe("typia transform in vitest", () => {
+  // The hook's vitest context, reduced to what it reads.
+  type VitestHook = (context: { vitest: { config: { watch: boolean } } }) => void;
+  const isVitestHook = (hook: unknown): hook is VitestHook => typeof hook === "function";
+  const vitestTransform = async (watch: boolean) => {
+    const server = await createServer({ ...config(), server: { middlewareMode: true }, appType: "custom" });
+    try {
+      const plugin = server.config.plugins.find((item) => item.name === "unplugin-typia");
+      const hook: unknown = plugin && "configureVitest" in plugin ? plugin.configureVitest : undefined;
+      if (!isVitestHook(hook)) throw new Error("unplugin-typia has no configureVitest hook");
+      hook({ vitest: { config: { watch } } });
+      return (await server.transformRequest("/index.ts"))?.code ?? "";
+    } finally {
+      await server.close();
+    }
+  };
+
+  it("shares one program in a one-shot run", async () => {
+    expect(await vitestTransform(false)).toContain('".count"');
+  }, 60_000);
+
+  it("keeps a program per file in watch mode", async () => {
+    const code = await vitestTransform(true);
+    expect(code).toContain("__is = (input2) => true");
+    expect(code).not.toContain('".count"');
+  }, 60_000);
+});
