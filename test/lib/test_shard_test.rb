@@ -9,6 +9,44 @@ class TestShardTest < ActiveSupport::TestCase
     klass
   end
 
+  def with_shard_env(value)
+    saved_env = ENV["MINITEST_SHARD"]
+    saved_current = TestShard.instance_variable_get(:@current)
+    ENV["MINITEST_SHARD"] = value
+    TestShard.instance_variable_set(:@current, nil)
+    yield
+  ensure
+    ENV["MINITEST_SHARD"] = saved_env
+    TestShard.instance_variable_set(:@current, saved_current)
+  end
+
+  test "MINITEST_SHARD turns sharding on" do
+    method_names = (1..60).map { |n| :"test_#{n}" }
+    klass = runnable(*method_names)
+
+    with_shard_env("2/6") do
+      assert_equal [2, 6], TestShard.current
+      expected = method_names.map(&:to_s).select { |method_name| TestShard.member?("#{klass.name}##{method_name}", 2, 6) }
+      assert_equal expected.sort, klass.runnable_methods.sort
+      assert_operator klass.runnable_methods.size, :<, method_names.size
+    end
+  end
+
+  test "an unset or empty MINITEST_SHARD runs every test" do
+    klass = runnable(:test_a, :test_b)
+
+    [nil, ""].each do |value|
+      with_shard_env(value) do
+        assert_nil TestShard.current
+        assert_equal %w[test_a test_b], klass.runnable_methods.sort
+      end
+    end
+  end
+
+  test "an invalid MINITEST_SHARD fails instead of running every test" do
+    with_shard_env("6/6") { assert_raises(ArgumentError) { TestShard.current } }
+  end
+
   test "parses <index>/<total>" do
     assert_equal [0, 6], TestShard.parse("0/6")
     assert_equal [5, 6], TestShard.parse("5/6")
