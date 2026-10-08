@@ -1240,7 +1240,8 @@ jobs:
       COMPOSE_FILE: docker/docker-compose-test-and-ci.yml:docker/docker-compose-ci-runner.yml
       COMPOSE_PROJECT_NAME: relevant_${{ matrix.ci_node_index }}
       RAILS_ENV: test
-      BUNDLE_GEMS__CONTRIBSYS__COM: ${{ secrets.BUNDLE_GEMS__CONTRIBSYS__COM }}
+      # No BUNDLE_GEMS__CONTRIBSYS__COM: sidekiq-pro is optional (config/initializers/sidekiq.rb),
+      # and leaving it out reuses the gem cache that the lint jobs save.
       # From docker/web/Dockerfile.test, which sets them for the asset build too.
       NODE_ENV: test
       RAILS_LOG_LEVEL: info
@@ -1322,7 +1323,9 @@ jobs:
           # database, the Vite test build, the widget bundles and the pages CSS.
           npm run setup
           bundle exec rake db:setup assets:precompile
-          docker wait "$(docker compose ps -aq copyfixturefiles)"
+          # docker wait prints the exit code instead of returning it.
+          copy_status=$(docker wait "$(docker compose ps -aq copyfixturefiles)")
+          [ "$copy_status" = 0 ] || { docker compose logs copyfixturefiles; exit 1; }
       - name: Run tests
         timeout-minutes: 25
         run: bundle exec rake "knapsack_pro:queue:rspec[--format RSpec::Github::Formatter --tag ~skip --format progress]"
@@ -1375,7 +1378,8 @@ jobs:
       COMPOSE_FILE: docker/docker-compose-test-and-ci.yml:docker/docker-compose-ci-runner.yml
       COMPOSE_PROJECT_NAME: fast_${{ matrix.ci_node_index }}
       RAILS_ENV: test
-      BUNDLE_GEMS__CONTRIBSYS__COM: ${{ secrets.BUNDLE_GEMS__CONTRIBSYS__COM }}
+      # No BUNDLE_GEMS__CONTRIBSYS__COM: sidekiq-pro is optional (config/initializers/sidekiq.rb),
+      # and leaving it out reuses the gem cache that the lint jobs save.
       # From docker/web/Dockerfile.test, which sets them for the asset build too.
       NODE_ENV: test
       RAILS_LOG_LEVEL: info
@@ -1457,7 +1461,9 @@ jobs:
           # database, the Vite test build, the widget bundles and the pages CSS.
           npm run setup
           bundle exec rake db:setup assets:precompile
-          docker wait "$(docker compose ps -aq copyfixturefiles)"
+          # docker wait prints the exit code instead of returning it.
+          copy_status=$(docker wait "$(docker compose ps -aq copyfixturefiles)")
+          [ "$copy_status" = 0 ] || { docker compose logs copyfixturefiles; exit 1; }
       - name: Run tests
         timeout-minutes: 25
         run: bundle exec rake "knapsack_pro:queue:rspec[--format RSpec::Github::Formatter --tag ~skip --format progress]"
@@ -1510,7 +1516,8 @@ jobs:
       COMPOSE_FILE: docker/docker-compose-test-and-ci.yml:docker/docker-compose-ci-runner.yml
       COMPOSE_PROJECT_NAME: slow_${{ matrix.ci_node_index }}
       RAILS_ENV: test
-      BUNDLE_GEMS__CONTRIBSYS__COM: ${{ secrets.BUNDLE_GEMS__CONTRIBSYS__COM }}
+      # No BUNDLE_GEMS__CONTRIBSYS__COM: sidekiq-pro is optional (config/initializers/sidekiq.rb),
+      # and leaving it out reuses the gem cache that the lint jobs save.
       # From docker/web/Dockerfile.test, which sets them for the asset build too.
       NODE_ENV: test
       RAILS_LOG_LEVEL: info
@@ -1592,7 +1599,9 @@ jobs:
           # database, the Vite test build, the widget bundles and the pages CSS.
           npm run setup
           bundle exec rake db:setup assets:precompile
-          docker wait "$(docker compose ps -aq copyfixturefiles)"
+          # docker wait prints the exit code instead of returning it.
+          copy_status=$(docker wait "$(docker compose ps -aq copyfixturefiles)")
+          [ "$copy_status" = 0 ] || { docker compose logs copyfixturefiles; exit 1; }
       - name: Run tests
         timeout-minutes: 25
         run: bundle exec rake "knapsack_pro:queue:rspec[--format RSpec::Github::Formatter --tag ~skip --format progress]"
