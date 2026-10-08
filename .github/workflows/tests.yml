@@ -72,7 +72,10 @@ jobs:
         if: steps.scope.outputs.full != 'true' && github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: echo "sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha || true)" >> "$GITHUB_OUTPUT"
+        run: |
+          SHA=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
+          [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::could not resolve main's commit"; exit 1; }
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
 
   reuse_scope:
     # Main-only. Asks whether this exact git tree already passed Fast+Slow on
@@ -1090,7 +1093,36 @@ jobs:
           persist-credentials: false
       - name: Compute relevant specs
         id: specs
-        run: bin/ci-relevant-specs
+        run: |
+          # Best-effort: checkout (fetch-depth 0) already has origin/main, and this
+          # anonymous fetch (persist-credentials off) intermittently gets a
+          # credential prompt from GitHub, which would fail the job for nothing.
+          git fetch --no-tags --quiet origin main || echo "origin/main refresh failed; using the ref from checkout"
+          set +e
+          SPECS=$(ruby bin/branch-specs)
+          STATUS=$?
+          set -e
+          # Exit 3 = the selector refused to certify a trimmed run (dependency/
+          # config/migration/factory change, mapping gap, or oversized
+          # selection). The full suite is required: add the run-all-specs label.
+          if [ "$STATUS" -eq 3 ]; then
+            echo "::error::bin/branch-specs escalated — this diff needs the full suite. Add the run-all-specs label to this PR and re-run."
+            exit 1
+          elif [ "$STATUS" -ne 0 ]; then
+            echo "bin/branch-specs failed with status $STATUS"
+            exit "$STATUS"
+          fi
+          COUNT=$(echo "$SPECS" | grep -c . || true)
+          # An empty list here means the diff touched nothing rspec-affecting
+          # (selector escalates on app-code diffs that map to nothing).
+          if [ "$COUNT" -eq 0 ]; then
+            echo "No rspec-affecting changes; running the schema smoke spec as a floor."
+            SPECS="spec/models/user_spec.rb"
+            COUNT=1
+          fi
+          echo "Running $COUNT spec file(s):"
+          echo "$SPECS" | sed 's/^/  /'
+          echo "files_csv=$(echo "$SPECS" | paste -sd, -)" >> "$GITHUB_OUTPUT"
 
   test_relevant:
     name: Test Relevant ${{ matrix.ci_node_index }}${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository && ' (internal PR noop)' || '' }}

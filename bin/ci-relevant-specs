@@ -1,30 +1,23 @@
 #!/usr/bin/env bash
 # Writes the spec files a branch needs (bin/branch-specs) to $GITHUB_OUTPUT as
-# files_csv, for the Test Relevant jobs in .github/workflows/tests.yml.
+# files_csv, for test_relevant_runner in .github/workflows/tests.yml. Every shard
+# passes the same BASE_SHA, so every shard selects the same list.
 #
-#   bin/ci-relevant-specs [BASE_SHA]   # diff against this commit instead of origin/main
+#   bin/ci-relevant-specs BASE_SHA
 
 set -euo pipefail
 
-BASE_SHA=${1:-}
-if [ -n "$BASE_SHA" ]; then
-  git fetch --no-tags --quiet origin "$BASE_SHA" || echo "fetch of $BASE_SHA failed"
-  # bin/branch-specs takes any full-length SHA as a ref, so a missing base would
-  # give an empty merge base and a trimmed selection.
-  if ! git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
-    echo "::error::base commit $BASE_SHA is not in the clone"
-    exit 1
-  fi
-  BASE_ARGS=(--base "$BASE_SHA")
-else
-  # Best-effort: checkout (fetch-depth 0) already has origin/main, and this
-  # anonymous fetch (persist-credentials off) intermittently gets a
-  # credential prompt from GitHub, which would fail the job for nothing.
-  git fetch --no-tags --quiet origin main || echo "origin/main refresh failed; using the ref from checkout"
-  BASE_ARGS=()
+BASE_SHA=${1:?usage: bin/ci-relevant-specs BASE_SHA}
+git fetch --no-tags --quiet origin "$BASE_SHA" || echo "fetch of $BASE_SHA failed"
+# bin/branch-specs takes any full-length SHA as a ref, so a missing base would
+# give an empty merge base and a trimmed selection.
+if ! git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
+  echo "::error::base commit $BASE_SHA is not in the clone"
+  exit 1
 fi
+
 set +e
-SPECS=$(ruby bin/branch-specs "${BASE_ARGS[@]}")
+SPECS=$(ruby bin/branch-specs --base "$BASE_SHA")
 STATUS=$?
 set -e
 # Exit 3 = the selector refused to certify a trimmed run (dependency/
