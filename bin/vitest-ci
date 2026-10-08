@@ -57,7 +57,10 @@ def source_files
   SOURCE_ROOTS.flat_map { |root| Dir.glob("#{root}/**/*").select { |path| File.file?(path) && SOURCE_FILE.match?(path) } }
 end
 
+# The file an import names, or, when no file exists there (a path a branch deleted),
+# the normalized path itself, so the importer can still be found from it.
 def resolve(from, specifier)
+  specifier = specifier.sub(/[?#].*\z/, "")
   base =
     if (prefix = ALIASES.keys.find { |key| specifier.start_with?(key) })
       ALIASES[prefix] + specifier.delete_prefix(prefix)
@@ -67,7 +70,7 @@ def resolve(from, specifier)
   return nil unless base
   base = File.expand_path(base, Dir.pwd).delete_prefix("#{Dir.pwd}/")
   candidates = RESOLVE_EXTENSIONS.map { |ext| base + ext } + ["/index.ts", "/index.tsx", "/index.js"].map { |ext| base + ext }
-  candidates.find { |path| File.file?(path) }
+  candidates.find { |path| File.file?(path) } || base
 end
 
 def dependents_index(files)
@@ -82,19 +85,21 @@ def dependents_index(files)
 end
 
 def plan(records, files: source_files)
+  return [:none, []] if records.empty?
   changed = []
   records.each do |status, paths|
     return [:full, "#{paths.join(' -> ')} changed"] if paths.any? { |path| FULL_SUITE_PATHS.any? { |pattern| pattern.match?(path) } }
     if status.start_with?("D", "R") && paths.any? { |path| SOURCE_FILE.match?(path) }
       return [:full, "#{paths.join(' -> ')} was #{status.start_with?('D') ? 'deleted' : 'renamed'}"]
     end
-    changed << paths.last unless status.start_with?("D")
+    # A deleted or renamed file's old path still finds the tests that imported it.
+    changed.concat(paths)
   end
-  return [:none, []] if changed.empty?
 
   dependents = dependents_index(files)
-  reached = Set.new(changed)
-  queue = changed.dup
+  starts = changed.flat_map { |path| [path, path.sub(/\.[^.\/]+\z/, "")] }.uniq
+  reached = Set.new(starts)
+  queue = starts.dup
   until queue.empty?
     dependents[queue.shift].each { |file| queue << file if reached.add?(file) }
   end

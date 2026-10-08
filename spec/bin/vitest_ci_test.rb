@@ -48,10 +48,20 @@ check("tests that read repository files always run") { mode == "tests" && tests.
 mode, tests = plan(["M", "app/models/user.rb"])
 check("a Ruby-only change runs only the file-reading tests") { mode == "tests" && tests.include?(FILE_READING_TEST) && !tests.include?("app/javascript/widget/utils.test.ts") }
 
+mode, tests = plan(["M", "app/javascript/pages/Checkout/Show.tsx"])
+check("an import with a Vite query (?raw) counts") { mode == "tests" && tests.include?("app/javascript/pages/Checkout/cartItemUidMapping.test.ts") }
+
+mode, tests = plan(["D", "app/javascript/stylesheets/tailwind.css"])
+check("a deleted file that a test reads runs the file-reading tests") { mode == "tests" && tests.include?(FILE_READING_TEST) }
+
+mode, tests = plan(["D", "spec/fixtures/accent_contrast_pairs.json"])
+check("a deleted fixture still selects the test that imported it") { mode == "tests" && tests.include?("app/javascript/utils/color.test.ts") }
+
+mode, tests = plan(["R100", "spec/fixtures/accent_contrast_pairs.json", "spec/fixtures/renamed_pairs.json"])
+check("a renamed fixture still selects the test that imported it") { mode == "tests" && tests.include?("app/javascript/utils/color.test.ts") }
+
 mode, = plan
 check("a branch with no changes runs nothing") { mode == "none" }
-mode, = plan(["D", "app/models/user.rb"])
-check("a deleted Ruby file alone runs nothing") { mode == "none" }
 
 mode, tests = plan(["R100", "app/models/a.rb", "app/models/b.rb"], ["M", "app/javascript/widget/utils.ts"])
 check("-z records with a rename parse into the right paths") { mode == "tests" && tests.include?("app/javascript/widget/utils.test.ts") }
