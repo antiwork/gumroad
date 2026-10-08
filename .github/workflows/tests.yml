@@ -174,8 +174,8 @@ jobs:
           key: ${{ steps.node_modules.outputs.cache-primary-key }}
       # Builds and saves the test assets that test_relevant_runner restores. It runs
       # on main, on the same runner type, because the build job's Vite cache lives
-      # with another runner provider. Same inputs as that cache's key, hashed before
-      # js:export writes into app/javascript.
+      # with another runner provider. The key hashes that cache's inputs, with this
+      # file as the recipe, before js:export writes into app/javascript.
       - name: Restore the runner test assets
         id: test_assets
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
