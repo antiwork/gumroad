@@ -26,7 +26,8 @@ class PiracyReports::ResolveService
     begin
       PiracyReportMailer.resolved(report.id, outcome).deliver_later
     rescue StandardError
-      report.update!(outcome_notified_at: nil)
+      # Release only this request's claim: a reopen and a newer outcome may already hold another.
+      PiracyReport.where(id: report.id, outcome:, outcome_notified_at: claimed_at).update_all(outcome_notified_at: nil)
       raise
     end
     result
@@ -37,7 +38,7 @@ class PiracyReports::ResolveService
 
     def record
       if unnotified_retry?
-        report.update!(outcome_notified_at: Time.current)
+        report.update!(outcome_notified_at: claimed_at)
         return Result.new(report:, errors: [])
       end
       return Result.new(report:, errors: ["The report already has an outcome"]) if report.resolved?
@@ -50,9 +51,14 @@ class PiracyReports::ResolveService
       errors << "reason is too long" if reason.to_s.length > MAX_REASON_LENGTH
       return Result.new(report:, errors:) if errors.any?
 
-      report.assign_attributes(outcome:, outcome_reason: reason, resolved_at: Time.current, outcome_notified_at: Time.current)
+      report.assign_attributes(outcome:, outcome_reason: reason, resolved_at: Time.current, outcome_notified_at: claimed_at)
       report.resolve!
       Result.new(report:, errors: [])
+    end
+
+    # Rounded to the column's precision, so the release can match the exact value it stored.
+    def claimed_at
+      @claimed_at ||= Time.current.round(6)
     end
 
     def unnotified_retry?

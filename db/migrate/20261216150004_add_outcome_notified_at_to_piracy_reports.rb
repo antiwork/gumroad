@@ -1,10 +1,16 @@
 # frozen_string_literal: true
 
 class AddOutcomeNotifiedAtToPiracyReports < ActiveRecord::Migration[7.1]
-  def change
-    change_table :piracy_reports, bulk: true do |t|
-      t.datetime :outcome_notified_at
-      t.index %i[counter_notice_received_on seller_id]
-    end
+  INDEX_COLUMNS = %i[counter_notice_received_on seller_id].freeze
+
+  # Guarded: a branch database that ran an earlier draft of 20261216150003 already has both.
+  def up
+    add_column :piracy_reports, :outcome_notified_at, :datetime unless column_exists?(:piracy_reports, :outcome_notified_at)
+    add_index :piracy_reports, INDEX_COLUMNS unless index_exists?(:piracy_reports, INDEX_COLUMNS)
+  end
+
+  def down
+    remove_index :piracy_reports, INDEX_COLUMNS if index_exists?(:piracy_reports, INDEX_COLUMNS)
+    remove_column :piracy_reports, :outcome_notified_at if column_exists?(:piracy_reports, :outcome_notified_at)
   end
 end

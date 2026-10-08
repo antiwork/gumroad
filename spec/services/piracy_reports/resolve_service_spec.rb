@@ -44,6 +44,18 @@ describe PiracyReports::ResolveService do
     expect(described_class.new(report:, outcome: "no_response").call.errors).to eq(["The report already has an outcome"])
   end
 
+  it "does not release a newer claim when an older request's email fails to queue" do
+    older = described_class.new(report:, outcome: "removed")
+    allow(PiracyReportMailer).to receive(:resolved).and_wrap_original do |original, *args|
+      # While the older request queues its email, the report reopens and gets a newer outcome.
+      report.update_columns(state: "resolved", outcome: "restored", outcome_notified_at: 1.minute.from_now.round(6))
+      raise Redis::CannotConnectError
+    end
+
+    expect { older.call }.to raise_error(Redis::CannotConnectError)
+    expect(report.reload.outcome_notified_at).to be_present
+  end
+
   it "rejects an unknown outcome and a report that was never sent" do
     expect(described_class.new(report:, outcome: "won").call.errors).to eq(["outcome must be one of removed, no_response, restored, withdrawn"])
 

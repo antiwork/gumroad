@@ -24,7 +24,8 @@ class PiracyReports::CounterNoticeService
     begin
       PiracyReportMailer.counter_notice_received(report.id).deliver_later
     rescue StandardError
-      report.update!(counter_notice_forwarded_at: nil)
+      # Release only this request's claim: a later request may already hold a newer one.
+      PiracyReport.where(id: report.id, counter_notice_forwarded_at: claimed_at).update_all(counter_notice_forwarded_at: nil)
       raise
     end
     result
@@ -35,7 +36,7 @@ class PiracyReports::CounterNoticeService
 
     def record
       if report.counter_noticed? && report.counter_notice_forwarded_at.nil?
-        report.update!(counter_notice_forwarded_at: Time.current)
+        report.update!(counter_notice_forwarded_at: claimed_at)
         return Result.new(report:, errors: [])
       end
       return Result.new(report:, errors: ["A counter-notice is already recorded for this report"]) if report.counter_notice_body.present?
@@ -49,11 +50,16 @@ class PiracyReports::CounterNoticeService
       return Result.new(report:, errors:) if errors.any?
 
       report.assign_attributes(
-        counter_notice_body: body, counter_notice_received_on: date, counter_notice_forwarded_at: Time.current,
+        counter_notice_body: body, counter_notice_received_on: date, counter_notice_forwarded_at: claimed_at,
         outcome: nil, outcome_reason: nil, resolved_at: nil, outcome_notified_at: nil
       )
       report.receive_counter_notice!
       Result.new(report:, errors: [])
+    end
+
+    # Rounded to the column's precision, so the release can match the exact value it stored.
+    def claimed_at
+      @claimed_at ||= Time.current.round(6)
     end
 
     def open_to_counter_notice?
