@@ -1,4 +1,5 @@
 import UnpluginTypia from "@typia/unplugin/vite";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -220,5 +221,19 @@ describe("typia transform in vitest", () => {
     const code = await vitestTransform(true);
     expect(code).toContain("__is = (input2) => true");
     expect(code).not.toContain('".count"');
+  }, 60_000);
+
+  it("checks a global .d.ts type in a real vitest run", () => {
+    const vitest = path.join(fixture, "../../../node_modules/vitest/vitest.mjs");
+    // Without this run's own VITEST* variables, so the nested vitest starts as a fresh one.
+    const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("VITEST")));
+    const result = spawnSync(process.execPath, [vitest, "run", "--config", path.join(fixture, "vitest.config.mjs")], {
+      cwd: fixture,
+      env,
+      encoding: "utf8",
+      // Below the test's own timeout, which cannot fire while spawnSync blocks the event loop.
+      timeout: 50_000,
+    });
+    expect(result.status, `${result.stdout}${result.stderr}`).toBe(0);
   }, 60_000);
 });
