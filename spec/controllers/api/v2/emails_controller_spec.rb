@@ -703,7 +703,7 @@ describe Api::V2::EmailsController do
           expect(response.parsed_body["success"]).to eq(true)
           expect(@installment.reload.ready_to_publish?).to be(true)
           expect(@installment.published?).to be(false)
-          expect(PublishScheduledPostJob).to have_enqueued_sidekiq_job(@installment.id, 1).at(1.day.from_now)
+          expect(PublishScheduledPostJob).to have_enqueued_sidekiq_job(@installment.id, 1).at(Time.zone.parse(@params[:to_be_published_at]))
         end
       end
 
