@@ -172,6 +172,38 @@ jobs:
         with:
           path: node_modules
           key: ${{ steps.node_modules.outputs.cache-primary-key }}
+      # Builds and saves the test assets that test_relevant_runner restores. It runs
+      # on main, on the same runner type, because the build job's Vite cache lives
+      # with another runner provider. Same inputs as that cache's key, hashed before
+      # js:export writes into app/javascript.
+      - name: Restore the runner test assets
+        id: test_assets
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            public/vite-test
+            tmp/cache/vite
+            public/js/gumroad-bundle.js
+            public/js/gumroad-embed-bundle.js
+            public/pages-tailwind.css
+            public/pages-tailwind-manifest.json
+            public/assets/pages
+            app/javascript/stylesheets/pages_tailwind.generated.html
+          key: >-
+            runner-test-assets-v1-${{ runner.os }}-${{ hashFiles(
+              'app/javascript/**', 'app/views/**',
+              'config/routes.rb', 'config/routes/**', 'config/domain.rb',
+              'config/application.rb', 'config/boot.rb', 'config/environment.rb',
+              'config/environments/**', 'config/redis.rb',
+              'lib/catch_bad_request_errors.rb', 'lib/utilities/global_config.rb',
+              'config/initializers/js-routes.rb', 'config/vite.json', 'config/vite/**',
+              'config/currencies.json', 'lib/json_schemas/**', 'lib/tasks/**', 'Rakefile',
+              'public/**', 'vendor/assets/**', 'patches/**', 'scripts/build_pages_tailwind.mjs',
+              'docker/base/**', 'docker/web/Dockerfile.test', '.github/workflows/tests.yml',
+              'package.json', 'package-lock.json', '.npmrc', 'tsconfig.json',
+              'vite.config.ts', 'vite.config.widget.ts', 'postcss.config.js',
+              'Gemfile.lock', '.ruby-version') }}
       # tsc needs the gitignored js:export output (app/javascript/utils/routes.*
       # and app/javascript/json_schemas/*). The export boots Rails off the
       # committed .env.test but tolerates every backing service being down, so
@@ -180,6 +212,27 @@ jobs:
         env:
           RAILS_ENV: test
       - run: npm run typecheck
+      - name: Build the runner test assets
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.test_assets.outputs.cache-hit != 'true'
+        # pages_tailwind:build first, as in test_relevant_runner.
+        run: bundle exec rake pages_tailwind:build assets:precompile
+        env:
+          RAILS_ENV: test
+          NODE_ENV: test
+          VITE_RUBY_SKIP_ASSETS_PRECOMPILE_INSTALL: true
+      - uses: actions/cache/save@v4
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.test_assets.outputs.cache-hit != 'true'
+        with:
+          path: |
+            public/vite-test
+            tmp/cache/vite
+            public/js/gumroad-bundle.js
+            public/js/gumroad-embed-bundle.js
+            public/pages-tailwind.css
+            public/pages-tailwind-manifest.json
+            public/assets/pages
+            app/javascript/stylesheets/pages_tailwind.generated.html
+          key: ${{ steps.test_assets.outputs.cache-primary-key }}
 
   lint_ruby:
     name: Lint Ruby
@@ -607,7 +660,7 @@ jobs:
         with:
           bundler-cache: true
 
-      - name: Prepare test database
+      - name: Prepare test database and assets
         run: bundle exec rake db:prepare
 
       - name: Start MinIO (S3-compatible object storage)
@@ -1067,11 +1120,12 @@ jobs:
       WEB_REPO: antiwork/gumroad-web
     runs-on: ubicloud-standard-4
     needs: [build, run_scope, relevant_specs]
-    # Branch/PR counterpart of test_fast/test_slow: the same docker setup and
+    # Fork PR counterpart of test_fast/test_slow: the same docker setup and
     # Knapsack queue distribution, restricted to the specs relevant_specs
     # mapped from the diff plus the money-path smoke set. Main pushes and
-    # run-all-specs PRs run the full suite instead.
-    if: needs.run_scope.outputs.full != 'true' && (github.event_name != 'pull_request_target' || github.event.pull_request.head.repo.full_name != github.repository)
+    # run-all-specs PRs run the full suite instead. Branch pushes in this
+    # repository use test_relevant_runner below.
+    if: needs.run_scope.outputs.full != 'true' && github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name != github.repository
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -1222,6 +1276,208 @@ jobs:
           docker rm -f $(docker ps -aq -f name=${{ env.COMPOSE_PROJECT_NAME }}) 2>/dev/null || true
           docker volume rm $(docker volume ls -q -f name=${{ env.COMPOSE_PROJECT_NAME }}) 2>/dev/null || true
           docker network rm ${{ env.COMPOSE_PROJECT_NAME }}_default 2>/dev/null || true
+
+  test_relevant_runner:
+    name: Test Relevant ${{ matrix.ci_node_index }}
+    runs-on: ubicloud-standard-4
+    needs: [run_scope, relevant_specs]
+    # Branch pushes in this repository run the relevant specs on the runner, so
+    # they skip the test image build and pull. Fork PRs keep the image job above:
+    # this job runs the branch's code next to the Knapsack token.
+    if: needs.run_scope.outputs.full != 'true' && github.event_name == 'push'
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        ci_node_total: [12]
+        ci_node_index: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+    env:
+      COMPOSE_FILE: docker/docker-compose-test-and-ci.yml:docker/docker-compose-ci-runner.yml
+      COMPOSE_PROJECT_NAME: relevant_${{ matrix.ci_node_index }}
+      RAILS_ENV: test
+      # No BUNDLE_GEMS__CONTRIBSYS__COM: sidekiq-pro is optional (config/initializers/sidekiq.rb),
+      # and leaving it out reuses the gem cache that the lint jobs save.
+      # From docker/web/Dockerfile.test, which sets them for the asset build too.
+      NODE_ENV: test
+      RAILS_LOG_LEVEL: info
+      # Also selects the headless Chrome drivers in spec/support/capybara_driver.rb.
+      IN_DOCKER: true
+      # The image's locale and time zone: Chrome formats dates from both.
+      LANG: C.UTF-8
+      TZ: UTC
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        timeout-minutes: 5
+        with:
+          persist-credentials: false
+      - name: Login to Docker Hub
+        uses: nick-fields/retry@v3
+        with:
+          timeout_seconds: 120
+          max_attempts: 3
+          retry_wait_seconds: 10
+          command: echo "$DOCKERHUB_PASSWORD" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
+      # In the background, so the image pulls and the MinIO health check overlap
+      # with the setup steps below. "Prepare test database" waits for it.
+      - name: Start services
+        run: (docker compose up -d > /tmp/compose.log 2>&1; echo $? > /tmp/compose.status) &
+      # What the test image adds to the runner: docker/base/Dockerfile.test, the
+      # wkhtmltopdf binary and the pinned Chrome and ChromeDriver from
+      # docker/base/Dockerfile, and docker/web/Dockerfile.test's ImageMagick limits.
+      # The runner's own, newer Chrome fails specs that pass on the image's.
+      - name: Install system packages
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -yq --no-install-recommends \
+            ffmpeg file fonts-dejavu fonts-takao fonts-wqy-microhei fonts-wqy-zenhei \
+            imagemagick libtag1-dev pdftk qpdf
+          curl -fsSL https://github.com/wkhtmltopdf/wkhtmltopdf/releases/download/0.12.4/wkhtmltox-0.12.4_linux-generic-amd64.tar.xz \
+            | tar xJ -C /tmp
+          sudo install -m 755 /tmp/wkhtmltox/bin/wkhtmltopdf /usr/local/bin/wkhtmltopdf
+          CHROME_VERSION=125.0.6422.76-1
+          curl -fsSL --retry 4 -o /tmp/chrome.deb "https://public-files.gumroad.com/google-chrome-stable_${CHROME_VERSION}_amd64.deb"
+          sudo apt-get install -yq --allow-downgrades /tmp/chrome.deb
+          curl -fsSL --retry 4 -o /tmp/chromedriver.zip "https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VERSION%-1}/linux64/chromedriver-linux64.zip"
+          unzip -q -o /tmp/chromedriver.zip -d /tmp
+          sudo install -m 755 /tmp/chromedriver-linux64/chromedriver /usr/local/bin/chromedriver
+          google-chrome --version
+          chromedriver --version
+          sudo sed -r -i \
+            -e 's/(name="memory" value=")[^"]+"/\11GiB"/' \
+            -e 's/(name="disk" value=")[^"]+"/\18GiB"/' \
+            -e 's/(name="width" value=")[^"]+"/\150KP"/' \
+            -e 's/(name="height" value=")[^"]+"/\150KP"/' \
+            /etc/ImageMagick-6/policy.xml
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: package.json
+          cache: npm
+      # Shares lint_js's cache, which only main pushes save.
+      - uses: actions/cache/restore@v4
+        id: node_modules
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package.json', 'package-lock.json', '.npmrc', 'patches/**') }}
+      - run: npm ci
+        if: steps.node_modules.outputs.cache-hit != 'true'
+      # Saved by the typecheck job on main, or by shard 0 of an earlier push to
+      # this branch.
+      - name: Restore the test assets
+        id: test_assets
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            public/vite-test
+            tmp/cache/vite
+            public/js/gumroad-bundle.js
+            public/js/gumroad-embed-bundle.js
+            public/pages-tailwind.css
+            public/pages-tailwind-manifest.json
+            public/assets/pages
+            app/javascript/stylesheets/pages_tailwind.generated.html
+          key: >-
+            runner-test-assets-v1-${{ runner.os }}-${{ hashFiles(
+              'app/javascript/**', 'app/views/**',
+              'config/routes.rb', 'config/routes/**', 'config/domain.rb',
+              'config/application.rb', 'config/boot.rb', 'config/environment.rb',
+              'config/environments/**', 'config/redis.rb',
+              'lib/catch_bad_request_errors.rb', 'lib/utilities/global_config.rb',
+              'config/initializers/js-routes.rb', 'config/vite.json', 'config/vite/**',
+              'config/currencies.json', 'lib/json_schemas/**', 'lib/tasks/**', 'Rakefile',
+              'public/**', 'vendor/assets/**', 'patches/**', 'scripts/build_pages_tailwind.mjs',
+              'docker/base/**', 'docker/web/Dockerfile.test', '.github/workflows/tests.yml',
+              'package.json', 'package-lock.json', '.npmrc', 'tsconfig.json',
+              'vite.config.ts', 'vite.config.widget.ts', 'postcss.config.js',
+              'Gemfile.lock', '.ruby-version') }}
+      - name: Prepare test database and assets
+        run: |
+          for _ in $(seq 1 90); do [ -f /tmp/compose.status ] && break; sleep 2; done
+          cat /tmp/compose.log
+          [ "$(cat /tmp/compose.status 2>/dev/null)" = 0 ] || { echo "docker compose up did not finish"; exit 1; }
+          # Over TCP: during its first start, MySQL answers on the socket before it
+          # listens on the port.
+          ready=false
+          for _ in $(seq 1 60); do
+            if docker compose exec -T db_test mysql --protocol=tcp -h127.0.0.1 -uroot -ppassword -e "SELECT 1" > /dev/null 2>&1 \
+              && curl -fsS http://localhost:9200/_cluster/health > /dev/null 2>&1 \
+              && curl -fsS http://localhost:9000/minio/health/ready > /dev/null 2>&1; then
+              ready=true
+              break
+            fi
+            sleep 2
+          done
+          [ "$ready" = true ] || { echo "MySQL, Elasticsearch or MinIO did not become ready"; exit 1; }
+          # The same preparation the build job bakes into the test image (the
+          # database, the Vite test build, the widget bundles and the pages CSS), in
+          # one Rails boot as docker/web/compile_assets.sh does. npm ci already ran
+          # above. pages_tailwind:build goes first because it writes into
+          # app/javascript, which Vite's digest covers; assets:precompile then skips it.
+          if [ "$ASSETS_RESTORED" = true ]; then
+            bundle exec rake js:export db:setup
+          else
+            VITE_RUBY_SKIP_ASSETS_PRECOMPILE_INSTALL=true bundle exec rake js:export db:setup pages_tailwind:build assets:precompile
+          fi
+          # docker wait prints the exit code instead of returning it.
+          copy_status=$(docker wait "$(docker compose ps -aq copyfixturefiles)")
+          [ "$copy_status" = 0 ] || { docker compose logs copyfixturefiles; exit 1; }
+        env:
+          ASSETS_RESTORED: ${{ steps.test_assets.outputs.cache-hit }}
+      - uses: actions/cache/save@v4
+        if: steps.test_assets.outputs.cache-hit != 'true' && matrix.ci_node_index == 0
+        with:
+          path: |
+            public/vite-test
+            tmp/cache/vite
+            public/js/gumroad-bundle.js
+            public/js/gumroad-embed-bundle.js
+            public/pages-tailwind.css
+            public/pages-tailwind-manifest.json
+            public/assets/pages
+            app/javascript/stylesheets/pages_tailwind.generated.html
+          key: ${{ steps.test_assets.outputs.cache-primary-key }}
+      - name: Run tests
+        timeout-minutes: 25
+        run: bundle exec rake "knapsack_pro:queue:rspec[--format RSpec::Github::Formatter --tag ~skip --format progress]"
+        env:
+          RUBY_YJIT_ENABLE: 1
+          KNAPSACK_PRO_TEST_SUITE_TOKEN_RSPEC: ${{ secrets.KNAPSACK_PRO_TEST_SUITE_TOKEN_RSPEC_FAST }}
+          KNAPSACK_PRO_CI_NODE_TOTAL: ${{ matrix.ci_node_total }}
+          KNAPSACK_PRO_CI_NODE_INDEX: ${{ matrix.ci_node_index }}
+          KNAPSACK_PRO_LOG_LEVEL: info
+          KNAPSACK_PRO_TEST_FILE_LIST: ${{ needs.relevant_specs.outputs.files_csv }}
+          KNAPSACK_PRO_COMMIT_HASH: ${{ github.sha }}
+          KNAPSACK_PRO_BRANCH: ${{ github.ref_name }}
+          KNAPSACK_PRO_CI_NODE_BUILD_ID: ${{ github.run_id }}
+          # Knapsack 10 keys the queue on this. It would read GITHUB_RUN_ID, which every
+          # runner job in this run shares.
+          KNAPSACK_PRO_TEST_QUEUE_ID: ${{ github.run_id }}-relevant
+          KNAPSACK_PRO_CI_NODE_RETRY_COUNT: ${{ github.run_attempt }}
+          KNAPSACK_PRO_FIXED_QUEUE_SPLIT: true
+          CI: true
+      - name: Archive capybara artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: capybara-screenshots-relevant-${{ matrix.ci_node_index }}-attempt-${{ github.run_attempt }}
+          path: tmp/capybara/*.png
+          retention-days: 7
+          if-no-files-found: ignore
+      - name: Archive test logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-logs-relevant-${{ matrix.ci_node_index }}-attempt-${{ github.run_attempt }}
+          path: log/test.log
+          retention-days: 7
+          if-no-files-found: ignore
 
   unblock_deployment_from_buildkite:
     name: Unblock deployment from Buildkite
