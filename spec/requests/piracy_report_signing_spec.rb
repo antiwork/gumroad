@@ -27,4 +27,16 @@ describe "Signing a piracy report notice", type: :system, js: true do
     expect(find("pre#notice")).to have_text("Signed: /s/ Jane Doe")
     expect(report.reload).to have_attributes(state: "signed", signature_statement_version: PiracyReport::SIGNATURE_STATEMENT_VERSION)
   end
+
+  it "lists the report and links back to it from the list" do
+    visit piracy_report_path(report.external_id)
+    expect(page).to have_text("Ready for you to sign")
+    expect(page).to have_text("You reported the page")
+
+    click_on "All piracy reports"
+
+    expect(page).to have_table_row({ "Product" => product.name, "Status" => "Ready for you to sign" })
+    click_on product.name
+    expect(page).to have_current_path(piracy_report_path(report.external_id))
+  end
 end

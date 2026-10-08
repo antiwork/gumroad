@@ -31,6 +31,18 @@ describe PiracyReport do
     end
   end
 
+  describe "#restoration_window" do
+    it "counts 10 and 14 weekdays from the day the host got the counter-notice" do
+      expect(build(:piracy_report, counter_notice_received_on: Date.new(2026, 10, 7)).restoration_window).to eq([Date.new(2026, 10, 21), Date.new(2026, 10, 27)])
+      # A Saturday receipt starts counting on Monday.
+      expect(build(:piracy_report, counter_notice_received_on: Date.new(2026, 10, 10)).restoration_window).to eq([Date.new(2026, 10, 23), Date.new(2026, 10, 29)])
+    end
+
+    it "is nil before a counter-notice" do
+      expect(build(:piracy_report).restoration_window).to be_nil
+    end
+  end
+
   describe ".gumroad_host?" do
     it "matches Gumroad domains and their subdomains" do
       expect(described_class.gumroad_host?(ROOT_DOMAIN.split(":").first)).to be(true)

@@ -1,6 +1,10 @@
 # frozen_string_literal: true
 
 class PiracyReportPolicy < ApplicationPolicy
+  def index?
+    user.role_admin_for?(seller)
+  end
+
   def new?
     create?
   end

@@ -14,7 +14,7 @@ class PiracyReportMailer < ApplicationMailer
     @subject = "Review and sign the takedown notice for #{@product_name}"
     @sign_url = piracy_report_url(@report.external_id)
 
-    mail to: @seller.email, subject: @subject
+    mail to: @seller.email, reply_to: SUPPORT_EMAIL, subject: @subject
   end
 
   # The exact text the seller signed, as plain text, so nothing reflows or rewrites it.
@@ -38,16 +38,18 @@ class PiracyReportMailer < ApplicationMailer
     @subject = "We sent your takedown notice for #{@product_name}"
     @report_url = piracy_report_url(@report.external_id)
 
-    mail to: @report.last_contact_email, subject: @subject
+    # Replies reach support@ tagged with the report, so gumclaw files them on it.
+    mail to: @report.last_contact_email, reply_to: @report.reply_to_address, subject: @subject
   end
 
   def counter_notice_received(piracy_report_id)
     @report = find_on_primary(piracy_report_id)
     @product_name = @report.product.name
-    @subject = "The site responded to your takedown notice for #{@product_name}"
+    @subject = "Your takedown notice for #{@product_name} is disputed"
     @report_url = piracy_report_url(@report.external_id)
+    @window_starts_on, @window_ends_on = @report.restoration_window
 
-    mail to: @report.last_contact_email, subject: @subject
+    mail to: @report.last_contact_email, reply_to: @report.reply_to_address, subject: @subject
   end
 
   def resolved(piracy_report_id, outcome)
@@ -57,7 +59,7 @@ class PiracyReportMailer < ApplicationMailer
     @subject = "Your takedown notice for #{@product_name} is closed"
     @report_url = piracy_report_url(@report.external_id)
 
-    mail to: @report.last_contact_email, subject: @subject
+    mail to: @report.last_contact_email, reply_to: @report.reply_to_address, subject: @subject
   end
 
   private

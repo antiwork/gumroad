@@ -24,6 +24,8 @@ class PiracyReport < ApplicationRecord
   SOURCES = %w[dashboard support].freeze
   REPLY_TOKEN_LENGTH = 16
   OUTCOMES = %w[removed no_response restored withdrawn].freeze
+  # 17 U.S.C. 512(g)(2)(C): the host restores the page 10 to 14 business days after a counter-notice.
+  RESTORATION_BUSINESS_DAYS = (10..14)
   MAX_COUNTER_NOTICE_LENGTH = 20_000
   # A MySQL TEXT column holds 65,535 bytes, and a counter-notice can be multibyte.
   MAX_COUNTER_NOTICE_BYTES = 65_535
@@ -182,11 +184,26 @@ class PiracyReport < ApplicationRecord
     "support+piracy-#{reply_token}@#{DEFAULT_EMAIL_DOMAIN}"
   end
 
+  # Weekdays only: the app has no holiday calendar, so sellers see these dates as approximate.
+  def restoration_window
+    return if counter_notice_received_on.blank?
+
+    [RESTORATION_BUSINESS_DAYS.first, RESTORATION_BUSINESS_DAYS.last].map { add_business_days(counter_notice_received_on, _1) }
+  end
+
   def url_host
     self.class.normalized_host(self.class.parse_http_url(url)&.host)
   end
 
   private
+    def add_business_days(date, days)
+      days.times.reduce(date) do |day, _|
+        day += 1
+        day += 1 while day.saturday? || day.sunday?
+        day
+      end
+    end
+
     def generate_external_id
       return if external_id.present?
 

@@ -157,6 +157,28 @@ describe "Products Page Scenario", type: :system, js: true do
     end
   end
 
+  describe "piracy reports" do
+    it "offers Report piracy only to sellers with the feature" do
+      product = create(:product, user: seller)
+
+      visit products_path
+      within find_product_row(product) do
+        select_disclosure "Open product action menu" do
+          expect(page).to have_menuitem("Duplicate")
+          expect(page).not_to have_menuitem("Report piracy")
+        end
+      end
+
+      Feature.activate_user(:piracy_reports, seller)
+      visit products_path
+      within find_product_row(product) do
+        select_disclosure "Open product action menu" do
+          expect(page).to have_menuitem("Report piracy")
+        end
+      end
+    end
+  end
+
   describe "duplication" do
     it "duplicates a membership" do
       membership = create(:subscription_product, user: seller)
