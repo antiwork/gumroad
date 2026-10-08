@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# Writes the spec files a branch needs (bin/branch-specs) to $GITHUB_OUTPUT as
+# files_csv, for test_relevant_runner in .github/workflows/tests.yml. Every shard
+# passes the same BASE_SHA, so every shard selects the same list.
+#
+#   bin/ci-relevant-specs BASE_SHA
+
+set -euo pipefail
+
+BASE_SHA=${1:?usage: bin/ci-relevant-specs BASE_SHA}
+git fetch --no-tags --quiet origin "$BASE_SHA" || echo "fetch of $BASE_SHA failed"
+# bin/branch-specs takes any full-length SHA as a ref, so a missing base would
+# give an empty merge base and a trimmed selection.
+if ! git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
+  echo "::error::base commit $BASE_SHA is not in the clone"
+  exit 1
+fi
+
+set +e
+SPECS=$(ruby bin/branch-specs --base "$BASE_SHA")
+STATUS=$?
+set -e
+# Exit 3 = the selector refused to certify a trimmed run (dependency/
+# config/migration/factory change, mapping gap, or oversized
+# selection). The full suite is required: add the run-all-specs label.
+if [ "$STATUS" -eq 3 ]; then
+  echo "::error::bin/branch-specs escalated — this diff needs the full suite. Add the run-all-specs label to this PR and re-run."
+  exit 1
+elif [ "$STATUS" -ne 0 ]; then
+  echo "bin/branch-specs failed with status $STATUS"
+  exit "$STATUS"
+fi
+COUNT=$(echo "$SPECS" | grep -c . || true)
+# An empty list here means the diff touched nothing rspec-affecting
+# (selector escalates on app-code diffs that map to nothing).
+if [ "$COUNT" -eq 0 ]; then
+  echo "No rspec-affecting changes; running the schema smoke spec as a floor."
+  SPECS="spec/models/user_spec.rb"
+  COUNT=1
+fi
+echo "Running $COUNT spec file(s):"
+echo "$SPECS" | sed 's/^/  /'
+echo "files_csv=$(echo "$SPECS" | paste -sd, -)" >> "$GITHUB_OUTPUT"
