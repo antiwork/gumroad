@@ -962,8 +962,49 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
         expect(described_class.check(bundle.reload, :product).passed).to eq(true)
       end
 
-      it "still blocks a coffee listing, which has no deliverable by design" do
+      it "still blocks a coffee listing from a seller with nothing else published" do
         coffee = create(:coffee_product, name: "Buy me a coffee", description: "Support my work")
+
+        expect(described_class.check(coffee.reload, :product).passed).to eq(false)
+      end
+
+      it "publishes a coffee listing when the seller has other live products" do
+        ContentModerationAdminCommentJob.clear
+        aged_seller = create(:user, created_at: 60.days.ago)
+        coffee = create(:coffee_product, user: aged_seller, name: "Buy me a coffee", description: "Support my work")
+        create(:product, user: aged_seller)
+
+        result = described_class.check(coffee.reload, :product)
+
+        expect(result.passed).to eq(true)
+        contents = ContentModerationAdminCommentJob.jobs.map { |j| j["args"].second }
+        expect(contents).to contain_exactly(
+          a_string_including("flagged but did not block").and(
+            a_string_including("not blocked: seller has a live storefront")
+          )
+        )
+      end
+
+      it "publishes a coffee listing when the seller has a sale but no other live product" do
+        aged_seller = create(:user, created_at: 60.days.ago)
+        coffee = create(:coffee_product, user: aged_seller, name: "Buy me a coffee", description: "Support my work")
+        create(:purchase, link: create(:product, user: aged_seller, deleted_at: Time.current))
+
+        expect(described_class.check(coffee.reload, :product).passed).to eq(true)
+      end
+
+      it "still blocks a coffee listing when the seller's only other product is an unpublished draft" do
+        aged_seller = create(:user, created_at: 60.days.ago)
+        coffee = create(:coffee_product, user: aged_seller, name: "Buy me a coffee", description: "Support my work")
+        create(:product, user: aged_seller, draft: true)
+
+        expect(described_class.check(coffee.reload, :product).passed).to eq(false)
+      end
+
+      it "still blocks a coffee listing when the seller's only other product was deleted" do
+        aged_seller = create(:user, created_at: 60.days.ago)
+        coffee = create(:coffee_product, user: aged_seller, name: "Buy me a coffee", description: "Support my work")
+        create(:product, user: aged_seller, deleted_at: Time.current)
 
         expect(described_class.check(coffee.reload, :product).passed).to eq(false)
       end

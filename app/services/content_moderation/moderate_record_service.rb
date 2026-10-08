@@ -269,12 +269,24 @@ class ContentModeration::ModerateRecordService
     def spam_flag_should_not_block?
       return seller_has_storefront? if entity_type.in?(%i[page post])
 
-      entity_type == :product && product_has_substantive_deliverable?
+      return false unless entity_type == :product
+      return tip_jar_from_established_seller? if record.native_type == Link::NATIVE_TYPE_COFFEE
+
+      product_has_substantive_deliverable?
+    end
+
+    # A tip jar has no deliverable by design, so the seller's other live products stand in.
+    def tip_jar_from_established_seller?
+      return false if user.blank?
+
+      user.links.alive.not_draft.where.not(id: record.id).exists? || user.sales.successful.exists?
     end
 
     # Why an admin is reading a downgraded spam flag rather than a block.
     def spam_downgrade_note_reason
-      entity_type.in?(%i[page post]) ? "not blocked: seller has a live storefront" : "not blocked: listing has content attached"
+      return "not blocked: seller has a live storefront" if entity_type.in?(%i[page post]) || record.native_type == Link::NATIVE_TYPE_COFFEE
+
+      "not blocked: listing has content attached"
     end
 
     # Kept to two indexed existence checks: this runs inside a save.
