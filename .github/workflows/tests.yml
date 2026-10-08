@@ -45,6 +45,7 @@ jobs:
       pull-requests: read
     outputs:
       full: ${{ steps.scope.outputs.full }}
+      base_sha: ${{ steps.base.outputs.sha }}
     steps:
       - id: scope
         env:
@@ -65,6 +66,13 @@ jobs:
           else
             echo "full=false" >> "$GITHUB_OUTPUT"
           fi
+      # One base commit for every test_relevant_runner shard: each selects its own
+      # specs, and Knapsack builds the queue from whichever shard's list comes first.
+      - id: base
+        if: steps.scope.outputs.full != 'true' && github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: echo "sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha || true)" >> "$GITHUB_OUTPUT"
 
   reuse_scope:
     # Main-only. Asks whether this exact git tree already passed Fast+Slow on
@@ -1284,13 +1292,14 @@ jobs:
         timeout-minutes: 5
         with:
           persist-credentials: false
-          # bin/branch-specs diffs against origin/main; it needs history, not old file contents.
+          # bin/branch-specs diffs against main, so the base has to be in the clone.
           fetch-depth: 0
-          filter: blob:none
       # Before the setup below, so a diff that needs the full suite fails at once.
       - name: Select relevant specs
         id: specs
-        run: bin/ci-relevant-specs
+        run: bin/ci-relevant-specs "$BASE_SHA"
+        env:
+          BASE_SHA: ${{ needs.run_scope.outputs.base_sha }}
       - name: Login to Docker Hub
         uses: nick-fields/retry@v3
         with:
