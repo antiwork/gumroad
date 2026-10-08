@@ -13,7 +13,7 @@ ok()   { PASS=$((PASS + 1)); echo "  ok   $1"; }
 fail() { FAIL=$((FAIL + 1)); echo "  FAIL $1"; }
 
 # The stub answers describe-auto-scaling-groups from SIZES_<asg> ("desired max", or
-# FAIL), and from REREAD_<asg> on later reads when set. It fails set-desired-capacity
+# FAIL). It fails set-desired-capacity
 # for the ASG named in SET_FAIL and logs each set. Any other call or argument, or a read
 # without the query and output the script parses, is logged and fails.
 mkdir -p "$WORK/bin"
@@ -42,11 +42,8 @@ case "$call" in
   "autoscaling describe-auto-scaling-groups")
     [ -n "$asg" ] && [ "$query" = "AutoScalingGroups[0].[DesiredCapacity,MaxSize]" ] && [ "$output" = "text" ] \
       || unsupported "$call --query '$query' --output '$output'"
-    reads="$CALLS.reads.$asg"
-    echo x >> "$reads"
-    var="SIZES_${asg//-/_}" reread="REREAD_${asg//-/_}"
+    var="SIZES_${asg//-/_}"
     sizes=${!var:-}
-    [ "$(wc -l < "$reads")" -gt 1 ] && [ -n "${!reread:-}" ] && sizes=${!reread}
     [ "$sizes" = "FAIL" ] && { echo "AccessDenied" >&2; exit 255; }
     printf '%s\n' "$sizes" ;;
   "autoscaling set-desired-capacity")
@@ -70,7 +67,6 @@ run() {
   local dir="${1:-$ROOT}"
   shift || true
   export CALLS="$WORK/calls"
-  rm -f "$CALLS" "$CALLS".reads.*
   : > "$CALLS"
   (cd "$dir" && env PATH="$WORK/bin:$PATH" BUILDKITE_BRANCH=test "$@" bash .buildkite/scripts/prescale_web_clusters.sh > "$WORK/out" 2>&1)
   STATUS=$?
@@ -97,21 +93,10 @@ run
 [ "$STATUS" -eq 0 ] && [ ! -s "$WORK/calls" ] \
   && ok "leaves clusters already at their max alone, so a running deploy is untouched" || fail "leaves full clusters alone: $(cat "$WORK/calls")"
 
-export "$blue=4	20" "$green=7	14" REREAD_production_web_cluster_blue_asg="12	20"
+export "$blue=4	20" "$green=7	14"
 run
-[ "$STATUS" -eq 0 ] && [ "$(cat "$WORK/calls")" = "production-web-cluster-green-asg 14" ] \
-  && ok "skips the write when the cluster grew past the target since the first read" || fail "re-read before the write: $(cat "$WORK/calls")"
-
-export "$blue=4	14" REREAD_production_web_cluster_blue_asg=FAIL
-run
-[ "$STATUS" -eq 0 ] && [ "$(cat "$WORK/calls")" = "production-web-cluster-green-asg 14" ] && grep -q "could not re-read production-web-cluster-blue-asg" "$WORK/out" \
-  && ok "a failed re-read skips the write, so a stale target never lands" || fail "a failed re-read: $(cat "$WORK/calls")"
-
-export REREAD_production_web_cluster_blue_asg="None	None"
-run
-[ "$STATUS" -eq 0 ] && [ "$(cat "$WORK/calls")" = "production-web-cluster-green-asg 14" ] \
-  && ok "an unexpected re-read skips the write" || fail "an unexpected re-read: $(cat "$WORK/calls")"
-unset REREAD_production_web_cluster_blue_asg
+[ "$STATUS" -eq 0 ] && [ "$(cat "$WORK/calls")" = "production-web-cluster-green-asg 14" ] && grep -q "stays below its max" "$WORK/out" \
+  && ok "skips a cluster whose doubling stays below its max, since only a write of the max cannot lower it" || fail "doubling below max: $(cat "$WORK/calls")"
 
 export "$blue=FAIL" "$green=7	14"
 run

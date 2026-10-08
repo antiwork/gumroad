@@ -1,9 +1,12 @@
 #!/bin/bash
 # Raises both web ASGs to the size the deploy's scale_up asks for, while the
-# assets compile, so the deploy finds those instances already booted. It mirrors
-# scale_up_clusters (double the desired capacity, capped at the ASG's max) but sets
-# no min-size pin: a build that never deploys is scaled back in by target tracking,
-# as after a deploy. Best effort: it never lowers a cluster and never fails the build.
+# assets compile, so the deploy finds those instances already booted. scale_up_clusters
+# doubles the desired capacity, capped at the ASG's max; with min at least half of max,
+# as today, that is always the max. This step only ever writes the max, because AWS has
+# no compare-and-set on desired capacity and any lower write could undo a scale-out
+# that lands between the read and the write. It sets no min-size pin: a build that never
+# deploys is scaled back in by target tracking, as after a deploy. Best effort: it never
+# lowers a cluster and never fails the build.
 
 set -uo pipefail
 
@@ -18,13 +21,9 @@ skip_if_production_noop "prescale_web_clusters.sh"
 
 WEB_ASGS=(production-web-cluster-blue-asg production-web-cluster-green-asg)
 
-read_sizes() {
-  aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names "$1" \
-    --query 'AutoScalingGroups[0].[DesiredCapacity,MaxSize]' --output text 2>&1
-}
-
 for asg in "${WEB_ASGS[@]}"; do
-  if ! sizes=$(read_sizes "$asg"); then
+  if ! sizes=$(aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names "$asg" \
+      --query 'AutoScalingGroups[0].[DesiredCapacity,MaxSize]' --output text 2>&1); then
     logger "WARNING: could not read $asg ($sizes); leaving it to the deploy's scale_up"
     continue
   fi
@@ -34,35 +33,19 @@ for asg in "${WEB_ASGS[@]}"; do
     continue
   fi
 
-  target=$((desired * 2))
-  [ "$target" -le "$max" ] || target=$max
-  if [ "$target" -le "$desired" ]; then
+  if [ "$desired" -ge "$max" ]; then
     logger "$asg is already at $desired of $max; nothing to do"
     continue
   fi
-
-  # AWS has no compare-and-set on desired capacity, so read again right before the write:
-  # target tracking or the deploy's scale_up may have raised the cluster since the first
-  # read. The pipeline's concurrency group keeps two builds' pre-scale steps from racing,
-  # and during a deploy its min-size pin makes AWS reject any write below it.
-  if ! sizes=$(read_sizes "$asg"); then
-    logger "WARNING: could not re-read $asg ($sizes); leaving it to the deploy's scale_up"
-    continue
-  fi
-  read -r current _ <<< "$sizes"
-  if [[ ! "$current" =~ ^[0-9]+$ ]]; then
-    logger "WARNING: unexpected sizes for $asg on re-read ('$sizes'); leaving it to the deploy's scale_up"
-    continue
-  fi
-  if [ "$current" -ge "$target" ]; then
-    logger "$asg is already at $current; nothing to do"
+  if [ $((desired * 2)) -lt "$max" ]; then
+    logger "WARNING: doubling $asg's $desired stays below its max of $max; leaving it to the deploy's scale_up"
     continue
   fi
 
-  if output=$(aws autoscaling set-desired-capacity --auto-scaling-group-name "$asg" --desired-capacity "$target" 2>&1); then
-    logger "Raised $asg from $desired to $target"
+  if output=$(aws autoscaling set-desired-capacity --auto-scaling-group-name "$asg" --desired-capacity "$max" 2>&1); then
+    logger "Raised $asg from $desired to $max"
   else
-    logger "WARNING: could not raise $asg to $target ($output); leaving it to the deploy's scale_up"
+    logger "WARNING: could not raise $asg to $max ($output); leaving it to the deploy's scale_up"
   fi
 done
 
