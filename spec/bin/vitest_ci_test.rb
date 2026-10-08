@@ -104,9 +104,11 @@ check("a [!a] class negates, and an unreadable pattern (extglob, base option) ma
     glob_matches?('import.meta.glob("./x/@(a|b).ts")', "app/javascript/other/z.ts") &&
     glob_matches?('import.meta.glob("./x/*.ts", { base: "/foo" })', "app/javascript/other/z.ts")
 end
-check("an apostrophe in a comment or an escaped quote cannot leak a later call's patterns") do
-  source = %q{import.meta.glob("./a/\"*.ts", {/* don't */ eager: true}); import.meta.glob(["./b/*.ts", "!./a/*.ts"])}
-  glob_matches?(source, "app/javascript/b/x.ts")
+check("a call that does not parse matches every path and leaks nothing into the next call") do
+  source = 'import.meta.glob("./a/\\"*.ts", {/* don\'t */ eager: true}); import.meta.glob(["./b/*.ts", "!./a/*.ts"])'
+  matchers = GLOB_HELPERS.glob_matchers("app/javascript/a.tsx", source)
+  matchers.size == 2 && matchers[0].call("app/javascript/zzz/q.ts") &&
+    matchers[1].call("app/javascript/b/x.ts") && !matchers[1].call("app/javascript/a/x.ts") && !matchers[1].call("app/javascript/c/x.ts")
 end
 
 check("an invalid bracket class or an escaped pattern matches every path instead of failing") do
