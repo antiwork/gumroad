@@ -1247,6 +1247,12 @@ jobs:
       RAILS_LOG_LEVEL: info
       # Also selects the headless Chrome drivers in spec/support/capybara_driver.rb.
       IN_DOCKER: true
+      # The image has no Chrome, so Selenium Manager downloads Chrome for Testing
+      # there. Do the same here instead of using the runner's preinstalled Chrome.
+      SE_FORCE_BROWSER_DOWNLOAD: true
+      # The image's locale and time zone: Chrome formats dates from both.
+      LANG: C.UTF-8
+      TZ: UTC
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -1385,6 +1391,12 @@ jobs:
       RAILS_LOG_LEVEL: info
       # Also selects the headless Chrome drivers in spec/support/capybara_driver.rb.
       IN_DOCKER: true
+      # The image has no Chrome, so Selenium Manager downloads Chrome for Testing
+      # there. Do the same here instead of using the runner's preinstalled Chrome.
+      SE_FORCE_BROWSER_DOWNLOAD: true
+      # The image's locale and time zone: Chrome formats dates from both.
+      LANG: C.UTF-8
+      TZ: UTC
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -1523,6 +1535,12 @@ jobs:
       RAILS_LOG_LEVEL: info
       # Also selects the headless Chrome drivers in spec/support/capybara_driver.rb.
       IN_DOCKER: true
+      # The image has no Chrome, so Selenium Manager downloads Chrome for Testing
+      # there. Do the same here instead of using the runner's preinstalled Chrome.
+      SE_FORCE_BROWSER_DOWNLOAD: true
+      # The image's locale and time zone: Chrome formats dates from both.
+      LANG: C.UTF-8
+      TZ: UTC
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
