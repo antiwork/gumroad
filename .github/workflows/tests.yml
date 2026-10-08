@@ -25,22 +25,9 @@ jobs:
     name: CI Gate${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository && ' (internal PR noop)' || '' }}
     runs-on: ubicloud-standard-2
     environment: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name != github.repository && 'ci-protected' || '' }}
-    steps:
-      - run: true
-
-  run_scope:
-    # Decides whether this run gets the full Fast/Slow suite or the trimmed
-    # test_relevant job. Full suite: every push to main (deploy gate), or a
-    # PR carrying the run-all-specs label. Push events have no PR payload,
-    # so the label is looked up via the commit's PRs.
-    #
-    # Fork PRs hit this job via pull_request_target (token is the base repo).
-    # No checkout here — only label lookup. Reuse of a prior Fast/Slow run
-    # lives in reuse_scope, which is main-push only.
-    name: Run scope
-    runs-on: ubicloud-standard-2
-    needs: ci_gate
-    if: ${{ github.event_name != 'pull_request_target' || github.event.pull_request.head.repo.full_name != github.repository }}
+    # The one run-all-specs lookup of the run. Both the image build and run_scope
+    # read it: two lookups could disagree when the label lands between them, and a
+    # skipped build would then skip the full suite while ci/green turned green.
     permissions:
       pull-requests: read
     outputs:
@@ -65,6 +52,27 @@ jobs:
           else
             echo "full=false" >> "$GITHUB_OUTPUT"
           fi
+
+  run_scope:
+    # Decides whether this run gets the full Fast/Slow suite or the trimmed
+    # test_relevant job. Full suite: every push to main (deploy gate), or a
+    # PR carrying the run-all-specs label. Push events have no PR payload,
+    # so the label is looked up via the commit's PRs.
+    #
+    # The label lookup itself runs in ci_gate, so the image build reads the same
+    # answer. Reuse of a prior Fast/Slow run lives in reuse_scope, which is
+    # main-push only.
+    name: Run scope
+    runs-on: ubicloud-standard-2
+    needs: ci_gate
+    if: ${{ github.event_name != 'pull_request_target' || github.event.pull_request.head.repo.full_name != github.repository }}
+    outputs:
+      full: ${{ steps.scope.outputs.full }}
+    steps:
+      - id: scope
+        env:
+          FULL: ${{ needs.ci_gate.outputs.full }}
+        run: echo "full=$FULL" >> "$GITHUB_OUTPUT"
 
   reuse_scope:
     # Main-only. Asks whether this exact git tree already passed Fast+Slow on
@@ -306,38 +314,13 @@ jobs:
 
   # Branch pushes build the test image in the Prebuild test image workflow, so
   # ci/green does not wait for it. A branch run builds it here only when its own
-  # full-suite jobs use it. Skipped on main and PRs, so the build there starts at once.
-  image_scope:
-    name: Image scope
-    runs-on: ubicloud-standard-2
-    needs: ci_gate
-    if: github.event_name == 'push' && github.ref != 'refs/heads/main'
-    permissions:
-      pull-requests: read
-    outputs:
-      build: ${{ steps.scope.outputs.build }}
-    steps:
-      - id: scope
-        env:
-          GH_TOKEN: ${{ github.token }}
-          SHA: ${{ github.sha }}
-        run: |
-          LABELS=$(gh api "repos/$GITHUB_REPOSITORY/commits/$SHA/pulls" --jq '[.[].labels[].name] | join("\n")' || true)
-          if echo "$LABELS" | grep -qx 'run-all-specs'; then
-            echo "build=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "build=false" >> "$GITHUB_OUTPUT"
-          fi
-
+  # full-suite jobs use it.
   build:
     name: Build images${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository && ' (internal PR noop)' || '' }}
-    needs: [ci_gate, image_scope]
+    needs: ci_gate
     if: |
-      always() &&
-      !cancelled() &&
-      needs.ci_gate.result == 'success' &&
       (github.event_name != 'pull_request_target' || github.event.pull_request.head.repo.full_name != github.repository) &&
-      (github.event_name != 'push' || github.ref == 'refs/heads/main' || needs.image_scope.outputs.build == 'true')
+      (github.event_name != 'push' || github.ref == 'refs/heads/main' || needs.ci_gate.outputs.full == 'true')
     uses: ./.github/workflows/build-test-image.yml
     secrets: inherit
 
