@@ -18,7 +18,7 @@ logger() {
 
 # Buildkite marks a timed-out step as errored, which soft_fail does not cover, so the
 # whole step, the relevance check's git fetch included, runs under a deadline of its own
-# that ends inside the step's 5-minute timeout.
+# that ends well inside the step's timeout.
 if [ -z "${PRESCALE_UNDER_DEADLINE:-}" ] && command -v timeout >/dev/null 2>&1; then
   PRESCALE_UNDER_DEADLINE=1 timeout -k 5 "${PRESCALE_DEADLINE_SECONDS:-240}" bash "$0"
   status=$?

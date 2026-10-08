@@ -16,7 +16,7 @@ fail() { FAIL=$((FAIL + 1)); echo "  FAIL $1"; }
 # FAIL). It fails set-desired-capacity
 # for the ASG named in SET_FAIL and logs each set. Any other call or argument, a read
 # without the query and output the script parses, or a call whose time limits could
-# outlast the step's timeout across its 4 calls, is logged and fails.
+# let it run past 60 s, is logged and fails.
 mkdir -p "$WORK/bin"
 cat > "$WORK/bin/aws" <<'STUB'
 #!/bin/bash
@@ -42,8 +42,8 @@ while [ $# -gt 0 ]; do
   shift 2
 done
 [[ "$connect" =~ ^[1-9][0-9]*$ && "$read_timeout" =~ ^[1-9][0-9]*$ && "${AWS_MAX_ATTEMPTS:-}" =~ ^[1-9][0-9]*$ ]] \
-  && [ $((AWS_MAX_ATTEMPTS * (connect + read_timeout) * 4)) -lt 300 ] \
-  || unsupported "$call without time limits that end inside the 5-minute step timeout"
+  && [ $((AWS_MAX_ATTEMPTS * (connect + read_timeout))) -le 60 ] \
+  || unsupported "$call without time limits that keep it to 60 s"
 [ -n "${AWS_HANG:-}" ] && sleep 60
 case "$call" in
   "autoscaling describe-auto-scaling-groups")

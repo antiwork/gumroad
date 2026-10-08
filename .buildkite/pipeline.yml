@@ -113,5 +113,7 @@ steps:
     branches: "main"
     depends_on: build-web-image
     command: ".buildkite/scripts/prescale_web_clusters.sh"
-    timeout_in_minutes: 5
+    # soft_fail does not cover a timeout. The script stops itself after 240 s; the rest
+    # is room for checkout and the pre-command hook's Docker prune and ECR login.
+    timeout_in_minutes: 15
     soft_fail: true
