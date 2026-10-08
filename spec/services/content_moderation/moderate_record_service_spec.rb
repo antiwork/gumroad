@@ -962,10 +962,18 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
         expect(described_class.check(bundle.reload, :product).passed).to eq(true)
       end
 
-      it "still blocks a coffee listing, which has no deliverable by design" do
+      it "still blocks a coffee listing from a seller with nothing else published" do
         coffee = create(:coffee_product, name: "Buy me a coffee", description: "Support my work")
 
         expect(described_class.check(coffee.reload, :product).passed).to eq(false)
+      end
+
+      it "publishes a coffee listing when the seller has other live products" do
+        aged_seller = create(:user, created_at: 60.days.ago)
+        coffee = create(:coffee_product, user: aged_seller, name: "Buy me a coffee", description: "Support my work")
+        create(:product, user: aged_seller)
+
+        expect(described_class.check(coffee.reload, :product).passed).to eq(true)
       end
 
       it "still blocks when the only integration is scheduling plumbing rather than the deliverable" do
