@@ -73,7 +73,9 @@ make_image "$WORK/image" one
 run_script; rc=$?
 [ $rc = 0 ] && [ "$(result_of)" = result=miss ] && grep -q "saved=true" "$WORK/out" && ok "a first run is a miss and saves" || fail "a first run is a miss and saves (rc=$rc $(result_of))"
 ls "$WORK/bucket/buildkite-branch-cache/main-asset-cache/"*.tar.gz.sha256 >/dev/null 2>&1 && ok "it saves under the main prefix with a sidecar" || fail "it saves under the main prefix with a sidecar"
-tar -tzf "$WORK/bucket/buildkite-branch-cache/main-asset-cache/"*.tar.gz | grep -q "app/javascript/utils/routes.js" && ok "the saved files include routes.js" || fail "the saved files include routes.js"
+# Under pipefail, `tar | grep -q` fails when grep exits early and tar takes SIGPIPE.
+listing=$(tar -tzf "$WORK/bucket/buildkite-branch-cache/main-asset-cache/"*.tar.gz)
+grep -q "app/javascript/utils/routes.js" <<<"$listing" && ok "the saved files include routes.js" || fail "the saved files include routes.js"
 
 run_script; rc=$?
 [ $rc = 0 ] && [ "$(result_of)" = result=hit ] && grep -q "files=9 mismatched=0 maps_differing=0" "$WORK/out" && ok "the same files again are a hit" || fail "the same files again are a hit (rc=$rc $(cat "$WORK/out" | tail -1))"
