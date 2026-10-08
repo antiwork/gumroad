@@ -16,7 +16,7 @@ type StatusColor = "success" | "warning" | "danger" | undefined;
 const OUTCOME_STATUS: Record<PiracyReportOutcome, { label: string; color: StatusColor }> = {
   removed: { label: "Page removed", color: "success" },
   no_response: { label: "No response from the site", color: undefined },
-  restored: { label: "Page put back", color: "warning" },
+  restored: { label: "Page put back", color: "danger" },
   withdrawn: { label: "Withdrawn", color: undefined },
 };
 
@@ -26,7 +26,7 @@ const STATE_STATUS: Record<Exclude<PiracyReportState, "resolved">, { label: stri
   awaiting_signature: { label: "Ready for you to sign", color: "warning" },
   signed: { label: "Signed, sending soon", color: undefined },
   sent: { label: "Sent, waiting for the site", color: undefined },
-  counter_noticed: { label: "Disputed", color: "danger" },
+  counter_noticed: { label: "Disputed", color: "warning" },
   declined: { label: "Not sent", color: undefined },
   cancelled: { label: "Closed", color: undefined },
 };
@@ -40,10 +40,10 @@ export const piracyReportStatus = (state: PiracyReportState, outcome: PiracyRepo
     : STATE_STATUS[state];
 
 // UTC, so the page shows the same dates as the emails and the signature line in the notice.
-export const formatPiracyReportDate = (value: string) =>
-  new Date(value.length === 10 ? `${value}T00:00:00Z` : value).toLocaleDateString(undefined, {
+export const formatPiracyReportDate = (value: string, locale: string, month: "long" | "short" = "long") =>
+  new Date(value.length === 10 ? `${value}T00:00:00Z` : value).toLocaleDateString(locale, {
     year: "numeric",
-    month: "long",
+    month,
     day: "numeric",
     timeZone: "UTC",
   });

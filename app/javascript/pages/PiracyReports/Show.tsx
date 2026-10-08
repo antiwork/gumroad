@@ -11,11 +11,13 @@ import {
 import { Button } from "$app/components/Button";
 import { Alert } from "$app/components/ui/Alert";
 import { Checkbox } from "$app/components/ui/Checkbox";
+import { DefinitionList } from "$app/components/ui/DefinitionList";
 import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Pill } from "$app/components/ui/Pill";
+import { useUserAgentInfo } from "$app/components/UserAgent";
 
 type HistoryEvent =
   | "filed"
@@ -86,6 +88,8 @@ const windowHasEnded = (lastDay: string) => new Date() > new Date(`${lastDay}T23
 export default function PiracyReportsShow() {
   const { report, product, confirmations, confirmations_version } = usePage<PiracyReportsShowProps>().props;
   const status = piracyReportStatus(report.state, report.outcome);
+  const userAgentInfo = useUserAgentInfo();
+  const formatDate = (value: string) => formatPiracyReportDate(value, userAgentInfo.locale);
 
   const form = useForm<{ signed_by_name: string; confirmations: string[]; confirmations_version: string }>({
     signed_by_name: "",
@@ -115,13 +119,14 @@ export default function PiracyReportsShow() {
           </Button>
         }
       >
-        <div className="flex flex-wrap items-center gap-2">
-          <Pill size="small" color={status.color}>
-            {status.label}
-          </Pill>
-          <span>
-            <strong>{product.name}</strong> — <span className="break-all">{report.url}</span>
-          </span>
+        <div className="grid gap-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <Pill size="small" color={status.color}>
+              {status.label}
+            </Pill>
+            <strong dir="auto">{product.name}</strong>
+          </div>
+          <small className="break-all text-muted">Reported page: {report.url}</small>
         </div>
       </PageHeader>
       <div className="grid gap-4 p-4 md:p-8">
@@ -149,8 +154,8 @@ export default function PiracyReportsShow() {
         ) : null}
         {report.state === "sent" && report.sent_at !== null ? (
           <Alert variant="success">
-            We sent the notice to {report.recipient_name ?? "the site"} on {formatPiracyReportDate(report.sent_at)}. You
-            do not need to do anything. We will email you when the site responds.
+            We sent the notice to {report.recipient_name ?? "the site"} on {formatDate(report.sent_at)}. You do not need
+            to do anything. We will email you when the site responds.
           </Alert>
         ) : null}
         {report.state === "counter_noticed" && report.restoration_window !== null ? (
@@ -158,22 +163,20 @@ export default function PiracyReportsShow() {
             The person who posted the page disputed the notice.{" "}
             {windowHasEnded(report.restoration_window[1]) ? (
               <>
-                Since about {formatPiracyReportDate(report.restoration_window[1])}, the site can put the page back. If
-                you filed a court action, reply to our email to tell us.
+                Since about {formatDate(report.restoration_window[1])}, the site can put the page back. If you filed a
+                court action, reply to our email to tell us.
               </>
             ) : (
               <>
-                The site can put the page back between about {formatPiracyReportDate(report.restoration_window[0])} and{" "}
-                {formatPiracyReportDate(report.restoration_window[1])}. To stop that, file a court action against them
-                before then, and reply to our email to tell us.
+                The site can put the page back between about {formatDate(report.restoration_window[0])} and{" "}
+                {formatDate(report.restoration_window[1])}. To stop that, file a court action against them before then,
+                and reply to our email to tell us.
               </>
             )}
           </Alert>
         ) : null}
         {report.state === "resolved" && report.outcome !== null ? (
-          <Alert
-            variant={report.outcome === "removed" ? "success" : report.outcome === "restored" ? "warning" : "info"}
-          >
+          <Alert variant={report.outcome === "removed" ? "success" : report.outcome === "restored" ? "danger" : "info"}>
             {OUTCOME_TEXT[report.outcome]}
           </Alert>
         ) : null}
@@ -184,25 +187,28 @@ export default function PiracyReportsShow() {
         ) : null}
         <Fieldset>
           <FieldsetTitle>History</FieldsetTitle>
-          <ol className="grid gap-1">
+          <DefinitionList className="gap-y-1">
             {report.history.map(({ event, at }) => (
-              <li key={event}>
-                <span className="text-muted">{formatPiracyReportDate(at)}</span> — {historyLabel(event, report)}
-              </li>
+              <React.Fragment key={event}>
+                <dt className="text-muted">{formatDate(at)}</dt>
+                <dd>{historyLabel(event, report)}</dd>
+              </React.Fragment>
             ))}
-          </ol>
+          </DefinitionList>
         </Fieldset>
         {report.notice_text === null ? null : (
           <Fieldset>
-            <FieldsetTitle>
-              <Label htmlFor="notice">The notice</Label>
-            </FieldsetTitle>
+            <FieldsetTitle id="notice-title">The notice</FieldsetTitle>
             <FieldsetDescription>
               {canSign
                 ? "This is the notice we send. When you sign, we add your typed name and the date as the signature."
                 : "This is the notice we send."}
             </FieldsetDescription>
-            <pre id="notice" className="max-h-96 overflow-auto rounded border border-border p-4 whitespace-pre-wrap">
+            <pre
+              id="notice"
+              aria-labelledby="notice-title"
+              className="max-h-96 overflow-auto rounded border border-border p-4 whitespace-pre-wrap"
+            >
               {report.notice_text}
             </pre>
           </Fieldset>
