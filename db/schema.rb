@@ -1698,8 +1698,10 @@ create_table "ping_deliveries", charset: "utf8mb4", collation: "utf8mb4_unicode_
     t.string "outcome"
     t.text "outcome_reason"
     t.datetime "resolved_at"
+    t.datetime "outcome_notified_at"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.index ["counter_notice_received_on", "seller_id"], name: "idx_on_counter_notice_received_on_seller_id_3ebe3a3950"
     t.index ["external_id"], name: "index_piracy_reports_on_external_id", unique: true
     t.index ["product_id", "normalized_url_digest"], name: "index_piracy_reports_on_product_id_and_normalized_url_digest", unique: true
     t.index ["reply_token"], name: "index_piracy_reports_on_reply_token", unique: true

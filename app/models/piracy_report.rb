@@ -25,6 +25,10 @@ class PiracyReport < ApplicationRecord
   REPLY_TOKEN_LENGTH = 16
   OUTCOMES = %w[removed no_response restored withdrawn].freeze
   MAX_COUNTER_NOTICE_LENGTH = 20_000
+  # A MySQL TEXT column holds 65,535 bytes, and a counter-notice can be multibyte.
+  MAX_COUNTER_NOTICE_BYTES = 65_535
+  # A host can remove the page and get a counter-notice later, so these outcomes can still change.
+  REOPENABLE_OUTCOMES = %w[removed no_response].freeze
   # A sent notice with no delivered or bounced event after this long was probably dropped silently.
   DELIVERY_CONFIRMATION_WINDOW = 24.hours
   SCREENING_VERDICTS = %w[pass fail review].freeze
@@ -71,11 +75,11 @@ class PiracyReport < ApplicationRecord
     end
 
     event :receive_counter_notice do
-      transition sent: :counter_noticed
+      transition %i[sent resolved] => :counter_noticed
     end
 
     event :resolve do
-      transition %i[sent counter_noticed] => :resolved
+      transition %i[sent counter_noticed resolved] => :resolved
     end
 
     event :cancel do

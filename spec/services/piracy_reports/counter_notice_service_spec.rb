@@ -10,7 +10,9 @@ describe PiracyReports::CounterNoticeService do
   end
 
   it "records the counter-notice with the host's receipt date and forwards it to the seller at once" do
-    freeze_time do
+    travel_to(Time.utc(2026, 10, 9, 12)) do
+      report.update!(sent_at: Time.utc(2026, 10, 6, 12))
+
       expect { expect(call(received_on: "2026-10-07")).to be_success }
         .to have_enqueued_mail(PiracyReportMailer, :counter_notice_received).with(report.id)
 
@@ -21,6 +23,40 @@ describe PiracyReports::CounterNoticeService do
         counter_notice_forwarded_at: Time.current
       )
     end
+  end
+
+  it "accepts a counter-notice after the report was resolved as removed, and reopens it" do
+    report.update!(state: "resolved", outcome: "removed", resolved_at: 1.day.ago, outcome_notified_at: 1.day.ago)
+
+    expect(call).to be_success
+    expect(report.reload).to have_attributes(state: "counter_noticed", outcome: nil, resolved_at: nil)
+    expect(PiracyReports::ResolveService.new(report:, outcome: "restored").call).to be_success
+  end
+
+  it "refuses a counter-notice after an outcome that cannot change" do
+    report.update!(state: "resolved", outcome: "withdrawn", outcome_reason: "Licensed.", resolved_at: 1.day.ago)
+
+    expect(call.errors).to eq(["The report has no notice out with a host"])
+  end
+
+  it "accepts the host's local date the day before the UTC send date" do
+    report.update!(sent_at: Time.utc(2026, 10, 8, 2))
+
+    travel_to(Time.utc(2026, 10, 8, 12)) { expect(call(received_on: "2026-10-07")).to be_success }
+  end
+
+  it "refuses a body that fits the character limit but not the column's bytes" do
+    expect(call(body: "😀" * 17_000).errors).to eq(["body is too long"])
+  end
+
+  it "finishes the forward on a retry when the seller email failed to queue" do
+    allow(PiracyReportMailer).to receive(:counter_notice_received).and_raise(Redis::CannotConnectError)
+    expect { call }.to raise_error(Redis::CannotConnectError)
+    expect(report.reload).to have_attributes(state: "counter_noticed", counter_notice_forwarded_at: nil)
+
+    allow(PiracyReportMailer).to receive(:counter_notice_received).and_call_original
+    expect { expect(call).to be_success }.to have_enqueued_mail(PiracyReportMailer, :counter_notice_received)
+    expect(report.reload.counter_notice_forwarded_at).to be_present
   end
 
   it "refuses a report that has no notice out with a host" do

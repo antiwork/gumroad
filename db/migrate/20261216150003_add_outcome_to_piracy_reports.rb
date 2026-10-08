@@ -9,6 +9,8 @@ class AddOutcomeToPiracyReports < ActiveRecord::Migration[7.1]
       t.string :outcome
       t.text :outcome_reason
       t.datetime :resolved_at
+      t.datetime :outcome_notified_at
+      t.index %i[counter_notice_received_on seller_id]
     end
   end
 end
