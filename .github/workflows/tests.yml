@@ -324,9 +324,9 @@ jobs:
       - name: Self-test the main asset cache shadow
         run: bash .buildkite/scripts/main_asset_cache_shadow_test.sh
 
-  # Branch pushes build the test image in the Prebuild test image workflow, so
-  # ci/green does not wait for it. A branch run builds it here only when its own
-  # full-suite jobs use it.
+  # Branch pushes build the test image in the Prebuild test image workflow, after
+  # this one, so ci/green does not wait for it. A branch run builds it here only
+  # when its own full-suite jobs use it.
   build:
     name: Build images${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository && ' (internal PR noop)' || '' }}
     needs: ci_gate

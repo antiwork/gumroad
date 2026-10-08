@@ -1,9 +1,15 @@
 name: Build test image
 
 # The content-addressed test image build. Tests calls it for main, fork PRs and
-# run-all-specs branches; Prebuild test image calls it for every other branch push.
+# run-all-specs branches; Prebuild test image calls it after Tests on other branches.
 on:
   workflow_call:
+    inputs:
+      # The commit to build when the caller's own github.sha is not it, as in a
+      # workflow_run, where github.sha is the default branch's head.
+      ref:
+        type: string
+        default: ""
     outputs:
       test_image_tag:
         value: ${{ jobs.build.outputs.test_image_tag }}
@@ -24,7 +30,7 @@ jobs:
         uses: actions/checkout@v4
         timeout-minutes: 5
         with:
-          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ inputs.ref || (github.event_name == 'pull_request_target' && github.event.pull_request.head.sha) || github.sha }}
           persist-credentials: false
       - name: Login to Docker Hub
         uses: nick-fields/retry@v3
