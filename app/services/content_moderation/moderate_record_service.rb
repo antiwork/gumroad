@@ -284,7 +284,9 @@ class ContentModeration::ModerateRecordService
 
     # Why an admin is reading a downgraded spam flag rather than a block.
     def spam_downgrade_note_reason
-      entity_type.in?(%i[page post]) ? "not blocked: seller has a live storefront" : "not blocked: listing has content attached"
+      return "not blocked: seller has a live storefront" if entity_type.in?(%i[page post]) || record.native_type == Link::NATIVE_TYPE_COFFEE
+
+      "not blocked: listing has content attached"
     end
 
     # Kept to two indexed existence checks: this runs inside a save.
