@@ -605,7 +605,7 @@ jobs:
         with:
           bundler-cache: true
 
-      - name: Prepare test database
+      - name: Prepare test database and assets
         run: bundle exec rake db:prepare
 
       - name: Start MinIO (S3-compatible object storage)
@@ -1295,7 +1295,7 @@ jobs:
           key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package.json', 'package-lock.json', '.npmrc', 'patches/**') }}
       - run: npm ci
         if: steps.node_modules.outputs.cache-hit != 'true'
-      - name: Prepare test database
+      - name: Prepare test database and assets
         run: |
           for _ in $(seq 1 90); do [ -f /tmp/compose.status ] && break; sleep 2; done
           cat /tmp/compose.log
@@ -1307,7 +1307,10 @@ jobs:
               && break
             sleep 2
           done
-          bin/rails db:prepare
+          # The same preparation the build job bakes into the test image: the
+          # database, the Vite test build, the widget bundles and the pages CSS.
+          npm run setup
+          bundle exec rake db:setup assets:precompile
           docker wait "$(docker compose ps -aq copyfixturefiles)"
       - name: Run tests
         timeout-minutes: 25
@@ -1417,7 +1420,7 @@ jobs:
           key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package.json', 'package-lock.json', '.npmrc', 'patches/**') }}
       - run: npm ci
         if: steps.node_modules.outputs.cache-hit != 'true'
-      - name: Prepare test database
+      - name: Prepare test database and assets
         run: |
           for _ in $(seq 1 90); do [ -f /tmp/compose.status ] && break; sleep 2; done
           cat /tmp/compose.log
@@ -1429,7 +1432,10 @@ jobs:
               && break
             sleep 2
           done
-          bin/rails db:prepare
+          # The same preparation the build job bakes into the test image: the
+          # database, the Vite test build, the widget bundles and the pages CSS.
+          npm run setup
+          bundle exec rake db:setup assets:precompile
           docker wait "$(docker compose ps -aq copyfixturefiles)"
       - name: Run tests
         timeout-minutes: 25
@@ -1541,7 +1547,7 @@ jobs:
           key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package.json', 'package-lock.json', '.npmrc', 'patches/**') }}
       - run: npm ci
         if: steps.node_modules.outputs.cache-hit != 'true'
-      - name: Prepare test database
+      - name: Prepare test database and assets
         run: |
           for _ in $(seq 1 90); do [ -f /tmp/compose.status ] && break; sleep 2; done
           cat /tmp/compose.log
@@ -1553,7 +1559,10 @@ jobs:
               && break
             sleep 2
           done
-          bin/rails db:prepare
+          # The same preparation the build job bakes into the test image: the
+          # database, the Vite test build, the widget bundles and the pages CSS.
+          npm run setup
+          bundle exec rake db:setup assets:precompile
           docker wait "$(docker compose ps -aq copyfixturefiles)"
       - name: Run tests
         timeout-minutes: 25
