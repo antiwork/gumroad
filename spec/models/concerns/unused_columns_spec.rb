@@ -2,19 +2,26 @@
 
 require "spec_helper"
 
-ActiveRecord::Schema.define do
-  create_table :test_models, temporary: true, force: true do |t|
-    t.string :name
-    t.string :email
-    t.string :description
-  end
-end
-
 describe UnusedColumns do
   class TestModel < ActiveRecord::Base
     include UnusedColumns
 
     unused_columns :description
+  end
+
+  # A temporary table exists only on the connection that created it, so it is made
+  # on each example's connection: the suite can hand an example a different one
+  # than the connection that loaded this file.
+  # The explicit drop keeps TEMPORARY in the SQL, which `force: true` leaves out: MySQL
+  # commits the example's transaction before a plain DROP TABLE.
+  before do
+    ActiveRecord::Base.connection.drop_table :test_models, temporary: true, if_exists: true
+    ActiveRecord::Base.connection.create_table :test_models, temporary: true do |t|
+      t.string :name
+      t.string :email
+      t.string :description
+    end
+    TestModel.reset_column_information
   end
 
   let(:record) do
