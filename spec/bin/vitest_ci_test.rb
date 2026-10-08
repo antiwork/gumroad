@@ -82,27 +82,27 @@ def glob_matches?(source, path, from: "app/javascript/a.tsx")
 end
 
 check("a glob array with a negated pattern excludes the negated files") do
-  source = %q{import.meta.glob(["./pages/**/*.tsx", "!./pages/**/*.test.tsx"])}
+  source = 'import.meta.glob(["./pages/**/*.tsx", "!./pages/**/*.test.tsx"])'
   glob_matches?(source, "app/javascript/pages/x/Y.tsx") && !glob_matches?(source, "app/javascript/pages/x/Y.test.tsx")
 end
 check("a negated pattern applies only to its own import.meta.glob call") do
-  source = %q{import.meta.glob("./a/*.ts"); import.meta.glob(["./b/*.ts", "!./a/*.ts"])}
+  source = 'import.meta.glob("./a/*.ts"); import.meta.glob(["./b/*.ts", "!./a/*.ts"])'
   glob_matches?(source, "app/javascript/a/x.ts")
 end
 check("a glob with a generic, a [id] file name and options still parses") do
-  source = %q{import.meta.glob<Record<string, string>>("./p/[id].tsx", { eager: true })}
+  source = 'import.meta.glob<Record<string, string>>("./p/[id].tsx", { eager: true })'
   glob_matches?(source, "app/javascript/p/[id].tsx")
 end
 check("a trailing ** and {a,b} alternation match nested files") do
-  glob_matches?(%q{import.meta.glob("$assets/images/**")}, "public/images/a/b/c.png", from: "app/javascript/a.tsx") &&
-    glob_matches?(%q{import.meta.glob("./i/*.{png,svg}")}, "app/javascript/i/x.svg") &&
-    !glob_matches?(%q{import.meta.glob("./i/*.{png,svg}")}, "app/javascript/i/x.jpg")
+  glob_matches?('import.meta.glob("$assets/images/**")', "public/images/a/b/c.png", from: "app/javascript/a.tsx") &&
+    glob_matches?('import.meta.glob("./i/*.{png,svg}")', "app/javascript/i/x.svg") &&
+    !glob_matches?('import.meta.glob("./i/*.{png,svg}")', "app/javascript/i/x.jpg")
 end
 
 check("a [!a] class negates, and an unreadable pattern (extglob, base option) matches every path") do
-  !glob_matches?(%q{import.meta.glob("./[!a]/x.ts")}, "app/javascript/a/x.ts") && glob_matches?(%q{import.meta.glob("./[!a]/x.ts")}, "app/javascript/b/x.ts") &&
-    glob_matches?(%q{import.meta.glob("./x/@(a|b).ts")}, "app/javascript/other/z.ts") &&
-    glob_matches?(%q{import.meta.glob("./x/*.ts", { base: "/foo" })}, "app/javascript/other/z.ts")
+  !glob_matches?('import.meta.glob("./[!a]/x.ts")', "app/javascript/a/x.ts") && glob_matches?('import.meta.glob("./[!a]/x.ts")', "app/javascript/b/x.ts") &&
+    glob_matches?('import.meta.glob("./x/@(a|b).ts")', "app/javascript/other/z.ts") &&
+    glob_matches?('import.meta.glob("./x/*.ts", { base: "/foo" })', "app/javascript/other/z.ts")
 end
 check("an apostrophe in a comment or an escaped quote cannot leak a later call's patterns") do
   source = %q{import.meta.glob("./a/\"*.ts", {/* don't */ eager: true}); import.meta.glob(["./b/*.ts", "!./a/*.ts"])}
@@ -110,8 +110,8 @@ check("an apostrophe in a comment or an escaped quote cannot leak a later call's
 end
 
 check("an invalid bracket class or an escaped pattern matches every path instead of failing") do
-  glob_matches?(%q{import.meta.glob("./a[]/*.ts")}, "app/javascript/other/z.ts") &&
-    glob_matches?(%q{import.meta.glob("./p/\\[id\\].tsx")}, "app/javascript/other/z.ts")
+  glob_matches?('import.meta.glob("./a[]/*.ts")', "app/javascript/other/z.ts") &&
+    glob_matches?('import.meta.glob("./p/\\[id\\].tsx")', "app/javascript/other/z.ts")
 end
 
 mode, = plan
