@@ -41,9 +41,10 @@ while [ $# -gt 0 ]; do
   esac
   shift 2
 done
-[[ "$connect" =~ ^[0-9]+$ && "$read_timeout" =~ ^[0-9]+$ && "${AWS_MAX_ATTEMPTS:-}" =~ ^[0-9]+$ ]] \
+[[ "$connect" =~ ^[1-9][0-9]*$ && "$read_timeout" =~ ^[1-9][0-9]*$ && "${AWS_MAX_ATTEMPTS:-}" =~ ^[1-9][0-9]*$ ]] \
   && [ $((AWS_MAX_ATTEMPTS * (connect + read_timeout) * 4)) -lt 300 ] \
   || unsupported "$call without time limits that end inside the 5-minute step timeout"
+[ -n "${AWS_HANG:-}" ] && sleep 60
 case "$call" in
   "autoscaling describe-auto-scaling-groups")
     [ -n "$asg" ] && [ "$query" = "AutoScalingGroups[0].[DesiredCapacity,MaxSize]" ] && [ "$output" = "text" ] \
@@ -119,6 +120,16 @@ export "$blue=None	None" "$green=0	14"
 run
 [ "$STATUS" -eq 0 ] && [ ! -s "$WORK/calls" ] \
   && ok "unexpected or zero sizes change nothing" || fail "unexpected sizes: $(cat "$WORK/calls")"
+
+if command -v timeout >/dev/null 2>&1; then
+  export "$blue=7	14" "$green=7	14"
+  started=$SECONDS
+  run "$ROOT" AWS_HANG=1 PRESCALE_DEADLINE_SECONDS=2
+  [ "$STATUS" -eq 0 ] && [ $((SECONDS - started)) -lt 20 ] && [ ! -s "$WORK/calls" ] && grep -q "stopped after 2 s" "$WORK/out" \
+    && ok "a stalled step stops at its own deadline and exits 0" || fail "deadline: $((SECONDS - started)) s, $(cat "$WORK/out")"
+else
+  echo "  skip a stalled step stops at its own deadline (no timeout command here; CI runs it)"
+fi
 
 # On main the step goes through skip_if_production_noop, so it needs a repo with a
 # release tag and an origin to fetch it from. The scripts are copied in uncommitted, so

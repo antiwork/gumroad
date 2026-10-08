@@ -16,12 +16,21 @@ logger() {
   echo -e "${GREEN}$(date "+%Y/%m/%d %H:%M:%S") prescale_web_clusters.sh: $1${NC}"
 }
 
+# Buildkite marks a timed-out step as errored, which soft_fail does not cover, so the
+# whole step, the relevance check's git fetch included, runs under a deadline of its own
+# that ends inside the step's 5-minute timeout.
+if [ -z "${PRESCALE_UNDER_DEADLINE:-}" ] && command -v timeout >/dev/null 2>&1; then
+  PRESCALE_UNDER_DEADLINE=1 timeout -k 5 "${PRESCALE_DEADLINE_SECONDS:-240}" bash "$0"
+  status=$?
+  [ "$status" -eq 0 ] || logger "WARNING: stopped after ${PRESCALE_DEADLINE_SECONDS:-240} s (exit $status); leaving the clusters to the deploy's scale_up"
+  exit 0
+fi
+
 source .buildkite/scripts/deploy_relevance.sh
 skip_if_production_noop "prescale_web_clusters.sh"
 
 WEB_ASGS=(production-web-cluster-blue-asg production-web-cluster-green-asg)
-# Buildkite marks a timed-out step as errored, which soft_fail does not cover. These bound
-# each call to 3 attempts of 20 s, so the 4 calls end inside the step's 5-minute timeout.
+# Each call gets 3 attempts of at most 20 s, so one stalled call cannot use up the deadline.
 export AWS_MAX_ATTEMPTS=3
 AWS_LIMITS=(--cli-connect-timeout 5 --cli-read-timeout 15)
 
