@@ -211,7 +211,9 @@ push_production_assets() {
 # On a cache hit, builds the production image from the web image and the files a
 # full compile of the same inputs produced, and skips the compile. The container
 # carries the same env and label as `make build_production`, because docker commit
-# bakes them into the image. Returns non-zero for a full compile instead: a miss,
+# bakes them into the image. A full compile also leaves a warm Bootsnap cache from
+# its Rails boot, which saves each production container about 3 s of boot, so the
+# hit path precompiles one (about 4 s); if that fails, the image just boots cold. Returns non-zero for a full compile instead: a miss,
 # a "no-cache" commit, or an image that could not be built. A failed S3 upload of
 # a built image stops the build, as it does after a full compile.
 build_production_image_from_main_asset_cache() {
@@ -245,7 +247,7 @@ build_production_image_from_main_asset_cache() {
       -v "$PWD/$PREVIEW_ASSET_CACHE_TARBALL:/tmp/$PREVIEW_ASSET_CACHE_TARBALL:ro" \
       --label assets_compiled=true \
       "$WEB_REPO:web-$WEB_TAG" \
-      bash -c "set -e; cd /app; tar -xzf /tmp/$PREVIEW_ASSET_CACHE_TARBALL; for p in $MAIN_ASSET_CACHE_PATHS; do [ ! -e \"\$p\" ] || chown -R app:app \"\$p\"; done; rm -rf spec/" \
+      bash -c "set -e; cd /app; tar -xzf /tmp/$PREVIEW_ASSET_CACHE_TARBALL; for p in $MAIN_ASSET_CACHE_PATHS; do [ ! -e \"\$p\" ] || chown -R app:app \"\$p\"; done; rm -rf spec/; gosu app bundle exec bootsnap precompile --gemfile app/ lib/ config/ || echo 'bootsnap precompile failed; the image will boot with a cold cache'" \
     || ! docker commit production-assets-from-cache "$image"; then
     logger "Could not build $image from the cached files: running the full compile"
     docker rm -f production-assets-from-cache >/dev/null 2>&1 || :

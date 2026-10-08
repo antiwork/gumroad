@@ -85,6 +85,8 @@ seed_cache; run_script; rc=$?
 grep -q "tarball-mounted" "$WORK/calls" && ok "the verified tarball is mounted into the image build" || fail "tarball not mounted"
 grep -q -- "-e RAILS_ENV=production" "$WORK/calls" && grep -q -- "--label assets_compiled=true" "$WORK/calls" && grep -q -- "-e REVISION=0123456789ab" "$WORK/calls" \
   && ok "the image carries the same env and label as make build_production" || fail "image env or label"
+grep -q "gosu app bundle exec bootsnap precompile --gemfile app/ lib/ config/ ||" "$WORK/calls" \
+  && ok "the image gets a warm Bootsnap cache, best-effort, as the app user" || fail "no Bootsnap precompile in the image build"
 grep -q "$TAG" "$WORK/annotations" && ok "a hit is annotated with its tag" || fail "hit not annotated"
 [ ! -e preview-asset-cache.tar.gz ] && ok "it leaves no tarball behind" || fail "tarball left behind"
 
