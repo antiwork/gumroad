@@ -1247,9 +1247,6 @@ jobs:
       RAILS_LOG_LEVEL: info
       # Also selects the headless Chrome drivers in spec/support/capybara_driver.rb.
       IN_DOCKER: true
-      # The image has no Chrome, so Selenium Manager downloads Chrome for Testing
-      # there. Do the same here instead of using the runner's preinstalled Chrome.
-      SE_FORCE_BROWSER_DOWNLOAD: true
       # The image's locale and time zone: Chrome formats dates from both.
       LANG: C.UTF-8
       TZ: UTC
@@ -1274,8 +1271,9 @@ jobs:
       - name: Start services
         run: (docker compose up -d > /tmp/compose.log 2>&1; echo $? > /tmp/compose.status) &
       # What the test image adds to the runner: docker/base/Dockerfile.test, the
-      # wkhtmltopdf binary from docker/base/Dockerfile, and docker/web/Dockerfile.test's
-      # ImageMagick limits.
+      # wkhtmltopdf binary and the pinned Chrome and ChromeDriver from
+      # docker/base/Dockerfile, and docker/web/Dockerfile.test's ImageMagick limits.
+      # The runner's own, newer Chrome fails specs that pass on the image's.
       - name: Install system packages
         run: |
           sudo apt-get update -qq
@@ -1285,6 +1283,14 @@ jobs:
           curl -fsSL https://github.com/wkhtmltopdf/wkhtmltopdf/releases/download/0.12.4/wkhtmltox-0.12.4_linux-generic-amd64.tar.xz \
             | tar xJ -C /tmp
           sudo install -m 755 /tmp/wkhtmltox/bin/wkhtmltopdf /usr/local/bin/wkhtmltopdf
+          CHROME_VERSION=125.0.6422.76-1
+          curl -fsSL --retry 4 -o /tmp/chrome.deb "https://public-files.gumroad.com/google-chrome-stable_${CHROME_VERSION}_amd64.deb"
+          sudo apt-get install -yq --allow-downgrades /tmp/chrome.deb
+          curl -fsSL --retry 4 -o /tmp/chromedriver.zip "https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VERSION%-1}/linux64/chromedriver-linux64.zip"
+          unzip -q -o /tmp/chromedriver.zip -d /tmp
+          sudo install -m 755 /tmp/chromedriver-linux64/chromedriver /usr/local/bin/chromedriver
+          google-chrome --version
+          chromedriver --version
           sudo sed -r -i \
             -e 's/(name="memory" value=")[^"]+"/\11GiB"/' \
             -e 's/(name="disk" value=")[^"]+"/\18GiB"/' \
@@ -1392,9 +1398,6 @@ jobs:
       RAILS_LOG_LEVEL: info
       # Also selects the headless Chrome drivers in spec/support/capybara_driver.rb.
       IN_DOCKER: true
-      # The image has no Chrome, so Selenium Manager downloads Chrome for Testing
-      # there. Do the same here instead of using the runner's preinstalled Chrome.
-      SE_FORCE_BROWSER_DOWNLOAD: true
       # The image's locale and time zone: Chrome formats dates from both.
       LANG: C.UTF-8
       TZ: UTC
@@ -1419,8 +1422,9 @@ jobs:
       - name: Start services
         run: (docker compose up -d > /tmp/compose.log 2>&1; echo $? > /tmp/compose.status) &
       # What the test image adds to the runner: docker/base/Dockerfile.test, the
-      # wkhtmltopdf binary from docker/base/Dockerfile, and docker/web/Dockerfile.test's
-      # ImageMagick limits.
+      # wkhtmltopdf binary and the pinned Chrome and ChromeDriver from
+      # docker/base/Dockerfile, and docker/web/Dockerfile.test's ImageMagick limits.
+      # The runner's own, newer Chrome fails specs that pass on the image's.
       - name: Install system packages
         run: |
           sudo apt-get update -qq
@@ -1430,6 +1434,14 @@ jobs:
           curl -fsSL https://github.com/wkhtmltopdf/wkhtmltopdf/releases/download/0.12.4/wkhtmltox-0.12.4_linux-generic-amd64.tar.xz \
             | tar xJ -C /tmp
           sudo install -m 755 /tmp/wkhtmltox/bin/wkhtmltopdf /usr/local/bin/wkhtmltopdf
+          CHROME_VERSION=125.0.6422.76-1
+          curl -fsSL --retry 4 -o /tmp/chrome.deb "https://public-files.gumroad.com/google-chrome-stable_${CHROME_VERSION}_amd64.deb"
+          sudo apt-get install -yq --allow-downgrades /tmp/chrome.deb
+          curl -fsSL --retry 4 -o /tmp/chromedriver.zip "https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VERSION%-1}/linux64/chromedriver-linux64.zip"
+          unzip -q -o /tmp/chromedriver.zip -d /tmp
+          sudo install -m 755 /tmp/chromedriver-linux64/chromedriver /usr/local/bin/chromedriver
+          google-chrome --version
+          chromedriver --version
           sudo sed -r -i \
             -e 's/(name="memory" value=")[^"]+"/\11GiB"/' \
             -e 's/(name="disk" value=")[^"]+"/\18GiB"/' \
@@ -1537,9 +1549,6 @@ jobs:
       RAILS_LOG_LEVEL: info
       # Also selects the headless Chrome drivers in spec/support/capybara_driver.rb.
       IN_DOCKER: true
-      # The image has no Chrome, so Selenium Manager downloads Chrome for Testing
-      # there. Do the same here instead of using the runner's preinstalled Chrome.
-      SE_FORCE_BROWSER_DOWNLOAD: true
       # The image's locale and time zone: Chrome formats dates from both.
       LANG: C.UTF-8
       TZ: UTC
@@ -1564,8 +1573,9 @@ jobs:
       - name: Start services
         run: (docker compose up -d > /tmp/compose.log 2>&1; echo $? > /tmp/compose.status) &
       # What the test image adds to the runner: docker/base/Dockerfile.test, the
-      # wkhtmltopdf binary from docker/base/Dockerfile, and docker/web/Dockerfile.test's
-      # ImageMagick limits.
+      # wkhtmltopdf binary and the pinned Chrome and ChromeDriver from
+      # docker/base/Dockerfile, and docker/web/Dockerfile.test's ImageMagick limits.
+      # The runner's own, newer Chrome fails specs that pass on the image's.
       - name: Install system packages
         run: |
           sudo apt-get update -qq
@@ -1575,6 +1585,14 @@ jobs:
           curl -fsSL https://github.com/wkhtmltopdf/wkhtmltopdf/releases/download/0.12.4/wkhtmltox-0.12.4_linux-generic-amd64.tar.xz \
             | tar xJ -C /tmp
           sudo install -m 755 /tmp/wkhtmltox/bin/wkhtmltopdf /usr/local/bin/wkhtmltopdf
+          CHROME_VERSION=125.0.6422.76-1
+          curl -fsSL --retry 4 -o /tmp/chrome.deb "https://public-files.gumroad.com/google-chrome-stable_${CHROME_VERSION}_amd64.deb"
+          sudo apt-get install -yq --allow-downgrades /tmp/chrome.deb
+          curl -fsSL --retry 4 -o /tmp/chromedriver.zip "https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VERSION%-1}/linux64/chromedriver-linux64.zip"
+          unzip -q -o /tmp/chromedriver.zip -d /tmp
+          sudo install -m 755 /tmp/chromedriver-linux64/chromedriver /usr/local/bin/chromedriver
+          google-chrome --version
+          chromedriver --version
           sudo sed -r -i \
             -e 's/(name="memory" value=")[^"]+"/\11GiB"/' \
             -e 's/(name="disk" value=")[^"]+"/\18GiB"/' \
