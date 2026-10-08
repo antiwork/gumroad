@@ -3,24 +3,21 @@
 # production image is already built and pushed when this step runs, and the
 # deploy does not wait for it. On a hit it compares what the cache would have
 # restored with the files in that image, one by one; on a miss it saves those
-# files for the next commit with the same inputs. The cache may serve a deploy
-# only after 30 hits with 0 mismatches.
+# files for the next commit with the same inputs. compile_assets.sh serves main
+# from this cache, so on a build it served the comparison only confirms the copy.
 #
 # Exit 1 (a soft failure in the pipeline) only on a mismatch, so one stands out.
 set -uo pipefail
 
 source .buildkite/scripts/preview_asset_cache.sh
+source .buildkite/scripts/main_asset_cache.sh
 source .buildkite/scripts/deploy_relevance.sh
 # A no-op commit builds no production image, so there is nothing to compare.
 skip_if_production_noop "main_asset_cache_shadow.sh"
 
-# Its own prefix and version, so entries never mix with preview ones. The
-# preview helpers below read this prefix; this script runs in its own process.
-PREVIEW_ASSET_CACHE_PREFIX="main-asset-cache"
-MAIN_ASSET_CACHE_VERSION="v1"
-# A production image has no node_modules, so it cannot rebuild routes.js or the
-# JSON schemas at boot: a cache for main must carry them.
-MAIN_ASSET_CACHE_PATHS="public/vite public/js public/pages-tailwind.css public/assets/pages public/pages-tailwind-manifest.json app/javascript/utils/routes.js app/javascript/utils/routes.d.ts app/javascript/json_schemas"
+# Its own prefix, so entries never mix with preview ones. The preview helpers
+# read this prefix; this script runs in its own process.
+PREVIEW_ASSET_CACHE_PREFIX="$MAIN_ASSET_CACHE_PREFIX"
 
 IMAGE="${ECR_REGISTRY}/gumroad/web:production-$(echo "$BUILDKITE_COMMIT" | cut -c1-12)"
 # Relative, under the checkout: without a host aws CLI the S3 helper runs in a
@@ -28,14 +25,6 @@ IMAGE="${ECR_REGISTRY}/gumroad/web:production-$(echo "$BUILDKITE_COMMIT" | cut -
 WORK=.main-asset-cache-shadow
 rm -rf "$WORK" && mkdir -p "$WORK"
 trap 'rm -rf "$WORK"' EXIT
-
-# The branch is not in the key: main never sets CUSTOM_DOMAIN. The environment
-# is, because RAILS_ENV picks the asset host baked into the bundle.
-main_asset_cache_tag() {
-  local tree_sha
-  tree_sha=$(preview_asset_cache_inputs | sha1sum | cut -d " " -f1)
-  echo "$tree_sha production $MAIN_ASSET_CACHE_VERSION" | sha1sum | cut -d " " -f1
-}
 
 # "sha256  path" for every file under the cached paths, in a stable order.
 file_digests() {

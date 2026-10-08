@@ -1,0 +1,114 @@
+#!/bin/bash
+# `check && ok || fail` is safe here: ok never fails.
+# shellcheck disable=SC2015
+# Harness for the production path of compile_assets.sh: runs the real script
+# against stub docker, make, aws and buildkite-agent binaries, with a local
+# directory as the S3 bucket. Run from the repo root:
+# .buildkite/scripts/main_asset_cache_compile_test.sh
+set -uo pipefail
+
+SCRIPT=.buildkite/scripts/compile_assets.sh
+WORK=$(mktemp -d)
+trap 'rm -rf "$WORK"' EXIT
+
+PASS=0; FAIL=0
+ok()   { PASS=$((PASS + 1)); echo "  ok   $1"; }
+fail() { FAIL=$((FAIL + 1)); echo "  FAIL $1"; }
+
+mkdir -p "$WORK/bin"
+cat > "$WORK/bin/docker" <<'STUB'
+#!/bin/bash
+echo "docker $*" >> "$CALLS"
+case "$1" in
+  images) echo image-id ;;
+  run)
+    if [[ " $* " == *" --name production-assets-from-cache "* ]]; then
+      mount=$(printf '%s\n' "$@" | grep -m1 ':/tmp/preview-asset-cache.tar.gz:ro' | cut -d: -f1)
+      [ -f "$mount" ] && echo "tarball-mounted" >> "$CALLS"
+      exit "${RUN_RC:-0}"
+    fi
+    [[ " $* " == *" -d "* ]] && { echo container-id; exit 0; }
+    [[ " $* " == *"push_assets_to_s3.sh"* ]] && exit "${S3_RC:-0}"
+    exit 0 ;;
+  commit|rm|push|pull) exit 0 ;;
+  *) exit 0 ;;
+esac
+STUB
+cat > "$WORK/bin/make" <<'STUB'
+#!/bin/bash
+echo "make $*" >> "$CALLS"
+STUB
+cat > "$WORK/bin/aws" <<'STUB'
+#!/bin/bash
+[ "$1 $2" = "s3 cp" ] || exit 1
+src=$3 dst=$4
+to_path() { echo "$BUCKET_DIR/${1#s3://}"; }
+case "$src" in
+  s3://*) [ -f "$(to_path "$src")" ] || exit 1; cp "$(to_path "$src")" "$dst" ;;
+  *) mkdir -p "$(dirname "$(to_path "$dst")")"; cp "$src" "$(to_path "$dst")" ;;
+esac
+STUB
+cat > "$WORK/bin/buildkite-agent" <<'STUB'
+#!/bin/bash
+cat >> "$ANNOTATIONS"
+STUB
+chmod +x "$WORK/bin/"*
+
+export BUILDKITE_COMMIT=0123456789abcdef0123 ECR_REGISTRY=ecr.example FORCE_DEPLOY=1 \
+  GUM_AWS_ACCESS_KEY_ID=x GUM_AWS_SECRET_ACCESS_KEY=y RAILS_PRODUCTION_MASTER_KEY=k BUILDKITE_BUILD_NUMBER=1
+TAG=$(BUILDKITE_BRANCH=main bash -c 'source .buildkite/scripts/preview_asset_cache.sh; source .buildkite/scripts/main_asset_cache.sh; main_asset_cache_tag')
+ENTRY="$WORK/bucket/buildkite-branch-cache/main-asset-cache/$TAG.tar.gz"
+
+seed_cache() {
+  rm -rf "$WORK/bucket"; mkdir -p "$(dirname "$ENTRY")" "$WORK/files/public/vite"
+  echo bundle > "$WORK/files/public/vite/app.js"
+  tar -czf "$ENTRY" -C "$WORK/files" public
+  sha256sum "$ENTRY" | cut -d " " -f1 > "$ENTRY.sha256"
+}
+
+run_script() {
+  : > "$WORK/calls"; : > "$WORK/annotations"
+  PATH="$WORK/bin:$PATH" CALLS="$WORK/calls" BUCKET_DIR="$WORK/bucket" ANNOTATIONS="$WORK/annotations" \
+    BUILDKITE_BRANCH=main BUILDKITE_PARALLEL_JOB=1 BUILDKITE_MESSAGE="Change something" \
+    env "$@" bash "$SCRIPT" > "$WORK/out" 2>&1
+}
+
+compiled() { grep -q "^make build_production" "$WORK/calls"; }
+served() { grep -q "^docker commit production-assets-from-cache ecr.example/gumroad/web:production-0123456789ab" "$WORK/calls"; }
+pushed() { grep -q "^docker push ecr.example/gumroad/web:production-0123456789ab" "$WORK/calls"; }
+uploaded() { grep -q "push_assets_to_s3.sh" "$WORK/calls"; }
+
+echo "compile_assets.sh production path"
+
+seed_cache; run_script; rc=$?
+[ $rc = 0 ] && served && ! compiled && uploaded && pushed && ok "a hit builds the image from the cache, uploads the assets and pushes it, with no compile" || fail "hit (rc=$rc): $(cat "$WORK/out" | tail -3)"
+grep -q "tarball-mounted" "$WORK/calls" && ok "the verified tarball is mounted into the image build" || fail "tarball not mounted"
+grep -q -- "-e RAILS_ENV=production" "$WORK/calls" && grep -q -- "--label assets_compiled=true" "$WORK/calls" && grep -q -- "-e REVISION=0123456789ab" "$WORK/calls" \
+  && ok "the image carries the same env and label as make build_production" || fail "image env or label"
+grep -q "$TAG" "$WORK/annotations" && ok "a hit is annotated with its tag" || fail "hit not annotated"
+[ ! -e preview-asset-cache.tar.gz ] && ok "it leaves no tarball behind" || fail "tarball left behind"
+
+rm -rf "$WORK/bucket"; run_script; rc=$?
+[ $rc = 0 ] && compiled && ! served && pushed && ok "a miss runs the full compile" || fail "miss (rc=$rc)"
+
+seed_cache; echo junk >> "$ENTRY"; run_script; rc=$?
+[ $rc = 0 ] && compiled && ! served && ok "a tarball that fails its checksum runs the full compile" || fail "bad checksum (rc=$rc)"
+
+seed_cache; run_script RUN_RC=1; rc=$?
+[ $rc = 0 ] && compiled && ! uploaded && pushed && ok "an image that cannot be built from the cache falls back to the full compile" || fail "image build failure (rc=$rc)"
+
+seed_cache; run_script S3_RC=1; rc=$?
+[ $rc != 0 ] && ! pushed && ! compiled && ok "a failed S3 upload stops the build before the image is pushed" || fail "S3 failure (rc=$rc)"
+
+seed_cache; run_script CUSTOM_DOMAIN=preview.example.com; rc=$?
+[ $rc != 0 ] && ! compiled && ! served && ok "CUSTOM_DOMAIN on the production path stops the build" || fail "CUSTOM_DOMAIN (rc=$rc)"
+
+seed_cache; run_script BUILDKITE_MESSAGE="Fix a thing [no-cache]"; rc=$?
+[ $rc = 0 ] && compiled && ! served && ok "a no-cache commit runs the full compile" || fail "no-cache (rc=$rc)"
+
+seed_cache; run_script BUILDKITE_BRANCH=comp-assets-test; rc=$?
+[ $rc = 0 ] && compiled && ! served && ok "only main is served from the cache" || fail "comp-assets branch (rc=$rc)"
+
+echo
+echo "PASSED=$PASS FAILED=$FAIL"
+[ "$FAIL" = 0 ]

@@ -18,6 +18,7 @@ quietly() {
 }
 
 source .buildkite/scripts/preview_asset_cache.sh
+source .buildkite/scripts/main_asset_cache.sh
 
 # Skip the whole production pipeline when this commit changes nothing that ships
 # (specs, workflows, docs, the pipeline itself). See deploy_relevance.sh.
@@ -191,18 +192,97 @@ if [[ ${BUILDKITE_PARALLEL_JOB:-0} = 0 && $BUILDKITE_BRANCH != "main" ]]; then
   push_image staging || exit 1
 fi
 
+# Uploads the image's compiled assets to the production bucket, the same way
+# `make build_production` does with PUSH_ASSETS=true.
+push_production_assets() {
+  local image=$1 container_id status=0
+  container_id=$(docker run -d --entrypoint="bash" --volume /app "$image") || return 1
+  docker run --rm \
+    -e AWS_ACCESS_KEY_ID="$GUM_AWS_ACCESS_KEY_ID" \
+    -e AWS_SECRET_ACCESS_KEY="$GUM_AWS_SECRET_ACCESS_KEY" \
+    -e ASSETS_S3_BUCKET=gumroad-production-assets \
+    --volumes-from "$container_id" \
+    garland/aws-cli-docker \
+    sh /app/docker/web/push_assets_to_s3.sh || status=$?
+  docker rm -fv "$container_id" >/dev/null 2>&1 || true
+  return $status
+}
+
+# On a cache hit, builds the production image from the web image and the files a
+# full compile of the same inputs produced, and skips the compile. The container
+# carries the same env and label as `make build_production`, because docker commit
+# bakes them into the image. Returns non-zero for a full compile instead: a miss,
+# a "no-cache" commit, or an image that could not be built. A failed S3 upload of
+# a built image stops the build, as it does after a full compile.
+build_production_image_from_main_asset_cache() {
+  local PREVIEW_ASSET_CACHE_PREFIX=$MAIN_ASSET_CACHE_PREFIX
+  local tag image=$WEB_REPO:production-$WEB_TAG
+  [[ $BUILDKITE_BRANCH == "main" ]] || return 1
+  if [[ ${BUILDKITE_MESSAGE:-} =~ no[-_.[:space:]]cache ]]; then
+    logger "The commit message asks for no cache: running the full compile"
+    return 1
+  fi
+  tag=$(main_asset_cache_tag)
+  if ! preview_asset_cache_restore "$tag"; then
+    logger "Main asset cache miss for tag $tag: running the full compile"
+    return 1
+  fi
+  logger "Main asset cache hit for tag $tag: building $image from the cached files"
+  docker rm -f production-assets-from-cache >/dev/null 2>&1 || :
+  if ! docker run \
+      --name production-assets-from-cache \
+      --entrypoint="" \
+      -e RAILS_ENV="production" \
+      -e RACK_ENV="production" \
+      -e DATABASE_HOST="db_test" \
+      -e DATABASE_NAME="gumroad_test" \
+      -e DATABASE_USERNAME="root" \
+      -e DATABASE_PASSWORD="password" \
+      -e RAILS_MASTER_KEY="$RAILS_PRODUCTION_MASTER_KEY" \
+      -e DEVISE_SECRET_KEY="sample_secret_key" \
+      -e BUILDKITE_BRANCH="$BUILDKITE_BRANCH" \
+      -e REVISION="$WEB_TAG" \
+      -v "$PWD/$PREVIEW_ASSET_CACHE_TARBALL:/tmp/$PREVIEW_ASSET_CACHE_TARBALL:ro" \
+      --label assets_compiled=true \
+      "$WEB_REPO:web-$WEB_TAG" \
+      bash -c "set -e; cd /app; tar -xzf /tmp/$PREVIEW_ASSET_CACHE_TARBALL; for p in $MAIN_ASSET_CACHE_PATHS; do [ ! -e \"\$p\" ] || chown -R app:app \"\$p\"; done; rm -rf spec/" \
+    || ! docker commit production-assets-from-cache "$image"; then
+    logger "Could not build $image from the cached files: running the full compile"
+    docker rm -f production-assets-from-cache >/dev/null 2>&1 || :
+    rm -f "$PREVIEW_ASSET_CACHE_TARBALL"
+    return 1
+  fi
+  docker rm production-assets-from-cache >/dev/null 2>&1 || :
+  rm -f "$PREVIEW_ASSET_CACHE_TARBALL"
+  if ! push_production_assets "$image"; then
+    logger "Uploading the production assets to S3 failed: stopping the build"
+    exit 1
+  fi
+  if command -v buildkite-agent >/dev/null 2>&1; then
+    printf 'Production assets served from the main asset cache (tag `%s`); the compile was skipped.\n' "$tag" \
+      | buildkite-agent annotate --style info --context main-asset-cache-served 2>/dev/null || true
+  fi
+}
+
 if [[ $BUILDKITE_PARALLEL_JOB = 1 && ( $BUILDKITE_BRANCH == "main" || $BUILDKITE_BRANCH == comp-assets-* ) ]]; then
-  logger "Building production assets"
-  docker rm production-assets || :
-  COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME}_production \
-    NEW_WEB_TAG=$WEB_TAG \
-    NEW_WEB_REPO=$WEB_REPO \
-    BUILDKITE_BRANCH=${BUILDKITE_BRANCH} \
-    GUM_AWS_ACCESS_KEY_ID=${GUM_AWS_ACCESS_KEY_ID} \
-    GUM_AWS_SECRET_ACCESS_KEY=${GUM_AWS_SECRET_ACCESS_KEY} \
-    RAILS_PRODUCTION_MASTER_KEY="$RAILS_PRODUCTION_MASTER_KEY" \
-    PUSH_ASSETS=true \
-    make build_production
+  if [[ -n ${CUSTOM_DOMAIN:-} ]]; then
+    logger "CUSTOM_DOMAIN is set: a production build must not bake a preview domain into its assets"
+    exit 1
+  fi
+
+  if ! build_production_image_from_main_asset_cache; then
+    logger "Building production assets"
+    docker rm production-assets || :
+    COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME}_production \
+      NEW_WEB_TAG=$WEB_TAG \
+      NEW_WEB_REPO=$WEB_REPO \
+      BUILDKITE_BRANCH=${BUILDKITE_BRANCH} \
+      GUM_AWS_ACCESS_KEY_ID=${GUM_AWS_ACCESS_KEY_ID} \
+      GUM_AWS_SECRET_ACCESS_KEY=${GUM_AWS_SECRET_ACCESS_KEY} \
+      RAILS_PRODUCTION_MASTER_KEY="$RAILS_PRODUCTION_MASTER_KEY" \
+      PUSH_ASSETS=true \
+      make build_production
+  fi
 
   push_image production || exit 1
 fi
