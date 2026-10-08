@@ -18,9 +18,13 @@ skip_if_production_noop "prescale_web_clusters.sh"
 
 WEB_ASGS=(production-web-cluster-blue-asg production-web-cluster-green-asg)
 
+read_sizes() {
+  aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names "$1" \
+    --query 'AutoScalingGroups[0].[DesiredCapacity,MaxSize]' --output text 2>&1
+}
+
 for asg in "${WEB_ASGS[@]}"; do
-  if ! sizes=$(aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names "$asg" \
-      --query 'AutoScalingGroups[0].[DesiredCapacity,MaxSize]' --output text 2>&1); then
+  if ! sizes=$(read_sizes "$asg"); then
     logger "WARNING: could not read $asg ($sizes); leaving it to the deploy's scale_up"
     continue
   fi
@@ -34,6 +38,16 @@ for asg in "${WEB_ASGS[@]}"; do
   [ "$target" -le "$max" ] || target=$max
   if [ "$target" -le "$desired" ]; then
     logger "$asg is already at $desired of $max; nothing to do"
+    continue
+  fi
+
+  # AWS has no compare-and-set on desired capacity, so read again right before the write:
+  # target tracking or the deploy's scale_up may have raised the cluster since the first
+  # read. The pipeline's concurrency group keeps two builds' pre-scale steps from racing,
+  # and during a deploy its min-size pin makes AWS reject any write below it.
+  if current=$(read_sizes "$asg") && read -r current _ <<< "$current" \
+      && [[ "$current" =~ ^[0-9]+$ ]] && [ "$current" -ge "$target" ]; then
+    logger "$asg is already at $current; nothing to do"
     continue
   fi
 

@@ -113,5 +113,8 @@ steps:
     branches: "main"
     depends_on: build-web-image
     command: ".buildkite/scripts/prescale_web_clusters.sh"
+    # One at a time across builds, so an older build's stale write cannot undo a newer one's.
+    concurrency_group: "gumroad/prescale-web-clusters"
+    concurrency: 1
     timeout_in_minutes: 5
     soft_fail: true
