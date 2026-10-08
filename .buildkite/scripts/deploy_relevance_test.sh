@@ -272,7 +272,7 @@ if [ "${1:-}" = "--mutate" ]; then
     sed "$expr" "$LIB" > "$LIB_UNDER_TEST"
     if cmp -s "$LIB" "$LIB_UNDER_TEST"; then echo "  ??   $name: sed did not change anything"; ESCAPED=$((ESCAPED + 1)); return; fi
     out=$(run_suite 2>&1)
-    if echo "$out" | grep -q ' 0 failed'; then echo "  ESC  $name (all cases still pass)"; ESCAPED=$((ESCAPED + 1)); else echo "  kill $name"; fi
+    if grep -q ' 0 failed' <<<"$out"; then echo "  ESC  $name (all cases still pass)"; ESCAPED=$((ESCAPED + 1)); else echo "  kill $name"; fi
   }
   mutate "baseline-is-parent"      's|git diff --name-only --no-renames "\$base" "\$commit"|git diff --name-only "$commit^" "$commit"|'
   mutate "renames-collapse"        's/ --no-renames//'
