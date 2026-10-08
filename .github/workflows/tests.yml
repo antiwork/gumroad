@@ -101,10 +101,14 @@ jobs:
     needs: ci_gate
     if: ${{ github.event_name != 'pull_request_target' || github.event.pull_request.head.repo.full_name != github.repository }}
     steps:
+      # Full history without file contents: bin/vitest-ci diffs the branch against
+      # its merge base with main.
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
+          fetch-depth: 0
+          filter: blob:none
       - uses: actions/setup-node@v4
         with:
           node-version-file: package.json
@@ -124,7 +128,15 @@ jobs:
           path: node_modules
           key: ${{ steps.node_modules.outputs.cache-primary-key }}
       - run: npm run lint-fast
-      - run: npm test
+      # Branch pushes run the tests related to their changes; main and fork PRs
+      # run the whole suite.
+      - name: Run vitest
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" != "refs/heads/main" ]]; then
+            ruby bin/vitest-ci origin/main
+          else
+            npm test
+          fi
         env:
           LANG: en_US.UTF-8
           LC_ALL: en_US.UTF-8
@@ -230,6 +242,9 @@ jobs:
 
       - name: Self-test the revert decision for red main deploys
         run: ruby spec/bin/revert_red_main_decision_test.rb
+
+      - name: Self-test the vitest selection for branches
+        run: ruby spec/bin/vitest_ci_test.rb
 
       - name: Self-test the main asset cache shadow
         run: bash .buildkite/scripts/main_asset_cache_shadow_test.sh

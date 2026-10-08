@@ -1,0 +1,242 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Runs the vitest tests a branch needs: the test files that depend on a file the
+# branch changed since it left BASE (default origin/main), or the whole suite when a
+# change can reach tests that an import graph does not show.
+#
+# The graph is static and counts every import, `import type` included: typia
+# generates validators from types, so a type-only change can change a test's
+# result. `vitest related` follows runtime imports only, so it would miss those.
+#
+#   bin/vitest-ci [BASE]
+#   bin/vitest-ci --plan < "git diff --name-status -z" output   # print the decision only
+
+require "open3"
+require "set"
+
+TEST_FILE = %r{\A(app/javascript/.+\.test\.tsx?|scripts/.+\.test\.ts)\z}
+SOURCE_ROOTS = ["app/javascript", "scripts"].freeze
+SOURCE_FILE = /\.(c|m)?(j|t)sx?\z/
+RESOLVE_EXTENSIONS = ["", ".ts", ".tsx", ".js", ".jsx", ".mts", ".d.ts", ".json"].freeze
+ALIASES = { "$app/" => "app/javascript/", "$assets/" => "public/", "$vendor/" => "vendor/assets/javascripts/" }.freeze
+SPECIFIER = /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+|\brequire\s*\(\s*|\bvi\.mock\s*\(\s*|\bimportActual\s*(?:<[^>]*>)?\s*\(\s*)["']([^"']+)["']/
+GLOB_CALL = /import\.meta\.glob\b/
+# Modules that read repository files at runtime depend on files no import names, so
+# every test that reaches one always runs. import.meta.glob is followed as edges instead.
+READS_FILES = /\breadFileSync\b|\breadFile\s*\(|\breaddirSync\b|\bglobSync\b|["']node:fs["']|["']fs["']/
+
+FULL_SUITE_PATHS = [
+  %r{\Apackage(-lock)?\.json\z},
+  %r{\A\.npmrc\z},
+  %r{\Apatches/},
+  %r{\Avitest\.config\.ts\z},
+  %r{\Avite\.config(\.widget)?\.ts\z},
+  %r{\Atsconfig\.json\z},
+  %r{(\A|/)__fixtures__/},
+  %r{\.d\.ts\z},
+  %r{\Abin/vitest-ci\z},
+  %r{\A\.github/workflows/tests\.yml\z},
+].freeze
+
+# `git diff --name-status -M -z` output: "M\0path\0", "D\0path\0", "R090\0old\0new\0".
+def parse_name_status(raw)
+  fields = raw.split("\0")
+  records = []
+  until fields.empty?
+    status = fields.shift
+    paths = status.start_with?("R", "C") ? fields.shift(2) : fields.shift(1)
+    records << [status, paths]
+  end
+  records
+end
+
+def read(path)
+  File.read(path, mode: "rb").force_encoding(Encoding::UTF_8).scrub
+end
+
+def source_files
+  SOURCE_ROOTS.flat_map { |root| Dir.glob("#{root}/**/*").select { |path| File.file?(path) && SOURCE_FILE.match?(path) } }
+end
+
+# The file an import names, or, when no file exists there (a path a branch deleted),
+# the normalized path itself, so the importer can still be found from it.
+def normalize(from, specifier)
+  base =
+    if (prefix = ALIASES.keys.find { |key| specifier.start_with?(key) })
+      ALIASES[prefix] + specifier.delete_prefix(prefix)
+    elsif specifier.start_with?(".")
+      File.join(File.dirname(from), specifier)
+    elsif specifier.start_with?("/")
+      specifier.delete_prefix("/")
+    end
+  base && File.expand_path(base, Dir.pwd).delete_prefix("#{Dir.pwd}/")
+end
+
+def resolve(from, specifier)
+  base = normalize(from, specifier.sub(/[?#].*\z/, ""))
+  return nil unless base
+  candidates = RESOLVE_EXTENSIONS.map { |ext| base + ext } + ["/index.ts", "/index.tsx", "/index.js"].map { |ext| base + ext }
+  candidates.find { |path| File.file?(path) } || base
+end
+
+def dependents_index(files)
+  dependents = Hash.new { |hash, key| hash[key] = Set.new }
+  files.each do |file|
+    read(file).scan(SPECIFIER).flatten.each do |specifier|
+      target = resolve(file, specifier)
+      dependents[target] << file if target
+    end
+  end
+  dependents
+end
+
+# For each `import.meta.glob(` call in `source`, [first argument text, whole call text]
+# or nil when the call does not parse. String contents and escapes are skipped so a
+# `)` or `,` inside a pattern does not end an argument.
+def glob_arguments(source)
+  source.to_enum(:scan, GLOB_CALL).map do
+    rest = Regexp.last_match.post_match
+    start = rest.index("(") or next
+    depth = 0
+    quote = nil
+    escaped = false
+    first = nil
+    result = nil
+    rest[start..].each_char.with_index do |char, offset|
+      if escaped then escaped = false
+      elsif quote
+        escaped = char == "\\"
+        quote = nil if char == quote
+      elsif "\"'`".include?(char) then quote = char
+      elsif "([{".include?(char) then depth += 1
+      elsif ")]}".include?(char)
+        depth -= 1
+        if depth.zero?
+          result = [first || rest[start + 1, offset - 1], rest[start + 1, offset - 1]]
+          break
+        end
+      elsif char == "," && depth == 1
+        first ||= rest[start + 1, offset - 1]
+      end
+    end
+    result
+  end
+end
+
+# Translates a glob to a regexp: `**/` spans zero or more directories, a trailing `**`
+# spans everything, `{a,b}` alternates, and `[...]` matches either the bracketed text
+# literally (a `[id].tsx` file) or as a character class.
+def glob_regexp(pattern)
+  out = +""
+  braces = 0
+  chars = pattern.chars
+  until chars.empty?
+    char = chars.shift
+    out <<
+      if char == "*" && chars.first == "*"
+        chars.shift
+        chars.first == "/" ? (chars.shift && "(?:.*/)?") : ".*"
+      elsif char == "*" then "[^/]*"
+      elsif char == "?" then "[^/]"
+      elsif char == "{" then (braces += 1) && "(?:"
+      elsif char == "}" && braces.positive? then (braces -= 1) && ")"
+      elsif char == "," && braces.positive? then "|"
+      elsif char == "[" && (close = chars.index("]"))
+        body = chars.shift(close + 1)[0...-1].join
+        negation = body.start_with?("!") ? "^" : ""
+        body = body.delete_prefix("!")
+        "(?:#{negation.empty? ? Regexp.escape("[#{body}]") : '(?!)'}|[#{negation}#{body.gsub(/[\\\[\]]/) { |c| "\\#{c}" }}])"
+      else Regexp.escape(char)
+      end
+  end
+  Regexp.new("\\A#{out}\\z")
+end
+
+# `import.meta.glob` imports every file its patterns match, so a file that matches
+# one is a dependency of the call's importer. Matching the changed path itself also
+# covers files a branch adds, deletes or renames. A call this cannot read matches
+# every path, which runs more tests, never fewer. Returns one lambda per call, from a
+# path to true or false.
+def glob_matchers(file, source)
+  glob_arguments(source).map do |first, call|
+    patterns = first ? first.scan(/(["'`])(.*?)\1/).map(&:last) : []
+    # Extglobs, escapes and a `base` option change what a pattern means; do not guess.
+    next ->(_path) { true } if patterns.empty? || patterns.any? { |pattern| pattern.match?(/[@+*?!]\(|\\/) } || call.match?(/\bbase\s*:/)
+    negated, included = patterns.partition { |pattern| pattern.start_with?("!") }
+    regexps = ->(list) { list.filter_map { |pattern| normalize(file, pattern) }.map { |pattern| glob_regexp(pattern) } }
+    includes = regexps.call(included)
+    excludes = regexps.call(negated.map { |pattern| pattern.delete_prefix("!") })
+    ->(path) { includes.any? { |regexp| regexp.match?(path) } && excludes.none? { |regexp| regexp.match?(path) } }
+  rescue RegexpError
+    ->(_path) { true }
+  end
+end
+
+def glob_index(files)
+  files.filter_map do |file|
+    source = read(file)
+    [file, glob_matchers(file, source)] if GLOB_CALL.match?(source)
+  end
+end
+
+def glob_importers(globs, path)
+  globs.filter_map { |file, matchers| file if matchers.any? { |matcher| matcher.call(path) } }
+end
+
+def plan(records, files: source_files)
+  return [:none, []] if records.empty?
+  changed = []
+  records.each do |status, paths|
+    return [:full, "#{paths.join(' -> ')} changed"] if paths.any? { |path| FULL_SUITE_PATHS.any? { |pattern| pattern.match?(path) } }
+    if status.start_with?("D", "R") && paths.any? { |path| SOURCE_FILE.match?(path) }
+      return [:full, "#{paths.join(' -> ')} was #{status.start_with?('D') ? 'deleted' : 'renamed'}"]
+    end
+    # A deleted or renamed file's old path still finds the tests that imported it.
+    changed.concat(paths)
+  end
+
+  dependents = dependents_index(files)
+  globs = glob_index(files)
+  walk = lambda do |starts|
+    reached = Set.new(starts)
+    queue = starts.dup
+    until queue.empty?
+      path = queue.shift
+      (dependents[path].to_a + glob_importers(globs, path)).each { |file| queue << file if reached.add?(file) }
+    end
+    reached.select { |file| TEST_FILE.match?(file) && File.file?(file) }
+  end
+  starts = changed.flat_map { |path| [path, path.sub(/\.[^.\/]+\z/, "")] }.uniq
+  reading = walk.call(files.select { |file| READS_FILES.match?(read(file)) })
+  tests = (walk.call(starts) + reading).uniq.sort
+  tests.empty? ? [:none, []] : [:tests, tests]
+end
+
+def git(*args)
+  out, status = Open3.capture2("git", *args)
+  abort("git #{args.join(' ')} failed") unless status.success?
+  out
+end
+
+if ARGV.first == "--plan"
+  mode, detail = plan(parse_name_status($stdin.read))
+  puts mode
+  puts detail
+  exit
+end
+
+base = ARGV.first || "origin/main"
+merge_base = git("merge-base", base, "HEAD").strip
+mode, detail = plan(parse_name_status(git("diff", "--name-status", "-M", "-z", merge_base, "HEAD")))
+
+case mode
+when :full
+  puts "vitest-ci: whole suite (#{detail})"
+  exec("npx", "vitest", "run")
+when :none
+  puts "vitest-ci: no test depends on the files changed since #{base}"
+else
+  puts "vitest-ci: #{detail.size} test file(s) depend on the files changed since #{base}"
+  exec("npx", "vitest", "run", *detail)
+end
