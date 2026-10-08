@@ -1,14 +1,28 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# Runs the vitest tests a branch needs: the ones related to the files it changed
-# since it left BASE (default origin/main), or the whole suite when a change can
-# affect tests the import graph does not reach.
+# Runs the vitest tests a branch needs: the test files that depend on a file the
+# branch changed since it left BASE (default origin/main), or the whole suite when a
+# change can reach tests that an import graph does not show.
+#
+# The graph is static and counts every import, `import type` included: typia
+# generates validators from types, so a type-only change can change a test's
+# result. `vitest related` follows runtime imports only, so it would miss those.
 #
 #   bin/vitest-ci [BASE]
-#   bin/vitest-ci --plan < name-status-lines   # print the decision only (tests)
+#   bin/vitest-ci --plan < "git diff --name-status -z" output   # print the decision only
 
 require "open3"
+require "set"
+
+TEST_FILE = %r{\A(app/javascript/.+\.test\.tsx?|scripts/.+\.test\.ts)\z}
+SOURCE_ROOTS = ["app/javascript", "scripts"].freeze
+SOURCE_FILE = /\.(c|m)?(j|t)sx?\z/
+RESOLVE_EXTENSIONS = ["", ".ts", ".tsx", ".js", ".jsx", ".mts", ".d.ts", ".json"].freeze
+ALIASES = { "$app/" => "app/javascript/", "$assets/" => "public/", "$vendor/" => "vendor/assets/javascripts/" }.freeze
+SPECIFIER = /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+|\brequire\s*\(\s*|\bvi\.mock\s*\(\s*|\bimportActual\s*(?:<[^>]*>)?\s*\(\s*)["']([^"']+)["']/
+# Tests that read repository files at runtime depend on files no import names.
+READS_FILES = /\breadFileSync\b|\breadFile\s*\(|\breaddirSync\b|\bglobSync\b|import\.meta\.glob|["']node:fs["']|["']fs["']/
 
 FULL_SUITE_PATHS = [
   %r{\Apackage(-lock)?\.json\z},
@@ -18,24 +32,75 @@ FULL_SUITE_PATHS = [
   %r{\Avite\.config(\.widget)?\.ts\z},
   %r{\Atsconfig\.json\z},
   %r{(\A|/)__fixtures__/},
+  %r{\.d\.ts\z},
   %r{\Abin/vitest-ci\z},
   %r{\A\.github/workflows/tests\.yml\z},
 ].freeze
-SCRIPT_FILE = /\.(c|m)?(j|t)sx?\z/
 
-# Each line is `git diff --name-status -M` output: "M\tpath", "D\tpath" or "R100\told\tnew".
-def plan(lines)
+# `git diff --name-status -M -z` output: "M\0path\0", "D\0path\0", "R090\0old\0new\0".
+def parse_name_status(raw)
+  fields = raw.split("\0")
+  records = []
+  until fields.empty?
+    status = fields.shift
+    paths = status.start_with?("R", "C") ? fields.shift(2) : fields.shift(1)
+    records << [status, paths]
+  end
+  records
+end
+
+def read(path)
+  File.read(path, mode: "rb").force_encoding(Encoding::UTF_8).scrub
+end
+
+def source_files
+  SOURCE_ROOTS.flat_map { |root| Dir.glob("#{root}/**/*").select { |path| File.file?(path) && SOURCE_FILE.match?(path) } }
+end
+
+def resolve(from, specifier)
+  base =
+    if (prefix = ALIASES.keys.find { |key| specifier.start_with?(key) })
+      ALIASES[prefix] + specifier.delete_prefix(prefix)
+    elsif specifier.start_with?(".")
+      File.join(File.dirname(from), specifier)
+    end
+  return nil unless base
+  base = File.expand_path(base, Dir.pwd).delete_prefix("#{Dir.pwd}/")
+  candidates = RESOLVE_EXTENSIONS.map { |ext| base + ext } + ["/index.ts", "/index.tsx", "/index.js"].map { |ext| base + ext }
+  candidates.find { |path| File.file?(path) }
+end
+
+def dependents_index(files)
+  dependents = Hash.new { |hash, key| hash[key] = Set.new }
+  files.each do |file|
+    read(file).scan(SPECIFIER).flatten.each do |specifier|
+      target = resolve(file, specifier)
+      dependents[target] << file if target
+    end
+  end
+  dependents
+end
+
+def plan(records, files: source_files)
   changed = []
-  lines.each do |line|
-    status, *paths = line.chomp.split("\t")
-    next if status.nil? || paths.empty?
+  records.each do |status, paths|
     return [:full, "#{paths.join(' -> ')} changed"] if paths.any? { |path| FULL_SUITE_PATHS.any? { |pattern| pattern.match?(path) } }
-    if status.start_with?("D", "R") && paths.any? { |path| SCRIPT_FILE.match?(path) }
+    if status.start_with?("D", "R") && paths.any? { |path| SOURCE_FILE.match?(path) }
       return [:full, "#{paths.join(' -> ')} was #{status.start_with?('D') ? 'deleted' : 'renamed'}"]
     end
     changed << paths.last unless status.start_with?("D")
   end
-  changed.empty? ? [:none, "no changed files"] : [:related, changed.uniq]
+  return [:none, []] if changed.empty?
+
+  dependents = dependents_index(files)
+  reached = Set.new(changed)
+  queue = changed.dup
+  until queue.empty?
+    dependents[queue.shift].each { |file| queue << file if reached.add?(file) }
+  end
+  reading = files.select { |file| TEST_FILE.match?(file) && READS_FILES.match?(read(file)) }
+  tests = (reached.select { |file| TEST_FILE.match?(file) && File.file?(file) } + reading).uniq.sort
+  tests.empty? ? [:none, []] : [:tests, tests]
 end
 
 def git(*args)
@@ -45,7 +110,7 @@ def git(*args)
 end
 
 if ARGV.first == "--plan"
-  mode, detail = plan($stdin.each_line)
+  mode, detail = plan(parse_name_status($stdin.read))
   puts mode
   puts detail
   exit
@@ -53,15 +118,15 @@ end
 
 base = ARGV.first || "origin/main"
 merge_base = git("merge-base", base, "HEAD").strip
-mode, detail = plan(git("diff", "--name-status", "-M", merge_base, "HEAD").each_line)
+mode, detail = plan(parse_name_status(git("diff", "--name-status", "-M", "-z", merge_base, "HEAD")))
 
 case mode
 when :full
   puts "vitest-ci: whole suite (#{detail})"
   exec("npx", "vitest", "run")
 when :none
-  puts "vitest-ci: no changed files since #{base}; nothing to run"
+  puts "vitest-ci: no test depends on the files changed since #{base}"
 else
-  puts "vitest-ci: tests related to #{detail.size} changed file(s) since #{base}"
-  exec("npx", "vitest", "related", "--run", "--passWithNoTests", *detail)
+  puts "vitest-ci: #{detail.size} test file(s) depend on the files changed since #{base}"
+  exec("npx", "vitest", "run", *detail)
 end
