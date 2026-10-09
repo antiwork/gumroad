@@ -78,7 +78,7 @@ export const CartItemQuantity = ({ className, children, ...props }: BaseProps & 
     {...props}
   >
     <span className="sr-only">Qty: {children}</span>
-    {children}
+    <span aria-hidden="true">{children}</span>
   </div>
 );
 
