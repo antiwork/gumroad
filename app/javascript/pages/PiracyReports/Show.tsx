@@ -316,8 +316,8 @@ export default function PiracyReportsShow() {
           }
         >
           <p>
-            We will not send the notice. You cannot undo this. This report still counts toward your limit of{" "}
-            {monthly_limit} reports for the month you filed it.
+            We will not send the notice. You cannot undo this, and you cannot report this page again for this product.
+            This report still counts toward your limit of {monthly_limit} reports for the month you filed it.
           </p>
         </Modal>
       ) : null}

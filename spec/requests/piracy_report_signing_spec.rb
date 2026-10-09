@@ -60,6 +60,8 @@ describe "Signing a piracy report notice", type: :system, js: true do
 
     click_on "Cancel report"
     within_modal "Cancel this report?" do
+      expect(page).to have_text("you cannot report this page again for this product")
+      expect(page).to have_text("reports for the month you filed it")
       click_on "Cancel report"
     end
 
