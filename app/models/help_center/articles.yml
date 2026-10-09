@@ -643,5 +643,5 @@
 - id: 354
   slug: "354-reporting-piracy"
   title: "Reporting piracy of your products"
-  description: "If a page on another site offers your product without your permission, you can report it from your dashboard. We check the page, prepare a takedown notice for you to sign, and send it to the site. This covers what you can report, what we check, signing, counter-notices, and the timelines."
+  description: "If a page on another site offers your product without your permission, we can send the site a takedown notice that you sign. This covers who can report, how to report, what each status means, what you sign, and what to do if someone disputes your notice."
   category_id: <%= HelpCenter::Category::START_SELLING.id %>
