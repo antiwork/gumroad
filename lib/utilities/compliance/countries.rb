@@ -29,9 +29,23 @@ module Compliance
       end
     end
 
+    # The gem's any-name lookup scans every country's names and translations, and
+    # UserComplianceInfo#country_code runs it several times per record. Only found names are
+    # kept, and the cache starts over at the limit, so arbitrary input cannot grow it.
+    FIND_BY_NAME_CACHE_LIMIT = 1_000
+    @find_by_name_cache = Concurrent::Map.new
+
     def self.find_by_name(country_name)
       return if country_name.blank?
-      ISO3166::Country.find_country_by_any_name(country_name)
+      cached = @find_by_name_cache[country_name]
+      return cached if cached
+
+      country = ISO3166::Country.find_country_by_any_name(country_name)
+      if country
+        @find_by_name_cache.clear if @find_by_name_cache.size >= FIND_BY_NAME_CACHE_LIMIT
+        @find_by_name_cache[country_name] = country
+      end
+      country
     end
 
     def self.historical_names(country_name)
