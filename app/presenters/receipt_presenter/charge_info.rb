@@ -27,6 +27,11 @@ class ReceiptPresenter::ChargeInfo
     end
   end
 
+  # A free trial still counts as paid here: the buyer gave a card and the total explains the later charge.
+  def free?
+    chargeable.successful_purchases.all? { _1.free_purchase? && !_1.is_free_trial_purchase? }
+  end
+
   def order_id
     chargeable.external_id_for_invoice
   end

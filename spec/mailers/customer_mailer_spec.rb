@@ -267,6 +267,13 @@ describe CustomerMailer do
         mail = CustomerMailer.receipt(purchase.id)
         expect(mail.body.encoded).not_to have_link("Generate invoice")
       end
+
+      it "keeps the order ID and date but omits the $0 total" do
+        body = CustomerMailer.receipt(purchase.id).body.sanitized
+        expect(body).to have_text("Order ID: #{purchase.external_id_for_invoice}")
+        expect(body).to have_text("Order date:")
+        expect(body).not_to have_text("Total:")
+      end
     end
 
     it "has the right subject for a rental purchase" do
