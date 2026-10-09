@@ -156,6 +156,29 @@ describe ReceiptPresenter::ChargeInfo do
     it_behaves_like "chargeable"
   end
 
+  describe "#free?" do
+    it "returns false for a paid purchase" do
+      expect(described_class.new(purchase, for_email: true, order_items_count: 1).free?).to be(false)
+    end
+
+    it "returns true for a $0 purchase" do
+      free_purchase = create(:free_purchase, link: create(:product, user: seller, price_cents: 0), seller:)
+      expect(described_class.new(free_purchase, for_email: true, order_items_count: 1).free?).to be(true)
+    end
+
+    it "returns false for a $0 free trial purchase" do
+      free_trial_purchase = create(:free_trial_membership_purchase, price_cents: 0)
+      expect(free_trial_purchase.free_purchase?).to be(true)
+      expect(described_class.new(free_trial_purchase, for_email: true, order_items_count: 1).free?).to be(false)
+    end
+
+    it "returns false for a charge with a free and a paid purchase" do
+      free_purchase = create(:free_purchase, link: create(:product, user: seller, price_cents: 0), seller:)
+      charge = create(:charge, seller:, purchases: [purchase, free_purchase], amount_cents: 14_99)
+      expect(described_class.new(charge, for_email: true, order_items_count: 2).free?).to be(false)
+    end
+  end
+
   describe "for Charge" do
     let(:charge) { create(:charge, seller:, purchases: [purchase], amount_cents: 14_99) }
     let!(:order) { charge.order }
