@@ -104,6 +104,7 @@ preview_asset_cache_inputs() {
     docker/web/push_assets_to_s3.sh \
     .buildkite/scripts/compile_assets.sh \
     .buildkite/scripts/preview_asset_cache.sh \
+    .buildkite/scripts/main_asset_cache.sh \
     Makefile \
     package.json \
     package-lock.json \

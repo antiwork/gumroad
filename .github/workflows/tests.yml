@@ -345,6 +345,8 @@ jobs:
       - name: Self-test the main asset cache shadow
         run: bash .buildkite/scripts/main_asset_cache_shadow_test.sh
 
+      - name: Self-test serving production assets from the main asset cache
+        run: bash .buildkite/scripts/main_asset_cache_compile_test.sh
       - name: Self-test the web pre-scale step
         run: bash .buildkite/scripts/prescale_web_clusters_test.sh
 
