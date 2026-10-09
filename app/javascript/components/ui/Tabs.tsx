@@ -54,13 +54,29 @@ interface TabsProps extends React.HTMLProps<HTMLDivElement>, VariantProps<typeof
   children: React.ReactNode;
 }
 
-export const Tabs = React.forwardRef<HTMLDivElement, TabsProps>(({ children, className, variant, ...props }, ref) => (
-  <TabVariantContext.Provider value={variant ?? "pills"}>
-    <div role="tablist" className={classNames(tabsVariants({ variant }), className)} {...props} ref={ref}>
-      {children}
-    </div>
-  </TabVariantContext.Provider>
-));
+export const Tabs = React.forwardRef<HTMLDivElement, TabsProps>(({ children, className, variant, ...props }, ref) => {
+  const listRef = React.useRef<HTMLDivElement>(null);
+  React.useImperativeHandle<HTMLDivElement | null, HTMLDivElement | null>(ref, () => listRef.current);
+
+  // A pill row scrolls sideways on narrow screens, so a selected tab past the edge would load hidden.
+  React.useEffect(() => {
+    const list = listRef.current;
+    const selected = list?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
+    if (!list || !selected) return;
+    const listRect = list.getBoundingClientRect();
+    const tabRect = selected.getBoundingClientRect();
+    if (tabRect.right > listRect.right) list.scrollLeft += tabRect.right - listRect.right;
+    else if (tabRect.left < listRect.left) list.scrollLeft -= listRect.left - tabRect.left;
+  }, []);
+
+  return (
+    <TabVariantContext.Provider value={variant ?? "pills"}>
+      <div role="tablist" className={classNames(tabsVariants({ variant }), className)} {...props} ref={listRef}>
+        {children}
+      </div>
+    </TabVariantContext.Provider>
+  );
+});
 Tabs.displayName = "Tabs";
 
 export const TabIcon = ({ children }: { children: React.ReactNode }) => (
