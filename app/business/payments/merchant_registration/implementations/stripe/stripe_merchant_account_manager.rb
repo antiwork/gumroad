@@ -14,9 +14,9 @@ module StripeMerchantAccountManager
   private_constant :ACCOUNT_HOLDER_NAME_SYNC_COUNTRIES
 
   NEW_ACCOUNT_CREATION_BLOCKED_COUNTRIES = [Compliance::Countries::IND.alpha2].freeze
+  LIVE_NON_INDIVIDUAL_BUSINESS_TYPES = %w[company non_profit government_entity].freeze
   # Stripe US `company[structure]` values, applied only to a US legal entity. Types missing here
   # (the legacy generic `llc`, and `profit`, which needs `business_type: non_profit`) send none.
-  LIVE_NON_INDIVIDUAL_BUSINESS_TYPES = %w[company non_profit government_entity].freeze
   US_COMPANY_STRUCTURES = {
     UserComplianceInfo::BusinessTypes::SOLE_PROPRIETORSHIP => "sole_proprietorship",
     UserComplianceInfo::BusinessTypes::SINGLE_MEMBER_LLC => "single_member_llc",
@@ -490,12 +490,12 @@ module StripeMerchantAccountManager
 
     diff_attributes = get_diff_attributes(current_attributes, last_attributes)
 
-    # A type changed outside Gumroad (e.g. via the hosted remediation form) leaves a company on Stripe
-    # while our last record says individual, so the diff would miss the type. Any non-individual type counts.
-    live_company_for_individual = user_compliance_info.is_individual? && LIVE_NON_INDIVIDUAL_BUSINESS_TYPES.include?(stripe_account["business_type"])
+    # A type changed outside Gumroad (e.g. via the hosted remediation form) leaves a non-individual account
+    # on Stripe while our last record says individual, so the diff would miss the type.
+    live_non_individual_for_individual = user_compliance_info.is_individual? && LIVE_NON_INDIVIDUAL_BUSINESS_TYPES.include?(stripe_account["business_type"])
     # Send the whole individual: Stripe's person is not the one our last record described, so a diff could omit
     # fields it lacks. Stripe test mode accepted this even for an already-verified individual.
-    diff_attributes[:individual] = current_attributes[:individual].deep_dup if live_company_for_individual
+    diff_attributes[:individual] = current_attributes[:individual].deep_dup if live_non_individual_for_individual
 
     # If we have a full SSN, don't send the last 4 digits at the same time. If the last 4 digits are from a previous
     # compliance info and don't match the new full SSN, this will result in an invalid request.
@@ -507,16 +507,16 @@ module StripeMerchantAccountManager
       diff_attributes[:individual][:dob] = current_attributes[:individual][:dob]
     end
 
-    diff_attributes[:business_type] = "individual" if live_company_for_individual
+    diff_attributes[:business_type] = "individual" if live_non_individual_for_individual
 
-    if (last_user_compliance_info&.is_business? || live_company_for_individual) && user_compliance_info.is_individual?
+    if (last_user_compliance_info&.is_business? || live_non_individual_for_individual) && user_compliance_info.is_individual?
       # Clear structure first - Stripe rejects company[structure] when business_type is "individual"
-      # The live-company arm keys on the ACCOUNT's country, not the compliance record's: the structure
+      # The live-account arm keys on the ACCOUNT's country, not the compliance record's: the structure
       # sits on the account, and the two diverge once the seller's legal entity moves.
       if (last_user_compliance_info&.is_business? &&
         last_user_compliance_info.legal_entity_country_code == Compliance::Countries::USA.alpha2 &&
         US_COMPANY_STRUCTURES.key?(last_user_compliance_info.business_type)) ||
-        (live_company_for_individual && stripe_account_country(stripe_account) == Compliance::Countries::USA.alpha2 &&
+        (live_non_individual_for_individual && stripe_account_country(stripe_account) == Compliance::Countries::USA.alpha2 &&
         stripe_account["company"] && stripe_account["company"]["structure"].present?)
         on_provider_mutation&.call
         Stripe::Account.update(stripe_account.id, { company: { structure: "" } })
@@ -612,7 +612,7 @@ module StripeMerchantAccountManager
     # clear_identity_rejection_notes takes ids rather than re-querying: a note from an overlapping
     # resync is a diagnostic this save has no result for.
     switching_to_individual = !user_compliance_info.is_business? &&
-                              (last_user_compliance_info&.is_business? || live_company_for_individual)
+                              (last_user_compliance_info&.is_business? || live_non_individual_for_individual)
     obsolete_representative_note_ids = switching_to_individual ? identity_rejection_note_ids(user, scope: :representative) : []
 
     # Mark before sending: a failed response can hide a successful Stripe update.

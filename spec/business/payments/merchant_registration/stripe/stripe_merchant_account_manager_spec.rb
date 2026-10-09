@@ -15915,15 +15915,32 @@ describe StripeMerchantAccountManager, :vcr do
         end
 
         %w[non_profit government_entity].each do |type|
-          it "sends business_type individual for a #{type} account" do
-            stub_stripe_account(previous, business_type: type)
+          it "clears the structure, then sends business_type individual for a #{type} account" do
+            stub_stripe_account(previous, business_type: type, company: { structure: "tax_exempt_government_instrumentality" }, country: "US")
 
             expect(Stripe::Account).to receive(:update).with(
               merchant_account.charge_processor_merchant_id,
-              hash_including(business_type: "individual")
-            )
+              { company: { structure: "" } }
+            ).ordered
+            expect(Stripe::Account).to receive(:update).with(
+              merchant_account.charge_processor_merchant_id,
+              hash_including(business_type: "individual", company: { name: user.alive_user_compliance_info.first_and_last_name }, individual: hash_including(:first_name, :last_name, :dob))
+            ).ordered
 
             described_class.update_account(user, passphrase:)
+          end
+
+          it "retires the representative's rejection note for a #{type} account" do
+            representative_note = user.add_payout_note(
+              content: "#{StripeMerchantAccountManager::IDENTITY_REJECTION_NOTE_PREFIX} (representative) — still outstanding",
+              seller_visible: false
+            )
+            stub_stripe_account(previous, business_type: type)
+            allow(Stripe::Account).to receive(:update)
+
+            described_class.update_account(user, passphrase:)
+
+            expect(representative_note.reload.deleted_at).to be_present
           end
         end
 
