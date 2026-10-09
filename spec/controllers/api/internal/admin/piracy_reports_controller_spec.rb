@@ -222,6 +222,61 @@ describe Api::Internal::Admin::PiracyReportsController do
     end
   end
 
+  describe "GET index by reply token" do
+    it "finds the report a reply to support+piracy-<token>@ answers" do
+      report = create(:piracy_report, :signed, state: "sent", reply_token: "abc123")
+      create(:piracy_report, :signed, state: "sent", reply_token: "zzz999")
+
+      get :index, params: { reply_token: "abc123" }
+
+      expect(response.parsed_body["reports"].pluck("report_id")).to eq([report.external_id])
+    end
+
+    it "returns nothing for a blank token, never every report" do
+      create(:piracy_report, :signed, state: "sent", reply_token: "abc123")
+
+      get :index, params: { reply_token: "" }
+
+      expect(response.parsed_body["reports"]).to eq([])
+    end
+  end
+
+  describe "POST counter_notice" do
+    it "records the counter-notice and audits the write" do
+      report = create(:piracy_report, :signed, state: "sent", sent_at: 3.days.ago)
+
+      expect do
+        post :counter_notice, params: { id: report.external_id, body: "I own a license.", received_on: Date.yesterday.iso8601 }
+      end.to change { AdminApiAuditLog.count }.by(1)
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["report"]).to include("state" => "counter_noticed", "counter_notice_received_on" => Date.yesterday.iso8601)
+      expect(AdminApiAuditLog.last).to have_attributes(action: "piracy_reports.counter_notice", target_external_id: report.external_id)
+      expect(AdminApiAuditLog.last.params_snapshot["body"]).not_to include("I own a license.")
+    end
+
+    it "returns 422 for a report with no notice out" do
+      report = create(:piracy_report, :signed)
+
+      post :counter_notice, params: { id: report.external_id, body: "x", received_on: Date.yesterday.iso8601 }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body["errors"]).to eq(["The report has no notice out with a host"])
+    end
+  end
+
+  describe "POST resolve" do
+    it "records the outcome" do
+      report = create(:piracy_report, :signed, state: "sent", sent_at: 3.days.ago)
+
+      post :resolve, params: { id: report.external_id, outcome: "removed" }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["report"]).to include("state" => "resolved", "outcome" => "removed")
+      expect(AdminApiAuditLog.last).to have_attributes(action: "piracy_reports.resolve")
+    end
+  end
+
   describe "POST start_screening" do
     it "moves a requested report to screening and audits the write" do
       report = create(:piracy_report)

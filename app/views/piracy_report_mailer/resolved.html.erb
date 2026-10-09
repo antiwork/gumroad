@@ -1,0 +1,18 @@
+<%= header_section(@subject) %>
+<div>
+  <p>
+    <% case @outcome %>
+    <% when "removed" %>
+      The site removed the page you reported for <strong><%= @product_name %></strong>.
+    <% when "no_response" %>
+      The site did not respond to your notice about <strong><%= @product_name %></strong>.
+    <% when "restored" %>
+      The site put the page back after a counter-notice about <strong><%= @product_name %></strong>.
+    <% when "withdrawn" %>
+      Your notice about <strong><%= @product_name %></strong> was withdrawn.
+    <% end %>
+  </p>
+  <p>
+    <%= link_to "View your report", @report_url, class: "button primary" %>
+  </p>
+</div>

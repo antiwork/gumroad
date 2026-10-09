@@ -81,6 +81,8 @@ class PiracyReportsController < Sellers::BaseController
         signed_at: @report.signed_at&.iso8601,
         signed_by_name: @report.signed_by_name,
         sent_at: @report.sent_at&.iso8601,
+        counter_notice_received_on: @report.counter_notice_received_on&.iso8601,
+        outcome: @report.outcome,
       }
     end
 end

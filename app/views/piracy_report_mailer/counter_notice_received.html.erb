@@ -1,0 +1,15 @@
+<%= header_section(@subject) %>
+<div>
+  <p>
+    The site that received your notice about <strong><%= @product_name %></strong> got a counter-notice on
+    <%= @report.counter_notice_received_on.strftime("%B %-d, %Y") %>. Its full text is below.
+  </p>
+  <p>
+    The site can put the page back 10 to 14 business days after that date, unless you file a court action
+    against the person who posted it and tell the site.
+  </p>
+  <pre style="white-space: pre-wrap;"><%= @report.counter_notice_body %></pre>
+  <p>
+    <%= link_to "View your report", @report_url, class: "button primary" %>
+  </p>
+</div>

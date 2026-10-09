@@ -444,6 +444,8 @@ Rails.application.routes.draw do
             member do
               post :start_screening
               post :screen
+              post :counter_notice
+              post :resolve
             end
           end
 

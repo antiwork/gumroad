@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_16_150002) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_16_150004) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -1692,8 +1692,16 @@ create_table "ping_deliveries", charset: "utf8mb4", collation: "utf8mb4_unicode_
     t.string "last_contact_email"
     t.datetime "delivered_at"
     t.datetime "delivery_failed_at"
+    t.text "counter_notice_body"
+    t.date "counter_notice_received_on"
+    t.datetime "counter_notice_forwarded_at"
+    t.string "outcome"
+    t.text "outcome_reason"
+    t.datetime "resolved_at"
+    t.datetime "outcome_notified_at"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.index ["counter_notice_received_on", "seller_id"], name: "idx_on_counter_notice_received_on_seller_id_3ebe3a3950"
     t.index ["external_id"], name: "index_piracy_reports_on_external_id", unique: true
     t.index ["product_id", "normalized_url_digest"], name: "index_piracy_reports_on_product_id_and_normalized_url_digest", unique: true
     t.index ["reply_token"], name: "index_piracy_reports_on_reply_token", unique: true
