@@ -13,3 +13,38 @@ piracy-test-antiwork.vercel.app:
   name: Antiwork piracy screening test
   email: gianfranco@gumroad.com
   source_url: https://piracy-test-antiwork.vercel.app/dmca
+
+google.com:
+  name: Google LLC
+  email: dmca-agent@google.com
+  source_url: https://dmca.copyright.gov/dmca/publish/history.html?search=Google+LLC&id=18b733849581703204a3229ddd03c10b
+
+dropbox.com:
+  name: Dropbox, Inc.
+  email: copyright@dropbox.com
+  source_url: https://dmca.copyright.gov/dmca/publish/history.html?search=Dropbox%2c+Inc.&id=3c0075cdd377972b704125dcb5a44df5
+
+mega.nz:
+  name: Mega Privacy (NZ) Limited
+  email: copyright@mega.nz
+  source_url: https://dmca.copyright.gov/dmca/publish/history.html?search=mega.nz&id=71bb148448b27a2f2f76717bbf7ed583
+
+discord.com:
+  name: Discord, Inc.
+  email: copyright@discordapp.com
+  source_url: https://dmca.copyright.gov/dmca/publish/history.html?search=Discord&id=447d1ff8fe8d44abbe6b203ceb5777ff
+
+patreon.com:
+  name: Patreon, Inc.
+  email: copyright@patreon.com
+  source_url: https://dmca.copyright.gov/dmca/publish/history.html?search=Patreon&id=34aa6e1a3b38a1e7f6170553e59878e2
+
+etsy.com:
+  name: Etsy, Inc.
+  email: legal@etsy.com
+  source_url: https://dmca.copyright.gov/dmca/publish/history.html?search=Etsy%2c+Inc.&id=da79ea0fc4ffba1327b5f63ed8d29be2
+
+mediafire.com:
+  name: MediaFire, LLC
+  email: copyright@mediafire.com
+  source_url: https://dmca.copyright.gov/dmca/publish/history.html?search=MediaFire&id=39a139711ad47a0b9457d7e461cb797f
