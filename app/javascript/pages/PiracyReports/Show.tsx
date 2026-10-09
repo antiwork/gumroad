@@ -85,7 +85,8 @@ const historyLabel = (event: HistoryEvent, report: PiracyReportsShowProps["repor
   }
 };
 
-const windowHasEnded = (lastDay: string) => new Date() > new Date(`${lastDay}T23:59:59Z`);
+// The site may restore the page from the first day of the window, so that day is the deadline.
+const dayHasPassed = (day: string) => new Date() >= new Date(`${day}T00:00:00Z`);
 
 export default function PiracyReportsShow() {
   const { report, product, confirmations, confirmations_version } = usePage<PiracyReportsShowProps>().props;
@@ -134,16 +135,16 @@ export default function PiracyReportsShow() {
       </Alert>
     ) : report.state === "counter_noticed" && report.restoration_window !== null ? (
       <Alert role="status" variant="warning">
-        {windowHasEnded(report.restoration_window[1]) ? (
+        {dayHasPassed(report.restoration_window[0]) ? (
           <>
-            Since about {formatDate(report.restoration_window[1])}, the site can put the page back. If you filed a court
+            Since about {formatDate(report.restoration_window[0])}, the site can put the page back. If you filed a court
             action, reply to our email to tell us.
           </>
         ) : (
           <>
             The site can put the page back between about {formatDate(report.restoration_window[0])} and{" "}
             {formatDate(report.restoration_window[1])}. To stop that, file a court action against the person who posted
-            the page before then, and reply to our email to tell us.
+            the page before {formatDate(report.restoration_window[0])}, and reply to our email to tell us.
           </>
         )}
       </Alert>
