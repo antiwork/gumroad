@@ -58,7 +58,10 @@ esac
 STUB
 cat > "$WORK/bin/buildkite-agent" <<'STUB'
 #!/bin/bash
-cat >> "$ANNOTATIONS"
+case "$1 $2" in
+  "meta-data set") [ "${META_SET_FAIL:-}" = 1 ] && exit 1; echo "meta-data $3=$4" >> "$CALLS" ;;
+  *) cat >> "$ANNOTATIONS" ;;
+esac
 STUB
 chmod +x "$WORK/bin/"*
 
@@ -97,10 +100,22 @@ grep -q -- "-e RAILS_ENV=production" "$WORK/calls" && grep -q -- "--label assets
 grep -q "gosu app bundle exec bootsnap precompile --gemfile app/ lib/ config/ ||" "$WORK/calls" \
   && ok "the image gets a warm Bootsnap cache, best-effort, as the app user" || fail "no Bootsnap precompile in the image build"
 grep -q "$TAG" "$WORK/annotations" && ok "a hit is annotated with its tag" || fail "hit not annotated"
+grep -q "^meta-data main-asset-cache-served=$TAG" "$WORK/calls" && ok "a hit records its tag for the save step" || fail "hit tag not recorded"
 [ ! -e preview-asset-cache.tar.gz ] && ok "it leaves no tarball behind" || fail "tarball left behind"
 
 rm -rf "$WORK/bucket"; run_script; rc=$?
 [ $rc = 0 ] && compiled && ! served && pushed && ok "a miss runs the full compile" || fail "miss (rc=$rc)"
+grep -q "^meta-data main-asset-cache-served=none" "$WORK/calls" && ok "a miss records that nothing was served, replacing an earlier attempt's tag" || fail "a miss did not record none"
+
+rm -rf "$WORK/bucket"; run_script META_SET_FAIL=1; rc=$?
+[ $rc = 0 ] && compiled && pushed && ok "a first attempt compiles even when the outcome cannot be recorded" || fail "first attempt with a failed record (rc=$rc)"
+
+rm -rf "$WORK/bucket"; run_script META_SET_FAIL=1 BUILDKITE_RETRY_COUNT=1; rc=$?
+[ $rc != 0 ] && ! compiled && ! pushed && ok "a retry that cannot replace an earlier outcome stops, so the job retries" || fail "retry with a failed record (rc=$rc)"
+
+rm -rf "$WORK/bucket"; run_script META_SET_FAIL=1 BUILDKITE_RETRY_COUNT=1 BUILDKITE_BRANCH=comp-assets-test; rc=$?
+[ $rc = 0 ] && compiled && pushed && ! grep -q "^meta-data" "$WORK/calls" \
+  && ok "a comp-assets retry records nothing and never stops on it" || fail "comp-assets retry (rc=$rc)"
 
 seed_cache; echo junk >> "$ENTRY"; run_script; rc=$?
 [ $rc = 0 ] && compiled && ! served && ok "a tarball that fails its checksum runs the full compile" || fail "bad checksum (rc=$rc)"

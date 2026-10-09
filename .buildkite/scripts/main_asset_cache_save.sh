@@ -1,10 +1,11 @@
 #!/bin/bash
-# Shadow mode for a main-branch asset cache. It never changes what ships: the
-# production image is already built and pushed when this step runs, and the
-# deploy does not wait for it. On a hit it compares what the cache would have
-# restored with the files in that image, one by one; on a miss it saves those
-# files for the next commit with the same inputs. compile_assets.sh serves main
-# from this cache, so on a build it served the comparison only confirms the copy.
+# Fills the main-branch asset cache that compile_assets.sh serves from. It never
+# changes what ships: the production image is already built and pushed when this
+# step runs, and the deploy does not wait for it. On a miss it saves that image's
+# compiled files for the next commit with the same inputs. When the compile ran
+# although an entry exists (a no-cache commit, a failed cache build), it compares the
+# entry with the real compile, one file at a time. A build served from the cache
+# holds the cached files, so the step only records the hit.
 #
 # Exit 1 (a soft failure in the pipeline) only on a mismatch, so one stands out.
 set -uo pipefail
@@ -13,7 +14,7 @@ source .buildkite/scripts/preview_asset_cache.sh
 source .buildkite/scripts/main_asset_cache.sh
 source .buildkite/scripts/deploy_relevance.sh
 # A no-op commit builds no production image, so there is nothing to compare.
-skip_if_production_noop "main_asset_cache_shadow.sh"
+skip_if_production_noop "main_asset_cache_save.sh"
 
 # Its own prefix, so entries never mix with preview ones. The preview helpers
 # read this prefix; this script runs in its own process.
@@ -22,7 +23,7 @@ PREVIEW_ASSET_CACHE_PREFIX="$MAIN_ASSET_CACHE_PREFIX"
 IMAGE="${ECR_REGISTRY}/gumroad/web:production-$(echo "$BUILDKITE_COMMIT" | cut -c1-12)"
 # Relative, under the checkout: without a host aws CLI the S3 helper runs in a
 # container that mounts only the current directory.
-WORK=.main-asset-cache-shadow
+WORK=.main-asset-cache-save
 rm -rf "$WORK" && mkdir -p "$WORK"
 trap 'rm -rf "$WORK"' EXIT
 
@@ -40,12 +41,20 @@ without_maps() { grep -v '\.map$' "$1" || true; }
 
 report() {
   local result=$1 detail=$2 style=${3:-info}
-  local line="main-asset-cache-shadow result=$result tag=${TAG:-none} $detail"
+  local line="main-asset-cache-save result=$result tag=${TAG:-none} $detail"
   echo "$line"
   if command -v buildkite-agent >/dev/null 2>&1; then
-    printf '%s\n' "$line" | buildkite-agent annotate --style "$style" --context main-asset-cache-shadow 2>/dev/null || true
+    printf '%s\n' "$line" | buildkite-agent annotate --style "$style" --context main-asset-cache-save 2>/dev/null || true
   fi
 }
+
+# compile_assets.sh writes the tag it served, or "none" after a full compile.
+served=$(buildkite-agent meta-data get main-asset-cache-served 2>/dev/null) || served=""
+if [ -n "$served" ] && [ "$served" != none ]; then
+  TAG=$served
+  report served "the image was built from the cache"
+  exit 0
+fi
 
 pulled=false
 for _ in 1 2 3; do
