@@ -83,7 +83,7 @@ class InvoicePresenter::SupplierInfo
 
     TAX_REGISTRATIONS_BY_COUNTRY = {
       Compliance::Countries::GBR.alpha2 => [["UK VAT Registration", GUMROAD_UK_VAT_REGISTRATION]],
-      Compliance::Countries::AUS.alpha2 => [["Australian Business Number", GUMROAD_AUSTRALIAN_BUSINESS_NUMBER]],
+      Compliance::Countries::AUS.alpha2 => [["ATO Reference Number (GST)", GUMROAD_AUSTRALIAN_BUSINESS_NUMBER]],
       Compliance::Countries::NOR.alpha2 => [["Norway VAT Registration", GUMROAD_NORWAY_VAT_REGISTRATION]],
       Compliance::Countries::IND.alpha2 => [["GSTIN", GUMROAD_INDIA_GSTIN]],
       Compliance::Countries::JPN.alpha2 => [["JCT Registration Number", GUMROAD_JAPAN_JCT]],

@@ -112,10 +112,10 @@ describe InvoicePresenter::SupplierInfo do
             context "when country is Australia" do
               before { purchase.update!(country: "Australia") }
 
-              it "returns ABN information" do
+              it "returns ATO GST reference information" do
                 expect(presenter.send(:gumroad_tax_attributes)).to eq([
                                                                         {
-                                                                          label: "Australian Business Number",
+                                                                          label: "ATO Reference Number (GST)",
                                                                           value: GUMROAD_AUSTRALIAN_BUSINESS_NUMBER
                                                                         }
                                                                       ])
@@ -246,10 +246,10 @@ describe InvoicePresenter::SupplierInfo do
               )
             end
 
-            it "returns ABN information" do
+            it "returns ATO GST reference information" do
               expect(presenter.send(:gumroad_tax_attributes)).to eq([
                                                                       {
-                                                                        label: "Australian Business Number",
+                                                                        label: "ATO Reference Number (GST)",
                                                                         value: GUMROAD_AUSTRALIAN_BUSINESS_NUMBER
                                                                       }
                                                                     ])

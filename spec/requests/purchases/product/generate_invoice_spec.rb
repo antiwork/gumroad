@@ -158,7 +158,7 @@ describe("Generate invoice for purchase", type: :system, js: true) do
       fill_in("ZIP code", with: "12345")
 
       within find("h5", text: "Supplier").first(:xpath, ".//..//..") do
-        expect(page).to have_content("Australian Business Number")
+        expect(page).to have_content("ATO Reference Number (GST)")
         expect(page).to have_content(GUMROAD_AUSTRALIAN_BUSINESS_NUMBER)
       end
 
@@ -177,7 +177,7 @@ describe("Generate invoice for purchase", type: :system, js: true) do
       expect(pdf_text).to include(purchase.link.name)
       expect(pdf_text).to include(purchase.formatted_non_refunded_total_transaction_amount)
       expect(pdf_text).to include(purchase.quantity.to_s)
-      expect(pdf_text).to include("Australian Business Number")
+      expect(pdf_text).to include("ATO Reference Number (GST)")
       expect(pdf_text).to include(GUMROAD_AUSTRALIAN_BUSINESS_NUMBER)
     end
 
