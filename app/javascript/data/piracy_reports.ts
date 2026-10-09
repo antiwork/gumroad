@@ -49,3 +49,9 @@ export const formatPiracyReportDate = (value: string, locale: string, month: "lo
   });
 
 export const withoutProtocol = (url: string) => url.replace(/^https?:\/\//u, "");
+
+// The site may restore the page from the first day of the window, so that day is the seller's deadline.
+export const restorationDeadline = (window: [string, string], now: Date) => ({
+  day: window[0],
+  passed: now >= new Date(`${window[0]}T00:00:00Z`),
+});

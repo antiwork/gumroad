@@ -5,6 +5,7 @@ import {
   formatPiracyReportDate,
   withoutProtocol,
   piracyReportStatus,
+  restorationDeadline,
   PiracyReportOutcome,
   PiracyReportState,
 } from "$app/data/piracy_reports";
@@ -85,8 +86,6 @@ const historyLabel = (event: HistoryEvent, report: PiracyReportsShowProps["repor
   }
 };
 
-const windowHasEnded = (lastDay: string) => new Date() > new Date(`${lastDay}T23:59:59Z`);
-
 export default function PiracyReportsShow() {
   const { report, product, confirmations, confirmations_version } = usePage<PiracyReportsShowProps>().props;
   const status = piracyReportStatus(report.state, report.outcome);
@@ -110,6 +109,7 @@ export default function PiracyReportsShow() {
     form.post(Routes.sign_piracy_report_path(report.id));
   };
 
+  const deadline = report.restoration_window ? restorationDeadline(report.restoration_window, new Date()) : null;
   const statusAlert =
     report.state === "requested" || report.state === "screening" ? (
       <Alert role="status" variant="info">
@@ -132,18 +132,18 @@ export default function PiracyReportsShow() {
         We sent the notice to {report.recipient_name ?? "the site"} on {formatDate(report.sent_at)}. You do not need to
         do anything. We will email you when the site responds.
       </Alert>
-    ) : report.state === "counter_noticed" && report.restoration_window !== null ? (
+    ) : report.state === "counter_noticed" && report.restoration_window !== null && deadline !== null ? (
       <Alert role="status" variant="warning">
-        {windowHasEnded(report.restoration_window[1]) ? (
+        {deadline.passed ? (
           <>
-            Since about {formatDate(report.restoration_window[1])}, the site can put the page back. If you filed a court
-            action, reply to our email to tell us.
+            Since about {formatDate(deadline.day)}, the site can put the page back. If you filed a court action, reply
+            to our email to tell us.
           </>
         ) : (
           <>
             The site can put the page back between about {formatDate(report.restoration_window[0])} and{" "}
             {formatDate(report.restoration_window[1])}. To stop that, file a court action against the person who posted
-            the page before then, and reply to our email to tell us.
+            the page before {formatDate(deadline.day)}, and reply to our email to tell us.
           </>
         )}
       </Alert>

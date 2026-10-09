@@ -75,6 +75,8 @@ describe PiracyReportMailer do
       body = mail.body.encoded
       expect(body).to include("I own a license for this course.", "October 7, 2026", "10 to 14 business days")
       expect(body.index("October 21, 2026")).to be < body.index("October 27, 2026")
+      # The site may restore the page from the first day, so the deadline names that day.
+      expect(body).to match(%r{before\s+<strong>October 21, 2026</strong>, and reply})
       expect(body.index("October 27, 2026")).to be < body.index("I own a license for this course.")
     end
   end
