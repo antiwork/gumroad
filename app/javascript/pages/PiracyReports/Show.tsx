@@ -9,7 +9,7 @@ import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 import { PageHeader } from "$app/components/ui/PageHeader";
 
-type ReportState = "requested" | "screening" | "awaiting_signature" | "signed" | "declined" | "cancelled";
+type ReportState = "requested" | "screening" | "awaiting_signature" | "signed" | "sent" | "declined" | "cancelled";
 
 type PiracyReportsShowProps = {
   report: {
@@ -20,6 +20,7 @@ type PiracyReportsShowProps = {
     notice_text: string | null;
     notice_digest: string | null;
     signed_at: string | null;
+    sent_at: string | null;
     signed_by_name: string | null;
   };
   product: { name: string; url: string };
@@ -64,6 +65,12 @@ export default function PiracyReportsShow() {
           <Alert variant="warning">
             We could not confirm that this page offers a copy of your work, so we have not sent anything. If you have
             more evidence, reply to your support thread.
+          </Alert>
+        ) : null}
+        {report.state === "sent" && report.sent_at !== null ? (
+          <Alert variant="success">
+            We sent the notice on {new Date(report.sent_at).toLocaleDateString()}. We will email you when the site
+            responds.
           </Alert>
         ) : null}
         {report.state === "signed" ? (

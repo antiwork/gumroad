@@ -1,0 +1,13 @@
+<%= header_section(@subject) %>
+<div>
+  <p>
+    We sent your notice about <strong><%= @product_name %></strong> to <%= @report.recipient_name %> on
+    <%= @report.sent_at.to_date.to_fs(:long) %>, from support@gumroad.com with you in CC.
+  </p>
+  <p>
+    We will email you when the site responds.
+  </p>
+  <p>
+    <%= link_to "View your report", @report_url, class: "button primary" %>
+  </p>
+</div>

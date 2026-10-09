@@ -12,6 +12,8 @@ class HandleEmailEventInfo
       HandleEmailEventInfo::ForReceiptEmail.perform(email_event_info)
     elsif email_event_info.for_abandoned_cart_email?
       HandleEmailEventInfo::ForAbandonedCartEmail.perform(email_event_info)
+    elsif email_event_info.for_piracy_notice?
+      HandleEmailEventInfo::ForPiracyNotice.perform(email_event_info)
     end
   end
 end

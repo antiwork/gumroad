@@ -26,4 +26,34 @@ describe PiracyReportMailer do
         .not_to change { ActionMailer::Base.deliveries.count }
     end
   end
+
+  describe "notice" do
+    let(:report) do
+      create(:piracy_report, :signed, state: "sent", reply_token: "abc123", sent_to_email: "copyright@example.com", last_contact_email: "seller@example.com")
+    end
+
+    subject(:mail) { described_class.notice(report.id) }
+
+    it "sends the signed text as plain text from support@, to the host, with the seller in CC and the report's Reply-To" do
+      expect(mail.from).to eq([ApplicationMailer::SUPPORT_EMAIL])
+      expect(mail.to).to eq(["copyright@example.com"])
+      expect(mail.cc).to eq(["seller@example.com"])
+      expect(mail.reply_to).to eq(["support+piracy-abc123@#{DEFAULT_EMAIL_DOMAIN}"])
+      expect(mail.content_type).to start_with("text/plain")
+      expect(mail.body.decoded).to eq("Notice text")
+    end
+  end
+
+  describe "notice_sent" do
+    let(:report) { create(:piracy_report, :signed, state: "sent", sent_at: Time.utc(2026, 10, 8), last_contact_email: "seller@example.com") }
+
+    subject(:mail) { described_class.notice_sent(report.id) }
+
+    it "tells the seller where and when the notice went, with a link to the report" do
+      expect(mail.to).to eq(["seller@example.com"])
+      expect(mail.subject).to eq("We sent your takedown notice for #{report.product.name}")
+      expect(mail.body.encoded).to include("Example Net Inc.")
+      expect(mail.body.encoded).to include(piracy_report_url(report.external_id))
+    end
+  end
 end

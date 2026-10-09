@@ -27,7 +27,7 @@ describe AlertOnStuckPiracyReportsJob do
 
     expect(InternalNotificationWorker).to have_received(:perform_async) do |room, subject, body|
       expect(room).to eq("risk")
-      expect(subject).to eq("Piracy reports waiting in screening")
+      expect(subject).to eq("Piracy reports waiting for a person")
       expect(body).to include("1 piracy report passed screening but the reported host has no verified contact")
       expect(body).to include(report.external_id)
       expect(body).to include("unlisted.example.org")
@@ -53,6 +53,31 @@ describe AlertOnStuckPiracyReportsJob do
     undecided = review_report
 
     expect(message).to start_with("1 piracy report could not be decided by the screening agent.\n\n• #{undecided.external_id}")
+  end
+
+  it "lists sent notices that bounced or have no delivery event after the window" do
+    bounced = create(:piracy_report, :signed, state: "sent", sent_at: 2.hours.ago, delivery_failed_at: 1.hour.ago)
+    silent = create(:piracy_report, :signed, state: "sent", sent_at: 25.hours.ago)
+    create(:piracy_report, :signed, state: "sent", sent_at: 25.hours.ago, delivered_at: 24.hours.ago)
+
+    expect(message).to include("2 piracy reports sent a notice that did not reach the host.")
+    expect(message).to include("#{bounced.external_id} — example.net", "bounced", "#{silent.external_id} — example.net", "no delivery event")
+  end
+
+  it "lists signed reports that sending has not picked up, with the reason, while sending is on" do
+    Feature.activate(:piracy_reports_sending)
+    allow(PiracyReports::RecipientRegistry).to receive(:entries).and_return({})
+    stuck = create(:piracy_report, :signed, signed_at: 2.hours.ago)
+
+    expect(message).to include("1 piracy report signed but not sent.", stuck.external_id, "The host's registry contact changed after screening")
+  end
+
+  it "does not list signed reports while sending is off" do
+    create(:piracy_report, :signed, signed_at: 2.hours.ago)
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).not_to have_received(:perform_async)
   end
 
   it "stays silent when no report is blocked or waiting for review" do
