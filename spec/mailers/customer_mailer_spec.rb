@@ -248,6 +248,11 @@ describe CustomerMailer do
       expect(mail.subject).to match(/^You bought /)
     end
 
+    it "includes the order header" do
+      expect(mail.body.encoded).to have_text("Order ID:")
+      expect(mail.body.encoded).to have_text("Order date:")
+    end
+
     context "when the purchase is free" do
       let(:seller) { create(:user, email: "alice@gumroad.com", name: "alice nguyen") }
       let(:product) { create(:product, user: seller, price_cents: 0) }
@@ -266,6 +271,12 @@ describe CustomerMailer do
       it "does not include generate invoice section" do
         mail = CustomerMailer.receipt(purchase.id)
         expect(mail.body.encoded).not_to have_link("Generate invoice")
+      end
+
+      it "does not include the order header" do
+        mail = CustomerMailer.receipt(purchase.id)
+        expect(mail.body.encoded).not_to have_text("Order ID:")
+        expect(mail.body.encoded).not_to have_text("Order date:")
       end
     end
 

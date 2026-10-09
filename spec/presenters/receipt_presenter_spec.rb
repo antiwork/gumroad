@@ -74,6 +74,22 @@ describe ReceiptPresenter do
       end
     end
 
+    describe "#free_charge?" do
+      it "is false for a purchase that moved money" do
+        expect(presenter.free_charge?).to eq(false)
+      end
+
+      it "is true for a $0 purchase" do
+        free_purchase = create(:free_purchase, link: create(:product, user: seller))
+        expect(described_class.new(free_purchase, for_email: true).free_charge?).to eq(true)
+      end
+
+      it "is false for a free trial, which the receipt still presents as a subscription" do
+        trial = create(:free_trial_membership_purchase, price_cents: 0)
+        expect(described_class.new(trial, for_email: true).free_charge?).to eq(false)
+      end
+    end
+
     describe "#items_infos" do
       it "returns an array" do
         expect(ReceiptPresenter::ItemInfo).to receive(:new).with(chargeable, presentment_currency: anything).and_call_original
@@ -167,6 +183,18 @@ describe ReceiptPresenter do
       it "returns a ShippingInfo object" do
         expect(presenter.shipping_info).to be_a(ReceiptPresenter::ShippingInfo)
         expect(presenter.shipping_info.send(:chargeable)).to eq(chargeable)
+      end
+    end
+
+    describe "#free_charge?" do
+      it "is true when every purchase in the charge is free" do
+        charge = create(:charge, purchases: create_list(:free_purchase, 2, link: create(:product, user: seller)))
+        expect(described_class.new(charge, for_email: true).free_charge?).to eq(true)
+      end
+
+      it "is false when any purchase in the charge moved money" do
+        charge = create(:charge, purchases: [create(:free_purchase, link: create(:product, user: seller)), purchase])
+        expect(described_class.new(charge, for_email: true).free_charge?).to eq(false)
       end
     end
 

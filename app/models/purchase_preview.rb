@@ -35,6 +35,12 @@ class PurchasePreview
     displayed_price_cents
   end
 
+  # The header section decides on `free_purchase?`; without this a free product's preview would
+  # keep the order header the real receipt drops, because method_missing answers nil.
+  def free_purchase?
+    price_cents.to_i.zero? && shipping_cents.to_i.zero?
+  end
+
   # The receipt template uses a lot of fields of `purchase`
   # in different pieces of business logic that are not relevant to our preview need.
   # For them it's fine to return `nil` instead of trying to add fields

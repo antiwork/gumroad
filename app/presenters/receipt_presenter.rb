@@ -25,6 +25,14 @@ class ReceiptPresenter
     @_payment_info ||= ReceiptPresenter::PaymentInfo.new(chargeable, presentment_currency:)
   end
 
+  # A charge that moved no money — every purchase free, none a free trial — reads as an order
+  # ("Order ID", "Order date", "Total: $0") to a buyer who paid nothing, so the receipt header
+  # is skipped for it. Free trials keep the header: a trial did subscribe.
+  def free_charge?
+    purchases = chargeable.successful_purchases
+    purchases.present? && purchases.all? { _1.free_purchase? && !_1.is_free_trial_purchase? }
+  end
+
   def shipping_info
     @_shipping_info ||= ReceiptPresenter::ShippingInfo.new(chargeable)
   end

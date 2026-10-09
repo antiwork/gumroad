@@ -206,10 +206,10 @@ describe PostResendApi, :freeze_time do
         expect(sent_email_content).to include("You've received this email because you've purchased <a href=\"#{url_redirect.download_page_url}\">#{@post.link.name}</a>.")
       end
 
-      it "says 'downloaded' instead of 'purchased' when the recipient's purchase was free" do
+      it "says 'got' instead of 'purchased' when the recipient's purchase was free" do
         purchase = create(:free_purchase, link: @product)
         send_emails(recipients: [{ email: "c1@example.com", purchase: }])
-        expect(sent_email_content).to include("You've received this email because you downloaded <a href=\"#{@post.link.long_url}\">#{@post.link.name}</a>.")
+        expect(sent_email_content).to include("You've received this email because you got <a href=\"#{@post.link.long_url}\">#{@post.link.name}</a>.")
       end
     end
   end
