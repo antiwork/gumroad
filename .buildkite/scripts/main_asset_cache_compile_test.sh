@@ -59,7 +59,7 @@ STUB
 cat > "$WORK/bin/buildkite-agent" <<'STUB'
 #!/bin/bash
 case "$1 $2" in
-  "meta-data set") [ "${META_SET_FAIL:-}" = 1 ] && exit 1; echo "meta-data $3=$4" >> "$CALLS" ;;
+  "meta-data set") [ "${META_SET_FAIL:-}" = 1 ] && { echo "meta-data-failed $3=$4" >> "$CALLS"; exit 1; }; echo "meta-data $3=$4" >> "$CALLS" ;;
   *) cat >> "$ANNOTATIONS" ;;
 esac
 STUB
@@ -117,7 +117,8 @@ seed_cache; run_script META_SET_FAIL=1; rc=$?
 [ $rc = 0 ] && served && ! compiled && pushed && ok "a first-attempt hit still serves from the cache when its outcome cannot be recorded" || fail "first-attempt hit with a failed record (rc=$rc)"
 
 seed_cache; run_script META_SET_FAIL=1 BUILDKITE_RETRY_COUNT=1; rc=$?
-[ $rc != 0 ] && ! compiled && ! pushed && ok "a retried hit that cannot record its outcome stops before the push" || fail "retried hit with a failed record (rc=$rc)"
+[ $rc != 0 ] && ! compiled && ! pushed && [ "$(grep -c "^meta-data" "$WORK/calls")" = 1 ] && grep -q "^meta-data-failed main-asset-cache-served=$TAG" "$WORK/calls" \
+  && ok "a retried hit that cannot record its outcome stops at once, before any fallback or push" || fail "retried hit with a failed record (rc=$rc): $(grep "^meta-data" "$WORK/calls")"
 
 rm -rf "$WORK/bucket"; run_script META_SET_FAIL=1 BUILDKITE_RETRY_COUNT=1 BUILDKITE_BRANCH=comp-assets-test; rc=$?
 [ $rc = 0 ] && compiled && pushed && ! grep -q "^meta-data" "$WORK/calls" \
