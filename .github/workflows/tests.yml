@@ -1085,7 +1085,10 @@ jobs:
         with:
           persist-credentials: false
           # bin/branch-specs diffs against main, so the base has to be in the clone.
+          # It reads the history's commits and trees but few old file contents,
+          # which git fetches on demand.
           fetch-depth: 0
+          filter: blob:none
       # Before the setup below, so a diff that needs the full suite fails at once.
       - name: Select relevant specs
         id: specs
