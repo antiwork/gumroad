@@ -9,10 +9,11 @@ logger() {
 }
 
 logger "Uploading public/vite to S3"
-# A new build gives every file a new mtime, so a plain sync uploads them all.
-# Names under assets/ carry a content hash: the same name and size is the same
-# file. A source map can differ at the same size; the old one maps the same code.
-aws s3 sync /app/public/vite s3://${ASSETS_S3_BUCKET}/vite --size-only --exclude '.vite/*' --acl public-read --cache-control max-age=31536000,immutable
+# cp lists only this build's files and uploads them all, in a few seconds. vite/ keeps
+# every earlier build's hashed files, and a sync lists all of them first: about 65 s per
+# deploy. Nothing is deleted, so the previous release's files keep resolving during a
+# rolling deploy.
+aws s3 cp --recursive --only-show-errors /app/public/vite s3://${ASSETS_S3_BUCKET}/vite --exclude '.vite/*' --acl public-read --cache-control max-age=31536000,immutable
 # The manifests keep fixed names.
 aws s3 sync /app/public/vite/.vite s3://${ASSETS_S3_BUCKET}/vite/.vite --acl public-read --cache-control max-age=31536000,immutable
 logger "Done uploading public/vite to S3"
