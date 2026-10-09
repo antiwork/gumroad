@@ -11,10 +11,10 @@ export type PiracyReportState =
 
 export type PiracyReportOutcome = "removed" | "no_response" | "restored" | "withdrawn";
 
-type StatusColor = "success" | "warning" | "danger" | undefined;
+type StatusColor = "warning" | "danger" | undefined;
 
 const OUTCOME_STATUS: Record<PiracyReportOutcome, { label: string; color: StatusColor }> = {
-  removed: { label: "Page removed", color: "success" },
+  removed: { label: "Page removed", color: undefined },
   no_response: { label: "No response from the site", color: undefined },
   restored: { label: "Page put back", color: "danger" },
   withdrawn: { label: "Withdrawn", color: undefined },
