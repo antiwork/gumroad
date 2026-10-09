@@ -134,7 +134,6 @@ export default function PiracyReportsShow() {
       </Alert>
     ) : report.state === "counter_noticed" && report.restoration_window !== null ? (
       <Alert role="status" variant="warning">
-        The person who posted the page disputed the notice.{" "}
         {windowHasEnded(report.restoration_window[1]) ? (
           <>
             Since about {formatDate(report.restoration_window[1])}, the site can put the page back. If you filed a court
@@ -143,8 +142,8 @@ export default function PiracyReportsShow() {
         ) : (
           <>
             The site can put the page back between about {formatDate(report.restoration_window[0])} and{" "}
-            {formatDate(report.restoration_window[1])}. To stop that, file a court action against them before then, and
-            reply to our email to tell us.
+            {formatDate(report.restoration_window[1])}. To stop that, file a court action against the person who posted
+            the page before then, and reply to our email to tell us.
           </>
         )}
       </Alert>
