@@ -154,7 +154,7 @@ class PostResendApi
 
     def build_seller_update_reason(recipient)
       # Recipients who got the product for free ($0 purchase, free download, PWYW at $0)
-      # never "purchased" anything, so the footer uses "got"/"downloaded" wording for them.
+      # never "purchased" anything, so the footer uses "got" wording for them.
       free_purchase = recipient[:purchase]&.free_purchase?
       if @post.seller_type?
         seller_name = @post.seller.name.presence || @post.seller.email || "Gumroad"
@@ -169,7 +169,7 @@ class PostResendApi
         elsif @post.link.is_recurring_billing
           "You've received this email because you subscribed to <a href=\"#{download_url_or_product_url}\">#{product_name}</a>."
         elsif free_purchase
-          "You've received this email because you downloaded <a href=\"#{download_url_or_product_url}\">#{product_name}</a>."
+          "You've received this email because you got <a href=\"#{download_url_or_product_url}\">#{product_name}</a>."
         else
           "You've received this email because you've purchased <a href=\"#{download_url_or_product_url}\">#{product_name}</a>."
         end
