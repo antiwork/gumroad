@@ -1,4 +1,4 @@
-import { Link, useForm, usePage } from "@inertiajs/react";
+import { useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
 
 import { Button } from "$app/components/Button";
@@ -29,15 +29,7 @@ export default function PiracyReportsNew() {
 
   return (
     <form onSubmit={submit}>
-      <PageHeader
-        title="Report piracy"
-        showTitleOnMobile
-        actions={
-          <Button asChild>
-            <Link href={Routes.piracy_reports_path()}>All piracy reports</Link>
-          </Button>
-        }
-      />
+      <PageHeader title="Report piracy" showTitleOnMobile />
       <div className="grid gap-4 p-4 md:p-8">
         <p>
           Tell us where <strong>{product.name}</strong> is being offered without your permission. We check the page,
