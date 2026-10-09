@@ -37,8 +37,9 @@ vi.mock("react-router-dom", async (importOriginal) => ({
         contextCapture.current = value;
         if (contextCapture.showCancellationDiscount) {
           contextCapture.renders += 1;
+          const MAX_EDITOR_RENDERS = 20;
           // Bound the broken effect loop so the regression fails without hanging the runner.
-          if (contextCapture.renders > 20) return <p role="alert">Editor did not settle</p>;
+          if (contextCapture.renders > MAX_EDITOR_RENDERS) return <p role="alert">Editor did not settle</p>;
           return <CancellationDiscountSelector />;
         }
         return null;
