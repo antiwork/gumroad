@@ -177,8 +177,9 @@ class User::FeatureStatusTest < ActiveSupport::TestCase
   # --- #can_setup_bank_payouts? -----------------------------------------------
 
   test "#can_setup_bank_payouts? is true for Stripe-supported countries (except India without an active bank account)" do
+    # One seller for every country: its newest compliance record decides.
+    seller = create_user
     (User::Compliance.const_get(:SUPPORTED_COUNTRIES) - [Compliance::Countries::IND]).each do |country|
-      seller = create_user
       create_user_compliance_info(user: seller, country: country.common_name)
       assert seller.can_setup_bank_payouts?, "expected #{country.common_name} to support bank payouts"
     end
@@ -255,8 +256,8 @@ class User::FeatureStatusTest < ActiveSupport::TestCase
 
   test "#can_setup_paypal_payouts? is false for Stripe-supported countries except UAE, Kazakhstan, Egypt, and India" do
     exempt = [Compliance::Countries::ARE, Compliance::Countries::KAZ, Compliance::Countries::EGY, Compliance::Countries::IND]
+    seller = create_user(payment_address: nil)
     (User::Compliance.const_get(:SUPPORTED_COUNTRIES) - exempt).each do |country|
-      seller = create_user(payment_address: nil)
       create_user_compliance_info(user: seller, country: country.common_name)
       assert_not seller.can_setup_paypal_payouts?, "expected #{country.common_name} not to allow PayPal payout setup"
     end
