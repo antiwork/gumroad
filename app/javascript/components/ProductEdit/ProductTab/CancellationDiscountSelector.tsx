@@ -7,6 +7,7 @@ import { ToggleSettingRow } from "$app/components/SettingRow";
 import { Fieldset } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
+import { useOnChange } from "$app/components/useOnChange";
 
 export const CancellationDiscountSelector = () => {
   const { product, updateProduct, currencyType } = useProductEditContext();
@@ -25,7 +26,7 @@ export const CancellationDiscountSelector = () => {
     cancellationDiscount?.duration_in_billing_cycles ?? null,
   );
 
-  React.useEffect(() => {
+  useOnChange(() => {
     if (!isEnabled) {
       updateProduct({ cancellation_discount: null });
       return;
@@ -44,7 +45,7 @@ export const CancellationDiscountSelector = () => {
         duration_in_billing_cycles: durationInBillingCycles,
       },
     });
-  }, [isEnabled, discount, durationInBillingCycles, updateProduct]);
+  }, [isEnabled, discount, durationInBillingCycles]);
 
   return (
     <ToggleSettingRow

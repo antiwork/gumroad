@@ -12,13 +12,19 @@ import {
 } from "$app/data/product_edit";
 import { confirmRemovedVariantPageDeletions } from "$app/data/product_save_contract";
 
+import { CancellationDiscountSelector } from "$app/components/ProductEdit/ProductTab/CancellationDiscountSelector";
 import { type FileEntry, ProductEditContext, type Product, type Version } from "$app/components/ProductEdit/state";
 import { showAlert } from "$app/components/server-components/Alert";
 import { ProductEditPage, type ProductEditPageProps } from "$app/components/server-components/ProductEditPage";
 
 type ProductEditContextValue = NonNullable<React.ContextType<typeof ProductEditContext>>;
 
-const contextCapture: { current: ProductEditContextValue | null } = { current: null };
+const contextCapture: { current: ProductEditContextValue | null; showCancellationDiscount: boolean; renders: number } =
+  {
+    current: null,
+    showCancellationDiscount: false,
+    renders: 0,
+  };
 const saveProductMock = vi.hoisted(() => vi.fn());
 const applyRichContentPageSaveResponseSpy = vi.hoisted(() => vi.fn());
 
@@ -29,6 +35,12 @@ vi.mock("react-router-dom", async (importOriginal) => ({
     <ProductEditContext.Consumer>
       {(value) => {
         contextCapture.current = value;
+        if (contextCapture.showCancellationDiscount) {
+          contextCapture.renders += 1;
+          // Bound the broken effect loop so the regression fails without hanging the runner.
+          if (contextCapture.renders > 20) return <p role="alert">Editor did not settle</p>;
+          return <CancellationDiscountSelector />;
+        }
         return null;
       }}
     </ProductEditContext.Consumer>
@@ -51,6 +63,8 @@ vi.mock("$app/components/server-components/Alert", () => ({ showAlert: vi.fn() }
 
 beforeEach(() => {
   contextCapture.current = null;
+  contextCapture.showCancellationDiscount = false;
+  contextCapture.renders = 0;
   saveProductMock.mockReset();
 });
 
@@ -705,6 +719,63 @@ const buildTieredProps = (product: Product): ProductEditPageProps => ({
   custom_html_global_nav_paths: [],
   successful_sales_count: 0,
   ai_generated: false,
+});
+
+describe("cancellation discount editing", () => {
+  it.each([
+    null,
+    { discount: { type: "percent", percents: 10 }, duration_in_billing_cycles: 3 },
+  ] satisfies Product["cancellation_discount"][])("settles without rewriting the loaded discount %j", (discount) => {
+    contextCapture.showCancellationDiscount = true;
+    const product: Product = {
+      ...buildTieredProduct([]),
+      native_type: "membership",
+      variants: [],
+      cancellation_discount: discount,
+    };
+    render(<ProductEditPage {...buildTieredProps(product)} cancellation_discounts_enabled />);
+
+    expect(screen.queryByText("Editor did not settle")).toBeNull();
+    expect(contextCapture.current?.product.cancellation_discount).toEqual(discount);
+
+    act(() => contextCapture.current?.updateProduct({ name: "Updated membership" }));
+    expect(screen.queryByText("Editor did not settle")).toBeNull();
+    expect(contextCapture.current?.product.name).toBe("Updated membership");
+    expect(contextCapture.current?.product.cancellation_discount).toEqual(discount);
+  });
+
+  it("saves creation, percentage changes, duration changes, and removal without repeated updates", async () => {
+    contextCapture.showCancellationDiscount = true;
+    const product: Product = { ...buildTieredProduct([]), native_type: "membership", variants: [] };
+    saveProductMock.mockResolvedValue({});
+    render(<ProductEditPage {...buildTieredProps(product)} cancellation_discounts_enabled />);
+    expect(screen.queryByText("Editor did not settle")).toBeNull();
+
+    fireEvent.click(screen.getByLabelText("Offer a cancellation discount"));
+    fireEvent.change(screen.getByRole("textbox", { name: "Fixed amount" }), { target: { value: "1.25" } });
+    expect(contextCapture.current?.product.cancellation_discount).toEqual({
+      discount: { type: "fixed", cents: 125 },
+      duration_in_billing_cycles: null,
+    });
+
+    fireEvent.click(screen.getByRole("radio", { name: "Percentage" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Percentage" }), { target: { value: "15" } });
+    fireEvent.change(screen.getByLabelText("Duration in billing cycles"), { target: { value: "2" } });
+    await act(async () => {
+      await contextCapture.current?.save();
+    });
+    expect(saveProductMock.mock.lastCall?.[2]).toMatchObject({
+      cancellation_discount: { discount: { type: "percent", percents: 15 }, duration_in_billing_cycles: 2 },
+    });
+    expect(screen.queryByText("Editor did not settle")).toBeNull();
+
+    fireEvent.click(screen.getByLabelText("Offer a cancellation discount"));
+    await act(async () => {
+      await contextCapture.current?.save();
+    });
+    expect(saveProductMock.mock.lastCall?.[2]).toMatchObject({ cancellation_discount: null });
+    expect(screen.queryByText("Editor did not settle")).toBeNull();
+  });
 });
 
 // Pins the in-flight cross-scope move path: the scoped sentPagesById lookup
