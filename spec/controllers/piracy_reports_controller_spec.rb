@@ -220,6 +220,37 @@ describe PiracyReportsController, type: :controller, inertia: true do
       end
     end
 
+    describe "POST cancel" do
+      it "cancels a signed report before it is sent, so the send job skips it" do
+        report = create(:piracy_report, :signed, seller:, product:)
+
+        post :cancel, params: { id: report.external_id }
+
+        expect(response).to redirect_to(piracy_report_path(report.external_id))
+        expect(flash[:notice]).to eq("Report cancelled. Nothing was sent.")
+        expect(report.reload.state).to eq("cancelled")
+        expect(PiracyReports::SendService.new(report:).call.errors).to include("The report is not signed")
+      end
+
+      it "leaves a sent report alone" do
+        report = create(:piracy_report, :signed, seller:, product:, state: "sent", sent_at: 1.hour.ago)
+
+        post :cancel, params: { id: report.external_id }
+
+        expect(flash[:alert]).to eq("This notice was already sent, so the report cannot be cancelled.")
+        expect(report.reload.state).to eq("sent")
+      end
+
+      it "does not cancel another seller's report" do
+        report = create(:piracy_report, :signed)
+
+        post :cancel, params: { id: report.external_id }
+
+        expect(response).to redirect_to(products_path)
+        expect(report.reload.state).to eq("signed")
+      end
+    end
+
     describe "POST sign" do
       let(:confirmations) { PiracyReport::SIGNATURE_CONFIRMATIONS.keys }
 
@@ -292,6 +323,15 @@ describe PiracyReportsController, type: :controller, inertia: true do
 
       post :sign, params: { id: report.external_id, signed_by_name: "Jane Doe", confirmations: PiracyReport::SIGNATURE_CONFIRMATIONS.keys, confirmations_version: PiracyReport::SIGNATURE_STATEMENT_VERSION }
       expect(report.reload.state).to eq("awaiting_signature")
+    end
+
+    it "cannot cancel the owner's report" do
+      report = create(:piracy_report, :signed, seller:, product:)
+
+      post :cancel, params: { id: report.external_id }
+
+      expect(response).to redirect_to(dashboard_url)
+      expect(report.reload.state).to eq("signed")
     end
 
     it "cannot list the owner's reports" do

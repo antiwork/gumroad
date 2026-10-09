@@ -26,4 +26,8 @@ class PiracyReportPolicy < ApplicationPolicy
   def sign?
     user.role_admin_for?(seller) && when_record_available { record.seller_id == seller&.id }
   end
+
+  def cancel?
+    sign?
+  end
 end

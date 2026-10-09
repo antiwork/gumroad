@@ -1,4 +1,4 @@
-import { Link, useForm, usePage } from "@inertiajs/react";
+import { Link, router, useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
 
 import {
@@ -12,6 +12,7 @@ import {
 import { classNames } from "$app/utils/classNames";
 
 import { Button } from "$app/components/Button";
+import { Modal } from "$app/components/Modal";
 import { Alert } from "$app/components/ui/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { Checkbox } from "$app/components/ui/Checkbox";
@@ -49,6 +50,7 @@ type PiracyReportsShowProps = {
     waiting_on_person: boolean;
     outcome: PiracyReportOutcome | null;
     signed_by_name: string | null;
+    can_cancel: boolean;
     history: { event: HistoryEvent; at: string }[];
   };
   product: { name: string; url: string };
@@ -82,7 +84,7 @@ const historyLabel = (event: HistoryEvent, report: PiracyReportsShowProps["repor
     case "resolved":
       return report.outcome ? OUTCOME_TEXT[report.outcome] : "We closed the report";
     case "closed":
-      return "We closed the report";
+      return "The report was cancelled";
   }
 };
 
@@ -91,6 +93,20 @@ export default function PiracyReportsShow() {
   const status = piracyReportStatus(report.state, report.outcome);
   const userAgentInfo = useUserAgentInfo();
   const formatDate = (value: string) => formatPiracyReportDate(value, userAgentInfo.locale);
+  const [confirmingCancel, setConfirmingCancel] = React.useState(false);
+  const [cancelling, setCancelling] = React.useState(false);
+  const cancelReport = () =>
+    router.post(
+      Routes.cancel_piracy_report_path(report.id),
+      {},
+      {
+        onStart: () => setCancelling(true),
+        onFinish: () => {
+          setCancelling(false);
+          setConfirmingCancel(false);
+        },
+      },
+    );
 
   const form = useForm<{ signed_by_name: string; confirmations: string[]; confirmations_version: string }>({
     signed_by_name: "",
@@ -155,8 +171,8 @@ export default function PiracyReportsShow() {
         {OUTCOME_TEXT[report.outcome]}
       </Alert>
     ) : report.state === "cancelled" ? (
-      <Alert role="status" variant="warning">
-        We closed this report because your account was closed, so nothing was sent. We keep the record.
+      <Alert role="status" variant="info">
+        This report was cancelled before it was sent. Nothing was sent.
       </Alert>
     ) : null;
 
@@ -184,6 +200,11 @@ export default function PiracyReportsShow() {
           </a>
         </p>
         {statusAlert}
+        {report.can_cancel ? (
+          <div>
+            <Button onClick={() => setConfirmingCancel(true)}>Cancel report</Button>
+          </div>
+        ) : null}
         <div className={classNames("grid items-start gap-8", report.notice_text !== null && "lg:grid-cols-2")}>
           {report.notice_text === null ? null : (
             <div className="flex flex-col gap-8">
@@ -276,6 +297,27 @@ export default function PiracyReportsShow() {
           </Card>
         </div>
       </div>
+      {confirmingCancel ? (
+        <Modal
+          open
+          onClose={() => setConfirmingCancel(false)}
+          title="Cancel this report?"
+          footer={
+            <>
+              <Button onClick={() => setConfirmingCancel(false)} disabled={cancelling}>
+                Keep report
+              </Button>
+              <Button color="danger" onClick={cancelReport} disabled={cancelling}>
+                {cancelling ? "Cancelling..." : "Cancel report"}
+              </Button>
+            </>
+          }
+        >
+          <p>
+            We will not send the notice. You cannot undo this, and the report still counts toward your monthly limit.
+          </p>
+        </Modal>
+      ) : null}
     </div>
   );
 }

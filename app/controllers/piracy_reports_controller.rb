@@ -5,7 +5,7 @@ class PiracyReportsController < Sellers::BaseController
   layout "inertia"
 
   before_action :set_product, only: [:new, :create]
-  before_action :set_report, only: [:show, :sign]
+  before_action :set_report, only: [:show, :sign, :cancel]
 
   def index
     authorize PiracyReport
@@ -72,6 +72,18 @@ class PiracyReportsController < Sellers::BaseController
     end
   end
 
+  # Takes the row lock the send job claims under, so a cancel and a send cannot both happen.
+  def cancel
+    authorize @report
+
+    cancelled = @report.with_lock { @report.can_cancel? && @report.cancel! }
+    if cancelled
+      redirect_to piracy_report_path(@report.external_id), notice: "Report cancelled. Nothing was sent."
+    else
+      redirect_to piracy_report_path(@report.external_id), alert: "This notice was already sent, so the report cannot be cancelled."
+    end
+  end
+
   private
     def set_product
       @product = current_seller.links.alive.find_by(unique_permalink: params[:product_id].to_s)
@@ -108,6 +120,7 @@ class PiracyReportsController < Sellers::BaseController
         notice_digest: @report.notice_digest,
         signed_at: @report.signed_at&.iso8601,
         signed_by_name: @report.signed_by_name,
+        can_cancel: @report.can_cancel?,
         sent_at: @report.sent_at&.iso8601,
         recipient_name: @report.recipient_name,
         restoration_window: @report.restoration_window&.map(&:iso8601),
