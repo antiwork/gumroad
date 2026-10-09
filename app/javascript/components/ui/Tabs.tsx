@@ -59,14 +59,19 @@ export const Tabs = React.forwardRef<HTMLDivElement, TabsProps>(({ children, cla
   React.useImperativeHandle<HTMLDivElement | null, HTMLDivElement | null>(ref, () => listRef.current);
 
   // A pill row scrolls sideways on narrow screens, so a selected tab past the edge would load hidden.
+  // Align again once web fonts load, because they widen the labels after the first layout.
   React.useEffect(() => {
-    const list = listRef.current;
-    const selected = list?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
-    if (!list || !selected) return;
-    const listRect = list.getBoundingClientRect();
-    const tabRect = selected.getBoundingClientRect();
-    if (tabRect.right > listRect.right) list.scrollLeft += tabRect.right - listRect.right;
-    else if (tabRect.left < listRect.left) list.scrollLeft -= listRect.left - tabRect.left;
+    const align = () => {
+      const list = listRef.current;
+      const selected = list?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
+      if (!list || !selected) return;
+      const listRect = list.getBoundingClientRect();
+      const tabRect = selected.getBoundingClientRect();
+      if (tabRect.right > listRect.right) list.scrollLeft += Math.ceil(tabRect.right - listRect.right);
+      else if (tabRect.left < listRect.left) list.scrollLeft -= Math.ceil(listRect.left - tabRect.left);
+    };
+    align();
+    if ("fonts" in document) void document.fonts.ready.then(align);
   }, []);
 
   return (
