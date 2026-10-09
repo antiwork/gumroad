@@ -5,7 +5,7 @@ class PiracyReportsController < Sellers::BaseController
   layout "inertia"
 
   before_action :set_product, only: [:new, :create]
-  before_action :set_report, only: [:show, :sign]
+  before_action :set_report, only: [:show, :sign, :cancel]
 
   def index
     authorize PiracyReport
@@ -57,6 +57,7 @@ class PiracyReportsController < Sellers::BaseController
       product: { name: @report.product.name, url: @report.product.long_url },
       confirmations: PiracyReport::SIGNATURE_CONFIRMATIONS.map { |key, text| { key:, text: } },
       confirmations_version: PiracyReport::SIGNATURE_STATEMENT_VERSION,
+      monthly_limit: PiracyReport::MONTHLY_LIMIT,
     }
   end
 
@@ -69,6 +70,21 @@ class PiracyReportsController < Sellers::BaseController
       redirect_to piracy_report_path(@report.external_id), notice: "Signed. We will send the notice."
     else
       redirect_to piracy_report_path(@report.external_id), alert: @report.errors.full_messages.to_sentence
+    end
+  end
+
+  # Takes the row lock the send job claims under, so a cancel and a send cannot both happen.
+  def cancel
+    authorize @report
+
+    # A second tab may confirm after the first one cancelled, so an already-cancelled report is a success.
+    cancelled = @report.with_lock { @report.cancelled? || (@report.can_cancel? && @report.cancel!) }
+    if cancelled
+      redirect_to piracy_report_path(@report.external_id), notice: "Report cancelled. Nothing was sent."
+    elsif @report.declined?
+      redirect_to piracy_report_path(@report.external_id), alert: "We did not send this report, so there is nothing to cancel."
+    else
+      redirect_to piracy_report_path(@report.external_id), alert: "This notice was already sent, so the report cannot be cancelled."
     end
   end
 
@@ -108,6 +124,7 @@ class PiracyReportsController < Sellers::BaseController
         notice_digest: @report.notice_digest,
         signed_at: @report.signed_at&.iso8601,
         signed_by_name: @report.signed_by_name,
+        can_cancel: @report.can_cancel?,
         sent_at: @report.sent_at&.iso8601,
         recipient_name: @report.recipient_name,
         restoration_window: @report.restoration_window&.map(&:iso8601),

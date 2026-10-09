@@ -50,4 +50,24 @@ describe "Signing a piracy report notice", type: :system, js: true do
 
     expect(page).to have_current_path(products_path)
   end
+
+  it "cancels a signed report after the seller confirms" do
+    visit piracy_report_path(report.external_id)
+    PiracyReport::SIGNATURE_CONFIRMATIONS.each_value { |text| check(text) }
+    fill_in "Type your full legal name to sign", with: "Jane Doe"
+    click_on "Sign notice"
+    expect(page).to have_text("Signed by Jane Doe")
+
+    click_on "Cancel report"
+    within_modal "Cancel this report?" do
+      expect(page).to have_text("you cannot report this page again for this product")
+      expect(page).to have_text("reports for the month you filed it")
+      click_on "Cancel report"
+    end
+
+    expect(page).to have_text("This report was cancelled. We did not send the notice.")
+    expect(page).to have_text("Cancelled")
+    expect(page).not_to have_button("Cancel report")
+    expect(report.reload.state).to eq("cancelled")
+  end
 end

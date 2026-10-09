@@ -28,7 +28,7 @@ const STATE_STATUS: Record<Exclude<PiracyReportState, "resolved">, { label: stri
   sent: { label: "Sent, waiting for the site", color: undefined },
   counter_noticed: { label: "Disputed", color: "warning" },
   declined: { label: "Not sent", color: undefined },
-  cancelled: { label: "Closed", color: undefined },
+  cancelled: { label: "Cancelled", color: undefined },
 };
 
 // One status vocabulary for the list and the report page, in the words a seller uses.

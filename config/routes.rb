@@ -1179,6 +1179,7 @@ Rails.application.routes.draw do
     post "/dashboard/piracy_reports", to: "piracy_reports#create", as: :piracy_reports
     get "/dashboard/piracy_reports/:id", to: "piracy_reports#show", as: :piracy_report
     post "/dashboard/piracy_reports/:id/sign", to: "piracy_reports#sign", as: :sign_piracy_report
+    post "/dashboard/piracy_reports/:id/cancel", to: "piracy_reports#cancel", as: :cancel_piracy_report
 
     # shipments
     post "/shipments/:purchase_id/mark_as_shipped", to: "shipments#mark_as_shipped", as: :mark_as_shipped
