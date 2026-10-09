@@ -42,9 +42,3 @@ mediafire.com:
   name: MediaFire, LLC
   email: copyright@mediafire.com
   source_url: https://dmca.copyright.gov/dmca/publish/history.html?search=MediaFire&id=39a139711ad47a0b9457d7e461cb797f
-
-# Test fixture for the piracy screening agent. Remove when the end-to-end test is done.
-piracy-test-antiwork.vercel.app:
-  name: Antiwork piracy screening test
-  email: gianfranco@gumroad.com
-  source_url: https://piracy-test-antiwork.vercel.app/dmca
