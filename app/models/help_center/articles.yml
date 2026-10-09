@@ -640,3 +640,8 @@
   title: "Custom product landing pages"
   description: "A custom landing page replaces one product's page with your own design, written as HTML by an AI agent. This covers what it replaces, how to build it, keeping the page buyable, what the page is allowed to do, and how to update or remove it."
   category_id: <%= HelpCenter::Category::ADD_A_PRODUCT.id %>
+- id: 354
+  slug: "354-reporting-piracy"
+  title: "Reporting piracy of your products"
+  description: "If a page on another site offers your product without your permission, we can send the site a takedown notice that you sign. This covers who can report, how to report, what each status means, what you sign, and what to do if someone disputes your notice."
+  category_id: <%= HelpCenter::Category::START_SELLING.id %>
