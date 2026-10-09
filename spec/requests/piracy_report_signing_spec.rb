@@ -39,4 +39,15 @@ describe "Signing a piracy report notice", type: :system, js: true do
     click_on "example.net/design-course"
     expect(page).to have_current_path(piracy_report_path(report.external_id))
   end
+
+  it "sends a seller with no reports to Products to start one" do
+    other_seller, = create_piracy_seller_with_product
+    login_as(other_seller)
+
+    visit piracy_reports_path
+    expect(page).to have_text("No piracy reports yet")
+    within("main") { click_on "Products" }
+
+    expect(page).to have_current_path(products_path)
+  end
 end

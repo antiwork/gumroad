@@ -37,13 +37,12 @@ export default function PiracyReportsNew() {
             <Link href={Routes.piracy_reports_path()}>All piracy reports</Link>
           </Button>
         }
-      >
+      />
+      <div className="grid gap-4 p-4 md:p-8">
         <p>
           Tell us where <strong>{product.name}</strong> is being offered without your permission. We check the page,
           then send you the takedown notice to sign before anything goes out.
         </p>
-      </PageHeader>
-      <div className="grid gap-4 p-4 md:p-8">
         {eligibility_errors.length > 0 ? (
           <Alert variant="warning">
             <div>
