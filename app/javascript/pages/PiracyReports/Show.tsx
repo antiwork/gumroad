@@ -317,7 +317,7 @@ export default function PiracyReportsShow() {
         >
           <p>
             We will not send the notice. You cannot undo this. This report still counts toward your limit of{" "}
-            {monthly_limit} reports this month.
+            {monthly_limit} reports for the month you filed it.
           </p>
         </Modal>
       ) : null}
