@@ -76,9 +76,12 @@ class PiracyReportsController < Sellers::BaseController
   def cancel
     authorize @report
 
-    cancelled = @report.with_lock { @report.can_cancel? && @report.cancel! }
+    # A second tab may confirm after the first one cancelled, so an already-cancelled report is a success.
+    cancelled = @report.with_lock { @report.cancelled? || (@report.can_cancel? && @report.cancel!) }
     if cancelled
       redirect_to piracy_report_path(@report.external_id), notice: "Report cancelled. Nothing was sent."
+    elsif @report.declined?
+      redirect_to piracy_report_path(@report.external_id), alert: "We did not send this report, so there is nothing to cancel."
     else
       redirect_to piracy_report_path(@report.external_id), alert: "This notice was already sent, so the report cannot be cancelled."
     end

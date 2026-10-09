@@ -241,6 +241,24 @@ describe PiracyReportsController, type: :controller, inertia: true do
         expect(report.reload.state).to eq("sent")
       end
 
+      it "treats a second cancel as done, as when two tabs confirm" do
+        report = create(:piracy_report, :signed, seller:, product:, state: "cancelled")
+
+        post :cancel, params: { id: report.external_id }
+
+        expect(flash[:notice]).to eq("Report cancelled. Nothing was sent.")
+        expect(report.reload.state).to eq("cancelled")
+      end
+
+      it "says there is nothing to cancel on a report we declined" do
+        report = create(:piracy_report, seller:, product:, state: "declined", screening_verdict: "fail")
+
+        post :cancel, params: { id: report.external_id }
+
+        expect(flash[:alert]).to eq("We did not send this report, so there is nothing to cancel.")
+        expect(report.reload.state).to eq("declined")
+      end
+
       it "does not cancel another seller's report" do
         report = create(:piracy_report, :signed)
 
