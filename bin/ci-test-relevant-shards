@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Prints how many Test Relevant shards a selection of spec files needs, for
+# bin/ci-relevant-specs. The extra shards of the matrix stop after selecting,
+# so ci/green waits on fewer runners, and a slow runner is less likely to hold
+# it up. Knapsack still splits a slow spec file by its examples.
+#
+#   bin/ci-test-relevant-shards FILE_COUNT MATRIX_SIZE
+
+set -euo pipefail
+
+FILES_PER_SHARD=4
+MIN_SHARDS=4
+
+files=${1:?usage: bin/ci-test-relevant-shards FILE_COUNT MATRIX_SIZE}
+max=${2:?usage: bin/ci-test-relevant-shards FILE_COUNT MATRIX_SIZE}
+
+shards=$(( (files + FILES_PER_SHARD - 1) / FILES_PER_SHARD ))
+if [ "$shards" -lt "$MIN_SHARDS" ]; then shards=$MIN_SHARDS; fi
+if [ "$shards" -gt "$max" ]; then shards=$max; fi
+echo "$shards"

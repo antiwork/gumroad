@@ -339,6 +339,9 @@ jobs:
       - name: Self-test the branch-specs selector
         run: ruby spec/bin/branch_specs_test.rb
 
+      - name: Self-test the Test Relevant shard count
+        run: ruby spec/bin/ci_test_relevant_shards_test.rb
+
       - name: Self-test the main spec-failure classifier
         run: ruby spec/bin/classify_main_spec_failure_test.rb
 
@@ -1106,12 +1109,16 @@ jobs:
           # bin/branch-specs diffs against main, so the base has to be in the clone.
           fetch-depth: 0
       # Before the setup below, so a diff that needs the full suite fails at once.
+      # Shards beyond what the selection needs skip every step after this one.
       - name: Select relevant specs
         id: specs
         run: bin/ci-relevant-specs "$BASE_SHA"
         env:
           BASE_SHA: ${{ needs.ci_gate.outputs.base_sha }}
+          CI_NODE_INDEX: ${{ matrix.ci_node_index }}
+          CI_NODE_TOTAL: ${{ matrix.ci_node_total }}
       - name: Login to Docker Hub
+        if: steps.specs.outputs.run == 'true'
         uses: nick-fields/retry@v3
         with:
           timeout_seconds: 120
@@ -1124,34 +1131,41 @@ jobs:
       # In the background, so the image pulls and the MinIO health check overlap
       # with the setup steps below. "Prepare test database" waits for it.
       - name: Start services
+        if: steps.specs.outputs.run == 'true'
         run: (docker compose up -d > /tmp/compose.log 2>&1; echo $? > /tmp/compose.status) &
       # Saved by the typecheck job on main, so apt downloads nothing on a hit.
       - name: Restore the test packages
+        if: steps.specs.outputs.run == 'true'
         uses: actions/cache/restore@v4
         with:
           path: ~/test-packages
           key: test-packages-v1-${{ runner.os }}-${{ hashFiles('bin/ci-test-packages') }}
       - name: Install system packages
+        if: steps.specs.outputs.run == 'true'
         run: bin/ci-test-packages install ~/test-packages
       - name: Set up Ruby
+        if: steps.specs.outputs.run == 'true'
         uses: ruby/setup-ruby@v1
         with:
           bundler-cache: true
       - uses: actions/setup-node@v4
+        if: steps.specs.outputs.run == 'true'
         with:
           node-version-file: package.json
           cache: npm
       # Shares lint_js's cache, which only main pushes save.
       - uses: actions/cache/restore@v4
+        if: steps.specs.outputs.run == 'true'
         id: node_modules
         with:
           path: node_modules
           key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package.json', 'package-lock.json', '.npmrc', 'patches/**') }}
       - run: npm ci
-        if: steps.node_modules.outputs.cache-hit != 'true'
+        if: steps.specs.outputs.run == 'true' && steps.node_modules.outputs.cache-hit != 'true'
       # Saved by the typecheck job on main, or by shard 0 of an earlier push to
       # this branch.
       - name: Restore the test assets
+        if: steps.specs.outputs.run == 'true'
         id: test_assets
         uses: actions/cache/restore@v4
         with:
@@ -1176,6 +1190,7 @@ jobs:
               'Gemfile.lock', '.ruby-version') }}
       # After the key above, as in the typecheck job.
       - name: Restore the pages CSS
+        if: steps.specs.outputs.run == 'true'
         id: pages_tailwind
         uses: actions/cache/restore@v4
         with:
@@ -1189,6 +1204,7 @@ jobs:
               'scripts/build_pages_tailwind.mjs', 'app/javascript/stylesheets/pages_tailwind.css',
               'package.json', 'package-lock.json', 'patches/**', '.github/workflows/tests.yml') }}
       - name: Prepare test database and assets
+        if: steps.specs.outputs.run == 'true'
         run: |
           for _ in $(seq 1 90); do [ -f /tmp/compose.status ] && break; sleep 2; done
           cat /tmp/compose.log
@@ -1218,7 +1234,7 @@ jobs:
           PAGES_RESTORED: ${{ steps.pages_tailwind.outputs.cache-hit }}
           VITE_RESTORED: ${{ steps.test_assets.outputs.cache-hit }}
       - uses: actions/cache/save@v4
-        if: steps.pages_tailwind.outputs.cache-hit != 'true' && matrix.ci_node_index == 0
+        if: steps.specs.outputs.run == 'true' && steps.pages_tailwind.outputs.cache-hit != 'true' && matrix.ci_node_index == 0
         with:
           path: |
             public/pages-tailwind.css
@@ -1227,7 +1243,7 @@ jobs:
             app/javascript/stylesheets/pages_tailwind.generated.html
           key: ${{ steps.pages_tailwind.outputs.cache-primary-key }}
       - uses: actions/cache/save@v4
-        if: steps.test_assets.outputs.cache-hit != 'true' && matrix.ci_node_index == 0
+        if: steps.specs.outputs.run == 'true' && steps.test_assets.outputs.cache-hit != 'true' && matrix.ci_node_index == 0
         with:
           path: |
             public/vite-test
@@ -1236,12 +1252,13 @@ jobs:
             public/js/gumroad-embed-bundle.js
           key: ${{ steps.test_assets.outputs.cache-primary-key }}
       - name: Run tests
+        if: steps.specs.outputs.run == 'true'
         timeout-minutes: 25
         run: bundle exec rake "knapsack_pro:queue:rspec[--format RSpec::Github::Formatter --tag ~skip --format progress]"
         env:
           RUBY_YJIT_ENABLE: 1
           KNAPSACK_PRO_TEST_SUITE_TOKEN_RSPEC: ${{ secrets.KNAPSACK_PRO_TEST_SUITE_TOKEN_RSPEC_FAST }}
-          KNAPSACK_PRO_CI_NODE_TOTAL: ${{ matrix.ci_node_total }}
+          KNAPSACK_PRO_CI_NODE_TOTAL: ${{ steps.specs.outputs.shards }}
           KNAPSACK_PRO_CI_NODE_INDEX: ${{ matrix.ci_node_index }}
           KNAPSACK_PRO_LOG_LEVEL: info
           KNAPSACK_PRO_TEST_FILE_LIST: ${{ steps.specs.outputs.files_csv }}
