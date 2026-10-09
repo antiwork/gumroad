@@ -170,6 +170,20 @@ describe PiracyReports::CreateService do
       expect(call(seller:, product:).errors).to eq(["The product has no successful sales"])
     end
 
+    it "creates a report for a seller with no sales once the staff test flag is on" do
+      seller = create(:user)
+      create(:user_compliance_info, user: seller)
+      Feature.activate_user(:piracy_reports, seller)
+      Feature.activate_user(PiracyReports::Eligibility::SKIP_SALES_CHECKS_FLAG, seller)
+      product = create(:product, user: seller)
+
+      result = call(seller:, product:)
+
+      expect(result).to be_success
+      expect(result.report).to be_persisted
+      expect(result.report).to have_attributes(state: "requested", seller:, product:)
+    end
+
     it "skips only the sales checks for a seller with the staff test flag" do
       seller = create(:user)
       create(:user_compliance_info, user: seller)
