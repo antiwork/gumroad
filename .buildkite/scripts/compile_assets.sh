@@ -308,6 +308,8 @@ record_main_asset_cache_outcome() {
     logger "Could not record the main asset cache outcome on a retry: stopping, so the job retries"
     exit 1
   fi
+  # The cache-hit path returns this, and a failure there would mean a full compile.
+  return 0
 }
 
 if [[ $BUILDKITE_PARALLEL_JOB = 1 && ( $BUILDKITE_BRANCH == "main" || $BUILDKITE_BRANCH == comp-assets-* ) ]]; then

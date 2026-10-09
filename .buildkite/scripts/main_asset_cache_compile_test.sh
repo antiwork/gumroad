@@ -113,6 +113,12 @@ rm -rf "$WORK/bucket"; run_script META_SET_FAIL=1; rc=$?
 rm -rf "$WORK/bucket"; run_script META_SET_FAIL=1 BUILDKITE_RETRY_COUNT=1; rc=$?
 [ $rc != 0 ] && ! compiled && ! pushed && ok "a retry that cannot replace an earlier outcome stops, so the job retries" || fail "retry with a failed record (rc=$rc)"
 
+seed_cache; run_script META_SET_FAIL=1; rc=$?
+[ $rc = 0 ] && served && ! compiled && pushed && ok "a first-attempt hit still serves from the cache when its outcome cannot be recorded" || fail "first-attempt hit with a failed record (rc=$rc)"
+
+seed_cache; run_script META_SET_FAIL=1 BUILDKITE_RETRY_COUNT=1; rc=$?
+[ $rc != 0 ] && ! compiled && ! pushed && ok "a retried hit that cannot record its outcome stops before the push" || fail "retried hit with a failed record (rc=$rc)"
+
 rm -rf "$WORK/bucket"; run_script META_SET_FAIL=1 BUILDKITE_RETRY_COUNT=1 BUILDKITE_BRANCH=comp-assets-test; rc=$?
 [ $rc = 0 ] && compiled && pushed && ! grep -q "^meta-data" "$WORK/calls" \
   && ok "a comp-assets retry records nothing and never stops on it" || fail "comp-assets retry (rc=$rc)"
