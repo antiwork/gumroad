@@ -28,15 +28,23 @@ case "$1" in
       exit "${RUN_RC:-0}"
     fi
     [[ " $* " == *" -d "* ]] && { echo container-id; exit 0; }
-    [[ " $* " == *"push_assets_to_s3.sh"* ]] && exit "${S3_RC:-0}"
+    [[ " $* " == *"push_assets_to_s3.sh"* ]] && { sleep "${S3_SECONDS:-0}"; exit "${S3_RC:-0}"; }
     exit 0 ;;
-  commit|rm|push|pull) exit 0 ;;
+  commit) exit "${COMMIT_RC:-0}" ;;
+  rm|push|pull) exit 0 ;;
   *) exit 0 ;;
 esac
 STUB
 cat > "$WORK/bin/make" <<'STUB'
 #!/bin/bash
 echo "make $*" >> "$CALLS"
+sleep "${MAKE_SECONDS:-0}"
+STUB
+# Stands in for prescale_web_clusters.sh, so no case reaches AWS.
+cat > "$WORK/prescale" <<'STUB'
+echo "prescale" >> "$CALLS"
+echo "prescale: raised the web clusters"
+sleep "${PRESCALE_SECONDS:-0}"
 STUB
 cat > "$WORK/bin/aws" <<'STUB'
 #!/bin/bash
@@ -70,6 +78,7 @@ run_script() {
   : > "$WORK/calls"; : > "$WORK/annotations"
   PATH="$WORK/bin:$PATH" CALLS="$WORK/calls" BUCKET_DIR="$WORK/bucket" ANNOTATIONS="$WORK/annotations" \
     BUILDKITE_BRANCH=main BUILDKITE_PARALLEL_JOB=1 BUILDKITE_MESSAGE="Change something" \
+    PRESCALE_SCRIPT="$WORK/prescale" \
     env "$@" bash "$SCRIPT" > "$WORK/out" 2>&1
 }
 
@@ -98,6 +107,12 @@ seed_cache; echo junk >> "$ENTRY"; run_script; rc=$?
 
 seed_cache; run_script RUN_RC=1; rc=$?
 [ $rc = 0 ] && compiled && ! uploaded && pushed && ok "an image that cannot be built from the cache falls back to the full compile" || fail "image build failure (rc=$rc)"
+grep -q "Pre-scaling the web clusters in 210s" "$WORK/out" && ! grep -q "Pre-scaling the web clusters in 0s" "$WORK/out" \
+  && ok "the fallback compile pre-scales on the full compile's delay" || fail "fallback pre-scale: $(grep -i pre-scal "$WORK/out")"
+
+seed_cache; run_script COMMIT_RC=1; rc=$?
+[ $rc = 0 ] && compiled && grep -q "Pre-scaling the web clusters in 210s" "$WORK/out" && ! grep -q "Pre-scaling the web clusters in 0s" "$WORK/out" \
+  && ok "a cache image that fails to commit pre-scales only on the fallback compile's delay" || fail "commit failure pre-scale (rc=$rc): $(grep -i pre-scal "$WORK/out")"
 
 seed_cache; run_script S3_RC=1; rc=$?
 [ $rc != 0 ] && ! pushed && ! compiled && ok "a failed S3 upload stops the build before the image is pushed" || fail "S3 failure (rc=$rc)"
@@ -110,6 +125,47 @@ seed_cache; run_script BUILDKITE_MESSAGE="Fix a thing [no-cache]"; rc=$?
 
 seed_cache; run_script BUILDKITE_BRANCH=comp-assets-test; rc=$?
 [ $rc = 0 ] && compiled && ! served && ok "only main is served from the cache" || fail "comp-assets branch (rc=$rc)"
+
+# The pre-scale runs in the background, so these cases wait out a short delay.
+prescaled() { sleep 2; grep -q "^prescale" "$WORK/calls"; }
+
+seed_cache; run_script S3_SECONDS=2; rc=$?
+[ $rc = 0 ] && served && grep -q "^prescale" "$WORK/calls" && grep -q "Pre-scaling the web clusters in 0s" "$WORK/out" \
+  && ok "a hit pre-scales the web clusters once its image is built, during the S3 upload" || fail "hit pre-scale (rc=$rc): $(grep -i pre-scal "$WORK/out")"
+commit_line=$(grep -n "^docker commit production-assets-from-cache" "$WORK/calls" | cut -d: -f1)
+prescale_line=$(grep -n "^prescale" "$WORK/calls" | cut -d: -f1)
+[ -n "$commit_line" ] && [ -n "$prescale_line" ] && [ "$prescale_line" -gt "$commit_line" ] \
+  && ok "the hit pre-scale starts after the image commit" || fail "pre-scale before the commit: $(cat "$WORK/calls")"
+
+rm -rf "$WORK/bucket"; run_script; rc=$?
+[ $rc = 0 ] && grep -q "Pre-scaling the web clusters in 210s" "$WORK/out" && ok "a full compile pre-scales the web clusters 210 s after it starts" || fail "miss pre-scale delay (rc=$rc): $(grep -i pre-scal "$WORK/out")"
+
+rm -rf "$WORK/bucket"; run_script PRESCALE_DELAY_SECONDS=1 MAKE_SECONDS=3; rc=$?
+[ $rc = 0 ] && prescaled && ok "the pre-scale runs once its delay passes during the compile" || fail "pre-scale did not run (rc=$rc)"
+grep -q "prescale: raised the web clusters" "$WORK/out" && ok "the pre-scale's log is printed when the compile ends" || fail "pre-scale log missing: $(tail -3 "$WORK/out")"
+
+seed_cache; : > "$WORK/calls"; started=$SECONDS
+PATH="$WORK/bin:$PATH" CALLS="$WORK/calls" BUCKET_DIR="$WORK/bucket" ANNOTATIONS="$WORK/annotations" \
+  BUILDKITE_BRANCH=main BUILDKITE_PARALLEL_JOB=1 BUILDKITE_MESSAGE="Change something" \
+  PRESCALE_SCRIPT="$WORK/prescale" PRESCALE_SECONDS=8 bash "$SCRIPT" 2>&1 | cat > "$WORK/out"
+[ $((SECONDS - started)) -lt 5 ] && ok "a slow pre-scale does not hold the compile's output open" || fail "slow pre-scale held output for $((SECONDS - started)) s"
+
+rm -rf "$WORK/bucket"; run_script PRESCALE_DELAY_SECONDS=1; rc=$?
+[ $rc = 0 ] && ! prescaled && ok "a compile that ends before the delay cancels the pre-scale" || fail "pre-scale ran after the compile ended"
+
+rm -rf "$WORK/bucket"; : > "$WORK/calls"; started=$SECONDS
+PATH="$WORK/bin:$PATH" CALLS="$WORK/calls" BUCKET_DIR="$WORK/bucket" ANNOTATIONS="$WORK/annotations" \
+  BUILDKITE_BRANCH=main BUILDKITE_PARALLEL_JOB=1 BUILDKITE_MESSAGE="Change something" \
+  PRESCALE_SCRIPT="$WORK/prescale" PRESCALE_DELAY_SECONDS=8 bash "$SCRIPT" 2>&1 | cat > "$WORK/out"
+[ $((SECONDS - started)) -lt 5 ] && ok "a cancelled pre-scale does not hold the job's output open" || fail "output held open for $((SECONDS - started)) s"
+
+rm -rf "$WORK/bucket"; printf '#!/bin/bash\necho "make $*" >> "$CALLS"\nexit 2\n' > "$WORK/bin/make"
+run_script PRESCALE_DELAY_SECONDS=1; rc=$?
+[ $rc != 0 ] && ! prescaled && ok "a failed compile cancels the pre-scale" || fail "failed compile (rc=$rc)"
+printf '#!/bin/bash\necho "make $*" >> "$CALLS"\nsleep "${MAKE_SECONDS:-0}"\n' > "$WORK/bin/make"
+
+seed_cache; run_script BUILDKITE_BRANCH=comp-assets-test PRESCALE_DELAY_SECONDS=0 MAKE_SECONDS=2; rc=$?
+[ $rc = 0 ] && ! grep -q "Pre-scaling" "$WORK/out" && ! prescaled && ok "only main pre-scales the production web clusters" || fail "comp-assets branch pre-scaled (rc=$rc)"
 
 echo
 echo "PASSED=$PASS FAILED=$FAIL"
