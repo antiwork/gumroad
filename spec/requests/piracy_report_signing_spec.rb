@@ -63,7 +63,8 @@ describe "Signing a piracy report notice", type: :system, js: true do
       click_on "Cancel report"
     end
 
-    expect(page).to have_text("This report was cancelled before it was sent. Nothing was sent.")
+    expect(page).to have_text("This report was cancelled. We did not send the notice.")
+    expect(page).to have_text("Cancelled")
     expect(page).not_to have_button("Cancel report")
     expect(report.reload.state).to eq("cancelled")
   end

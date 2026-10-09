@@ -56,6 +56,7 @@ type PiracyReportsShowProps = {
   product: { name: string; url: string };
   confirmations: { key: string; text: string }[];
   confirmations_version: string;
+  monthly_limit: number;
 };
 
 const OUTCOME_TEXT: Record<PiracyReportOutcome, string> = {
@@ -89,7 +90,8 @@ const historyLabel = (event: HistoryEvent, report: PiracyReportsShowProps["repor
 };
 
 export default function PiracyReportsShow() {
-  const { report, product, confirmations, confirmations_version } = usePage<PiracyReportsShowProps>().props;
+  const { report, product, confirmations, confirmations_version, monthly_limit } =
+    usePage<PiracyReportsShowProps>().props;
   const status = piracyReportStatus(report.state, report.outcome);
   const userAgentInfo = useUserAgentInfo();
   const formatDate = (value: string) => formatPiracyReportDate(value, userAgentInfo.locale);
@@ -172,7 +174,7 @@ export default function PiracyReportsShow() {
       </Alert>
     ) : report.state === "cancelled" ? (
       <Alert role="status" variant="info">
-        This report was cancelled before it was sent. Nothing was sent.
+        This report was cancelled. We did not send the notice.
       </Alert>
     ) : null;
 
@@ -314,7 +316,8 @@ export default function PiracyReportsShow() {
           }
         >
           <p>
-            We will not send the notice. You cannot undo this, and the report still counts toward your monthly limit.
+            We will not send the notice. You cannot undo this. This report still counts toward your limit of{" "}
+            {monthly_limit} reports this month.
           </p>
         </Modal>
       ) : null}

@@ -57,6 +57,7 @@ class PiracyReportsController < Sellers::BaseController
       product: { name: @report.product.name, url: @report.product.long_url },
       confirmations: PiracyReport::SIGNATURE_CONFIRMATIONS.map { |key, text| { key:, text: } },
       confirmations_version: PiracyReport::SIGNATURE_STATEMENT_VERSION,
+      monthly_limit: PiracyReport::MONTHLY_LIMIT,
     }
   end
 
