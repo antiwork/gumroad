@@ -1,5 +1,5 @@
 diff --git a/node_modules/@typia/unplugin/dist/core.js b/node_modules/@typia/unplugin/dist/core.js
-index e61604c..c9675cd 100644
+index e61604c..8d11dcb 100644
 --- a/node_modules/@typia/unplugin/dist/core.js
 +++ b/node_modules/@typia/unplugin/dist/core.js
 @@ -493,7 +493,7 @@ const sourceCache = /* @__PURE__ */ new Map();
@@ -20,7 +20,7 @@ index e61604c..c9675cd 100644
  		const { diagnostics, transformed, file } = _usingCtx.u(transform$1(id, program, tsSource, options.typia));
  		warnDiagnostic(diagnostics, transformed, unpluginContext);
  		return wrap(printer.printFile(file));
-@@ -541,7 +541,58 @@ async function getTsCompilerOption(cacheEnable = true, tsconfigId) {
+@@ -541,7 +541,59 @@ async function getTsCompilerOption(cacheEnable = true, tsconfigId) {
  * @param cacheEnable - Whether to enable cache. @default true
  * @returns The program and source.
  */
@@ -30,6 +30,7 @@ index e61604c..c9675cd 100644
 +* A program per file rebuilds the type checker each time (~1s a file), and
 +* misses the global types in tsconfig's include, so those checks degrade to
 +* `any`. Off in dev and watch mode: a shared program would go stale on edits.
++* On in `vitest run`, which is one-shot like a build.
 +*
 +* Vite transforms files in parallel, and a shared checker numbers types in the
 +* order they are first asked for, which sets the order of union members in the
@@ -80,7 +81,7 @@ index e61604c..c9675cd 100644
  	const tsSource = ts.createSourceFile(id, source, compilerOptions.target ?? ts.ScriptTarget.ES2020);
  	const host = ts.createCompilerHost(compilerOptions);
  	/** When alias defined in config, resolve module with alias */
-@@ -634,49 +685,86 @@ function createFilter$1(include, exclude) {
+@@ -634,49 +686,86 @@ function createFilter$1(include, exclude) {
  	return createFilter(include, exclude);
  }
  /** The main unplugin instance. */
@@ -202,7 +203,7 @@ index e61604c..c9675cd 100644
  		if (!s.hasChanged()) return;
  		return {
  			code: s.toString(),
-@@ -690,14 +778,14 @@ const unpluginFactory = (rawOptions = {}) => {
+@@ -690,14 +779,14 @@ const unpluginFactory = (rawOptions = {}) => {
  	async function transformCodeWithTypiaTransform({ id, source, ctx, options }) {
  		try {
  			var _usingCtx = _usingCtx$1();
@@ -220,18 +221,29 @@ index e61604c..c9675cd 100644
  				if (showLog) if (code != null) log("success", `Transformed: ${id}`);
  				else log("error", `Transform is null: ${id}`);
  				/** Save cache */
-@@ -716,8 +804,10 @@ const unpluginFactory = (rawOptions = {}) => {
+@@ -714,10 +803,18 @@ const unpluginFactory = (rawOptions = {}) => {
+ 	return {
+ 		name,
  		enforce: options.enforce,
- 		vite: { configResolved(config) {
- 			viteConfig = config;
-+			shared.enabled = options.sharedProgram !== false && config.command === "build" && !config.build.watch;
- 		} },
+-		vite: { configResolved(config) {
+-			viteConfig = config;
+-		} },
++		vite: {
++			configResolved(config) {
++				viteConfig = config;
++				shared.enabled = options.sharedProgram !== false && config.command === "build" && !config.build.watch;
++			},
++			// Gumroad patch: `vitest run` is one-shot too, and runs on a dev server.
++			configureVitest({ vitest }) {
++				shared.enabled = options.sharedProgram !== false && !vitest.config.watch;
++			}
++		},
  		buildStart() {
 +			shared.program = void 0;
  			if (logOption !== false) log("box", cacheOptions ? `Cache enabled` : `Cache disabled`);
  		},
  		transformInclude(id) {
-@@ -768,6 +858,6 @@ const unpluginFactory = (rawOptions = {}) => {
+@@ -768,6 +865,6 @@ const unpluginFactory = (rawOptions = {}) => {
  */
  const unplugin = /* @__PURE__ */ createUnplugin(unpluginFactory);
  //#endregion
@@ -241,17 +253,18 @@ index e61604c..c9675cd 100644
  //# sourceMappingURL=core.js.map
 \ No newline at end of file
 diff --git a/node_modules/@typia/unplugin/dist/options.d.ts b/node_modules/@typia/unplugin/dist/options.d.ts
-index 9ed739d..c99f9b5 100644
+index 9ed739d..56c1c0b 100644
 --- a/node_modules/@typia/unplugin/dist/options.d.ts
 +++ b/node_modules/@typia/unplugin/dist/options.d.ts
-@@ -50,10 +50,19 @@ type Options = {
+@@ -50,10 +50,20 @@ type Options = {
     * @default true
     */
    log?: boolean | "verbose";
 +  /**
 +   * Gumroad patch: share one TypeScript program across all transforms in a
-+   * one-shot `vite build`. Turn it off for a build that transforms only a few
-+   * files: the shared program type-checks the whole tsconfig first.
++   * one-shot `vite build` or `vitest run`. Turn it off for a build that
++   * transforms only a few files: the shared program type-checks the whole
++   * tsconfig first.
 +   *
 +   * @default true
 +   */

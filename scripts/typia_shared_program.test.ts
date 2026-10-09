@@ -1,4 +1,5 @@
 import UnpluginTypia from "@typia/unplugin/vite";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -193,4 +194,54 @@ describe("typia transform in dev", () => {
     const code = await devTransform(() => buildOutput(["index"]));
     expect(code).toContain("__is = (input2) => true");
   }, 60_000);
+});
+
+describe("typia transform in vitest", () => {
+  // The hook's vitest context, reduced to what it reads.
+  type VitestHook = (context: { vitest: { config: { watch: boolean } } }) => void;
+  const isVitestHook = (hook: unknown): hook is VitestHook => typeof hook === "function";
+  const vitestTransform = async (watch: boolean) => {
+    const server = await createServer({ ...config(), server: { middlewareMode: true }, appType: "custom" });
+    try {
+      const plugin = server.config.plugins.find((item) => item.name === "unplugin-typia");
+      const hook: unknown = plugin && "configureVitest" in plugin ? plugin.configureVitest : undefined;
+      if (!isVitestHook(hook)) throw new Error("unplugin-typia has no configureVitest hook");
+      hook({ vitest: { config: { watch } } });
+      return (await server.transformRequest("/index.ts"))?.code ?? "";
+    } finally {
+      await server.close();
+    }
+  };
+
+  it("shares one program in a one-shot run", async () => {
+    expect(await vitestTransform(false)).toContain('".count"');
+  }, 60_000);
+
+  it("keeps a program per file in watch mode", async () => {
+    const code = await vitestTransform(true);
+    expect(code).toContain("__is = (input2) => true");
+    expect(code).not.toContain('".count"');
+  }, 60_000);
+
+  // spawnSync blocks the event loop, so the test's own timeout cannot fire while it runs;
+  // the child's lower limit ends a stalled run first.
+  const NESTED_RUN_TEST_TIMEOUT_MS = 60_000;
+  const NESTED_RUN_KILL_AFTER_MS = 50_000;
+
+  it(
+    "checks a global .d.ts type in a real vitest run",
+    () => {
+      const vitest = path.join(fixture, "../../../node_modules/vitest/vitest.mjs");
+      // Without this run's own VITEST* variables, so the nested vitest starts as a fresh one.
+      const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("VITEST")));
+      const result = spawnSync(process.execPath, [vitest, "run", "--config", path.join(fixture, "vitest.config.mjs")], {
+        cwd: fixture,
+        env,
+        encoding: "utf8",
+        timeout: NESTED_RUN_KILL_AFTER_MS,
+      });
+      expect(result.status, `${result.stdout}${result.stderr}`).toBe(0);
+    },
+    NESTED_RUN_TEST_TIMEOUT_MS,
+  );
 });
