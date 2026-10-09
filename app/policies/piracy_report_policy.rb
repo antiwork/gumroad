@@ -1,6 +1,15 @@
 # frozen_string_literal: true
 
 class PiracyReportPolicy < ApplicationPolicy
+  def index?
+    user.role_admin_for?(seller)
+  end
+
+  # The Products tab shows only when there is a list this user can open.
+  def tab?
+    index? && PiracyReport.filed_by?(seller)
+  end
+
   def new?
     create?
   end

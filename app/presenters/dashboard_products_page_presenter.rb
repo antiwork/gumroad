@@ -40,6 +40,7 @@ class DashboardProductsPagePresenter
       query:,
       has_products: -> { presenter.send(:base_props)[:has_products] },
       can_create_product: -> { presenter.send(:base_props)[:can_create_product] },
+      piracy_reports_tab_visible: -> { Pundit.policy!(presenter.send(:pundit_user), PiracyReport).tab? },
       products_data: InertiaRails.defer(group: "data") do
         {
           products: presenter.products_table_props[:products],

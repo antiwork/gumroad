@@ -30,6 +30,8 @@ const ProductsContent = ({ query }: { query: string }) => {
 };
 
 const ArchivedProductsIndexPage = () => {
+  const { piracy_reports_tab_visible: piracyReportsTabVisible } = usePage<{ piracy_reports_tab_visible: boolean }>()
+    .props;
   const { query, setQuery } = useProductsSearch();
 
   return (
@@ -37,6 +39,7 @@ const ArchivedProductsIndexPage = () => {
       selectedTab="archived"
       title="Products"
       archivedTabVisible
+      piracyReportsTabVisible={piracyReportsTabVisible}
       ctaButton={<HeaderButtons query={query} setQuery={setQuery} />}
     >
       <Deferred data={["products_data", "memberships_data"]} fallback={<ProductsContentLoading />}>

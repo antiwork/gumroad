@@ -14,6 +14,7 @@ import placeholder from "$assets/images/product_nudge.svg";
 
 type ProductsIndexPageProps = ProductsPageProps & {
   archived_products_count: number;
+  piracy_reports_tab_visible: boolean;
 };
 
 const ProductsContent = ({
@@ -67,7 +68,8 @@ const ProductsContent = ({
 };
 
 const ProductsIndexPage = () => {
-  const { archived_products_count: archivedProductsCount } = usePage<ProductsIndexPageProps>().props;
+  const { archived_products_count: archivedProductsCount, piracy_reports_tab_visible: piracyReportsTabVisible } =
+    usePage<ProductsIndexPageProps>().props;
   const [enableArchiveTab, setEnableArchiveTab] = React.useState(archivedProductsCount > 0);
 
   const { query, setQuery } = useProductsSearch();
@@ -77,6 +79,7 @@ const ProductsIndexPage = () => {
       selectedTab="products"
       title="Products"
       archivedTabVisible={enableArchiveTab}
+      piracyReportsTabVisible={piracyReportsTabVisible}
       ctaButton={<HeaderButtons query={query} setQuery={setQuery} />}
     >
       <Deferred data={["memberships_data", "products_data"]} fallback={<ProductsContentLoading />}>

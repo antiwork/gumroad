@@ -1,12 +1,18 @@
 <%= header_section(@subject) %>
 <div>
   <p>
-    The site that received your notice about <strong><%= @product_name %></strong> got a counter-notice on
-    <%= @report.counter_notice_received_on.strftime("%B %-d, %Y") %>. Its full text is below.
+    The site can put the page back between about <strong><%= @window_starts_on.strftime("%B %-d, %Y") %></strong> and
+    <strong><%= @window_ends_on.strftime("%B %-d, %Y") %></strong>.
   </p>
   <p>
-    The site can put the page back 10 to 14 business days after that date, unless you file a court action
-    against the person who posted it and tell the site.
+    To stop that, file a court action against the person who posted the page before then, and reply to this email to
+    tell us. If you do nothing, the site can put the page back.
+  </p>
+  <p>
+    <strong>What happened:</strong> the person who posted the page sent the site a counter-notice on
+    <%= @report.counter_notice_received_on.strftime("%B %-d, %Y") %>. A counter-notice says they have the right to
+    share the work. The law lets the site put the page back 10 to 14 business days after it got the counter-notice.
+    The full counter-notice is below.
   </p>
   <pre style="white-space: pre-wrap;"><%= @report.counter_notice_body %></pre>
   <p>

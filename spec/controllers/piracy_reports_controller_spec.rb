@@ -25,6 +25,33 @@ describe PiracyReportsController, type: :controller, inertia: true do
   context "with user signed in as admin for seller" do
     include_context "with user signed in as admin for seller"
 
+    describe "GET index" do
+      it "lists only the seller's reports, newest first" do
+        older = create(:piracy_report, seller:, product:, url: "https://example.net/older")
+        newer = create(:piracy_report, :awaiting_signature, seller:, product:, url: "https://example.net/newer")
+        create(:piracy_report)
+
+        get :index
+
+        expect(response).to be_successful
+        expect(inertia.component).to eq("PiracyReports/Index")
+        expect(inertia.props[:reports].map { _1[:id] }).to eq([newer.external_id, older.external_id])
+        expect(inertia.props[:reports].first).to include(product_name: product.name, url: "https://example.net/newer", state: "awaiting_signature", outcome: nil)
+        expect(inertia.props[:can_report]).to be(true)
+        expect(inertia.props[:archived_tab_visible]).to be(false)
+      end
+
+      it "still lists past reports when the seller can no longer file one" do
+        create(:piracy_report, seller:, product:)
+        Feature.deactivate_user(:piracy_reports, seller)
+
+        get :index
+
+        expect(inertia.props[:reports].size).to eq(1)
+        expect(inertia.props[:can_report]).to be(false)
+      end
+    end
+
     describe "GET new" do
       it "renders the form with the product and no eligibility errors" do
         get :new, params: { product_id: product.unique_permalink }
@@ -134,6 +161,47 @@ describe PiracyReportsController, type: :controller, inertia: true do
         expect(inertia.props[:confirmations_version]).to eq(PiracyReport::SIGNATURE_STATEMENT_VERSION)
       end
 
+      it "renders the history and the restoration window of a disputed report" do
+        report = create(:piracy_report, :signed, seller:, product:, state: "counter_noticed", screened_at: Time.utc(2026, 10, 2, 9),
+                                                 sent_at: Time.utc(2026, 10, 5, 9), delivered_at: Time.utc(2026, 10, 5, 10),
+                                                 counter_notice_body: "Licensed.", counter_notice_received_on: Date.new(2026, 10, 7))
+
+        get :show, params: { id: report.external_id }
+
+        expect(inertia.props[:report][:restoration_window]).to eq(["2026-10-21", "2026-10-27"])
+        expect(inertia.props[:report][:history].map { _1[:event] }).to eq(%i[filed confirmed signed sent delivered counter_notice])
+        expect(inertia.props[:report][:history].last).to eq(event: :counter_notice, at: "2026-10-07")
+      end
+
+      it "shows a declined report as declined in the history" do
+        report = create(:piracy_report, seller:, product:, state: "declined", screening_verdict: "fail", screened_at: 1.day.ago)
+
+        get :show, params: { id: report.external_id }
+
+        expect(inertia.props[:report][:history].map { _1[:event] }).to eq(%i[filed declined])
+      end
+
+      it "ends the history of a cancelled report with its closing" do
+        report = create(:piracy_report, :awaiting_signature, seller:, product:, screened_at: 2.days.ago)
+        report.cancel!
+
+        get :show, params: { id: report.external_id }
+
+        expect(inertia.props[:report][:history].map { _1[:event] }).to eq(%i[filed confirmed closed])
+      end
+
+      it "says when a person, not the agent, is checking the page" do
+        report = create(:piracy_report, seller:, product:, state: "screening", screening_verdict: "review", screened_at: 1.day.ago)
+
+        get :show, params: { id: report.external_id }
+        expect(inertia.props[:report]).to include(waiting_on_person: true)
+        expect(inertia.props[:report][:history].map { _1[:event] }).to eq(%i[filed])
+
+        report.update!(screening_verdict: nil)
+        get :show, params: { id: report.external_id }
+        expect(inertia.props[:report]).to include(waiting_on_person: false)
+      end
+
       it "renders the review state before screening finishes" do
         report = create(:piracy_report, seller:, product:)
 
@@ -224,6 +292,12 @@ describe PiracyReportsController, type: :controller, inertia: true do
 
       post :sign, params: { id: report.external_id, signed_by_name: "Jane Doe", confirmations: PiracyReport::SIGNATURE_CONFIRMATIONS.keys, confirmations_version: PiracyReport::SIGNATURE_STATEMENT_VERSION }
       expect(report.reload.state).to eq("awaiting_signature")
+    end
+
+    it "cannot list the owner's reports" do
+      get :index
+
+      expect(response).to redirect_to(dashboard_url)
     end
   end
 end

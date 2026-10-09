@@ -28,6 +28,7 @@ class CollabProductsPagePresenter
         total_collaborations:,
       },
       archived_tab_visible: seller.archived_products_count > 0,
+      piracy_reports_tab_visible: Pundit.policy!(pundit_user, PiracyReport).tab?,
       **products_table_props,
       **memberships_table_props,
       collaborators_disabled_reason: seller.has_brazilian_stripe_connect_account? ? "Collaborators with Brazilian Stripe accounts are not supported." : nil,

@@ -1174,6 +1174,7 @@ Rails.application.routes.draw do
     end
 
     # piracy reports
+    get "/dashboard/piracy_reports", to: "piracy_reports#index"
     get "/dashboard/piracy_reports/new", to: "piracy_reports#new", as: :new_piracy_report
     post "/dashboard/piracy_reports", to: "piracy_reports#create", as: :piracy_reports
     get "/dashboard/piracy_reports/:id", to: "piracy_reports#show", as: :piracy_report

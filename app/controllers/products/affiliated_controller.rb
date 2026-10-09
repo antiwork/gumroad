@@ -58,6 +58,7 @@ class Products::AffiliatedController < Sellers::BaseController
                                       # that always fails.
                                       can_remove_affiliations: Pundit.policy!(pundit_user, [:products, :affiliated, DirectAffiliate]).destroy?)
                                  .affiliated_products_page_props
+                                 .merge(piracy_reports_tab_visible: Pundit.policy!(pundit_user, PiracyReport).tab?)
     end
 
     # Only direct affiliations are removable here. A GlobalAffiliate row is the user's own

@@ -13,6 +13,7 @@ describe PiracyReportMailer do
       expect(mail.subject).to eq("Review and sign the takedown notice for #{report.product.name}")
       expect(mail.body.encoded).to include(piracy_report_url(report.external_id))
       expect(mail.body.encoded).to include(report.product.name)
+      expect(mail.reply_to).to eq([ApplicationMailer::SUPPORT_EMAIL])
     end
 
     it "sends nothing once the report has been closed" do
@@ -45,7 +46,7 @@ describe PiracyReportMailer do
   end
 
   describe "notice_sent" do
-    let(:report) { create(:piracy_report, :signed, state: "sent", sent_at: Time.utc(2026, 10, 8), last_contact_email: "seller@example.com") }
+    let(:report) { create(:piracy_report, :signed, state: "sent", sent_at: Time.utc(2026, 10, 8), reply_token: "abc123", last_contact_email: "seller@example.com") }
 
     subject(:mail) { described_class.notice_sent(report.id) }
 
@@ -54,26 +55,33 @@ describe PiracyReportMailer do
       expect(mail.subject).to eq("We sent your takedown notice for #{report.product.name}")
       expect(mail.body.encoded).to include("Example Net Inc.")
       expect(mail.body.encoded).to include(piracy_report_url(report.external_id))
+      expect(mail.body.encoded).to include("October 8, 2026")
+      expect(mail.reply_to).to eq(["support+piracy-abc123@#{DEFAULT_EMAIL_DOMAIN}"])
     end
   end
 
   describe "counter_notice_received" do
     let(:report) do
-      create(:piracy_report, :signed, state: "counter_noticed", last_contact_email: "seller@example.com",
+      create(:piracy_report, :signed, state: "counter_noticed", reply_token: "abc123", last_contact_email: "seller@example.com",
                                       counter_notice_body: "I own a license for this course.", counter_notice_received_on: Date.new(2026, 10, 7))
     end
 
-    it "forwards the full counter-notice with the date the host received it and the restoration rule" do
+    it "leads with the dates the page can come back, then forwards the full counter-notice" do
       mail = described_class.counter_notice_received(report.id)
 
       expect(mail.to).to eq(["seller@example.com"])
-      expect(mail.body.encoded).to include("I own a license for this course.", "October 7, 2026", "10 to 14 business days")
+      expect(mail.subject).to eq("Your takedown notice for #{report.product.name} is disputed")
+      expect(mail.reply_to).to eq(["support+piracy-abc123@#{DEFAULT_EMAIL_DOMAIN}"])
+      body = mail.body.encoded
+      expect(body).to include("I own a license for this course.", "October 7, 2026", "10 to 14 business days")
+      expect(body.index("October 21, 2026")).to be < body.index("October 27, 2026")
+      expect(body.index("October 27, 2026")).to be < body.index("I own a license for this course.")
     end
   end
 
   describe "resolved" do
     it "tells the seller the outcome" do
-      report = create(:piracy_report, :signed, state: "resolved", outcome: "removed", last_contact_email: "seller@example.com")
+      report = create(:piracy_report, :signed, state: "resolved", outcome: "removed", reply_token: "abc123", last_contact_email: "seller@example.com")
       # A counter-notice can reopen the report before the queued email runs.
       report.update!(state: "counter_noticed", outcome: nil)
 
@@ -81,6 +89,7 @@ describe PiracyReportMailer do
 
       expect(mail.subject).to eq("Your takedown notice for #{report.product.name} is closed")
       expect(mail.body.encoded).to include("The site removed the page")
+      expect(mail.reply_to).to eq(["support+piracy-abc123@#{DEFAULT_EMAIL_DOMAIN}"])
     end
   end
 end
