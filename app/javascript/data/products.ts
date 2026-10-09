@@ -27,6 +27,7 @@ export type Membership = {
   can_destroy: boolean;
   can_archive: boolean;
   can_unarchive: boolean;
+  can_report_piracy: boolean;
 };
 
 export type Product = {
@@ -49,6 +50,7 @@ export type Product = {
   can_destroy: boolean;
   can_archive: boolean;
   can_unarchive: boolean;
+  can_report_piracy: boolean;
 };
 
 export type RecurringProductType = "membership" | "newsletter" | "podcast";
