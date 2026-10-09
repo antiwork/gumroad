@@ -1957,6 +1957,8 @@ class Purchase < ApplicationRecord
       minimum_price_cents = currency_minimum_or_zero(minimum_price_cents) if once_per_cart_fixed_offer_code?
 
       minimum_price_cents *= purchasing_power_parity_factor if is_purchasing_power_parity_discounted? && link.purchasing_power_parity_enabled? && offer_code_for_pricing.blank?
+      # The client rounds the discounted total before splitting it; float residue would otherwise double in the split.
+      minimum_price_cents = minimum_price_cents.round if is_installment_payment
 
       minimum_price = minimum_price_cents
 
