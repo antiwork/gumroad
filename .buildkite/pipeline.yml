@@ -93,14 +93,14 @@ steps:
           username: "gumroadteam"
           password-env: DOCKERHUB_PASSWORD
 
-  # Shadow mode for a main asset cache: compares, never ships. Last on purpose:
-  # a block step waits for every step above it, so placed before the approval
-  # gate this would hold every deploy. The explicit depends_on lets it start as
-  # soon as the compile ends, without waiting for the gate.
-  - label: ":mag: Asset cache shadow"
-    key: asset-cache-shadow
+  # Fills the main asset cache that the compile serves from (see the script). Last on
+  # purpose: a block step waits for every step above it, so placed before the approval
+  # gate this would hold every deploy. The explicit depends_on lets it start as soon
+  # as the compile ends, without waiting for the gate.
+  - label: ":floppy_disk: Save main asset cache"
+    key: save-main-asset-cache
     branches: "main"
     depends_on: compile-assets
-    command: ".buildkite/scripts/main_asset_cache_shadow.sh"
+    command: ".buildkite/scripts/main_asset_cache_save.sh"
     soft_fail: true
     timeout_in_minutes: 15

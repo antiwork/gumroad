@@ -293,6 +293,23 @@ build_production_image_from_main_asset_cache() {
     printf 'Production assets served from the main asset cache (tag `%s`); the compile was skipped.\n' "$tag" \
       | buildkite-agent annotate --style info --context main-asset-cache-served 2>/dev/null || true
   fi
+  record_main_asset_cache_outcome "$tag"
+}
+
+# main_asset_cache_save.sh reads this: an image built from the cache holds the cached
+# files, so that step has nothing to compare or save. Every production attempt writes
+# it, because build meta-data outlives a retry. Only a retry can find an earlier
+# attempt's tag, so only a retry stops when its write fails: a stale tag would skip the
+# save step's comparison of a full compile.
+record_main_asset_cache_outcome() {
+  [[ $BUILDKITE_BRANCH == "main" ]] && command -v buildkite-agent >/dev/null 2>&1 || return 0
+  buildkite-agent meta-data set main-asset-cache-served "$1" >/dev/null 2>&1 && return 0
+  if [[ ${BUILDKITE_RETRY_COUNT:-0} != 0 ]]; then
+    logger "Could not record the main asset cache outcome on a retry: stopping, so the job retries"
+    exit 1
+  fi
+  # The cache-hit path returns this, and a failure there would mean a full compile.
+  return 0
 }
 
 if [[ $BUILDKITE_PARALLEL_JOB = 1 && ( $BUILDKITE_BRANCH == "main" || $BUILDKITE_BRANCH == comp-assets-* ) ]]; then
@@ -302,6 +319,7 @@ if [[ $BUILDKITE_PARALLEL_JOB = 1 && ( $BUILDKITE_BRANCH == "main" || $BUILDKITE
   fi
 
   if ! build_production_image_from_main_asset_cache; then
+    record_main_asset_cache_outcome none
     start_web_prescale "$PRESCALE_DELAY_SECONDS"
     logger "Building production assets"
     docker rm production-assets || :

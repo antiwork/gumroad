@@ -1,7 +1,7 @@
 #!/bin/bash
 # shellcheck disable=SC2034 # the variables are read by the scripts that source this file
 # The main-branch asset cache, shared by the production compile (which serves
-# from it) and the shadow step (which fills and checks it). Source
+# from it) and the save step (which fills and checks it). Source
 # preview_asset_cache.sh first: the tag reuses its input list.
 
 MAIN_ASSET_CACHE_PREFIX="main-asset-cache"

@@ -1,12 +1,12 @@
 #!/bin/bash
 # `check && ok || fail` is safe here: ok never fails.
 # shellcheck disable=SC2015
-# Harness for main_asset_cache_shadow.sh: runs the real script against stub
+# Harness for main_asset_cache_save.sh: runs the real script against stub
 # docker, aws, and buildkite-agent binaries, with a local directory as the S3
-# bucket. Run from the repo root: .buildkite/scripts/main_asset_cache_shadow_test.sh
+# bucket. Run from the repo root: .buildkite/scripts/main_asset_cache_save_test.sh
 set -uo pipefail
 
-SCRIPT=.buildkite/scripts/main_asset_cache_shadow.sh
+SCRIPT=.buildkite/scripts/main_asset_cache_save.sh
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 
@@ -18,6 +18,7 @@ mkdir -p "$WORK/bin"
 # `docker run` prints a tar of $IMAGE_DIR, standing in for the production image.
 cat > "$WORK/bin/docker" <<'STUB'
 #!/bin/bash
+echo "docker $1" >> "$DOCKER_CALLS"
 case "$1" in
   pull) exit "${PULL_RC:-0}" ;;
   run) tar -cf - -C "$IMAGE_DIR" . ;;
@@ -35,9 +36,14 @@ case "$src" in
   *) [ "${UPLOAD_FAIL:-}" = 1 ] && exit 1; mkdir -p "$(dirname "$(to_path "$dst")")"; cp "$src" "$(to_path "$dst")" ;;
 esac
 STUB
+# meta-data get answers from SERVED_TAG, as compile_assets.sh sets it on a served build.
 cat > "$WORK/bin/buildkite-agent" <<'STUB'
 #!/bin/bash
-cat >> "$ANNOTATIONS"
+case "$1 $2" in
+  "meta-data get") [ "$3" = main-asset-cache-served ] && [ -n "${SERVED_TAG:-}" ] || exit 100; printf '%s' "$SERVED_TAG" ;;
+  "annotate "*) cat >> "$ANNOTATIONS" ;;
+  *) exit 1 ;;
+esac
 STUB
 chmod +x "$WORK/bin/"*
 
@@ -58,15 +64,15 @@ make_image() {
 }
 
 run_script() {
-  : > "$WORK/annotations"
-  PATH="$WORK/bin:$PATH" IMAGE_DIR="$WORK/image" BUCKET_DIR="$WORK/bucket" ANNOTATIONS="$WORK/annotations" \
+  : > "$WORK/annotations"; : > "$WORK/docker_calls"
+  PATH="$WORK/bin:$PATH" IMAGE_DIR="$WORK/image" BUCKET_DIR="$WORK/bucket" ANNOTATIONS="$WORK/annotations" DOCKER_CALLS="$WORK/docker_calls" \
     BUILDKITE_BRANCH=main FORCE_DEPLOY=1 BUILDKITE_COMMIT=0123456789abcdef ECR_REGISTRY=ecr.example \
     GUM_AWS_ACCESS_KEY_ID=x GUM_AWS_SECRET_ACCESS_KEY=y env "$@" bash "$SCRIPT" > "$WORK/out" 2>&1
 }
 
 result_of() { grep -o 'result=[a-z]*' "$WORK/out" | tail -1; }
 
-echo "main_asset_cache_shadow.sh"
+echo "main_asset_cache_save.sh"
 
 rm -rf "$WORK/bucket"
 make_image "$WORK/image" one
@@ -143,21 +149,35 @@ chmod +x "$WORK/failtar/tar"
 run_script PATH="$WORK/failtar:$WORK/bin:$PATH" REAL_TAR="$(command -v tar)"; rc=$?
 [ $rc = 0 ] && [ "$(result_of)" = result=error ] && [ ! -d "$WORK/bucket/buildkite-branch-cache/main-asset-cache" ] && ok "a failed archive is an error and uploads nothing" || fail "a failed archive is an error and uploads nothing (rc=$rc $(result_of))"
 
-[ ! -e .main-asset-cache-shadow ] && ok "it leaves no work directory behind" || fail "it leaves no work directory behind"
+[ ! -e .main-asset-cache-save ] && ok "it leaves no work directory behind" || fail "it leaves no work directory behind"
 
 # A block step waits for every step above it: above the approval gate, the
-# shadow step would hold every deploy.
+# save step would hold every deploy.
 ruby -ryaml -e '
   steps = YAML.load_file(".buildkite/pipeline.yml")["steps"]
   index = ->(key) { steps.index { |step| step["key"] == key } }
-  shadow = steps[index.("asset-cache-shadow")]
+  save = steps[index.("save-main-asset-cache")]
   deploy = steps[index.("production-deployment")]
-  ok = index.("asset-cache-shadow") > index.("require-approval") &&
-       shadow["depends_on"] == "compile-assets" && shadow["soft_fail"] == true &&
-       !Array(deploy["depends_on"]).include?("asset-cache-shadow")
+  ok = index.("save-main-asset-cache") > index.("require-approval") &&
+       save["depends_on"] == "compile-assets" && save["soft_fail"] == true &&
+       !Array(deploy["depends_on"]).include?("save-main-asset-cache")
   exit(ok ? 0 : 1)
-' && ok "the shadow step sits below the approval gate, and the deploy does not wait for it" \
-  || fail "the shadow step sits below the approval gate, and the deploy does not wait for it"
+' && ok "the save step sits below the approval gate, and the deploy does not wait for it" \
+  || fail "the save step sits below the approval gate, and the deploy does not wait for it"
+
+# A build served from the cache has nothing to compare or save, even when its image
+# differs: the step must not pull it.
+rm -rf "$WORK/bucket"; make_image "$WORK/image" one
+run_script
+make_image "$WORK/image" two
+run_script SERVED_TAG=abc123; rc=$?
+[ $rc = 0 ] && [ "$(result_of)" = result=served ] && grep -q "tag=abc123" "$WORK/out" && grep -q "result=served" "$WORK/annotations" && [ ! -s "$WORK/docker_calls" ] \
+  && ok "a build served from the cache only records the hit" || fail "a served build (rc=$rc $(result_of))"
+
+rm -rf "$WORK/bucket"; make_image "$WORK/image" one
+run_script SERVED_TAG=none; rc=$?
+[ $rc = 0 ] && [ "$(result_of)" = result=miss ] && grep -q "saved=true" "$WORK/out" \
+  && ok "a full compile, even after a served attempt, still fills the cache" || fail "SERVED_TAG=none (rc=$rc $(result_of))"
 
 echo
 echo "PASSED=$PASS FAILED=$FAIL"
