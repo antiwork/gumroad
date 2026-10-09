@@ -6,8 +6,7 @@
   </p>
   <p>
     To stop that, file a court action against the person who posted the page before
-    <strong><%= @window_starts_on.strftime("%B %-d, %Y") %></strong>, and reply to this email to tell us. If you do
-    nothing, the site can put the page back.
+    <strong><%= @window_starts_on.strftime("%B %-d, %Y") %></strong>, and reply to this email to tell us.
   </p>
   <p>
     <strong>What happened:</strong> the person who posted the page sent the site a counter-notice on
@@ -15,7 +14,7 @@
     share the work. The law lets the site put the page back 10 to 14 business days after it got the counter-notice.
     The full counter-notice is below.
   </p>
-  <pre style="white-space: pre-wrap; font-family: inherit;"><%= @report.counter_notice_body %></pre>
+  <pre style="white-space: pre-wrap; font-family: inherit; margin: 16px 0; padding-left: 16px; border-left: 2px solid currentColor;"><%= @report.counter_notice_body %></pre>
   <p>
     <%= link_to "View your report", @report_url, class: "button primary" %>
   </p>
