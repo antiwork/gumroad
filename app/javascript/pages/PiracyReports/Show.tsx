@@ -175,12 +175,14 @@ export default function PiracyReportsShow() {
             </Pill>
           </div>
         }
-      >
-        <a href={report.url} target="_blank" rel="noreferrer nofollow" className="break-all text-muted">
-          {withoutProtocol(report.url)}
-        </a>
-      </PageHeader>
+      />
       <div className="flex flex-col gap-8 p-4 md:p-8">
+        <p>
+          Reported page:{" "}
+          <a href={report.url} target="_blank" rel="noreferrer nofollow" className="break-all">
+            {withoutProtocol(report.url)}
+          </a>
+        </p>
         {statusAlert}
         <div className={classNames("grid items-start gap-8", report.notice_text !== null && "lg:grid-cols-2")}>
           {report.notice_text === null ? null : (

@@ -40,7 +40,11 @@ export default function PiracyReportsIndex() {
           <Placeholder>
             <h2>No piracy reports yet</h2>
             {can_report ? (
-              <p>To report one, open a product's menu on the Products page and choose Report piracy.</p>
+              <p>
+                To report a page that offers your product without your permission, go to{" "}
+                <Link href={Routes.products_path()}>Products</Link>, open the product's menu, and choose{" "}
+                <strong className="whitespace-nowrap">Report piracy</strong>.
+              </p>
             ) : null}
           </Placeholder>
         ) : (
