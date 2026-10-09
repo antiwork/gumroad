@@ -8,6 +8,7 @@ describe Api::Internal::ReceiptPreviewsController do
 
   let(:seller) { create(:named_seller) }
   let(:product) { create(:product, user: seller, name: "Sample product", price_cents: 500) }
+  let(:free_product) { create(:product, user: seller, name: "Freebie", price_cents: 0, customizable_price: true) }
 
   include_context "with user signed in as admin for seller"
 
@@ -24,12 +25,24 @@ describe Api::Internal::ReceiptPreviewsController do
     end
 
     it "uses the free-product subject for a free product" do
-      free = create(:product, user: seller, name: "Freebie", price_cents: 0, customizable_price: true)
-
-      get :show, params: { product_id: free.unique_permalink }
+      get :show, params: { product_id: free_product.unique_permalink }
 
       expect(response).to be_successful
       expect(response.parsed_body["subject"]).to eq("You got Freebie!")
+    end
+
+    it "shows the total for a paid product" do
+      get :show, params: { product_id: product.unique_permalink }
+
+      expect(Capybara.string(response.parsed_body["html"])).to have_text("Total:")
+    end
+
+    it "omits the $0 total but keeps the order ID for a free product" do
+      get :show, params: { product_id: free_product.unique_permalink }
+
+      html = Capybara.string(response.parsed_body["html"])
+      expect(html).to have_text("Order ID:")
+      expect(html).not_to have_text("Total:")
     end
 
     it "returns a JSON error for an invalid preview" do

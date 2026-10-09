@@ -35,6 +35,11 @@ class PurchasePreview
     displayed_price_cents
   end
 
+  # Without this, method_missing returns nil and ChargeInfo#free? is never true for a preview.
+  def free_purchase?
+    price_cents == 0 && shipping_cents == 0
+  end
+
   # The receipt template uses a lot of fields of `purchase`
   # in different pieces of business logic that are not relevant to our preview need.
   # For them it's fine to return `nil` instead of trying to add fields
