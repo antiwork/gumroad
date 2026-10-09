@@ -13,14 +13,15 @@ class SendWishlistUpdatedEmailsJob
     return if wishlist.wishlist_products_for_email.where("created_at > ?", last_product_added_at).exists?
 
     wishlist.wishlist_followers.find_each do |wishlist_follower|
-      SentEmailInfo.ensure_mailer_uniqueness("CustomerLowPriorityMailer",
-                                             "wishlist_updated",
-                                             wishlist_follower.id, wishlist_product_ids) do
-        new_products = wishlist_products.select { _1.created_at > wishlist_follower.created_at }
-        if new_products.any?
-          CustomerLowPriorityMailer.wishlist_updated(wishlist_follower.id, new_products.size).deliver_later(queue: "low")
-        end
-      end
+      digest = SentEmailInfo.mailer_key_digest("CustomerLowPriorityMailer", "wishlist_updated", wishlist_follower.id, wishlist_product_ids)
+      next if SentEmailInfo.key_exists?(digest)
+
+      new_products = wishlist_products.select { _1.created_at > wishlist_follower.created_at }
+      next if new_products.empty?
+
+      CustomerLowPriorityMailer.wishlist_updated(wishlist_follower.id, new_products.size).deliver_later(queue: "low")
+      # A queue failure must leave this follower retryable.
+      SentEmailInfo.set_key!(digest)
     end
 
     wishlist.update!(followers_last_contacted_at: last_product_added_at)
