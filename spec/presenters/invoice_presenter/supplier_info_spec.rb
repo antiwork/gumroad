@@ -115,7 +115,7 @@ describe InvoicePresenter::SupplierInfo do
               it "returns ATO GST reference information" do
                 expect(presenter.send(:gumroad_tax_attributes)).to eq([
                                                                         {
-                                                                          label: "ATO Reference Number (GST)",
+                                                                          label: "ATO reference number (GST)",
                                                                           value: GUMROAD_AUSTRALIAN_BUSINESS_NUMBER
                                                                         }
                                                                       ])
@@ -249,7 +249,7 @@ describe InvoicePresenter::SupplierInfo do
             it "returns ATO GST reference information" do
               expect(presenter.send(:gumroad_tax_attributes)).to eq([
                                                                       {
-                                                                        label: "ATO Reference Number (GST)",
+                                                                        label: "ATO reference number (GST)",
                                                                         value: GUMROAD_AUSTRALIAN_BUSINESS_NUMBER
                                                                       }
                                                                     ])
