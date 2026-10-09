@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Prints the rake tasks that build the test assets a cache did not restore, for
+# the typecheck and test_relevant_runner jobs in .github/workflows/tests.yml.
+# PAGES_RESTORED and VITE_RESTORED are each cache step's cache-hit output.
+#
+# The tasks are what assets:precompile runs, in its order. The pages CSS goes
+# first because it writes into app/javascript, which Vite's digest covers. The
+# widget build goes last: it sets PROTOCOL and the domains in the rake process's
+# environment, which a Vite build after it would compile in.
+#
+#   bundle exec rake js:export db:setup $(bin/ci-test-asset-tasks)
+
+set -euo pipefail
+
+tasks=""
+[ "${PAGES_RESTORED:-}" = true ] || tasks="pages_tailwind:build"
+[ "${VITE_RESTORED:-}" = true ] || tasks="$tasks vite:build_all vite:build_widget"
+echo "${tasks# }"
