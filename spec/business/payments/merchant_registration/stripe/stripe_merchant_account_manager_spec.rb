@@ -15914,8 +15914,21 @@ describe StripeMerchantAccountManager, :vcr do
           expect(representative_note.reload.deleted_at).to be_present
         end
 
-        it "leaves a non_profit account's type alone" do
-          stub_stripe_account(previous, business_type: "non_profit")
+        %w[non_profit government_entity].each do |type|
+          it "sends business_type individual for a #{type} account" do
+            stub_stripe_account(previous, business_type: type)
+
+            expect(Stripe::Account).to receive(:update).with(
+              merchant_account.charge_processor_merchant_id,
+              hash_including(business_type: "individual")
+            )
+
+            described_class.update_account(user, passphrase:)
+          end
+        end
+
+        it "leaves an individual account's type alone" do
+          stub_stripe_account(previous, business_type: "individual")
 
           expect(Stripe::Account).to receive(:update).with(
             merchant_account.charge_processor_merchant_id,

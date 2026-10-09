@@ -16,6 +16,7 @@ module StripeMerchantAccountManager
   NEW_ACCOUNT_CREATION_BLOCKED_COUNTRIES = [Compliance::Countries::IND.alpha2].freeze
   # Stripe US `company[structure]` values, applied only to a US legal entity. Types missing here
   # (the legacy generic `llc`, and `profit`, which needs `business_type: non_profit`) send none.
+  LIVE_NON_INDIVIDUAL_BUSINESS_TYPES = %w[company non_profit government_entity].freeze
   US_COMPANY_STRUCTURES = {
     UserComplianceInfo::BusinessTypes::SOLE_PROPRIETORSHIP => "sole_proprietorship",
     UserComplianceInfo::BusinessTypes::SINGLE_MEMBER_LLC => "single_member_llc",
@@ -490,9 +491,8 @@ module StripeMerchantAccountManager
     diff_attributes = get_diff_attributes(current_attributes, last_attributes)
 
     # A type changed outside Gumroad (e.g. via the hosted remediation form) leaves a company on Stripe
-    # while our last record says individual, so the diff would miss the type. Only "company" counts:
-    # non_profit and government_entity accounts are left alone.
-    live_company_for_individual = user_compliance_info.is_individual? && stripe_account["business_type"] == "company"
+    # while our last record says individual, so the diff would miss the type. Any non-individual type counts.
+    live_company_for_individual = user_compliance_info.is_individual? && LIVE_NON_INDIVIDUAL_BUSINESS_TYPES.include?(stripe_account["business_type"])
     # Send the whole individual: Stripe's person is not the one our last record described, so a diff could omit
     # fields it lacks. Stripe test mode accepted this even for an already-verified individual.
     diff_attributes[:individual] = current_attributes[:individual].deep_dup if live_company_for_individual
