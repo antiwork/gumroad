@@ -169,5 +169,17 @@ describe PiracyReports::CreateService do
 
       expect(call(seller:, product:).errors).to eq(["The product has no successful sales"])
     end
+
+    it "skips only the sales checks for a seller with the staff test flag" do
+      seller = create(:user)
+      create(:user_compliance_info, user: seller)
+      Feature.activate_user(:piracy_reports, seller)
+      product = create(:product, user: seller)
+      expect(call(seller:, product:).errors).to contain_exactly(PiracyReports::Eligibility.store_agent_gate_error, "The product has no successful sales")
+
+      Feature.activate_user(PiracyReports::Eligibility::SKIP_SALES_CHECKS_FLAG, seller)
+      seller.alive_user_compliance_info.update_columns(first_name: nil, last_name: nil)
+      expect(call(seller:, product:).errors).to eq(["The seller's payout record has no legal name to print in the notice"])
+    end
   end
 end
