@@ -104,16 +104,3 @@ steps:
     command: ".buildkite/scripts/main_asset_cache_shadow.sh"
     soft_fail: true
     timeout_in_minutes: 15
-
-  # Boots the deploy's extra web capacity while the assets compile, so the deploy's
-  # scale_up finds it ready. Never pins, never lowers, never fails the build. Below
-  # the approval block, like the asset cache shadow, so the deploy never waits for it.
-  - label: ":arrow_up: Pre-scale web clusters"
-    key: prescale-web-clusters
-    branches: "main"
-    depends_on: build-web-image
-    command: ".buildkite/scripts/prescale_web_clusters.sh"
-    # soft_fail does not cover a timeout. The script stops itself after 240 s; the rest
-    # is room for checkout and the pre-command hook's Docker prune and ECR login.
-    timeout_in_minutes: 15
-    soft_fail: true

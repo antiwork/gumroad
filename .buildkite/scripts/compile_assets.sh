@@ -192,6 +192,35 @@ if [[ ${BUILDKITE_PARALLEL_JOB:-0} = 0 && $BUILDKITE_BRANCH != "main" ]]; then
   push_image staging || exit 1
 fi
 
+# Raises the web clusters for the deploy's scale_up, timed to land a few minutes before
+# it: soon enough for the new instances to boot (about 2.5 minutes), late enough that
+# target tracking has not scaled the idle ones back in (about 5.5 minutes after a raise).
+# A full compile ends about 3 minutes after the delay below; a cache hit starts it once its
+# image is built. It never fails the compile. A compile that ends or fails before it starts
+# cancels it; one that has started finishes its few-second raise within its own deadline.
+PRESCALE_DELAY_SECONDS=${PRESCALE_DELAY_SECONDS:-210}
+PRESCALE_SCRIPT=${PRESCALE_SCRIPT:-.buildkite/scripts/prescale_web_clusters.sh}
+PRESCALE_PID=""
+PRESCALE_LOG=$(mktemp)
+start_web_prescale() {
+  local delay=$1
+  [[ $BUILDKITE_BRANCH == "main" && -z $PRESCALE_PID ]] || return 0
+  logger "Pre-scaling the web clusters in ${delay}s"
+  # Nothing here may hold the job's output open, or a stalled pre-scale would hold up the
+  # compile the deploy waits for. Its log is printed when the compile ends.
+  ( sleep "$delay" >/dev/null 2>&1; bash "$PRESCALE_SCRIPT" >"$PRESCALE_LOG" 2>&1 || true ) &
+  PRESCALE_PID=$!
+}
+cancel_web_prescale() {
+  [[ -z $PRESCALE_PID ]] || kill "$PRESCALE_PID" 2>/dev/null || true
+  if [[ -s $PRESCALE_LOG ]]; then
+    logger "Pre-scale log so far:"
+    cat "$PRESCALE_LOG"
+  fi
+  rm -f "$PRESCALE_LOG"
+}
+trap cancel_web_prescale EXIT
+
 # Keep in step with `make build_production` with PUSH_ASSETS=true.
 push_production_assets() {
   local image=$1 container_id status=0
@@ -255,6 +284,7 @@ build_production_image_from_main_asset_cache() {
   fi
   docker rm production-assets-from-cache >/dev/null 2>&1 || :
   rm -f "$PREVIEW_ASSET_CACHE_TARBALL"
+  start_web_prescale 0
   if ! push_production_assets "$image"; then
     logger "Uploading the production assets to S3 failed: stopping the build"
     exit 1
@@ -272,6 +302,7 @@ if [[ $BUILDKITE_PARALLEL_JOB = 1 && ( $BUILDKITE_BRANCH == "main" || $BUILDKITE
   fi
 
   if ! build_production_image_from_main_asset_cache; then
+    start_web_prescale "$PRESCALE_DELAY_SECONDS"
     logger "Building production assets"
     docker rm production-assets || :
     COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME}_production \
