@@ -45,6 +45,10 @@ export const disputeReasons = {
       "other",
     ],
   },
+  debit_not_authorized: {
+    message: "The cardholder's bank claims the debit was not authorized by the account holder.",
+    reasonsForWinning: ["cardholder_withdrew_dispute", "cardholder_refunded", "purchase_made_by_cardholder", "other"],
+  },
   duplicate: {
     message: "The cardholder claims they were charged multiple times for the same product or service.",
     reasonsForWinning: ["cardholder_withdrew_dispute", "cardholder_refunded", "purchase_is_unique", "other"],
@@ -123,3 +127,6 @@ export const disputeReasons = {
   { message: string; refusalRequiresExplanation?: true; reasonsForWinning: ReasonForWinningOption[] }
 >;
 export type DisputeReason = keyof typeof disputeReasons;
+
+export const getDisputeReason = (reason: string) =>
+  reason in disputeReasons ? disputeReasons[reason as DisputeReason] : disputeReasons.general;

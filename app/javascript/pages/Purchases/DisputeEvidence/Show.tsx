@@ -6,8 +6,7 @@ import typia from "typia";
 
 import {
   CancellationRebuttalOption,
-  DisputeReason,
-  disputeReasons,
+  getDisputeReason,
   ReasonForWinningOption,
   reasonForWinningOptions,
   cancellationRebuttalOptions,
@@ -33,7 +32,7 @@ const ALLOWED_EXTENSIONS = ["jpeg", "jpg", "png", "pdf"];
 
 type Props = {
   dispute_evidence: {
-    dispute_reason: DisputeReason;
+    dispute_reason: string;
     customer_email: string;
     purchased_at: string;
     duration_left_to_submit_evidence_formatted: string;
@@ -116,7 +115,7 @@ export default function Show() {
   const savedReasonForWinning = restoreChoice(
     saved.reason_for_winning,
     reasonForWinningOptions,
-    disputeReasons[dispute_evidence.dispute_reason].reasonsForWinning,
+    getDisputeReason(dispute_evidence.dispute_reason).reasonsForWinning,
   );
   const savedCancellationRebuttal = restoreChoice(
     saved.cancellation_rebuttal,
@@ -270,7 +269,7 @@ export default function Show() {
 
   const TEXTAREA_MAX_LENGTH = 3000;
   const TEXTAREA_ROWS = 7;
-  const disputeReason = disputeReasons[dispute_evidence.dispute_reason];
+  const disputeReason = getDisputeReason(dispute_evidence.dispute_reason);
 
   return (
     <Card className="mx-auto my-8 max-w-2xl">
