@@ -76,7 +76,11 @@ describe Affiliate do
       it "includes only live direct and global affiliates if the seller participates in discover" do
         allow(product).to receive(:recommendable?).and_return(true)
         affiliates = Affiliate.valid_for_product(product)
-        expect(affiliates).to match_array GlobalAffiliate.where.not(affiliate_user: suspended_user) + [direct_affiliate]
+        # Global affiliates are table-wide, so check the ones this example made:
+        # rows that other files leave behind would change a whole-table list.
+        expect(affiliates.where(type: DirectAffiliate.name)).to eq [direct_affiliate]
+        expect(affiliates).to include(seller.global_affiliate, direct_affiliate.affiliate_user.global_affiliate)
+        expect(affiliates).not_to include(suspended_user.global_affiliate)
       end
     end
   end

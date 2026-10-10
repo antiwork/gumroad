@@ -26,6 +26,9 @@ RSpec.describe LastReadCommunityChatMessage, ".set! concurrency" do
     @community.destroy!
     @product.destroy!
     RefundPolicy.where(seller_id: @seller.id).delete_all
+    # Each user creates a global affiliate that User#destroy leaves behind, and
+    # without the transaction it outlives this file.
+    Affiliate.where(affiliate_user_id: [@seller.id, @reader.id]).delete_all
     @reader.destroy!
     @seller.destroy!
   end
