@@ -21,7 +21,24 @@ export PUPPETEER_SKIP_DOWNLOAD="true"
 
 # vite_ruby's assets:precompile otherwise runs this same `npm ci` a second time.
 export VITE_RUBY_SKIP_ASSETS_PRECOMPILE_INSTALL=true
-NODE_ENV=development npm ci
+# The production compile mounts /node-modules-cache (Makefile, build_production):
+# a tarball there replaces the install, and after an install the tarball is
+# written back for main to save. Other builds mount nothing and install as before.
+# comp-assets-* builds mount it too, to read, but only main saves, so they skip the write.
+if [[ -s /node-modules-cache/node_modules.tar.gz ]]; then
+  echo "Restoring node_modules from the cache"
+  tar -xzf /node-modules-cache/node_modules.tar.gz
+else
+  NODE_ENV=development npm ci
+  if [[ $BUILDKITE_BRANCH == "main" && -d /node-modules-cache && -w /node-modules-cache ]]; then
+    if (set -o pipefail; tar -cf - node_modules | gzip -1 > /node-modules-cache/node_modules.tar.gz.new); then
+      echo "Wrote node_modules to the cache directory"
+    else
+      echo "Could not write node_modules to the cache directory"
+      rm -f /node-modules-cache/node_modules.tar.gz.new
+    fi
+  fi
+fi
 
 # One Rails boot. js:export must run first: Vite reads routes.js. assets:precompile
 # builds the pages Tailwind itself (lib/tasks/pages_tailwind.rake).

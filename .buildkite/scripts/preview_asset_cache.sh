@@ -105,6 +105,7 @@ preview_asset_cache_inputs() {
     .buildkite/scripts/compile_assets.sh \
     .buildkite/scripts/preview_asset_cache.sh \
     .buildkite/scripts/main_asset_cache.sh \
+    .buildkite/scripts/main_node_modules_cache.sh \
     Makefile \
     package.json \
     package-lock.json \
