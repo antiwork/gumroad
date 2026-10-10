@@ -58,13 +58,18 @@ describe Affiliate do
       let(:product) { create(:product) }
       let(:seller) { product.user }
       let!(:direct_affiliate) { create(:direct_affiliate, seller:, products: [product]) }
+      let!(:other_product_affiliate) { create(:direct_affiliate, seller:, products: [create(:product, user: seller)]) }
+      let!(:deleted_affiliate) { create(:direct_affiliate, seller:, products: [product], deleted_at: 1.day.ago) }
+      let!(:suspended_affiliate) { create(:direct_affiliate, seller:, products: [product], affiliate_user: suspended_user) }
+      let!(:other_seller_affiliate) { create(:direct_affiliate) }
       let(:suspended_user) { create(:tos_user) }
 
-      before do
-        create(:direct_affiliate)
-        create(:direct_affiliate, seller:, products: [create(:product, user: seller)])
-        create(:direct_affiliate, seller:, products: [product], deleted_at: 1.day.ago)
-        create(:direct_affiliate, seller:, products: [product], affiliate_user: suspended_user)
+      # Every user gets a global affiliate on create and the scope adds the global affiliates of
+      # every live, non-suspended user, so name the users this example makes rather than the whole
+      # table — rows left behind by specs that skip a transaction made that comparison fail.
+      let(:expected_global_affiliates) do
+        [seller, direct_affiliate.affiliate_user, other_product_affiliate.affiliate_user,
+         deleted_affiliate.affiliate_user, other_seller_affiliate.affiliate_user, other_seller_affiliate.seller].map(&:global_affiliate)
       end
 
       it "includes only live direct affiliates for the product if the seller does not participate in discover" do
@@ -76,7 +81,7 @@ describe Affiliate do
       it "includes only live direct and global affiliates if the seller participates in discover" do
         allow(product).to receive(:recommendable?).and_return(true)
         affiliates = Affiliate.valid_for_product(product)
-        expect(affiliates).to match_array GlobalAffiliate.where.not(affiliate_user: suspended_user) + [direct_affiliate]
+        expect(affiliates).to match_array expected_global_affiliates + [direct_affiliate]
       end
     end
   end
