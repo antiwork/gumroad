@@ -20,7 +20,7 @@ vi.mock("$app/data/product_reviews", () => ({
   getReviewVideoUploadContext: mocks.getReviewVideoUploadContext,
   setProductRating: mocks.setProductRating,
 }));
-vi.mock("$vendor/evaporate.cjs", () => ({ default: vi.fn() }));
+vi.mock("$vendor/evaporate.js", () => ({ default: vi.fn() }));
 vi.mock("@inertiajs/react", () => ({
   usePage: () => ({ props: mocks.pageProps }),
   router: { replaceProp: vi.fn() },

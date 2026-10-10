@@ -13,7 +13,7 @@ const Evaporate = vi.hoisted(() =>
   }),
 );
 
-vi.mock("$vendor/evaporate.cjs", () => ({ default: Evaporate }));
+vi.mock("$vendor/evaporate.js", () => ({ default: Evaporate }));
 
 vi.stubGlobal(
   "Routes",

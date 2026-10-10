@@ -10,7 +10,7 @@ import { useReviewVideoUploader } from "$app/components/ReviewForm/useReviewVide
 
 vi.stubGlobal("Routes", new Proxy({}, { get: () => () => "#" }));
 
-vi.mock("$vendor/evaporate.cjs", () => ({ default: vi.fn() }));
+vi.mock("$vendor/evaporate.js", () => ({ default: vi.fn() }));
 
 const mocks = vi.hoisted(() => {
   const state: { loggedInUser: { id: string } | null } = { loggedInUser: { id: "user-id" } };

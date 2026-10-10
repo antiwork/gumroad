@@ -124,7 +124,8 @@ describe("typia transform in a one-shot build", () => {
   it("orders union members the same whichever file is transformed first", async () => {
     const unionFirst = await buildOutput(["union", "zeta"]);
     const zetaFirst = await buildOutput(["zeta", "union"]);
-    expect(unionFirst.union).toContain(`expected: '("alpha" | "zeta")'`);
+    // Rollup prints this string in single quotes, Rolldown in escaped double quotes.
+    expect(unionFirst.union.replaceAll('\\"', '"')).toContain('("alpha" | "zeta")');
     expect(zetaFirst.union).toBe(unionFirst.union);
   }, 60_000);
 
@@ -186,13 +187,13 @@ describe("typia transform in dev", () => {
   it("keeps a program per file, which does not see the global .d.ts", async () => {
     const code = await devTransform();
     // The unresolved type becomes `any`: a validator that accepts anything.
-    expect(code).toContain("__is = (input2) => true");
+    expect(code).toMatch(/__is = \(input\d*\) => true/u);
     expect(code).not.toContain('".count"');
   }, 60_000);
 
   it("keeps a program per file while a build runs in the same process", async () => {
     const code = await devTransform(() => buildOutput(["index"]));
-    expect(code).toContain("__is = (input2) => true");
+    expect(code).toMatch(/__is = \(input\d*\) => true/u);
   }, 60_000);
 });
 
@@ -219,7 +220,7 @@ describe("typia transform in vitest", () => {
 
   it("keeps a program per file in watch mode", async () => {
     const code = await vitestTransform(true);
-    expect(code).toContain("__is = (input2) => true");
+    expect(code).toMatch(/__is = \(input\d*\) => true/u);
     expect(code).not.toContain('".count"');
   }, 60_000);
 

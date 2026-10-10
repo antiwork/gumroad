@@ -1,4 +1,4 @@
-import Evaporate from "$vendor/evaporate.cjs";
+import Evaporate from "$vendor/evaporate.js";
 import * as React from "react";
 
 import { last } from "$app/utils/array";
