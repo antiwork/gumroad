@@ -18,7 +18,7 @@ module IbanBankAccount
   end
 
   def stripe_external_account_routing_number
-    cross_border_sepa_payout? ? nil : routing_number
+    cross_border_sepa_payout? ? nil : routing_number&.strip&.upcase
   end
 
   private

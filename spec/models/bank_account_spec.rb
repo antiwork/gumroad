@@ -11,6 +11,19 @@ describe BankAccount do
     end
   end
 
+  describe "#stripe_external_account_routing_number" do
+    it "leaves a numeric routing code unchanged" do
+      expect(build(:indonesia_bank_account, bank_code: "008").stripe_external_account_routing_number).to eq("008")
+    end
+
+    it "upcases a lowercase code without changing the stored bank number" do
+      ba = build(:morocco_bank_account, bank_code: "cihmmamc")
+
+      expect(ba.stripe_external_account_routing_number).to eq("CIHMMAMC")
+      expect(ba.bank_number).to eq("cihmmamc")
+    end
+  end
+
   describe "#supports_instant_payouts?" do
     let(:bank_account) { create(:ach_account) }
 

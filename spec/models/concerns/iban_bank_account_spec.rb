@@ -53,6 +53,11 @@ describe IbanBankAccount do
       expect(bank_account.stripe_external_account_routing_number).to eq("AAAASMSMXXX")
     end
 
+    it "upcases a lowercase routing_number on the home-country branch" do
+      bank_account = build(:san_marino_bank_account, account_number: "SM86U0322509800000000270100", bank_code: "aaaasmsmxxx")
+      expect(bank_account.stripe_external_account_routing_number).to eq("AAAASMSMXXX")
+    end
+
     it "returns nil for SEPA models that have no routing_number, regardless of cross-border status" do
       expect(build(:bulgaria_bank_account, account_number: "LT121000011101001000").stripe_external_account_routing_number).to be_nil
       expect(build(:bulgaria_bank_account, account_number: "BG80BNBG96611020345678").stripe_external_account_routing_number).to be_nil
