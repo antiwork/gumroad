@@ -766,7 +766,10 @@ export const ProfileSectionsForm = ({ onChange, disabled = false, ...props }: Pr
         return {
           ...commonProps,
           type,
-          shown_products: [],
+          // A new products section starts with the creator's current catalog: an empty list
+          // matches no product, so the public section read "No products found" until products
+          // were picked by hand.
+          shown_products: props.products.map(({ id }) => id),
           default_product_sort: "page_layout",
           show_filters: false,
           add_new_products: true,

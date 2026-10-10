@@ -298,6 +298,28 @@ describe("ProfileSectionsForm", () => {
     });
   });
 
+  it("adds a products section already showing the creator's catalog", () => {
+    const withProducts = props();
+    withProducts.tabs = [{ name: "Home", sections: [] }];
+    withProducts.sections = [];
+    withProducts.products = [
+      { id: "prod-a", name: "Product A" },
+      { id: "prod-b", name: "Product B" },
+    ];
+    const tracked = trackState();
+    render(<ProfileSectionsForm {...withProducts} onChange={tracked.onChange} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Add section" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Products" }));
+
+    // An empty selection matches no product, so the public section rendered "No products found"
+    // until products were picked by hand.
+    expect(tracked.latest().sections[0]).toMatchObject({
+      type: "SellerProfileProductsSection",
+      shown_products: ["prod-a", "prod-b"],
+    });
+  });
+
   it("keeps an in-flight image's local preview out of the section text and then syncs its CDN URL", async () => {
     cdn.hold = true;
     const withRichText = props();

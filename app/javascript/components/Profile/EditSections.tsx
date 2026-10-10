@@ -680,7 +680,10 @@ export const AddSectionButton = ({ side, index }: { index: number; side?: "top" 
               return {
                 ...commonProps,
                 type,
-                shown_products: [],
+                // A new products section starts with the creator's current catalog: an empty
+                // list matches no product, so the public section read "No products found"
+                // until products were picked by hand.
+                shown_products: state.products.map(({ id }) => id),
                 default_product_sort: "page_layout" as const,
                 show_filters: false,
                 add_new_products: true,
