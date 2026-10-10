@@ -206,12 +206,8 @@ jobs:
             tmp/cache/vite
             public/js/gumroad-bundle.js
             public/js/gumroad-embed-bundle.js
-            public/pages-tailwind.css
-            public/pages-tailwind-manifest.json
-            public/assets/pages
-            app/javascript/stylesheets/pages_tailwind.generated.html
           key: >-
-            runner-test-assets-v1-${{ runner.os }}-${{ hashFiles(
+            runner-test-assets-v2-${{ runner.os }}-${{ hashFiles(
               'app/javascript/**', 'app/views/**',
               'config/routes.rb', 'config/routes/**', 'config/domain.rb',
               'config/application.rb', 'config/boot.rb', 'config/environment.rb',
@@ -220,10 +216,27 @@ jobs:
               'config/initializers/js-routes.rb', 'config/vite.json', 'config/vite/**',
               'config/currencies.json', 'lib/json_schemas/**', 'lib/tasks/**', 'Rakefile',
               'public/**', 'vendor/assets/**', 'patches/**', 'scripts/build_pages_tailwind.mjs',
-              'docker/base/**', 'docker/web/Dockerfile.test', '.github/workflows/tests.yml',
+              'docker/base/**', 'docker/web/Dockerfile.test', '.github/workflows/tests.yml', 'bin/ci-test-asset-tasks',
               'package.json', 'package-lock.json', '.npmrc', 'tsconfig.json',
               'vite.config.ts', 'vite.config.widget.ts', 'postcss.config.js',
               'Gemfile.lock', '.ruby-version') }}
+      # After the key above, which hashes public/** and app/javascript/**: these
+      # files would change it. The pages CSS is a fixed class list, so app code
+      # and views never change this key.
+      - name: Restore the runner pages CSS
+        id: pages_tailwind
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            public/pages-tailwind.css
+            public/pages-tailwind-manifest.json
+            public/assets/pages
+            app/javascript/stylesheets/pages_tailwind.generated.html
+          key: >-
+            runner-pages-tailwind-v1-${{ runner.os }}-${{ hashFiles(
+              'scripts/build_pages_tailwind.mjs', 'app/javascript/stylesheets/pages_tailwind.css',
+              'package.json', 'package-lock.json', 'patches/**', '.github/workflows/tests.yml', 'bin/ci-test-asset-tasks') }}
       # tsc needs the gitignored js:export output (app/javascript/utils/routes.*
       # and app/javascript/json_schemas/*). The export boots Rails off the
       # committed .env.test but tolerates every backing service being down, so
@@ -254,13 +267,23 @@ jobs:
           path: ~/test-packages
           key: ${{ steps.test_packages.outputs.cache-primary-key }}
       - name: Build the runner test assets
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.test_assets.outputs.cache-hit != 'true'
-        # pages_tailwind:build first, as in test_relevant_runner.
-        run: bundle exec rake pages_tailwind:build assets:precompile
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && (steps.test_assets.outputs.cache-hit != 'true' || steps.pages_tailwind.outputs.cache-hit != 'true')
+        # The pages CSS first, as in test_relevant_runner.
+        run: bundle exec rake $(bin/ci-test-asset-tasks)
         env:
           RAILS_ENV: test
           NODE_ENV: test
-          VITE_RUBY_SKIP_ASSETS_PRECOMPILE_INSTALL: true
+          PAGES_RESTORED: ${{ steps.pages_tailwind.outputs.cache-hit }}
+          VITE_RESTORED: ${{ steps.test_assets.outputs.cache-hit }}
+      - uses: actions/cache/save@v4
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.pages_tailwind.outputs.cache-hit != 'true'
+        with:
+          path: |
+            public/pages-tailwind.css
+            public/pages-tailwind-manifest.json
+            public/assets/pages
+            app/javascript/stylesheets/pages_tailwind.generated.html
+          key: ${{ steps.pages_tailwind.outputs.cache-primary-key }}
       - uses: actions/cache/save@v4
         if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.test_assets.outputs.cache-hit != 'true'
         with:
@@ -269,10 +292,6 @@ jobs:
             tmp/cache/vite
             public/js/gumroad-bundle.js
             public/js/gumroad-embed-bundle.js
-            public/pages-tailwind.css
-            public/pages-tailwind-manifest.json
-            public/assets/pages
-            app/javascript/stylesheets/pages_tailwind.generated.html
           key: ${{ steps.test_assets.outputs.cache-primary-key }}
 
   lint_ruby:
@@ -1144,12 +1163,8 @@ jobs:
             tmp/cache/vite
             public/js/gumroad-bundle.js
             public/js/gumroad-embed-bundle.js
-            public/pages-tailwind.css
-            public/pages-tailwind-manifest.json
-            public/assets/pages
-            app/javascript/stylesheets/pages_tailwind.generated.html
           key: >-
-            runner-test-assets-v1-${{ runner.os }}-${{ hashFiles(
+            runner-test-assets-v2-${{ runner.os }}-${{ hashFiles(
               'app/javascript/**', 'app/views/**',
               'config/routes.rb', 'config/routes/**', 'config/domain.rb',
               'config/application.rb', 'config/boot.rb', 'config/environment.rb',
@@ -1158,10 +1173,24 @@ jobs:
               'config/initializers/js-routes.rb', 'config/vite.json', 'config/vite/**',
               'config/currencies.json', 'lib/json_schemas/**', 'lib/tasks/**', 'Rakefile',
               'public/**', 'vendor/assets/**', 'patches/**', 'scripts/build_pages_tailwind.mjs',
-              'docker/base/**', 'docker/web/Dockerfile.test', '.github/workflows/tests.yml',
+              'docker/base/**', 'docker/web/Dockerfile.test', '.github/workflows/tests.yml', 'bin/ci-test-asset-tasks',
               'package.json', 'package-lock.json', '.npmrc', 'tsconfig.json',
               'vite.config.ts', 'vite.config.widget.ts', 'postcss.config.js',
               'Gemfile.lock', '.ruby-version') }}
+      # After the key above, as in the typecheck job.
+      - name: Restore the pages CSS
+        id: pages_tailwind
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            public/pages-tailwind.css
+            public/pages-tailwind-manifest.json
+            public/assets/pages
+            app/javascript/stylesheets/pages_tailwind.generated.html
+          key: >-
+            runner-pages-tailwind-v1-${{ runner.os }}-${{ hashFiles(
+              'scripts/build_pages_tailwind.mjs', 'app/javascript/stylesheets/pages_tailwind.css',
+              'package.json', 'package-lock.json', 'patches/**', '.github/workflows/tests.yml', 'bin/ci-test-asset-tasks') }}
       - name: Prepare test database and assets
         run: |
           for _ in $(seq 1 90); do [ -f /tmp/compose.status ] && break; sleep 2; done
@@ -1182,19 +1211,24 @@ jobs:
           [ "$ready" = true ] || { echo "MySQL, Elasticsearch or MinIO did not become ready"; exit 1; }
           # The same preparation the build job bakes into the test image (the
           # database, the Vite test build, the widget bundles and the pages CSS), in
-          # one Rails boot as docker/web/compile_assets.sh does. npm ci already ran
-          # above. pages_tailwind:build goes first because it writes into
-          # app/javascript, which Vite's digest covers; assets:precompile then skips it.
-          if [ "$ASSETS_RESTORED" = true ]; then
-            bundle exec rake js:export db:setup
-          else
-            VITE_RUBY_SKIP_ASSETS_PRECOMPILE_INSTALL=true bundle exec rake js:export db:setup pages_tailwind:build assets:precompile
-          fi
+          # one Rails boot as docker/web/compile_assets.sh does, building only what
+          # the caches above lacked. npm ci already ran above.
+          bundle exec rake js:export db:setup $(bin/ci-test-asset-tasks)
           # docker wait prints the exit code instead of returning it.
           copy_status=$(docker wait "$(docker compose ps -aq copyfixturefiles)")
           [ "$copy_status" = 0 ] || { docker compose logs copyfixturefiles; exit 1; }
         env:
-          ASSETS_RESTORED: ${{ steps.test_assets.outputs.cache-hit }}
+          PAGES_RESTORED: ${{ steps.pages_tailwind.outputs.cache-hit }}
+          VITE_RESTORED: ${{ steps.test_assets.outputs.cache-hit }}
+      - uses: actions/cache/save@v4
+        if: steps.pages_tailwind.outputs.cache-hit != 'true' && matrix.ci_node_index == 0
+        with:
+          path: |
+            public/pages-tailwind.css
+            public/pages-tailwind-manifest.json
+            public/assets/pages
+            app/javascript/stylesheets/pages_tailwind.generated.html
+          key: ${{ steps.pages_tailwind.outputs.cache-primary-key }}
       - uses: actions/cache/save@v4
         if: steps.test_assets.outputs.cache-hit != 'true' && matrix.ci_node_index == 0
         with:
@@ -1203,10 +1237,6 @@ jobs:
             tmp/cache/vite
             public/js/gumroad-bundle.js
             public/js/gumroad-embed-bundle.js
-            public/pages-tailwind.css
-            public/pages-tailwind-manifest.json
-            public/assets/pages
-            app/javascript/stylesheets/pages_tailwind.generated.html
           key: ${{ steps.test_assets.outputs.cache-primary-key }}
       - name: Run tests
         timeout-minutes: 25
