@@ -45,7 +45,10 @@ RSpec.describe LastReadCommunityChatMessage do
           community:,
           community_chat_message: message2
         )
-        losing_record.errors.add(:user_id, :taken)
+        # The uniqueness validator always records the conflicting value, and
+        # `added?` compares options exactly, so a bare :taken error cannot
+        # reproduce the failure.
+        losing_record.errors.add(:user_id, :taken, value: user.id)
 
         allow(described_class).to receive(:find_by).with(user_id: user.id, community_id: community.id)
           .and_return(nil, winning_record)

@@ -125,38 +125,51 @@ RSpec.describe LastReadCommunityChatMessage, ".set! concurrency" do
   it "creates one newest marker when the first updates are concurrent" do
     described_class.delete_all
     ready = Queue.new
-    release = Queue.new
+    releases = {
+      @older_message.id => Queue.new,
+      @newer_message.id => Queue.new,
+    }
     allow(described_class).to receive(:create!).and_wrap_original do |method, *args|
-      ready << true
-      release.pop
+      message_id = args.last.fetch(:community_chat_message).id
+      ready << message_id
+      releases.fetch(message_id).pop
       method.call(*args)
     end
 
     errors = Queue.new
-    threads = [@older_message, @newer_message].map do |message|
-      Thread.new do
+    threads = {}
+    [@older_message, @newer_message].each do |message|
+      threads[message.id] = Thread.new do
         ActiveRecord::Base.connection_pool.with_connection do
           described_class.set!(
             user_id: @reader.id,
             community_id: @community.id,
             community_chat_message_id: message.id
           )
-        rescue => e
-          errors << e
         end
+      rescue => e
+        errors << e
       end
     end
 
-    2.times { Timeout.timeout(10) { ready.pop } }
-    2.times { release << true }
-    threads.each { expect(_1.join(10)).to be_present }
+    expect(2.times.map { Timeout.timeout(10) { ready.pop } }).to contain_exactly(
+      @older_message.id,
+      @newer_message.id
+    )
+
+    # Both requests looked up no marker; let the older one create and commit
+    # first so the newer one's uniqueness check sees the row it just wrote.
+    releases.fetch(@older_message.id) << true
+    expect(threads.fetch(@older_message.id).join(10)).to be_present
+    releases.fetch(@newer_message.id) << true
+    expect(threads.fetch(@newer_message.id).join(10)).to be_present
 
     expect(errors.size).to eq(0), -> { errors.size.times.map { errors.pop.full_message }.join("\n") }
     expect(described_class.where(user: @reader, community: @community).count).to eq(1)
     expect(described_class.find_by!(user: @reader, community: @community).community_chat_message_id).to eq(@newer_message.id)
   ensure
-    2.times { release << true } if defined?(release) && release
-    threads&.each do |thread|
+    releases&.each_value { _1 << true }
+    threads&.each_value do |thread|
       next if thread.join(1)
 
       thread.kill

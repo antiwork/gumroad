@@ -17,7 +17,7 @@ class LastReadCommunityChatMessage < ApplicationRecord
         record = create!(user_id:, community_id:, community_chat_message: message)
       rescue ActiveRecord::RecordInvalid => error
         record = find_by(user_id:, community_id:)
-        raise error unless record && error.record.errors.added?(:user_id, :taken)
+        raise error unless record && error.record.errors.of_kind?(:user_id, :taken)
       rescue ActiveRecord::RecordNotUnique
         record = find_by!(user_id:, community_id:)
       end
