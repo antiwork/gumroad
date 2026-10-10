@@ -66,8 +66,8 @@ export const DateRangePicker = ({
     : today;
   const presets = [
     { label: "Today", from: today, to: today },
-    { label: "Last 7 days", from: subDays(today, 7), to: today },
-    { label: "Last 30 days", from: subDays(today, 30), to: today },
+    { label: "Last 7 days", from: subDays(today, 6), to: today },
+    { label: "Last 30 days", from: subDays(today, 29), to: today },
     { label: "This month", from: startOfMonth(today), to: today },
     {
       label: "Last month",
