@@ -330,14 +330,14 @@ check(
   base_files: {
     "app/javascript/components/EvaporateUploader.tsx" => "old",
     "app/javascript/types/evaporate.d.ts" => "old",
-    "vendor/assets/javascripts/evaporate.cjs" => "old",
+    "vendor/assets/javascripts/evaporate.js" => "old",
     "app/models/widget.rb" => "old",
     "spec/models/widget_spec.rb" => SPEC_STUB,
   },
   head_files: {
     "app/javascript/components/EvaporateUploader.tsx" => "new",
     "app/javascript/types/evaporate.d.ts" => "new",
-    "vendor/assets/javascripts/evaporate.cjs" => "new",
+    "vendor/assets/javascripts/evaporate.js" => "new",
     "app/models/widget.rb" => "new",
   },
   expect_specs: %w[spec/models/widget_spec.rb],

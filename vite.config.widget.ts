@@ -19,7 +19,7 @@ export default defineConfig({
     outDir: "public/js",
     emptyOutDir: false,
     lib: {
-      entry: resolve(__dirname, entry),
+      entry: resolve(import.meta.dirname, entry),
       name: target.replace(/-/gu, "_"),
       formats: ["iife"],
       fileName: () => `${target}-bundle.js`,
@@ -36,7 +36,7 @@ export default defineConfig({
   css: {
     preprocessorOptions: {
       scss: {
-        loadPaths: [resolve(__dirname, "app/assets")],
+        loadPaths: [resolve(import.meta.dirname, "app/assets")],
       },
     },
   },

@@ -18,7 +18,7 @@ describe("Inertia page bundle boundaries", () => {
 
   it("pins Vite's dynamic-import helper to the vendor chunk", async () => {
     const configSource = (await import("../../../vite.config.ts?raw")).default.replace(/\/\/[^\n]*/gu, "");
-    expect(configSource).toMatch(/from\s+["']\.\/config\/vite\/manual-chunks["']/u);
+    expect(configSource).toMatch(/from\s+["']\.\/config\/vite\/manual-chunks\.ts["']/u);
     expect(configSource).toMatch(/manualChunks,/u);
 
     expect(manualChunks("vite/preload-helper")).toBe("vendor");

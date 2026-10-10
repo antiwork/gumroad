@@ -7,8 +7,8 @@ import AutoImport from "unplugin-auto-import/vite";
 import { defineConfig } from "vite";
 import RubyPlugin from "vite-plugin-ruby";
 
-import { manualChunks } from "./config/vite/manual-chunks";
-import { staleModuleGuard } from "./config/vite/stale-module-guard";
+import { manualChunks } from "./config/vite/manual-chunks.ts";
+import { staleModuleGuard } from "./config/vite/stale-module-guard.ts";
 
 const rootPath = path.dirname(fileURLToPath(import.meta.url));
 

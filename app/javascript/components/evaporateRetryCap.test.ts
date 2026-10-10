@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import Evaporate from "$vendor/evaporate.cjs";
+import Evaporate from "$vendor/evaporate.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 // A minimal XMLHttpRequest stand-in for the four requests Evaporate makes: the initiate POST

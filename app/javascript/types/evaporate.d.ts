@@ -1,4 +1,4 @@
-declare module "$vendor/evaporate.cjs" {
+declare module "$vendor/evaporate.js" {
   type UploadParams = {
     name: string;
     file: File;
