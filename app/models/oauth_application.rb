@@ -31,6 +31,8 @@ class OauthApplication < Doorkeeper::Application
 
   LOCK_WAIT_SECONDS = 5
   LOCK_ATTEMPTS = 3
+  LOCK_RETRY_BASE_DELAY_SECONDS = 0.25
+  LOCK_RETRY_JITTER_SECONDS = 0.25
 
   # Bounds each wait on the application row and retries, so a contended row costs seconds
   # instead of InnoDB's 50s. Retries only when this call owns the transaction: a
@@ -44,7 +46,7 @@ class OauthApplication < Doorkeeper::Application
     rescue ActiveRecord::LockWaitTimeout
       raise unless owns_transaction && attempts < LOCK_ATTEMPTS
 
-      sleep(attempts * 0.25 + rand * 0.25)
+      sleep(attempts * LOCK_RETRY_BASE_DELAY_SECONDS + rand * LOCK_RETRY_JITTER_SECONDS)
       retry
     end
   end

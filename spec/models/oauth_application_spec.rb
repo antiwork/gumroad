@@ -410,5 +410,21 @@ describe OauthApplication do
       @oauth_application.with_application_lock { nil }
       expect(described_class.connection.select_value("SELECT @@SESSION.innodb_lock_wait_timeout")).to eq(before)
     end
+
+    it "bounds the session lock wait timeout while the lock is held" do
+      bounded = nil
+      @oauth_application.with_application_lock do
+        bounded = described_class.connection.select_value("SELECT @@SESSION.innodb_lock_wait_timeout")
+      end
+      expect(bounded.to_i).to eq(described_class::LOCK_WAIT_SECONDS)
+    end
+
+    it "restores the session lock wait timeout after an exception" do
+      before = described_class.connection.select_value("SELECT @@SESSION.innodb_lock_wait_timeout")
+      expect do
+        @oauth_application.with_application_lock { raise ActiveRecord::LockWaitTimeout }
+      end.to raise_error(ActiveRecord::LockWaitTimeout)
+      expect(described_class.connection.select_value("SELECT @@SESSION.innodb_lock_wait_timeout")).to eq(before)
+    end
   end
 end
