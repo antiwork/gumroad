@@ -30,8 +30,12 @@ if [[ -s /node-modules-cache/node_modules.tar.gz ]]; then
 else
   NODE_ENV=development npm ci
   if [[ -d /node-modules-cache && -w /node-modules-cache ]]; then
-    (set -o pipefail; tar -cf - node_modules | gzip -1 > /node-modules-cache/node_modules.tar.gz.new) \
-      || rm -f /node-modules-cache/node_modules.tar.gz.new
+    if (set -o pipefail; tar -cf - node_modules | gzip -1 > /node-modules-cache/node_modules.tar.gz.new); then
+      echo "Wrote node_modules to the cache directory"
+    else
+      echo "Could not write node_modules to the cache directory"
+      rm -f /node-modules-cache/node_modules.tar.gz.new
+    fi
   fi
 fi
 
