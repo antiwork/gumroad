@@ -270,6 +270,21 @@ echo 'npm ci --ignore-scripts' > "$KEY_REPO/docker/web/compile_assets.sh"; key_c
 [ "$(key_tag)" != "$KEY_BASE" ] && ok "a change to compile_assets.sh changes the key" || fail "compile_assets.sh is not in the key"
 
 echo
+echo "pages CSS cache key"
+
+pt_key_tag() { (cd "$KEY_REPO" && bash -c "source $KEY_SCRIPTS/preview_asset_cache.sh; source $KEY_SCRIPTS/main_pages_tailwind_cache.sh; main_pages_tailwind_cache_tag"); }
+mkdir -p "$KEY_REPO/scripts" "$KEY_REPO/app/javascript/stylesheets" "$KEY_REPO/lib/tasks"
+echo a > "$KEY_REPO/scripts/build_pages_tailwind.mjs"; echo a > "$KEY_REPO/app/javascript/stylesheets/pages_tailwind.css"
+echo a > "$KEY_REPO/lib/tasks/pages_tailwind.rake"; key_commit pages; PT_KEY=$(pt_key_tag)
+echo c > "$KEY_REPO/spec/a_spec.rb"; key_commit unrelated-pages
+[ "$(pt_key_tag)" = "$PT_KEY" ] && ok "a change outside the pages CSS inputs keeps the key" || fail "unrelated change moved the pages CSS key"
+for input in scripts/build_pages_tailwind.mjs app/javascript/stylesheets/pages_tailwind.css package-lock.json lib/tasks/pages_tailwind.rake; do
+  echo "changed" >> "$KEY_REPO/$input"; key_commit "$input"
+  [ "$(pt_key_tag)" != "$PT_KEY" ] && ok "a change to $input changes the pages CSS key" || fail "$input is not in the pages CSS key"
+  PT_KEY=$(pt_key_tag)
+done
+
+echo
 echo "compile_assets.sh in the container, through make build_production"
 
 # Real `make build_production` runs the real docker/web/compile_assets.sh. DOCKER_CMD
