@@ -27,6 +27,21 @@ describe MoroccoBankAccount do
     end
   end
 
+  describe "#stripe_external_account_routing_number" do
+    it "sends a lowercase BIC to Stripe in uppercase" do
+      ba = create(:morocco_bank_account, bank_code: "cihmmamc")
+
+      expect(ba.stripe_external_account_routing_number).to eq("CIHMMAMC")
+      expect(ba.bank_number).to eq("cihmmamc")
+    end
+
+    it "drops a trailing newline that the anchored format check lets through" do
+      ba = create(:morocco_bank_account, bank_code: "cihmmamc\n")
+
+      expect(ba.stripe_external_account_routing_number).to eq("CIHMMAMC")
+    end
+  end
+
   describe "#account_number_visual" do
     it "returns the visual account number" do
       expect(create(:morocco_bank_account, account_number_last_four: "9123").account_number_visual).to eq("MA******9123")

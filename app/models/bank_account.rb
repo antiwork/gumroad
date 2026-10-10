@@ -67,8 +67,9 @@ class BankAccount < ApplicationRecord
     currency
   end
 
+  # Stripe resolves a BIC case-sensitively; digit-only codes are unaffected by upcase.
   def stripe_external_account_routing_number
-    routing_number
+    routing_number&.strip&.upcase
   end
 
   def to_hash
