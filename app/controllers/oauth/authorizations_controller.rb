@@ -46,7 +46,7 @@ class Oauth::AuthorizationsController < Doorkeeper::AuthorizationsController
       oauth_application = OauthApplication.alive.find_by(uid: params[:client_id])
       return super if oauth_application.nil?
 
-      oauth_application.with_lock do
+      oauth_application.with_application_lock do
         @pre_auth = nil
         @strategy = nil
         super
