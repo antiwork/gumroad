@@ -81,6 +81,7 @@ class Dispute < ApplicationRecord
 
   STRIPE_REASONS = %w[
     credit_not_processed
+    debit_not_authorized
     duplicate
     fraudulent
     general

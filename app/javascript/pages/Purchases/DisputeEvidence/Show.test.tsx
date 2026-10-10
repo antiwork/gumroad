@@ -164,6 +164,20 @@ describe("DisputeEvidence Show", () => {
     });
   });
 
+  it.each([
+    ["debit_not_authorized", "The cardholder's bank claims the debit was not authorized by the account holder."],
+    ["some_future_stripe_reason", "This is an uncategorized inquiry for which we have no details."],
+    [null, "This is an uncategorized inquiry for which we have no details."],
+  ])("renders the form for dispute reason %s", async (reason, message) => {
+    mocks.usePage.mockReturnValue({
+      props: { ...pageProps, dispute_evidence: { ...pageProps.dispute_evidence, dispute_reason: reason } },
+    });
+    renderPage();
+
+    expect(await screen.findByText(message, { exact: false })).toBeTruthy();
+    expect(submitButton()).toBeTruthy();
+  });
+
   // A seller returning mid-window must be able to revise what they saved, not just read it back.
   it("restores a saved radio choice into the form and resends it untouched", async () => {
     mocks.usePage.mockReturnValue({
