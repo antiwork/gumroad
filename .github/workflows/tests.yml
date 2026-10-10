@@ -216,7 +216,7 @@ jobs:
               'config/initializers/js-routes.rb', 'config/vite.json', 'config/vite/**',
               'config/currencies.json', 'lib/json_schemas/**', 'lib/tasks/**', 'Rakefile',
               'public/**', 'vendor/assets/**', 'patches/**', 'scripts/build_pages_tailwind.mjs',
-              'docker/base/**', 'docker/web/Dockerfile.test', '.github/workflows/tests.yml',
+              'docker/base/**', 'docker/web/Dockerfile.test', '.github/workflows/tests.yml', 'bin/ci-test-asset-tasks',
               'package.json', 'package-lock.json', '.npmrc', 'tsconfig.json',
               'vite.config.ts', 'vite.config.widget.ts', 'postcss.config.js',
               'Gemfile.lock', '.ruby-version') }}
@@ -236,7 +236,7 @@ jobs:
           key: >-
             runner-pages-tailwind-v1-${{ runner.os }}-${{ hashFiles(
               'scripts/build_pages_tailwind.mjs', 'app/javascript/stylesheets/pages_tailwind.css',
-              'package.json', 'package-lock.json', 'patches/**', '.github/workflows/tests.yml') }}
+              'package.json', 'package-lock.json', 'patches/**', '.github/workflows/tests.yml', 'bin/ci-test-asset-tasks') }}
       # tsc needs the gitignored js:export output (app/javascript/utils/routes.*
       # and app/javascript/json_schemas/*). The export boots Rails off the
       # committed .env.test but tolerates every backing service being down, so
@@ -1170,7 +1170,7 @@ jobs:
               'config/initializers/js-routes.rb', 'config/vite.json', 'config/vite/**',
               'config/currencies.json', 'lib/json_schemas/**', 'lib/tasks/**', 'Rakefile',
               'public/**', 'vendor/assets/**', 'patches/**', 'scripts/build_pages_tailwind.mjs',
-              'docker/base/**', 'docker/web/Dockerfile.test', '.github/workflows/tests.yml',
+              'docker/base/**', 'docker/web/Dockerfile.test', '.github/workflows/tests.yml', 'bin/ci-test-asset-tasks',
               'package.json', 'package-lock.json', '.npmrc', 'tsconfig.json',
               'vite.config.ts', 'vite.config.widget.ts', 'postcss.config.js',
               'Gemfile.lock', '.ruby-version') }}
@@ -1187,7 +1187,7 @@ jobs:
           key: >-
             runner-pages-tailwind-v1-${{ runner.os }}-${{ hashFiles(
               'scripts/build_pages_tailwind.mjs', 'app/javascript/stylesheets/pages_tailwind.css',
-              'package.json', 'package-lock.json', 'patches/**', '.github/workflows/tests.yml') }}
+              'package.json', 'package-lock.json', 'patches/**', '.github/workflows/tests.yml', 'bin/ci-test-asset-tasks') }}
       - name: Prepare test database and assets
         run: |
           for _ in $(seq 1 90); do [ -f /tmp/compose.status ] && break; sleep 2; done
