@@ -35,16 +35,22 @@ class Oauth::TokensController < Doorkeeper::TokensController
       oauth_application = refresh_token_application
       return super if oauth_application.nil?
 
-      oauth_application.with_lock do
+      oauth_application.with_application_lock do
         @strategy = nil
         super
       end
     end
 
+    # `Doorkeeper::AccessToken#application` loads Doorkeeper's own application class, which does
+    # not carry `with_application_lock`; re-read the token's application as the Gumroad subclass
+    # so the bounded lock wait applies on this path too.
     def refresh_token_application
       return unless params[:grant_type] == "refresh_token"
 
-      Doorkeeper.config.access_token_model.by_refresh_token(params[:refresh_token])&.application
+      application_id = Doorkeeper.config.access_token_model.by_refresh_token(params[:refresh_token])&.application_id
+      return if application_id.nil?
+
+      OauthApplication.find_by(id: application_id)
     end
 
     def device_access_token_request?

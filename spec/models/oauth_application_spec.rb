@@ -367,4 +367,64 @@ describe OauthApplication do
       expect(device_authorization.reload).to have_attributes(status: OauthDeviceAuthorization::STATUS_DENIED, access_token: nil)
     end
   end
+
+  describe "#with_application_lock" do
+    before do
+      @oauth_application = create(:oauth_application, owner: create(:user))
+      allow_any_instance_of(described_class).to receive(:sleep)
+    end
+
+    it "retries a lock wait timeout and returns the block result" do
+      attempts = 0
+      result = @oauth_application.with_application_lock do
+        attempts += 1
+        raise ActiveRecord::LockWaitTimeout if attempts < 3
+
+        :done
+      end
+
+      expect(result).to eq(:done)
+      expect(attempts).to eq(3)
+    end
+
+    it "re-raises once attempts are exhausted" do
+      attempts = 0
+      expect do
+        @oauth_application.with_application_lock { attempts += 1; raise ActiveRecord::LockWaitTimeout }
+      end.to raise_error(ActiveRecord::LockWaitTimeout)
+      expect(attempts).to eq(described_class::LOCK_ATTEMPTS)
+    end
+
+    it "does not retry inside a caller's transaction" do
+      attempts = 0
+      expect do
+        described_class.transaction do
+          @oauth_application.with_application_lock { attempts += 1; raise ActiveRecord::LockWaitTimeout }
+        end
+      end.to raise_error(ActiveRecord::LockWaitTimeout)
+      expect(attempts).to eq(1)
+    end
+
+    it "restores the session lock wait timeout" do
+      before = described_class.connection.select_value("SELECT @@SESSION.innodb_lock_wait_timeout")
+      @oauth_application.with_application_lock { nil }
+      expect(described_class.connection.select_value("SELECT @@SESSION.innodb_lock_wait_timeout")).to eq(before)
+    end
+
+    it "bounds the session lock wait timeout while the lock is held" do
+      bounded = nil
+      @oauth_application.with_application_lock do
+        bounded = described_class.connection.select_value("SELECT @@SESSION.innodb_lock_wait_timeout")
+      end
+      expect(bounded.to_i).to eq(described_class::LOCK_WAIT_SECONDS)
+    end
+
+    it "restores the session lock wait timeout after an exception" do
+      before = described_class.connection.select_value("SELECT @@SESSION.innodb_lock_wait_timeout")
+      expect do
+        @oauth_application.with_application_lock { raise ActiveRecord::LockWaitTimeout }
+      end.to raise_error(ActiveRecord::LockWaitTimeout)
+      expect(described_class.connection.select_value("SELECT @@SESSION.innodb_lock_wait_timeout")).to eq(before)
+    end
+  end
 end

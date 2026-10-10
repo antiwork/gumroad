@@ -29,10 +29,32 @@ class OauthApplication < Doorkeeper::Application
     end
   end
 
+  LOCK_WAIT_SECONDS = 5
+  LOCK_ATTEMPTS = 3
+  LOCK_RETRY_BASE_DELAY_SECONDS = 0.25
+  LOCK_RETRY_JITTER_SECONDS = 0.25
+
+  # Bounds each wait on the application row and retries, so a contended row costs seconds
+  # instead of InnoDB's 50s. Retries only when this call owns the transaction: a
+  # LockWaitTimeout aborts it, so an enclosing caller's transaction cannot be resumed.
+  def with_application_lock(&block)
+    attempts = 0
+    begin
+      attempts += 1
+      owns_transaction = !self.class.connection.current_transaction.joinable?
+      with_bounded_lock_wait { with_lock(&block) }
+    rescue ActiveRecord::LockWaitTimeout
+      raise unless owns_transaction && attempts < LOCK_ATTEMPTS
+
+      sleep(attempts * LOCK_RETRY_BASE_DELAY_SECONDS + rand * LOCK_RETRY_JITTER_SECONDS)
+      retry
+    end
+  end
+
   def mark_deleted!
     deleted_at = Time.current
 
-    with_lock do
+    with_application_lock do
       access_grants.where(revoked_at: nil).update_all(revoked_at: deleted_at)
       access_tokens.where(revoked_at: nil).update_all(revoked_at: deleted_at)
       device_authorizations
@@ -66,7 +88,7 @@ class OauthApplication < Doorkeeper::Application
 
   # Returns an existing active access token or creates one if none exist
   def get_or_generate_access_token
-    with_lock do
+    with_application_lock do
       allowed_scopes = scopes.to_s
       ensure_access_grant_exists(allowed_scopes:)
       access_tokens.where(resource_owner_id: owner.id,
@@ -78,7 +100,7 @@ class OauthApplication < Doorkeeper::Application
   def revoke_access_for(user)
     revoked_at = Time.current
 
-    with_lock do
+    with_application_lock do
       # Coordinate with device token polling on this application row before revoking tokens.
       # Pending codes have no owner yet; approve! rejects codes created before this revocation.
       deny_approved_device_authorizations_for(user, denied_at: revoked_at)
@@ -90,7 +112,7 @@ class OauthApplication < Doorkeeper::Application
   def revoke_access_tokens_for(user)
     revoked_at = Time.current
 
-    with_lock do
+    with_application_lock do
       deny_approved_device_authorizations_for(user, denied_at: revoked_at)
       Doorkeeper::AccessToken.revoke_all_for(id, user)
     end
@@ -103,6 +125,15 @@ class OauthApplication < Doorkeeper::Application
   end
 
   private
+    def with_bounded_lock_wait
+      connection = self.class.connection
+      previous = connection.select_value("SELECT @@SESSION.innodb_lock_wait_timeout")
+      connection.execute("SET SESSION innodb_lock_wait_timeout = #{LOCK_WAIT_SECONDS}")
+      yield
+    ensure
+      connection.execute("SET SESSION innodb_lock_wait_timeout = #{previous.to_i}") if previous.present?
+    end
+
     def deny_approved_device_authorizations_for(user, denied_at:)
       device_authorizations
         .where(
