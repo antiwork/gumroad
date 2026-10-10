@@ -203,15 +203,16 @@ describe SalesRelatedProductsInfo, "concurrent sales count upserts" do
       "smaller_product_id = #{pair[0]} AND larger_product_id = #{pair[1]}"
     end
 
-    def table_lock_waiter_ids(connection)
-      connection.select_values(<<~SQL).map(&:to_i)
-        SELECT requesting_thread.PROCESSLIST_ID FROM performance_schema.data_lock_waits AS lock_waits
-        INNER JOIN performance_schema.data_locks AS requested_lock
-          ON requested_lock.ENGINE_LOCK_ID = lock_waits.REQUESTING_ENGINE_LOCK_ID
-        INNER JOIN performance_schema.threads AS requesting_thread
-          ON requesting_thread.THREAD_ID = lock_waits.REQUESTING_THREAD_ID
-        WHERE requested_lock.OBJECT_SCHEMA = DATABASE()
-          AND requested_lock.OBJECT_NAME = #{connection.quote(described_class.table_name)}
+    # Identifies the waiter by the record it requests, not by its session. data_locks.THREAD_ID names
+    # whichever thread last re-created the lock struct, so a page split or purge re-attributes a
+    # waiting lock. information_schema.innodb_trx only refreshes after 100ms without a reader, so
+    # polling it never shows the upsert.
+    def waiting_lock_data(connection)
+      connection.select_values(<<~SQL)
+        SELECT LOCK_DATA FROM performance_schema.data_locks
+        WHERE OBJECT_SCHEMA = DATABASE()
+          AND OBJECT_NAME = #{connection.quote(described_class.table_name)}
+          AND LOCK_STATUS = 'WAITING'
       SQL
     end
 
@@ -231,14 +232,15 @@ describe SalesRelatedProductsInfo, "concurrent sales count upserts" do
             holding << true
             raise "the block never started" unless upserting.pop(timeout: LOCK_WAIT_BUDGET_SECONDS)
             deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + LOCK_WAIT_BUDGET_SECONDS
-            until (waiting_ids = connection.uncached { table_lock_waiter_ids(connection) }).include?(process_id)
+            # The upsert's duplicate-key check waits on second_pair's unique-index entry: "smaller, larger, id".
+            until (waiting = connection.uncached { waiting_lock_data(connection) }).any? { _1&.start_with?("#{second_pair.join(', ')}, ") }
               if Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
                 upsert_thread = connection.uncached { connection.select_rows(<<~SQL) }
                   SELECT PROCESSLIST_COMMAND, PROCESSLIST_STATE, PROCESSLIST_INFO FROM performance_schema.threads
                   WHERE PROCESSLIST_ID = #{process_id}
                 SQL
                 raise "the upsert never blocked on second_pair within #{LOCK_WAIT_BUDGET_SECONDS}s " \
-                      "(connection #{process_id}: #{upsert_thread.inspect}; connections waiting on the table: #{waiting_ids.inspect})"
+                      "(connection #{process_id}: #{upsert_thread.inspect}; waiting locks on the table: #{waiting.inspect})"
               end
               sleep(0.025)
             end
