@@ -463,6 +463,17 @@ const ProductsSectionView = ({ section, controls = true }: { section: ProductsSe
     () => searchDispatch({ type: "set-params", params }),
     [JSON.stringify(section.shown_products), section.default_product_sort],
   );
+  // A section created with the creator's catalog arrives with ids and no results fetched for them,
+  // and the handler above only fires on a change: fetch once for that selection or the grid renders
+  // the empty state until the seller touches it.
+  const paramsRef = useRefToLatest(params);
+  const fetchedInitialSelection = React.useRef(false);
+  React.useEffect(() => {
+    if (fetchedInitialSelection.current) return;
+    if (section.search_results.total !== 0 || section.shown_products.length === 0) return;
+    fetchedInitialSelection.current = true;
+    searchDispatch({ type: "set-params", params: paramsRef.current });
+  }, [section.search_results.total, section.shown_products.length, searchDispatch, paramsRef]);
   const selectedProductsCount = state.products.filter((product) => section.shown_products.includes(product.id)).length;
   const totalProductsCount = state.products.length;
 
