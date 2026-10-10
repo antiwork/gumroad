@@ -48,7 +48,7 @@ function sanitizeChunkName(name: string) {
   return BLOCKABLE_NAME_PATTERNS.some((pattern) => pattern.test(name)) ? "third_party_tracking" : name;
 }
 
-export default defineConfig(({ mode }) => ({
+export default defineConfig(() => ({
   plugins: [
     RubyPlugin(),
     react(),
@@ -66,9 +66,9 @@ export default defineConfig(({ mode }) => ({
       ],
     }),
     stripCjsExportsPlugin(),
-    // Bundle visualizer — only emitted during production builds.
-    // Run `npx vite build` then open tmp/bundle-stats.html to audit chunk sizes.
-    ...(mode === "production"
+    // Bundle visualizer, opt-in: it adds about a quarter to a production build.
+    // Run `BUNDLE_STATS=1 npx vite build` then open tmp/bundle-stats.html to audit chunk sizes.
+    ...(process.env.BUNDLE_STATS === "1"
       ? [
           visualizer({
             filename: "tmp/bundle-stats.html",
