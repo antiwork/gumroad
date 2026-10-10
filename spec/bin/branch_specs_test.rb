@@ -1825,6 +1825,39 @@ check(
   expect_reason: "diff touches app/javascript/stylesheets/tailwind.css but no specs",
 )
 
+# CI clones without file contents (tests.yml, filter: blob:none), so the schema
+# diff fetches the base's db/schema.rb on demand. The selection must still be
+# right when that fetch works, and must stop when it fails: an empty diff would
+# read as an unchanged schema.
+def blobless_clone_check(name, remove_source:)
+  $count += 1
+  Dir.mktmpdir do |dir|
+    source = File.join(dir, "source")
+    clone = File.join(dir, "clone")
+    FileUtils.mkdir_p(source)
+    build_repo(source,
+               base_files: DB_SPECS.merge("db/schema.rb" => schema_rb),
+               head_files: { MIGRATION_PATH_FOR_TEST => migration_rb("  def change\n    add_column :widgets, :border_radius, :string\n  end\n"), "db/schema.rb" => WIDGET_SCHEMA })
+    system("git", "-C", source, "config", "uploadpack.allowFilter", "true", exception: true)
+    system("git", "clone", "-q", "--filter=blob:none", "--no-local", "file://#{source}", clone, exception: true)
+    FileUtils.rm_rf(source) if remove_source
+    stdout, stderr, status = Open3.capture3("ruby", SELECTOR, "--base", "origin/base", chdir: clone)
+    if remove_source
+      unless status.exitstatus == 1 && stderr.include?("failed")
+        $failures << "#{name}: expected exit 1 naming the failed git call, got #{status.exitstatus}\nstdout: #{stdout}\nstderr: #{stderr}"
+      end
+    else
+      got = stdout.split("\n").sort
+      unless status.success? && got == WIDGET_SPECS.sort
+        $failures << "#{name}: expected #{WIDGET_SPECS.sort}, got #{got} (exit #{status.exitstatus})\nstderr: #{stderr}"
+      end
+    end
+  end
+end
+
+blobless_clone_check("a clone without file contents selects the same specs", remove_source: false)
+blobless_clone_check("a git call that fails stops the selector instead of trimming the selection", remove_source: true)
+
 WORKFLOW = File.expand_path("../../.github/workflows/tests.yml", __dir__)
 workflow = YAML.load_file(WORKFLOW)
 migration_versions = workflow.fetch("jobs").fetch("migration_versions")

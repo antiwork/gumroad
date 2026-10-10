@@ -26,6 +26,9 @@ RSpec.describe LastReadCommunityChatMessage, ".set! concurrency" do
     @community.destroy!
     @product.destroy!
     RefundPolicy.where(seller_id: @seller.id).delete_all
+    # This spec runs outside a transaction, and `User` has no `dependent:` on its global
+    # affiliate, so destroying a user leaves the row behind with a dangling affiliate_user_id.
+    GlobalAffiliate.where(affiliate_user_id: [@seller.id, @reader.id]).delete_all
     @reader.destroy!
     @seller.destroy!
   end
@@ -120,6 +123,19 @@ RSpec.describe LastReadCommunityChatMessage, ".set! concurrency" do
       thread.kill
       thread.join
     end
+  end
+
+  it "returns the marker another connection created between the lookup and the create" do
+    described_class.delete_all
+    allow(described_class).to receive(:create!).and_wrap_original do |method, *args|
+      Thread.new { ActiveRecord::Base.connection_pool.with_connection { method.call(*args) } }.join
+      method.call(*args)
+    end
+
+    record = described_class.set!(user_id: @reader.id, community_id: @community.id, community_chat_message_id: @newer_message.id)
+
+    expect(record).to eq(described_class.find_by!(user: @reader, community: @community))
+    expect(record.reload.community_chat_message_id).to eq(@newer_message.id)
   end
 
   it "creates one newest marker when the first updates are concurrent" do

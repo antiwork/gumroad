@@ -334,10 +334,14 @@ end
 # real file, which would quietly run the wrong spec.
 def git(*args)
   out = IO.popen(["git", *args], err: File::NULL, external_encoding: "UTF-8", &:read)
-  return [] unless $?.success?
+  # CI clones without file contents and git fetches them on demand, so a call
+  # can fail. An empty answer would silently trim the selection.
+  abort("bin/branch-specs: git #{args.join(' ')} failed") unless $?.success?
   escalate!("git reported a path that is not valid UTF-8") unless out.valid_encoding?
   out.split("\n")
 end
+
+def ref?(ref) = system("git", "rev-parse", "--verify", "--quiet", ref, out: File::NULL, err: File::NULL)
 
 base = "origin/main"
 base_given = false
@@ -363,10 +367,10 @@ until argv.empty?
   end
 end
 
-if git("rev-parse", "--verify", "--quiet", base).empty?
+unless ref?(base)
   abort("bin/branch-specs: base ref #{base.inspect} does not resolve") if base_given
   base = "main"
-  abort("bin/branch-specs: neither origin/main nor main resolves") if git("rev-parse", "--verify", "--quiet", base).empty?
+  abort("bin/branch-specs: neither origin/main nor main resolves") unless ref?(base)
 end
 merge_base = git("merge-base", base, "HEAD").first
 
