@@ -1,8 +1,8 @@
 import { X } from "@boxicons/react";
 import * as React from "react";
-import typia from "typia";
 
 import { classNames } from "$app/utils/classNames";
+import { hasType, isBoolean, isOneOf, isRecord, isString } from "$app/utils/guards";
 
 import { Alert } from "$app/components/ui/Alert";
 import { useGlobalEventListener } from "$app/components/useGlobalEventListener";
@@ -19,6 +19,13 @@ export type AlertPayload = {
   html?: boolean;
   position?: "top" | "bottom";
 };
+
+const isAlertPayload = (value: unknown): value is AlertPayload =>
+  isRecord(value) &&
+  isString(value.message) &&
+  isOneOf(value.status, ["success", "danger", "info", "warning"]) &&
+  (value.html === undefined || isBoolean(value.html)) &&
+  (value.position === undefined || isOneOf(value.position, ["top", "bottom"]));
 
 const ToastAlert = ({ initial }: { initial: AlertPayload | null }) => {
   const [alert, setAlert] = React.useState<AlertPayload | null>(initial);
@@ -47,7 +54,7 @@ const ToastAlert = ({ initial }: { initial: AlertPayload | null }) => {
 
   useGlobalEventListener("message", (event: MessageEvent) => {
     if (event.origin !== window.location.origin) return;
-    if (typia.is<{ type: "alert"; payload: AlertPayload }>(event.data)) {
+    if (hasType(event.data, "alert") && isAlertPayload(event.data.payload)) {
       const newAlert = event.data.payload;
       if ((newAlert.position ?? "top") !== (alert?.position ?? "top")) isHoveringRef.current = false;
       setAlert(newAlert);

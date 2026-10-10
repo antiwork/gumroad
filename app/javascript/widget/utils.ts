@@ -1,6 +1,16 @@
 import typia from "typia";
 
+import { hasType, isNumber, isRecord, isString } from "../utils/guards";
+
 export type HeightMessage = { type: "height"; height: number };
+
+export const isHeightMessage = (data: unknown): data is HeightMessage =>
+  hasType(data, "height") && isNumber(data.height);
+
+type TranslationsMessage = { type: "translations"; translations: Record<string, string> };
+
+export const isTranslationsMessage = (data: unknown): data is TranslationsMessage =>
+  hasType(data, "translations") && isRecord(data.translations) && Object.values(data.translations).every(isString);
 
 export const parseProductURL = (href: string, customDomain?: string) => {
   try {

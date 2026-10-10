@@ -2,7 +2,6 @@ import { Copy, DotsHorizontalRounded, Link, Pencil, RefreshCcw, Trash, X } from 
 import cx from "classnames";
 import * as React from "react";
 import { GroupBase, SelectInstance } from "react-select";
-import typia from "typia";
 
 import {
   OfferCodeStatistics,
@@ -14,6 +13,7 @@ import {
 } from "$app/data/offer_code";
 import { classNames } from "$app/utils/classNames";
 import { CurrencyCode, formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
+import { isNumber, isOneOf, isRecord, isString } from "$app/utils/guards";
 import { between } from "$app/utils/math";
 import { asyncVoid } from "$app/utils/promise";
 import { AbortError, assertResponseError } from "$app/utils/request";
@@ -106,6 +106,15 @@ export type QueryParams = {
   query: string | null;
   page: number | null;
 };
+
+export const isQueryParams = (value: unknown): value is QueryParams =>
+  isRecord(value) &&
+  (value.sort === null ||
+    (isRecord(value.sort) &&
+      isOneOf(value.sort.key, ["name", "revenue", "uses", "term"]) &&
+      isOneOf(value.sort.direction, ["asc", "desc"]))) &&
+  (value.query === null || isString(value.query)) &&
+  (value.page === null || isNumber(value.page));
 
 const formatProductNames = (products: Product[]) => {
   const names = products
@@ -255,9 +264,7 @@ const DiscountsPage = ({
 
   // Handle browser actions for navigating to the previous/next page
   useGlobalEventListener("popstate", (e: PopStateEvent) => {
-    const params = typia.is<QueryParams>(e.state)
-      ? e.state
-      : extractParams(new URLSearchParams(window.location.search));
+    const params = isQueryParams(e.state) ? e.state : extractParams(new URLSearchParams(window.location.search));
     const newSort = params.sort;
     const newQuery = params.query;
     const page = params.page ?? 1;

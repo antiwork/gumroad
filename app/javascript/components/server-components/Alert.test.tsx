@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, render } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -40,5 +40,27 @@ describe("ToastAlert", () => {
     // Other libraries may schedule timers; assert none of ours is the 5-second dismiss.
     const dismissTimers = setTimeoutSpy.mock.calls.filter(([, delay]) => delay === DISMISS_DELAY_MS);
     expect(dismissTimers).toHaveLength(0);
+  });
+
+  const post = (data: unknown) =>
+    act(() => {
+      window.dispatchEvent(new MessageEvent("message", { data, origin: window.location.origin }));
+    });
+
+  it("shows an alert posted by showAlert's message shape", () => {
+    render(<ToastAlert initial={null} />);
+
+    post({ type: "alert", payload: { message: "Changes saved", status: "success", html: false, position: undefined } });
+
+    expect(screen.getByText("Changes saved")).toBeTruthy();
+  });
+
+  it("ignores an alert message whose payload has the wrong shape", () => {
+    render(<ToastAlert initial={null} />);
+
+    post({ type: "alert", payload: { message: "Not shown", status: "bogus" } });
+    post({ type: "alert", payload: { status: "success" } });
+
+    expect(screen.queryByText("Not shown")).toBeNull();
   });
 });

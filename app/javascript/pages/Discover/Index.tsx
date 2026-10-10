@@ -11,6 +11,7 @@ import { last } from "$app/utils/array";
 import { classNames } from "$app/utils/classNames";
 import { CurrencyCode, formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 import { discoverTitleGenerator, Taxonomy } from "$app/utils/discover";
+import { isString } from "$app/utils/guards";
 
 import { Layout } from "$app/components/Discover/Layout";
 import { RecentlyViewed, RecentlyViewedProps } from "$app/components/Discover/RecentlyViewed";
@@ -56,6 +57,9 @@ const sortTitles = {
   hot_and_new: "Hot and new products",
   best_sellers: "Best selling products",
 };
+
+const isSortKey = (sort: unknown): sort is keyof typeof sortTitles =>
+  isString(sort) && Object.prototype.hasOwnProperty.call(sortTitles, sort);
 
 const ProductsCarousel = ({ products, title }: { products: CardProduct[]; title: string }) => {
   const [active, setActive] = React.useState(0);
@@ -451,7 +455,7 @@ function DiscoverIndex() {
                   ? state.results?.products.length
                     ? `Showing 1-${state.results.products.length} of ${state.results.total} products`
                     : null
-                  : sortTitles[typia.is<keyof typeof sortTitles>(state.params.sort) ? state.params.sort : "trending"]}
+                  : sortTitles[isSortKey(state.params.sort) ? state.params.sort : "trending"]}
               </h2>
               {state.params.query || hasOfferCode ? null : (
                 <Tabs>

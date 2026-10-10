@@ -1,8 +1,6 @@
-import typia from "typia";
+import { hasType } from "../utils/guards";
 
-import { HeightMessage, isValidHost, onLoad, parseProductURL } from "./utils";
-
-type TranslationsMessage = { type: "translations"; translations: Record<string, string> };
+import { isHeightMessage, isTranslationsMessage, isValidHost, onLoad, parseProductURL } from "./utils";
 
 const script = document.querySelector<HTMLScriptElement>("script[src*='/js/gumroad.js']");
 const customDomain = script ? new URL(script.src).host : undefined;
@@ -97,13 +95,13 @@ window.addEventListener("message", (evt) => {
 
   if (evt.source !== overlayIframe.contentWindow || !isValidHost(url, customDomain)) return;
 
-  if (typia.is<{ type: "loaded" }>(evt.data)) {
+  if (hasType(evt.data, "loaded")) {
     progressbar.style.display = "none";
     document.body.style.overflow = "hidden";
     overlay.style.display = "";
-  } else if (typia.is<HeightMessage>(evt.data)) {
+  } else if (isHeightMessage(evt.data)) {
     overlayIframe.style.height = `${evt.data.height}px`;
-  } else if (typia.is<TranslationsMessage>(evt.data)) {
+  } else if (isTranslationsMessage(evt.data)) {
     overlayCloseButton.ariaLabel = evt.data.translations.close || "";
   }
 });

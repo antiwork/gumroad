@@ -5,6 +5,7 @@ import { NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/r
 import * as React from "react";
 import typia from "typia";
 
+import { isRecord, isString } from "$app/utils/guards";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request } from "$app/utils/request";
 import { sanitizeHtml } from "$app/utils/sanitize";
@@ -99,6 +100,14 @@ export const Raw = TiptapNode.create({
   addExtensions: () => [VideoEmbed],
 });
 type IframelyEmbedData = { html: string; title: string; url: string; provider_name: string; thumbnail_url?: string };
+
+const isIframelyEmbedData = (data: unknown): data is IframelyEmbedData =>
+  isRecord(data) &&
+  isString(data.html) &&
+  isString(data.title) &&
+  isString(data.url) &&
+  isString(data.provider_name) &&
+  (data.thumbnail_url === undefined || isString(data.thumbnail_url));
 
 // Iframely stores the exact URL we ask for, so use one canonical spelling first and a distinct fallback.
 const YOUTUBE_VIDEO_ID = /^[A-Za-z0-9_-]{11}$/u;
@@ -204,9 +213,9 @@ export const EmbedMediaForm = React.forwardRef<{ focus: () => void }, EmbedMedia
                 let data: unknown = null;
                 for (const candidate of mediaEmbedUrlCandidates(inputRef.current.value)) {
                   data = await (await lookup(candidate)).json();
-                  if (typia.is<IframelyEmbedData>(data)) break;
+                  if (isIframelyEmbedData(data)) break;
                 }
-                if (typia.is<IframelyEmbedData>(data)) {
+                if (isIframelyEmbedData(data)) {
                   inputRef.current.value = "";
                   onEmbedReceived?.(data);
                 } else {

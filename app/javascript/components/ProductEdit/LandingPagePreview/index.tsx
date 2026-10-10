@@ -1,6 +1,6 @@
 import * as React from "react";
-import typia from "typia";
 
+import { hasType, isRecord, isString } from "$app/utils/guards";
 import { writeQueryParams } from "$app/utils/url";
 
 // Loads the same /l/:id/landing endpoint buyers see. The sandbox omits
@@ -67,9 +67,9 @@ export const LandingPagePreview = ({
       let params: Record<string, unknown> | undefined;
       if (e.data === "gumroad:checkout") {
         params = undefined;
-      } else if (typia.is<{ type: "gumroad:checkout"; params?: Record<string, unknown> }>(e.data)) {
+      } else if (hasType(e.data, "gumroad:checkout") && (e.data.params === undefined || isRecord(e.data.params))) {
         params = e.data.params;
-      } else if (typia.is<{ type: "gumroad:navigate"; url: string }>(e.data)) {
+      } else if (hasType(e.data, "gumroad:navigate") && isString(e.data.url)) {
         // A link to one of the seller's own Gumroad pages. In production the
         // trusted wrapper navigates the buyer's tab after checking the URL
         // against the seller's own hostnames. Here the seller is previewing

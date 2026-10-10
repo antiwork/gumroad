@@ -1,5 +1,6 @@
 import typia from "typia";
 
+import { isRecord, isString } from "$app/utils/guards";
 import { request, ResponseError } from "$app/utils/request";
 
 export type MarketingAction = {
@@ -47,10 +48,13 @@ export type MarketingEmailDraft = {
 
 type ErrorResponse = { success: false; error: string };
 
+const isErrorResponse = (json: unknown): json is ErrorResponse =>
+  isRecord(json) && json.success === false && isString(json.error);
+
 const parse = async <T>(response: Response, assert: (json: unknown) => T): Promise<T> => {
   const json: unknown = await response.json();
   if (!response.ok) {
-    const error = typia.is<ErrorResponse>(json) ? json.error : undefined;
+    const error = isErrorResponse(json) ? json.error : undefined;
     throw new ResponseError(error);
   }
   return assert(json);

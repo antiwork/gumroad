@@ -1,5 +1,3 @@
-import typia from "typia";
-
 import { SearchRequest } from "$app/data/search";
 
 const rawCategoryImages = import.meta.glob<string>("$assets/images/discover/*", {
@@ -48,9 +46,12 @@ const rootTaxonomies = {
 };
 export type RootTaxonomySlug = keyof typeof rootTaxonomies;
 
+const isRootTaxonomySlug = (slug: string | undefined): slug is RootTaxonomySlug =>
+  slug !== undefined && Object.prototype.hasOwnProperty.call(rootTaxonomies, slug);
+
 export const getRootTaxonomy = (taxonomyPath: string | undefined) => {
   const root = taxonomyPath?.split("/")[0];
-  return typia.is<RootTaxonomySlug>(root) ? root : null;
+  return isRootTaxonomySlug(root) ? root : null;
 };
 
 export const discoverTitleGenerator = (

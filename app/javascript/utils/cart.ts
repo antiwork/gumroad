@@ -1,6 +1,5 @@
-import typia from "typia";
-
 import { CardProduct } from "$app/parsers/product";
+import { hasType, isNumber, isRecord } from "$app/utils/guards";
 
 import { CartItem } from "$app/components/Checkout/cartState";
 
@@ -28,7 +27,9 @@ export const hasCartItems = (count: CartItemsCount | null): count is number => t
 const readSameOriginCount = (src: string): Promise<CartItemsCount> =>
   fetch(src, { headers: { Accept: "application/json" }, cache: "no-store" })
     .then((response) => (response.ok ? response.json() : Promise.reject(new Error("count unavailable"))))
-    .then((body) => (typia.is<{ cart_items_count: number }>(body) ? body.cart_items_count : "not-available"))
+    .then((body: unknown) =>
+      isRecord(body) && isNumber(body.cart_items_count) ? body.cart_items_count : "not-available",
+    )
     .catch(() => "not-available");
 
 const readCountFromFrame = (src: string, resolve: (value: CartItemsCount) => void) => {
@@ -39,7 +40,10 @@ const readCountFromFrame = (src: string, resolve: (value: CartItemsCount) => voi
   const handler = (evt: MessageEvent) => {
     if (evt.source !== iframe.contentWindow || evt.origin !== origin) return;
 
-    if (typia.is<{ type: "cart-items-count"; cartItemsCount: CartItemsCount }>(evt.data)) {
+    if (
+      hasType(evt.data, "cart-items-count") &&
+      (isNumber(evt.data.cartItemsCount) || evt.data.cartItemsCount === "not-available")
+    ) {
       window.removeEventListener("message", handler);
       iframe.remove();
       resolve(evt.data.cartItemsCount);

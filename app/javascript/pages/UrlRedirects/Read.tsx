@@ -16,6 +16,7 @@ import {
   getLinearSectionRank,
   sanitizeSerializedEpubSection,
 } from "$app/pages/UrlRedirects/epub";
+import { isBoolean, isNumber, isOneOf, isRecord, isString } from "$app/utils/guards";
 
 import { Button } from "$app/components/Button";
 import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
@@ -119,11 +120,29 @@ export const syncPinnedReaderHeight = (container: HTMLElement): (() => void) => 
   return () => window.removeEventListener("resize", handleResize);
 };
 
+const isDisplayedEpubLocation = (value: unknown) =>
+  isRecord(value) &&
+  isNumber(value.index) &&
+  isString(value.href) &&
+  isString(value.cfi) &&
+  isNumber(value.location) &&
+  isNumber(value.percentage) &&
+  isRecord(value.displayed) &&
+  isNumber(value.displayed.page) &&
+  isNumber(value.displayed.total);
+
+export const isEpubLocation = (value: unknown): value is EpubLocation =>
+  isRecord(value) &&
+  isDisplayedEpubLocation(value.start) &&
+  isDisplayedEpubLocation(value.end) &&
+  isBoolean(value.atStart) &&
+  isBoolean(value.atEnd);
+
 const getCurrentEpubLocation = (rendition: Rendition): EpubLocation | null => {
   // epub.js types this as always present, but it is undefined until the first
   // relocation event for some books and rendering modes.
   const location: unknown = Reflect.get(rendition, "location");
-  return typia.is<EpubLocation>(location) ? location : null;
+  return isEpubLocation(location) ? location : null;
 };
 
 // The reading position we persist in a cookie so an anonymous (or same-browser)
@@ -136,6 +155,15 @@ type StoredMediaLocation = {
   cfi?: string | null;
   unit?: "page_number" | "percentage" | "seconds";
 };
+
+const isNullable = <T,>(value: unknown, check: (value: unknown) => value is T) => value == null || check(value);
+
+export const isStoredMediaLocation = (value: unknown): value is StoredMediaLocation =>
+  isRecord(value) &&
+  isNullable(value.timestamp, isString) &&
+  isNullable(value.location, isNumber) &&
+  isNullable(value.cfi, isString) &&
+  (value.unit === undefined || isOneOf(value.unit, ["page_number", "percentage", "seconds"]));
 
 export const canResumePdfFromLocation = (location: StoredMediaLocation) =>
   location.location != null && (location.unit === "page_number" || (location.unit == null && location.cfi == null));
@@ -150,7 +178,7 @@ const getMediaLocationFromCookies = (readId: string): StoredMediaLocation => {
   if (cookieValue) {
     try {
       const json: unknown = JSON.parse(decodeURIComponent(cookieValue));
-      if (typia.is<StoredMediaLocation>(json)) return json;
+      if (isStoredMediaLocation(json)) return json;
     } catch {
       // Ignore cookies we can't parse — e.g. ones written before values were
       // URI-encoded, or ones truncated by the browser. Resuming from the server

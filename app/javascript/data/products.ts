@@ -1,5 +1,6 @@
 import typia from "typia";
 
+import { isOneOf } from "$app/utils/guards";
 import { request } from "$app/utils/request";
 
 export type SortKey = "name" | "successful_sales_count" | "revenue" | "display_price_cents" | "status" | "cut";
@@ -53,7 +54,10 @@ export type Product = {
   can_report_piracy: boolean;
 };
 
-export type RecurringProductType = "membership" | "newsletter" | "podcast";
+const recurringProductTypes = ["membership", "newsletter", "podcast"] as const;
+export type RecurringProductType = (typeof recurringProductTypes)[number];
+export const isRecurringProductType = (type: unknown): type is RecurringProductType =>
+  isOneOf(type, recurringProductTypes);
 
 export async function getFolderArchiveDownloadUrl(request_url: string) {
   const res = await request({

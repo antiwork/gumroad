@@ -1,3 +1,5 @@
+import { hasType, isOneOf, isRecord } from "$app/utils/guards";
+
 export type Seller = {
   id: string;
   name: string;
@@ -32,3 +34,17 @@ export type CommunityChatMessage = {
     is_seller: boolean;
   };
 };
+
+type IncomingCommunityChannelMessage =
+  | { type: "create_chat_message"; message: CommunityChatMessage }
+  | { type: "update_chat_message"; message: CommunityChatMessage }
+  | { type: "delete_chat_message"; message: CommunityChatMessage };
+type IncomingUserChannelMessage = { type: "latest_community_info"; data: Community };
+
+export const isIncomingUserChannelMessage = (msg: unknown): msg is IncomingUserChannelMessage =>
+  hasType(msg, "latest_community_info") && isRecord(msg.data);
+
+export const isIncomingCommunityChannelMessage = (msg: unknown): msg is IncomingCommunityChannelMessage =>
+  isRecord(msg) &&
+  isOneOf(msg.type, ["create_chat_message", "update_chat_message", "delete_chat_message"]) &&
+  isRecord(msg.message);

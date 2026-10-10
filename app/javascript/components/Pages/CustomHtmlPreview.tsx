@@ -1,6 +1,6 @@
 import * as React from "react";
-import typia from "typia";
 
+import { hasType, isNumber, isRecord, isString } from "$app/utils/guards";
 import { request } from "$app/utils/request";
 
 // The editor-pane half of the gumroad:products bridge (gumroad-private#1691). On the live
@@ -29,7 +29,18 @@ type ProductsSlice = {
   limit?: number;
 };
 
-const isIndex = (value: unknown): value is number => typia.is<number>(value) && Number.isInteger(value) && value >= 0;
+const isIndex = (value: unknown): value is number => isNumber(value) && Number.isInteger(value) && value >= 0;
+
+const isOptionalNumber = (value: unknown) => value === undefined || isNumber(value);
+
+const isProductsSlice = (value: unknown): value is ProductsSlice =>
+  isRecord(value) &&
+  value.success === true &&
+  Array.isArray(value.products) &&
+  isNumber(value.products_total) &&
+  isRecord(value.prices) &&
+  isOptionalNumber(value.offset) &&
+  isOptionalNumber(value.limit);
 
 export const CustomHtmlPreview = ({
   src,
@@ -52,16 +63,16 @@ export const CustomHtmlPreview = ({
     const onMessage = (e: MessageEvent) => {
       const frame = frameRef.current;
       if (!frame || e.source !== frame.contentWindow) return;
-      if (!typia.is<ProductsRequest>(e.data)) return;
-      const message = e.data;
+      if (!hasType(e.data, "gumroad:products")) return;
+      const message: ProductsRequest = e.data;
 
-      const requestId = typia.is<string>(message.requestId) ? message.requestId : null;
+      const requestId = isString(message.requestId) ? message.requestId : null;
       // The document itself mints this token on script execution (see PRODUCTS_BRIDGE_SCRIPT) and
       // only accepts a reply carrying it back. e.source (the WindowProxy) is navigation-stable, so
       // it can't tell a replaced document apart from the one that asked — echoing the token lets
       // each document self-filter replies meant for whatever occupied the frame before it, without
       // this side having to track load/reload timing at all.
-      const documentToken = typia.is<string>(message.documentToken) ? message.documentToken : null;
+      const documentToken = isString(message.documentToken) ? message.documentToken : null;
       const reply = (payload: Record<string, unknown>) => {
         frame.contentWindow?.postMessage(
           { ...payload, type: "gumroad:products:result", requestId, documentToken },
@@ -87,7 +98,7 @@ export const CustomHtmlPreview = ({
             return;
           }
           const body: unknown = await response.json();
-          if (!typia.is<ProductsSlice>(body)) {
+          if (!isProductsSlice(body)) {
             reply({ success: false });
             return;
           }

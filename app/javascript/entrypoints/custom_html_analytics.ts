@@ -2,6 +2,7 @@ import typia from "typia";
 
 import { incrementProductViews } from "$app/data/view_event";
 import { AnalyticsData } from "$app/parsers/product";
+import { hasType } from "$app/utils/guards";
 import { defaults as requestDefaults } from "$app/utils/request";
 import { startTrackingForSeller, trackProductEvent, trackProfilePageView } from "$app/utils/user_analytics";
 
@@ -82,8 +83,7 @@ if (configElement) {
     window.addEventListener("message", (event) => {
       if (event.source !== landingFrame?.contentWindow) return;
       const data: unknown = event.data;
-      const isCheckout =
-        data === "gumroad:checkout" || (typia.is<{ type: string }>(data) && data.type === "gumroad:checkout");
+      const isCheckout = data === "gumroad:checkout" || hasType(data, "gumroad:checkout");
       if (!isCheckout) return;
       if (!props.tracking_enabled) return;
       trackProductEvent(props.seller_id, { permalink: props.permalink, action: "iwantthis", product_name: props.name });

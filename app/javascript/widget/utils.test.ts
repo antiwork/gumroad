@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll } from "vitest";
 
-import { isValidHost } from "$app/widget/utils";
+import { isHeightMessage, isTranslationsMessage, isValidHost } from "$app/widget/utils";
 
 // isValidHost is the widget's entire trust boundary: both postMessage handlers (widget/embed.ts
 // L49, widget/overlay.ts L98) drop any message whose origin it rejects, and parseProductURL
@@ -117,5 +117,21 @@ describe("isValidHost", () => {
     it("rejects a doubled root dot", () => {
       expect(valid(`${ROOT_DOMAIN}..`)).toBe(false);
     });
+  });
+});
+
+describe("widget messages", () => {
+  it("accepts a height message with a finite height", () => {
+    expect(isHeightMessage({ type: "height", height: 420 })).toBe(true);
+    expect(isHeightMessage({ type: "height", height: "420" })).toBe(false);
+    expect(isHeightMessage({ type: "height" })).toBe(false);
+    expect(isHeightMessage({ type: "loaded", height: 420 })).toBe(false);
+  });
+
+  it("accepts a translations message only when every translation is a string", () => {
+    expect(isTranslationsMessage({ type: "translations", translations: { close: "Close" } })).toBe(true);
+    expect(isTranslationsMessage({ type: "translations", translations: { close: 1 } })).toBe(false);
+    expect(isTranslationsMessage({ type: "translations" })).toBe(false);
+    expect(isTranslationsMessage({ type: "height", translations: {} })).toBe(false);
   });
 });

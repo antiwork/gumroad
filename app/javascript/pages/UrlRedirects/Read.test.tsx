@@ -5,6 +5,8 @@ import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import Read, {
+  isEpubLocation,
+  isStoredMediaLocation,
   canResumePdfFromLocation,
   downloadEpubArchive,
   ensureDefiniteReaderHeight,
@@ -661,5 +663,40 @@ describe("reader height chain", () => {
     expect(container.style.height).toBe("");
 
     release();
+  });
+});
+
+describe("stored and live reading positions", () => {
+  const displayed = {
+    index: 2,
+    href: "ch2.xhtml",
+    cfi: "epubcfi(/6/4)",
+    location: 3,
+    percentage: 0.25,
+    displayed: { page: 1, total: 9 },
+  };
+
+  it("accepts a complete epub.js location", () => {
+    expect(isEpubLocation({ start: displayed, end: displayed, atStart: false, atEnd: false })).toBe(true);
+  });
+
+  it("rejects an epub.js location before the first relocation or with a missing field", () => {
+    expect(isEpubLocation(undefined)).toBe(false);
+    expect(isEpubLocation({ start: displayed, end: displayed, atStart: false })).toBe(false);
+    expect(isEpubLocation({ start: { ...displayed, cfi: 4 }, end: displayed, atStart: false, atEnd: false })).toBe(
+      false,
+    );
+  });
+
+  it("accepts stored positions with null or missing fields", () => {
+    expect(isStoredMediaLocation({})).toBe(true);
+    expect(isStoredMediaLocation({ location: 12, unit: "page_number", timestamp: null, cfi: null })).toBe(true);
+  });
+
+  it("rejects stored positions with a wrong field type or an unknown unit", () => {
+    expect(isStoredMediaLocation({ location: "12" })).toBe(false);
+    expect(isStoredMediaLocation({ unit: "chapters" })).toBe(false);
+    expect(isStoredMediaLocation({ unit: null })).toBe(false);
+    expect(isStoredMediaLocation([])).toBe(false);
   });
 });

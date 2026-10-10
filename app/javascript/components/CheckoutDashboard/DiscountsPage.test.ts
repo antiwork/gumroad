@@ -1,6 +1,10 @@
 import { describe, it, expect } from "vitest";
 
-import { extractParams, findWholeProductScopeIds } from "$app/components/CheckoutDashboard/DiscountsPage";
+import {
+  extractParams,
+  findWholeProductScopeIds,
+  isQueryParams,
+} from "$app/components/CheckoutDashboard/DiscountsPage";
 
 describe("extractParams", () => {
   it("restores a query containing a literal % without throwing (double-decode regression)", () => {
@@ -33,5 +37,19 @@ describe("findWholeProductScopeIds", () => {
 
   it("keeps a product visible when its scope lists options, including an empty list", () => {
     expect(findWholeProductScopeIds([{ id: "1" }, { id: "2" }], { "1": ["opt-a"], "2": [] })).toEqual(new Set());
+  });
+});
+
+describe("isQueryParams", () => {
+  it("accepts the state the page pushes, with or without a sort", () => {
+    expect(isQueryParams({ sort: { key: "revenue", direction: "desc" }, query: "black", page: 2 })).toBe(true);
+    expect(isQueryParams({ sort: null, query: null, page: null })).toBe(true);
+  });
+
+  it("rejects state another page left in history", () => {
+    expect(isQueryParams(null)).toBe(false);
+    expect(isQueryParams({ sort: { key: "price", direction: "desc" }, query: null, page: null })).toBe(false);
+    expect(isQueryParams({ sort: null, query: null })).toBe(false);
+    expect(isQueryParams({ sort: null, query: 1, page: null })).toBe(false);
   });
 });

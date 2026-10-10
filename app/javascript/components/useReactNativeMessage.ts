@@ -1,6 +1,6 @@
 import * as React from "react";
-import typia from "typia";
 
+import { hasType, isBoolean, isNumber, isRecord, isString } from "$app/utils/guards";
 import Mobile from "$app/utils/mobile";
 
 import { useRefToLatest } from "./useRefToLatest";
@@ -13,6 +13,21 @@ export type ReactNativeMessage =
       payload: { fileId: string; isPlaying: boolean; latestMediaLocation?: string };
     };
 
+export const isReactNativeMessage = (data: unknown): data is ReactNativeMessage => {
+  if (hasType(data, "mobileAppSettingsSave")) return true;
+  if (hasType(data, "mobileAppPageChange")) return isRecord(data.payload) && isNumber(data.payload.pageIndex);
+  if (hasType(data, "mobileAppAudioPlayerInfo")) {
+    const { payload } = data;
+    return (
+      isRecord(payload) &&
+      isString(payload.fileId) &&
+      isBoolean(payload.isPlaying) &&
+      (payload.latestMediaLocation === undefined || isString(payload.latestMediaLocation))
+    );
+  }
+  return false;
+};
+
 export const useReactNativeMessage = (handler: (data: ReactNativeMessage) => void) => {
   const handlerRef = useRefToLatest(handler);
 
@@ -21,13 +36,13 @@ export const useReactNativeMessage = (handler: (data: ReactNativeMessage) => voi
     const target = Mobile.isOnAndroidDevice() ? document : window;
     const listener = (event: MessageEvent) => {
       if (typeof event.data !== "string" || !event.data.startsWith("{")) return;
-      let data: ReactNativeMessage;
+      let data: unknown;
       try {
-        data = typia.assert<ReactNativeMessage>(JSON.parse(event.data));
+        data = JSON.parse(event.data);
       } catch {
         return;
       }
-      handlerRef.current(data);
+      if (isReactNativeMessage(data)) handlerRef.current(data);
     };
     // @ts-expect-error - React Native sends message events to Android webviews via the document object, not window
     target.addEventListener("message", listener);

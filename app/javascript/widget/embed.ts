@@ -1,6 +1,4 @@
-import typia from "typia";
-
-import { HeightMessage, isValidHost, onLoad, parseProductURL } from "./utils";
+import { isHeightMessage, isValidHost, onLoad, parseProductURL } from "./utils";
 
 const script = document.querySelector<HTMLScriptElement>("script[src*='/js/gumroad-embed.js']");
 const customDomain = script ? new URL(script.src).host : undefined;
@@ -48,5 +46,5 @@ window.addEventListener("message", (evt) => {
   const iframe = embeds.find((embed) => embed.contentWindow === evt.source);
   if (!iframe || !isValidHost(url, customDomain)) return;
 
-  if (typia.is<HeightMessage>(evt.data)) iframe.style.height = `${evt.data.height}px`;
+  if (isHeightMessage(evt.data)) iframe.style.height = `${evt.data.height}px`;
 });

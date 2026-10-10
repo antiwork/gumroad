@@ -7,7 +7,14 @@ import * as React from "react";
 import typia from "typia";
 
 import cable from "$app/channels/consumer";
-import { Community, CommunityChatMessage, Seller, NotificationSettings } from "$app/data/communities";
+import {
+  Community,
+  CommunityChatMessage,
+  isIncomingCommunityChannelMessage,
+  isIncomingUserChannelMessage,
+  Seller,
+  NotificationSettings,
+} from "$app/data/communities";
 import { assertDefined } from "$app/utils/assert";
 
 import { Button, NavigationButton } from "$app/components/Button";
@@ -37,11 +44,6 @@ const USER_CHANNEL_NAME = "UserChannel";
 export const MIN_MESSAGE_LENGTH = 1;
 export const MAX_MESSAGE_LENGTH = 20_000;
 
-type IncomingCommunityChannelMessage =
-  | { type: "create_chat_message"; message: CommunityChatMessage }
-  | { type: "update_chat_message"; message: CommunityChatMessage }
-  | { type: "delete_chat_message"; message: CommunityChatMessage };
-type IncomingUserChannelMessage = { type: "latest_community_info"; data: Community };
 type OutgoingUserChannelMessage = { type: "latest_community_info"; community_id: string };
 
 export const CommunityViewContext = React.createContext<{
@@ -353,7 +355,7 @@ function CommunitiesIndex() {
     userChannelRef.current = channel;
 
     channel.on("message", (msg) => {
-      if (typia.is<IncomingUserChannelMessage>(msg)) {
+      if (isIncomingUserChannelMessage(msg)) {
         updateCommunity(msg.data.id, {
           unread_count: msg.data.unread_count,
           last_read_community_chat_message_created_at: msg.data.last_read_community_chat_message_created_at,
@@ -384,7 +386,7 @@ function CommunitiesIndex() {
       const channel = cable.subscribeTo(COMMUNITY_CHANNEL_NAME, { community_id: community.id });
       communityChannelsRef.current[community.id] = channel;
       channel.on("message", (msg) => {
-        if (typia.is<IncomingCommunityChannelMessage>(msg)) {
+        if (isIncomingCommunityChannelMessage(msg)) {
           if (msg.type === "create_chat_message") {
             if (msg.message.community_id === community.id) {
               insertOrUpdateMessage(msg.message);

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { discoverTitleGenerator, Taxonomy } from "$app/utils/discover";
+import { discoverTitleGenerator, getRootTaxonomy, Taxonomy } from "$app/utils/discover";
 
 const taxonomies: Taxonomy[] = [{ key: "design", slug: "design", label: "Design", parent_key: null }];
 
@@ -43,5 +43,18 @@ describe("discoverTitleGenerator", () => {
   test("uses the Discover landing title on the unfiltered index", () => {
     const title = discoverTitleGenerator({}, taxonomies, "", undefined);
     expect(title).toBe("Discover digital products from independent creators | Gumroad");
+  });
+});
+
+describe("getRootTaxonomy", () => {
+  test("returns the root slug of a known taxonomy path", () => {
+    expect(getRootTaxonomy("design/icons")).toBe("design");
+    expect(getRootTaxonomy("other")).toBe("other");
+  });
+
+  test("returns null for an unknown or missing root", () => {
+    expect(getRootTaxonomy("nonsense/icons")).toBeNull();
+    expect(getRootTaxonomy("toString")).toBeNull();
+    expect(getRootTaxonomy(undefined)).toBeNull();
   });
 });
