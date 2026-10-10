@@ -26,6 +26,9 @@ RSpec.describe LastReadCommunityChatMessage, ".set! concurrency" do
     @community.destroy!
     @product.destroy!
     RefundPolicy.where(seller_id: @seller.id).delete_all
+    # This spec runs outside a transaction, and `User` has no `dependent:` on its global
+    # affiliate, so destroying a user leaves the row behind with a dangling affiliate_user_id.
+    GlobalAffiliate.where(affiliate_user_id: [@seller.id, @reader.id]).delete_all
     @reader.destroy!
     @seller.destroy!
   end
