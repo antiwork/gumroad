@@ -6,8 +6,7 @@ import typia from "typia";
 
 import {
   CancellationRebuttalOption,
-  DisputeReason,
-  disputeReasons,
+  disputeReasonEntry,
   ReasonForWinningOption,
   reasonForWinningOptions,
   cancellationRebuttalOptions,
@@ -33,7 +32,9 @@ const ALLOWED_EXTENSIONS = ["jpeg", "jpg", "png", "pdf"];
 
 type Props = {
   dispute_evidence: {
-    dispute_reason: DisputeReason;
+    // Stripe's raw `reason` string, forwarded verbatim by the presenter: it can be a code this app
+    // has no copy for yet, so it is not narrowed to the known keys.
+    dispute_reason: string;
     customer_email: string;
     purchased_at: string;
     duration_left_to_submit_evidence_formatted: string;
@@ -113,10 +114,13 @@ export default function Show() {
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const userAgentInfo = useUserAgentInfo();
   const saved = dispute_evidence.saved;
+  // Stripe can return a reason this app does not know, and the raw string reaches us unchanged.
+  // Resolve it through the map's fallback so an unknown reason never leaves the form blank.
+  const disputeReason = disputeReasonEntry(dispute_evidence.dispute_reason);
   const savedReasonForWinning = restoreChoice(
     saved.reason_for_winning,
     reasonForWinningOptions,
-    disputeReasons[dispute_evidence.dispute_reason].reasonsForWinning,
+    disputeReason.reasonsForWinning,
   );
   const savedCancellationRebuttal = restoreChoice(
     saved.cancellation_rebuttal,
@@ -270,7 +274,6 @@ export default function Show() {
 
   const TEXTAREA_MAX_LENGTH = 3000;
   const TEXTAREA_ROWS = 7;
-  const disputeReason = disputeReasons[dispute_evidence.dispute_reason];
 
   return (
     <Card className="mx-auto my-8 max-w-2xl">

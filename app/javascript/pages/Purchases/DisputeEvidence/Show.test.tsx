@@ -224,6 +224,23 @@ describe("DisputeEvidence Show", () => {
     expect(screen.queryByText("Your saved response is filled in below.")).toBe(null);
   });
 
+  // The presenter forwards Stripe's raw reason, so a reason the app does not know (a newer code, or
+  // a network-specific one) used to index the map unguarded and throw, leaving the seller a blank
+  // page for the whole window. It must instead render the general copy with the form intact.
+  it("falls back to the general copy for a dispute reason the app does not know", () => {
+    mocks.usePage.mockReturnValue({
+      props: {
+        ...pageProps,
+        dispute_evidence: { ...pageProps.dispute_evidence, dispute_reason: "some_unknown_stripe_reason" },
+      },
+    });
+    renderPage();
+
+    expect(screen.getByText(/uncategorized inquiry/u)).toBeTruthy();
+    expect(screen.getAllByRole("radio").length).toBeGreaterThan(0);
+    expect(submitButton()).toBeTruthy();
+  });
+
   // The server folds the previously saved attachment into the merge before enforcing the max,
   // so on a return visit the UI must count it too — otherwise it permits a selection the server
   // is guaranteed to reject with "You can attach up to N files."
