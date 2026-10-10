@@ -355,6 +355,24 @@ check(
   expect_specs: %w[spec/services/update_user_compliance_info_spec.rb],
 )
 
+check(
+  "rake task maps to its spec/lib/tasks spec",
+  base_files: {
+    "lib/tasks/taxonomy.rake" => "old",
+    "spec/lib/tasks/taxonomy_spec.rb" => SPEC_STUB,
+  },
+  head_files: { "lib/tasks/taxonomy.rake" => "new" },
+  expect_specs: %w[spec/lib/tasks/taxonomy_spec.rb],
+)
+
+check(
+  "rake task without a spec escalates as a mapping gap",
+  base_files: { "lib/tasks/taxonomy.rake" => "old" },
+  head_files: { "lib/tasks/taxonomy.rake" => "new" },
+  expect_escalate: true,
+  expect_reason: "lib/tasks/taxonomy.rake but no specs were selected for it (mapping gap)",
+)
+
 # help_center article partial -> help_center request specs
 check(
   "help_center article partial maps to help_center request specs",
