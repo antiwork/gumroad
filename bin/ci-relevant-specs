@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # Writes the spec files a branch needs (bin/branch-specs) to $GITHUB_OUTPUT as
 # files_csv, for test_relevant_runner in .github/workflows/tests.yml. Every shard
-# passes the same BASE_SHA, so every shard selects the same list.
+# passes the same BASE_SHA, so every shard selects the same list. Also writes
+# how many shards that list needs (bin/ci-test-relevant-shards), and run=false
+# on the shards beyond it.
 #
-#   bin/ci-relevant-specs BASE_SHA
+#   CI_NODE_INDEX=0 CI_NODE_TOTAL=12 bin/ci-relevant-specs BASE_SHA
 
 set -euo pipefail
 
@@ -41,3 +43,12 @@ fi
 echo "Running $COUNT spec file(s):"
 echo "$SPECS" | sed 's/^/  /'
 echo "files_csv=$(echo "$SPECS" | paste -sd, -)" >> "$GITHUB_OUTPUT"
+
+SHARDS=$(bin/ci-test-relevant-shards "$COUNT" "${CI_NODE_TOTAL:?}")
+echo "shards=$SHARDS" >> "$GITHUB_OUTPUT"
+if [ "${CI_NODE_INDEX:?}" -lt "$SHARDS" ]; then
+  echo "run=true" >> "$GITHUB_OUTPUT"
+else
+  echo "Using $SHARDS of $CI_NODE_TOTAL shards; this one is not needed."
+  echo "run=false" >> "$GITHUB_OUTPUT"
+fi
