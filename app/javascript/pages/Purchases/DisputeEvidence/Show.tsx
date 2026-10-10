@@ -32,7 +32,7 @@ const ALLOWED_EXTENSIONS = ["jpeg", "jpg", "png", "pdf"];
 
 type Props = {
   dispute_evidence: {
-    dispute_reason: string;
+    dispute_reason: string | null;
     customer_email: string;
     purchased_at: string;
     duration_left_to_submit_evidence_formatted: string;

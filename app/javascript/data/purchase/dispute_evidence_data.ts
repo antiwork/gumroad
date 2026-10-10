@@ -128,5 +128,5 @@ export const disputeReasons = {
 >;
 export type DisputeReason = keyof typeof disputeReasons;
 
-export const getDisputeReason = (reason: string) =>
+export const getDisputeReason = (reason: string | null) =>
   Object.entries(disputeReasons).find(([key]) => key === reason)?.[1] ?? disputeReasons.general;

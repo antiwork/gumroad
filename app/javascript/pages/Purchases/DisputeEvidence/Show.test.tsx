@@ -167,6 +167,7 @@ describe("DisputeEvidence Show", () => {
   it.each([
     ["debit_not_authorized", "The cardholder's bank claims the debit was not authorized by the account holder."],
     ["some_future_stripe_reason", "This is an uncategorized inquiry for which we have no details."],
+    [null, "This is an uncategorized inquiry for which we have no details."],
   ])("renders the form for dispute reason %s", async (reason, message) => {
     mocks.usePage.mockReturnValue({
       props: { ...pageProps, dispute_evidence: { ...pageProps.dispute_evidence, dispute_reason: reason } },
