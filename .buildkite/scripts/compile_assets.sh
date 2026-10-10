@@ -328,7 +328,9 @@ if [[ $BUILDKITE_PARALLEL_JOB = 1 && ( $BUILDKITE_BRANCH == "main" || $BUILDKITE
     # The compile container runs as the app user, which writes the new tarball here.
     chmod 777 "$MAIN_NODE_MODULES_CACHE_DIR"
     NODE_MODULES_TAG=$(main_node_modules_cache_tag)
-    if main_node_modules_cache_restore "$NODE_MODULES_TAG"; then
+    if [[ ${BUILDKITE_MESSAGE:-} =~ no[-_.[:space:]]cache ]]; then
+      logger "no-cache commit: the compile runs npm ci and replaces node_modules tag $NODE_MODULES_TAG"
+    elif main_node_modules_cache_restore "$NODE_MODULES_TAG"; then
       logger "node_modules cache hit for tag $NODE_MODULES_TAG"
     else
       logger "node_modules cache miss for tag $NODE_MODULES_TAG: the compile runs npm ci"

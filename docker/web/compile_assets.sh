@@ -30,7 +30,7 @@ if [[ -s /node-modules-cache/node_modules.tar.gz ]]; then
 else
   NODE_ENV=development npm ci
   if [[ -d /node-modules-cache && -w /node-modules-cache ]]; then
-    tar -cf - node_modules | gzip -1 > /node-modules-cache/node_modules.tar.gz.new \
+    (set -o pipefail; tar -cf - node_modules | gzip -1 > /node-modules-cache/node_modules.tar.gz.new) \
       || rm -f /node-modules-cache/node_modules.tar.gz.new
   fi
 fi

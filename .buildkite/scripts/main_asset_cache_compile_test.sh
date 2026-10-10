@@ -126,6 +126,10 @@ rm -rf "$WORK/bucket"; seed_node_modules; echo junk >> "$NM_ENTRY"; run_script; 
 [ $rc = 0 ] && compiled && ! grep -q "^node-modules-restored" "$WORK/calls" \
   && ok "a node_modules tarball that fails its checksum is not used" || fail "node_modules bad checksum (rc=$rc)"
 
+rm -rf "$WORK/bucket"; seed_node_modules; run_script BUILDKITE_MESSAGE="Fix a thing [no-cache]" MAKE_WRITES_NODE_MODULES=1; rc=$?
+[ $rc = 0 ] && compiled && ! grep -q "^node-modules-restored" "$WORK/calls" && [ "$(cat "$NM_ENTRY")" = installed ] \
+  && ok "a no-cache commit installs node_modules and replaces the entry" || fail "node_modules no-cache (rc=$rc)"
+
 rm -rf "$WORK/bucket"; run_script MAKE_WRITES_NODE_MODULES=1; rc=$?
 [ $rc = 0 ] && [ "$(cat "$NM_ENTRY" 2>/dev/null)" = installed ] && [ "$(cat "$NM_ENTRY.sha256" 2>/dev/null)" = "$(echo installed | sha256sum | cut -d " " -f1)" ] \
   && ok "main saves the node_modules a full install wrote, with its checksum" || fail "node_modules save on main (rc=$rc): $(ls -R "$WORK/bucket" 2>&1 | tail -3)"
