@@ -71,8 +71,9 @@ end
 
 base = ARGV.fetch(0) { abort("usage: bin/branch-minitests BASE_SHA") }
 merge_base = git("merge-base", base, "HEAD").first
-changed = Set.new(git("diff", "--name-only", "#{merge_base}..HEAD"))
-changed.merge(git("diff", "--name-only", "HEAD"))
+# --no-renames keeps a renamed file's old path, whose name tests still use.
+changed = Set.new(git("diff", "--name-only", "--no-renames", "#{merge_base}..HEAD"))
+changed.merge(git("diff", "--name-only", "--no-renames", "HEAD"))
 changed.merge(git("ls-files", "--others", "--exclude-standard"))
 
 if changed.any? { |path| ALL_PATTERNS.any? { |re| re.match?(path) } }
