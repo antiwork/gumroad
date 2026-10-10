@@ -525,7 +525,7 @@ def spec_candidates(path)
     end
   when %r{\Aapp/([^/]+)/(.*)\.rb\z}
     ["spec/#{$1}/#{$2}_spec.rb"]
-  when %r{\Alib/(.*)\.rb\z}
+  when %r{\Alib/(.*)\.(?:rb|rake)\z}
     ["spec/lib/#{$1}_spec.rb"]
   else
     []
