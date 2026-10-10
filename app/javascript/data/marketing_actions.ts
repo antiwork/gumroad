@@ -1,5 +1,4 @@
-import typia from "typia";
-
+import { cast } from "$app/utils/cast";
 import { isRecord, isString } from "$app/utils/guards";
 import { request, ResponseError } from "$app/utils/request";
 
@@ -7,8 +6,7 @@ export type MarketingAction = {
   id: string;
   channel: string;
   // Every status the API can return: the state machine's states, plus `blocked` for a
-  // channel whose gate the seller has not cleared yet. typia validates this at runtime,
-  // so a state missing here makes the whole recommendations payload unusable.
+  // channel whose gate the seller has not cleared yet.
   status: "recommended" | "approved" | "queued" | "posted" | "failed" | "cancelled" | "blocked";
   copy: string;
   post_text: string;
@@ -66,7 +64,7 @@ export const fetchMarketingRecommendations = async (productId: string) => {
     method: "GET",
     accept: "json",
   });
-  return parse(response, (json) => typia.assert<{ channels: MarketingChannel[] }>(json)).then((r) => r.channels);
+  return parse(response, (json) => cast<{ channels: MarketingChannel[] }>(json)).then((r) => r.channels);
 };
 
 export const approveMarketingAction = async (productId: string, id: string, copy?: string) => {
@@ -76,7 +74,7 @@ export const approveMarketingAction = async (productId: string, id: string, copy
     accept: "json",
     data: copy === undefined ? {} : { copy },
   });
-  return parse(response, (json) => typia.assert<MarketingAction>(json));
+  return parse(response, (json) => cast<MarketingAction>(json));
 };
 
 export const executeMarketingAction = async (productId: string, id: string) => {
@@ -87,7 +85,7 @@ export const executeMarketingAction = async (productId: string, id: string) => {
     data: {},
   });
   return parse(response, (json) =>
-    typia.assert<{
+    cast<{
       action: MarketingAction;
       intent_url: string | null;
       connect_path: string | null;
@@ -103,5 +101,5 @@ export const cancelMarketingAction = async (productId: string, id: string) => {
     accept: "json",
     data: {},
   });
-  return parse(response, (json) => typia.assert<MarketingAction>(json));
+  return parse(response, (json) => cast<MarketingAction>(json));
 };

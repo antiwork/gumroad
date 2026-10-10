@@ -1,6 +1,5 @@
-import typia from "typia";
-
 import { Discount } from "$app/parsers/checkout";
+import { cast } from "$app/utils/cast";
 import { CurrencyCode } from "$app/utils/currency";
 import { request, ResponseError } from "$app/utils/request";
 
@@ -28,7 +27,7 @@ export const computeOfferDiscount = async (payload: ComputeDiscountRequestData):
       url: Routes.compute_discount_offer_codes_path(payload),
     });
     if (response.ok) {
-      return typia.assert<OfferCodeResponseData>(await response.json());
+      return cast<OfferCodeResponseData>(await response.json());
     }
   } catch {}
   return { error_code: "invalid_offer", error_message: "Something went wrong.", valid: false };
@@ -69,7 +68,7 @@ export const searchProductOfferCodes = async (
 
   if (!response.ok) throw new ResponseError();
 
-  return typia.assert<ProductOfferCodeSuggestion[]>(await response.json());
+  return cast<ProductOfferCodeSuggestion[]>(await response.json());
 };
 
 type DiscountPayload = {
@@ -102,7 +101,7 @@ export const getPagedDiscounts = (page: number, query: string | null, sort: Sort
     abortSignal: abort.signal,
   })
     .then((res) => res.json())
-    .then((json) => typia.assert<{ offer_codes: OfferCode[]; pagination: PaginationProps }>(json));
+    .then((json) => cast<{ offer_codes: OfferCode[]; pagination: PaginationProps }>(json));
 
   return {
     response,
@@ -139,7 +138,7 @@ export const createDiscount = async (payload: DiscountPayload) => {
     url: Routes.checkout_discounts_path(),
     data: buildDiscountPayload(payload),
   });
-  const responseData = typia.assert<
+  const responseData = cast<
     { success: true; offer_codes: OfferCode[]; pagination: PaginationProps } | { success: false; error_message: string }
   >(await response.json());
   if (!responseData.success) throw new ResponseError(responseData.error_message);
@@ -153,7 +152,7 @@ export const updateDiscount = async (id: string, payload: DiscountPayload) => {
     url: Routes.checkout_discount_path(id),
     data: buildDiscountPayload(payload),
   });
-  const responseData = typia.assert<
+  const responseData = cast<
     { success: true; offer_codes: OfferCode[]; pagination: PaginationProps } | { success: false; error_message: string }
   >(await response.json());
   if (!responseData.success) throw new ResponseError(responseData.error_message);
@@ -166,9 +165,7 @@ export const deleteDiscount = async (id: string) => {
     accept: "json",
     url: Routes.checkout_discount_path(id),
   });
-  const responseData = typia.assert<{ success: true } | { success: false; error_message: string }>(
-    await response.json(),
-  );
+  const responseData = cast<{ success: true } | { success: false; error_message: string }>(await response.json());
   if (!responseData.success) throw new ResponseError(responseData.error_message);
 };
 
@@ -183,4 +180,4 @@ export const getStatistics = (id: string) =>
       if (!res.ok) throw new ResponseError();
       return res.json();
     })
-    .then((json) => typia.assert<OfferCodeStatistics>(json));
+    .then((json) => cast<OfferCodeStatistics>(json));

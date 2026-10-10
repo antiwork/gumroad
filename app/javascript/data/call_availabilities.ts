@@ -1,5 +1,4 @@
-import typia from "typia";
-
+import { cast } from "$app/utils/cast";
 import { request, ResponseError } from "$app/utils/request";
 
 export type CallAvailability = {
@@ -16,7 +15,7 @@ export async function getRemainingCallAvailabilities(permalink: string) {
 
   if (!response.ok) throw new ResponseError();
 
-  const rawAvailabilities = typia.assert<{ call_availabilities: { start_time: string; end_time: string }[] }>(
+  const rawAvailabilities = cast<{ call_availabilities: { start_time: string; end_time: string }[] }>(
     await response.json(),
   );
 

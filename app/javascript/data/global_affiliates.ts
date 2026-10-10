@@ -1,5 +1,4 @@
-import typia from "typia";
-
+import { cast } from "$app/utils/cast";
 import { request, ResponseError } from "$app/utils/request";
 
 export type Product = {
@@ -16,7 +15,7 @@ export const searchGlobalAffiliatesProductEligibility = async ({ query }: { quer
     url: Routes.global_affiliates_product_eligibility_path(query),
   });
   if (!response.ok) throw new ResponseError();
-  const responseData = typia.assert<{ success: true; product: Product } | { success: false; error: string }>(
+  const responseData = cast<{ success: true; product: Product } | { success: false; error: string }>(
     await response.json(),
   );
   if (!responseData.success) throw new ResponseError(responseData.error);

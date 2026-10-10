@@ -1,5 +1,4 @@
 import type { Stripe } from "@stripe/stripe-js";
-import typia from "typia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -11,6 +10,7 @@ import {
 } from "$app/data/order";
 import type { ConfirmedPurchaseResponse, StartCartPurchaseRequestPayload } from "$app/data/purchase";
 import type { Discount } from "$app/parsers/checkout";
+import { cast } from "$app/utils/cast";
 import { request } from "$app/utils/request";
 import { getConnectedAccountStripeInstance, getStripeInstance } from "$app/utils/stripe_loader";
 
@@ -23,10 +23,6 @@ vi.mock("$app/utils/stripe_loader", () => ({
   getConnectedAccountStripeInstance: vi.fn(),
   getStripeInstance: vi.fn(),
 }));
-
-// typia's assert transform isn't wired into vitest.config, so stub it to a pass-through. These tests
-// exercise the post-capture resubmission control flow, not response-shape validation.
-vi.mock("typia", () => ({ default: { assert: (value: unknown) => value } }));
 
 const requestMock = vi.mocked(request);
 const getStripeInstanceMock = vi.mocked(getStripeInstance);
@@ -253,7 +249,7 @@ describe("startOrderCreation", () => {
     });
     requestMock.mockReset();
     getStripeInstanceMock.mockReset();
-    const stripe = typia.assert<Stripe>({});
+    const stripe = cast<Stripe>({});
     stripe.confirmCardPayment = vi.fn().mockResolvedValue({});
     getStripeInstanceMock.mockResolvedValue(stripe);
 
@@ -349,7 +345,7 @@ describe("startOrderCreation", () => {
     });
     requestMock.mockReset();
     getStripeInstanceMock.mockReset();
-    const stripe = typia.assert<Stripe>({});
+    const stripe = cast<Stripe>({});
     stripe.confirmCardPayment = vi.fn().mockRejectedValue(new Error("Stripe unavailable"));
     getStripeInstanceMock.mockResolvedValue(stripe);
 
@@ -390,7 +386,7 @@ describe("startOrderCreation", () => {
       confirm_order_path: (id: string) => `/orders/${id}/confirm`,
       confirm_error_order_path: (id: string) => `/orders/${id}/confirm_error`,
     });
-    const stripe = typia.assert<Stripe>({});
+    const stripe = cast<Stripe>({});
     stripe.confirmCardPayment = vi.fn().mockRejectedValue(new Error("Stripe unavailable"));
     getStripeInstanceMock.mockResolvedValue(stripe);
     const lineItem = requestData.lineItems.at(0);
@@ -431,7 +427,7 @@ describe("startOrderCreation", () => {
     });
     requestMock.mockReset();
     getStripeInstanceMock.mockReset();
-    const stripe = typia.assert<Stripe>({});
+    const stripe = cast<Stripe>({});
     stripe.confirmCardPayment = vi.fn().mockResolvedValue({});
     getStripeInstanceMock.mockResolvedValue(stripe);
 
@@ -493,7 +489,7 @@ describe("startOrderCreation", () => {
     });
     requestMock.mockReset();
     getStripeInstanceMock.mockReset();
-    const stripe = typia.assert<Stripe>({});
+    const stripe = cast<Stripe>({});
     stripe.confirmCardPayment = vi.fn().mockResolvedValue({});
     getStripeInstanceMock.mockResolvedValue(stripe);
 
@@ -561,11 +557,11 @@ describe("startOrderCreation", () => {
     requestMock.mockReset();
     getStripeInstanceMock.mockReset();
     getConnectedAccountStripeInstanceMock.mockReset();
-    const platformStripe = typia.assert<Stripe>({});
+    const platformStripe = cast<Stripe>({});
     platformStripe.confirmCardSetup = vi.fn().mockResolvedValue({});
     platformStripe.confirmCardPayment = vi.fn().mockResolvedValue({});
     getStripeInstanceMock.mockResolvedValue(platformStripe);
-    const connectStripe = typia.assert<Stripe>({});
+    const connectStripe = cast<Stripe>({});
     connectStripe.confirmCardSetup = vi.fn().mockResolvedValue({});
     connectStripe.confirmCardPayment = vi.fn().mockResolvedValue({});
     getConnectedAccountStripeInstanceMock.mockResolvedValue(connectStripe);
@@ -639,7 +635,7 @@ describe("startOrderCreation", () => {
     });
     requestMock.mockReset();
     getStripeInstanceMock.mockReset();
-    const stripe = typia.assert<Stripe>({});
+    const stripe = cast<Stripe>({});
     const stripeError = { type: "card_error", message: "We are unable to authenticate your payment method." };
     stripe.confirmCardSetup = vi.fn().mockResolvedValue({ error: stripeError });
     stripe.confirmCardPayment = vi.fn().mockResolvedValue({});
@@ -708,7 +704,7 @@ describe("startOrderCreation", () => {
     });
     requestMock.mockReset();
     getStripeInstanceMock.mockReset();
-    const stripe = typia.assert<Stripe>({});
+    const stripe = cast<Stripe>({});
     stripe.confirmCardPayment = vi.fn().mockResolvedValue({ error: { type: "card_error" } });
     getStripeInstanceMock.mockResolvedValue(stripe);
 
@@ -774,7 +770,7 @@ describe("startOrderCreation", () => {
     });
     requestMock.mockReset();
     getStripeInstanceMock.mockReset();
-    const stripe = typia.assert<Stripe>({});
+    const stripe = cast<Stripe>({});
     stripe.confirmCardSetup = vi.fn().mockResolvedValue({});
     getStripeInstanceMock.mockResolvedValue(stripe);
 
@@ -825,7 +821,7 @@ describe("startOrderCreation", () => {
     });
     requestMock.mockReset();
     getStripeInstanceMock.mockReset();
-    const stripe = typia.assert<Stripe>({});
+    const stripe = cast<Stripe>({});
     stripe.confirmCardSetup = vi.fn().mockResolvedValue({});
     getStripeInstanceMock.mockResolvedValue(stripe);
 
@@ -877,7 +873,7 @@ describe("startOrderCreation", () => {
     });
     requestMock.mockReset();
     getStripeInstanceMock.mockReset();
-    const stripe = typia.assert<Stripe>({});
+    const stripe = cast<Stripe>({});
     stripe.confirmCardSetup = vi.fn().mockResolvedValue({});
     getStripeInstanceMock.mockResolvedValue(stripe);
 
@@ -974,7 +970,7 @@ describe("startOrderCreation", () => {
     });
     requestMock.mockReset();
     getStripeInstanceMock.mockReset();
-    const stripe = typia.assert<Stripe>({});
+    const stripe = cast<Stripe>({});
     stripe.confirmCardSetup = vi.fn().mockResolvedValue({});
     getStripeInstanceMock.mockResolvedValue(stripe);
 
@@ -1041,7 +1037,7 @@ describe("startOrderCreation", () => {
     });
     requestMock.mockReset();
     getStripeInstanceMock.mockReset();
-    const stripe = typia.assert<Stripe>({});
+    const stripe = cast<Stripe>({});
     stripe.confirmCardSetup = vi.fn().mockResolvedValue({});
     getStripeInstanceMock.mockResolvedValue(stripe);
 
@@ -1121,7 +1117,7 @@ describe("startOrderCreation", () => {
     });
     requestMock.mockReset();
     getStripeInstanceMock.mockReset();
-    const stripe = typia.assert<Stripe>({});
+    const stripe = cast<Stripe>({});
     stripe.confirmCardSetup = vi.fn().mockResolvedValue({});
     getStripeInstanceMock.mockResolvedValue(stripe);
 
@@ -1163,7 +1159,7 @@ describe("startOrderCreation", () => {
     });
     requestMock.mockReset();
     getStripeInstanceMock.mockReset();
-    const stripe = typia.assert<Stripe>({});
+    const stripe = cast<Stripe>({});
     stripe.confirmCardSetup = vi.fn().mockResolvedValue({ error: { type: "card_error", message: "auth failed" } });
     getStripeInstanceMock.mockResolvedValue(stripe);
 
@@ -1230,7 +1226,7 @@ describe("startOrderCreation", () => {
     });
     requestMock.mockReset();
     getStripeInstanceMock.mockReset();
-    const stripe = typia.assert<Stripe>({});
+    const stripe = cast<Stripe>({});
     stripe.confirmCardSetup = vi.fn().mockResolvedValue({});
     getStripeInstanceMock.mockResolvedValue(stripe);
 
@@ -1313,7 +1309,7 @@ describe("startClientConfirmOrderCreation", () => {
     });
     requestMock.mockReset();
     getStripeInstanceMock.mockReset();
-    const stripe = typia.assert<Stripe>({});
+    const stripe = cast<Stripe>({});
     confirmPaymentMock.mockReset().mockResolvedValue({});
     stripe.confirmPayment = confirmPaymentMock;
     getStripeInstanceMock.mockResolvedValue(stripe);
@@ -1592,7 +1588,7 @@ describe("startClientConfirmOrderCreation", () => {
     requestMock
       .mockResolvedValueOnce(jsonResponse(prepareResponse))
       .mockResolvedValueOnce(jsonResponse({ success: true, unavailable_once_per_cart_ids: [] }));
-    const stripe = typia.assert<Stripe>({});
+    const stripe = cast<Stripe>({});
     stripe.confirmPayment = vi.fn().mockResolvedValue({
       error: { type: "invalid_request_error", code: "payment_intent_unexpected_state", message: "Bad state." },
     });
@@ -1762,7 +1758,7 @@ describe("startClientConfirmOrderCreation", () => {
     requestMock
       .mockResolvedValueOnce(jsonResponse(prepareResponse))
       .mockResolvedValueOnce(jsonResponse({ success: true }));
-    const stripe = typia.assert<Stripe>({});
+    const stripe = cast<Stripe>({});
     stripe.confirmPayment = vi.fn().mockResolvedValue({
       error: { type: "card_error", code: "card_declined", message: "Your card was declined." },
     });
@@ -1827,7 +1823,7 @@ describe("startOrderCreation", () => {
     });
     requestMock.mockReset();
     getStripeInstanceMock.mockReset();
-    const stripe = typia.assert<Stripe>({});
+    const stripe = cast<Stripe>({});
     stripe.confirmCardSetup = vi
       .fn()
       .mockResolvedValueOnce({ setupIntent: { id: "seti_a" } })
@@ -1901,7 +1897,7 @@ describe("startOrderCreation", () => {
     });
     requestMock.mockReset();
     getStripeInstanceMock.mockReset();
-    const stripe = typia.assert<Stripe>({});
+    const stripe = cast<Stripe>({});
     stripe.confirmCardSetup = vi
       .fn()
       .mockResolvedValueOnce({ setupIntent: { id: "seti_a" } })

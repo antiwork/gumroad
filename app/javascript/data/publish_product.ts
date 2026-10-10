@@ -1,5 +1,4 @@
-import typia from "typia";
-
+import { cast } from "$app/utils/cast";
 import { request, ResponseError } from "$app/utils/request";
 
 type TogglePublishStateResponse = { success: true } | { success: false; error_message: string };
@@ -10,6 +9,6 @@ export async function setProductPublished(id: string, publish: boolean) {
     method: "POST",
     accept: "json",
   });
-  const responseData = typia.assert<TogglePublishStateResponse>(await response.json());
+  const responseData = cast<TogglePublishStateResponse>(await response.json());
   if (!responseData.success) throw new ResponseError(responseData.error_message);
 }

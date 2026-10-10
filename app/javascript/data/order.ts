@@ -1,5 +1,4 @@
 import { StripeError } from "@stripe/stripe-js";
-import typia from "typia";
 
 import {
   LineItemUid,
@@ -10,6 +9,7 @@ import {
   OfferCodes,
   createPurchasesRequestData,
 } from "$app/data/purchase";
+import { cast } from "$app/utils/cast";
 import { request, ResponseError } from "$app/utils/request";
 import { getConnectedAccountStripeInstance, getStripeInstance } from "$app/utils/stripe_loader";
 
@@ -33,7 +33,7 @@ type OrderRequiresCardSetupResponse = {
 };
 type ProcessingPurchaseResponse = { success: true; processing: true; permalink: string };
 // #create may return `processing` when an India off-session debit is scheduled without an auth
-// pause — include it in the union or typia.assert misreports a scheduled debit as failure.
+// pause — include it in the union so callers handle a scheduled debit instead of reporting a failure.
 type LineItemResponse =
   | PurchaseErrorResponse
   | ConfirmedPurchaseResponse
@@ -48,7 +48,7 @@ type OrderSuccessResponse = {
   offer_codes: OfferCodes;
 };
 // #confirm may return `processing` for India e-mandate debits that stay processing for hours —
-// include it in the union or typia.assert misreports a scheduled debit as failure.
+// include it in the union so callers handle a scheduled debit instead of reporting a failure.
 type ConfirmOrderResponse = {
   success: true;
   line_items: Record<
@@ -558,7 +558,7 @@ const createOrder = async (payload: StartCartPurchaseRequestPayload) => {
     data,
   });
   if (!response.ok) throw new ResponseError();
-  return typia.assert<OrderSuccessResponse | OrderErrorResponse>(await response.json());
+  return cast<OrderSuccessResponse | OrderErrorResponse>(await response.json());
 };
 
 const translateOrderSuccessIntoLineItemSuccess = (response: OrderSuccessResponse): CartPurchaseResult => ({
@@ -607,7 +607,7 @@ const confirmOrderAfterAction = async ({
     },
   });
   if (!response.ok) throw new ResponseError();
-  return typia.assert<ConfirmOrderResponse>(await response.json());
+  return cast<ConfirmOrderResponse>(await response.json());
 };
 
 type OrderRequiresPaymentConfirmationResponse = {
@@ -626,8 +626,8 @@ type PrepareOrderResponse = {
   offer_codes: OfferCodes;
 };
 // #finalize can return a `processing` line item when the PaymentIntent settles asynchronously,
-// so it needs its own response type — reusing ConfirmOrderResponse would make typia.assert throw
-// on the processing shape and misreport a captured payment as a failure.
+// so it needs its own response type — with ConfirmOrderResponse, callers would not handle the
+// processing shape and would misreport a captured payment as a failure.
 type FinalizeOrderResponse = {
   success: true;
   line_items: Record<LineItemUid, ConfirmedPurchaseResponse | PurchaseErrorResponse | ProcessingPurchaseResponse>;
@@ -843,7 +843,7 @@ const prepareClientConfirmOrder = async (
   const data = { ...createPurchasesRequestData(payload, {}), confirmation_token: confirmationTokenId };
   const response = await request({ method: "POST", url: Routes.prepare_orders_path(), accept: "json", data });
   if (!response.ok) throw new ResponseError();
-  return typia.assert<PrepareOrderResponse | OrderErrorResponse>(await response.json());
+  return cast<PrepareOrderResponse | OrderErrorResponse>(await response.json());
 };
 
 // No retry: a dropped finalize surfaces as "processing" and the webhook/worker finalize server-side.
@@ -858,7 +858,7 @@ const finalizeClientConfirmOrder = async (
     data: { retry_offer_codes: retryOfferCodes },
   });
   if (!response.ok) throw new ResponseError();
-  return typia.assert<FinalizeOrderResponse>(await response.json());
+  return cast<FinalizeOrderResponse>(await response.json());
 };
 
 // #prepare and #finalize key line items by cart-item uid, so map by uid rather

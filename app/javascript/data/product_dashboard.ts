@@ -1,5 +1,4 @@
-import typia from "typia";
-
+import { cast } from "$app/utils/cast";
 import { ResponseError, request } from "$app/utils/request";
 
 export async function deleteProduct(permalink: string) {
@@ -9,7 +8,7 @@ export async function deleteProduct(permalink: string) {
     accept: "json",
   });
 
-  const json = typia.assert<{ success: true } | { success: false; message: string }>(await response.json());
+  const json = cast<{ success: true } | { success: false; message: string }>(await response.json());
   if (!json.success) throw new ResponseError(json.message);
 }
 
@@ -21,7 +20,7 @@ export async function archiveProduct(permalink: string) {
     data: { id: permalink },
   });
 
-  const json = typia.assert<{ success: true } | { success: false; error: string }>(await response.json());
+  const json = cast<{ success: true } | { success: false; error: string }>(await response.json());
   if (!json.success) throw new ResponseError(json.error || "Failed to archive product");
 }
 
@@ -32,7 +31,7 @@ export async function unarchiveProduct(permalink: string) {
     accept: "json",
   });
 
-  const json = typia.assert<{ success: true; archived_products_count: number } | { success: false; errors: string[] }>(
+  const json = cast<{ success: true; archived_products_count: number } | { success: false; errors: string[] }>(
     await response.json(),
   );
   if (!json.success) throw new ResponseError(json.errors[0] || "Failed to unarchive product");
@@ -47,7 +46,7 @@ export async function duplicateProduct(permalink: string, productName: string) {
     data: { id: permalink },
   });
 
-  const json = typia.assert<{ success: true } | { success: false; error_message: string }>(await response.json());
+  const json = cast<{ success: true } | { success: false; error_message: string }>(await response.json());
   if (!json.success) throw new ResponseError(json.error_message);
 
   await pollForProductDuplication(permalink, productName);
@@ -60,7 +59,7 @@ async function pollForProductDuplication(permalink: string, productName: string)
     accept: "json",
   });
 
-  const json = typia.assert<{ status: string; error_message?: string }>(await response.json());
+  const json = cast<{ status: string; error_message?: string }>(await response.json());
   if (json.status === "product_duplication_failed") {
     const reason = json.error_message
       ? `Sorry, failed to duplicate '${productName}': ${json.error_message}`

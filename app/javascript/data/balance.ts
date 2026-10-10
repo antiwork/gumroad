@@ -1,5 +1,4 @@
-import typia from "typia";
-
+import { cast } from "$app/utils/cast";
 import { request, ResponseError } from "$app/utils/request";
 
 export type ExportablePayout = {
@@ -16,7 +15,7 @@ export const getExportablePayouts = async (year: number) => {
 
   if (!response.ok) throw new ResponseError();
 
-  return typia.assert<{
+  return cast<{
     selected_year: number;
     years_with_payouts: number[];
     payouts_in_selected_year: ExportablePayout[];

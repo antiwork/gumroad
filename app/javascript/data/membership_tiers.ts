@@ -1,5 +1,4 @@
-import typia from "typia";
-
+import { cast } from "$app/utils/cast";
 import { RecurrenceId } from "$app/utils/recurringPricing";
 import { request, ResponseError } from "$app/utils/request";
 
@@ -27,7 +26,7 @@ export const sendSamplePriceChangeEmail = async ({
       : { ...newPrice, tier_id: tierId, effective_date: effectiveDate },
   });
   if (response.ok) {
-    const responseData = typia.assert<{ success: true } | { success: false; error?: string }>(await response.json());
+    const responseData = cast<{ success: true } | { success: false; error?: string }>(await response.json());
     if (!responseData.success) throw new ResponseError(responseData.error || "Error sending sample price change email");
   } else {
     throw new ResponseError("Error sending sample price change email");

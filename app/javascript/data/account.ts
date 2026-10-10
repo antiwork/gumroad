@@ -1,10 +1,9 @@
-import typia from "typia";
-
 import {
   AnyPaymentMethodParams,
   StripeErrorParams,
   serializeCardParamsIntoQueryParamsObject,
 } from "$app/data/payment_method_params";
+import { cast } from "$app/utils/cast";
 import { request, ResponseError } from "$app/utils/request";
 
 export type CreateAccountPayload = {
@@ -37,9 +36,9 @@ export const createAccount = async (data: CreateAccountPayload): Promise<CreateA
       referral: data.referrerId,
     },
   });
-  const responseData = typia.assert<
-    { success: true; redirect_location: string } | { success: false; error_message: string }
-  >(await response.json());
+  const responseData = cast<{ success: true; redirect_location: string } | { success: false; error_message: string }>(
+    await response.json(),
+  );
   if (!responseData.success) throw new ResponseError(responseData.error_message);
   return { redirectLocation: responseData.redirect_location };
 };
@@ -57,9 +56,9 @@ export const addPurchaseToLibrary = async (data: {
     data: { user: { purchase_id: data.purchaseId, purchase_email: data.purchaseEmail } },
   });
 
-  const responseData = typia.assert<
-    { success: true; redirect_location: string } | { success: false; error_message?: string }
-  >(await response.json());
+  const responseData = cast<{ success: true; redirect_location: string } | { success: false; error_message?: string }>(
+    await response.json(),
+  );
   if (!responseData.success)
     throw new ResponseError(responseData.error_message ?? "Sorry, something went wrong. Please try again.");
   return { redirectLocation: responseData.redirect_location };

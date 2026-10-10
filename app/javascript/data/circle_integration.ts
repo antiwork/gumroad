@@ -1,5 +1,4 @@
-import typia from "typia";
-
+import { cast } from "$app/utils/cast";
 import { request, ResponseError } from "$app/utils/request";
 
 export type CircleCommunity = { name: string; id: number };
@@ -20,9 +19,7 @@ export const fetchCommunities = async (apiKey: string) => {
     url: Routes.communities_integrations_circle_index_path({ format: "json", api_key: apiKey }),
     accept: "json",
   });
-  const responseData = typia.assert<FetchCommunitiesSuccessResponse | FetchCommunitiesErrorResponse>(
-    await response.json(),
-  );
+  const responseData = cast<FetchCommunitiesSuccessResponse | FetchCommunitiesErrorResponse>(await response.json());
   if (!responseData.success) throw new ResponseError();
   return { communities: responseData.communities };
 };
@@ -37,9 +34,7 @@ export const fetchSpaceGroups = async (apiKey: string, communityId: number) => {
     }),
     accept: "json",
   });
-  const responseData = typia.assert<FetchSpaceGroupsSuccessResponse | FetchSpaceGroupsErrorResponse>(
-    await response.json(),
-  );
+  const responseData = cast<FetchSpaceGroupsSuccessResponse | FetchSpaceGroupsErrorResponse>(await response.json());
   if (!responseData.success) throw new ResponseError();
   return { spaceGroups: responseData.space_groups };
 };

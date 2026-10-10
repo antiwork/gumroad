@@ -1,5 +1,4 @@
-import typia from "typia";
-
+import { cast } from "$app/utils/cast";
 import { request, ResponseError } from "$app/utils/request";
 
 export const lookupCharges = async (data: {
@@ -19,7 +18,7 @@ export const lookupCharges = async (data: {
       format: "json",
     }),
   });
-  if (response.ok) return typia.assert<{ success: boolean }>(await response.json());
+  if (response.ok) return cast<{ success: boolean }>(await response.json());
   throw new ResponseError();
 };
 
@@ -40,7 +39,7 @@ export const lookupLicenseKey = async (data: {
       format: "json",
     }),
   });
-  if (response.ok) return typia.assert<{ success: boolean }>(await response.json());
+  if (response.ok) return cast<{ success: boolean }>(await response.json());
   throw new ResponseError();
 };
 
@@ -50,6 +49,6 @@ export const lookupPaypalCharges = async (data: { invoiceId: string }) => {
     accept: "json",
     url: Routes.paypal_charge_data_path({ invoice_id: data.invoiceId, format: "json" }),
   });
-  if (response.ok) return typia.assert<{ success: boolean }>(await response.json());
+  if (response.ok) return cast<{ success: boolean }>(await response.json());
   throw new ResponseError();
 };

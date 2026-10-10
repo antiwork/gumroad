@@ -1,6 +1,5 @@
-import typia from "typia";
-
 import { ProfileSettings, Tab } from "$app/parsers/profile";
+import { cast } from "$app/utils/cast";
 import { request, ResponseError } from "$app/utils/request";
 
 import { Props as ProductProps } from "$app/components/Product";
@@ -99,7 +98,7 @@ export const updateProfileSettings = async (
       ...(profileVersion !== undefined ? { profile_version: profileVersion } : {}),
     },
   });
-  const json = typia.assert<{ success: false; error_message: string } | { success: true }>(await response.json());
+  const json = cast<{ success: false; error_message: string } | { success: true }>(await response.json());
   if (!json.success) throw new ResponseError(json.error_message);
 };
 
@@ -110,7 +109,7 @@ export const getProduct = async (id: string) => {
     accept: "json",
   });
   if (!response.ok) throw new ResponseError();
-  return typia.assert<ProductProps>(await response.json());
+  return cast<ProductProps>(await response.json());
 };
 
 export const unlinkTwitter = async () => {
@@ -119,7 +118,7 @@ export const unlinkTwitter = async () => {
     url: Routes.unlink_twitter_settings_connections_path(),
     accept: "json",
   });
-  const json = typia.assert<{ success: false; error_message: string } | { success: true }>(await response.json());
+  const json = cast<{ success: false; error_message: string } | { success: true }>(await response.json());
   if (!json.success) throw new ResponseError(json.error_message);
 };
 
@@ -129,7 +128,7 @@ export const unlinkYoutube = async () => {
     url: "/settings/connections/unlink_youtube",
     accept: "json",
   });
-  const json = typia.assert<{ success: false; error_message: string } | { success: true }>(await response.json());
+  const json = cast<{ success: false; error_message: string } | { success: true }>(await response.json());
   if (!json.success) throw new ResponseError(json.error_message);
 };
 
@@ -139,7 +138,7 @@ export const unlinkInstagram = async () => {
     url: "/settings/connections/unlink_instagram",
     accept: "json",
   });
-  const json = typia.assert<{ success: false; error_message: string } | { success: true }>(await response.json());
+  const json = cast<{ success: false; error_message: string } | { success: true }>(await response.json());
   if (!json.success) throw new ResponseError(json.error_message);
 };
 
@@ -149,6 +148,6 @@ export const unlinkTiktok = async () => {
     url: "/settings/connections/unlink_tiktok",
     accept: "json",
   });
-  const json = typia.assert<{ success: false; error_message: string } | { success: true }>(await response.json());
+  const json = cast<{ success: false; error_message: string } | { success: true }>(await response.json());
   if (!json.success) throw new ResponseError(json.error_message);
 };

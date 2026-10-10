@@ -1,5 +1,4 @@
-import typia from "typia";
-
+import { cast } from "$app/utils/cast";
 import { request, ResponseError } from "$app/utils/request";
 
 export type ChatRole = "user" | "assistant";
@@ -86,7 +85,7 @@ export const sendAgentMessage = async (
     url: Routes.internal_agent_messages_path(),
     data: { messages, ...(conversationId ? { conversation_id: conversationId } : {}) },
   });
-  const json = typia.assert<SendMessageResponse>(await response.json());
+  const json = cast<SendMessageResponse>(await response.json());
   if (!json.success) throw new ResponseError(json.error);
   return {
     reply: json.reply,
@@ -116,7 +115,7 @@ export const executeAgentAction = async (
       ...(proposalMessageId ? { proposal_message_id: proposalMessageId } : {}),
     },
   });
-  const json = typia.assert<ExecuteActionResponse>(await response.json());
+  const json = cast<ExecuteActionResponse>(await response.json());
   if (!json.success) throw new AgentActionError(json.message, json.action_status ?? null, json.retryable === true);
   return { message: json.message, object: json.object ?? null };
 };
@@ -155,7 +154,7 @@ export const fetchCustomHtmlProposalPreview = async (action: ProposedAction): Pr
       ...(typeof body === "object" && body !== null ? body : {}),
     },
   });
-  const json = typia.assert<CustomHtmlPreviewResponse>(await response.json());
+  const json = cast<CustomHtmlPreviewResponse>(await response.json());
   if (!json.success) throw new ResponseError(json.error);
   // The POST staged the document, but the iframe's own GET is a separate request that can still
   // miss (say, the staged document expired or was evicted). Probe the URL before reporting the
@@ -198,7 +197,7 @@ export const fetchLatestAgentConversation = async (): Promise<Conversation | nul
     url: Routes.internal_agent_conversations_latest_path(),
   });
   if (!response.ok) throw new ResponseError();
-  const json = typia.assert<LatestConversationResponse>(await response.json());
+  const json = cast<LatestConversationResponse>(await response.json());
   return json.conversation;
 };
 
@@ -223,7 +222,7 @@ export const fetchAgentActionStatus = async (
     abortSignal,
   });
   if (!response.ok) throw new ResponseError();
-  const json = typia.assert<AgentActionStatusResponse>(await response.json());
+  const json = cast<AgentActionStatusResponse>(await response.json());
   return { actionStatus: json.action_status, objects: json.objects };
 };
 
@@ -248,7 +247,7 @@ export const fetchAgentTurnStatus = async (clientTurnId: string): Promise<AgentT
     url: Routes.internal_agent_turn_status_path(clientTurnId),
   });
   if (!response.ok) throw new ResponseError();
-  const json = typia.assert<AgentTurnStatusResponse>(await response.json());
+  const json = cast<AgentTurnStatusResponse>(await response.json());
   if (!json.success) throw new ResponseError(json.error);
   return json.status === "persisted"
     ? { status: json.status, conversation_id: json.conversation_id, message: json.message }
@@ -283,8 +282,7 @@ type StreamResult = {
   conversationId: string | null;
 };
 
-// Server-Sent Event payloads, validated per-event with typia so a malformed frame can't slip
-// untyped data into the UI.
+// Server-Sent Event payloads, one type per event name.
 type TokenData = { text: string };
 type ObjectsData = { objects: DisplayObject[] };
 type ProposedActionData = { proposed_action: ProposedAction | null };
@@ -417,7 +415,7 @@ export const streamAgentMessage = async (
 
     switch (event) {
       case "token": {
-        const { text } = typia.assert<TokenData>(raw);
+        const { text } = cast<TokenData>(raw);
         handlers.onToken?.(text);
         return null;
       }
@@ -428,23 +426,23 @@ export const streamAgentMessage = async (
         return null;
       }
       case "objects": {
-        objects = typia.assert<ObjectsData>(raw).objects;
+        objects = cast<ObjectsData>(raw).objects;
         handlers.onObjects?.(objects);
         return null;
       }
       case "proposed_action": {
-        proposedAction = typia.assert<ProposedActionData>(raw).proposed_action;
+        proposedAction = cast<ProposedActionData>(raw).proposed_action;
         if (proposedAction) handlers.onProposedAction?.(proposedAction);
         return null;
       }
       case "suggestions": {
-        suggestions = typia.assert<SuggestionsData>(raw).suggestions;
+        suggestions = cast<SuggestionsData>(raw).suggestions;
         handlers.onSuggestions?.(suggestions);
         if (done) done = { ...done, suggestions };
         return null;
       }
       case "done": {
-        const data = typia.assert<DoneData>(raw);
+        const data = cast<DoneData>(raw);
         const assembled: StreamResult = {
           reply: data.reply,
           // Fall back to the proposed action accumulated mid-stream (the `proposed_action` event),
@@ -460,7 +458,7 @@ export const streamAgentMessage = async (
         return assembled;
       }
       case "error": {
-        throw new ResponseError(typia.assert<ErrorData>(raw).message);
+        throw new ResponseError(cast<ErrorData>(raw).message);
       }
       default:
         return null;

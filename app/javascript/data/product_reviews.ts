@@ -1,5 +1,4 @@
-import typia from "typia";
-
+import { cast } from "$app/utils/cast";
 import { request, ResponseError } from "$app/utils/request";
 
 import { PaginationProps } from "$app/components/Pagination";
@@ -39,7 +38,7 @@ export const setProductRating = async ({
     },
   });
 
-  const json = typia.assert<
+  const json = cast<
     | {
         success: true;
         review: {
@@ -83,7 +82,7 @@ export const getReviews = async (productId: string, page: number) => {
 
   if (!response.ok) throw new ResponseError();
 
-  return typia.assert<{ reviews: Review[]; pagination: PaginationProps }>(await response.json());
+  return cast<{ reviews: Review[]; pagination: PaginationProps }>(await response.json());
 };
 
 export const getReview = async (reviewId: string): Promise<{ review: Review }> => {
@@ -95,7 +94,7 @@ export const getReview = async (reviewId: string): Promise<{ review: Review }> =
 
   if (!response.ok) throw new ResponseError();
 
-  return typia.assert<{ review: Review }>(await response.json());
+  return cast<{ review: Review }>(await response.json());
 };
 
 export const getStreamingUrls = async (id: string) => {
@@ -107,7 +106,7 @@ export const getStreamingUrls = async (id: string) => {
 
   if (!response.ok) throw new ResponseError();
 
-  return typia.assert<{ streaming_urls: string[] }>(await response.json());
+  return cast<{ streaming_urls: string[] }>(await response.json());
 };
 
 export type ReviewVideoUploadContext = {
@@ -125,5 +124,5 @@ export const getReviewVideoUploadContext = async (): Promise<ReviewVideoUploadCo
 
   if (!response.ok) throw new ResponseError();
 
-  return typia.assert<ReviewVideoUploadContext>(await response.json());
+  return cast<ReviewVideoUploadContext>(await response.json());
 };

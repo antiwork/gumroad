@@ -1,5 +1,4 @@
-import typia from "typia";
-
+import { cast } from "$app/utils/cast";
 import { ResponseError, request } from "$app/utils/request";
 
 import { WishlistItem } from "$app/components/Wishlist";
@@ -17,7 +16,7 @@ export const createWishlist = async (name: string) => {
     accept: "json",
     data: { wishlist: { name } },
   });
-  return typia.assert<{ wishlist: Wishlist }>(await response.json());
+  return cast<{ wishlist: Wishlist }>(await response.json());
 };
 
 type FetchPaginatedWishlistItemsArgs = {
@@ -48,7 +47,7 @@ export const fetchPaginatedWishlistItems = async ({
     url: Routes.wishlist_products_path(wishlist_id, { page }),
   });
   if (!response.ok) throw new ResponseError();
-  return typia.assert<PaginatedWishlistItems>(await response.json());
+  return cast<PaginatedWishlistItems>(await response.json());
 };
 
 export const addToWishlist = async ({
@@ -81,7 +80,7 @@ export const addToWishlist = async ({
     },
   });
   if (!response.ok) {
-    const data = typia.assert<{ error: string }>(await response.json());
+    const data = cast<{ error: string }>(await response.json());
     throw new ResponseError(data.error);
   }
 };
@@ -102,7 +101,7 @@ export const updateWishlist = async ({
     data: { wishlist },
   });
   if (!response.ok) {
-    const data = typia.assert<{ error: string }>(await response.json());
+    const data = cast<{ error: string }>(await response.json());
     throw new ResponseError(data.error);
   }
 };
@@ -138,7 +137,7 @@ export const followWishlist = async ({ wishlistId }: { wishlistId: string }) => 
     accept: "json",
   });
   if (!response.ok) {
-    const data = typia.assert<{ error: string }>(await response.json());
+    const data = cast<{ error: string }>(await response.json());
     throw new ResponseError(data.error);
   }
 };
@@ -159,5 +158,5 @@ export const fetchWishlists = async (ids: string[]) => {
     accept: "json",
   });
   if (!response.ok) throw new ResponseError();
-  return typia.assert<CardWishlist[]>(await response.json());
+  return cast<CardWishlist[]>(await response.json());
 };

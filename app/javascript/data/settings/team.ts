@@ -1,5 +1,4 @@
-import typia from "typia";
-
+import { cast } from "$app/utils/cast";
 import { RateLimitError, request, ResponseError } from "$app/utils/request";
 
 import { Option } from "$app/components/Select";
@@ -37,7 +36,7 @@ export const createTeamInvitation = async (
       data: { team_invitation: teamInvitation },
     });
     if (response.ok) {
-      return typia.assert<{ success: false; error_message: string } | { success: true }>(await response.json());
+      return cast<{ success: false; error_message: string } | { success: true }>(await response.json());
     }
   } catch (e) {
     // A refused invitation answers 429, which `request` raises as a RateLimitError carrying the
@@ -88,7 +87,7 @@ export const resendInvitation = async (
   if (!response.ok) throw new ResponseError();
 
   // A refused resend answers 200 with the validation message the seller needs to read.
-  return typia.assert<{ success: false; error_message: string } | { success: true }>(await response.json());
+  return cast<{ success: false; error_message: string } | { success: true }>(await response.json());
 };
 
 export const restoreMember = async (memberInfo: MemberInfo) => {

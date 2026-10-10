@@ -1,5 +1,4 @@
-import typia from "typia";
-
+import { cast } from "$app/utils/cast";
 import { ResponseError, request } from "$app/utils/request";
 
 export type Thumbnail = { guid: string; url: string };
@@ -17,7 +16,7 @@ export const createThumbnail = async (permalink: string, thumbnailPayload: Thumb
   });
 
   if (response.ok) {
-    const responseData = typia.assert<{ success: true; thumbnail: Thumbnail } | { success: false; error: string }>(
+    const responseData = cast<{ success: true; thumbnail: Thumbnail } | { success: false; error: string }>(
       await response.json(),
     );
     if (responseData.success) return responseData.thumbnail;
@@ -35,9 +34,7 @@ export const deleteThumbnail = async (permalink: string, thumbnailId: string) =>
   });
 
   if (response.ok) {
-    const responseData = typia.assert<{ success: true; thumbnail: Thumbnail } | { success: false }>(
-      await response.json(),
-    );
+    const responseData = cast<{ success: true; thumbnail: Thumbnail } | { success: false }>(await response.json());
     if (responseData.success) return;
   }
 

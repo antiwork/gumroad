@@ -1,10 +1,11 @@
 import { Editor, findChildren } from "@tiptap/core";
 import { type Mark } from "@tiptap/pm/model";
 import { EditorState, Transaction } from "@tiptap/pm/state";
-import typia from "typia";
 
 import { buildDeletionOperations } from "$app/data/product_save_contract";
+import { cast } from "$app/utils/cast";
 import { CurrencyCode } from "$app/utils/currency";
+import { isBoolean, isRecord as isPlainObject, isRecordOf, isString } from "$app/utils/guards";
 import { ResponseError, request } from "$app/utils/request";
 
 import { extensions } from "$app/components/ProductEdit/ContentTab";
@@ -44,6 +45,27 @@ export type SaveProductResponse = {
   // The same baseline, per version, keyed by variant external id.
   variant_loaded_integrations?: Record<string, Record<string, boolean>>;
 };
+
+const optional = (value: unknown, check: (item: unknown) => boolean) => value === undefined || check(value);
+const isStringMap = (value: unknown): value is Record<string, string> => isRecordOf(value, isString);
+const isStringList = (value: unknown): value is string[] => Array.isArray(value) && value.every(isString);
+const isBooleanMap = (value: unknown): value is Record<string, boolean> => isRecordOf(value, isBoolean);
+
+// The ids in a save response decide which records the next save updates instead of re-creating,
+// so a response of the wrong shape is treated like an unreadable one: the seller reloads.
+const isSaveProductResponse = (value: unknown): value is SaveProductResponse =>
+  isPlainObject(value) &&
+  optional(value.warning_message, isString) &&
+  optional(value.variant_id_mappings, isStringMap) &&
+  optional(value.rich_content_id_mappings, isStringMap) &&
+  optional(value.rich_content_id_mappings_by_scope, (scopes) => isRecordOf(scopes, isStringMap)) &&
+  optional(value.file_id_mappings, isStringMap) &&
+  optional(value.rich_content_removed_file_embed_ids, (pages) => isRecordOf(pages, isStringList)) &&
+  optional(value.rich_content_updated_at, isStringMap) &&
+  optional(value.variant_updated_at, isStringMap) &&
+  optional(value.editor_revision, (revision) => revision === null || isString(revision)) &&
+  optional(value.loaded_integrations, isBooleanMap) &&
+  optional(value.variant_loaded_integrations, (variants) => isRecordOf(variants, isBooleanMap));
 
 // The server's fail-closed answer when a save would delete version-level pages
 // that are hidden by the "use the same content for all versions" flag while
@@ -690,13 +712,17 @@ export const saveProduct = async (
       ),
     },
   });
-  if (!response.ok) throw saveProductError(typia.assert<SaveProductErrorPayload>(await readFailureJson(response)));
+  if (!response.ok) throw saveProductError(cast<SaveProductErrorPayload>(await readFailureJson(response)));
   if (response.status === 204) return {};
+  let body: unknown;
   try {
-    return typia.assert<SaveProductResponse>(await response.json());
+    body = await response.json();
   } catch (cause) {
     throw new UnconfirmedSaveError(cause);
   }
+  if (!isSaveProductResponse(body))
+    throw new UnconfirmedSaveError(new Error("The save response has an unexpected shape"));
+  return body;
 };
 
 // A 2xx the editor cannot read: the server may already have kept the save, so a blind retry could

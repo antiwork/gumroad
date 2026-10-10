@@ -1,5 +1,4 @@
-import typia from "typia";
-
+import { cast } from "$app/utils/cast";
 import { request, ResponseError } from "$app/utils/request";
 
 export type AnalyticsDataByReferral = {
@@ -37,7 +36,7 @@ export const fetchAnalyticsDataByReferral = ({
       if (!response.ok) throw new ResponseError();
       return response.json();
     })
-    .then((json) => typia.assert<AnalyticsDataByReferral>(json));
+    .then((json) => cast<AnalyticsDataByReferral>(json));
   return { response, abort };
 };
 
@@ -62,6 +61,6 @@ export const fetchAnalyticsDataByState = ({ startTime, endTime }: { startTime: s
     abortSignal: abort.signal,
   })
     .then((response) => response.json())
-    .then((json) => typia.assert<AnalyticsDataByState>(json));
+    .then((json) => cast<AnalyticsDataByState>(json));
   return { response, abort };
 };

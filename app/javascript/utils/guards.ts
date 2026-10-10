@@ -13,5 +13,8 @@ export const isBoolean = (value: unknown): value is boolean => typeof value === 
 export const isOneOf = <T extends string>(value: unknown, options: readonly T[]): value is T =>
   typeof value === "string" && options.some((option) => option === value);
 
+export const isRecordOf = <T>(value: unknown, check: (item: unknown) => item is T): value is Record<string, T> =>
+  isRecord(value) && Object.values(value).every(check);
+
 export const hasType = <T extends string>(value: unknown, type: T): value is Record<string, unknown> & { type: T } =>
   isRecord(value) && value.type === type;

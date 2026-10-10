@@ -1,5 +1,4 @@
-import typia from "typia";
-
+import { cast } from "$app/utils/cast";
 import { ResponseError, request } from "$app/utils/request";
 
 export type PriceDistributionTier = "with_taxonomy" | "broadened" | "insufficient";
@@ -66,5 +65,5 @@ export const fetchPriceDistribution = async (
     abortSignal: signal,
   });
   if (!response.ok) throw new ResponseError();
-  return typia.assert<PriceDistribution>(await response.json());
+  return cast<PriceDistribution>(await response.json());
 };

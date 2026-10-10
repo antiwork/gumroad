@@ -1,5 +1,4 @@
-import typia from "typia";
-
+import { cast } from "$app/utils/cast";
 import { CurrencyCode } from "$app/utils/currency";
 import { request, ResponseError } from "$app/utils/request";
 
@@ -122,7 +121,7 @@ export async function getAudienceCount(externalId: string) {
   });
 
   if (!response.ok) throw new ResponseError();
-  return typia.assert<{ count: number }>(await response.json());
+  return cast<{ count: number }>(await response.json());
 }
 
 type RecipientCountRequestPayload = {
@@ -152,7 +151,7 @@ export function getRecipientCount(requestPayload: RecipientCountRequestPayload) 
       if (!res.ok) throw new ResponseError();
       return res.json();
     })
-    .then((json) => typia.assert<{ recipient_count: number; audience_count: number }>(json));
+    .then((json) => cast<{ recipient_count: number; audience_count: number }>(json));
 
   return {
     response,
@@ -170,7 +169,7 @@ export async function getNonOpenerCount(externalId: string) {
   if (!response.ok) throw new ResponseError();
   // `count` is null when the audience is too large to count within the request; the
   // resend itself still works (recipients are resolved in a background job).
-  return typia.assert<{ count: number | null; recently_resent: boolean; audience_filtered_out: boolean }>(
+  return cast<{ count: number | null; recently_resent: boolean; audience_filtered_out: boolean }>(
     await response.json(),
   );
 }
@@ -183,8 +182,8 @@ export async function resendToNonOpeners(externalId: string) {
   });
 
   const json: unknown = await response.json();
-  if (!response.ok) throw new ResponseError(typia.assert<{ error: string }>(json).error);
-  return typia.assert<{ success: boolean }>(json);
+  if (!response.ok) throw new ResponseError(cast<{ error: string }>(json).error);
+  return cast<{ success: boolean }>(json);
 }
 
 export async function sendToRemaining(externalId: string) {
@@ -195,8 +194,8 @@ export async function sendToRemaining(externalId: string) {
   });
 
   const json: unknown = await response.json();
-  if (!response.ok) throw new ResponseError(typia.assert<{ error: string }>(json).error);
-  return typia.assert<{ success: boolean }>(json);
+  if (!response.ok) throw new ResponseError(cast<{ error: string }>(json).error);
+  return cast<{ success: boolean }>(json);
 }
 
 export async function previewInstallment(externalId: string) {
@@ -206,5 +205,5 @@ export async function previewInstallment(externalId: string) {
     url: Routes.internal_installment_preview_email_path(externalId),
   });
 
-  if (!response.ok) throw new ResponseError(typia.assert<{ message: string }>(await response.json()).message);
+  if (!response.ok) throw new ResponseError(cast<{ message: string }>(await response.json()).message);
 }

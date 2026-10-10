@@ -1,5 +1,4 @@
-import typia from "typia";
-
+import { cast } from "$app/utils/cast";
 import { request, ResponseError } from "$app/utils/request";
 
 export type SelfServeAffiliateProduct = {
@@ -53,4 +52,4 @@ export const getStatistics = (id: string) =>
       if (!res.ok) throw new ResponseError();
       return res.json();
     })
-    .then((json) => typia.assert<AffiliateStatistics>(json));
+    .then((json) => cast<AffiliateStatistics>(json));

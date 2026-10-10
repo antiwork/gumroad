@@ -1,5 +1,4 @@
-import typia from "typia";
-
+import { cast } from "$app/utils/cast";
 import type { CurrencyCode } from "$app/utils/currency";
 import { request, ResponseError } from "$app/utils/request";
 
@@ -117,7 +116,7 @@ export const getSurcharges = async (data: GetSurchargesRequest, abortSignal?: Ab
     data,
   });
   if (!response.ok) throw new ResponseError();
-  const result = typia.assert<SurchargesResponse>(await response.json());
+  const result = cast<SurchargesResponse>(await response.json());
   const serverTime = Date.parse(response.headers.get("Date") ?? "");
   if (result.buyer_currency_quote) {
     result.buyer_currency_quote.client_expires_at = clientExpiresAt(

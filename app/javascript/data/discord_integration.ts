@@ -1,5 +1,4 @@
-import typia from "typia";
-
+import { cast } from "$app/utils/cast";
 import { request } from "$app/utils/request";
 
 type ServerInfo = { ok: true; serverName: string; serverId: string; username: string } | { ok: false };
@@ -10,7 +9,7 @@ export const fetchServerInfo = async (code: string): Promise<ServerInfo> => {
     accept: "json",
   });
   if (response.ok) {
-    const responseData = typia.assert<
+    const responseData = cast<
       { success: true; server_id: string; server_name: string; username: string } | { success: false }
     >(await response.json());
     if (responseData.success) {
@@ -42,9 +41,7 @@ export const joinServer = async (
     accept: "json",
   });
   if (response.ok) {
-    const responseData = typia.assert<{ success: true; server_name: string } | { success: false }>(
-      await response.json(),
-    );
+    const responseData = cast<{ success: true; server_name: string } | { success: false }>(await response.json());
     if (responseData.success) {
       return { ok: true, serverName: responseData.server_name };
     }
@@ -67,9 +64,7 @@ export const leaveServer = async (
     accept: "json",
   });
   if (response.ok) {
-    const responseData = typia.assert<{ success: true; server_name: string } | { success: false }>(
-      await response.json(),
-    );
+    const responseData = cast<{ success: true; server_name: string } | { success: false }>(await response.json());
     if (responseData.success) {
       return { ok: true, serverName: responseData.server_name };
     }

@@ -1,5 +1,4 @@
-import typia from "typia";
-
+import { cast } from "$app/utils/cast";
 import { assertResponseError, request } from "$app/utils/request";
 
 type FollowResponse = { success: true; message: string } | { success: false; message?: string };
@@ -19,7 +18,7 @@ export const followSeller = async (
       url: Routes.follow_user_path(),
       data: { email, seller_id, "g-recaptcha-response": recaptchaResponse },
     });
-    return typia.assert<FollowResponse>(await response.json());
+    return cast<FollowResponse>(await response.json());
   } catch (e) {
     assertResponseError(e);
     return { success: false };

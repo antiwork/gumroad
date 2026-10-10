@@ -101,6 +101,25 @@ describe("removeSelfAsAffiliate", () => {
     expect(error.message).toBe("Your role as marketing cannot perform this action.");
   });
 
+  it("keeps the generic message for a JSON failure without an error string", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve(
+          new Response(JSON.stringify({ success: false }), {
+            status: 403,
+            headers: { "content-type": "application/json" },
+          }),
+        ),
+      ),
+    );
+
+    const error = await send();
+    expect(error).toBeInstanceOf(ResponseError);
+    if (!(error instanceof ResponseError)) throw error;
+    expect(error.message).toBe("Sorry, something went wrong. Please try again.");
+  });
+
   it("keeps the generic message for a non-JSON failure that is not a stale row", async () => {
     vi.stubGlobal(
       "fetch",

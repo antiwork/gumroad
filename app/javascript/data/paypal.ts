@@ -1,5 +1,4 @@
-import typia from "typia";
-
+import { cast } from "$app/utils/cast";
 import { request } from "$app/utils/request";
 
 type BillingAgreement = {
@@ -34,7 +33,7 @@ export const createBillingAgreement = async (billingAgreementTokenId: string): P
     });
 
     if (response.ok) {
-      return typia.assert<BillingAgreement>(await response.json());
+      return cast<BillingAgreement>(await response.json());
     }
     throw new Error("Server returned error response.");
   } catch (e) {
@@ -51,7 +50,7 @@ export const createBillingAgreementToken = async (data: { shipping: boolean }): 
       method: "POST",
       accept: "json",
     });
-    const responseData = typia.assert<{ billing_agreement_token_id: string }>(await response.json());
+    const responseData = cast<{ billing_agreement_token_id: string }>(await response.json());
     return responseData.billing_agreement_token_id;
   } catch (e) {
     // eslint-disable-next-line no-console

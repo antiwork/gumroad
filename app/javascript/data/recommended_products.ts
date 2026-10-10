@@ -1,6 +1,5 @@
-import typia from "typia";
-
 import { CardProduct } from "$app/parsers/product";
+import { cast } from "$app/utils/cast";
 import { request } from "$app/utils/request";
 
 export type RecommendationType =
@@ -23,5 +22,5 @@ export async function getRecommendedProducts(
       recommendation_type: recommendationType,
     }),
   });
-  return typia.assert<CardProduct[]>(await response.json());
+  return cast<CardProduct[]>(await response.json());
 }

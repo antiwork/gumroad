@@ -1,5 +1,4 @@
-import typia from "typia";
-
+import { cast } from "$app/utils/cast";
 import { isRecord, isString } from "$app/utils/guards";
 import { request, ResponseError } from "$app/utils/request";
 
@@ -25,7 +24,7 @@ const parse = async (response: Response): Promise<MarketingCartRecovery> => {
     const json: unknown = await response.json().catch(() => null);
     throw new ResponseError(isErrorResponse(json) ? json.error : undefined);
   }
-  return typia.assert<MarketingCartRecovery>(await response.json());
+  return cast<MarketingCartRecovery>(await response.json());
 };
 
 export const fetchCartRecovery = async (productId: string) => {

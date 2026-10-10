@@ -1,5 +1,5 @@
-import typia from "typia";
-
+import { cast } from "$app/utils/cast";
+import { isRecord, isString } from "$app/utils/guards";
 import { AbortError, request, ResponseError } from "$app/utils/request";
 
 import { AffiliatedProduct, AffiliatedPageStats, SortKey } from "$app/components/AffiliatedPage";
@@ -29,7 +29,7 @@ export const getPagedAffiliatedProducts = (page?: number, query?: string, sort?:
     abortSignal: abort.signal,
   })
     .then((res) => res.json().catch(convertPlatformAbort))
-    .then((json) => typia.assert<PagedAffiliatedProductsData>(json));
+    .then((json) => cast<PagedAffiliatedProductsData>(json));
 
   return {
     response,
@@ -67,11 +67,12 @@ export const removeSelfAsAffiliate = async (
     try {
       // A role that may view this page but not remove affiliations gets a 401 naming the role —
       // worth showing rather than replacing with a generic failure.
-      message = typia.assert<{ error: string }>(JSON.parse(body)).error;
+      const json: unknown = JSON.parse(body);
+      if (isRecord(json) && isString(json.error)) message = json.error;
     } catch {
       /* non-JSON body: keep the generic message */
     }
     throw new ResponseError(message);
   }
-  return typia.assert<AffiliationRemovedData>(await response.json());
+  return cast<AffiliationRemovedData>(await response.json());
 };

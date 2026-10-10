@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { hasType, isBoolean, isNumber, isOneOf, isRecord, isString } from "$app/utils/guards";
+import { hasType, isBoolean, isNumber, isOneOf, isRecord, isRecordOf, isString } from "$app/utils/guards";
 
 describe("guards", () => {
   it("accepts plain objects as records, and rejects null, arrays and primitives", () => {
@@ -37,5 +37,12 @@ describe("guards", () => {
     expect(hasType({ type: "loaded" }, "height")).toBe(false);
     expect(hasType("height", "height")).toBe(false);
     expect(hasType(null, "height")).toBe(false);
+  });
+
+  it("accepts a record only when every value passes the check", () => {
+    expect(isRecordOf({ a: "x", b: "y" }, isString)).toBe(true);
+    expect(isRecordOf({}, isString)).toBe(true);
+    expect(isRecordOf({ a: "x", b: 1 }, isString)).toBe(false);
+    expect(isRecordOf(["x"], isString)).toBe(false);
   });
 });
