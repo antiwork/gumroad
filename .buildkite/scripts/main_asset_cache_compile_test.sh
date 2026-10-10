@@ -214,10 +214,138 @@ PATH="$WORK/bin:$PATH" CALLS="$WORK/calls" BUCKET_DIR="$WORK/bucket" ANNOTATIONS
 rm -rf "$WORK/bucket"; printf '#!/bin/bash\necho "make $*" >> "$CALLS"\nexit 2\n' > "$WORK/bin/make"
 run_script PRESCALE_DELAY_SECONDS=1; rc=$?
 [ $rc != 0 ] && ! prescaled && ok "a failed compile cancels the pre-scale" || fail "failed compile (rc=$rc)"
+[ $rc != 0 ] && [ ! -e .main-node-modules-cache ] && ok "a failed compile still removes the node_modules cache directory" \
+  || { fail "failed compile left the node_modules cache directory (rc=$rc)"; rm -rf .main-node-modules-cache; }
 printf '#!/bin/bash\necho "make $*" >> "$CALLS"\nsleep "${MAKE_SECONDS:-0}"\n' > "$WORK/bin/make"
 
 seed_cache; run_script BUILDKITE_BRANCH=comp-assets-test PRESCALE_DELAY_SECONDS=0 MAKE_SECONDS=2; rc=$?
 [ $rc = 0 ] && ! grep -q "Pre-scaling" "$WORK/out" && ! prescaled && ok "only main pre-scales the production web clusters" || fail "comp-assets branch pre-scaled (rc=$rc)"
+
+echo
+echo "node_modules cache key"
+
+KEY_REPO="$WORK/key-repo"
+KEY_SCRIPTS=$PWD/.buildkite/scripts
+mkdir -p "$KEY_REPO/docker/web" "$KEY_REPO/spec"
+echo '{}' > "$KEY_REPO/package.json"; echo '{}' > "$KEY_REPO/package-lock.json"
+echo 'npm ci' > "$KEY_REPO/docker/web/compile_assets.sh"; echo a > "$KEY_REPO/spec/a_spec.rb"
+key_commit() { git -C "$KEY_REPO" add -A && git -C "$KEY_REPO" -c user.name=t -c user.email=t@example.com -c commit.gpgsign=false commit -q -m "$1"; }
+key_tag() { (cd "$KEY_REPO" && bash -c "source $KEY_SCRIPTS/preview_asset_cache.sh; source $KEY_SCRIPTS/main_node_modules_cache.sh; main_node_modules_cache_tag"); }
+git -C "$KEY_REPO" init -q && key_commit base; KEY_BASE=$(key_tag)
+echo b > "$KEY_REPO/spec/a_spec.rb"; key_commit unrelated
+[ "$(key_tag)" = "$KEY_BASE" ] && ok "a change outside the install inputs keeps the key" || fail "unrelated change moved the key"
+echo 'npm ci --ignore-scripts' > "$KEY_REPO/docker/web/compile_assets.sh"; key_commit install
+[ "$(key_tag)" != "$KEY_BASE" ] && ok "a change to compile_assets.sh changes the key" || fail "compile_assets.sh is not in the key"
+
+echo
+echo "compile_assets.sh in the container, through make build_production"
+
+# Real `make build_production` runs the real docker/web/compile_assets.sh. DOCKER_CMD
+# is this stub, which applies the -e and -v flags make passes and runs make's command
+# in a sandbox root: the script's /node-modules-cache, /app and ~ paths are rewritten
+# into it, and it stops unless make mounts the cache at that same path.
+CT="$WORK/container"
+mkdir -p "$WORK/ctbin"
+cat > "$WORK/ctbin/docker" <<'STUB'
+#!/bin/bash
+case "$1" in
+  ps) [ "$(cat "$CT/run_rc" 2>/dev/null)" = 0 ] && echo container-id ;;
+  commit) echo "commit $*" >> "$CALLS" ;;
+  run)
+    shift; envs=(); mount=
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        -e) envs+=("$2"); shift 2 ;;
+        -v) mount=$2; shift 2 ;;
+        --name|--network|--label) shift 2 ;;
+        --*) shift ;;
+        *) break ;;
+      esac
+    done
+    shift # the image
+    if [ -n "$mount" ]; then
+      [ "${mount#*:}" = /node-modules-cache ] || { echo "make mounts the cache at ${mount#*:}" >&2; exit 97; }
+      ln -s "${mount%%:*}" "$CT/node-modules-cache"
+      echo "mount $mount" >> "$CALLS"
+    fi
+    mkdir -p "$CT/app/docker/web"
+    sed -e "s#/node-modules-cache#$CT/node-modules-cache#g" -e "s#/app/#$CT/app/#g" \
+      -e "s#/tmp/node-compile-cache#$CT/tmp/node-compile-cache#g" "$REAL_COMPILE_ASSETS" > "$CT/app/docker/web/compile_assets.sh"
+    chmod +x "$CT/app/docker/web/compile_assets.sh"
+    cd "$CT/app" || exit 1
+    PATH="$WORK/ctbin:$PATH" env "${envs[@]}" APP_DIR="$CT/app" HOME="$CT/home" "$@"
+    rc=$?
+    echo $rc > "$CT/run_rc"
+    exit $rc ;;
+esac
+STUB
+cat > "$WORK/ctbin/gosu" <<'STUB'
+#!/bin/bash
+shift
+exec "$@"
+STUB
+cat > "$WORK/ctbin/npm" <<'STUB'
+#!/bin/bash
+echo "npm $* NODE_ENV=${NODE_ENV:-}" >> "$CALLS"
+mkdir -p node_modules && echo installed > node_modules/.marker
+STUB
+cat > "$WORK/ctbin/bundle" <<'STUB'
+#!/bin/bash
+echo "bundle $* node_modules=$(cat node_modules/.marker 2>/dev/null)" >> "$CALLS"
+STUB
+# Fails the archive write, leaving a partial file behind, when TAR_FAIL=1.
+cat > "$WORK/ctbin/tar" <<'STUB'
+#!/bin/bash
+if [ "${TAR_FAIL:-}" = 1 ] && [ "$1" = -cf ]; then echo partial; exit 1; fi
+exec "$REAL_TAR" "$@"
+STUB
+chmod +x "$WORK/ctbin/"*
+
+# Usage: run_container_build <seed tarball or ""> [make variable overrides...]
+run_container_build() {
+  seed=$1; shift
+  rm -rf "$CT"; mkdir -p "$CT/host-cache" "$CT/home" "$CT/app/nomad/staging/deploy_branch"
+  [ -z "$seed" ] || cp "$seed" "$CT/host-cache/node_modules.tar.gz"
+  echo 'get_app_name() { echo preview; }' > "$CT/app/nomad/staging/deploy_branch/deploy_branch_common.sh"
+  : > "$WORK/calls"
+  (
+    export WORK CT CALLS="$WORK/calls" REAL_COMPILE_ASSETS="$PWD/docker/web/compile_assets.sh" REAL_TAR
+    REAL_TAR=$(command -v tar)
+    make build_production DOCKER_CMD="$WORK/ctbin/docker" DOCKER_COMPOSE_CMD=true NEW_WEB_TAG=0123456789ab \
+      BUILDKITE_BRANCH=main NODE_MODULES_CACHE_DIR="$CT/host-cache" "$@"
+  ) > "$WORK/out" 2>&1
+}
+cache_files() { ls -A "$CT/host-cache" | tr '\n' ' '; }
+
+mkdir -p "$WORK/seed/node_modules" && echo cached > "$WORK/seed/node_modules/.marker"
+SEED="$WORK/seed.tar.gz"; tar -czf "$SEED" -C "$WORK/seed" node_modules
+
+run_container_build "" NODE_MODULES_CACHE_DIR=; rc=$?
+[ $rc = 0 ] && grep -q "^npm ci NODE_ENV=development" "$WORK/calls" && ! grep -q "^mount" "$WORK/calls" && [ ! -e "$CT/node-modules-cache" ] \
+  && ok "without a cache mount the install runs and nothing is written" || fail "no mount (rc=$rc): $(tail -3 "$WORK/out")"
+
+run_container_build "$SEED"; rc=$?
+[ $rc = 0 ] && ! grep -q "^npm" "$WORK/calls" && grep -q "^bundle .* node_modules=cached" "$WORK/calls" && grep -q "^mount .*:/node-modules-cache$" "$WORK/calls" \
+  && [ "$(cache_files)" = "node_modules.tar.gz " ] \
+  && ok "a mounted tarball replaces the install and nothing is written back" || fail "restore (rc=$rc): $(cat "$WORK/calls"; cache_files)"
+
+run_container_build ""; rc=$?
+mkdir -p "$WORK/extracted" && rm -rf "$WORK/extracted/node_modules" && tar -xzf "$CT/host-cache/node_modules.tar.gz.new" -C "$WORK/extracted" 2>/dev/null
+[ $rc = 0 ] && grep -q "^npm ci NODE_ENV=development" "$WORK/calls" && [ "$(cache_files)" = "node_modules.tar.gz.new " ] \
+  && [ "$(cat "$WORK/extracted/node_modules/.marker" 2>/dev/null)" = installed ] \
+  && ok "main writes the installed node_modules to the mounted cache as node_modules.tar.gz.new" || fail "write-back (rc=$rc): $(cat "$WORK/calls"; cache_files)"
+
+run_container_build "" BUILDKITE_BRANCH=comp-assets-test; rc=$?
+[ $rc = 0 ] && grep -q "^npm ci" "$WORK/calls" && [ -z "$(cache_files)" ] \
+  && ok "a comp-assets build installs without creating a node_modules.tar.gz.new it cannot save" || fail "comp-assets write-back (rc=$rc): $(cache_files)"
+
+run_container_build "$SEED" BUILDKITE_BRANCH=comp-assets-test; rc=$?
+[ $rc = 0 ] && ! grep -q "^npm" "$WORK/calls" && grep -q "^bundle .* node_modules=cached" "$WORK/calls" \
+  && ok "a comp-assets build still restores the cached tarball" || fail "comp-assets restore (rc=$rc)"
+
+run_container_build "" TAR_FAIL=1; rc=$?
+[ $rc = 0 ] && grep -q "Could not write node_modules to the cache directory" "$WORK/out" && [ -z "$(cache_files)" ] \
+  && ok "a failed archive write leaves no partial node_modules.tar.gz.new" || fail "partial archive (rc=$rc): $(cache_files)"
 
 echo
 echo "PASSED=$PASS FAILED=$FAIL"

@@ -220,7 +220,12 @@ cancel_web_prescale() {
   fi
   rm -f "$PRESCALE_LOG"
 }
-trap cancel_web_prescale EXIT
+# The cache directory is removed on every exit, so a failed build leaves nothing behind.
+cleanup_on_exit() {
+  cancel_web_prescale
+  rm -rf "$MAIN_NODE_MODULES_CACHE_DIR"
+}
+trap cleanup_on_exit EXIT
 
 # Keep in step with `make build_production` with PUSH_ASSETS=true.
 push_production_assets() {
@@ -348,7 +353,6 @@ if [[ $BUILDKITE_PARALLEL_JOB = 1 && ( $BUILDKITE_BRANCH == "main" || $BUILDKITE
     if [[ $BUILDKITE_BRANCH == "main" ]]; then
       main_node_modules_cache_save "$NODE_MODULES_TAG" || :
     fi
-    rm -rf "$MAIN_NODE_MODULES_CACHE_DIR"
   fi
 
   push_image production || exit 1
