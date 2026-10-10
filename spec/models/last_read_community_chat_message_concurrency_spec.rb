@@ -122,6 +122,19 @@ RSpec.describe LastReadCommunityChatMessage, ".set! concurrency" do
     end
   end
 
+  it "returns the marker another connection created between the lookup and the create" do
+    described_class.delete_all
+    allow(described_class).to receive(:create!).and_wrap_original do |method, *args|
+      Thread.new { ActiveRecord::Base.connection_pool.with_connection { method.call(*args) } }.join
+      method.call(*args)
+    end
+
+    record = described_class.set!(user_id: @reader.id, community_id: @community.id, community_chat_message_id: @newer_message.id)
+
+    expect(record).to eq(described_class.find_by!(user: @reader, community: @community))
+    expect(record.reload.community_chat_message_id).to eq(@newer_message.id)
+  end
+
   it "creates one newest marker when the first updates are concurrent" do
     described_class.delete_all
     ready = Queue.new
