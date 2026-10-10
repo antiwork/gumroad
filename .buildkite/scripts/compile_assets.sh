@@ -19,6 +19,7 @@ quietly() {
 
 source .buildkite/scripts/preview_asset_cache.sh
 source .buildkite/scripts/main_asset_cache.sh
+source .buildkite/scripts/main_node_modules_cache.sh
 
 # Skip the whole production pipeline when this commit changes nothing that ships
 # (specs, workflows, docs, the pipeline itself). See deploy_relevance.sh.
@@ -323,7 +324,17 @@ if [[ $BUILDKITE_PARALLEL_JOB = 1 && ( $BUILDKITE_BRANCH == "main" || $BUILDKITE
     start_web_prescale "$PRESCALE_DELAY_SECONDS"
     logger "Building production assets"
     docker rm production-assets || :
+    rm -rf "$MAIN_NODE_MODULES_CACHE_DIR" && mkdir -p "$MAIN_NODE_MODULES_CACHE_DIR"
+    # The compile container runs as the app user, which writes the new tarball here.
+    chmod 777 "$MAIN_NODE_MODULES_CACHE_DIR"
+    NODE_MODULES_TAG=$(main_node_modules_cache_tag)
+    if main_node_modules_cache_restore "$NODE_MODULES_TAG"; then
+      logger "node_modules cache hit for tag $NODE_MODULES_TAG"
+    else
+      logger "node_modules cache miss for tag $NODE_MODULES_TAG: the compile runs npm ci"
+    fi
     COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME}_production \
+      NODE_MODULES_CACHE_DIR=$PWD/$MAIN_NODE_MODULES_CACHE_DIR \
       NEW_WEB_TAG=$WEB_TAG \
       NEW_WEB_REPO=$WEB_REPO \
       BUILDKITE_BRANCH=${BUILDKITE_BRANCH} \
@@ -332,6 +343,10 @@ if [[ $BUILDKITE_PARALLEL_JOB = 1 && ( $BUILDKITE_BRANCH == "main" || $BUILDKITE
       RAILS_PRODUCTION_MASTER_KEY="$RAILS_PRODUCTION_MASTER_KEY" \
       PUSH_ASSETS=true \
       make build_production
+    if [[ $BUILDKITE_BRANCH == "main" ]]; then
+      main_node_modules_cache_save "$NODE_MODULES_TAG" || :
+    fi
+    rm -rf "$MAIN_NODE_MODULES_CACHE_DIR"
   fi
 
   push_image production || exit 1

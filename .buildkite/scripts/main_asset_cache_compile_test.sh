@@ -38,6 +38,8 @@ STUB
 cat > "$WORK/bin/make" <<'STUB'
 #!/bin/bash
 echo "make $*" >> "$CALLS"
+[ -s "${NODE_MODULES_CACHE_DIR:-/nonexistent}/node_modules.tar.gz" ] && echo "node-modules-restored $(cat "$NODE_MODULES_CACHE_DIR/node_modules.tar.gz")" >> "$CALLS"
+[ "${MAKE_WRITES_NODE_MODULES:-}" = 1 ] && echo installed > "$NODE_MODULES_CACHE_DIR/node_modules.tar.gz.new"
 sleep "${MAKE_SECONDS:-0}"
 STUB
 # Stands in for prescale_web_clusters.sh, so no case reaches AWS.
@@ -106,6 +108,30 @@ grep -q "^meta-data main-asset-cache-served=$TAG" "$WORK/calls" && ok "a hit rec
 rm -rf "$WORK/bucket"; run_script; rc=$?
 [ $rc = 0 ] && compiled && ! served && pushed && ok "a miss runs the full compile" || fail "miss (rc=$rc)"
 grep -q "^meta-data main-asset-cache-served=none" "$WORK/calls" && ok "a miss records that nothing was served, replacing an earlier attempt's tag" || fail "a miss did not record none"
+
+NM_TAG=$(bash -c 'source .buildkite/scripts/preview_asset_cache.sh; source .buildkite/scripts/main_node_modules_cache.sh; main_node_modules_cache_tag')
+NM_ENTRY="$WORK/bucket/buildkite-branch-cache/main-node-modules/$NM_TAG.tar.gz"
+seed_node_modules() {
+  mkdir -p "$(dirname "$NM_ENTRY")"
+  echo cached > "$NM_ENTRY"
+  sha256sum "$NM_ENTRY" | cut -d " " -f1 > "$NM_ENTRY.sha256"
+}
+
+rm -rf "$WORK/bucket"; seed_node_modules; run_script; rc=$?
+[ $rc = 0 ] && compiled && grep -q "^node-modules-restored cached" "$WORK/calls" \
+  && ok "a full compile gets the cached node_modules tarball when its checksum matches" || fail "node_modules hit (rc=$rc): $(cat "$WORK/calls")"
+[ ! -e .main-node-modules-cache ] && ok "the node_modules cache directory is removed after the compile" || fail "node_modules cache directory left behind"
+
+rm -rf "$WORK/bucket"; seed_node_modules; echo junk >> "$NM_ENTRY"; run_script; rc=$?
+[ $rc = 0 ] && compiled && ! grep -q "^node-modules-restored" "$WORK/calls" \
+  && ok "a node_modules tarball that fails its checksum is not used" || fail "node_modules bad checksum (rc=$rc)"
+
+rm -rf "$WORK/bucket"; run_script MAKE_WRITES_NODE_MODULES=1; rc=$?
+[ $rc = 0 ] && [ "$(cat "$NM_ENTRY" 2>/dev/null)" = installed ] && [ "$(cat "$NM_ENTRY.sha256" 2>/dev/null)" = "$(echo installed | sha256sum | cut -d " " -f1)" ] \
+  && ok "main saves the node_modules a full install wrote, with its checksum" || fail "node_modules save on main (rc=$rc): $(ls -R "$WORK/bucket" 2>&1 | tail -3)"
+
+rm -rf "$WORK/bucket"; run_script MAKE_WRITES_NODE_MODULES=1 BUILDKITE_BRANCH=comp-assets-test; rc=$?
+[ $rc = 0 ] && [ ! -e "$NM_ENTRY" ] && ok "a comp-assets build never writes the node_modules cache" || fail "comp-assets wrote node_modules (rc=$rc)"
 
 rm -rf "$WORK/bucket"; run_script META_SET_FAIL=1; rc=$?
 [ $rc = 0 ] && compiled && pushed && ok "a first attempt compiles even when the outcome cannot be recorded" || fail "first attempt with a failed record (rc=$rc)"
