@@ -27,6 +27,10 @@ import { useUserAgentInfo } from "$app/components/UserAgent";
 // Must match PRODUCT_EVENT_TRACKING_STARTED_DATE on the backend.
 const PRODUCT_EVENT_TRACKING_STARTED_DATE = new Date("2012-10-13");
 
+// Presets are inclusive of today, so N days back is N - 1.
+const LAST_7_DAYS_START_OFFSET = 6;
+const LAST_30_DAYS_START_OFFSET = 29;
+
 export const DateRangePicker = ({
   from,
   to,
@@ -66,8 +70,8 @@ export const DateRangePicker = ({
     : today;
   const presets = [
     { label: "Today", from: today, to: today },
-    { label: "Last 7 days", from: subDays(today, 7), to: today },
-    { label: "Last 30 days", from: subDays(today, 30), to: today },
+    { label: "Last 7 days", from: subDays(today, LAST_7_DAYS_START_OFFSET), to: today },
+    { label: "Last 30 days", from: subDays(today, LAST_30_DAYS_START_OFFSET), to: today },
     { label: "This month", from: startOfMonth(today), to: today },
     {
       label: "Last month",
