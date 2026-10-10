@@ -40,6 +40,8 @@ cat > "$WORK/bin/make" <<'STUB'
 echo "make $*" >> "$CALLS"
 [ -s "${NODE_MODULES_CACHE_DIR:-/nonexistent}/node_modules.tar.gz" ] && echo "node-modules-restored $(cat "$NODE_MODULES_CACHE_DIR/node_modules.tar.gz")" >> "$CALLS"
 [ "${MAKE_WRITES_NODE_MODULES:-}" = 1 ] && echo installed > "$NODE_MODULES_CACHE_DIR/node_modules.tar.gz.new"
+[ -s "${PAGES_TAILWIND_CACHE_DIR:-/nonexistent}/pages_tailwind.tar.gz" ] && echo "pages-restored $(cat "$PAGES_TAILWIND_CACHE_DIR/pages_tailwind.tar.gz")" >> "$CALLS"
+[ "${MAKE_WRITES_PAGES:-}" = 1 ] && echo built > "$PAGES_TAILWIND_CACHE_DIR/pages_tailwind.tar.gz.new"
 sleep "${MAKE_SECONDS:-0}"
 STUB
 # Stands in for prescale_web_clusters.sh, so no case reaches AWS.
@@ -137,6 +139,34 @@ rm -rf "$WORK/bucket"; run_script MAKE_WRITES_NODE_MODULES=1; rc=$?
 rm -rf "$WORK/bucket"; run_script MAKE_WRITES_NODE_MODULES=1 BUILDKITE_BRANCH=comp-assets-test; rc=$?
 [ $rc = 0 ] && [ ! -e "$NM_ENTRY" ] && ok "a comp-assets build never writes the node_modules cache" || fail "comp-assets wrote node_modules (rc=$rc)"
 
+PT_TAG=$(bash -c 'source .buildkite/scripts/preview_asset_cache.sh; source .buildkite/scripts/main_pages_tailwind_cache.sh; main_pages_tailwind_cache_tag')
+PT_ENTRY="$WORK/bucket/buildkite-branch-cache/main-pages-tailwind/$PT_TAG.tar.gz"
+seed_pages() {
+  mkdir -p "$(dirname "$PT_ENTRY")"
+  echo cached > "$PT_ENTRY"
+  sha256sum "$PT_ENTRY" | cut -d " " -f1 > "$PT_ENTRY.sha256"
+}
+
+rm -rf "$WORK/bucket"; seed_pages; run_script; rc=$?
+[ $rc = 0 ] && compiled && grep -q "^pages-restored cached" "$WORK/calls" && ! grep -q "^node-modules-restored" "$WORK/calls" \
+  && ok "a full compile gets the cached pages CSS tarball when its checksum matches" || fail "pages hit (rc=$rc): $(cat "$WORK/calls")"
+[ ! -e .main-pages-tailwind-cache ] && ok "the pages CSS cache directory is removed after the compile" || fail "pages cache directory left behind"
+
+rm -rf "$WORK/bucket"; seed_pages; echo junk >> "$PT_ENTRY"; run_script; rc=$?
+[ $rc = 0 ] && compiled && ! grep -q "^pages-restored" "$WORK/calls" \
+  && ok "a pages CSS tarball that fails its checksum is not used" || fail "pages bad checksum (rc=$rc)"
+
+rm -rf "$WORK/bucket"; seed_pages; run_script BUILDKITE_MESSAGE="Fix a thing [no-cache]" MAKE_WRITES_PAGES=1; rc=$?
+[ $rc = 0 ] && compiled && ! grep -q "^pages-restored" "$WORK/calls" && [ "$(cat "$PT_ENTRY")" = built ] \
+  && ok "a no-cache commit builds the pages CSS and replaces the entry" || fail "pages no-cache (rc=$rc)"
+
+rm -rf "$WORK/bucket"; run_script MAKE_WRITES_PAGES=1; rc=$?
+[ $rc = 0 ] && [ "$(cat "$PT_ENTRY" 2>/dev/null)" = built ] && [ "$(cat "$PT_ENTRY.sha256" 2>/dev/null)" = "$(echo built | sha256sum | cut -d " " -f1)" ] \
+  && ok "main saves the pages CSS a full build wrote, with its checksum" || fail "pages save on main (rc=$rc): $(ls -R "$WORK/bucket" 2>&1 | tail -3)"
+
+rm -rf "$WORK/bucket"; run_script MAKE_WRITES_PAGES=1 BUILDKITE_BRANCH=comp-assets-test; rc=$?
+[ $rc = 0 ] && [ ! -e "$PT_ENTRY" ] && ok "a comp-assets build never writes the pages CSS cache" || fail "comp-assets wrote the pages CSS (rc=$rc)"
+
 rm -rf "$WORK/bucket"; run_script META_SET_FAIL=1; rc=$?
 [ $rc = 0 ] && compiled && pushed && ok "a first attempt compiles even when the outcome cannot be recorded" || fail "first attempt with a failed record (rc=$rc)"
 
@@ -216,6 +246,8 @@ run_script PRESCALE_DELAY_SECONDS=1; rc=$?
 [ $rc != 0 ] && ! prescaled && ok "a failed compile cancels the pre-scale" || fail "failed compile (rc=$rc)"
 [ $rc != 0 ] && [ ! -e .main-node-modules-cache ] && ok "a failed compile still removes the node_modules cache directory" \
   || { fail "failed compile left the node_modules cache directory (rc=$rc)"; rm -rf .main-node-modules-cache; }
+[ $rc != 0 ] && [ ! -e .main-pages-tailwind-cache ] && ok "a failed compile still removes the pages CSS cache directory" \
+  || { fail "failed compile left the pages CSS cache directory (rc=$rc)"; rm -rf .main-pages-tailwind-cache; }
 printf '#!/bin/bash\necho "make $*" >> "$CALLS"\nsleep "${MAKE_SECONDS:-0}"\n' > "$WORK/bin/make"
 
 seed_cache; run_script BUILDKITE_BRANCH=comp-assets-test PRESCALE_DELAY_SECONDS=0 MAKE_SECONDS=2; rc=$?
@@ -242,8 +274,8 @@ echo "compile_assets.sh in the container, through make build_production"
 
 # Real `make build_production` runs the real docker/web/compile_assets.sh. DOCKER_CMD
 # is this stub, which applies the -e and -v flags make passes and runs make's command
-# in a sandbox root: the script's /node-modules-cache, /app and ~ paths are rewritten
-# into it, and it stops unless make mounts the cache at that same path.
+# in a sandbox root: the script's /node-modules-cache, /pages-tailwind-cache, /app and
+# ~ paths are rewritten into it, and it stops unless make mounts the caches at those paths.
 CT="$WORK/container"
 mkdir -p "$WORK/ctbin"
 cat > "$WORK/ctbin/docker" <<'STUB'
@@ -252,24 +284,27 @@ case "$1" in
   ps) [ "$(cat "$CT/run_rc" 2>/dev/null)" = 0 ] && echo container-id ;;
   commit) echo "commit $*" >> "$CALLS" ;;
   run)
-    shift; envs=(); mount=
+    shift; envs=(); mounts=()
     while [ $# -gt 0 ]; do
       case "$1" in
         -e) envs+=("$2"); shift 2 ;;
-        -v) mount=$2; shift 2 ;;
+        -v) mounts+=("$2"); shift 2 ;;
         --name|--network|--label) shift 2 ;;
         --*) shift ;;
         *) break ;;
       esac
     done
     shift # the image
-    if [ -n "$mount" ]; then
-      [ "${mount#*:}" = /node-modules-cache ] || { echo "make mounts the cache at ${mount#*:}" >&2; exit 97; }
-      ln -s "${mount%%:*}" "$CT/node-modules-cache"
+    for mount in "${mounts[@]}"; do
+      case "${mount#*:}" in
+        /node-modules-cache|/pages-tailwind-cache) ;;
+        *) echo "make mounts a cache at ${mount#*:}" >&2; exit 97 ;;
+      esac
+      ln -s "${mount%%:*}" "$CT${mount#*:}"
       echo "mount $mount" >> "$CALLS"
-    fi
+    done
     mkdir -p "$CT/app/docker/web"
-    sed -e "s#/node-modules-cache#$CT/node-modules-cache#g" -e "s#/app/#$CT/app/#g" \
+    sed -e "s#/node-modules-cache#$CT/node-modules-cache#g" -e "s#/pages-tailwind-cache#$CT/pages-tailwind-cache#g" -e "s#/app/#$CT/app/#g" \
       -e "s#/tmp/node-compile-cache#$CT/tmp/node-compile-cache#g" "$REAL_COMPILE_ASSETS" > "$CT/app/docker/web/compile_assets.sh"
     chmod +x "$CT/app/docker/web/compile_assets.sh"
     cd "$CT/app" || exit 1
@@ -289,14 +324,21 @@ cat > "$WORK/ctbin/npm" <<'STUB'
 echo "npm $* NODE_ENV=${NODE_ENV:-}" >> "$CALLS"
 mkdir -p node_modules && echo installed > node_modules/.marker
 STUB
+# assets:precompile builds the pages CSS unless the restore set PAGES_TAILWIND_RESTORED
+# (lib/tasks/pages_tailwind.rake), so this writes the files only in that case.
 cat > "$WORK/ctbin/bundle" <<'STUB'
 #!/bin/bash
-echo "bundle $* node_modules=$(cat node_modules/.marker 2>/dev/null)" >> "$CALLS"
+if [ "${PAGES_TAILWIND_RESTORED:-}" != true ]; then
+  mkdir -p public/assets/pages app/javascript/stylesheets
+  for f in public/pages-tailwind.css public/pages-tailwind-manifest.json public/assets/pages/pages-tailwind-0.css app/javascript/stylesheets/pages_tailwind.generated.html; do echo built > "$f"; done
+fi
+echo "bundle $* node_modules=$(cat node_modules/.marker 2>/dev/null) pages=$(cat public/pages-tailwind.css 2>/dev/null)" >> "$CALLS"
 STUB
 # Fails the archive write, leaving a partial file behind, when TAR_FAIL=1.
 cat > "$WORK/ctbin/tar" <<'STUB'
 #!/bin/bash
 if [ "${TAR_FAIL:-}" = 1 ] && [ "$1" = -cf ]; then echo partial; exit 1; fi
+if [ "${PAGES_TAR_FAIL:-}" = 1 ] && [ "$1" = -czf ]; then echo partial > "$2"; exit 1; fi
 exec "$REAL_TAR" "$@"
 STUB
 chmod +x "$WORK/ctbin/"*
@@ -305,24 +347,28 @@ chmod +x "$WORK/ctbin/"*
 run_container_build() {
   seed=$1; shift
   rm -rf "$CT"; mkdir -p "$CT/host-cache" "$CT/home" "$CT/app/nomad/staging/deploy_branch"
+  mkdir -p "$CT/host-pages"
   [ -z "$seed" ] || cp "$seed" "$CT/host-cache/node_modules.tar.gz"
+  [ -z "${PAGES_SEED_FILE:-}" ] || cp "$PAGES_SEED_FILE" "$CT/host-pages/pages_tailwind.tar.gz"
   echo 'get_app_name() { echo preview; }' > "$CT/app/nomad/staging/deploy_branch/deploy_branch_common.sh"
   : > "$WORK/calls"
   (
     export WORK CT CALLS="$WORK/calls" REAL_COMPILE_ASSETS="$PWD/docker/web/compile_assets.sh" REAL_TAR
     REAL_TAR=$(command -v tar)
     make build_production DOCKER_CMD="$WORK/ctbin/docker" DOCKER_COMPOSE_CMD=true NEW_WEB_TAG=0123456789ab \
-      BUILDKITE_BRANCH=main NODE_MODULES_CACHE_DIR="$CT/host-cache" "$@"
+      BUILDKITE_BRANCH=main NODE_MODULES_CACHE_DIR="$CT/host-cache" PAGES_TAILWIND_CACHE_DIR="$CT/host-pages" "$@"
   ) > "$WORK/out" 2>&1
 }
 cache_files() { ls -A "$CT/host-cache" | tr '\n' ' '; }
+pages_files() { ls -A "$CT/host-pages" | tr '\n' ' '; }
 
 mkdir -p "$WORK/seed/node_modules" && echo cached > "$WORK/seed/node_modules/.marker"
 SEED="$WORK/seed.tar.gz"; tar -czf "$SEED" -C "$WORK/seed" node_modules
 
-run_container_build "" NODE_MODULES_CACHE_DIR=; rc=$?
-[ $rc = 0 ] && grep -q "^npm ci NODE_ENV=development" "$WORK/calls" && ! grep -q "^mount" "$WORK/calls" && [ ! -e "$CT/node-modules-cache" ] \
-  && ok "without a cache mount the install runs and nothing is written" || fail "no mount (rc=$rc): $(tail -3 "$WORK/out")"
+run_container_build "" NODE_MODULES_CACHE_DIR= PAGES_TAILWIND_CACHE_DIR=; rc=$?
+[ $rc = 0 ] && grep -q "^npm ci NODE_ENV=development" "$WORK/calls" && grep -q "^bundle .* pages=built" "$WORK/calls" && ! grep -q "^mount" "$WORK/calls" \
+  && [ ! -e "$CT/node-modules-cache" ] && [ ! -e "$CT/pages-tailwind-cache" ] \
+  && ok "without cache mounts the install and the pages CSS build run and nothing is written" || fail "no mount (rc=$rc): $(tail -3 "$WORK/out")"
 
 run_container_build "$SEED"; rc=$?
 [ $rc = 0 ] && ! grep -q "^npm" "$WORK/calls" && grep -q "^bundle .* node_modules=cached" "$WORK/calls" && grep -q "^mount .*:/node-modules-cache$" "$WORK/calls" \
@@ -346,6 +392,38 @@ run_container_build "$SEED" BUILDKITE_BRANCH=comp-assets-test; rc=$?
 run_container_build "" TAR_FAIL=1; rc=$?
 [ $rc = 0 ] && grep -q "Could not write node_modules to the cache directory" "$WORK/out" && [ -z "$(cache_files)" ] \
   && ok "a failed archive write leaves no partial node_modules.tar.gz.new" || fail "partial archive (rc=$rc): $(cache_files)"
+
+mkdir -p "$WORK/pages-seed/public/assets/pages" "$WORK/pages-seed/app/javascript/stylesheets"
+for f in public/pages-tailwind.css public/pages-tailwind-manifest.json public/assets/pages/pages-tailwind-1.css app/javascript/stylesheets/pages_tailwind.generated.html; do
+  echo cached > "$WORK/pages-seed/$f"
+done
+PAGES_SEED="$WORK/pages-seed.tar.gz"
+tar -czf "$PAGES_SEED" -C "$WORK/pages-seed" public/pages-tailwind.css public/pages-tailwind-manifest.json public/assets/pages app/javascript/stylesheets/pages_tailwind.generated.html
+
+PAGES_SEED_FILE=$PAGES_SEED run_container_build "$SEED"; rc=$?
+[ $rc = 0 ] && grep -q "^bundle .* pages=cached" "$WORK/calls" && grep -q "^mount .*:/pages-tailwind-cache$" "$WORK/calls" \
+  && [ "$(cat "$CT/app/public/assets/pages/pages-tailwind-1.css" 2>/dev/null)" = cached ] \
+  && [ "$(cat "$CT/app/app/javascript/stylesheets/pages_tailwind.generated.html" 2>/dev/null)" = cached ] \
+  && [ "$(pages_files)" = "pages_tailwind.tar.gz " ] \
+  && ok "a mounted pages CSS tarball is unpacked before assets:precompile, which skips the build, and nothing is written back" \
+  || fail "pages restore (rc=$rc): $(cat "$WORK/calls"; pages_files)"
+
+run_container_build "$SEED"; rc=$?
+mkdir -p "$WORK/pages-extracted" && rm -rf "${WORK:?}/pages-extracted/"* && tar -xzf "$CT/host-pages/pages_tailwind.tar.gz.new" -C "$WORK/pages-extracted" 2>/dev/null
+[ $rc = 0 ] && grep -q "^bundle .* pages=built" "$WORK/calls" && [ "$(pages_files)" = "pages_tailwind.tar.gz.new " ] \
+  && [ "$(cat "$WORK/pages-extracted/public/pages-tailwind.css" 2>/dev/null)" = built ] \
+  && [ "$(cat "$WORK/pages-extracted/public/pages-tailwind-manifest.json" 2>/dev/null)" = built ] \
+  && [ "$(cat "$WORK/pages-extracted/public/assets/pages/pages-tailwind-0.css" 2>/dev/null)" = built ] \
+  && [ "$(cat "$WORK/pages-extracted/app/javascript/stylesheets/pages_tailwind.generated.html" 2>/dev/null)" = built ] \
+  && ok "main writes the four pages CSS outputs to the mounted cache as pages_tailwind.tar.gz.new" || fail "pages write-back (rc=$rc): $(cat "$WORK/calls"; pages_files)"
+
+run_container_build "$SEED" BUILDKITE_BRANCH=comp-assets-test; rc=$?
+[ $rc = 0 ] && grep -q "^bundle .* pages=built" "$WORK/calls" && [ -z "$(pages_files)" ] \
+  && ok "a comp-assets build builds the pages CSS without creating an archive it cannot save" || fail "pages comp-assets (rc=$rc): $(pages_files)"
+
+run_container_build "$SEED" PAGES_TAR_FAIL=1; rc=$?
+[ $rc = 0 ] && grep -q "Could not write the pages CSS to the cache directory" "$WORK/out" && [ -z "$(pages_files)" ] \
+  && ok "a failed pages CSS archive write leaves no partial file and does not fail the compile" || fail "pages partial archive (rc=$rc): $(pages_files)"
 
 echo
 echo "PASSED=$PASS FAILED=$FAIL"

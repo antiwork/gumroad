@@ -20,6 +20,7 @@ quietly() {
 source .buildkite/scripts/preview_asset_cache.sh
 source .buildkite/scripts/main_asset_cache.sh
 source .buildkite/scripts/main_node_modules_cache.sh
+source .buildkite/scripts/main_pages_tailwind_cache.sh
 
 # Skip the whole production pipeline when this commit changes nothing that ships
 # (specs, workflows, docs, the pipeline itself). See deploy_relevance.sh.
@@ -223,7 +224,7 @@ cancel_web_prescale() {
 # The cache directory is removed on every exit, so a failed build leaves nothing behind.
 cleanup_on_exit() {
   cancel_web_prescale
-  rm -rf "$MAIN_NODE_MODULES_CACHE_DIR"
+  rm -rf "$MAIN_NODE_MODULES_CACHE_DIR" "$MAIN_PAGES_TAILWIND_CACHE_DIR"
 }
 trap cleanup_on_exit EXIT
 
@@ -329,19 +330,29 @@ if [[ $BUILDKITE_PARALLEL_JOB = 1 && ( $BUILDKITE_BRANCH == "main" || $BUILDKITE
     start_web_prescale "$PRESCALE_DELAY_SECONDS"
     logger "Building production assets"
     docker rm production-assets || :
-    rm -rf "$MAIN_NODE_MODULES_CACHE_DIR" && mkdir -p "$MAIN_NODE_MODULES_CACHE_DIR"
-    # The compile container runs as the app user, which writes the new tarball here.
-    chmod 777 "$MAIN_NODE_MODULES_CACHE_DIR"
+    rm -rf "$MAIN_NODE_MODULES_CACHE_DIR" "$MAIN_PAGES_TAILWIND_CACHE_DIR"
+    mkdir -p "$MAIN_NODE_MODULES_CACHE_DIR" "$MAIN_PAGES_TAILWIND_CACHE_DIR"
+    # The compile container runs as the app user, which writes the new tarballs here.
+    chmod 777 "$MAIN_NODE_MODULES_CACHE_DIR" "$MAIN_PAGES_TAILWIND_CACHE_DIR"
     NODE_MODULES_TAG=$(main_node_modules_cache_tag)
+    PAGES_TAILWIND_TAG=$(main_pages_tailwind_cache_tag)
     if [[ ${BUILDKITE_MESSAGE:-} =~ no[-_.[:space:]]cache ]]; then
-      logger "no-cache commit: the compile runs npm ci and replaces node_modules tag $NODE_MODULES_TAG"
-    elif main_node_modules_cache_restore "$NODE_MODULES_TAG"; then
-      logger "node_modules cache hit for tag $NODE_MODULES_TAG"
+      logger "no-cache commit: the compile runs npm ci and the pages CSS build, and replaces node_modules tag $NODE_MODULES_TAG and pages CSS tag $PAGES_TAILWIND_TAG"
     else
-      logger "node_modules cache miss for tag $NODE_MODULES_TAG: the compile runs npm ci"
+      if main_node_modules_cache_restore "$NODE_MODULES_TAG"; then
+        logger "node_modules cache hit for tag $NODE_MODULES_TAG"
+      else
+        logger "node_modules cache miss for tag $NODE_MODULES_TAG: the compile runs npm ci"
+      fi
+      if main_pages_tailwind_cache_restore "$PAGES_TAILWIND_TAG"; then
+        logger "pages CSS cache hit for tag $PAGES_TAILWIND_TAG"
+      else
+        logger "pages CSS cache miss for tag $PAGES_TAILWIND_TAG: the compile builds it"
+      fi
     fi
     COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME}_production \
       NODE_MODULES_CACHE_DIR=$PWD/$MAIN_NODE_MODULES_CACHE_DIR \
+      PAGES_TAILWIND_CACHE_DIR=$PWD/$MAIN_PAGES_TAILWIND_CACHE_DIR \
       NEW_WEB_TAG=$WEB_TAG \
       NEW_WEB_REPO=$WEB_REPO \
       BUILDKITE_BRANCH=${BUILDKITE_BRANCH} \
@@ -352,6 +363,7 @@ if [[ $BUILDKITE_PARALLEL_JOB = 1 && ( $BUILDKITE_BRANCH == "main" || $BUILDKITE
       make build_production
     if [[ $BUILDKITE_BRANCH == "main" ]]; then
       main_node_modules_cache_save "$NODE_MODULES_TAG" || :
+      main_pages_tailwind_cache_save "$PAGES_TAILWIND_TAG" || :
     fi
   fi
 

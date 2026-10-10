@@ -40,9 +40,28 @@ else
   fi
 fi
 
+# The pages CSS cache works like the node_modules cache above. These are the files
+# scripts/build_pages_tailwind.mjs writes; the generated HTML is in Vite's digest.
+pages_tailwind_paths="public/pages-tailwind.css public/pages-tailwind-manifest.json public/assets/pages app/javascript/stylesheets/pages_tailwind.generated.html"
+if [[ -s /pages-tailwind-cache/pages_tailwind.tar.gz ]]; then
+  echo "Restoring the pages CSS from the cache"
+  tar -xzf /pages-tailwind-cache/pages_tailwind.tar.gz
+  export PAGES_TAILWIND_RESTORED=true
+fi
+
 # One Rails boot. js:export must run first: Vite reads routes.js. assets:precompile
-# builds the pages Tailwind itself (lib/tasks/pages_tailwind.rake).
+# builds the pages Tailwind itself (lib/tasks/pages_tailwind.rake), unless restored.
 bundle exec rake js:export assets:precompile
+
+if [[ -z ${PAGES_TAILWIND_RESTORED:-} && $BUILDKITE_BRANCH == "main" && -d /pages-tailwind-cache && -w /pages-tailwind-cache ]]; then
+  # shellcheck disable=SC2086 # the paths are fixed and contain no spaces
+  if tar -czf /pages-tailwind-cache/pages_tailwind.tar.gz.new $pages_tailwind_paths; then
+    echo "Wrote the pages CSS to the cache directory"
+  else
+    echo "Could not write the pages CSS to the cache directory"
+    rm -f /pages-tailwind-cache/pages_tailwind.tar.gz.new
+  fi
+fi
 
 remove_assets_dir() {
   ASSETS_DIRECTORY=$1
