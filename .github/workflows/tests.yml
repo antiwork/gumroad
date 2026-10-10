@@ -320,6 +320,9 @@ jobs:
       - name: Self-test the branch-specs selector
         run: ruby spec/bin/branch_specs_test.rb
 
+      - name: Self-test the Minitest selector
+        run: ruby spec/bin/branch_minitests_test.rb
+
       - name: Self-test the main spec-failure classifier
         run: ruby spec/bin/classify_main_spec_failure_test.rb
 
@@ -414,8 +417,37 @@ jobs:
         with:
           ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
+          # bin/branch-minitests diffs against main, as bin/branch-specs does.
+          fetch-depth: 0
+          filter: blob:none
+
+      # PR-branch pushes run the tests their diff can affect. main, the
+      # run-all-specs label and fork PRs leave base_sha empty and run them all.
+      - name: Select tests
+        id: tests
+        env:
+          BASE_SHA: ${{ needs.ci_gate.outputs.base_sha }}
+        run: |
+          if [ -z "$BASE_SHA" ]; then
+            echo "mode=all" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git fetch --no-tags --quiet origin "$BASE_SHA"
+          TESTS=$(ruby bin/branch-minitests "$BASE_SHA")
+          if [ "$TESTS" = "ALL" ]; then
+            echo "mode=all" >> "$GITHUB_OUTPUT"
+          elif [ -z "$TESTS" ]; then
+            echo "No Minitest file is affected by this diff."
+            echo "mode=none" >> "$GITHUB_OUTPUT"
+          else
+            echo "Running these Minitest files:"
+            echo "$TESTS" | sed 's/^/  /'
+            echo "mode=some" >> "$GITHUB_OUTPUT"
+            echo "files=$(echo "$TESTS" | paste -sd' ' -)" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Set up Ruby
+        if: steps.tests.outputs.mode != 'none'
         uses: ruby/setup-ruby@v1
         with:
           bundler-cache: true
@@ -423,6 +455,7 @@ jobs:
       # Over TCP: during its first start, MySQL answers on the socket before it
       # listens on the port.
       - name: Wait for MySQL
+        if: steps.tests.outputs.mode != 'none'
         run: |
           for _ in $(seq 1 60); do
             docker exec mysql mysql --protocol=tcp -h127.0.0.1 -uroot -ppassword -e "SELECT 1" > /dev/null 2>&1 && exit 0
@@ -433,9 +466,11 @@ jobs:
           exit 1
 
       - name: Prepare test database and assets
+        if: steps.tests.outputs.mode != 'none'
         run: bundle exec rake db:prepare
 
       - name: Set up MinIO buckets
+        if: steps.tests.outputs.mode != 'none'
         run: |
           for i in $(seq 1 30); do curl -fsS http://localhost:9000/minio/health/ready >/dev/null 2>&1 && break; sleep 2; done
           curl -fsS http://localhost:9000/minio/health/ready || { echo "MinIO did not become ready"; exit 1; }
@@ -461,13 +496,17 @@ jobs:
             done"
 
       - name: Wait for Elasticsearch
+        if: steps.tests.outputs.mode != 'none'
         run: |
           for i in $(seq 1 30); do curl -fsS http://localhost:9200/_cluster/health >/dev/null 2>&1 && break; sleep 2; done
           curl -fsS http://localhost:9200/_cluster/health || { echo "Elasticsearch did not become ready"; exit 1; }
 
       - name: Run Minitest
-        run: bundle exec rails test
+        if: steps.tests.outputs.mode != 'none'
+        # An empty FILES runs every test. Each file name is one word.
+        run: bundle exec rails test $FILES
         env:
+          FILES: ${{ steps.tests.outputs.files }}
           RUBY_YJIT_ENABLE: 1
           CI: true
           MINITEST_SHARD: ${{ matrix.ci_node_index }}/${{ matrix.ci_node_total }}

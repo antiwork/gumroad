@@ -1,0 +1,98 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Prints the Minitest files a branch needs, one per line, or ALL for the whole
+# suite. Prints nothing when the diff cannot affect Minitest. test_minitest in
+# .github/workflows/tests.yml runs this on PR-branch pushes; main runs ALL.
+#
+# A Ruby change selects every test that names its class or a module on its
+# path, so a change picks too many tests rather than too few. A view change
+# selects the tests that name its controller. Shared test setup, config,
+# dependencies and any path no rule covers run ALL.
+#
+#   bin/branch-minitests BASE_SHA
+
+require "set"
+
+# Loaded by every test (test/test_helper.rb requires spec/support files too).
+ALL_PATTERNS = [
+  %r{\Atest/(test_helper\.rb|support/|fixtures/)},
+  %r{\Aspec/support/},
+  %r{\A(Gemfile|Gemfile\.lock|\.ruby-version|Rakefile|\.env\.test)\z},
+  %r{\A(config|db|vendor)/},
+  %r{\Aapp/(models/application_record|controllers/application_controller)\.rb\z},
+  %r{\Aapp/views/(layouts|shared)/},
+  %r{\A\.github/workflows/tests\.yml\z},
+  %r{\Abin/branch-minitests\z},
+].freeze
+
+# Minitest boots no browser and builds no assets, so these cannot change it.
+IGNORED_PATTERNS = [
+  %r{\Aapp/(javascript|assets)/},
+  %r{\Aspec/},
+  %r{\A(docs|public|script|docker|patches|\.claude|\.agents)/},
+  %r{\A\.(github|buildkite)/},
+  %r{\Abin/},
+  %r{\.(md|txt)\z},
+  %r{\A(package\.json|package-lock\.json|\.npmrc|tsconfig\.json|vite\.config[^/]*|vitest\.config[^/]*|postcss\.config\.js|eslint\.config[^/]*|\.prettier[^/]*)\z},
+].freeze
+
+def git(*args)
+  out = IO.popen(["git", *args], err: File::NULL, external_encoding: "UTF-8", &:read)
+  abort("bin/branch-minitests: git #{args.join(' ')} failed") unless $?.success?
+  abort("bin/branch-minitests: git reported a path that is not valid UTF-8") unless out.valid_encoding?
+  out.split("\n")
+end
+
+def camelize(segment) = segment.sub(/\..*\z/, "").split("_").map(&:capitalize).join
+
+# Every module on the path and the file's own class: app/models/purchase/refund.rb
+# names Purchase and Refund. A view names its directories and their controller.
+def names_for(path)
+  parts = path.split("/")
+  if path.start_with?("app/views/")
+    dirs = parts[2...-1].map { |dir| camelize(dir) }
+    dirs + (dirs.empty? ? [] : ["#{dirs.last}Controller"])
+  else
+    parts.drop(path.start_with?("app/") ? 2 : 1).map { |part| camelize(part) }
+  end.reject(&:empty?)
+end
+
+def tests_naming(names)
+  return [] if names.empty?
+
+  # A test class is often the only mention: LinksControllerTest names LinksController.
+  pattern = "\\b(#{names.uniq.map { |name| Regexp.escape(name) }.join('|')})(Test)?\\b"
+  out = IO.popen(["grep", "-rlE", pattern, "test/", "--include=*_test.rb"], err: File::NULL, external_encoding: "UTF-8", &:read)
+  # grep exits 1 when nothing matches, and 2 on an error.
+  abort("bin/branch-minitests: grep failed") if $?.exitstatus.to_i > 1
+  out.split("\n")
+end
+
+base = ARGV.fetch(0) { abort("usage: bin/branch-minitests BASE_SHA") }
+merge_base = git("merge-base", base, "HEAD").first
+changed = Set.new(git("diff", "--name-only", "#{merge_base}..HEAD"))
+changed.merge(git("diff", "--name-only", "HEAD"))
+changed.merge(git("ls-files", "--others", "--exclude-standard"))
+
+if changed.any? { |path| ALL_PATTERNS.any? { |re| re.match?(path) } }
+  puts "ALL"
+  exit 0
+end
+
+tests = Set.new
+names = []
+changed.each do |path|
+  if path.start_with?("test/") && path.end_with?("_test.rb")
+    tests << path if File.file?(path)
+  elsif IGNORED_PATTERNS.any? { |re| re.match?(path) }
+    next
+  elsif path.match?(%r{\A(app|lib)/})
+    names.concat(names_for(path))
+  else
+    puts "ALL"
+    exit 0
+  end
+end
+tests.merge(tests_naming(names))
+puts tests.sort
