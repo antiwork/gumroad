@@ -63,6 +63,34 @@ RSpec.describe LastReadCommunityChatMessage do
         expect(winning_record.reload.community_chat_message).to eq(message2)
       end
 
+      it "re-raises when the create fails for a reason other than the concurrent insert" do
+        winning_record = create(
+          :last_read_community_chat_message,
+          user:,
+          community:,
+          community_chat_message: message1
+        )
+        losing_record = build(
+          :last_read_community_chat_message,
+          user:,
+          community:,
+          community_chat_message: message2
+        )
+        losing_record.errors.add(:community_chat_message, :blank)
+
+        allow(described_class).to receive(:find_by).with(user_id: user.id, community_id: community.id)
+          .and_return(nil, winning_record)
+        allow(described_class).to receive(:create!).and_raise(ActiveRecord::RecordInvalid.new(losing_record))
+
+        expect do
+          described_class.set!(
+            user_id: user.id,
+            community_id: community.id,
+            community_chat_message_id: message2.id
+          )
+        end.to raise_error(ActiveRecord::RecordInvalid)
+      end
+
       it "uses the winning record when the unique index detects a concurrent insert" do
         winning_record = create(
           :last_read_community_chat_message,
