@@ -86,6 +86,19 @@ class Order::ChargeService
         create_charge_for_seller_purchases(non_free_seller_purchases, chargeable, off_session, setup_future_charges)
       end
     rescue => e
+      handled_charge_processor_error = e.is_a?(ChargeProcessorCardError) ||
+                                       e.is_a?(ChargeProcessorUnavailableError) ||
+                                       e.is_a?(ChargeProcessorInvalidRequestError) ||
+                                       e.is_a?(ChargeProcessorErrorRateLimit) ||
+                                       e.is_a?(ChargeProcessorErrorGeneric)
+      setup_only_purchases = non_free_seller_purchases&.select { _1.in_progress? && _1.errors.empty? }
+      if handled_charge_processor_error && setup_only_purchases.present? &&
+         setup_only_purchases.all? { _1.is_free_trial_purchase? || _1.is_preorder_authorization? }
+        setup_only_purchases.each do |purchase|
+          record_setup_charge_processor_error(purchase, e)
+        end
+      end
+
       # Per seller group: earlier groups' charges are already captured and the loop carries
       # on, so this is the partial-order path, not an aborted checkout.
       Rails.logger.error("Error charging order (#{order.id}):: #{e.class} => #{e.message} => #{e.backtrace}")
@@ -104,6 +117,34 @@ class Order::ChargeService
     end
 
     charge_responses
+  end
+
+  def record_setup_charge_processor_error(purchase, error)
+    case error
+    when ChargeProcessorInvalidRequestError
+      Rails.logger.error("Charge processor error: #{error.message} in purchase: #{purchase.external_id}")
+      purchase.errors.add :base, "There is a temporary problem, please try again (your card was not charged)."
+      purchase.error_code = PurchaseErrorCode::PROCESSOR_INVALID_REQUEST
+      purchase.stripe_error_code = error.processor_error_code if purchase.stripe_error_code.blank?
+    when ChargeProcessorUnavailableError, ChargeProcessorErrorRateLimit
+      Rails.logger.error("Charge processor error: #{error.message} in purchase: #{purchase.external_id}")
+      purchase.errors.add :base, "There is a temporary problem, please try again (your card was not charged)."
+      purchase.error_code = if purchase.charge_processor_id.blank? || purchase.stripe_charge_processor?
+        PurchaseErrorCode::STRIPE_UNAVAILABLE
+      else
+        PurchaseErrorCode::PAYPAL_UNAVAILABLE
+      end
+    when ChargeProcessorErrorGeneric
+      Rails.logger.error("Charge processor error: #{error.message} in purchase: #{purchase.external_id}")
+      purchase.errors.add :base, "There is a temporary problem, please try again (your card was not charged)."
+      purchase.stripe_error_code = error.error_code
+    when ChargeProcessorCardError
+      purchase.stripe_error_code = error.error_code
+      purchase.stripe_transaction_id = error.charge_id
+      purchase.was_zipcode_check_performed = true if error.error_code == "incorrect_zip"
+      Rails.logger.info("Charge processor error: #{error.message} in purchase: #{purchase.external_id}")
+      purchase.errors.add :base, PurchaseErrorCode.customer_error_message(error.message)
+    end
   end
 
   def mark_successful_if_free_or_test_purchase(purchase)
@@ -272,6 +313,7 @@ class Order::ChargeService
       if purchase.is_test_purchase?
         preorder.mark_test_authorization_successful!
       elsif error_message.present?
+        purchase.error_code = PurchaseErrorCode::PROCESSING_ERROR if purchase.error_code.blank?
         Purchase::MarkFailedService.new(purchase).perform
       else
         preorder.mark_authorization_successful!
@@ -691,6 +733,10 @@ class Order::ChargeService
         elsif charge_intent&.succeeded? && purchase_has_charge_data?(purchase)
           mark_charged_purchase_successful(purchase)
         else
+          if !purchase.is_test_purchase? && purchase.error_code.blank? && purchase.stripe_error_code.blank? &&
+             (purchase.is_free_trial_purchase? || purchase.is_preorder_authorization?)
+            purchase.error_code = PurchaseErrorCode::PROCESSING_ERROR
+          end
           Purchase::MarkFailedService.new(purchase).perform
         end
       end
