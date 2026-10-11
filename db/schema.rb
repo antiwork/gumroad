@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_16_150004) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_16_160000) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -1339,6 +1339,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_16_150004) do
     t.string "support_email"
     t.bigint "default_offer_code_id"
     t.integer "sales_count_for_inventory_cache", default: 0, null: false
+    t.datetime "first_published_at"
     t.index ["banned_at"], name: "index_links_on_banned_at"
     t.index ["custom_permalink"], name: "index_links_on_custom_permalink", length: 191
     t.index ["default_offer_code_id"], name: "index_links_on_default_offer_code_id"

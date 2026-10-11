@@ -126,6 +126,7 @@ class Api::Internal::Admin::ProductsController < Api::Internal::Admin::BaseContr
         deleted_at: product.deleted_at&.iso8601,
         banned_at: product.banned_at&.iso8601,
         purchase_disabled_at: product.purchase_disabled_at&.iso8601,
+        first_published_at: product.first_published_at&.iso8601,
         alive: product.alive?,
         is_adult: product.is_adult?,
         bad_card_counter: product.bad_card_counter,

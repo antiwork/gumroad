@@ -73,6 +73,7 @@ const baseProduct: Product = {
     title: "30-day money back guarantee",
   },
   is_published: false,
+  first_published_at: null,
   free_trial_enabled: false,
   free_trial_duration_amount: null,
   free_trial_duration_unit: null,

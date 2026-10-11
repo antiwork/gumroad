@@ -113,6 +113,7 @@ const baseProduct: Product = {
     title: "",
   },
   is_published: false,
+  first_published_at: null,
   free_trial_enabled: false,
   free_trial_duration_amount: null,
   free_trial_duration_unit: null,
@@ -300,5 +301,22 @@ describe("ProductTab automatic discount code control", () => {
         default_offer_code: defaultOfferCode,
       }),
     );
+  });
+});
+
+describe("ProductTab first published date", () => {
+  it("shows the date the listing first went live", () => {
+    renderProductTab({ ...baseProduct, first_published_at: "2026-01-23T12:00:00Z" });
+
+    // The month name is locale-dependent, so assert on the label and the date's own parts.
+    const line = screen.getByText(/^First published /u);
+    expect(line.textContent).toContain("23");
+    expect(line.textContent).toContain("2026");
+  });
+
+  it("shows nothing for a listing published before the date was recorded", () => {
+    renderProductTab(baseProduct);
+
+    expect(screen.queryByText(/^First published /u)).toBeNull();
   });
 });

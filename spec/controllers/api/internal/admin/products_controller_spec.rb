@@ -359,6 +359,19 @@ describe Api::Internal::Admin::ProductsController do
       )
     end
 
+    it "exposes first_published_at when recorded, nil for a listing that predates it" do
+      published = create(:product, user: seller)
+      published.update_column(:first_published_at, 3.days.ago)
+      published.reload
+      unrecorded = create(:product, user: seller)
+
+      get :show, params: { id: published.external_id }
+      expect(response.parsed_body["product"]["first_published_at"]).to eq(published.first_published_at.iso8601)
+
+      get :show, params: { id: unrecorded.external_id }
+      expect(response.parsed_body["product"]["first_published_at"]).to be_nil
+    end
+
     it "returns the bad-card counter value as stored on the product" do
       product = create(:product, user: seller)
       product.update_column(:bad_card_counter, 7)

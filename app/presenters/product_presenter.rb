@@ -217,6 +217,7 @@ class ProductPresenter
         },
         covers: product.display_asset_previews.as_json,
         is_published: !product.draft && product.alive?,
+        first_published_at: product.first_published_at&.iso8601,
         require_shipping: product.require_shipping?,
         integrations: Integration::ALL_NAMES.index_with { |name| @product.find_integration_by_name(name).as_json },
         variants: product.alive_variants.in_order.includes(:variant_category, :alive_rich_contents).map do |variant|

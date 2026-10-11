@@ -155,6 +155,7 @@ export type Product = {
   product_refund_policy_enabled: boolean;
   refund_policy: RefundPolicy;
   is_published: boolean;
+  first_published_at: string | null;
   free_trial_enabled: boolean;
   free_trial_duration_amount: 1 | null;
   free_trial_duration_unit: FreeTrialDurationUnit | null;

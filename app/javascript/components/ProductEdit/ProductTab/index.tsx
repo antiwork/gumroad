@@ -1,8 +1,10 @@
 import { Sparkle } from "@boxicons/react";
+import { parseISO } from "date-fns";
 import * as React from "react";
 
 import { COFFEE_CUSTOM_BUTTON_TEXT_OPTIONS, CUSTOM_BUTTON_TEXT_OPTIONS } from "$app/parsers/product";
 import { currencyCodeList } from "$app/utils/currency";
+import { formatDate } from "$app/utils/date";
 import { recurrenceIds, recurrenceLabels } from "$app/utils/recurringPricing";
 
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
@@ -208,6 +210,12 @@ export const ProductTab = () => {
                   fileAttributes={product.file_attributes}
                   setFileAttributes={(file_attributes) => updateProduct({ file_attributes })}
                 />
+                {/* Server-recorded on first publish; sellers cite this date in copyright filings. */}
+                {product.first_published_at ? (
+                  <p className="text-muted">
+                    First published {formatDate(parseISO(product.first_published_at), { dateStyle: "long" })}
+                  </p>
+                ) : null}
               </section>
               <section className="grid gap-8 border-t border-border p-4 md:p-8">
                 <h2>Integrations</h2>

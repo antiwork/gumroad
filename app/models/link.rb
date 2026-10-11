@@ -550,6 +550,9 @@ class Link < ApplicationRecord
     transcode_after_publish = auto_transcode_videos?
     caller_flags_change = changes["flags"]&.map(&:to_i)
 
+    # Set once: a re-publish must not move the date a listing first went live, which sellers
+    # cite in copyright filings.
+    self.first_published_at ||= Time.current
     self.purchase_disabled_at = nil
     self.deleted_at = nil
     self.draft = false
