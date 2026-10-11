@@ -81,11 +81,16 @@ const videoFile = (overrides: Partial<FileItem> = {}): FileItem => ({
 
 // Renders the embedded-video row the way the content page does, so the tests can
 // check the frame the buyer actually gets rather than only the style helper.
-const renderFileRow = (file: FileItem, mediaUrls: Record<string, string[]> = {}, isEmbed = false) =>
+const renderFileRow = (
+  file: FileItem,
+  mediaUrls: Record<string, string[]> = {},
+  isEmbed = false,
+  isMobileAppView = false,
+) =>
   render(
     <PurchaseInfoProvider value={{ purchaseId: "purchase-1", redirectId: "redirect-1", token: "token-1" }}>
       <MediaUrlsProvider value={[mediaUrls, () => undefined]}>
-        <IsMobileAppViewProvider value={false}>
+        <IsMobileAppViewProvider value={isMobileAppView}>
           <FileRow file={file} playingAudioForId={null} setPlayingAudioForId={() => undefined} isEmbed={isEmbed} />
         </IsMobileAppViewProvider>
       </MediaUrlsProvider>
@@ -211,6 +216,48 @@ describe("FileList", () => {
         type: "click",
         payload: { resourceId: file.id, resumeAt: "0", contentLength: "3711" },
       });
+    });
+  });
+
+  describe("the native app audio row", () => {
+    const audioFile = (overrides: Partial<FileItem> = {}): FileItem =>
+      videoFile({ extension: "MP3", file_name: "Track", duration: 46, ...overrides });
+
+    const dispatchAudioPlayerInfo = (detail: unknown) =>
+      act(() => {
+        window.dispatchEvent(new CustomEvent("mobile_app_audio_player_info", { detail }));
+      });
+
+    it("applies the playback state the native app reports for this file", () => {
+      const file = audioFile();
+      renderFileRow(file, {}, false, true);
+      expect(screen.getByRole("button", { name: "Play" })).toBeTruthy();
+
+      dispatchAudioPlayerInfo({ fileId: file.id, isPlaying: true, latestMediaLocation: "24" });
+
+      expect(screen.getByRole("button", { name: "Pause" })).toBeTruthy();
+      expect(screen.getByText("0m 22s left")).toBeTruthy();
+    });
+
+    // The native app's payload is not our server's data, so a field of the wrong type is ignored
+    // rather than used: a string isPlaying must not flip the row into its playing state.
+    it("ignores a payload whose fields have the wrong types", () => {
+      const file = audioFile();
+      renderFileRow(file, {}, false, true);
+
+      dispatchAudioPlayerInfo({ fileId: file.id, isPlaying: "true", latestMediaLocation: 24 });
+
+      expect(screen.getByRole("button", { name: "Play" })).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Pause" })).toBeNull();
+    });
+
+    it("ignores a payload for another file", () => {
+      const file = audioFile();
+      renderFileRow(file, {}, false, true);
+
+      dispatchAudioPlayerInfo({ fileId: "another-file", isPlaying: true });
+
+      expect(screen.queryByRole("button", { name: "Pause" })).toBeNull();
     });
   });
 

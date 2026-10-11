@@ -38,7 +38,7 @@ import { Input } from "$app/components/ui/Input";
 import { LinkButton } from "$app/components/ui/LinkButton";
 import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
 import { useOnOutsideClick } from "$app/components/useOnOutsideClick";
-import { useReactNativeMessage } from "$app/components/useReactNativeMessage";
+import { isMobileAppAudioPlayerInfo, useReactNativeMessage } from "$app/components/useReactNativeMessage";
 import { useRefToLatest } from "$app/components/useRefToLatest";
 import { WithTooltip } from "$app/components/WithTooltip";
 
@@ -463,11 +463,6 @@ const useTouchAndHold = ({ onFinish, onCancel }: { onFinish: () => void; onCance
   return { onTouchStart, onTouchEnd };
 };
 
-type MobileAppAudioPlayerInfo = {
-  fileId: string;
-  isPlaying: boolean;
-  latestMediaLocation?: string;
-};
 const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
   const [isPlaying, setIsPlaying] = React.useState(false);
   const [latestMediaLocation, setLatestMediaLocation] = React.useState<number | null>(
@@ -476,11 +471,10 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
 
   useGlobalCustomEventListener("mobile_app_audio_player_info", (evt) => {
     if (!(evt instanceof CustomEvent)) return;
-    const data = cast<MobileAppAudioPlayerInfo | null>(evt.detail);
-    if (data?.fileId === file.id) {
-      setIsPlaying(data.isPlaying);
-      setLatestMediaLocation(parseFloat(data.latestMediaLocation ?? "0"));
-    }
+    const data: unknown = evt.detail;
+    if (!isMobileAppAudioPlayerInfo(data) || data.fileId !== file.id) return;
+    setIsPlaying(data.isPlaying);
+    setLatestMediaLocation(parseFloat(data.latestMediaLocation ?? "0"));
   });
 
   useReactNativeMessage((data) => {

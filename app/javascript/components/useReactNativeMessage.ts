@@ -5,26 +5,29 @@ import Mobile from "$app/utils/mobile";
 
 import { useRefToLatest } from "./useRefToLatest";
 
+export type MobileAppAudioPlayerInfo = {
+  fileId: string;
+  isPlaying: boolean;
+  latestMediaLocation?: string;
+};
+
 export type ReactNativeMessage =
   | { type: "mobileAppPageChange"; payload: { pageIndex: number } }
   | { type: "mobileAppSettingsSave" }
-  | {
-      type: "mobileAppAudioPlayerInfo";
-      payload: { fileId: string; isPlaying: boolean; latestMediaLocation?: string };
-    };
+  | { type: "mobileAppAudioPlayerInfo"; payload: MobileAppAudioPlayerInfo };
+
+// The native app sends this payload both as a message and as a CustomEvent detail, so both
+// entry points check it with the same guard.
+export const isMobileAppAudioPlayerInfo = (value: unknown): value is MobileAppAudioPlayerInfo =>
+  isRecord(value) &&
+  isString(value.fileId) &&
+  isBoolean(value.isPlaying) &&
+  (value.latestMediaLocation === undefined || isString(value.latestMediaLocation));
 
 export const isReactNativeMessage = (data: unknown): data is ReactNativeMessage => {
   if (hasType(data, "mobileAppSettingsSave")) return true;
   if (hasType(data, "mobileAppPageChange")) return isRecord(data.payload) && isNumber(data.payload.pageIndex);
-  if (hasType(data, "mobileAppAudioPlayerInfo")) {
-    const { payload } = data;
-    return (
-      isRecord(payload) &&
-      isString(payload.fileId) &&
-      isBoolean(payload.isPlaying) &&
-      (payload.latestMediaLocation === undefined || isString(payload.latestMediaLocation))
-    );
-  }
+  if (hasType(data, "mobileAppAudioPlayerInfo")) return isMobileAppAudioPlayerInfo(data.payload);
   return false;
 };
 

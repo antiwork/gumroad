@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { isReactNativeMessage } from "$app/components/useReactNativeMessage";
+import { isMobileAppAudioPlayerInfo, isReactNativeMessage } from "$app/components/useReactNativeMessage";
 
 describe("isReactNativeMessage", () => {
   it("accepts each message the mobile app sends", () => {
@@ -28,5 +28,20 @@ describe("isReactNativeMessage", () => {
         payload: { fileId: "f1", isPlaying: true, latestMediaLocation: 12 },
       }),
     ).toBe(false);
+  });
+});
+
+describe("isMobileAppAudioPlayerInfo", () => {
+  it("accepts the audio player payload the mobile app sends", () => {
+    expect(isMobileAppAudioPlayerInfo({ fileId: "f1", isPlaying: true })).toBe(true);
+    expect(isMobileAppAudioPlayerInfo({ fileId: "f1", isPlaying: false, latestMediaLocation: "12" })).toBe(true);
+  });
+
+  it("rejects a payload with a field of the wrong type", () => {
+    expect(isMobileAppAudioPlayerInfo({ fileId: "f1", isPlaying: "true" })).toBe(false);
+    expect(isMobileAppAudioPlayerInfo({ fileId: "f1", isPlaying: true, latestMediaLocation: 12 })).toBe(false);
+    expect(isMobileAppAudioPlayerInfo({ fileId: 1, isPlaying: true })).toBe(false);
+    expect(isMobileAppAudioPlayerInfo(null)).toBe(false);
+    expect(isMobileAppAudioPlayerInfo("f1")).toBe(false);
   });
 });
