@@ -27,6 +27,37 @@ export const AttributesEditor = ({
   // rejects. A plain id keeps the datalist wireable in the component tests.
   const nameSuggestionsId = React.useId().replace(/:/gu, "");
 
+  // Rows are keyed by position, so a reorder reuses the DOM nodes in place: the button the seller
+  // just pressed stays where it was and now belongs to whichever detail slid into that slot, so a
+  // second Enter moves that detail instead of the one they were moving. Remember where the moved
+  // detail landed and put focus back on its own button after the update, so repeated presses keep
+  // moving the same detail.
+  const moveButtonsRef = React.useRef(
+    new Map<number, { up: HTMLButtonElement | null; down: HTMLButtonElement | null }>(),
+  );
+  const focusAfterMoveRef = React.useRef<{ index: number; direction: "up" | "down" } | null>(null);
+
+  const registerMoveButton = (idx: number, direction: "up" | "down", button: HTMLButtonElement | null) => {
+    if (!button) return;
+    const entry = moveButtonsRef.current.get(idx) ?? { up: null, down: null };
+    entry[direction] = button;
+    moveButtonsRef.current.set(idx, entry);
+  };
+
+  React.useEffect(() => {
+    const pending = focusAfterMoveRef.current;
+    if (!pending) return;
+    focusAfterMoveRef.current = null;
+    const entry = moveButtonsRef.current.get(pending.index);
+    const sameDirection = pending.direction === "up" ? entry?.up : entry?.down;
+    const otherDirection = pending.direction === "up" ? entry?.down : entry?.up;
+    // The detail has reached the end of the list, where the button for the direction just used is
+    // disabled and a disabled button cannot take focus; its other button still belongs to the same
+    // row, so focus stays with the moved detail either way.
+    const target = sameDirection && !sameDirection.disabled ? sameDirection : otherDirection;
+    if (target && !target.disabled) target.focus();
+  }, [customAttributes]);
+
   const updateCustomAttribute = (idx: number, update: Partial<Attribute>) => {
     const customAttribute = customAttributes[idx];
     if (!customAttribute) return;
@@ -43,6 +74,7 @@ export const AttributesEditor = ({
     const reordered = [...customAttributes];
     reordered.splice(idx, 1);
     reordered.splice(to, 0, customAttribute);
+    focusAfterMoveRef.current = { index: to, direction: to < idx ? "up" : "down" };
     setCustomAttributes(reordered);
   };
 
@@ -78,6 +110,8 @@ export const AttributesEditor = ({
               onDelete={() => setCustomAttributes(customAttributes.filter((_, index) => idx !== index))}
               onMoveUp={idx === 0 ? undefined : () => moveCustomAttribute(idx, idx - 1)}
               onMoveDown={idx === customAttributes.length - 1 ? undefined : () => moveCustomAttribute(idx, idx + 1)}
+              registerMoveUp={(button) => registerMoveButton(idx, "up", button)}
+              registerMoveDown={(button) => registerMoveButton(idx, "down", button)}
               key={idx}
             />
           ))}
@@ -101,6 +135,8 @@ const AttributeEditor = ({
   onDelete,
   onMoveUp,
   onMoveDown,
+  registerMoveUp,
+  registerMoveDown,
 }: {
   attribute: Attribute;
   nameSuggestionsId?: string;
@@ -108,6 +144,8 @@ const AttributeEditor = ({
   onDelete: () => void;
   onMoveUp?: (() => void) | undefined;
   onMoveDown?: (() => void) | undefined;
+  registerMoveUp?: (button: HTMLButtonElement | null) => void;
+  registerMoveDown?: (button: HTMLButtonElement | null) => void;
 }) => (
   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr max-content", gap: "var(--spacer-2)" }}>
     <Input
@@ -126,10 +164,10 @@ const AttributeEditor = ({
     <div style={{ display: "flex", gap: "var(--spacer-2)" }}>
       {onUpdate ? (
         <>
-          <Button aria-label="Move detail up" disabled={!onMoveUp} onClick={onMoveUp}>
+          <Button aria-label="Move detail up" ref={registerMoveUp} disabled={!onMoveUp} onClick={onMoveUp}>
             <ArrowUp className="size-5" />
           </Button>
-          <Button aria-label="Move detail down" disabled={!onMoveDown} onClick={onMoveDown}>
+          <Button aria-label="Move detail down" ref={registerMoveDown} disabled={!onMoveDown} onClick={onMoveDown}>
             <ArrowDown className="size-5" />
           </Button>
         </>

@@ -88,4 +88,34 @@ describe("AttributesEditor", () => {
     ]);
     expect(container.querySelector(`input[list="${datalist.id}"]`)).not.toBeNull();
   });
+
+  it("keeps focus on the moved detail so repeated presses keep moving the same row", () => {
+    const Harness = () => {
+      const [attributes, setAttributes] = React.useState<Attribute[]>([
+        { name: "Format", value: "PDF" },
+        { name: "Pages", value: "12" },
+        { name: "Ships from", value: "United States" },
+      ]);
+      return <AttributesEditor customAttributes={attributes} setCustomAttributes={setAttributes} />;
+    };
+    render(<Harness />);
+
+    const rowNames = () => screen.getAllByRole<HTMLInputElement>("combobox").map((input) => input.value);
+
+    // A keyboard seller is standing on the third row's "move up" button.
+    const firstPress = assertDefined(moveUpButtons()[2]);
+    firstPress.focus();
+    fireEvent.click(firstPress);
+
+    expect(rowNames()).toEqual(["Format", "Ships from", "Pages"]);
+    expect(document.activeElement).toBe(moveUpButtons()[1]);
+
+    // Pressing it again must keep moving the same detail, not the row that took its place.
+    fireEvent.click(assertDefined(moveUpButtons()[1]));
+
+    expect(rowNames()).toEqual(["Ships from", "Format", "Pages"]);
+    // The detail is now first, so its "move up" button is disabled and cannot take focus; focus
+    // stays on the moved row via its "move down" button rather than on a different row.
+    expect(document.activeElement).toBe(moveDownButtons()[0]);
+  });
 });

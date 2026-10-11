@@ -684,7 +684,7 @@ describe ProductPresenter do
       it "offers the detail names the seller uses on their other products" do
         create(:product, user: product.user).save_custom_attributes([{ "name" => "Format", "value" => "PDF" }, { "name" => "Pages", "value" => "12" }])
 
-        expect(presenter.edit_props[:custom_attribute_name_suggestions]).to match_array(["Format", "Pages"])
+        expect(presenter.edit_props[:custom_attribute_name_suggestions]).to eq(["Format", "Pages"])
       end
 
       it "suggests a name used on several products once" do
@@ -701,10 +701,27 @@ describe ProductPresenter do
         expect(presenter.edit_props[:custom_attribute_name_suggestions]).to eq([])
       end
 
-      it "caps the list" do
-        create(:product, user: product.user).save_custom_attributes((1..25).map { { "name" => "Detail #{_1}", "value" => "Value" } })
+      it "returns the suggestions in name order, not the order the products were updated" do
+        create(:product, user: product.user).save_custom_attributes([{ "name" => "Pages", "value" => "12" }, { "name" => "Format", "value" => "PDF" }])
 
-        expect(presenter.edit_props[:custom_attribute_name_suggestions].length).to eq(20)
+        expect(presenter.edit_props[:custom_attribute_name_suggestions]).to eq(["Format", "Pages"])
+      end
+
+      it "caps the list at the first 20 names in order, not an arbitrary 20" do
+        # Inserted in reverse so "insertion order" and "name order" cannot agree by accident.
+        names = (1..25).map { format("Detail %02d", _1) }
+        create(:product, user: product.user).save_custom_attributes(names.reverse.map { { "name" => _1, "value" => "Value" } })
+
+        expect(presenter.edit_props[:custom_attribute_name_suggestions]).to eq(names.first(20))
+      end
+
+      it "suggests a detail name too long for a VARCHAR(255) column to hold" do
+        # JSON_TABLE returns NULL (it does not truncate) for a name wider than the column, and
+        # nothing caps the length of a name the editor stores.
+        long_name = "S" * 300
+        create(:product, user: product.user).save_custom_attributes([{ "name" => long_name, "value" => "PDF" }])
+
+        expect(presenter.edit_props[:custom_attribute_name_suggestions]).to eq([long_name])
       end
     end
 

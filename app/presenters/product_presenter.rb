@@ -433,15 +433,21 @@ class ProductPresenter
                             .limit(CUSTOM_ATTRIBUTE_NAME_SUGGESTION_PRODUCT_LIMIT)
                             .select(:json_data)
 
+      # `name` is TEXT rather than VARCHAR: nothing caps the length of a detail name the editor
+      # stores, and a name wider than the column comes back NULL from JSON_TABLE (it is not
+      # truncated), which would silently drop a name the seller does use on their other products.
       Link.from("(#{recent_products.to_sql}) AS suggestion_products")
           .joins(<<~SQL.squish)
             JOIN JSON_TABLE(
               suggestion_products.json_data,
-              '$.custom_attributes[*]' COLUMNS (name VARCHAR(255) PATH '$.name')
+              '$.custom_attributes[*]' COLUMNS (name TEXT PATH '$.name')
             ) AS detail_names ON TRUE
           SQL
           .where("detail_names.name IS NOT NULL")
           .distinct
+          # Order before the limit: the cap would otherwise pick an arbitrary 20 of the seller's
+          # names and the list could change between two loads of the same editor.
+          .order("detail_names.name ASC")
           .limit(MAX_CUSTOM_ATTRIBUTE_NAME_SUGGESTIONS)
           .pluck("detail_names.name")
           .filter_map { _1.to_s.strip.presence }
