@@ -43,6 +43,7 @@ class UpdateUserCountry
         content: "Country changed from #{@old_country_code} to #{@new_country_code}"
       )
 
+      @user.retire_payout_setup_rejection_notes!
       @user.forfeit_unpaid_balance!(:country_change)
       @user.stripe_account.try(:delete_charge_processor_account!)
       @user.active_bank_account.try(:mark_deleted!)

@@ -45,6 +45,17 @@ module User::Comments
             .find { |note| note.json_data[StripeMerchantAccountManager::PAYOUT_SETUP_REJECTION_NOTE_FLAG] == true }
   end
 
+  # Soft-deletes every marked payout-setup-rejection note. A rejection describes the setup for the
+  # country it was written under, so it stops being true once the payout country changes.
+  def retire_payout_setup_rejection_notes!
+    comments.with_type_payout_note
+            .alive
+            .where(author_id: GUMROAD_ADMIN_ID)
+            .where("json_data LIKE ?", "%#{StripeMerchantAccountManager::PAYOUT_SETUP_REJECTION_NOTE_FLAG}%")
+            .select { |note| note.json_data[StripeMerchantAccountManager::PAYOUT_SETUP_REJECTION_NOTE_FLAG] == true }
+            .each { |note| note.update!(deleted_at: Time.current) }
+  end
+
   # The newest payout note on the account, seller-facing or internal.
   #
   # Same scoping and ordering as latest_seller_visible_payout_note on purpose — the payout pipeline

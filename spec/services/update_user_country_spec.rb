@@ -115,6 +115,26 @@ describe UpdateUserCountry do
       expect(comment.content).to eq("Country changed from US to GB")
     end
 
+    it "retires the seller-visible payout-setup-rejection note" do
+      note = @user.comments.create!(
+        author_id: GUMROAD_ADMIN_ID,
+        comment_type: Comment::COMMENT_TYPE_PAYOUT_NOTE,
+        content: "Our payment partner couldn't accept the phone number you entered.",
+        json_data: { StripeMerchantAccountManager::PAYOUT_SETUP_REJECTION_NOTE_FLAG => true, seller_visible: true }
+      )
+      other_note = @user.comments.create!(
+        author_id: GUMROAD_ADMIN_ID,
+        comment_type: Comment::COMMENT_TYPE_PAYOUT_NOTE,
+        content: "Internal payout note"
+      )
+
+      UpdateUserCountry.new(new_country_code: "IN", user: @user).process
+
+      expect(note.reload.deleted_at).to be_present
+      expect(other_note.reload.deleted_at).to be_nil
+      expect(@user.latest_payout_setup_rejection_note).to be_nil
+    end
+
     context "when old and new country are not Stripe-supported countries" do
       it "retains PayPal payment address" do
         payment_address = @user.payment_address
