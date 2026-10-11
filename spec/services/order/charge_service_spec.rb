@@ -1637,6 +1637,27 @@ describe Order::ChargeService, :vcr do
         expect(purchase.error_code).to be_blank
       end
 
+      it "does not add processing_error to a free trial in a mixed paid cart" do
+        paid_product = create(:product, user: seller_2, price_cents: 30_00)
+        params[:line_items] << {
+          uid: "unique-id-1",
+          permalink: paid_product.unique_permalink,
+          perceived_price_cents: 30_00,
+          quantity: 1
+        }
+        allow_any_instance_of(Charge::CreateService).to receive(:perform).and_return(instance_double(Charge, charge_intent: nil))
+
+        order, = Order::CreateService.new(params:, buyer:).perform
+        Order::ChargeService.new(order:, params:).perform
+
+        free_trial_purchase = order.reload.purchases.find_by!(link: free_trial_membership_product)
+        paid_purchase = order.purchases.find_by!(link: paid_product)
+        expect(free_trial_purchase).to be_failed
+        expect(free_trial_purchase.error_code).to be_blank
+        expect(paid_purchase).to be_failed
+        expect(paid_purchase.error_code).to be_blank
+      end
+
       it "records processing_error when an unexpected exception is swallowed by the seller rescue" do
         allow(ChargeProcessor).to receive(:setup_future_charges!).and_raise(NoMethodError, "undefined method for nil")
 

@@ -47,6 +47,10 @@ class Order::ChargeService
 
       non_free_seller_purchases = seller_purchases.select(&:in_progress?)
       next unless non_free_seller_purchases.present?
+      # This initial value covers processor errors raised before purchase preparation can finish.
+      setup_only_seller_group = non_free_seller_purchases.all? do |purchase|
+        purchase.is_free_trial_purchase? || purchase.is_preorder_authorization?
+      end
 
       # All purchases belonging to the same seller should have the same destination merchant account
       if non_free_seller_purchases.pluck(:merchant_account_id).uniq.compact.count > 1
@@ -79,6 +83,9 @@ class Order::ChargeService
       only_setup_for_future_charges = all_in_progress_purchases.present? && all_in_progress_purchases.all? do |purchase|
         purchase.is_free_trial_purchase? || purchase.is_preorder_authorization?
       end
+
+      # Once preparation completes, use the same surviving-candidate predicate as the setup branch.
+      setup_only_seller_group = only_setup_for_future_charges
 
       if only_setup_for_future_charges
         setup_for_future_charges_without_charging(non_free_seller_purchases, chargeable, chargeable_from_params.blank? && chargeable.present?)
@@ -113,7 +120,10 @@ class Order::ChargeService
       # and each line item has a response. Include purchases rejected by
       # `Purchase.validate_offer_code_usage_across_line_items` so their line items
       # get an error response in `charge_responses`.
-      ensure_all_purchases_processed((non_free_seller_purchases || seller_purchases.select(&:in_progress?)) + (seller_purchases & rejected_by_offer_code_limit))
+      ensure_all_purchases_processed(
+        (non_free_seller_purchases || seller_purchases.select(&:in_progress?)) + (seller_purchases & rejected_by_offer_code_limit),
+        setup_only_group: setup_only_seller_group
+      )
     end
 
     charge_responses
@@ -691,7 +701,7 @@ class Order::ChargeService
     end
   end
 
-  def ensure_all_purchases_processed(purchases)
+  def ensure_all_purchases_processed(purchases, setup_only_group: false)
     return if purchases.nil?
 
     purchases.each do |purchase|
@@ -733,8 +743,7 @@ class Order::ChargeService
         elsif charge_intent&.succeeded? && purchase_has_charge_data?(purchase)
           mark_charged_purchase_successful(purchase)
         else
-          if !purchase.is_test_purchase? && purchase.error_code.blank? && purchase.stripe_error_code.blank? &&
-             (purchase.is_free_trial_purchase? || purchase.is_preorder_authorization?)
+          if setup_only_group && !purchase.is_test_purchase? && purchase.error_code.blank? && purchase.stripe_error_code.blank?
             purchase.error_code = PurchaseErrorCode::PROCESSING_ERROR
           end
           Purchase::MarkFailedService.new(purchase).perform
