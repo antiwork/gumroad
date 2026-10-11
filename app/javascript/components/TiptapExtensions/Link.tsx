@@ -439,5 +439,16 @@ export const Link = Node.create({
         .setMeta("addToHistory", false),
     );
   },
-  addExtensions: () => [BaseLink.extend({ parseHTML: () => undefined }).configure({ openOnClick: false })],
+  addExtensions: () => [
+    BaseLink.extend({
+      parseHTML: () => undefined,
+      // Read-only views (profile sections) render stored JSON link marks as-is, so ignore a stored rel.
+      addAttributes() {
+        return {
+          ...this.parent?.(),
+          rel: { default: "noopener noreferrer nofollow", renderHTML: () => ({ rel: "noopener noreferrer nofollow" }) },
+        };
+      },
+    }).configure({ openOnClick: false }),
+  ],
 });

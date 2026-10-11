@@ -146,6 +146,7 @@ export const RichContentLink = Mark.create<BaseLinkOptions & LinkRenderOptions>(
         ...HTMLAttributes,
         href: resolveHref(assertString(HTMLAttributes.href), this.options),
         target: "_blank",
+        rel: "noopener noreferrer nofollow",
       },
       0,
     ];
