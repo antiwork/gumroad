@@ -51,6 +51,24 @@ describe("getPagedAffiliatedProducts", () => {
     expect(error).toBeInstanceOf(ResponseError);
     expect(error).not.toBeInstanceOf(AbortError);
   });
+
+  it("rejects an error status with a ResponseError instead of using its body as products", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve(
+          new Response(JSON.stringify({ success: false, error: "Not allowed" }), {
+            status: 403,
+            headers: { "content-type": "application/json" },
+          }),
+        ),
+      ),
+    );
+
+    const { response } = getPagedAffiliatedProducts(1);
+
+    await expect(response).rejects.toBeInstanceOf(ResponseError);
+  });
 });
 
 describe("removeSelfAsAffiliate", () => {
