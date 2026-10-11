@@ -1464,16 +1464,9 @@ describe Order::ChargeService, :vcr do
 
     describe "free trial setup failures" do
       let(:buyer) do
-        saved_card = CreditCard.create!(
-          charge_processor_id: StripeChargeProcessor.charge_processor_id,
-          stripe_customer_id: "cus_setup_failure_card",
-          processor_payment_method_id: "pm_setup_failure_card",
-          stripe_fingerprint: "setup_failure_card_fingerprint",
-          visual: "**** **** **** 4242",
-          card_type: CardType::VISA,
+        saved_card = create(
+          :credit_card,
           card_country: Compliance::Countries::IND.alpha2,
-          expiry_month: 12,
-          expiry_year: 2030,
           json_data: { stripe_setup_intent_id: "seti_existing" }
         )
         create(:user, credit_card: saved_card)
@@ -1504,9 +1497,9 @@ describe Order::ChargeService, :vcr do
 
       after { Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller_2) }
 
-      def charge_free_trial
-        order, = Order::CreateService.new(params:, buyer:).perform
-        responses = Order::ChargeService.new(order:, params:).perform
+      def charge_free_trial(order_params = params)
+        order, = Order::CreateService.new(params: order_params, buyer:).perform
+        responses = Order::ChargeService.new(order:, params: order_params).perform
         [order.reload.purchases.sole, responses]
       end
 
@@ -1624,31 +1617,23 @@ describe Order::ChargeService, :vcr do
         expect(purchase.error_code).to eq(PurchaseErrorCode::PROCESSING_ERROR)
       end
 
-      it "leaves the error code blank when a paid charge ends without an intent" do
+      it "limits the processing_error fallback to setup-only free trials" do
         paid_product = create(:product, user: seller_2, price_cents: 30_00)
-        params[:line_items] = [
-          { uid: "unique-id-0", permalink: paid_product.unique_permalink, perceived_price_cents: 30_00, quantity: 1 }
-        ]
+        paid_line_item = { uid: "unique-id-1", permalink: paid_product.unique_permalink, perceived_price_cents: 30_00, quantity: 1 }
+        paid_only_params = params.deep_dup
+        paid_only_params[:line_items] = [paid_line_item.merge(uid: "unique-id-0")]
+        mixed_params = params.deep_dup
+        mixed_params[:line_items] << paid_line_item
+        setup_only_params = params.deep_dup
         allow_any_instance_of(Charge::CreateService).to receive(:perform).and_return(instance_double(Charge, charge_intent: nil))
 
-        purchase, = charge_free_trial
+        purchase, = charge_free_trial(paid_only_params)
 
         expect(purchase).to be_failed
         expect(purchase.error_code).to be_blank
-      end
 
-      it "does not add processing_error to a free trial in a mixed paid cart" do
-        paid_product = create(:product, user: seller_2, price_cents: 30_00)
-        params[:line_items] << {
-          uid: "unique-id-1",
-          permalink: paid_product.unique_permalink,
-          perceived_price_cents: 30_00,
-          quantity: 1
-        }
-        allow_any_instance_of(Charge::CreateService).to receive(:perform).and_return(instance_double(Charge, charge_intent: nil))
-
-        order, = Order::CreateService.new(params:, buyer:).perform
-        Order::ChargeService.new(order:, params:).perform
+        order, = Order::CreateService.new(params: mixed_params, buyer:).perform
+        Order::ChargeService.new(order:, params: mixed_params).perform
 
         free_trial_purchase = order.reload.purchases.find_by!(link: free_trial_membership_product)
         paid_purchase = order.purchases.find_by!(link: paid_product)
@@ -1656,6 +1641,12 @@ describe Order::ChargeService, :vcr do
         expect(free_trial_purchase.error_code).to be_blank
         expect(paid_purchase).to be_failed
         expect(paid_purchase.error_code).to be_blank
+
+        allow(ChargeProcessor).to receive(:setup_future_charges!).and_return(nil)
+
+        purchase, = charge_free_trial(setup_only_params)
+
+        expect(purchase.error_code).to eq(PurchaseErrorCode::PROCESSING_ERROR)
       end
 
       it "records processing_error when an unexpected exception is swallowed by the seller rescue" do
