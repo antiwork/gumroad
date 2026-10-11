@@ -3,7 +3,7 @@
 class Exports::Sales::ProcessChunkWorker
   include Sidekiq::Job
   # This job is unique because two parallel jobs running `chunks_left_to_process?` could queue the same chunk to be reprocessed.
-  sidekiq_options retry: 5, queue: :low, lock: :until_executed
+  sidekiq_options retry: 5, queue: :exports, lock: :until_executed
 
   def perform(chunk_id)
     @chunk = SalesExportChunk.find(chunk_id)

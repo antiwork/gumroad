@@ -2,7 +2,7 @@
 
 class Exports::Sales::CreateAndEnqueueChunksWorker
   include Sidekiq::Job
-  sidekiq_options retry: 5, queue: :low
+  sidekiq_options retry: 5, queue: :exports
   # This is the number of purchases that will be exported in each SalesExportChunk.
   # It also affects:
   # - how long it will take to serialize/deserialize that YAML (2.5s/0.4s for 1k purchases)

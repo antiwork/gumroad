@@ -3,7 +3,7 @@
 class Exports::Sales::CompileChunksWorker
   include Sidekiq::Job
   # This job is unique because two parallel ProcessChunkWorker jobs could queue this at the same time.
-  sidekiq_options retry: 5, queue: :low, lock: :until_executed
+  sidekiq_options retry: 5, queue: :exports, lock: :until_executed
 
   def perform(export_id)
     @export = SalesExport.find(export_id)
