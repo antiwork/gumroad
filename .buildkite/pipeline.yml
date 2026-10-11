@@ -6,7 +6,7 @@ steps:
 
   - label: ":docker: Build Base Image"
     key: build-base-image
-    branches: "main comp-assets-*"
+    branches: "main"
     command: ".buildkite/scripts/build_base.sh"
     timeout_in_minutes: 60
     plugins:
@@ -16,7 +16,7 @@ steps:
 
   - label: ":docker: Build Web Image"
     key: build-web-image
-    branches: "main comp-assets-*"
+    branches: "main"
     command: ".buildkite/scripts/build_web.sh"
     depends_on: build-base-image
     timeout_in_minutes: 25
@@ -27,12 +27,26 @@ steps:
 
   - label: ":gear: Compile Assets"
     key: compile-assets
-    branches: "main comp-assets-*"
+    branches: "main"
     depends_on: build-web-image
     command: ".buildkite/scripts/compile_assets.sh"
     artifact_paths: "log/**/*"
     parallelism: 2
     timeout_in_minutes: 25
+    plugins:
+      - docker-login#v3.0.0:
+          username: "gumroadteam"
+          password-env: DOCKERHUB_PASSWORD
+      - docker-login#v3.0.0:
+          server: quay.io
+          username: gumroad
+          password-env: QUAY_PASSWORD
+
+  - label: ":zap: Build base, web and assets in one job"
+    key: build-one-job
+    branches: "comp-assets-*"
+    command: ".buildkite/scripts/build_base.sh && .buildkite/scripts/build_web.sh && BUILDKITE_PARALLEL_JOB=1 .buildkite/scripts/compile_assets.sh"
+    timeout_in_minutes: 40
     plugins:
       - docker-login#v3.0.0:
           username: "gumroadteam"
