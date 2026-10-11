@@ -91,6 +91,8 @@ class ProductDuplicatorService
 
     def mark_duplicate_product_as_draft
       duplicated_product.draft = true
+      # The copy has never been live, so it must not inherit the source's first-live date.
+      duplicated_product.first_published_at = nil
       duplicated_product.purchase_disabled_at = Time.current
     end
 

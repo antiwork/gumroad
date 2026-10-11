@@ -182,8 +182,10 @@ export const Layout = ({
       // resolves false when it failed or the seller cancelled; stay put then.
       const saved = await save();
       if (!saved) return;
-      await setProductPublished(uniquePermalink, published);
-      updateProduct({ is_published: published });
+      // The publish request is what records the date, so take it from the response — otherwise
+      // the editor keeps showing the listing as never published until a full reload.
+      const { first_published_at } = await setProductPublished(uniquePermalink, published);
+      updateProduct(first_published_at ? { is_published: published, first_published_at } : { is_published: published });
       showAlert(published ? "Published!" : "Unpublished!", "success");
       if (tab === "share") {
         if (product.native_type === "coffee") navigate.current(rootPath);

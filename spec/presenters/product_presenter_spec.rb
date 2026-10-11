@@ -524,6 +524,7 @@ describe ProductPresenter do
               fine_print_enabled: true
             },
             is_published: true,
+            first_published_at: nil,
             covers: asset_previews.map(&:as_json),
             integrations: {
               "circle" => circle_integration.as_json,
@@ -934,6 +935,7 @@ describe ProductPresenter do
                 fine_print_enabled: false,
               },
               is_published: true,
+              first_published_at: nil,
               covers: [],
               integrations: {
                 "circle" => nil,
@@ -1255,6 +1257,7 @@ describe ProductPresenter do
                 fine_print_enabled: false,
               },
               is_published: true,
+              first_published_at: nil,
               covers: [],
               integrations: {
                 "circle" => nil,

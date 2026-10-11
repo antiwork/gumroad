@@ -187,6 +187,14 @@ describe ProductDuplicatorService do
     expect(duplicate_product.is_duplicating).to be false
   end
 
+  it "does not carry the source product's first published date onto the copy" do
+    product.update!(first_published_at: 2.days.ago)
+
+    duplicate_product = ProductDuplicatorService.new(product.id).duplicate
+
+    expect(duplicate_product.reload.first_published_at).to be_nil
+  end
+
   it "maintains atomicity and rolls back the transaction if some error occurs in the middle" do
     duplicate_product = nil
     allow_any_instance_of(ProductDuplicatorService).to receive(:duplicate_third_party_analytics).and_raise(RuntimeError)

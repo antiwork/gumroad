@@ -9,9 +9,10 @@ import { Layout } from "$app/components/ProductEdit/Layout";
 import { type FileEntry, ProductEditContext, type Product } from "$app/components/ProductEdit/state";
 import { showAlert } from "$app/components/server-components/Alert";
 
+const matchHandle = vi.hoisted(() => ({ current: "product" }));
 vi.mock("react-router-dom", () => ({
   Link: ({ to, children }: { to: string; children?: React.ReactNode }) => <a href={to}>{children}</a>,
-  useMatches: () => [{ handle: "product" }],
+  useMatches: () => [{ handle: matchHandle.current }],
   useNavigate: () => vi.fn(),
 }));
 
@@ -47,6 +48,7 @@ afterEach(() => {
   cleanup();
   product.files = [];
   product.is_published = false;
+  matchHandle.current = "product";
   vi.unstubAllGlobals();
 });
 
@@ -141,7 +143,13 @@ const product: Product = {
   community_chat_enabled: false,
 };
 
-const renderLayout = (currentSeller: CurrentSeller, { saveBlocked = false }: { saveBlocked?: boolean } = {}) =>
+const renderLayout = (
+  currentSeller: CurrentSeller,
+  {
+    saveBlocked = false,
+    updateProduct = vi.fn(),
+  }: { saveBlocked?: boolean; updateProduct?: (update: Partial<Product> | ((product: Product) => void)) => void } = {},
+) =>
   render(
     <DomainSettingsProvider
       value={{
@@ -160,7 +168,7 @@ const renderLayout = (currentSeller: CurrentSeller, { saveBlocked = false }: { s
             id: "product-id",
             product,
             uniquePermalink: "product-permalink",
-            updateProduct: vi.fn(),
+            updateProduct,
             thumbnail: null,
             refundPolicies: [],
             currencyType: "usd",
@@ -268,6 +276,24 @@ describe("ProductEdit Layout publish and unpublish", () => {
     await waitFor(() => expect(reportErrorSpy).toHaveBeenCalledTimes(1));
     expect(showAlert).toHaveBeenCalledWith("Something went wrong. Please try again.", "error");
     expect(screen.getByRole<HTMLButtonElement>("button", { name: "Unpublish" }).disabled).toBe(false);
+  });
+
+  it("puts the date the publish recorded into the editor state", async () => {
+    const updateProduct = vi.fn();
+    matchHandle.current = "content";
+    setProductPublished.mockResolvedValueOnce({ first_published_at: "2026-01-23T12:00:00Z" });
+    product.files = [];
+    product.is_published = false;
+    renderLayout(minor, { updateProduct });
+
+    fireEvent.click(screen.getByRole("button", { name: "Publish and continue" }));
+
+    await waitFor(() =>
+      expect(updateProduct).toHaveBeenCalledWith({
+        is_published: true,
+        first_published_at: "2026-01-23T12:00:00Z",
+      }),
+    );
   });
 });
 

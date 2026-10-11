@@ -1,7 +1,9 @@
 import { cast } from "$app/utils/cast";
 import { request, ResponseError } from "$app/utils/request";
 
-type TogglePublishStateResponse = { success: true } | { success: false; error_message: string };
+type TogglePublishStateResponse =
+  | { success: true; first_published_at: string | null }
+  | { success: false; error_message: string };
 
 export async function setProductPublished(id: string, publish: boolean) {
   const response = await request({
@@ -11,4 +13,5 @@ export async function setProductPublished(id: string, publish: boolean) {
   });
   const responseData = cast<TogglePublishStateResponse>(await response.json());
   if (!responseData.success) throw new ResponseError(responseData.error_message);
+  return responseData;
 }

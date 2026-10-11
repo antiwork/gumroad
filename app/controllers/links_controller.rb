@@ -810,7 +810,9 @@ class LinksController < ApplicationController
       return render json: { success: false, error_message: "Something broke. We're looking into what happened. Sorry about this!" }
     end
 
-    render json: { success: true }
+    # The editor reads the recorded date back from this response, so a seller sees it as soon as
+    # the publish that set it lands instead of after a reload.
+    render json: { success: true, first_published_at: @product.first_published_at&.iso8601 }
   end
 
   def destroy

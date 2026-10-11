@@ -550,9 +550,13 @@ class Link < ApplicationRecord
     transcode_after_publish = auto_transcode_videos?
     caller_flags_change = changes["flags"]&.map(&:to_i)
 
-    # Set once: a re-publish must not move the date a listing first went live, which sellers
-    # cite in copyright filings.
-    self.first_published_at ||= Time.current
+    # A listing's first-live date is recorded only on the publish that takes it live for the
+    # first time. `draft?` is the only "never been live" signal: unpublishing, an admin
+    # re-enable (both call publish! again) and a restore all leave draft false, so they must not
+    # stamp a date on a listing published long before this column existed — those stay NULL,
+    # which means "not recorded", never "never published". Sellers cite this date in copyright
+    # filings, so a later publish must not move it.
+    record_first_published_at = draft?
     self.purchase_disabled_at = nil
     self.deleted_at = nil
     self.draft = false
@@ -570,7 +574,11 @@ class Link < ApplicationRecord
         AfterCommitEverywhere.after_commit { transaction_committed = true } unless caller_has_transaction
         # A restore takes the seller row before this product row, as a permalink claim does, so the two cannot deadlock.
         lock_seller_for_permalink_checks
-        current_flags = Link.where(id:).lock.pick(:flags).to_i
+        locked_values = Array(Link.where(id:).lock.pick(:flags, :first_published_at))
+        current_flags = locked_values[0].to_i
+        # Read the recorded date under the same lock: two overlapping publishes could otherwise
+        # both read NULL and each write its own time, moving a date that is meant to be permanent.
+        self.first_published_at = locked_values[1] || Time.current if record_first_published_at
         if caller_flags_change
           # Merge only the caller's changed bits because all Link flags share one column.
           previous_flags, requested_flags = caller_flags_change
