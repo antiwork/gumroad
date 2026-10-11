@@ -137,7 +137,7 @@ FANOUT = {
   # Recurring run-all-specs gaps (ProductEdit, Settings, API docs, Analytics,
   # Audience, Bundles, Dashboard). These trees have no co-located rspec.
   %r{\Aapp/javascript/components/ProductEdit/} => PRODUCT_FLOW_SPECS,
-  %r{\Aapp/javascript/components/Product/} => PRODUCT_FLOW_SPECS,
+  %r{\Aapp/javascript/components/Product/} => PRODUCT_FLOW_SPECS + %w[spec/requests/purchases/product],
   %r{\Aapp/javascript/pages/Products/} => PRODUCT_FLOW_SPECS,
   %r{\Aapp/javascript/components/server-components/ProductEdit} => PRODUCT_FLOW_SPECS,
   %r{\Aapp/javascript/pages/Settings/} => SETTINGS_FLOW_SPECS,
@@ -409,6 +409,23 @@ def specs_mentioning(*basenames)
   return [] unless $?.success?
   escalate!("grep reported a spec path that is not valid UTF-8") unless out.valid_encoding?
   out.split("\n")
+end
+
+# A class named by more specs than this is a hub (Purchase, User): its name says
+# nothing about which flow a change touches, so its callers are not selected.
+MAX_CALLER_SPECS = 25
+
+# Specs that name a changed Ruby class, as well as its own spec. A caller's spec
+# under another name breaks as often as the class's own spec does.
+def caller_specs(path)
+  return [] unless path.match?(%r{\A(app|lib)/.*\.rb\z}) && File.exist?(path)
+
+  class_name = File.basename(path, ".rb").split("_").map(&:capitalize).join
+  out = IO.popen(["grep", "-rlw", class_name, "spec/", "--include=*_spec.rb"], err: File::NULL, external_encoding: "UTF-8", &:read)
+  return [] unless $?.success?
+  escalate!("grep reported a spec path that is not valid UTF-8") unless out.valid_encoding?
+  found = out.split("\n")
+  found.size > MAX_CALLER_SPECS ? [] : found
 end
 
 def grep_files(pattern, root)
@@ -823,6 +840,7 @@ changed.each do |path|
   fanout_hits = FANOUT.select { |re, _| re.match?(path) }.values.flatten.select { |dir| Dir.exist?(dir) || File.exist?(dir) }
   config_hits = (CONFIG_SPEC_MAP[path] || []).select { |s| File.exist?(s) }
   contributed = candidates + fanout_hits + config_hits
+  contributed += caller_specs(path) if contributed.any?
 
   if contributed.any?
     specs.merge(contributed)

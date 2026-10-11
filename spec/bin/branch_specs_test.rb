@@ -1876,6 +1876,51 @@ end
 blobless_clone_check("a clone without file contents selects the same specs", remove_source: false)
 blobless_clone_check("a git call that fails stops the selector instead of trimming the selection", remove_source: true)
 
+check(
+  "a changed class also selects the specs of its callers",
+  base_files: {
+    "app/models/credit.rb" => "old",
+    "spec/models/credit_spec.rb" => SPEC_STUB,
+    "spec/modules/user/stats_spec.rb" => "#{SPEC_STUB}describe \"x\" do\n  it { Credit.create! }\nend\n",
+  },
+  head_files: { "app/models/credit.rb" => "new" },
+  expect_specs: %w[spec/models/credit_spec.rb spec/modules/user/stats_spec.rb],
+)
+
+check(
+  "a caller spec must name the whole class",
+  base_files: {
+    "app/models/credit.rb" => "old",
+    "spec/models/credit_spec.rb" => SPEC_STUB,
+    "spec/services/billing_spec.rb" => "#{SPEC_STUB}describe CreditCard do\nend\n",
+  },
+  head_files: { "app/models/credit.rb" => "new" },
+  expect_specs: %w[spec/models/credit_spec.rb],
+  reject_specs: %w[spec/services/billing_spec.rb],
+)
+
+check(
+  "a class named by more than MAX_CALLER_SPECS specs adds no caller specs",
+  base_files: {
+    "app/models/widget.rb" => "old",
+    "spec/models/widget_spec.rb" => "#{SPEC_STUB}describe Widget do\nend\n",
+  }.merge((1..25).to_h { |i| ["spec/services/caller_#{i}_spec.rb", "#{SPEC_STUB}describe \"x\" do\n  it { Widget.new }\nend\n"] }),
+  head_files: { "app/models/widget.rb" => "new" },
+  expect_specs: %w[spec/models/widget_spec.rb],
+  reject_specs: %w[spec/services/caller_1_spec.rb],
+)
+
+check(
+  "product components select the product purchase specs",
+  base_files: {
+    "app/javascript/components/Product/CtaButton.tsx" => "old",
+    "spec/requests/products/show/show_spec.rb" => SPEC_STUB,
+    "spec/requests/purchases/product/variants_spec.rb" => SPEC_STUB,
+  },
+  head_files: { "app/javascript/components/Product/CtaButton.tsx" => "new" },
+  expect_specs: %w[spec/requests/products/show/show_spec.rb spec/requests/purchases/product/variants_spec.rb],
+)
+
 WORKFLOW = File.expand_path("../../.github/workflows/tests.yml", __dir__)
 workflow = YAML.load_file(WORKFLOW)
 migration_versions = workflow.fetch("jobs").fetch("migration_versions")
