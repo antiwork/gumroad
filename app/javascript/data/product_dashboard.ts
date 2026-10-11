@@ -1,5 +1,5 @@
 import { cast } from "$app/utils/cast";
-import { ResponseError, request } from "$app/utils/request";
+import { ResponseError, request, readJson } from "$app/utils/request";
 
 export async function deleteProduct(permalink: string) {
   const response = await request({
@@ -59,7 +59,7 @@ async function pollForProductDuplication(permalink: string, productName: string)
     accept: "json",
   });
 
-  const json = cast<{ status: string; error_message?: string }>(await response.json());
+  const json = await readJson<{ status: string; error_message?: string }>(response);
   if (json.status === "product_duplication_failed") {
     const reason = json.error_message
       ? `Sorry, failed to duplicate '${productName}': ${json.error_message}`
