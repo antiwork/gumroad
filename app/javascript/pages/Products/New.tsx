@@ -4,17 +4,18 @@ import * as React from "react";
 import { useState } from "react";
 
 import { isRecurringProductType } from "$app/data/products";
-import { ProductNativeType, ProductServiceType } from "$app/parsers/product";
+import { isProductNativeType, ProductNativeType, ProductServiceType } from "$app/parsers/product";
 import { cast } from "$app/utils/cast";
 import { classNames } from "$app/utils/classNames";
 import { CurrencyCode, currencyCodeList, findCurrencyByCode, isCurrencyCode } from "$app/utils/currency";
+import { isNumber, isRecord, isString } from "$app/utils/guards";
 import {
   RecurrenceId,
   durationInMonthsToRecurrenceId,
   recurrenceIds,
   recurrenceLabels,
 } from "$app/utils/recurringPricing";
-import { assertResponseError, RateLimitError, request } from "$app/utils/request";
+import { assertResponseError, RateLimitError, request, ResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import Errors from "$app/components/Form/Errors";
@@ -47,6 +48,32 @@ const nativeTypeIcons = Object.fromEntries(
 const defaultRecurrence: RecurrenceId = "monthly";
 
 const MIN_AI_PROMPT_LENGTH = 10;
+
+// The details come from a language model, which can leave fields out, so they are checked before they
+// reach the form.
+type AiProductDetails = {
+  name: string;
+  description: string;
+  summary: string;
+  price: number;
+  currency_code: string;
+  price_frequency_in_months: number | null;
+  native_type: ProductNativeType;
+  number_of_content_pages: number | null;
+};
+
+const isNullableNumber = (value: unknown) => value === null || isNumber(value);
+
+export const isAiProductDetails = (data: unknown): data is AiProductDetails =>
+  isRecord(data) &&
+  isString(data.name) &&
+  isString(data.description) &&
+  isString(data.summary) &&
+  isNumber(data.price) &&
+  isString(data.currency_code) &&
+  isNullableNumber(data.price_frequency_in_months) &&
+  isProductNativeType(data.native_type) &&
+  isNullableNumber(data.number_of_content_pages);
 
 type NewProductFormData = {
   link: {
@@ -175,27 +202,10 @@ const NewProductPage = () => {
         data: { prompt: form.data.link.ai_prompt.trim() },
       });
 
-      const result = cast<
-        | {
-            success: true;
-            data: {
-              name: string;
-              description: string;
-              summary: string;
-              price: number;
-              currency_code: string;
-              price_frequency_in_months: number | null;
-              native_type: ProductNativeType;
-              number_of_content_pages: number | null;
-            };
-          }
-        | {
-            success: false;
-            error: string;
-          }
-      >(await response.json());
+      const result = cast<{ success: true; data: unknown } | { success: false; error: string }>(await response.json());
 
       if (result.success) {
+        if (!isAiProductDetails(result.data)) throw new ResponseError();
         const aiData = result.data;
         const subscriptionDuration =
           aiData.native_type === "membership" && aiData.price_frequency_in_months

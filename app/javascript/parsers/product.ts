@@ -1,4 +1,5 @@
 import { CurrencyCode } from "$app/utils/currency";
+import { isOneOf } from "$app/utils/guards";
 import { RecurrenceId } from "$app/utils/recurringPricing";
 
 export type AssetPreview = {
@@ -14,19 +15,24 @@ export type AssetPreview = {
   native_height: number | null;
 };
 
-export type ProductNativeType =
-  | "digital"
-  | "course"
-  | "ebook"
-  | "newsletter"
-  | "membership"
-  | "podcast"
-  | "audiobook"
-  | "physical"
-  | "bundle"
-  | ProductServiceType;
+const productServiceTypes = ["commission", "call", "coffee"] as const;
+export type ProductServiceType = (typeof productServiceTypes)[number];
 
-export type ProductServiceType = "commission" | "call" | "coffee";
+const productNativeTypes = [
+  "digital",
+  "course",
+  "ebook",
+  "newsletter",
+  "membership",
+  "podcast",
+  "audiobook",
+  "physical",
+  "bundle",
+  ...productServiceTypes,
+] as const;
+export type ProductNativeType = (typeof productNativeTypes)[number];
+
+export const isProductNativeType = (value: unknown): value is ProductNativeType => isOneOf(value, productNativeTypes);
 
 export type Ratings = { count: number; average: number };
 
