@@ -2,7 +2,7 @@ import { ProductNativeType } from "$app/parsers/product";
 import { cast } from "$app/utils/cast";
 import { CurrencyCode } from "$app/utils/currency";
 import { RecurrenceId } from "$app/utils/recurringPricing";
-import { ResponseError, request } from "$app/utils/request";
+import { ResponseError, request, readJson } from "$app/utils/request";
 
 import { PaginationProps } from "$app/components/Pagination";
 import { Sort } from "$app/components/useSortingTableDriver";
@@ -185,9 +185,7 @@ export const getPagedCustomers = ({
       minimum_license_uses: minimumLicenseUses,
     }),
     abortSignal: abort.signal,
-  })
-    .then((res) => res.json())
-    .then((json) => cast<{ customers: Customer[]; pagination: PaginationProps | null; count: number }>(json));
+  }).then((res) => readJson<{ customers: Customer[]; pagination: PaginationProps | null; count: number }>(res));
 
   return {
     response,

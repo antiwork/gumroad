@@ -1,3 +1,5 @@
+import { cast } from "$app/utils/cast";
+
 type RequestSettingsBase = {
   accept: "json" | "html" | "csv";
   url: string;
@@ -138,4 +140,11 @@ export const request = async (settings: RequestSettings): Promise<Response> => {
   } finally {
     --globalThis.__activeRequests;
   }
+};
+
+// Reads the JSON body of a successful response. request() returns 4xx responses, and their error
+// bodies must not be used as data, so an error status throws here.
+export const readJson = async <T>(response: Response): Promise<T> => {
+  if (!response.ok) throw new ResponseError();
+  return cast<T>(await response.json());
 };

@@ -1,11 +1,10 @@
 import * as React from "react";
 
-import { cast } from "$app/utils/cast";
-import { request } from "$app/utils/request";
+import { request, readJson } from "$app/utils/request";
 
 const fetchBraintreeClientToken = async (): Promise<{ clientToken: string | null }> => {
   const response = await request({ url: Routes.braintree_client_token_path(), method: "GET", accept: "json" });
-  return cast<{ clientToken: string | null }>(await response.json());
+  return await readJson<{ clientToken: string | null }>(response);
 };
 
 const BRAINTREE_TOKEN_VALIDITY_MS = 12 * 60 * 60 * 1000; // 12 hrs

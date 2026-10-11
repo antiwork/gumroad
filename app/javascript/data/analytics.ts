@@ -1,5 +1,5 @@
 import { cast } from "$app/utils/cast";
-import { request, ResponseError } from "$app/utils/request";
+import { request, ResponseError, readJson } from "$app/utils/request";
 
 export type AnalyticsDataByReferral = {
   dates_and_months: {
@@ -59,8 +59,6 @@ export const fetchAnalyticsDataByState = ({ startTime, endTime }: { startTime: s
     accept: "json",
     url: Routes.analytics_data_by_state_path({ start_time: startTime, end_time: endTime }),
     abortSignal: abort.signal,
-  })
-    .then((response) => response.json())
-    .then((json) => cast<AnalyticsDataByState>(json));
+  }).then((response) => readJson<AnalyticsDataByState>(response));
   return { response, abort };
 };

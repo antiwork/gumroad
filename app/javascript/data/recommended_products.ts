@@ -1,6 +1,5 @@
 import { CardProduct } from "$app/parsers/product";
-import { cast } from "$app/utils/cast";
-import { request } from "$app/utils/request";
+import { request, readJson } from "$app/utils/request";
 
 export type RecommendationType =
   | "no_recommendations"
@@ -22,5 +21,5 @@ export async function getRecommendedProducts(
       recommendation_type: recommendationType,
     }),
   });
-  return cast<CardProduct[]>(await response.json());
+  return await readJson<CardProduct[]>(response);
 }

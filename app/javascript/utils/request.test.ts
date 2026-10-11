@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { AbortError, RateLimitError, ResponseError, request } from "$app/utils/request";
+import { AbortError, RateLimitError, readJson, ResponseError, request } from "$app/utils/request";
 
 const jsonResponse = (status: number, body: unknown, headers: Record<string, string> = {}) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", ...headers } });
@@ -93,5 +93,17 @@ describe("request", () => {
     const error = await sendAndCatch();
     expect(error).toBeInstanceOf(ResponseError);
     expect(error).toMatchObject({ message: "Something went wrong." });
+  });
+});
+
+describe("readJson", () => {
+  it("returns the body of a successful response", async () => {
+    await expect(readJson<{ id: string }>(jsonResponse(200, { id: "a" }))).resolves.toEqual({ id: "a" });
+  });
+
+  it("throws a ResponseError for an error status instead of returning the error body", async () => {
+    await expect(readJson(jsonResponse(400, { success: false, error: "search failed" }))).rejects.toBeInstanceOf(
+      ResponseError,
+    );
   });
 });

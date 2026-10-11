@@ -1,5 +1,5 @@
 import { cast } from "$app/utils/cast";
-import { request, ResponseError } from "$app/utils/request";
+import { request, ResponseError, readJson } from "$app/utils/request";
 
 import { ProductToAdd } from "$app/components/Checkout/cartState";
 import { Upsell, SortKey } from "$app/components/CheckoutDashboard/UpsellsPage";
@@ -156,9 +156,7 @@ export const getPagedUpsells = (page: number, query: string | null, sort: Sort<S
     accept: "json",
     url: Routes.paged_checkout_upsells_path({ page, query, sort }),
     abortSignal: abort.signal,
-  })
-    .then((res) => res.json())
-    .then((json) => cast<{ upsells: Upsell[]; pagination: PaginationProps }>(json));
+  }).then((res) => readJson<{ upsells: Upsell[]; pagination: PaginationProps }>(res));
 
   return {
     response,

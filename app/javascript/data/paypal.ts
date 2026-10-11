@@ -1,5 +1,5 @@
 import { cast } from "$app/utils/cast";
-import { request } from "$app/utils/request";
+import { request, readJson } from "$app/utils/request";
 
 type BillingAgreement = {
   id: string;
@@ -50,7 +50,7 @@ export const createBillingAgreementToken = async (data: { shipping: boolean }): 
       method: "POST",
       accept: "json",
     });
-    const responseData = cast<{ billing_agreement_token_id: string }>(await response.json());
+    const responseData = await readJson<{ billing_agreement_token_id: string }>(response);
     return responseData.billing_agreement_token_id;
   } catch (e) {
     // eslint-disable-next-line no-console

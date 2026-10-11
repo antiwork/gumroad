@@ -1,7 +1,7 @@
 import { Discount } from "$app/parsers/checkout";
 import { cast } from "$app/utils/cast";
 import { CurrencyCode } from "$app/utils/currency";
-import { request, ResponseError } from "$app/utils/request";
+import { request, ResponseError, readJson } from "$app/utils/request";
 
 import { OfferCode, SortKey, Duration } from "$app/components/CheckoutDashboard/DiscountsPage";
 import { PaginationProps } from "$app/components/Pagination";
@@ -99,9 +99,7 @@ export const getPagedDiscounts = (page: number, query: string | null, sort: Sort
     accept: "json",
     url: Routes.paged_checkout_discounts_path({ page, query, sort }),
     abortSignal: abort.signal,
-  })
-    .then((res) => res.json())
-    .then((json) => cast<{ offer_codes: OfferCode[]; pagination: PaginationProps }>(json));
+  }).then((res) => readJson<{ offer_codes: OfferCode[]; pagination: PaginationProps }>(res));
 
   return {
     response,

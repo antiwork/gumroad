@@ -28,7 +28,10 @@ export const getPagedAffiliatedProducts = (page?: number, query?: string, sort?:
     url: Routes.products_affiliated_index_path({ page, query, sort }),
     abortSignal: abort.signal,
   })
-    .then((res) => res.json().catch(convertPlatformAbort))
+    .then((res) => {
+      if (!res.ok) throw new ResponseError();
+      return res.json().catch(convertPlatformAbort);
+    })
     .then((json) => cast<PagedAffiliatedProductsData>(json));
 
   return {

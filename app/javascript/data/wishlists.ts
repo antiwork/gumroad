@@ -1,5 +1,5 @@
 import { cast } from "$app/utils/cast";
-import { ResponseError, request } from "$app/utils/request";
+import { ResponseError, request, readJson } from "$app/utils/request";
 
 import { WishlistItem } from "$app/components/Wishlist";
 import { CardWishlist } from "$app/components/Wishlist/Card";
@@ -16,7 +16,7 @@ export const createWishlist = async (name: string) => {
     accept: "json",
     data: { wishlist: { name } },
   });
-  return cast<{ wishlist: Wishlist }>(await response.json());
+  return await readJson<{ wishlist: Wishlist }>(response);
 };
 
 type FetchPaginatedWishlistItemsArgs = {
