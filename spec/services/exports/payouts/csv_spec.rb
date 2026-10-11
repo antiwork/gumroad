@@ -132,12 +132,67 @@ describe Exports::Payouts::Csv, :vcr do
       end
 
       it "add entry for usd payment currency" do
-        @payout.amount_cents = @payout.amount_cents + 100
-        @payout.save!
+        @payout.balances.first.update_column(:amount_cents, @payout.balances.first.amount_cents + 100)
         csv = Exports::Payouts::Csv.new(payment: @payout).perform
         parsed_csv = CSV.parse(csv)
         expect(parsed_csv).to include(["Technical Adjustment", @payout.payout_period_end_date.to_s, "", "", "", "", "", "", "", "", "1.0"])
       end
+    end
+  end
+
+  describe "technical adjustment and payout fee by payout currency" do
+    before do
+      @seller = create :user
+      travel_to(1.month.ago) do
+        product = create :product, user: @seller, price_cents: 1000
+        2.times { create_purchase seller: @seller, link: product }
+      end
+      @payout = create_payout(1.week.ago, PayoutProcessorType::PAYPAL, @seller)
+      @balance = @payout.balances.first
+    end
+
+    let(:parsed_csv) { CSV.parse(Exports::Payouts::Csv.new(payment: @payout).perform) }
+    let(:adjustment_cents) { parsed_csv.select { _1.first == "Technical Adjustment" }.sum { _1.last.to_f * 100 }.round }
+
+    it "adds no adjustment when the rows add up to the balances" do
+      expect(parsed_csv.map(&:first)).not_to include("Technical Adjustment")
+    end
+
+    it "adjusts a usd payout for a one-cent difference from its balances" do
+      @balance.update_column(:amount_cents, @balance.amount_cents + 1)
+
+      expect(adjustment_cents).to eq(1)
+      expect(parsed_csv.last.last.to_f).to eq((@payout.balances.sum(:amount_cents) - @payout.gumroad_fee_cents.to_i) / 100.0)
+    end
+
+    it "adjusts a non-usd payout against its usd balances" do
+      @payout.update!(currency: Currency::GBP, amount_cents: 1)
+      @balance.update_column(:amount_cents, @balance.amount_cents - 1)
+
+      expect(adjustment_cents).to eq(-1)
+      expect(parsed_csv.last.last.to_f).to eq(@payout.balances.sum(:amount_cents) / 100.0)
+    end
+
+    it "ignores payout.amount_cents, which is in the payout currency" do
+      @payout.update!(currency: Currency::GBP, amount_cents: @payout.amount_cents * 100)
+
+      expect(parsed_csv.map(&:first)).not_to include("Technical Adjustment")
+    end
+
+    it "shows the payout fee and nets it off a usd payout" do
+      @payout.update!(gumroad_fee_cents: 92)
+      fee_row = parsed_csv.find { _1.first == "Payout Fee" }
+
+      expect(fee_row.last(2)).to eq(["0.92", "-0.92"])
+      expect(parsed_csv.map(&:first)).not_to include("Technical Adjustment")
+      expect(parsed_csv.last.last.to_f).to eq((@payout.balances.sum(:amount_cents) - 92) / 100.0)
+    end
+
+    it "leaves a non-usd payout fee out of the usd columns" do
+      @payout.update!(currency: Currency::GBP, gumroad_fee_cents: 92)
+
+      expect(parsed_csv.map(&:first)).not_to include("Payout Fee", "Technical Adjustment")
+      expect(parsed_csv.last.last.to_f).to eq(@payout.balances.sum(:amount_cents) / 100.0)
     end
   end
 

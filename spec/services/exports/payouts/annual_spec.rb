@@ -28,6 +28,7 @@ describe Exports::Payouts::Annual, :vcr do
                           link: create(:product, user: @user))
         payment.amount_cents = purchase.payment_cents
         payment.save!
+        purchase.purchase_success_balance.update!(amount_cents: purchase.payment_cents)
         create(:purchase,
                seller: @user,
                price_cents: amount_cents,
