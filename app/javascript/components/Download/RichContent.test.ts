@@ -11,11 +11,14 @@ const schema = getSchema([
   RichContentLink.configure({ saleInfo: null, licenseKey: null, rootDomain: "gumroad.com" }),
 ]);
 
-const renderLink = (href: unknown) => {
+const renderLink = (href: unknown, attrs: Record<string, unknown> = {}) => {
   const doc = Node.fromJSON(schema, {
     type: "doc",
     content: [
-      { type: "paragraph", content: [{ type: "text", text: "Open", marks: [{ type: "link", attrs: { href } }] }] },
+      {
+        type: "paragraph",
+        content: [{ type: "text", text: "Open", marks: [{ type: "link", attrs: { href, ...attrs } }] }],
+      },
     ],
   });
   const container = document.createElement("div");
@@ -30,5 +33,11 @@ describe("RichContentLink", () => {
 
   it("refuses a link whose href is not a string, so an array cannot smuggle in a javascript: URL", () => {
     expect(() => renderLink(["javascript:alert(document.domain)"])).toThrow(TypeError);
+  });
+
+  it("opens a seller's link with noopener even when the stored rel asks for an opener", () => {
+    const link = renderLink("https://example.com", { rel: "opener" });
+    expect(link?.getAttribute("rel")).toBe("noopener noreferrer nofollow");
+    expect(link?.getAttribute("target")).toBe("_blank");
   });
 });

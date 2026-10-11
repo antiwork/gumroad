@@ -415,4 +415,35 @@ describe("useRichTextEditor", () => {
     render(React.createElement(Harness));
     expect(getEditor().schema.nodes.upsellCard).toBeUndefined();
   });
+
+  it("opens a stored link mark with noopener in a read-only editor even when its rel asks for an opener", () => {
+    const initialValue = {
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [
+            {
+              type: "text",
+              text: "Open",
+              marks: [{ type: "link", attrs: { href: "https://example.com", rel: "opener" } }],
+            },
+          ],
+        },
+      ],
+    };
+    let editor: Editor | null = null;
+    const Harness = () => {
+      editor = useRichTextEditor({ initialValue, editable: false });
+      return null;
+    };
+    const getEditor = (): Editor => {
+      if (!editor) throw new Error("editor did not mount");
+      return editor;
+    };
+    render(React.createElement(Harness));
+    const link = getEditor().view.dom.querySelector("a");
+    expect(link?.getAttribute("rel")).toBe("noopener noreferrer nofollow");
+    expect(link?.getAttribute("target")).toBe("_blank");
+  });
 });
