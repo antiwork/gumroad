@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const loadStripe = vi.fn();
 vi.mock("@stripe/stripe-js", () => ({ loadStripe }));
-vi.mock("typia", () => ({ default: { assert: (value: unknown) => value } }));
 
 const metaTags: Record<string, { getAttribute: (name: string) => string | null }> = {
   "meta[property='stripe:pk']": { getAttribute: () => "pk_test_123" },

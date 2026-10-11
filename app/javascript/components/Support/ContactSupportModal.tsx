@@ -1,6 +1,6 @@
 import * as React from "react";
-import typia from "typia";
 
+import { cast } from "$app/utils/cast";
 import { assertResponseError, request } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
@@ -66,7 +66,7 @@ export const ContactSupportModal = ({
           referrer_path: referrerPath ?? (typeof window === "undefined" ? "" : window.location.pathname),
         },
       });
-      const json = typia.assert<{ success: true } | { success: false; error: string }>(await response.json());
+      const json = cast<{ success: true } | { success: false; error: string }>(await response.json());
       if (json.success) {
         setSubmitted(true);
       } else {

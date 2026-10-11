@@ -1,7 +1,7 @@
 import * as React from "react";
-import typia from "typia";
 
 import { assert } from "$app/utils/assert";
+import { cast } from "$app/utils/cast";
 
 export type TeamMembership = {
   id: string;
@@ -107,7 +107,7 @@ export type LoggedInUser = {
 const Context = React.createContext<LoggedInUser | null | undefined>(undefined);
 
 export const parseLoggedInUser = (data: unknown): LoggedInUser | null => {
-  const parsed = typia.assert<{
+  const parsed = cast<{
     id: string;
     email: string | null;
     name: string | null;

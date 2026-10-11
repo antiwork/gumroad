@@ -3,8 +3,8 @@ import { Editor, Extension, Node as TiptapNode } from "@tiptap/core";
 import { DOMOutputSpec } from "@tiptap/pm/model";
 import { NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
 import * as React from "react";
-import typia from "typia";
 
+import { cast } from "$app/utils/cast";
 import { isRecord, isString } from "$app/utils/guards";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request } from "$app/utils/request";
@@ -68,11 +68,11 @@ export const Raw = TiptapNode.create({
   renderHTML: ({ HTMLAttributes }) => {
     const doc = document.createElement("div");
     doc.className = "tiptap__raw";
-    const processedHtml = sanitizeHtml(typia.assert<string>(HTMLAttributes.html));
+    const processedHtml = sanitizeHtml(cast<string>(HTMLAttributes.html));
     doc.innerHTML = processedHtml;
-    if (HTMLAttributes.title) doc.setAttribute("data-title", typia.assert<string>(HTMLAttributes.title));
-    if (HTMLAttributes.url) doc.setAttribute("data-url", typia.assert<string>(HTMLAttributes.url));
-    if (HTMLAttributes.thumbnail) doc.setAttribute("data-thumbnail", typia.assert<string>(HTMLAttributes.thumbnail));
+    if (HTMLAttributes.title) doc.setAttribute("data-title", cast<string>(HTMLAttributes.title));
+    if (HTMLAttributes.url) doc.setAttribute("data-url", cast<string>(HTMLAttributes.url));
+    if (HTMLAttributes.thumbnail) doc.setAttribute("data-thumbnail", cast<string>(HTMLAttributes.thumbnail));
     const walk = (element: Element): DOMOutputSpec => {
       const attrs: Record<string, string> = {};
       for (const attr of element.attributes) attrs[attr.name] = attr.value;
@@ -281,7 +281,7 @@ export const ExternalMediaFileEmbed = TiptapNode.create({
         <Row className="embed">
           <RowDetails
             className="preview"
-            dangerouslySetInnerHTML={{ __html: sanitizeHtml(typia.assert<string>(node.attrs.html)) }}
+            dangerouslySetInnerHTML={{ __html: sanitizeHtml(cast<string>(node.attrs.html)) }}
           />
           <RowContent className="content">
             <PlayCircle pack="filled" className="type-icon size-5" />
@@ -289,7 +289,7 @@ export const ExternalMediaFileEmbed = TiptapNode.create({
               <h4 className="truncate">{node.attrs.title}</h4>
               {node.attrs.url ? (
                 <div className="truncate">
-                  <a href={typia.assert<string>(node.attrs.url)} target="_blank" rel="noreferrer">
+                  <a href={cast<string>(node.attrs.url)} target="_blank" rel="noreferrer">
                     {node.attrs.url}
                   </a>
                 </div>

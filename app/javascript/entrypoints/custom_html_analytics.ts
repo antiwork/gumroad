@@ -1,7 +1,6 @@
-import typia from "typia";
-
 import { incrementProductViews } from "$app/data/view_event";
 import { AnalyticsData } from "$app/parsers/product";
+import { cast } from "$app/utils/cast";
 import { hasType } from "$app/utils/guards";
 import { defaults as requestDefaults } from "$app/utils/request";
 import { startTrackingForSeller, trackProductEvent, trackProfilePageView } from "$app/utils/user_analytics";
@@ -53,7 +52,7 @@ type ProfileProps = SharedProps & {
 // affordance, so there are no product or e-commerce events.
 const configElement = document.querySelector('meta[name="gr:custom-html-analytics"]');
 if (configElement) {
-  const props = typia.assert<ProductProps | ProfileProps>(JSON.parse(configElement.getAttribute("content") ?? ""));
+  const props = cast<ProductProps | ProfileProps>(JSON.parse(configElement.getAttribute("content") ?? ""));
   const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute("content");
   if (csrfToken) requestDefaults.headers = { ...requestDefaults.headers, "X-CSRF-Token": csrfToken };
 

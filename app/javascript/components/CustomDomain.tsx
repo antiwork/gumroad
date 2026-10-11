@@ -1,6 +1,6 @@
 import * as React from "react";
-import typia from "typia";
 
+import { cast } from "$app/utils/cast";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
 
@@ -60,7 +60,7 @@ const CustomDomain = ({
         url: Routes.custom_domain_verifications_path(),
         data: { domain: customDomain, product_id: productId },
       });
-      const responseData = typia.assert<{ success: boolean; message: string }>(await response.json());
+      const responseData = cast<{ success: boolean; message: string }>(await response.json());
       if (!responseData.success) throw new ResponseError(responseData.message);
       setVerificationInfo({ buttonState: "success", state: "success", message: responseData.message });
     } catch (e) {

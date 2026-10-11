@@ -1,7 +1,7 @@
 import { router } from "@inertiajs/react";
 import * as React from "react";
-import typia from "typia";
 
+import { cast } from "$app/utils/cast";
 import { assertResponseError, request } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
@@ -41,7 +41,7 @@ export const CountrySelectionModal = ({ country: initialCountry, countries }: Pr
         data: { country },
       });
       if (response.ok) return window.location.reload();
-      const { error } = typia.assert<{ error: string }>(await response.json());
+      const { error } = cast<{ error: string }>(await response.json());
       setError(error);
     } catch (e) {
       assertResponseError(e);

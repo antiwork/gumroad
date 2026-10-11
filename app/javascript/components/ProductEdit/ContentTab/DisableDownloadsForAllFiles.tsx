@@ -1,7 +1,7 @@
 import { ArrowInDownSquareHalf } from "@boxicons/react";
 import * as React from "react";
-import typia from "typia";
 
+import { cast } from "$app/utils/cast";
 import { request, ResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
@@ -26,7 +26,7 @@ export const DisableDownloadsForAllFiles = ({ onResult }: { onResult: (result: D
         accept: "json",
       });
       if (!response.ok) throw new ResponseError();
-      const { disabled_count, disabled_file_ids, ineligible_count } = typia.assert<{
+      const { disabled_count, disabled_file_ids, ineligible_count } = cast<{
         disabled_count: number;
         disabled_file_ids: string[];
         ineligible_count: number;

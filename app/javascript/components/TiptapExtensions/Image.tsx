@@ -5,9 +5,9 @@ import { Transaction } from "@tiptap/pm/state";
 import { EditorView } from "@tiptap/pm/view";
 import { NodeViewContent, NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
 import * as React from "react";
-import typia from "typia";
 
 import { assertDefined } from "$app/utils/assert";
+import { cast } from "$app/utils/cast";
 import { classNames } from "$app/utils/classNames";
 import FileUtils from "$app/utils/file";
 import { isLikelyImageFile, prepareImageForUpload, heicDecodingLikely } from "$app/utils/prepareImageForUpload";
@@ -205,7 +205,7 @@ const ImageNodeView = ({ node, editor, getPos }: NodeViewProps) => {
     <NodeViewWrapper>
       <figure ref={nodeRef} style={isUploading ? { position: "relative" } : undefined}>
         {attrs.link ? (
-          <a href={typia.assert<string>(attrs.link)} target="_blank" rel="noopener noreferrer nofollow">
+          <a href={cast<string>(attrs.link)} target="_blank" rel="noopener noreferrer nofollow">
             {imageMarkup}
           </a>
         ) : (

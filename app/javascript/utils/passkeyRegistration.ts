@@ -1,5 +1,4 @@
-import typia from "typia";
-
+import { cast } from "$app/utils/cast";
 import { request, ResponseError } from "$app/utils/request";
 import { createPasskey, type PasskeyRegistrationOptions } from "$app/utils/webauthn";
 
@@ -18,7 +17,7 @@ export const registerPasskey = async (): Promise<Passkey> => {
     method: "POST",
     accept: "json",
   });
-  const optionsResult = typia.assert<{
+  const optionsResult = cast<{
     success: boolean;
     options?: PasskeyRegistrationOptions;
     error_message?: string;
@@ -35,7 +34,7 @@ export const registerPasskey = async (): Promise<Passkey> => {
     accept: "json",
     data: { credential },
   });
-  const createResult = typia.assert<{ success: boolean; passkey?: Passkey; error_message?: string }>(
+  const createResult = cast<{ success: boolean; passkey?: Passkey; error_message?: string }>(
     await createResponse.json(),
   );
   if (!createResponse.ok || !createResult.success || !createResult.passkey) {

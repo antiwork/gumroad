@@ -4,7 +4,6 @@ import { findChildren, Node as TiptapNode } from "@tiptap/core";
 import { Plugin } from "@tiptap/pm/state";
 import { EditorContent, NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
 import * as React from "react";
-import typia from "typia";
 
 import {
   AbandonedCartProduct,
@@ -16,6 +15,7 @@ import {
   WorkflowFormContext,
 } from "$app/types/workflow";
 import { assert, assertDefined } from "$app/utils/assert";
+import { cast } from "$app/utils/cast";
 import { classNames } from "$app/utils/classNames";
 import GuidGenerator from "$app/utils/guid_generator";
 
@@ -489,7 +489,7 @@ const EmailRow = ({
                   aria-label="Period"
                   onChange={(e) =>
                     onChange({
-                      delayed_delivery_time_period: typia.assert<InstallmentDeliveryTimePeriod>(e.target.value),
+                      delayed_delivery_time_period: cast<InstallmentDeliveryTimePeriod>(e.target.value),
                     })
                   }
                   onFocus={() => onFocus("delayed_delivery_time_period")}

@@ -75,9 +75,8 @@ export type PaymentElementClientConfirmConfig = {
   currency: string;
   // True only when the server proved this client-confirm cart can honor a displayed FX quote at
   // /orders/prepare. Optional because a cart save during a rolling deploy can return a response
-  // from a server that predates the field — typia re-validates that response, so requiring it
-  // would strand the checkout with a stale configuration. Absent is a legacy server response and
-  // must not remount into a quote whose method list that server never signed.
+  // from a server that predates the field. Absent is a legacy server response and must not
+  // remount into a quote whose method list that server never signed.
   buyer_currency_presentment?: boolean;
   presentment_amount_cents: number | null;
   listed_currency_display: ListedCurrencyDisplayConfig | null;

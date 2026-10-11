@@ -11,10 +11,10 @@ import {
 import cx from "classnames";
 import { throttle } from "lodash-es";
 import * as React from "react";
-import typia from "typia";
 
 import { createConsumptionEvent } from "$app/data/consumption_analytics";
 import { trackMediaLocationChanged } from "$app/data/media_location";
+import { cast } from "$app/utils/cast";
 import { classNames } from "$app/utils/classNames";
 import { humanizedDuration } from "$app/utils/duration";
 import FileUtils from "$app/utils/file";
@@ -217,7 +217,7 @@ export const FileRow = ({
         accept: "json",
       });
       if (!response.ok) throw new ResponseError();
-      const urls = typia.assert<Record<string, string[]>>(await response.json());
+      const urls = cast<Record<string, string[]>>(await response.json());
       if (!urls[file.id]?.length) throw new ResponseError();
       setAllMediaUrls((prev) => ({ ...prev, ...urls }));
     } finally {
@@ -476,7 +476,7 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
 
   useGlobalCustomEventListener("mobile_app_audio_player_info", (evt) => {
     if (!(evt instanceof CustomEvent)) return;
-    const data = typia.assert<MobileAppAudioPlayerInfo | null>(evt.detail);
+    const data = cast<MobileAppAudioPlayerInfo | null>(evt.detail);
     if (data?.fileId === file.id) {
       setIsPlaying(data.isPlaying);
       setLatestMediaLocation(parseFloat(data.latestMediaLocation ?? "0"));
@@ -817,7 +817,7 @@ const SendToKindleContainer = ({
         data: { email: emailEntry, file_external_id: fileId },
       });
 
-      const json = typia.assert<{ success: boolean; error?: string }>(await response.json());
+      const json = cast<{ success: boolean; error?: string }>(await response.json());
       if (!json.success) throw new ResponseError(json.error ?? "Something went wrong.");
 
       showAlert("It's been sent to your Kindle.", "success");

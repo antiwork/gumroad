@@ -1,6 +1,6 @@
 import * as React from "react";
-import typia from "typia";
 
+import { cast } from "$app/utils/cast";
 import {
   COLOMBIA_ID_MAX_INPUT_LENGTH,
   COLOMBIA_ID_MIN_DIGITS,
@@ -452,7 +452,7 @@ const BeneficialOwnersSection = ({
         accept: "json",
       });
       if (!response.ok) throw new ResponseError(`Request failed (${response.status})`);
-      const data = typia.assert<{ beneficial_owners: BeneficialOwner[] }>(await response.json());
+      const data = cast<{ beneficial_owners: BeneficialOwner[] }>(await response.json());
       setOwners(data.beneficial_owners);
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : "Couldn't load beneficial owners.");
@@ -574,7 +574,7 @@ const BeneficialOwnersSection = ({
         data: isRepresentative ? representativePayload(formState) : formStatePayload(formState),
       });
       if (!response.ok) {
-        const body = typia.assert<{ error?: string }>(await response.json().catch(() => ({})));
+        const body = cast<{ error?: string }>(await response.json().catch(() => ({})));
         throw new ResponseError(body.error || `Request failed (${response.status})`);
       }
       showAlert(isEdit ? "Beneficial owner updated." : "Beneficial owner added.", "success");
@@ -597,7 +597,7 @@ const BeneficialOwnersSection = ({
         accept: "json",
       });
       if (!response.ok) {
-        const body = typia.assert<{ error?: string }>(await response.json().catch(() => ({})));
+        const body = cast<{ error?: string }>(await response.json().catch(() => ({})));
         throw new ResponseError(body.error || `Request failed (${response.status})`);
       }
       showAlert("Beneficial owner removed.", "success");

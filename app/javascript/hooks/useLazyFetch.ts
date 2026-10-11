@@ -1,6 +1,6 @@
 import React from "react";
-import typia from "typia";
 
+import { cast } from "$app/utils/cast";
 import { assertResponseError, request } from "$app/utils/request";
 
 import { showAlert } from "$app/components/server-components/Alert";
@@ -146,7 +146,7 @@ export const useLazyPaginatedFetch = <T extends unknown[]>(
   });
   const [currentData, setCurrentData] = React.useState<T>(initialData);
   const core = useLazyFetchCore(initialData, options, (responseData, parsedData) => {
-    const { pagination: paginationData } = typia.assert<PaginatedResponse>(responseData);
+    const { pagination: paginationData } = cast<PaginatedResponse>(responseData);
     setPagination(paginationData);
 
     const canFetchMore =

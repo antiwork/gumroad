@@ -1,6 +1,6 @@
 import * as React from "react";
-import typia from "typia";
 
+import { cast } from "$app/utils/cast";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
@@ -73,9 +73,7 @@ export const CreateBrandAccountModal = ({ open, onClose }: { open: boolean; onCl
           },
         },
       });
-      const responseData = typia.assert<{ success: true } | { success: false; error_message: string }>(
-        await response.json(),
-      );
+      const responseData = cast<{ success: true } | { success: false; error_message: string }>(await response.json());
       if (!responseData.success) throw new ResponseError(responseData.error_message);
       // The session is already switched into the new brand account; land on its dashboard.
       window.location.href = Routes.dashboard_path();

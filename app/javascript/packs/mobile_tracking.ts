@@ -1,8 +1,7 @@
-import typia from "typia";
-
 import { ConfirmedPurchaseResponse } from "$app/data/purchase";
 import { trackUserProductAction } from "$app/data/user_action_event";
 import { AnalyticsData } from "$app/parsers/product";
+import { cast } from "$app/utils/cast";
 import { CurrencyCode, getIsSingleUnitCurrency } from "$app/utils/currency";
 import { assertResponseError } from "$app/utils/request";
 import { startTrackingForSeller, trackProductEvent } from "$app/utils/user_analytics";
@@ -27,7 +26,7 @@ const {
   third_party_analytics_domain,
   permalink,
   name,
-} = typia.assert<{
+} = cast<{
   enabled: boolean;
   seller_id: string;
   analytics: AnalyticsData;
@@ -62,7 +61,7 @@ if (enabled) {
         currency: result.currency_type.toUpperCase(),
         product_name: result.name,
         value: result.non_formatted_price,
-        valueIsSingleUnit: getIsSingleUnitCurrency(typia.assert<CurrencyCode>(result.currency_type)),
+        valueIsSingleUnit: getIsSingleUnitCurrency(cast<CurrencyCode>(result.currency_type)),
         quantity: result.quantity,
         tax: result.non_formatted_seller_tax_amount,
         ...(result.buyer_presentment_currency

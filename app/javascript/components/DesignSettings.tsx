@@ -1,5 +1,6 @@
 import * as React from "react";
-import typia from "typia";
+
+import { cast } from "$app/utils/cast";
 
 export type DesignSettings = { font: { name: string; url: string } };
 
@@ -16,5 +17,5 @@ export const useFont = (): { name: string; url: string } => {
 export const readDesignSettings = (): DesignSettings => {
   const el = document.getElementById("design-settings");
   if (el == null) throw new Error("Cannot read design settings, #design-settings was not rendered into the DOM");
-  return typia.assert<DesignSettings>(JSON.parse(el.dataset.settings ?? ""));
+  return cast<DesignSettings>(JSON.parse(el.dataset.settings ?? ""));
 };

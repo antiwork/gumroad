@@ -1,11 +1,11 @@
 import { ArrowLeft, ArrowRight, ListUl } from "@boxicons/react";
 import { router } from "@inertiajs/react";
 import * as React from "react";
-import typia from "typia";
 
 import { getFolderArchiveDownloadUrl, getProductFileDownloadInfos, saveLastContentPage } from "$app/data/products";
 import { RichContent, RichContentPage } from "$app/parsers/richContent";
 import { assertDefined } from "$app/utils/assert";
+import { cast } from "$app/utils/cast";
 import FileUtils from "$app/utils/file";
 import {
   generatePageIcon,
@@ -409,7 +409,7 @@ export const WithContent = ({
 
 const findFileEmbeds = (node: RichContent): string[] =>
   node.content?.flatMap((child) => {
-    if (child.type === FileEmbed.name && child.attrs?.id) return typia.assert<string>(child.attrs.id);
+    if (child.type === FileEmbed.name && child.attrs?.id) return cast<string>(child.attrs.id);
     return findFileEmbeds(child);
   }) ?? [];
 

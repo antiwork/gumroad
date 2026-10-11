@@ -18,7 +18,6 @@ import { EditorContent } from "@tiptap/react";
 import { debounce, isEqual, sortBy } from "lodash-es";
 import * as React from "react";
 import { ReactSortable as Sortable } from "react-sortablejs";
-import typia from "typia";
 
 import {
   Section as BaseSection,
@@ -33,6 +32,7 @@ import {
 import { SearchResults } from "$app/data/search";
 import { PROFILE_SORT_KEYS } from "$app/parsers/product";
 import { assertDefined } from "$app/utils/assert";
+import { cast } from "$app/utils/cast";
 import { classNames } from "$app/utils/classNames";
 import { ALLOWED_EXTENSIONS } from "$app/utils/file";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
@@ -97,7 +97,7 @@ const useSaveSection = (initialSection: Section) => {
         data: section,
         accept: "json",
       });
-      if (!response.ok) throw new ResponseError(typia.assert<{ error: string }>(await response.json()).error);
+      if (!response.ok) throw new ResponseError(cast<{ error: string }>(await response.json()).error);
       showAlert("Changes saved!", "success");
       setSavedSection(section);
     } catch (e) {
@@ -138,7 +138,7 @@ export const useSectionImageUploadSettings = () => {
                 .then((response) => response.json())
                 .then((data) => {
                   settled();
-                  resolve(typia.assert<{ url: string }>(data).url);
+                  resolve(cast<{ url: string }>(data).url);
                 })
                 .catch((e: unknown) => {
                   settled();
@@ -729,8 +729,8 @@ export const AddSectionButton = ({ side, index }: { index: number; side?: "top" 
           accept: "json",
         });
         const json: unknown = await response.json();
-        if (!response.ok) throw new ResponseError(typia.assert<{ error: string }>(json).error);
-        const { id } = typia.assert<{ id: string }>(json);
+        if (!response.ok) throw new ResponseError(cast<{ error: string }>(json).error);
+        const { id } = cast<{ id: string }>(json);
         return { ...section, id };
       } catch (e) {
         if (e instanceof ResponseError) showAlert(e.message, "error");

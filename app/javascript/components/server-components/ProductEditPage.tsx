@@ -2,7 +2,6 @@ import { DirectUpload } from "@rails/activestorage";
 import { isEqual } from "lodash-es";
 import * as React from "react";
 import { createBrowserRouter, RouteObject, RouterProvider } from "react-router-dom";
-import typia from "typia";
 
 import {
   applyRichContentPageSaveResponse,
@@ -25,6 +24,7 @@ import {
 import { OtherRefundPolicy } from "$app/data/products/other_refund_policies";
 import { Thumbnail } from "$app/data/thumbnails";
 import { RatingsWithPercentages } from "$app/parsers/product";
+import { cast } from "$app/utils/cast";
 import { CurrencyCode } from "$app/utils/currency";
 import { useDedupeInFlight } from "$app/utils/dedupeInFlight";
 import { Taxonomy } from "$app/utils/discover";
@@ -921,7 +921,7 @@ const ProductEditPage = (props: Props) => {
                 url: Routes.s3_utility_cdn_url_for_blob_path({ key: blob.key }),
               })
                 .then((response) => response.json())
-                .then((data) => resolve(typia.assert<{ url: string }>(data).url))
+                .then((data) => resolve(cast<{ url: string }>(data).url))
                 .catch((e: unknown) => {
                   assertResponseError(e);
                   reject(e);

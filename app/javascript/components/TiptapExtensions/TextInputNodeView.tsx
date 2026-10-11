@@ -1,6 +1,7 @@
 import { NodeViewProps, NodeViewWrapper } from "@tiptap/react";
 import * as React from "react";
-import typia from "typia";
+
+import { cast } from "$app/utils/cast";
 
 import { TextInput } from "$app/components/Download/CustomField/TextInput";
 import { NodeActionsMenu, NodeActionsWrapper } from "$app/components/TiptapExtensions/NodeActionsMenu";
@@ -9,9 +10,9 @@ import { Input } from "$app/components/ui/Input";
 import { Textarea } from "$app/components/ui/Textarea";
 
 export const TextInputNodeView = ({ editor, node, updateAttributes, getPos }: NodeViewProps) => {
-  const label = typia.assert<string | null>(node.attrs.label);
-  const type = typia.assert<"shortAnswer" | "longAnswer">(node.type.name);
-  const customFieldId = typia.assert<string | null>(node.attrs.id);
+  const label = cast<string | null>(node.attrs.label);
+  const type = cast<"shortAnswer" | "longAnswer">(node.type.name);
+  const customFieldId = cast<string | null>(node.attrs.id);
 
   const sharedProps: React.InputHTMLAttributes<HTMLInputElement | HTMLTextAreaElement> = {
     readOnly: true,

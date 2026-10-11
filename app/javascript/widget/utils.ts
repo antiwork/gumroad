@@ -1,5 +1,4 @@
-import typia from "typia";
-
+import { cast } from "../utils/cast";
 import { hasType, isNumber, isRecord, isString } from "../utils/guards";
 
 export type HeightMessage = { type: "height"; height: number };
@@ -79,7 +78,7 @@ const isHostOrSubdomainOf = (host: string, domain: string) => {
 // customDomain can legitimately be "": it is `new URL(script.src).host` (embed.ts, overlay.ts),
 // which is empty for a host-less scheme such as a page saved to `file:`. The helper rejects it.
 export const isValidHost = (url: URL, customDomain?: string) =>
-  isHostOrSubdomainOf(url.host, typia.assert<string>(process.env.ROOT_DOMAIN)) ||
+  isHostOrSubdomainOf(url.host, cast<string>(process.env.ROOT_DOMAIN)) ||
   isShortDomain(url.host) ||
   (customDomain !== undefined && isHostOrSubdomainOf(url.host, customDomain));
 

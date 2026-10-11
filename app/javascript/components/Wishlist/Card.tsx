@@ -1,9 +1,9 @@
 import { Bookmark, BookmarkPlus, FileDetail } from "@boxicons/react";
 import { FastAverageColor } from "fast-average-color";
 import * as React from "react";
-import typia from "typia";
 
 import useLazyLoadingProps from "$app/hooks/useLazyLoadingProps";
+import { cast } from "$app/utils/cast";
 import { classNames } from "$app/utils/classNames";
 import { formatOrderOfMagnitude } from "$app/utils/formatOrderOfMagnitude";
 import { getCssVariable } from "$app/utils/styles";
@@ -64,7 +64,7 @@ export const Card = ({ wishlist, hideSeller, eager }: CardProps) => {
       } = await new FastAverageColor().getColorAsync(thumbnailUrl);
 
       const distances = validColors.map((hex) => {
-        const [vr, vg, vb] = typia.assert<[number, number, number]>(
+        const [vr, vg, vb] = cast<[number, number, number]>(
           hex
             .slice(1)
             .match(/.{2}/gu)

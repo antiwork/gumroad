@@ -1,9 +1,8 @@
 import * as React from "react";
-import typia from "typia";
 
 import { ProductNativeType } from "$app/parsers/product";
 import { CurrencyCode } from "$app/utils/currency";
-import { assertResponseError, request } from "$app/utils/request";
+import { assertResponseError, request, readJson } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import { DiscountInput, InputtedDiscount } from "$app/components/CheckoutDashboard/DiscountInput";
@@ -70,7 +69,7 @@ export const UpsellSelectModal = ({
         accept: "json",
         url: Routes.checkout_upsells_products_path(query.trim() !== "" ? { query: query.trim() } : {}),
       });
-      const responseData = typia.assert<Product[]>(await response.json());
+      const responseData = await readJson<Product[]>(response);
       // Ignore out-of-order responses: only the latest request may update the list.
       if (requestId === activeRequestId.current) setProducts(responseData);
     } catch (error) {

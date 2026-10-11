@@ -1,6 +1,7 @@
 import * as React from "react";
-import typia from "typia";
 
+import { cast } from "$app/utils/cast";
+import { isRecord } from "$app/utils/guards";
 import { request, ResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
@@ -181,12 +182,14 @@ const LegalGuardianSection = ({
         data: { guardian: payload },
       });
       if (!response.ok) {
-        const body = typia.assert<{ error?: string }>(await response.json().catch(() => ({})));
+        const body = cast<{ error?: string }>(await response.json().catch(() => ({})));
         throw new ResponseError(body.error ?? "Something went wrong.");
       }
-      // typia rather than a cast, so a response shape that drifts from this contract fails loudly
-      // here instead of writing undefined into the form and reporting success.
-      const { guardian } = typia.assert<{ guardian: Guardian }>(await response.json());
+      // Checked, so a response without a guardian fails here instead of writing undefined into the
+      // form and reporting success.
+      const json: unknown = await response.json();
+      if (!isRecord(json) || !isRecord(json.guardian)) throw new ResponseError();
+      const guardian = cast<Guardian>(json.guardian);
 
       setFormState(guardianToFormState(guardian));
       // The incomplete branch names the terms specifically: it is the only required field a seller

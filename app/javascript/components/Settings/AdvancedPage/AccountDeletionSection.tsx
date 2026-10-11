@@ -1,6 +1,6 @@
 import * as React from "react";
-import typia from "typia";
 
+import { cast } from "$app/utils/cast";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
@@ -22,7 +22,7 @@ const AccountDeletionSection = (props: Props) => {
         accept: "json",
         url: Routes.deactivate_account_path(),
       });
-      const responseData = typia.assert<{ success: true } | { success: false; message: string }>(await response.json());
+      const responseData = cast<{ success: true } | { success: false; message: string }>(await response.json());
       if (!responseData.success) throw new ResponseError(responseData.message);
       window.location.href = Routes.root_path();
     } catch (e) {

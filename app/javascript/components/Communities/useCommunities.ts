@@ -1,9 +1,9 @@
 import { usePage } from "@inertiajs/react";
 import * as React from "react";
-import typia from "typia";
 
 import { Community, CommunityNotificationSettings } from "$app/data/communities";
 import { assertDefined } from "$app/utils/assert";
+import { cast } from "$app/utils/cast";
 
 export type CommunityDraft = {
   content: string;
@@ -21,7 +21,7 @@ const sortByName = <T extends { name: string }>(items: readonly T[]) =>
   [...items].sort((a, b) => a.name.localeCompare(b.name));
 
 export const useCommunities = () => {
-  const pageProps = typia.assert<PageProps>(usePage().props);
+  const pageProps = cast<PageProps>(usePage().props);
   const {
     has_products,
     communities: initialCommunities,

@@ -1,7 +1,7 @@
 import { parseISO } from "date-fns";
 import * as React from "react";
-import typia from "typia";
 
+import { cast } from "$app/utils/cast";
 import { formatDate } from "$app/utils/date";
 import { PASSKEY_ADD_ERROR, type Passkey, registerPasskey } from "$app/utils/passkeyRegistration";
 import { asyncVoid } from "$app/utils/promise";
@@ -64,9 +64,7 @@ export const PasskeysSection = ({ passkeys: initialPasskeys }: { passkeys: Passk
         accept: "json",
         data: { nickname },
       });
-      const result = typia.assert<{ success: boolean; passkey?: Passkey; error_message?: string }>(
-        await response.json(),
-      );
+      const result = cast<{ success: boolean; passkey?: Passkey; error_message?: string }>(await response.json());
       if (!response.ok || !result.success || !result.passkey) {
         throw new ResponseError(result.error_message ?? GENERIC_ERROR);
       }
@@ -91,7 +89,7 @@ export const PasskeysSection = ({ passkeys: initialPasskeys }: { passkeys: Passk
         method: "DELETE",
         accept: "json",
       });
-      const result = typia.assert<{ success: boolean; error_message?: string }>(await response.json());
+      const result = cast<{ success: boolean; error_message?: string }>(await response.json());
       if (!response.ok || !result.success) {
         throw new ResponseError(result.error_message ?? GENERIC_ERROR);
       }

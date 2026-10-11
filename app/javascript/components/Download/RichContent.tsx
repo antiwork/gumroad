@@ -4,10 +4,10 @@ import { LinkOptions as BaseLinkOptions } from "@tiptap/extension-link";
 import { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { EditorContent, NodeViewContent, NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
 import * as React from "react";
-import typia from "typia";
 
 import { RichContent } from "$app/parsers/richContent";
 import { assertDefined } from "$app/utils/assert";
+import { cast } from "$app/utils/cast";
 import { classNames } from "$app/utils/classNames";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
@@ -144,7 +144,7 @@ const Link = Mark.create<BaseLinkOptions & LinkRenderOptions>({
       "a",
       {
         ...HTMLAttributes,
-        href: resolveHref(typia.assert<string>(HTMLAttributes.href), this.options),
+        href: resolveHref(cast<string>(HTMLAttributes.href), this.options),
         target: "_blank",
       },
       0,
@@ -165,7 +165,7 @@ const TiptapLink = TiptapNode.create<LinkRenderOptions>({
         ...HTMLAttributes,
         target: "_blank",
         rel: "noopener noreferrer nofollow",
-        href: resolveHref(typia.assert<string>(HTMLAttributes.href), this.options),
+        href: resolveHref(cast<string>(HTMLAttributes.href), this.options),
       },
       0,
     ];
@@ -188,7 +188,7 @@ const TiptapButton = TiptapNode.create<LinkRenderOptions>({
           class: buttonVariants({ size: "default", color: "primary" }),
           target: "_blank",
           rel: "noopener noreferrer nofollow",
-          href: resolveHref(typia.assert<string>(HTMLAttributes.href), this.options),
+          href: resolveHref(cast<string>(HTMLAttributes.href), this.options),
         },
         0,
       ],
@@ -283,7 +283,7 @@ const useFilesInGroup = (node: ProseMirrorNode | undefined) => {
     const fileIds: string[] = [];
     node.content.descendants((c) => {
       if (!c.attrs.id) return;
-      const fileId = typia.assert<string>(c.attrs.id);
+      const fileId = cast<string>(c.attrs.id);
       fileIds.push(fileId);
       const file = downloadInfo.downloadableFiles.find((f) => f.id === fileId);
       if (file) files.push(file);
@@ -319,7 +319,7 @@ const FileEmbedGroupNodeView = ({ node, editor }: NodeViewProps) => {
     downloadableFilesInFolder.length === 0 ||
     (!canGenerateArchive && downloadableFilesInFolder.length > 1)
   );
-  const folderId = typia.assert<string>(node.attrs.uid);
+  const folderId = cast<string>(node.attrs.uid);
 
   useRunOnce(() => {
     const groupWrapper = ref.current?.querySelector("[data-node-view-content]")?.firstElementChild;

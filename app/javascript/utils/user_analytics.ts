@@ -1,9 +1,8 @@
-import typia from "typia";
-
 import * as FacebookPixel from "$app/data/facebook_pixel";
 import * as GoogleAnalytics from "$app/data/google_analytics";
 import * as TikTokPixel from "$app/data/tiktok_pixel";
 import { AnalyticsData, BuyerCurrencyDisplay } from "$app/parsers/product";
+import { cast } from "$app/utils/cast";
 import { CurrencyCode, getIsSingleUnitCurrency } from "$app/utils/currency";
 
 export type GumroadEvents = keyof typeof ProductEventsTitles;
@@ -133,7 +132,7 @@ export function trackSellerPurchaseEvent({ seller_id, analytics, purchase_event 
     purchase_external_id: purchase_event.purchase_external_id,
     product_name: purchase_event.product_name,
     value: purchase_event.value,
-    valueIsSingleUnit: getIsSingleUnitCurrency(typia.assert<CurrencyCode>(purchase_event.currency)),
+    valueIsSingleUnit: getIsSingleUnitCurrency(cast<CurrencyCode>(purchase_event.currency)),
     currency: purchase_event.currency.toUpperCase(),
     quantity: purchase_event.quantity,
     tax: purchase_event.tax,

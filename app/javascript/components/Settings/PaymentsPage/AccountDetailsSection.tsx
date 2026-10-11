@@ -1,9 +1,9 @@
 import { Eye, EyeSlash, Store, User as UserIcon } from "@boxicons/react";
 import parsePhoneNumberFromString, { CountryCode } from "libphonenumber-js";
 import * as React from "react";
-import typia from "typia";
 
 import type { ComplianceInfo, FormFieldName, User } from "$app/types/payments";
+import { cast } from "$app/utils/cast";
 import {
   getIndividualTaxIdConfig,
   PERSONAL_ID_NUMBER_CONFIG,
@@ -117,7 +117,7 @@ const AccountDetailsSection = ({
   }, [isEditingBusinessTaxId]);
 
   const formatPhoneNumber = (phoneNumber: string, country_code: string | null): string => {
-    const countryCode: CountryCode = typia.assert<CountryCode>(country_code);
+    const countryCode: CountryCode = cast<CountryCode>(country_code);
     return parsePhoneNumberFromString(phoneNumber, countryCode)?.format("E.164") ?? phoneNumber;
   };
 

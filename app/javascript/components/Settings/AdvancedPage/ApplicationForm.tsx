@@ -2,8 +2,8 @@ import { Trash } from "@boxicons/react";
 import { router } from "@inertiajs/react";
 import { DirectUpload } from "@rails/activestorage";
 import * as React from "react";
-import typia from "typia";
 
+import { cast } from "$app/utils/cast";
 import FileUtils from "$app/utils/file";
 import { getImageDimensionsFromFile } from "$app/utils/image";
 import { asyncVoid } from "$app/utils/promise";
@@ -240,9 +240,9 @@ const ApplicationForm = ({ application }: { application?: Application }) => {
                       method: "POST",
                       accept: "json",
                     });
-                    const responseData = typia.assert<
-                      { success: true; token: string } | { success: false; message: string }
-                    >(await response.json());
+                    const responseData = cast<{ success: true; token: string } | { success: false; message: string }>(
+                      await response.json(),
+                    );
                     if (!responseData.success) throw new ResponseError(responseData.message);
                     setToken(responseData.token);
                   } catch (e) {

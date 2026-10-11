@@ -1,11 +1,11 @@
-import typia from "typia";
+import { cast } from "$app/utils/cast";
 
 const readFileAsDataURL = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
 
     reader.addEventListener("load", () => {
-      resolve(typia.assert<string>(reader.result));
+      resolve(cast<string>(reader.result));
     });
 
     reader.addEventListener("error", () => {

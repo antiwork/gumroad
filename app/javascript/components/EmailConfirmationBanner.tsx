@@ -1,6 +1,6 @@
 import * as React from "react";
-import typia from "typia";
 
+import { cast } from "$app/utils/cast";
 import { request } from "$app/utils/request";
 
 import { showAlert } from "$app/components/server-components/Alert";
@@ -34,7 +34,7 @@ export const EmailConfirmationBanner = ({ email, can_resend, children }: EmailCo
       // rejected — the only rejection case is that there is nothing left to
       // confirm (e.g. the email was confirmed in another tab while the banner
       // was still up), so tell the seller that instead of a generic error.
-      const responseData = typia.assert<{ success: boolean }>(await response.json());
+      const responseData = cast<{ success: boolean }>(await response.json());
       if (!responseData.success) {
         setResendState("initial");
         showAlert("Your email address is already confirmed — refresh the page to continue.", "error");

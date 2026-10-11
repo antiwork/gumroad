@@ -1,8 +1,8 @@
 import { CreditCard } from "@boxicons/react";
 import * as React from "react";
-import typia from "typia";
 
 import { SavedCreditCard } from "$app/parsers/card";
+import { cast } from "$app/utils/cast";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
 
@@ -28,7 +28,7 @@ export const CreditCardForm = ({ card, can_remove, read_only }: Props) => {
         method: "POST",
         accept: "json",
       });
-      if (!response.ok) throw new ResponseError(typia.assert<{ error: string }>(await response.json()).error);
+      if (!response.ok) throw new ResponseError(cast<{ error: string }>(await response.json()).error);
       setStatus("removed");
     } catch (e) {
       assertResponseError(e);

@@ -1,7 +1,7 @@
 import * as React from "react";
-import typia from "typia";
 
 import { assert } from "$app/utils/assert";
+import { cast } from "$app/utils/cast";
 
 type TimeZone = { name: string; offset: number };
 
@@ -28,7 +28,7 @@ export type CurrentSeller = {
 const Context = React.createContext<CurrentSeller | null | undefined>(undefined);
 
 export const parseCurrentSeller = (data: unknown): CurrentSeller | null => {
-  const parsed = typia.assert<{
+  const parsed = cast<{
     id: string;
     email: string | null;
     name: string | null;

@@ -30,7 +30,6 @@ import { parseISO } from "date-fns";
 import { partition } from "lodash-es";
 import * as React from "react";
 import { ReactSortable } from "react-sortablejs";
-import typia from "typia";
 
 import { fetchDropboxFiles, ResponseDropboxFile, uploadDropboxFile } from "$app/data/dropbox_upload";
 import {
@@ -46,6 +45,7 @@ import { reorderRowsPreservingMembership } from "$app/data/product_save_contract
 import { type Post } from "$app/types/workflow";
 import { escapeRegExp } from "$app/utils";
 import { assertDefined } from "$app/utils/assert";
+import { cast } from "$app/utils/cast";
 import { classNames } from "$app/utils/classNames";
 import { formatDate } from "$app/utils/date";
 import FileUtils from "$app/utils/file";
@@ -691,7 +691,7 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
         new Promise((resolve) => setTimeout(resolve, 250)),
       ]);
       if (!response.ok) throw new ResponseError();
-      const parsedResponse = typia.assert<{ existing_files: ExistingFileEntry[] }>(await response.json());
+      const parsedResponse = cast<{ existing_files: ExistingFileEntry[] }>(await response.json());
       setExistingFiles(parsedResponse.existing_files);
     } catch (error) {
       assertResponseError(error);
@@ -1509,9 +1509,7 @@ export const ContentTab = () => {
         accept: "json",
       });
       if (!response.ok) throw new ResponseError();
-      const parsedResponse = typia.assert<{ posts: Post[]; total: number; next_page: number | null }>(
-        await response.json(),
-      );
+      const parsedResponse = cast<{ posts: Post[]; total: number; next_page: number | null }>(await response.json());
       loadedPostsData.current.set(
         selectedVariantId,
         refresh

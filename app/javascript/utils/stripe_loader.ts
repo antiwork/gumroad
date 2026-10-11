@@ -1,5 +1,6 @@
 import { loadStripe, Stripe, StripeConstructorOptions } from "@stripe/stripe-js";
-import typia from "typia";
+
+import { cast } from "$app/utils/cast";
 
 let stripeInstance: Promise<Stripe> | undefined;
 
@@ -17,7 +18,7 @@ export const getCheckoutStripeInstance = async (stripeConnectAccountId: string |
 const loadStripeInstance = async (stripeAccount?: string) => {
   const publicKeyTag = document.querySelector<HTMLElement>("meta[property='stripe:pk']");
   const apiVersionTag = document.querySelector<HTMLElement>("meta[property='stripe:api_version']");
-  const publicKey = typia.assert<string>(publicKeyTag?.getAttribute("value"));
+  const publicKey = cast<string>(publicKeyTag?.getAttribute("value"));
   const apiVersion = apiVersionTag?.getAttribute("value");
 
   const options: StripeConstructorOptions = {};

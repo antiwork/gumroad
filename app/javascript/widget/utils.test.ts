@@ -7,9 +7,8 @@ import { isHeightMessage, isTranslationsMessage, isValidHost } from "$app/widget
 // refuses to load a product from a host it rejects. So these cases are the security contract,
 // not incidental coverage — a regression here lets an attacker-registered host talk to the widget.
 //
-// The domains are set here rather than read from the ambient env: isValidHost runs
-// typia.assert<string> on ROOT_DOMAIN, so an unset value throws instead of returning false, and
-// the vitest process does not inherit the app's env.
+// The domains are set here rather than read from the ambient env: isValidHost reads ROOT_DOMAIN,
+// and the vitest process does not inherit the app's env.
 const ROOT_DOMAIN = "gumroad.com";
 const SHORT_DOMAIN = "gum.co";
 

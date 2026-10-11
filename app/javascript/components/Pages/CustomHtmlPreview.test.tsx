@@ -1,8 +1,9 @@
 // @vitest-environment happy-dom
 import { cleanup, render, waitFor } from "@testing-library/react";
 import * as React from "react";
-import typia from "typia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { isRecord, isString } from "$app/utils/guards";
 
 import { CustomHtmlPreview } from "$app/components/Pages/CustomHtmlPreview";
 
@@ -41,7 +42,7 @@ const jsonResponse = (body: unknown) => ({ ok: true, json: () => Promise.resolve
 // The single URL the responder fetched, as a string the assertions can parse.
 const requestedUrl = (): string => {
   const settings: unknown = mocks.request.mock.calls[0]?.[0];
-  if (!typia.is<{ url: string }>(settings)) throw new Error("expected the responder to have fetched a slice");
+  if (!isRecord(settings) || !isString(settings.url)) throw new Error("expected the responder to have fetched a slice");
   return settings.url;
 };
 

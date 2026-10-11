@@ -1,6 +1,6 @@
 import * as React from "react";
-import typia from "typia";
 
+import { cast } from "$app/utils/cast";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
@@ -38,7 +38,7 @@ export const TaxesCollectionModal = ({ taxesOwed, creditCreationDate, name }: Pr
         data: { signature },
       });
       if (!response.ok) throw new ResponseError();
-      const optInResponse: SaveOptInResponse = typia.assert<SaveOptInResponse>(await response.json());
+      const optInResponse: SaveOptInResponse = cast<SaveOptInResponse>(await response.json());
       if (optInResponse.success) return window.location.reload();
       throw new ResponseError(optInResponse.error);
     } catch (e) {
