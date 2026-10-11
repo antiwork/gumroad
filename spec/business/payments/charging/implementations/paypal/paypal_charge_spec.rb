@@ -480,6 +480,26 @@ describe PaypalCharge do
                                           card_type: "paypal",
                                           card_visual: "paypal-gr-integspecs@gumroad.com")
       end
+
+      context "when the order payload has no payer" do
+        # PayPal omits `payer` on some order responses, so the charge must still load without it.
+        subject do
+          PaypalCharge.new(paypal_transaction_id: "58003532R80972514",
+                           order_api_used: true,
+                           payment_details: order_details.tap { |order| order.delete("payer") })
+        end
+
+        it "loads the charge without the payer-derived card fields" do
+          is_expected.to have_attributes(charge_processor_id: PaypalChargeProcessor.charge_processor_id,
+                                         id: "58003532R80972514",
+                                         fee: 87.0,
+                                         paypal_payment_status: "REFUNDED",
+                                         card_fingerprint: nil,
+                                         card_country: nil,
+                                         card_type: "paypal",
+                                         card_visual: nil)
+        end
+      end
     end
 
     context "when paypal transaction is not present" do

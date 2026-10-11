@@ -47,9 +47,13 @@ class PaypalCharge < BaseProcessorCharge
       self.paypal_payment_status = capture_details["status"]
       self.status = capture_details["status"].to_s.downcase
       self.refunded = status == PaypalApiPaymentStatus::REFUNDED.downcase
-      self.card_fingerprint = PaypalCardFingerprint.build_paypal_fingerprint(order_details["payer"]["email_address"])
-      self.card_visual = order_details["payer"]["email_address"]
-      self.card_country = order_details["payer"]["address"]["country_code"]
+      # PayPal omits `payer` on some order responses, so the card fields it feeds are optional.
+      payer = order_details["payer"]
+      if payer.present?
+        self.card_fingerprint = PaypalCardFingerprint.build_paypal_fingerprint(payer["email_address"])
+        self.card_visual = payer["email_address"]
+        self.card_country = payer.dig("address", "country_code")
+      end
       self.card_type = CardType::PAYPAL
       # Don't create flow of funds for PayPal charge as we don't use anything from it except for gumroad amount's currency
       # for affiliate balance creation, but as now gumroad amount's currency can be non-usd, we can't use it as affiliate balance
