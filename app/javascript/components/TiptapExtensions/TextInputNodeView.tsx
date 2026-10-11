@@ -2,6 +2,7 @@ import { NodeViewProps, NodeViewWrapper } from "@tiptap/react";
 import * as React from "react";
 
 import { cast } from "$app/utils/cast";
+import { assertNullableString } from "$app/utils/guards";
 
 import { TextInput } from "$app/components/Download/CustomField/TextInput";
 import { NodeActionsMenu, NodeActionsWrapper } from "$app/components/TiptapExtensions/NodeActionsMenu";
@@ -10,9 +11,9 @@ import { Input } from "$app/components/ui/Input";
 import { Textarea } from "$app/components/ui/Textarea";
 
 export const TextInputNodeView = ({ editor, node, updateAttributes, getPos }: NodeViewProps) => {
-  const label = cast<string | null>(node.attrs.label);
+  const label = assertNullableString(node.attrs.label);
   const type = cast<"shortAnswer" | "longAnswer">(node.type.name);
-  const customFieldId = cast<string | null>(node.attrs.id);
+  const customFieldId = assertNullableString(node.attrs.id);
 
   const sharedProps: React.InputHTMLAttributes<HTMLInputElement | HTMLTextAreaElement> = {
     readOnly: true,

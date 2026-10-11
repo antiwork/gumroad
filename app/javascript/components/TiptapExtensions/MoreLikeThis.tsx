@@ -3,7 +3,7 @@ import { Node as TiptapNode } from "@tiptap/core";
 import { NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
 import * as React from "react";
 
-import { getRecommendedProducts, RecommendationType } from "$app/data/recommended_products";
+import { getRecommendedProducts, isRecommendationType, RecommendationType } from "$app/data/recommended_products";
 import { CardProduct } from "$app/parsers/product";
 import { cast } from "$app/utils/cast";
 
@@ -45,7 +45,9 @@ export const MoreLikeThis = TiptapNode.create<{ productId: string }>({
 const MoreLikeThisNodeView = ({ editor, node, extension, selected, getPos }: NodeViewProps) => {
   const [recommendedProducts, setRecommendedProducts] = React.useState<CardProduct[] | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
-  const recommendationType = cast<RecommendationType | undefined>(node.attrs.recommendationType);
+  const recommendationType = isRecommendationType(node.attrs.recommendationType)
+    ? node.attrs.recommendationType
+    : undefined;
 
   React.useEffect(() => {
     const fetchRecommendedProducts = async () => {

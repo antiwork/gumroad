@@ -3,7 +3,7 @@ import { NodeViewProps, Node as TiptapNode } from "@tiptap/core";
 import { NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
 import * as React from "react";
 
-import { cast } from "$app/utils/cast";
+import { assertString } from "$app/utils/guards";
 
 import { Button } from "$app/components/Button";
 import { FileInput } from "$app/components/Download/CustomField/FileInput";
@@ -42,7 +42,7 @@ const FileUploadNodeView = ({ editor, node, getPos }: NodeViewProps) => {
   if (!editor.isEditable) {
     return (
       <NodeViewWrapper>
-        <FileInput customFieldId={cast<string>(node.attrs.id)} />
+        <FileInput customFieldId={assertString(node.attrs.id)} />
       </NodeViewWrapper>
     );
   }

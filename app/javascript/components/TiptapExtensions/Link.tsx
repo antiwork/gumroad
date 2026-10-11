@@ -6,8 +6,8 @@ import { NodeViewContent, NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer 
 import cx from "classnames";
 import * as React from "react";
 
-import { cast } from "$app/utils/cast";
 import { classNames } from "$app/utils/classNames";
+import { assertString } from "$app/utils/guards";
 
 import { Button, buttonVariants } from "$app/components/Button";
 import { Modal } from "$app/components/Modal";
@@ -121,7 +121,7 @@ const LinkNodeView = ({ node, editor, getPos, deleteNode }: NodeViewProps) => {
   const [isPopoverVisible, setIsPopoverVisible] = React.useState(false);
   const [link, setLink] = React.useState<{ label: string; url: string }>({
     label: node.textContent,
-    url: cast<string>(node.attrs.href),
+    url: assertString(node.attrs.href),
   });
 
   const linkInputRef = React.useRef<HTMLInputElement | null>(null);
@@ -211,14 +211,14 @@ const LinkNodeView = ({ node, editor, getPos, deleteNode }: NodeViewProps) => {
         <Popover
           open={isPopoverShown}
           onOpenChange={(open) => {
-            setLink({ label: node.textContent, url: cast<string>(node.attrs.href) });
+            setLink({ label: node.textContent, url: assertString(node.attrs.href) });
             setIsPopoverShown(open);
           }}
         >
           <PopoverTrigger className={classNames("invisible all-unset", { visible: isButton || isPopoverVisible })}>
             <NodeViewContent
               as="a"
-              href={cast<string>(node.attrs.href)}
+              href={assertString(node.attrs.href)}
               className={cx({ [tiptapButtonClassName]: isButton })}
               target="_blank"
               rel="noopener noreferrer nofollow"
@@ -263,7 +263,7 @@ const LinkNodeView = ({ node, editor, getPos, deleteNode }: NodeViewProps) => {
         <NodeViewContent
           style={{ display: "grid" }}
           as="a"
-          href={cast<string>(node.attrs.href)}
+          href={assertString(node.attrs.href)}
           contentEditable={editor.isEditable}
           className={cx({ [tiptapButtonClassName]: isButton })}
           target="_blank"
@@ -271,7 +271,7 @@ const LinkNodeView = ({ node, editor, getPos, deleteNode }: NodeViewProps) => {
           onClick={(event: React.MouseEvent) => {
             if (editor.isEditable) {
               event.preventDefault();
-              setLink({ label: node.textContent, url: cast<string>(node.attrs.href) });
+              setLink({ label: node.textContent, url: assertString(node.attrs.href) });
               setIsPopoverShown(true);
             }
           }}
@@ -422,7 +422,7 @@ export const Link = Node.create({
         const link = node.marks.find((mark) => mark.type.name === "link");
         if (link) {
           const mappedPos = tr.mapping.map(pos);
-          const href = cast<string>(link.attrs.href);
+          const href = assertString(link.attrs.href);
           const LinkNode =
             this.editor.schema.nodes[Link.name]?.create({ href }, this.editor.schema.text(node.text || "")) ?? node;
           tr.setSelection(new NodeSelection(tr.doc.resolve(mappedPos)));

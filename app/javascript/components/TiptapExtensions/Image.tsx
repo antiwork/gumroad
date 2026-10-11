@@ -7,9 +7,9 @@ import { NodeViewContent, NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer 
 import * as React from "react";
 
 import { assertDefined } from "$app/utils/assert";
-import { cast } from "$app/utils/cast";
 import { classNames } from "$app/utils/classNames";
 import FileUtils from "$app/utils/file";
+import { assertString } from "$app/utils/guards";
 import { isLikelyImageFile, prepareImageForUpload, heicDecodingLikely } from "$app/utils/prepareImageForUpload";
 import {
   canResetFileInputAfterSnapshot,
@@ -205,7 +205,7 @@ const ImageNodeView = ({ node, editor, getPos }: NodeViewProps) => {
     <NodeViewWrapper>
       <figure ref={nodeRef} style={isUploading ? { position: "relative" } : undefined}>
         {attrs.link ? (
-          <a href={cast<string>(attrs.link)} target="_blank" rel="noopener noreferrer nofollow">
+          <a href={assertString(attrs.link)} target="_blank" rel="noopener noreferrer nofollow">
             {imageMarkup}
           </a>
         ) : (

@@ -4,7 +4,7 @@ import { NodeViewContent, NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer 
 import { common, createLowlight } from "lowlight";
 import * as React from "react";
 
-import { cast } from "$app/utils/cast";
+import { assertOptionalString } from "$app/utils/guards";
 
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { Select } from "$app/components/ui/Select";
@@ -59,7 +59,7 @@ const LANGUAGES = lowlight.listLanguages().map((lang) => {
 });
 
 const CodeBlockComponent = ({ node, updateAttributes, editor }: NodeViewProps) => {
-  const language = cast<string | null | undefined>(node.attrs.language);
+  const language = assertOptionalString(node.attrs.language);
   const { isEditable } = editor;
 
   return (

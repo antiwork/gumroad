@@ -4,10 +4,10 @@ import { NodeViewContent, NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer 
 import * as React from "react";
 
 import { ProductNativeType } from "$app/parsers/product";
-import { cast } from "$app/utils/cast";
 import { CurrencyCode } from "$app/utils/currency";
 import { formatOrderOfMagnitude } from "$app/utils/formatOrderOfMagnitude";
-import { OfferCode, applyOfferCodeToCents } from "$app/utils/offer-code";
+import { assertString, assertNullableString } from "$app/utils/guards";
+import { OfferCode, applyOfferCodeToCents, isOfferCode } from "$app/utils/offer-code";
 import { assertResponseError, request, readJson } from "$app/utils/request";
 
 import { PriceTag } from "$app/components/Product/PriceTag";
@@ -81,7 +81,9 @@ export const UpsellCard = TiptapNode.create({
         default: null,
         parseHTML: (element) => {
           const discount = element.getAttribute("discount");
-          return discount ? cast<OfferCode | null>(JSON.parse(discount)) : null;
+          if (!discount) return null;
+          const parsed: unknown = JSON.parse(discount);
+          return isOfferCode(parsed) ? parsed : null;
         },
         renderHTML: (attributes) => {
           if (attributes.discount) {
@@ -123,10 +125,10 @@ const getUpsellUrl = (id: string, permalink: string) => {
 };
 
 const UpsellCardNodeView = ({ node, selected, editor }: NodeViewProps) => {
-  const id = cast<string | null>(node.attrs.id);
-  const productId = cast<string>(node.attrs.productId);
-  const variantId = cast<string | null>(node.attrs.variantId);
-  const discount = cast<OfferCode | null>(node.attrs.discount);
+  const id = assertNullableString(node.attrs.id);
+  const productId = assertString(node.attrs.productId);
+  const variantId = assertNullableString(node.attrs.variantId);
+  const discount = isOfferCode(node.attrs.discount) ? node.attrs.discount : null;
   const [product, setProduct] = React.useState<Product | null>(null);
   const [variant, setVariant] = React.useState<ProductOption | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);

@@ -5,8 +5,8 @@ import * as React from "react";
 import { getFolderArchiveDownloadUrl, getProductFileDownloadInfos, saveLastContentPage } from "$app/data/products";
 import { RichContent, RichContentPage } from "$app/parsers/richContent";
 import { assertDefined } from "$app/utils/assert";
-import { cast } from "$app/utils/cast";
 import FileUtils from "$app/utils/file";
+import { assertString } from "$app/utils/guards";
 import {
   generatePageIcon,
   PAGE_ICON_COMPONENTS,
@@ -409,7 +409,7 @@ export const WithContent = ({
 
 const findFileEmbeds = (node: RichContent): string[] =>
   node.content?.flatMap((child) => {
-    if (child.type === FileEmbed.name && child.attrs?.id) return cast<string>(child.attrs.id);
+    if (child.type === FileEmbed.name && child.attrs?.id) return assertString(child.attrs.id);
     return findFileEmbeds(child);
   }) ?? [];
 

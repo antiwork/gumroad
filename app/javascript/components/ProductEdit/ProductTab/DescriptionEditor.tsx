@@ -7,7 +7,8 @@ import * as React from "react";
 import { assertDefined } from "$app/utils/assert";
 import { cast } from "$app/utils/cast";
 import FileUtils, { ALLOWED_EXTENSIONS } from "$app/utils/file";
-import { assertResponseError, request } from "$app/utils/request";
+import { isRecord, isString } from "$app/utils/guards";
+import { assertResponseError, readJson, request, ResponseError } from "$app/utils/request";
 
 import { PublicFileWithStatus } from "$app/components/ProductEdit/state";
 import {
@@ -31,6 +32,13 @@ export const useImageUpload = () => {
   const [imagesUploading, setImagesUploading] = React.useState<Set<File>>(new Set());
 
   return { isUploading: imagesUploading.size > 0, setImagesUploading };
+};
+
+// A public file that fails validation answers 200 with { success: false, error }, so a status check
+// alone does not catch it.
+export const publicFileIdFromResponse = (data: unknown): string => {
+  if (!isRecord(data) || data.success !== true || !isString(data.id)) throw new ResponseError();
+  return data.id;
 };
 
 export const PublicFilesSettingsContext = React.createContext<{
@@ -254,9 +262,9 @@ export const DescriptionEditor = ({
               url: Routes.internal_product_public_files_path({ product_id: id, signed_blob_id: blob.signed_id }),
               accept: "json",
             })
-              .then((response) => response.json())
+              .then((response) => readJson<unknown>(response))
               .then((data) => {
-                const fileId = cast<{ id: string }>(data).id;
+                const fileId = publicFileIdFromResponse(data);
                 updatePublicFiles((prev) => {
                   const file = prev.find((file) => file.id === src);
                   if (file) {

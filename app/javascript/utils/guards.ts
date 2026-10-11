@@ -18,3 +18,15 @@ export const isRecordOf = <T>(value: unknown, check: (item: unknown) => item is 
 
 export const hasType = <T extends string>(value: unknown, type: T): value is Record<string, unknown> & { type: T } =>
   isRecord(value) && value.type === type;
+
+// For values that must have the type before they are used, such as seller-written rich content
+// attributes that end up in the DOM. Each one throws when the value has another type.
+export const assertString = (value: unknown): string => {
+  if (!isString(value)) throw new TypeError(`Expected a string, got ${typeof value}`);
+  return value;
+};
+
+export const assertNullableString = (value: unknown): string | null => (value === null ? null : assertString(value));
+
+export const assertOptionalString = (value: unknown): string | null | undefined =>
+  value === null || value === undefined ? value : assertString(value);

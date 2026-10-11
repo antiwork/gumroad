@@ -9,8 +9,8 @@ import * as React from "react";
 
 import { cancelDropboxFileUpload } from "$app/data/dropbox_upload";
 import { assertDefined } from "$app/utils/assert";
-import { cast } from "$app/utils/cast";
 import FileUtils from "$app/utils/file";
+import { assertString } from "$app/utils/guards";
 import { createJWPlayer } from "$app/utils/jwPlayer";
 import { getMimeType } from "$app/utils/mimetypes";
 import { summarizeUploadProgress } from "$app/utils/summarizeUploadProgress";
@@ -85,7 +85,7 @@ const FileEmbedNodeView = ({
   const uploader = assertDefined(useEvaporateUploader());
   const s3UploadConfig = useS3UploadConfig();
 
-  const file = filesById.get(cast<string>(node.attrs.id));
+  const file = filesById.get(assertString(node.attrs.id));
   const downloadUrl = file && getDownloadUrl(id, file);
   // The server answers this for a saved file; a file still uploading answers for itself, so the
   // switch never appears where the backend would ignore it (ProductFile#can_disable_downloads?).
@@ -209,7 +209,7 @@ const FileEmbedNodeView = ({
       findChildren(editor.state.doc, ({ type }) => type.name === FileEmbedGroup.name).flatMap(({ node: groupNode }) =>
         groupNode === parentNode
           ? []
-          : [{ uid: cast<string>(groupNode.attrs.uid), name: titleWithFallback(groupNode.attrs.name) }],
+          : [{ uid: assertString(groupNode.attrs.uid), name: titleWithFallback(groupNode.attrs.name) }],
       ),
     [selected],
   );
@@ -406,7 +406,7 @@ const FileEmbedNodeView = ({
         {parentNode?.childCount === 1 ? null : (
           <MenuItem
             onClick={() =>
-              editor.commands.moveFileEmbedToGroup({ fileUid: cast<string>(node.attrs.uid), groupUid: null })
+              editor.commands.moveFileEmbedToGroup({ fileUid: assertString(node.attrs.uid), groupUid: null })
             }
           >
             <FolderPlus className="size-5" />
@@ -417,9 +417,9 @@ const FileEmbedNodeView = ({
           <MenuItem
             key={uid}
             onClick={() => {
-              editor.commands.moveFileEmbedToGroup({ fileUid: cast<string>(node.attrs.uid), groupUid: uid });
+              editor.commands.moveFileEmbedToGroup({ fileUid: assertString(node.attrs.uid), groupUid: uid });
 
-              const fileName = filesById.get(cast<string>(node.attrs.id))?.display_name;
+              const fileName = filesById.get(assertString(node.attrs.id))?.display_name;
               if (fileName) showAlert(`Moved "${fileName}" to "${name}".`, "success");
             }}
           >

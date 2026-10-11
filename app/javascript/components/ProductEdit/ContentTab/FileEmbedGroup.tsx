@@ -7,8 +7,8 @@ import * as React from "react";
 
 import { getFolderArchiveDownloadUrl, getProductFileDownloadInfos } from "$app/data/products";
 import { isTuple } from "$app/utils/array";
-import { cast } from "$app/utils/cast";
 import { classNames } from "$app/utils/classNames";
+import { assertString } from "$app/utils/guards";
 import GuidGenerator from "$app/utils/guid_generator";
 import { assertResponseError } from "$app/utils/request";
 
@@ -80,7 +80,7 @@ const FileEmbedGroupNodeView = ({
     downloadableFiles.length > 0 &&
     !downloadableFiles.some((file) => file.pdf_stamp_enabled) &&
     downloadableFiles.reduce((total, file) => total + (file.file_size ?? 0), 0) < ARCHIVE_SIZE_LIMIT_IN_BYTES;
-  const folderId = cast<string>(node.attrs.uid);
+  const folderId = assertString(node.attrs.uid);
 
   const inputRef = React.useRef<HTMLInputElement>(null);
   useRunOnce(() => {

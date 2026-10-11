@@ -1,11 +1,16 @@
 import { CardProduct } from "$app/parsers/product";
+import { isOneOf } from "$app/utils/guards";
 import { request, readJson } from "$app/utils/request";
 
-export type RecommendationType =
-  | "no_recommendations"
-  | "own_products"
-  | "directly_affiliated_products"
-  | "gumroad_affiliates_products";
+const recommendationTypes = [
+  "no_recommendations",
+  "own_products",
+  "directly_affiliated_products",
+  "gumroad_affiliates_products",
+] as const;
+export type RecommendationType = (typeof recommendationTypes)[number];
+export const isRecommendationType = (value: unknown): value is RecommendationType =>
+  isOneOf(value, recommendationTypes);
 
 export async function getRecommendedProducts(
   cartProductIds: string[],

@@ -7,8 +7,8 @@ import * as React from "react";
 
 import { RichContent } from "$app/parsers/richContent";
 import { assertDefined } from "$app/utils/assert";
-import { cast } from "$app/utils/cast";
 import { classNames } from "$app/utils/classNames";
+import { assertString } from "$app/utils/guards";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 
@@ -50,7 +50,7 @@ export const RichContentView = ({
     initialValue: richContent as Content,
     editable: false,
     extensions: [
-      Link.configure({ saleInfo, licenseKey, rootDomain }),
+      RichContentLink.configure({ saleInfo, licenseKey, rootDomain }),
       TiptapLink.configure({ saleInfo, licenseKey, rootDomain }),
       TiptapButton.configure({ saleInfo, licenseKey, rootDomain }),
       FileEmbed,
@@ -131,7 +131,7 @@ type LinkRenderOptions = { saleInfo: SaleInfo | null; licenseKey: string | null;
 const resolveHref = (href: string, options: LinkRenderOptions) =>
   addSaleInfoQueryParams(substituteLicenseKey(href, options.licenseKey), options.saleInfo, options.rootDomain);
 
-const Link = Mark.create<BaseLinkOptions & LinkRenderOptions>({
+export const RichContentLink = Mark.create<BaseLinkOptions & LinkRenderOptions>({
   name: "link",
   addAttributes: () => ({
     href: { default: null },
@@ -144,7 +144,7 @@ const Link = Mark.create<BaseLinkOptions & LinkRenderOptions>({
       "a",
       {
         ...HTMLAttributes,
-        href: resolveHref(cast<string>(HTMLAttributes.href), this.options),
+        href: resolveHref(assertString(HTMLAttributes.href), this.options),
         target: "_blank",
       },
       0,
@@ -165,7 +165,7 @@ const TiptapLink = TiptapNode.create<LinkRenderOptions>({
         ...HTMLAttributes,
         target: "_blank",
         rel: "noopener noreferrer nofollow",
-        href: resolveHref(cast<string>(HTMLAttributes.href), this.options),
+        href: resolveHref(assertString(HTMLAttributes.href), this.options),
       },
       0,
     ];
@@ -188,7 +188,7 @@ const TiptapButton = TiptapNode.create<LinkRenderOptions>({
           class: buttonVariants({ size: "default", color: "primary" }),
           target: "_blank",
           rel: "noopener noreferrer nofollow",
-          href: resolveHref(cast<string>(HTMLAttributes.href), this.options),
+          href: resolveHref(assertString(HTMLAttributes.href), this.options),
         },
         0,
       ],
@@ -283,7 +283,7 @@ const useFilesInGroup = (node: ProseMirrorNode | undefined) => {
     const fileIds: string[] = [];
     node.content.descendants((c) => {
       if (!c.attrs.id) return;
-      const fileId = cast<string>(c.attrs.id);
+      const fileId = assertString(c.attrs.id);
       fileIds.push(fileId);
       const file = downloadInfo.downloadableFiles.find((f) => f.id === fileId);
       if (file) files.push(file);
@@ -319,7 +319,7 @@ const FileEmbedGroupNodeView = ({ node, editor }: NodeViewProps) => {
     downloadableFilesInFolder.length === 0 ||
     (!canGenerateArchive && downloadableFilesInFolder.length > 1)
   );
-  const folderId = cast<string>(node.attrs.uid);
+  const folderId = assertString(node.attrs.uid);
 
   useRunOnce(() => {
     const groupWrapper = ref.current?.querySelector("[data-node-view-content]")?.firstElementChild;

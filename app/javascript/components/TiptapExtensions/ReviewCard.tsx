@@ -3,7 +3,7 @@ import { NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
 import * as React from "react";
 
 import { Review as ReviewType, getReview } from "$app/data/product_reviews";
-import { cast } from "$app/utils/cast";
+import { assertString } from "$app/utils/guards";
 import { assertResponseError } from "$app/utils/request";
 
 import { useCurrentSeller } from "$app/components/CurrentSeller";
@@ -56,7 +56,7 @@ export const ReviewCard = Node.create({
 });
 
 const ReviewCardNodeView = ({ node, selected, editor }: NodeViewProps) => {
-  const reviewId = cast<string>(node.attrs.reviewId ?? "");
+  const reviewId = assertString(node.attrs.reviewId ?? "");
   const [review, setReview] = React.useState<ReviewType | null>(null);
   const [failedToLoad, setFailedToLoad] = React.useState(false);
   const isEditable = editor.isEditable;

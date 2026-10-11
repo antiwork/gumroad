@@ -1,4 +1,10 @@
+import { isNumber, isRecord } from "$app/utils/guards";
+
 export type OfferCode = { type: "fixed"; cents: number } | { type: "percent"; percents: number };
+
+export const isOfferCode = (value: unknown): value is OfferCode =>
+  isRecord(value) &&
+  ((value.type === "fixed" && isNumber(value.cents)) || (value.type === "percent" && isNumber(value.percents)));
 export function applyOfferCodeToCents(offerCode: null | OfferCode, amountCents: number): number {
   if (offerCode == null) return amountCents;
 
