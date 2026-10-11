@@ -204,6 +204,7 @@ const renderLayout = (currentSeller: CurrentSeller, { saveBlocked = false }: { s
             setContentUpdates: vi.fn(),
             filesById: new Map(),
             aiGenerated: false,
+            customAttributeNameSuggestions: [],
           }}
         >
           <Layout>Body</Layout>

@@ -215,6 +215,7 @@ const renderProductTab = (
             setContentUpdates: vi.fn(),
             filesById: new Map(),
             aiGenerated: false,
+            customAttributeNameSuggestions: [],
           }}
         >
           <ProductTab />

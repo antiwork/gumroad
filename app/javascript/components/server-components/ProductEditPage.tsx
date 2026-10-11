@@ -117,6 +117,7 @@ type Props = {
   custom_html_global_nav_hosts: string[];
   custom_html_global_nav_paths: string[];
   ai_generated: boolean;
+  custom_attribute_name_suggestions: string[];
 };
 
 const buildFilesById = (productId: string, files: Props["product"]["files"]) =>
@@ -170,6 +171,7 @@ const createContextValue = (props: Props) => ({
   contentUpdates: null,
   setContentUpdates: () => {},
   aiGenerated: props.ai_generated,
+  customAttributeNameSuggestions: props.custom_attribute_name_suggestions,
 });
 
 // reconciliation_id is save plumbing, not content: the first save stamps

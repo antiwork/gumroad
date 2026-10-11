@@ -674,9 +674,38 @@ describe ProductPresenter do
           custom_html_global_nav_hosts: VALID_REQUEST_HOSTS,
           custom_html_global_nav_paths: RendersCustomHtmlPages::GLOBAL_NAV_PATHS,
           ai_generated: false,
+          custom_attribute_name_suggestions: [],
           dropbox_api_key: DROPBOX_PICKER_API_KEY,
         }
       )
+    end
+
+    describe "custom_attribute_name_suggestions" do
+      it "offers the detail names the seller uses on their other products" do
+        create(:product, user: product.user).save_custom_attributes([{ "name" => "Format", "value" => "PDF" }, { "name" => "Pages", "value" => "12" }])
+
+        expect(presenter.edit_props[:custom_attribute_name_suggestions]).to match_array(["Format", "Pages"])
+      end
+
+      it "suggests a name used on several products once" do
+        create(:product, user: product.user).save_custom_attributes([{ "name" => "Format", "value" => "PDF" }])
+        create(:product, user: product.user).save_custom_attributes([{ "name" => "Format", "value" => "Hardcover" }])
+
+        expect(presenter.edit_props[:custom_attribute_name_suggestions]).to eq(["Format"])
+      end
+
+      it "leaves out the product being edited, other sellers, and blank names" do
+        create(:product).save_custom_attributes([{ "name" => "Format", "value" => "PDF" }])
+        create(:product, user: product.user).save_custom_attributes([{ "name" => "", "value" => "PDF" }])
+
+        expect(presenter.edit_props[:custom_attribute_name_suggestions]).to eq([])
+      end
+
+      it "caps the list" do
+        create(:product, user: product.user).save_custom_attributes((1..25).map { { "name" => "Detail #{_1}", "value" => "Value" } })
+
+        expect(presenter.edit_props[:custom_attribute_name_suggestions].length).to eq(20)
+      end
     end
 
     context "when the shared-content flag hides recoverable variant content" do
@@ -1078,6 +1107,7 @@ describe ProductPresenter do
             custom_html_global_nav_hosts: VALID_REQUEST_HOSTS,
             custom_html_global_nav_paths: RendersCustomHtmlPages::GLOBAL_NAV_PATHS,
             ai_generated: false,
+            custom_attribute_name_suggestions: [],
             dropbox_api_key: DROPBOX_PICKER_API_KEY,
           }
         )
@@ -1338,6 +1368,7 @@ describe ProductPresenter do
             custom_html_global_nav_hosts: VALID_REQUEST_HOSTS,
             custom_html_global_nav_paths: RendersCustomHtmlPages::GLOBAL_NAV_PATHS,
             ai_generated: false,
+            custom_attribute_name_suggestions: [],
             dropbox_api_key: DROPBOX_PICKER_API_KEY,
           }
         )

@@ -191,6 +191,7 @@ it("saves changed state after the active save reconciles server ids", async () =
     custom_html_global_nav_paths: [],
     successful_sales_count: 0,
     ai_generated: false,
+    custom_attribute_name_suggestions: [],
   };
   const requests: { resolve: (response: SaveProductResponse) => void }[] = [];
   saveProductMock.mockImplementation(() => new Promise<SaveProductResponse>((resolve) => requests.push({ resolve })));
@@ -390,6 +391,7 @@ it("reconciles same-id pages in different variant scopes using each variant's ow
     custom_html_global_nav_paths: [],
     successful_sales_count: 0,
     ai_generated: false,
+    custom_attribute_name_suggestions: [],
   };
 
   saveProductMock.mockResolvedValue({
@@ -566,6 +568,7 @@ it("keeps a newly-created variant's move provenance after its own id is remapped
     custom_html_global_nav_paths: [],
     successful_sales_count: 0,
     ai_generated: false,
+    custom_attribute_name_suggestions: [],
   };
 
   saveProductMock.mockResolvedValue({
@@ -720,6 +723,7 @@ const buildTieredProps = (product: Product): ProductEditPageProps => ({
   custom_html_global_nav_paths: [],
   successful_sales_count: 0,
   ai_generated: false,
+  custom_attribute_name_suggestions: [],
 });
 
 describe("cancellation discount editing", () => {

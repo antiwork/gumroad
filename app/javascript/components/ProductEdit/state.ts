@@ -347,6 +347,9 @@ export const ProductEditContext = React.createContext<{
   setContentUpdates: React.Dispatch<React.SetStateAction<ContentUpdates>>;
   filesById: Map<string, FileEntry>;
   aiGenerated: boolean;
+  // Detail names this seller has used on their other products, offered as suggestions in the
+  // Additional details name field.
+  customAttributeNameSuggestions: string[];
 } | null>(null);
 export const useProductEditContext = () => assertDefined(React.useContext(ProductEditContext));
 

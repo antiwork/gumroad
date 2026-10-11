@@ -14,6 +14,11 @@ class ProductPresenter
   # Only used when the Redis override cannot be read. An unset key still means "no limit", so this
   # must not become the limit for every picker.
   DEFAULT_EXISTING_PRODUCT_FILES_LIMIT = 100
+  # Detail names for the editor's suggestions come from the seller's most recently updated
+  # products: those carry the naming they are using now, and a large catalogue should not make
+  # every editor page load read all of it.
+  CUSTOM_ATTRIBUTE_NAME_SUGGESTION_PRODUCT_LIMIT = 200
+  MAX_CUSTOM_ATTRIBUTE_NAME_SUGGESTIONS = 20
   LATEST_SALE_ID_NOT_PROVIDED = Object.new.freeze
   private_constant :LATEST_SALE_ID_NOT_PROVIDED
 
@@ -398,6 +403,7 @@ class ProductPresenter
       custom_html_global_nav_paths: RendersCustomHtmlPages::GLOBAL_NAV_PATHS,
       dropbox_api_key: DROPBOX_PICKER_API_KEY,
       ai_generated:,
+      custom_attribute_name_suggestions: custom_attribute_name_suggestions,
     }
   end
 
@@ -420,6 +426,28 @@ class ProductPresenter
   end
 
   private
+    def custom_attribute_name_suggestions
+      recent_products = Link.where(user_id: product.user_id)
+                            .where.not(id: product.id)
+                            .order(updated_at: :desc)
+                            .limit(CUSTOM_ATTRIBUTE_NAME_SUGGESTION_PRODUCT_LIMIT)
+                            .select(:json_data)
+
+      Link.from("(#{recent_products.to_sql}) AS suggestion_products")
+          .joins(<<~SQL.squish)
+            JOIN JSON_TABLE(
+              suggestion_products.json_data,
+              '$.custom_attributes[*]' COLUMNS (name VARCHAR(255) PATH '$.name')
+            ) AS detail_names ON TRUE
+          SQL
+          .where("detail_names.name IS NOT NULL")
+          .distinct
+          .limit(MAX_CUSTOM_ATTRIBUTE_NAME_SUGGESTIONS)
+          .pluck("detail_names.name")
+          .filter_map { _1.to_s.strip.presence }
+          .uniq
+    end
+
     # An unset key means "no limit", which the picker relies on; only a stalled read gets the cap,
     # so a Redis blip cannot uncap the list.
     def existing_product_files_limit

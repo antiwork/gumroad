@@ -67,6 +67,7 @@ export const ProductTab = () => {
     cancellationDiscountsEnabled,
     priceCheckerEnabled,
     aiGenerated,
+    customAttributeNameSuggestions,
   } = useProductEditContext();
   const [initialProduct] = React.useState(product);
 
@@ -207,6 +208,7 @@ export const ProductTab = () => {
                   setCustomAttributes={(custom_attributes) => updateProduct({ custom_attributes })}
                   fileAttributes={product.file_attributes}
                   setFileAttributes={(file_attributes) => updateProduct({ file_attributes })}
+                  nameSuggestions={customAttributeNameSuggestions}
                 />
               </section>
               <section className="grid gap-8 border-t border-border p-4 md:p-8">

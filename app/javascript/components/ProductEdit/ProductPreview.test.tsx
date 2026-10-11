@@ -167,6 +167,7 @@ const renderPreview = ({
         setContentUpdates: vi.fn(),
         filesById: new Map(),
         aiGenerated: false,
+        customAttributeNameSuggestions: [],
       }}
     >
       <ProductPreview />
