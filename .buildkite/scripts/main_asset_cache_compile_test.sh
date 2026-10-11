@@ -84,7 +84,7 @@ seed_cache() {
 run_script() {
   : > "$WORK/calls"; : > "$WORK/annotations"
   PATH="$WORK/bin:$PATH" CALLS="$WORK/calls" BUCKET_DIR="$WORK/bucket" ANNOTATIONS="$WORK/annotations" \
-    BUILDKITE_BRANCH=main BUILDKITE_PARALLEL_JOB=1 BUILDKITE_MESSAGE="Change something" \
+    BUILDKITE_BRANCH=main BUILDKITE_MESSAGE="Change something" \
     PRESCALE_SCRIPT="$WORK/prescale" \
     env "$@" bash "$SCRIPT" > "$WORK/out" 2>&1
 }
@@ -207,6 +207,7 @@ seed_cache; run_script BUILDKITE_MESSAGE="Fix a thing [no-cache]"; rc=$?
 
 seed_cache; run_script BUILDKITE_BRANCH=comp-assets-test; rc=$?
 [ $rc = 0 ] && compiled && ! served && ok "only main is served from the cache" || fail "comp-assets branch (rc=$rc)"
+! grep -q "^make build_staging" "$WORK/calls" && ok "a comp-assets build compiles no staging assets" || fail "comp-assets compiled staging assets"
 
 # The pre-scale runs in the background, so these cases wait out a short delay.
 prescaled() { sleep 2; grep -q "^prescale" "$WORK/calls"; }
@@ -228,7 +229,7 @@ grep -q "prescale: raised the web clusters" "$WORK/out" && ok "the pre-scale's l
 
 seed_cache; : > "$WORK/calls"; started=$SECONDS
 PATH="$WORK/bin:$PATH" CALLS="$WORK/calls" BUCKET_DIR="$WORK/bucket" ANNOTATIONS="$WORK/annotations" \
-  BUILDKITE_BRANCH=main BUILDKITE_PARALLEL_JOB=1 BUILDKITE_MESSAGE="Change something" \
+  BUILDKITE_BRANCH=main BUILDKITE_MESSAGE="Change something" \
   PRESCALE_SCRIPT="$WORK/prescale" PRESCALE_SECONDS=8 bash "$SCRIPT" 2>&1 | cat > "$WORK/out"
 [ $((SECONDS - started)) -lt 5 ] && ok "a slow pre-scale does not hold the compile's output open" || fail "slow pre-scale held output for $((SECONDS - started)) s"
 
@@ -237,7 +238,7 @@ rm -rf "$WORK/bucket"; run_script PRESCALE_DELAY_SECONDS=1; rc=$?
 
 rm -rf "$WORK/bucket"; : > "$WORK/calls"; started=$SECONDS
 PATH="$WORK/bin:$PATH" CALLS="$WORK/calls" BUCKET_DIR="$WORK/bucket" ANNOTATIONS="$WORK/annotations" \
-  BUILDKITE_BRANCH=main BUILDKITE_PARALLEL_JOB=1 BUILDKITE_MESSAGE="Change something" \
+  BUILDKITE_BRANCH=main BUILDKITE_MESSAGE="Change something" \
   PRESCALE_SCRIPT="$WORK/prescale" PRESCALE_DELAY_SECONDS=8 bash "$SCRIPT" 2>&1 | cat > "$WORK/out"
 [ $((SECONDS - started)) -lt 5 ] && ok "a cancelled pre-scale does not hold the job's output open" || fail "output held open for $((SECONDS - started)) s"
 

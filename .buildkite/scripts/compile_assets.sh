@@ -69,9 +69,9 @@ if [[ ! $(docker images -q --filter "reference=$WEB_REPO:web-$WEB_TAG") ]]; then
   pull_web_image || exit 1
 fi
 
-# BUILDKITE_PARALLEL_JOB is unset when the step has no parallelism configured
-# (preview.yml runs a single asset job); default to 0 so the staging build runs.
-if [[ ${BUILDKITE_PARALLEL_JOB:-0} = 0 && $BUILDKITE_BRANCH != "main" ]]; then
+# The branch picks the target: pipeline.yml runs main and comp-assets-* and needs
+# production assets; preview.yml runs every other branch and needs staging assets.
+if [[ $BUILDKITE_BRANCH != "main" && $BUILDKITE_BRANCH != comp-assets-* ]]; then
   # Preview branches first check the content-addressed asset cache. On a hit
   # we skip the entire compile (npm install, js:export, Vite) and build the
   # staging image by extracting the previously compiled artifacts into a
@@ -319,7 +319,7 @@ record_main_asset_cache_outcome() {
   return 0
 }
 
-if [[ $BUILDKITE_PARALLEL_JOB = 1 && ( $BUILDKITE_BRANCH == "main" || $BUILDKITE_BRANCH == comp-assets-* ) ]]; then
+if [[ $BUILDKITE_BRANCH == "main" || $BUILDKITE_BRANCH == comp-assets-* ]]; then
   if [[ -n ${CUSTOM_DOMAIN:-} ]]; then
     logger "CUSTOM_DOMAIN is set: a production build must not bake a preview domain into its assets"
     exit 1
