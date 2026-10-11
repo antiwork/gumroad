@@ -26,9 +26,8 @@ describe "Sales export queue isolation" do
       content = Rails.root.join(path).read
       expect(content).to match(/-q exports/), "#{path} must list -q exports"
       expect(content).to match(/-q low/)
+      # exports comes after low so it only uses idle threads.
+      expect(content.index("-q low")).to be < content.index("-q exports"), "#{path} must list -q exports after -q low"
     end
-    # Strict order: exports comes after low so it only uses idle threads.
-    script = Rails.root.join("docker/web/sidekiq_worker.sh").read
-    expect(script.index("-q low")).to be < script.index("-q exports")
   end
 end
