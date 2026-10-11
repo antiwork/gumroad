@@ -124,9 +124,9 @@ mode, tests = plan(["R100", "app/models/a.rb", "app/models/b.rb"], ["M", "app/ja
 check("-z records with a rename parse into the right paths") { mode == "tests" && tests.include?("app/javascript/widget/utils.test.ts") }
 
 [
-  "package.json", "package-lock.json", ".npmrc", "patches/@typia+unplugin+12.1.1.patch",
+  "package.json", "package-lock.json", ".npmrc", "patches/epubjs+0.3.93.patch",
   "vitest.config.ts", "vite.config.ts", "vite.config.widget.ts", "tsconfig.json",
-  "scripts/__fixtures__/typia_shared_program/index.ts", "app/javascript/types/global.d.ts",
+  "scripts/__fixtures__/example/index.ts", "app/javascript/types/global.d.ts",
   "bin/vitest-ci", ".github/workflows/tests.yml",
 ].each do |path|
   mode, = plan(["M", path])

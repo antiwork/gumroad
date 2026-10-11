@@ -1,4 +1,3 @@
-import UnpluginTypia from "@typia/unplugin/vite";
 import { resolve } from "path";
 import { defineConfig } from "vite";
 
@@ -12,8 +11,6 @@ const entry = widgets[target];
 if (!entry) throw new Error(`Unknown WIDGET_TARGET: ${target}. Expected one of: ${Object.keys(widgets).join(", ")}`);
 
 export default defineConfig({
-  // Two typia files: a shared program would type-check the whole app first.
-  plugins: [UnpluginTypia({ cache: true, sharedProgram: false })],
   publicDir: false,
   build: {
     outDir: "public/js",

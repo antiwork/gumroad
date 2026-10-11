@@ -5,9 +5,9 @@
 # branch changed since it left BASE (default origin/main), or the whole suite when a
 # change can reach tests that an import graph does not show.
 #
-# The graph is static and counts every import, `import type` included: typia
-# generates validators from types, so a type-only change can change a test's
-# result. `vitest related` follows runtime imports only, so it would miss those.
+# The graph is static and counts every import, `import type` included, so a
+# type-only change still runs the tests that depend on it. `vitest related`
+# follows runtime imports only, so it would miss those.
 #
 #   bin/vitest-ci [BASE]
 #   bin/vitest-ci --plan < "git diff --name-status -z" output   # print the decision only

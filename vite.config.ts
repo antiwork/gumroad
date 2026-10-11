@@ -1,4 +1,3 @@
-import UnpluginTypia from "@typia/unplugin/vite";
 import react from "@vitejs/plugin-react";
 import { fileURLToPath } from "node:url";
 import path from "path";
@@ -53,7 +52,6 @@ export default defineConfig(() => ({
     RubyPlugin(),
     react(),
     staleModuleGuard(),
-    UnpluginTypia({ cache: true }),
     AutoImport({
       imports: [
         { "$app/utils/routes": [["*", "Routes"]] },

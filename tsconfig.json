@@ -21,8 +21,7 @@
     "allowJs": true,
     "resolveJsonModule": true,
     "skipLibCheck": true,
-    "allowSyntheticDefaultImports": true,
-    "plugins": [{ "transform": "typia/lib/transform" }]
+    "allowSyntheticDefaultImports": true
   },
   "include": ["app/javascript"],
   "exclude": ["**/*.spec.ts", "node_modules", "vendor", "public"]

@@ -238,8 +238,8 @@ describe CurrencyHelper do
     end
 
     it "never returns nil for buyer_currency_shown / product_currency in the rescue path" do
-      # The TS BuyerCurrencyDisplay type declares both fields non-nullable; a nil here makes
-      # typia.assert throw and breaks the CHECKOUT page. Lock in non-nil string currencies.
+      # The TS BuyerCurrencyDisplay type declares both fields non-nullable, and the CHECKOUT page
+      # uses them as strings. Lock in non-nil string currencies.
       allow(helper).to receive(:buyer_currency_for_ip).and_raise(StandardError)
 
       props = helper.buyer_currency_display_props(product:, price_cents: 1000, ip: "1.2.3.4")

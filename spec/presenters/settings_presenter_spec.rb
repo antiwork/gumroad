@@ -655,9 +655,9 @@ describe SettingsPresenter do
         .to contain_exactly(%w[account refund_sales], %w[view_payouts], %w[view_payouts])
     end
 
-    # The page runs `typia.assert<Props>` on these props and indexes SCOPE_DESCRIPTIONS by scope, so
-    # a scope Doorkeeper allows but the component's Scope union omits crashes Authorized Applications
-    # rather than rendering an empty bullet. Adding a scope to doorkeeper.rb has to touch Index.tsx.
+    # The page indexes SCOPE_DESCRIPTIONS by scope, so a scope Doorkeeper allows but the component's
+    # Scope union omits shows an empty bullet in Authorized Applications. Adding a scope to
+    # doorkeeper.rb has to touch Index.tsx.
     it "cannot emit a scope the settings page has no description for" do
       scope_union = File.read(Rails.root.join("app/javascript/pages/Settings/AuthorizedApplications/Index.tsx"))
                         .split("type Scope =").second.split(";").first.scan(/"([a-z_]+)"/).flatten

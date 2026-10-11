@@ -248,8 +248,8 @@ module CurrencyHelper
     # again (the original failure may have been in price_currency_type / product.user), so we
     # guard it independently and fall back to "usd" only as a last resort. Both
     # buyer_currency_shown and product_currency MUST be non-nil strings — the TS
-    # BuyerCurrencyDisplay type declares them non-nullable, and a nil here makes typia.assert
-    # throw on the checkout path, breaking checkout for that buyer.
+    # BuyerCurrencyDisplay type declares them non-nullable, and the checkout code uses them as
+    # strings, so a nil here breaks checkout for that buyer.
     safe_product_currency = begin
       product.price_currency_type.to_s.downcase.presence || Currency::USD
     rescue StandardError
