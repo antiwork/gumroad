@@ -122,13 +122,14 @@ describe Exports::Payouts::Csv, :vcr do
     end
 
     describe "Technical Adjustment entries" do
-      it "does not add entry for non-usd payment currency" do
+      it "ignores the amount of a non-usd payout" do
         @payout.amount_cents = @payout.amount_cents + 100
         @payout.currency = Currency::GBP
         @payout.save!
         csv = Exports::Payouts::Csv.new(payment: @payout).perform
         parsed_csv = CSV.parse(csv)
-        expect(parsed_csv).not_to include(["Technical Adjustment", @payout.payout_period_end_date.to_s, "", "", "", "", "", "", "", "", "1.0"])
+        expect(parsed_csv.map(&:first)).not_to include("Technical Adjustment")
+        expect(parsed_csv.last.last.to_f).to eq(@payout.balances.sum(:amount_cents) / 100.0)
       end
 
       it "add entry for usd payment currency" do
@@ -352,6 +353,62 @@ describe Exports::Payouts::Csv, :vcr do
 
       expect(sums.size).to be < 100,
                            "Expected the export to stop aggregating per calendar day, got #{sums.size} SUM queries"
+    end
+  end
+
+  describe "non-USD payout reconciliation" do
+    before do
+      allow_any_instance_of(Purchase).to receive(:pause_payouts_for_seller_based_on_chargeback_rate!)
+      allow_any_instance_of(Purchase).to receive(:create_dispute_evidence_if_needed!).and_return(nil)
+
+      @seller = create :user
+      travel_to(1.month.ago) do
+        product = create :product, user: @seller, price_cents: 10_00
+        @sales = Array.new(2) { create_purchase price_cents: 10_00, seller: @seller, link: product }
+      end
+    end
+
+    def export(payout)
+      CSV.parse(Exports::Payouts::Csv.new(payment: payout).perform)
+    end
+
+    it "adds an entry when the rows differ from the payout's balances" do
+      payout = create_payout(1.week.ago, PayoutProcessorType::PAYPAL, @seller)
+      payout.update!(currency: Currency::GBP)
+      balance = payout.balances.first
+      balance.update_column(:amount_cents, balance.amount_cents + 100)
+
+      parsed_csv = export(payout)
+
+      expect(parsed_csv).to include(["Technical Adjustment", payout.payout_period_end_date.to_s, "", "", "", "", "", "", "", "", "1.0"])
+      expect(parsed_csv.last.last.to_f).to eq(payout.balances.sum(:amount_cents) / 100.0)
+    end
+
+    it "leaves the payout fee out of the USD totals" do
+      payout = create_payout(1.week.ago, PayoutProcessorType::PAYPAL, @seller)
+      expect(payout.gumroad_fee_cents).to be_positive
+      payout.update!(currency: Currency::GBP)
+
+      parsed_csv = export(payout)
+
+      expect(parsed_csv.map(&:first)).not_to include("Payout Fee", "Technical Adjustment")
+      expect(parsed_csv.last.last.to_f).to eq(payout.balances.sum(:amount_cents) / 100.0)
+    end
+
+    it "nets to the balances after a partial refund followed by a chargeback" do
+      sale = @sales.first
+      travel_to(1.month.ago + 1.day) do
+        sale.refund_purchase!(FlowOfFunds.build_simple_flow_of_funds(Currency::USD, 3_00), @seller.id)
+        event = OpenStruct.new(created_at: Time.current, extras: {}, flow_of_funds: FlowOfFunds.build_simple_flow_of_funds(Currency::USD, sale.reload.total_transaction_cents))
+        sale.handle_event_dispute_formalized!(event)
+      end
+      payout = create_payout(1.week.ago, PayoutProcessorType::PAYPAL, @seller)
+      payout.update!(currency: Currency::GBP)
+
+      parsed_csv = export(payout)
+
+      expect(parsed_csv.map(&:first)).to include("Partial Refund", "Chargeback")
+      expect(parsed_csv.last.last.to_f).to eq(payout.balances.sum(:amount_cents) / 100.0)
     end
   end
 

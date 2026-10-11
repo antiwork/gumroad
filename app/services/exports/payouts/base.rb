@@ -129,7 +129,8 @@ class Exports::Payouts::Base
       data = merge_paypal_sales_data(data)
       data = merge_stripe_connect_sales_data(data)
 
-      if payout.gumroad_fee_cents.present?
+      # A non-USD payout's fee is in the payout's currency, and the CSV columns are in USD.
+      if payout.currency == Currency::USD && payout.gumroad_fee_cents.present?
         data << [
           "Payout Fee",
           payout.payout_period_end_date.to_s,
@@ -153,14 +154,15 @@ class Exports::Payouts::Base
       # tiebreaker keeps same-day ordering deterministic.
       data = data.sort_by.with_index { |row, index| [row.second, index] }
 
-      if payout.currency == Currency::USD && payout.amount_cents != @running_total
+      # A non-USD payout's amount is in the payout's currency, so its USD total is the sum of its balances.
+      expected_total_cents = payout.currency == Currency::USD ? payout.amount_cents : payout.balances.sum(:amount_cents)
+
+      if expected_total_cents != @running_total
         # Our calculation produced a net total that is different from the actual payout total.
         # We can, at the very least, add an adjustment row to the CSV so that the "net total" column adds up.
         # We can also use this conditional to mark the payout for future review.
-        # We don't include non-usd payments here since the currency mismatch leads to
-        # wrong totals and erroneous entries most of the time.
 
-        adjustment_cents = payout.amount_cents - @running_total
+        adjustment_cents = expected_total_cents - @running_total
         adjustment = adjustment_cents / 100.0
 
         data << [
