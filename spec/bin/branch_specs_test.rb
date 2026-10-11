@@ -1892,11 +1892,23 @@ check(
   base_files: {
     "app/models/credit.rb" => "old",
     "spec/models/credit_spec.rb" => SPEC_STUB,
+    "spec/modules/user/stats_spec.rb" => "#{SPEC_STUB}describe \"x\" do\n  it { Credit.create! }\nend\n",
     "spec/services/billing_spec.rb" => "#{SPEC_STUB}describe CreditCard do\nend\n",
   },
   head_files: { "app/models/credit.rb" => "new" },
-  expect_specs: %w[spec/models/credit_spec.rb],
+  expect_specs: %w[spec/models/credit_spec.rb spec/modules/user/stats_spec.rb],
   reject_specs: %w[spec/services/billing_spec.rb],
+)
+
+# The class's own spec counts toward the cap: 24 callers + widget_spec = 25.
+check(
+  "a class named by exactly MAX_CALLER_SPECS specs still adds its caller specs",
+  base_files: {
+    "app/models/widget.rb" => "old",
+    "spec/models/widget_spec.rb" => "#{SPEC_STUB}describe Widget do\nend\n",
+  }.merge((1..24).to_h { |i| ["spec/services/caller_#{i}_spec.rb", "#{SPEC_STUB}describe \"x\" do\n  it { Widget.new }\nend\n"] }),
+  head_files: { "app/models/widget.rb" => "new" },
+  expect_specs: %w[spec/models/widget_spec.rb] + (1..24).map { |i| "spec/services/caller_#{i}_spec.rb" },
 )
 
 check(
