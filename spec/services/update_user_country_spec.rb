@@ -116,17 +116,17 @@ describe UpdateUserCountry do
     end
 
     it "retires the seller-visible payout-setup-rejection note" do
-      note = @user.comments.create!(
-        author_id: GUMROAD_ADMIN_ID,
-        comment_type: Comment::COMMENT_TYPE_PAYOUT_NOTE,
-        content: "Our payment partner couldn't accept the phone number you entered.",
-        json_data: { StripeMerchantAccountManager::PAYOUT_SETUP_REJECTION_NOTE_FLAG => true, seller_visible: true }
-      )
-      other_note = @user.comments.create!(
-        author_id: GUMROAD_ADMIN_ID,
-        comment_type: Comment::COMMENT_TYPE_PAYOUT_NOTE,
-        content: "Internal payout note"
-      )
+      note = create(:comment,
+                    commentable: @user,
+                    author_id: GUMROAD_ADMIN_ID,
+                    comment_type: Comment::COMMENT_TYPE_PAYOUT_NOTE,
+                    content: "Our payment partner couldn't accept the phone number you entered.",
+                    json_data: { StripeMerchantAccountManager::PAYOUT_SETUP_REJECTION_NOTE_FLAG => true, seller_visible: true })
+      other_note = create(:comment,
+                          commentable: @user,
+                          author_id: GUMROAD_ADMIN_ID,
+                          comment_type: Comment::COMMENT_TYPE_PAYOUT_NOTE,
+                          content: "Internal payout note")
 
       UpdateUserCountry.new(new_country_code: "IN", user: @user).process
 
