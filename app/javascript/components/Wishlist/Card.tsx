@@ -1,12 +1,9 @@
 import { Bookmark, BookmarkPlus, FileDetail } from "@boxicons/react";
-import { FastAverageColor } from "fast-average-color";
 import * as React from "react";
 
 import useLazyLoadingProps from "$app/hooks/useLazyLoadingProps";
-import { cast } from "$app/utils/cast";
 import { classNames } from "$app/utils/classNames";
 import { formatOrderOfMagnitude } from "$app/utils/formatOrderOfMagnitude";
-import { getCssVariable } from "$app/utils/styles";
 
 import { AuthorByline } from "$app/components/Product/AuthorByline";
 import { Skeleton } from "$app/components/Skeleton";
@@ -51,34 +48,7 @@ export const Card = ({ wishlist, hideSeller, eager }: CardProps) => {
   const lazyLoadingProps = useLazyLoadingProps({ eager });
 
   const thumbnailUrl = wishlist.thumbnails.find((thumbnail) => thumbnail.url)?.url;
-  const [backgroundColor, setBackgroundColor] = React.useState<string>(thumbnailUrl ? "transparent" : "var(--pink)");
-  React.useEffect(() => {
-    const updateBackgroundColor = async () => {
-      if (!thumbnailUrl) return;
-      const validColors = ["--pink", "--purple", "--green", "--orange", "--red", "--yellow"].map((color) =>
-        getCssVariable(color),
-      );
-
-      const {
-        value: [r, g, b],
-      } = await new FastAverageColor().getColorAsync(thumbnailUrl);
-
-      const distances = validColors.map((hex) => {
-        const [vr, vg, vb] = cast<[number, number, number]>(
-          hex
-            .slice(1)
-            .match(/.{2}/gu)
-            ?.map((x) => parseInt(x, 16)),
-        );
-        return Math.sqrt((r - vr) ** 2 + (g - vg) ** 2 + (b - vb) ** 2);
-      });
-      const closestValidColor = validColors[distances.indexOf(Math.min(...distances))];
-      if (closestValidColor) {
-        setBackgroundColor(closestValidColor);
-      }
-    };
-    void updateBackgroundColor();
-  }, [thumbnailUrl]);
+  const backgroundColor = thumbnailUrl ? "transparent" : "var(--pink)";
 
   return (
     <ProductCard className="lg:flex-row">
