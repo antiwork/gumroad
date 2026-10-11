@@ -2,7 +2,6 @@ import { FileDetail, Paperclip, Trash } from "@boxicons/react";
 import { useForm, usePage } from "@inertiajs/react";
 import { DirectUpload } from "@rails/activestorage";
 import * as React from "react";
-import typia from "typia";
 
 import {
   CancellationRebuttalOption,
@@ -12,6 +11,7 @@ import {
   cancellationRebuttalOptions,
   cancellationRebuttalOptionKeys,
 } from "$app/data/purchase/dispute_evidence_data";
+import { cast } from "$app/utils/cast";
 import FileUtils from "$app/utils/file";
 
 import { Button, NavigationButton } from "$app/components/Button";
@@ -104,7 +104,7 @@ const restoreChoice = <T extends string>(
 };
 
 export default function Show() {
-  const { dispute_evidence, disputable, products } = typia.assert<Props>(usePage().props);
+  const { dispute_evidence, disputable, products } = cast<Props>(usePage().props);
 
   const reasonForWinningUID = React.useId();
   const cancellationRebuttalUID = React.useId();
@@ -340,7 +340,7 @@ export default function Show() {
                 name="reasonForWinning"
                 value={option}
                 checked={reasonForWinningOption === option}
-                onChange={(evt) => setReasonForWinningOption(typia.assert<ReasonForWinningOption>(evt.target.value))}
+                onChange={(evt) => setReasonForWinningOption(cast<ReasonForWinningOption>(evt.target.value))}
               />
               {reasonForWinningOptions[option]}
             </Label>
@@ -368,9 +368,7 @@ export default function Show() {
                   name="cancellationRebuttal"
                   value={option}
                   checked={cancellationRebuttalOption === option}
-                  onChange={(evt) =>
-                    setCancellationRebuttalOption(typia.assert<CancellationRebuttalOption>(evt.target.value))
-                  }
+                  onChange={(evt) => setCancellationRebuttalOption(cast<CancellationRebuttalOption>(evt.target.value))}
                 />
                 {message}
               </Label>

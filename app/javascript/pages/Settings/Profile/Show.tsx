@@ -2,7 +2,6 @@ import { FontFamily } from "@boxicons/react";
 import { Link, router, usePage } from "@inertiajs/react";
 import { capitalize, isEqual } from "lodash-es";
 import * as React from "react";
-import typia from "typia";
 
 import { updateProfileSettings as saveProfileSettings } from "$app/data/profile_settings";
 import {
@@ -12,6 +11,7 @@ import {
   rebaseProfileSettings,
 } from "$app/pages/Settings/Profile/profileSettingsForm";
 import { CreatorProfile } from "$app/parsers/profile";
+import { cast } from "$app/utils/cast";
 import { classNames } from "$app/utils/classNames";
 import { assertResponseError } from "$app/utils/request";
 
@@ -111,7 +111,7 @@ export default function SettingsPage() {
     theme_options,
     username,
     email_confirmation,
-  } = typia.assert<ProfilePageProps>(usePage().props);
+  } = cast<ProfilePageProps>(usePage().props);
   const loggedInUser = useLoggedInUser();
   const [creatorProfile, setCreatorProfile] = React.useState(creator_profile);
   React.useEffect(() => setCreatorProfile(creator_profile), [creator_profile]);

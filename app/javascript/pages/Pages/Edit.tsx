@@ -1,7 +1,8 @@
 import { MagicWand } from "@boxicons/react";
 import { router, usePage } from "@inertiajs/react";
 import * as React from "react";
-import typia from "typia";
+
+import { cast } from "$app/utils/cast";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
@@ -50,9 +51,7 @@ const agentPrompt = (username: string, slug: string | null, isProfile: boolean) 
     : `Build and publish a custom page for my Gumroad store (@${username})${slug ? ` at /${slug}` : ""}. Design a unique, on-brand page — fully responsive, with light and dark mode. Preview it with \`gumroad pages preview\`, then publish with \`gumroad pages push ${slug ?? "<slug>"}\`. ${followFormHint}`;
 
 export default function PagesEdit() {
-  const { page, is_profile, is_new, username, profile_url, products_page_limit } = typia.assert<PageProps>(
-    usePage().props,
-  );
+  const { page, is_profile, is_new, username, profile_url, products_page_limit } = cast<PageProps>(usePage().props);
   const loggedInUser = useLoggedInUser();
   // Mirrors PagePolicy: create? also gates update? and destroy?, so one flag
   // covers everything the editor can change. Viewers without it get a

@@ -1,10 +1,10 @@
 import { router, usePage } from "@inertiajs/react";
 import { formatDistanceToNow } from "date-fns";
 import React from "react";
-import typia from "typia";
 
 import { DraftInstallment, Pagination } from "$app/data/installments";
 import { assertDefined } from "$app/utils/assert";
+import { cast } from "$app/utils/cast";
 
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { EmptyStatePlaceholder } from "$app/components/EmailsPage/EmptyStatePlaceholder";
@@ -31,7 +31,7 @@ type PageProps = {
 };
 
 export default function EmailsDrafts() {
-  const { installments, pagination, has_posts } = typia.assert<PageProps>(usePage().props);
+  const { installments, pagination, has_posts } = cast<PageProps>(usePage().props);
   const currentSeller = assertDefined(useCurrentSeller(), "currentSeller is required");
 
   const audienceCounts = useAudienceCounts(installments);

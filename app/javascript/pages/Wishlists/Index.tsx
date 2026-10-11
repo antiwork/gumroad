@@ -1,7 +1,8 @@
 import { InfoCircle, Trash } from "@boxicons/react";
 import { router, useForm, usePage } from "@inertiajs/react";
 import React from "react";
-import typia from "typia";
+
+import { cast } from "$app/utils/cast";
 
 import { Button } from "$app/components/Button";
 import { Layout } from "$app/components/Library/Layout";
@@ -27,7 +28,7 @@ type Props = {
 };
 
 export default function WishlistsPage() {
-  const { wishlists } = typia.assert<Props>(usePage().props);
+  const { wishlists } = cast<Props>(usePage().props);
   const [deletingWishlist, setConfirmingDeleteWishlist] = React.useState<Wishlist | null>(null);
 
   const deleteForm = useForm({});

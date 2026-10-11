@@ -1,8 +1,8 @@
 import { XSquare } from "@boxicons/react";
 import { useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
-import typia from "typia";
 
+import { cast } from "$app/utils/cast";
 import { isUrlValid } from "$app/utils/url";
 
 import { Button } from "$app/components/Button";
@@ -31,7 +31,7 @@ type Props = {
 };
 
 export default function AffiliatesEdit() {
-  const props = typia.assert<Props>(usePage().props);
+  const props = cast<Props>(usePage().props);
   const loggedInUser = useLoggedInUser();
 
   const form = useForm<{
@@ -115,7 +115,7 @@ export default function AffiliatesEdit() {
       return;
     }
 
-    patch(typia.assert<string>(Routes.affiliate_path(props.affiliate.id)), {
+    patch(cast<string>(Routes.affiliate_path(props.affiliate.id)), {
       onError: (errors: Record<string, string | string[]>) => {
         const message = errors.base
           ? Array.isArray(errors.base)

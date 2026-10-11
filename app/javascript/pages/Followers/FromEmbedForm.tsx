@@ -1,6 +1,7 @@
 import { usePage } from "@inertiajs/react";
 import * as React from "react";
-import typia from "typia";
+
+import { cast } from "$app/utils/cast";
 
 import { NavigationButton } from "$app/components/Button";
 import { PoweredByFooter } from "$app/components/PoweredByFooter";
@@ -16,7 +17,7 @@ type Props = {
 };
 
 function FollowersFromEmbedFormPage() {
-  const { success, message, subscribe_url } = typia.assert<Props>(usePage().props);
+  const { success, message, subscribe_url } = cast<Props>(usePage().props);
 
   return (
     <div className="flex flex-1 flex-col justify-between p-4">

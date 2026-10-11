@@ -3,8 +3,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-// Show is imported statically rather than lazily: it pulls in typia plus the whole ui component
-// tree, and transforming that graph inside a hook exceeds vitest's default hookTimeout.
+// Show is imported statically rather than lazily: it pulls in the whole ui component tree, and transforming that graph inside a hook exceeds vitest's default hookTimeout.
 import PaymentsPage from "$app/pages/Settings/Payments/Show";
 import type { ComplianceInfo, User } from "$app/types/payments";
 

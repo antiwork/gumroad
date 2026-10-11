@@ -1,11 +1,11 @@
 import { Archive, DotsHorizontalRounded, FileCode, Search, Trash } from "@boxicons/react";
 import { router, usePage } from "@inertiajs/react";
 import * as React from "react";
-import typia from "typia";
 
 import { deletePurchasedProduct, setPurchaseArchived } from "$app/data/library";
 import { ProductNativeType } from "$app/parsers/product";
 import { assertDefined } from "$app/utils/assert";
+import { cast } from "$app/utils/cast";
 import { classNames } from "$app/utils/classNames";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
@@ -213,7 +213,7 @@ export default function LibraryPage() {
     search,
     purchase_analytics,
     receipt_purchases,
-  } = typia.assert<Props>(usePage().props);
+  } = cast<Props>(usePage().props);
 
   const discoverUrl = useDiscoverUrl();
   const [enteredQuery, setEnteredQuery] = React.useState(search.query);

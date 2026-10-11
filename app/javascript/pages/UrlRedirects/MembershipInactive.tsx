@@ -1,8 +1,8 @@
 import { usePage } from "@inertiajs/react";
 import * as React from "react";
-import typia from "typia";
 
 import { StandaloneLayout } from "$app/inertia/layout";
+import { cast } from "$app/utils/cast";
 
 import { Button } from "$app/components/Button";
 import { Layout, LayoutProps } from "$app/components/DownloadPage/Layout";
@@ -15,7 +15,7 @@ type PageProps = LayoutProps;
 const fullHeightPlaceholderClassName = "flex-1 content-center";
 
 function MembershipInactivePage() {
-  const pageProps = typia.assert<PageProps>(usePage().props);
+  const pageProps = cast<PageProps>(usePage().props);
   const { purchase } = pageProps;
 
   const isInstallmentPlan = purchase?.membership?.is_installment_plan;

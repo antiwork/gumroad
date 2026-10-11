@@ -1,10 +1,10 @@
 import { InfoCircle } from "@boxicons/react";
 import { router, usePage } from "@inertiajs/react";
 import React from "react";
-import typia from "typia";
 
 import { Pagination, PublishedInstallment } from "$app/data/installments";
 import { assertDefined } from "$app/utils/assert";
+import { cast } from "$app/utils/cast";
 import { formatStatNumber } from "$app/utils/formatStatNumber";
 
 import { useCurrentSeller } from "$app/components/CurrentSeller";
@@ -34,7 +34,7 @@ type PageProps = {
 };
 
 export default function EmailsPublished() {
-  const { installments, pagination, has_posts } = typia.assert<PageProps>(usePage().props);
+  const { installments, pagination, has_posts } = cast<PageProps>(usePage().props);
 
   const currentSeller = assertDefined(useCurrentSeller(), "currentSeller is required");
   const [selectedInstallmentId, setSelectedInstallmentId] = React.useState<string | null>(null);

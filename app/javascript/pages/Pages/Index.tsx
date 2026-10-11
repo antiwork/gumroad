@@ -1,7 +1,8 @@
 import { ArrowRight, Box, FileDetail, MagicWand, Pencil, Store, Trash } from "@boxicons/react";
 import { Link, router, usePage } from "@inertiajs/react";
 import * as React from "react";
-import typia from "typia";
+
+import { cast } from "$app/utils/cast";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
@@ -31,7 +32,7 @@ type ProfileEntry = {
 };
 
 export default function PagesIndex() {
-  const { pages, profile, product_pages_count } = typia.assert<{
+  const { pages, profile, product_pages_count } = cast<{
     pages: PageEntry[];
     profile: ProfileEntry;
     product_pages_count: number;

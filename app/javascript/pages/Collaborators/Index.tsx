@@ -1,9 +1,9 @@
 import { AlertShield, Pencil, Trash } from "@boxicons/react";
 import { useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
-import typia from "typia";
 
 import type { Collaborator, CollaboratorPagesSharedProps } from "$app/data/collaborators";
+import { cast } from "$app/utils/cast";
 import { formatCommission, formatProductNames } from "$app/utils/collaboratorFormatters";
 
 import { Button } from "$app/components/Button";
@@ -27,8 +27,9 @@ type CollaboratorsPageProps = {
 const CollaboratorsPage = () => {
   const loggedInUser = useLoggedInUser();
 
-  const { collaborators, collaborators_disabled_reason, has_incoming_collaborators } =
-    typia.assert<CollaboratorsPageProps>(usePage().props);
+  const { collaborators, collaborators_disabled_reason, has_incoming_collaborators } = cast<CollaboratorsPageProps>(
+    usePage().props,
+  );
   const [selectedCollaborator, setSelectedCollaborator] = React.useState<Collaborator | null>(null);
 
   const deleteForm = useForm({});

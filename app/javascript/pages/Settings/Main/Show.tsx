@@ -1,8 +1,8 @@
 import { useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
-import typia from "typia";
 
 import { SettingPage } from "$app/parsers/settings";
+import { cast } from "$app/utils/cast";
 import { asyncVoid } from "$app/utils/promise";
 import { request, assertResponseError } from "$app/utils/request";
 
@@ -82,7 +82,7 @@ type MainPageProps = {
 };
 
 export default function MainPage() {
-  const props = typia.assert<MainPageProps>(usePage().props);
+  const props = cast<MainPageProps>(usePage().props);
   const uid = React.useId();
   const { rootDomain, scheme } = useDomains();
   const loggedInUser = useLoggedInUser();

@@ -1,8 +1,8 @@
 import { useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
-import typia from "typia";
 
 import { CreatorProfile } from "$app/parsers/profile";
+import { cast } from "$app/utils/cast";
 
 import { Button } from "$app/components/Button";
 import { useAppDomain } from "$app/components/DomainSettings";
@@ -24,9 +24,7 @@ type Props = {
 };
 
 const AffiliateRequestsNew = () => {
-  const { creator_profile, success, requester_has_existing_account, email_param } = typia.assert<Props>(
-    usePage().props,
-  );
+  const { creator_profile, success, requester_has_existing_account, email_param } = cast<Props>(usePage().props);
 
   const appDomain = useAppDomain();
   const loggedInUser = useLoggedInUser();

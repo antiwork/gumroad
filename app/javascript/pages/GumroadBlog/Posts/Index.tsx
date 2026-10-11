@@ -2,8 +2,8 @@ import { Link, usePage } from "@inertiajs/react";
 import cx from "classnames";
 import * as React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import typia from "typia";
 
+import { cast } from "$app/utils/cast";
 import { formatPostDate } from "$app/utils/date";
 
 import { BlogLayout } from "$app/components/GumroadBlog/Layout";
@@ -236,7 +236,7 @@ const TagSelector = ({
 };
 
 const IndexPage = () => {
-  const { posts } = typia.assert<IndexPageProps>(usePage().props);
+  const { posts } = cast<IndexPageProps>(usePage().props);
   const [activeTab, setActiveTab] = useState<string | null>(null);
 
   const featured_post = posts[0];

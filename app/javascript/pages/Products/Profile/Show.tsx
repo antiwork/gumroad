@@ -1,8 +1,8 @@
 import { usePage } from "@inertiajs/react";
 import * as React from "react";
-import typia from "typia";
 
 import { CreatorProfile } from "$app/parsers/profile";
+import { cast } from "$app/utils/cast";
 
 import { Layout as ProductLayout, Props } from "$app/components/Product/Layout";
 import { Layout as ProfileLayout } from "$app/components/Profile/Layout";
@@ -12,7 +12,7 @@ type PageProps = Props & {
 };
 
 function ProfileProductShowPage() {
-  const props = typia.assert<PageProps>(usePage().props);
+  const props = cast<PageProps>(usePage().props);
 
   return (
     <ProfileLayout

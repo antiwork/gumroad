@@ -1,8 +1,8 @@
 import { useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
-import typia from "typia";
 
 import { type SettingPage } from "$app/parsers/settings";
+import { cast } from "$app/utils/cast";
 
 import AccountDeletionSection from "$app/components/Settings/AdvancedPage/AccountDeletionSection";
 import ApplicationsSection, { type Application } from "$app/components/Settings/AdvancedPage/ApplicationsSection";
@@ -27,7 +27,7 @@ type AdvancedPageProps = {
 };
 
 export default function AdvancedPage() {
-  const props = typia.assert<AdvancedPageProps>(usePage().props);
+  const props = cast<AdvancedPageProps>(usePage().props);
   const form = useForm({
     domain: props.custom_domain_name,
     blocked_customer_emails: props.blocked_customer_emails,

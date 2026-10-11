@@ -1,12 +1,13 @@
 import { usePage } from "@inertiajs/react";
 import * as React from "react";
-import typia from "typia";
+
+import { cast } from "$app/utils/cast";
 
 import { PoweredByFooter } from "$app/components/PoweredByFooter";
 import { Layout, Props } from "$app/components/Product/Layout";
 
 function ProductShowPage() {
-  const props = typia.assert<Props>(usePage().props);
+  const props = cast<Props>(usePage().props);
 
   return (
     <>

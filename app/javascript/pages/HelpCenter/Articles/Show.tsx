@@ -1,6 +1,7 @@
 import { router, usePage } from "@inertiajs/react";
 import * as React from "react";
-import typia from "typia";
+
+import { cast } from "$app/utils/cast";
 
 import { CategorySidebar } from "$app/components/HelpCenterPage/CategorySidebar";
 import { mountHelpVideos } from "$app/components/HelpCenterPage/mountHelpVideos";
@@ -140,7 +141,7 @@ const elementContainingText = (root: HTMLElement, text: string): HTMLElement | n
 };
 
 export default function HelpCenterArticle() {
-  const { article, sidebar_categories } = typia.assert<Props>(usePage().props);
+  const { article, sidebar_categories } = cast<Props>(usePage().props);
   const contentRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {

@@ -1,7 +1,7 @@
 import { Link, useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
-import typia from "typia";
 
+import { cast } from "$app/utils/cast";
 import { asyncVoid } from "$app/utils/promise";
 import { AbortError, request, ResponseError } from "$app/utils/request";
 import {
@@ -98,7 +98,7 @@ function LoginPage() {
             accept: "json",
             abortSignal: signal,
           });
-          const optionsResult = typia.assert<{
+          const optionsResult = cast<{
             success: boolean;
             options?: PasskeyAuthenticationOptions;
             error_message?: string;
@@ -120,7 +120,7 @@ function LoginPage() {
           data: { credential, next },
           abortSignal: signal,
         });
-        const loginResult = typia.assert<{ success: boolean; redirect_location?: string; error_message?: string }>(
+        const loginResult = cast<{ success: boolean; redirect_location?: string; error_message?: string }>(
           await loginResponse.json(),
         );
         if (!loginResponse.ok || !loginResult.success || !loginResult.redirect_location) {

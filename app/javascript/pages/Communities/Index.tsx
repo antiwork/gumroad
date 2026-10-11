@@ -4,7 +4,6 @@ import { InfiniteScroll, router, useForm, usePage } from "@inertiajs/react";
 import cx from "classnames";
 import { debounce } from "lodash-es";
 import * as React from "react";
-import typia from "typia";
 
 import cable from "$app/channels/consumer";
 import {
@@ -16,6 +15,7 @@ import {
   NotificationSettings,
 } from "$app/data/communities";
 import { assertDefined } from "$app/utils/assert";
+import { cast } from "$app/utils/cast";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { ChatMessageInput } from "$app/components/Communities/ChatMessageInput";
@@ -117,7 +117,7 @@ function CommunitiesIndex() {
   const [localMessages, setLocalMessages] = React.useState<Record<string, CommunityChatMessage[]>>({});
   const [deletedMessageIds, setDeletedMessageIds] = React.useState<Set<string>>(new Set());
 
-  const pageProps = typia.assert<PageProps>(usePage().props);
+  const pageProps = cast<PageProps>(usePage().props);
   const pageMessages = pageProps.messages ?? [];
   const localMsgs = localMessages[selectedCommunity?.id ?? ""] ?? [];
 

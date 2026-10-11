@@ -1,9 +1,9 @@
 import { usePage } from "@inertiajs/react";
 import * as React from "react";
-import typia from "typia";
 
 import { incrementProductViews } from "$app/data/view_event";
 import { CreatorProfile } from "$app/parsers/profile";
+import { cast } from "$app/utils/cast";
 
 import { Product, Purchase } from "$app/components/Product";
 import { CoffeeProduct } from "$app/components/Product/CoffeeProduct";
@@ -18,7 +18,7 @@ type Props = {
 };
 
 export default function CoffeePage() {
-  const { product, purchase, creator_profile } = typia.assert<Props>(usePage().props);
+  const { product, purchase, creator_profile } = cast<Props>(usePage().props);
   const { searchParams } = new URL(useOriginalLocation());
 
   // The coffee page is served from /coffee rather than /l/:permalink, so nothing else records its

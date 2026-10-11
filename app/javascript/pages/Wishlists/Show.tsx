@@ -1,7 +1,7 @@
 import { usePage } from "@inertiajs/react";
 import * as React from "react";
-import typia from "typia";
 
+import { cast } from "$app/utils/cast";
 import { Taxonomy } from "$app/utils/discover";
 
 import { Layout as DiscoverLayout } from "$app/components/Discover/Layout";
@@ -15,7 +15,7 @@ type Props = WishlistProps & {
 };
 
 export default function WishlistShowPage() {
-  const { layout, creator_profile, taxonomies_for_nav, ...wishlistProps } = typia.assert<Props>(usePage().props);
+  const { layout, creator_profile, taxonomies_for_nav, ...wishlistProps } = cast<Props>(usePage().props);
 
   if (layout === "profile" && creator_profile) {
     return (

@@ -4,7 +4,7 @@ import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ProfileSettingsForm } from "$app/pages/Settings/Profile/profileSettingsForm";
-// Imported statically: transforming typia plus the page's component tree inside a hook exceeds
+// Imported statically: transforming the page's component tree inside a hook exceeds
 // vitest's default hookTimeout.
 import SettingsPage from "$app/pages/Settings/Profile/Show";
 

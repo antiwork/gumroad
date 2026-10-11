@@ -1,6 +1,7 @@
 import { Link, usePage } from "@inertiajs/react";
 import * as React from "react";
-import typia from "typia";
+
+import { cast } from "$app/utils/cast";
 
 import { CategorySidebar } from "$app/components/HelpCenterPage/CategorySidebar";
 import { ArticleLink, SidebarCategory } from "$app/components/HelpCenterPage/types";
@@ -21,7 +22,7 @@ interface Props {
 }
 
 export default function HelpCenterCategory() {
-  const { category, sidebar_categories } = typia.assert<Props>(usePage().props);
+  const { category, sidebar_categories } = cast<Props>(usePage().props);
 
   return (
     <HelpCenterLayout showSearchButton>

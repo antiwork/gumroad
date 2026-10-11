@@ -1,7 +1,7 @@
 import { usePage } from "@inertiajs/react";
 import * as React from "react";
-import typia from "typia";
 
+import { cast } from "$app/utils/cast";
 import { Taxonomy } from "$app/utils/discover";
 
 import { Layout as DiscoverLayout } from "$app/components/Discover/Layout";
@@ -13,7 +13,7 @@ type PageProps = Props & {
 };
 
 function DiscoverProductShowPage() {
-  const props = typia.assert<PageProps>(usePage().props);
+  const props = cast<PageProps>(usePage().props);
 
   return (
     <DiscoverLayout

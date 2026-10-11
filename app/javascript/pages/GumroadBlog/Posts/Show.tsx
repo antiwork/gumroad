@@ -2,9 +2,9 @@ import { ArrowLeft } from "@boxicons/react";
 import { Link, usePage } from "@inertiajs/react";
 import { EditorContent } from "@tiptap/react";
 import * as React from "react";
-import typia from "typia";
 
 import { incrementPostViews } from "$app/data/view_event";
+import { cast } from "$app/utils/cast";
 import { formatPostDate } from "$app/utils/date";
 
 import { NavigationButton } from "$app/components/Button";
@@ -33,7 +33,7 @@ const BackToBlog = () => (
 );
 
 function ShowPage() {
-  const { external_id, subject, published_at, message, call_to_action } = typia.assert<ShowPageProps>(usePage().props);
+  const { external_id, subject, published_at, message, call_to_action } = cast<ShowPageProps>(usePage().props);
   const userAgentInfo = useUserAgentInfo();
   const [pageLoaded, setPageLoaded] = React.useState(false);
 

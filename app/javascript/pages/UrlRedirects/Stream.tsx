@@ -1,10 +1,10 @@
 import { usePage } from "@inertiajs/react";
 import { throttle } from "lodash-es";
 import * as React from "react";
-import typia from "typia";
 
 import { createConsumptionEvent } from "$app/data/consumption_analytics";
 import { trackMediaLocationChanged } from "$app/data/media_location";
+import { cast } from "$app/utils/cast";
 import GuidGenerator from "$app/utils/guid_generator";
 import { createJWPlayer } from "$app/utils/jwPlayer";
 import { isFinishedMediaLocation, isResumableMediaLocation, persistableMediaLocation } from "$app/utils/mediaLocation";
@@ -47,7 +47,7 @@ function Stream() {
     purchase_id,
     should_show_transcoding_notice,
     transcode_on_first_sale,
-  } = typia.assert<StreamProps>(usePage().props);
+  } = cast<StreamProps>(usePage().props);
 
   const containerRef = React.useRef<HTMLDivElement>(null);
 

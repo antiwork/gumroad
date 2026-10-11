@@ -2,12 +2,12 @@ import { Bank, CreditCard, Paypal, Stripe } from "@boxicons/react";
 import { router, useForm, usePage } from "@inertiajs/react";
 import parsePhoneNumberFromString, { CountryCode } from "libphonenumber-js";
 import * as React from "react";
-import typia from "typia";
 
 import { CardPayoutError, prepareCardTokenForPayouts, type CardPayoutToken } from "$app/data/card_payout_data";
 import { SavedCreditCard } from "$app/parsers/card";
 import { SettingPage } from "$app/parsers/settings";
 import type { ComplianceInfo, PayoutMethod, FormFieldName, User, PayoutDebitCardData } from "$app/types/payments";
+import { cast } from "$app/utils/cast";
 import { COLOMBIA_ID_NUMBER_ERROR_MESSAGE, isValidColombiaIdNumber } from "$app/utils/colombiaIdNumbers";
 import { formatPriceCentsWithCurrencySymbol, formatPriceCentsWithoutCurrencySymbol } from "$app/utils/currency";
 import { GUATEMALA_NIT_ERROR_MESSAGE, isValidGuatemalaNit } from "$app/utils/guatemalaNit";
@@ -250,8 +250,8 @@ const isFormFieldName = (value: string): value is FormFieldName => value in FIEL
 
 export default function PaymentsPage() {
   const page = usePage();
-  const props = typia.assert<PaymentsPageProps>(page.props);
-  const errors = typia.assert<{ base?: string[]; field?: string } | undefined>(page.props.errors);
+  const props = cast<PaymentsPageProps>(page.props);
+  const errors = cast<{ base?: string[]; field?: string } | undefined>(page.props.errors);
 
   const [clientErrorMessage, setClientErrorMessage] = React.useState<ErrorMessageInfo | null>(null);
   const formRef = React.useRef<HTMLDivElement & HTMLFormElement>(null);
@@ -483,7 +483,7 @@ export default function PaymentsPage() {
     countryRequiresPhysicalAddress(countryCode) && isStreetAddressPOBox(input);
 
   const validatePhoneNumber = (input: string | null, country_code: string | null) => {
-    const countryCode: CountryCode = typia.assert<CountryCode>(country_code);
+    const countryCode: CountryCode = cast<CountryCode>(country_code);
     // Use isPossible() (length/structure) rather than isValid() (exact allocated-range
     // membership). isValid() depends on bundled libphonenumber-js metadata that lags the
     // real numbering plan, so legitimately-allocated numbers in newly-added ranges (e.g.
@@ -909,15 +909,12 @@ export default function PaymentsPage() {
       !form.data.user.street_address ||
       (streetAddressValidationContextChanged &&
         form.data.user.country !== null &&
-        isPhysicalAddressRequiredAndPOBox(
-          typia.assert<CountryCode>(form.data.user.country),
-          form.data.user.street_address,
-        ))
+        isPhysicalAddressRequiredAndPOBox(cast<CountryCode>(form.data.user.country), form.data.user.street_address))
     ) {
       markFieldInvalid("street_address");
       if (form.data.user.street_address) {
         setClientErrorMessage({
-          message: poBoxAddressErrorMessage(typia.assert<CountryCode>(form.data.user.country)),
+          message: poBoxAddressErrorMessage(cast<CountryCode>(form.data.user.country)),
         });
       }
     }
@@ -1133,14 +1130,14 @@ export default function PaymentsPage() {
         (businessStreetAddressValidationContextChanged &&
           form.data.user.business_country !== null &&
           isPhysicalAddressRequiredAndPOBox(
-            typia.assert<CountryCode>(form.data.user.business_country),
+            cast<CountryCode>(form.data.user.business_country),
             form.data.user.business_street_address,
           ))
       ) {
         markFieldInvalid("business_street_address");
         if (form.data.user.business_street_address) {
           setClientErrorMessage({
-            message: poBoxAddressErrorMessage(typia.assert<CountryCode>(form.data.user.business_country)),
+            message: poBoxAddressErrorMessage(cast<CountryCode>(form.data.user.business_country)),
           });
         }
       }

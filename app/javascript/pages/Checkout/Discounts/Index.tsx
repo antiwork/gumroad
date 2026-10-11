@@ -1,6 +1,7 @@
 import { usePage } from "@inertiajs/react";
 import React from "react";
-import typia from "typia";
+
+import { cast } from "$app/utils/cast";
 
 import { default as DiscountsPage, DiscountsPageProps } from "$app/components/CheckoutDashboard/DiscountsPage";
 
@@ -13,7 +14,7 @@ function Discounts() {
     show_black_friday_banner,
     black_friday_code,
     black_friday_code_name,
-  } = typia.assert<DiscountsPageProps>(usePage().props);
+  } = cast<DiscountsPageProps>(usePage().props);
 
   return (
     <DiscountsPage

@@ -1,6 +1,5 @@
 import { useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
-import typia from "typia";
 
 import { OtherRefundPolicy } from "$app/data/products/other_refund_policies";
 import { Thumbnail } from "$app/data/thumbnails";
@@ -10,6 +9,7 @@ import {
   CUSTOM_BUTTON_TEXT_OPTIONS,
   RatingsWithPercentages,
 } from "$app/parsers/product";
+import { cast } from "$app/utils/cast";
 import { CurrencyCode, currencyCodeList, formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 
 import { BundleEditLayout, useProductUrl } from "$app/components/BundleEdit/Layout";
@@ -109,7 +109,7 @@ type ProductFormData = {
 
 export default function BundlesProductEdit() {
   const page = usePage();
-  const props = typia.assert<ProductPageProps>(page.props);
+  const props = cast<ProductPageProps>(page.props);
   const {
     bundle,
     id,

@@ -3,7 +3,7 @@ import { cleanup, render } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// Imported statically rather than inside a hook: the page pulls in typia and the Product tree, and
+// Imported statically rather than inside a hook: the page pulls in the Product tree, and
 // transforming that graph inside a hook exceeds vitest's default hookTimeout.
 import { incrementProductViews } from "$app/data/view_event";
 import CoffeePage from "$app/pages/Users/Coffee";
@@ -19,8 +19,6 @@ vi.mock("$app/components/Profile/Layout", () => ({
 vi.mock("$app/components/Product/CoffeeProduct", () => ({ CoffeeProduct: () => <div /> }));
 vi.mock("$app/data/view_event", () => ({ incrementProductViews: vi.fn() }));
 
-// typia.assert runs for real against this fixture, so it doubles as a check that the props the
-// coffee page claims to accept are the props it is handed.
 const product = (overrides: Partial<Product> = {}): Product => ({
   id: "1",
   name: "Support me",

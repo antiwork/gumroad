@@ -2,11 +2,11 @@ import { ArrowUpRight } from "@boxicons/react";
 import { Head, usePage } from "@inertiajs/react";
 import { EditorContent } from "@tiptap/react";
 import * as React from "react";
-import typia from "typia";
 
 import { PaginatedComments } from "$app/data/comments";
 import { incrementPostViews } from "$app/data/view_event";
 import { CreatorProfile } from "$app/parsers/profile";
+import { cast } from "$app/utils/cast";
 import { formatPostDate } from "$app/utils/date";
 
 import { Button } from "$app/components/Button";
@@ -56,7 +56,7 @@ export default function PostsShow() {
     comments_max_allowed_depth,
     creator_profile,
     custom_styles,
-  } = typia.assert<PageProps>(usePage().props);
+  } = cast<PageProps>(usePage().props);
 
   const userAgentInfo = useUserAgentInfo();
   const [pageLoaded, setPageLoaded] = React.useState(false);

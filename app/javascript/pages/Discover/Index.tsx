@@ -2,12 +2,12 @@ import { ArrowLeft, ArrowRight, X } from "@boxicons/react";
 import { Deferred, Link, router, usePage } from "@inertiajs/react";
 import { range } from "lodash-es";
 import * as React from "react";
-import typia from "typia";
 
 import { SearchRequest, SearchResults } from "$app/data/search";
 import { useScrollToElement } from "$app/hooks/useScrollToElement";
 import { CardProduct } from "$app/parsers/product";
 import { last } from "$app/utils/array";
+import { cast } from "$app/utils/cast";
 import { classNames } from "$app/utils/classNames";
 import { CurrencyCode, formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 import { discoverTitleGenerator, Taxonomy } from "$app/utils/discover";
@@ -242,7 +242,7 @@ const parseUrlParams = (href: string, curatedProductIds: string[], defaultSortOr
 };
 
 function DiscoverIndex() {
-  const props = typia.assert<Props>(usePage().props);
+  const props = cast<Props>(usePage().props);
   const defaultSortOrder = props.curated_product_ids.length > 0 ? "curated" : undefined;
 
   const initialParsed = parseUrlParams(window.location.href, props.curated_product_ids, defaultSortOrder);

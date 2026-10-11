@@ -4,7 +4,6 @@ import type { Book, Rendition, Location as EpubLocation } from "epubjs";
 import type { PDFDocumentProxy } from "pdfjs-dist/legacy/build/pdf.mjs";
 import type { PDFSinglePageViewer } from "pdfjs-dist/legacy/web/pdf_viewer.mjs";
 import * as React from "react";
-import typia from "typia";
 
 import { trackMediaLocationChanged } from "$app/data/media_location";
 import {
@@ -16,6 +15,7 @@ import {
   getLinearSectionRank,
   sanitizeSerializedEpubSection,
 } from "$app/pages/UrlRedirects/epub";
+import { cast } from "$app/utils/cast";
 import { isBoolean, isNumber, isOneOf, isRecord, isString } from "$app/utils/guards";
 
 import { Button } from "$app/components/Button";
@@ -189,7 +189,7 @@ const getMediaLocationFromCookies = (readId: string): StoredMediaLocation => {
 };
 
 const Read = () => {
-  const props = typia.assert<Props>(usePage().props);
+  const props = cast<Props>(usePage().props);
   return props.file_type === "epub" ? <EpubReader {...props} /> : <PdfReader {...props} />;
 };
 
@@ -292,7 +292,7 @@ const PdfReader = ({
       releaseHeightSync = syncPinnedReaderHeight(container);
 
       const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
-      pdfjs.GlobalWorkerOptions.workerSrc = typia.assert<{ default: string }>(
+      pdfjs.GlobalWorkerOptions.workerSrc = cast<{ default: string }>(
         await import("pdfjs-dist/legacy/build/pdf.worker.mjs?url"),
       ).default;
 
@@ -845,7 +845,7 @@ const EpubReader = ({
                       role="radio"
                       aria-checked={theme === name}
                       aria-label={label}
-                      onClick={() => updateTheme(typia.assert<EpubThemeName>(name))}
+                      onClick={() => updateTheme(cast<EpubThemeName>(name))}
                       className="cursor-pointer rounded border p-2 all-unset"
                       style={{
                         background,

@@ -2,10 +2,10 @@ import { ChevronDown, Sparkle } from "@boxicons/react";
 import { Link, useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
 import { useState } from "react";
-import typia from "typia";
 
 import { isRecurringProductType } from "$app/data/products";
 import { ProductNativeType, ProductServiceType } from "$app/parsers/product";
+import { cast } from "$app/utils/cast";
 import { classNames } from "$app/utils/classNames";
 import { CurrencyCode, currencyCodeList, findCurrencyByCode, isCurrencyCode } from "$app/utils/currency";
 import {
@@ -94,7 +94,7 @@ const NewProductPage = () => {
     ai_generation_enabled,
     ai_promo_dismissed,
     is_mobile_app_web_view,
-  } = typia.assert<NewProductPageProps>(usePage().props);
+  } = cast<NewProductPageProps>(usePage().props);
 
   const isMobileAppWebView =
     Boolean(is_mobile_app_web_view) ||
@@ -121,7 +121,7 @@ const NewProductPage = () => {
     },
   });
 
-  const errors = typia.assert<FormErrors>(form.errors);
+  const errors = cast<FormErrors>(form.errors);
 
   const [aiPromoVisible, setAiPromoVisible] = useState(ai_generation_enabled && !ai_promo_dismissed);
   const [aiPopoverOpen, setAiPopoverOpen] = useState(false);
@@ -175,7 +175,7 @@ const NewProductPage = () => {
         data: { prompt: form.data.link.ai_prompt.trim() },
       });
 
-      const result = typia.assert<
+      const result = cast<
         | {
             success: true;
             data: {

@@ -1,6 +1,7 @@
 import { Head, usePage } from "@inertiajs/react";
 import * as React from "react";
-import typia from "typia";
+
+import { cast } from "$app/utils/cast";
 
 import { PoweredByFooter } from "$app/components/PoweredByFooter";
 import { Product, useSelectionFromUrl, Props as ProductProps } from "$app/components/Product";
@@ -8,7 +9,7 @@ import { Product, useSelectionFromUrl, Props as ProductProps } from "$app/compon
 type PageProps = ProductProps & { custom_styles?: string };
 
 const PurchaseProductShowPage = () => {
-  const props = typia.assert<PageProps>(usePage().props);
+  const props = cast<PageProps>(usePage().props);
   const [selection, setSelection] = useSelectionFromUrl(props.product);
 
   return (

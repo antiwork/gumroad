@@ -1,7 +1,6 @@
 import { router, useForm, usePage } from "@inertiajs/react";
 import { parseISO } from "date-fns";
 import * as React from "react";
-import typia from "typia";
 
 import { confirmLineItem } from "$app/data/purchase";
 import { updateSubscription } from "$app/data/subscription";
@@ -14,6 +13,7 @@ import {
 import { SavedCreditCard } from "$app/parsers/card";
 import { Discount } from "$app/parsers/checkout";
 import { CustomFieldDescriptor, ProductNativeType } from "$app/parsers/product";
+import { cast } from "$app/utils/cast";
 import {
   CurrencyCode,
   formatPriceCentsWithCurrencySymbol,
@@ -120,7 +120,7 @@ export default function SubscriptionsManage() {
     ca_provinces,
     used_card,
     request_apple_pay_merchant_tokens,
-  } = typia.assert<Props>(usePage().props);
+  } = cast<Props>(usePage().props);
 
   const url = new URL(useOriginalLocation());
 

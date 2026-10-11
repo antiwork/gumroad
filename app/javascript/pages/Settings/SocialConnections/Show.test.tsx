@@ -3,8 +3,8 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
-// Imported statically for the same reason as Settings/Payments/Show.test.tsx: transforming typia
-// plus the ui component tree inside a hook exceeds vitest's default hookTimeout.
+// Imported statically for the same reason as Settings/Payments/Show.test.tsx: transforming the
+// ui component tree inside a hook exceeds vitest's default hookTimeout.
 import SocialConnectionsPage from "$app/pages/Settings/SocialConnections/Show";
 
 const mocks = vi.hoisted(() => ({ usePage: vi.fn() }));

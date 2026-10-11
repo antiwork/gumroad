@@ -1,8 +1,8 @@
 import { usePage } from "@inertiajs/react";
 import * as React from "react";
-import typia from "typia";
 
 import { useDropbox } from "$app/hooks/useDropbox";
+import { cast } from "$app/utils/cast";
 
 import { ProductEditBoundary } from "$app/components/ProductEdit/Boundary";
 import { LazyProductEditPage } from "$app/components/ProductEdit/load";
@@ -15,7 +15,7 @@ type PageProps = ProductEditPageProps & {
 };
 
 export default function ProductEditInertiaPage() {
-  const props = typia.assert<PageProps>(usePage().props);
+  const props = cast<PageProps>(usePage().props);
   const { dropbox_api_key, ...editProps } = props;
 
   useDropbox(dropbox_api_key);

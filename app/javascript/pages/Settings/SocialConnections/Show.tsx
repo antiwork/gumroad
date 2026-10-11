@@ -1,10 +1,10 @@
 import { AlertCircle, CheckCircle, DotsHorizontalRounded, Instagram, Tiktok, TwitterX, Youtube } from "@boxicons/react";
 import { router, usePage } from "@inertiajs/react";
 import * as React from "react";
-import typia from "typia";
 
 import { unlinkInstagram, unlinkTiktok, unlinkTwitter, unlinkYoutube } from "$app/data/profile_settings";
 import { SettingPage } from "$app/parsers/settings";
+import { cast } from "$app/utils/cast";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 
@@ -72,7 +72,7 @@ export default function SocialConnectionsPage() {
     tiktok_connect_enabled,
     tiktok_connected,
     tiktok_handle,
-  } = typia.assert<SocialConnectionsPageProps>(usePage().props);
+  } = cast<SocialConnectionsPageProps>(usePage().props);
 
   const disconnect = (unlink: () => Promise<unknown>) =>
     asyncVoid(async () => {

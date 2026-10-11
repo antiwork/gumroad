@@ -1,6 +1,7 @@
 import { usePage } from "@inertiajs/react";
 import * as React from "react";
-import typia from "typia";
+
+import { cast } from "$app/utils/cast";
 
 import { Avatar } from "$app/components/ui/Avatar";
 
@@ -11,7 +12,7 @@ type Props = {
 };
 
 export default function SubscribePreview() {
-  const { avatar_url, title, bio } = typia.assert<Props>(usePage().props);
+  const { avatar_url, title, bio } = cast<Props>(usePage().props);
 
   return (
     <div className="override flex h-full w-full items-center gap-6 p-8">

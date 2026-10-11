@@ -1,9 +1,9 @@
 import { Link } from "@boxicons/react";
 import { useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
-import typia from "typia";
 
 import { AssetPreview, CustomButtonTextOption, RatingsWithPercentages } from "$app/parsers/product";
+import { cast } from "$app/utils/cast";
 import { CurrencyCode } from "$app/utils/currency";
 import { Taxonomy } from "$app/utils/discover";
 
@@ -79,7 +79,7 @@ type ShareFormData = {
 
 export default function BundlesShareEdit() {
   const page = usePage();
-  const props = typia.assert<SharePageProps>(page.props);
+  const props = cast<SharePageProps>(page.props);
   const {
     bundle,
     id,

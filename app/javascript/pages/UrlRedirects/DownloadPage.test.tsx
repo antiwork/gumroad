@@ -4,7 +4,7 @@ import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // The page is imported statically rather than with `await import(...)` inside beforeEach. It
-// pulls in typia, React and the whole Download component tree, and transforming that graph took
+// pulls in React and the whole Download component tree, and transforming that graph took
 // longer than vitest's 10s default hookTimeout on a loaded CI runner, so every test in the file
 // failed with "Hook timed out in 10000ms" even though nothing was actually wrong. A static
 // import is charged to the file's own import phase, which has no such deadline. The vi.mock
@@ -23,8 +23,7 @@ vi.mock("@inertiajs/react", () => ({ usePage: mocks.usePage, usePoll: mocks.useP
 vi.mock("$app/hooks/useDropbox", () => ({ useDropbox: () => undefined }));
 vi.mock("$app/components/DownloadPage/WithContent", () => ({ WithContent: () => <div /> }));
 
-// typia.assert is generated from the page's prop type, so give the page a shape that satisfies it
-// while keeping the fixture small: one video file inside a rich-content page.
+// A fixture with the page's prop shape, kept small: one video file inside a rich-content page.
 const pageProps = () => ({
   content_unavailability_reason_code: null,
   is_mobile_app_web_view: false,
@@ -98,8 +97,6 @@ describe("DownloadPage media position polling", () => {
       pollsByInterval.set(interval, poll);
       return poll;
     });
-    // typia.assert runs for real against this fixture, so it doubles as a check that the
-    // fixture still satisfies the page's prop contract.
     mocks.usePage.mockReturnValue({ props: pageProps() });
   });
 

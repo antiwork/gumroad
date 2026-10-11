@@ -1,7 +1,6 @@
 import { Head, router, useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
 import { flushSync } from "react-dom";
-import typia from "typia";
 
 import { type SurchargesResponse } from "$app/data/customer_surcharge";
 import { PaymentConfirmedError, startClientConfirmOrderCreation, startOrderCreation } from "$app/data/order";
@@ -11,6 +10,7 @@ import { type SavedCreditCard } from "$app/parsers/card";
 import { type CardProduct, COMMISSION_DEPOSIT_PROPORTION, type CustomFieldDescriptor } from "$app/parsers/product";
 import { isOpenTuple } from "$app/utils/array";
 import { assert } from "$app/utils/assert";
+import { cast } from "$app/utils/cast";
 import { CurrencyCode, getIsSingleUnitCurrency } from "$app/utils/currency";
 import { isValidEmail } from "$app/utils/email";
 import { calculateFirstInstallmentPaymentPriceCents } from "$app/utils/price";
@@ -193,7 +193,7 @@ const CheckoutIndexPage = () => {
     },
     checkout_payment,
     ...props
-  } = typia.assert<CheckoutIndexPageProps>(usePage().props);
+  } = cast<CheckoutIndexPageProps>(usePage().props);
 
   const user = useLoggedInUser();
   const email = user?.email ?? props.cart?.email ?? "";
@@ -794,7 +794,7 @@ const CheckoutIndexPage = () => {
             currency: result.currency_type.toUpperCase(),
             product_name: result.name,
             value: result.non_formatted_price,
-            valueIsSingleUnit: getIsSingleUnitCurrency(typia.assert<CurrencyCode>(result.currency_type)),
+            valueIsSingleUnit: getIsSingleUnitCurrency(cast<CurrencyCode>(result.currency_type)),
             quantity: result.quantity,
             tax: result.non_formatted_seller_tax_amount,
             ...(item.product.buyer_currency_display
@@ -992,12 +992,10 @@ const CheckoutIndexPage = () => {
         currentCartKey: () => currentPaymentLaneCartKeyRef.current,
         // The one path that lifts the hold on Pay. The save that asked is the only place that knows
         // the configuration describes the cart the buyer is looking at — see checkoutPaymentRefresh.
-        // Re-validated here because it is read straight off the response rather than out of the
-        // props typia has already checked.
         onDelivered: (checkoutPayment) =>
           dispatch({
             type: "update-checkout-payment",
-            checkoutPayment: typia.assert<CheckoutPaymentConfig>(checkoutPayment),
+            checkoutPayment: cast<CheckoutPaymentConfig>(checkoutPayment),
           }),
         onUnrecoverable: (message) => showAlert(message, "error"),
       }),

@@ -1,8 +1,8 @@
 import { usePage } from "@inertiajs/react";
 import * as React from "react";
-import typia from "typia";
 
 import { AnalyticsData } from "$app/parsers/product";
+import { cast } from "$app/utils/cast";
 import { startTrackingForSeller, trackProfilePageView } from "$app/utils/user_analytics";
 
 import { Profile } from "$app/components/Profile";
@@ -19,7 +19,7 @@ type SellerAnalytics = {
 type ShowPageProps = React.ComponentProps<typeof Profile> & { seller_analytics: SellerAnalytics };
 
 function UsersShow() {
-  const profileProps = typia.assert<ShowPageProps>(usePage().props);
+  const profileProps = cast<ShowPageProps>(usePage().props);
   const addProfileThirdPartyAnalytics = useAddProfileThirdPartyAnalytics();
 
   // The seller's analytics never fired on the profile: startTrackingForSeller

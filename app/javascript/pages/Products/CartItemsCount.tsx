@@ -1,13 +1,14 @@
 import { usePage } from "@inertiajs/react";
 import * as React from "react";
-import typia from "typia";
+
+import { cast } from "$app/utils/cast";
 
 type Props = {
   cart_items_count: number;
 };
 
 const CartItemsCount = () => {
-  const { cart_items_count } = typia.assert<Props>(usePage().props);
+  const { cart_items_count } = cast<Props>(usePage().props);
 
   React.useEffect(() => {
     void document.hasStorageAccess().then((hasAccess) =>

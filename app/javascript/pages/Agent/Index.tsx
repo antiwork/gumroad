@@ -1,6 +1,7 @@
 import { usePage } from "@inertiajs/react";
 import * as React from "react";
-import typia from "typia";
+
+import { cast } from "$app/utils/cast";
 
 import { AgentChat } from "$app/components/Agent/AgentChat";
 
@@ -13,9 +14,7 @@ type AgentPageProps = {
 };
 
 const AgentPage = () => {
-  const { greeting, suggestions, eligible, locked_heading, locked_explanation } = typia.assert<AgentPageProps>(
-    usePage().props,
-  );
+  const { greeting, suggestions, eligible, locked_heading, locked_explanation } = cast<AgentPageProps>(usePage().props);
 
   return (
     <AgentChat

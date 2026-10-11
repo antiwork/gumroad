@@ -1,8 +1,8 @@
 import { Cog } from "@boxicons/react";
 import { Link, router, usePage } from "@inertiajs/react";
 import * as React from "react";
-import typia from "typia";
 
+import { cast } from "$app/utils/cast";
 import { classNames } from "$app/utils/classNames";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
@@ -97,7 +97,7 @@ const FAQ_ITEMS: {
 ];
 
 const TaxCenterIndex = () => {
-  const { documents, available_years, selected_year } = typia.assert<{
+  const { documents, available_years, selected_year } = cast<{
     documents: TaxDocument[];
     available_years: number[];
     selected_year: number | null;

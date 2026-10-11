@@ -2,9 +2,9 @@ import { XSquare } from "@boxicons/react";
 import { router, usePage } from "@inertiajs/react";
 import { parseISO } from "date-fns";
 import * as React from "react";
-import typia from "typia";
 
 import { SettingPage } from "$app/parsers/settings";
+import { cast } from "$app/utils/cast";
 
 import { Button } from "$app/components/Button";
 import { Modal } from "$app/components/Modal";
@@ -72,7 +72,7 @@ type Props = {
 };
 
 export default function AuthorizedApplicationsPage() {
-  const props = typia.assert<Props>(usePage().props);
+  const props = cast<Props>(usePage().props);
   const userAgentInfo = useUserAgentInfo();
   const [applications, setApplications] = React.useState(props.authorized_applications);
   const [revokingAccessForApp, setRevokingAccessForApp] = React.useState<{ id: string; revoking?: boolean } | null>(
@@ -84,7 +84,7 @@ export default function AuthorizedApplicationsPage() {
     router.delete(Routes.oauth_authorized_application_path(id), {
       only: ["authorized_applications"],
       onSuccess: (page) => {
-        const updatedProps = typia.assert<Props>(page.props);
+        const updatedProps = cast<Props>(page.props);
         setApplications(updatedProps.authorized_applications);
         showAlert("Authorized application revoked", "success");
         setRevokingAccessForApp(null);
