@@ -255,6 +255,336 @@ describe Exports::Payouts::Csv, :vcr do
     end
   end
 
+  describe "seller's affiliate commission on refunded sales" do
+    before do
+      @seller = create :user
+      direct_affiliate = create :direct_affiliate, affiliate_user: create(:user), seller: @seller
+
+      travel_to(1.month.ago) do
+        product = create :product, user: @seller, price_cents: 1000
+        @kept_sale = create_purchase price_cents: 1000, seller: @seller, link: product, affiliate: direct_affiliate
+        @fully_refunded_sale = create_purchase price_cents: 1000, seller: @seller, link: product, affiliate: direct_affiliate
+        @partially_refunded_sale = create_purchase price_cents: 1000, seller: @seller, link: product, affiliate: direct_affiliate
+      end
+
+      travel_to(1.month.ago + 1.day) do
+        @fully_refunded_sale.refund_purchase!(FlowOfFunds.build_simple_flow_of_funds(Currency::USD, @fully_refunded_sale.total_transaction_cents), @seller.id)
+        @partially_refunded_sale.refund_purchase!(FlowOfFunds.build_simple_flow_of_funds(Currency::USD, 350), @seller.id)
+        @partially_refunded_sale.refund_purchase!(FlowOfFunds.build_simple_flow_of_funds(Currency::USD, 200), @seller.id)
+      end
+
+      @payout = create_payout(1.week.ago, PayoutProcessorType::PAYPAL, @seller)
+    end
+
+    it "gives the commission back only for full refunds" do
+      expect(@partially_refunded_sale.reload.affiliate_credit_cents).to be_positive
+
+      parsed_csv = CSV.parse(Exports::Payouts::Csv.new(payment: @payout).perform)
+      types = parsed_csv.map(&:first)
+      affiliate_net = parsed_csv.select { |row| row.first == "Affiliate Credit" }.sum { |row| row.last.to_f }
+
+      expect(types.count("Full Refund")).to eq(1)
+      expect(types.count("Partial Refund")).to eq(2)
+      expect(affiliate_net).to be_within(0.001).of(-(@kept_sale.affiliate_credit_cents + @partially_refunded_sale.affiliate_credit_cents) / 100.0)
+      expect(types).not_to include("Technical Adjustment")
+      expect(parsed_csv.last.last.to_f).to eq(@payout.amount_cents / 100.0)
+    end
+  end
+
+  describe "affiliate credit clawed back by several partial refunds" do
+    before do
+      @seller = create :user
+      another_seller = create :user
+      direct_affiliate = create :direct_affiliate, affiliate_user: @seller, seller: another_seller
+
+      travel_to(1.month.ago) do
+        @own_product = create :product, user: @seller, price_cents: 1000
+        affiliate_product = create :product, user: another_seller, price_cents: 15000
+        @affiliated_sale = create_purchase price_cents: 15000, seller: another_seller, link: affiliate_product, affiliate: direct_affiliate
+      end
+
+      travel_to(1.month.ago + 1.day) do
+        @affiliated_sale.refund_purchase!(FlowOfFunds.build_simple_flow_of_funds(Currency::USD, 3000), another_seller.id)
+        @affiliated_sale.refund_purchase!(FlowOfFunds.build_simple_flow_of_funds(Currency::USD, 2000), another_seller.id)
+      end
+
+      travel_to(1.month.ago + 2.days) do
+        @first_payout = create_payout(Time.current, PayoutProcessorType::PAYPAL, @seller)
+      end
+
+      travel_to(1.month.ago + 9.days) do
+        create_purchase price_cents: 1000, seller: @seller, link: @own_product
+        @affiliated_sale.refund_purchase!(FlowOfFunds.build_simple_flow_of_funds(Currency::USD, 4000), another_seller.id)
+      end
+
+      travel_to(1.month.ago + 18.days) do
+        @second_payout = create_payout(Time.current, PayoutProcessorType::PAYPAL, @seller)
+      end
+    end
+
+    it "deducts each clawback in the payout whose balance it debited" do
+      affiliate_credit = @affiliated_sale.reload.affiliate_credit
+      first_clawbacks, second_clawbacks = affiliate_credit.affiliate_partial_refunds.partition do |partial_refund|
+        @first_payout.balances.ids.include?(partial_refund.balance_id)
+      end
+      expect(first_clawbacks.size).to eq(2)
+      expect(second_clawbacks.size).to eq(1)
+      expect(@second_payout.balances.ids).to include(affiliate_credit.affiliate_credit_refund_balance_id)
+
+      [
+        [@first_payout, affiliate_credit.amount_cents - first_clawbacks.sum(&:amount_cents)],
+        [@second_payout, -second_clawbacks.sum(&:amount_cents)],
+      ].each do |payout, expected_affiliate_cents|
+        parsed_csv = CSV.parse(Exports::Payouts::Csv.new(payment: payout).perform)
+        affiliate_net = parsed_csv.select { |row| row.first == "Affiliate Credit" }.sum { |row| row.last.to_f }
+
+        expect(affiliate_net).to be_within(0.001).of(expected_affiliate_cents / 100.0)
+        expect(parsed_csv.map(&:first)).not_to include("Technical Adjustment")
+        expect(parsed_csv.last.last.to_f).to eq(payout.amount_cents / 100.0)
+      end
+    end
+  end
+
+  describe "affiliate credit on charged-back sales" do
+    before do
+      allow_any_instance_of(Purchase).to receive(:pause_payouts_for_seller_based_on_chargeback_rate!)
+      allow_any_instance_of(Purchase).to receive(:create_dispute_evidence_if_needed!).and_return(nil)
+
+      @seller = create :user
+      another_seller = create :user
+      @affiliate_user = create :user
+      direct_affiliate = create :direct_affiliate, affiliate_user: @affiliate_user, seller: @seller
+      another_direct_affiliate = create :direct_affiliate, affiliate_user: @affiliate_user, seller: another_seller
+
+      travel_to(1.month.ago) do
+        product = create :product, user: @seller, price_cents: 1000
+        @kept_sale = create_purchase seller: @seller, link: product, affiliate: direct_affiliate
+        @fully_charged_back_sale = create_purchase seller: @seller, link: product, affiliate: direct_affiliate
+        @charged_back_after_partial_refund_sale = create_purchase seller: another_seller, link: create(:product, user: another_seller, price_cents: 1000), affiliate: another_direct_affiliate
+        create_purchase seller: @seller, link: create(:product, user: @seller, price_cents: 100_00)
+        create_purchase seller: @affiliate_user, link: create(:product, user: @affiliate_user, price_cents: 1000)
+      end
+
+      travel_to(1.month.ago + 1.day) do
+        @charged_back_after_partial_refund_sale.refund_purchase!(FlowOfFunds.build_simple_flow_of_funds(Currency::USD, 300), another_seller.id)
+      end
+
+      travel_to(1.month.ago + 2.days) do
+        [@fully_charged_back_sale, @charged_back_after_partial_refund_sale.reload].each do |purchase|
+          event = OpenStruct.new(created_at: Time.current, extras: {}, flow_of_funds: FlowOfFunds.build_simple_flow_of_funds(Currency::USD, purchase.total_transaction_cents))
+          purchase.handle_event_dispute_formalized!(event)
+        end
+      end
+
+      @seller_payout = create_payout(1.week.ago, PayoutProcessorType::PAYPAL, @seller)
+      @affiliate_payout = create_payout(1.week.ago, PayoutProcessorType::PAYPAL, @affiliate_user)
+    end
+
+    it "gives the seller the whole commission back for a full chargeback" do
+      parsed_csv = CSV.parse(Exports::Payouts::Csv.new(payment: @seller_payout).perform)
+      chargeback_row = parsed_csv.find { |row| row.first == "Chargeback" && row.third == @fully_charged_back_sale.external_id }
+
+      expect(chargeback_row.last.to_f).to eq(-@fully_charged_back_sale.net_total)
+      expect(affiliate_net(parsed_csv)).to be_within(0.001).of(-@kept_sale.affiliate_credit_cents / 100.0)
+      expect(parsed_csv.map(&:first)).not_to include("Technical Adjustment")
+      expect(parsed_csv.last.last.to_f).to eq(@seller_payout.amount_cents / 100.0)
+    end
+
+    it "deducts the whole credit for a full chargeback and each clawback after a partial refund" do
+      partial_credit = @charged_back_after_partial_refund_sale.reload.affiliate_credit
+      expect(@fully_charged_back_sale.affiliate_credit.affiliate_partial_refunds).to be_empty
+      expect(partial_credit.affiliate_partial_refunds.size).to eq(2)
+      expect(@affiliate_payout.balances.ids).to include(@fully_charged_back_sale.affiliate_credit.affiliate_credit_chargeback_balance_id,
+                                                        partial_credit.affiliate_credit_chargeback_balance_id)
+
+      parsed_csv = CSV.parse(Exports::Payouts::Csv.new(payment: @affiliate_payout).perform)
+      expected_cents = @kept_sale.affiliate_credit_cents + partial_credit.amount_cents - partial_credit.affiliate_partial_refunds.sum(&:amount_cents)
+
+      expect(affiliate_net(parsed_csv)).to be_within(0.001).of(expected_cents / 100.0)
+      expect(expected_cents).to eq(affiliate_ledger_cents(@affiliate_payout))
+      expect(parsed_csv.map(&:first)).not_to include("Technical Adjustment")
+      expect(parsed_csv.last.last.to_f).to eq(@affiliate_payout.amount_cents / 100.0)
+    end
+  end
+
+  describe "whole affiliate clawback after a partial one" do
+    # With the seller bearing the affiliate fee, the last refund's rounded-up clawback equals the
+    # whole credit, so it leaves no AffiliatePartialRefund row even though an earlier refund did.
+    before do
+      allow_any_instance_of(Purchase).to receive(:pause_payouts_for_seller_based_on_chargeback_rate!)
+      allow_any_instance_of(Purchase).to receive(:create_dispute_evidence_if_needed!).and_return(nil)
+
+      @seller = create :user, bears_affiliate_fee: true
+      @affiliate_user = create :user
+      direct_affiliate = create :direct_affiliate, affiliate_user: @affiliate_user, seller: @seller, affiliate_basis_points: 1000
+
+      travel_to(1.month.ago) do
+        @own_product = create :product, user: @affiliate_user, price_cents: 1000
+        create_purchase seller: @affiliate_user, link: @own_product
+        @affiliated_sale = create_purchase seller: @seller, link: create(:product, user: @seller, price_cents: 1000), affiliate: direct_affiliate
+      end
+
+      travel_to(1.month.ago + 1.day) do
+        @affiliated_sale.refund_purchase!(FlowOfFunds.build_simple_flow_of_funds(Currency::USD, 5), @seller.id)
+      end
+    end
+
+    def refund_the_rest
+      @affiliated_sale.reload.refund_purchase!(FlowOfFunds.build_simple_flow_of_funds(Currency::USD, @affiliated_sale.amount_refundable_cents), @seller.id)
+    end
+
+    it "deducts both clawbacks when they debit the same balance" do
+      travel_to(1.month.ago + 2.days) { refund_the_rest }
+      payout = create_payout(1.week.ago, PayoutProcessorType::PAYPAL, @affiliate_user)
+
+      affiliate_credit = @affiliated_sale.reload.affiliate_credit
+      expect(affiliate_credit.affiliate_partial_refunds.map(&:amount_cents)).to eq([1])
+      expect(payout.balances.ids).to include(affiliate_credit.affiliate_credit_refund_balance_id)
+
+      parsed_csv = CSV.parse(Exports::Payouts::Csv.new(payment: payout).perform)
+
+      expect(affiliate_net(parsed_csv)).to eq(-0.01)
+      expect(affiliate_ledger_cents(payout)).to eq(-1)
+      expect(parsed_csv.map(&:first)).not_to include("Technical Adjustment")
+      expect(parsed_csv.last.last.to_f).to eq(payout.amount_cents / 100.0)
+    end
+
+    it "deducts a whole chargeback clawback in the balance a partial refund also debited" do
+      travel_to(1.month.ago + 2.days) do
+        purchase = @affiliated_sale.reload
+        event = OpenStruct.new(created_at: Time.current, extras: {}, flow_of_funds: FlowOfFunds.build_simple_flow_of_funds(Currency::USD, purchase.total_transaction_cents))
+        purchase.handle_event_dispute_formalized!(event)
+      end
+      payout = create_payout(1.week.ago, PayoutProcessorType::PAYPAL, @affiliate_user)
+
+      affiliate_credit = @affiliated_sale.reload.affiliate_credit
+      expect(affiliate_credit.affiliate_partial_refunds.map(&:amount_cents)).to eq([1])
+      expect(payout.balances.ids).to include(affiliate_credit.affiliate_credit_chargeback_balance_id)
+
+      parsed_csv = CSV.parse(Exports::Payouts::Csv.new(payment: payout).perform)
+
+      expect(affiliate_net(parsed_csv)).to eq(-0.01)
+      expect(affiliate_ledger_cents(payout)).to eq(-1)
+      expect(parsed_csv.map(&:first)).not_to include("Technical Adjustment")
+      expect(parsed_csv.last.last.to_f).to eq(payout.amount_cents / 100.0)
+    end
+
+    it "deducts a whole charge-level chargeback clawback in the balance a partial refund also debited" do
+      allow_any_instance_of(Charge).to receive(:create_dispute_evidence_if_needed!).and_return(nil)
+      travel_to(1.month.ago + 2.days) do
+        purchase = @affiliated_sale.reload
+        charge = create(:charge, seller: @seller, purchases: [purchase], amount_cents: purchase.total_transaction_cents)
+        event = OpenStruct.new(created_at: Time.current, extras: {}, flow_of_funds: FlowOfFunds.build_simple_flow_of_funds(Currency::USD, purchase.total_transaction_cents))
+        charge.handle_event_dispute_formalized!(event)
+      end
+      payout = create_payout(1.week.ago, PayoutProcessorType::PAYPAL, @affiliate_user)
+
+      affiliate_credit = @affiliated_sale.reload.affiliate_credit
+      expect(affiliate_credit.purchase.disputes).to be_empty
+      expect(affiliate_credit.affiliate_partial_refunds.map(&:amount_cents)).to eq([1])
+      expect(payout.balances.ids).to include(affiliate_credit.affiliate_credit_chargeback_balance_id)
+
+      parsed_csv = CSV.parse(Exports::Payouts::Csv.new(payment: payout).perform)
+
+      expect(affiliate_net(parsed_csv)).to eq(-0.01)
+      expect(affiliate_ledger_cents(payout)).to eq(-1)
+      expect(parsed_csv.map(&:first)).not_to include("Technical Adjustment")
+      expect(parsed_csv.last.last.to_f).to eq(payout.amount_cents / 100.0)
+    end
+
+    it "deducts the whole clawback in the later balance it debited" do
+      first_payout = travel_to(1.month.ago + 2.days) { create_payout(Time.current, PayoutProcessorType::PAYPAL, @affiliate_user) }
+      travel_to(1.month.ago + 9.days) do
+        create_purchase seller: @affiliate_user, link: @own_product
+        refund_the_rest
+      end
+      second_payout = travel_to(1.month.ago + 18.days) { create_payout(Time.current, PayoutProcessorType::PAYPAL, @affiliate_user) }
+
+      affiliate_credit = @affiliated_sale.reload.affiliate_credit
+      expect(first_payout.balances.ids).to include(affiliate_credit.affiliate_partial_refunds.sole.balance_id)
+      expect(second_payout.balances.ids).to include(affiliate_credit.affiliate_credit_refund_balance_id)
+
+      [[first_payout, 99], [second_payout, -100]].each do |payout, expected_cents|
+        parsed_csv = CSV.parse(Exports::Payouts::Csv.new(payment: payout).perform)
+
+        expect(affiliate_net(parsed_csv)).to be_within(0.001).of(expected_cents / 100.0)
+        expect(affiliate_ledger_cents(payout)).to eq(expected_cents)
+        expect(parsed_csv.map(&:first)).not_to include("Technical Adjustment")
+        expect(parsed_csv.last.last.to_f).to eq(payout.amount_cents / 100.0)
+      end
+    end
+  end
+
+  describe "failed refund of an affiliated sale" do
+    before do
+      @seller = create :user
+      @affiliate_user = create :user
+      direct_affiliate = create :direct_affiliate, affiliate_user: @affiliate_user, seller: @seller
+
+      travel_to(1.month.ago) do
+        create_purchase seller: @affiliate_user, link: create(:product, user: @affiliate_user, price_cents: 1000)
+        @affiliated_sale = create_purchase seller: @seller, link: create(:product, user: @seller, price_cents: 150_00), affiliate: direct_affiliate
+      end
+
+      travel_to(1.month.ago + 1.day) do
+        @affiliated_sale.refund_purchase!(FlowOfFunds.build_simple_flow_of_funds(Currency::USD, 3000), @seller.id)
+        @affiliated_sale.reload.refund_purchase!(FlowOfFunds.build_simple_flow_of_funds(Currency::USD, 2000), @seller.id)
+        Purchase::HandleFailedRefundService.new(refund: @affiliated_sale.refunds.last).perform
+      end
+
+      @payout = create_payout(1.week.ago, PayoutProcessorType::PAYPAL, @affiliate_user)
+    end
+
+    it "deducts only the clawback that still stands and shows the failed one as a pair" do
+      affiliate_credit = @affiliated_sale.reload.affiliate_credit
+      remaining_clawback = affiliate_credit.affiliate_partial_refunds.sole
+      expect(@affiliated_sale.refunds.last.balance_reversed_on_failure).to be_present
+      expect(affiliate_credit.affiliate_credit_refund_balance_id).to eq(remaining_clawback.balance_id)
+
+      parsed_csv = CSV.parse(Exports::Payouts::Csv.new(payment: @payout).perform)
+      failed_refund_rows = parsed_csv.select { |row| row.first.in?(["Failed Refund", "Failed Refund Reversal"]) }
+
+      expect(affiliate_net(parsed_csv)).to be_within(0.001).of((affiliate_credit.amount_cents - remaining_clawback.amount_cents) / 100.0)
+      expect(affiliate_ledger_cents(@payout)).to eq(affiliate_credit.amount_cents - remaining_clawback.amount_cents)
+      expect(failed_refund_rows.map(&:first)).to contain_exactly("Failed Refund", "Failed Refund Reversal")
+      expect(failed_refund_rows.sum { |row| row.last.to_f }).to eq(0)
+      expect(parsed_csv.map(&:first)).not_to include("Technical Adjustment")
+      expect(parsed_csv.last.last.to_f).to eq(@payout.amount_cents / 100.0)
+    end
+  end
+
+  describe "non-USD payout with partially refunded affiliate sales" do
+    before do
+      @seller = create :user
+      direct_affiliate = create :direct_affiliate, affiliate_user: create(:user), seller: @seller, affiliate_basis_points: 5000
+
+      travel_to(1.month.ago) do
+        product = create :product, user: @seller, price_cents: 100_00
+        @affiliated_sales = Array.new(3) { create_purchase seller: @seller, link: product, affiliate: direct_affiliate }
+        create_purchase seller: @seller, link: create(:product, user: @seller, price_cents: 50_00)
+      end
+
+      travel_to(1.month.ago + 1.day) do
+        @affiliated_sales.first(2).zip([20_00, 35_00]).each do |sale, refund_cents|
+          sale.refund_purchase!(FlowOfFunds.build_simple_flow_of_funds(Currency::USD, refund_cents), @seller.id)
+        end
+      end
+
+      @payout = create_payout(1.week.ago, PayoutProcessorType::PAYPAL, @seller)
+      @payout.update!(currency: Currency::GBP, amount_cents: 100_00, gumroad_fee_cents: nil)
+    end
+
+    it "keeps the whole commission deducted for partially refunded sales" do
+      parsed_csv = CSV.parse(Exports::Payouts::Csv.new(payment: @payout).perform)
+      types = parsed_csv[1...-1].map(&:first)
+
+      expect(types.uniq).to contain_exactly("Sale", "Partial Refund", "Affiliate Credit")
+      expect(affiliate_net(parsed_csv)).to be_within(0.001).of(-@affiliated_sales.sum { _1.reload.affiliate_credit_cents } / 100.0)
+      expect(parsed_csv.last.first).to eq("Totals")
+      expect(parsed_csv.last.last.to_f).to eq(@payout.balances.sum(:amount_cents) / 100.0)
+    end
+  end
+
   describe "failed refund reversals" do
     let!(:payout_date) { 1.week.ago }
     let(:payout_processor_type) { PayoutProcessorType::PAYPAL }
@@ -364,6 +694,17 @@ describe Exports::Payouts::Csv, :vcr do
       return value if str[1..]&.match?(/\A\d+\.?\d*\z/)
     end
     %w[= @ | % \r \t + -].include?(first) ? "'#{value}" : value
+  end
+
+  def affiliate_net(parsed_csv)
+    parsed_csv.select { |row| row.first == "Affiliate Credit" }.sum { |row| row.last.to_f }
+  end
+
+  def affiliate_ledger_cents(payout)
+    balance_transactions = BalanceTransaction.where(balance_id: payout.balances.ids)
+    AffiliateCredit.where(affiliate_credit_success_balance_id: payout.balances.ids).sum(:amount_cents) +
+      balance_transactions.where.not(dispute_id: nil).sum(:issued_amount_gross_cents) +
+      balance_transactions.joins(:refund).merge(Refund.effective).sum(:issued_amount_gross_cents)
   end
 
   def create_payout(payout_date, processor_type, user)

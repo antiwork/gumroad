@@ -32,6 +32,8 @@ class Exports::Payouts::Base
       data = []
 
       payout.balances.find_each do |bal|
+        fully_refunded_affiliate_fee_cents = 0
+
         bal.successful_sales.joins(:link).find_each do |purchase|
           data << summarize_sale(purchase)
         end
@@ -53,6 +55,7 @@ class Exports::Payouts::Base
             refund = purchase.refunds.effective.first
             if refund.total_transaction_cents == purchase.total_transaction_cents
               data << summarize_full_refund(refund, purchase)
+              fully_refunded_affiliate_fee_cents += purchase.affiliate_credit_cents
             end
           else
             balance_transactions_related_to_purchase_refunds.find_each do |btxn|
@@ -61,6 +64,7 @@ class Exports::Payouts::Base
 
               if gross_amount == -purchase.price_dollars
                 data << summarize_full_refund(btxn.refund, purchase)
+                fully_refunded_affiliate_fee_cents += purchase.affiliate_credit_cents
               else
                 data << summarize_partial_refund(btxn, purchase)
               end
@@ -85,7 +89,7 @@ class Exports::Payouts::Base
                    "", "", "", "", "", "", -amount, amount]
         end
 
-        affiliate_credit_cents = calculate_affiliate_for_balance(bal)
+        affiliate_credit_cents = calculate_affiliate_for_balance(bal, fully_refunded_affiliate_fee_cents:)
 
         if affiliate_credit_cents != 0
           data << summarize_affiliate_credit(bal, affiliate_credit_cents)
@@ -532,9 +536,9 @@ class Exports::Payouts::Base
 
     # Affiliate credits for a balance consist of:
     # - sum of affiliate credits accurred for this balance
-    # - minus sum of affiliate credits that were refunded/charged back for this balance
+    # - minus affiliate credits clawed back in this balance, each debit counted in the balance it landed in
     #   (the positive credit itself for the purchase most likely has happened in a different, previous balance)
-    def calculate_affiliate_for_balance(bal)
+    def calculate_affiliate_for_balance(bal, fully_refunded_affiliate_fee_cents:)
       affiliate_credit_cents_for_balance = AffiliateCredit
                                                .where(affiliate_credit_success_balance_id: bal.id)
                                                .sum("amount_cents")
@@ -542,23 +546,47 @@ class Exports::Payouts::Base
                                             .where(purchase_success_balance_id: bal.id)
                                             .sum("affiliate_credit_cents")
 
-      refunded_affiliate_credit_cents_for_balance = AffiliateCredit
-                                                        .where(affiliate_credit_refund_balance_id: bal.id)
-                                                        .sum("amount_cents")
-      refunded_affiliate_fee_cents_for_balance = Purchase
-                                                     .where(purchase_refund_balance_id: bal.id)
-                                                     .sum("affiliate_credit_cents")
+      partially_clawed_back_affiliate_credit_cents_for_balance = AffiliatePartialRefund
+                                                                     .where(balance_id: bal.id)
+                                                                     .sum("amount_cents")
 
-      chargeback_affiliate_credit_cents_for_balance = AffiliateCredit
-                                                          .where(affiliate_credit_chargeback_balance_id: bal.id)
-                                                          .sum("amount_cents")
       chargeback_affiliate_fee_cents_for_balance = Purchase
                                                        .where(purchase_chargeback_balance_id: bal.id)
                                                        .sum("affiliate_credit_cents")
 
-      total_affiliate_credit_cents = affiliate_credit_cents_for_balance - refunded_affiliate_credit_cents_for_balance - chargeback_affiliate_credit_cents_for_balance
-      total_affiliate_fee_cents = affiliate_fee_cents_for_balance - refunded_affiliate_fee_cents_for_balance - chargeback_affiliate_fee_cents_for_balance
+      total_affiliate_credit_cents = affiliate_credit_cents_for_balance - partially_clawed_back_affiliate_credit_cents_for_balance - wholly_clawed_back_affiliate_credit_cents_for_balance(bal)
+      total_affiliate_fee_cents = affiliate_fee_cents_for_balance - fully_refunded_affiliate_fee_cents - chargeback_affiliate_fee_cents_for_balance
 
       (total_affiliate_credit_cents - total_affiliate_fee_cents)
+    end
+
+    def wholly_clawed_back_affiliate_credit_cents_for_balance(bal)
+      credits = AffiliateCredit
+                  .where(affiliate_credit_refund_balance_id: bal.id)
+                  .or(AffiliateCredit.where(affiliate_credit_chargeback_balance_id: bal.id))
+                  .pluck(:id, :purchase_id, :amount_cents, :affiliate_credit_refund_balance_id, :affiliate_credit_chargeback_balance_id)
+      return 0 if credits.empty?
+
+      partial_counts = AffiliatePartialRefund.where(balance_id: bal.id, affiliate_credit_id: credits.map(&:first))
+                                             .group(:affiliate_credit_id)
+                                             .count
+      refund_debit_counts = bal.balance_transactions.joins(:refund).merge(Refund.effective)
+                               .where(refunds: { purchase_id: credits.map(&:second) })
+                               .where("balance_transactions.issued_amount_gross_cents < 0")
+                               .group("refunds.purchase_id")
+                               .count
+
+      credits.sum do |id, purchase_id, amount_cents, refund_balance_id, chargeback_balance_id|
+        partial_count = partial_counts[id].to_i
+        whole_count = if partial_count.zero?
+          [refund_balance_id, chargeback_balance_id].count(bal.id)
+        else
+          # Purchase#seller_balance_update_eligible? allows one live chargeback debit per purchase, so the
+          # pointer stands for it. It also covers charge-level disputes, which have no purchase_id.
+          debit_count = refund_debit_counts[purchase_id].to_i + (chargeback_balance_id == bal.id ? 1 : 0)
+          [debit_count - partial_count, 0].max
+        end
+        amount_cents * whole_count
+      end
     end
 end
