@@ -5,7 +5,7 @@ class Order::CreateService
 
   LISTED_CURRENCY_RATE_EXPIRED_MESSAGE = "The listed-currency price changed or expired. Please refresh the page and try again."
 
-  attr_accessor :params, :buyer, :order
+  attr_accessor :params, :buyer, :order, :manage_cookie_verifier
 
   PARAM_TO_ATTRIBUTE_MAPPINGS = {
     friend: :friend_actions,
@@ -24,9 +24,10 @@ class Order::CreateService
   # giftee purchase that could not be created — rather than only the one the current code paths
   # produce, so that a change elsewhere cannot quietly start destroying carts. See the comment at
   # the cart-cleanup branch in `perform` for which of these are reachable today.
-  def initialize(params:, buyer: nil)
+  def initialize(params:, buyer: nil, manage_cookie_verifier: nil)
     @params = params
     @buyer = buyer
+    @manage_cookie_verifier = manage_cookie_verifier
   end
 
   def perform
@@ -151,7 +152,8 @@ class Order::CreateService
           params: purchase_params.merge(is_part_of_combined_charge: true).merge(card_params).merge(
             buyer_currency_quote: params[:buyer_currency_quote]
           ),
-          buyer:
+          buyer:,
+          manage_cookie_verifier:
         ).perform
 
         if sca_response

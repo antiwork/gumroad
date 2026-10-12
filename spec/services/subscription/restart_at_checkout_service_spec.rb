@@ -60,7 +60,8 @@ describe Subscription::RestartAtCheckoutService do
           ),
           logged_in_user: buyer,
           gumroad_guid: browser_guid,
-          remote_ip: "127.0.0.1"
+          remote_ip: "127.0.0.1",
+          manage_cookie_verified: false
         ).and_return(updater_service)
 
         expect(updater_service).to receive(:perform).and_return({ success: true, success_message: "Membership restarted" })
@@ -71,6 +72,15 @@ describe Subscription::RestartAtCheckoutService do
           params: base_params,
           buyer: buyer
         ).perform
+      end
+
+      it "passes the manage cookie check to UpdaterService" do
+        updater_service = instance_double(Subscription::UpdaterService, perform: { success: true })
+        expect(Subscription::UpdaterService).to receive(:new)
+          .with(hash_including(subscription:, manage_cookie_verified: true))
+          .and_return(updater_service)
+
+        described_class.new(subscription:, product:, params: base_params, manage_cookie_verified: true).perform
       end
 
       it "transforms checkout params to UpdaterService format" do
@@ -292,7 +302,8 @@ describe Subscription::RestartAtCheckoutService do
           params: hash_including(price_id: yearly_price.external_id),
           logged_in_user: buyer,
           gumroad_guid: browser_guid,
-          remote_ip: "127.0.0.1"
+          remote_ip: "127.0.0.1",
+          manage_cookie_verified: false
         ).and_return(updater_service)
 
         expect(updater_service).to receive(:perform).and_return({ success: true })

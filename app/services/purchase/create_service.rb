@@ -16,8 +16,9 @@ class Purchase::CreateService < Purchase::BaseService
   attr_reader :product, :params, :purchase_params, :gift_params, :buyer
   attr_accessor :purchase, :gift
 
-  def initialize(product:, params:, buyer: nil)
+  def initialize(product:, params:, buyer: nil, manage_cookie_verifier: nil)
     @product = product
+    @manage_cookie_verifier = manage_cookie_verifier
     @params = params
     @purchase_params = params[:purchase]
     @gift_params = params[:gift].presence
@@ -403,7 +404,8 @@ class Purchase::CreateService < Purchase::BaseService
         subscription: restartable_subscription,
         product: product,
         params: params,
-        buyer: buyer
+        buyer: buyer,
+        manage_cookie_verified: !!@manage_cookie_verifier&.call(restartable_subscription)
       ).perform
 
       if result[:success]

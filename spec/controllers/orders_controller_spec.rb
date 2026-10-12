@@ -849,7 +849,8 @@ describe OrdersController, :vcr do
               stripe_customer_id: "cus_123",
               stripe_setup_intent_id: "seti_123",
               line_items: contain_exactly(hash_including(uid: "unique-id-0"))
-            )
+            ),
+            manage_cookie_verifier: anything
           ).and_return(create_service)
           allow(Order::ChargeService).to receive(:new).and_return(charge_service)
 
@@ -881,6 +882,27 @@ describe OrdersController, :vcr do
         post :create
 
         expect(response.parsed_body["success"]).to be(true)
+      end
+
+      it "lets a checkout restart check the membership's manage cookie" do
+        allow(controller).to receive(:skip_recaptcha?).and_return(true)
+        subscription = create(:subscription)
+        other_subscription = create(:subscription)
+        cookies.encrypted[subscription.cookie_key] = subscription.external_id
+        order_purchases = double("order_purchases", successful: [])
+        allow(order_purchases).to receive(:each).and_return([])
+        order = double("order", persisted?: false, purchases: order_purchases, send_charge_receipts: nil)
+        verifier = nil
+        allow(Order::CreateService).to receive(:new) do |**kwargs|
+          verifier = kwargs[:manage_cookie_verifier]
+          instance_double(Order::CreateService, perform: [order, {}, []])
+        end
+        allow(Order::ChargeService).to receive(:new).and_return(instance_double(Order::ChargeService, perform: {}))
+
+        post :create
+
+        expect(verifier.call(subscription)).to be(true)
+        expect(verifier.call(other_subscription)).to be(false)
       end
 
       it "returns once-per-cart codes when charging fails after order creation" do
@@ -2269,7 +2291,8 @@ describe OrdersController, :vcr do
                     gift: { gift_note: "Happy birthday!", giftee_email: "giftee@gumroad.com" },
                     is_gift: "true"
                   ),
-                  buyer: anything
+                  buyer: anything,
+                  manage_cookie_verifier: anything
                 ).and_call_original
                 expect(Purchase::CreateService).to receive(:new).with(
                   product: product_2,
@@ -2277,7 +2300,8 @@ describe OrdersController, :vcr do
                     gift: { gift_note: "Happy birthday!", giftee_email: "giftee@gumroad.com" },
                     is_gift: "true"
                   ),
-                  buyer: anything
+                  buyer: anything,
+                  manage_cookie_verifier: anything
                 ).and_call_original
 
                 post :create, params: multiple_purchase_params
@@ -2334,7 +2358,8 @@ describe OrdersController, :vcr do
               gift: { gift_note: "Happy birthday!", giftee_email: "giftee@gumroad.com" },
               is_gift: "true"
             ),
-            buyer: anything
+            buyer: anything,
+            manage_cookie_verifier: anything
           ).and_call_original
           expect(Purchase::CreateService).to receive(:new).with(
             product: product_2,
@@ -2342,7 +2367,8 @@ describe OrdersController, :vcr do
               gift: { gift_note: "Happy birthday!", giftee_email: "giftee@gumroad.com" },
               is_gift: "true"
             ),
-            buyer: anything
+            buyer: anything,
+            manage_cookie_verifier: anything
           ).and_call_original
 
           post :create, params: multiple_purchase_params
@@ -2362,7 +2388,8 @@ describe OrdersController, :vcr do
               gift: { gift_note: "Happy birthday!", giftee_id: user.external_id },
               is_gift: "true"
             ),
-            buyer: anything
+            buyer: anything,
+            manage_cookie_verifier: anything
           ).and_call_original
           expect(Purchase::CreateService).to receive(:new).with(
             product: product_2,
@@ -2370,7 +2397,8 @@ describe OrdersController, :vcr do
               gift: { gift_note: "Happy birthday!", giftee_id: user.external_id },
               is_gift: "true"
             ),
-            buyer: anything
+            buyer: anything,
+            manage_cookie_verifier: anything
           ).and_call_original
 
           post :create, params: multiple_purchase_params

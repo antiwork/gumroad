@@ -1,13 +1,14 @@
 # frozen_string_literal: true
 
 class Subscription::RestartAtCheckoutService
-  attr_reader :subscription, :product, :params, :buyer
+  attr_reader :subscription, :product, :params, :buyer, :manage_cookie_verified
 
-  def initialize(subscription:, product:, params:, buyer: nil)
+  def initialize(subscription:, product:, params:, buyer: nil, manage_cookie_verified: false)
     @subscription = subscription
     @product = product
     @params = normalize_params(params)
     @buyer = buyer
+    @manage_cookie_verified = manage_cookie_verified
   end
 
   def perform
@@ -16,7 +17,8 @@ class Subscription::RestartAtCheckoutService
       params: updater_service_params,
       logged_in_user: buyer,
       gumroad_guid: params.dig(:purchase, :browser_guid),
-      remote_ip: params[:remote_ip]
+      remote_ip: params[:remote_ip],
+      manage_cookie_verified:
     ).perform
 
     adapt_result(result)

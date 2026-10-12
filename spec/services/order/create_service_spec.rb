@@ -1013,7 +1013,8 @@ describe Order::CreateService, :vcr do
       params[:line_items].each do |line_item_params|
         expect(Purchase::CreateService).to receive(:new).with(product: Link.find_by(unique_permalink: line_item_params[:permalink]),
                                                               params: hash_including(is_part_of_combined_charge: true),
-                                                              buyer: nil).and_call_original
+                                                              buyer: nil,
+                                                              manage_cookie_verifier: nil).and_call_original
       end
 
       order, _ = Order::CreateService.new(params:).perform
@@ -1376,7 +1377,8 @@ describe Order::CreateService, :vcr do
           ),
           logged_in_user: buyer,
           gumroad_guid: browser_guid,
-          remote_ip: anything
+          remote_ip: anything,
+          manage_cookie_verified: false
         ).and_return(updater_service)
         allow(updater_service).to receive(:perform).and_return({ success: true, success_message: "Membership restarted" })
 
@@ -1389,6 +1391,29 @@ describe Order::CreateService, :vcr do
         # The regular product from seller_2 should still be in the order
         expect(order.purchases.in_progress.count).to eq(1)
         expect(order.purchases.first.link).to eq(product_4)
+      end
+
+      it "tells the restart whether the checkout holds the membership's manage cookie" do
+        updater_service = instance_double(Subscription::UpdaterService, perform: { success: true, success_message: "Membership restarted" })
+        checked_subscriptions = []
+        verifier = ->(checked) { checked_subscriptions << checked; checked == subscription }
+        expect(Subscription::UpdaterService).to receive(:new)
+          .with(hash_including(subscription:, manage_cookie_verified: true))
+          .and_return(updater_service)
+
+        _, purchase_responses, _ = Order::CreateService.new(params: params_with_membership, buyer:, manage_cookie_verifier: verifier).perform
+
+        expect(purchase_responses["unique-id-0"]).to include(success: true)
+        expect(checked_subscriptions).to eq([subscription])
+      end
+
+      it "does not treat the checkout as holding the manage cookie when the cookie does not match" do
+        updater_service = instance_double(Subscription::UpdaterService, perform: { success: true, success_message: "Membership restarted" })
+        expect(Subscription::UpdaterService).to receive(:new)
+          .with(hash_including(subscription:, manage_cookie_verified: false))
+          .and_return(updater_service)
+
+        Order::CreateService.new(params: params_with_membership, buyer:, manage_cookie_verifier: ->(_) { false }).perform
       end
 
       it "does not add the restarted subscription's original purchase to the order" do

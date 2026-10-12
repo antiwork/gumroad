@@ -21,7 +21,8 @@ class OrdersController < ApplicationController
 
     order, purchase_responses, offer_codes = Order::CreateService.new(
       buyer: logged_in_user,
-      params: order_params
+      params: order_params,
+      manage_cookie_verifier:
     ).perform
 
     charge_responses = Order::ChargeService.new(order:, params: order_params).perform
@@ -75,7 +76,8 @@ class OrdersController < ApplicationController
 
     order, purchase_responses, offer_codes = Order::CreateService.new(
       buyer: logged_in_user,
-      params: order_params
+      params: order_params,
+      manage_cookie_verifier:
     ).perform
 
     prepare_responses = Order::PreparePaymentIntentService.new(
@@ -348,6 +350,13 @@ class OrdersController < ApplicationController
         expires_in: CONFIRM_ERROR_NOTIFY_LIMIT_WINDOW
       )
       count.nil? || count <= CONFIRM_ERROR_NOTIFY_LIMIT_PER_ORDER
+    end
+
+    def manage_cookie_verifier
+      ->(subscription) do
+        cookie = cookies.encrypted[subscription.cookie_key]
+        cookie.present? && ActiveSupport::SecurityUtils.secure_compare(cookie, subscription.external_id)
+      end
     end
 
     def build_order_params
