@@ -501,6 +501,7 @@ describe Purchase::ConfirmService, :vcr do
         expect(@subscription.alive?).to be(true)
         allow_any_instance_of(Purchase).to receive(:confirm_charge_intent!).and_return true
         expect(@subscription).to receive(:send_restart_notifications!)
+        expect(@subscription).to receive(:log_indian_card_mandate_restart)
         expect(@subscription).to receive(:handle_purchase_success)
 
         error_message = Purchase::ConfirmService.new(purchase: @membership_restart_purchase, params: {}).perform

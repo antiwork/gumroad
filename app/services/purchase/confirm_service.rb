@@ -95,6 +95,7 @@ class Purchase::ConfirmService < Purchase::BaseService
       purchase.subscription.handle_purchase_success(purchase)
       if purchase.subscription.is_resubscription_pending_confirmation?
         purchase.subscription.send_restart_notifications!
+        purchase.subscription.log_indian_card_mandate_restart
         purchase.subscription.update_flag!(:is_resubscription_pending_confirmation, false, true)
       end
       UpdateIntegrationsOnTierChangeWorker.perform_async(purchase.subscription.id)

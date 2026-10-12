@@ -275,9 +275,8 @@ class Subscription::UpdaterService
 
     subscription.send_restart_notifications! if is_resubscribing && result[:success] && !result[:requires_card_action] && terminated_or_scheduled_for_termination
 
-    if is_resubscribing && result[:success] && subscription.stripe_mandate_id.present? && subscription.india_card_mandate_pending_restart_enabled?
-      Rails.logger.info("indian_card_mandate.pending_restart.restarted subscription_id=#{subscription.id} mandate_id=#{subscription.stripe_mandate_id}")
-    end
+    # A restart that still needs card approval is logged by Purchase::ConfirmService once the buyer approves.
+    subscription.log_indian_card_mandate_restart if is_resubscribing && result[:success] && !result[:requires_card_action]
 
     result
   end

@@ -2954,6 +2954,16 @@ describe Subscription::UpdaterService, :vcr do
           expect(Rails.logger).to have_received(:info).with("indian_card_mandate.pending_restart.restarted subscription_id=#{@subscription.id} mandate_id=mandate_pending")
         end
 
+        it "does not log the restart while the charge still needs card approval" do
+          restart_with_replacement_card
+          @mandate_status = "active"
+          allow_any_instance_of(described_class).to receive(:charge_user!).and_return(success: true, requires_card_action: true)
+
+          restart_with_saved_card
+
+          expect(Rails.logger).not_to have_received(:info).with(a_string_including("indian_card_mandate.pending_restart.restarted"))
+        end
+
         it "still rejects a pending mandate when the restart also changes the plan" do
           params = upgrade_tier_params.merge(perceived_upgrade_price_cents: @new_tier_quarterly_price.price_cents)
 

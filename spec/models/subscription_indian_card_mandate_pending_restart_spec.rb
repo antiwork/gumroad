@@ -103,4 +103,26 @@ describe Subscription do
       end
     end
   end
+
+  describe "#log_indian_card_mandate_restart" do
+    let(:subscription) { create(:subscription, stripe_mandate_id: "mandate_active") }
+
+    before { allow(Rails.logger).to receive(:info) }
+
+    it "logs the restart when the feature is on" do
+      allow(subscription).to receive(:india_card_mandate_pending_restart_enabled?).and_return(true)
+
+      subscription.log_indian_card_mandate_restart
+
+      expect(Rails.logger).to have_received(:info).with("indian_card_mandate.pending_restart.restarted subscription_id=#{subscription.id} mandate_id=mandate_active")
+    end
+
+    it "logs nothing when the feature is off" do
+      allow(subscription).to receive(:india_card_mandate_pending_restart_enabled?).and_return(false)
+
+      subscription.log_indian_card_mandate_restart
+
+      expect(Rails.logger).not_to have_received(:info)
+    end
+  end
 end
