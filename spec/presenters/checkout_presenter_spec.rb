@@ -1434,6 +1434,24 @@ describe CheckoutPresenter do
         end
       end
 
+      context "when the original purchase's country is blank" do
+        it "uses the IP country" do
+          @subscription.original_purchase.update!(country: "", ip_country: "Brazil")
+
+          result = described_class.new(logged_in_user: nil, ip: "127.0.0.1").subscription_manager_props(subscription: @subscription)
+          expect(result[:contact_info][:country]).to eq "BR"
+        end
+
+        # Preselecting the visitor's country would charge VAT on manage-page updates for members
+        # who were never charged it (see tiered_membership_vat_spec).
+        it "does not use the visitor's country" do
+          @subscription.original_purchase.update!(country: nil, ip_country: nil)
+
+          result = described_class.new(logged_in_user: nil, ip: "104.193.168.19").subscription_manager_props(subscription: @subscription)
+          expect(result[:contact_info][:country]).to eq ""
+        end
+      end
+
       context "when the subscription is deactivated" do
         before do
           @subscription.update!(cancelled_at: 1.day.ago, deactivated_at: 1.day.ago, cancelled_by_buyer: true)

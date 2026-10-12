@@ -1382,6 +1382,23 @@ describe Subscription::UpdaterService, :vcr do
           expect(@original_purchase.country).to eq "United States"
         end
 
+        it "keeps the saved country when contact info has no country" do
+          @original_purchase.update!(country: "Germany")
+
+          result = Subscription::UpdaterService.new(
+            subscription: @subscription,
+            gumroad_guid: @gumroad_guid,
+            params: same_plan_params.merge(contact_info: { email: }),
+            logged_in_user: @user,
+            remote_ip: @remote_ip,
+          ).perform
+
+          expect(result[:success]).to eq true
+          @original_purchase.reload
+          expect(@original_purchase.email).to eq email
+          expect(@original_purchase.country).to eq "Germany"
+        end
+
         it "compares saved-card mandate terms from the stored billing address",
            vcr: { cassette_name: "Subscription_UpdaterService/_perform/tiered_membership_subscription/setting_contact_info/sets_the_contact_info_on_the_original_purchase" } do
           @credit_card.update!(card_country: Compliance::Countries::IND.alpha2)

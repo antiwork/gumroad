@@ -67,15 +67,35 @@ class Subscription::RestartAtCheckoutService
 
     def contact_info
       purchase_params = params[:purchase] || {}
-      {
+      info = {
         email: purchase_params[:email],
         full_name: purchase_params[:full_name],
         street_address: purchase_params[:street_address],
-        country: purchase_params[:country],
         state: purchase_params[:state],
         zip_code: purchase_params[:zip_code],
         city: purchase_params[:city],
-      }.compact.presence
+      }.compact_blank
+
+      country = submitted_country(purchase_params)
+      if country.present?
+        info[:country] = country
+        # The old country's state and ZIP must not stay next to a new country.
+        info.reverse_merge!(state: nil, zip_code: nil) if country_changed?(country)
+      end
+      info.presence
+    end
+
+    # Checkout sends a digital product's country only as the tax election, and hides that
+    # field when nothing is due, so a $0 election is a GeoIP default the buyer never saw.
+    def submitted_country(purchase_params)
+      return purchase_params[:country] if purchase_params[:country].present?
+      return unless purchase_params[:perceived_price_cents].to_i.positive?
+
+      purchase_params[:sales_tax_country_code_election].presence
+    end
+
+    def country_changed?(country)
+      ISO3166::Country[country]&.alpha2 != Compliance::Countries.find_by_name(subscription.original_purchase.country)&.alpha2
     end
 
     def default_variant_ids

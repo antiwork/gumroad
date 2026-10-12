@@ -280,7 +280,9 @@ class CheckoutPresenter
         city: subscription.original_purchase.city || "",
         state: subscription.original_purchase.state || "",
         zip: subscription.original_purchase.zip_code || "",
-        country: Compliance::Countries.find_by_name(subscription.original_purchase.country || subscription.original_purchase.ip_country)&.alpha2 || "",
+        country: Compliance::Countries.find_by_name(
+          subscription.original_purchase.country.presence || subscription.original_purchase.ip_country
+        )&.alpha2 || "",
       },
       used_card: CheckoutPresenter.saved_card(subscription.credit_card_to_charge),
       # When the seller is in the Apple Pay merchant-token rollout (antiwork/gumroad#5727), a

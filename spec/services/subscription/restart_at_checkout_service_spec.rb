@@ -141,6 +141,58 @@ describe Subscription::RestartAtCheckoutService do
         )
       end
 
+      it "uses the tax country election when checkout sends no shipping country" do
+        subscription.original_purchase.update!(country: "Germany", zip_code: "10115")
+        checkout_params = base_params.deep_merge(purchase: { perceived_price_cents: 500, sales_tax_country_code_election: "DE" })
+
+        transformed_params = described_class.new(subscription:, product:, params: checkout_params, buyer:).send(:updater_service_params)
+
+        expect(transformed_params[:contact_info]).to eq(email:, country: "DE")
+      end
+
+      it "clears the old state and ZIP when the elected country changes" do
+        subscription.original_purchase.update!(country: "United States", state: "CA", zip_code: "94107")
+        checkout_params = base_params.deep_merge(purchase: { perceived_price_cents: 500, sales_tax_country_code_election: "DE" })
+
+        transformed_params = described_class.new(subscription:, product:, params: checkout_params, buyer:).send(:updater_service_params)
+
+        expect(transformed_params[:contact_info]).to eq(email:, country: "DE", state: nil, zip_code: nil)
+      end
+
+      it "keeps a submitted ZIP when the elected country changes" do
+        subscription.original_purchase.update!(country: "Germany", zip_code: "10115")
+        checkout_params = base_params.deep_merge(purchase: { perceived_price_cents: 500, sales_tax_country_code_election: "US", zip_code: "10001" })
+
+        transformed_params = described_class.new(subscription:, product:, params: checkout_params, buyer:).send(:updater_service_params)
+
+        expect(transformed_params[:contact_info]).to eq(email:, country: "US", state: nil, zip_code: "10001")
+      end
+
+      it "keeps the saved state and ZIP when the purchase stores an older name for the same country" do
+        subscription.original_purchase.update!(country: "Turkey", zip_code: "34000")
+        checkout_params = base_params.deep_merge(purchase: { perceived_price_cents: 500, sales_tax_country_code_election: "TR" })
+
+        transformed_params = described_class.new(subscription:, product:, params: checkout_params, buyer:).send(:updater_service_params)
+
+        expect(transformed_params[:contact_info]).to eq(email:, country: "TR")
+      end
+
+      it "ignores the tax country election when nothing is due, because checkout hides the country field" do
+        checkout_params = base_params.deep_merge(purchase: { perceived_price_cents: 0, sales_tax_country_code_election: "DE" })
+
+        transformed_params = described_class.new(subscription:, product:, params: checkout_params, buyer:).send(:updater_service_params)
+
+        expect(transformed_params[:contact_info]).to eq(email:)
+      end
+
+      it "leaves blank checkout fields out of the contact information" do
+        checkout_params = base_params.deep_merge(purchase: { country: "", sales_tax_country_code_election: "", state: "", zip_code: "" })
+
+        transformed_params = described_class.new(subscription:, product:, params: checkout_params, buyer:).send(:updater_service_params)
+
+        expect(transformed_params[:contact_info]).to eq(email:)
+      end
+
       it "uses the buyer identity when defaulting the perceived restart price" do
         params_without_perceived_price = base_params.deep_dup
         params_without_perceived_price[:purchase].delete(:perceived_price_cents)
@@ -620,6 +672,39 @@ describe Subscription::RestartAtCheckoutService do
 
           expect(result[:success]).to be false
           expect(result[:error_message]).to eq("This product is no longer available, so this membership can't be restarted.")
+        end
+      end
+
+      context "when a digital membership restarts at checkout" do
+        let(:product) { create(:membership_product, user: seller, price_cents: 500) }
+        let!(:subscription) do
+          create(:subscription, link: product, user: buyer).tap do |subscription|
+            create(:purchase, link: product, purchaser: buyer, email:, subscription:, is_original_subscription_purchase: true,
+                              price_cents: 500, variant_attributes: product.tiers.to_a, country: "Germany", zip_code: "10115")
+            subscription.update!(cancelled_at: 1.day.ago, cancelled_by_buyer: true, deactivated_at: 1.day.ago)
+          end
+        end
+
+        before do
+          allow_any_instance_of(Subscription::UpdaterService).to receive(:charge_user!).and_return(success: true)
+        end
+
+        it "keeps the saved country on the restarted membership" do
+          checkout_params = base_params.deep_merge(purchase: { perceived_price_cents: 500, country: "", sales_tax_country_code_election: "", state: "" })
+
+          result = described_class.new(subscription:, product:, params: checkout_params, buyer:).perform
+
+          expect(result).to include(success: true)
+          expect(subscription.original_purchase.reload).to have_attributes(country: "Germany", zip_code: "10115")
+        end
+
+        it "saves the country the buyer elected for tax" do
+          checkout_params = base_params.deep_merge(purchase: { perceived_price_cents: 500, sales_tax_country_code_election: "FR" })
+
+          result = described_class.new(subscription:, product:, params: checkout_params, buyer:).perform
+
+          expect(result).to include(success: true)
+          expect(subscription.original_purchase.reload).to have_attributes(country: "France", zip_code: nil)
         end
       end
     end

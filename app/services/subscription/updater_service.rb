@@ -109,7 +109,7 @@ class Subscription::UpdaterService
       ActiveRecord::Base.transaction do
         # Update subscription contact info
         if params[:contact_info].present?
-          params[:contact_info][:country] = ISO3166::Country[params[:contact_info][:country]]&.common_name
+          params[:contact_info][:country] = ISO3166::Country[params[:contact_info][:country]]&.common_name if params[:contact_info].key?(:country)
           original_purchase.is_updated_original_subscription_purchase = true
           original_purchase.update!(params[:contact_info])
         end
