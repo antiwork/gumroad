@@ -360,7 +360,7 @@ class Purchase < ApplicationRecord
     end
   end
 
-  before_validation :downcase_email, if: :email_changed?
+  stripped_fields :email, nilify_blanks: false, transform: -> { _1.downcase }, if: -> { email.present? && email_changed? }
 
   validate :must_have_valid_email
   validate :not_double_charged, on: :create
@@ -6348,11 +6348,6 @@ class Purchase < ApplicationRecord
 
     def price_for_recurrence
       price || subscription&.price
-    end
-
-    def downcase_email
-      return if email.blank?
-      self.email = email.downcase
     end
 
     def all_workflows
