@@ -451,10 +451,10 @@ class User < ApplicationRecord
 
   after_save :create_updated_stripe_apple_pay_domain, if: ->(user) { user.saved_change_to_username? }
   after_save :delete_old_stripe_apple_pay_domain, if: ->(user) { user.saved_change_to_username? }
-  after_save :sync_stripe_business_profile_url, if: ->(user) { user.saved_change_to_username? }
   after_update :update_audience_members_affiliates
   after_update :update_product_search_index!
   after_update :update_alive_cart_email, if: :saved_change_to_email?
+  after_commit :enqueue_stripe_business_profile_sync, on: :update, if: :username_previously_changed?
   after_commit :move_purchases_to_new_email, on: :update, if: :email_previously_changed?
   after_commit :make_affiliate_of_the_matching_approved_affiliate_requests, on: [:create, :update], if: ->(user) { user.confirmed_at_previously_changed? && user.confirmed? }
   after_commit :generate_subscribe_preview, on: [:create, :update], if: :should_subscribe_preview_be_regenerated?
@@ -1767,9 +1767,9 @@ class User < ApplicationRecord
       CreateStripeApplePayDomainWorker.perform_async(id)
     end
 
-    def sync_stripe_business_profile_url
-      return if saved_change_to_username[0].blank?
-      SyncStripeBusinessProfileUrlWorker.perform_async(id, saved_change_to_username[0])
+    def enqueue_stripe_business_profile_sync
+      return if username_previous_change[0].blank?
+      SyncStripeBusinessProfileUrlJob.perform_async(id, username_previous_change[0])
     end
 
     def delete_old_stripe_apple_pay_domain

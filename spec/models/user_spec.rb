@@ -3779,6 +3779,27 @@ describe User, :vcr do
     end
   end
 
+  describe "Stripe business profile URL sync on username change" do
+    let(:user) { create(:user, username: "usernamesample") }
+
+    before { SyncStripeBusinessProfileUrlJob.jobs.clear }
+
+    it "enqueues only after the transaction commits" do
+      user.transaction do
+        user.update!(username: "newusername")
+        expect(SyncStripeBusinessProfileUrlJob.jobs).to be_empty
+      end
+
+      expect(SyncStripeBusinessProfileUrlJob).to have_enqueued_sidekiq_job(user.id, "usernamesample")
+    end
+
+    it "does not enqueue when the username is unchanged" do
+      user.update!(name: "newname")
+
+      expect(SyncStripeBusinessProfileUrlJob.jobs).to be_empty
+    end
+  end
+
   describe "after_create #create_global_affiliate!" do
     it "creates a global affiliate record after user creation" do
       user = build(:user)

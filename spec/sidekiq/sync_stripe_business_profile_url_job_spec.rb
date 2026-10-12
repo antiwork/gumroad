@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-describe SyncStripeBusinessProfileUrlWorker do
+describe SyncStripeBusinessProfileUrlJob do
   let(:user) { create(:user, username: "davidsbuild") }
   let!(:merchant_account) { create(:merchant_account, user:, charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}") }
   let(:stripe_url) { "#{PROTOCOL}://#{Subdomain.from_username("antdavidson")}/l/client-report-kit" }
