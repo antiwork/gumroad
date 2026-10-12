@@ -215,7 +215,7 @@ class Link < ApplicationRecord
 
   before_validation :associate_price, on: :create
   before_validation :set_unique_permalink
-  before_validation :lock_seller_for_permalink_checks
+  before_validation :lock_seller_for_serialized_checks
   before_validation :release_custom_permalink_if_possible, if: :custom_permalink_changed?
   after_save :stage_renamed_custom_permalink, if: :saved_change_to_custom_permalink?
   after_commit :redirect_renamed_custom_permalinks
@@ -574,7 +574,7 @@ class Link < ApplicationRecord
       Link.transaction do
         AfterCommitEverywhere.after_commit { transaction_committed = true } unless caller_has_transaction
         # A restore takes the seller row before this product row, as a permalink claim does, so the two cannot deadlock.
-        lock_seller_for_permalink_checks
+        lock_seller_for_serialized_checks
         locked_values = Array(Link.where(id:).lock.pick(:flags, :first_published_at))
         current_flags = locked_values[0].to_i
         # Read the recorded date under the same lock: two overlapping publishes could otherwise
@@ -1549,7 +1549,7 @@ class Link < ApplicationRecord
   def show_in_sections!(section_external_ids)
     # The profile editor locks the seller, then the profile row. Take them in that order here too, ahead of
     # the profile lock below, so a save that also changes the permalink cannot deadlock with it.
-    lock_seller_for_permalink_checks
+    lock_seller_for_serialized_checks
     user.with_profile_sections_lock do
       user.seller_profile_products_sections.on_profile.reload.each do |section|
         shown = section.shown_products.include?(id)
@@ -1756,11 +1756,17 @@ class Link < ApplicationRecord
       user_id.present? && (restoring_deleted_product? || claiming_custom_permalink?)
     end
 
+    # A conversion to a bundle and the restore of a deleted bundle that contains it each validate against the
+    # other's row, so they serialize on the seller too. Their checks read with FOR UPDATE for the same reason.
+    def serialize_bundle_membership_checks?
+      user_id.present? && persisted? && is_bundle? && (is_bundle_changed? || will_save_change_to_deleted_at?(to: nil))
+    end
+
     # The claim and the restore lock different product rows and no constraint spans them, so they take
     # the seller's row to run one at a time. The checks above then read with FOR UPDATE: under
     # REPEATABLE READ a plain read could still see the snapshot from before the other save committed.
-    def lock_seller_for_permalink_checks
-      User.where(id: user_id).lock.pick(:id) if serialize_permalink_checks?
+    def lock_seller_for_serialized_checks
+      User.where(id: user_id).lock.pick(:id) if serialize_permalink_checks? || serialize_bundle_membership_checks?
     end
 
     def custom_permalink_of_licensed_product
