@@ -47,6 +47,7 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
       # Convert actual countries hash keys from symbols to strings to match presenter output
       # Inertia RSpec helper returns symbol keys, but presenter uses string keys
       actual_props[:countries] = actual_props[:countries].transform_keys(&:to_s) if actual_props[:countries] && actual_props[:countries].keys.first.is_a?(Symbol)
+      actual_props[:person_countries] = actual_props[:person_countries].transform_keys(&:to_s) if actual_props[:person_countries]
       expect(actual_props).to eq(expected_props)
     end
 
@@ -245,7 +246,7 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         create(:user_compliance_info_empty, user: gf_seller, country: "French Guiana")
         sign_in gf_seller
 
-        put :update, params: { user: params.merge(country: "GF", updated_country_code: "GF", first_name: "Sofia") }
+        put :update, params: { user: params.merge(country: "GF", updated_country_code: "GF", business_country: "GF", first_name: "Sofia") }
 
         expect(session[:inertia_errors]).to be_blank
       end
@@ -2285,6 +2286,7 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
       %w[GF GP MQ YT MF].each do |code|
         post :set_country, params: params.merge(country: code), as: :json
         expect(response).to have_http_status(:forbidden)
+        expect(response.parsed_body["error"]).to match(/Select France instead/)
       end
       expect(user.reload.fetch_or_build_user_compliance_info.country).to be_blank
     end

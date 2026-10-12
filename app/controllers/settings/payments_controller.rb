@@ -4,6 +4,8 @@ class Settings::PaymentsController < Settings::BaseController
   include ActionView::Helpers::SanitizeHelper
   include AuditsPayoutSettingsChanges
 
+  FRENCH_OVERSEAS_DEPARTMENT_MESSAGE = "French overseas departments are not valid compliance countries. Select France instead."
+
   MILITARY_ZIP_MESSAGE = "We can't accept military (APO/FPO/DPO) ZIP codes for payouts. Please enter a physical US street address and its ZIP code."
 
   before_action :authorize
@@ -44,18 +46,18 @@ class Settings::PaymentsController < Settings::BaseController
       return redirect_with_error("Puerto Rico is not a valid compliance country. Select United States and Puerto Rico as your state.")
     end
 
-    # Same carve-out as above: an existing seller's form echoes their current country back.
+    # Same carve-out as above. The form echoes business_country with the same fallback the presenter uses.
     attempted_french_territory = [
       [params.dig(:user, :updated_country_code), current_uci&.legal_entity_country_code],
       [params.dig(:user, :country),              current_uci&.country_code],
-      [params.dig(:user, :business_country),     current_uci&.business_country_code],
+      [params.dig(:user, :business_country),     current_uci&.business_country_code || current_uci&.country_code],
     ].any? do |submitted, current|
       submitted.present? &&
         submitted != current &&
         Compliance::Countries::FRENCH_OVERSEAS_DEPARTMENTS_AS_FRANCE.include?(submitted)
     end
     if attempted_french_territory
-      return redirect_with_error("French overseas departments are not valid compliance countries. Select France instead.")
+      return redirect_with_error(FRENCH_OVERSEAS_DEPARTMENT_MESSAGE)
     end
 
     compliance_info = current_seller.fetch_or_build_user_compliance_info
@@ -211,7 +213,9 @@ class Settings::PaymentsController < Settings::BaseController
     compliance_info = current_seller.fetch_or_build_user_compliance_info
     return head :forbidden if compliance_info.country.present?
     return head :forbidden if Compliance::Countries::US_OUTLYING_AREAS_AS_STATES.include?(params[:country])
-    return head :forbidden if Compliance::Countries::FRENCH_OVERSEAS_DEPARTMENTS_AS_FRANCE.include?(params[:country])
+    if Compliance::Countries::FRENCH_OVERSEAS_DEPARTMENTS_AS_FRANCE.include?(params[:country])
+      return render json: { error: FRENCH_OVERSEAS_DEPARTMENT_MESSAGE }, status: :forbidden
+    end
 
     compliance_info.dup_and_save! do |new_compliance_info|
       new_compliance_info.country = ISO3166::Country[params[:country]]&.common_name

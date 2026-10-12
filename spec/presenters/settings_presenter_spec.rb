@@ -697,6 +697,7 @@ describe SettingsPresenter do
           supported_countries_help_text: "This feature is available in <a href='https://stripe.com/en-in/global'>all countries where Stripe operates</a>, except India, Indonesia, Malaysia, Mexico, Philippines, and Thailand.",
         },
         countries: Compliance::Countries.for_select_for_seller_compliance.to_h,
+        person_countries: Compliance::Countries.for_select.to_h,
         ip_country_code: nil,
         bank_account_details: {
           show_bank_account: false,
@@ -852,6 +853,15 @@ describe SettingsPresenter do
         expect(countries).to have_key(territory), "expected #{territory} to remain selectable but it was excluded"
       end
       expect(countries).to have_key("US")
+    end
+
+    it "excludes the French overseas departments from the compliance dropdown but keeps them for people's countries" do
+      props = presenter.payments_props
+      %w[GF GP MQ YT MF].each do |code|
+        expect(props[:countries]).not_to have_key(code)
+        expect(props[:person_countries]).to have_key(code)
+      end
+      expect(props[:countries]).to include("FR", "RE")
     end
 
     it "names a Stripe-restricted country even though it is omitted from the dropdown" do

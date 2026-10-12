@@ -192,6 +192,7 @@ type PaymentsPageProps = {
     show_au_backtax_prompt: boolean;
   };
   countries: Record<string, string>;
+  person_countries: Record<string, string>;
   ip_country_code: string | null;
   bank_account_details: BankAccountDetails;
   paypal_address: string | null;
@@ -1677,6 +1678,7 @@ export default function PaymentsPage() {
                 minDobYear={props.min_dob_year}
                 isFormDisabled={props.is_form_disabled}
                 countries={props.countries}
+                personCountries={props.person_countries}
                 usBusinessTypes={props.us_business_types}
                 uaeBusinessTypes={props.uae_business_types}
                 indiaBusinessTypes={props.india_business_types}
@@ -1707,7 +1709,7 @@ export default function PaymentsPage() {
           />
           {selectedPayoutMethod !== "stripe" && props.can_manage_beneficial_owners ? (
             <BeneficialOwnersSection
-              countries={props.countries}
+              countries={props.person_countries}
               states={props.states}
               defaultCountry={form.data.user.business_country ?? form.data.user.country}
               onIdDocumentAlternativeChange={setHasIdDocumentAlternative}
