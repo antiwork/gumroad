@@ -46,8 +46,10 @@ module Product::Validations
       end
     end
 
+    # A deleted bundle keeps its memberships and its editor is unreachable, so those rows must not
+    # block the conversion: scope the guard to memberships of a bundle that is still visible.
     def bundle_is_not_in_bundle
-      return unless BundleProduct.alive.where(product: self).exists?
+      return unless BundleProduct.alive.where(product: self).joins(:bundle).merge(Link.visible).exists?
 
       errors.add(:base, "This product cannot be converted to a bundle because it is already part of a bundle.")
     end

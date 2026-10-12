@@ -168,6 +168,47 @@ describe Bundles::ContentController, inertia: true do
         expect(flash[:alert]).to eq("Bundles must have at least one product.")
       end
     end
+
+    context "when the product is not a bundle" do
+      let(:product) { create(:product, user: seller) }
+      let(:member_product) { bundle.bundle_products.first.product }
+
+      def convert(product, to: member_product)
+        put :update, params: {
+          bundle_id: product.external_id,
+          products: [{ product_id: to.external_id, quantity: 1 }]
+        }
+      end
+
+      context "when its only membership belongs to a deleted bundle" do
+        let(:deleted_bundle) { create(:product, :bundle, user: seller) }
+        let!(:stale_membership) { create(:bundle_product, bundle: deleted_bundle, product:) }
+
+        before { deleted_bundle.delete! }
+
+        # The seller has no route to a deleted bundle's editor, so the membership it left behind can
+        # never be released; treating it as a live one blocks the conversion permanently.
+        it "converts the product to a bundle" do
+          convert(product)
+
+          expect(response).to redirect_to(edit_bundle_content_path(product.external_id))
+          expect(flash[:notice]).to eq("Changes saved!")
+          expect(product.reload.is_bundle).to eq(true)
+          expect(product.native_type).to eq(Link::NATIVE_TYPE_BUNDLE)
+        end
+      end
+
+      context "when its membership belongs to a live bundle" do
+        let!(:membership) { create(:bundle_product, bundle:, product:) }
+
+        it "refuses the conversion" do
+          convert(product)
+
+          expect(flash[:alert]).to eq("This product cannot be converted to a bundle because it is already part of a bundle.")
+          expect(product.reload.is_bundle).to eq(false)
+        end
+      end
+    end
   end
 
   describe "PUT update_purchases_content" do
