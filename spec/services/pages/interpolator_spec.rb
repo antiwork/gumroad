@@ -215,22 +215,27 @@ describe Pages::Interpolator do
 
       it "matches an Untitled version by the product's name, as the buy button does" do
         category = create(:variant_category, link: product)
+        create(:variant, variant_category: category, name: "Basic")
         create(:variant, variant_category: category, name: "Untitled", price_difference_cents: 500)
-        create(:variant, variant_category: category, name: "Pro", price_difference_cents: 1000)
-        html = %(<span data-gumroad-field="price" data-gumroad-option="Test Product">$0</span>)
+        html = %(<span data-gumroad-field="price" data-gumroad-option="Test Product">$0</span>) +
+               %(<span data-gumroad-field="price">$0</span>)
 
         result = described_class.interpolate(html, product: product.reload)
 
-        expect(result).to include(">$20<")
+        expect(result).to include(%(data-gumroad-option="Test Product">$20</span>))
+        expect(result).to include(%(<span data-gumroad-field="price">$15</span>))
       end
 
-      it "writes the price of a product's only option" do
-        create(:variant, variant_category: create(:variant_category, link: product), name: "Pro", price_difference_cents: 1000)
-        html = %(<span data-gumroad-field="price" data-gumroad-option="Pro">$0</span>)
+      it "writes a single-tier membership's only option without the + its other recurrence gives the product price" do
+        single_tier = create(:membership_product, price_cents: 500)
+        single_tier.tiers.sole.save_recurring_prices!("monthly" => { enabled: true, price: 5 }, "yearly" => { enabled: true, price: 50 })
+        html = %(<span data-gumroad-field="price" data-gumroad-option="#{single_tier.name}">$0</span>) +
+               %(<span data-gumroad-field="price">$0</span>)
 
-        result = described_class.interpolate(html, product: product.reload)
+        result = described_class.interpolate(html, product: single_tier.reload)
 
-        expect(result).to include(">$25<")
+        expect(result).to include(%(data-gumroad-option="#{single_tier.name}">$5 a month</span>))
+        expect(result).to include(%(<span data-gumroad-field="price">$5+ a month</span>))
       end
 
       it "takes an option-scoped default offer code off that option only" do
@@ -268,19 +273,21 @@ describe Pages::Interpolator do
       end
 
       it "leaves elements without the option attribute on the product price" do
-        html = %(<span data-gumroad-field="price">$0</span>)
+        html = %(<span data-gumroad-field="price" data-gumroad-option="Second Tier">$0</span><span data-gumroad-field="price">$0</span>)
 
         result = described_class.interpolate(html, product: membership)
 
-        expect(result).to eq(%(<span data-gumroad-field="price">$4+ a month</span>))
+        expect(result).to eq(%(<span data-gumroad-field="price" data-gumroad-option="Second Tier">$9 a month</span><span data-gumroad-field="price">$4+ a month</span>))
       end
 
       it "ignores the option attribute on fields other than price" do
-        html = %(<span data-gumroad-field="name" data-gumroad-option="Second Tier">x</span>)
+        html = %(<span data-gumroad-field="name" data-gumroad-option="Second Tier">x</span>) +
+               %(<span data-gumroad-field="price" data-gumroad-option="Second Tier">$0</span>)
 
         result = described_class.interpolate(html, product: membership)
 
-        expect(result).to include(">#{membership.name}<")
+        expect(result).to include(%(data-gumroad-field="name" data-gumroad-option="Second Tier">#{membership.name}</span>))
+        expect(result).to include(%(data-gumroad-field="price" data-gumroad-option="Second Tier">$9 a month</span>))
       end
     end
 
@@ -622,11 +629,13 @@ describe Pages::Interpolator do
         end
 
         it "leaves an option's original-price element empty when that option is not discounted" do
-          html = %(<s data-gumroad-product="quicklauncher" data-gumroad-option="Basic" data-gumroad-field="original-price"></s>)
+          html = %(<s data-gumroad-product="quicklauncher" data-gumroad-option="Basic" data-gumroad-field="original-price"></s>) +
+                 %(<s data-gumroad-product="quicklauncher" data-gumroad-option="Pro" data-gumroad-field="original-price"></s>)
 
           result = described_class.interpolate_profile(html, profile: seller, prices:)
 
-          expect(result).to include(%(data-gumroad-field="original-price"></s>))
+          expect(result).to include(%(data-gumroad-option="Basic" data-gumroad-field="original-price"></s>))
+          expect(result).to include(%(data-gumroad-option="Pro" data-gumroad-field="original-price">€30</s>))
         end
 
         it "leaves the element's own text alone when the option is unknown" do

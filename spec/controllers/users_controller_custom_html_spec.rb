@@ -210,6 +210,7 @@ describe UsersController, :vcr, type: :controller do
 
     it "fills an option-scoped price for a product's only option" do
       membership = create(:membership_product, user: seller, price_cents: 500)
+      membership.tiers.sole.save_recurring_prices!("monthly" => { enabled: true, price: 5 }, "yearly" => { enabled: true, price: 50 })
       product = create(:product, user: seller, price_cents: 1000)
       create(:variant, variant_category: create(:variant_category, link: product), name: "Pro", price_difference_cents: 500)
       seller.update!(custom_html: %(<span data-gumroad-product="#{membership.general_permalink}" data-gumroad-option="#{membership.name}" data-gumroad-field="price">$0</span>) +

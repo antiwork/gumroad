@@ -536,8 +536,14 @@ describe Pages::ProductPrices do
         expect(options.map { _1[:price] }).to eq(["€3.20 a month", "€7.20+ a month"])
       end
 
-      it "adds no options key to a product without options" do
-        expect(described_class.build(seller, ip: nil)[product.general_permalink]).not_to have_key(:options)
+      it "adds an options key only to the products that have options" do
+        versioned = create(:product, user: seller)
+        add_versions(versioned)
+
+        prices = described_class.build(seller, ip: nil)
+
+        expect(prices[versioned.general_permalink]).to have_key(:options)
+        expect(prices[product.general_permalink]).not_to have_key(:options)
       end
 
       it "prices the only option of a single-tier membership and of a product with one version" do
