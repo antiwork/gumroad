@@ -117,6 +117,37 @@ describe StripePayoutProcessor do
       expect(ReverseDeferredInternalTransferJob.jobs).to be_empty
     end
 
+    describe "payout reversed and cancelled events" do
+      let(:in_flight) do
+        create(:payment, user: seller, processor: PayoutProcessorType::STRIPE, state: "processing", correlation_id: nil,
+                         stripe_connect_account_id: "acct_cross_border", stripe_internal_transfer_id: "tr_in_flight", stripe_transfer_id: "po_in_flight")
+      end
+
+      before { allow(described_class).to receive(:alert_if_payout_credited_retired_account) }
+
+      it "defers the reversal of a reversed payout while a funded cross-border sibling waits" do
+        travel_to(deferred.created_at + 8.hours) do
+          expect(described_class).not_to receive(:reverse_internal_transfer!)
+
+          described_class.handle_stripe_event_payout_reversed(in_flight, "po_reversing")
+
+          expect(ReverseDeferredInternalTransferJob).to have_enqueued_sidekiq_job(in_flight.id).in(19.hours)
+          expect(in_flight.reload).to have_attributes(state: "failed", processor_reversing_payout_id: "po_reversing")
+        end
+      end
+
+      it "defers the reversal of a cancelled payout while a funded cross-border sibling waits" do
+        travel_to(deferred.created_at + 8.hours) do
+          expect(described_class).not_to receive(:reverse_internal_transfer!)
+
+          described_class.handle_stripe_event_payout_cancelled(in_flight)
+
+          expect(ReverseDeferredInternalTransferJob).to have_enqueued_sidekiq_job(in_flight.id).in(19.hours)
+          expect(in_flight.reload.state).to eq("cancelled")
+        end
+      end
+    end
+
     it "records the difference credit instead of reversing an already reversed transfer again" do
       transfer = Stripe::Transfer.construct_from(id: "tr_returned", amount: 383_17, amount_reversed: 383_17)
       allow(Stripe::Transfer).to receive(:retrieve).with("tr_returned").and_return(transfer)

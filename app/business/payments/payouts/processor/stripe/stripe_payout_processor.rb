@@ -819,14 +819,7 @@ class StripePayoutProcessor
   # the daily requeue nor the weekly batch reads `failure_reason`, so a failure reason alone only
   # stops the requeue — the seller's next scheduled batch, days later, would move the money again.
   def self.reverse_internal_transfer_or_hold_payouts!(payment, failure_reason, reraise: false)
-    sibling = deferred_payout_awaiting_funds(payment)
-    if sibling
-      # A reversal debits the shared Connect balance at today's FX rate, which can exceed what this
-      # payout's return credited and leave the sibling's deferred bank payout short of funds.
-      ReverseDeferredInternalTransferJob.perform_in(deferred_reversal_delay(sibling), payment.id)
-    else
-      reverse_internal_transfer!(payment)
-    end
+    reverse_internal_transfer_or_defer!(payment)
     # An unknown payout outcome means Stripe may have accepted the bank payout even though the
     # reversal of the (separate) internal transfer succeeded, so the hold is still owed.
     hold_payouts_for_unaccounted_money!(payment, failure_reason) if failure_reason == Payment::FailureReason::PAYOUT_OUTCOME_UNKNOWN
@@ -1047,7 +1040,7 @@ class StripePayoutProcessor
         return
       end
 
-      reverse_internal_transfer!(payment)
+      reverse_internal_transfer_or_defer!(payment)
 
       payment.processor_reversing_payout_id = reversing_payout_id
       payment.save!
@@ -1089,7 +1082,7 @@ class StripePayoutProcessor
       raise "Expected payment #{payment.id} to be in processing state, got: #{payment.state}" unless payment.state == "processing"
 
       payment.mark_cancelled!
-      reverse_internal_transfer!(payment)
+      reverse_internal_transfer_or_defer!(payment)
     end
   end
 
@@ -1162,6 +1155,19 @@ class StripePayoutProcessor
 
     cross_border_payout?(sibling) ? sibling : nil
   end
+
+  # Reverses now, or defers the reversal while a funded cross-border sibling awaits its bank payout.
+  # A reversal debits the shared Connect balance at today's FX rate, which can exceed what this
+  # payout's return credited and leave the sibling's deferred bank payout short of funds.
+  def self.reverse_internal_transfer_or_defer!(payment)
+    sibling = deferred_payout_awaiting_funds(payment)
+    if sibling
+      ReverseDeferredInternalTransferJob.perform_in(deferred_reversal_delay(sibling), payment.id)
+    else
+      reverse_internal_transfer!(payment)
+    end
+  end
+  private_class_method :reverse_internal_transfer_or_defer!
 
   def self.deferred_reversal_delay(sibling)
     [sibling.created_at + CROSS_BORDER_PAYOUT_DELAY + DEFERRED_REVERSAL_GRACE - Time.current, 1.hour].max
