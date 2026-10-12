@@ -107,6 +107,75 @@ describe SyncStripeBusinessProfileUrlJob do
     expect(stripe_state[:url]).to eq("#{PROTOCOL}://#{Subdomain.from_username("davidsbuild3")}")
   end
 
+  it "reads the seller and the Stripe account from the primary database" do
+    primary_scope = false
+    expect(ApplicationRecord).to receive(:connected_to).with(role: :writing).and_wrap_original do |original, **options, &block|
+      original.call(**options) do
+        primary_scope = true
+        block.call
+      ensure
+        primary_scope = false
+      end
+    end
+    expect(User).to receive(:find_by).with(id: user.id).and_wrap_original do |original, **args|
+      expect(primary_scope).to eq(true)
+      original.call(**args)
+    end
+    expect_any_instance_of(User).to receive(:stripe_account).and_wrap_original do |original|
+      expect(primary_scope).to eq(true)
+      original.call
+    end
+
+    described_class.new.perform(user.id)
+
+    expect(Stripe::Account).to have_received(:update)
+  end
+
+  context "with runtime uniqueness enabled" do
+    around do |example|
+      SidekiqUniqueJobs.use_config(enabled: true) { example.run }
+    end
+
+    def run_through_server_middleware(job)
+      SidekiqUniqueJobs::Middleware::Server.new.call(described_class.new, job, "low") do
+        described_class.new.perform(*job.fetch("args"))
+        yield if block_given?
+      end
+    end
+
+    it "reschedules a rename that commits during a run, and the later run writes the newest URL" do
+      stripe_state = { url: stripe_url }
+      allow(Stripe::Account).to receive(:retrieve).with(merchant_account.charge_processor_merchant_id) do
+        Stripe::Account.construct_from(id: merchant_account.charge_processor_merchant_id, business_profile: { url: stripe_state[:url] })
+      end
+      described_class.clear
+      user.update!(username: "davidsbuild2")
+      first_job = described_class.jobs.sole
+      conflicting_run_executed = false
+
+      allow(Stripe::Account).to receive(:update) do |_id, params|
+        if described_class.jobs.size == 1
+          user.update!(username: "davidsbuild3")
+          run_through_server_middleware(described_class.jobs.last) { conflicting_run_executed = true }
+        end
+        stripe_state[:url] = params[:business_profile][:url]
+      end
+
+      run_through_server_middleware(first_job)
+
+      expect(conflicting_run_executed).to eq(false)
+      expect(stripe_state[:url]).to eq("#{PROTOCOL}://#{Subdomain.from_username("davidsbuild2")}")
+      expect(described_class.jobs.size).to eq(3)
+      rescheduled_job = described_class.jobs.last
+      expect(rescheduled_job.fetch("args")).to eq([user.id])
+      expect(rescheduled_job).to have_key("at")
+
+      run_through_server_middleware(rescheduled_job)
+
+      expect(stripe_state[:url]).to eq("#{PROTOCOL}://#{Subdomain.from_username("davidsbuild3")}")
+    end
+  end
+
   it "does nothing for a deleted user" do
     user.update!(deleted_at: Time.current)
 

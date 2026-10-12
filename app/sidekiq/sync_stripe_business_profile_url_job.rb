@@ -10,11 +10,11 @@ class SyncStripeBusinessProfileUrlJob
                   on_conflict: { server: :reschedule }
 
   def perform(user_id)
-    user = User.find_by(id: user_id)
-    return if user.nil? || user.deleted? || user.subdomain.blank?
-
-    merchant_account = user.stripe_account
-    return if merchant_account.blank?
+    user, merchant_account = ApplicationRecord.connected_to(role: :writing) do
+      seller = User.find_by(id: user_id)
+      [seller, seller&.stripe_account]
+    end
+    return if user.nil? || user.deleted? || user.subdomain.blank? || merchant_account.blank?
 
     stripe_account_id = merchant_account.charge_processor_merchant_id
     stripe_host = business_profile_host(Stripe::Account.retrieve(stripe_account_id))
