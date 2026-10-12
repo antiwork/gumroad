@@ -402,7 +402,7 @@ class Subscription::UpdaterService
         subscription.indian_card_mandate_requires_reauthorization = false
       end
       subscription.save!
-      return if stripe_mandate_id.blank? || mandate_pending
+      return if stripe_mandate_id.blank?
 
       # The validated setup intent carried the subscription's own mandate terms, so a mandate
       # here is in the terms currency. The fixing must exist before any charge below — an

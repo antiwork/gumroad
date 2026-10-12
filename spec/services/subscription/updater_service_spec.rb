@@ -2911,6 +2911,8 @@ describe Subscription::UpdaterService, :vcr do
 
         it "keeps the card with renewal stopped, and neither restarts nor charges" do
           expect_any_instance_of(described_class).not_to receive(:charge_user!)
+          # The saved-card restart after confirmation does not record it, and an INR renewal needs it.
+          expect(@subscription).to receive(:record_indian_card_mandate_presentment!).and_call_original
 
           result = restart_with_replacement_card
 
