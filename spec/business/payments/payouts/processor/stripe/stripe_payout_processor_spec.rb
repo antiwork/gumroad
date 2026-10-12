@@ -98,7 +98,7 @@ describe StripePayoutProcessor do
 
         described_class.reverse_internal_transfer_or_hold_payouts!(returned, "could_not_process", reraise: true)
 
-        expect(ReverseDeferredInternalTransferWorker).to have_enqueued_sidekiq_job(returned.id).in(19.hours)
+        expect(ReverseDeferredInternalTransferJob).to have_enqueued_sidekiq_job(returned.id).in(19.hours)
       end
     end
 
@@ -114,7 +114,7 @@ describe StripePayoutProcessor do
 
       described_class.reverse_internal_transfer_or_hold_payouts!(returned, "could_not_process", reraise: true)
 
-      expect(ReverseDeferredInternalTransferWorker.jobs).to be_empty
+      expect(ReverseDeferredInternalTransferJob.jobs).to be_empty
     end
   end
 

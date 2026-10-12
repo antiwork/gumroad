@@ -823,7 +823,7 @@ class StripePayoutProcessor
     if sibling
       # A reversal debits the shared Connect balance at today's FX rate, which can exceed what this
       # payout's return credited and leave the sibling's deferred bank payout short of funds.
-      ReverseDeferredInternalTransferWorker.perform_in(deferred_reversal_delay(sibling), payment.id)
+      ReverseDeferredInternalTransferJob.perform_in(deferred_reversal_delay(sibling), payment.id)
     else
       reverse_internal_transfer!(payment)
     end
