@@ -676,6 +676,36 @@ describe("Bolivia bank validation", () => {
   });
 });
 
+describe("Dominican Republic CIE", () => {
+  const renderDominicanSeller = (userOverrides: Partial<User> = {}) => {
+    mocks.usePage.mockReturnValue({
+      props: {
+        ...pageProps(
+          { country_code: "DO", individual_tax_id_needed_countries: ["US", "DO"], ...userOverrides },
+          { country: "DO" },
+        ),
+        countries: { DO: "Dominican Republic" },
+      },
+    });
+    render(<PaymentsPage />);
+  };
+
+  it("blocks a save with a blank CIE", () => {
+    renderDominicanSeller({ individual_tax_id_entered: false });
+    save();
+
+    expect(mocks.put).not.toHaveBeenCalled();
+    expect(screen.getAllByText(/Enter your Cédula de identidad y electoral/u).length).toBeGreaterThan(0);
+  });
+
+  it("does not block when a CIE is already on file", () => {
+    renderDominicanSeller({ individual_tax_id_entered: true });
+    save();
+
+    expect(screen.queryByText(/Enter your Cédula de identidad y electoral/u)).toBeNull();
+  });
+});
+
 describe("Bangladesh bank code validation", () => {
   const beftnError = "Enter your bank's 9-digit BEFTN routing number, digits only.";
 
