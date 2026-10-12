@@ -402,7 +402,7 @@ class Subscription::UpdaterService
         subscription.indian_card_mandate_requires_reauthorization = false
       end
       subscription.save!
-      return if stripe_mandate_id.blank?
+      return if stripe_mandate_id.blank? || mandate_pending
 
       # The validated setup intent carried the subscription's own mandate terms, so a mandate
       # here is in the terms currency. The fixing must exist before any charge below — an
@@ -452,6 +452,9 @@ class Subscription::UpdaterService
         expected_credit_card_id: credit_card.id,
         mandate_id: mandate.id
       )
+      # A restart held on a pending mandate saved the card without its price fixing. Recording the fixing during
+      # the hold would size a checkout retry's reuse check off it instead of the rate stamped on the SetupIntent.
+      subscription.record_indian_card_mandate_presentment! if is_resubscribing && subscription.india_card_mandate_pending_restart_enabled?
     rescue ChargeProcessorError => e
       ErrorNotifier.notify(e, subscription: subscription.external_id)
       raise Subscription::UpdateFailed, "We could not verify this card for recurring payments. Please update the payment method before you restart this subscription."
