@@ -34,6 +34,8 @@ describe StripePayoutProcessor, ".create_credit_for_difference_from_reversed_int
     Comment.where(commentable_type: "User", commentable_id: seller.id).delete_all
     Payment.where(user_id: seller.id).delete_all
     MerchantAccount.where(id: merchant_account.id).delete_all
+    RefundPolicy.where(seller_id: seller.id).delete_all
+    GlobalAffiliate.where(affiliate_user_id: seller.id).delete_all
     User.where(id: seller.id).delete_all
   end
 
