@@ -1167,7 +1167,6 @@ class StripePayoutProcessor
       reverse_internal_transfer!(payment)
     end
   end
-  private_class_method :reverse_internal_transfer_or_defer!
 
   def self.deferred_reversal_delay(sibling)
     [sibling.created_at + CROSS_BORDER_PAYOUT_DELAY + DEFERRED_REVERSAL_GRACE - Time.current, 1.hour].max

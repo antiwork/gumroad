@@ -25,7 +25,8 @@ class ReverseDeferredInternalTransferJob
     # credit write rolled back still owes that credit, which the processor records without re-reversing.
     return if transfer.amount_reversed.to_i >= transfer.amount.to_i && payment.credit.present?
 
-    # Re-checks for a sibling still waiting (and reschedules), and holds payouts if the reversal fails.
-    StripePayoutProcessor.reverse_internal_transfer_or_hold_payouts!(payment, payment.failure_reason, reraise: true)
+    # Re-checks for a sibling still waiting (and reschedules). Errors propagate so Sidekiq retries;
+    # only the exhausted-retries callback holds payouts.
+    StripePayoutProcessor.reverse_internal_transfer_or_defer!(payment)
   end
 end
