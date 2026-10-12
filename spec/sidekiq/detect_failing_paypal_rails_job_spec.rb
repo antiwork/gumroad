@@ -141,6 +141,16 @@ describe DetectFailingPaypalRailsJob do
       expect(batch_sizes).to eq([2, 2, 1])
     end
 
+    it "does not note a batch account that was disconnected after the batch was loaded" do
+      create_purchases(threshold, state: "failed")
+      stale_accounts = [MerchantAccount.find(merchant_account.id)]
+      merchant_account.update!(charge_processor_deleted_at: Time.current)
+      now = Time.current
+
+      expect { described_class.new.send(:note_failing_accounts, stale_accounts, (now - described_class::LOOKBACK)..now) }
+        .not_to change { Comment.count }
+    end
+
     it "notes the remaining accounts when one account's note operation raises" do
       other_account = create(:merchant_account_paypal, user: create(:user))
       create_purchases(threshold, state: "failed")

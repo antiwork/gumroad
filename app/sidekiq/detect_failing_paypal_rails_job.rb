@@ -46,7 +46,8 @@ class DetectFailingPaypalRailsJob
                               .distinct
                               .pluck(:merchant_account_id)
 
-      failing_accounts.reject { |account| completed_ids.include?(account.id) }.each do |merchant_account|
+      # Re-query so an account disconnected while the batch ran is not noted from a stale object.
+      connected_paypal_accounts.where(id: failed_counts.keys - completed_ids).each do |merchant_account|
         note_failing_rail(merchant_account, failed_counts.fetch(merchant_account.id))
       rescue StandardError => e
         # One account's failure must not stop the remaining accounts from being noted.
