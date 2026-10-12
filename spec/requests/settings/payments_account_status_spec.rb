@@ -11,6 +11,8 @@ describe "Settings::Payments account_status", type: :request do
     create(:user_compliance_info, country: "United States", user: seller)
     allow_any_instance_of(User).to receive(:external_id).and_return("6")
     host! DOMAIN
+    # Devise builds its mappings when routes are drawn; this spec also runs alone in test-confidence.
+    Rails.application.reload_routes!
     sign_in seller
   end
 

@@ -9,6 +9,11 @@ describe PurchaseErrorCode do
         .to eq(described_class::PROCESSOR_MERCHANT_CANNOT_RECEIVE_TRANSFERS)
     end
 
+    it "names PayPal's compliance violation as a payee-side cause" do
+      expect(described_class.for_processor_error("COMPLIANCE_VIOLATION"))
+        .to eq(described_class::PAYPAL_PAYEE_COMPLIANCE_VIOLATION)
+    end
+
     it "keeps an unnamed processor rejection in the generic bucket" do
       # A code we cannot explain must keep wearing the catch-all label, or the next unnamed
       # regression becomes indistinguishable from the causes we have named.
@@ -34,6 +39,13 @@ describe PurchaseErrorCode do
       expect(message).to include("was not charged")
       expect(message).not_to match(/stripe|transfers|capabilit|verif/i)
     end
+
+    it "tells the buyer about a PayPal compliance violation without inviting a retry or naming the compliance state" do
+      message = described_class.buyer_facing_message(described_class::PAYPAL_PAYEE_COMPLIANCE_VIOLATION)
+
+      expect(message).to include("was not charged")
+      expect(message).not_to match(/try again|retry|complian|violation|restrict/i)
+    end
   end
 
   describe ".is_temporary_network_error?" do
@@ -43,12 +55,16 @@ describe PurchaseErrorCode do
       # be a worse outcome than a renewal that succeeds once the account clears.
       expect(described_class.is_temporary_network_error?(described_class::PROCESSOR_MERCHANT_CANNOT_RECEIVE_TRANSFERS)).to be(true)
     end
+
+    it "keeps the PayPal compliance violation code as retryable as the generic code it was split from" do
+      expect(described_class.is_temporary_network_error?(described_class::PAYPAL_PAYEE_COMPLIANCE_VIOLATION)).to be(true)
+    end
   end
 
   describe "PAYMENT_ERROR_CODES" do
-    it "includes the named cause" do
+    it "includes the named causes" do
       expect(described_class::PAYMENT_ERROR_CODES)
-        .to include(described_class::PROCESSOR_MERCHANT_CANNOT_RECEIVE_TRANSFERS)
+        .to include(described_class::PROCESSOR_MERCHANT_CANNOT_RECEIVE_TRANSFERS, described_class::PAYPAL_PAYEE_COMPLIANCE_VIOLATION)
     end
   end
 end

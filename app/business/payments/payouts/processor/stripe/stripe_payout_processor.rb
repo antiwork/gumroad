@@ -33,6 +33,9 @@ class StripePayoutProcessor
   # transfer, losing the FX spread. So those payouts are scheduled this far out instead of run
   # immediately.
   CROSS_BORDER_PAYOUT_DELAY = 25.hours
+  # A failed payout's reversal waits this long past a sibling's deferred bank payout, and stops
+  # waiting on a sibling older than the delay plus this, so a lost job cannot hold it forever.
+  DEFERRED_REVERSAL_GRACE = 2.hours
 
   # How long a connected account's payable-currency set (see `pay_out_currencies`) is reused before
   # asking Stripe again. Long enough that one payout run pays one API round-trip per account, short
@@ -816,7 +819,7 @@ class StripePayoutProcessor
   # the daily requeue nor the weekly batch reads `failure_reason`, so a failure reason alone only
   # stops the requeue — the seller's next scheduled batch, days later, would move the money again.
   def self.reverse_internal_transfer_or_hold_payouts!(payment, failure_reason, reraise: false)
-    reverse_internal_transfer!(payment)
+    reverse_internal_transfer_or_defer!(payment)
     # An unknown payout outcome means Stripe may have accepted the bank payout even though the
     # reversal of the (separate) internal transfer succeeded, so the hold is still owed.
     hold_payouts_for_unaccounted_money!(payment, failure_reason) if failure_reason == Payment::FailureReason::PAYOUT_OUTCOME_UNKNOWN
@@ -1037,7 +1040,7 @@ class StripePayoutProcessor
         return
       end
 
-      reverse_internal_transfer!(payment)
+      reverse_internal_transfer_or_defer!(payment)
 
       payment.processor_reversing_payout_id = reversing_payout_id
       payment.save!
@@ -1079,7 +1082,7 @@ class StripePayoutProcessor
       raise "Expected payment #{payment.id} to be in processing state, got: #{payment.state}" unless payment.state == "processing"
 
       payment.mark_cancelled!
-      reverse_internal_transfer!(payment)
+      reverse_internal_transfer_or_defer!(payment)
     end
   end
 
@@ -1133,16 +1136,59 @@ class StripePayoutProcessor
     ErrorNotifier.notify(message, payment_id: payment.id, user_id: payment.user_id)
   end
 
+  # Public: Another payout to the same Gumroad-managed cross-border account that is already funded
+  # but whose deferred bank payout (see CROSS_BORDER_PAYOUT_DELAY) has not been created yet.
+  def self.deferred_payout_awaiting_funds(payment)
+    return nil if payment.stripe_internal_transfer_id.nil? || payment.stripe_connect_account_id.blank?
+
+    sibling = Payment.where(user_id: payment.user_id,
+                            processor: PayoutProcessorType::STRIPE,
+                            state: Payment::PROCESSING,
+                            stripe_connect_account_id: payment.stripe_connect_account_id,
+                            stripe_transfer_id: nil)
+                     .where.not(id: payment.id)
+                     .where.not(stripe_internal_transfer_id: nil)
+                     .where("created_at > ?", (CROSS_BORDER_PAYOUT_DELAY + DEFERRED_REVERSAL_GRACE).ago)
+                     .order(:id)
+                     .first
+    return nil if sibling.nil?
+
+    cross_border_payout?(sibling) ? sibling : nil
+  end
+
+  # Reverses now, or defers the reversal while a funded cross-border sibling awaits its bank payout.
+  # A reversal debits the shared Connect balance at today's FX rate, which can exceed what this
+  # payout's return credited and leave the sibling's deferred bank payout short of funds.
+  def self.reverse_internal_transfer_or_defer!(payment)
+    sibling = deferred_payout_awaiting_funds(payment)
+    if sibling
+      ReverseDeferredInternalTransferJob.perform_in(deferred_reversal_delay(sibling), payment.id)
+    else
+      reverse_internal_transfer!(payment)
+    end
+  end
+
+  def self.deferred_reversal_delay(sibling)
+    [sibling.created_at + CROSS_BORDER_PAYOUT_DELAY + DEFERRED_REVERSAL_GRACE - Time.current, 1.hour].max
+  end
+  private_class_method :deferred_reversal_delay
+
   def self.reverse_internal_transfer!(payment)
     return if payment.stripe_internal_transfer_id.nil?
 
     internal_transfer = Stripe::Transfer.retrieve(payment.stripe_internal_transfer_id)
-    internal_transfer.reversals.create
+    # The transfer may already be reversed (a deferred reversal of the same payout, or an earlier
+    # attempt whose credit write rolled back). Stripe rejects a second reversal; the difference
+    # credit is not part of the reversal, so it is still owed.
+    internal_transfer.reversals.create if internal_transfer.amount_reversed.to_i < internal_transfer.amount.to_i
 
     create_credit_for_difference_from_reversed_internal_transfer(payment, internal_transfer)
   end
 
   def self.create_credit_for_difference_from_reversed_internal_transfer(payment, internal_transfer)
+    # One difference credit per returned payout (`Payment#credit`), so a retry records it once.
+    return if payment.credit.present?
+
     destination_payment = Stripe::Charge.retrieve(
       {
         id: internal_transfer.destination_payment,
@@ -1162,11 +1208,18 @@ class StripePayoutProcessor
       charge_processor_id: StripeChargeProcessor.charge_processor_id,
       charge_processor_merchant_id: internal_transfer.destination
     ).first
-    Credit.create_for_returned_payment_difference!(
-      user: payment.user,
-      merchant_account:,
-      returned_payment: payment,
-      difference_amount_cents:
-    )
+    # `credits.returned_payment_id` is not unique, so concurrent reversals serialize on the Payment row
+    # and re-check inside the lock. The credit and its balance transaction commit or roll back together.
+    Payment.transaction do
+      Payment.where(id: payment.id).lock.pick(:id)
+      next if Credit.exists?(returned_payment_id: payment.id)
+
+      Credit.create_for_returned_payment_difference!(
+        user: payment.user,
+        merchant_account:,
+        returned_payment: payment,
+        difference_amount_cents:
+      )
+    end
   end
 end

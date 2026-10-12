@@ -15872,25 +15872,29 @@ describe StripeMerchantAccountManager, :vcr do
         context "when the seller is in Canada" do
           let(:current_factory) { :user_compliance_info_canada }
 
-          it "does not clear a non-US account's structure" do
-            stub_stripe_account(previous, business_type: "company", company: { structure: "llc" }, country: "CA")
+          it "clears a non-US account's structure before sending business_type individual" do
+            stub_stripe_account(previous, business_type: "company", company: { structure: "incorporated_partnership" }, country: "CA")
 
-            expect(Stripe::Account).not_to receive(:update).with(anything, { company: { structure: "" } })
+            expect(Stripe::Account).to receive(:update).with(
+              merchant_account.charge_processor_merchant_id,
+              { company: { structure: "" } }
+            ).ordered
             expect(Stripe::Account).to receive(:update).with(
               merchant_account.charge_processor_merchant_id,
               hash_including(business_type: "individual")
-            )
+            ).ordered
 
             described_class.update_account(user, passphrase:)
           end
         end
 
-        context "when the account is US but the seller's record has since moved country" do
+        context "when the record's country differs from the account's and an extra identity update is sent" do
           let(:current_factory) { :user_compliance_info_canada }
 
-          # A Canadian record on a US account splits the identity fields into their own update, so the
-          # strict ordered expectations used elsewhere would trip on that extra call.
-          it "clears on the account's country, not the record's" do
+          # The country mismatch splits the identity fields into their own update, so the strict ordered
+          # expectations used elsewhere would trip on that extra call. The clear keys only on the live
+          # Stripe structure and must still precede business_type individual.
+          it "clears the live structure before sending business_type individual" do
             stub_stripe_account(previous, business_type: "company", company: { structure: "llc" }, country: "US")
             allow(Stripe::Account).to receive(:update)
 

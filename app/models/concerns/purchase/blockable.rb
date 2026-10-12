@@ -46,8 +46,9 @@ module Purchase::Blockable
   private_constant :IGNORED_ERROR_CODES
 
   # Failures the buyer had no part in, so they cannot be evidence of card testing: our call to
-  # the processor never completed, so the card was never contacted. Counting these lets a
-  # processor incident manufacture fraud evidence against everyone who retried during it.
+  # the processor never completed, so the card was never contacted, or the processor rejected the
+  # seller (payee) rather than the buyer's funding source. Counting these lets a processor
+  # incident or one restricted seller manufacture fraud evidence against everyone who retried.
   #
   # These codes land in `error_code`; a card decline lands in `stripe_error_code` and leaves
   # `error_code` NULL (#failure_code reads `stripe_error_code || error_code`).
@@ -56,6 +57,7 @@ module Purchase::Blockable
     PurchaseErrorCode::PAYPAL_UNAVAILABLE,
     PurchaseErrorCode::PROCESSING_ERROR,
     PurchaseErrorCode::PROCESSOR_INVALID_REQUEST,
+    PurchaseErrorCode::PAYPAL_PAYEE_COMPLIANCE_VIOLATION,
   ].freeze
   private_constant :CARD_TESTING_UNCOUNTED_ERROR_CODES
 

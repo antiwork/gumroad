@@ -7,6 +7,8 @@ import { stripeRequirementLabel } from "$app/utils/personalTaxId";
 
 import BeneficialOwnersSection from "$app/components/Settings/PaymentsPage/BeneficialOwnersSection";
 
+vi.mock("$app/components/server-components/Alert", () => ({ showAlert: vi.fn() }));
+
 beforeAll(() => {
   Object.assign(globalThis, {
     Routes: new Proxy(
@@ -66,7 +68,7 @@ const renderSection = (owners: unknown[], defaultCountry = "GB") => {
   );
   return render(
     <BeneficialOwnersSection
-      countries={{ GB: "United Kingdom", AE: "United Arab Emirates", HK: "Hong Kong" }}
+      countries={{ GB: "United Kingdom", AE: "United Arab Emirates", HK: "Hong Kong", DO: "Dominican Republic" }}
       states={{ us: [], ca: [], au: [], mx: [], ae: [], ir: [], br: [], jp: [] }}
       defaultCountry={defaultCountry}
       minDobYear={1900}
@@ -234,5 +236,89 @@ describe("BeneficialOwnersSection Hong Kong passport", () => {
 
     const select = await screen.findByLabelText<HTMLSelectElement>("Passport issuing country");
     expect(select.required).toBe(false);
+  });
+});
+
+describe("BeneficialOwnersSection Dominican Republic CIE", () => {
+  const cieLabel = "Cédula de identidad y electoral (CIE)";
+  const formatError = /must be 13 characters including the dashes/u;
+  const savedOwner = { ...ownerWithoutIdNumber, address: { ...ownerWithoutIdNumber.address, country: "DO" } };
+
+  const submittedWrites = () =>
+    vi.mocked(fetch).mock.calls.filter(([, init]) => init?.method === "POST" || init?.method === "PUT");
+
+  const submitForm = (input: HTMLElement) => {
+    const form = input.closest("form");
+    if (!form) throw new Error("The ID number input is not inside a form");
+    fireEvent.submit(form);
+  };
+
+  const submitWithCie = (value: string) => {
+    const input = screen.getByLabelText(cieLabel);
+    fireEvent.change(input, { target: { value } });
+    submitForm(input);
+  };
+
+  const openAddForm = async (defaultCountry = "DO") => {
+    renderSection([], defaultCountry);
+    fireEvent.click(await screen.findByRole("button", { name: "Add beneficial owner" }));
+    await screen.findByLabelText(defaultCountry === "DO" ? cieLabel : "Personal ID number");
+  };
+
+  it.each([
+    "00112345678",
+    "001-12345678",
+    "001-1234567-88",
+    "P1234567",
+    " 001-1234567-8",
+    "001-1234567-8 ",
+    "001 -1234567-8",
+  ])("refuses to add an owner with the malformed CIE %j", async (value) => {
+    await openAddForm();
+
+    submitWithCie(value);
+
+    expect(await screen.findByText(formatError)).toBeTruthy();
+    expect(submittedWrites()).toHaveLength(0);
+  });
+
+  it("adds an owner with a dashed CIE", async () => {
+    await openAddForm();
+
+    submitWithCie("001-1234567-8");
+
+    await waitFor(() => expect(submittedWrites()).toHaveLength(1));
+    expect(screen.queryByText(formatError)).toBeNull();
+  });
+
+  it("refuses to save an edited owner whose new CIE is malformed", async () => {
+    renderSection([savedOwner], "DO");
+    fireEvent.click(await screen.findByRole("button", { name: "Edit Chloe Flexman" }));
+
+    submitWithCie("00112345678");
+
+    expect(await screen.findByText(formatError)).toBeTruthy();
+    expect(submittedWrites()).toHaveLength(0);
+  });
+
+  it("saves an edited owner whose CIE field is left blank", async () => {
+    renderSection([savedOwner], "DO");
+    fireEvent.click(await screen.findByRole("button", { name: "Edit Chloe Flexman" }));
+
+    submitWithCie("");
+
+    await waitFor(() => expect(submittedWrites()).toHaveLength(1));
+    expect(screen.queryByText(formatError)).toBeNull();
+  });
+
+  it("does not apply the CIE rule to another country's owners", async () => {
+    await openAddForm("GB");
+
+    const input = screen.getByLabelText("Personal ID number");
+    fireEvent.change(input, { target: { value: "AB123456C" } });
+    submitForm(input);
+
+    await waitFor(() => expect(submittedWrites()).toHaveLength(1));
+    expect(screen.queryByText(formatError)).toBeNull();
   });
 });

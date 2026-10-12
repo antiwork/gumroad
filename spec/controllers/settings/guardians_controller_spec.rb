@@ -32,6 +32,9 @@ describe Settings::GuardiansController, type: :controller do
     }
   end
 
+  # Devise builds its mappings when routes are drawn; this spec also runs alone in test-confidence.
+  before { Rails.application.reload_routes! }
+
   include_context "with user signed in as admin for seller"
 
   describe "POST create" do

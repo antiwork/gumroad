@@ -56,6 +56,132 @@ describe StripePayoutProcessor do
     end
   end
 
+  describe "reversing a failed payout's transfer while a deferred cross-border payout waits" do
+    let(:seller) { create(:user) }
+    let!(:merchant_account) { create(:merchant_account, user: seller, charge_processor_merchant_id: "acct_cross_border") }
+    let!(:compliance_info) { create(:user_compliance_info, user: seller, country: "Thailand") }
+    let(:returned) do
+      create(:payment_returned, user: seller, processor: PayoutProcessorType::STRIPE, stripe_connect_account_id: "acct_cross_border",
+                                stripe_internal_transfer_id: "tr_returned", stripe_transfer_id: "po_returned", correlation_id: nil)
+    end
+    let!(:deferred) do
+      create(:payment, user: seller, processor: PayoutProcessorType::STRIPE, state: "processing", correlation_id: nil,
+                       stripe_connect_account_id: "acct_cross_border", stripe_internal_transfer_id: "tr_deferred", stripe_transfer_id: nil)
+    end
+
+    it "finds the funded sibling whose bank payout has not been created" do
+      expect(described_class.deferred_payout_awaiting_funds(returned)).to eq(deferred)
+    end
+
+    it "finds nothing once the sibling's bank payout exists" do
+      deferred.update!(stripe_transfer_id: "po_deferred")
+      expect(described_class.deferred_payout_awaiting_funds(returned)).to be_nil
+    end
+
+    it "finds nothing when the sibling is not a cross-border payout" do
+      compliance_info.update_columns(country: "United States")
+      expect(described_class.deferred_payout_awaiting_funds(returned)).to be_nil
+    end
+
+    it "finds nothing on another connected account or for a payout with no transfer" do
+      deferred.update!(stripe_connect_account_id: "acct_other")
+      expect(described_class.deferred_payout_awaiting_funds(returned)).to be_nil
+
+      deferred.update!(stripe_connect_account_id: "acct_cross_border")
+      returned.update!(stripe_internal_transfer_id: nil)
+      expect(described_class.deferred_payout_awaiting_funds(returned)).to be_nil
+    end
+
+    it "schedules the reversal for after the sibling's bank payout instead of reversing now" do
+      travel_to(deferred.created_at + 8.hours) do
+        expect(described_class).not_to receive(:reverse_internal_transfer!)
+
+        described_class.reverse_internal_transfer_or_hold_payouts!(returned, "could_not_process", reraise: true)
+
+        expect(ReverseDeferredInternalTransferJob).to have_enqueued_sidekiq_job(returned.id).in(19.hours)
+      end
+    end
+
+    it "stops waiting on a sibling whose deferred payout is overdue" do
+      travel_to(deferred.created_at + 28.hours) do
+        expect(described_class.deferred_payout_awaiting_funds(returned)).to be_nil
+      end
+    end
+
+    it "reverses immediately when no deferred payout is waiting" do
+      deferred.update!(stripe_transfer_id: "po_deferred")
+      expect(described_class).to receive(:reverse_internal_transfer!).with(returned)
+
+      described_class.reverse_internal_transfer_or_hold_payouts!(returned, "could_not_process", reraise: true)
+
+      expect(ReverseDeferredInternalTransferJob.jobs).to be_empty
+    end
+
+    describe "payout reversed and cancelled events" do
+      let(:in_flight) do
+        create(:payment, user: seller, processor: PayoutProcessorType::STRIPE, state: "processing", correlation_id: nil,
+                         stripe_connect_account_id: "acct_cross_border", stripe_internal_transfer_id: "tr_in_flight", stripe_transfer_id: "po_in_flight")
+      end
+
+      before { allow(described_class).to receive(:alert_if_payout_credited_retired_account) }
+
+      it "defers the reversal of a reversed payout while a funded cross-border sibling waits" do
+        travel_to(deferred.created_at + 8.hours) do
+          expect(described_class).not_to receive(:reverse_internal_transfer!)
+
+          described_class.handle_stripe_event_payout_reversed(in_flight, "po_reversing")
+
+          expect(ReverseDeferredInternalTransferJob).to have_enqueued_sidekiq_job(in_flight.id).in(19.hours)
+          expect(in_flight.reload).to have_attributes(state: "failed", processor_reversing_payout_id: "po_reversing")
+        end
+      end
+
+      it "defers the reversal of a cancelled payout while a funded cross-border sibling waits" do
+        travel_to(deferred.created_at + 8.hours) do
+          expect(described_class).not_to receive(:reverse_internal_transfer!)
+
+          described_class.handle_stripe_event_payout_cancelled(in_flight)
+
+          expect(ReverseDeferredInternalTransferJob).to have_enqueued_sidekiq_job(in_flight.id).in(19.hours)
+          expect(in_flight.reload.state).to eq("cancelled")
+        end
+      end
+    end
+
+    it "records the difference credit instead of reversing an already reversed transfer again" do
+      transfer = Stripe::Transfer.construct_from(id: "tr_returned", amount: 383_17, amount_reversed: 383_17)
+      allow(Stripe::Transfer).to receive(:retrieve).with("tr_returned").and_return(transfer)
+      allow(transfer).to receive(:reversals).and_raise("Stripe would reject a second reversal")
+      expect(described_class).to receive(:create_credit_for_difference_from_reversed_internal_transfer)
+        .with(returned, transfer)
+
+      described_class.reverse_internal_transfer!(returned)
+    end
+
+    it "does not record a second difference credit for the same returned payout" do
+      create(:credit, user: seller, merchant_account:, returned_payment: returned)
+      expect(Stripe::Charge).not_to receive(:retrieve)
+
+      described_class.create_credit_for_difference_from_reversed_internal_transfer(
+        returned, Stripe::Transfer.construct_from(id: "tr_returned", amount: 383_17, amount_reversed: 383_17)
+      )
+    end
+
+    it "rolls the difference credit back when its balance transaction cannot be written" do
+      transfer = Stripe::Transfer.construct_from(id: "tr_returned", destination: "acct_cross_border", destination_payment: "py_returned")
+      destination_payment = Stripe::Charge.construct_from(id: "py_returned", balance_transaction: { net: 9_868_182 },
+                                                          refunds: [{ balance_transaction: "txn_refund" }])
+      allow(Stripe::Charge).to receive(:retrieve).and_return(destination_payment)
+      allow(Stripe::BalanceTransaction).to receive(:retrieve).and_return(Stripe::BalanceTransaction.construct_from(net: -9_956_166))
+      allow(BalanceTransaction).to receive(:create!).and_raise(ActiveRecord::RecordInvalid)
+
+      expect do
+        described_class.create_credit_for_difference_from_reversed_internal_transfer(returned, transfer)
+      end.to raise_error(ActiveRecord::RecordInvalid)
+      expect(returned.reload.credit).to be_nil
+    end
+  end
+
   describe "foreign payout destination identity" do
     let(:seller) { create(:user) }
     let!(:merchant_account) { create(:merchant_account, user: seller, currency: Currency::HUF, charge_processor_merchant_id: "acct_destination") }

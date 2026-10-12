@@ -7,6 +7,7 @@ import {
   COLOMBIA_ID_NUMBER_ERROR_MESSAGE,
   isValidColombiaIdNumber,
 } from "$app/utils/colombiaIdNumbers";
+import { DOMINICAN_REPUBLIC_CIE_ERROR_MESSAGE, isValidDominicanRepublicCie } from "$app/utils/dominicanRepublicCie";
 import {
   HONG_KONG_PASSPORT_ID_CONFIG,
   PERSONAL_ID_NUMBER_CONFIG,
@@ -547,6 +548,13 @@ const BeneficialOwnersSection = ({
     return isValidColombiaIdNumber(formState.id_number) ? null : COLOMBIA_ID_NUMBER_ERROR_MESSAGE;
   };
 
+  const validateDominicanRepublicCie = (): string | null => {
+    if (defaultCountry !== "DO") return null;
+    if (editState?.mode === "edit" && editState.owner.relationship.representative) return null;
+    if (!formState.id_number.trim()) return null;
+    return isValidDominicanRepublicCie(formState.id_number) ? null : DOMINICAN_REPUBLIC_CIE_ERROR_MESSAGE;
+  };
+
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!editState) return;
@@ -555,9 +563,9 @@ const BeneficialOwnersSection = ({
       setFormError(kanaError);
       return;
     }
-    const colombiaIdError = validateColombiaIdNumber();
-    if (colombiaIdError) {
-      setFormError(colombiaIdError);
+    const idNumberError = validateColombiaIdNumber() ?? validateDominicanRepublicCie();
+    if (idNumberError) {
+      setFormError(idNumberError);
       return;
     }
     setIsSaving(true);

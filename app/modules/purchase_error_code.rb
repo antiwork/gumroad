@@ -24,6 +24,7 @@ module PurchaseErrorCode
   # that state, and the remedy is an account action rather than a deploy. Split out of
   # PROCESSOR_INVALID_REQUEST so that bucket keeps meaning "our request was malformed".
   PROCESSOR_MERCHANT_CANNOT_RECEIVE_TRANSFERS = "processor_merchant_cannot_receive_transfers"
+  PAYPAL_PAYEE_COMPLIANCE_VIOLATION = "paypal_payee_compliance_violation"
   PROCESSING_ERROR = "processing_error"
   HIGH_PROXY_SCORE_AND_ADDITIONAL_CONTRIBUTION = "high_proxy_score_can_only_buy_once"
   BUYER_CHARGED_BACK = "buyer_has_charged_back"
@@ -264,6 +265,7 @@ module PurchaseErrorCode
                                                     PAYPAL_UNAVAILABLE,
                                                     PROCESSOR_INVALID_REQUEST,
                                                     PROCESSOR_MERCHANT_CANNOT_RECEIVE_TRANSFERS,
+                                                    PAYPAL_PAYEE_COMPLIANCE_VIOLATION,
                                                     PROCESSING_ERROR,
                                                     CREDIT_CARD_NOT_PROVIDED,
                                                     INDIA_CARD_MANDATE_MISSING,
@@ -279,6 +281,7 @@ module PurchaseErrorCode
   # label, or the next regression is indistinguishable from these.
   PROCESSOR_ERROR_CODE_MAP = {
     "insufficient_capabilities_for_transfer" => PROCESSOR_MERCHANT_CANNOT_RECEIVE_TRANSFERS,
+    "COMPLIANCE_VIOLATION" => PAYPAL_PAYEE_COMPLIANCE_VIOLATION,
   }.freeze
 
   def self.for_processor_error(processor_error_code)
@@ -290,6 +293,8 @@ module PurchaseErrorCode
   BUYER_MESSAGES_BY_ERROR_CODE = {
     PROCESSOR_MERCHANT_CANNOT_RECEIVE_TRANSFERS =>
       "This creator isn't able to accept payments right now. Your card was not charged — please try again later.",
+    PAYPAL_PAYEE_COMPLIANCE_VIOLATION =>
+      "This creator can't accept this PayPal payment. Your PayPal account was not charged.",
   }.freeze
 
   def self.buyer_facing_message(error_code)
@@ -311,7 +316,8 @@ module PurchaseErrorCode
     # PROCESSOR_MERCHANT_CANNOT_RECEIVE_TRANSFERS too: the account state changes, not our code,
     # and a renewal that self-heals beats a subscription terminated while the seller is blocked.
     error_code == STRIPE_UNAVAILABLE || error_code == PAYPAL_UNAVAILABLE || error_code == PROCESSING_ERROR ||
-      error_code == PROCESSOR_INVALID_REQUEST || error_code == PROCESSOR_MERCHANT_CANNOT_RECEIVE_TRANSFERS
+      error_code == PROCESSOR_INVALID_REQUEST || error_code == PROCESSOR_MERCHANT_CANNOT_RECEIVE_TRANSFERS ||
+      error_code == PAYPAL_PAYEE_COMPLIANCE_VIOLATION
   end
 
   def self.is_error_retryable?(error_code)

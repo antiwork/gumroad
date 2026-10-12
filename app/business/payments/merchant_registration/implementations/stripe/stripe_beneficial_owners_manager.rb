@@ -71,6 +71,7 @@ module StripeBeneficialOwnersManager
     validate_required_fields!(params, action: :create, user: user)
     validate_jp_kana_address_format!(params, user)
     validate_colombia_id_number!(params, user)
+    validate_dominican_republic_cie!(params, user)
     person_params = build_person_params(params, user, action: :create)
     person = Stripe::Account.create_person(stripe_account.charge_processor_merchant_id, person_params)
     serialize(person)
@@ -86,6 +87,7 @@ module StripeBeneficialOwnersManager
       validate_required_fields!(params, action: :update, user: user)
       validate_jp_kana_address_format!(params, user)
       validate_colombia_id_number!(params, user)
+      validate_dominican_republic_cie!(params, user)
       person_params = build_person_params(params, user, action: :update)
     end
 
@@ -235,6 +237,15 @@ module StripeBeneficialOwnersManager
     raise InvalidFieldError, Compliance::ColombiaIdNumber::ERROR_MESSAGE
   end
   private_class_method :validate_colombia_id_number!
+
+  def self.validate_dominican_republic_cie!(params, user)
+    return unless user.alive_user_compliance_info&.legal_entity_country_code == Compliance::Countries::DOM.alpha2
+    id_number = params[:id_number].to_s
+    return if id_number.strip.blank?
+    return if Compliance::DominicanRepublicCie.valid?(id_number)
+    raise InvalidFieldError, Compliance::DominicanRepublicCie::ERROR_MESSAGE
+  end
+  private_class_method :validate_dominican_republic_cie!
 
   def self.representative?(person)
     relationship = person.is_a?(Hash) ? person[:relationship] || person["relationship"] : person[:relationship]

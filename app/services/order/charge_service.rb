@@ -47,6 +47,10 @@ class Order::ChargeService
 
       non_free_seller_purchases = seller_purchases.select(&:in_progress?)
       next unless non_free_seller_purchases.present?
+      # This initial value covers processor errors raised before purchase preparation can finish.
+      setup_only_seller_group = non_free_seller_purchases.all? do |purchase|
+        purchase.is_free_trial_purchase? || purchase.is_preorder_authorization?
+      end
 
       # All purchases belonging to the same seller should have the same destination merchant account
       if non_free_seller_purchases.pluck(:merchant_account_id).uniq.compact.count > 1
@@ -80,12 +84,28 @@ class Order::ChargeService
         purchase.is_free_trial_purchase? || purchase.is_preorder_authorization?
       end
 
+      # Once preparation completes, use the same surviving-candidate predicate as the setup branch.
+      setup_only_seller_group = only_setup_for_future_charges
+
       if only_setup_for_future_charges
         setup_for_future_charges_without_charging(non_free_seller_purchases, chargeable, chargeable_from_params.blank? && chargeable.present?)
       else
         create_charge_for_seller_purchases(non_free_seller_purchases, chargeable, off_session, setup_future_charges)
       end
     rescue => e
+      handled_charge_processor_error = e.is_a?(ChargeProcessorCardError) ||
+                                       e.is_a?(ChargeProcessorUnavailableError) ||
+                                       e.is_a?(ChargeProcessorInvalidRequestError) ||
+                                       e.is_a?(ChargeProcessorErrorRateLimit) ||
+                                       e.is_a?(ChargeProcessorErrorGeneric)
+      setup_only_purchases = non_free_seller_purchases&.select { _1.in_progress? && _1.errors.empty? }
+      if handled_charge_processor_error && setup_only_purchases.present? &&
+         setup_only_purchases.all? { _1.is_free_trial_purchase? || _1.is_preorder_authorization? }
+        setup_only_purchases.each do |purchase|
+          record_setup_charge_processor_error(purchase, e)
+        end
+      end
+
       # Per seller group: earlier groups' charges are already captured and the loop carries
       # on, so this is the partial-order path, not an aborted checkout.
       Rails.logger.error("Error charging order (#{order.id}):: #{e.class} => #{e.message} => #{e.backtrace}")
@@ -100,10 +120,41 @@ class Order::ChargeService
       # and each line item has a response. Include purchases rejected by
       # `Purchase.validate_offer_code_usage_across_line_items` so their line items
       # get an error response in `charge_responses`.
-      ensure_all_purchases_processed((non_free_seller_purchases || seller_purchases.select(&:in_progress?)) + (seller_purchases & rejected_by_offer_code_limit))
+      ensure_all_purchases_processed(
+        (non_free_seller_purchases || seller_purchases.select(&:in_progress?)) + (seller_purchases & rejected_by_offer_code_limit),
+        setup_only_group: setup_only_seller_group
+      )
     end
 
     charge_responses
+  end
+
+  def record_setup_charge_processor_error(purchase, error)
+    case error
+    when ChargeProcessorInvalidRequestError
+      Rails.logger.error("Charge processor error: #{error.message} in purchase: #{purchase.external_id}")
+      purchase.errors.add :base, "There is a temporary problem, please try again (your card was not charged)."
+      purchase.error_code = PurchaseErrorCode::PROCESSOR_INVALID_REQUEST
+      purchase.stripe_error_code = error.processor_error_code if purchase.stripe_error_code.blank?
+    when ChargeProcessorUnavailableError, ChargeProcessorErrorRateLimit
+      Rails.logger.error("Charge processor error: #{error.message} in purchase: #{purchase.external_id}")
+      purchase.errors.add :base, "There is a temporary problem, please try again (your card was not charged)."
+      purchase.error_code = if purchase.charge_processor_id.blank? || purchase.stripe_charge_processor?
+        PurchaseErrorCode::STRIPE_UNAVAILABLE
+      else
+        PurchaseErrorCode::PAYPAL_UNAVAILABLE
+      end
+    when ChargeProcessorErrorGeneric
+      Rails.logger.error("Charge processor error: #{error.message} in purchase: #{purchase.external_id}")
+      purchase.errors.add :base, "There is a temporary problem, please try again (your card was not charged)."
+      purchase.stripe_error_code = error.error_code
+    when ChargeProcessorCardError
+      purchase.stripe_error_code = error.error_code
+      purchase.stripe_transaction_id = error.charge_id
+      purchase.was_zipcode_check_performed = true if error.error_code == "incorrect_zip"
+      Rails.logger.info("Charge processor error: #{error.message} in purchase: #{purchase.external_id}")
+      purchase.errors.add :base, PurchaseErrorCode.customer_error_message(error.message)
+    end
   end
 
   def mark_successful_if_free_or_test_purchase(purchase)
@@ -272,6 +323,7 @@ class Order::ChargeService
       if purchase.is_test_purchase?
         preorder.mark_test_authorization_successful!
       elsif error_message.present?
+        purchase.error_code = PurchaseErrorCode::PROCESSING_ERROR if purchase.error_code.blank?
         Purchase::MarkFailedService.new(purchase).perform
       else
         preorder.mark_authorization_successful!
@@ -649,7 +701,7 @@ class Order::ChargeService
     end
   end
 
-  def ensure_all_purchases_processed(purchases)
+  def ensure_all_purchases_processed(purchases, setup_only_group: false)
     return if purchases.nil?
 
     purchases.each do |purchase|
@@ -691,6 +743,9 @@ class Order::ChargeService
         elsif charge_intent&.succeeded? && purchase_has_charge_data?(purchase)
           mark_charged_purchase_successful(purchase)
         else
+          if setup_only_group && !purchase.is_test_purchase? && purchase.error_code.blank? && purchase.stripe_error_code.blank?
+            purchase.error_code = PurchaseErrorCode::PROCESSING_ERROR
+          end
           Purchase::MarkFailedService.new(purchase).perform
         end
       end

@@ -4056,6 +4056,8 @@ class StripePayoutProcessorTest < ActiveSupport::TestCase
       internal_transfer.stubs(:reversals).returns(@reversal_reversals)
       internal_transfer.stubs(:destination).returns(STRIPE_CONNECT_ACCOUNT_ID)
       internal_transfer.stubs(:destination_payment).returns("py_1234")
+      internal_transfer.stubs(:amount).returns(100_00)
+      internal_transfer.stubs(:amount_reversed).returns(0)
 
       destination_payment = mock("destination_payment")
       first_refund = mock("refund")
@@ -4522,7 +4524,7 @@ class StripePayoutProcessorTest < ActiveSupport::TestCase
     # Doubles matching the "external transfer fails (mocked)" nested describe: a
     # fake internal transfer whose reversal/credit path is exercised without HTTP.
     def mocked_internal_transfer
-      stub("id" => "tr_1234", "destination_payment" => "py_1234")
+      stub("id" => "tr_1234", "destination_payment" => "py_1234", "amount" => 100_00, "amount_reversed" => 0)
     end
 
     def mocked_destination_payment

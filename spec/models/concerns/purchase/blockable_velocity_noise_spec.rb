@@ -173,6 +173,40 @@ RSpec.describe Purchase::Blockable do
       end
     end
 
+    context "when PayPal rejects the seller as the payee" do
+      # Realistic row: PayPal's per-attempt billing-agreement token is the fingerprint, and the
+      # processor's issue code rides in stripe_error_code next to our own error_code. card_visual
+      # is nil so each token counts as its own wallet; the factory default would collapse the four
+      # rows into one wallet and the examples would pass without the exemption.
+      def payee_rejection(token)
+        create(:failed_purchase, email:, browser_guid: guid, ip_address: ip,
+                                 charge_processor_id: "paypal",
+                                 stripe_fingerprint: token, card_visual: nil,
+                                 error_code: PurchaseErrorCode::PAYPAL_PAYEE_COMPLIANCE_VIOLATION,
+                                 stripe_error_code: "COMPLIANCE_VIOLATION")
+      end
+
+      before { 4.times { payee_rejection("B-#{SecureRandom.hex(8)}") } }
+
+      it "does not block the buyer" do
+        live_attempt(processor: "paypal", fingerprint: "B-live-payee").send(:block_buyer_based_on_recent_failures!)
+
+        expect(PlatformBlock.active.find_by(object_value: email)).to be_nil
+      end
+
+      it "does not block the browser guid" do
+        live_attempt(processor: "paypal", fingerprint: "B-live-payee-guid").send(:ban_fraudulent_buyer_browser_guid!)
+
+        expect(PlatformBlock.active.find_by(object_value: guid)).to be_nil
+      end
+
+      it "does not block the ip address" do
+        live_attempt(processor: "paypal", fingerprint: "B-live-payee-ip").send(:block_ip_address_based_on_recent_failures!)
+
+        expect(PlatformBlock.active.find_by(object_value: ip)).to be_nil
+      end
+    end
+
     context "when a flood of newer retries outnumbers any bounded scan" do
       # Bulk-copies the row: hundreds of factory purchases would dominate the suite's runtime,
       # and the flood only has to exist, not to be individually distinct.

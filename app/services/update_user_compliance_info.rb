@@ -143,6 +143,9 @@ class UpdateUserComplianceInfo
         guatemala_nit_error = guatemala_individual_nit_error(old_compliance_info)
         return { success: false, error_message: guatemala_nit_error } if guatemala_nit_error
 
+        dominican_republic_cie_error = dominican_republic_individual_cie_error(old_compliance_info)
+        return { success: false, error_message: dominican_republic_cie_error } if dominican_republic_cie_error
+
         passport_country_error = hong_kong_passport_issuing_country_error(old_compliance_info)
         return { success: false, error_message: passport_country_error } if passport_country_error
 
@@ -411,6 +414,14 @@ class UpdateUserComplianceInfo
       return unless individual_id_country_matches?(old_compliance_info, Compliance::Countries::GTM.alpha2)
       return if Compliance::GuatemalaNit.valid?(submitted)
       Compliance::GuatemalaNit::ERROR_MESSAGE
+    end
+
+    def dominican_republic_individual_cie_error(old_compliance_info)
+      submitted = submitted_tax_id_for(:individual_tax_id).presence || submitted_tax_id_for(:ssn_last_four).presence
+      return if submitted.blank?
+      return unless individual_id_country_matches?(old_compliance_info, Compliance::Countries::DOM.alpha2)
+      return if Compliance::DominicanRepublicCie.valid?(submitted)
+      Compliance::DominicanRepublicCie::ERROR_MESSAGE
     end
 
     # A Hong Kong company's representative who lives abroad enters a passport number in place of a
