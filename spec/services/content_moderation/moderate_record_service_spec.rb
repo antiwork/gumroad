@@ -550,6 +550,16 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
           .with(hash_including(check_off_platform_fulfillment: false))
       end
 
+      it "does not ask for an unpersisted bundle conversion whose products are pending" do
+        draft = create(:product, user: seller, draft: true)
+        draft.assign_attributes(is_bundle: true, native_type: Link::NATIVE_TYPE_BUNDLE)
+
+        described_class.check(draft, :product, pending_bundle_products_present: true)
+
+        expect(ContentModeration::Strategies::PromptStrategy).to have_received(:new)
+          .with(hash_including(check_off_platform_fulfillment: false))
+      end
+
       it "does not ask for posts, which have no attachable deliverable of their own" do
         post = create(:installment, seller: seller, name: "Post", message: "<p>Body</p>")
 
@@ -960,6 +970,45 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
         create(:bundle_product, bundle:, product: create(:product, user: seller))
 
         expect(described_class.check(bundle.reload, :product).passed).to eq(true)
+      end
+
+      describe "pending bundle products" do
+        it "publishes an empty draft converted to a bundle when the request will add products" do
+          draft = create(:product, user: seller, draft: true, name: "Bundle", description: "Everything you need")
+          draft.assign_attributes(is_bundle: true, native_type: Link::NATIVE_TYPE_BUNDLE)
+
+          expect(described_class.check(draft, :product, pending_bundle_products_present: true).passed).to eq(true)
+        end
+
+        it "publishes an empty draft bundle when the request will add products" do
+          bundle = create(:product, user: seller, is_bundle: true, draft: true, name: "Bundle", description: "Everything you need")
+
+          expect(described_class.check(bundle.reload, :product, pending_bundle_products_present: true).passed).to eq(true)
+        end
+
+        it "blocks when the request leaves the bundle with no products" do
+          draft = create(:product, user: seller, draft: true, name: "Bundle", description: "Everything you need")
+          draft.assign_attributes(is_bundle: true, native_type: Link::NATIVE_TYPE_BUNDLE)
+
+          expect(described_class.check(draft, :product, pending_bundle_products_present: false).passed).to eq(false)
+        end
+
+        it "blocks when the request removes every persisted product" do
+          bundle = create(:product, user: seller, is_bundle: true, name: "Bundle", description: "Everything you need")
+          create(:bundle_product, bundle:, product: create(:product, user: seller))
+
+          expect(described_class.check(bundle.reload, :product, pending_bundle_products_present: false).passed).to eq(false)
+        end
+
+        it "reads the persisted products when no pending state is given" do
+          bundle = create(:product, user: seller, is_bundle: true, name: "Bundle", description: "Everything you need")
+
+          expect(described_class.check(bundle.reload, :product, pending_bundle_products_present: nil).passed).to eq(false)
+        end
+
+        it "does not let pending products vouch for a record that is not a bundle" do
+          expect(described_class.check(product, :product, pending_bundle_products_present: true).passed).to eq(false)
+        end
       end
 
       it "still blocks a coffee listing from a seller with nothing else published" do

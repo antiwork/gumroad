@@ -17,14 +17,26 @@ class Bundles::ContentController < Bundles::BaseController
     should_publish = params[:publish].present? && !@bundle.published?
     should_unpublish = params[:unpublish].present? && @bundle.published?
 
-    bundle = nil
-    ActiveRecord::Base.transaction do
-      @bundle.is_bundle = true
-      @bundle.native_type = Link::NATIVE_TYPE_BUNDLE
-      bundle = Bundle::UpdateProductsService.new(bundle: @bundle, products: content_permitted_params).perform
+    products = content_permitted_params
 
-      bundle.publish! if should_publish
-      bundle.unpublish! if should_unpublish
+    # Set before moderation, which runs ahead of the transaction and must judge the bundle this request produces.
+    @bundle.is_bundle = true
+    @bundle.native_type = Link::NATIVE_TYPE_BUNDLE
+
+    bundle = nil
+    save_bundle = proc do
+      ActiveRecord::Base.transaction do
+        bundle = Bundle::UpdateProductsService.new(bundle: @bundle, products:).perform
+
+        bundle.publish! if should_publish
+        bundle.unpublish! if should_unpublish
+      end
+    end
+
+    if should_publish
+      @bundle.with_content_moderation_for_publish(pending_bundle_products_present: products.present?, &save_bundle)
+    else
+      save_bundle.call
     end
 
     if should_publish

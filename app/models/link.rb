@@ -543,11 +543,20 @@ class Link < ApplicationRecord
     DeleteWishlistProductsJob.perform_in(10.minutes, id)
   end
 
+  # Lets a caller that wraps publish! in its own transaction run the moderation I/O before taking locks.
+  # The cheap guards run first so a publish they would reject never pays for moderation; publish! re-runs them.
+  # `pending_bundle_products_present` is forwarded to the moderation check; see ModerateRecordService.check.
+  def with_content_moderation_for_publish(pending_bundle_products_present: nil)
+    enforce_publish_guards!
+    check_content_moderation_for_publish!(pending_bundle_products_present:)
+    @content_moderation_checked_for_publish = true
+    yield
+  ensure
+    @content_moderation_checked_for_publish = false
+  end
+
   def publish!
-    enforce_not_unpublished_by_admin!
-    enforce_shipping_destinations_presence!
-    enforce_user_email_confirmation!
-    enforce_merchant_account_exits_for_new_users!
+    enforce_publish_guards!
     transcode_after_publish = auto_transcode_videos?
     caller_flags_change = changes["flags"]&.map(&:to_i)
 
@@ -566,9 +575,7 @@ class Link < ApplicationRecord
     transaction_committed = false
     lock_retries = 0
     begin
-      errors.clear
-      content_moderation_check
-      raise ActiveRecord::RecordInvalid, self if errors.any?
+      check_content_moderation_for_publish! unless @content_moderation_checked_for_publish
 
       @content_moderation_checked_for_publish = true
       Link.transaction do
@@ -1855,6 +1862,13 @@ class Link < ApplicationRecord
       end
     end
 
+    def enforce_publish_guards!
+      enforce_not_unpublished_by_admin!
+      enforce_shipping_destinations_presence!
+      enforce_user_email_confirmation!
+      enforce_merchant_account_exits_for_new_users!
+    end
+
     def enforce_not_unpublished_by_admin!
       return unless is_unpublished_by_admin?
 
@@ -2164,10 +2178,16 @@ class Link < ApplicationRecord
       end
     end
 
-    def content_moderation_check
+    def check_content_moderation_for_publish!(pending_bundle_products_present: nil)
+      errors.clear
+      content_moderation_check(pending_bundle_products_present:)
+      raise ActiveRecord::RecordInvalid, self if errors.any?
+    end
+
+    def content_moderation_check(pending_bundle_products_present: nil)
       return if user&.vip_creator?
 
-      result = ContentModeration::ModerateRecordService.check(self, :product)
+      result = ContentModeration::ModerateRecordService.check(self, :product, pending_bundle_products_present:)
       return if result.passed
 
       errors.add(:base, ContentModeration::ModerateRecordService.seller_message(result.reasons, "product"))

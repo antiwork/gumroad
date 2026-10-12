@@ -18,10 +18,7 @@ class Api::V2::BundleContentsController < Api::V2::BaseController
       return render_response(false, message: error)
     end
 
-    ActiveRecord::Base.transaction do
-      @product.lock!
-      Bundle::UpdateProductsService.new(bundle: @product, products:).perform
-    end
+    Bundle::UpdateProductsService.new(bundle: @product, products:).perform
 
     @product.reload
     success_with_object(:product, @product)
