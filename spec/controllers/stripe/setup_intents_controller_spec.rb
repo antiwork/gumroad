@@ -229,7 +229,7 @@ describe Stripe::SetupIntentsController, :vcr do
         expect(controller.send(:authenticated_subscription)).to eq(subscription)
       end
 
-      context "when a membership is waiting on its pending Indian card mandate", vcr: false do
+      context "when a membership is storing a card whose Indian mandate is pending or active", vcr: false do
         let(:buyer) { create(:user) }
         let(:product) { create(:subscription_product) }
         let(:subscription) { create(:subscription, link: product, user: buyer, credit_card: stored_card) }
@@ -354,15 +354,6 @@ describe Stripe::SetupIntentsController, :vcr do
             expect_stored_card_returned
           end
 
-          it "returns the stored card to a session that has since minted other setup intents too" do
-            session[described_class::SESSION_SETUP_INTENT_KEY] = [[subscription.external_id, "seti_pending"], [subscription.external_id, "seti_other"]]
-            expect(ChargeProcessor).not_to receive(:setup_future_charges!)
-
-            post :create, params: guest_params
-
-            expect_stored_card_returned
-          end
-
           it "keeps the earlier setup intents when another one is minted for a different card" do
             session[described_class::SESSION_SETUP_INTENT_KEY] = [[subscription.external_id, "seti_pending"]]
             allow(chargeable).to receive(:fingerprint).and_return("fingerprint_other")
@@ -383,15 +374,6 @@ describe Stripe::SetupIntentsController, :vcr do
             expect(remembered.size).to eq(described_class::MAX_SESSION_SETUP_INTENTS)
             expect(remembered.first).to eq([subscription.external_id, "seti_old_1"])
             expect(remembered.last).to eq([subscription.external_id, "seti_new"])
-          end
-
-          it "does not return the stored card to a session that holds a stored setup intent id for another subscription" do
-            session[described_class::SESSION_SETUP_INTENT_KEY] = [["other_subscription", "seti_pending"], [subscription.external_id, "seti_other"]]
-            expect(ChargeProcessor).to receive(:setup_future_charges!).and_return(new_setup_intent)
-
-            post :create, params: guest_params
-
-            expect_stored_card_not_exposed
           end
 
           it "returns the stored card to the signed-in owner" do

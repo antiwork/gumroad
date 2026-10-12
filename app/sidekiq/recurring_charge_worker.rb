@@ -11,14 +11,6 @@ class RecurringChargeWorker
         subscription = Subscription.find(subscription_id)
         return if subscription.link.user.suspended?
         return unless subscription.alive?(include_pending_cancellation: false)
-        # Persisted on the subscription, so a plain, dunning or sweep job prices an owed restart charge like the job
-        # that was enqueued for it.
-        begin
-          pricing = subscription.indian_card_mandate_restart_charge_pricing
-        rescue Subscription::PricingBuyerMissing => e
-          subscription.fail_for_missing_pricing_buyer!(e.buyer_id, e.pricing_state)
-          return
-        end
         indian_card_mandate_recovered = false
         if subscription.india_card_mandate_reliability_enabled? && subscription.renewal_disabled_due_to_indian_card_mandate?
           # Keep access active while the charge waits for a mandate that Stripe can use.
@@ -27,10 +19,8 @@ class RecurringChargeWorker
           return if subscription.renewal_disabled_due_to_indian_card_mandate?
           indian_card_mandate_recovered = true
         end
-        if subscription.is_test_subscription || subscription.current_subscription_price_cents(**pricing) == 0 || subscription.charges_completed?
-          subscription.settle_indian_card_mandate_restart_charge_pricing!
-          return
-        end
+        return if subscription.is_test_subscription || subscription.current_subscription_price_cents == 0
+        return if subscription.charges_completed?
         # An installment plan whose every prior installment was charged back cannot be cancelled
         # (see Subscription#all_charges_disputed?), so without this guard it keeps its schedule and
         # charges the disputing buyer again. Placed before in_free_trial? so it applies regardless of
@@ -45,10 +35,7 @@ class RecurringChargeWorker
         end
         return if subscription.in_free_trial?
         last_successful_purchase = subscription.purchases.successful.last
-        if last_successful_purchase && (last_successful_purchase.created_at + subscription.period) > Time.current
-          subscription.settle_indian_card_mandate_restart_charge_pricing!
-          return
-        end
+        return if last_successful_purchase && (last_successful_purchase.created_at + subscription.period) > Time.current
 
         last_purchase = subscription.purchases.last
 
@@ -88,7 +75,6 @@ class RecurringChargeWorker
                 new_quantity: latest_applicable_plan_change.quantity,
                 perceived_price_cents: latest_applicable_plan_change.perceived_price_cents,
                 is_applying_plan_change: true,
-                **pricing,
               )
               latest_applicable_plan_change.update!(applied: true)
               subscription.reload
@@ -112,7 +98,7 @@ class RecurringChargeWorker
           return if mandate_reauthorization_required
         end
 
-        subscription.charge!(override_params:, **pricing)
+        subscription.charge!(override_params:)
         Rails.logger.info("Completed processing RecurringChargeWorker#perform(#{subscription_id})")
       end
     end

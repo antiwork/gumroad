@@ -65,7 +65,7 @@ describe "Subscription restart at checkout", :js, type: :system do
       Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @seller)
     end
 
-    it "records the new card but keeps a guest restart stopped while Stripe reports its mandate as pending" do
+    it "keeps a guest restart stopped while Stripe reports the new mandate as pending" do
       visit "/checkout?product=#{@product.unique_permalink}&option=#{@tier.external_id}&quantity=1"
 
       fill_checkout_form(
@@ -75,21 +75,18 @@ describe "Subscription restart at checkout", :js, type: :system do
       )
       click_on "Pay", exact: true
 
-      pending_message = "Your bank is still confirming this card for recurring payments."
-      challenge_or_pending = <<~XPATH.squish
+      failure_message = "We could not verify this card for recurring payments."
+      challenge_or_failure = <<~XPATH.squish
         //iframe[starts-with(@src, 'https://js.stripe.com/v3/three-ds-2-challenge')]
-        | //*[@role='alert' and contains(normalize-space(.), '#{pending_message}')]
+        | //*[@role='alert' and contains(normalize-space(.), '#{failure_message}')]
       XPATH
-      expect(page).to have_xpath(challenge_or_pending, wait: 60)
+      expect(page).to have_xpath(challenge_or_failure, wait: 60)
       within_sca_frame(wait: 1) { click_on "Complete" } if page.has_selector?(SCA_CHALLENGE_IFRAME, wait: 0)
 
-      expect(page).to have_text(pending_message)
+      expect(page).to have_text(failure_message)
       expect(@subscription.reload).not_to be_alive
-      expect(@subscription.stripe_mandate_id).to be_present
-      expect(@subscription.credit_card).to be_present
-      expect(@subscription).to be_renewal_disabled_due_to_indian_card_mandate
-      expect(@subscription).to be_indian_card_mandate_restart_held
-      expect(@subscription.purchases.not_is_original_subscription_purchase.count).to eq(0)
+      expect(@subscription.stripe_mandate_id).to be_nil
+      expect(@subscription.credit_card).to be_nil
       expect(@product.subscriptions.count).to eq(1)
     end
   end

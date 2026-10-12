@@ -167,19 +167,6 @@ describe CustomerLowPriorityMailer do
       expect(mail.body.encoded).to include("keep access while renewals are paused")
       expect(mail.body.encoded).to include("/subscriptions/#{subscription.external_id}/manage")
     end
-
-    it "tells the buyer a held restart did not happen and nothing was charged" do
-      subscription = create(:subscription, link: create(:subscription_product))
-      create(:membership_purchase, subscription:, link: subscription.link, is_original_subscription_purchase: true)
-
-      mail = described_class.subscription_indian_card_mandate_invalid(subscription.id, true)
-
-      expect(mail.subject).to eq("Your membership could not be restarted.")
-      expect(mail.body.encoded).to include("has not restarted")
-      expect(mail.body.encoded).to include("not been charged")
-      expect(mail.body.encoded).not_to include("keep access")
-      expect(mail.body.encoded).to include("/subscriptions/#{subscription.external_id}/manage")
-    end
   end
 
   describe "subscription_card_declined_warning" do

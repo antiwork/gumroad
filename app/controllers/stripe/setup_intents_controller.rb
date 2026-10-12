@@ -90,10 +90,10 @@ class Stripe::SetupIntentsController < ApplicationController
         authenticated_offer_code_buyer: logged_in_user
       )
     rescue ChargeProcessorInvalidRequestError
-      # Only a stale or invalid stored id may fall through to a replacement.
+      # Only a stale or invalid stored id may fall through to a new SetupIntent.
       nil
     rescue StandardError => e
-      # Fail closed: a lookup we could not complete must not mint a second SetupIntent and mandate for the same pending card.
+      # Fail closed: a lookup we could not complete must not create a second SetupIntent and mandate for the same card.
       ErrorNotifier.notify(e, subscription: subscription&.external_id)
       render_provider_unavailable
       nil
@@ -103,8 +103,8 @@ class Stripe::SetupIntentsController < ApplicationController
       render json: { success: false, error_message: PROVIDER_UNAVAILABLE_MESSAGE }, status: :service_unavailable
     end
 
-    # A guest's email + permalink must not unlock stored Stripe ids: the caller owns the subscription,
-    # holds its manage cookie, or minted the stored setup intent in this session.
+    # A guest's email and permalink must not unlock stored Stripe ids: the caller owns the subscription,
+    # holds its manage cookie, or created the stored setup intent in this session.
     def pending_card_reuse_authorized?(subscription)
       return true if logged_in_user.present? && logged_in_user.id == subscription.user_id
 
@@ -119,8 +119,7 @@ class Stripe::SetupIntentsController < ApplicationController
       Array(session[SESSION_SETUP_INTENT_KEY])
     end
 
-    # Appends rather than overwrites: a second card minted in this session must not revoke the earlier,
-    # still-pending intent.
+    # Appends rather than overwrites, so a second card tried in this session keeps the first one reusable.
     def remember_setup_intent(subscription, setup_intent)
       return if subscription.blank?
 
