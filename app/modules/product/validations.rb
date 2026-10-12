@@ -54,6 +54,12 @@ module Product::Validations
       errors.add(:base, "This product cannot be converted to a bundle because it is already part of a bundle.")
     end
 
+    def restored_bundle_has_no_bundle_products
+      return unless bundle_products.alive.joins(:product).merge(Link.is_bundle).exists?
+
+      errors.add(:base, "This bundle cannot be restored because it contains a product that has since been converted to a bundle.")
+    end
+
     def published_bundle_must_have_at_least_one_product
       return unless published?
       return if not_is_bundle?
