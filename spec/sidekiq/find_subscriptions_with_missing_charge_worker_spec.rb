@@ -419,6 +419,73 @@ describe FindSubscriptionsWithMissingChargeWorker do
               end
             end
 
+            context "when the pricing changes between the buyer lookup and the terminal path's lock" do
+              let(:other_buyer) { create(:user) }
+
+              # The lookup finds the buyer missing; the change lands before the sweep takes the row lock.
+              def change_pricing_after_lookup(&change)
+                allow(Subscription::PricingBuyerMissing).to receive(:new).and_wrap_original do |original, *args|
+                  original.call(*args).tap { change.call }
+                end
+              end
+
+              def expect_membership_untouched
+                @subscription.reload
+                expect(@subscription).to be_alive
+                expect(@subscription.failed_at).to be_nil
+                expect(ErrorNotifier).not_to have_received(:notify)
+                expect(CompleteIndianCardMandateJob.jobs.size).to eq(0)
+              end
+
+              it "keeps the membership and the pricing a newer submission recorded, and still sweeps the rest of the batch" do
+                change_pricing_after_lookup do
+                  Subscription.where(id: @subscription.id).update_all(
+                    indian_card_mandate_restart_buyer_id: other_buyer.id, indian_card_mandate_restart_price_cents: 7_00
+                  )
+                end
+
+                travel_to @six_months_after_purchase do
+                  described_class.new.perform(@batch_number)
+
+                  expect_membership_untouched
+                  expect(@subscription).to be_indian_card_mandate_restart_charge_pricing_pending
+                  expect(@subscription).to be_indian_card_mandate_recovery_pending
+                  expect(@subscription.indian_card_mandate_restart_buyer_id).to eq(other_buyer.id)
+                  expect(@subscription.indian_card_mandate_restart_price_cents).to eq(7_00)
+                  expect(RecurringChargeWorker.jobs.map { _1["args"] }).to eq([[other_subscription.id, true]])
+                end
+              end
+
+              it "keeps the membership when a charge settled the pricing in the meantime" do
+                change_pricing_after_lookup do
+                  Subscription.find(@subscription.id).tap do |settled|
+                    settled.clear_indian_card_mandate_restart_charge_pricing
+                    settled.update!(indian_card_mandate_recovery_pending: false)
+                  end
+                end
+
+                travel_to @six_months_after_purchase do
+                  described_class.new.perform(@batch_number)
+
+                  expect_membership_untouched
+                  expect(@subscription.indian_card_mandate_restart_price_cents).to be_nil
+                end
+              end
+
+              it "keeps the membership and the pricing while a charge is in flight" do
+                change_pricing_after_lookup do
+                  create(:membership_purchase, subscription: @subscription, purchase_state: "in_progress", is_original_subscription_purchase: false)
+                end
+
+                travel_to @six_months_after_purchase do
+                  described_class.new.perform(@batch_number)
+
+                  expect_membership_untouched
+                  expect(@subscription).to be_indian_card_mandate_restart_charge_pricing_pending
+                end
+              end
+            end
+
             context "when failing the membership itself raises" do
               let(:error) { ActiveRecord::StatementInvalid.new("lock wait timeout") }
               let!(:notice_subscription) { create(:subscription, id: 1_020, deactivated_at: 1.day.ago, indian_card_mandate_restart_abandoned_notice_pending: true) }

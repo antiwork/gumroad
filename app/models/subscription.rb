@@ -11,10 +11,12 @@ class Subscription < ApplicationRecord
 
   # The buyer a restart charge was priced for no longer exists, so it has no faithful price.
   class PricingBuyerMissing < StandardError
-    attr_reader :buyer_id
+    attr_reader :buyer_id, :pricing_state
 
-    def initialize(buyer_id)
+    # `pricing_state` is what the lookup saw; the terminal path acts only while the locked row still shows it.
+    def initialize(buyer_id, pricing_state = nil)
       @buyer_id = buyer_id
+      @pricing_state = pricing_state
       super("Pricing buyer #{buyer_id} no longer exists")
     end
   end
@@ -998,27 +1000,51 @@ class Subscription < ApplicationRecord
     return { authenticated_offer_code_buyer: nil } if indian_card_mandate_restart_buyer_id.nil?
 
     buyer = User.find_by(id: indian_card_mandate_restart_buyer_id)
-    raise PricingBuyerMissing, indian_card_mandate_restart_buyer_id if buyer.nil?
+    raise PricingBuyerMissing.new(indian_card_mandate_restart_buyer_id, indian_card_mandate_restart_pricing_state) if buyer.nil?
 
     { authenticated_offer_code_buyer: buyer }
+  end
+
+  # Who owns the owed restart charge's pricing right now: any new hold, settlement or recovery change alters it.
+  def indian_card_mandate_restart_pricing_state
+    {
+      charge_pricing_pending: indian_card_mandate_restart_charge_pricing_pending?,
+      buyer_captured: indian_card_mandate_restart_buyer_captured?,
+      buyer_id: indian_card_mandate_restart_buyer_id,
+      price_cents: indian_card_mandate_restart_price_cents,
+      quantity: indian_card_mandate_restart_quantity,
+      recovery_pending: indian_card_mandate_recovery_pending?
+    }
   end
 
   # Terminal outcome for a restart charge whose recorded buyer was deleted after the eligibility check: nothing can
   # price it, so an alive, overdue membership must not keep access it can never be billed for. Fails it through the
   # regular unpaid-renewal path, in the same transaction that clears the recovery state so a failure there retries both.
-  def fail_for_missing_pricing_buyer!(buyer_id)
-    with_lock do
+  # The lookup ran before this lock, so a caller that no longer owns the pricing (a newer submission replaced it, a
+  # charge settled it or is in flight, the renewal was paid) changes nothing; returns whether it acted.
+  def fail_for_missing_pricing_buyer!(buyer_id, expected_pricing_state)
+    failed = with_lock do
+      next false unless expected_pricing_state.present? &&
+        indian_card_mandate_restart_pricing_state == expected_pricing_state &&
+        indian_card_mandate_restart_buyer_id == buyer_id &&
+        buyer_id.present? && !User.exists?(buyer_id)
+
+      is_alive = alive?(include_pending_cancellation: false)
+      next false if is_alive && (!overdue_for_charge? || has_a_charge_in_progress?)
+
       clear_indian_card_mandate_restart_charge_pricing
       self.indian_card_mandate_recovery_pending = false
       save!
-      if alive?(include_pending_cancellation: false) && !is_test_subscription? && overdue_for_charge?
-        unsubscribe_and_fail!(preserve_access_for_mandate_failure: false)
-      end
+      unsubscribe_and_fail!(preserve_access_for_mandate_failure: false) if is_alive && !is_test_subscription?
+      true
     end
+    return false unless failed
+
     ErrorNotifier.notify(
       "Pricing buyer missing for an owed restart charge; subscription failed without charging",
       subscription_id: id, subscription: external_id, buyer_id:
     )
+    true
   end
 
   # A live reauthorization starts its own recovery, which must not inherit a restart's terms.

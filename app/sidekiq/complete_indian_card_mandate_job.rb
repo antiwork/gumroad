@@ -174,7 +174,7 @@ class CompleteIndianCardMandateJob
       return if self.class.superseded?(subscription_id, generation)
       return unless restart || reauthorization
 
-      mark_recovery_pending(subscription) if reauthorization
+      return if reauthorization && !mark_recovery_pending(subscription, generation)
 
       # The refresh may itself rewrite or clear `stripe_mandate_id`, so only the card is fenced.
       checked_card_id = subscription.credit_card_to_charge&.id
@@ -230,12 +230,17 @@ class CompleteIndianCardMandateJob
 
     # Set before the refresh clears the renewal stop: nothing else records that a renewal which came due
     # while the stop was set is still owed its charge, and a failed enqueue below must be retryable.
-    def mark_recovery_pending(subscription)
+    # `advance` checked the generation before this lock: a newer submission may since have held a restart, whose
+    # accepted terms the clear below would erase. Returns false when this chain no longer owns the subscription.
+    def mark_recovery_pending(subscription, generation)
       subscription.with_lock do
-        next if subscription.indian_card_mandate_recovery_pending?
+        next false if self.class.superseded?(subscription.id, generation)
+        next false if subscription.indian_card_mandate_restart_held? || !subscription.indian_card_mandate_reauthorization_pending?
+        next true if subscription.indian_card_mandate_recovery_pending?
 
         subscription.clear_indian_card_mandate_restart_terms unless subscription.indian_card_mandate_restart_charge_pricing_pending?
         subscription.update!(indian_card_mandate_recovery_pending: true)
+        true
       end
     end
 

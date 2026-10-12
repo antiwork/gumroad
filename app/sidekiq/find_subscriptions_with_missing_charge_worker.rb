@@ -53,7 +53,7 @@ class FindSubscriptionsWithMissingChargeWorker
       pricing = subscription.indian_card_mandate_restart_charge_pricing
       subscription.current_subscription_price_cents(**pricing) == 0
     rescue Subscription::PricingBuyerMissing => e
-      fail_for_missing_pricing_buyer(subscription, e.buyer_id)
+      fail_for_missing_pricing_buyer(subscription, e)
       true
     rescue StandardError => e
       ErrorNotifier.notify(e, subscription_id: subscription.id)
@@ -61,8 +61,8 @@ class FindSubscriptionsWithMissingChargeWorker
     end
 
     # Separate from `zero_price?` because a sibling `rescue` clause does not catch what another one raises.
-    def fail_for_missing_pricing_buyer(subscription, buyer_id)
-      subscription.fail_for_missing_pricing_buyer!(buyer_id)
+    def fail_for_missing_pricing_buyer(subscription, error)
+      subscription.fail_for_missing_pricing_buyer!(error.buyer_id, error.pricing_state)
     rescue StandardError => e
       ErrorNotifier.notify(e, subscription_id: subscription.id)
     end

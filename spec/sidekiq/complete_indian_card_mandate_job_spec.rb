@@ -1291,6 +1291,59 @@ describe CompleteIndianCardMandateJob do
       live
     end
 
+    context "when a newer submission holds a restart after this chain's generation check" do
+      let(:mandate_status) { "active" }
+
+      # The window between `advance`'s generation check and `mark_recovery_pending`'s row lock.
+      def hold_newer_restart_after_generation_check
+        newer_generation = nil
+        interleaved = false
+        allow(described_class).to receive(:superseded?).and_wrap_original do |original, *args|
+          original.call(*args).tap do
+            next if interleaved
+
+            interleaved = true
+            live_subscription.update!(cancelled_at: 1.day.ago, cancelled_by_buyer: true, deactivated_at: 1.day.ago)
+            Subscription.transaction do
+              newer_generation = described_class.claim_held_restart(
+                Subscription.find(live_subscription.id),
+                authenticated_offer_code_buyer: live_subscription.user,
+                payment_method_before: [live_subscription.stripe_mandate_id, live_subscription.credit_card_id]
+              ).generation
+            end
+          end
+        end
+        -> { newer_generation }
+      end
+
+      it "leaves the newer hold's accepted terms and state alone, and its own chain still completes the restart" do
+        stale_generation = described_class.next_generation(live_subscription.id)
+        newer_generation = hold_newer_restart_after_generation_check
+
+        described_class.new.perform(live_subscription.id, 0, stale_generation)
+
+        held = live_subscription.reload
+        expect(held).to be_indian_card_mandate_restart_held
+        expect(held).not_to be_indian_card_mandate_recovery_pending
+        expect(held).to be_renewal_disabled_due_to_indian_card_mandate
+        expect(held.indian_card_mandate_restart_price_cents).to eq(product.default_price_cents)
+        expect(held.indian_card_mandate_restart_quantity).to eq(1)
+        expect(held.indian_card_mandate_restart_buyer_id).to eq(held.user_id)
+        expect(held).to be_indian_card_mandate_restart_buyer_captured
+        expect(RecurringChargeWorker.jobs).to be_empty
+
+        described_class.new.perform(live_subscription.id, 0, newer_generation.call)
+
+        completed = live_subscription.reload
+        expect(completed).to be_alive
+        expect(completed).not_to be_indian_card_mandate_restart_held
+        expect(completed).to be_indian_card_mandate_restart_charge_pricing_pending
+        expect(completed.indian_card_mandate_restart_buyer_id).to eq(completed.user_id)
+        expect(completed.indian_card_mandate_restart_price_cents).to eq(product.default_price_cents)
+        expect(RecurringChargeWorker.jobs.map { _1["args"] }).to eq([[live_subscription.id]])
+      end
+    end
+
     it "keeps renewals stopped and uncharged and checks again while the mandate is pending" do
       described_class.new.perform(live_subscription.id, 0, 7)
 

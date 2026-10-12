@@ -16,7 +16,7 @@ class RecurringChargeWorker
         begin
           pricing = subscription.indian_card_mandate_restart_charge_pricing
         rescue Subscription::PricingBuyerMissing => e
-          subscription.fail_for_missing_pricing_buyer!(e.buyer_id)
+          subscription.fail_for_missing_pricing_buyer!(e.buyer_id, e.pricing_state)
           return
         end
         indian_card_mandate_recovered = false
