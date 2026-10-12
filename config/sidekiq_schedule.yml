@@ -98,6 +98,11 @@ execute_scheduled_payouts_job:
   cron: "0 9 * * *" # UTC 09:00, after daily payouts at 08:00
   class: ExecuteScheduledPayoutsJob
   description: Executes due scheduled payouts for suspended users
+detect_failing_paypal_rails:
+  cron: "45 5 * * *" # UTC 05:45
+  class: DetectFailingPaypalRailsJob
+  queue: low
+  description: Notes connected PayPal accounts with repeated failed purchases and no completions on the seller for staff review
 sync_watched_users:
   cron: "0 9 * * *" # UTC 09:00
   class: SyncWatchedUsersJob
