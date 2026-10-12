@@ -698,6 +698,7 @@ describe SettingsPresenter do
         },
         countries: Compliance::Countries.for_select_for_seller_compliance.to_h,
         person_countries: Compliance::Countries.for_select.to_h,
+        representative_countries: Compliance::Countries.for_select_for_business_representative.to_h,
         ip_country_code: nil,
         bank_account_details: {
           show_bank_account: false,
@@ -860,8 +861,10 @@ describe SettingsPresenter do
       %w[GF GP MQ YT MF].each do |code|
         expect(props[:countries]).not_to have_key(code)
         expect(props[:person_countries]).to have_key(code)
+        expect(props[:representative_countries]).to have_key(code)
       end
       expect(props[:countries]).to include("FR", "RE")
+      expect(props[:representative_countries]).not_to have_key("PR")
     end
 
     it "names a Stripe-restricted country even though it is omitted from the dropdown" do

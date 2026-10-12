@@ -258,6 +258,7 @@ class SettingsPresenter
       countries: Compliance::Countries.for_select_for_seller_compliance.to_h,
       # People's addresses and nationalities are not compliance countries, so they keep the full list.
       person_countries: Compliance::Countries.for_select.to_h,
+      representative_countries: Compliance::Countries.for_select_for_business_representative.to_h,
       ip_country_code: GeoIp.lookup(remote_ip)&.country_code,
       bank_account_details:,
       paypal_address: seller.payment_address,

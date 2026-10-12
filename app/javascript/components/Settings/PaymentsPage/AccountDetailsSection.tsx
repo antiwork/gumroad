@@ -54,6 +54,7 @@ const AccountDetailsSection = ({
   minDobYear,
   countries,
   personCountries,
+  representativeCountries,
   usBusinessTypes,
   uaeBusinessTypes,
   indiaBusinessTypes,
@@ -71,6 +72,7 @@ const AccountDetailsSection = ({
   minDobYear: number;
   countries: Record<string, string>;
   personCountries?: Record<string, string>;
+  representativeCountries?: Record<string, string>;
   usBusinessTypes: { code: string; name: string }[];
   uaeBusinessTypes: { code: string; name: string }[];
   indiaBusinessTypes: { code: string; name: string }[];
@@ -1121,11 +1123,13 @@ const AccountDetailsSection = ({
             )
           }
         >
-          {Object.entries(countries).map(([code, name]) => (
-            <option key={code} value={code} disabled={name.includes("(not supported)")}>
-              {name}
-            </option>
-          ))}
+          {Object.entries(complianceInfo.is_business ? (representativeCountries ?? countries) : countries).map(
+            ([code, name]) => (
+              <option key={code} value={code} disabled={name.includes("(not supported)")}>
+                {name}
+              </option>
+            ),
+          )}
         </Select>
       </Fieldset>
       <Fieldset state={errorFieldNames.has("phone") ? "danger" : undefined}>

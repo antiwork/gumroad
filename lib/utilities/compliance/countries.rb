@@ -151,6 +151,12 @@ module Compliance
       end.sort_by { |pair| pair.last }
     end
 
+    # A business representative's own residence is not the legal country, so French overseas
+    # departments stay listed. PR is still excluded: it is entered as United States + state PR.
+    def self.for_select_for_business_representative
+      for_select.reject { |alpha2, _name| US_OUTLYING_AREAS_AS_STATES.include?(alpha2) }
+    end
+
     # Same shape as `for_select`, but excludes the outlying areas we model as US states (PR) and the
     # French overseas departments we treat as France, so a
     # seller cannot pick one as their country and end up in the issue #394 catch-22. The other outlying
@@ -158,9 +164,7 @@ module Compliance
     # invoice, customer addresses) continue to use `for_select` because billing addresses to any
     # territory can be legitimate.
     def self.for_select_for_seller_compliance
-      for_select.reject do |alpha2, _name|
-        US_OUTLYING_AREAS_AS_STATES.include?(alpha2) || FRENCH_OVERSEAS_DEPARTMENTS_AS_FRANCE.include?(alpha2)
-      end
+      for_select_for_business_representative.reject { |alpha2, _name| FRENCH_OVERSEAS_DEPARTMENTS_AS_FRANCE.include?(alpha2) }
     end
 
     GLOBE_SHOWING_AMERICAS_EMOJI = [127758].pack("U*")

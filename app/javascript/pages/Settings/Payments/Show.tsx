@@ -193,6 +193,7 @@ type PaymentsPageProps = {
   };
   countries: Record<string, string>;
   person_countries: Record<string, string>;
+  representative_countries: Record<string, string>;
   ip_country_code: string | null;
   bank_account_details: BankAccountDetails;
   paypal_address: string | null;
@@ -1679,6 +1680,7 @@ export default function PaymentsPage() {
                 isFormDisabled={props.is_form_disabled}
                 countries={props.countries}
                 personCountries={props.person_countries}
+                representativeCountries={props.representative_countries}
                 usBusinessTypes={props.us_business_types}
                 uaeBusinessTypes={props.uae_business_types}
                 indiaBusinessTypes={props.india_business_types}

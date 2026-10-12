@@ -283,6 +283,14 @@ describe Compliance do
       end
     end
 
+    describe ".for_select_for_business_representative" do
+      it "keeps the French overseas departments, drops Puerto Rico, and otherwise matches for_select" do
+        codes = Compliance::Countries.for_select_for_business_representative.map(&:first)
+        expect(codes).to include("GF", "GP", "MQ", "YT", "MF")
+        expect(Compliance::Countries.for_select.map(&:first) - codes).to eq(["PR"])
+      end
+    end
+
     describe ".country_with_flag_by_name" do
       context "for a valid country name" do
         it "returns a country with its corresponding flag" do

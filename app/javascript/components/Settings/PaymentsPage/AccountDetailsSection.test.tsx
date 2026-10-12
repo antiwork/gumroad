@@ -72,7 +72,11 @@ const usBusinessTypes = [
   { code: "profit", name: "Non Profit" },
 ];
 
-const renderSection = (user: User, complianceOverrides: Partial<ComplianceInfo> = {}) =>
+const renderSection = (
+  user: User,
+  complianceOverrides: Partial<ComplianceInfo> = {},
+  props: Partial<React.ComponentProps<typeof AccountDetailsSection>> = {},
+) =>
   render(
     <AccountDetailsSection
       user={user}
@@ -88,6 +92,7 @@ const renderSection = (user: User, complianceOverrides: Partial<ComplianceInfo> 
       states={{ us: [{ code: "CA", name: "California" }], ca: [], au: [], mx: [], ae: [], ir: [], br: [], jp: [] }}
       errorFieldNames={new Set()}
       saveCounter={0}
+      {...props}
     />,
   );
 
@@ -450,5 +455,27 @@ describe("AccountDetailsSection (Kanji) field reasons", () => {
       expect(screen.getByLabelText(label).hasAttribute("aria-describedby")).toBe(false);
     });
     expect(screen.queryByText("Required.")).toBeNull();
+  });
+});
+
+describe("AccountDetailsSection creator country", () => {
+  const representativeCountries = { US: "United States", GB: "United Kingdom", GP: "Guadeloupe" };
+  const creatorCountryCodes = () =>
+    Array.from(document.querySelector<HTMLSelectElement>('select[id$="-creator-country"]')?.options ?? []).map(
+      (option) => option.value,
+    );
+
+  it("offers a business representative the representative list, including French overseas departments", () => {
+    renderSection(
+      makeUser(),
+      { is_business: true, business_country: "FR", country: "GP" },
+      { representativeCountries },
+    );
+    expect(creatorCountryCodes()).toEqual(["US", "GB", "GP"]);
+  });
+
+  it("keeps an individual on the compliance list", () => {
+    renderSection(makeUser(), {}, { representativeCountries });
+    expect(creatorCountryCodes()).toEqual(["US", "GB"]);
   });
 });

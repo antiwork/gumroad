@@ -48,6 +48,7 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
       # Inertia RSpec helper returns symbol keys, but presenter uses string keys
       actual_props[:countries] = actual_props[:countries].transform_keys(&:to_s) if actual_props[:countries] && actual_props[:countries].keys.first.is_a?(Symbol)
       actual_props[:person_countries] = actual_props[:person_countries].transform_keys(&:to_s) if actual_props[:person_countries]
+      actual_props[:representative_countries] = actual_props[:representative_countries].transform_keys(&:to_s) if actual_props[:representative_countries]
       expect(actual_props).to eq(expected_props)
     end
 
@@ -229,15 +230,118 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         )
       end
 
+      def expect_switch_rejection_error
+        expect(session[:inertia_errors][:base]).to eq([Settings::PaymentsController::FRENCH_OVERSEAS_DEPARTMENT_SWITCH_MESSAGE])
+      end
+
       it "rejects updated_country_code=GF with a message naming France" do
         put :update, params: { user: params.merge(updated_country_code: "GF") }
         expect_france_rejection_error
       end
 
-      it "rejects user[country]=GP and user[business_country]=MQ" do
+      it "rejects user[country]=GP when the business has no country of its own, and user[business_country]=MQ" do
         put :update, params: { user: params.merge(country: "GP", is_business: true) }
         expect_france_rejection_error
+        session.delete(:inertia_errors)
         put :update, params: { user: params.merge(business_country: "MQ", is_business: true) }
+        expect_france_rejection_error
+      end
+
+      def make_french_business
+        user.alive_user_compliance_info.dup_and_save! do |info|
+          info.is_business = true
+          info.business_country = "France"
+        end
+      end
+
+      %w[GP GF].each do |department|
+        it "lets the representative of a French business live in #{department}, while payouts follow the business country" do
+          make_french_business
+
+          put :update, params: { user: params.merge(is_business: true, business_country: "FR", country: department, business_name: "Barnabas SAS", business_street_address: "8 rue de la Paix", business_city: "Paris", business_zip_code: "75002", business_type: UserComplianceInfo::BusinessTypes::CORPORATION) }
+
+          expect(session[:inertia_errors]).to be_blank
+          expect_save_success_flash_message
+          compliance_info = user.reload.alive_user_compliance_info
+          expect(compliance_info.country).to eq(Compliance::Countries.mapping[department])
+          expect(compliance_info.business_country).to eq("France")
+          expect(compliance_info.legal_entity_country_code).to eq("FR")
+          expect(user.reload.native_payouts_supported?).to be(true)
+          expect(user.no_payout_rail_in_compliance_country?).to be(false)
+        end
+      end
+
+      it "lets an existing French business move its representative to MQ without resending the business country" do
+        make_french_business
+
+        put :update, params: { user: params.merge(is_business: true, country: "MQ") }
+
+        expect(session[:inertia_errors]).to be_blank
+        expect(user.reload.alive_user_compliance_info.country).to eq("Martinique")
+      end
+
+      it "rejects switching a French business with a GP representative to individual, which would make GP the legal country" do
+        make_french_business
+        put :update, params: { user: params.merge(is_business: true, business_country: "FR", country: "GP") }, as: :json
+        expect(session[:inertia_errors]).to be_blank
+
+        # The form sends JSON, where `is_business: false` leaves the stored representative country in place.
+        [
+          params.merge(is_business: false, business_country: "FR", country: "GP"),
+          params.merge(is_business: false, business_country: "FR", country: "FR"),
+          params.merge(is_business: false, business_country: "FR", country: "GP", updated_country_code: "FR"),
+          params.merge(is_business: false),
+        ].each do |user_params|
+          session.delete(:inertia_errors)
+          put :update, params: { user: user_params }, as: :json
+          expect_switch_rejection_error
+        end
+        session.delete(:inertia_errors)
+        put :update, params: { user: params.merge(is_business: false, country: "GP") }
+        expect_switch_rejection_error
+
+        compliance_info = user.reload.alive_user_compliance_info
+        expect(compliance_info.is_business).to be(true)
+        expect(compliance_info.legal_entity_country_code).to eq("FR")
+      end
+
+      it "lets that seller switch to individual after setting their personal country to France, as the message says" do
+        make_french_business
+        put :update, params: { user: params.merge(is_business: true, business_country: "FR", country: "GP") }, as: :json
+        put :update, params: { user: params.merge(is_business: true, business_country: "FR", country: "FR") }, as: :json
+        expect(session[:inertia_errors]).to be_blank
+
+        put :update, params: { user: params.merge(is_business: false, business_country: "FR", country: "FR") }, as: :json
+
+        expect(session[:inertia_errors]).to be_blank
+        compliance_info = user.reload.alive_user_compliance_info
+        expect(compliance_info.is_business).to be(false)
+        expect(compliance_info.legal_entity_country_code).to eq("FR")
+      end
+
+      it "rejects user[country]=GP when the submitted business country is unmappable and would be cleared" do
+        make_french_business
+
+        put :update, params: { user: params.merge(is_business: true, country: "GP", business_country: "ZZ") }, as: :json
+
+        expect_france_rejection_error
+        expect(user.reload.alive_user_compliance_info.legal_entity_country_code).to eq("FR")
+      end
+
+      it "lets a French business with a GP representative change country while switching to individual" do
+        make_french_business
+        put :update, params: { user: params.merge(is_business: true, business_country: "FR", country: "GP") }, as: :json
+        expect(session[:inertia_errors]).to be_blank
+
+        put :update, params: { user: params.merge(is_business: false, business_country: "FR", country: "GP", updated_country_code: "DE") }, as: :json
+
+        expect(session[:inertia_errors]).to be_blank
+        expect(flash[:notice]).to start_with("Your country has been updated")
+        expect(user.reload.alive_user_compliance_info.legal_entity_country_code).to eq("DE")
+      end
+
+      it "still rejects user[country]=GP for an individual" do
+        put :update, params: { user: params.merge(is_business: "off", country: "GP") }
         expect_france_rejection_error
       end
 

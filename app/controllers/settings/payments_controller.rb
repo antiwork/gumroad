@@ -5,6 +5,7 @@ class Settings::PaymentsController < Settings::BaseController
   include AuditsPayoutSettingsChanges
 
   FRENCH_OVERSEAS_DEPARTMENT_MESSAGE = "French overseas departments are not valid compliance countries. Select France instead."
+  FRENCH_OVERSEAS_DEPARTMENT_SWITCH_MESSAGE = "Your personal address is in a French overseas department, which can't be the country of an individual account. Switch back to Business, set the Country of your personal address to France and save, then switch to Individual."
 
   MILITARY_ZIP_MESSAGE = "We can't accept military (APO/FPO/DPO) ZIP codes for payouts. Please enter a physical US street address and its ZIP code."
 
@@ -49,7 +50,6 @@ class Settings::PaymentsController < Settings::BaseController
     # Same carve-out as above. The form echoes business_country with the same fallback the presenter uses.
     attempted_french_territory = [
       [params.dig(:user, :updated_country_code), current_uci&.legal_entity_country_code],
-      [params.dig(:user, :country),              current_uci&.country_code],
       [params.dig(:user, :business_country),     current_uci&.business_country_code || current_uci&.country_code],
     ].any? do |submitted, current|
       submitted.present? &&
@@ -60,9 +60,20 @@ class Settings::PaymentsController < Settings::BaseController
       return redirect_with_error(FRENCH_OVERSEAS_DEPARTMENT_MESSAGE)
     end
 
+    # `country` is a business representative's own residence, so it is judged by the legal country the
+    # save leaves behind. A real country change returns before the save, so it is left to the guard above.
+    updated_country_code = params.dig(:user, :updated_country_code)
+    changing_country = updated_country_code.present? && updated_country_code != current_uci&.legal_entity_country_code
+    if current_uci && !changing_country
+      business_after_save, legal_country_after_save = account_type_and_legal_country_code_after_save(current_uci)
+      if legal_country_after_save != current_uci.legal_entity_country_code &&
+         Compliance::Countries::FRENCH_OVERSEAS_DEPARTMENTS_AS_FRANCE.include?(legal_country_after_save)
+        return redirect_with_error(current_uci.is_business? && !business_after_save ? FRENCH_OVERSEAS_DEPARTMENT_SWITCH_MESSAGE : FRENCH_OVERSEAS_DEPARTMENT_MESSAGE)
+      end
+    end
+
     compliance_info = current_seller.fetch_or_build_user_compliance_info
 
-    updated_country_code = params.dig(:user, :updated_country_code)
     if updated_country_code.present? && updated_country_code != compliance_info.legal_entity_country_code
       begin
         # A country change cannot be combined with the rest of the form. Changing the country
@@ -447,6 +458,20 @@ class Settings::PaymentsController < Settings::BaseController
       return false if submitted.nil?
 
       ActiveModel::Type::Boolean.new.cast(submitted) != compliance_info.is_business?
+    end
+
+    # Mirrors UpdateUserComplianceInfo#assign_compliance_params: country fields are written only when the
+    # raw is_business param is truthy ("off" is, JSON false is not), and an unknown code clears the field.
+    def account_type_and_legal_country_code_after_save(compliance_info)
+      user_params = params[:user] || {}
+      country_code_after_save = lambda do |field, stored|
+        submitted = user_params[field]
+        next stored unless user_params[:is_business] && submitted.present?
+        submitted if Compliance::Countries.mapping.key?(submitted)
+      end
+      is_business = user_params[:is_business].nil? ? compliance_info.is_business? : ActiveModel::Type::Boolean.new.cast(user_params[:is_business])
+      business_country_code = country_code_after_save.call(:business_country, compliance_info.business_country_code)
+      [is_business, (business_country_code if is_business) || country_code_after_save.call(:country, compliance_info.country_code)]
     end
 
     # When the account is a business, the Country dropdown writes the `country` param (and the
