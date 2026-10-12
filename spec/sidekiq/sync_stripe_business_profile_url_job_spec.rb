@@ -47,4 +47,29 @@ describe SyncStripeBusinessProfileUrlJob do
 
     expect(Stripe::Account).not_to have_received(:retrieve)
   end
+
+  it "uses the username committed while waiting for the row lock" do
+    allow_any_instance_of(User).to receive(:with_lock).and_wrap_original do |original, *args, &block|
+      User.where(id: user.id).update_all(username: "latestname")
+      original.call(*args, &block)
+    end
+
+    described_class.new.perform(user.id, "antdavidson")
+
+    expect(Stripe::Account).to have_received(:update).with(
+      merchant_account.charge_processor_merchant_id,
+      business_profile: { url: "#{PROTOCOL}://#{Subdomain.from_username("latestname")}/l/client-report-kit" }
+    )
+  end
+
+  it "does not update Stripe when the username changes during the Stripe read" do
+    allow(Stripe::Account).to receive(:retrieve) do
+      User.where(id: user.id).update_all(username: "racedname")
+      double(business_profile: double(url: stripe_url))
+    end
+
+    described_class.new.perform(user.id, "antdavidson")
+
+    expect(Stripe::Account).not_to have_received(:update)
+  end
 end
