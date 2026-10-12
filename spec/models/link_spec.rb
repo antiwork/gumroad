@@ -111,6 +111,63 @@ describe Link do
     end
   end
 
+  describe "converting a product to a bundle" do
+    let(:seller) { create(:user) }
+    let(:product) { create(:product, user: seller, draft: true) }
+    let(:bundle) { create(:product, :bundle, user: seller) }
+
+    before { create(:bundle_product, bundle:, product:) }
+
+    it "is blocked while the product is in an active bundle" do
+      product.is_bundle = true
+
+      expect(product).not_to be_valid
+      expect(product.errors.full_messages).to include("This product cannot be converted to a bundle because it is already part of a bundle.")
+    end
+
+    it "is allowed when the only bundle containing the product is soft-deleted" do
+      bundle.mark_deleted!
+      product.is_bundle = true
+
+      expect(product).to be_valid
+    end
+
+    it "is blocked when one containing bundle is soft-deleted and another is active" do
+      other_bundle = create(:product, :bundle, user: seller)
+      create(:bundle_product, bundle: other_bundle, product:)
+      bundle.mark_deleted!
+      product.is_bundle = true
+
+      expect(product).not_to be_valid
+      expect(product.errors.full_messages).to include("This product cannot be converted to a bundle because it is already part of a bundle.")
+    end
+
+    context "when the only bundle containing the product was deleted before the conversion" do
+      let(:restore_error) { "This bundle cannot be restored because it contains a product that has since been converted to a bundle." }
+
+      before do
+        bundle.mark_deleted!
+        product.update!(is_bundle: true)
+      end
+
+      it "blocks restoring the deleted bundle" do
+        bundle.deleted_at = nil
+
+        expect(bundle).not_to be_valid
+        expect(bundle.errors.full_messages).to include(restore_error)
+        expect { bundle.mark_undeleted! }.to raise_error(ActiveRecord::RecordInvalid)
+        expect(bundle.reload).to be_deleted
+      end
+    end
+
+    it "allows restoring a deleted bundle whose products are not bundles" do
+      bundle.mark_deleted!
+
+      expect { bundle.mark_undeleted! }.not_to raise_error
+      expect(bundle.reload).to be_alive
+    end
+  end
+
   describe "repairing detached defaults after concurrent edits" do
     let(:seller) { create(:user) }
     let(:product) { create(:product, user: seller, price_cents: 2000) }
