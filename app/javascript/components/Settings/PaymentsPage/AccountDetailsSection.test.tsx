@@ -458,9 +458,9 @@ describe("AccountDetailsSection (Kanji) field reasons", () => {
   });
 });
 
-describe("AccountDetailsSection creator country", () => {
+describe("AccountDetailsSection personal country", () => {
   const representativeCountries = { US: "United States", GB: "United Kingdom", GP: "Guadeloupe" };
-  const creatorCountryCodes = () =>
+  const personalCountryCodes = () =>
     Array.from(document.querySelector<HTMLSelectElement>('select[id$="-creator-country"]')?.options ?? []).map(
       (option) => option.value,
     );
@@ -471,11 +471,11 @@ describe("AccountDetailsSection creator country", () => {
       { is_business: true, business_country: "FR", country: "GP" },
       { representativeCountries },
     );
-    expect(creatorCountryCodes()).toEqual(["US", "GB", "GP"]);
+    expect(personalCountryCodes()).toEqual(["US", "GB", "GP"]);
   });
 
   it("keeps an individual on the compliance list", () => {
     renderSection(makeUser(), {}, { representativeCountries });
-    expect(creatorCountryCodes()).toEqual(["US", "GB"]);
+    expect(personalCountryCodes()).toEqual(["US", "GB"]);
   });
 });
