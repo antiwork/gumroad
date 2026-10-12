@@ -427,6 +427,15 @@ describe LinksController, :vcr, type: :controller do
       expect(response.body).to include(%(href="/l/#{product.unique_permalink}?wanted=true"))
     end
 
+    it "writes a tier's live price into an option-scoped price element" do
+      membership = create(:membership_product_with_preset_tiered_pricing, user: seller)
+      membership.update!(custom_html: %(<span data-gumroad-field="price" data-gumroad-option="Second Tier">$0</span><a data-gumroad-action="buy">Buy</a>))
+
+      get :landing_iframe_content, params: { id: membership.unique_permalink }
+
+      expect(response.body).to include(%(data-gumroad-option="Second Tier">$5 a month</span>))
+    end
+
     it "serves a Rocket Loader-safe delegated checkout bridge" do
       product.update!(custom_html: %(<button data-gumroad-action="buy">Buy</button>))
 

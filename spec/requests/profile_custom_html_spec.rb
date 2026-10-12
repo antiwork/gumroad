@@ -413,7 +413,7 @@ describe "Profile custom HTML rendering", type: :request do
       get "http://seller.example.com/landing/embed"
 
       prices = JSON.parse(response.body[%r{<script id="gumroad-prices"[^>]*>(.*?)</script>}m, 1])
-      expect(prices[membership.general_permalink]).to eq(
+      expect(prices[membership.general_permalink].except("options")).to eq(
         "price" => "€4 a month", "price_cents" => 400, "currency_code" => "eur", "localized" => true
       )
       expect(response.body).to include(">€4 a month<")

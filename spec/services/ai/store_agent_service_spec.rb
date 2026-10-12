@@ -1277,6 +1277,20 @@ describe Ai::StoreAgentService do
         expect(captured[:system]).to match(/Never author an empty image slot/)
       end
 
+      it "points the agent at option-scoped live prices instead of hand-typed tier prices" do
+        captured = nil
+        allow(client).to receive(:messages) do |args|
+          captured = args
+          text_result("ok")
+        end
+
+        service.respond(messages: [{ role: "user", content: "hi" }])
+
+        expect(captured[:system]).to match(/A product with versions, tiers or\s+variants also carries options/)
+        expect(captured[:system]).to match(/adding data-gumroad-option set to a version or tier\s+name/)
+        expect(captured[:system]).to match(/never hand-type a tier price/)
+      end
+
       # Both payload arrays are capped at Pages::ProfileData::MAX_ITEMS, so a page that renders
       # either one has to be told to disclose the cap. Products alone is not enough: a posts
       # archive rendering the first 100 of 260 reads to the creator as posts having vanished,

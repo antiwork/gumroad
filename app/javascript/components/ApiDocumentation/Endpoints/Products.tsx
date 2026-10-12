@@ -187,6 +187,11 @@ gumroad products page publish <permalink> ./landing.html`}
         text inside them.
       </li>
       <li>
+        <code>data-gumroad-field="price"</code> together with <code>data-gumroad-option="&lt;variant name&gt;"</code> —
+        replaced with that variant's, version's or tier's current price instead, priced the same way. A name the product
+        doesn't have leaves the element's own text alone, so write your set price inside it as a fallback.
+      </li>
+      <li>
         <code>data-gumroad-action="buy"</code> — wires the element up to launch the Gumroad checkout. Works on any tag (
         <code>&lt;a&gt;</code>, <code>&lt;button&gt;</code>, <code>&lt;div&gt;</code>).
       </li>

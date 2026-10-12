@@ -643,9 +643,12 @@ class Ai::StoreAgentService
       currency when Gumroad can localize this checkout), price_cents, currency_code, localized
       (true when converted for this visitor), and — only while the creator's default offer code
       discounts the product — original_price and original_price_cents, for rendering the
-      struck-through pre-sale price next to the live one. Equivalently, mark up one element per
+      struck-through pre-sale price next to the live one. A product with versions, tiers or
+      variants also carries options: one item per option, with its id and name plus those same
+      price keys. Equivalently, mark up one element per
       price with both data-gumroad-product set to that permalink and data-gumroad-field="price"
-      (or "original-price", or "currency"), and the server fills it in server-side — use that
+      (or "original-price", or "currency"), adding data-gumroad-option set to a version or tier
+      name for that option's value, and the server fills it in server-side — use that
       form when the price is static markup rather than built by a script, since it then renders
       without JavaScript. Whichever you use, write the creator's own price as the element's text
       so the page still reads correctly if a permalink stops matching (except original-price,
@@ -690,7 +693,9 @@ class Ai::StoreAgentService
       data-gumroad-field="name", "price", "description", "rating", or "review-count" with the
       product's live values on every render. That price is the amount a first-time buyer pays —
       default offer code applied, and memberships quoted at their default recurrence — matching
-      the native page it replaces. "rating" and "review-count" write nothing when the seller has
+      the native page it replaces. To show one version's or tier's price, add data-gumroad-option
+      with its name to a data-gumroad-field="price" element — never hand-type a tier price, which
+      goes stale. "rating" and "review-count" write nothing when the seller has
       reviews hidden or the product has none, so whatever the page already has inside those
       elements stays — put a sensible fallback there rather than a placeholder.
     - Never tell the creator a change is prepared, staged, or waiting for their confirmation unless

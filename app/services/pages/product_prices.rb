@@ -57,13 +57,14 @@ class Pages::ProductPrices
     # to two queries per product), plus what the buyer-currency gate and formatting read. This
     # runs uncached on a public page for up to MAX_ITEMS products, so the preload is load-bearing.
     def products
-      # default_tier is its own has-one-through — `tiers:` does not populate it, and
-      # show_customizable_price_indicator? reads it per tiered membership.
+      # skus_alive_not_default and alive_variants are what Link#option_records reads for the
+      # per-option prices. Do not add default_tier: the preloader batches it with the tier
+      # category's alive_variants and leaves that list holding the default tier alone.
       seller.products.alive.not_archived.not_draft
-            .includes(:alive_prices, :installment_plan, :user, :skus,
+            .includes(:alive_prices, :installment_plan, :user, :skus, :skus_alive_not_default,
                       default_offer_code: :variants,
-                      tiers: :alive_prices, default_tier: :alive_prices,
-                      variant_categories_alive: :alive_variants)
+                      tiers: :alive_prices,
+                      variant_categories_alive: :alive_variants, alive_variants: :alive_prices)
             .order(created_at: :desc, id: :desc).offset(offset).limit(limit)
     end
 
@@ -92,6 +93,22 @@ class Pages::ProductPrices
       # quotes its cheapest recurrence's amount here and its default recurrence's amount there.
       base_price_cents = product.display_price_cents(for_default_duration: true)
       price_cents = product.discounted_price_cents(base_price_cents)
+      entry = price_entry(product, base_price_cents:, price_cents:)
+      entry[:options] = option_entries(product) if product.option_records.any?
+      entry
+    end
+
+    def option_entries(product)
+      product.option_prices.map do |option|
+        {
+          id: option[:id],
+          name: option[:name],
+          **price_entry(product, base_price_cents: option[:base_price_cents], price_cents: option[:price_cents], option:),
+        }
+      end
+    end
+
+    def price_entry(product, base_price_cents:, price_cents:, option: nil)
       # buyer_currency_display_props is the native card's own localization decision — including
       # for the later-charge shapes (memberships, preorders, free trials, commissions,
       # installment plans), which localize while charging is display-only, for USD buyers once
@@ -102,15 +119,16 @@ class Pages::ProductPrices
       display = buyer_currency_display_props(product:, price_cents:, ip:, preferred_currency:)
 
       if display[:display_mode] == "buyer_local" && display[:buyer_local_price_cents].present?
-        localized_entry(product, display, base_price_cents:, price_cents:)
+        customizable = option ? option[:customizable] : product.has_customizable_price_option?
+        localized_entry(product, display, base_price_cents:, price_cents:, customizable:)
       else
-        own_currency_entry(product, base_price_cents:, price_cents:)
+        own_currency_entry(product, base_price_cents:, price_cents:, price: option&.fetch(:price))
       end
     end
 
-    def localized_entry(product, display, base_price_cents:, price_cents:)
+    def localized_entry(product, display, base_price_cents:, price_cents:, customizable:)
       entry = {
-        price: localized_price_formatted(product, display),
+        price: localized_price_formatted(product, display, customizable:),
         price_cents: display[:buyer_local_price_cents],
         currency_code: display[:buyer_currency_shown],
         localized: true,
@@ -133,9 +151,9 @@ class Pages::ProductPrices
       entry
     end
 
-    def own_currency_entry(product, base_price_cents:, price_cents:)
+    def own_currency_entry(product, base_price_cents:, price_cents:, price: nil)
       entry = {
-        price: product.price_formatted_verbose_for_price_cents(
+        price: price || product.price_formatted_verbose_for_price_cents(
           price_cents, recurrence: product.subscription_duration, duration_in_months: product.duration_in_months
         ),
         price_cents:,
@@ -152,10 +170,10 @@ class Pages::ProductPrices
     # Mirrors Link#price_formatted_verbose in the buyer's currency: amount, "+", then the same
     # recurrence wording — recurrence_label is the server twin of formatRecurrenceWithDuration,
     # which is how the native card suffixes its own localized amount client-side.
-    def localized_price_formatted(product, display)
+    def localized_price_formatted(product, display, customizable:)
       formatted = format_in_buyer_currency(display[:buyer_local_price_cents], display[:buyer_currency_shown])
       recurrence = recurrence_label(product.subscription_duration, product.duration_in_months) if product.is_recurring_billing?
-      "#{formatted}#{product.has_customizable_price_option? ? '+' : ''}#{recurrence ? " #{recurrence}" : ''}"
+      "#{formatted}#{customizable ? '+' : ''}#{recurrence ? " #{recurrence}" : ''}"
     end
 
     def format_in_buyer_currency(cents, currency)

@@ -142,6 +142,148 @@ describe Pages::Interpolator do
       expect(result).to include(">$5 once<")
     end
 
+    describe "option-scoped price" do
+      let(:membership) do
+        create(:membership_product_with_preset_tiered_pricing,
+               recurrence_price_values: [
+                 { monthly: { enabled: true, price: 4 }, yearly: { enabled: true, price: 40 } },
+                 { monthly: { enabled: true, price: 9 }, yearly: { enabled: true, price: 90 } },
+               ])
+      end
+
+      it "writes a non-default tier's price at the default monthly recurrence" do
+        html = %(<span data-gumroad-field="price" data-gumroad-option="Second Tier">$0</span>)
+
+        result = described_class.interpolate(html, product: membership)
+
+        expect(result).to include(">$9 a month<")
+      end
+
+      it "writes a tier's price at a yearly default recurrence" do
+        membership.update!(subscription_duration: :yearly)
+        html = %(<span data-gumroad-field="price" data-gumroad-option="Second Tier">$0</span>)
+
+        result = described_class.interpolate(html, product: membership.reload)
+
+        expect(result).to include(">$90 a year<")
+      end
+
+      it "suffixes + only for a pay-what-you-want tier" do
+        membership.tiers.find_by!(name: "Second Tier").update!(customizable_price: true)
+        html = %(<span data-gumroad-field="price" data-gumroad-option="First Tier"></span>) +
+               %(<span data-gumroad-field="price" data-gumroad-option="Second Tier"></span>)
+
+        result = described_class.interpolate(html, product: membership.reload)
+
+        expect(result).to include(">$4 a month<")
+        expect(result).to include(">$9+ a month<")
+      end
+
+      it "writes a version's price as the base price plus its difference" do
+        category = create(:variant_category, link: product)
+        create(:variant, variant_category: category, name: "Basic")
+        create(:variant, variant_category: category, name: "Pro", price_difference_cents: 1000)
+        html = %(<span data-gumroad-field="price" data-gumroad-option="Pro">$0</span>)
+
+        result = described_class.interpolate(html, product: product.reload)
+
+        expect(result).to include(">$25<")
+      end
+
+      it "suffixes + on a version of a pay-what-you-want product" do
+        product.update!(customizable_price: true)
+        category = create(:variant_category, link: product)
+        create(:variant, variant_category: category, name: "Basic")
+        create(:variant, variant_category: category, name: "Pro", price_difference_cents: 1000)
+        html = %(<span data-gumroad-field="price" data-gumroad-option="Pro">$0</span>)
+
+        result = described_class.interpolate(html, product: product.reload)
+
+        expect(result).to include(">$25+<")
+      end
+
+      it "writes a SKU's price as the base price plus its difference, matched by SKU name" do
+        physical = create(:physical_product, price_cents: 1000)
+        create(:sku, link: physical, name: "Small")
+        create(:sku, link: physical, name: "Large", price_difference_cents: 500)
+        html = %(<span data-gumroad-field="price" data-gumroad-option="Large">$0</span>)
+
+        result = described_class.interpolate(html, product: physical.reload)
+
+        expect(result).to include(">$15<")
+      end
+
+      it "matches an Untitled version by the product's name, as the buy button does" do
+        category = create(:variant_category, link: product)
+        create(:variant, variant_category: category, name: "Untitled", price_difference_cents: 500)
+        create(:variant, variant_category: category, name: "Pro", price_difference_cents: 1000)
+        html = %(<span data-gumroad-field="price" data-gumroad-option="Test Product">$0</span>)
+
+        result = described_class.interpolate(html, product: product.reload)
+
+        expect(result).to include(">$20<")
+      end
+
+      it "writes the price of a product's only option" do
+        create(:variant, variant_category: create(:variant_category, link: product), name: "Pro", price_difference_cents: 1000)
+        html = %(<span data-gumroad-field="price" data-gumroad-option="Pro">$0</span>)
+
+        result = described_class.interpolate(html, product: product.reload)
+
+        expect(result).to include(">$25<")
+      end
+
+      it "takes an option-scoped default offer code off that option only" do
+        category = create(:variant_category, link: product)
+        create(:variant, variant_category: category, name: "Basic")
+        pro = create(:variant, variant_category: category, name: "Pro", price_difference_cents: 1000)
+        offer_code = product.user.offer_codes.create!(code: "half", amount_percentage: 50, products: [product], variants: [pro])
+        product.update!(default_offer_code: offer_code)
+        html = %(<span data-gumroad-field="price" data-gumroad-option="Basic"></span>) +
+               %(<span data-gumroad-field="price" data-gumroad-option="Pro"></span>) +
+               %(<span data-gumroad-field="price"></span>)
+
+        result = described_class.interpolate(html, product: product.reload)
+
+        expect(result).to include(%(data-gumroad-option="Basic">$15</span>))
+        expect(result).to include(%(data-gumroad-option="Pro">$12.50</span>))
+        expect(result).to include(%(<span data-gumroad-field="price">$15</span>))
+      end
+
+      it "keeps the element's own text for an option the product does not have" do
+        html = %(<span data-gumroad-field="price" data-gumroad-option="Gold Tier">From $9</span>)
+
+        result = described_class.interpolate(html, product: membership)
+
+        expect(result).to include(">From $9<")
+      end
+
+      it "keeps the element's own text for a deleted option" do
+        membership.tiers.find_by!(name: "Second Tier").mark_deleted!
+        html = %(<span data-gumroad-field="price" data-gumroad-option="Second Tier">From $9</span>)
+
+        result = described_class.interpolate(html, product: membership.reload)
+
+        expect(result).to include(">From $9<")
+      end
+
+      it "leaves elements without the option attribute on the product price" do
+        html = %(<span data-gumroad-field="price">$0</span>)
+
+        result = described_class.interpolate(html, product: membership)
+
+        expect(result).to eq(%(<span data-gumroad-field="price">$4+ a month</span>))
+      end
+
+      it "ignores the option attribute on fields other than price" do
+        html = %(<span data-gumroad-field="name" data-gumroad-option="Second Tier">x</span>)
+
+        result = described_class.interpolate(html, product: membership)
+
+        expect(result).to include(">#{membership.name}<")
+      end
+    end
+
     it "preserves the description's paragraph/heading structure instead of collapsing it to plain text" do
       product.update!(description: "<h1>Title</h1><p>First paragraph.</p><p>Second <strong>paragraph</strong>.</p>")
       html = %(<div data-gumroad-field="description">placeholder</div>)
@@ -451,6 +593,58 @@ describe Pages::Interpolator do
 
         expect(result).to include(">Jane Doe<")
         expect(result).to include(">€11.20<")
+      end
+
+      describe "option-scoped" do
+        let(:prices) do
+          {
+            "quicklauncher" => {
+              price: "€11.20", price_cents: 1120, currency_code: "eur", localized: true,
+              options: [
+                { id: "basic-id", name: "Basic", price: "€11.20", price_cents: 1120, currency_code: "eur", localized: true },
+                { id: "pro-id", name: "Pro", price: "€15", price_cents: 1500, currency_code: "eur", localized: true,
+                  original_price: "€30", original_price_cents: 3000 },
+              ],
+            },
+          }
+        end
+
+        it "writes the named option's price, original price and currency" do
+          html = %(<span data-gumroad-product="quicklauncher" data-gumroad-option="Pro" data-gumroad-field="price">$0</span>) +
+                 %(<s data-gumroad-product="quicklauncher" data-gumroad-option="Pro" data-gumroad-field="original-price"></s>) +
+                 %(<span data-gumroad-product="quicklauncher" data-gumroad-option="Pro" data-gumroad-field="currency"></span>)
+
+          result = described_class.interpolate_profile(html, profile: seller, prices:)
+
+          expect(result).to include(%(data-gumroad-field="price">€15</span>))
+          expect(result).to include(%(data-gumroad-field="original-price">€30</s>))
+          expect(result).to include(%(data-gumroad-field="currency">EUR</span>))
+        end
+
+        it "leaves an option's original-price element empty when that option is not discounted" do
+          html = %(<s data-gumroad-product="quicklauncher" data-gumroad-option="Basic" data-gumroad-field="original-price"></s>)
+
+          result = described_class.interpolate_profile(html, profile: seller, prices:)
+
+          expect(result).to include(%(data-gumroad-field="original-price"></s>))
+        end
+
+        it "leaves the element's own text alone when the option is unknown" do
+          html = %(<span data-gumroad-product="quicklauncher" data-gumroad-option="Gold" data-gumroad-field="price">From $9</span>)
+
+          result = described_class.interpolate_profile(html, profile: seller, prices:)
+
+          expect(result).to include(">From $9<")
+        end
+
+        it "leaves the element's own text alone when the product has no options" do
+          html = %(<span data-gumroad-product="solo" data-gumroad-option="Pro" data-gumroad-field="price">From $9</span>)
+          solo = { "solo" => { price: "€11.20", price_cents: 1120, currency_code: "eur", localized: true } }
+
+          result = described_class.interpolate_profile(html, profile: seller, prices: solo)
+
+          expect(result).to include(">From $9<")
+        end
       end
 
       it "html-escapes the interpolated price" do

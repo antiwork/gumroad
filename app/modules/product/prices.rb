@@ -127,9 +127,12 @@ module Product::Prices
   # Pass `duration_in_months:` to engage the finite-term wording the native card renders
   # ("once" for a single-charge term, "a month x 6" for a longer fixed one); nil keeps the
   # open-ended label every existing caller shows today.
-  def price_formatted_verbose_for_price_cents(price_cents, recurrence: display_recurrence, duration_in_months: nil)
+  #
+  # Pass `customizable:` when the amount is one option's, whose "+" follows that option's own
+  # pay-what-you-want setting rather than the product's.
+  def price_formatted_verbose_for_price_cents(price_cents, recurrence: display_recurrence, duration_in_months: nil, customizable: show_customizable_price_indicator?)
     formatted = format_price(display_price_for_price_cents(price_cents))
-    "#{formatted}#{show_customizable_price_indicator? ? '+' : ''}#{is_recurring_billing ? " #{recurrence_label(recurrence, duration_in_months)}" : ''}"
+    "#{formatted}#{customizable ? '+' : ''}#{is_recurring_billing ? " #{recurrence_label(recurrence, duration_in_months)}" : ''}"
   end
 
   def price_formatted_including_rental_verbose
@@ -217,7 +220,10 @@ module Product::Prices
   # cannot meet (Purchase::CreateService raises below it), and a spent use cap. Erring the
   # other way is safe — a buyer who qualifies later sees the price drop at checkout, where the
   # binding amount is minted. PPP stays out entirely: it needs per-cart context.
-  def discounted_price_cents(base_price_cents)
+  #
+  # Pass `option:` when base_price_cents is that option's price, so an option-scoped code is
+  # checked against that option instead of the lowest-priced one.
+  def discounted_price_cents(base_price_cents, option: nil)
     offer_code = default_offer_code
     return base_price_cents if offer_code.blank? || offer_code.deleted? || offer_code.inactive? || offer_code.existing_customers_only?
     # A fixed-cents code stops matching after a product currency change; checkout's
@@ -226,9 +232,44 @@ module Product::Prices
     return base_price_cents if offer_code.minimum_quantity.to_i > 1
     return base_price_cents if offer_code.minimum_amount_cents.to_i > base_price_cents
     return base_price_cents unless default_offer_code_uses_left?(offer_code)
-    return base_price_cents unless discounts_lowest_priced_option?(offer_code)
+    if option
+      preload_scoped_variant_categories(offer_code)
+      return base_price_cents unless offer_code.applicable_to_variant?(self, option)
+    else
+      return base_price_cents unless discounts_lowest_priced_option?(offer_code)
+    end
 
     [base_price_cents - offer_code.amount_off(base_price_cents), 0].max
+  end
+
+  # Every option of #options priced the way display_price_cents(for_default_duration: true) and
+  # discounted_price_cents price the product, for surfaces that quote one option. A tier with no
+  # price at the default recurrence is left out rather than quoted at zero.
+  def option_prices
+    option_records.filter_map do |option|
+      if is_tiered_membership?
+        tier_price = option.alive_prices.select { |price| price.is_buy? && price.recurrence == subscription_duration }.last
+        next if tier_price.nil?
+
+        base_price_cents = tier_price.price_cents
+        customizable = option.customizable_price?
+      else
+        base_price_cents = (default_price_cents || 0) + option.price_difference_cents.to_i
+        customizable = customizable_price?
+      end
+      price_cents = discounted_price_cents(base_price_cents, option:)
+
+      {
+        id: option.external_id,
+        # Same naming as BaseVariant#to_option and Sku#to_option_for_product, which is what a
+        # data-gumroad-option value is matched against.
+        name: (skus_enabled? || option.name != "Untitled") ? option.name.to_s : name,
+        base_price_cents:,
+        price_cents:,
+        customizable:,
+        price: price_formatted_verbose_for_price_cents(price_cents, recurrence: subscription_duration, duration_in_months:, customizable:),
+      }
+    end
   end
 
   def display_price(additional_attrs = {})
@@ -440,10 +481,7 @@ module Product::Prices
     # base_price_cents is the lowest option's price, so an option-scoped code that leaves that
     # option out would quote a price the buyer only reaches by picking a dearer option.
     def discounts_lowest_priced_option?(offer_code)
-      # Categories are loaded for the Variants only: a SKU has no variant_category to preload, and
-      # an includes on ProductPresenter::Card::ASSOCIATIONS would raise for a SKU-scoped code.
-      unloaded = offer_code.variants.grep(Variant).reject { |variant| variant.association(:variant_category).loaded? }
-      ActiveRecord::Associations::Preloader.new(records: unloaded, associations: :variant_category).call if unloaded.any?
+      preload_scoped_variant_categories(offer_code)
 
       restricted_ids = offer_code.restricted_variants_for(self).map(&:id)
       return true if restricted_ids.empty?
@@ -459,6 +497,14 @@ module Product::Prices
         end
 
       (lowest_ids & restricted_ids).any?
+    end
+
+    # restricted_variants_for reads each scoped option's owning product. Categories are loaded for
+    # the Variants only: a SKU has no variant_category to preload, and an includes on
+    # ProductPresenter::Card::ASSOCIATIONS would raise for a SKU-scoped code.
+    def preload_scoped_variant_categories(offer_code)
+      unloaded = offer_code.variants.grep(Variant).reject { |variant| variant.association(:variant_category).loaded? }
+      ActiveRecord::Associations::Preloader.new(records: unloaded, associations: :variant_category).call if unloaded.any?
     end
 
     # Every tier tied at the default-duration lowest price, since a code covering any of them

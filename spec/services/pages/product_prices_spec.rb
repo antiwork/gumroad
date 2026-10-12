@@ -115,7 +115,7 @@ describe Pages::ProductPrices do
       entry = described_class.build(seller, ip: french_ip)[membership.general_permalink]
       native = native_card_props(membership, french_ip)
 
-      expect(entry).to eq(price: "€4 a month", price_cents: 400, currency_code: "eur", localized: true)
+      expect(entry.except(:options)).to eq(price: "€4 a month", price_cents: 400, currency_code: "eur", localized: true)
       expect(entry[:price_cents]).to eq(native[:buyer_local_price_cents])
       expect(entry[:currency_code]).to eq(native[:buyer_currency_display][:buyer_currency_shown])
     end
@@ -134,7 +134,7 @@ describe Pages::ProductPrices do
       entry = described_class.build(seller, ip: us_ip)[membership.general_permalink]
       native = native_card_props(membership, us_ip)
 
-      expect(entry).to eq(price: "$6.25 a month", price_cents: 625, currency_code: "usd", localized: true)
+      expect(entry.except(:options)).to eq(price: "$6.25 a month", price_cents: 625, currency_code: "usd", localized: true)
       expect(entry[:price_cents]).to eq(native[:buyer_local_price_cents])
       expect(entry[:currency_code]).to eq(native[:buyer_currency_display][:buyer_currency_shown])
     end
@@ -152,7 +152,7 @@ describe Pages::ProductPrices do
       entry = described_class.build(seller, ip: french_ip)[membership.general_permalink]
       native = native_card_props(membership, french_ip)
 
-      expect(entry).to eq(price: "€4 a month", price_cents: 400, currency_code: "eur", localized: true)
+      expect(entry.except(:options)).to eq(price: "€4 a month", price_cents: 400, currency_code: "eur", localized: true)
       expect(entry[:price_cents]).to eq(native[:buyer_local_price_cents])
       expect(entry[:currency_code]).to eq(native[:buyer_currency_display][:buyer_currency_shown])
     end
@@ -170,7 +170,7 @@ describe Pages::ProductPrices do
       entry = described_class.build(seller, ip: french_ip)[membership.general_permalink]
       native = native_card_props(membership, french_ip)
 
-      expect(entry).to eq(price: "$5 a month", price_cents: 500, currency_code: "usd", localized: false)
+      expect(entry.except(:options)).to eq(price: "$5 a month", price_cents: 500, currency_code: "usd", localized: false)
       expect(native[:buyer_currency_display][:display_mode]).to eq("default")
       expect(native[:buyer_local_price_cents]).to be_nil
     end
@@ -432,6 +432,189 @@ describe Pages::ProductPrices do
                           original_price: "€11.20", original_price_cents: 1120)
     end
 
+    describe "options" do
+      let(:tier_prices) do
+        [
+          { monthly: { enabled: true, price: 4 }, yearly: { enabled: true, price: 40 } },
+          { monthly: { enabled: true, price: 9 }, yearly: { enabled: true, price: 90 } },
+        ]
+      end
+
+      def add_versions(to_product)
+        category = create(:variant_category, link: to_product)
+        basic = create(:variant, variant_category: category, name: "Basic")
+        pro = create(:variant, variant_category: category, name: "Pro", price_difference_cents: 600)
+        [basic, pro]
+      end
+
+      it "prices every tier at the default recurrence, in option order" do
+        membership = create(:membership_product_with_preset_tiered_pricing, user: seller, subscription_duration: :yearly,
+                                                                            recurrence_price_values: tier_prices)
+        first_tier, second_tier = membership.tiers.sort_by(&:id)
+
+        entry = described_class.build(seller, ip: nil)[membership.general_permalink]
+
+        expect(entry.except(:options)).to eq(price: "$40+ a year", price_cents: 4000, currency_code: "usd", localized: false)
+        expect(entry[:options]).to eq([
+                                        { id: first_tier.external_id, name: "First Tier", price: "$40 a year", price_cents: 4000, currency_code: "usd", localized: false },
+                                        { id: second_tier.external_id, name: "Second Tier", price: "$90 a year", price_cents: 9000, currency_code: "usd", localized: false },
+                                      ])
+      end
+
+      it "omits a tier with no price at the default recurrence" do
+        membership = create(:membership_product_with_preset_tiered_pricing, user: seller, subscription_duration: :yearly,
+                                                                            recurrence_price_values: tier_prices)
+        membership.tiers.find_by!(name: "Second Tier").alive_prices.find_by!(recurrence: "yearly").mark_deleted!
+
+        entry = described_class.build(seller, ip: nil)[membership.general_permalink]
+
+        expect(entry[:options].map { _1[:name] }).to eq(["First Tier"])
+      end
+
+      it "prices each version as the base price plus its difference" do
+        basic, pro = add_versions(product)
+
+        entry = described_class.build(seller, ip: nil)[product.general_permalink]
+
+        expect(entry.except(:options)).to eq(price: "$14", price_cents: 1400, currency_code: "usd", localized: false)
+        expect(entry[:options]).to eq([
+                                        { id: basic.external_id, name: "Basic", price: "$14", price_cents: 1400, currency_code: "usd", localized: false },
+                                        { id: pro.external_id, name: "Pro", price: "$20", price_cents: 2000, currency_code: "usd", localized: false },
+                                      ])
+      end
+
+      it "discounts only the options an option-scoped default code covers" do
+        _basic, pro = add_versions(product)
+        offer_code = seller.offer_codes.create!(code: "half", amount_percentage: 50, products: [product], variants: [pro])
+        product.update!(default_offer_code: offer_code)
+
+        entry = described_class.build(seller, ip: nil)[product.general_permalink]
+
+        expect(entry.except(:options)).to eq(price: "$14", price_cents: 1400, currency_code: "usd", localized: false)
+        expect(entry[:options].first).not_to have_key(:original_price)
+        expect(entry[:options].first[:price_cents]).to eq(1400)
+        expect(entry[:options].second).to include(price: "$10", price_cents: 1000, original_price: "$20", original_price_cents: 2000)
+      end
+
+      it "discounts every option under an unscoped default code" do
+        add_versions(product)
+        offer_code = seller.offer_codes.create!(code: "half", amount_percentage: 50, products: [product])
+        product.update!(default_offer_code: offer_code)
+
+        options = described_class.build(seller, ip: nil)[product.general_permalink][:options]
+
+        expect(options.map { _1.slice(:price, :original_price) }).to eq([{ price: "$7", original_price: "$14" }, { price: "$10", original_price: "$20" }])
+      end
+
+      it "localizes each option and its original price through the product's rate" do
+        _basic, pro = add_versions(product)
+        offer_code = seller.offer_codes.create!(code: "half", amount_percentage: 50, products: [product], variants: [pro])
+        product.update!(default_offer_code: offer_code)
+        enable_buyer_local_currency
+        stub_geoip(french_ip, "FR")
+        allow_any_instance_of(described_class).to receive(:buyer_local_currency_rate).and_return(BigDecimal("0.8"))
+
+        entry = described_class.build(seller, ip: french_ip)[product.general_permalink]
+
+        expect(entry.except(:options)).to eq(price: "€11.20", price_cents: 1120, currency_code: "eur", localized: true)
+        expect(entry[:options].map { _1.except(:id) }).to eq([
+                                                               { name: "Basic", price: "€11.20", price_cents: 1120, currency_code: "eur", localized: true },
+                                                               { name: "Pro", price: "€8", price_cents: 800, currency_code: "eur", localized: true,
+                                                                 original_price: "€16", original_price_cents: 1600 },
+                                                             ])
+      end
+
+      it "localizes a tier's price with its recurrence wording" do
+        membership = create(:membership_product_with_preset_tiered_pricing, user: seller, recurrence_price_values: tier_prices)
+        membership.tiers.find_by!(name: "Second Tier").update!(customizable_price: true)
+        enable_buyer_local_currency
+        stub_geoip(french_ip, "FR")
+        allow_any_instance_of(described_class).to receive(:buyer_local_currency_rate).and_return(BigDecimal("0.8"))
+
+        options = described_class.build(seller, ip: french_ip)[membership.general_permalink][:options]
+
+        expect(options.map { _1[:price] }).to eq(["€3.20 a month", "€7.20+ a month"])
+      end
+
+      it "adds no options key to a product without options" do
+        expect(described_class.build(seller, ip: nil)[product.general_permalink]).not_to have_key(:options)
+      end
+
+      it "prices the only option of a single-tier membership and of a product with one version" do
+        membership = create(:membership_product, user: seller, price_cents: 500)
+        version = create(:variant, variant_category: create(:variant_category, link: product), name: "Pro", price_difference_cents: 600)
+
+        prices = described_class.build(seller, ip: nil)
+
+        tier = membership.reload.option_records.sole
+        expect(prices[membership.general_permalink][:options]).to eq([
+                                                                       { id: tier.external_id, name: membership.name, price: "$5 a month", price_cents: 500, currency_code: "usd", localized: false },
+                                                                     ])
+        expect(prices[product.general_permalink][:options]).to eq([
+                                                                    { id: version.external_id, name: "Pro", price: "$20", price_cents: 2000, currency_code: "usd", localized: false },
+                                                                  ])
+      end
+
+      it "prices each SKU as the base price plus its difference" do
+        physical = create(:physical_product, user: seller, price_cents: 1000)
+        small = create(:sku, link: physical, name: "Small")
+        large = create(:sku, link: physical, name: "Large", price_difference_cents: 500)
+
+        options = described_class.build(seller, ip: nil)[physical.general_permalink][:options]
+
+        expect(options).to eq([
+                                { id: small.external_id, name: "Small", price: "$10", price_cents: 1000, currency_code: "usd", localized: false },
+                                { id: large.external_id, name: "Large", price: "$15", price_cents: 1500, currency_code: "usd", localized: false },
+                              ])
+      end
+
+      it "names an Untitled version after the product, as the buy button does" do
+        category = create(:variant_category, link: product)
+        create(:variant, variant_category: category, name: "Untitled")
+        create(:variant, variant_category: category, name: "Pro", price_difference_cents: 600)
+
+        options = described_class.build(seller, ip: nil)[product.general_permalink][:options]
+
+        expect(options.map { _1[:name] }).to eq(product.options.map { _1[:name] })
+        expect(options.map { _1[:name] }).to eq(["Quicklauncher", "Pro"])
+      end
+
+      it "issues the same number of queries however many tiered and versioned products the page holds" do
+        count_queries = lambda do
+          queries = 0
+          subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |*, payload|
+            queries += 1 unless payload[:name] == "SCHEMA"
+          end
+          described_class.build(seller, ip: nil)
+          ActiveSupport::Notifications.unsubscribe(subscriber)
+          queries
+        end
+        add_scoped_versions = lambda do |code|
+          extra = create(:product, user: seller, price_cents: 1000)
+          _basic, pro = add_versions(extra)
+          extra.update!(default_offer_code: seller.offer_codes.create!(code:, amount_percentage: 10, products: [extra], variants: [pro]))
+        end
+        add_skus = lambda do
+          physical = create(:physical_product, user: seller, price_cents: 1000)
+          create(:sku, link: physical, name: "Small")
+          create(:sku, link: physical, name: "Large", price_difference_cents: 500)
+        end
+
+        create(:membership_product_with_preset_tiered_pricing, user: seller, recurrence_price_values: tier_prices)
+        add_scoped_versions.call("opt0")
+        add_skus.call
+        baseline = count_queries.call
+        3.times do |i|
+          create(:membership_product_with_preset_tiered_pricing, user: seller, recurrence_price_values: tier_prices)
+          add_scoped_versions.call("more#{i}")
+          add_skus.call
+        end
+
+        expect(count_queries.call).to eq(baseline)
+        expect(described_class.build(seller, ip: nil).values.count { _1[:options]&.size == 2 }).to eq(12)
+      end
+    end
+
     it "skips deleted, archived and draft products, matching the gumroad-data payload" do
       create(:product, user: seller, deleted_at: Time.current)
       create(:product, user: seller, archived: true)
@@ -455,6 +638,19 @@ describe Pages::ProductPrices do
 
       expect(price_keys.length).to eq(2)
       expect(price_keys).to eq(products.select { |p| page_names.include?(p.name) }.sort_by { |p| -p.created_at.to_i }.map(&:general_permalink))
+    end
+
+    it "quotes a multi-tier membership at its cheapest tier, as the native card does, when the first tier is dearer" do
+      membership = create(:membership_product_with_preset_tiered_pricing, user: seller, subscription_duration: :monthly,
+                                                                          recurrence_price_values: [
+                                                                            { monthly: { enabled: true, price: 99 } },
+                                                                            { monthly: { enabled: true, price: 29 } },
+                                                                          ])
+
+      entry = described_class.build(seller, ip: nil)[membership.general_permalink]
+
+      expect(entry.except(:options)).to eq(price: "$29+ a month", price_cents: 2900, currency_code: "usd", localized: false)
+      expect(entry[:price]).to eq(membership.reload.price_formatted_verbose(for_default_duration: true, discounted: true))
     end
 
     # Formatting a tiered membership reads default_tier, a separate has-one-through that the

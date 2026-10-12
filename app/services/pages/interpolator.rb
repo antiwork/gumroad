@@ -75,6 +75,12 @@ class Pages::Interpolator
     "currency" => ->(entry) { entry[:currency_code].to_s.upcase.presence },
   }.freeze
 
+  # data-gumroad-option scopes a price to one option by the same name the buy button takes
+  # (Pages::BuyButtonParams#variant), so blank means "no option" there and here alike.
+  def self.option_name(node)
+    node["data-gumroad-option"].presence
+  end
+
   # Profiles have no buy affordance, so profile interpolation only fills in
   # display fields — no buy-button validation or ?wanted=true href rewriting.
   #
@@ -97,6 +103,9 @@ class Pages::Interpolator
       # published page and the live preview disagree.
       unless permalink.nil?
         entry = prices[permalink]
+        if entry && (option = option_name(node))
+          entry = entry[:options]&.find { |candidate| candidate[:name] == option }
+        end
         handler = PRODUCT_PRICE_FIELDS[field]
         value = entry && handler ? handler.call(entry) : nil
         # An unknown permalink or field leaves the element untouched, so whatever the page wrote
@@ -118,10 +127,16 @@ class Pages::Interpolator
     # :unloaded, not nil, because nil is the meaningful "reviews hidden or none yet" result and
     # must be memoized too.
     summary = :unloaded
+    option_prices = nil
 
     fragment.css("[data-gumroad-field]").each do |node|
       field = node["data-gumroad-field"]
-      if (handler = FIELDS[field])
+      if field == "price" && (option = option_name(node))
+        # An option the product lacks (a typo, a deleted version) keeps the element's own text
+        # rather than falling back to the product price, which would misquote that option.
+        option_prices ||= product.option_prices
+        value = option_prices.find { |candidate| candidate[:name] == option }&.fetch(:price)
+      elsif (handler = FIELDS[field])
         value = handler.call(product)
       elsif (handler = REVIEW_FIELDS[field])
         summary = review_summary(product) if summary == :unloaded

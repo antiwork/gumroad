@@ -196,6 +196,31 @@ describe UsersController, :vcr, type: :controller do
       expect(response.body).not_to include(">placeholder<")
     end
 
+    it "embeds each option's live price in the gumroad-prices blob" do
+      membership = create(:membership_product_with_preset_tiered_pricing, user: seller)
+      seller.update!(custom_html: %(<div id="app"></div><script>document.getElementById("gumroad-prices")</script>))
+
+      get :landing_iframe_content
+
+      blob = Nokogiri::HTML(response.body).at_css("script#gumroad-prices").text
+      options = JSON.parse(blob).dig(membership.general_permalink, "options")
+      expect(options.map { _1.slice("name", "price") }).to eq([{ "name" => "First Tier", "price" => "$3 a month" },
+                                                               { "name" => "Second Tier", "price" => "$5 a month" }])
+    end
+
+    it "fills an option-scoped price for a product's only option" do
+      membership = create(:membership_product, user: seller, price_cents: 500)
+      product = create(:product, user: seller, price_cents: 1000)
+      create(:variant, variant_category: create(:variant_category, link: product), name: "Pro", price_difference_cents: 500)
+      seller.update!(custom_html: %(<span data-gumroad-product="#{membership.general_permalink}" data-gumroad-option="#{membership.name}" data-gumroad-field="price">$0</span>) +
+                                  %(<i data-gumroad-product="#{product.general_permalink}" data-gumroad-option="Pro" data-gumroad-field="price">$0</i>))
+
+      get :landing_iframe_content
+
+      expect(response.body).to include(%(data-gumroad-field="price">$5 a month</span>))
+      expect(response.body).to include(%(data-gumroad-field="price">$15</i>))
+    end
+
     it "does not embed a checkout bridge in the iframe document" do
       seller.update!(custom_html: %(<a data-gumroad-action="buy" href="/x">Buy</a>))
 

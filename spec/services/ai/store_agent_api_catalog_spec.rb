@@ -423,6 +423,10 @@ describe Ai::StoreAgentApiCatalog do
       expect(summary).to include("data-gumroad-field")
     end
 
+    it "tells the model a product page can price one option with data-gumroad-option" do
+      expect(described_class.find("update_product_custom_html").summary).to include("data-gumroad-option")
+    end
+
     # The guardrail copy lives on update_product_custom_html, so the plain product update must not
     # offer a second, warning-free path to the same write.
     it "keeps custom_html out of the generic update_product params" do

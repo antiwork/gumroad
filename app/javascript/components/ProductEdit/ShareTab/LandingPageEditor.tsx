@@ -29,6 +29,7 @@ IMPORTANT: a custom landing page REPLACES the entire product page, including the
 
 Mark live values and buy buttons with data attributes that Gumroad fills in server-side:
 - data-gumroad-field="name|price|description|rating|review-count" — interpolated with the product's current values. rating and review-count are left as you wrote them when reviews are hidden or the product has none, so put a fallback like "Be the first to review" inside those elements.
+- data-gumroad-field="price" plus data-gumroad-option="<variant name>" — that variant/version/tier's current price instead of the product's, so never hand-type a tier price. An unknown name keeps your own text.
 - data-gumroad-action="buy" — wired up to launch the Gumroad checkout. Use on any element (<a>, <button>, <div>).
 
 For products with selection state, set the choice directly on the buy element so the checkout opens pre-selected (an invalid value silently falls back to the product defaults — it won't break the page):

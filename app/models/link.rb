@@ -870,17 +870,21 @@ class Link < ApplicationRecord
   end
 
   def options
+    skus_enabled? ? option_records.map(&:to_option_for_product) : option_records.map(&:to_option)
+  end
+
+  # The SKU or Variant records behind #options, in the same order.
+  def option_records
     if skus_enabled?
-      skus_alive_not_default.map(&:to_option_for_product)
+      skus_alive_not_default.to_a
     elsif variant_categories_alive.any?
       first_category = variant_categories_alive.first
       if alive_variants.loaded?
         alive_variants
           .select { |v| v.variant_category_id == first_category.id }
           .sort_by { |v| [v.position_in_category.nil? ? 0 : 1, v.position_in_category.to_i, v.created_at || Time.at(0)] }
-          .map(&:to_option)
       else
-        variants.where(variant_category: first_category).in_order.alive.map(&:to_option)
+        variants.where(variant_category: first_category).in_order.alive.to_a
       end
     else
       []
