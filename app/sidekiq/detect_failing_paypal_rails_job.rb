@@ -11,41 +11,49 @@ class DetectFailingPaypalRailsJob
   LOOKBACK = 7.days
   MIN_FAILED_ATTEMPTS = 20
   DEDUP_WINDOW = LOOKBACK
+  BATCH_SIZE = 500
   PAYEE_ERROR_CODES = [PurchaseErrorCode::PAYPAL_PAYEE_COMPLIANCE_VIOLATION].freeze
   PAYEE_STRIPE_ERROR_CODES = [PurchaseErrorCode::PAYPAL_MERCHANT_ACCOUNT_RESTRICTED].freeze
 
   def perform
     now = Time.current
     window = (now - LOOKBACK)..now
-    account_ids = connected_paypal_accounts.pluck(:id)
-    seller_ids = connected_paypal_accounts.pluck(:user_id)
-    # seller_id keeps the query on the (seller_id, purchase_state, created_at) index.
-    scope = Purchase.paypal.where(created_at: window, seller_id: seller_ids)
-    failed_counts = scope.failed
-                            .where(merchant_account_id: account_ids)
-                            .merge(Purchase.where(error_code: PAYEE_ERROR_CODES).or(Purchase.where(stripe_error_code: PAYEE_STRIPE_ERROR_CODES)))
-                            .group(:merchant_account_id)
-                            .having("COUNT(*) >= ?", MIN_FAILED_ATTEMPTS)
-                            .count
-    return if failed_counts.empty?
 
-    # merchant_account_id is unindexed, so narrow to the failing accounts' sellers before filtering on it.
-    failing_seller_ids = connected_paypal_accounts.where(id: failed_counts.keys).pluck(:user_id)
-    completed_ids = Purchase.paypal.where(created_at: window, seller_id: failing_seller_ids)
-                            .all_success_states
-                            .where(merchant_account_id: failed_counts.keys)
-                            .distinct
-                            .pluck(:merchant_account_id)
-
-    connected_paypal_accounts.where(id: failed_counts.keys - completed_ids).find_each do |merchant_account|
-      note_failing_rail(merchant_account, failed_counts.fetch(merchant_account.id))
-    rescue StandardError => e
-      # One account's failure must not stop the remaining accounts from being noted.
-      ErrorNotifier.notify(e, context: { merchant_account_id: merchant_account.id, user_id: merchant_account.user_id })
+    connected_paypal_accounts.find_in_batches(batch_size: BATCH_SIZE) do |accounts|
+      note_failing_accounts(accounts, window)
     end
   end
 
   private
+    def note_failing_accounts(accounts, window)
+      account_ids = accounts.map(&:id)
+      seller_ids = accounts.map(&:user_id)
+      # seller_id keeps the query on the (seller_id, purchase_state, created_at) index.
+      failed_counts = Purchase.paypal.where(created_at: window, seller_id: seller_ids)
+                              .failed
+                              .where(merchant_account_id: account_ids)
+                              .merge(Purchase.where(error_code: PAYEE_ERROR_CODES).or(Purchase.where(stripe_error_code: PAYEE_STRIPE_ERROR_CODES)))
+                              .group(:merchant_account_id)
+                              .having("COUNT(*) >= ?", MIN_FAILED_ATTEMPTS)
+                              .count
+      return if failed_counts.empty?
+
+      failing_accounts = accounts.select { |account| failed_counts.key?(account.id) }
+      # merchant_account_id is unindexed, so narrow to the failing accounts' sellers before filtering on it.
+      completed_ids = Purchase.paypal.where(created_at: window, seller_id: failing_accounts.map(&:user_id))
+                              .all_success_states
+                              .where(merchant_account_id: failed_counts.keys)
+                              .distinct
+                              .pluck(:merchant_account_id)
+
+      failing_accounts.reject { |account| completed_ids.include?(account.id) }.each do |merchant_account|
+        note_failing_rail(merchant_account, failed_counts.fetch(merchant_account.id))
+      rescue StandardError => e
+        # One account's failure must not stop the remaining accounts from being noted.
+        ErrorNotifier.notify(e, context: { merchant_account_id: merchant_account.id, user_id: merchant_account.user_id })
+      end
+    end
+
     def connected_paypal_accounts
       MerchantAccount.paypal.alive.charge_processor_alive.where.not(user_id: nil)
     end

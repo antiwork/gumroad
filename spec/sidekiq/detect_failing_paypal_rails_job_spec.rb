@@ -9,8 +9,8 @@ describe DetectFailingPaypalRailsJob do
 
   def create_purchases(count, state:, account: merchant_account, created_at: 1.day.ago, charge_processor_id: PaypalChargeProcessor.charge_processor_id, **attrs)
     attrs = { error_code: PurchaseErrorCode::PAYPAL_PAYEE_COMPLIANCE_VIOLATION }.merge(attrs) if state == "failed"
-    link = create(:product, user: account.user || create(:user))
-    create_list(:purchase, count, link:, purchase_state: state, merchant_account: account, charge_processor_id:, created_at:, **attrs)
+    product = create(:product, user: account.user || create(:user))
+    create_list(:purchase, count, link: product, purchase_state: state, merchant_account: account, charge_processor_id:, created_at:, **attrs)
   end
 
   def notes_for(user)
@@ -109,6 +109,36 @@ describe DetectFailingPaypalRailsJob do
 
       expect { described_class.new.perform }.to change { Comment.count }.by(2)
       expect(notes_for(other_account.user).count).to eq(1)
+    end
+
+    it "applies the same rules to every account when accounts are processed in batches" do
+      stub_const("#{described_class}::BATCH_SIZE", 1)
+      completed_account = create(:merchant_account_paypal, user: create(:user))
+      below_threshold_account = create(:merchant_account_paypal, user: create(:user))
+      other_account = create(:merchant_account_paypal, user: create(:user))
+      create_purchases(threshold, state: "failed")
+      create_purchases(threshold, state: "failed", account: completed_account)
+      create_purchases(1, state: "successful", account: completed_account)
+      create_purchases(threshold - 1, state: "failed", account: below_threshold_account)
+      create_purchases(threshold, state: "failed", account: other_account)
+
+      expect { described_class.new.perform }.to change { Comment.count }.by(2)
+
+      expect(notes_for(seller).count).to eq(1)
+      expect(notes_for(other_account.user).count).to eq(1)
+      expect(notes_for(completed_account.user).count).to eq(0)
+      expect(notes_for(below_threshold_account.user).count).to eq(0)
+    end
+
+    it "loads connected accounts in bounded batches" do
+      stub_const("#{described_class}::BATCH_SIZE", 2)
+      4.times { create(:merchant_account_paypal, user: create(:user)) }
+      batch_sizes = []
+      allow_any_instance_of(described_class).to receive(:note_failing_accounts) { |_job, accounts, _window| batch_sizes << accounts.size }
+
+      described_class.new.perform
+
+      expect(batch_sizes).to eq([2, 2, 1])
     end
 
     it "notes the remaining accounts when one account's note operation raises" do
