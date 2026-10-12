@@ -1035,7 +1035,7 @@ export default function PaymentsPage() {
     if (
       individualIdCountryMatches("DO") &&
       !props.user.individual_tax_id_entered &&
-      !form.data.user.individual_tax_id
+      !form.data.user.individual_tax_id?.trim()
     ) {
       markFieldInvalid("individual_tax_id");
       setClientErrorMessage({

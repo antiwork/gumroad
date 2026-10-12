@@ -698,11 +698,23 @@ describe("Dominican Republic CIE", () => {
     expect(screen.getAllByText(/Enter your Cédula de identidad y electoral/u).length).toBeGreaterThan(0);
   });
 
+  it("blocks a save with a whitespace-only CIE", () => {
+    renderDominicanSeller({ individual_tax_id_entered: false });
+    fireEvent.change(screen.getByLabelText("Cédula de identidad y electoral (CIE)"), {
+      target: { value: "             " },
+    });
+    save();
+
+    expect(mocks.put).not.toHaveBeenCalled();
+    expect(screen.getAllByText(/Enter your Cédula de identidad y electoral/u).length).toBeGreaterThan(0);
+  });
+
   it("does not block when a CIE is already on file", () => {
     renderDominicanSeller({ individual_tax_id_entered: true });
     save();
 
     expect(screen.queryByText(/Enter your Cédula de identidad y electoral/u)).toBeNull();
+    expect(mocks.put).toHaveBeenCalled();
   });
 });
 
