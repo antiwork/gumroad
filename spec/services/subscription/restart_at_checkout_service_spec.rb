@@ -158,6 +158,15 @@ describe Subscription::RestartAtCheckoutService do
         expect(transformed_params[:contact_info]).to eq(email:, zip_code: "10001")
       end
 
+      it "keeps the election's ZIP when it matches the IP country of a purchase with no saved country" do
+        subscription.original_purchase.update!(country: nil, ip_country: "United States", zip_code: "94107")
+        checkout_params = base_params.deep_merge(purchase: { perceived_price_cents: 500, sales_tax_country_code_election: "US", zip_code: "10001" })
+
+        transformed_params = described_class.new(subscription:, product:, params: checkout_params, buyer:).send(:updater_service_params)
+
+        expect(transformed_params[:contact_info]).to eq(email:, zip_code: "10001")
+      end
+
       it "drops the election's ZIP and state when the election differs from the saved country" do
         subscription.original_purchase.update!(country: "Germany", zip_code: "10115")
         checkout_params = base_params.deep_merge(purchase: { perceived_price_cents: 500, sales_tax_country_code_election: "US", zip_code: "10001", state: "NY" })
