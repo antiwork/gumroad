@@ -10,6 +10,11 @@ import type { ComplianceInfo, PayoutMethod, FormFieldName, User, PayoutDebitCard
 import { cast } from "$app/utils/cast";
 import { COLOMBIA_ID_NUMBER_ERROR_MESSAGE, isValidColombiaIdNumber } from "$app/utils/colombiaIdNumbers";
 import { formatPriceCentsWithCurrencySymbol, formatPriceCentsWithoutCurrencySymbol } from "$app/utils/currency";
+import {
+  DOMINICAN_REPUBLIC_CIE_BLANK_ERROR_MESSAGE,
+  DOMINICAN_REPUBLIC_CIE_ERROR_MESSAGE,
+  isValidDominicanRepublicCie,
+} from "$app/utils/dominicanRepublicCie";
 import { GUATEMALA_NIT_ERROR_MESSAGE, isValidGuatemalaNit } from "$app/utils/guatemalaNit";
 import { accountNumberFormatError } from "$app/utils/payoutAccountNumbers";
 import { normalizeUsTaxId, personalTaxIdError, usesHongKongPassport, usesUsTaxId } from "$app/utils/personalTaxId";
@@ -160,7 +165,7 @@ const missingFieldsErrorMessageFromDom = (form: HTMLElement, fieldNames: Set<For
       continue;
     }
     const label = field.id ? form.querySelector(`label[for="${CSS.escape(field.id)}"]`) : null;
-    const text = label?.textContent?.trim();
+    const text = label?.textContent.trim();
     if (text) labels.push(text);
   }
 
@@ -1032,16 +1037,15 @@ export default function PaymentsPage() {
       markFieldInvalid("individual_tax_id");
       setClientErrorMessage({ message: GUATEMALA_NIT_ERROR_MESSAGE });
     }
-    if (
-      individualIdCountryMatches("DO") &&
-      !props.user.individual_tax_id_entered &&
-      !form.data.user.individual_tax_id?.trim()
-    ) {
-      markFieldInvalid("individual_tax_id");
-      setClientErrorMessage({
-        message:
-          "Enter your Cédula de identidad y electoral (CIE). Stripe cannot pay out without it, and a passport is not accepted.",
-      });
+    if (individualIdCountryMatches("DO")) {
+      const cie = form.data.user.individual_tax_id;
+      if (cie && !isValidDominicanRepublicCie(cie)) {
+        markFieldInvalid("individual_tax_id");
+        setClientErrorMessage({ message: DOMINICAN_REPUBLIC_CIE_ERROR_MESSAGE });
+      } else if (!cie && !props.user.individual_tax_id_entered && selectedPayoutMethod !== "paypal") {
+        markFieldInvalid("individual_tax_id");
+        setClientErrorMessage({ message: DOMINICAN_REPUBLIC_CIE_BLANK_ERROR_MESSAGE });
+      }
     }
     if (form.data.user.is_business) {
       const businessTypes = getBusinessTypes(form.data.user.business_country, {

@@ -193,13 +193,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       fill_in("Last 4 digits of SSN", with: "0000")
       fill_in("Phone number", with: "5022-541-982")
 
-      within_fieldset "Card information" do
-        within_frame do
-          fill_in "Card number", with: "5200828282828210"
-          fill_in "MM / YY", with: StripePaymentMethodHelper::EXPIRY_MMYY
-          fill_in "CVC", with: "123"
-        end
-      end
+      fill_in_credit_card(number: "5200828282828210")
 
       click_on "Update settings"
 

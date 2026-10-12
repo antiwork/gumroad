@@ -677,44 +677,139 @@ describe("Bolivia bank validation", () => {
 });
 
 describe("Dominican Republic CIE", () => {
-  const renderDominicanSeller = (userOverrides: Partial<User> = {}) => {
+  const blankError = /Enter your Cédula de identidad y electoral/u;
+  const formatError = /must be 13 characters including the dashes/u;
+  const bankDetails = {
+    show_bank_account: true,
+    show_paypal: true,
+    is_a_card: false,
+    routing_number: null,
+    account_number_visual: "******6789",
+    card: null,
+    card_data_handling_mode: null,
+    bank_account: null,
+  };
+
+  const renderDominicanSeller = (
+    userOverrides: Partial<User> = {},
+    complianceOverrides: Partial<ComplianceInfo> = {},
+    propOverrides: Record<string, unknown> = {},
+  ) => {
     mocks.usePage.mockReturnValue({
       props: {
         ...pageProps(
           { country_code: "DO", individual_tax_id_needed_countries: ["US", "DO"], ...userOverrides },
-          { country: "DO" },
+          { country: "DO", ...complianceOverrides },
         ),
-        countries: { DO: "Dominican Republic" },
+        countries: { DO: "Dominican Republic", VN: "Vietnam" },
+        bank_account_details: bankDetails,
+        ...propOverrides,
       },
     });
     render(<PaymentsPage />);
   };
+
+  const typeCie = (value: string, label = "Cédula de identidad y electoral (CIE)") =>
+    fireEvent.change(screen.getByLabelText(label), { target: { value } });
 
   it("blocks a save with a blank CIE", () => {
     renderDominicanSeller({ individual_tax_id_entered: false });
     save();
 
     expect(mocks.put).not.toHaveBeenCalled();
-    expect(screen.getAllByText(/Enter your Cédula de identidad y electoral/u).length).toBeGreaterThan(0);
-  });
-
-  it("blocks a save with a whitespace-only CIE", () => {
-    renderDominicanSeller({ individual_tax_id_entered: false });
-    fireEvent.change(screen.getByLabelText("Cédula de identidad y electoral (CIE)"), {
-      target: { value: "             " },
-    });
-    save();
-
-    expect(mocks.put).not.toHaveBeenCalled();
-    expect(screen.getAllByText(/Enter your Cédula de identidad y electoral/u).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(blankError).length).toBeGreaterThan(0);
   });
 
   it("does not block when a CIE is already on file", () => {
     renderDominicanSeller({ individual_tax_id_entered: true });
     save();
 
-    expect(screen.queryByText(/Enter your Cédula de identidad y electoral/u)).toBeNull();
+    expect(screen.queryByText(blankError)).toBeNull();
     expect(mocks.put).toHaveBeenCalled();
+  });
+
+  it("does not block a PayPal payout that submits no CIE", () => {
+    renderDominicanSeller(
+      { individual_tax_id_entered: false },
+      {},
+      { bank_account_details: { ...bankDetails, show_bank_account: false, account_number_visual: null } },
+    );
+    save();
+
+    expect(screen.queryByText(blankError)).toBeNull();
+    expect(mocks.put).toHaveBeenCalled();
+  });
+
+  it.each([
+    "00112345678",
+    "001-12345678",
+    "001-1234567-88",
+    "P1234567",
+    " 001-1234567-8",
+    "001-1234567-8 ",
+    "001 -1234567-8",
+  ])("blocks the malformed CIE %j", (value) => {
+    renderDominicanSeller({ individual_tax_id_entered: false });
+    typeCie(value);
+    save();
+
+    expect(mocks.put).not.toHaveBeenCalled();
+    expect(screen.getAllByText(formatError).length).toBeGreaterThan(0);
+  });
+
+  it("blocks a malformed CIE when replacing one already on file", () => {
+    renderDominicanSeller({ individual_tax_id_entered: true });
+    fireEvent.click(screen.getByRole("button", { name: "Change" }));
+    typeCie("00112345678");
+    save();
+
+    expect(mocks.put).not.toHaveBeenCalled();
+    expect(screen.getAllByText(formatError).length).toBeGreaterThan(0);
+  });
+
+  it("saves a dashed CIE", () => {
+    renderDominicanSeller({ individual_tax_id_entered: false });
+    typeCie("001-1234567-8");
+    save();
+
+    expect(screen.queryByText(blankError)).toBeNull();
+    expect(screen.queryByText(formatError)).toBeNull();
+    expect(mocks.put).toHaveBeenCalledTimes(1);
+    expect(mocks.put.mock.calls[0]?.[1]).toMatchObject({ user: { individual_tax_id: "001-1234567-8" } });
+  });
+
+  describe("for a Dominican business", () => {
+    const business = {
+      is_business: true,
+      business_country: "DO",
+      business_type: "corporation",
+      business_name: "Example SRL",
+      business_street_address: "Calle El Conde 1",
+      business_city: "Santo Domingo",
+      business_zip_code: "10101",
+      business_phone: "+18095550100",
+      job_title: "Director",
+    };
+
+    it("requires the CIE of a representative who lives in the Dominican Republic", () => {
+      renderDominicanSeller({ individual_tax_id_entered: false, business_tax_id_entered: true }, business);
+      save();
+
+      expect(mocks.put).not.toHaveBeenCalled();
+      expect(screen.getAllByText(blankError).length).toBeGreaterThan(0);
+    });
+
+    it("does not demand a CIE from a representative who lives elsewhere", () => {
+      renderDominicanSeller(
+        { individual_tax_id_entered: false, business_tax_id_entered: true },
+        { ...business, country: "VN", phone: "+84912345678" },
+      );
+      typeCie("B1234567", "Personal tax ID");
+      save();
+
+      expect(screen.queryByText(formatError)).toBeNull();
+      expect(mocks.put).toHaveBeenCalled();
+    });
   });
 });
 

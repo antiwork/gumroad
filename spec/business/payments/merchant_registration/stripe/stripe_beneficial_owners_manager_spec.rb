@@ -240,6 +240,35 @@ describe StripeBeneficialOwnersManager do
       end
     end
 
+    context "when the seller's legal entity is in the Dominican Republic" do
+      let(:dominican_params) do
+        params.deep_dup.tap { |p| p[:address] = { line1: "Calle El Conde 1", city: "Santo Domingo", state: "Distrito Nacional", postal_code: "10101", country: "DO" } }
+      end
+
+      before do
+        user.alive_user_compliance_info.mark_deleted!
+        create(:user_compliance_info_business, user:, business_country: "Dominican Republic", country: "Dominican Republic")
+      end
+
+      ["00112345678", "001-12345678", "001-1234567-88", "AB123456C", " 001-1234567-8", "001-1234567-8 ", "001 -1234567-8", "001-1234567-8\u00a0"].each do |value|
+        it "rejects #{value.inspect} before it reaches Stripe" do
+          invalid = dominican_params.deep_dup.tap { |p| p[:id_number] = value }
+          expect(Stripe::Account).not_to receive(:create_person)
+          expect { described_class.create(user, invalid) }
+            .to raise_error(StripeBeneficialOwnersManager::InvalidFieldError, Compliance::DominicanRepublicCie::ERROR_MESSAGE)
+        end
+      end
+
+      it "sends a dashed CIE to Stripe" do
+        valid = dominican_params.deep_dup.tap { |p| p[:id_number] = "001-1234567-8" }
+        expect(Stripe::Account).to receive(:create_person) do |_account_id, attrs|
+          expect(attrs[:id_number]).to eq("001-1234567-8")
+          other_owner_person
+        end
+        described_class.create(user, valid)
+      end
+    end
+
     it "raises NotEligibleError for ineligible users" do
       allow(user).to receive(:stripe_account).and_return(nil)
       expect { described_class.create(user, params) }.to raise_error(StripeBeneficialOwnersManager::NotEligibleError)
@@ -593,6 +622,49 @@ describe StripeBeneficialOwnersManager do
       end
 
       described_class.update(user, "person_phil", blank_id_params)
+    end
+
+    context "when the seller's legal entity is in the Dominican Republic" do
+      before do
+        user.alive_user_compliance_info.mark_deleted!
+        create(:user_compliance_info_business, user:, business_country: "Dominican Republic", country: "Dominican Republic")
+      end
+
+      ["00112345678", "001-1234567-88", "AB123456C", " 001-1234567-8", "001 -1234567-8"].each do |value|
+        it "rejects #{value.inspect} for a non-representative before it reaches Stripe" do
+          allow(Stripe::Account).to receive(:retrieve_person).with(stripe_account_id, "person_phil").and_return(other_owner_person)
+          expect(Stripe::Account).not_to receive(:update_person)
+          expect { described_class.update(user, "person_phil", params.merge(id_number: value)) }
+            .to raise_error(StripeBeneficialOwnersManager::InvalidFieldError, Compliance::DominicanRepublicCie::ERROR_MESSAGE)
+        end
+      end
+
+      it "sends a dashed CIE to Stripe" do
+        allow(Stripe::Account).to receive(:retrieve_person).with(stripe_account_id, "person_phil").and_return(other_owner_person)
+        expect(Stripe::Account).to receive(:update_person) do |_account_id, _person_id, attrs|
+          expect(attrs[:id_number]).to eq("001-1234567-8")
+          other_owner_person
+        end
+        described_class.update(user, "person_phil", params.merge(id_number: "001-1234567-8"))
+      end
+
+      it "leaves the stored CIE untouched when the form value is blank" do
+        allow(Stripe::Account).to receive(:retrieve_person).with(stripe_account_id, "person_phil").and_return(other_owner_person)
+        expect(Stripe::Account).to receive(:update_person) do |_account_id, _person_id, attrs|
+          expect(attrs).not_to have_key(:id_number)
+          other_owner_person
+        end
+        described_class.update(user, "person_phil", params.merge(id_number: ""))
+      end
+
+      it "does not validate or send id_number when updating the representative" do
+        allow(Stripe::Account).to receive(:retrieve_person).with(stripe_account_id, "person_rep").and_return(representative_person)
+        expect(Stripe::Account).to receive(:update_person) do |_account_id, _person_id, attrs|
+          expect(attrs.keys).to eq([:relationship])
+          representative_person
+        end
+        described_class.update(user, "person_rep", params.merge(id_number: "00112345678"))
+      end
     end
 
     it "raises MissingRequiredFieldError when email or phone is missing on a non-rep update" do

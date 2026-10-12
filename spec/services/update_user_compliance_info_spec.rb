@@ -998,6 +998,141 @@ describe UpdateUserComplianceInfo do
       end
     end
 
+    context "with a Dominican Republic individual" do
+      def create_dominican_individual_user(individual_tax_id:)
+        create(:user).tap do |u|
+          create(
+            :user_compliance_info,
+            user: u,
+            country: "Dominican Republic",
+            state: nil,
+            city: "Santo Domingo",
+            zip_code: "10101",
+            individual_tax_id:,
+          )
+        end
+      end
+
+      def process_with(user, **params)
+        described_class.new(compliance_params: ActionController::Parameters.new(is_business: false, **params), user:).process
+      end
+
+      let(:expected_error) { Compliance::DominicanRepublicCie::ERROR_MESSAGE }
+
+      it "accepts a dashed CIE and stores it as entered" do
+        user = create_dominican_individual_user(individual_tax_id: nil)
+
+        expect(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info)
+
+        result = process_with(user, individual_tax_id: "001-1234567-8")
+
+        expect(result[:success]).to be true
+        expect(user.reload.alive_user_compliance_info.individual_tax_id.decrypt("1234")).to eq("001-1234567-8")
+      end
+
+      %w[00112345678 001-12345678 001-123456-78 01-1234567-8 001-1234567-88 001-1234567-A AB1234567 n/a].push(" 001-1234567-8", "001-1234567-8 ", "001 -1234567-8", "001-1234567-8\u00a0", "001-1234567-8\n").each do |value|
+        it "rejects #{value.inspect}, which is not the exact dashed CIE shape" do
+          user = create_dominican_individual_user(individual_tax_id: nil)
+          original = user.alive_user_compliance_info
+
+          expect(StripeMerchantAccountManager).not_to receive(:handle_new_user_compliance_info)
+
+          result = nil
+          expect { result = process_with(user, individual_tax_id: value) }.not_to change { UserComplianceInfo.count }
+
+          expect(result[:success]).to be false
+          expect(result[:error_message]).to eq(expected_error)
+          expect(user.reload.alive_user_compliance_info.id).to eq(original.id)
+        end
+      end
+
+      it "replaces a stored CIE only with a valid one" do
+        user = create_dominican_individual_user(individual_tax_id: "001-1234567-8")
+
+        expect(StripeMerchantAccountManager).not_to receive(:handle_new_user_compliance_info)
+
+        result = process_with(user, individual_tax_id: "P1234567")
+
+        expect(result[:success]).to be false
+        expect(result[:error_message]).to eq(expected_error)
+      end
+
+      it "keeps the stored CIE when a masked value is resubmitted with another edit" do
+        user = create_dominican_individual_user(individual_tax_id: "001-1234567-8")
+
+        result = process_with(user, individual_tax_id: "•••-•••••••-8", city: "Santiago")
+
+        expect(result[:success]).to be true
+        info = user.reload.alive_user_compliance_info
+        expect(info.city).to eq("Santiago")
+        expect(info.individual_tax_id.decrypt("1234")).to eq("001-1234567-8")
+      end
+
+      it "saves other fields when no CIE is submitted and none is on file" do
+        user = create_dominican_individual_user(individual_tax_id: nil)
+
+        result = process_with(user, city: "Santiago")
+
+        expect(result[:success]).to be true
+        expect(user.reload.alive_user_compliance_info.city).to eq("Santiago")
+      end
+
+      it "leaves other countries' individual tax IDs alone" do
+        user = create(:user).tap do |u|
+          create(:user_compliance_info, user: u, country: "Uruguay", individual_tax_id: "1.123.123-1")
+        end
+
+        result = process_with(user, individual_tax_id: "00112345678", city: "Montevideo")
+
+        expect(result[:success]).to be true
+      end
+
+      context "as a business" do
+        def create_dominican_business_user(representative_country:)
+          create(:user).tap do |u|
+            create(
+              :user_compliance_info_business,
+              user: u,
+              country: representative_country,
+              business_country: "Dominican Republic",
+              business_type: UserComplianceInfo::BusinessTypes::CORPORATION,
+              individual_tax_id: "12345678",
+            )
+          end
+        end
+
+        it "rejects a malformed CIE from a representative who lives in the Dominican Republic" do
+          user = create_dominican_business_user(representative_country: "Dominican Republic")
+
+          expect(StripeMerchantAccountManager).not_to receive(:handle_new_user_compliance_info)
+
+          result = process_with(user, is_business: true, individual_tax_id: "00112345678")
+
+          expect(result[:success]).to be false
+          expect(result[:error_message]).to eq(expected_error)
+        end
+
+        it "accepts a representative's own document when they live outside the Dominican Republic" do
+          user = create_dominican_business_user(representative_country: "Peru")
+
+          expect(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info)
+
+          result = process_with(user, is_business: true, individual_tax_id: "12345678-9")
+
+          expect(result[:success]).to be true
+          expect(user.reload.alive_user_compliance_info.individual_tax_id.decrypt("1234")).to eq("12345678-9")
+        end
+      end
+
+      it "keeps the browser's pattern and message identical to this guard's" do
+        helper = Rails.root.join("app/javascript/utils/dominicanRepublicCie.ts").read
+        browser_pattern = helper[%r{DOMINICAN_REPUBLIC_CIE_PATTERN = /(.+)/u;}, 1]
+
+        expect(browser_pattern).to eq(Compliance::DominicanRepublicCie::PATTERN.source.sub('\A', "^").sub('\z', "$"))
+        expect(helper).to include(%("#{expected_error}"))
+      end
+    end
+
     context "with a Colombian individual" do
       def create_colombian_individual_user(individual_tax_id:)
         create(:user).tap do |u|
