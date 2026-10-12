@@ -1208,8 +1208,12 @@ class StripePayoutProcessor
       charge_processor_id: StripeChargeProcessor.charge_processor_id,
       charge_processor_merchant_id: internal_transfer.destination
     ).first
-    # Credit and its balance transaction land together, so `payment.credit` above means the adjustment applied.
-    ActiveRecord::Base.transaction do
+    # `credits.returned_payment_id` is not unique, so concurrent reversals serialize on the Payment row
+    # and re-check inside the lock. The credit and its balance transaction commit or roll back together.
+    Payment.transaction do
+      Payment.where(id: payment.id).lock.pick(:id)
+      next if Credit.exists?(returned_payment_id: payment.id)
+
       Credit.create_for_returned_payment_difference!(
         user: payment.user,
         merchant_account:,
