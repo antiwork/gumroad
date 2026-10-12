@@ -451,6 +451,7 @@ class User < ApplicationRecord
 
   after_save :create_updated_stripe_apple_pay_domain, if: ->(user) { user.saved_change_to_username? }
   after_save :delete_old_stripe_apple_pay_domain, if: ->(user) { user.saved_change_to_username? }
+  after_save :sync_stripe_business_profile_url, if: ->(user) { user.saved_change_to_username? }
   after_update :update_audience_members_affiliates
   after_update :update_product_search_index!
   after_update :update_alive_cart_email, if: :saved_change_to_email?
@@ -1764,6 +1765,11 @@ class User < ApplicationRecord
     def create_updated_stripe_apple_pay_domain
       return unless subdomain.present?
       CreateStripeApplePayDomainWorker.perform_async(id)
+    end
+
+    def sync_stripe_business_profile_url
+      return if saved_change_to_username[0].blank?
+      SyncStripeBusinessProfileUrlWorker.perform_async(id, saved_change_to_username[0])
     end
 
     def delete_old_stripe_apple_pay_domain
