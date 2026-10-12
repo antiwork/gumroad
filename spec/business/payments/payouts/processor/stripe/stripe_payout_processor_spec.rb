@@ -135,6 +135,20 @@ describe StripePayoutProcessor do
         returned, Stripe::Transfer.construct_from(id: "tr_returned", amount: 383_17, amount_reversed: 383_17)
       )
     end
+
+    it "rolls the difference credit back when its balance transaction cannot be written" do
+      transfer = Stripe::Transfer.construct_from(id: "tr_returned", destination: "acct_cross_border", destination_payment: "py_returned")
+      destination_payment = Stripe::Charge.construct_from(id: "py_returned", balance_transaction: { net: 9_868_182 },
+                                                          refunds: [{ balance_transaction: "txn_refund" }])
+      allow(Stripe::Charge).to receive(:retrieve).and_return(destination_payment)
+      allow(Stripe::BalanceTransaction).to receive(:retrieve).and_return(Stripe::BalanceTransaction.construct_from(net: -9_956_166))
+      allow(BalanceTransaction).to receive(:create!).and_raise(ActiveRecord::RecordInvalid)
+
+      expect do
+        described_class.create_credit_for_difference_from_reversed_internal_transfer(returned, transfer)
+      end.to raise_error(ActiveRecord::RecordInvalid)
+      expect(returned.reload.credit).to be_nil
+    end
   end
 
   describe "foreign payout destination identity" do

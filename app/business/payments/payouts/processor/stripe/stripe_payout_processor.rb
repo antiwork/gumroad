@@ -1203,11 +1203,14 @@ class StripePayoutProcessor
       charge_processor_id: StripeChargeProcessor.charge_processor_id,
       charge_processor_merchant_id: internal_transfer.destination
     ).first
-    Credit.create_for_returned_payment_difference!(
-      user: payment.user,
-      merchant_account:,
-      returned_payment: payment,
-      difference_amount_cents:
-    )
+    # Credit and its balance transaction land together, so `payment.credit` above means the adjustment applied.
+    ActiveRecord::Base.transaction do
+      Credit.create_for_returned_payment_difference!(
+        user: payment.user,
+        merchant_account:,
+        returned_payment: payment,
+        difference_amount_cents:
+      )
+    end
   end
 end
