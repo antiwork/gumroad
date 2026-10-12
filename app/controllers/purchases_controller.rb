@@ -177,7 +177,8 @@ class PurchasesController < ApplicationController
                                        gumroad_guid: cookies[:_gumroad_guid],
                                        params: permitted_subscription_params,
                                        logged_in_user:,
-                                       remote_ip: request.remote_ip).perform
+                                       remote_ip: request.remote_ip,
+                                       manage_cookie_verified: true).perform
 
     render json: result
   end

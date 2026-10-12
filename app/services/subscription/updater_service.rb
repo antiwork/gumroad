@@ -5,15 +5,16 @@ class Subscription::UpdaterService
 
   MANDATE_PENDING_RESTART_MESSAGE = "Your bank is still confirming this card for recurring payments. You haven't been charged, and your membership hasn't restarted yet. Please try again later."
 
-  attr_reader :subscription, :gumroad_guid, :params, :logged_in_user, :remote_ip
+  attr_reader :subscription, :gumroad_guid, :params, :logged_in_user, :remote_ip, :manage_cookie_verified
   attr_accessor :original_purchase, :original_price, :new_purchase, :upgrade_purchase,
                 :overdue_for_charge, :is_resubscribing, :is_pending_cancellation,
                 :calculate_upgrade_cost_as_of, :prorated_discount_price_cents,
                 :card_data_handling_mode, :card_data_handling_error, :chargeable,
                 :api_notification_sent, :indian_card_mandate_pending
 
-  def initialize(subscription:, params:, logged_in_user:, gumroad_guid:, remote_ip:)
+  def initialize(subscription:, params:, logged_in_user:, gumroad_guid:, remote_ip:, manage_cookie_verified: false)
     @subscription = subscription
+    @manage_cookie_verified = manage_cookie_verified
     @params = params
     @logged_in_user = logged_in_user
     @gumroad_guid = gumroad_guid
@@ -164,9 +165,6 @@ class Subscription::UpdaterService
           # price and ongoing subscription price. Skip this step if the plan is not
           # changing.
           validate_perceived_prices_match
-
-          # delete pending plan changes
-          subscription.subscription_plan_changes.alive.update_all(deleted_at: Time.current)
         end
 
         if replacement_card.present?
@@ -204,6 +202,9 @@ class Subscription::UpdaterService
           result = { success: false, error_message: MANDATE_PENDING_RESTART_MESSAGE }
           next
         end
+
+        # delete pending plan changes
+        subscription.subscription_plan_changes.alive.update_all(deleted_at: Time.current) if !same_plan_and_price? || overdue_for_charge
 
         if !apply_plan_change_immediately?
           # If not an upgrade or changing plans during trial period, roll back changes
@@ -388,9 +389,13 @@ class Subscription::UpdaterService
     end
 
     # A plain restart can wait for the bank. A plan, price or discount change is applied only with its charge,
-    # so it still needs an active mandate.
+    # so it still needs an active mandate. The hold saves the card and contact details, so only the member may hold.
     def mandate_pending_restart_allowed?
-      is_resubscribing && new_purchase.nil? && subscription.india_card_mandate_pending_restart_enabled?
+      is_resubscribing && new_purchase.nil? && member_verified? && subscription.india_card_mandate_pending_restart_enabled?
+    end
+
+    def member_verified?
+      manage_cookie_verified || (logged_in_user.present? && logged_in_user.id == subscription.user_id)
     end
 
     def update_subscription_credit_card!(credit_card, clear_mandate_stop: false, stripe_mandate_id: nil, mandate_pending: false)
@@ -439,7 +444,7 @@ class Subscription::UpdaterService
       end
 
       mandate, status, = subscription.indian_card_mandate_for(credit_card.id)
-      if status == "pending" && subscription.india_card_mandate_pending_restart_enabled?
+      if status == "pending" && is_resubscribing && subscription.india_card_mandate_pending_restart_enabled?
         raise Subscription::UpdateFailed, MANDATE_PENDING_RESTART_MESSAGE
       end
       unless status == "active"

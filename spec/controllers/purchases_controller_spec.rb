@@ -1333,6 +1333,19 @@ describe PurchasesController, :vcr do
         params.merge(use_existing_card: true)
       end
 
+      # Replays only the setup requests; the updater itself is stubbed.
+      it "tells the updater that the buyer holds the manage cookie",
+         vcr: { cassette_name: "PurchasesController/within_consumer_area/PUT_update_subscription/updates_the_variant_price_and_contact_information_associated_with_the_subscription" } do
+        updater = instance_double(Subscription::UpdaterService, perform: { success: true })
+        expect(Subscription::UpdaterService).to receive(:new)
+          .with(hash_including(subscription: @subscription, manage_cookie_verified: true))
+          .and_return(updater)
+
+        put :update_subscription, params: params_existing_card
+
+        expect(response.parsed_body["success"]).to eq true
+      end
+
       it "updates the variant, price, and contact information associated with the subscription" do
         travel_to(@originally_subscribed_at + 1.month) do
           put :update_subscription, params: params_new_card

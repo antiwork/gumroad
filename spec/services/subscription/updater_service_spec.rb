@@ -2865,19 +2865,20 @@ describe Subscription::UpdaterService, :vcr do
           end
         end
 
-        def restart_with_replacement_card(params = restart_params)
+        def restart_with_replacement_card(params = restart_params, logged_in_user: @user, manage_cookie_verified: false)
           service = described_class.new(
             subscription: @subscription,
             gumroad_guid: @gumroad_guid,
             params: params.except(:use_existing_card),
-            logged_in_user: @user,
+            logged_in_user:,
             remote_ip: @remote_ip,
+            manage_cookie_verified:,
           )
           allow(service).to receive(:get_chargeable) do
             service.chargeable = instance_double(Chargeable, get_chargeable_for: stripe_chargeable)
             nil
           end
-          allow(CreditCard).to receive(:create).and_return(replacement_card)
+          allow(CreditCard).to receive(:create) { replacement_card }
           service.perform
         end
 
@@ -2913,6 +2914,7 @@ describe Subscription::UpdaterService, :vcr do
           expect_any_instance_of(described_class).not_to receive(:charge_user!)
           # A fixing here would change the terms a checkout retry's reuse check expects.
           expect(@subscription).not_to receive(:record_indian_card_mandate_presentment!)
+          plan_change = create(:subscription_plan_change, subscription: @subscription)
 
           result = restart_with_replacement_card
 
@@ -2923,7 +2925,69 @@ describe Subscription::UpdaterService, :vcr do
           expect(@subscription.stripe_mandate_id).to eq("mandate_pending")
           expect(@subscription).to be_renewal_disabled_due_to_indian_card_mandate
           expect(@subscription.purchases.count).to eq(@purchase_count_before)
+          expect(plan_change.reload).to be_alive
           expect(Rails.logger).to have_received(:info).with("indian_card_mandate.pending_restart.held subscription_id=#{@subscription.id} mandate_id=mandate_pending")
+        end
+
+        context "when the restart comes from someone other than the member" do
+          let(:guest_contact_info) do
+            { full_name: "Someone Else", email: "someone.else@example.com", street_address: "1 Other St", city: "Elsewhere", state: "CA", zip_code: "94107", country: "US" }
+          end
+          let(:guest_params) { restart_params.merge(contact_info: guest_contact_info) }
+
+          before do
+            allow_any_instance_of(Subscription).to receive(:indian_card_setup_intent_terms_match?).and_return(true)
+            @original_full_name = @subscription.original_purchase.full_name
+            @original_street_address = @subscription.original_purchase.street_address
+          end
+
+          it "saves nothing for a guest restart by email" do
+            result = restart_with_replacement_card(guest_params, logged_in_user: nil)
+
+            expect(result).to eq(success: false, error_message: rejected_message)
+            @subscription.reload
+            expect(@subscription).not_to be_alive(include_pending_cancellation: false)
+            expect(@subscription.credit_card).to eq(@credit_card)
+            expect(@subscription.stripe_mandate_id).to be_nil
+            expect(@subscription).not_to be_renewal_disabled_due_to_indian_card_mandate
+            expect(CreditCard.where(stripe_fingerprint: "fingerprint_replacement")).not_to exist
+            expect(@subscription.original_purchase.full_name).to eq(@original_full_name)
+            expect(@subscription.original_purchase.street_address).to eq(@original_street_address)
+            expect(Rails.logger).not_to have_received(:info).with(a_string_including("indian_card_mandate.pending_restart.held"))
+          end
+
+          it "saves nothing for a signed-in user who does not own the membership" do
+            result = restart_with_replacement_card(guest_params, logged_in_user: create(:user))
+
+            expect(result).to eq(success: false, error_message: rejected_message)
+            expect(@subscription.reload.credit_card).to eq(@credit_card)
+            expect(@subscription.stripe_mandate_id).to be_nil
+            expect(@subscription.original_purchase.full_name).to eq(@original_full_name)
+          end
+
+          it "holds the restart for a guest who holds the manage cookie" do
+            result = restart_with_replacement_card(guest_params, logged_in_user: nil, manage_cookie_verified: true)
+
+            expect(result).to eq(success: false, error_message: pending_message)
+            @subscription.reload
+            expect(@subscription).not_to be_alive(include_pending_cancellation: false)
+            expect(@subscription.credit_card).to eq(replacement_card)
+            expect(@subscription.stripe_mandate_id).to eq("mandate_pending")
+            expect(@subscription).to be_renewal_disabled_due_to_indian_card_mandate
+            expect(@subscription.original_purchase.full_name).to eq("Someone Else")
+          end
+        end
+
+        it "does not say the membership has not restarted when a live membership updates on a pending mandate" do
+          restart_with_replacement_card
+          @subscription.update!(cancelled_at: nil, cancelled_by_buyer: false)
+          expect(@subscription.reload).to be_alive(include_pending_cancellation: false)
+
+          result = restart_with_saved_card
+
+          expect(result).to eq(success: false, error_message: "We could not verify this card for recurring payments. Please update the payment method before you restart this subscription.")
+          expect(@subscription.reload).to be_renewal_disabled_due_to_indian_card_mandate
+          expect(@subscription.credit_card).to eq(replacement_card)
         end
 
         it "asks the buyer to wait when they retry on the saved card before the bank confirms" do
