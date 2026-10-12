@@ -360,7 +360,7 @@ class Purchase < ApplicationRecord
     end
   end
 
-  stripped_fields :email, nilify_blanks: false, transform: -> { _1.downcase }, if: -> { email.present? && email_changed? }
+  stripped_fields :email, remove_duplicate_spaces: false, nilify_blanks: false, transform: -> { _1.downcase }, if: -> { email.present? && email_changed? }
 
   validate :must_have_valid_email
   validate :not_double_charged, on: :create
