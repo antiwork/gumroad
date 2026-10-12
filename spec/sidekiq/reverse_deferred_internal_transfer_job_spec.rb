@@ -20,9 +20,20 @@ describe ReverseDeferredInternalTransferJob do
     described_class.new.perform(payment.id)
   end
 
-  it "does nothing once the transfer is fully reversed" do
+  it "does nothing once the transfer is reversed and its difference credit is recorded" do
     stub_transfer(amount: 383_17, amount_reversed: 383_17)
+    merchant_account = create(:merchant_account, user: payment.user, charge_processor_merchant_id: "acct_held_credit")
+    create(:credit, user: payment.user, merchant_account:, balance: create(:balance, user: payment.user, merchant_account:),
+                    returned_payment: payment)
     expect(StripePayoutProcessor).not_to receive(:reverse_internal_transfer_or_hold_payouts!)
+
+    described_class.new.perform(payment.id)
+  end
+
+  it "takes the reversal path when the transfer is reversed but its difference credit is missing" do
+    stub_transfer(amount: 383_17, amount_reversed: 383_17)
+    expect(StripePayoutProcessor).to receive(:reverse_internal_transfer_or_hold_payouts!)
+      .with(payment, payment.failure_reason, reraise: true)
 
     described_class.new.perform(payment.id)
   end

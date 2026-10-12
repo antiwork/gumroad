@@ -117,12 +117,23 @@ describe StripePayoutProcessor do
       expect(ReverseDeferredInternalTransferJob.jobs).to be_empty
     end
 
-    it "does not reverse a transfer that is already fully reversed" do
+    it "records the difference credit instead of reversing an already reversed transfer again" do
       transfer = Stripe::Transfer.construct_from(id: "tr_returned", amount: 383_17, amount_reversed: 383_17)
       allow(Stripe::Transfer).to receive(:retrieve).with("tr_returned").and_return(transfer)
-      expect(described_class).not_to receive(:create_credit_for_difference_from_reversed_internal_transfer)
+      allow(transfer).to receive(:reversals).and_raise("Stripe would reject a second reversal")
+      expect(described_class).to receive(:create_credit_for_difference_from_reversed_internal_transfer)
+        .with(returned, transfer)
 
       described_class.reverse_internal_transfer!(returned)
+    end
+
+    it "does not record a second difference credit for the same returned payout" do
+      create(:credit, user: seller, merchant_account:, returned_payment: returned)
+      expect(Stripe::Charge).not_to receive(:retrieve)
+
+      described_class.create_credit_for_difference_from_reversed_internal_transfer(
+        returned, Stripe::Transfer.construct_from(id: "tr_returned", amount: 383_17, amount_reversed: 383_17)
+      )
     end
   end
 

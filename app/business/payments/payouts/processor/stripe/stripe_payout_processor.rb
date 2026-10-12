@@ -1172,15 +1172,18 @@ class StripePayoutProcessor
     return if payment.stripe_internal_transfer_id.nil?
 
     internal_transfer = Stripe::Transfer.retrieve(payment.stripe_internal_transfer_id)
-    # A deferred reversal can run after another path already reversed it; Stripe would reject a second one.
-    return if internal_transfer.amount_reversed.to_i >= internal_transfer.amount.to_i
-
-    internal_transfer.reversals.create
+    # The transfer may already be reversed (a deferred reversal of the same payout, or an earlier
+    # attempt whose credit write rolled back). Stripe rejects a second reversal; the difference
+    # credit is not part of the reversal, so it is still owed.
+    internal_transfer.reversals.create if internal_transfer.amount_reversed.to_i < internal_transfer.amount.to_i
 
     create_credit_for_difference_from_reversed_internal_transfer(payment, internal_transfer)
   end
 
   def self.create_credit_for_difference_from_reversed_internal_transfer(payment, internal_transfer)
+    # One difference credit per returned payout (`Payment#credit`), so a retry records it once.
+    return if payment.credit.present?
+
     destination_payment = Stripe::Charge.retrieve(
       {
         id: internal_transfer.destination_payment,
