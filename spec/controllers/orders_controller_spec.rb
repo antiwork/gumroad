@@ -2977,6 +2977,28 @@ describe OrdersController, :vcr do
       expect(Event.purchase.where(purchase_id: Purchase.last.id)).to be_empty
     end
 
+    it "lets a checkout restart check the membership's manage cookie" do
+      subscription = create(:subscription)
+      other_subscription = create(:subscription)
+      cookies.encrypted[subscription.cookie_key] = subscription.external_id
+      purchases = double("order_purchases")
+      allow(purchases).to receive(:each).and_return([])
+      order = double("order", persisted?: true, purchases:)
+      verifier = nil
+      allow(Order::CreateService).to receive(:new) do |**kwargs|
+        verifier = kwargs[:manage_cookie_verifier]
+        instance_double(Order::CreateService, perform: [order, {}, []])
+      end
+      allow(Order::PreparePaymentIntentService).to receive(:new)
+        .and_return(instance_double(Order::PreparePaymentIntentService, perform: { "unique-id-0" => { success: false } }))
+      allow(Order::OfferCodeRecoveryService).to receive(:for_order).with(order).and_return([])
+
+      post :prepare, params: { line_items:, confirmation_token: "ctoken-test" }.merge(common_params)
+
+      expect(verifier.call(subscription)).to be(true)
+      expect(verifier.call(other_subscription)).to be(false)
+    end
+
     it "returns once-per-cart codes when preparing the payment fails after order creation" do
       purchases = double("order_purchases")
       allow(purchases).to receive(:each).and_return([])
