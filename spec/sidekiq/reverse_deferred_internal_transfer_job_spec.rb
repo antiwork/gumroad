@@ -27,12 +27,17 @@ describe ReverseDeferredInternalTransferJob do
     described_class.new.perform(payment.id)
   end
 
-  it "takes the hold-aware path when the transfer cannot be read" do
+  it "lets an unreadable transfer retry instead of reversing blind" do
     allow(Stripe::Transfer).to receive(:retrieve).with("tr_held").and_raise(Stripe::APIConnectionError.new("down"))
-    expect(StripePayoutProcessor).to receive(:reverse_internal_transfer_or_hold_payouts!)
-      .with(payment, payment.failure_reason, reraise: true)
+    expect(StripePayoutProcessor).not_to receive(:reverse_internal_transfer_or_hold_payouts!)
 
-    described_class.new.perform(payment.id)
+    expect { described_class.new.perform(payment.id) }.to raise_error(Stripe::APIConnectionError)
+  end
+
+  it "takes the hold-aware path once retries are exhausted" do
+    expect(StripePayoutProcessor).to receive(:reverse_internal_transfer_or_hold_payouts!).with(payment, payment.failure_reason)
+
+    described_class.sidekiq_retries_exhausted_block.call({ "args" => [payment.id] }, StandardError.new)
   end
 
   it "does nothing for a payout that is still in flight" do
