@@ -479,6 +479,42 @@ describe "Purchase Process", :vcr do
               end
             end
           end
+
+          describe "PayPal chargeable rejected by the processor" do
+            let(:chargeable) { Chargeable.new([PaypalChargeable.new("B-38D505255T217912K", "buyer@example.com", "US")]) }
+            let(:purchase) { build(:purchase_with_balance, chargeable:) }
+            let(:processor_error_code) { "COMPLIANCE_VIOLATION" }
+
+            before do
+              allow(chargeable).to receive(:prepare!).and_return(true)
+              expect(ChargeProcessor).to receive(:create_payment_intent_or_charge!).and_raise(
+                ChargeProcessorInvalidRequestError.new(
+                  "422|#<OpenStruct name=\"UNPROCESSABLE_ENTITY\", details=[#<OpenStruct issue=\"#{processor_error_code}\">]>",
+                  processor_error_code:
+                )
+              )
+              purchase.process!
+            end
+
+            it "stores the compliance violation error code and keeps the raw PayPal issue" do
+              expect(purchase.error_code).to eq PurchaseErrorCode::PAYPAL_PAYEE_COMPLIANCE_VIOLATION
+              expect(purchase.stripe_error_code).to eq "COMPLIANCE_VIOLATION"
+            end
+
+            it "shows the buyer the compliance violation message" do
+              expect(purchase.errors.full_messages).to eq [PurchaseErrorCode.buyer_facing_message(PurchaseErrorCode::PAYPAL_PAYEE_COMPLIANCE_VIOLATION)]
+            end
+
+            context "when the PayPal issue is not a named cause" do
+              let(:processor_error_code) { "INVALID_PARAMETER_VALUE" }
+
+              it "keeps the generic invalid request code and message" do
+                expect(purchase.error_code).to eq PurchaseErrorCode::PROCESSOR_INVALID_REQUEST
+                expect(purchase.stripe_error_code).to eq "INVALID_PARAMETER_VALUE"
+                expect(purchase.errors.full_messages).to eq [PurchaseErrorCode::GENERIC_PROCESSOR_FAILURE_MESSAGE]
+              end
+            end
+          end
         end
       end
     end
