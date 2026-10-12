@@ -3779,6 +3779,46 @@ describe User, :vcr do
     end
   end
 
+  describe "after_save callback to enqueue SyncStripeBusinessProfileUrlJob" do
+    let(:user) { create(:user, username: "oldusername") }
+
+    before { user }
+
+    it "enqueues the sync only after the rename commits" do
+      User.transaction do
+        user.update!(username: "newusername")
+
+        expect(SyncStripeBusinessProfileUrlJob.jobs.size).to eq(0)
+      end
+
+      expect(SyncStripeBusinessProfileUrlJob.jobs.size).to eq(1)
+      expect(SyncStripeBusinessProfileUrlJob).to have_enqueued_sidekiq_job(user.id)
+    end
+
+    it "does not enqueue the sync when the rename rolls back" do
+      User.transaction do
+        user.update!(username: "newusername")
+        raise ActiveRecord::Rollback
+      end
+
+      expect(SyncStripeBusinessProfileUrlJob.jobs.size).to eq(0)
+    end
+
+    it "does not enqueue the sync when the username is unchanged" do
+      user.update!(name: "New name")
+
+      expect(SyncStripeBusinessProfileUrlJob.jobs.size).to eq(0)
+    end
+
+    it "does not enqueue the sync when the first username is set" do
+      seller = create(:user, username: nil)
+
+      seller.update!(username: "firstusername")
+
+      expect(SyncStripeBusinessProfileUrlJob.jobs.size).to eq(0)
+    end
+  end
+
   describe "after_create #create_global_affiliate!" do
     it "creates a global affiliate record after user creation" do
       user = build(:user)
