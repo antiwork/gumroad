@@ -145,8 +145,11 @@ class ContentModeration::ModerateRecordService
     end
   end
 
-  def self.check(record, entity_type, skip_images: false)
-    new(record, entity_type, skip_images:).check
+  # `pending_bundle_products_present`: nil reads the bundle's persisted products. true/false is the
+  # caller stating that the request being moderated will leave the bundle with / without alive
+  # products, for a caller that must moderate before it persists them. Only read for bundles.
+  def self.check(record, entity_type, skip_images: false, pending_bundle_products_present: nil)
+    new(record, entity_type, skip_images:, pending_bundle_products_present:).check
   end
 
   def self.off_platform_fulfillment_reason?(reason)
@@ -154,10 +157,11 @@ class ContentModeration::ModerateRecordService
   end
   private_class_method :off_platform_fulfillment_reason?
 
-  def initialize(record, entity_type, skip_images: false)
+  def initialize(record, entity_type, skip_images: false, pending_bundle_products_present: nil)
     @record = record
     @entity_type = entity_type
     @skip_images = skip_images
+    @pending_bundle_products_present = pending_bundle_products_present
   end
 
   def check
@@ -303,7 +307,7 @@ class ContentModeration::ModerateRecordService
     # and Zoom/Calendar plumbing do not count; Circle/Discord invites do.
     def product_has_substantive_deliverable?
       return true if record.is_physical?
-      return true if record.is_bundle? && record.bundle_products.alive.any?
+      return true if record.is_bundle? && bundle_has_products?
       return true if record.native_type.in?([Link::NATIVE_TYPE_CALL, Link::NATIVE_TYPE_COMMISSION])
       return true if gumroad_fulfilled_community_integration?
 
@@ -327,6 +331,12 @@ class ContentModeration::ModerateRecordService
       end
 
       has_deliverable
+    end
+
+    def bundle_has_products?
+      return @pending_bundle_products_present unless @pending_bundle_products_present.nil?
+
+      record.bundle_products.alive.any?
     end
 
     # An alive ProductFile row is not a stored object (save racing an unfinished

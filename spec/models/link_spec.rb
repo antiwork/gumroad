@@ -66,6 +66,78 @@ describe Link do
     end
 
 
+    context "content moderation" do
+      let(:product) { create(:product, user: create(:user), draft: true) }
+      let(:passed_result) { ContentModeration::ModerateRecordService::CheckResult.new(passed: true, reasons: []) }
+      let(:blocked_result) do
+        ContentModeration::ModerateRecordService::CheckResult.new(passed: false, reasons: ["Matched blocked word: forbidden"])
+      end
+
+      it "moderates on a direct publish and blocks it when moderation fails" do
+        expect(ContentModeration::ModerateRecordService).to receive(:check).once.and_return(blocked_result)
+
+        expect { product.publish! }.to raise_error(ActiveRecord::RecordInvalid)
+
+        expect(product.reload).not_to be_published
+      end
+
+      it "moderates a direct publish once" do
+        expect(ContentModeration::ModerateRecordService).to receive(:check).once.and_return(passed_result)
+
+        product.publish!
+
+        expect(product.reload).to be_published
+      end
+
+      it "raises from with_content_moderation_for_publish without publishing when moderation fails" do
+        allow(ContentModeration::ModerateRecordService).to receive(:check).and_return(blocked_result)
+
+        expect do
+          product.with_content_moderation_for_publish { product.publish! }
+        end.to raise_error(ActiveRecord::RecordInvalid)
+
+        expect(product.errors.full_messages).to be_present
+        expect(product.reload).not_to be_published
+      end
+
+      it "rejects an admin-unpublished product from with_content_moderation_for_publish before moderation" do
+        product.update!(is_unpublished_by_admin: true)
+        expect(ContentModeration::ModerateRecordService).not_to receive(:check)
+
+        expect do
+          product.with_content_moderation_for_publish { raise "block must not run" }
+        end.to raise_error(Link::LinkInvalid, /unpublished by Gumroad/)
+
+        expect(product.reload).not_to be_published
+      end
+
+      it "re-runs the publish guards in publish! after the wrapper's guards passed" do
+        allow(ContentModeration::ModerateRecordService).to receive(:check).and_return(passed_result)
+
+        expect do
+          product.with_content_moderation_for_publish do
+            product.is_unpublished_by_admin = true
+            product.publish!
+          end
+        end.to raise_error(Link::LinkInvalid, /unpublished by Gumroad/)
+
+        expect(product.reload).not_to be_published
+      end
+
+      it "reuses the wrapper's moderation once and still moderates the next direct publish" do
+        product
+        allow(ContentModeration::ModerateRecordService).to receive(:check).and_return(passed_result)
+
+        product.with_content_moderation_for_publish { product.publish! }
+
+        expect(product.reload).to be_published
+        expect(ContentModeration::ModerateRecordService).to have_received(:check).once
+
+        allow(ContentModeration::ModerateRecordService).to receive(:check).and_return(blocked_result)
+        expect { product.publish! }.to raise_error(ActiveRecord::RecordInvalid)
+      end
+    end
+
     it "lets an assignment deadlock roll back the caller transaction" do
       seller = create(:user)
       affiliates = create_list(:direct_affiliate, 2, seller:, apply_to_all_products: true)
