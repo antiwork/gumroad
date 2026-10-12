@@ -30,7 +30,8 @@ class AffiliatesController < Sellers::BaseController
     )
     affiliates_data = presenter.index_props
 
-    if affiliates_data[:affiliates].empty? && affiliates_data[:affiliate_requests].empty? && (page.nil? || page == 1) && query.blank?
+    if affiliates_data[:affiliates].empty? && affiliates_data[:affiliate_requests].empty? && (page.nil? || page == 1) && query.blank? &&
+        !current_seller.self_service_affiliate_products.enabled.exists?
       return redirect_to onboarding_affiliates_path
     end
 

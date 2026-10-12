@@ -1125,6 +1125,73 @@ describe Charge::CreateService, :vcr do
       expect(purchase.errors[:base].join).to include("isn't able to accept payments")
     end
 
+    describe "PayPal compliance violation" do
+      let(:merchant_account) { create(:merchant_account_paypal, user: seller_1, charge_processor_merchant_id: "B66YJBBNCRW6L") }
+      let(:chargeable) { Chargeable.new([PaypalChargeable.new("B-38D505255T217912K", "buyer@example.com", "US")]) }
+      let(:purchase) do
+        create(:purchase,
+               link: product_1,
+               seller: seller_1,
+               merchant_account:,
+               charge_processor_id: PaypalChargeProcessor.charge_processor_id,
+               purchase_state: "in_progress",
+               total_transaction_cents: 5_00)
+      end
+      let(:paypal_rest_api) { instance_double(PaypalRestApi) }
+      let(:compliance_violation_response) do
+        JSON.parse({ status_code: 422,
+                     result: { name: "UNPROCESSABLE_ENTITY",
+                               details: [{ issue: "COMPLIANCE_VIOLATION",
+                                           description: "Transaction cannot be processed due to a possible compliance violation." }] } }.to_json,
+                   object_class: OpenStruct)
+      end
+
+      before do
+        allow(PaypalRestApi).to receive(:new).and_return(paypal_rest_api)
+        allow(paypal_rest_api).to receive(:successful_response?) { |response| response != compliance_violation_response }
+      end
+
+      def perform_charge
+        Charge::CreateService.new(order: create(:order),
+                                  seller: seller_1,
+                                  merchant_account:,
+                                  chargeable:,
+                                  purchases: [purchase],
+                                  amount_cents: 5_00,
+                                  gumroad_amount_cents: 1_00,
+                                  setup_future_charges: false,
+                                  off_session: false,
+                                  statement_description: seller_1.name_or_username,
+                                  params: {}).perform
+      end
+
+      def expect_payee_compliance_failure
+        expect(purchase.error_code).to eq(PurchaseErrorCode::PAYPAL_PAYEE_COMPLIANCE_VIOLATION)
+        expect(purchase.stripe_error_code).to eq("COMPLIANCE_VIOLATION")
+        expect(purchase.errors[:base]).to eq([PurchaseErrorCode.buyer_facing_message(PurchaseErrorCode::PAYPAL_PAYEE_COMPLIANCE_VIOLATION)])
+      end
+
+      it "records the payee-side cause when PayPal rejects the order at create" do
+        allow(paypal_rest_api).to receive(:create_order).and_return(compliance_violation_response)
+        expect(paypal_rest_api).not_to receive(:capture)
+
+        perform_charge
+
+        expect_payee_compliance_failure
+      end
+
+      it "records the payee-side cause when PayPal rejects the order at capture" do
+        allow(paypal_rest_api).to receive(:create_order).and_return(OpenStruct.new(status_code: 201, result: OpenStruct.new(id: "9XX680320L106570A")))
+        allow(paypal_rest_api).to receive(:capture)
+          .with(order_id: "9XX680320L106570A", billing_agreement_id: "B-38D505255T217912K")
+          .and_return(compliance_violation_response)
+
+        perform_charge
+
+        expect_payee_compliance_failure
+      end
+    end
+
     it "records the settlement-currency mismatch and asks the buyer to re-quote when Stripe rejects the FX quote at intent create" do
       order = create(:order)
       merchant_account = create(:merchant_account_stripe_connect, user: seller_1)

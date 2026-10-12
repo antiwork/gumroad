@@ -1032,6 +1032,17 @@ export default function PaymentsPage() {
       markFieldInvalid("individual_tax_id");
       setClientErrorMessage({ message: GUATEMALA_NIT_ERROR_MESSAGE });
     }
+    if (
+      individualIdCountryMatches("DO") &&
+      !props.user.individual_tax_id_entered &&
+      !form.data.user.individual_tax_id?.trim()
+    ) {
+      markFieldInvalid("individual_tax_id");
+      setClientErrorMessage({
+        message:
+          "Enter your Cédula de identidad y electoral (CIE). Stripe cannot pay out without it, and a passport is not accepted.",
+      });
+    }
     if (form.data.user.is_business) {
       const businessTypes = getBusinessTypes(form.data.user.business_country, {
         US: props.us_business_types,

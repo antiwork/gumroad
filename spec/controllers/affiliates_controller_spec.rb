@@ -35,6 +35,15 @@ describe AffiliatesController, type: :controller, inertia: true do
 
           expect(response).to redirect_to(onboarding_affiliates_path)
         end
+
+        it "renders the index page when a self-service affiliate product is enabled" do
+          create(:self_service_affiliate_product, seller:, enabled: true)
+
+          get :index
+
+          expect(response).to be_successful
+          expect(inertia.component).to eq("Affiliates/Index")
+        end
       end
     end
 

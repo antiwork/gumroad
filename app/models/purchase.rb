@@ -5216,10 +5216,11 @@ class Purchase < ApplicationRecord
     rescue ChargeProcessorInvalidRequestError => e
       # The processor rejected our request as malformed — a deterministic failure on our side,
       # not an outage. Record it under its own code so a code regression shows up in monitoring
-      # instead of hiding inside Stripe-outage noise. Retry behavior is unchanged.
+      # instead of hiding inside Stripe-outage noise. Retry behavior is unchanged. A named cause
+      # (e.g. PayPal COMPLIANCE_VIOLATION) gets its own code and buyer message.
       logger.error "Charge processor error: #{e.message} in purchase: #{external_id}"
-      errors.add :base, "There is a temporary problem, please try again (your card was not charged)."
-      self.error_code = PurchaseErrorCode::PROCESSOR_INVALID_REQUEST
+      self.error_code = PurchaseErrorCode.for_processor_error(e.processor_error_code)
+      errors.add :base, PurchaseErrorCode.buyer_facing_message(error_code)
       self.stripe_error_code = e.processor_error_code if stripe_error_code.blank?
       nil
     rescue ChargeProcessorUnavailableError => e
