@@ -1172,6 +1172,9 @@ class StripePayoutProcessor
     return if payment.stripe_internal_transfer_id.nil?
 
     internal_transfer = Stripe::Transfer.retrieve(payment.stripe_internal_transfer_id)
+    # A deferred reversal can run after another path already reversed it; Stripe would reject a second one.
+    return if internal_transfer.amount_reversed.to_i >= internal_transfer.amount.to_i
+
     internal_transfer.reversals.create
 
     create_credit_for_difference_from_reversed_internal_transfer(payment, internal_transfer)

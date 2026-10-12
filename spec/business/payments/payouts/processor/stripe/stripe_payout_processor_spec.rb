@@ -116,6 +116,14 @@ describe StripePayoutProcessor do
 
       expect(ReverseDeferredInternalTransferJob.jobs).to be_empty
     end
+
+    it "does not reverse a transfer that is already fully reversed" do
+      transfer = Stripe::Transfer.construct_from(id: "tr_returned", amount: 383_17, amount_reversed: 383_17)
+      allow(Stripe::Transfer).to receive(:retrieve).with("tr_returned").and_return(transfer)
+      expect(described_class).not_to receive(:create_credit_for_difference_from_reversed_internal_transfer)
+
+      described_class.reverse_internal_transfer!(returned)
+    end
   end
 
   describe "foreign payout destination identity" do
