@@ -4386,7 +4386,7 @@ class PurchaseTest < ActiveSupport::TestCase
   end
 
   test "email on create invalid email is invalid" do
-    purchase = build_purchase(email: "hi@gumroad.com@")
+    purchase = build_purchase(email: "hi@example.com@")
     purchase.save
     assert_not purchase.valid?
   end
@@ -4394,10 +4394,10 @@ class PurchaseTest < ActiveSupport::TestCase
   test "email on create strips surrounding whitespace" do
     # Surrounding whitespace is normalized away rather than rejected, so the stored address is
     # one we can deliver to — the same behavior User#email has.
-    purchase = build_purchase(email: " hi@gumroad.com ")
+    purchase = build_purchase(email: " hi@example.com ")
     purchase.save
     assert purchase.valid?
-    assert_equal "hi@gumroad.com", purchase.email
+    assert_equal "hi@example.com", purchase.email
   end
 
   test "email on update valid email is valid" do
