@@ -209,6 +209,10 @@ seed_cache; run_script BUILDKITE_BRANCH=comp-assets-test; rc=$?
 [ $rc = 0 ] && compiled && ! served && ok "only main is served from the cache" || fail "comp-assets branch (rc=$rc)"
 ! grep -q "^make build_staging" "$WORK/calls" && ok "a comp-assets build compiles no staging assets" || fail "comp-assets compiled staging assets"
 
+rm -rf "$WORK/bucket"; run_script BUILDKITE_BRANCH=preview-test; rc=$?
+[ $rc = 0 ] && grep -q "^make build_staging" "$WORK/calls" && grep -q "^docker push ecr.example/gumroad/web:staging-0123456789ab" "$WORK/calls" \
+  && ! compiled && ! served && ! pushed && ok "a preview branch builds and pushes staging assets and no production ones" || fail "preview branch (rc=$rc): $(cat "$WORK/calls")"
+
 # The pre-scale runs in the background, so these cases wait out a short delay.
 prescaled() { sleep 2; grep -q "^prescale" "$WORK/calls"; }
 

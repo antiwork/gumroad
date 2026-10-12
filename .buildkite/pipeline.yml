@@ -4,8 +4,8 @@ steps:
     branches: "!main !comp-assets-*"
     command: ".buildkite/scripts/preview_gate.sh"
 
-  # One job, because each step uses the image the previous step left on this machine.
-  # As separate jobs, each step waited for a machine and pulled the images again.
+  # One job, so the steps wait for a machine and set it up once instead of three times.
+  # build_web.sh still normally pushes the web image to ECR, and compile_assets.sh may pull it back.
   - label: ":docker: Build images and compile assets"
     key: compile-assets
     branches: "main comp-assets-*"
