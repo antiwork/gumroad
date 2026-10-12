@@ -149,6 +149,32 @@ describe Subscription::RestartAtCheckoutService do
         expect(transformed_params[:contact_info]).to eq(email:)
       end
 
+      it "keeps the election's ZIP when the election matches the saved country" do
+        subscription.original_purchase.update!(country: "United States", zip_code: "94107")
+        checkout_params = base_params.deep_merge(purchase: { perceived_price_cents: 500, sales_tax_country_code_election: "US", zip_code: "10001" })
+
+        transformed_params = described_class.new(subscription:, product:, params: checkout_params, buyer:).send(:updater_service_params)
+
+        expect(transformed_params[:contact_info]).to eq(email:, zip_code: "10001")
+      end
+
+      it "drops the election's ZIP and state when the election differs from the saved country" do
+        subscription.original_purchase.update!(country: "Germany", zip_code: "10115")
+        checkout_params = base_params.deep_merge(purchase: { perceived_price_cents: 500, sales_tax_country_code_election: "US", zip_code: "10001", state: "NY" })
+
+        transformed_params = described_class.new(subscription:, product:, params: checkout_params, buyer:).send(:updater_service_params)
+
+        expect(transformed_params[:contact_info]).to eq(email:)
+      end
+
+      it "passes blank shipping fields so a new shipping address clears the old ones" do
+        checkout_params = base_params.deep_merge(purchase: { country: "GB", state: "", zip_code: "SW1A 1AA" })
+
+        transformed_params = described_class.new(subscription:, product:, params: checkout_params, buyer:).send(:updater_service_params)
+
+        expect(transformed_params[:contact_info]).to eq(email:, country: "GB", state: "", zip_code: "SW1A 1AA")
+      end
+
       it "leaves blank checkout fields out of the contact information" do
         checkout_params = base_params.deep_merge(purchase: { country: "", sales_tax_country_code_election: "", state: "", zip_code: "" })
 
@@ -669,6 +695,34 @@ describe Subscription::RestartAtCheckoutService do
 
           expect(result).to include(success: true)
           expect(subscription.original_purchase.reload).to have_attributes(country: "Germany", zip_code: "10115")
+        end
+      end
+
+      context "when the restart charge runs" do
+        let(:product) { create(:membership_product, user: seller, price_cents: 500) }
+        let(:credit_card) { create(:credit_card, user: buyer) }
+        let!(:subscription) do
+          travel_to(3.months.ago) do
+            create(:subscription, link: product, user: buyer, credit_card:).tap do |subscription|
+              create(:purchase, link: product, purchaser: buyer, email:, subscription:, is_original_subscription_purchase: true, credit_card:,
+                                price_cents: 500, variant_attributes: product.tiers.to_a, country: "Germany", ip_country: "Germany")
+            end
+          end.tap { _1.update!(cancelled_at: 1.month.ago, cancelled_by_buyer: true, deactivated_at: 1.month.ago) }
+        end
+
+        before do
+          create(:zip_tax_rate, country: "DE", zip_code: nil, state: nil, combined_rate: 0.19, is_seller_responsible: false)
+        end
+
+        it "charges VAT for the saved country when the buyer elects another country for tax", :vcr do
+          checkout_params = base_params.deep_merge(purchase: { perceived_price_cents: 500, sales_tax_country_code_election: "FR" })
+
+          result = described_class.new(subscription:, product:, params: checkout_params, buyer:).perform
+
+          expect(result).to include(success: true)
+          restart_purchase = subscription.reload.purchases.successful.where.not(id: subscription.original_purchase.id).last
+          expect(restart_purchase).to have_attributes(country: "Germany", gumroad_tax_cents: 95)
+          expect(subscription.original_purchase.country).to eq("Germany")
         end
       end
     end

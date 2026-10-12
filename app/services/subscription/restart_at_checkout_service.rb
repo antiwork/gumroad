@@ -67,9 +67,7 @@ class Subscription::RestartAtCheckoutService
 
     def contact_info
       purchase_params = params[:purchase] || {}
-      # Only a shipping country is saved. A digital checkout's tax election is not: renewals reuse the
-      # original purchase's IP country, and a new country that disagrees with it fails tax validation.
-      {
+      info = {
         email: purchase_params[:email],
         full_name: purchase_params[:full_name],
         street_address: purchase_params[:street_address],
@@ -77,7 +75,20 @@ class Subscription::RestartAtCheckoutService
         state: purchase_params[:state],
         zip_code: purchase_params[:zip_code],
         city: purchase_params[:city],
-      }.compact_blank.presence
+      }
+      if purchase_params[:country].blank?
+        # A digital checkout sends the country only as a tax election, which is not saved: renewals reuse
+        # the original purchase's IP country, and a new country that disagrees with it fails tax validation.
+        # The election's state and ZIP are kept only when it matches the saved country.
+        info.except!(:state, :zip_code) unless saved_country?(purchase_params[:sales_tax_country_code_election])
+        info.compact_blank!
+      end
+      info.compact.presence
+    end
+
+    def saved_country?(country_code)
+      saved_code = Compliance::Countries.find_by_name(subscription.original_purchase.country)&.alpha2
+      saved_code.present? && ISO3166::Country[country_code.to_s]&.alpha2 == saved_code
     end
 
     def default_variant_ids
