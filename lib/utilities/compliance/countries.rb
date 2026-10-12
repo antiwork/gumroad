@@ -131,6 +131,12 @@ module Compliance
     # which left those four with no payout path at all — this restores it.
     US_OUTLYING_AREAS_AS_STATES = %w[PR].freeze
 
+    # French overseas departments Stripe onboards as French businesses (Stripe: "register for a Stripe
+    # account with France selected as the Country"). They have no payout rail as their own country, so
+    # they are filtered out of the seller country dropdown and rejected as a compliance country: a
+    # seller there picks France. Réunion is deliberately absent — it has a PayPal receiving rail.
+    FRENCH_OVERSEAS_DEPARTMENTS_AS_FRANCE = %w[GF GP MQ YT MF].freeze
+
     # Stripe's restricted-businesses list still names Syria after OFAC revoked the
     # comprehensive program. Checkout (and other for_select consumers) must not offer it.
     def self.hidden_from_select?(alpha2)
@@ -145,13 +151,16 @@ module Compliance
       end.sort_by { |pair| pair.last }
     end
 
-    # Same shape as `for_select`, but excludes the outlying areas we model as US states (PR), so a
+    # Same shape as `for_select`, but excludes the outlying areas we model as US states (PR) and the
+    # French overseas departments we treat as France, so a
     # seller cannot pick one as their country and end up in the issue #394 catch-22. The other outlying
     # areas stay listed because they are valid PayPal payout countries. Buyer-facing flows (checkout,
     # invoice, customer addresses) continue to use `for_select` because billing addresses to any
     # territory can be legitimate.
     def self.for_select_for_seller_compliance
-      for_select.reject { |alpha2, _name| US_OUTLYING_AREAS_AS_STATES.include?(alpha2) }
+      for_select.reject do |alpha2, _name|
+        US_OUTLYING_AREAS_AS_STATES.include?(alpha2) || FRENCH_OVERSEAS_DEPARTMENTS_AS_FRANCE.include?(alpha2)
+      end
     end
 
     GLOBE_SHOWING_AMERICAS_EMOJI = [127758].pack("U*")

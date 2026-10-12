@@ -221,6 +221,36 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
       end
     end
 
+    describe "French overseas department handling" do
+      def expect_france_rejection_error
+        expect(session[:inertia_errors][:base]).to include(
+          a_string_matching(/Select France instead/)
+        )
+      end
+
+      it "rejects updated_country_code=GF with a message naming France" do
+        put :update, params: { user: params.merge(updated_country_code: "GF") }
+        expect_france_rejection_error
+      end
+
+      it "rejects user[country]=GP and user[business_country]=MQ" do
+        put :update, params: { user: params.merge(country: "GP", is_business: true) }
+        expect_france_rejection_error
+        put :update, params: { user: params.merge(business_country: "MQ", is_business: true) }
+        expect_france_rejection_error
+      end
+
+      it "lets an existing French Guiana seller update other settings (the form echoes country=GF)" do
+        gf_seller = create(:user, email: "gf-seller-#{SecureRandom.hex(4)}@example.com")
+        create(:user_compliance_info_empty, user: gf_seller, country: "French Guiana")
+        sign_in gf_seller
+
+        put :update, params: { user: params.merge(country: "GF", updated_country_code: "GF", first_name: "Sofia") }
+
+        expect(session[:inertia_errors]).to be_blank
+      end
+    end
+
     describe "tos" do
       describe "with terms notice displayed" do
         describe "with time" do
@@ -2249,6 +2279,14 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
 
     before do
       sign_in user
+    end
+
+    it "forbids setting a French overseas department as the country" do
+      %w[GF GP MQ YT MF].each do |code|
+        post :set_country, params: params.merge(country: code), as: :json
+        expect(response).to have_http_status(:forbidden)
+      end
+      expect(user.reload.fetch_or_build_user_compliance_info.country).to be_blank
     end
 
     it "updates the country and returns the proper response" do

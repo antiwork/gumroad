@@ -8,6 +8,8 @@ import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 import { LinkButton } from "$app/components/ui/LinkButton";
 
+const FRENCH_OVERSEAS_DEPARTMENT_CODES = ["GF", "GP", "MQ", "YT", "MF"];
+
 const PayPalEmailSection = ({
   canSetupBankPayouts,
   showPayPalPayoutsFeeNote,
@@ -85,8 +87,11 @@ const PayPalEmailSection = ({
       {user.no_payout_rail_in_country ? (
         <Alert variant="warning">
           PayPal does not let accounts registered in {countryName ?? "your country"} receive money, so a payout to one
-          will fail, and bank payouts are not available there either. To get paid you need a PayPal account registered
-          in a country PayPal can pay into. Your balance stays in your Gumroad account in the meantime.
+          will fail, and bank payouts are not available there either.{" "}
+          {user.country_code && FRENCH_OVERSEAS_DEPARTMENT_CODES.includes(user.country_code)
+            ? "Payouts to businesses here are supported as France: select France as your country and add your French bank account. Changing country means entering your identity and payout details again."
+            : "To get paid you need a PayPal account registered in a country PayPal can pay into."}{" "}
+          Your balance stays in your Gumroad account in the meantime.
         </Alert>
       ) : null}
     </section>

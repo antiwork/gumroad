@@ -152,6 +152,14 @@ describe("bank payout switch option", () => {
     expect(screen.getByText(/PayPal does not let accounts registered in Nigeria receive money/u)).toBeTruthy();
   });
 
+  it("tells a French Guiana seller to select France and add a French bank account", () => {
+    renderSection({ countryCode: "GF", countryName: "French Guiana", noPayoutRailInCountry: true });
+
+    expect(screen.getByText(/PayPal does not let accounts registered in French Guiana receive money/u)).toBeTruthy();
+    expect(screen.getByText(/select France as your country and add your French bank account/u)).toBeTruthy();
+    expect(screen.queryByText(/registered in a country PayPal can pay into/u)).toBeNull();
+  });
+
   it("shows nothing extra when no compliance country is on file", () => {
     renderSection({ countryCode: null, countryName: null });
 

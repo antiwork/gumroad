@@ -268,7 +268,18 @@ describe Compliance do
       it "leaves every other country in place" do
         full = Compliance::Countries.for_select.map(&:first)
         filtered = Compliance::Countries.for_select_for_seller_compliance.map(&:first)
-        expect(full - filtered).to match_array(%w[PR])
+        expect(full - filtered).to match_array(%w[PR GF GP MQ YT MF])
+      end
+
+      it "excludes the French overseas departments Stripe onboards under France from the seller list" do
+        codes = Compliance::Countries.for_select_for_seller_compliance.map(&:first)
+        expect(codes & %w[GF GP MQ YT MF]).to be_empty
+        expect(codes).to include("FR", "RE")
+      end
+
+      it "keeps the French overseas departments in the buyer-facing list" do
+        codes = Compliance::Countries.for_select.map(&:first)
+        expect(codes).to include("GF", "GP", "MQ", "YT", "MF")
       end
     end
 

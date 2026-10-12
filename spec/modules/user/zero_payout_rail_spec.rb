@@ -74,6 +74,19 @@ describe User::FeatureStatus, ".no_payout_rail_in_compliance_country?" do
     expect(seller.can_setup_paypal_payouts?).to be(true)
   end
 
+  # Stripe onboards these as French businesses, but we offer no bank rail for them until the reach
+  # decision is made; do not map them to FR here, or the seller is told a rail exists that does not.
+  it "stays true for the French overseas departments and keeps their PayPal option" do
+    ["French Guiana", "Guadeloupe", "Martinique", "Mayotte", "Saint Martin"].each do |country|
+      set_country(country)
+
+      expect(seller.alive_user_compliance_info.legal_entity_country_code).to be_in(%w[GF GP MQ YT MF])
+      expect(seller.native_payouts_supported?).to be(false)
+      expect(seller.no_payout_rail_in_compliance_country?).to be(true), "expected #{country} to have no rail"
+      expect(seller.can_setup_paypal_payouts?).to be(true)
+    end
+  end
+
   describe "PaypalPayoutProcessor::PAYOUT_RECEIVING_COUNTRY_CODES" do
     it "holds alpha2 codes only, with no duplicates" do
       codes = PaypalPayoutProcessor::PAYOUT_RECEIVING_COUNTRY_CODES
