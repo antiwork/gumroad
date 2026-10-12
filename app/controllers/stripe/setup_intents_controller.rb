@@ -3,6 +3,11 @@
 # Stateless API calls we need to make for the frontend to setup future charges for given CC, before passing this
 # CC data to be saved/charged along with the preorder, subscription, or bundle payment.
 class Stripe::SetupIntentsController < ApplicationController
+  SESSION_SETUP_INTENT_KEY = :indian_card_mandate_setup_intents
+  # The session lives in a cookie. Keeps the newest few, enough for a buyer who tries a second card and returns to the first.
+  MAX_SESSION_SETUP_INTENTS = 5
+  PROVIDER_UNAVAILABLE_MESSAGE = "There is a temporary problem, please try again (your card was not charged)."
+
   before_action :validate_card_params, only: %i[create]
 
   def create
@@ -18,6 +23,20 @@ class Stripe::SetupIntentsController < ApplicationController
     end
 
     chargeable.prepare!
+
+    pending_card = reusable_pending_card(subscription, chargeable)
+    return if performed?
+
+    if pending_card.present?
+      render json: {
+        success: true,
+        reusable_token: pending_card.stripe_customer_id,
+        setup_intent_id: pending_card.stripe_setup_intent_id,
+        payment_method_id: pending_card.processor_payment_method_id
+      }
+      return
+    end
+
     reusable_token = chargeable.reusable_token_for!(StripeChargeProcessor.charge_processor_id, logged_in_user)
 
     if skip_setup_intent_for_new_registration?(subscription)
@@ -29,6 +48,8 @@ class Stripe::SetupIntentsController < ApplicationController
 
     setup_intent = ChargeProcessor.setup_future_charges!(merchant_account, chargeable, mandate_options:)
 
+    remember_setup_intent(subscription, setup_intent)
+
     if setup_intent.succeeded?
       render json: { success: true, reusable_token:, setup_intent_id: setup_intent.id }
     elsif setup_intent.requires_action?
@@ -39,7 +60,7 @@ class Stripe::SetupIntentsController < ApplicationController
 
   rescue ChargeProcessorInvalidRequestError, ChargeProcessorUnavailableError => e
     logger.error "Error while creating setup intent: `#{e.message}`"
-    render json: { success: false, error_message: "There is a temporary problem, please try again (your card was not charged)." }, status: :service_unavailable
+    render_provider_unavailable
   rescue ChargeProcessorCardError => e
     logger.error "Error while creating setup intent: `#{e.message}`"
     render json: { success: false, error_message: PurchaseErrorCode.customer_error_message(e.message), error_code: e.error_code }, status: :unprocessable_entity
@@ -55,6 +76,56 @@ class Stripe::SetupIntentsController < ApplicationController
 
         render json: { success: false, error_message: }, status: :unprocessable_entity
       end
+    end
+
+    def reusable_pending_card(subscription, chargeable)
+      return if subscription.blank?
+      # Not every payment method has a fingerprint, and nil must never match nil.
+      return if chargeable.fingerprint.blank?
+      return unless subscription.credit_card&.stripe_fingerprint == chargeable.fingerprint
+      return unless pending_card_reuse_authorized?(subscription)
+
+      subscription.reusable_pending_indian_card(
+        billing_info: billing_info_params,
+        authenticated_offer_code_buyer: logged_in_user
+      )
+    rescue ChargeProcessorInvalidRequestError
+      # Only a stale or invalid stored id may fall through to a replacement.
+      nil
+    rescue StandardError => e
+      # Fail closed: a lookup we could not complete must not mint a second SetupIntent and mandate for the same pending card.
+      ErrorNotifier.notify(e, subscription: subscription&.external_id)
+      render_provider_unavailable
+      nil
+    end
+
+    def render_provider_unavailable
+      render json: { success: false, error_message: PROVIDER_UNAVAILABLE_MESSAGE }, status: :service_unavailable
+    end
+
+    # A guest's email + permalink must not unlock stored Stripe ids: the caller owns the subscription,
+    # holds its manage cookie, or minted the stored setup intent in this session.
+    def pending_card_reuse_authorized?(subscription)
+      return true if logged_in_user.present? && logged_in_user.id == subscription.user_id
+
+      cookie = cookies.encrypted[subscription.cookie_key]
+      return true if cookie.present? && ActiveSupport::SecurityUtils.secure_compare(cookie, subscription.external_id)
+
+      stored_setup_intent_id = subscription.credit_card.stripe_setup_intent_id
+      stored_setup_intent_id.present? && minted_setup_intents.include?([subscription.external_id, stored_setup_intent_id])
+    end
+
+    def minted_setup_intents
+      Array(session[SESSION_SETUP_INTENT_KEY])
+    end
+
+    # Appends rather than overwrites: a second card minted in this session must not revoke the earlier,
+    # still-pending intent.
+    def remember_setup_intent(subscription, setup_intent)
+      return if subscription.blank?
+
+      entry = [subscription.external_id, setup_intent.id]
+      session[SESSION_SETUP_INTENT_KEY] = (minted_setup_intents - [entry] + [entry]).last(MAX_SESSION_SETUP_INTENTS)
     end
 
     def merchant_account

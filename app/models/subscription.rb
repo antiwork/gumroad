@@ -55,6 +55,8 @@ class Subscription < ApplicationRecord
             8 => :renewal_disabled_due_to_indian_card_mandate,
             9 => :indian_card_mandate_requires_reauthorization,
             10 => :vat_exempt_territory,
+            11 => :indian_card_mandate_recovery_pending,
+            12 => :indian_card_mandate_restart_held,
             :column => "flags",
             :flag_query_mode => :bit_operator,
             check_for_column: false
@@ -517,6 +519,16 @@ class Subscription < ApplicationRecord
     end
   end
 
+  # The buyer was promised an automatic restart. Call it in the transaction that clears the held marker, once
+  # per hold: the mail goes out only if that transaction commits.
+  def notify_indian_card_mandate_restart_abandoned
+    AfterCommitEverywhere.after_commit do
+      CustomerLowPriorityMailer.subscription_indian_card_mandate_invalid(id, true).deliver_later(queue: "low")
+    rescue StandardError => e
+      ErrorNotifier.notify(e, subscription: external_id)
+    end
+  end
+
   def restore_indian_card_mandate_after_failed_reauthorization!(expected_credit_card_id: nil)
     return unless india_card_mandate_reliability_enabled?
 
@@ -878,6 +890,105 @@ class Subscription < ApplicationRecord
 
     mandate, status = source&.retrieve_indian_card_mandate || [nil, "missing"]
     [mandate, status, source]
+  end
+
+  # Keyed on its own flag, not the renewal stop (the mandate refresh clears the stop before the restart commits)
+  # and not `is_resubscription_pending_confirmation`, which purchase confirmation and failure act on: a held
+  # restart has no purchase behind it.
+  def indian_card_mandate_restart_pending?
+    !alive?(include_pending_cancellation: false) &&
+      indian_card_mandate_restart_held? &&
+      stripe_mandate_id.present?
+  end
+
+  # Sets the hold together with the price and quantity the buyer accepted, so that completion can tell whether
+  # they still apply. Must run inside the caller's row lock.
+  def hold_indian_card_mandate_restart!(authenticated_offer_code_buyer:)
+    update!(
+      indian_card_mandate_restart_held: true,
+      indian_card_mandate_restart_price_cents: current_subscription_price_cents(authenticated_offer_code_buyer:),
+      indian_card_mandate_restart_quantity: original_purchase.quantity
+    )
+  end
+
+  # Fails closed on a hold with no recorded terms.
+  def indian_card_mandate_restart_terms_unchanged?(authenticated_offer_code_buyer: AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED)
+    indian_card_mandate_restart_price_cents.present? &&
+      indian_card_mandate_restart_quantity.present? &&
+      indian_card_mandate_restart_price_cents == current_subscription_price_cents(authenticated_offer_code_buyer:) &&
+      indian_card_mandate_restart_quantity == original_purchase.quantity
+  end
+
+  def indian_card_mandate_reauthorization_pending?
+    alive?(include_pending_cancellation: false) &&
+      renewal_disabled_due_to_indian_card_mandate? &&
+      stripe_mandate_id.present?
+  end
+
+  # What a restart must still satisfy when it completes later than the buyer's submission:
+  # the exclusions of `restartable_for_product_and_buyer/_email` plus the checkout-time checks.
+  # A pending cancellation has no `deactivated_at` yet but is still held, and `resubscribe!` undoes it.
+  def indian_card_mandate_restart_eligible?
+    return false if ended_at.present? || cancelled_by_admin? || is_test_subscription?
+    return false unless deactivated_at.present? || pending_cancellation?
+    return false if !link.is_recurring_billing || link.deleted? || link.user.suspended?
+    return false if original_purchase.variant_attributes.any?(&:closed_to_new_buyers?)
+    return false if is_installment_plan? && charges_completed?
+    return false if !tier&.customizable_price? && tier_price_changed?
+    return false unless indian_card_mandate_restart_terms_unchanged?
+
+    card = credit_card_to_charge
+    card.blank? || link.user.supports_card?(card.as_json)
+  end
+
+  def tier_price_changed?(authenticated_offer_code_buyer: AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED)
+    price = tier_price
+    return false if price.blank?
+
+    current_subscription_price_cents(authenticated_offer_code_buyer:) / original_purchase.quantity != price.price_cents
+  end
+
+  def reusable_pending_indian_card(billing_info: nil, authenticated_offer_code_buyer: AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED)
+    return unless indian_card_mandate_restart_pending? || indian_card_mandate_reauthorization_pending?
+
+    card = credit_card
+    setup_intent_id = card&.stripe_setup_intent_id
+    return if setup_intent_id.blank?
+
+    _mandate, status, = indian_card_mandate_for(card.id)
+    # Only a pending mandate is awaiting the buyer's approval; an active one must not swap in the stored payment method.
+    return unless status == "pending"
+
+    setup_intent = ChargeProcessor.get_setup_intent(renewal_merchant_account, setup_intent_id)
+    return unless setup_intent&.succeeded? &&
+      setup_intent.mandate == stripe_mandate_id &&
+      setup_intent.customer_id == card.stripe_customer_id &&
+      setup_intent.payment_method_id == card.processor_payment_method_id &&
+      indian_card_setup_intent_terms_match?(setup_intent, billing_info:, authenticated_offer_code_buyer:)
+
+    card
+  end
+
+  def indian_card_setup_intent_terms_match?(setup_intent, billing_info: nil, authenticated_offer_code_buyer: AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED)
+    return false unless setup_intent&.usage == "off_session"
+    return false unless setup_intent.metadata[:gumroad_subscription_id] == external_id
+
+    mandate_options = setup_intent.card_mandate_options
+    return false if mandate_options.blank?
+
+    # Pin the rate stamped at setup so a cached-rate refresh cannot reject the mandate the buyer just approved.
+    fixed_rate = BigDecimal(setup_intent.metadata[:gumroad_mandate_rate].to_s, exception: false)
+    fixed_rate = nil unless fixed_rate&.positive?
+    expected_terms = indian_card_mandate_terms(billing_info:, authenticated_offer_code_buyer:, fixed_rate:)
+    return false if expected_terms.blank?
+
+    mandate_options.amount_type == "maximum" &&
+      mandate_options.amount.to_i == expected_terms[:amount] &&
+      mandate_options.currency.to_s.downcase == expected_terms[:currency] &&
+      StripeChargeProcessor.indian_card_mandate_reference_for_subscription?(mandate_options.reference, external_id) &&
+      mandate_options.interval == expected_terms[:interval] &&
+      mandate_options.interval_count == expected_terms[:interval_count] &&
+      Array(mandate_options.supported_types).include?("india")
   end
 
   def refresh_indian_card_mandate!
@@ -1374,6 +1485,8 @@ class Subscription < ApplicationRecord
       self.cancelled_by_admin = false
       self.cancelled_by_buyer = false
       self.failed_at = nil unless pending_cancellation
+      # A restart held for an Indian mandate is moot once access is back by any route.
+      self.indian_card_mandate_restart_held = false
       save!
       original_purchase&.schedule_audience_member_refresh
 

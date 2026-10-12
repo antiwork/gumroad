@@ -28,6 +28,7 @@ class RedisKey
     def ai_request_throttle(user_id) = "ai_request_throttle:#{user_id}"
     def agent_request_throttle(user_id) = "agent_request_throttle:#{user_id}"
     def team_invitation_send_throttle(seller_id) = "team_invitation_send_throttle:#{seller_id}"
+    def indian_card_mandate_completion_generation(subscription_id) = "indian_card_mandate_completion:#{subscription_id}:generation"
     def team_invitation_burst_reported(seller_id) = "team_invitation_burst_reported:#{seller_id}"
     def agent_turn_status(user_id, client_turn_id) = "agent_turn_status:#{user_id}:#{client_turn_id}"
     def agent_custom_html_preview(user_id, token) = "agent_custom_html_preview:#{user_id}:#{token}"

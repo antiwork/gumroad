@@ -1,6 +1,12 @@
 <%= header_section(@subject) %>
 <div>
-  <p>We could not verify the recurring payment authorization for <%= @subscription.link.name %>.</p>
-  <p>We paused automatic renewals and did not retry the payment. You keep access while renewals are paused.</p>
-  <p>Please <%= link_to "update your payment method", @edit_card_url %> to restore automatic renewals.</p>
+  <% if @restart_abandoned %>
+    <p>We could not confirm the card you submitted to restart <%= @subscription.link.name %> for recurring payments.</p>
+    <p>Your membership has not restarted and you have not been charged.</p>
+    <p>Please <%= link_to "update your payment method", @edit_card_url %> to try again.</p>
+  <% else %>
+    <p>We could not verify the recurring payment authorization for <%= @subscription.link.name %>.</p>
+    <p>We paused automatic renewals and did not retry the payment. You keep access while renewals are paused.</p>
+    <p>Please <%= link_to "update your payment method", @edit_card_url %> to restore automatic renewals.</p>
+  <% end %>
 </div>

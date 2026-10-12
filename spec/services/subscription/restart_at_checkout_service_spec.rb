@@ -554,6 +554,133 @@ describe Subscription::RestartAtCheckoutService do
       end
     end
 
+    describe "Indian card mandate still pending" do
+      let(:merchant_account) do
+        create(
+          :merchant_account,
+          user: nil,
+          charge_processor_id: StripeChargeProcessor.charge_processor_id,
+          charge_processor_merchant_id: nil
+        )
+      end
+      let(:credit_card) do
+        CreditCard.create!(
+          charge_processor_id: StripeChargeProcessor.charge_processor_id,
+          stripe_customer_id: "cus_pending",
+          processor_payment_method_id: "pm_pending",
+          stripe_fingerprint: "fingerprint_pending",
+          visual: "**** **** **** 4242",
+          card_type: CardType::VISA,
+          card_country: Compliance::Countries::IND.alpha2,
+          expiry_month: 12,
+          expiry_year: 2030
+        )
+      end
+      let(:product) { create(:subscription_product_with_versions, user: seller) }
+      let!(:subscription) do
+        subscription = create(:subscription, link: product, user: buyer, credit_card: credit_card, stripe_mandate_id: "mandate_pending")
+        travel_to(1.month.ago) do
+          create(:purchase,
+                 is_original_subscription_purchase: true,
+                 link: product,
+                 subscription: subscription,
+                 purchaser: buyer,
+                 email: email,
+                 price_cents: product.default_price_cents,
+                 credit_card: credit_card,
+                 variant_attributes: [product.variants.first])
+        end
+        subscription.update!(cancelled_at: 1.day.ago, cancelled_by_buyer: true, deactivated_at: 1.day.ago)
+        subscription
+      end
+      let(:base_params) do
+        {
+          purchase: { email: email, perceived_price_cents: product.default_price_cents, browser_guid: browser_guid },
+          price_id: subscription.price.external_id,
+          variants: [product.variants.first.external_id],
+          remote_ip: "127.0.0.1"
+        }
+      end
+      let(:mandate_status) { "pending" }
+
+      before do
+        allow(MerchantAccount).to receive(:gumroad)
+          .with(StripeChargeProcessor.charge_processor_id)
+          .and_return(merchant_account)
+        Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller)
+        allow(ChargeProcessor).to receive(:get_mandate) do
+          Stripe::Mandate.construct_from(id: "mandate_pending", status: mandate_status, payment_method: "pm_pending")
+        end
+        allow(subscription).to receive(:send_restart_notifications!)
+      end
+
+      after do
+        Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller)
+      end
+
+      def restart_overdue_subscription
+        travel_to(2.months.from_now) do
+          described_class.new(subscription: subscription, product: product, params: base_params, buyer: buyer).perform
+        end
+      end
+
+      let(:pending_message) { Subscription::UpdaterService::MANDATE_STILL_PENDING_RESTART_MESSAGE }
+
+      it "leaves the membership ended and uncharged while the saved card's mandate is pending" do
+        expect(subscription).not_to receive(:charge!)
+
+        result = restart_overdue_subscription
+
+        expect(result).to eq(success: false, error_message: pending_message)
+        expect(subscription.reload).not_to be_alive
+        expect(subscription).to be_indian_card_mandate_restart_held
+        expect(subscription.purchases.not_is_original_subscription_purchase.count).to eq(0)
+        expect(RecurringChargeWorker.jobs.size).to eq(0)
+        expect(CompleteIndianCardMandateJob.jobs.size).to eq(1)
+      end
+
+      it "gives the same answer to a repeated submission and keeps the one completion chain the first submission enqueued" do
+        expect(subscription).not_to receive(:charge!)
+
+        2.times { expect(restart_overdue_subscription).to include(success: false, error_message: pending_message) }
+
+        expect(subscription.reload).not_to be_alive
+        expect(subscription.stripe_mandate_id).to eq("mandate_pending")
+        expect(subscription).to be_indian_card_mandate_restart_held
+        expect(CompleteIndianCardMandateJob.jobs.map { _1["args"].first(2) }).to eq([[subscription.id, 0]])
+        generation = CompleteIndianCardMandateJob.jobs.first["args"].last
+        expect(CompleteIndianCardMandateJob.superseded?(subscription.id, generation)).to be(false)
+      end
+
+      it "restarts and charges when a later submission finds the mandate active" do
+        restart_overdue_subscription
+        allow(ChargeProcessor).to receive(:get_mandate).and_return(
+          Stripe::Mandate.construct_from(id: "mandate_pending", status: "active", payment_method: "pm_pending")
+        )
+        renewal = instance_double(Purchase, successful?: true, test_successful?: false, errors: ActiveModel::Errors.new(nil), error_code: nil, external_id: "renewal_external_id")
+        expect(subscription).to receive(:charge!).once.and_return(renewal)
+
+        result = restart_overdue_subscription
+
+        expect(result).to include(success: true, restarted_subscription: true)
+        expect(subscription.reload).to be_alive
+        expect(subscription).not_to be_renewal_disabled_due_to_indian_card_mandate
+        expect(subscription).not_to be_indian_card_mandate_restart_held
+      end
+
+      context "when the mandate is inactive" do
+        let(:mandate_status) { "inactive" }
+
+        it "refuses the restart and leaves the subscription ended" do
+          result = restart_overdue_subscription
+
+          expect(result[:success]).to be(false)
+          expect(result[:error_message]).to eq("We could not verify this card for recurring payments. Please update the payment method before you restart this subscription.")
+          expect(subscription.reload).not_to be_alive
+        end
+      end
+    end
+
     # Integration tests - verify error handling works correctly
     # Success cases are covered by UpdaterService specs; we just verify delegation
     describe "integration behavior" do

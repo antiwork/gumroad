@@ -120,6 +120,319 @@ describe Subscription::UpdaterService, :vcr do
         }
       end
 
+      describe "when the replacement card's Indian mandate is still pending",
+               vcr: { cassette_name: "Subscription_UpdaterService/_perform/tiered_membership_subscription/when_the_replacement_card_s_Indian_mandate_is_still_pending" } do
+        let(:merchant_account) do
+          create(:merchant_account, user: nil, charge_processor_id: StripeChargeProcessor.charge_processor_id, charge_processor_merchant_id: nil)
+        end
+        let(:replacement_card) do
+          CreditCard.create!(
+            charge_processor_id: StripeChargeProcessor.charge_processor_id,
+            stripe_customer_id: "cus_replacement",
+            processor_payment_method_id: "pm_replacement",
+            stripe_fingerprint: "fingerprint_replacement",
+            visual: "**** **** **** 4242",
+            card_type: CardType::VISA,
+            card_country: Compliance::Countries::IND.alpha2,
+            expiry_month: 12,
+            expiry_year: 2030,
+            json_data: { stripe_setup_intent_id: "seti_replacement" }
+          )
+        end
+        let(:stripe_chargeable) do
+          StripeChargeablePaymentMethod.new("pm_replacement", zip_code: "12345", product_permalink: @product.unique_permalink)
+        end
+        let(:pending_message) { Subscription::UpdaterService::MANDATE_STILL_PENDING_CHANGE_MESSAGE }
+
+        # Terms are read when Stripe is asked, so they match whatever plan the updater has applied by then.
+        def stub_stripe_mandate
+          allow(ChargeProcessor).to receive(:get_setup_intent) do
+            terms = @subscription.reload.indian_card_mandate_terms
+            instance_double(
+              StripeSetupIntent,
+              succeeded?: true,
+              mandate: "mandate_pending",
+              payment_method_id: "pm_replacement",
+              customer_id: "cus_replacement",
+              usage: "off_session",
+              metadata: { gumroad_subscription_id: @subscription.external_id },
+              card_mandate_options: Stripe::StripeObject.construct_from(
+                amount_type: "maximum",
+                amount: terms[:amount],
+                currency: terms[:currency],
+                reference: StripeChargeProcessor.indian_card_mandate_reference(@subscription.external_id),
+                interval: terms[:interval],
+                interval_count: terms[:interval_count],
+                supported_types: ["india"]
+              )
+            )
+          end
+          allow(ChargeProcessor).to receive(:get_mandate) do
+            Stripe::Mandate.construct_from(id: "mandate_pending", status: @mandate_status, payment_method: "pm_replacement")
+          end
+        end
+
+        def replace_card_with_pending_mandate(params)
+          service = described_class.new(
+            subscription: @subscription,
+            gumroad_guid: @gumroad_guid,
+            params: params.except(:use_existing_card),
+            logged_in_user: @user,
+            remote_ip: @remote_ip,
+          )
+          allow(service).to receive(:get_chargeable) do
+            service.chargeable = instance_double(Chargeable, get_chargeable_for: stripe_chargeable)
+            nil
+          end
+          allow(CreditCard).to receive(:create).and_return(replacement_card)
+          service
+        end
+
+        def saved_card_with_pending_mandate(params)
+          @subscription.update!(credit_card: replacement_card, stripe_mandate_id: "mandate_pending")
+          @subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
+          described_class.new(
+            subscription: @subscription,
+            gumroad_guid: @gumroad_guid,
+            params: params.merge(use_existing_card: true),
+            logged_in_user: @user,
+            remote_ip: @remote_ip,
+          )
+        end
+
+        # Terms that depend only on the submitted state, so a billing change moves the mandate cap.
+        def stub_terms_by_billing_state
+          allow(@subscription).to receive(:indian_card_mandate_terms) do |billing_info: nil, **|
+            amount = billing_info.present? && billing_info.with_indifferent_access[:state] == "NY" ? 10_75 : 10_00
+            { amount:, currency: Currency::USD, interval: "month", interval_count: 3 }
+          end
+        end
+
+        def expect_plan_change_refused(result)
+          expect(result).to eq(success: false, error_message: pending_message)
+          @subscription.reload
+          expect(@subscription.original_purchase.id).to eq(@original_purchase.id)
+          expect(@subscription.original_purchase.variant_attributes).to eq([@original_tier])
+          expect(@subscription.original_purchase.displayed_price_cents).to eq(@original_tier_quarterly_price.price_cents)
+          expect(@subscription.purchases.not_is_original_subscription_purchase.count).to eq(0)
+          expect(@subscription.purchases.count).to eq(@purchase_count_before)
+          expect(@subscription.subscription_plan_changes.alive).to be_empty
+          expect(UpdateIntegrationsOnTierChangeWorker.jobs).to be_empty
+          expect(CompleteIndianCardMandateJob.jobs).to be_empty
+          expect(RecurringChargeWorker.jobs).to be_empty
+        end
+
+        before do
+          allow(MerchantAccount).to receive(:gumroad).with(StripeChargeProcessor.charge_processor_id).and_return(merchant_account)
+          Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+          [RecurringChargeWorker, UpdateIntegrationsOnTierChangeWorker, CompleteIndianCardMandateJob].each(&:clear)
+          @mandate_status = "pending"
+          stub_stripe_mandate
+          @purchase_count_before = @subscription.purchases.count
+          expect_any_instance_of(Subscription).not_to receive(:charge!)
+          expect_any_instance_of(Subscription).not_to receive(:send_updated_notifification_webhook)
+        end
+
+        after do
+          Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+        end
+
+        context "when the renewal is overdue" do
+          before { travel_to(@originally_subscribed_at + 4.months) }
+
+          let(:overdue_upgrade_params) do
+            upgrade_tier_params.merge(perceived_upgrade_price_cents: @new_tier_quarterly_price.price_cents)
+          end
+          let(:overdue_same_plan_params) { same_plan_params.merge(perceived_upgrade_price_cents: @original_tier_quarterly_price.price_cents) }
+
+          it "refuses a tier upgrade on a replacement card without applying it or charging" do
+            result = replace_card_with_pending_mandate(overdue_upgrade_params).perform
+
+            expect_plan_change_refused(result)
+            expect(@subscription.credit_card).to eq(@credit_card)
+            expect(@subscription.stripe_mandate_id).to be_nil
+          end
+
+          it "refuses a recurrence change on a replacement card without applying it or charging" do
+            params = upgrade_recurrence_params.merge(perceived_upgrade_price_cents: @original_tier_yearly_price.price_cents)
+
+            result = replace_card_with_pending_mandate(params).perform
+
+            expect_plan_change_refused(result)
+          end
+
+          it "refuses a quantity change on a replacement card without applying it or charging" do
+            params = overdue_same_plan_params.merge(
+              quantity: 2,
+              perceived_price_cents: @original_tier_quarterly_price.price_cents * 2,
+              perceived_upgrade_price_cents: @original_tier_quarterly_price.price_cents * 2
+            )
+
+            result = replace_card_with_pending_mandate(params).perform
+
+            expect(result).to eq(success: false, error_message: pending_message)
+            expect(@subscription.reload.original_purchase.quantity).to eq(1)
+            expect(@subscription.purchases.count).to eq(@purchase_count_before)
+          end
+
+          it "refuses a tier upgrade on the saved card without applying it or charging" do
+            result = saved_card_with_pending_mandate(overdue_upgrade_params).perform
+
+            expect_plan_change_refused(result)
+          end
+
+          it "refuses a billing change on the saved card instead of leaving the pending mandate on stale terms" do
+            @subscription.original_purchase.update!(country: "United States", state: "CA", zip_code: "94107")
+            stub_terms_by_billing_state
+            params = overdue_same_plan_params.merge(contact_info: { country: "US", state: "NY", zip_code: "10001" })
+
+            result = saved_card_with_pending_mandate(params).perform
+
+            expect_plan_change_refused(result)
+            expect(@subscription.original_purchase.state).to eq("CA")
+            expect(@subscription).to be_renewal_disabled_due_to_indian_card_mandate
+            expect(@subscription).not_to be_indian_card_mandate_requires_reauthorization
+          end
+
+          it "accepts a billing change on the saved card that leaves the mandate terms unchanged" do
+            @subscription.original_purchase.update!(country: "United States", state: "CA", zip_code: "94107")
+            stub_terms_by_billing_state
+            params = overdue_same_plan_params.merge(contact_info: { country: "US", state: "CA", zip_code: "94108" })
+
+            result = saved_card_with_pending_mandate(params).perform
+
+            expect(result).to include(success: true)
+            expect(CompleteIndianCardMandateJob.jobs.size).to eq(1)
+          end
+
+          it "records the card and keeps renewals stopped for the overdue renewal alone, then charges once the mandate is active" do
+            result = replace_card_with_pending_mandate(overdue_same_plan_params).perform
+
+            expect(result).to include(success: true)
+            @subscription.reload
+            expect(@subscription.credit_card).to eq(replacement_card)
+            expect(@subscription.stripe_mandate_id).to eq("mandate_pending")
+            expect(@subscription).to be_renewal_disabled_due_to_indian_card_mandate
+            expect(@subscription.purchases.count).to eq(@purchase_count_before)
+            expect(RecurringChargeWorker.jobs).to be_empty
+            expect(CompleteIndianCardMandateJob.jobs.size).to eq(1)
+
+            CompleteIndianCardMandateJob.drain
+            expect(@subscription.reload).to be_renewal_disabled_due_to_indian_card_mandate
+            expect(RecurringChargeWorker.jobs).to be_empty
+
+            @mandate_status = "active"
+            CompleteIndianCardMandateJob.schedule(@subscription.id)
+            CompleteIndianCardMandateJob.drain
+
+            expect(@subscription.reload).not_to be_renewal_disabled_due_to_indian_card_mandate
+            expect(RecurringChargeWorker.jobs.map { _1["args"] }).to eq([[@subscription.id]])
+          end
+
+          context "when the saved card's pending mandate resolves through the source purchase and stripe_mandate_id is blank" do
+            before do
+              result = saved_card_with_pending_mandate(overdue_same_plan_params).perform
+              expect(result).to include(success: true)
+            end
+
+            def saved_card_with_pending_mandate(params)
+              service = super
+              @subscription.update!(stripe_mandate_id: nil)
+              @subscription.original_purchase.update!(credit_card: replacement_card)
+              source_purchase_id = @subscription.original_purchase.id
+              allow_any_instance_of(Subscription).to receive(:indian_card_mandate_source_purchase) { |_card_id| Purchase.find(source_purchase_id) }
+              allow_any_instance_of(Purchase).to receive(:retrieve_indian_card_mandate) do
+                [Stripe::Mandate.construct_from(id: "mandate_pending", status: "pending", payment_method: "pm_replacement"), "pending"]
+              end
+              service
+            end
+
+            it "records the resolved mandate id so the completion job can follow it" do
+              @subscription.reload
+              expect(@subscription.stripe_mandate_id).to eq("mandate_pending")
+              expect(@subscription).to be_renewal_disabled_due_to_indian_card_mandate
+              expect(@subscription).to be_indian_card_mandate_reauthorization_pending
+              expect(CompleteIndianCardMandateJob.jobs.size).to eq(1)
+            end
+
+            it "resumes renewals and queues the overdue charge once the source purchase's mandate becomes active" do
+              @mandate_status = "active"
+
+              CompleteIndianCardMandateJob.drain
+
+              expect(@subscription.reload).not_to be_renewal_disabled_due_to_indian_card_mandate
+              expect(@subscription).not_to be_indian_card_mandate_recovery_pending
+              expect(RecurringChargeWorker.jobs.map { _1["args"] }).to eq([[@subscription.id]])
+            end
+
+            it "tells the buyer to update the card when the mandate stays pending until the chain gives up" do
+              expect do
+                CompleteIndianCardMandateJob.drain
+              end.to have_enqueued_mail(CustomerLowPriorityMailer, :subscription_indian_card_mandate_invalid).with(@subscription.id)
+
+              expect(@subscription.reload).to be_renewal_disabled_due_to_indian_card_mandate
+              expect(@subscription).not_to be_indian_card_mandate_recovery_pending
+              expect(CompleteIndianCardMandateJob.jobs).to be_empty
+            end
+          end
+
+          context "when the completion job cannot be enqueued" do
+            before { allow(CompleteIndianCardMandateJob).to receive(:perform_async).and_raise(Redis::CannotConnectError, "redis down") }
+
+            it "reports the failure and keeps the card and the renewal stop instead of returning a 500" do
+              expect(ErrorNotifier).to receive(:notify).with(instance_of(Redis::CannotConnectError), subscription: @subscription.external_id)
+
+              result = replace_card_with_pending_mandate(overdue_same_plan_params).perform
+
+              expect(result).to include(success: true)
+              @subscription.reload
+              expect(@subscription.credit_card).to eq(replacement_card)
+              expect(@subscription.stripe_mandate_id).to eq("mandate_pending")
+              expect(@subscription).to be_renewal_disabled_due_to_indian_card_mandate
+              expect(@subscription).to be_indian_card_mandate_reauthorization_pending
+              expect(@subscription.purchases.count).to eq(@purchase_count_before)
+              expect(RecurringChargeWorker.jobs).to be_empty
+            end
+
+            it "leaves the subscription for the missing-charge sweep, which queues the renewal once it is overdue enough" do
+              allow(ErrorNotifier).to receive(:notify)
+              replace_card_with_pending_mandate(overdue_same_plan_params).perform
+              RecurringChargeWorker.clear
+
+              travel_to(3.hours.from_now) do
+                FindSubscriptionsWithMissingChargeWorker.new.perform(@subscription.id % 10)
+              end
+
+              expect(RecurringChargeWorker.jobs.map { _1["args"] }).to eq([[@subscription.id, true]])
+            end
+          end
+        end
+
+        context "when the renewal is not due yet" do
+          it "refuses a prorated upgrade on a replacement card without applying it or charging" do
+            result = replace_card_with_pending_mandate(upgrade_tier_params).perform
+
+            expect_plan_change_refused(result)
+          end
+
+          it "records the card, keeps renewals stopped, and resumes without a charge once the mandate is active" do
+            result = replace_card_with_pending_mandate(same_plan_params).perform
+
+            expect(result).to include(success: true)
+            expect(@subscription.reload.credit_card).to eq(replacement_card)
+            expect(@subscription).to be_renewal_disabled_due_to_indian_card_mandate
+            expect(CompleteIndianCardMandateJob.jobs.size).to eq(1)
+
+            @mandate_status = "active"
+            CompleteIndianCardMandateJob.drain
+
+            expect(@subscription.reload).not_to be_renewal_disabled_due_to_indian_card_mandate
+            expect(@subscription.stripe_mandate_id).to eq("mandate_pending")
+            expect(RecurringChargeWorker.jobs).to be_empty
+          end
+        end
+      end
+
       describe "updating the credit card" do
         it "updates the subscription but not the user's card" do
           service = Subscription::UpdaterService.new(
@@ -2762,6 +3075,344 @@ describe Subscription::UpdaterService, :vcr do
         end
       end
 
+      def held_restart_service
+        Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+        @credit_card.update!(card_country: Compliance::Countries::IND.alpha2)
+        @subscription.update!(
+          cancelled_at: @originally_subscribed_at + 3.months,
+          cancelled_by_buyer: true,
+          stripe_mandate_id: "mandate_pending"
+        )
+        travel_to(@originally_subscribed_at + 4.months)
+        mandate = Stripe::Mandate.construct_from(
+          id: "mandate_pending",
+          status: "pending",
+          payment_method: @credit_card.processor_payment_method_id
+        )
+        allow(ChargeProcessor).to receive(:get_mandate).and_return(mandate)
+        allow(@subscription).to receive(:send_restart_notifications!)
+        expect(@subscription).not_to receive(:charge!)
+        params = {
+          price_id: @quarterly_product_price.external_id,
+          variants: [@original_tier.external_id],
+          quantity: 1,
+          use_existing_card: true,
+          perceived_price_cents: @original_tier_quarterly_price.price_cents,
+          perceived_upgrade_price_cents: @original_tier_quarterly_price.price_cents,
+        }
+
+        service = described_class.new(
+          subscription: @subscription,
+          gumroad_guid: @gumroad_guid,
+          params:,
+          logged_in_user: @user,
+          remote_ip: @remote_ip,
+        )
+        service.original_purchase = @subscription.original_purchase
+        service
+      end
+
+      it "keeps a restart on a saved card whose mandate is still pending ended and uncharged",
+         vcr: { cassette_name: "Subscription_UpdaterService/_perform/tiered_membership_subscription/restarting_a_membership/when_the_price_has_changed/charges_the_current_price" } do
+        expect(held_restart_service.perform).to eq(
+          success: false,
+          error_message: described_class::MANDATE_STILL_PENDING_RESTART_MESSAGE
+        )
+
+        expect(@subscription.reload).not_to be_alive
+        expect(@subscription.stripe_mandate_id).to eq("mandate_pending")
+        expect(@subscription).to be_indian_card_mandate_restart_held
+        expect(@subscription.indian_card_mandate_restart_price_cents).to eq(@subscription.current_subscription_price_cents(authenticated_offer_code_buyer: @user))
+        expect(@subscription.indian_card_mandate_restart_quantity).to eq(@subscription.original_purchase.quantity)
+        expect(@subscription.purchases.not_is_original_subscription_purchase.count).to eq(0)
+        expect(CompleteIndianCardMandateJob.jobs.size).to eq(1)
+      ensure
+        Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+      end
+
+      it "locks the subscription row before claiming a generation when a repeat submission finds the marker already set",
+         vcr: { cassette_name: "Subscription_UpdaterService/_perform/tiered_membership_subscription/restarting_a_membership/when_the_price_has_changed/charges_the_current_price" } do
+        service = held_restart_service
+        @subscription.update!(indian_card_mandate_restart_held: true)
+        locked = false
+        locked_when_claiming = nil
+        subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |*, payload|
+          locked = true if payload[:sql].match?(/FROM `subscriptions`.* FOR UPDATE/)
+        end
+        allow(CompleteIndianCardMandateJob).to receive(:claim_held_restart).and_wrap_original do |original, *args, **kwargs|
+          locked = false
+          original.call(*args, **kwargs)
+        end
+        allow(CompleteIndianCardMandateJob).to receive(:next_generation).and_wrap_original do |original, *args|
+          locked_when_claiming = locked
+          original.call(*args)
+        end
+
+        expect(service.perform).to include(success: false, error_message: described_class::MANDATE_STILL_PENDING_RESTART_MESSAGE)
+
+        expect(locked_when_claiming).to be(true)
+        expect(@subscription.reload).to be_indian_card_mandate_restart_held
+      ensure
+        ActiveSupport::Notifications.unsubscribe(subscriber)
+        Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+      end
+
+      it "releases the held restart when its completion job cannot be enqueued",
+         vcr: { cassette_name: "Subscription_UpdaterService/_perform/tiered_membership_subscription/restarting_a_membership/when_the_price_has_changed/charges_the_current_price" } do
+        service = held_restart_service
+        allow(CompleteIndianCardMandateJob).to receive(:perform_async).and_raise(Redis::CannotConnectError)
+        expect(ErrorNotifier).to receive(:notify).with(instance_of(Redis::CannotConnectError), subscription: @subscription.external_id)
+
+        expect(service.perform).to eq(
+          success: false,
+          error_message: described_class::MANDATE_RESTART_NOT_SCHEDULED_MESSAGE
+        )
+
+        expect(@subscription.reload).not_to be_alive
+        expect(@subscription).not_to be_indian_card_mandate_restart_held
+        expect(@subscription.reusable_pending_indian_card).to be_nil
+        expect(@subscription.purchases.not_is_original_subscription_purchase.count).to eq(0)
+      ensure
+        Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+      end
+
+      context "when a restart is already held and the buyer submits again" do
+        let(:generation_key) { RedisKey.indian_card_mandate_completion_generation(@subscription.id) }
+        let(:abandoned_mail) do
+          have_enqueued_mail(CustomerLowPriorityMailer, :subscription_indian_card_mandate_invalid).with(@subscription.id, true)
+        end
+
+        # The first submission's chain is promised to the buyer; returns the service for a second submission.
+        def repeat_submission(payment_method_changed:)
+          held_restart_service.perform
+          # The completion job only restarts memberships that actually ended.
+          @subscription.update!(deactivated_at: @originally_subscribed_at + 3.months)
+          @earlier_chain = CompleteIndianCardMandateJob.jobs.map { _1["args"] }
+          if payment_method_changed
+            # Stands in for a different card: only the claim's view of the payment method before the update matters.
+            allow(CompleteIndianCardMandateJob).to receive(:claim_held_restart).and_wrap_original do |original, *args, **kwargs|
+              original.call(*args, **kwargs, payment_method_before: [nil, nil])
+            end
+          end
+          held_restart_service
+        end
+
+        it "keeps the earlier chain without enqueueing another when nothing about the mandate or terms changed",
+           vcr: { cassette_name: "Subscription_UpdaterService/_perform/tiered_membership_subscription/restarting_a_membership/when_the_price_has_changed/charges_the_current_price" } do
+          service = repeat_submission(payment_method_changed: false)
+          allow(CompleteIndianCardMandateJob).to receive(:perform_async).and_raise(Redis::CannotConnectError)
+          expect(ErrorNotifier).not_to receive(:notify)
+
+          expect { expect(service.perform).to eq(success: false, error_message: described_class::MANDATE_STILL_PENDING_RESTART_MESSAGE) }
+            .not_to have_enqueued_mail(CustomerLowPriorityMailer, :subscription_indian_card_mandate_invalid)
+
+          expect(@subscription.reload).to be_indian_card_mandate_restart_held
+          expect($redis.get(generation_key).to_i).to eq(@earlier_chain.first.last)
+          expect(CompleteIndianCardMandateJob.jobs.map { _1["args"] }).to eq(@earlier_chain)
+        ensure
+          Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+        end
+
+        it "lets the earlier chain restart the membership after the repeat submission",
+           vcr: { cassette_name: "Subscription_UpdaterService/_perform/tiered_membership_subscription/restarting_a_membership/when_the_price_has_changed/charges_the_current_price" } do
+          repeat_submission(payment_method_changed: false).perform
+          allow(ChargeProcessor).to receive(:get_mandate).and_return(
+            Stripe::Mandate.construct_from(id: "mandate_pending", status: "active", payment_method: @credit_card.processor_payment_method_id)
+          )
+
+          CompleteIndianCardMandateJob.drain
+
+          expect(@subscription.reload).to be_alive
+          expect(@subscription).not_to be_indian_card_mandate_restart_held
+        ensure
+          Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+        end
+
+        it "tells the buyer the earlier promise ended when a replacement chain cannot be enqueued",
+           vcr: { cassette_name: "Subscription_UpdaterService/_perform/tiered_membership_subscription/restarting_a_membership/when_the_price_has_changed/charges_the_current_price" } do
+          service = repeat_submission(payment_method_changed: true)
+          allow(CompleteIndianCardMandateJob).to receive(:perform_async).and_raise(Redis::CannotConnectError)
+          expect(ErrorNotifier).to receive(:notify).with(instance_of(Redis::CannotConnectError), subscription: @subscription.external_id)
+
+          result = nil
+          expect { result = service.perform }.to abandoned_mail.once
+
+          expect(result).to eq(success: false, error_message: described_class::MANDATE_RESTART_NOT_SCHEDULED_MESSAGE)
+          expect(@subscription.reload).not_to be_indian_card_mandate_restart_held
+        ensure
+          Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+        end
+
+        it "puts the earlier generation back when the replacement claim fails after incrementing it",
+           vcr: { cassette_name: "Subscription_UpdaterService/_perform/tiered_membership_subscription/restarting_a_membership/when_the_price_has_changed/charges_the_current_price" } do
+          service = repeat_submission(payment_method_changed: true)
+          earlier_generation = @earlier_chain.first.last
+          allow($redis).to receive(:expire).and_call_original
+          allow($redis).to receive(:expire).with(generation_key, any_args).and_raise(Redis::CannotConnectError)
+          expect(ErrorNotifier).to receive(:notify).with(instance_of(Redis::CannotConnectError), subscription: @subscription.external_id)
+
+          result = nil
+          expect { result = service.perform }.not_to abandoned_mail
+
+          expect(result).to eq(success: false, error_message: described_class::MANDATE_RESTART_NOT_SCHEDULED_MESSAGE)
+          expect(@subscription.reload).to be_indian_card_mandate_restart_held
+          expect($redis.get(generation_key).to_i).to eq(earlier_generation)
+          expect(CompleteIndianCardMandateJob.superseded?(@subscription.id, earlier_generation)).to be(false)
+
+          allow(ChargeProcessor).to receive(:get_mandate).and_return(
+            Stripe::Mandate.construct_from(id: "mandate_pending", status: "active", payment_method: @credit_card.processor_payment_method_id)
+          )
+          CompleteIndianCardMandateJob.drain
+
+          expect(@subscription.reload).to be_alive
+          expect(@subscription).not_to be_indian_card_mandate_restart_held
+        ensure
+          Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+        end
+      end
+
+      it "releases the held restart without Redis when the enqueue failure also takes Redis down",
+         vcr: { cassette_name: "Subscription_UpdaterService/_perform/tiered_membership_subscription/restarting_a_membership/when_the_price_has_changed/charges_the_current_price" } do
+        service = held_restart_service
+        generation_key = RedisKey.indian_card_mandate_completion_generation(@subscription.id)
+        allow(CompleteIndianCardMandateJob).to receive(:perform_async).and_raise(Redis::CannotConnectError)
+        allow($redis).to receive(:get).and_call_original
+        allow($redis).to receive(:get).with(generation_key).and_raise(Redis::CannotConnectError)
+        expect(ErrorNotifier).to receive(:notify).with(instance_of(Redis::CannotConnectError), subscription: @subscription.external_id)
+
+        result = nil
+        expect { result = service.perform }.not_to have_enqueued_mail(CustomerLowPriorityMailer, :subscription_indian_card_mandate_invalid)
+
+        expect(result).to eq(
+          success: false,
+          error_message: described_class::MANDATE_RESTART_NOT_SCHEDULED_MESSAGE
+        )
+        expect(@subscription.reload).not_to be_alive
+        expect(@subscription).not_to be_indian_card_mandate_restart_held
+        expect(@subscription.reusable_pending_indian_card).to be_nil
+      ensure
+        Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+      end
+
+      %i[incr expire].each do |redis_command|
+        it "rolls the held restart back and asks the buyer to retry when Redis #{redis_command} fails at claim time",
+           vcr: { cassette_name: "Subscription_UpdaterService/_perform/tiered_membership_subscription/restarting_a_membership/when_the_price_has_changed/charges_the_current_price" } do
+          service = held_restart_service
+          state = lambda do
+            @subscription.reload.slice(
+              :credit_card_id, :stripe_mandate_id, :deactivated_at, :indian_card_mandate_restart_held,
+              :indian_card_mandate_restart_price_cents, :indian_card_mandate_restart_quantity
+            )
+          end
+          state_before = state.call
+          allow($redis).to receive(redis_command).and_call_original
+          allow($redis).to receive(redis_command).with(RedisKey.indian_card_mandate_completion_generation(@subscription.id), any_args).and_raise(Redis::CannotConnectError)
+          expect(ErrorNotifier).to receive(:notify).with(instance_of(Redis::CannotConnectError), subscription: @subscription.external_id)
+
+          expect(service.perform).to eq(
+            success: false,
+            error_message: described_class::MANDATE_RESTART_NOT_SCHEDULED_MESSAGE
+          )
+
+          expect(state.call).to eq(state_before)
+          expect(@subscription).not_to be_alive
+          expect(@subscription).not_to be_indian_card_mandate_restart_held
+          expect(@subscription.reusable_pending_indian_card).to be_nil
+          expect(@subscription.purchases.not_is_original_subscription_purchase.count).to eq(0)
+          expect(CompleteIndianCardMandateJob.jobs.size).to eq(0)
+        ensure
+          Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+        end
+      end
+
+      context "when the pending mandate resolves through the source purchase and stripe_mandate_id is blank" do
+        # Only the submission resolves through the source purchase; once the id is stored, the job reads the mandate directly.
+        def hold_restart_with_source_resolved_mandate
+          service = held_restart_service
+          @subscription.update!(stripe_mandate_id: nil, deactivated_at: @originally_subscribed_at + 3.months)
+          @mandate_status = "pending"
+          source_purchase_id = @subscription.original_purchase.id
+          allow_any_instance_of(Subscription).to receive(:indian_card_mandate_source_purchase) { |_card_id| Purchase.find(source_purchase_id) }
+          allow_any_instance_of(Purchase).to receive(:retrieve_indian_card_mandate) do
+            [Stripe::Mandate.construct_from(id: "mandate_pending", status: "pending", payment_method: @credit_card.processor_payment_method_id), "pending"]
+          end
+          allow(ChargeProcessor).to receive(:get_mandate) do
+            Stripe::Mandate.construct_from(id: "mandate_pending", status: @mandate_status, payment_method: @credit_card.processor_payment_method_id)
+          end
+          [RecurringChargeWorker, CompleteIndianCardMandateJob].each(&:clear)
+          service
+        end
+
+        it "records the resolved mandate id with the held restart so the completion job can follow it",
+           vcr: { cassette_name: "Subscription_UpdaterService/_perform/tiered_membership_subscription/restarting_a_membership/when_the_price_has_changed/charges_the_current_price" } do
+          expect(hold_restart_with_source_resolved_mandate.perform).to eq(
+            success: false,
+            error_message: described_class::MANDATE_STILL_PENDING_RESTART_MESSAGE
+          )
+
+          expect(@subscription.reload.stripe_mandate_id).to eq("mandate_pending")
+          expect(@subscription).to be_indian_card_mandate_restart_held
+          expect(@subscription).to be_indian_card_mandate_restart_pending
+          expect(CompleteIndianCardMandateJob.jobs.size).to eq(1)
+        ensure
+          Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+        end
+
+        it "restarts the membership once the source purchase's mandate becomes active",
+           vcr: { cassette_name: "Subscription_UpdaterService/_perform/tiered_membership_subscription/restarting_a_membership/when_the_price_has_changed/charges_the_current_price" } do
+          hold_restart_with_source_resolved_mandate.perform
+          @mandate_status = "active"
+
+          CompleteIndianCardMandateJob.drain
+
+          expect(@subscription.reload).to be_alive
+          expect(@subscription).not_to be_indian_card_mandate_restart_held
+          expect(@subscription).not_to be_renewal_disabled_due_to_indian_card_mandate
+        ensure
+          Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+        end
+
+        it "releases the held restart when the source purchase's mandate stays pending until the chain gives up",
+           vcr: { cassette_name: "Subscription_UpdaterService/_perform/tiered_membership_subscription/restarting_a_membership/when_the_price_has_changed/charges_the_current_price" } do
+          hold_restart_with_source_resolved_mandate.perform
+
+          CompleteIndianCardMandateJob.drain
+
+          expect(@subscription.reload).not_to be_alive
+          expect(@subscription).not_to be_indian_card_mandate_restart_held
+          expect(CompleteIndianCardMandateJob.jobs).to be_empty
+        ensure
+          Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+        end
+      end
+
+      it "refuses a restart on a saved card whose pending mandate would be left on stale billing terms",
+         vcr: { cassette_name: "Subscription_UpdaterService/_perform/tiered_membership_subscription/restarting_a_membership/when_the_price_has_changed/charges_the_current_price" } do
+        @subscription.original_purchase.update!(country: "United States", state: "CA", zip_code: "94107")
+        allow_any_instance_of(Subscription).to receive(:indian_card_mandate_terms) do |_subscription, billing_info: nil, **|
+          amount = billing_info.present? && billing_info.with_indifferent_access[:state] == "NY" ? 10_75 : 10_00
+          { amount:, currency: Currency::USD, interval: "month", interval_count: 3 }
+        end
+        service = held_restart_service
+        service.params[:contact_info] = { country: "US", state: "NY", zip_code: "10001" }
+        [RecurringChargeWorker, CompleteIndianCardMandateJob].each(&:clear)
+
+        expect(service.perform).to eq(
+          success: false,
+          error_message: described_class::MANDATE_STILL_PENDING_CHANGE_MESSAGE
+        )
+
+        expect(@subscription.reload).not_to be_alive
+        expect(@subscription).not_to be_indian_card_mandate_restart_held
+        expect(@subscription.original_purchase.state).to eq("CA")
+        expect(@subscription.reusable_pending_indian_card).to be_nil
+        expect(@subscription.purchases.not_is_original_subscription_purchase.count).to eq(0)
+        expect(CompleteIndianCardMandateJob.jobs).to be_empty
+        expect(RecurringChargeWorker.jobs).to be_empty
+      ensure
+        Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+      end
+
       it "requires new mandate terms when a restart applies a seller price change",
          vcr: { cassette_name: "Subscription_UpdaterService/_perform/tiered_membership_subscription/restarting_a_membership/when_the_price_has_changed/charges_the_current_price" } do
         Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
@@ -3055,6 +3706,49 @@ describe Subscription::UpdaterService, :vcr do
       end
     end
 
+    context "switching from a pay-what-you-want tier to a fixed-price tier" do
+      let(:seller) { create(:user) }
+      let(:buyer) { create(:user) }
+      let(:product) { create(:membership_product_with_preset_tiered_pricing, user: seller) }
+      let(:pwyw_tier) { product.tiers.first }
+      let(:fixed_tier) { product.tiers.second }
+      let(:subscription) do
+        subscription = create(:subscription, link: product, user: buyer)
+        create(:purchase,
+               is_original_subscription_purchase: true,
+               link: product,
+               subscription:,
+               purchaser: buyer,
+               price_cents: product.default_price_cents,
+               variant_attributes: [pwyw_tier])
+        subscription
+      end
+
+      def service_for(tier)
+        described_class.new(
+          subscription:,
+          gumroad_guid: "abc123",
+          params: { variants: [tier.external_id] },
+          logged_in_user: buyer,
+          remote_ip: "127.0.0.1",
+        )
+      end
+
+      before do
+        pwyw_tier.update!(customizable_price: true)
+        allow_any_instance_of(Subscription).to receive(:tier_price).and_return(instance_double(Price, price_cents: 5_00))
+        subscription.original_purchase.update_columns(displayed_price_cents: 8_00)
+      end
+
+      it "reports a price change when the requested tier has a fixed price" do
+        expect(service_for(fixed_tier).send(:price_changed?)).to be(true)
+      end
+
+      it "reports no price change when the requested tier is pay what you want" do
+        expect(service_for(pwyw_tier).send(:price_changed?)).to be(false)
+      end
+    end
+
     context "buyer-aware fallback pricing" do
       let(:logged_in_user) { create(:user) }
       let(:subscription) { instance_double(Subscription) }
@@ -3075,10 +3769,8 @@ describe Subscription::UpdaterService, :vcr do
       end
 
       it "uses the logged in user when checking whether the subscription price changed" do
-        service.original_purchase = instance_double(Purchase, quantity: 2)
         allow(service).to receive(:pwyw?).and_return(false)
-        allow(subscription).to receive(:send).with(:tier_price).and_return(instance_double(Price, price_cents: 6_17))
-        expect(subscription).to receive(:current_subscription_price_cents).with(authenticated_offer_code_buyer: logged_in_user).and_return(12_34)
+        expect(subscription).to receive(:tier_price_changed?).with(authenticated_offer_code_buyer: logged_in_user).and_return(false)
 
         expect(service.send(:price_changed?)).to eq(false)
       end
@@ -3895,6 +4587,203 @@ describe Subscription::UpdaterService, :vcr do
         Subscription::UpdateFailed,
         "We could not verify this card for recurring payments. Please try the card again or use a different payment method."
       )
+    end
+
+    context "when Stripe reports the replacement mandate as pending" do
+      let(:pending_setup_intent) do
+        instance_double(
+          StripeSetupIntent,
+          succeeded?: true,
+          mandate: "mandate_pending",
+          payment_method_id: "pm_replacement",
+          customer_id: "cus_replacement",
+          usage: "off_session",
+          metadata: { gumroad_subscription_id: subscription.external_id },
+          card_mandate_options: mandate_options
+        )
+      end
+      let(:pending_mandate) do
+        Stripe::Mandate.construct_from(id: "mandate_pending", status: "pending", payment_method: "pm_replacement")
+      end
+      let(:invalid_message) do
+        "We could not verify this card for recurring payments. Please try the card again or use a different payment method."
+      end
+
+      before do
+        subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
+        subscription.update_flag!(:indian_card_mandate_requires_reauthorization, true, true)
+        subscription.reload
+        allow(ChargeProcessor).to receive(:get_setup_intent).and_return(pending_setup_intent)
+        allow(ChargeProcessor).to receive(:get_mandate).and_return(pending_mandate)
+        allow(service).to receive(:charge_can_wait_for_mandate?).and_return(true)
+      end
+
+      it "records the pending mandate and keeps renewals stopped until it activates" do
+        mandate_validation = service.send(:validate_indian_card_mandate!, replacement_card)
+        service.send(:update_subscription_credit_card!, replacement_card, **mandate_validation)
+
+        subscription.reload
+        expect(subscription.credit_card).to eq(replacement_card)
+        expect(subscription.stripe_mandate_id).to eq("mandate_pending")
+        expect(subscription).to be_renewal_disabled_due_to_indian_card_mandate
+        expect(subscription).not_to be_indian_card_mandate_requires_reauthorization
+        expect(service.indian_card_mandate_pending).to be(true)
+        expect(stripe_chargeable.validated_stripe_mandate_id).to be_nil
+      end
+
+      it "records the same pending setup intent again without changing the stored state" do
+        2.times do
+          mandate_validation = service.send(:validate_indian_card_mandate!, replacement_card)
+          service.send(:update_subscription_credit_card!, replacement_card, **mandate_validation)
+        end
+
+        subscription.reload
+        expect(subscription.credit_card).to eq(replacement_card)
+        expect(subscription.stripe_mandate_id).to eq("mandate_pending")
+        expect(subscription).to be_renewal_disabled_due_to_indian_card_mandate
+      end
+
+      it "accepts the pending mandate of an ended membership's restart when it changes no plan, price, or discount" do
+        service.is_resubscribing = true
+
+        mandate_validation = service.send(:validate_indian_card_mandate!, replacement_card)
+
+        expect(mandate_validation).to include(stripe_mandate_id: "mandate_pending", mandate_pending: true)
+        expect(service.indian_card_mandate_pending).to be(true)
+      end
+
+      it "clears the pending flag once the same mandate validates as active" do
+        service.send(:validate_indian_card_mandate!, replacement_card)
+        allow(ChargeProcessor).to receive(:get_mandate).and_return(
+          Stripe::Mandate.construct_from(id: "mandate_pending", status: "active", payment_method: "pm_replacement")
+        )
+
+        mandate_validation = service.send(:validate_indian_card_mandate!, replacement_card)
+        service.send(:update_subscription_credit_card!, replacement_card, **mandate_validation)
+
+        expect(service.indian_card_mandate_pending).to be(false)
+        expect(stripe_chargeable.validated_stripe_mandate_id).to eq("mandate_pending")
+        expect(subscription.reload).not_to be_renewal_disabled_due_to_indian_card_mandate
+      end
+
+      it "rejects the pending mandate when a charge is due now that cannot wait for it" do
+        allow(service).to receive(:charge_can_wait_for_mandate?).and_return(false)
+
+        expect do
+          service.send(:validate_indian_card_mandate!, replacement_card)
+        end.to raise_error(Subscription::UpdateFailed, described_class::MANDATE_STILL_PENDING_CHANGE_MESSAGE)
+        expect(subscription.reload.stripe_mandate_id).to be_nil
+      end
+
+      it "rejects a pending mandate bound to a different payment method" do
+        allow(ChargeProcessor).to receive(:get_mandate).and_return(
+          Stripe::Mandate.construct_from(id: "mandate_pending", status: "pending", payment_method: "pm_other")
+        )
+
+        expect do
+          service.send(:validate_indian_card_mandate!, replacement_card)
+        end.to raise_error(Subscription::UpdateFailed, invalid_message)
+      end
+
+      it "rejects a pending setup intent that belongs to another customer" do
+        allow(pending_setup_intent).to receive(:customer_id).and_return("cus_other")
+
+        expect do
+          service.send(:validate_indian_card_mandate!, replacement_card)
+        end.to raise_error(Subscription::UpdateFailed, invalid_message)
+      end
+
+      it "rejects a pending setup intent created for another subscription" do
+        allow(pending_setup_intent).to receive(:metadata).and_return(gumroad_subscription_id: "other_subscription")
+
+        expect do
+          service.send(:validate_indian_card_mandate!, replacement_card)
+        end.to raise_error(Subscription::UpdateFailed, invalid_message)
+      end
+
+      it "rejects a pending setup intent whose terms differ from the subscription's" do
+        terms = subscription.indian_card_mandate_terms
+        allow(pending_setup_intent).to receive(:card_mandate_options).and_return(
+          Stripe::StripeObject.construct_from(
+            amount_type: "maximum",
+            amount: terms[:amount] + 1,
+            currency: terms[:currency],
+            reference: StripeChargeProcessor.indian_card_mandate_reference(subscription.external_id),
+            interval: terms[:interval],
+            interval_count: terms[:interval_count],
+            supported_types: ["india"]
+          )
+        )
+
+        expect do
+          service.send(:validate_indian_card_mandate!, replacement_card)
+        end.to raise_error(Subscription::UpdateFailed, invalid_message)
+      end
+
+      it "rejects an inactive mandate" do
+        allow(ChargeProcessor).to receive(:get_mandate).and_return(
+          Stripe::Mandate.construct_from(id: "mandate_pending", status: "inactive", payment_method: "pm_replacement")
+        )
+
+        expect do
+          service.send(:validate_indian_card_mandate!, replacement_card)
+        end.to raise_error(Subscription::UpdateFailed, invalid_message)
+      end
+
+      it "rejects a setup intent with no mandate" do
+        allow(pending_setup_intent).to receive(:mandate).and_return(nil)
+
+        expect do
+          service.send(:validate_indian_card_mandate!, replacement_card)
+        end.to raise_error(Subscription::UpdateFailed, invalid_message)
+      end
+    end
+
+    describe "#charge_can_wait_for_mandate?" do
+      it "is true for an ended membership's restart that creates no new purchase" do
+        service.is_resubscribing = true
+        allow(service).to receive(:should_charge_user?).and_return(true)
+        service.overdue_for_charge = false
+        service.new_purchase = nil
+
+        expect(service.send(:charge_can_wait_for_mandate?)).to be(true)
+      end
+
+      it "is false for an ended membership's restart that changes the plan" do
+        service.is_resubscribing = true
+        service.overdue_for_charge = true
+        service.new_purchase = instance_double(Purchase)
+
+        expect(service.send(:charge_can_wait_for_mandate?)).to be(false)
+      end
+
+      it "is true when no charge is due" do
+        allow(service).to receive(:should_charge_user?).and_return(false)
+
+        expect(service.send(:charge_can_wait_for_mandate?)).to be(true)
+      end
+
+      it "is true when the charge is the overdue renewal" do
+        allow(service).to receive(:should_charge_user?).and_return(true)
+        service.overdue_for_charge = true
+
+        expect(service.send(:charge_can_wait_for_mandate?)).to be(true)
+      end
+
+      it "is false when the overdue renewal comes with a plan, price, or quantity change" do
+        allow(service).to receive(:should_charge_user?).and_return(true)
+        service.overdue_for_charge = true
+        service.new_purchase = instance_double(Purchase)
+
+        expect(service.send(:charge_can_wait_for_mandate?)).to be(false)
+      end
+
+      it "is false when the charge is a prorated upgrade made mid-period" do
+        allow(service).to receive(:should_charge_user?).and_return(true)
+        service.overdue_for_charge = false
+
+        expect(service.send(:charge_can_wait_for_mandate?)).to be(false)
+      end
     end
 
     it "does not require a replacement mandate when no future charge exists" do

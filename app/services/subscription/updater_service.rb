@@ -3,12 +3,16 @@
 class Subscription::UpdaterService
   include CurrencyHelper
 
+  MANDATE_STILL_PENDING_RESTART_MESSAGE = "Your bank is still confirming this card for recurring payments. You haven't been charged, and your membership will restart automatically once it's confirmed."
+  MANDATE_RESTART_NOT_SCHEDULED_MESSAGE = "Your bank is still confirming this card for recurring payments. You haven't been charged. Please try again in a few minutes."
+  MANDATE_STILL_PENDING_CHANGE_MESSAGE = "Your bank is still confirming this card for recurring payments. We haven't changed your membership or charged you. Please try again once it's confirmed."
+
   attr_reader :subscription, :gumroad_guid, :params, :logged_in_user, :remote_ip
   attr_accessor :original_purchase, :original_price, :new_purchase, :upgrade_purchase,
                 :overdue_for_charge, :is_resubscribing, :is_pending_cancellation,
                 :calculate_upgrade_cost_as_of, :prorated_discount_price_cents,
                 :card_data_handling_mode, :card_data_handling_error, :chargeable,
-                :api_notification_sent
+                :api_notification_sent, :indian_card_mandate_pending
 
   def initialize(subscription:, params:, logged_in_user:, gumroad_guid:, remote_ip:)
     @subscription = subscription
@@ -101,6 +105,9 @@ class Subscription::UpdaterService
       )
     end
     saved_card_mandate_terms_changed = false
+    restart_held_for_mandate = false
+    mandate_completion_claim = nil
+    payment_method_before = [subscription.stripe_mandate_id, subscription.credit_card_id]
 
     begin
       ActiveRecord::Base.transaction do
@@ -218,14 +225,24 @@ class Subscription::UpdaterService
             discount_changed:,
             seller_price_changed:
           )
+        # The pending mandate was approved under the old terms, and nothing here would charge or re-check it later.
+        if saved_card_mandate_terms_changed && indian_card_mandate_pending
+          raise Subscription::UpdateFailed, MANDATE_STILL_PENDING_CHANGE_MESSAGE
+        end
+
         # Restart subscription if necessary
-        subscription.resubscribe! if is_resubscribing
+        hold_restart_for_mandate = is_resubscribing && indian_card_mandate_pending
+        subscription.resubscribe! if is_resubscribing && !hold_restart_for_mandate
 
         if saved_card_mandate_terms_changed && !should_charge_user?
           subscription.require_indian_card_mandate_reauthorization!
         end
 
-        if (same_plan_and_price? || subscription.in_free_trial?) && !overdue_for_charge
+        if hold_restart_for_mandate
+          mandate_completion_claim = claim_held_restart(payment_method_before)
+          result = { success: false, error_message: MANDATE_STILL_PENDING_RESTART_MESSAGE }
+          restart_held_for_mandate = true
+        elsif (same_plan_and_price? || subscription.in_free_trial?) && !overdue_for_charge
           send_subscription_updated_api_notification if apply_plan_change_immediately?
 
           # return if not changing tier or price (and the user isn't resubscribing
@@ -242,7 +259,7 @@ class Subscription::UpdaterService
           end
 
           # Charge user if necessary
-          if should_charge_user?
+          if should_charge_user? && !indian_card_mandate_pending
             result = charge_user!
             record_mandate_presentment_after_charge! if result[:success]
             if saved_card_mandate_terms_changed && result[:success]
@@ -259,6 +276,11 @@ class Subscription::UpdaterService
     end
 
     subscription.update_flag!(:is_resubscription_pending_confirmation, true, true) if is_resubscribing && result[:requires_card_action]
+    if restart_held_for_mandate
+      result = (mandate_completion_claim && schedule_held_restart_completion(mandate_completion_claim)) || result
+    elsif result[:success] && indian_card_mandate_pending
+      schedule_live_mandate_completion
+    end
 
     if apply_plan_change_immediately? && !same_variants? && result[:success] && !result[:requires_card_action]
       UpdateIntegrationsOnTierChangeWorker.perform_async(subscription.id)
@@ -270,6 +292,34 @@ class Subscription::UpdaterService
   end
 
   private
+    # Runs inside the update transaction: raising rolls back the card, mandate, terms and hold along with it.
+    def claim_held_restart(payment_method_before)
+      CompleteIndianCardMandateJob.claim_held_restart(subscription, authenticated_offer_code_buyer: logged_in_user, payment_method_before:)
+    rescue Redis::BaseError => e
+      ErrorNotifier.notify(e, subscription: subscription.external_id)
+      raise Subscription::UpdateFailed, MANDATE_RESTART_NOT_SCHEDULED_MESSAGE
+    end
+
+    # The marker is committed before the chain that owns it is enqueued. If the enqueue fails, nothing would
+    # ever clear it and the stored card would stay reusable, so drop it and have the buyer submit again.
+    def schedule_held_restart_completion(claim)
+      CompleteIndianCardMandateJob.schedule(subscription.id, claim.generation)
+      nil
+    rescue StandardError => e
+      ErrorNotifier.notify(e, subscription: subscription.external_id)
+      CompleteIndianCardMandateJob.release_unscheduled(subscription, claim)
+      { success: false, error_message: MANDATE_RESTART_NOT_SCHEDULED_MESSAGE }
+    end
+
+    # The card swap and the renewal stop are already committed, and the stop plus `stripe_mandate_id` stay in place,
+    # so the failure is reported rather than raised. Without the chain, the scheduled renewal charge and
+    # FindSubscriptionsWithMissingChargeWorker both refresh the mandate through RecurringChargeWorker.
+    def schedule_live_mandate_completion
+      CompleteIndianCardMandateJob.schedule(subscription.id)
+    rescue StandardError => e
+      ErrorNotifier.notify(e, subscription: subscription.external_id)
+    end
+
     def validate_params
       return if !tiered_membership? || (variants.present? && price.present?)
 
@@ -340,9 +390,14 @@ class Subscription::UpdaterService
       customer_matches = setup_intent&.customer_id == credit_card.stripe_customer_id
       binding_matches = setup_intent&.payment_method_id == payment_method_id &&
         StripeChargeProcessor.mandate_matches_payment_method?(mandate, payment_method_id)
-      terms_match = indian_card_setup_intent_terms_match?(setup_intent)
+      terms_match = subscription.indian_card_setup_intent_terms_match?(
+        setup_intent,
+        billing_info: params[:contact_info],
+        authenticated_offer_code_buyer: logged_in_user
+      )
+      pending = status == "pending"
 
-      unless status == "active" && customer_matches && binding_matches && terms_match
+      unless (status == "active" || pending) && customer_matches && binding_matches && terms_match
         ErrorNotifier.notify(
           "Indian card update rejected without an active e-mandate",
           subscription: subscription.external_id,
@@ -350,10 +405,12 @@ class Subscription::UpdaterService
         )
         raise Subscription::UpdateFailed, "We could not verify this card for recurring payments. Please try the card again or use a different payment method."
       end
+      raise Subscription::UpdateFailed, MANDATE_STILL_PENDING_CHANGE_MESSAGE if pending && !charge_can_wait_for_mandate?
 
       stripe_chargeable = chargeable&.get_chargeable_for(StripeChargeProcessor.charge_processor_id)
-      stripe_chargeable.validated_stripe_mandate_id = mandate.id if stripe_chargeable.respond_to?(:validated_stripe_mandate_id=)
-      { clear_mandate_stop: true, stripe_mandate_id: mandate.id }
+      stripe_chargeable.validated_stripe_mandate_id = mandate.id if !pending && stripe_chargeable.respond_to?(:validated_stripe_mandate_id=)
+      self.indian_card_mandate_pending = pending
+      { clear_mandate_stop: true, stripe_mandate_id: mandate.id, mandate_pending: pending }
     rescue ChargeProcessorError => e
       ErrorNotifier.notify(e, subscription: subscription.external_id)
       raise Subscription::UpdateFailed, "We could not verify this card for recurring payments. Please try the card again or use a different payment method."
@@ -365,43 +422,11 @@ class Subscription::UpdaterService
         credit_card.requires_mandate?
     end
 
-    def indian_card_setup_intent_terms_match?(setup_intent)
-      return false unless setup_intent&.usage == "off_session"
-      return false unless setup_intent.metadata[:gumroad_subscription_id] == subscription.external_id
-
-      mandate_options = setup_intent.card_mandate_options
-      return false if mandate_options.blank?
-
-      # Recompute the terms with the rate stamped when the setup intent was created, so a
-      # cached-rate refresh between setup and this validation cannot reject the mandate the
-      # buyer just approved. The stamp is server-authored metadata; a missing or unusable
-      # value falls back to the live rate (intents created before the stamp existed).
-      fixed_rate = BigDecimal(setup_intent.metadata[:gumroad_mandate_rate].to_s, exception: false)
-      fixed_rate = nil unless fixed_rate&.positive?
-      expected_terms = subscription.indian_card_mandate_terms(
-        billing_info: params[:contact_info],
-        authenticated_offer_code_buyer: logged_in_user,
-        fixed_rate:
-      )
-      return false if expected_terms.blank?
-
-      mandate_options.amount_type == "maximum" &&
-        mandate_options.amount.to_i == expected_terms[:amount] &&
-        mandate_options.currency.to_s.downcase == expected_terms[:currency] &&
-        StripeChargeProcessor.indian_card_mandate_reference_for_subscription?(
-          mandate_options.reference,
-          subscription.external_id
-        ) &&
-        mandate_options.interval == expected_terms[:interval] &&
-        mandate_options.interval_count == expected_terms[:interval_count] &&
-        Array(mandate_options.supported_types).include?("india")
-    end
-
-    def update_subscription_credit_card!(credit_card, clear_mandate_stop: false, stripe_mandate_id: nil)
+    def update_subscription_credit_card!(credit_card, clear_mandate_stop: false, stripe_mandate_id: nil, mandate_pending: false)
       subscription.credit_card = credit_card
       if clear_mandate_stop
         subscription.stripe_mandate_id = stripe_mandate_id
-        subscription.renewal_disabled_due_to_indian_card_mandate = false
+        subscription.renewal_disabled_due_to_indian_card_mandate = mandate_pending
         subscription.indian_card_mandate_requires_reauthorization = false
       end
       subscription.save!
@@ -443,6 +468,15 @@ class Subscription::UpdaterService
       end
 
       mandate, status, = subscription.indian_card_mandate_for(credit_card.id)
+      if status == "pending"
+        raise Subscription::UpdateFailed, MANDATE_STILL_PENDING_CHANGE_MESSAGE unless charge_can_wait_for_mandate?
+
+        # A mandate resolved through the source purchase leaves `stripe_mandate_id` blank, and the completion job's
+        # predicates (and pending-card reuse) key on it.
+        subscription.update!(stripe_mandate_id: mandate.id) if subscription.stripe_mandate_id != mandate.id
+        self.indian_card_mandate_pending = true
+        return
+      end
       unless status == "active"
         raise Subscription::UpdateFailed, "We could not verify this card for recurring payments. Please update the payment method before you restart this subscription."
       end
@@ -455,6 +489,14 @@ class Subscription::UpdaterService
     rescue ChargeProcessorError => e
       ErrorNotifier.notify(e, subscription: subscription.external_id)
       raise Subscription::UpdateFailed, "We could not verify this card for recurring payments. Please update the payment method before you restart this subscription."
+    end
+
+    # A plan, price, quantity, or discount change is only applied alongside its charge, so any change that
+    # built a new purchase (`new_purchase`) is refused rather than applied while the mandate is pending.
+    def charge_can_wait_for_mandate?
+      return new_purchase.nil? if is_resubscribing
+
+      !should_charge_user? || (overdue_for_charge && new_purchase.nil?)
     end
 
     def future_subscription_charge?
@@ -697,9 +739,8 @@ class Subscription::UpdaterService
 
     def price_changed?
       return false if pwyw?
-      tier_price = subscription.send(:tier_price)
-      return false unless tier_price.present?
-      current_subscription_price_cents / original_purchase.quantity != tier_price.price_cents
+
+      subscription.tier_price_changed?(authenticated_offer_code_buyer: logged_in_user)
     end
 
     def same_pwyw_price?

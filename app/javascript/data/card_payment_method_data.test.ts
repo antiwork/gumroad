@@ -1,5 +1,5 @@
 import type { Stripe, StripeElements } from "@stripe/stripe-js";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   cardPaymentMethodParams,
@@ -8,11 +8,15 @@ import {
   paymentElementBillingDetailsCollection,
   paymentElementRequiresFullName,
   prepareCardPaymentMethodData,
+  prepareFutureCharges,
   preparePaymentElementPaymentMethodData,
 } from "$app/data/card_payment_method_data";
+import { type CardPaymentMethodParams } from "$app/data/payment_method_params";
+import { request } from "$app/utils/request";
 import { getStripeInstance } from "$app/utils/stripe_loader";
 
 vi.mock("$app/utils/stripe_loader", () => ({ getStripeInstance: vi.fn() }));
+vi.mock("$app/utils/request", () => ({ request: vi.fn() }));
 
 // Shared fixture for the pendingSubmit tests below: a minimal Stripe + Elements pair (built the
 // same way as payment_element_client_confirm.test.ts — Object.create keeps eslint's no-type-
@@ -408,5 +412,50 @@ describe("prepareCardPaymentMethodData billing_details.address.postal_code", () 
         billing_details: { address: { postal_code: null }, email: "buyer@example.com" },
       }),
     );
+  });
+});
+
+describe("prepareFutureCharges", () => {
+  const cardParams: CardPaymentMethodParams = {
+    status: "success",
+    type: "card",
+    reusable: false,
+    stripe_payment_method_id: "pm_new",
+    card_country: "IN",
+    card_country_source: "stripe",
+  };
+  beforeEach(() => {
+    vi.stubGlobal("Routes", { stripe_setup_intents_path: () => "/stripe/setup_intents" });
+  });
+  const respondWith = (body: Record<string, unknown>) =>
+    vi.mocked(request).mockResolvedValue(new Response(JSON.stringify(body), { status: 200 }));
+
+  it("keeps the payment method the buyer just entered when the server created a new setup intent", async () => {
+    respondWith({ success: true, reusable_token: "cus_new", setup_intent_id: "seti_new" });
+
+    const { cardParams: result } = await prepareFutureCharges({ products: [], cardParams });
+
+    expect(result).toMatchObject({
+      stripe_payment_method_id: "pm_new",
+      stripe_customer_id: "cus_new",
+      stripe_setup_intent_id: "seti_new",
+    });
+  });
+
+  it("resends the stored payment method, customer, and setup intent when the server reuses them", async () => {
+    respondWith({
+      success: true,
+      reusable_token: "cus_pending",
+      setup_intent_id: "seti_pending",
+      payment_method_id: "pm_pending",
+    });
+
+    const { cardParams: result } = await prepareFutureCharges({ products: [], cardParams });
+
+    expect(result).toMatchObject({
+      stripe_payment_method_id: "pm_pending",
+      stripe_customer_id: "cus_pending",
+      stripe_setup_intent_id: "seti_pending",
+    });
   });
 });

@@ -229,6 +229,204 @@ describe Stripe::SetupIntentsController, :vcr do
         expect(controller.send(:authenticated_subscription)).to eq(subscription)
       end
 
+      context "when a membership is waiting on its pending Indian card mandate", vcr: false do
+        let(:buyer) { create(:user) }
+        let(:product) { create(:subscription_product) }
+        let(:subscription) { create(:subscription, link: product, user: buyer, credit_card: stored_card) }
+        let(:chargeable) { double(prepare!: nil, reusable_token_for!: "cus_new", requires_mandate?: false, fingerprint: "fingerprint_pending") }
+        let(:stored_card) do
+          CreditCard.create!(
+            charge_processor_id: StripeChargeProcessor.charge_processor_id,
+            stripe_customer_id: "cus_pending",
+            processor_payment_method_id: "pm_pending",
+            stripe_fingerprint: "fingerprint_pending",
+            visual: "**** **** **** 4242",
+            card_type: CardType::VISA,
+            expiry_month: 12,
+            expiry_year: 2030,
+            json_data: { stripe_setup_intent_id: "seti_pending" }
+          )
+        end
+        let(:stored_ids) { %w[cus_pending seti_pending pm_pending] }
+        let(:billing_info) { { country: "IN", state: "MH", postal_code: "400001" } }
+        let(:manage_params) do
+          {
+            stripe_payment_method_id: "pm_unused",
+            billing_info:,
+            products: [{ price: product.price_cents, permalink: product.unique_permalink, subscription_id: subscription.external_id }]
+          }
+        end
+        let(:guest_params) do
+          {
+            stripe_payment_method_id: "pm_unused",
+            email: "buyer@example.com",
+            billing_info:,
+            products: [{ price: product.price_cents, permalink: product.unique_permalink }]
+          }
+        end
+        let(:new_setup_intent) { instance_double(StripeSetupIntent, id: "seti_new", succeeded?: true) }
+
+        before do
+          allow(subscription).to receive(:india_card_mandate_reliability_enabled?).and_return(true)
+          allow(Subscription).to receive(:find_by_external_id).with(subscription.external_id).and_return(subscription)
+          allow(Subscription).to receive(:restartable_for_product_and_email).with(product:, email: "buyer@example.com").and_return(subscription)
+          allow(subscription).to receive(:reusable_pending_indian_card).and_return(stored_card)
+          allow(CardParamsHelper).to receive(:check_for_errors).and_return(nil)
+          allow(CardParamsHelper).to receive(:build_chargeable).and_return(chargeable)
+        end
+
+        def expect_stored_card_returned
+          expect(response).to be_successful
+          expect(response.parsed_body).to eq(
+            "success" => true,
+            "reusable_token" => "cus_pending",
+            "setup_intent_id" => "seti_pending",
+            "payment_method_id" => "pm_pending"
+          )
+        end
+
+        def expect_stored_card_not_exposed
+          expect(subscription).not_to have_received(:reusable_pending_indian_card)
+          stored_ids.each { expect(response.body).not_to include(_1) }
+        end
+
+        context "with the subscription's manage cookie" do
+          before { request.cookie_jar.encrypted[subscription.cookie_key] = subscription.external_id }
+
+          it "returns the stored setup intent, customer, and payment method instead of creating another" do
+            expect(ChargeProcessor).not_to receive(:setup_future_charges!)
+
+            post :create, params: manage_params
+
+            expect_stored_card_returned
+            expect(subscription).to have_received(:reusable_pending_indian_card).with(
+              billing_info: { "country" => "IN", "state" => "MH", "postal_code" => "400001" },
+              authenticated_offer_code_buyer: nil
+            )
+          end
+
+          it "creates a new setup intent and remembers it in the session when the stored one is no longer reusable" do
+            allow(subscription).to receive(:reusable_pending_indian_card).and_return(nil)
+            expect(ChargeProcessor).to receive(:setup_future_charges!).and_return(new_setup_intent)
+
+            post :create, params: manage_params
+
+            expect(response.parsed_body).to include("setup_intent_id" => "seti_new", "reusable_token" => "cus_new")
+            expect(response.parsed_body).not_to have_key("payment_method_id")
+            expect(session[described_class::SESSION_SETUP_INTENT_KEY]).to eq([[subscription.external_id, "seti_new"]])
+          end
+
+          it "creates a new setup intent without asking Stripe when the buyer submits a different card" do
+            allow(chargeable).to receive(:fingerprint).and_return("fingerprint_other")
+            expect(ChargeProcessor).to receive(:setup_future_charges!).and_return(new_setup_intent)
+
+            post :create, params: manage_params
+
+            expect(response.parsed_body).to include("setup_intent_id" => "seti_new")
+            expect(subscription).not_to have_received(:reusable_pending_indian_card)
+          end
+        end
+
+        context "when a guest restarts by email and product permalink" do
+          it "does not return the stored card's Stripe ids to a caller with no cookie, session, or login" do
+            expect(ChargeProcessor).to receive(:setup_future_charges!).and_return(new_setup_intent)
+
+            post :create, params: guest_params
+
+            expect(response.parsed_body).to include("setup_intent_id" => "seti_new", "reusable_token" => "cus_new")
+            expect_stored_card_not_exposed
+          end
+
+          it "does not return the stored card to a session that minted a different setup intent" do
+            session[described_class::SESSION_SETUP_INTENT_KEY] = [[subscription.external_id, "seti_other"]]
+            expect(ChargeProcessor).to receive(:setup_future_charges!).and_return(new_setup_intent)
+
+            post :create, params: guest_params
+
+            expect_stored_card_not_exposed
+          end
+
+          it "does not return the stored card to a session that minted the setup intent for another subscription" do
+            session[described_class::SESSION_SETUP_INTENT_KEY] = [["other_subscription", "seti_pending"]]
+            expect(ChargeProcessor).to receive(:setup_future_charges!).and_return(new_setup_intent)
+
+            post :create, params: guest_params
+
+            expect_stored_card_not_exposed
+          end
+
+          it "returns the stored card to the session that minted its setup intent" do
+            session[described_class::SESSION_SETUP_INTENT_KEY] = [[subscription.external_id, "seti_pending"]]
+            expect(ChargeProcessor).not_to receive(:setup_future_charges!)
+
+            post :create, params: guest_params
+
+            expect_stored_card_returned
+          end
+
+          it "returns the stored card to a session that has since minted other setup intents too" do
+            session[described_class::SESSION_SETUP_INTENT_KEY] = [[subscription.external_id, "seti_pending"], [subscription.external_id, "seti_other"]]
+            expect(ChargeProcessor).not_to receive(:setup_future_charges!)
+
+            post :create, params: guest_params
+
+            expect_stored_card_returned
+          end
+
+          it "keeps the earlier setup intents when another one is minted for a different card" do
+            session[described_class::SESSION_SETUP_INTENT_KEY] = [[subscription.external_id, "seti_pending"]]
+            allow(chargeable).to receive(:fingerprint).and_return("fingerprint_other")
+            expect(ChargeProcessor).to receive(:setup_future_charges!).and_return(new_setup_intent)
+
+            post :create, params: guest_params
+
+            expect(session[described_class::SESSION_SETUP_INTENT_KEY]).to eq([[subscription.external_id, "seti_pending"], [subscription.external_id, "seti_new"]])
+          end
+
+          it "remembers only the newest setup intents once the session list is full" do
+            session[described_class::SESSION_SETUP_INTENT_KEY] = Array.new(described_class::MAX_SESSION_SETUP_INTENTS) { [subscription.external_id, "seti_old_#{_1}"] }
+            expect(ChargeProcessor).to receive(:setup_future_charges!).and_return(new_setup_intent)
+
+            post :create, params: guest_params
+
+            remembered = session[described_class::SESSION_SETUP_INTENT_KEY]
+            expect(remembered.size).to eq(described_class::MAX_SESSION_SETUP_INTENTS)
+            expect(remembered.first).to eq([subscription.external_id, "seti_old_1"])
+            expect(remembered.last).to eq([subscription.external_id, "seti_new"])
+          end
+
+          it "does not return the stored card to a session that holds a stored setup intent id for another subscription" do
+            session[described_class::SESSION_SETUP_INTENT_KEY] = [["other_subscription", "seti_pending"], [subscription.external_id, "seti_other"]]
+            expect(ChargeProcessor).to receive(:setup_future_charges!).and_return(new_setup_intent)
+
+            post :create, params: guest_params
+
+            expect_stored_card_not_exposed
+          end
+
+          it "returns the stored card to the signed-in owner" do
+            sign_in buyer
+            allow(Subscription).to receive(:restartable_for_product_and_buyer).with(product:, buyer:).and_return(subscription)
+            expect(ChargeProcessor).not_to receive(:setup_future_charges!)
+
+            post :create, params: guest_params
+
+            expect_stored_card_returned
+          end
+
+          it "does not return the stored card to a different signed-in user" do
+            other_user = create(:user)
+            sign_in other_user
+            allow(Subscription).to receive(:restartable_for_product_and_buyer).with(product:, buyer: other_user).and_return(subscription)
+            expect(ChargeProcessor).to receive(:setup_future_charges!).and_return(new_setup_intent)
+
+            post :create, params: guest_params
+
+            expect_stored_card_not_exposed
+          end
+        end
+      end
+
       it "does not bind one setup intent to multiple recurring products" do
         products = create_list(:subscription_product, 2)
         allow(controller).to receive(:params).and_return(

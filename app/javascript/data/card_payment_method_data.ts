@@ -431,6 +431,7 @@ export const prepareFutureCharges = async <
     return {
       cardParams: {
         ...data.cardParams,
+        ...("payment_method_id" in responseData ? { stripe_payment_method_id: responseData.payment_method_id } : {}),
         stripe_customer_id: responseData.reusable_token,
         ...("setup_intent_id" in responseData ? { stripe_setup_intent_id: responseData.setup_intent_id } : {}),
         status: "success",
@@ -455,5 +456,6 @@ export const prepareFutureCharges = async <
 type CreateSetupIntentSuccessResponse =
   | { success: true; reusable_token: string; setup_intent_id: string; requires_card_setup: true; client_secret: string }
   | { success: true; reusable_token: string; setup_intent_id: string }
+  | { success: true; reusable_token: string; setup_intent_id: string; payment_method_id: string }
   | { success: true; reusable_token: string; setup_intent_skipped: true };
 type CreateSetupIntentErrorResponse = { success: false; error_message: string; error_code?: string };

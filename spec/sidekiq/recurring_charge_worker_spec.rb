@@ -116,6 +116,41 @@ describe RecurringChargeWorker, :vcr do
     end
   end
 
+  it "keeps a pending stored Indian card mandate from being charged and charges once it activates",
+     vcr: { cassette_name: "RecurringChargeWorker/doesn_t_call_charge_if_there_was_a_purchase_made_the_period_for_a_monthly_subscription" } do
+    Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+    create(:purchase, link: @product, price_cents: @product.price_cents, is_original_subscription_purchase: true, subscription: @subscription)
+    card = @subscription.user.credit_card
+    card.update!(card_country: Compliance::Countries::IND.alpha2, processor_payment_method_id: "pm_pending")
+    @subscription.update!(stripe_mandate_id: "mandate_pending")
+    @subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
+    allow_any_instance_of(Subscription).to receive(:india_card_mandate_reliability_enabled?).and_return(true)
+    allow_any_instance_of(Subscription).to receive(:renewal_merchant_account)
+      .and_return(create(:merchant_account, user: nil, charge_processor_id: StripeChargeProcessor.charge_processor_id, charge_processor_merchant_id: nil))
+    mandate_status = "pending"
+    allow(ChargeProcessor).to receive(:get_mandate) do
+      Stripe::Mandate.construct_from(id: "mandate_pending", status: mandate_status, payment_method: "pm_pending")
+    end
+    charges = 0
+    allow_any_instance_of(Subscription).to receive(:charge!) { charges += 1 }
+
+    travel_to(@subscription.period.from_now + 1.day) do
+      described_class.new.perform(@subscription.id)
+
+      expect(charges).to eq(0)
+      expect(@subscription.reload).to be_renewal_disabled_due_to_indian_card_mandate
+
+      mandate_status = "active"
+      described_class.new.perform(@subscription.id)
+    end
+
+    expect(charges).to eq(1)
+    expect(@subscription.reload).not_to be_renewal_disabled_due_to_indian_card_mandate
+    expect(@subscription.stripe_mandate_id).to eq("mandate_pending")
+  ensure
+    Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+  end
+
   it "calls `charge` for subscriptions purchased on 30th January when invoked at the end of the subscription period" do
     travel_to(Time.current.change(year: 2018, month: 1, day: 30)) do
       create(:purchase, link: @product, price_cents: @product.price_cents, is_original_subscription_purchase: true, subscription: @subscription)

@@ -111,9 +111,10 @@ class CustomerLowPriorityMailer < ApplicationMailer
     @subject = @payment_method_is_upi ? "Your payment method needs attention." : "Your card was declined."
   end
 
-  def subscription_indian_card_mandate_invalid(subscription_id)
+  def subscription_indian_card_mandate_invalid(subscription_id, restart_abandoned = false)
     @subscription = Subscription.find(subscription_id)
-    @subject = "Update your payment method to keep automatic renewals active."
+    @restart_abandoned = restart_abandoned
+    @subject = restart_abandoned ? "Your membership could not be restarted." : "Update your payment method to keep automatic renewals active."
   end
 
   def subscription_charge_failed(subscription_id)
