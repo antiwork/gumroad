@@ -56,6 +56,68 @@ describe StripePayoutProcessor do
     end
   end
 
+  describe "reversing a failed payout's transfer while a deferred cross-border payout waits" do
+    let(:seller) { create(:user) }
+    let!(:merchant_account) { create(:merchant_account, user: seller, charge_processor_merchant_id: "acct_cross_border") }
+    let!(:compliance_info) { create(:user_compliance_info, user: seller, country: "Thailand") }
+    let(:returned) do
+      create(:payment_returned, user: seller, processor: PayoutProcessorType::STRIPE, stripe_connect_account_id: "acct_cross_border",
+                                stripe_internal_transfer_id: "tr_returned", stripe_transfer_id: "po_returned", correlation_id: nil)
+    end
+    let!(:deferred) do
+      create(:payment, user: seller, processor: PayoutProcessorType::STRIPE, state: "processing", correlation_id: nil,
+                       stripe_connect_account_id: "acct_cross_border", stripe_internal_transfer_id: "tr_deferred", stripe_transfer_id: nil)
+    end
+
+    it "finds the funded sibling whose bank payout has not been created" do
+      expect(described_class.deferred_payout_awaiting_funds(returned)).to eq(deferred)
+    end
+
+    it "finds nothing once the sibling's bank payout exists" do
+      deferred.update!(stripe_transfer_id: "po_deferred")
+      expect(described_class.deferred_payout_awaiting_funds(returned)).to be_nil
+    end
+
+    it "finds nothing when the sibling is not a cross-border payout" do
+      compliance_info.update_columns(country: "United States")
+      expect(described_class.deferred_payout_awaiting_funds(returned)).to be_nil
+    end
+
+    it "finds nothing on another connected account or for a payout with no transfer" do
+      deferred.update!(stripe_connect_account_id: "acct_other")
+      expect(described_class.deferred_payout_awaiting_funds(returned)).to be_nil
+
+      deferred.update!(stripe_connect_account_id: "acct_cross_border")
+      returned.update!(stripe_internal_transfer_id: nil)
+      expect(described_class.deferred_payout_awaiting_funds(returned)).to be_nil
+    end
+
+    it "schedules the reversal for after the sibling's bank payout instead of reversing now" do
+      travel_to(deferred.created_at + 8.hours) do
+        expect(described_class).not_to receive(:reverse_internal_transfer!)
+
+        described_class.reverse_internal_transfer_or_hold_payouts!(returned, "could_not_process", reraise: true)
+
+        expect(ReverseDeferredInternalTransferWorker).to have_enqueued_sidekiq_job(returned.id).in(19.hours)
+      end
+    end
+
+    it "stops waiting on a sibling whose deferred payout is overdue" do
+      travel_to(deferred.created_at + 28.hours) do
+        expect(described_class.deferred_payout_awaiting_funds(returned)).to be_nil
+      end
+    end
+
+    it "reverses immediately when no deferred payout is waiting" do
+      deferred.update!(stripe_transfer_id: "po_deferred")
+      expect(described_class).to receive(:reverse_internal_transfer!).with(returned)
+
+      described_class.reverse_internal_transfer_or_hold_payouts!(returned, "could_not_process", reraise: true)
+
+      expect(ReverseDeferredInternalTransferWorker.jobs).to be_empty
+    end
+  end
+
   describe "foreign payout destination identity" do
     let(:seller) { create(:user) }
     let!(:merchant_account) { create(:merchant_account, user: seller, currency: Currency::HUF, charge_processor_merchant_id: "acct_destination") }

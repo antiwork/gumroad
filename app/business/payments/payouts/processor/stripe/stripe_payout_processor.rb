@@ -33,6 +33,9 @@ class StripePayoutProcessor
   # transfer, losing the FX spread. So those payouts are scheduled this far out instead of run
   # immediately.
   CROSS_BORDER_PAYOUT_DELAY = 25.hours
+  # A failed payout's reversal waits this long past a sibling's deferred bank payout, and stops
+  # waiting on a sibling older than the delay plus this, so a lost job cannot hold it forever.
+  DEFERRED_REVERSAL_GRACE = 2.hours
 
   # How long a connected account's payable-currency set (see `pay_out_currencies`) is reused before
   # asking Stripe again. Long enough that one payout run pays one API round-trip per account, short
@@ -816,7 +819,14 @@ class StripePayoutProcessor
   # the daily requeue nor the weekly batch reads `failure_reason`, so a failure reason alone only
   # stops the requeue — the seller's next scheduled batch, days later, would move the money again.
   def self.reverse_internal_transfer_or_hold_payouts!(payment, failure_reason, reraise: false)
-    reverse_internal_transfer!(payment)
+    sibling = deferred_payout_awaiting_funds(payment)
+    if sibling
+      # A reversal debits the shared Connect balance at today's FX rate, which can exceed what this
+      # payout's return credited and leave the sibling's deferred bank payout short of funds.
+      ReverseDeferredInternalTransferWorker.perform_in(deferred_reversal_delay(sibling), payment.id)
+    else
+      reverse_internal_transfer!(payment)
+    end
     # An unknown payout outcome means Stripe may have accepted the bank payout even though the
     # reversal of the (separate) internal transfer succeeded, so the hold is still owed.
     hold_payouts_for_unaccounted_money!(payment, failure_reason) if failure_reason == Payment::FailureReason::PAYOUT_OUTCOME_UNKNOWN
@@ -1132,6 +1142,31 @@ class StripePayoutProcessor
     payment.user.add_payout_note(content: "[PAYOUT][DRIFT] #{message}", seller_visible: false)
     ErrorNotifier.notify(message, payment_id: payment.id, user_id: payment.user_id)
   end
+
+  # Public: Another payout to the same Gumroad-managed cross-border account that is already funded
+  # but whose deferred bank payout (see CROSS_BORDER_PAYOUT_DELAY) has not been created yet.
+  def self.deferred_payout_awaiting_funds(payment)
+    return nil if payment.stripe_internal_transfer_id.nil? || payment.stripe_connect_account_id.blank?
+
+    sibling = Payment.where(user_id: payment.user_id,
+                            processor: PayoutProcessorType::STRIPE,
+                            state: Payment::PROCESSING,
+                            stripe_connect_account_id: payment.stripe_connect_account_id,
+                            stripe_transfer_id: nil)
+                     .where.not(id: payment.id)
+                     .where.not(stripe_internal_transfer_id: nil)
+                     .where("created_at > ?", (CROSS_BORDER_PAYOUT_DELAY + DEFERRED_REVERSAL_GRACE).ago)
+                     .order(:id)
+                     .first
+    return nil if sibling.nil?
+
+    cross_border_payout?(sibling) ? sibling : nil
+  end
+
+  def self.deferred_reversal_delay(sibling)
+    [sibling.created_at + CROSS_BORDER_PAYOUT_DELAY + DEFERRED_REVERSAL_GRACE - Time.current, 1.hour].max
+  end
+  private_class_method :deferred_reversal_delay
 
   def self.reverse_internal_transfer!(payment)
     return if payment.stripe_internal_transfer_id.nil?
