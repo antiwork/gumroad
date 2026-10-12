@@ -1057,6 +1057,22 @@ describe UpdateUserComplianceInfo do
         expect(result[:error_message]).to eq(expected_error)
       end
 
+      it "validates a CIE submitted as ssn_last_four" do
+        user = create_dominican_individual_user(individual_tax_id: "001-1234567-8")
+        original = user.alive_user_compliance_info
+
+        expect(StripeMerchantAccountManager).not_to receive(:handle_new_user_compliance_info)
+
+        result = nil
+        expect { result = process_with(user, ssn_last_four: "P1234567") }.not_to change { UserComplianceInfo.count }
+
+        expect(result[:success]).to be false
+        expect(result[:error_message]).to eq(expected_error)
+        info = user.reload.alive_user_compliance_info
+        expect(info.id).to eq(original.id)
+        expect(info.individual_tax_id.decrypt("1234")).to eq("001-1234567-8")
+      end
+
       it "keeps the stored CIE when a masked value is resubmitted with another edit" do
         user = create_dominican_individual_user(individual_tax_id: "001-1234567-8")
 
