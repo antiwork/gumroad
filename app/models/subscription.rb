@@ -9,6 +9,16 @@ class Subscription < ApplicationRecord
 
   class UpdateFailed < StandardError; end
 
+  # The buyer a restart charge was priced for no longer exists, so it has no faithful price.
+  class PricingBuyerMissing < StandardError
+    attr_reader :buyer_id
+
+    def initialize(buyer_id)
+      @buyer_id = buyer_id
+      super("Pricing buyer #{buyer_id} no longer exists")
+    end
+  end
+
   has_paper_trail
   include ExternalId
   include CurrencyHelper
@@ -30,6 +40,10 @@ class Subscription < ApplicationRecord
   # time to access membership manage page after requesting magic link
   TOKEN_VALIDITY = 24.hours
   ALLOWED_TIME_BEFORE_SENDING_REPEATED_CANCELLATION_EMAIL_TO_CREATOR = 7.days
+  # How long an undelivered Indian-mandate restart notice is redriven. Past it the mail would describe a restart the
+  # buyer has long since forgotten or the membership has moved on from, so it is dropped (and reported for manual
+  # follow-up) rather than looped forever; an outage longer than this loses the notice.
+  INDIAN_CARD_MANDATE_RESTART_NOTICE_RETENTION = 7.days
 
   AutoRenewalDiscount = Struct.new(:offer_code, :offer_code_amount, :offer_code_is_percent, keyword_init: true) do
     def resolved_percent
@@ -57,6 +71,10 @@ class Subscription < ApplicationRecord
             10 => :vat_exempt_territory,
             11 => :indian_card_mandate_recovery_pending,
             12 => :indian_card_mandate_restart_held,
+            13 => :indian_card_mandate_restart_abandoned_notice_pending,
+            14 => :indian_card_mandate_restart_completed_notice_pending,
+            15 => :indian_card_mandate_restart_charge_pricing_pending,
+            16 => :indian_card_mandate_restart_buyer_captured,
             :column => "flags",
             :flag_query_mode => :bit_operator,
             check_for_column: false
@@ -85,6 +103,7 @@ class Subscription < ApplicationRecord
   validate :installment_plans_cannot_be_cancelled_by_buyer
 
   before_create :enable_mor_fee
+  before_save :sync_indian_card_mandate_restart_notice_owed, if: :will_save_change_to_flags?
   after_create :update_last_payment_option
   after_save :create_interruption_event, if: -> { deactivated_at_previously_changed? }
   after_create :create_interruption_event, if: -> { deactivated_at.present? } # needed in addition to the `after_save`. See https://github.com/gumroad/web/pull/26305#discussion_r1336425626
@@ -425,6 +444,7 @@ class Subscription < ApplicationRecord
     self.stripe_mandate_id = nil if credit_card_id != purchase.credit_card_id
     self.credit_card_id = purchase.credit_card_id
     self.renewal_disabled_due_to_indian_card_mandate = false unless indian_card_mandate_requires_reauthorization?
+    clear_indian_card_mandate_restart_charge_pricing if indian_card_mandate_restart_charge_pricing_pending?
     save!
     create_purchase_event(purchase)
     if purchase.was_product_recommended
@@ -519,14 +539,51 @@ class Subscription < ApplicationRecord
     end
   end
 
-  # The buyer was promised an automatic restart. Call it in the transaction that clears the held marker, once
-  # per hold: the mail goes out only if that transaction commits.
-  def notify_indian_card_mandate_restart_abandoned
-    AfterCommitEverywhere.after_commit do
+  # Records, in the transaction that decides it, a notice owed to a buyer who was promised an automatic restart
+  # (`:abandoned` or `:completed`), and delivers it once that commits. A delivery that fails leaves the marker for
+  # DeliverIndianCardMandateRestartNoticesJob, so the notice never blocks the restart or charge it follows.
+  def record_indian_card_mandate_restart_notice!(kind)
+    update!("indian_card_mandate_restart_#{kind}_notice_pending": true)
+    AfterCommitEverywhere.after_commit { deliver_indian_card_mandate_restart_notices_or_retry }
+  end
+
+  # At-least-once: a marker is cleared only after its delivery was enqueued, so a crash or a failure part-way
+  # through `send_restart_notifications!` (two mails, then a webhook) re-sends the part that already went out.
+  def deliver_indian_card_mandate_restart_notices!
+    deliver_indian_card_mandate_restart_notice(:abandoned) do
       CustomerLowPriorityMailer.subscription_indian_card_mandate_invalid(id, true).deliver_later(queue: "low")
-    rescue StandardError => e
-      ErrorNotifier.notify(e, subscription: external_id)
     end
+    # Checked under the row lock: a restart that has since failed, ended or been deactivated again must not tell the
+    # buyer or seller it went through. The marker is still cleared.
+    deliver_indian_card_mandate_restart_notice(:completed) do
+      send_restart_notifications! if alive? && !deactivated?
+    end
+  end
+
+  # Drops notices owed past the retention window, under the row lock so a notice delivered or re-recorded meanwhile is
+  # left alone. Returns what was dropped for the caller to report, or nil when nothing was.
+  def expire_stale_indian_card_mandate_restart_notices!
+    with_lock do
+      recorded_at = indian_card_mandate_restart_notice_recorded_at
+      next if recorded_at.nil? || recorded_at >= INDIAN_CARD_MANDATE_RESTART_NOTICE_RETENTION.ago
+
+      dropped = {
+        subscription_id: id,
+        abandoned_notice: indian_card_mandate_restart_abandoned_notice_pending?,
+        completed_notice: indian_card_mandate_restart_completed_notice_pending?,
+        recorded_at:,
+        age_in_days: ((Time.current - recorded_at) / 1.day).floor
+      }
+      update!(indian_card_mandate_restart_abandoned_notice_pending: false, indian_card_mandate_restart_completed_notice_pending: false)
+      dropped
+    end
+  end
+
+  def deliver_indian_card_mandate_restart_notices_or_retry
+    deliver_indian_card_mandate_restart_notices!
+  rescue StandardError => e
+    ErrorNotifier.notify(e, subscription: external_id)
+    DeliverIndianCardMandateRestartNoticesJob.schedule_retry(id)
   end
 
   def restore_indian_card_mandate_after_failed_reauthorization!(expected_credit_card_id: nil)
@@ -906,13 +963,19 @@ class Subscription < ApplicationRecord
   def hold_indian_card_mandate_restart!(authenticated_offer_code_buyer:)
     update!(
       indian_card_mandate_restart_held: true,
+      indian_card_mandate_restart_abandoned_notice_pending: false,
+      indian_card_mandate_restart_charge_pricing_pending: false,
+      indian_card_mandate_restart_buyer_captured: true,
+      indian_card_mandate_restart_buyer_id: authenticated_offer_code_buyer&.id,
       indian_card_mandate_restart_price_cents: current_subscription_price_cents(authenticated_offer_code_buyer:),
       indian_card_mandate_restart_quantity: original_purchase.quantity
     )
   end
 
   # Fails closed on a hold with no recorded terms.
-  def indian_card_mandate_restart_terms_unchanged?(authenticated_offer_code_buyer: AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED)
+  # Prices against the buyer the hold was accepted for, so a signed-out manage-cookie buyer's price is not
+  # compared with `user`'s existing-customer discount.
+  def indian_card_mandate_restart_terms_unchanged?(authenticated_offer_code_buyer: indian_card_mandate_restart_buyer)
     indian_card_mandate_restart_price_cents.present? &&
       indian_card_mandate_restart_quantity.present? &&
       indian_card_mandate_restart_price_cents == current_subscription_price_cents(authenticated_offer_code_buyer:) &&
@@ -925,16 +988,77 @@ class Subscription < ApplicationRecord
       stripe_mandate_id.present?
   end
 
+  # Pricing an owed restart charge must reuse so it bills what the hold was accepted at, for every charge job until
+  # one succeeds; `{}` when no restart owes one. Raises PricingBuyerMissing if the recorded buyer is gone: the charge
+  # must not fall back to signed-out pricing. The buyer id is nil for a signed-out buyer, so it is the recorded
+  # price that says a hold was priced at all.
+  def indian_card_mandate_restart_charge_pricing
+    return {} unless indian_card_mandate_restart_charge_pricing_pending? && indian_card_mandate_restart_price_cents.present?
+    return {} unless indian_card_mandate_restart_buyer_captured?
+    return { authenticated_offer_code_buyer: nil } if indian_card_mandate_restart_buyer_id.nil?
+
+    buyer = User.find_by(id: indian_card_mandate_restart_buyer_id)
+    raise PricingBuyerMissing, indian_card_mandate_restart_buyer_id if buyer.nil?
+
+    { authenticated_offer_code_buyer: buyer }
+  end
+
+  # Terminal outcome for a restart charge whose recorded buyer was deleted after the eligibility check: nothing can
+  # price it, so an alive, overdue membership must not keep access it can never be billed for. Fails it through the
+  # regular unpaid-renewal path, in the same transaction that clears the recovery state so a failure there retries both.
+  def fail_for_missing_pricing_buyer!(buyer_id)
+    with_lock do
+      clear_indian_card_mandate_restart_charge_pricing
+      self.indian_card_mandate_recovery_pending = false
+      save!
+      if alive?(include_pending_cancellation: false) && !is_test_subscription? && overdue_for_charge?
+        unsubscribe_and_fail!(preserve_access_for_mandate_failure: false)
+      end
+    end
+    ErrorNotifier.notify(
+      "Pricing buyer missing for an owed restart charge; subscription failed without charging",
+      subscription_id: id, subscription: external_id, buyer_id:
+    )
+  end
+
+  # A live reauthorization starts its own recovery, which must not inherit a restart's terms.
+  def clear_indian_card_mandate_restart_terms
+    assign_attributes(
+      indian_card_mandate_restart_price_cents: nil,
+      indian_card_mandate_restart_quantity: nil,
+      indian_card_mandate_restart_buyer_id: nil,
+      indian_card_mandate_restart_buyer_captured: false
+    )
+  end
+
+  # The owed charge succeeded or can no longer be taken. Only assigns: the caller saves.
+  def clear_indian_card_mandate_restart_charge_pricing
+    clear_indian_card_mandate_restart_terms
+    self.indian_card_mandate_restart_charge_pricing_pending = false
+  end
+
+  def settle_indian_card_mandate_restart_charge_pricing!
+    with_lock do
+      next unless indian_card_mandate_restart_charge_pricing_pending?
+
+      clear_indian_card_mandate_restart_charge_pricing
+      save!
+    end
+  end
+
   # What a restart must still satisfy when it completes later than the buyer's submission:
   # the exclusions of `restartable_for_product_and_buyer/_email` plus the checkout-time checks.
-  # A pending cancellation has no `deactivated_at` yet but is still held, and `resubscribe!` undoes it.
+  # A pending cancellation has no `deactivated_at` yet but is still held, and `resubscribe!` undoes it; like
+  # UpdaterService, it is still the member's current term, so a closed tier does not block it.
+  # Installment plans are never on recurring-billing products, but Manage restarts them all the same.
   def indian_card_mandate_restart_eligible?
     return false if ended_at.present? || cancelled_by_admin? || is_test_subscription?
     return false unless deactivated_at.present? || pending_cancellation?
-    return false if !link.is_recurring_billing || link.deleted? || link.user.suspended?
-    return false if original_purchase.variant_attributes.any?(&:closed_to_new_buyers?)
+    return false if indian_card_mandate_restart_buyer_id.present? && !User.exists?(indian_card_mandate_restart_buyer_id)
+    return false if !(link.is_recurring_billing || is_installment_plan?) || link.deleted? || link.user.suspended?
+    return false if deactivated_at.present? && original_purchase.variant_attributes.any?(&:closed_to_new_buyers?)
     return false if is_installment_plan? && charges_completed?
-    return false if !tier&.customizable_price? && tier_price_changed?
+    return false if !tier&.customizable_price? && tier_price_changed?(authenticated_offer_code_buyer: indian_card_mandate_restart_buyer)
     return false unless indian_card_mandate_restart_terms_unchanged?
 
     card = credit_card_to_charge
@@ -1117,6 +1241,7 @@ class Subscription < ApplicationRecord
 
   def deactivate!
     self.deactivated_at = Time.current
+    clear_indian_card_mandate_restart_charge_pricing if indian_card_mandate_restart_charge_pricing_pending?
     save!
     original_purchase&.schedule_audience_member_refresh
 
@@ -1487,6 +1612,7 @@ class Subscription < ApplicationRecord
       self.failed_at = nil unless pending_cancellation
       # A restart held for an Indian mandate is moot once access is back by any route.
       self.indian_card_mandate_restart_held = false
+      self.indian_card_mandate_restart_abandoned_notice_pending = false
       save!
       original_purchase&.schedule_audience_member_refresh
 
@@ -1756,6 +1882,33 @@ class Subscription < ApplicationRecord
   end
 
   private
+    # With the marker, a nil id is the signed-out buyer, who has no existing-customer pricing. Without it the hold
+    # predates the buyer column, and its terms were always priced for `user`. A recorded buyer who no longer
+    # exists raises rather than becoming signed-out.
+    def indian_card_mandate_restart_buyer
+      return AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED unless indian_card_mandate_restart_buyer_captured?
+
+      User.find(indian_card_mandate_restart_buyer_id) if indian_card_mandate_restart_buyer_id.present?
+    end
+
+    # The indexed columns FindSubscriptionsWithMissingChargeWorker scans; the two kind markers say which notice. The
+    # timestamp is the first record and survives while either marker remains, so the second kind cannot extend the
+    # window of the first.
+    def sync_indian_card_mandate_restart_notice_owed
+      owed = indian_card_mandate_restart_abandoned_notice_pending? || indian_card_mandate_restart_completed_notice_pending?
+      self.indian_card_mandate_restart_notice_owed = owed
+      self.indian_card_mandate_restart_notice_recorded_at = owed ? (indian_card_mandate_restart_notice_recorded_at || Time.current) : nil
+    end
+
+    def deliver_indian_card_mandate_restart_notice(kind)
+      with_lock do
+        next unless public_send(:"indian_card_mandate_restart_#{kind}_notice_pending?")
+
+        yield
+        update!("indian_card_mandate_restart_#{kind}_notice_pending": false)
+      end
+    end
+
     def purchases_for_sales_api_ids
       # Cold-cache path: use the canonical `Purchase.for_sales_api` scope so
       # any future change to its definition propagates automatically.

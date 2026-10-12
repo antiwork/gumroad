@@ -235,17 +235,7 @@ describe Stripe::SetupIntentsController, :vcr do
         let(:subscription) { create(:subscription, link: product, user: buyer, credit_card: stored_card) }
         let(:chargeable) { double(prepare!: nil, reusable_token_for!: "cus_new", requires_mandate?: false, fingerprint: "fingerprint_pending") }
         let(:stored_card) do
-          CreditCard.create!(
-            charge_processor_id: StripeChargeProcessor.charge_processor_id,
-            stripe_customer_id: "cus_pending",
-            processor_payment_method_id: "pm_pending",
-            stripe_fingerprint: "fingerprint_pending",
-            visual: "**** **** **** 4242",
-            card_type: CardType::VISA,
-            expiry_month: 12,
-            expiry_year: 2030,
-            json_data: { stripe_setup_intent_id: "seti_pending" }
-          )
+          create(:indian_stripe_credit_card, stripe_setup_intent_id: "seti_pending")
         end
         let(:stored_ids) { %w[cus_pending seti_pending pm_pending] }
         let(:billing_info) { { country: "IN", state: "MH", postal_code: "400001" } }

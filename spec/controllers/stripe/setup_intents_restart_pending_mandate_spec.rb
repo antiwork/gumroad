@@ -12,16 +12,12 @@ describe Stripe::SetupIntentsController, "resubmitting a restart at checkout who
     create(:merchant_account, user: nil, charge_processor_id: StripeChargeProcessor.charge_processor_id, charge_processor_merchant_id: nil)
   end
   let(:old_card) do
-    CreditCard.create!(
-      charge_processor_id: StripeChargeProcessor.charge_processor_id,
+    create(
+      :indian_stripe_credit_card,
       stripe_customer_id: "cus_old",
       processor_payment_method_id: "pm_old",
       stripe_fingerprint: "fp_old",
-      visual: "**** **** **** 1111",
-      card_type: CardType::VISA,
-      card_country: Compliance::Countries::IND.alpha2,
-      expiry_month: 12,
-      expiry_year: 2030
+      visual: "**** **** **** 1111"
     )
   end
   let!(:subscription) do
@@ -188,6 +184,7 @@ describe Stripe::SetupIntentsController, "resubmitting a restart at checkout who
 
     expect(subscription.reload).to be_alive
     expect(subscription).not_to be_indian_card_mandate_restart_held
+    # Submitted signed out, so the owed charge is priced for no buyer.
     expect(RecurringChargeWorker.jobs.map { _1["args"] }).to eq([[subscription.id]])
   end
 

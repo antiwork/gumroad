@@ -10,17 +10,7 @@ describe CompleteIndianCardMandateJob do
     create(:merchant_account, user: nil, charge_processor_id: StripeChargeProcessor.charge_processor_id, charge_processor_merchant_id: nil)
   end
   let(:credit_card) do
-    CreditCard.create!(
-      charge_processor_id: StripeChargeProcessor.charge_processor_id,
-      stripe_customer_id: "cus_pending",
-      processor_payment_method_id: "pm_pending",
-      stripe_fingerprint: "fingerprint_pending",
-      visual: "**** **** **** 4242",
-      card_type: CardType::VISA,
-      card_country: Compliance::Countries::IND.alpha2,
-      expiry_month: 12,
-      expiry_year: 2030
-    )
+    create(:indian_stripe_credit_card)
   end
   let(:mandate_status) { "pending" }
   let!(:subscription) do
@@ -53,6 +43,9 @@ describe CompleteIndianCardMandateJob do
   after do
     Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller)
   end
+
+  # The accepted terms travel on the subscription, not in the charge job's arguments.
+  let(:restart_charge_args) { [subscription.id] }
 
   def have_enqueued_restart_abandoned_mail
     have_enqueued_mail(CustomerLowPriorityMailer, :subscription_indian_card_mandate_invalid).with(subscription.id, true)
@@ -89,6 +82,7 @@ describe CompleteIndianCardMandateJob do
 
       expect(subscription.reload).not_to be_alive
       expect(subscription).not_to be_indian_card_mandate_restart_held
+      expect(subscription).not_to be_indian_card_mandate_restart_buyer_captured
       expect(described_class.jobs).to be_empty
     end
   end
@@ -104,7 +98,7 @@ describe CompleteIndianCardMandateJob do
       expect(subscription.reload).to be_alive
       expect(subscription).not_to be_indian_card_mandate_restart_held
       expect(subscription).not_to be_renewal_disabled_due_to_indian_card_mandate
-      expect(RecurringChargeWorker.jobs.map { _1["args"] }).to eq([[subscription.id]])
+      expect(RecurringChargeWorker.jobs.map { _1["args"] }).to eq([restart_charge_args])
     end
 
     context "when the membership was still pending cancellation at the submission" do
@@ -120,7 +114,7 @@ describe CompleteIndianCardMandateJob do
         expect(subscription.cancelled_at).to be_nil
         expect(subscription).not_to be_cancelled_by_buyer
         expect(subscription).not_to be_indian_card_mandate_restart_held
-        expect(RecurringChargeWorker.jobs.map { _1["args"] }).to eq([[subscription.id]])
+        expect(RecurringChargeWorker.jobs.map { _1["args"] }).to eq([restart_charge_args])
       end
 
       it "does not charge while the mandate is still pending and leaves the cancellation in place" do
@@ -175,7 +169,7 @@ describe CompleteIndianCardMandateJob do
 
       expect(subscription.reload).to be_alive
       expect(subscription).not_to be_indian_card_mandate_restart_held
-      expect(RecurringChargeWorker.jobs.map { _1["args"] }).to eq([[subscription.id]])
+      expect(RecurringChargeWorker.jobs.map { _1["args"] }).to eq([restart_charge_args])
     end
 
     it "does nothing a second time" do
@@ -213,7 +207,7 @@ describe CompleteIndianCardMandateJob do
 
         described_class.new.perform(subscription.id)
 
-        expect(RecurringChargeWorker.jobs.map { _1["args"] }).to eq([[subscription.id]])
+        expect(RecurringChargeWorker.jobs.map { _1["args"] }).to eq([restart_charge_args])
         expect(subscription.reload).not_to be_indian_card_mandate_recovery_pending
 
         described_class.new.perform(subscription.id)
@@ -237,7 +231,7 @@ describe CompleteIndianCardMandateJob do
         described_class.next_generation(subscription.id)
         described_class.new.perform(subscription.id, 0, generation)
 
-        expect(RecurringChargeWorker.jobs.map { _1["args"] }).to eq([[subscription.id]])
+        expect(RecurringChargeWorker.jobs.map { _1["args"] }).to eq([restart_charge_args])
         expect(subscription.reload).not_to be_indian_card_mandate_recovery_pending
       end
 
@@ -258,13 +252,13 @@ describe CompleteIndianCardMandateJob do
         allow_any_instance_of(Subscription).to receive(:send_restart_notifications!).and_raise(Redis::CannotConnectError, "redis down")
       end
 
-      it "reports the failure and still queues the overdue charge without a retry" do
+      it "reports the failure and still queues the overdue charge without failing the job" do
         expect(ErrorNotifier).to receive(:notify).with(instance_of(Redis::CannotConnectError), subscription: subscription.external_id)
 
         expect { described_class.new.perform(subscription.id) }.not_to raise_error
 
         expect(subscription.reload).to be_alive
-        expect(RecurringChargeWorker.jobs.map { _1["args"] }).to eq([[subscription.id]])
+        expect(RecurringChargeWorker.jobs.map { _1["args"] }).to eq([restart_charge_args])
         expect(subscription).not_to be_indian_card_mandate_recovery_pending
       end
 
@@ -276,10 +270,456 @@ describe CompleteIndianCardMandateJob do
         expect(subscription.reload).to be_indian_card_mandate_recovery_pending
 
         allow(RecurringChargeWorker).to receive(:perform_async).and_call_original
+        expect { described_class.new.perform(subscription.id) }.not_to raise_error
+
+        expect(RecurringChargeWorker.jobs.map { _1["args"] }).to eq([restart_charge_args])
+        expect(subscription.reload).not_to be_indian_card_mandate_recovery_pending
+      end
+    end
+  end
+
+  describe "when the hold changes hands after the mandate refresh" do
+    let(:mandate_status) { "active" }
+
+    # The refresh runs outside the row lock, so a submission can commit between it and the restart.
+    def interleave_after_refresh
+      allow_any_instance_of(Subscription).to receive(:refresh_indian_card_mandate!) do
+        yield
+        "active"
+      end
+    end
+
+    def expect_hold_left_to_the_newer_submission
+      expect(subscription.reload).not_to be_alive
+      expect(subscription).to be_indian_card_mandate_restart_held
+      expect(RecurringChargeWorker.jobs).to be_empty
+    end
+
+    it "does not restart or clear the hold when a newer generation has claimed it" do
+      generation = described_class.next_generation(subscription.id)
+      interleave_after_refresh { described_class.next_generation(subscription.id) }
+      expect_any_instance_of(Subscription).not_to receive(:send_restart_notifications!)
+
+      expect { described_class.new.perform(subscription.id, 0, generation) }.not_to have_enqueued_restart_abandoned_mail
+
+      expect_hold_left_to_the_newer_submission
+    end
+
+    let(:replacement) do
+      create(:indian_stripe_credit_card, stripe_customer_id: "cus_new", processor_payment_method_id: "pm_new", stripe_fingerprint: "fingerprint_new")
+    end
+
+    it "leaves the hold to the newer submission when it replaced the card" do
+      generation = described_class.next_generation(subscription.id)
+      interleave_after_refresh do
+        Subscription.find(subscription.id).update!(credit_card: replacement)
+        described_class.next_generation(subscription.id)
+      end
+      expect_any_instance_of(Subscription).not_to receive(:send_restart_notifications!)
+
+      expect { described_class.new.perform(subscription.id, 0, generation) }.not_to have_enqueued_restart_abandoned_mail
+
+      expect_hold_left_to_the_newer_submission
+      expect(subscription.credit_card).to eq(replacement)
+    end
+
+    it "releases the hold and tells the buyer when the card changed but no newer generation claimed it" do
+      generation = described_class.next_generation(subscription.id)
+      interleave_after_refresh { Subscription.find(subscription.id).update!(credit_card: replacement) }
+      expect_any_instance_of(Subscription).not_to receive(:send_restart_notifications!)
+
+      expect { described_class.new.perform(subscription.id, 0, generation) }.to have_enqueued_restart_abandoned_mail.once
+
+      expect(subscription.reload).not_to be_alive
+      expect(subscription).not_to be_indian_card_mandate_restart_held
+      expect(subscription).not_to be_indian_card_mandate_restart_abandoned_notice_pending
+      expect(RecurringChargeWorker.jobs).to be_empty
+    end
+
+    it "records the abandoned notice for the sweep when its delivery fails" do
+      generation = described_class.next_generation(subscription.id)
+      interleave_after_refresh { Subscription.find(subscription.id).update!(credit_card: replacement) }
+      allow(CustomerLowPriorityMailer).to receive(:subscription_indian_card_mandate_invalid).and_raise(Redis::CannotConnectError, "redis down")
+
+      described_class.new.perform(subscription.id, 0, generation)
+
+      expect(subscription.reload).not_to be_indian_card_mandate_restart_held
+      expect(subscription).to be_indian_card_mandate_restart_abandoned_notice_pending
+      expect(DeliverIndianCardMandateRestartNoticesJob.jobs).not_to be_empty
+    end
+
+    it "restarts when the refresh itself rewrites the stored mandate id" do
+      generation = described_class.next_generation(subscription.id)
+      subscription.update!(stripe_mandate_id: "mandate_stale")
+      allow_any_instance_of(Subscription).to receive(:refresh_indian_card_mandate!) do |record|
+        record.update!(stripe_mandate_id: "mandate_pending")
+        "active"
+      end
+
+      described_class.new.perform(subscription.id, 0, generation)
+
+      expect(subscription.reload).to be_alive
+      expect(subscription).not_to be_indian_card_mandate_restart_held
+      expect(subscription.stripe_mandate_id).to eq("mandate_pending")
+    end
+
+    it "restarts when the refresh clears the mandate because the card in use needs none" do
+      generation = described_class.next_generation(subscription.id)
+      non_mandate_card = create(:indian_stripe_credit_card, card_country: "US", stripe_customer_id: "cus_us", processor_payment_method_id: "pm_us", stripe_fingerprint: "fingerprint_us")
+      subscription.update!(credit_card: non_mandate_card)
+
+      described_class.new.perform(subscription.id, 0, generation)
+
+      expect(subscription.reload).to be_alive
+      expect(subscription).not_to be_indian_card_mandate_restart_held
+      expect(subscription.stripe_mandate_id).to be_nil
+      expect(subscription.credit_card).to eq(non_mandate_card)
+    end
+
+    it "restarts when nothing changed since the refresh" do
+      generation = described_class.next_generation(subscription.id)
+      interleave_after_refresh { }
+
+      described_class.new.perform(subscription.id, 0, generation)
+
+      expect(subscription.reload).to be_alive
+      expect(subscription).not_to be_indian_card_mandate_restart_held
+    end
+  end
+
+  describe "when a buyer notice cannot be delivered" do
+    let(:redis_down) { Redis::CannotConnectError.new("redis down") }
+
+    before { allow(ErrorNotifier).to receive(:notify) }
+
+    context "when the restart was abandoned" do
+      def perform_final_recheck
+        described_class.new.perform(subscription.id, CheckIndianCardMandateRegistrationJob::PENDING_RECHECK_DELAYS.length)
+      end
+
+      it "keeps the abandonment and a marker for the notice, and schedules the dedicated retry, without failing the job" do
+        allow_any_instance_of(ActionMailer::MessageDelivery).to receive(:deliver_later).and_raise(redis_down)
+
+        expect { perform_final_recheck }.not_to raise_error
+
+        expect(subscription.reload).not_to be_indian_card_mandate_restart_held
+        expect(subscription).to be_indian_card_mandate_restart_abandoned_notice_pending
+        expect(DeliverIndianCardMandateRestartNoticesJob.jobs.map { _1["args"] }).to eq([[subscription.id]])
+        expect(ErrorNotifier).to have_received(:notify).with(redis_down, subscription: subscription.external_id)
+      end
+
+      it "does not fail the job when the dedicated retry cannot be scheduled either" do
+        allow_any_instance_of(ActionMailer::MessageDelivery).to receive(:deliver_later).and_raise(redis_down)
+        allow(DeliverIndianCardMandateRestartNoticesJob).to receive(:perform_in).and_raise(redis_down)
+
+        expect { perform_final_recheck }.not_to raise_error
+
+        expect(subscription.reload).not_to be_indian_card_mandate_restart_held
+        expect(subscription).to be_indian_card_mandate_restart_abandoned_notice_pending
+      end
+
+      it "drops a completed notice that was already owed, since the restart it announced is now abandoned" do
+        subscription.update!(indian_card_mandate_restart_completed_notice_pending: true)
+        expect_any_instance_of(Subscription).not_to receive(:send_restart_notifications!)
+
+        expect { perform_final_recheck }
+          .to have_enqueued_mail(CustomerLowPriorityMailer, :subscription_indian_card_mandate_invalid).with(subscription.id, true).once
+
+        expect(subscription.reload).not_to be_indian_card_mandate_restart_held
+        expect(subscription).not_to be_indian_card_mandate_restart_completed_notice_pending
+        expect(subscription).not_to be_indian_card_mandate_restart_abandoned_notice_pending
+      end
+
+      it "leaves an owed notice to the dedicated job when the chain has already ended" do
+        subscription.update!(indian_card_mandate_restart_held: false, indian_card_mandate_restart_abandoned_notice_pending: true)
+        allow_any_instance_of(ActionMailer::MessageDelivery).to receive(:deliver_later).and_raise(redis_down)
+
+        expect { perform_final_recheck }.not_to raise_error
+
+        expect(subscription.reload).to be_indian_card_mandate_restart_abandoned_notice_pending
+        expect(DeliverIndianCardMandateRestartNoticesJob.jobs).to be_empty
+      end
+
+      it "does not release or abandon a valid pending restart because a notice could not be delivered" do
+        subscription.update!(indian_card_mandate_restart_completed_notice_pending: true)
+        allow_any_instance_of(Subscription).to receive(:send_restart_notifications!).and_raise(redis_down)
+        generation = described_class.next_generation(subscription.id)
+
+        expect { described_class.new.perform(subscription.id, 0, generation) }.not_to raise_error
+
+        expect(subscription.reload).to be_indian_card_mandate_restart_held
+        expect(described_class.jobs.map { _1["args"] }).to eq([[subscription.id, 1, generation]])
+        expect(DeliverIndianCardMandateRestartNoticesJob.jobs).to be_empty
+      end
+
+      it "does not resend the notice once a delivery has cleared its marker" do
+        allow_any_instance_of(ActionMailer::MessageDelivery).to receive(:deliver_later).and_raise(redis_down)
+        perform_final_recheck
+        allow_any_instance_of(ActionMailer::MessageDelivery).to receive(:deliver_later).and_call_original
+
+        expect do
+          DeliverIndianCardMandateRestartNoticesJob.new.perform(subscription.id)
+          DeliverIndianCardMandateRestartNoticesJob.new.perform(subscription.id)
+        end.to have_enqueued_restart_abandoned_mail.once
+
+        expect(subscription.reload).not_to be_indian_card_mandate_restart_abandoned_notice_pending
+      end
+
+      it "sends nothing for an abandonment that a later restart made moot" do
+        allow_any_instance_of(ActionMailer::MessageDelivery).to receive(:deliver_later).and_raise(redis_down)
+        perform_final_recheck
+        allow_any_instance_of(ActionMailer::MessageDelivery).to receive(:deliver_later).and_call_original
+        subscription.resubscribe!
+
+        expect { subscription.deliver_indian_card_mandate_restart_notices! }.not_to have_enqueued_restart_abandoned_mail
+      end
+    end
+
+    context "when the restart completed" do
+      let(:mandate_status) { "active" }
+
+      it "keeps a marker for the notifications and schedules the dedicated retry, without touching the restart or charge" do
+        allow_any_instance_of(Subscription).to receive(:send_restart_notifications!).and_raise(redis_down)
+
+        expect { described_class.new.perform(subscription.id) }.not_to raise_error
+
+        expect(subscription.reload).to be_alive
+        expect(subscription).to be_indian_card_mandate_restart_completed_notice_pending
+        expect(RecurringChargeWorker.jobs.map { _1["args"] }).to eq([restart_charge_args])
+        expect(DeliverIndianCardMandateRestartNoticesJob.jobs.map { _1["args"] }).to eq([[subscription.id]])
+      end
+
+      it "does not resend the restart notifications once a delivery has cleared their marker" do
+        allow_any_instance_of(Subscription).to receive(:send_restart_notifications!).and_raise(redis_down)
+        described_class.new.perform(subscription.id)
+        calls = 0
+        allow_any_instance_of(Subscription).to receive(:send_restart_notifications!) { calls += 1 }
+
+        DeliverIndianCardMandateRestartNoticesJob.new.perform(subscription.id)
+        DeliverIndianCardMandateRestartNoticesJob.new.perform(subscription.id)
+
+        expect(calls).to eq(1)
+        expect(subscription.reload).not_to be_indian_card_mandate_restart_completed_notice_pending
+      end
+
+      it "queues the charge once even when neither the notice nor its retry could be delivered" do
+        allow_any_instance_of(Subscription).to receive(:send_restart_notifications!).and_raise(redis_down)
+        allow(DeliverIndianCardMandateRestartNoticesJob).to receive(:perform_in).and_raise(redis_down)
+
+        expect { described_class.new.perform(subscription.id) }.not_to raise_error
+        expect { described_class.new.perform(subscription.id) }.not_to raise_error
+
+        expect(RecurringChargeWorker.jobs.size).to eq(1)
+        expect(subscription.reload).to be_indian_card_mandate_restart_completed_notice_pending
+      end
+
+      it "does not queue a second charge or restart when the retry runs" do
+        allow_any_instance_of(Subscription).to receive(:send_restart_notifications!).and_raise(redis_down)
+        described_class.new.perform(subscription.id)
+        allow_any_instance_of(Subscription).to receive(:send_restart_notifications!)
+
+        DeliverIndianCardMandateRestartNoticesJob.new.perform(subscription.id)
+
+        expect(RecurringChargeWorker.jobs.size).to eq(1)
+        expect(subscription.reload).to be_alive
+      end
+
+      it "records no completed notice for a restart of a membership that was only pending cancellation" do
+        subscription.update!(cancelled_at: 5.days.from_now, deactivated_at: nil)
+
         described_class.new.perform(subscription.id)
 
-        expect(RecurringChargeWorker.jobs.map { _1["args"] }).to eq([[subscription.id]])
+        expect(subscription.reload).not_to be_indian_card_mandate_restart_completed_notice_pending
+        expect(DeliverIndianCardMandateRestartNoticesJob.jobs).to be_empty
       end
+    end
+  end
+
+  context "when a signed-out buyer's hold is completed and an existing-customer discount applies to the account" do
+    let(:mandate_status) { "active" }
+
+    before do
+      create(:offer_code, :for_existing_customers, products: [product], amount_cents: nil, amount_percentage: 1)
+      subscription.reload.hold_indian_card_mandate_restart!(authenticated_offer_code_buyer: nil)
+    end
+
+    it "restarts at the price the signed-out buyer accepted instead of abandoning it as a price change" do
+      expect { described_class.new.perform(subscription.id) }.not_to have_enqueued_restart_abandoned_mail
+
+      expect(subscription.reload).to be_alive
+      expect(subscription).not_to be_indian_card_mandate_restart_held
+    end
+
+    it "still abandons the restart when the signed-out price has drifted since the submission" do
+      subscription.update!(indian_card_mandate_restart_price_cents: subscription.indian_card_mandate_restart_price_cents + 1_00)
+
+      expect { described_class.new.perform(subscription.id) }.to have_enqueued_restart_abandoned_mail.once
+
+      expect(subscription.reload).not_to be_alive
+    end
+  end
+
+  describe "the charge a completed restart owes" do
+    let(:mandate_status) { "active" }
+    let(:charged) { [] }
+    let(:guest_price) { subscription.current_subscription_price_cents(authenticated_offer_code_buyer: nil) }
+    let(:buyer_price) { subscription.current_subscription_price_cents(authenticated_offer_code_buyer: buyer) }
+
+    before do
+      create(:offer_code, :for_existing_customers, products: [product], amount_cents: nil, amount_percentage: 1)
+      # Records the purchase `charge!` built, which is what the charge would be taken for.
+      allow_any_instance_of(Subscription).to receive(:process_purchase!) do |_subscription, purchase, *|
+        charged << [purchase.perceived_price_cents, purchase.offer_code&.id]
+      end
+    end
+
+    def restart_and_charge
+      described_class.new.perform(subscription.id)
+      RecurringChargeWorker.drain
+    end
+
+    it "bills the signed-out price to a signed-out buyer even though the account has an existing-customer discount" do
+      subscription.reload.hold_indian_card_mandate_restart!(authenticated_offer_code_buyer: nil)
+      expect(buyer_price).to be < guest_price
+
+      restart_and_charge
+
+      expect(subscription.reload).to be_alive
+      expect(charged).to eq([[guest_price, nil]])
+      expect(subscription.indian_card_mandate_restart_charge_pricing_pending?).to be(true)
+      expect(subscription).to be_indian_card_mandate_restart_buyer_captured
+    end
+
+    context "when the hold predates the recorded buyer" do
+      before do
+        subscription.reload.hold_indian_card_mandate_restart!(authenticated_offer_code_buyer: buyer)
+        subscription.update!(indian_card_mandate_restart_buyer_id: nil, indian_card_mandate_restart_buyer_captured: false)
+      end
+
+      it "restarts and bills the discounted price it was accepted at, as before the column existed" do
+        expect(buyer_price).to be < guest_price
+
+        expect { restart_and_charge }.not_to have_enqueued_restart_abandoned_mail
+
+        subscription.reload
+        expect(subscription).to be_alive
+        expect(charged.size).to eq(1)
+        expect(charged.first.first).to eq(buyer_price)
+        expect(charged.first.last).to be_present
+      end
+
+      it "does not invent a captured buyer while the owed charge's pricing is held" do
+        described_class.new.perform(subscription.id)
+
+        subscription.reload
+        expect(subscription).to be_indian_card_mandate_restart_charge_pricing_pending
+        expect(subscription).not_to be_indian_card_mandate_restart_buyer_captured
+        expect(subscription.indian_card_mandate_restart_charge_pricing).to eq({})
+      end
+    end
+
+    it "bills the accepted price even when a plain charge job runs before the one the restart enqueued" do
+      subscription.reload.hold_indian_card_mandate_restart!(authenticated_offer_code_buyer: nil)
+      described_class.new.perform(subscription.id)
+      RecurringChargeWorker.jobs.clear
+
+      RecurringChargeWorker.new.perform(subscription.id)
+      RecurringChargeWorker.new.perform(subscription.id, true)
+
+      expect(charged).to eq([[guest_price, nil], [guest_price, nil]])
+    end
+
+    it "bills the discounted price to the authenticated buyer the hold was accepted for" do
+      subscription.reload.hold_indian_card_mandate_restart!(authenticated_offer_code_buyer: buyer)
+      expect(buyer_price).to be < guest_price
+
+      restart_and_charge
+
+      expect(subscription.reload).to be_alive
+      expect(charged.size).to eq(1)
+      expect(charged.first.first).to eq(buyer_price)
+      expect(charged.first.last).to be_present
+    end
+
+    it "rebuilds the context from the hold when the first enqueue failed and the sweep redrives the charge" do
+      subscription.reload.hold_indian_card_mandate_restart!(authenticated_offer_code_buyer: nil)
+      calls = 0
+      allow(RecurringChargeWorker).to receive(:perform_async).and_wrap_original do |original, *args|
+        calls += 1
+        raise Redis::CannotConnectError, "redis down" if calls == 1
+
+        original.call(*args)
+      end
+
+      expect { described_class.new.perform(subscription.id) }.to raise_error(Redis::CannotConnectError)
+      expect(subscription.reload).to be_indian_card_mandate_recovery_pending
+
+      described_class.new.perform(subscription.id)
+      RecurringChargeWorker.drain
+
+      expect(charged).to eq([[guest_price, nil]])
+      expect(subscription.reload).not_to be_indian_card_mandate_recovery_pending
+    end
+
+    it "does not charge, rather than fall back to signed-out pricing, when the buyer the hold was accepted for is gone" do
+      subscription.update!(indian_card_mandate_restart_buyer_id: buyer.id + 10_000)
+
+      restart_and_charge
+
+      expect(subscription.reload).not_to be_alive
+      expect(charged).to be_empty
+    end
+  end
+
+  describe "when the buyer the hold was accepted for is deleted after the restart committed" do
+    let(:mandate_status) { "active" }
+    let(:hold_buyer) { create(:user) }
+    let(:charged) { [] }
+
+    before do
+      subscription.update!(indian_card_mandate_restart_buyer_id: hold_buyer.id)
+      allow_any_instance_of(Subscription).to receive(:process_purchase!) { |_subscription, purchase, *| charged << purchase }
+      allow(ErrorNotifier).to receive(:notify)
+    end
+
+    # The eligibility check inside the restart still sees the buyer; `after_restart` runs once the restart has committed.
+    def after_restart(&hook)
+      allow_any_instance_of(Subscription).to receive(:resubscribe!).and_wrap_original do |original, *args|
+        original.call(*args).tap(&hook)
+      end
+    end
+
+    def delete_hold_buyer_after_restart
+      after_restart { User.where(id: hold_buyer.id).delete_all }
+    end
+
+    it "fails the membership without charging and leaves no recovery marker or held terms" do
+      delete_hold_buyer_after_restart
+
+      described_class.new.perform(subscription.id)
+      RecurringChargeWorker.drain
+
+      subscription.reload
+      expect(charged).to be_empty
+      expect(RecurringChargeWorker.jobs).to be_empty
+      expect(subscription).not_to be_alive
+      expect(subscription.failed_at).to be_present
+      expect(subscription).not_to be_indian_card_mandate_recovery_pending
+      expect(subscription.indian_card_mandate_restart_price_cents).to be_nil
+      expect(subscription.indian_card_mandate_restart_quantity).to be_nil
+      expect(subscription.indian_card_mandate_restart_buyer_id).to be_nil
+      expect(ErrorNotifier).to have_received(:notify).with(
+        kind_of(String), subscription_id: subscription.id, subscription: subscription.external_id, buyer_id: hold_buyer.id
+      )
+    end
+
+    it "does not loop: a later run finds nothing to redrive" do
+      delete_hold_buyer_after_restart
+      described_class.new.perform(subscription.id)
+
+      expect { described_class.new.perform(subscription.id) }.not_to change { RecurringChargeWorker.jobs.size }
+
+      expect(subscription.reload).not_to be_indian_card_mandate_recovery_pending
     end
   end
 
@@ -345,6 +785,12 @@ describe CompleteIndianCardMandateJob do
 
       it "releases the marker without a restart or charge when the hold recorded no terms" do
         subscription.update!(indian_card_mandate_restart_price_cents: nil, indian_card_mandate_restart_quantity: nil)
+
+        expect_marker_released_without_restart
+      end
+
+      it "releases a hold from before terms were recorded, which has no price, quantity or buyer, instead of guessing a buyer" do
+        subscription.update!(indian_card_mandate_restart_price_cents: nil, indian_card_mandate_restart_quantity: nil, indian_card_mandate_restart_buyer_id: nil)
 
         expect_marker_released_without_restart
       end
@@ -627,6 +1073,56 @@ describe CompleteIndianCardMandateJob do
       expect(result.replaced_hold).to be(true)
     end
 
+    context "when the submitting buyer context differs from the recorded hold buyer" do
+      def claim_as(submitting_buyer)
+        Subscription.transaction do
+          described_class.claim_held_restart(subscription, authenticated_offer_code_buyer: submitting_buyer, payment_method_before: unchanged_payment_method)
+        end
+      end
+
+      it "claims nothing when the same buyer submits again" do
+        expect(claim_as(buyer)).to be_nil
+
+        expect($redis.get(generation_key).to_i).to eq(earlier_generation)
+      end
+
+      it "claims nothing when a signed-out buyer submits again over a signed-out hold" do
+        subscription.hold_indian_card_mandate_restart!(authenticated_offer_code_buyer: nil)
+
+        expect(claim_as(nil)).to be_nil
+        expect(subscription.reload.indian_card_mandate_restart_buyer_id).to be_nil
+      end
+
+      it "claims a new generation and records the buyer when an authenticated buyer follows a signed-out hold" do
+        subscription.hold_indian_card_mandate_restart!(authenticated_offer_code_buyer: nil)
+
+        result = claim_as(buyer)
+
+        expect(result.generation).to eq(earlier_generation + 1)
+        expect(result.replaced_hold).to be(true)
+        expect(subscription.reload.indian_card_mandate_restart_buyer_id).to eq(buyer.id)
+      end
+
+      it "claims a new generation and records no buyer when a signed-out buyer follows an authenticated hold" do
+        result = claim_as(nil)
+
+        expect(result.generation).to eq(earlier_generation + 1)
+        expect(subscription.reload.indian_card_mandate_restart_buyer_id).to be_nil
+        expect(subscription).to be_indian_card_mandate_restart_buyer_captured
+      end
+
+      it "claims a new generation and records the new buyer when another authenticated buyer submits at equal prices" do
+        other_buyer = create(:user)
+        expect(subscription.current_subscription_price_cents(authenticated_offer_code_buyer: other_buyer))
+          .to eq(subscription.current_subscription_price_cents(authenticated_offer_code_buyer: buyer))
+
+        result = claim_as(other_buyer)
+
+        expect(result.generation).to eq(earlier_generation + 1)
+        expect(subscription.reload.indian_card_mandate_restart_buyer_id).to eq(other_buyer.id)
+      end
+    end
+
     it "claims a new generation when the accepted terms changed" do
       subscription.update!(indian_card_mandate_restart_price_cents: subscription.indian_card_mandate_restart_price_cents + 1)
 
@@ -868,6 +1364,15 @@ describe CompleteIndianCardMandateJob do
 
         expect(live_subscription.reload).not_to be_renewal_disabled_due_to_indian_card_mandate
         expect(RecurringChargeWorker.jobs.map { _1["args"] }).to eq([[live_subscription.id]])
+      end
+
+      it "queues the charge with the subscription's own pricing even when stale restart terms are left on it" do
+        live_subscription.update!(indian_card_mandate_restart_price_cents: 1, indian_card_mandate_restart_quantity: 1)
+
+        described_class.new.perform(live_subscription.id)
+
+        expect(RecurringChargeWorker.jobs.map { _1["args"] }).to eq([[live_subscription.id]])
+        expect(live_subscription.reload.indian_card_mandate_restart_price_cents).to be_nil
       end
 
       context "when the renewal is not due yet" do

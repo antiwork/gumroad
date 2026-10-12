@@ -126,17 +126,12 @@ describe Subscription::UpdaterService, :vcr do
           create(:merchant_account, user: nil, charge_processor_id: StripeChargeProcessor.charge_processor_id, charge_processor_merchant_id: nil)
         end
         let(:replacement_card) do
-          CreditCard.create!(
-            charge_processor_id: StripeChargeProcessor.charge_processor_id,
+          create(
+            :indian_stripe_credit_card,
             stripe_customer_id: "cus_replacement",
             processor_payment_method_id: "pm_replacement",
             stripe_fingerprint: "fingerprint_replacement",
-            visual: "**** **** **** 4242",
-            card_type: CardType::VISA,
-            card_country: Compliance::Countries::IND.alpha2,
-            expiry_month: 12,
-            expiry_year: 2030,
-            json_data: { stripe_setup_intent_id: "seti_replacement" }
+            stripe_setup_intent_id: "seti_replacement"
           )
         end
         let(:stripe_chargeable) do
@@ -3075,7 +3070,7 @@ describe Subscription::UpdaterService, :vcr do
         end
       end
 
-      def held_restart_service
+      def held_restart_service(logged_in_user: @user)
         Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
         @credit_card.update!(card_country: Compliance::Countries::IND.alpha2)
         @subscription.update!(
@@ -3105,7 +3100,7 @@ describe Subscription::UpdaterService, :vcr do
           subscription: @subscription,
           gumroad_guid: @gumroad_guid,
           params:,
-          logged_in_user: @user,
+          logged_in_user:,
           remote_ip: @remote_ip,
         )
         service.original_purchase = @subscription.original_purchase
@@ -3124,8 +3119,20 @@ describe Subscription::UpdaterService, :vcr do
         expect(@subscription).to be_indian_card_mandate_restart_held
         expect(@subscription.indian_card_mandate_restart_price_cents).to eq(@subscription.current_subscription_price_cents(authenticated_offer_code_buyer: @user))
         expect(@subscription.indian_card_mandate_restart_quantity).to eq(@subscription.original_purchase.quantity)
+        expect(@subscription.indian_card_mandate_restart_buyer_id).to eq(@user.id)
         expect(@subscription.purchases.not_is_original_subscription_purchase.count).to eq(0)
         expect(CompleteIndianCardMandateJob.jobs.size).to eq(1)
+      ensure
+        Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+      end
+
+      it "records no buyer on the hold for a signed-out manage-cookie restart, so completion prices it the same way",
+         vcr: { cassette_name: "Subscription_UpdaterService/_perform/tiered_membership_subscription/restarting_a_membership/when_the_price_has_changed/charges_the_current_price" } do
+        held_restart_service(logged_in_user: nil).perform
+
+        expect(@subscription.reload).to be_indian_card_mandate_restart_held
+        expect(@subscription.indian_card_mandate_restart_buyer_id).to be_nil
+        expect(@subscription.indian_card_mandate_restart_price_cents).to eq(@subscription.current_subscription_price_cents(authenticated_offer_code_buyer: nil))
       ensure
         Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
       end

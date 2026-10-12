@@ -61,14 +61,17 @@ class CompleteIndianCardMandateJob
     # stale `release` could otherwise commit its clear after this claim. `lock!` also refreshes a marker that
     # release cleared after the caller loaded the record. Must run inside the caller's transaction.
     #
-    # Returns nil, claiming nothing, for a repeat submission that changes neither the payment method nor the
-    # accepted terms while an earlier chain is live: that chain already owns the promise, and superseding it
-    # would leave the buyer with nothing if this submission's own enqueue then failed.
+    # Returns nil, claiming nothing, for a repeat submission that changes neither the payment method, the
+    # accepted terms nor the submitting buyer (nil when signed out) while an earlier chain is live: that chain
+    # already owns the promise, and superseding it would leave the buyer with nothing if this submission's own
+    # enqueue then failed. A different buyer context prices the charge differently even at equal current prices.
     def claim_held_restart(subscription, authenticated_offer_code_buyer:, payment_method_before:)
       subscription.lock!
       was_held = subscription.indian_card_mandate_restart_held?
       previous = $redis.get(RedisKey.indian_card_mandate_completion_generation(subscription.id))&.to_i if was_held
       if previous && payment_method_before == [subscription.stripe_mandate_id, subscription.credit_card_id] &&
+          subscription.indian_card_mandate_restart_buyer_captured? &&
+          subscription.indian_card_mandate_restart_buyer_id == authenticated_offer_code_buyer&.id &&
           subscription.indian_card_mandate_restart_terms_unchanged?(authenticated_offer_code_buyer:)
         return
       end
@@ -122,7 +125,7 @@ class CompleteIndianCardMandateJob
         if claim.replaced_hold
           abandon_restart(subscription)
         else
-          subscription.update!(indian_card_mandate_restart_held: false)
+          subscription.update!(indian_card_mandate_restart_held: false, indian_card_mandate_restart_buyer_captured: false)
         end
       end
     end
@@ -131,11 +134,12 @@ class CompleteIndianCardMandateJob
     def abandon_restart(subscription)
       return unless subscription.indian_card_mandate_restart_held?
 
-      subscription.update!(indian_card_mandate_restart_held: false)
-      subscription.notify_indian_card_mandate_restart_abandoned
+      subscription.update!(indian_card_mandate_restart_held: false, indian_card_mandate_restart_buyer_captured: false)
+      subscription.record_indian_card_mandate_restart_notice!(:abandoned)
     end
 
-    # Only while the renewal stop is still set: once it is cleared the marker is the sole record of an owed charge.
+    # Only while the renewal stop is still set: once it is cleared the marker is the sole record of an owed charge,
+    # left for FindSubscriptionsWithMissingChargeWorker to hand back to `recover`.
     # The stop stays, and the replacement card has already displaced the one that was renewing, so the buyer
     # is told to update their payment method instead of finding renewals paused with no explanation.
     def release_recovery(subscription, generation)
@@ -156,37 +160,51 @@ class CompleteIndianCardMandateJob
 
   def perform(subscription_id, pending_recheck_count = 0, generation = nil)
     subscription = Subscription.find(subscription_id)
-    restart = subscription.indian_card_mandate_restart_pending?
-    reauthorization = !restart && subscription.indian_card_mandate_reauthorization_pending?
-    # A refresh or restart that committed before its enqueue failed leaves only the marker behind. It records an
-    # owed charge rather than ownership of the chain, so a newer submission does not void it.
-    return recover(subscription) if !restart && !reauthorization && subscription.indian_card_mandate_recovery_pending?
-    return if self.class.superseded?(subscription_id, generation)
-    return unless restart || reauthorization
-
-    mark_recovery_pending(subscription) if reauthorization
-
-    case subscription.refresh_indian_card_mandate!
-    when "active"
-      restart ? restart(subscription) : recover(subscription)
-    when "pending"
-      delay = CheckIndianCardMandateRegistrationJob::PENDING_RECHECK_DELAYS[pending_recheck_count]
-      if delay.present?
-        self.class.perform_in(delay, subscription_id, pending_recheck_count + 1, generation)
-      else
-        give_up(subscription, generation, restart:)
-      end
-    else
-      give_up(subscription, generation, restart:)
-    end
+    advance(subscription, pending_recheck_count, generation)
   end
 
   private
-    def restart(subscription)
+    def advance(subscription, pending_recheck_count, generation)
+      subscription_id = subscription.id
+      restart = subscription.indian_card_mandate_restart_pending?
+      reauthorization = !restart && subscription.indian_card_mandate_reauthorization_pending?
+      # A refresh or restart that committed before its enqueue failed leaves only the marker behind. It records an
+      # owed charge rather than ownership of the chain, so a newer submission does not void it.
+      return recover(subscription) if !restart && !reauthorization && subscription.indian_card_mandate_recovery_pending?
+      return if self.class.superseded?(subscription_id, generation)
+      return unless restart || reauthorization
+
+      mark_recovery_pending(subscription) if reauthorization
+
+      # The refresh may itself rewrite or clear `stripe_mandate_id`, so only the card is fenced.
+      checked_card_id = subscription.credit_card_to_charge&.id
+      case subscription.refresh_indian_card_mandate!
+      when "active"
+        restart ? restart(subscription, generation, checked_card_id) : recover(subscription)
+      when "pending"
+        delay = CheckIndianCardMandateRegistrationJob::PENDING_RECHECK_DELAYS[pending_recheck_count]
+        if delay.present?
+          self.class.perform_in(delay, subscription_id, pending_recheck_count + 1, generation)
+        else
+          give_up(subscription, generation, restart:)
+        end
+      else
+        give_up(subscription, generation, restart:)
+      end
+    end
+
+    def restart(subscription, generation, checked_card_id)
       notify = subscription.termination_date.present?
       charge_owed = false
       subscription.with_lock do
         return unless subscription.indian_card_mandate_restart_held? && !subscription.alive?(include_pending_cancellation: false)
+        # The refresh ran outside this lock. A newer generation has taken over the hold and ends it itself.
+        return if self.class.superseded?(subscription.id, generation)
+        # Otherwise nobody else owns the hold, and the card just confirmed active is not the one it would charge.
+        unless subscription.credit_card_to_charge&.id == checked_card_id
+          self.class.abandon_restart(subscription)
+          return
+        end
 
         # Days may have passed since the buyer submitted; nothing here may restore access that a synchronous restart would refuse.
         unless subscription.indian_card_mandate_restart_eligible?
@@ -195,26 +213,29 @@ class CompleteIndianCardMandateJob
         end
 
         subscription.resubscribe!
-        # Committed with the restart: once the pending flag clears, a retry has nothing else to tell it a charge is owed.
+        # Committed with the restart: once the recovery marker clears, a retry has nothing else to tell it a charge is
+        # owed. The pricing flag outlives it, so every charge job bills the accepted terms until one succeeds.
         charge_owed = subscription.overdue_for_charge?
-        subscription.update!(indian_card_mandate_restart_held: false, indian_card_mandate_recovery_pending: charge_owed)
+        subscription.update!(
+          indian_card_mandate_restart_held: false,
+          indian_card_mandate_recovery_pending: charge_owed,
+          indian_card_mandate_restart_charge_pricing_pending: charge_owed,
+          # Carried into the pricing state only for a hold that captured its buyer; a legacy hold stays on `user`.
+          indian_card_mandate_restart_buyer_captured: charge_owed && subscription.indian_card_mandate_restart_buyer_captured?
+        )
+        subscription.record_indian_card_mandate_restart_notice!(:completed) if notify
       end
-      notify_restart(subscription) if notify
       recover(subscription) if charge_owed
-    end
-
-    # A mailer or webhook failure must not stand between a restarted membership and its overdue charge.
-    def notify_restart(subscription)
-      subscription.send_restart_notifications!
-    rescue StandardError => e
-      ErrorNotifier.notify(e, subscription: subscription.external_id)
     end
 
     # Set before the refresh clears the renewal stop: nothing else records that a renewal which came due
     # while the stop was set is still owed its charge, and a failed enqueue below must be retryable.
     def mark_recovery_pending(subscription)
       subscription.with_lock do
-        subscription.update!(indian_card_mandate_recovery_pending: true) unless subscription.indian_card_mandate_recovery_pending?
+        next if subscription.indian_card_mandate_recovery_pending?
+
+        subscription.clear_indian_card_mandate_restart_terms unless subscription.indian_card_mandate_restart_charge_pricing_pending?
+        subscription.update!(indian_card_mandate_recovery_pending: true)
       end
     end
 
@@ -226,16 +247,21 @@ class CompleteIndianCardMandateJob
     end
 
     # Cleared only after the enqueue succeeds. A crash in between re-enqueues on retry, which RecurringChargeWorker tolerates.
+    # A completed restart's charge is priced by RecurringChargeWorker from the persisted pricing flag, not from this job.
     def recover(subscription)
       if subscription.alive?(include_pending_cancellation: false) && subscription.overdue_for_charge?
         RecurringChargeWorker.perform_async(subscription.id)
+      else
+        subscription.settle_indian_card_mandate_restart_charge_pricing!
       end
       clear_recovery_pending(subscription)
     end
 
     def clear_recovery_pending(subscription)
       subscription.with_lock do
-        subscription.update!(indian_card_mandate_recovery_pending: false) if subscription.indian_card_mandate_recovery_pending?
+        next unless subscription.indian_card_mandate_recovery_pending?
+
+        subscription.update!(indian_card_mandate_recovery_pending: false)
       end
     end
 end

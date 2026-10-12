@@ -564,17 +564,7 @@ describe Subscription::RestartAtCheckoutService do
         )
       end
       let(:credit_card) do
-        CreditCard.create!(
-          charge_processor_id: StripeChargeProcessor.charge_processor_id,
-          stripe_customer_id: "cus_pending",
-          processor_payment_method_id: "pm_pending",
-          stripe_fingerprint: "fingerprint_pending",
-          visual: "**** **** **** 4242",
-          card_type: CardType::VISA,
-          card_country: Compliance::Countries::IND.alpha2,
-          expiry_month: 12,
-          expiry_year: 2030
-        )
+        create(:indian_stripe_credit_card)
       end
       let(:product) { create(:subscription_product_with_versions, user: seller) }
       let!(:subscription) do
@@ -666,6 +656,94 @@ describe Subscription::RestartAtCheckoutService do
         expect(subscription.reload).to be_alive
         expect(subscription).not_to be_renewal_disabled_due_to_indian_card_mandate
         expect(subscription).not_to be_indian_card_mandate_restart_held
+      end
+
+      context "when the accepted restart is completed later and charged by a plain job" do
+        let(:product) { create(:subscription_product_with_versions, user: seller, price_cents: 10_00) }
+        let(:quantity) { 2 }
+        let(:full_price_cents) { product.default_price_cents * quantity }
+        let(:discounted_price_cents) { full_price_cents / 2 }
+        let!(:existing_customer_offer_code) do
+          create(:offer_code, :for_existing_customers, products: [product], user: seller, amount_cents: nil, amount_percentage: 50)
+        end
+        let(:charged) { [] }
+
+        before do
+          subscription.original_purchase.update_columns(quantity:, price_cents: full_price_cents, displayed_price_cents: full_price_cents)
+          # Records the purchase `charge!` built, which is what the charge would be taken for.
+          allow_any_instance_of(Subscription).to receive(:process_purchase!) do |_subscription, purchase, *|
+            charged << [purchase.perceived_price_cents, purchase.quantity, purchase.offer_code&.id]
+          end
+        end
+
+        def accept_pending_restart(restart_buyer:, perceived_price_cents:)
+          travel_to(2.months.from_now) do
+            described_class.new(
+              subscription: subscription,
+              product: product,
+              params: base_params.deep_merge(purchase: { perceived_price_cents: }),
+              buyer: restart_buyer
+            ).perform
+          end
+        end
+
+        def complete_held_restart_and_run_charge_job
+          allow(ChargeProcessor).to receive(:get_mandate).and_return(
+            Stripe::Mandate.construct_from(id: "mandate_pending", status: "active", payment_method: "pm_pending")
+          )
+          travel_to(2.months.from_now) do
+            CompleteIndianCardMandateJob.drain
+            expect(RecurringChargeWorker.jobs.map { _1["args"] }).to eq([[subscription.id]])
+            RecurringChargeWorker.drain
+          end
+        end
+
+        it "records an authenticated buyer's id, price and quantity, then charges exactly that price and quantity" do
+          result = accept_pending_restart(restart_buyer: buyer, perceived_price_cents: discounted_price_cents)
+
+          expect(result).to eq(success: false, error_message: pending_message)
+          subscription.reload
+          expect(subscription).to be_indian_card_mandate_restart_held
+          expect(subscription.indian_card_mandate_restart_buyer_id).to eq(buyer.id)
+          expect(subscription.indian_card_mandate_restart_price_cents).to eq(discounted_price_cents)
+          expect(subscription.indian_card_mandate_restart_quantity).to eq(quantity)
+          expect(subscription).not_to be_indian_card_mandate_restart_charge_pricing_pending
+
+          complete_held_restart_and_run_charge_job
+
+          subscription.reload
+          expect(subscription).to be_alive
+          expect(subscription).to be_indian_card_mandate_restart_charge_pricing_pending
+          expect(subscription.indian_card_mandate_restart_buyer_id).to eq(buyer.id)
+          expect(charged).to eq([[discounted_price_cents, quantity, existing_customer_offer_code.id]])
+        end
+
+        it "records a signed-out buyer's nil id with the guest price and quantity, then charges exactly that" do
+          result = accept_pending_restart(restart_buyer: nil, perceived_price_cents: full_price_cents)
+
+          expect(result).to eq(success: false, error_message: pending_message)
+          subscription.reload
+          expect(subscription).to be_indian_card_mandate_restart_held
+          expect(subscription.indian_card_mandate_restart_buyer_id).to be_nil
+          expect(subscription.indian_card_mandate_restart_price_cents).to eq(full_price_cents)
+          expect(subscription.indian_card_mandate_restart_quantity).to eq(quantity)
+          expect(subscription).not_to be_indian_card_mandate_restart_charge_pricing_pending
+
+          complete_held_restart_and_run_charge_job
+
+          subscription.reload
+          expect(subscription).to be_alive
+          expect(subscription).to be_indian_card_mandate_restart_charge_pricing_pending
+          expect(subscription.indian_card_mandate_restart_buyer_id).to be_nil
+          expect(charged).to eq([[full_price_cents, quantity, nil]])
+        end
+
+        it "refuses an authenticated buyer's submission priced as signed-out, so the buyer is what prices the hold" do
+          result = accept_pending_restart(restart_buyer: buyer, perceived_price_cents: full_price_cents)
+
+          expect(result).to eq(success: false, error_message: "The price just changed! Refresh the page for the updated price.")
+          expect(subscription.reload).not_to be_indian_card_mandate_restart_held
+        end
       end
 
       context "when the mandate is inactive" do
