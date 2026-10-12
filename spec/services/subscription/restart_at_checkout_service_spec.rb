@@ -141,44 +141,8 @@ describe Subscription::RestartAtCheckoutService do
         )
       end
 
-      it "uses the tax country election when checkout sends no shipping country" do
-        subscription.original_purchase.update!(country: "Germany", zip_code: "10115")
-        checkout_params = base_params.deep_merge(purchase: { perceived_price_cents: 500, sales_tax_country_code_election: "DE" })
-
-        transformed_params = described_class.new(subscription:, product:, params: checkout_params, buyer:).send(:updater_service_params)
-
-        expect(transformed_params[:contact_info]).to eq(email:, country: "DE")
-      end
-
-      it "clears the old state and ZIP when the elected country changes" do
-        subscription.original_purchase.update!(country: "United States", state: "CA", zip_code: "94107")
-        checkout_params = base_params.deep_merge(purchase: { perceived_price_cents: 500, sales_tax_country_code_election: "DE" })
-
-        transformed_params = described_class.new(subscription:, product:, params: checkout_params, buyer:).send(:updater_service_params)
-
-        expect(transformed_params[:contact_info]).to eq(email:, country: "DE", state: nil, zip_code: nil)
-      end
-
-      it "keeps a submitted ZIP when the elected country changes" do
-        subscription.original_purchase.update!(country: "Germany", zip_code: "10115")
-        checkout_params = base_params.deep_merge(purchase: { perceived_price_cents: 500, sales_tax_country_code_election: "US", zip_code: "10001" })
-
-        transformed_params = described_class.new(subscription:, product:, params: checkout_params, buyer:).send(:updater_service_params)
-
-        expect(transformed_params[:contact_info]).to eq(email:, country: "US", state: nil, zip_code: "10001")
-      end
-
-      it "keeps the saved state and ZIP when the purchase stores an older name for the same country" do
-        subscription.original_purchase.update!(country: "Turkey", zip_code: "34000")
-        checkout_params = base_params.deep_merge(purchase: { perceived_price_cents: 500, sales_tax_country_code_election: "TR" })
-
-        transformed_params = described_class.new(subscription:, product:, params: checkout_params, buyer:).send(:updater_service_params)
-
-        expect(transformed_params[:contact_info]).to eq(email:, country: "TR")
-      end
-
-      it "ignores the tax country election when nothing is due, because checkout hides the country field" do
-        checkout_params = base_params.deep_merge(purchase: { perceived_price_cents: 0, sales_tax_country_code_election: "DE" })
+      it "does not save the tax country election" do
+        checkout_params = base_params.deep_merge(purchase: { perceived_price_cents: 500, sales_tax_country_code_election: "FR" })
 
         transformed_params = described_class.new(subscription:, product:, params: checkout_params, buyer:).send(:updater_service_params)
 
@@ -698,13 +662,13 @@ describe Subscription::RestartAtCheckoutService do
           expect(subscription.original_purchase.reload).to have_attributes(country: "Germany", zip_code: "10115")
         end
 
-        it "saves the country the buyer elected for tax" do
+        it "keeps the saved country when the buyer elects another country for tax" do
           checkout_params = base_params.deep_merge(purchase: { perceived_price_cents: 500, sales_tax_country_code_election: "FR" })
 
           result = described_class.new(subscription:, product:, params: checkout_params, buyer:).perform
 
           expect(result).to include(success: true)
-          expect(subscription.original_purchase.reload).to have_attributes(country: "France", zip_code: nil)
+          expect(subscription.original_purchase.reload).to have_attributes(country: "Germany", zip_code: "10115")
         end
       end
     end
