@@ -41,7 +41,7 @@ class DetectFailingPaypalRailsJob
       failing_accounts = accounts.select { |account| failed_counts.key?(account.id) }
       # merchant_account_id is unindexed, so narrow to the failing accounts' sellers before filtering on it.
       completed_ids = Purchase.paypal.where(created_at: window, seller_id: failing_accounts.map(&:user_id))
-                              .all_success_states
+                              .successful
                               .where(merchant_account_id: failed_counts.keys)
                               .distinct
                               .pluck(:merchant_account_id)

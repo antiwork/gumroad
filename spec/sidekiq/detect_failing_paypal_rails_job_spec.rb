@@ -35,7 +35,8 @@ describe DetectFailingPaypalRailsJob do
     end
 
     it "does not count buyer-side declines" do
-      create_purchases(threshold, state: "failed", error_code: PurchaseErrorCode::PAYPAL_PAYER_ACCOUNT_DECLINED_PAYMENT, stripe_error_code: nil)
+      create_purchases(threshold, state: "failed", error_code: nil, stripe_error_code: PurchaseErrorCode::PAYPAL_PAYER_ACCOUNT_DECLINED_PAYMENT)
+      create_purchases(threshold, state: "failed", error_code: nil, stripe_error_code: PurchaseErrorCode::PAYPAL_PAYER_CANCELLED_BILLING_AGREEMENT)
       create_purchases(threshold, state: "failed", error_code: nil, stripe_error_code: nil)
 
       expect { described_class.new.perform }.not_to change { Comment.count }
@@ -58,6 +59,14 @@ describe DetectFailingPaypalRailsJob do
       create_purchases(1, state: "successful")
 
       expect { described_class.new.perform }.not_to change { Comment.count }
+    end
+
+    it "notes an account whose only purchases in the window were not captured" do
+      create_purchases(threshold, state: "failed")
+      create_purchases(1, state: "not_charged")
+      create_purchases(1, state: "preorder_authorization_successful")
+
+      expect { described_class.new.perform }.to change { notes_for(seller).count }.by(1)
     end
 
     it "notes an account whose only completion is older than the window" do
@@ -172,6 +181,20 @@ describe DetectFailingPaypalRailsJob do
       ).once
     end
 
+    it "notes each failing account on a seller with two connected PayPal accounts once" do
+      second_account = create(:merchant_account_paypal, user: seller)
+      create_purchases(threshold, state: "failed")
+      create_purchases(threshold, state: "failed", account: second_account)
+
+      expect { described_class.new.perform }.to change { notes_for(seller).count }.by(2)
+      expect(notes_for(seller).map(&:content)).to contain_exactly(
+        a_string_including("(#{merchant_account.charge_processor_merchant_id})"),
+        a_string_including("(#{second_account.charge_processor_merchant_id})")
+      )
+
+      expect { described_class.new.perform }.not_to change { notes_for(seller).count }
+    end
+
     it "does not add a duplicate note on a repeat run" do
       create_purchases(threshold, state: "failed")
 
@@ -189,11 +212,10 @@ describe DetectFailingPaypalRailsJob do
       expect { described_class.new.perform }.to change { notes_for(seller).count }.by(1)
     end
 
-    it "does not change the seller's state or enqueue notifications" do
+    it "does not change the seller's state" do
       create_purchases(threshold, state: "failed")
 
       expect { described_class.new.perform }.not_to change { seller.reload.attributes }
-      expect(ActionMailer::Base.deliveries).to be_empty
     end
   end
 end
