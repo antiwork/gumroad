@@ -3,7 +3,7 @@
 class Subscription::UpdaterService
   include CurrencyHelper
 
-  MANDATE_PENDING_RESTART_MESSAGE = "Your bank is still confirming this card for recurring payments. You haven't been charged, and your membership hasn't restarted yet. Please try again in about 20 minutes."
+  MANDATE_PENDING_RESTART_MESSAGE = "Your bank is still confirming this card for recurring payments. You haven't been charged, and your membership hasn't restarted yet. Please try again later."
 
   attr_reader :subscription, :gumroad_guid, :params, :logged_in_user, :remote_ip
   attr_accessor :original_purchase, :original_price, :new_purchase, :upgrade_purchase,
