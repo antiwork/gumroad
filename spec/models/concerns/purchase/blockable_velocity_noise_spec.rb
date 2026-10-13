@@ -207,6 +207,37 @@ RSpec.describe Purchase::Blockable do
       end
     end
 
+    context "when PayPal reports the seller's account as restricted" do
+      # Purchase#with_charge_processor_error_handler writes only stripe_error_code for this rejection
+      # and leaves error_code NULL, so the decline-code list is the only filter that can skip it.
+      def restricted_payee(token)
+        create(:failed_purchase, email:, browser_guid: guid, ip_address: ip,
+                                 charge_processor_id: "paypal",
+                                 stripe_fingerprint: token, card_visual: nil,
+                                 stripe_error_code: PurchaseErrorCode::PAYPAL_MERCHANT_ACCOUNT_RESTRICTED)
+      end
+
+      before { 4.times { restricted_payee("B-#{SecureRandom.hex(8)}") } }
+
+      it "does not block the buyer" do
+        live_attempt(processor: "paypal", fingerprint: "B-live-restricted").send(:block_buyer_based_on_recent_failures!)
+
+        expect(PlatformBlock.active.find_by(object_value: email)).to be_nil
+      end
+
+      it "does not block the browser guid" do
+        live_attempt(processor: "paypal", fingerprint: "B-live-restricted-guid").send(:ban_fraudulent_buyer_browser_guid!)
+
+        expect(PlatformBlock.active.find_by(object_value: guid)).to be_nil
+      end
+
+      it "does not block the ip address" do
+        live_attempt(processor: "paypal", fingerprint: "B-live-restricted-ip").send(:block_ip_address_based_on_recent_failures!)
+
+        expect(PlatformBlock.active.find_by(object_value: ip)).to be_nil
+      end
+    end
+
     context "when Stripe rejects the seller as the transfer destination" do
       def payee_rejection(fingerprint)
         create(:failed_purchase, email:, browser_guid: guid, ip_address: ip,

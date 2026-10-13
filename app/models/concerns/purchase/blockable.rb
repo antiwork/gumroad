@@ -74,6 +74,7 @@ module Purchase::Blockable
     "card_declined_processing_error",
     "processing_error",
     "3000", # Braintree: Processor Network Unavailable - Try Again
+    PurchaseErrorCode::PAYPAL_MERCHANT_ACCOUNT_RESTRICTED, # PayPal refused the seller, not the buyer's wallet
   ].freeze
   private_constant :CARD_TESTING_UNCOUNTED_DECLINE_CODES
 
