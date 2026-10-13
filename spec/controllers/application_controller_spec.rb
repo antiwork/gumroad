@@ -358,6 +358,21 @@ describe ApplicationController do
         expect(subject.send(:after_sign_out_path_for, @user)).to eq "/about"
       end
     end
+
+    describe "on another host" do
+      it "goes to the homepage instead of the foreign referrer" do
+        allow(controller.request).to receive(:referrer).and_return("https://mail.google.com/mail/u/0/")
+        expect(subject.send(:after_sign_out_path_for, @user)).to eq "/"
+      end
+    end
+
+    describe "on this host" do
+      it "goes to the absolute referrer after logging out" do
+        referrer = "https://#{@request.host}/l/wq"
+        allow(controller.request).to receive(:referrer).and_return(referrer)
+        expect(subject.send(:after_sign_out_path_for, @user)).to eq referrer
+      end
+    end
   end
 
   describe "login_path_for" do

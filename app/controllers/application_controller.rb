@@ -262,10 +262,10 @@ class ApplicationController < ActionController::Base
       end
     end
 
-    # Url to visit after logout is referrer or homepage
+    # Referrer after logout, homepage when it is another host. `url_from` runs the same host check
+    # as Rails' open-redirect protection, so a foreign referrer cannot raise UnsafeRedirectError.
     def after_sign_out_path_for(_resource_or_scope)
-      ref = request.referrer
-      ref.nil? ? "/" : ref
+      url_from(request.referrer) || "/"
     end
 
     # 404 helper

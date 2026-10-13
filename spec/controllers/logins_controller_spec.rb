@@ -391,6 +391,19 @@ describe LoginsController, type: :controller, inertia: true do
       expect(response.cookies["last_viewed_dashboard"]).to be_nil
     end
 
+    context "when the referrer is another site" do
+      before do
+        @request.env["HTTP_REFERER"] = "https://mail.google.com/"
+      end
+
+      it "signs out and redirects to the homepage" do
+        get :destroy
+
+        expect(response).to redirect_to(root_path)
+        expect(controller.user_signed_in?).to be(false)
+      end
+    end
+
     context "when impersonating" do
       let(:admin) { create(:admin_user) }
 
@@ -423,6 +436,13 @@ describe LoginsController, type: :controller, inertia: true do
       expect(response).to redirect_to(root_path)
       expect(flash[:notice]).to eq("Signed out successfully.")
       expect(controller.user_signed_in?).to be(false)
+    end
+
+    it "redirects back to a referrer on this host" do
+      @request.env["HTTP_REFERER"] = "https://#{@request.host}/library"
+      delete :destroy
+
+      expect(response).to redirect_to("https://#{@request.host}/library")
     end
 
     it "clears cookies on sign out" do
