@@ -68,14 +68,14 @@ describe "robots.txt", type: :request do
 
   describe "shared cacheability" do
     [true, false].each do |storefront|
-      it "responds with no cookies and a public Cache-Control#{storefront ? " on a storefront host" : ""}" do
+      it "responds with no cookies and a public Cache-Control that allows serving stale while revalidating#{storefront ? " on a storefront host" : ""}" do
         host!(storefront ? Subdomain.from_username(create(:named_user).username) : ROOT_DOMAIN)
 
         get "/robots.txt"
 
         expect(response).to have_http_status(:ok)
         expect(response.headers["Set-Cookie"]).to be_blank
-        expect(response.headers["Cache-Control"]).to eq("max-age=#{RobotsController::CACHE_TTL.to_i}, public")
+        expect(response.headers["Cache-Control"]).to eq("max-age=#{RobotsController::CACHE_TTL.to_i}, public, stale-while-revalidate=#{RobotsController::STALE_WHILE_REVALIDATE.to_i}")
       end
     end
   end
