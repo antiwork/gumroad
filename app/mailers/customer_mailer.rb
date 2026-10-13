@@ -396,7 +396,11 @@ class CustomerMailer < ApplicationMailer
   end
 
   def files_ready_for_download(purchase_id)
-    @purchase = Purchase.find(purchase_id)
+    # The sender locks the redirect row on the primary before it enqueues, so the row exists;
+    # a replica can still miss one that is seconds old, and the render raises on the nil.
+    @purchase = ApplicationRecord.connected_to(role: :writing) do
+      Purchase.includes(:url_redirect).find(purchase_id)
+    end
     @product = @purchase.link
     @url_redirect = @purchase.url_redirect
 

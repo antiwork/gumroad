@@ -2007,5 +2007,13 @@ describe CustomerMailer do
       expect(body).to include(purchase.url_redirect.download_page_url)
       expect(body).to include("Contact Seller by replying to this email.")
     end
+
+    it "reads the purchase and its download page from the primary, not a replica" do
+      expect(ApplicationRecord).to receive(:connected_to).with(role: :writing).and_call_original
+
+      mail = CustomerMailer.files_ready_for_download(purchase.id)
+
+      expect(mail.body.encoded).to include(purchase.url_redirect.download_page_url)
+    end
   end
 end
