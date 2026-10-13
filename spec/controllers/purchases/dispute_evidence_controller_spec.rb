@@ -592,8 +592,8 @@ describe Purchases::DisputeEvidenceController, type: :controller, inertia: true 
       end.to raise_error(ActionController::RoutingError)
     end
 
-    # The scoped token alone is exactly the surface gp#1921 reported: it was sufficient by
-    # itself before this fix, so an unrelated signed-in user must still 404 even holding it.
+    # The scoped token alone is exactly the surface gp#1921 reported, so it must never show the
+    # page to a non-owner; it only earns them an explanation instead of a bare 404.
     it "redirects an unrelated signed-in user holding a valid scoped token with an explanation" do
       sign_in(create(:user))
 
@@ -610,6 +610,43 @@ describe Purchases::DisputeEvidenceController, type: :controller, inertia: true 
 
       expect(response).to redirect_to(dashboard_url)
       expect(dispute_evidence.reload.reason_for_winning).to be_nil
+    end
+
+    it "does not render the success page for an unrelated signed-in user holding a valid scoped token" do
+      sign_in(create(:user))
+
+      get :success, params: { purchase_id: evidence_token }
+
+      expect(response).to redirect_to(dashboard_url)
+    end
+
+    it "redirects a team admin of the seller holding a valid scoped token instead of showing the page" do
+      team_member = create(:user)
+      create(:team_membership, user: team_member, seller: purchase.seller, role: TeamMembership::ROLE_ADMIN)
+      sign_in(team_member)
+      cookies.encrypted[:current_seller_id] = purchase.seller.id
+
+      get :show, params: { purchase_id: evidence_token }
+
+      expect(response).to redirect_to(dashboard_url)
+    end
+
+    it "404s for an unrelated signed-in user holding an expired scoped token" do
+      sign_in(create(:user))
+      expired_token = purchase.secure_external_id(scope: Purchases::DisputeEvidenceController::SECURE_ID_SCOPE, expires_at: 1.minute.ago)
+
+      expect do
+        get :show, params: { purchase_id: expired_token }
+      end.to raise_error(ActionController::RoutingError)
+    end
+
+    it "404s for an unrelated signed-in user holding a token minted for another scope" do
+      sign_in(create(:user))
+      other_scope_token = purchase.secure_external_id(scope: "email_unsubscribe", expires_at: 1.day.from_now)
+
+      expect do
+        get :show, params: { purchase_id: other_scope_token }
+      end.to raise_error(ActionController::RoutingError)
     end
 
     it "redirects a signed-out request holding a valid scoped token to log in" do

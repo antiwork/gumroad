@@ -377,18 +377,20 @@ class ApplicationController < ActionController::Base
 
       return unless merchant_account
 
-      flash.keep
-
-      if current_seller.user_compliance_info_requests.requested.present?
-        redirect_to settings_payments_path, notice: "Urgent: We are required to collect more information from you to continue processing payments." and return
-      end
+      return redirect_to_payment_requirements if current_seller.user_compliance_info_requests.requested.present?
 
       stripe_account = Stripe::Account.retrieve(merchant_account.charge_processor_merchant_id)
       if (StripeMerchantAccountManager::REQUESTED_CAPABILITIES & stripe_account.capabilities.to_h.stringify_keys.select { |k, v| v == "active" }.keys).size == 2
         $redis.srem(RedisKey.user_ids_with_payment_requirements_key, current_seller.id)
       else
-        redirect_to settings_payments_path, notice: "Urgent: We are required to collect more information from you to continue processing payments." and return
+        redirect_to_payment_requirements
       end
+    end
+
+    # Keep only when redirecting: a kept flash on a page that renders would show again on the next one.
+    def redirect_to_payment_requirements
+      flash.keep
+      redirect_to settings_payments_path, notice: "Urgent: We are required to collect more information from you to continue processing payments."
     end
 
     # Fast-path gate in front of the compliance redirect. A stalled Redis read must not 500 the
