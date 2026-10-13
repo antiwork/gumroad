@@ -843,7 +843,7 @@ export default function PaymentsPage() {
       if (!form.data.user.building_number) {
         markFieldInvalid("building_number");
       }
-      if (!form.data.user.building_number_kana) {
+      if (!form.data.user.building_number_kana?.trim()) {
         markFieldInvalid("building_number_kana");
       }
       if (!form.data.user.street_address_kanji) {
@@ -1076,7 +1076,7 @@ export default function PaymentsPage() {
         if (!form.data.user.business_building_number) {
           markFieldInvalid("business_building_number");
         }
-        if (!form.data.user.business_building_number_kana) {
+        if (!form.data.user.business_building_number_kana?.trim()) {
           markFieldInvalid("business_building_number_kana");
         }
         if (!form.data.user.business_street_address_kanji) {

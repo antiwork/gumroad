@@ -1127,6 +1127,7 @@ describe("Japanese (Kanji) variation fields", () => {
 
   it.each([
     ["blank", ""],
+    ["only spaces", "   "],
     ["missing", null],
   ] as const)("blocks an individual save when the kana block number is %s", (_, value) => {
     renderJpSeller({ building_number_kana: value });
@@ -1137,8 +1138,11 @@ describe("Japanese (Kanji) variation fields", () => {
     expect(screen.getByLabelText("Block / Building number (Kana)").getAttribute("aria-invalid")).toBe("true");
   });
 
-  it("blocks a business save when the kana business block number is blank", () => {
-    renderJpBusiness({ business_building_number_kana: "" });
+  it.each([
+    ["blank", ""],
+    ["only spaces", "   "],
+  ] as const)("blocks a business save when the kana business block number is %s", (_, value) => {
+    renderJpBusiness({ business_building_number_kana: value });
     save();
 
     expect(mocks.put).not.toHaveBeenCalled();
