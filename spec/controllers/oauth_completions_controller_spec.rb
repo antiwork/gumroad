@@ -171,7 +171,9 @@ describe OauthCompletionsController, :vcr do
         it "signs in and leaves a predecessor with unsettled obligations untouched" do
           create(:balance, user:, merchant_account: managed_account, amount_cents: 10_00)
           managed_before = persisted_fields(managed_account)
-          connect_before = persisted_fields(connect_account)
+          # Signing in re-saves the Connect account and refreshes charge_processor_alive_at, so these
+          # move whenever the request crosses a second boundary.
+          connect_before = persisted_fields(connect_account).except("charge_processor_alive_at", "updated_at")
 
           expect { post :stripe }.not_to change { MerchantAccount.count }
 
@@ -179,7 +181,8 @@ describe OauthCompletionsController, :vcr do
           expect(flash[:alert]).to be_nil
           expect(persisted_fields(managed_account)).to eq(managed_before)
           expect(managed_account).to be_active
-          expect(persisted_fields(connect_account)).to eq(connect_before)
+          expect(persisted_fields(connect_account).except("charge_processor_alive_at", "updated_at")).to eq(connect_before)
+          expect(connect_account).to be_active
           expect(user.reload.stripe_account).to eq(managed_account)
         end
 
