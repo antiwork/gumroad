@@ -748,4 +748,23 @@ describe DisputeEvidence::CreateFromDisputeService, :vcr, :versioning do
       end
     end
   end
+
+  describe "gift orders" do
+    let(:gift) { create(:gift) }
+    let(:gifter_purchase) { create(:purchase, link: create(:product), gift_given: gift, is_gift_sender_purchase: true) }
+    let(:dispute) { create(:dispute_on_charge, charge: create(:charge, purchases: [gifter_purchase])) }
+
+    before do
+      create(:purchase, link: gifter_purchase.link, gift_received: gift, is_gift_receiver_purchase: true)
+      allow(DisputeEvidence::GenerateReceiptImageService).to receive(:perform).and_return(nil)
+    end
+
+    it "includes the giftee purchase in the access activity log" do
+      giftee_purchase = gift.reload.giftee_purchase
+      expect(DisputeEvidence::GenerateAccessActivityLogsService).to receive(:perform)
+        .with(gifter_purchase, other_purchases: [giftee_purchase]).and_return("log")
+
+      expect(DisputeEvidence.create_from_dispute!(dispute).access_activity_log).to eq("log")
+    end
+  end
 end

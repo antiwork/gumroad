@@ -36,7 +36,7 @@ class DisputeEvidence::CreateFromDisputeService
     end
     dispute_evidence.product_description = generate_product_description(product:, purchase:)
     dispute_evidence.uncategorized_text = DisputeEvidence::GenerateUncategorizedTextService.perform(purchase)
-    dispute_evidence.access_activity_log = DisputeEvidence::GenerateAccessActivityLogsService.perform(purchase, other_purchases: other_disputed_purchases)
+    dispute_evidence.access_activity_log = DisputeEvidence::GenerateAccessActivityLogsService.perform(purchase, other_purchases: other_disputed_purchases + giftee_purchases)
     attach_receipt_image(dispute_evidence, purchase)
 
     dispute_evidence.policy_disclosure = generate_refund_policy_disclosure(purchase, refund_policy_fine_print_view_events)
@@ -72,6 +72,11 @@ class DisputeEvidence::CreateFromDisputeService
 
     def other_disputed_purchases
       @_other_disputed_purchases ||= dispute.disputable.disputed_purchases.reject { _1.id == purchase.id }
+    end
+
+    # A gift's consumption is recorded on the giftee's row, which is never on the disputed charge.
+    def giftee_purchases
+      @_giftee_purchases ||= [purchase, *other_disputed_purchases].filter_map { _1.gift_given&.giftee_purchase }.uniq
     end
 
     def build_shipping_address(source)
