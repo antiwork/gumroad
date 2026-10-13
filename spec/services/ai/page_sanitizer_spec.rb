@@ -113,70 +113,21 @@ describe Ai::PageSanitizer do
       expect(sanitized).not_to include("Content-Security-Policy")
     end
 
-    it "keeps YouTube embeds with the required video sandbox" do
-      sanitized = described_class.sanitize(%(<iframe src="https://www.youtube-nocookie.com/embed/abc"></iframe>))
+    [
+      "https://www.youtube-nocookie.com/embed/abc",
+      "https://www.youtube.com/embed/abc",
+      "https://player.vimeo.com/video/123",
+      "https://example.com/widget",
+    ].each do |src|
+      it "removes an iframe from #{src} and names the link alternative in the report" do
+        result = described_class.sanitize_with_report(%(<iframe src="#{src}" sandbox="allow-scripts allow-same-origin" allowfullscreen></iframe><p>Safe</p>))
 
-      expect(sanitized).to include(%(src="https://www.youtube-nocookie.com/embed/abc"))
-      expect(sanitized).to include(%(sandbox="allow-scripts"))
-    end
-
-    it "keeps Vimeo embeds" do
-      sanitized = described_class.sanitize(%(<iframe src="https://player.vimeo.com/video/123"></iframe>))
-
-      expect(sanitized).to include(%(src="https://player.vimeo.com/video/123"))
-      expect(sanitized).to include(%(sandbox="allow-scripts"))
-    end
-
-    it "preserves the YouTube share-snippet permission attributes (fullscreen/PiP)" do
-      sanitized = described_class.sanitize(
-        %(<iframe src="https://www.youtube.com/embed/abc" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>)
-      )
-
-      expect(sanitized).to include("allow=")
-      expect(sanitized).to include("picture-in-picture")
-      expect(sanitized).to include("referrerpolicy=")
-      expect(sanitized).to include("allowfullscreen")
-    end
-
-    it "overwrites permissive iframe sandbox attributes (seller can't widen the policy)" do
-      sanitized = described_class.sanitize(%(<iframe src="https://www.youtube.com/embed/abc" sandbox="allow-scripts allow-same-origin allow-top-navigation"></iframe>))
-
-      expect(sanitized).to include(%(sandbox="allow-scripts"))
-      expect(sanitized).not_to include("allow-top-navigation")
-      expect(sanitized).not_to include("allow-same-origin")
-    end
-
-    it "rejects apex (non-www) YouTube hosts so the sanitizer stays aligned with frame-src CSP" do
-      result = described_class.sanitize_with_report(%(<iframe src="https://youtube.com/embed/abc"></iframe>))
-
-      expect(result.html).not_to include("<iframe")
-      expect(result.report[:removed_tags]).to contain_exactly(
-        hash_including(tag: "iframe", reason: "iframe src host not allowed")
-      )
-    end
-
-    it "strips iframes from unapproved hosts" do
-      result = described_class.sanitize_with_report(%(<iframe src="https://evil.com/x"></iframe><p>Safe</p>))
-
-      expect(result.html).not_to include("<iframe")
-      expect(result.html).to include("<p>Safe</p>")
-      expect(result.report[:removed_tags]).to contain_exactly(
-        hash_including(tag: "iframe", reason: "iframe src host not allowed")
-      )
-    end
-
-    it "strips userinfo-spoofed iframe URLs" do
-      sanitized = described_class.sanitize(%(<iframe src="https://www.youtube.com@evil.com/x"></iframe>))
-
-      expect(sanitized).not_to include("<iframe")
-      expect(sanitized).not_to include("evil.com")
-    end
-
-    it "strips non-https YouTube iframe URLs" do
-      sanitized = described_class.sanitize(%(<iframe src="http://www.youtube.com/embed/abc"></iframe>))
-
-      expect(sanitized).not_to include("<iframe")
-      expect(sanitized).not_to include("youtube.com")
+        expect(result.html).not_to include("<iframe")
+        expect(result.html).to include("<p>Safe</p>")
+        expect(result.report[:removed_tags]).to contain_exactly(
+          hash_including(tag: "iframe", attrs: hash_including("src" => src), reason: described_class::IFRAME_REMOVAL_REASON)
+        )
+      end
     end
 
     it "removes form action attributes" do
@@ -230,10 +181,10 @@ describe Ai::PageSanitizer do
       expect(sanitized).to include("data:image/svg+xml")
     end
 
-    it "strips data URLs from iframe src attributes" do
+    it "removes iframes with a data URL src" do
       sanitized = described_class.sanitize(%(<iframe src="data:image/svg+xml,<svg><script>alert(1)</script></svg>"></iframe>))
 
-      expect(sanitized).to include(%(<iframe sandbox="allow-scripts"></iframe>))
+      expect(sanitized).not_to include("<iframe")
       expect(sanitized).not_to include("data:image/svg+xml")
     end
 

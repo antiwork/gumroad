@@ -21,7 +21,7 @@ describe "GET /l/:id/landing/embed CSP", type: :request do
     expect(csp).to include("default-src 'none'")
     expect(csp).to include("script-src 'unsafe-inline'")
     expect(csp).to include("connect-src 'none'")
-    expect(csp).to include("frame-src https://www.youtube-nocookie.com https://www.youtube.com https://player.vimeo.com")
+    expect(csp).not_to include("frame-src")
     # Images/media are locked to Gumroad's own CDN hosts — no bare `https:` wildcard,
     # so a seller's page can't beacon data out via an arbitrary-host image/media GET.
     img_sources = csp[/img-src([^;]*)/, 1].split

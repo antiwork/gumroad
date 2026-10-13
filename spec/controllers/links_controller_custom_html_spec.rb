@@ -371,7 +371,7 @@ describe LinksController, :vcr, type: :controller do
       get :landing_iframe_content, params: { id: product.unique_permalink }
       expect(response.headers["Content-Security-Policy"]).to eq(CUSTOM_HTML_CSP)
       expect(response.headers["Content-Security-Policy"]).to include("sandbox #{RendersCustomHtmlPages::CUSTOM_HTML_SANDBOX}")
-      expect(response.headers["Content-Security-Policy"]).to include("frame-src https://www.youtube-nocookie.com https://www.youtube.com https://player.vimeo.com")
+      expect(response.headers["Content-Security-Policy"]).not_to include("frame-src")
       # The shared Tailwind build loads from the asset host as an external
       # stylesheet, so style-src must allow it.
       expect(response.headers["Content-Security-Policy"]).to include("style-src 'unsafe-inline' #{RendersCustomHtmlPages::PAGES_TAILWIND_ASSET_HOST}")

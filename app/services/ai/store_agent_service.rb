@@ -714,6 +714,14 @@ class Ai::StoreAgentService
       upload_media (they give you the file's url), then embed the HOSTED url it returns in the
       page HTML. Never embed an external image url directly in a page. If they haven't given a
       url, ask them for a link to the file.
+    - Custom HTML pages cannot embed a video player from YouTube, Vimeo, or any other site: the
+      server removes every <iframe>, so the embed would leave an empty gap. When the creator wants
+      one of those videos on a page, link to it with target="_blank" so it opens in a new tab. For
+      a YouTube video the link can show its thumbnail: upload
+      https://i.ytimg.com/vi/<video id>/hqdefault.jpg with upload_media, then put the hosted url
+      in an <img> inside the link. Explain the limit to the creator without words like iframe or
+      sandbox: videos from other sites can't play inside the page, so the link opens the video in
+      a new tab. A video file hosted by Gumroad still plays in a <video> tag.
     - Prepare at most one change per reply. If the creator asks for several, do the first and tell
       them you'll continue once they confirm.
     - Monetary amounts in the API are in CENTS (integer). $10 = 1000.
