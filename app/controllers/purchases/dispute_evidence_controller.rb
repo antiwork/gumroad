@@ -134,8 +134,13 @@ class Purchases::DisputeEvidenceController < ApplicationController
       scoped_purchase = Purchase.find_by_secure_external_id(requested_id, scope: SECURE_ID_SCOPE)
       @purchase = scoped_purchase || Purchase.find_by_external_id(requested_id)
       @purchase_route_id = scoped_purchase ? requested_id : @purchase&.external_id
-      @purchase = nil unless @purchase && logged_in_user.role_owner_for?(@purchase.seller)
-      @purchase || e404
+      return e404 unless @purchase
+      return if logged_in_user.role_owner_for?(@purchase.seller)
+
+      # Only the emailed token earns an explanation; the buyer-visible external_id stays a bare 404.
+      return e404 unless scoped_purchase
+
+      redirect_to dashboard_url, alert: "This page belongs to the seller account that made the sale. Sign in with that account, or reply to the chargeback email with your statement."
     end
 
     def dispute_evidence_params

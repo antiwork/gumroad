@@ -594,12 +594,22 @@ describe Purchases::DisputeEvidenceController, type: :controller, inertia: true 
 
     # The scoped token alone is exactly the surface gp#1921 reported: it was sufficient by
     # itself before this fix, so an unrelated signed-in user must still 404 even holding it.
-    it "404s for an unrelated signed-in user holding a valid scoped token" do
+    it "redirects an unrelated signed-in user holding a valid scoped token with an explanation" do
       sign_in(create(:user))
 
-      expect do
-        get :show, params: { purchase_id: evidence_token }
-      end.to raise_error(ActionController::RoutingError)
+      get :show, params: { purchase_id: evidence_token }
+
+      expect(response).to redirect_to(dashboard_url)
+      expect(flash[:alert]).to include("belongs to the seller account that made the sale")
+    end
+
+    it "does not save anything for an unrelated signed-in user holding a valid scoped token" do
+      sign_in(create(:user))
+
+      put :update, params: { purchase_id: evidence_token, dispute_evidence: { reason_for_winning: "Overwritten" } }
+
+      expect(response).to redirect_to(dashboard_url)
+      expect(dispute_evidence.reload.reason_for_winning).to be_nil
     end
 
     it "redirects a signed-out request holding a valid scoped token to log in" do
