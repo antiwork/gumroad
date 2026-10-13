@@ -55,6 +55,17 @@ if env != "development"
   # now actively harmful: ApplicationRecord.connects_to shares ActiveRecord::Base's
   # pool, so re-establishing hands `connection_class` back to ActiveRecord::Base and
   # mysql2_proxy stops honoring ApplicationRecord.connected_to(role: :writing).
+
+  # Some deploys see the container outlive its 30 s kill timeout after "Gracefully shutting
+  # down workers...". These two lines show whether a worker's server, a worker's exit, or the
+  # master is what waits.
+  on_worker_shutdown do |index|
+    $stdout.syswrite("puma_shutdown event=worker_server_stopped worker=#{index} pid=#{Process.pid} at=#{Time.now.utc.strftime("%Y-%m-%dT%H:%M:%S.%LZ")}\n")
+  end
+
+  on_stopped do
+    $stdout.syswrite("puma_shutdown event=master_workers_reaped pid=#{Process.pid} at=#{Time.now.utc.strftime("%Y-%m-%dT%H:%M:%S.%LZ")}\n")
+  end
 end
 
 pidfile "tmp/pids/puma.pid"
