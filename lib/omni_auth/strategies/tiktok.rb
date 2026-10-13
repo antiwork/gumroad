@@ -5,8 +5,6 @@ require "omniauth-oauth2"
 module OmniAuth
   module Strategies
     class Tiktok < OAuth2
-      ALWAYS_SHOW_AUTHORIZATION = 1
-
       option :name, "tiktok"
       option :scope, "user.info.basic,user.info.profile,user.info.stats"
       option :client_options,
@@ -27,7 +25,6 @@ module OmniAuth
         super.tap do |params|
           params[:client_key] = options.client_id
           params[:response_type] = "code"
-          params[:disable_auto_auth] = ALWAYS_SHOW_AUTHORIZATION
           params.delete(:client_id)
         end
       end
