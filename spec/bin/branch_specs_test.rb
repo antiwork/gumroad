@@ -23,7 +23,7 @@ SELECTOR = File.expand_path("../../bin/branch-specs", __dir__)
 $failures = []
 $count = 0
 
-def build_repo(dir, base_files:, head_files:, head_deletes: [], quote_path: nil)
+def build_repo(dir, base_files:, head_files:, head_deletes: [], head_renames: {}, quote_path: nil)
   Dir.chdir(dir) do
     system("git init -q -b main .", exception: true)
     system("git config user.email t@t.t", exception: true)
@@ -43,6 +43,10 @@ def build_repo(dir, base_files:, head_files:, head_deletes: [], quote_path: nil)
     write.call(base_files)
     system("git branch -f base HEAD", exception: true)
     FileUtils.rm(head_deletes)
+    head_renames.each do |from, to|
+      FileUtils.mkdir_p(File.dirname(to))
+      system("git", "mv", from, to, exception: true)
+    end
     write.call(head_files)
   end
 end
@@ -57,10 +61,10 @@ ASCII_LOCALE = { "LC_ALL" => "C", "LANG" => "C", "LC_CTYPE" => nil, "LANGUAGE" =
 # non-ASCII expectations below compare as text rather than raising.
 def utf8(str) = str.dup.force_encoding(Encoding::UTF_8)
 
-def check(name, base_files:, head_files:, head_deletes: [], expect_specs: nil, reject_specs: [], expect_escalate: false, expect_reason: nil, env: {}, quote_path: nil)
+def check(name, base_files:, head_files:, head_deletes: [], head_renames: {}, expect_specs: nil, reject_specs: [], expect_escalate: false, expect_reason: nil, env: {}, quote_path: nil)
   $count += 1
   Dir.mktmpdir do |dir|
-    build_repo(dir, base_files:, head_files:, head_deletes:, quote_path:)
+    build_repo(dir, base_files:, head_files:, head_deletes:, head_renames:, quote_path:)
     stdout, stderr, status = Open3.capture3(env, "ruby", SELECTOR, "--base", "base", chdir: dir)
     stdout = utf8(stdout)
     stderr = utf8(stderr)
@@ -1931,6 +1935,17 @@ check(
   },
   head_files: { "app/javascript/components/Product/CtaButton.tsx" => "new" },
   expect_specs: %w[spec/requests/products/show/show_spec.rb spec/requests/purchases/product/variants_spec.rb],
+)
+
+check(
+  "a renamed file still selects the spec for its old name",
+  base_files: {
+    "app/services/price_checker_service.rb" => "class PriceCheckerService\n  def call = :checked\nend\n",
+    "spec/services/price_checker_service_spec.rb" => "describe PriceCheckerService do\nend\n",
+  },
+  head_renames: { "app/services/price_checker_service.rb" => "app/services/product_price_checker.rb" },
+  head_files: { "spec/services/product_price_checker_spec.rb" => "describe ProductPriceChecker do\nend\n" },
+  expect_specs: %w[spec/services/price_checker_service_spec.rb spec/services/product_price_checker_spec.rb],
 )
 
 WORKFLOW = File.expand_path("../../.github/workflows/tests.yml", __dir__)
