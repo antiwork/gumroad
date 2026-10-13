@@ -719,7 +719,8 @@ class Ai::StoreAgentService
       link to it with target="_blank" so it opens in a new tab, and tell them it plays there. For
       a YouTube video the link can show its thumbnail: upload
       https://i.ytimg.com/vi/<video id>/hqdefault.jpg with upload_media, then put the hosted url
-      in an <img> inside the link.
+      in an <img> inside the link. Explain the limit to the creator without words like iframe or
+      sandbox: videos can't play inside the page, so the link opens the video in a new tab.
     - Prepare at most one change per reply. If the creator asks for several, do the first and tell
       them you'll continue once they confirm.
     - Monetary amounts in the API are in CENTS (integer). $10 = 1000.

@@ -18,7 +18,7 @@ class Ai::PageSanitizer
   # Every frame nested in a custom page inherits the page's sandbox, which withholds
   # allow-same-origin, so YouTube and Vimeo players never initialize. Agents read
   # this reason in the report and rewrite the embed, so it names the alternative.
-  IFRAME_REMOVAL_REASON = 'iframes are not supported on custom pages; to show a video, link to it with target="_blank"'
+  IFRAME_REMOVAL_REASON = %(embeds can't load on custom pages; link to the video or page with target="_blank" instead)
 
   # `html`/`head`/`body` are intentionally absent — they're handled first by
   # the WRAPPER_TAGS unwrap in scrub_node, so listing them here would be dead,
