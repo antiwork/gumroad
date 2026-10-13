@@ -43,7 +43,18 @@ module Product::Tags
     tag_list = {} if tag_list.blank?
     # TODO: Remove support for non-array argument when product edit page is migrated to React
     tags_to_save = tag_list.is_a?(Array) ? tag_list : tag_list.values.map(&:downcase)
-    (tags.pluck(:name) - tags_to_save).each { |tag_to_remove| untag!(tag_to_remove) }
-    (tags_to_save - tags.pluck(:name)).each { |tag_to_add| tag!(tag_to_add) }
+
+    current_names = tags.pluck(:name)
+    names_to_remove = current_names - tags_to_save
+    names_to_add = tags_to_save - current_names
+
+    # `tag!`/`untag!` each take an X-lock on a `tags` row (the counter cache), so both halves
+    # are applied in one pass over the tag ids (the order the taggings_count backfill locks
+    # them in) rather than two passes that can deadlock. Tags created here hold no shared row
+    # yet, so they sort last.
+    ids_by_name = Tag.where(name: (names_to_remove + names_to_add).map(&:downcase)).pluck(:name, :id).to_h
+    (names_to_remove.map { |name| [name, :remove] } + names_to_add.map { |name| [name, :add] })
+      .sort_by { |name, _| [ids_by_name.fetch(name.downcase, Float::INFINITY), name] }
+      .each { |name, action| action == :remove ? untag!(name) : tag!(name) }
   end
 end
