@@ -766,5 +766,19 @@ describe DisputeEvidence::CreateFromDisputeService, :vcr, :versioning do
 
       expect(DisputeEvidence.create_from_dispute!(dispute).access_activity_log).to eq("log")
     end
+
+    it "includes the giftee purchases of every disputed purchase in a combined charge" do
+      senders = 2.times.map do |i|
+        sender = create(:purchase, link: create(:product), gift_given: create(:gift), is_gift_sender_purchase: true)
+        receiver = create(:purchase, link: sender.link, gift_received: sender.gift_given, is_gift_receiver_purchase: true)
+        create(:consumption_event, purchase: receiver, ip_address: "9.9.9.#{i}")
+        sender
+      end
+      combined_dispute = create(:dispute_on_charge, charge: create(:charge, purchases: senders))
+
+      log = DisputeEvidence.create_from_dispute!(combined_dispute).access_activity_log
+
+      expect(log).to include("9.9.9.0", "9.9.9.1")
+    end
   end
 end
