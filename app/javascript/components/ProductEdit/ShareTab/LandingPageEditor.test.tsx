@@ -22,6 +22,9 @@ vi.mock("$app/utils/request", () => ({
     return Promise.resolve({ ok: next.ok, json: () => Promise.resolve(next.body) });
   },
   ResponseError: class ResponseError extends Error {},
+  assertResponseError: (e: unknown) => {
+    if (!(e instanceof Error)) throw e;
+  },
 }));
 
 vi.mock("$app/components/server-components/Alert", () => ({ showAlert: vi.fn() }));
