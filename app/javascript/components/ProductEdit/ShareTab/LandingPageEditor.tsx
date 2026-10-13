@@ -5,21 +5,21 @@ import { assertResponseError, request, ResponseError } from "$app/utils/request"
 import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { Modal } from "$app/components/Modal";
-import { useProductUrl } from "$app/components/ProductEdit/Layout";
-import { useProductEditContext } from "$app/components/ProductEdit/state";
 import { showAlert } from "$app/components/server-components/Alert";
 import { AgentSupportFallbackNote } from "$app/components/Support/AgentSupportFallbackNote";
 import { Alert } from "$app/components/ui/Alert";
 import { Details, DetailsToggle } from "$app/components/ui/Details";
 
-export const LandingPageEditor = () => {
-  const { product, uniquePermalink, customHtmlPagesEnabled, updateProduct } = useProductEditContext();
-  const url = useProductUrl();
-  const hasLandingPage = !!product.custom_html?.trim();
+type LandingPageEditorProps = {
+  uniquePermalink: string;
+  url: string;
+  hasLandingPage: boolean;
+  onRemoved: () => void;
+};
+
+export const LandingPageEditor = ({ uniquePermalink, url, hasLandingPage, onRemoved }: LandingPageEditorProps) => {
   const [isRemoveOpen, setIsRemoveOpen] = React.useState(false);
   const [isRemoving, setIsRemoving] = React.useState(false);
-
-  if (!customHtmlPagesEnabled) return null;
 
   const agentPrompt = `Build and publish a custom landing page for my Gumroad product ${uniquePermalink}.
 
@@ -66,9 +66,7 @@ Then preview, publish, and verify it with the Gumroad CLI:
 If the gumroad CLI isn't installed: brew install antiwork/cli/gumroad (or curl -fsSL https://gumroad.com/install-cli.sh | bash), then run gumroad auth login.`;
 
   const removeLandingPage = async () => {
-    const previousCustomHtml = product.custom_html;
     setIsRemoving(true);
-    updateProduct({ custom_html: null });
 
     try {
       const response = await request({
@@ -81,10 +79,10 @@ If the gumroad CLI isn't installed: brew install antiwork/cli/gumroad (or curl -
       if (!response.ok || json.success === false) throw new ResponseError(json.message ?? json.error_message);
 
       setIsRemoveOpen(false);
+      onRemoved();
       showAlert("Landing page removed.", "success");
     } catch (e) {
       assertResponseError(e);
-      updateProduct({ custom_html: previousCustomHtml });
       showAlert(e.message, "error");
     } finally {
       setIsRemoving(false);

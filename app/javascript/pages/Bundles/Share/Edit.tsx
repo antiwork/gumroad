@@ -18,6 +18,7 @@ import { FacebookShareButton } from "$app/components/FacebookShareButton";
 import { Seller } from "$app/components/Product";
 import { Attribute } from "$app/components/ProductEdit/ProductTab/AttributesEditor";
 import { RefundPolicy } from "$app/components/ProductEdit/RefundPolicy";
+import { LandingPageEditor } from "$app/components/ProductEdit/ShareTab/LandingPageEditor";
 import { ProfileSectionsEditor } from "$app/components/ProductEdit/ShareTab/ProfileSectionsEditor";
 import { TagSelector } from "$app/components/ProductEdit/ShareTab/TagSelector";
 import { TaxonomyEditor } from "$app/components/ProductEdit/ShareTab/TaxonomyEditor";
@@ -65,6 +66,8 @@ type SharePageProps = {
   ratings: RatingsWithPercentages;
   seller_refund_policy_enabled: boolean;
   seller_refund_policy: Pick<RefundPolicy, "title" | "fine_print">;
+  custom_html_pages_enabled: boolean;
+  has_custom_landing_page: boolean;
 };
 
 type ShareFormData = {
@@ -91,10 +94,13 @@ export default function BundlesShareEdit() {
     ratings,
     seller_refund_policy_enabled,
     seller_refund_policy,
+    custom_html_pages_enabled,
+    has_custom_landing_page,
   } = props;
 
   const currentSeller = useCurrentSeller();
   const url = useProductUrl(unique_permalink, bundle.custom_permalink);
+  const [hasLandingPage, setHasLandingPage] = React.useState(has_custom_landing_page);
 
   if (!currentSeller) return null;
 
@@ -170,6 +176,14 @@ export default function BundlesShareEdit() {
             />
           </section>
         </section>
+        {custom_html_pages_enabled ? (
+          <LandingPageEditor
+            uniquePermalink={unique_permalink}
+            url={url}
+            hasLandingPage={hasLandingPage}
+            onRemoved={() => setHasLandingPage(false)}
+          />
+        ) : null}
         <ProfileSectionsEditor
           sectionIds={form.data.section_ids}
           onChange={(sectionIds) => form.setData("section_ids", sectionIds)}

@@ -58,6 +58,10 @@ class BundlePresenter
         title: bundle.user.refund_policy.title,
         fine_print: bundle.user.refund_policy.fine_print,
       },
+      # The bundle Share tab has no inline HTML editor — the panel only reports whether a landing
+      # page is live and offers Remove — so the HTML itself never leaves the server.
+      custom_html_pages_enabled: Feature.active?(:custom_html_pages, bundle.user),
+      has_custom_landing_page: bundle.custom_html.present?,
     )
   end
 

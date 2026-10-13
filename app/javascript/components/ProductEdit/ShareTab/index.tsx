@@ -31,6 +31,7 @@ export const ShareTab = () => {
     product,
     uniquePermalink,
     updateProduct,
+    customHtmlPagesEnabled,
     profileSections,
     taxonomies,
     taxonomyAttributes,
@@ -72,7 +73,14 @@ export const ShareTab = () => {
               </>
             ) : null}
           </section>
-          <LandingPageEditor />
+          {customHtmlPagesEnabled ? (
+            <LandingPageEditor
+              uniquePermalink={uniquePermalink}
+              url={url}
+              hasLandingPage={!!product.custom_html?.trim()}
+              onRemoved={() => updateProduct({ custom_html: null })}
+            />
+          ) : null}
           <ProfileSectionsEditor
             sectionIds={product.section_ids}
             onChange={(sectionIds) => updateProduct({ section_ids: sectionIds })}

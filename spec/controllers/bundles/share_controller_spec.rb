@@ -27,6 +27,22 @@ describe Bundles::ShareController, inertia: true do
         expect(inertia.props[:bundle][:hide_bundle_product_reviews]).to eq(false)
         expect(inertia.props[:taxonomies]).to be_an(Array)
         expect(inertia.props[:profile_sections]).to be_an(Array)
+        expect(inertia.props[:custom_html_pages_enabled]).to eq(false)
+        expect(inertia.props[:has_custom_landing_page]).to eq(false)
+      end
+    end
+
+    context "when the bundle carries a custom landing page" do
+      before do
+        Feature.activate_user(:custom_html_pages, seller)
+        bundle.update!(custom_html: "<h1>Bundle landing page</h1>")
+      end
+
+      it "reports the flag and the live page so the Share tab can offer Remove" do
+        get :edit, params: { bundle_id: bundle.external_id }
+
+        expect(inertia.props[:custom_html_pages_enabled]).to eq(true)
+        expect(inertia.props[:has_custom_landing_page]).to eq(true)
       end
     end
 
