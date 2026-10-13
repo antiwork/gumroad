@@ -683,6 +683,13 @@ describe DisputeEvidence::GenerateAccessActivityLogsService do
       expect(content).to include("2024-05-08 00:02:00 UTC,watch,web,1.2.3.4,\"Sibling Product\"")
     end
 
+    it "reports a sibling's rental first view when the selected purchase has no redirect" do
+      sibling.create_url_redirect!
+      sibling.url_redirect.update!(rental_first_viewed_at: DateTime.parse("2024-05-09"))
+
+      expect(described_class.perform(purchase, other_purchases: [sibling])).to eq("The rented content (\"Sibling Product\") was first viewed at 2024-05-09 00:00:00 UTC.")
+    end
+
     it "leaves output byte-identical when no siblings are passed" do
       create(:consumption_event, purchase_id: purchase.id, consumed_at: DateTime.parse("2024-05-08"), ip_address: "0.0.0.0")
 

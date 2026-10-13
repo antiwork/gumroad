@@ -10,7 +10,6 @@ class DisputeEvidence::GenerateAccessActivityLogsService
   def initialize(purchase, other_purchases: [])
     @purchase = purchase
     @other_purchases = other_purchases
-    @url_redirect = purchase.url_redirect
   end
 
   def perform
@@ -22,12 +21,18 @@ class DisputeEvidence::GenerateAccessActivityLogsService
   end
 
   private
-    attr_reader :purchase, :other_purchases, :url_redirect
+    attr_reader :purchase, :other_purchases
 
+    # A gifted rental is watched on the giftee's redirect; the sender's purchase never gets one.
     def rental_activity
-      return unless url_redirect.present? && url_redirect.rental_first_viewed_at.present?
+      first_viewed = access_purchases
+        .select { _1.url_redirect&.rental_first_viewed_at }
+        .min_by { _1.url_redirect.rental_first_viewed_at }
+      return if first_viewed.nil?
 
-      "The rented content was first viewed at #{url_redirect.rental_first_viewed_at}."
+      name = attribute_products? ? product_name_for(first_viewed.id) : ""
+      subject = name.present? ? "The rented content (#{name})" : "The rented content"
+      "#{subject} was first viewed at #{first_viewed.url_redirect.rental_first_viewed_at}."
     end
 
     def usage_activity
@@ -103,15 +108,15 @@ class DisputeEvidence::GenerateAccessActivityLogsService
     def consumption_event_rows
       consumption_events.last(LOG_RECORDS_LIMIT).map do |event|
         row = event.slice(*BASE_ROW_ATTRIBUTES).values
-        row += [product_name_for(event)] if attribute_products?
+        row += [product_name_for(event.purchase_id)] if attribute_products?
         row.join(",")
       end
     end
 
     # Quoted because product names routinely contain commas; embedded quotes are doubled per CSV
     # convention rather than rewritten, since this is evidence and the name must stay verbatim.
-    def product_name_for(event)
-      name = purchase_names_by_id[event.purchase_id]
+    def product_name_for(purchase_id)
+      name = purchase_names_by_id[purchase_id]
       return "" if name.blank?
 
       "\"#{name.gsub("\"", "\"\"").gsub(/[\r\n]+/, " ")}\""

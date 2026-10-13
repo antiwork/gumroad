@@ -780,5 +780,17 @@ describe DisputeEvidence::CreateFromDisputeService, :vcr, :versioning do
 
       expect(log).to include("9.9.9.0", "9.9.9.1")
     end
+
+    it "logs the recipient's first view of a gifted rental",
+       vcr: { cassette_name: "DisputeEvidence_CreateFromDisputeService/gift_orders/includes_the_giftee_purchase_in_the_access_activity_log" } do
+      gifter_purchase.link.update!(name: "Gifted Rental")
+      giftee_purchase = gift.reload.giftee_purchase
+      giftee_purchase.create_url_redirect!
+      giftee_purchase.url_redirect.update!(rental_first_viewed_at: DateTime.parse("2024-05-09"))
+
+      log = DisputeEvidence.create_from_dispute!(dispute).access_activity_log
+
+      expect(log).to include("The rented content (\"Gifted Rental\") was first viewed at 2024-05-09 00:00:00 UTC.")
+    end
   end
 end
