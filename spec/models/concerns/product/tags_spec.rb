@@ -80,9 +80,9 @@ describe Product::Tags do
 
   describe "#product_taggings" do
     it "traverses the taggings in tag-id order, so every writer locks the same rows in the same order" do
-      ProductTagging.create!(product: @product, tag: @gamma)
-      ProductTagging.create!(product: @product, tag: @alpha)
-      ProductTagging.create!(product: @product, tag: @beta)
+      create(:product_tagging, product: @product, tag: @gamma)
+      create(:product_tagging, product: @product, tag: @alpha)
+      create(:product_tagging, product: @product, tag: @beta)
 
       expect(@product.product_taggings.map(&:tag_id)).to eq([@alpha.id, @beta.id, @gamma.id])
     end
