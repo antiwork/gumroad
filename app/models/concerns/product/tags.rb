@@ -55,7 +55,7 @@ module Product::Tags
     # `tag!`/`untag!` each take an X-lock on a `tags` row (the counter cache), so both halves run in
     # one pass ordered by that row's id rather than two passes that can deadlock. The row is resolved
     # the way those methods resolve it — equivalent spellings share a slot — with removals first.
-    ids_by_name = work.map(&:first).uniq.index_with { |name| Tag.find_by(name: name.downcase)&.id }
+    ids_by_name = work.map { |name, _| name.downcase }.uniq.index_with { |name| Tag.find_by(name:)&.id }
     work.sort_by! do |name, action|
       [ids_by_name[name.downcase] || Float::INFINITY, action == :remove ? 0 : 1, name.downcase]
     end

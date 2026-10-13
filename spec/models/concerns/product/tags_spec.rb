@@ -67,6 +67,15 @@ describe Product::Tags do
 
       @product.save_tags!(["cafe"])
     end
+
+    it "orders a mixed-case addition by the row it resolves to" do
+      @product.save_tags!(["gamma"])
+
+      expect(@product).to receive(:tag!).with("ALPHA").ordered
+      expect(@product).to receive(:untag!).with("gamma").ordered
+
+      @product.save_tags!(["ALPHA"])
+    end
   end
 
   describe "#product_taggings" do
