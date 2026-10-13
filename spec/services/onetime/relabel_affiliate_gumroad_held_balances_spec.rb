@@ -97,6 +97,27 @@ describe Onetime::RelabelAffiliateGumroadHeldBalances do
     expect(result[:stats][:already_usd]).to eq(1)
   end
 
+  it "refuses a row whose balance transaction belongs to a different user" do
+    balance, bt = create_mislabelled_affiliate_balance
+    bt.update_columns(user_id: create(:user).id)
+
+    result = service(balance_ids: [balance.id], dry_run: false).process
+
+    expect(result[:stats][:bt_wrong_owner]).to eq(1)
+    expect(balance.reload.holding_currency).to eq(Currency::EUR)
+    expect(bt.reload.holding_amount_currency).to eq(Currency::EUR)
+  end
+
+  it "refuses a row whose balance transaction label differs from the balance" do
+    balance, bt = create_mislabelled_affiliate_balance
+    bt.update_columns(issued_amount_currency: Currency::USD, holding_amount_currency: Currency::USD)
+
+    result = service(balance_ids: [balance.id], dry_run: false).process
+
+    expect(result[:stats][:bt_currency_differs_from_balance]).to eq(1)
+    expect(balance.reload.holding_currency).to eq(Currency::EUR)
+  end
+
   it "refuses balance transactions created after the USD booking deployed" do
     balance, = create_mislabelled_affiliate_balance
     late = described_class.new(balance_ids: [balance.id], fix_deployed_at: booked_at - 1.day, dry_run: false).process

@@ -109,8 +109,15 @@ class Onetime::RelabelAffiliateGumroadHeldBalances
 
     def check_transaction(bt, balance)
       return :bt_wrong_merchant_account unless bt.merchant_account_id == balance.merchant_account_id
+      # The balance is the affiliate's, so every leg on it must be that same user's: a leg booked
+      # to another user is a separate data problem, not a label this repair may rewrite.
+      return :bt_wrong_owner unless bt.user_id == balance.user_id
       return :bt_created_after_fix unless bt.created_at < @fix_deployed_at
       return :bt_currencies_differ unless bt.issued_amount_currency.to_s == bt.holding_amount_currency.to_s
+      # Compare against the balance, not just the leg against itself: a leg already labelled USD on
+      # a non-USD balance would otherwise be reported as repaired while the balance stayed foreign.
+      return :bt_currency_differs_from_balance unless bt.issued_amount_currency.to_s == balance.currency.to_s &&
+                                                    bt.holding_amount_currency.to_s == balance.holding_currency.to_s
       return :bt_cents_differ unless bt.issued_amount_net_cents == bt.holding_amount_net_cents &&
                                      bt.issued_amount_gross_cents == bt.holding_amount_gross_cents
       return :bt_not_purchase_leg if bt.purchase.nil? || bt.refund_id || bt.dispute_id
