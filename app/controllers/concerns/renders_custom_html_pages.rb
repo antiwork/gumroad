@@ -92,7 +92,6 @@ module RendersCustomHtmlPages
     "default-src 'none'",
     "script-src 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://unpkg.com",
     "style-src 'unsafe-inline' #{PAGES_TAILWIND_ASSET_HOST} https://cdn.tailwindcss.com https://fonts.googleapis.com https://fonts.bunny.net",
-    "frame-src https://www.youtube-nocookie.com https://www.youtube.com https://player.vimeo.com",
     "img-src data: blob: #{PAGE_ASSET_HOSTS}",
     # Mirror img-src so the <audio>/<video>/<source> tags the sanitizer
     # allows actually load — without this they'd inherit default-src 'none'.
@@ -186,7 +185,7 @@ module RendersCustomHtmlPages
         }, true);
         window.addEventListener("message", function (e) {
           // Only the parent wrapper's reply drives the confirmation UI —
-          // nested iframes (e.g. embedded video players) can't spoof it.
+          // a message the page posts to itself can't spoof it.
           if (e.source !== window.parent) return;
           var d = e.data;
           if (!d || typeof d !== "object" || d.type !== "gumroad:follow:result") return;
@@ -453,8 +452,8 @@ module RendersCustomHtmlPages
         }
         try { window.gumroadProducts = { request: request }; } catch (_err) {}
         window.addEventListener("message", function (e) {
-          // Only the parent wrapper's reply resolves a request — nested
-          // iframes (e.g. embedded video players) can't spoof it.
+          // Only the parent wrapper's reply resolves a request — a message
+          // the page posts to itself can't spoof it.
           if (e.source !== window.parent) return;
           var d = e.data;
           if (!d || typeof d !== "object" || d.type !== "gumroad:products:result") return;

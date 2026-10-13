@@ -15,32 +15,26 @@ class Ai::PageSanitizer
     fonts.bunny.net
   ].freeze
 
-  # Canonical embed hosts only (www variants). These must stay aligned with the
-  # `frame-src` list in CUSTOM_HTML_CSP (links_controller.rb): an apex host that
-  # passed sanitization but was missing from frame-src would be silently
-  # CSP-blocked at render with no save-time signal. Apex URLs are rejected here
-  # so the seller gets the "iframe src host not allowed" report entry instead.
-  ALLOWED_IFRAME_HOSTS = %w[
-    www.youtube-nocookie.com
-    www.youtube.com
-    player.vimeo.com
-  ].freeze
+  # Every frame nested in a custom page inherits the page's sandbox, which withholds
+  # allow-same-origin, so YouTube and Vimeo players never initialize. Agents read
+  # this reason in the report and rewrite the embed, so it names the alternative.
+  IFRAME_REMOVAL_REASON = 'iframes are not supported on custom pages; to show a video, link to it with target="_blank"'
 
   # `html`/`head`/`body` are intentionally absent — they're handled first by
   # the WRAPPER_TAGS unwrap in scrub_node, so listing them here would be dead,
   # misleading allowlist entries.
   ALLOWED_TAGS = %w[
     a abbr address area article aside audio b bdi bdo blockquote br button canvas caption cite code col colgroup data datalist dd del details dfn dialog div dl dt em
-    fieldset figcaption figure footer form h1 h2 h3 h4 h5 h6 header hgroup hr i iframe img input ins kbd label legend li link main map mark menu meter nav ol optgroup option
+    fieldset figcaption figure footer form h1 h2 h3 h4 h5 h6 header hgroup hr i img input ins kbd label legend li link main map mark menu meter nav ol optgroup option
     output p picture pre progress q rp rt ruby s samp script search section select slot small source span strong style sub summary sup svg table tbody td template textarea
     tfoot th thead time tr track u ul var video wbr path circle rect line polyline polygon ellipse g defs lineargradient radialgradient stop clippath
   ].freeze
 
   ALLOWED_ATTRIBUTES = %w[
-    accept accept-charset allow allowfullscreen alt aria-describedby aria-hidden aria-label aria-labelledby aria-live aria-pressed async autocomplete autofocus autoplay checked cite class
+    accept accept-charset alt aria-describedby aria-hidden aria-label aria-labelledby aria-live aria-pressed async autocomplete autofocus autoplay checked cite class
     charset cols colspan content contenteditable controls coords crossorigin datetime defer dir disabled download draggable enctype
     fill for form height hidden href id kind label lang loading loop max maxlength media method min minlength multiple muted name pattern placeholder playsinline poster
-    preserveaspectratio readonly referrerpolicy rel required role rows rowspan sandbox scope selected shape size sizes span spellcheck src srcset step style tabindex target title translate type
+    preserveaspectratio readonly referrerpolicy rel required role rows rowspan scope selected shape size sizes span spellcheck src srcset step style tabindex target title translate type
     value viewbox width xmlns x y x1 y1 x2 y2 cx cy r rx ry d stroke stroke-width stroke-linecap stroke-linejoin fill-rule clip-rule clip-path points transform offset stop-color
     stop-opacity
   ].freeze
@@ -51,7 +45,6 @@ class Ai::PageSanitizer
   # in these attributes loads a document with no CSP, so its scripts escape
   # `connect-src 'none'` — block `data:` here outright.
   NAVIGABLE_URL_ATTRIBUTES = %w[action href].freeze
-  DOCUMENT_SOURCE_TAGS = %w[iframe].freeze
   # Media `src`/`poster` attributes load a resource, not a document. `data:` is
   # fine for inline media but not for document MIME types that a browser would parse and script.
   SAFE_DATA_URI_PREFIXES = %w[data:image/ data:video/ data:audio/ data:font/].freeze
@@ -97,6 +90,12 @@ class Ai::PageSanitizer
       return
     end
 
+    if node.name == "iframe"
+      record_removed_tag(report, node, IFRAME_REMOVAL_REASON)
+      node.remove
+      return
+    end
+
     unless allowed_tag?(node.name)
       record_removed_tag(report, node, "tag not in allowlist")
       node.remove
@@ -115,25 +114,6 @@ class Ai::PageSanitizer
       return
     end
 
-    if node.name == "iframe"
-      if document_source_data_url?(node.name, "src", node["src"])
-        node["sandbox"] = "allow-scripts"
-      else
-        unless allowed_iframe_src?(node["src"])
-          record_removed_tag(report, node, "iframe src host not allowed")
-          node.remove
-          return
-        end
-
-        # Overwrite unconditionally — a seller-supplied permissive value should
-        # not survive the sanitizer. The parent document's sandbox (CUSTOM_HTML_CSP)
-        # grants neither allow-same-origin nor allow-presentation, and a nested
-        # browsing context's active sandbox is the union of restrictions, so those
-        # tokens would be dead here. Keep just allow-scripts — public video
-        # playback works via the postMessage IFrame API regardless of opaque origin.
-        node["sandbox"] = "allow-scripts"
-      end
-    end
     if node.name == "form" && node["action"].present?
       record_removed_attribute(report, node, "action", node["action"], "form action removed")
       node.remove_attribute("action")
@@ -143,7 +123,7 @@ class Ai::PageSanitizer
     # which would skip the next entry if we iterated it live (same reason the
     # children traversal above snapshots).
     node.attribute_nodes.to_a.each do |attribute|
-      reason = attribute_removal_reason(node.name, attribute.name, attribute.value)
+      reason = attribute_removal_reason(attribute.name, attribute.value)
       next unless reason
 
       record_removed_attribute(report, node, attribute.name, attribute.value, reason)
@@ -153,10 +133,9 @@ class Ai::PageSanitizer
     node["rel"] = "noopener noreferrer" if node.name == "a" && node["target"].to_s.strip.casecmp("_blank").zero?
   end
 
-  def self.attribute_removal_reason(tag_name, name, value)
+  def self.attribute_removal_reason(name, value)
     return "attribute not in allowlist" unless allowed_attribute?(name)
     return unsafe_target_reason(value) if name.downcase == "target"
-    return "data: URL blocked" if document_source_data_url?(tag_name, name, value)
     return srcset_url_removal_reason(value) if SRCSET_ATTRIBUTES.include?(name.downcase)
     return dangerous_url_reason(value) if dangerous_url_attribute?(name, value)
 
@@ -222,12 +201,6 @@ class Ai::PageSanitizer
     NAVIGABLE_URL_ATTRIBUTES.include?(normalized_name) || SAFE_DATA_URI_PREFIXES.none? { |prefix| normalized.start_with?(prefix) }
   end
 
-  def self.document_source_data_url?(tag_name, name, value)
-    DOCUMENT_SOURCE_TAGS.include?(tag_name.downcase) &&
-      name.downcase == "src" &&
-      normalize_url(value).start_with?("data:")
-  end
-
   def self.srcset_url_removal_reason(value)
     normalized_urls = srcset_urls(value).map { |url| normalize_url(url) }
     return "javascript: URL blocked" if normalized_urls.any? { |url| url.start_with?("javascript:") }
@@ -251,10 +224,6 @@ class Ai::PageSanitizer
     return false unless node["rel"].to_s.downcase.split(/\s+/).include?("stylesheet")
 
     https_host_in?(node["href"], ALLOWED_STYLESHEET_HOSTS)
-  end
-
-  def self.allowed_iframe_src?(src)
-    https_host_in?(src, ALLOWED_IFRAME_HOSTS)
   end
 
   def self.https_host_in?(url, hosts)
@@ -283,5 +252,5 @@ class Ai::PageSanitizer
     decoded.gsub(/[[:space:]\u0000-\u001f]+/, "").downcase
   end
 
-  private_class_method :scrub_node, :allowed_tag?, :allowed_attribute?, :event_handler_attribute?, :dangerous_url_attribute?, :document_source_data_url?, :srcset_url_removal_reason, :srcset_urls, :allowed_script_src?, :allowed_stylesheet_link?, :allowed_iframe_src?, :https_host_in?, :unsafe_target_reason, :normalize_url, :finalize_report, :record_removed_tag, :record_removed_attribute, :report_cap_reached?, :dangerous_url_reason, :strip_control_chars, :attribute_removal_reason
+  private_class_method :scrub_node, :allowed_tag?, :allowed_attribute?, :event_handler_attribute?, :dangerous_url_attribute?, :srcset_url_removal_reason, :srcset_urls, :allowed_script_src?, :allowed_stylesheet_link?, :https_host_in?, :unsafe_target_reason, :normalize_url, :finalize_report, :record_removed_tag, :record_removed_attribute, :report_cap_reached?, :dangerous_url_reason, :strip_control_chars, :attribute_removal_reason
 end

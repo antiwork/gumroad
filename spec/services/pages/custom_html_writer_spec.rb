@@ -71,17 +71,21 @@ describe Pages::CustomHtmlWriter do
 
     it "refuses a nonidempotent sanitized result without leaking a save through an outer transaction" do
       page_before = current_page
-      replacement = %(#{replace}<iframe src="data:text/html,example"></iframe>)
-      once = Ai::PageSanitizer.sanitize_with_report(page_before.sub(find) { replacement }).html
+      # No known input breaks the sanitizer's idempotence, so every pass appends a marker.
+      allow(Ai::PageSanitizer).to receive(:sanitize_with_report).and_wrap_original do |original, html|
+        result = original.call(html)
+        Ai::PageSanitizer::Result.new(html: "#{result.html}<!-- pass -->", report: result.report)
+      end
+      once = Ai::PageSanitizer.sanitize_with_report(page_before.sub(find) { replace }).html
       twice = Ai::PageSanitizer.sanitize_with_report(once).html
       expect(once).not_to eq(twice)
-      check = described_class.check_guarded_edit(page_before, find:, replace: replacement,
+      check = described_class.check_guarded_edit(page_before, find:, replace:,
                                                               expected_custom_html_sha256: expected_digest,
                                                               result_custom_html_sha256: Digest::SHA256.hexdigest(once))
       expect(check.error).to eq(described_class::RESULT_MISMATCH_ERROR)
 
       user.class.transaction(requires_new: true) do
-        result = guarded_edit(replace: replacement, result_custom_html_sha256: Digest::SHA256.hexdigest(once))
+        result = guarded_edit(result_custom_html_sha256: Digest::SHA256.hexdigest(once))
         expect(result.error).to eq(described_class::RESULT_MISMATCH_ERROR)
       end
       expect(user.reload.custom_html).to eq(page_before)
