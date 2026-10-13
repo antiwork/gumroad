@@ -404,6 +404,19 @@ describe LoginsController, type: :controller, inertia: true do
       end
     end
 
+    context "when no one is signed in" do
+      before do
+        sign_out user
+        @request.env["HTTP_REFERER"] = "https://mail.google.com/"
+      end
+
+      it "redirects to the homepage" do
+        get :destroy
+
+        expect(response).to redirect_to(root_path)
+      end
+    end
+
     context "when impersonating" do
       let(:admin) { create(:admin_user) }
 
