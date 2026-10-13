@@ -517,5 +517,15 @@ describe ApplicationController do
 
       expect(controller.send(:seller_has_payment_requirements?)).to be(true)
     end
+
+    it "keeps the flash across the compliance redirect so an earlier alert survives it" do
+      allow($redis).to receive(:sismember).and_return(true)
+      allow(seller).to receive_message_chain(:merchant_accounts, :alive, :stripe, :last).and_return(double)
+      allow(seller).to receive_message_chain(:user_compliance_info_requests, :requested, :present?).and_return(true)
+      allow(controller).to receive(:redirect_to).and_return(true)
+      expect(controller.flash).to receive(:keep)
+
+      controller.send(:check_payment_details)
+    end
   end
 end

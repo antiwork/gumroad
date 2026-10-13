@@ -377,6 +377,8 @@ class ApplicationController < ActionController::Base
 
       return unless merchant_account
 
+      flash.keep
+
       if current_seller.user_compliance_info_requests.requested.present?
         redirect_to settings_payments_path, notice: "Urgent: We are required to collect more information from you to continue processing payments." and return
       end
