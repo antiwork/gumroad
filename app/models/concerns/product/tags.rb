@@ -4,7 +4,10 @@ module Product::Tags
   extend ActiveSupport::Concern
 
   included do
-    has_many :product_taggings, foreign_key: :product_id, dependent: :destroy
+    # Ordered by tag_id: creating or destroying a tagging writes the shared `tags` counter
+    # cache, so every traversal of a product's taggings must take those rows in the same order
+    # (see #save_tags!). The default order is the tagging row id, which is unrelated to them.
+    has_many :product_taggings, -> { order(:tag_id) }, foreign_key: :product_id, dependent: :destroy
     has_many :tags, through: :product_taggings
 
     scope :with_tags, lambda { |tag_names|
