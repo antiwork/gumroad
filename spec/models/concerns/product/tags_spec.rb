@@ -39,6 +39,34 @@ describe Product::Tags do
 
       @product.save_tags!(["alpha"])
     end
+
+    it "removes before it adds when both spellings resolve to the same tag row" do
+      @product.save_tags!(["alpha"])
+
+      expect(@product).to receive(:untag!).with("alpha").ordered
+      expect(@product).to receive(:tag!).with("ALPHA").ordered
+
+      @product.save_tags!(["ALPHA"])
+    end
+
+    it "accepts an existing tag re-spelled in a different case" do
+      @product.save_tags!(["alpha"])
+
+      expect { @product.save_tags!(["ALPHA"]) }.not_to raise_error
+      expect(@product.reload.tags.pluck(:name)).to eq(["alpha"])
+    end
+
+    it "orders by the tag row a name resolves to, not the spelling" do
+      accented = create(:tag, name: "café")
+      plain = create(:tag, name: "zeta")
+      @product.save_tags!([plain.name])
+
+      expect(Tag.find_by(name: "cafe")).to eq(accented)
+      expect(@product).to receive(:tag!).with("cafe").ordered
+      expect(@product).to receive(:untag!).with("zeta").ordered
+
+      @product.save_tags!(["cafe"])
+    end
   end
 
   describe "#product_taggings" do

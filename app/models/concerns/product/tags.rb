@@ -51,12 +51,14 @@ module Product::Tags
     names_to_remove = current_names - tags_to_save
     names_to_add = tags_to_save - current_names
 
-    # `tag!`/`untag!` each take an X-lock on a `tags` row (the counter cache), so both halves are
-    # applied in one pass over the tag ids rather than two passes that can deadlock; id order
-    # matches the taggings_count backfill. Tags created here hold no shared row, so they sort last.
-    ids_by_name = Tag.where(name: (names_to_remove + names_to_add).map(&:downcase)).pluck(:name, :id).to_h
-    (names_to_remove.map { |name| [name, :remove] } + names_to_add.map { |name| [name, :add] })
-      .sort_by { |name, _| [ids_by_name.fetch(name.downcase, Float::INFINITY), name] }
-      .each { |name, action| action == :remove ? untag!(name) : tag!(name) }
+    work = names_to_remove.map { |name| [name, :remove] } + names_to_add.map { |name| [name, :add] }
+    # `tag!`/`untag!` each take an X-lock on a `tags` row (the counter cache), so both halves run in
+    # one pass ordered by that row's id rather than two passes that can deadlock. The row is resolved
+    # the way those methods resolve it — equivalent spellings share a slot — with removals first.
+    ids_by_name = work.map(&:first).uniq.index_with { |name| Tag.find_by(name: name.downcase)&.id }
+    work.sort_by! do |name, action|
+      [ids_by_name[name.downcase] || Float::INFINITY, action == :remove ? 0 : 1, name.downcase]
+    end
+    work.each { |name, action| action == :remove ? untag!(name) : tag!(name) }
   end
 end
