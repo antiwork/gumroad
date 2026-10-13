@@ -843,6 +843,14 @@ export default function PaymentsPage() {
       if (!form.data.user.building_number) {
         markFieldInvalid("building_number");
       }
+      // Stripe's Japanese custom-account address check requires both scripts of the block/building
+      // number, so a save that leaves the (Kana) line empty still leaves the address incomplete on
+      // Stripe's side even though the form looked complete here — the requirement goes past due and
+      // payouts pause with no way for the seller to see why. The input carries `required`, but this
+      // page posts through Inertia, so the browser never enforces it. See antiwork/gumroad-private#3509.
+      if (!form.data.user.building_number_kana) {
+        markFieldInvalid("building_number_kana");
+      }
       if (!form.data.user.street_address_kanji) {
         markFieldInvalid("street_address_kanji");
         setFieldErrorMessage("street_address_kanji", "Required.");
@@ -1072,6 +1080,12 @@ export default function PaymentsPage() {
         }
         if (!form.data.user.business_building_number) {
           markFieldInvalid("business_building_number");
+        }
+        // Same requirement as the individual block/building number above: Stripe wants both scripts
+        // of the company address too (business address_kana.line1), and the (Kana) input's
+        // `required` attribute is not enforced on an Inertia save.
+        if (!form.data.user.business_building_number_kana) {
+          markFieldInvalid("business_building_number_kana");
         }
         if (!form.data.user.business_street_address_kanji) {
           markFieldInvalid("business_street_address_kanji");

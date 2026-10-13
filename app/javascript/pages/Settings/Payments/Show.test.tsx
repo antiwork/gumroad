@@ -1245,6 +1245,34 @@ describe("Japanese (Kanji) variation fields", () => {
     expect(screen.getByText(/^Please complete the required fields below:/u).textContent).toContain(inputLabel);
   });
 
+  // Stripe's Japanese address check wants both scripts of the block/building number, so an empty
+  // (Kana) line must block the save even though the input's `required` attribute is not enforced
+  // (this page posts through Inertia). Like the Kanji line beside it, a blank one carries no inline
+  // "Required." reason — it only needs to block the save and be named in the banner.
+  it("blocks a JP save when the block/building number (Kana) is blank", () => {
+    renderJpSeller({ building_number_kana: "" });
+    save();
+
+    expect(mocks.put).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Block / Building number (Kana)").getAttribute("aria-invalid")).toBe("true");
+    expect(screen.getByText(/^Please complete the required fields below:/u).textContent).toContain(
+      "Block / Building number (Kana)",
+    );
+  });
+
+  it("blocks a JP business save when the business block/building number (Kana) is blank", () => {
+    renderJpBusiness({ business_building_number_kana: "" });
+    save();
+
+    expect(mocks.put).not.toHaveBeenCalled();
+    // Both the individual and business blocks are on the page; only the blank business one is flagged.
+    const inputs = screen.getAllByLabelText("Block / Building number (Kana)");
+    expect(inputs.filter((input) => input.getAttribute("aria-invalid") === "true")).toHaveLength(1);
+    expect(screen.getByText(/^Please complete the required fields below:/u).textContent).toContain(
+      "Block / Building number (Kana)",
+    );
+  });
+
   it("clears the reasons with the highlights on the next edit and keeps the banner", () => {
     renderJpSeller({ first_name_kanji: "Taro", last_name_kanji: "Yamada" });
     save();
