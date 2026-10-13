@@ -375,8 +375,9 @@ end
 merge_base = git("merge-base", base, "HEAD").first
 
 changed = Set.new
-changed.merge(git("diff", "--name-only", "#{merge_base}..HEAD")) if merge_base
-changed.merge(git("diff", "--name-only", "HEAD"))
+# --no-renames keeps a renamed file's old path, whose name specs still use.
+changed.merge(git("diff", "--name-only", "--no-renames", "#{merge_base}..HEAD")) if merge_base
+changed.merge(git("diff", "--name-only", "--no-renames", "HEAD"))
 changed.merge(git("ls-files", "--others", "--exclude-standard"))
 
 cassette_in_diff = changed.any? { |path| path.start_with?("spec/support/fixtures/vcr_cassettes/") }
