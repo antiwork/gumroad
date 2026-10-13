@@ -25,6 +25,7 @@ module OmniAuth
         super.tap do |params|
           params[:client_key] = options.client_id
           params[:response_type] = "code"
+          params[:disable_auto_auth] = 1
           params.delete(:client_id)
         end
       end
