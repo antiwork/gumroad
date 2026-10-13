@@ -1125,6 +1125,30 @@ describe("Japanese (Kanji) variation fields", () => {
     expect(screen.getByLabelText(inputLabel).getAttribute("aria-invalid")).toBe("true");
   });
 
+  it.each([
+    ["blank", ""],
+    ["missing", null],
+  ] as const)("blocks an individual save when the kana block number is %s", (_, value) => {
+    renderJpSeller({ building_number_kana: value });
+    save();
+
+    expect(mocks.put).not.toHaveBeenCalled();
+    expect(screen.getByText("Please complete the required fields below: Block / Building number (Kana).")).toBeTruthy();
+    expect(screen.getByLabelText("Block / Building number (Kana)").getAttribute("aria-invalid")).toBe("true");
+  });
+
+  it("blocks a business save when the kana business block number is blank", () => {
+    renderJpBusiness({ business_building_number_kana: "" });
+    save();
+
+    expect(mocks.put).not.toHaveBeenCalled();
+    expect(screen.getByText("Please complete the required fields below: Block / Building number (Kana).")).toBeTruthy();
+    const [businessInput, individualInput] = screen.getAllByLabelText("Block / Building number (Kana)");
+    expect(businessInput?.id).toContain("business-building-number-kana");
+    expect(businessInput?.getAttribute("aria-invalid")).toBe("true");
+    expect(individualInput?.getAttribute("aria-invalid")).toBe("false");
+  });
+
   it("saves a Japanese seller whose variations hold Japanese characters", () => {
     renderJpSeller();
     save();

@@ -109,6 +109,9 @@ class UpdateUserComplianceInfo
         japan_city_error = japan_city_error_message
         return { success: false, error_message: japan_city_error } if japan_city_error.present?
 
+        japan_building_number_kana_error = japan_building_number_kana_error_message
+        return { success: false, error_message: japan_building_number_kana_error } if japan_building_number_kana_error.present?
+
         ENCRYPTED_FIELD_LABELS.each do |field, label|
           value = compliance_params[field]
           next if value.blank?
@@ -507,6 +510,26 @@ class UpdateUserComplianceInfo
       end
 
       nil
+    end
+
+    # building_number goes to Stripe as address_kanji.line1 and building_number_kana as
+    # address_kana.line1; Stripe keeps the account past due while the kana line1 is blank.
+    def japan_building_number_kana_error_message
+      if japan_address_submitted_for?(:individual) &&
+         effective_compliance_value(:building_number).present? && effective_compliance_value(:building_number_kana).blank?
+        return "Block / Building number (Kana) is required for Japanese addresses."
+      end
+
+      if japan_address_submitted_for?(:business) &&
+         effective_compliance_value(:business_building_number).present? && effective_compliance_value(:business_building_number_kana).blank?
+        return "Business block / building number (Kana) is required for Japanese addresses."
+      end
+
+      nil
+    end
+
+    def effective_compliance_value(field)
+      compliance_params[field].presence || current_compliance_info.public_send(field).presence
     end
 
     def japan_address_submitted_for?(entity)
