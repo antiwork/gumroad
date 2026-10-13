@@ -207,6 +207,29 @@ RSpec.describe Purchase::Blockable do
       end
     end
 
+    context "when Stripe rejects the seller as the transfer destination" do
+      def payee_rejection(fingerprint)
+        create(:failed_purchase, email:, browser_guid: guid, ip_address: ip,
+                                 stripe_fingerprint: fingerprint, card_visual: nil,
+                                 error_code: PurchaseErrorCode::PROCESSOR_MERCHANT_CANNOT_RECEIVE_TRANSFERS,
+                                 stripe_error_code: "insufficient_capabilities_for_transfer")
+      end
+
+      before { 4.times { payee_rejection("fp_#{SecureRandom.hex(8)}") } }
+
+      it "does not block the buyer" do
+        live_attempt(fingerprint: "fp_live_payee").send(:block_buyer_based_on_recent_failures!)
+
+        expect(PlatformBlock.active.find_by(object_value: email)).to be_nil
+      end
+
+      it "does not block the browser guid" do
+        live_attempt(fingerprint: "fp_live_payee_guid").send(:ban_fraudulent_buyer_browser_guid!)
+
+        expect(PlatformBlock.active.find_by(object_value: guid)).to be_nil
+      end
+    end
+
     context "when a flood of newer retries outnumbers any bounded scan" do
       # Bulk-copies the row: hundreds of factory purchases would dominate the suite's runtime,
       # and the flood only has to exist, not to be individually distinct.

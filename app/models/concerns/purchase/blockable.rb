@@ -57,6 +57,7 @@ module Purchase::Blockable
     PurchaseErrorCode::PAYPAL_UNAVAILABLE,
     PurchaseErrorCode::PROCESSING_ERROR,
     PurchaseErrorCode::PROCESSOR_INVALID_REQUEST,
+    PurchaseErrorCode::PROCESSOR_MERCHANT_CANNOT_RECEIVE_TRANSFERS,
     PurchaseErrorCode::PAYPAL_PAYEE_COMPLIANCE_VIOLATION,
   ].freeze
   private_constant :CARD_TESTING_UNCOUNTED_ERROR_CODES
