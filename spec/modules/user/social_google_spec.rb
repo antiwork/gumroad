@@ -46,6 +46,31 @@ describe User::SocialGoogle do
       expect(created_user.reload.google_uid).to eq(@data_copy2["uid"])
     end
 
+    context "when the email match is an account created with a password" do
+      let(:password_set_at_signup) { "chosen-by-whoever-signed-up" }
+
+      before { @data_copy2["info"]["image"] = nil }
+
+      it "drops the password the signup never proved and confirms the account", :aggregate_failures do
+        created_user = create(:unconfirmed_user, email: @data_copy2["info"]["email"], password: password_set_at_signup)
+
+        found_user = User.find_or_create_for_google_oauth2(@data_copy2)
+
+        expect(found_user.id).to eq(created_user.id)
+        expect(created_user.reload).to be_confirmed
+        expect(created_user.google_uid).to eq(@data_copy2["uid"])
+        expect(created_user.valid_password?(password_set_at_signup)).to be(false)
+      end
+
+      it "keeps the password of an account that already confirmed its email" do
+        created_user = create(:user, email: @data_copy2["info"]["email"], password: password_set_at_signup)
+
+        User.find_or_create_for_google_oauth2(@data_copy2)
+
+        expect(created_user.reload.valid_password?(password_set_at_signup)).to be(true)
+      end
+    end
+
     context "when the matched account was deleted and its email freed to another account" do
       let(:freed_address) { "spongebob-freed-1234@deleted.invalid" }
 

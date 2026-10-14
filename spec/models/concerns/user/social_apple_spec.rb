@@ -68,6 +68,28 @@ describe User::SocialApple do
       it "does not create a new user" do
         expect { User.find_or_create_for_apple_oauth(apple_data) }.not_to change { User.count }
       end
+
+      it "drops the password the signup never proved when the account is unconfirmed", :aggregate_failures do
+        password_set_at_signup = "chosen-by-whoever-signed-up"
+        unconfirmed_user = create(:unconfirmed_user, email: "apple-unconfirmed@example.com", password: password_set_at_signup)
+        data = apple_data.merge("uid" => "001234.apple-unconfirmed", "info" => { "email" => "apple-unconfirmed@example.com" })
+
+        result = User.find_or_create_for_apple_oauth(data)
+
+        expect(result.id).to eq(unconfirmed_user.id)
+        expect(unconfirmed_user.reload).to be_confirmed
+        expect(unconfirmed_user.valid_password?(password_set_at_signup)).to be(false)
+      end
+
+      it "keeps the password of an account that already confirmed its email" do
+        password_set_by_its_owner = "chosen-by-its-owner"
+        confirmed_user = create(:user, email: "apple-confirmed@example.com", password: password_set_by_its_owner)
+        data = apple_data.merge("uid" => "001234.apple-confirmed", "info" => { "email" => "apple-confirmed@example.com" })
+
+        User.find_or_create_for_apple_oauth(data)
+
+        expect(confirmed_user.reload.valid_password?(password_set_by_its_owner)).to be(true)
+      end
     end
 
     context "when the uid is blank" do
