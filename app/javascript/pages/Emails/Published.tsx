@@ -393,7 +393,7 @@ const ClickedUrlsModal = ({ installment, onClose }: { installment: PublishedInst
       } catch (error) {
         if (error instanceof AbortError) return;
         assertResponseError(error);
-        showAlert("Sorry, something went wrong. Please try again.", "error");
+        showAlert("Couldn't load clicked URLs. Please try again.", "error");
         onClose();
       }
     })();
