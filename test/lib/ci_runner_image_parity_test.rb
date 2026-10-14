@@ -14,6 +14,20 @@ class CiRunnerImageParityTest < ActiveSupport::TestCase
   def runner = read("bin/ci-test-packages")
   def image = IMAGE_DOCKERFILES.map { |path| read(path) }.join("\n")
 
+  def image_packages
+    installed, removed, list = Set.new, Set.new, nil
+    image.each_line do |line|
+      if line =~ /apt-get (install|remove|purge)\b.*\\$/
+        list = $1 == "install" ? installed : removed
+      elsif list && line =~ /^\s+([a-z0-9][\w.+-]*) \\$/
+        list << $1
+      else
+        list = nil
+      end
+    end
+    installed - removed
+  end
+
   test "the runner installs the image's Chrome" do
     image_version = image[/^ARG CHROME_VERSION=(\S+)$/, 1]
     assert image_version, "no ARG CHROME_VERSION in the image Dockerfiles"
@@ -40,7 +54,6 @@ class CiRunnerImageParityTest < ActiveSupport::TestCase
 
   test "the image installs every package the runner installs" do
     runner_packages = runner[/^PACKAGES=\((.+)\)$/, 1].split
-    image_packages = image.scan(/^\s+([a-z0-9][\w.+-]*) \\$/).flatten
-    assert_empty runner_packages - image_packages
+    assert_empty runner_packages - image_packages.to_a
   end
 end
