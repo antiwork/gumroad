@@ -424,6 +424,25 @@ describe StripePayoutProcessor do
       expect(payment.reload.failure_reason).to eq(Payment::FailureReason::BANK_ACCOUNT_NOT_FOUND_AT_STRIPE)
       expect(bank_account.reload).to be_deleted
     end
+
+    it "completes a payout to a relinked Stripe Connect account whose older row a takeover retired", :aggregate_failures do
+      seller = create(:user)
+      retired = create(:merchant_account_stripe_connect, user: seller, charge_processor_merchant_id: "acct_relinked")
+      retired.delete_charge_processor_account!
+      retired.mark_retired_by_adoption!
+      create(:merchant_account_stripe_connect, user: seller, charge_processor_merchant_id: "acct_relinked")
+      payment = create(:payment, user: seller, processor: PayoutProcessorType::STRIPE, state: "processing",
+                                 stripe_connect_account_id: "acct_relinked", stripe_internal_transfer_id: "tr_relinked",
+                                 processor_fee_cents: 0)
+      allow(Stripe::Transfer).to receive(:retrieve).with("tr_relinked")
+        .and_return(Stripe::Transfer.construct_from(id: "tr_relinked", destination_payment: "py_relinked"))
+      expect(described_class).not_to receive(:reverse_internal_transfer_or_hold_payouts!)
+
+      described_class.perform_payment(payment)
+
+      expect(payment.reload).to be_completed
+      expect(payment.stripe_transfer_id).to eq("py_relinked")
+    end
   end
 
   describe ".stripe_invalid_request_error_failure_reason" do
@@ -679,6 +698,28 @@ describe StripePayoutProcessor do
         expect(credit.reload).to be_unpaid
       end
 
+      it "says a refused pre-takeover payout's internal transfer is being reversed", :aggregate_failures do
+        account = create(:merchant_account, user: seller, currency: Currency::AUD, charge_processor_merchant_id: "acct_adopted_aud")
+        credit = create(:balance, user: seller, merchant_account: account, state: "processing", date: 2.days.ago.to_date,
+                                  amount_cents: 300_00, holding_currency: Currency::AUD, holding_amount_cents: 450_00)
+        payment = create(:payment, user: seller, processor: PayoutProcessorType::STRIPE, state: "processing",
+                                   stripe_connect_account_id: account.charge_processor_merchant_id,
+                                   stripe_internal_transfer_id: "tr_before_takeover", currency: Currency::AUD,
+                                   amount_cents: 450_00, balances: [credit])
+        account.delete_charge_processor_account!
+        account.mark_retired_by_adoption!
+        allow(described_class).to receive(:reverse_internal_transfer_or_defer!)
+        expect(Stripe::Payout).not_to receive(:create)
+
+        errors = described_class.perform_payment(payment)
+
+        expect(errors.sole).to include("Google or Apple sign-in", "Internal transfer tr_before_takeover is being reversed")
+        expect(errors.sole).not_to include("blocked before transfer")
+        expect(described_class).to have_received(:reverse_internal_transfer_or_defer!).with(payment)
+        expect(payment.reload.failure_reason).to eq(Payment::FailureReason::DESTINATION_ACCOUNT_RETIRED)
+        expect(credit.reload).to be_unpaid
+      end
+
       it "drains to the retired account's own bank even after the seller added one on the replacement account" do
         account = create(:merchant_account, user: seller, currency: Currency::AUD,
                                             charge_processor_merchant_id: "acct_two_banks_aud", deleted_at: Time.current)
@@ -847,6 +888,24 @@ describe StripePayoutProcessor do
         expect(errors.sole).to include("does not match the payout currency")
         expect(payment.reload.failure_reason).to eq(Payment::FailureReason::CURRENCY_MISMATCH)
         expect(stale.reload).to be_unpaid
+      end
+
+      it "refuses money on a takeover-retired account as retired, not as a mismatch against the new account", :aggregate_failures do
+        adopted_account = create(:merchant_account, user: seller, currency: Currency::AUD, charge_processor_merchant_id: "acct_adopted_aud")
+        adopted_account.delete_charge_processor_account!
+        adopted_account.mark_retired_by_adoption!
+        held = create(:balance, user: seller, merchant_account: adopted_account, state: "processing", date: 2.days.ago.to_date,
+                                amount_cents: 20_00, holding_currency: Currency::AUD, holding_amount_cents: 30_00)
+        merchant_account, payout_currency, group = described_class.payout_groups(seller, [held]).sole
+        expect(merchant_account).to eq(adopted_account)
+        payment = build_payment(seller, group, merchant_account.charge_processor_merchant_id)
+        expect_no_stripe_money_movement
+
+        errors = described_class.prepare_payment_and_set_amount(payment, group, merchant_account, payout_currency)
+
+        expect(errors.sole).to include("acct_adopted_aud", "is retired")
+        expect(payment.reload.failure_reason).to eq(Payment::FailureReason::DESTINATION_ACCOUNT_RETIRED)
+        expect(held.reload).to be_unpaid
       end
     end
   end

@@ -252,7 +252,9 @@ class StripePayoutProcessor
     balances_held_by_stripe
       .group_by { |balance| [balance.merchant_account_id, balance.holding_currency.to_s] }
       .each do |(merchant_account_id, currency), stripe_balances|
-        groups[[merchant_account_id, currency]] = [merchant_account, currency, stripe_balances]
+        # A takeover-retired account is refused as retired, so its held money never counts against the new rail.
+        held_on = stripe_balances.first.merchant_account
+        groups[[merchant_account_id, currency]] = [held_on.retired_by_adoption? ? held_on : merchant_account, currency, stripe_balances]
       end
 
     if balances_held_by_gumroad.present?
@@ -689,7 +691,10 @@ class StripePayoutProcessor
   # Refuses a payout on a rail a takeover retired. The takeover deleted the bank this account paid,
   # so money prepared against the account before the takeover is not sent to that bank.
   def self.fail_payout_on_adoption_retired_rail!(payment, merchant_account)
-    message = retired_destination_error(merchant_account, payment.balances)
+    moved = payment.stripe_internal_transfer_id.present? ? "Internal transfer #{payment.stripe_internal_transfer_id} is being reversed" : "No money was moved"
+    message = "Cannot process payout: destination Stripe account #{merchant_account.charge_processor_merchant_id} " \
+      "(MerchantAccount #{merchant_account.id}) is retired because a Google or Apple sign-in took over the account. " \
+      "#{moved}, and the balances remain unpaid. Contact Gumroad Support to reconcile them; this rail cannot be drained or restored."
     payment.stripe_connect_account_id = merchant_account.charge_processor_merchant_id
     payment.error_message = message.truncate(1000)
     payment.mark_failed!(Payment::FailureReason::DESTINATION_ACCOUNT_RETIRED)
@@ -707,7 +712,9 @@ class StripePayoutProcessor
     payout_requested = false
     # We have transferred the balance held by gumroad to the connected Stripe standard account.
     # No payout needs to be issued in this case.
-    merchant_account = payment.user.merchant_accounts.find_by(charge_processor_merchant_id: payment.stripe_connect_account_id)
+    # A relinked Stripe Connect account shares its id with the row a takeover retired; the live row wins.
+    merchant_accounts = payment.user.merchant_accounts.where(charge_processor_merchant_id: payment.stripe_connect_account_id)
+    merchant_account = merchant_accounts.alive.first || merchant_accounts.first
     # Also covers payouts prepared before the flag existed, and accounts retired between prepare and perform.
     payment.retired_account_drain = true if drainable_retired_account?(merchant_account)
     # A payout prepared before a takeover still names the bank that takeover removed.
