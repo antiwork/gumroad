@@ -467,8 +467,8 @@ export default function SubscriptionsManage() {
       {subscription.payment_method_confirmation_pending ? (
         <CardContent>
           <Alert variant="warning" className="grow">
-            Your bank is still confirming your card for recurring payments. You keep access in the meantime, and we'll
-            charge the card once your bank confirms.
+            Your bank is still confirming your card for recurring payments. You keep access in the meantime, and
+            automatic renewals resume once your bank confirms.
           </Alert>
         </CardContent>
       ) : subscription.payment_method_update_required ? (

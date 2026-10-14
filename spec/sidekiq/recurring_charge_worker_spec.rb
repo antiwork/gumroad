@@ -84,6 +84,7 @@ describe RecurringChargeWorker, :vcr do
       end
       allow(ChargeProcessor).to receive(:get_setup_intent) do
         record_open_transactions.call
+        @on_get_setup_intent&.call
         instance_double(
           StripeSetupIntent,
           mandate: "mandate_held",
@@ -145,16 +146,66 @@ describe RecurringChargeWorker, :vcr do
       expect(subscription.later_charge_presentments).to be_empty
     end
 
-    it "records no INR fixing for a mandate the bank approved in USD" do
+    it "ends the hold and asks the buyer once for a new card when the bank approved the mandate in USD" do
       @setup_intent_currency = Currency::USD
+      expect_any_instance_of(Subscription).not_to receive(:charge!)
+
+      perform_after_period
+      perform_after_period
+
+      subscription.reload
+      expect(subscription).to be_indian_card_mandate_requires_reauthorization
+      expect(subscription.stripe_mandate_id).to be_nil
+      expect(subscription).not_to be_indian_card_mandate_held
+      expect(subscription).to be_renewal_disabled_due_to_indian_card_mandate
+      expect(subscription.later_charge_presentments).to be_empty
+      expect(CustomerLowPriorityMailer).to have_received(:subscription_indian_card_mandate_invalid).with(subscription.id).once
+      expect(mail).to have_received(:deliver_later).with(queue: "low").once
+      expect(ErrorNotifier).to have_received(:notify).with("Held Indian card mandate does not match its setup intent", subscription: subscription.external_id, mandate_id: "mandate_held")
+    end
+
+    it "leaves a newer hold alone when the mandate is replaced before the lock" do
+      @on_get_setup_intent = -> { Subscription.where(id: subscription.id).update_all(stripe_mandate_id: "mandate_newer") }
       expect_any_instance_of(Subscription).not_to receive(:charge!)
 
       perform_after_period
 
       subscription.reload
+      expect(subscription.stripe_mandate_id).to eq("mandate_newer")
       expect(subscription).to be_indian_card_mandate_held
       expect(subscription.later_charge_presentments).to be_empty
-      expect(ErrorNotifier).to have_received(:notify).with("Held Indian card mandate does not match its setup intent", subscription: subscription.external_id, mandate_id: "mandate_held")
+    end
+
+    context "when the product is listed in USD" do
+      before do
+        product.update_column(:price_currency_type, Currency::USD)
+        original_purchase.update_columns(displayed_price_currency_type: Currency::USD, displayed_price_cents: 10_00)
+        @setup_intent_currency = Currency::USD
+      end
+
+      it "checks the mandate was approved in USD, then resumes and charges without a fixing" do
+        expect_any_instance_of(Subscription).to receive(:charge!)
+
+        perform_after_period
+
+        subscription.reload
+        expect(subscription).not_to be_renewal_disabled_due_to_indian_card_mandate
+        expect(subscription).not_to be_indian_card_mandate_hold_pending
+        expect(subscription.later_charge_presentments).to be_empty
+        expect(ChargeProcessor).to have_received(:get_setup_intent)
+      end
+
+      it "ends the hold when the bank approved the mandate in INR" do
+        @setup_intent_currency = Currency::INR
+        expect_any_instance_of(Subscription).not_to receive(:charge!)
+
+        perform_after_period
+
+        subscription.reload
+        expect(subscription).to be_indian_card_mandate_requires_reauthorization
+        expect(subscription).not_to be_indian_card_mandate_held
+        expect(subscription.later_charge_presentments).to be_empty
+      end
     end
 
     it "records no INR fixing when a paused membership that was never held recovers" do

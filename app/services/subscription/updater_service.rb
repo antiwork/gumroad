@@ -4,9 +4,9 @@ class Subscription::UpdaterService
   include CurrencyHelper
 
   MANDATE_PENDING_RESTART_MESSAGE = "Your bank is still confirming this card for recurring payments. You haven't been charged, and your membership hasn't restarted yet. Please try again later."
-  MANDATE_PENDING_RENEWAL_MESSAGE = "Your bank is still confirming this card for recurring payments. We saved the card and haven't charged you. Your membership stays active, and we'll charge the card once your bank confirms."
+  MANDATE_PENDING_RENEWAL_MESSAGE = "Your bank is still confirming this card for recurring payments. We saved the card and haven't charged you. Your membership stays active, and automatic renewals resume once your bank confirms."
   MANDATE_PENDING_PLAN_CHANGE_MESSAGE = "Your bank is still confirming this card for recurring payments. You haven't been charged, and your plan hasn't changed. Please try again once your bank confirms."
-  MANDATE_PENDING_SAVED_CARD_MESSAGE = "Your bank is still confirming your saved card for recurring payments. You haven't been charged, and nothing was changed. Your membership stays active, and we'll charge the card once your bank confirms."
+  MANDATE_PENDING_SAVED_CARD_MESSAGE = "Your bank is still confirming your saved card for recurring payments. You haven't been charged, and nothing was changed. Your membership stays active, and automatic renewals resume once your bank confirms."
 
   attr_reader :subscription, :gumroad_guid, :params, :logged_in_user, :remote_ip, :manage_cookie_verified
   attr_accessor :original_purchase, :original_price, :new_purchase, :upgrade_purchase,
@@ -483,6 +483,9 @@ class Subscription::UpdaterService
 
       if !is_resubscribing && subscription.indian_card_mandate_held?
         unless subscription.resume_held_indian_card_mandate!(mandate:, status:)
+          if subscription.indian_card_mandate_requires_reauthorization?
+            raise Subscription::UpdateFailed, "We could not verify this card for recurring payments. Please try the card again or use a different payment method."
+          end
           raise Subscription::UpdateFailed, "There is a temporary problem, please try again (your card was not charged)."
         end
         return

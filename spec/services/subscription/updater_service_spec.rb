@@ -3143,6 +3143,25 @@ describe Subscription::UpdaterService, :vcr do
             expect(Rails.logger).to have_received(:info).with("indian_card_mandate.pending_restart.held subscription_id=#{@subscription.id} mandate_id=mandate_pending path=live card=saved")
           end
 
+          it "asks for another card, without charging, when the saved card's mandate was approved in another currency" do
+            restart_with_replacement_card
+            @mandate_status = "active"
+            allow(ChargeProcessor).to receive(:get_setup_intent).and_return(
+              instance_double(
+                StripeSetupIntent,
+                mandate: "mandate_pending",
+                metadata: { gumroad_subscription_id: @subscription.external_id },
+                card_mandate_options: Stripe::StripeObject.construct_from(currency: Currency::INR)
+              )
+            )
+            allow(ErrorNotifier).to receive(:notify)
+            expect_any_instance_of(described_class).not_to receive(:charge_user!)
+
+            result = restart_with_saved_card
+
+            expect(result).to eq(success: false, error_message: rejected_message)
+          end
+
           it "says the plan has not changed when a plan change meets the pending saved card" do
             restart_with_replacement_card
             original_variants = @subscription.reload.original_purchase.variant_attributes.to_a

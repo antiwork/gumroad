@@ -480,7 +480,7 @@ class Subscription < ApplicationRecord
         return unless alive?(include_pending_cancellation: false)
 
         if status != "pending" && indian_card_mandate_held?
-          # The hold told the buyer we'd charge once the bank confirms, so they must hear that it didn't.
+          # The hold told the buyer renewals resume once the bank confirms, so they must hear that they won't.
           notify_buyer = true
           self.indian_card_mandate_hold_pending = false
         else
@@ -598,8 +598,8 @@ class Subscription < ApplicationRecord
       stripe_mandate_id.present?
   end
 
-  # Returns true only when renewals resumed. The hold saved the card without its price fixing, so the fixing is
-  # recorded first, and only for the mandate the buyer approved in the recovery currency.
+  # Returns true only when renewals resumed. The hold saved the card without its price fixing, so resuming first
+  # checks the mandate was approved in the currency the renewal bills, and records the fixing for INR listings.
   def resume_held_indian_card_mandate!(mandate: nil, status: nil)
     return false unless indian_card_mandate_held?
 
@@ -613,30 +613,38 @@ class Subscription < ApplicationRecord
     end
 
     presentment_attributes = nil
-    currency = indian_card_recovery_presentment_currency
-    if currency.present? && current_later_charge_presentment.nil?
+    if current_later_charge_presentment.nil?
+      currency = indian_card_recovery_presentment_currency.presence || Currency::USD
       setup_intent = ChargeProcessor.get_setup_intent(renewal_merchant_account, card.stripe_setup_intent_id) if card.stripe_setup_intent_id.present?
-      # An older mandate approved in USD cannot bill an INR fixing.
       unless setup_intent.present? &&
              setup_intent.mandate == mandate.id &&
              mandate.id == stripe_mandate_id &&
              setup_intent.metadata[:gumroad_subscription_id] == external_id &&
              setup_intent.card_mandate_options&.currency.to_s.downcase == currency
         ErrorNotifier.notify("Held Indian card mandate does not match its setup intent", subscription: external_id, mandate_id: mandate.id)
+        # The SetupIntent never changes, so retrying cannot help: ask the buyer for a new mandate instead.
+        transaction do
+          lock!
+          if held_indian_card_mandate_unchanged?(card, mandate)
+            require_indian_card_mandate_reauthorization!(clear_existing_mandate: true, notify_buyer_if_already_disabled: true)
+          end
+        end
         return false
       end
 
-      presentment_attributes = indian_card_recovery_presentment_attributes(currency)
-      if presentment_attributes.nil?
-        ErrorNotifier.notify("Held Indian card mandate has no price fixing to record", subscription: external_id, mandate_id: mandate.id)
-        return false
+      if currency == Currency::INR
+        presentment_attributes = indian_card_recovery_presentment_attributes(currency)
+        if presentment_attributes.nil?
+          ErrorNotifier.notify("Held Indian card mandate has no price fixing to record", subscription: external_id, mandate_id: mandate.id)
+          return false
+        end
       end
     end
 
     resumed = false
     transaction do
       lock!
-      if indian_card_mandate_held? && credit_card_to_charge&.id == card.id && stripe_mandate_id == mandate.id
+      if held_indian_card_mandate_unchanged?(card, mandate)
         if presentment_attributes.present? && current_later_charge_presentment.nil?
           later_charge_presentments.create!(**presentment_attributes, effective_from: Time.current)
         end
@@ -2008,6 +2016,10 @@ class Subscription < ApplicationRecord
 
     def end_indian_card_mandate_hold
       self.indian_card_mandate_hold_pending = false
+    end
+
+    def held_indian_card_mandate_unchanged?(card, mandate)
+      indian_card_mandate_held? && credit_card_to_charge&.id == card.id && stripe_mandate_id == mandate.id
     end
 
     def assign_seller
