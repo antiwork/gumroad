@@ -79,6 +79,8 @@ class Api::V2::CoversControllerTest < ActionController::TestCase
         post :create, params: create_params(signed_blob_id:), as: :json
       end
 
+      assert_response :success
+      assert_equal "application/json", response.media_type
       body = response.parsed_body
       assert_equal false, body["success"]
       assert_equal "The signed_blob_id is invalid or expired.", body["message"]
