@@ -95,7 +95,9 @@ module SearchProducts
 
       # search_options coerces each of these unconditionally (`.to_i`, `.to_f`) or hands it to ES
       # as a scalar; a crafted `?query[][]=x` would otherwise 500 a public profile URL.
-      %i[query rating min_price max_price sort recommended_by from size].each do |key|
+      # `taxonomy_id` is wrapped into a `terms` list by search_options, so an array there nests the
+      # value and 400s the whole query.
+      %i[query rating min_price max_price sort recommended_by from size taxonomy_id].each do |key|
         search_params[key] = scalar_search_value(search_params[key]) if search_params.key?(key)
       end
 

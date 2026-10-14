@@ -6920,6 +6920,16 @@ class LinksControllerSearchTest < ActionController::TestCase
     assert_equal 1, response.parsed_body["total"]
   end
 
+  test "normalize_search_param_values! collapses a crafted nested taxonomy_id to its scalar reading" do
+    params = ActionController::Parameters.new(taxonomy_id: ["18"])
+    @controller.send(:normalize_search_param_values!, params)
+    assert_equal "18", params[:taxonomy_id]
+
+    params = ActionController::Parameters.new(taxonomy_id: { "a" => "18" })
+    @controller.send(:normalize_search_param_values!, params)
+    assert_nil params[:taxonomy_id]
+  end
+
   test "GET search searches only for recommendable products" do
     setting_and_ordering_setup
     bad = create_product(name: "Previously-owned weasel")
