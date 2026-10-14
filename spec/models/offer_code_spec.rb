@@ -869,6 +869,17 @@ describe OfferCode do
       expect(code.reload).to be_valid
     end
 
+    it "saves a nil auto_apply as false" do
+      code = universal_code(auto_apply: nil)
+      expect(code.save).to be(true)
+      expect(code.reload.auto_apply).to be(false)
+
+      code.update!(auto_apply: true)
+      expect(code.update(auto_apply: nil)).to be(true)
+      expect(code.auto_apply).to be(false)
+      expect(code.reload.auto_apply).to be(false)
+    end
+
     describe "sale_label" do
       it "strips whitespace and turns blank into nil" do
         code = universal_code(auto_apply: true, sale_label: "  Black Friday  ")

@@ -64,6 +64,7 @@ class OfferCode < ApplicationRecord
   # refused. A raw locking read, not `user.lock!`, so a seller object with unsaved changes
   # is never reloaded or raised on.
   before_validation :lock_seller_for_auto_apply, if: :auto_apply?
+  before_validation { self.auto_apply = false if auto_apply.nil? }
 
   after_save :invalidate_product_cache
   after_save { Current.auto_apply_offer_codes = nil }
@@ -734,7 +735,9 @@ class OfferCode < ApplicationRecord
       errors.add(:base, "A cancellation or upsell discount cannot be applied automatically.") if is_cancellation_discount? || upsell.present?
       return if user_id.blank?
 
-      other = OfferCode.alive.where(user_id:, auto_apply: true)
+      # A locking (current) read: `update` assigns associations before the seller lock, and that
+      # read fixes the REPEATABLE READ snapshot, so a plain read can miss a code committed since.
+      other = OfferCode.alive.where(user_id:, auto_apply: true).lock
       other = other.where.not(id:) if persisted?
       if (existing = other.first)
         errors.add(:base, "Another discount (#{existing.code}) is already applied automatically. Turn it off first.")
