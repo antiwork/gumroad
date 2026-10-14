@@ -6,7 +6,7 @@ require "timeout"
 describe OfferCode, "auto apply concurrency" do
   self.use_transactional_tests = false
 
-  def wait_for_row_lock(process_id:, table:)
+  def wait_for_row_lock(process_id:, table:, thread:)
     Timeout.timeout(10) do
       loop do
         lock_wait_count = ActiveRecord::Base.connection.select_value(<<~SQL.squish)
@@ -20,7 +20,7 @@ describe OfferCode, "auto apply concurrency" do
             AND requested_lock.OBJECT_SCHEMA = DATABASE()
             AND requested_lock.OBJECT_NAME = #{ActiveRecord::Base.connection.quote(table)}
         SQL
-        break if lock_wait_count.to_i.positive?
+        break if lock_wait_count.to_i.positive? || !thread.alive?
 
         sleep 0.01
       end
@@ -40,7 +40,14 @@ describe OfferCode, "auto apply concurrency" do
     User.where(id: @seller&.id).delete_all
   end
 
-  it "lets only one of two concurrent saves turn auto apply on" do
+  def new_auto_apply_code
+    User.find(@seller.id).offer_codes.build(code: "new#{SecureRandom.hex(3)}", amount_percentage: 30, universal: true, products: [], auto_apply: true)
+  end
+
+  # Holds the first writer right after its first statement matching `pause_after`, starts the
+  # second writer, expects it to block on the seller row, then releases the first.
+  # Returns writer => [saved, errors].
+  def race(first:, second:, pause_after: /FROM `users`.*FOR UPDATE/m)
     first_lock = Queue.new
     release_first = Queue.new
     second_connection_id = Queue.new
@@ -51,7 +58,7 @@ describe OfferCode, "auto apply concurrency" do
 
     subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |_name, _start, _finish, _id, payload|
       next unless Thread.current[:auto_apply_first_writer]
-      next unless payload[:sql].include?("FROM `users`") && payload[:sql].include?("FOR UPDATE")
+      next unless payload[:sql].match?(pause_after)
 
       Thread.current[:auto_apply_first_writer] = false
       first_lock << true
@@ -61,8 +68,7 @@ describe OfferCode, "auto apply concurrency" do
     first_writer = Thread.new do
       ActiveRecord::Base.connection_pool.with_connection do
         Thread.current[:auto_apply_first_writer] = true
-        code = User.find(@seller.id).offer_codes.build(code: "new#{SecureRandom.hex(3)}", amount_percentage: 30, universal: true, products: [], auto_apply: true)
-        results << [:first, code.save, code.errors.full_messages]
+        results << [:first, *first.call]
       rescue StandardError => error
         errors << error
       ensure
@@ -74,15 +80,13 @@ describe OfferCode, "auto apply concurrency" do
     second_writer = Thread.new do
       ActiveRecord::Base.connection_pool.with_connection do
         second_connection_id << ActiveRecord::Base.connection.select_value("SELECT CONNECTION_ID()")
-        code = OfferCode.find(@existing_code.id)
-        # Like Checkout::DiscountsController#update: the association writes read before validation.
-        results << [:second, code.update(auto_apply: true, products: [], excluded_products: []), code.errors.full_messages]
+        results << [:second, *second.call]
       rescue StandardError => error
         errors << error
       end
     end
     process_id = Timeout.timeout(10) { second_connection_id.pop }
-    wait_for_row_lock(process_id:, table: "users")
+    wait_for_row_lock(process_id:, table: "users", thread: second_writer)
 
     expect(second_writer).to be_alive
     expect(results).to be_empty
@@ -91,20 +95,43 @@ describe OfferCode, "auto apply concurrency" do
     [first_writer, second_writer].each { expect(_1.join(10)).to be_present }
 
     expect(errors).to be_empty
-    outcomes = 2.times.map { results.pop }.to_h { |writer, saved, messages| [writer, [saved, messages]] }
-    expect(outcomes[:first]).to eq([true, []])
-    expect(outcomes[:second].first).to be(false)
-    expect(outcomes[:second].last.join).to include("is already applied automatically")
-    expect(OfferCode.alive.where(user_id: @seller.id, auto_apply: true).count).to eq(1)
-    expect(@existing_code.reload.auto_apply).to be(false)
+    2.times.map { results.pop }.to_h { |writer, saved, messages| [writer, [saved, messages]] }
   ensure
     ActiveSupport::Notifications.unsubscribe(subscriber) if subscriber
-    release_first << true if defined?(release_first) && release_first
+    release_first << true if release_first
     [first_writer, second_writer].compact.each do |thread|
       next if thread.join(1)
 
       thread.kill
       thread.join
     end
+  end
+
+  it "lets only one of two concurrent saves turn auto apply on" do
+    outcomes = race(
+      first: -> { new_auto_apply_code.then { [_1.save, _1.errors.full_messages] } },
+      second: lambda do
+        code = OfferCode.find(@existing_code.id)
+        # Like Checkout::DiscountsController#update: the association writes read before validation.
+        [code.update(auto_apply: true, products: [], excluded_products: []), code.errors.full_messages]
+      end
+    )
+
+    expect(outcomes[:first]).to eq([true, []])
+    expect(outcomes[:second].first).to be(false)
+    expect(outcomes[:second].last.join).to include("is already applied automatically")
+    expect(OfferCode.alive.where(user_id: @seller.id, auto_apply: true).count).to eq(1)
+    expect(@existing_code.reload.auto_apply).to be(false)
+  end
+
+  it "lets only one of two concurrent creates turn auto apply on" do
+    create_code = -> { new_auto_apply_code.then { [_1.save, _1.errors.full_messages] } }
+    # Paused after its INSERT, so without the seller lock the second create passes validation too.
+    outcomes = race(first: create_code, second: create_code, pause_after: /\AINSERT INTO `offer_codes`/)
+
+    expect(outcomes[:first]).to eq([true, []])
+    expect(outcomes[:second].first).to be(false)
+    expect(outcomes[:second].last.join).to include("is already applied automatically")
+    expect(OfferCode.alive.where(user_id: @seller.id, auto_apply: true).count).to eq(1)
   end
 end

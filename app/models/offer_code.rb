@@ -57,12 +57,8 @@ class OfferCode < ApplicationRecord
 
 
   before_validation :normalize_sale_label
-  # validate_auto_apply reads the seller's alive auto-applied codes, and the dashboard and
-  # API v2 both write here. Two concurrent saves could each pass that check before either
-  # inserts, leaving two alive codes where only the first is ever read. Taking the seller's
-  # row lock first serializes them: the second save re-reads after the first commits and is
-  # refused. A raw locking read, not `user.lock!`, so a seller object with unsaved changes
-  # is never reloaded or raised on.
+  # Before validate_auto_apply, so concurrent auto-apply saves for one seller serialize on the
+  # seller row. A raw locking read: `user.lock!` reloads the seller, or raises on unsaved changes.
   before_validation :lock_seller_for_auto_apply, if: :auto_apply?
   before_validation { self.auto_apply = false if auto_apply.nil? }
 
@@ -740,10 +736,11 @@ class OfferCode < ApplicationRecord
       errors.add(:base, "A cancellation or upsell discount cannot be applied automatically.") if is_cancellation_discount? || upsell.present?
       return if user_id.blank?
 
-      # A locking (current) read: `update` assigns associations before the seller lock, and that
-      # read fixes the REPEATABLE READ snapshot, so a plain read can miss a code committed since.
-      other = OfferCode.alive.where(user_id:, auto_apply: true).lock
-      other = other.where.not(id:) if persisted?
+      # `update` assigns associations before the seller lock, fixing the REPEATABLE READ snapshot,
+      # so it needs a current read. A create's first read is the seller lock; locking here too would
+      # take gap locks that can deadlock two sellers' concurrent inserts.
+      other = OfferCode.alive.where(user_id:, auto_apply: true)
+      other = other.where.not(id:).lock if persisted?
       if (existing = other.first)
         errors.add(:base, "Another discount (#{existing.code}) is already applied automatically. Turn it off first.")
       end
