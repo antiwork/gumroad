@@ -4181,6 +4181,19 @@ describe Api::Internal::Admin::UsersController do
       expect(user.payment_address).to eq("paypal@example.com")
     end
 
+    it "returns 422 without restoring a rail a Google or Apple takeover retired" do
+      merchant_account
+      strip_bank_rail!(user)
+      merchant_account.reload.mark_retired_by_adoption!
+
+      post :restore_bank_payout_rail, params: { user_id: user.external_id }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body["message"]).to eq("The bank rail was removed when a Google or Apple sign-in took over the account, so it cannot be restored")
+      expect(user.reload.active_bank_account).to be_nil
+      expect(merchant_account.reload).to be_deleted
+    end
+
     it "returns 422 when the user still has an active bank account" do
       create(:user_compliance_info, user:, country: "India")
       create(:indian_bank_account, user:)
