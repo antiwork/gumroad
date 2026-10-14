@@ -15,4 +15,5 @@ docker/tmp/
 .env
 .env.*.local
 node_modules/
+resend_callbacks/
 spec/
