@@ -127,7 +127,7 @@ describe("DiscountsPage shop-wide auto-apply", () => {
     fireEvent.click(toggle);
 
     const input = screen.getByLabelText("Sale label (optional)");
-    const inputs = [...document.querySelectorAll("input")];
+    const inputs: HTMLElement[] = [...document.querySelectorAll("input")];
     expect(inputs.indexOf(toggle)).toBeLessThan(inputs.indexOf(input));
     const toggleLegends = [...(toggle.closest("fieldset")?.querySelectorAll("legend") ?? [])];
     expect(toggleLegends.some((legend) => legend.textContent.includes("Sale label"))).toBe(false);
