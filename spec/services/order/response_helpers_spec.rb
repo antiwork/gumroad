@@ -51,6 +51,14 @@ describe Order::ResponseHelpers do
     describe "updated_product price for a pay-what-you-want purchase" do
       let(:pwyw_product) { create(:product, user: seller, price_cents: 10_00, customizable_price: true) }
 
+      it "returns the buyer's unit price rather than the displayed price" do
+        purchase = create(:failed_purchase, link: pwyw_product, displayed_price_cents: 12_00, pre_discount_unit_price_cents: 30_00)
+
+        response = test_instance.send(:error_response, "Payment declined", purchase:)
+
+        expect(response[:updated_product][:price]).to eq(30_00)
+      end
+
       it "raises the buyer's unit price to a minimum the seller raised after the attempt" do
         purchase = create(:failed_purchase, link: pwyw_product, pre_discount_unit_price_cents: 20_00)
         pwyw_product.update!(price_cents: 25_00)
