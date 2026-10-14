@@ -25,6 +25,14 @@ describe PaginatedInstallmentsPresenter do
       end
     end
 
+    it "reads every row's open and click counts in one DynamoDB batch" do
+      stub_const("#{described_class}::PER_PAGE", 10)
+
+      expect(EmailEngagementDynamoStore).not_to receive(:summary)
+      expect(EmailEngagementDynamoStore).to receive(:summaries).once.and_call_original
+      expect(presenter.props[:installments].size).to eq(2)
+    end
+
     context "when 'page' option is specified" do
       let(:page) { 2 }
 

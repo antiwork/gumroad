@@ -25,6 +25,16 @@ describe CollaboratorsPresenter do
       )
     end
 
+    it "loads every collaborator's products and avatar without a query per collaborator" do
+      row_queries = /FROM `(affiliates_links|links|users|active_storage_attachments)`/
+      described_class.new(seller:).index_props
+      two_collaborators = count_queries(matching: row_queries) { described_class.new(seller:).index_props }
+
+      2.times { create(:collaborator, seller:, products: [create(:product, user: seller)]) }
+
+      expect(count_queries(matching: row_queries) { described_class.new(seller:).index_props }).to eq(two_collaborators)
+    end
+
     it "returns if the seller has any incoming collaborations" do
       props = described_class.new(seller: pending_collaborator.affiliate_user).index_props
       expect(props[:has_incoming_collaborators]).to eq true

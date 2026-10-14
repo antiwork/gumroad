@@ -48,6 +48,17 @@ describe Checkout::UpsellsController do
     end
   end
 
+  describe "GET paged" do
+    it "loads every upsell's version pairs in one query" do
+      product3 = create(:product_with_digital_versions, user: seller)
+      upsell3 = create(:upsell, product: product3, name: "Upsell 3", seller:)
+      create(:upsell_variant, upsell: upsell3, selected_variant: product3.alive_variants.first, offered_variant: product3.alive_variants.second)
+
+      expect(count_queries(matching: /FROM `upsell_variants`/) { get :paged, params: { page: 1 } }).to eq(1)
+      expect(response.parsed_body["upsells"].size).to eq(3)
+    end
+  end
+
   describe "GET statistics" do
     before do
       build_list :product, 5 do |product, i|

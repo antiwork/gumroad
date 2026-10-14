@@ -14,13 +14,7 @@ class Checkout::UpsellsPresenter
   def upsells_props
     {
       pages:,
-      upsells: upsells.includes(
-          :product,
-          :variant,
-          :offer_code,
-          :selected_products,
-          upsell_variants: [:selected_variant, :offered_variant]
-        ).map(&:as_json),
+      upsells: upsells.map(&:as_json),
       pagination:,
       products: product_props
     }

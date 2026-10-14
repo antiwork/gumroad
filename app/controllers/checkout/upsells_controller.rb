@@ -123,6 +123,7 @@ class Checkout::UpsellsController < Sellers::BaseController
       upsells = current_seller.upsells
                       .alive
                       .not_is_content_upsell
+                      .includes(:product, :variant, :offer_code, :selected_products, upsell_variants: [:selected_variant, :offered_variant])
                       .sorted_by(**paged_params[:sort].to_h.symbolize_keys)
                       .order(updated_at: :desc)
       upsells = upsells.where("name LIKE :query", query: "%#{params[:query]}%") if params[:query].present?

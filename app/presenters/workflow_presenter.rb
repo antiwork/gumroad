@@ -45,7 +45,7 @@ class WorkflowPresenter
       send_to_past_customers: workflow.send_to_past_customers,
     }
 
-    props[:installments] = workflow.installments.alive.joins(:installment_rule).order("delayed_delivery_time ASC").map { InstallmentPresenter.new(seller:, installment: _1).props }
+    props[:installments] = workflow.alive_installments_in_delivery_order.map { InstallmentPresenter.new(seller:, installment: _1).props }
 
     props.merge!(workflow.json_filters)
     if workflow.product_type? || workflow.variant_type?

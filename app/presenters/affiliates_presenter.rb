@@ -112,6 +112,7 @@ class AffiliatesPresenter
       affiliates = seller.direct_affiliates
                             .alive
                             .includes(:affiliate_user, :seller)
+                            .preload(product_affiliates: :product)
                             .sorted_by(**sort.to_h.symbolize_keys)
 
       affiliates = affiliates.joins(:affiliate_user).where("users.username LIKE :query OR users.email LIKE :query OR users.name LIKE :query", query: "%#{query.strip}%") if query

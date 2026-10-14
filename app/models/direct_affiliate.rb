@@ -54,7 +54,7 @@ class DirectAffiliate < Affiliate
     affiliate_info.merge(
       products: affiliated_products,
       apply_to_all_products: affiliated_products.all? { _1[:fee_percent] == affiliate_percentage } && affiliated_products.length == seller.links.alive.count,
-      product_referral_url: product_affiliates.one? ? referral_url_for_product(products.first) : referral_url)
+      product_referral_url: product_affiliates.one? ? referral_url_for_product(product_affiliates.first.product) : referral_url)
   end
 
   def product_sales_info

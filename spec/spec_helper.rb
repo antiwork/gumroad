@@ -640,6 +640,7 @@ RSpec.configure do |config|
   config.include RichTextEditorHelpers, type: :system
   config.include DiscoverHelpers, type: :system
   config.include MockTableHelpers
+  config.include QueryCountHelpers
   config.include SecureHeadersHelpers, type: :system
   config.include ElasticsearchHelpers
   config.include ProductPageViewHelpers
