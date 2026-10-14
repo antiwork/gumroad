@@ -341,7 +341,8 @@ export const Product = ({
     setDiscountCode(initialDiscountCode);
   }, [initialDiscountCode]);
 
-  const selectionAttributes = applySelection(product, discountCode?.valid ? discountCode.discount : null, selection);
+  const discount = discountCode?.valid ? discountCode.discount : null;
+  const selectionAttributes = applySelection(product, discount, selection);
   let { basePriceCents } = selectionAttributes;
   const { priceCents, discountedPriceCents, pppDiscounted, maxQuantity, selectedOption } = selectionAttributes;
   React.useEffect(() => {
@@ -404,12 +405,18 @@ export const Product = ({
   // The label names the price the buyer is looking at, so it only shows while the seller's
   // auto-applied code is what produced that price: a PPP discount, or a code whose minimum
   // quantity this selection has not met, leaves the displayed price alone.
+  const codeDiscounts = (attributes: typeof selectionAttributes) =>
+    !attributes.pppDiscounted && attributes.discountedPriceCents < attributes.priceCents;
+  // With no option picked, each option shows its own price, so any discounted one earns the label.
   const showSaleLabel =
     !!saleLabel &&
     discountCode === initialDiscountCode &&
     !!discountCode?.valid &&
-    !pppDiscounted &&
-    discountedPriceCents < priceCents;
+    (product.options.length > 0 && selectedOption === null
+      ? product.options.some((option) =>
+          codeDiscounts(applySelection(product, discount, { ...selection, optionId: option.id })),
+        )
+      : codeDiscounts(selectionAttributes));
 
   return (
     <article className="relative grid rounded border border-border bg-background lg:grid-cols-[2fr_1fr]">
