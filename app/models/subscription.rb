@@ -598,8 +598,8 @@ class Subscription < ApplicationRecord
       stripe_mandate_id.present?
   end
 
-  # Returns true only when renewals resumed. The hold saved the card without its price fixing, so resuming first
-  # checks the mandate was approved in the currency the renewal bills, and records the fixing for INR listings.
+  # True only when renewals resumed. A mandate approved outside the listing currency ends the hold for good, leaving
+  # indian_card_mandate_requires_reauthorization? set; an INR listing records its fixing before resuming.
   def resume_held_indian_card_mandate!(mandate: nil, status: nil)
     return false unless indian_card_mandate_held?
 
@@ -614,7 +614,7 @@ class Subscription < ApplicationRecord
 
     presentment_attributes = nil
     if current_later_charge_presentment.nil?
-      currency = indian_card_recovery_presentment_currency.presence || Currency::USD
+      currency = indian_card_mandate_listing_currency
       setup_intent = ChargeProcessor.get_setup_intent(renewal_merchant_account, card.stripe_setup_intent_id) if card.stripe_setup_intent_id.present?
       unless setup_intent.present? &&
              setup_intent.mandate == mandate.id &&
@@ -633,6 +633,11 @@ class Subscription < ApplicationRecord
       end
 
       if currency == Currency::INR
+        # The recovery currency can be briefly unavailable (e.g. a settlement mismatch marker), so wait it out.
+        if indian_card_recovery_presentment_currency != currency
+          ErrorNotifier.notify("Held Indian card mandate cannot record its INR fixing yet", subscription: external_id, mandate_id: mandate.id)
+          return false
+        end
         presentment_attributes = indian_card_recovery_presentment_attributes(currency)
         if presentment_attributes.nil?
           ErrorNotifier.notify("Held Indian card mandate has no price fixing to record", subscription: external_id, mandate_id: mandate.id)
@@ -890,16 +895,23 @@ class Subscription < ApplicationRecord
   def indian_card_recovery_presentment_currency
     return unless india_card_mandate_reliability_enabled?
 
-    purchase = original_purchase
-    return if purchase.nil?
+    return if original_purchase.nil?
 
     currency = Currency::INR
-    return unless link.price_currency_type.to_s.downcase == currency
-    displayed_currency = purchase[:displayed_price_currency_type].presence || link.price_currency_type
-    return unless displayed_currency.to_s.downcase == currency
+    return unless indian_card_mandate_listing_currency == currency
     return unless indian_card_renewal_presentment_supported?(currency)
 
     currency
+  end
+
+  # The currency a held mandate's SetupIntent was approved in. Unlike the recovery currency, it never changes.
+  def indian_card_mandate_listing_currency
+    displayed_currency = original_purchase&.[](:displayed_price_currency_type).presence || link.price_currency_type
+    if link.price_currency_type.to_s.downcase == Currency::INR && displayed_currency.to_s.downcase == Currency::INR
+      Currency::INR
+    else
+      Currency::USD
+    end
   end
 
   # The renewal lane refuses to invent a buyer-currency amount without a stored row, so a

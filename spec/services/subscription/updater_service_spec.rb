@@ -3143,9 +3143,23 @@ describe Subscription::UpdaterService, :vcr do
             expect(Rails.logger).to have_received(:info).with("indian_card_mandate.pending_restart.held subscription_id=#{@subscription.id} mandate_id=mandate_pending path=live card=saved")
           end
 
-          it "asks for another card, without charging, when the saved card's mandate was approved in another currency" do
+          it "asks the buyer to come back once the bank confirms when the saved card is not held" do
+            restart_with_replacement_card
+            @subscription.reload.update!(indian_card_mandate_hold_pending: false)
+            expect_any_instance_of(described_class).not_to receive(:charge_user!)
+
+            result = restart_with_saved_card
+
+            expect(result).to eq(success: false, error_message: Subscription::UpdaterService::MANDATE_PENDING_SAVED_CARD_RETRY_MESSAGE)
+            expect(@subscription.reload).to be_renewal_disabled_due_to_indian_card_mandate
+            expect(@subscription).not_to be_indian_card_mandate_held
+          end
+
+          it "ends the hold and asks once for another card, without charging, when the saved card's mandate was approved in another currency" do
             restart_with_replacement_card
             @mandate_status = "active"
+            mail = instance_double(ActionMailer::MessageDelivery, deliver_later: true)
+            allow(CustomerLowPriorityMailer).to receive(:subscription_indian_card_mandate_invalid).and_return(mail)
             allow(ChargeProcessor).to receive(:get_setup_intent).and_return(
               instance_double(
                 StripeSetupIntent,
@@ -3159,7 +3173,14 @@ describe Subscription::UpdaterService, :vcr do
 
             result = restart_with_saved_card
 
-            expect(result).to eq(success: false, error_message: rejected_message)
+            expect(result).to eq(success: false, error_message: Subscription::UpdaterService::HELD_MANDATE_ENDED_MESSAGE)
+            @subscription.reload
+            expect(@subscription).to be_indian_card_mandate_requires_reauthorization
+            expect(@subscription.stripe_mandate_id).to be_nil
+            expect(@subscription).not_to be_indian_card_mandate_held
+            expect(@subscription.purchases.count).to eq(@purchase_count_before)
+            expect(CustomerLowPriorityMailer).to have_received(:subscription_indian_card_mandate_invalid).with(@subscription.id).once
+            expect(mail).to have_received(:deliver_later).with(queue: "low").once
           end
 
           it "says the plan has not changed when a plan change meets the pending saved card" do

@@ -7,6 +7,8 @@ class Subscription::UpdaterService
   MANDATE_PENDING_RENEWAL_MESSAGE = "Your bank is still confirming this card for recurring payments. We saved the card and haven't charged you. Your membership stays active, and automatic renewals resume once your bank confirms."
   MANDATE_PENDING_PLAN_CHANGE_MESSAGE = "Your bank is still confirming this card for recurring payments. You haven't been charged, and your plan hasn't changed. Please try again once your bank confirms."
   MANDATE_PENDING_SAVED_CARD_MESSAGE = "Your bank is still confirming your saved card for recurring payments. You haven't been charged, and nothing was changed. Your membership stays active, and automatic renewals resume once your bank confirms."
+  MANDATE_PENDING_SAVED_CARD_RETRY_MESSAGE = "Your bank is still confirming your saved card for recurring payments. You haven't been charged, and nothing was changed. Please try again once your bank confirms."
+  HELD_MANDATE_ENDED_MESSAGE = "We could not verify this card for recurring payments. Please use a different payment method."
 
   attr_reader :subscription, :gumroad_guid, :params, :logged_in_user, :remote_ip, :manage_cookie_verified
   attr_accessor :original_purchase, :original_price, :new_purchase, :upgrade_purchase,
@@ -271,6 +273,9 @@ class Subscription::UpdaterService
       result = { success: false, error_message: e.message }
     end
 
+    # The rollback undid ending the hold, so end it again outside the transaction for the reauthorization and email to commit.
+    subscription.reload.resume_held_indian_card_mandate! if @held_indian_card_mandate_ended
+
     subscription.update_flag!(:is_resubscription_pending_confirmation, true, true) if is_resubscribing && result[:requires_card_action]
 
     if apply_plan_change_immediately? && !same_variants? && result[:success] && !result[:requires_card_action]
@@ -414,7 +419,10 @@ class Subscription::UpdaterService
       # A plan change rolls back with the pending card, so the renewal message would promise a change that never happens.
       return MANDATE_PENDING_PLAN_CHANGE_MESSAGE if new_purchase.present?
 
-      saved_card ? MANDATE_PENDING_SAVED_CARD_MESSAGE : MANDATE_PENDING_RENEWAL_MESSAGE
+      return MANDATE_PENDING_RENEWAL_MESSAGE unless saved_card
+
+      # Only a hold is rechecked in the background; any other paused membership must come back and retry.
+      subscription.indian_card_mandate_held? ? MANDATE_PENDING_SAVED_CARD_MESSAGE : MANDATE_PENDING_SAVED_CARD_RETRY_MESSAGE
     end
 
     def log_mandate_pending_hold(mandate_id, card:)
@@ -484,7 +492,8 @@ class Subscription::UpdaterService
       if !is_resubscribing && subscription.indian_card_mandate_held?
         unless subscription.resume_held_indian_card_mandate!(mandate:, status:)
           if subscription.indian_card_mandate_requires_reauthorization?
-            raise Subscription::UpdateFailed, "We could not verify this card for recurring payments. Please try the card again or use a different payment method."
+            @held_indian_card_mandate_ended = true
+            raise Subscription::UpdateFailed, HELD_MANDATE_ENDED_MESSAGE
           end
           raise Subscription::UpdateFailed, "There is a temporary problem, please try again (your card was not charged)."
         end

@@ -176,6 +176,58 @@ describe RecurringChargeWorker, :vcr do
       expect(subscription.later_charge_presentments).to be_empty
     end
 
+    it "leaves a newer hold alone when the mandate is replaced before the lock that would end the hold" do
+      @setup_intent_currency = Currency::USD
+      @on_get_setup_intent = -> { Subscription.where(id: subscription.id).update_all(stripe_mandate_id: "mandate_newer") }
+      expect_any_instance_of(Subscription).not_to receive(:charge!)
+
+      perform_after_period
+
+      subscription.reload
+      expect(subscription.stripe_mandate_id).to eq("mandate_newer")
+      expect(subscription).to be_indian_card_mandate_held
+      expect(subscription).not_to be_indian_card_mandate_requires_reauthorization
+      expect(CustomerLowPriorityMailer).not_to have_received(:subscription_indian_card_mandate_invalid)
+    end
+
+    it "keeps the hold, without charging, while the INR fixing is briefly unavailable" do
+      allow_any_instance_of(MerchantAccount).to receive(:settlement_currency_mismatch_active?).and_return(true)
+      expect(subscription.indian_card_recovery_presentment_currency).to be_nil
+      expect_any_instance_of(Subscription).not_to receive(:charge!)
+
+      perform_after_period
+
+      subscription.reload
+      expect(subscription).to be_indian_card_mandate_held
+      expect(subscription).not_to be_indian_card_mandate_requires_reauthorization
+      expect(subscription.stripe_mandate_id).to eq("mandate_held")
+      expect(subscription.later_charge_presentments).to be_empty
+      expect(CustomerLowPriorityMailer).not_to have_received(:subscription_indian_card_mandate_invalid)
+      expect(ErrorNotifier).to have_received(:notify).with("Held Indian card mandate cannot record its INR fixing yet", subscription: subscription.external_id, mandate_id: "mandate_held")
+    end
+
+    it "records the INR fixing before charging a held membership whose free trial ended without a payment" do
+      original_purchase.is_free_trial_purchase = true
+      original_purchase.update_columns(purchase_state: "not_charged", flags: original_purchase.flags)
+      subscription.update_columns(free_trial_ends_at: 1.day.ago)
+      expect(subscription.purchases.successful).to be_empty
+      fixing_at_charge = nil
+      expect_any_instance_of(Subscription).to receive(:charge!) do |charged|
+        fixing_at_charge = charged.later_charge_presentments.sole
+      end
+
+      perform_after_period
+
+      expect(fixing_at_charge).to have_attributes(
+        presentment_currency: Currency::INR,
+        presentment_price_cents: 80_000,
+        canonical_price_cents: 10_00
+      )
+      subscription.reload
+      expect(subscription).not_to be_renewal_disabled_due_to_indian_card_mandate
+      expect(subscription).not_to be_indian_card_mandate_hold_pending
+    end
+
     context "when the product is listed in USD" do
       before do
         product.update_column(:price_currency_type, Currency::USD)
