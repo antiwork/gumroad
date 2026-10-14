@@ -71,7 +71,7 @@ export const searchProductOfferCodes = async (
   return cast<ProductOfferCodeSuggestion[]>(await response.json());
 };
 
-type DiscountPayload = {
+export type DiscountPayload = {
   name: string;
   code: string;
   discount: { type: "cents" | "percent"; value: number };
@@ -109,7 +109,7 @@ export const getPagedDiscounts = (page: number, query: string | null, sort: Sort
   };
 };
 
-const buildDiscountPayload = (payload: DiscountPayload) => ({
+export const buildDiscountPayload = (payload: DiscountPayload) => ({
   name: payload.name,
   code: payload.code,
   amount_percentage: payload.discount.type === "percent" ? payload.discount.value : null,

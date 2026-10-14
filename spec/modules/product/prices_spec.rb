@@ -11,6 +11,72 @@ describe Product::Prices do
     create(:price, link: @subscription_product, price_cents: 35_00, recurrence: BasePrice::Recurrence::YEARLY)
   end
 
+  describe "#discounted_price_cents with a shop-wide auto-applied code" do
+    let(:seller) { @product.user }
+    let(:product) { @product }
+    let!(:code) { seller.offer_codes.create!(code: "SHOP20", amount_percentage: 20, universal: true, products: [], auto_apply: true) }
+
+    before { Current.reset }
+
+    it "lowers the quoted price" do
+      expect(product.discounted_price_cents(250)).to eq(200)
+    end
+
+    it "yields to an explicit per-product default" do
+      own = create(:percentage_offer_code, products: [product], code: "OWN50", amount_percentage: 50)
+      product.update!(default_offer_code: own)
+
+      expect(product.discounted_price_cents(250)).to eq(125)
+    end
+
+    it "is blocked when inactive" do
+      code.update!(valid_at: 1.day.from_now)
+      expect(product.discounted_price_cents(250)).to eq(250)
+    end
+
+    it "is blocked for existing-customers-only codes" do
+      code.update!(existing_customers_only: true, ownership_products: [create(:product, user: seller, price_cents: 500)])
+      expect(product.discounted_price_cents(250)).to eq(250)
+    end
+
+    it "is blocked when a minimum quantity above one is required" do
+      code.update!(minimum_quantity: 2)
+      expect(product.discounted_price_cents(250)).to eq(250)
+    end
+
+    it "is blocked when the spend minimum is not met" do
+      code.update!(minimum_amount_cents: 1000)
+      expect(product.discounted_price_cents(250)).to eq(250)
+    end
+
+    it "is blocked once the use cap is spent" do
+      code.update!(max_purchase_count: 1)
+      allow_any_instance_of(OfferCode).to receive(:is_valid_for_purchase?).and_return(false)
+      expect(product.discounted_price_cents(250)).to eq(250)
+    end
+
+    it "is blocked for an excluded product" do
+      code.update!(excluded_products: [product])
+      Current.reset
+      expect(product.discounted_price_cents(250)).to eq(250)
+    end
+
+    it "is blocked when a fixed-amount code's currency does not match the product" do
+      code.update!(auto_apply: false)
+      eur = seller.offer_codes.create!(code: "SHOPEUR", amount_cents: 100, currency_type: "eur", universal: true, products: [], auto_apply: true)
+      Current.reset
+
+      expect(eur.applicable?(product)).to be(false)
+      expect(product.discounted_price_cents(250)).to eq(250)
+    end
+
+    it "is blocked for a deleted code" do
+      code.update!(deleted_at: Time.current)
+      Current.reset
+      expect(product.discounted_price_cents(250)).to eq(250)
+    end
+  end
+
   describe "default_price" do
     it "has the correct default price for a subscription product" do
       expect(@subscription_product.default_price.price_cents).to eq(4_00)

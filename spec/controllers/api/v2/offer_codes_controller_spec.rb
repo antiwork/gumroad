@@ -65,6 +65,15 @@ describe Api::V2::OfferCodesController do
         @params.merge!(access_token: @token.token)
       end
 
+      it "creates a universal auto-applied code with a sale label" do
+        post @action, params: @params.merge(universal: "true", auto_apply: "true", sale_label: "Black Friday")
+
+        expect(response.parsed_body["success"]).to eq(true)
+        code = @user.offer_codes.alive.last
+        expect(code).to have_attributes(auto_apply: true, sale_label: "Black Friday", universal: true)
+        expect(response.parsed_body["offer_code"]).to include("auto_apply" => true, "sale_label" => "Black Friday")
+      end
+
       describe "incorrect parameters" do
         it "returns error message" do
           post :create, params: @params.merge(amount_off: nil)
@@ -267,6 +276,13 @@ describe Api::V2::OfferCodesController do
       before do
         @token = create("doorkeeper/access_token", application: @app, resource_owner_id: @user.id, scopes: "edit_products")
         @params.merge!(access_token: @token.token)
+      end
+
+      it "does not let a product-specific code auto apply" do
+        put @action, params: @params.merge(auto_apply: "true")
+
+        expect(response.parsed_body["success"]).to eq(false)
+        expect(@offer_code.reload.auto_apply).to eq(false)
       end
 
       it "fails gracefully on bad id" do

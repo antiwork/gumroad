@@ -642,7 +642,9 @@ const DiscountsPage = ({
                 {selectedOfferCode.auto_apply ? (
                   <CardContent>
                     <h5 className="grow font-bold">Applied automatically</h5>
-                    {selectedOfferCode.sale_label ? `On product pages (${selectedOfferCode.sale_label})` : "On product pages"}
+                    {selectedOfferCode.sale_label
+                      ? `On product pages (${selectedOfferCode.sale_label})`
+                      : "On product pages"}
                   </CardContent>
                 ) : null}
                 {selectedOfferCode.minimum_amount_cents !== null ? (

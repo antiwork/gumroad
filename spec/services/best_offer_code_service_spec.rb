@@ -457,4 +457,47 @@ describe BestOfferCodeService do
       end
     end
   end
+
+  describe "shop-wide auto-applied code" do
+    let(:auto_code) { seller.offer_codes.create!(code: "SHOP30", amount_percentage: 30, universal: true, products: [], auto_apply: true) }
+
+    before { Current.reset }
+
+    it "applies with no url code" do
+      auto_code
+      result = described_class.new(product: product).result
+
+      expect(result).to include(valid: true, code: "SHOP30")
+      expect(result[:discount][:percents]).to eq(30)
+    end
+
+    it "lets an explicit per-product default win" do
+      auto_code
+      own = create(:percentage_offer_code, products: [product], code: "OWN10", amount_percentage: 10)
+      product.update!(default_offer_code: own)
+
+      expect(described_class.new(product: product).result).to include(valid: true, code: "OWN10")
+    end
+
+    it "gives no discount to an excluded product" do
+      auto_code.update!(excluded_products: [product])
+
+      expect(described_class.new(product: product).result).to be_nil
+    end
+
+    it "gives no discount outside the validity window" do
+      auto_code.update!(valid_at: 2.days.from_now, expires_at: 9.days.from_now)
+      expect(described_class.new(product: product).result).to be_nil
+
+      Current.reset
+      auto_code.update!(valid_at: 9.days.ago, expires_at: 2.days.ago)
+      expect(described_class.new(product: product).result).to be_nil
+    end
+
+    it "gives no discount once auto apply is off" do
+      auto_code.update!(auto_apply: false)
+
+      expect(described_class.new(product: product).result).to be_nil
+    end
+  end
 end

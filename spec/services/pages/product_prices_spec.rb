@@ -250,6 +250,24 @@ describe Pages::ProductPrices do
       expect(queries.size).to eq(2)
     end
 
+    it "prices every product with a shop-wide auto-applied code in a fixed number of queries" do
+      seller.offer_codes.create!(code: "shop", amount_percentage: 50, universal: true, products: [], auto_apply: true)
+      Current.reset
+
+      queries = []
+      count = ->(*, payload) { queries << payload[:sql] if payload[:sql].include?("offer_codes") && payload[:name] != "SCHEMA" }
+      baseline = ActiveSupport::Notifications.subscribed(count, "sql.active_record") { described_class.build(seller, ip: nil) }
+      expect(baseline[product.general_permalink][:price_cents]).to eq(700)
+      few = queries.size
+
+      3.times { create(:product, user: seller, price_cents: 1000) }
+      queries.clear
+      Current.reset
+      ActiveSupport::Notifications.subscribed(count, "sql.active_record") { described_class.build(seller, ip: nil) }
+
+      expect(queries.size).to eq(few)
+    end
+
     it "quotes the discount only when the code covers the lowest-priced option" do
       category = create(:variant_category, link: product)
       basic = create(:variant, variant_category: category, name: "Basic")
@@ -664,6 +682,8 @@ describe Pages::ProductPrices do
     # catches that N+1 and any future per-product read this uncached public path grows.
     it "issues the same number of queries however many tiered memberships the catalogue holds" do
       count_queries = lambda do
+        # One request's worth of per-request memos (the seller's auto-apply code) each time.
+        Current.reset
         queries = 0
         subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |*, payload|
           queries += 1 unless payload[:name] == "SCHEMA"
