@@ -67,7 +67,7 @@ class OfferCode < ApplicationRecord
   before_validation { self.auto_apply = false if auto_apply.nil? }
 
   after_save :invalidate_product_cache
-  after_save { Current.auto_apply_offer_codes = nil }
+  after_save :forget_auto_apply_offer_code
   after_save :reindex_associated_products
   after_save :note_column_applicability_changes
   after_commit :repair_detached_default_discounts, if: -> { @applicability_changed }
@@ -716,6 +716,11 @@ class OfferCode < ApplicationRecord
       elsif sale_label.match?(/[<>]/)
         errors.add(:base, "The sale label must be plain text.")
       end
+    end
+
+    def forget_auto_apply_offer_code
+      Current.auto_apply_offer_codes = nil
+      association(:user).target&.association(:auto_apply_offer_code)&.reset
     end
 
     def lock_seller_for_auto_apply

@@ -869,6 +869,17 @@ describe OfferCode do
       expect(code.reload).to be_valid
     end
 
+    it "refreshes the seller's preloaded auto-applied code after a save" do
+      preloaded = User.includes(:auto_apply_offer_code).find(seller.id)
+      expect(preloaded.auto_apply_offer_code).to be_nil
+
+      code = preloaded.offer_codes.create!(code: "shop", amount_percentage: 30, universal: true, products: [], auto_apply: true)
+      expect(preloaded.auto_apply_offer_code).to eq(code)
+
+      code.update!(auto_apply: false)
+      expect(preloaded.auto_apply_offer_code).to be_nil
+    end
+
     it "saves a nil auto_apply as false" do
       code = universal_code(auto_apply: nil)
       expect(code.save).to be(true)

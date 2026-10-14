@@ -132,6 +132,9 @@ class User < ApplicationRecord
   has_many :imported_customers, foreign_key: :importing_user_id
   has_many :invites, foreign_key: :sender_id
   has_many :offer_codes
+  # Card listings preload this (see ProductPresenter::Card::ASSOCIATIONS); read it through
+  # #auto_apply_offer_code, which falls back to a per-request memo when it is not loaded.
+  has_one :auto_apply_offer_code, -> { alive.universal.where(auto_apply: true).order(:id) }, class_name: "OfferCode"
   has_many :user_compliance_infos
   has_many :guardians
   has_many :user_compliance_info_requests
@@ -687,8 +690,8 @@ class User < ApplicationRecord
   end
 
   # The seller's shop-wide auto-applied code when it applies to `product` (alive, currency match,
-  # not excluded), else nil. The code is resolved once per request (Current memo) with its
-  # exclusions loaded, so pricing a page of products adds no per-product query.
+  # not excluded), else nil. The code is preloaded or resolved once per request (Current memo)
+  # with its exclusions loaded, so pricing a page of products adds no per-product query.
   def auto_apply_offer_code_for(product)
     code = auto_apply_offer_code
     return if code.nil? || code.deleted? || code.code.blank? || !code.universal?
@@ -697,6 +700,8 @@ class User < ApplicationRecord
   end
 
   def auto_apply_offer_code
+    return super if association(:auto_apply_offer_code).loaded?
+
     cache = (Current.auto_apply_offer_codes ||= {})
     return cache[id] if cache.key?(id)
 

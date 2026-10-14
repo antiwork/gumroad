@@ -14,7 +14,7 @@ class ProductPresenter::Card
     {
       default_offer_code: :variants,
       tiers: :alive_prices,
-      user: [:custom_domain, { avatar_attachment: { blob: { variant_records: { image_attachment: :blob } } } }],
+      user: [:custom_domain, { auto_apply_offer_code: [:excluded_products, :variants], avatar_attachment: { blob: { variant_records: { image_attachment: :blob } } } }],
       variant_categories_alive: :alive_variants,
       thumbnail_alive: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } },
       display_asset_previews: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } },

@@ -163,6 +163,38 @@ describe ProductPresenter::Card do
         queries
       end
 
+      it "resolves every seller's auto-applied code in a fixed number of queries" do
+        add_sellers = lambda do |count|
+          Array.new(count) do |i|
+            seller = create(:user)
+            product = create(:product, user: seller, price_cents: 1000)
+            if i.even?
+              code = seller.offer_codes.create!(code: "SHOP#{seller.id}", amount_percentage: 20, universal: true, products: [], auto_apply: true)
+              code.excluded_products << create(:product, user: seller)
+            end
+            product
+          end
+        end
+        render_cards = lambda do |products|
+          Current.reset
+          cards = nil
+          queries = capture_queries do
+            loaded = Link.includes(*ProductPresenter::ASSOCIATIONS_FOR_CARD).where(id: products.map(&:id)).order(:id).to_a
+            cards = loaded.map { |product| described_class.new(product:).for_web(compute_description: false, compute_inventory: false) }
+          end
+          [cards, queries.grep(/offer_code/)]
+        end
+
+        products = add_sellers.call(2)
+        cards, few = render_cards.call(products)
+        expect(cards.map { _1[:price_cents] }).to eq([800, 1000])
+
+        products += add_sellers.call(4)
+        cards, many = render_cards.call(products)
+        expect(cards.map { _1[:price_cents] }).to eq([800, 1000] * 3)
+        expect(many.size).to eq(few.size)
+      end
+
       # Thumbnail already passed before the cover/avatar preload landed; it stays as a
       # guard so nobody trims the shared preload graph.
       %i[thumbnail cover avatar].each do |source|
