@@ -73,15 +73,22 @@ class Pages::ProductPrices
     # own purchases SUM — up to MAX_ITEMS of them on this uncached path when every product
     # carries its own code.
     def warm_offer_code_uses(products)
+      # The explicit defaults first: effective_default_offer_code reads their uses left to decide
+      # whether the seller's auto-apply code takes over.
+      warm_uses_left(products.filter_map(&:default_offer_code))
+      codes = products.filter_map(&:effective_default_offer_code)
+      warm_uses_left(codes)
       # A code's option scope can hold SKUs, which have no variant_category, so the categories
       # (read by BaseVariant#owning_product_id) are preloaded for the variants alone.
-      scoped_variants = products.filter_map(&:effective_default_offer_code).flat_map(&:variants).grep(Variant)
+      scoped_variants = codes.flat_map(&:variants).grep(Variant)
       ActiveRecord::Associations::Preloader.new(records: scoped_variants, associations: :variant_category).call
+    end
+
+    def warm_uses_left(codes)
       cache = (Current.default_offer_code_uses_left ||= {})
-      capped = products.filter_map(&:effective_default_offer_code)
-                       .select { |code| code.max_purchase_count.present? }
-                       .uniq(&:id)
-                       .reject { |code| cache.key?(code.id) }
+      capped = codes.select { |code| code.max_purchase_count.present? }
+                    .uniq(&:id)
+                    .reject { |code| cache.key?(code.id) }
       return if capped.empty?
 
       cache.merge!(OfferCode.uses_left_by_id(capped))

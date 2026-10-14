@@ -111,6 +111,65 @@ describe Link do
     end
   end
 
+  describe "#effective_default_offer_code" do
+    let(:seller) { create(:user) }
+    let(:product) { create(:product, user: seller, price_cents: 1000) }
+    let(:own) { seller.offer_codes.create!(code: "OWN50", amount_percentage: 50, products: [product]) }
+    let(:auto_code) { seller.offer_codes.create!(code: "SHOP20", amount_percentage: 20, universal: true, products: [], auto_apply: true) }
+
+    before do
+      product.update!(default_offer_code: own)
+      Current.reset
+    end
+
+    it "keeps a redeemable explicit default over the auto-applied code" do
+      auto_code
+
+      expect(product.reload.effective_default_offer_code).to eq(own)
+      expect(product.discounted_price_cents(1000)).to eq(500)
+    end
+
+    it "falls back to the auto-applied code once the explicit default has expired" do
+      auto_code
+      own.update!(valid_at: 2.days.ago, expires_at: 1.day.ago)
+
+      expect(product.reload.effective_default_offer_code).to eq(auto_code)
+      expect(product.discounted_price_cents(1000)).to eq(800)
+      expect(BestOfferCodeService.new(product:).result).to include(valid: true, code: "SHOP20")
+    end
+
+    it "falls back to the auto-applied code before the explicit default starts" do
+      auto_code
+      own.update!(valid_at: 1.day.from_now)
+
+      expect(product.reload.effective_default_offer_code).to eq(auto_code)
+    end
+
+    it "falls back to the auto-applied code once the explicit default is deleted" do
+      auto_code
+      own.update_column(:deleted_at, Time.current)
+
+      expect(product.reload.effective_default_offer_code).to eq(auto_code)
+    end
+
+    it "falls back to the auto-applied code once the explicit default's use cap is spent" do
+      auto_code
+      own.update!(max_purchase_count: 1)
+      create(:purchase, link: product, offer_code: own, seller:)
+
+      expect(product.reload.effective_default_offer_code).to eq(auto_code)
+      expect(product.discounted_price_cents(1000)).to eq(800)
+      expect(BestOfferCodeService.new(product:).result).to include(valid: true, code: "SHOP20")
+    end
+
+    it "returns a lapsed explicit default unchanged when the seller has no auto-applied code" do
+      own.update!(valid_at: 2.days.ago, expires_at: 1.day.ago)
+
+      expect(product.reload.effective_default_offer_code).to eq(own)
+      expect(product.discounted_price_cents(1000)).to eq(1000)
+    end
+  end
+
   describe "repairing detached defaults after concurrent edits" do
     let(:seller) { create(:user) }
     let(:product) { create(:product, user: seller, price_cents: 2000) }

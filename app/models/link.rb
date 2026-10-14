@@ -1135,9 +1135,13 @@ class Link < ApplicationRecord
   end
 
   # The code that applies with no ?code= in the URL. An explicit per-product default wins over
-  # the seller's shop-wide auto-apply code: the seller set it on this product deliberately.
+  # the seller's shop-wide auto-apply code only while buyers can still redeem it; a lapsed one
+  # would otherwise hold this product at full price through the shop-wide sale.
   def effective_default_offer_code
-    default_offer_code.presence || user.auto_apply_offer_code_for(self)
+    explicit = default_offer_code
+    return explicit if explicit.present? && !explicit.deleted? && !explicit.inactive? && default_offer_code_uses_left?(explicit)
+
+    user.auto_apply_offer_code_for(self) || explicit
   end
 
   # A default discount buyers can no longer redeem: the code was deleted,
