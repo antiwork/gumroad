@@ -61,9 +61,9 @@ module User::SocialApple
           user.email = email
         end
 
-        # A password signup never proves the address, so this row's password may not be its owner's.
-        # Apple proves the address here, so an unconfirmed password must not survive the adoption.
-        user.password = Devise.friendly_token[0, 20] if user.provider.blank? && !user.confirmed?
+        # A password signup proves nothing about the address, and neither does a confirmed row (it can
+        # be confirmed without mailbox access), so an Apple sign-in drops that password.
+        user.password = Devise.friendly_token[0, 20] if user.provider.blank?
 
         user.skip_confirmation_notification!
         user.save!

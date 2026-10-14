@@ -143,9 +143,9 @@ module User::SocialGoogle
       # Set user's avatar if they don't have one
       user.google_picture_url(data) unless user.avatar.attached?
 
-      # A password signup never proves the address, so this row's password may not be its owner's.
-      # Google proves the address here, so an unconfirmed password must not survive the adoption.
-      user.password = Devise.friendly_token[0, 20] if user.provider.blank? && !user.confirmed?
+      # A password signup proves nothing about the address, and neither does a confirmed row (it can
+      # be confirmed without mailbox access), so a Google sign-in drops that password.
+      user.password = Devise.friendly_token[0, 20] if user.provider.blank?
 
       user.skip_confirmation_notification!
       user.save!

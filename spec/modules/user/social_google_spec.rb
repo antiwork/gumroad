@@ -62,12 +62,12 @@ describe User::SocialGoogle do
         expect(created_user.valid_password?(password_set_at_signup)).to be(false)
       end
 
-      it "keeps the password of an account that already confirmed its email" do
+      it "drops that password when the account had already confirmed its email" do
         created_user = create(:user, email: @data_copy2["info"]["email"], password: password_set_at_signup)
 
         User.find_or_create_for_google_oauth2(@data_copy2)
 
-        expect(created_user.reload.valid_password?(password_set_at_signup)).to be(true)
+        expect(created_user.reload.valid_password?(password_set_at_signup)).to be(false)
       end
     end
 

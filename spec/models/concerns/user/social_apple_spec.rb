@@ -69,7 +69,7 @@ describe User::SocialApple do
         expect { User.find_or_create_for_apple_oauth(apple_data) }.not_to change { User.count }
       end
 
-      it "drops the password the signup never proved when the account is unconfirmed", :aggregate_failures do
+      it "drops the password the signup never proved and confirms the account", :aggregate_failures do
         password_set_at_signup = "chosen-by-whoever-signed-up"
         unconfirmed_user = create(:unconfirmed_user, email: "apple-unconfirmed@example.com", password: password_set_at_signup)
         data = apple_data.merge("uid" => "001234.apple-unconfirmed", "info" => { "email" => "apple-unconfirmed@example.com" })
@@ -81,14 +81,14 @@ describe User::SocialApple do
         expect(unconfirmed_user.valid_password?(password_set_at_signup)).to be(false)
       end
 
-      it "keeps the password of an account that already confirmed its email" do
-        password_set_by_its_owner = "chosen-by-its-owner"
-        confirmed_user = create(:user, email: "apple-confirmed@example.com", password: password_set_by_its_owner)
+      it "drops that password when the account had already confirmed its email" do
+        password_set_at_signup = "chosen-by-whoever-signed-up"
+        confirmed_user = create(:user, email: "apple-confirmed@example.com", password: password_set_at_signup)
         data = apple_data.merge("uid" => "001234.apple-confirmed", "info" => { "email" => "apple-confirmed@example.com" })
 
         User.find_or_create_for_apple_oauth(data)
 
-        expect(confirmed_user.reload.valid_password?(password_set_by_its_owner)).to be(true)
+        expect(confirmed_user.reload.valid_password?(password_set_at_signup)).to be(false)
       end
     end
 
