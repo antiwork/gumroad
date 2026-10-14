@@ -111,6 +111,37 @@ describe FindSubscriptionsWithMissingChargeWorker do
           end
         end
 
+        context "when a free trial ended while the bank was still confirming an Indian card mandate" do
+          before do
+            product = create(:membership_product, free_trial_enabled: true, free_trial_duration_amount: 1, free_trial_duration_unit: :week)
+            @trial_subscription = create(:subscription, link: product, id: 2_000)
+            create(:membership_purchase, link: product, subscription: @trial_subscription, purchase_state: "not_charged", is_free_trial_purchase: true, price_cents: 300)
+            @trial_subscription.update!(
+              free_trial_ends_at: @initial_purchase_time + 7.days,
+              renewal_disabled_due_to_indian_card_mandate: true,
+              stripe_mandate_id: "mandate_held"
+            )
+          end
+
+          it "queues a held membership although it has no successful charge" do
+            @trial_subscription.update!(indian_card_mandate_hold_pending: true)
+
+            travel_to @initial_purchase_time + 15.days do
+              described_class.new.perform(@batch_number)
+
+              expect(RecurringChargeWorker.jobs.map { |job| job["args"] }).to eq([[@trial_subscription.id, true]])
+            end
+          end
+
+          it "skips the membership when it is not held" do
+            travel_to @initial_purchase_time + 15.days do
+              described_class.new.perform(@batch_number)
+
+              expect(RecurringChargeWorker.jobs.size).to eq(0)
+            end
+          end
+        end
+
         it "does not queue subscriptions that already have a charge in progress" do
           travel_to @six_months_after_purchase do
             create(:recurring_membership_purchase, subscription: @subscription, purchase_state: "in_progress")

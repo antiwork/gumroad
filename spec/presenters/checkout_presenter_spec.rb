@@ -1097,6 +1097,7 @@ describe CheckoutPresenter do
                                  is_test: false,
                                  is_overdue_for_charge: false,
                                  payment_method_update_required: false,
+                                 payment_method_confirmation_pending: false,
                                  is_gift: false,
                                  is_installment_plan: false,
                                  current_recurrence_available: true,
@@ -1121,7 +1122,26 @@ describe CheckoutPresenter do
 
         result = described_class.new(logged_in_user: nil, ip: "127.0.0.1").subscription_manager_props(subscription: @subscription)
 
-        expect(result[:subscription][:payment_method_update_required]).to be(true)
+        expect(result[:subscription]).to include(payment_method_update_required: true, payment_method_confirmation_pending: false)
+      ensure
+        Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+      end
+
+      it "shows a card the bank is still confirming as pending instead of asking for a new payment method",
+         vcr: { cassette_name: "CheckoutPresenter/_subscription_manager_props/tiered_membership_product/shows_when_the_buyer_must_update_the_payment_method" } do
+        Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+        @subscription.update!(
+          cancelled_at: nil,
+          price: @tier_price,
+          stripe_mandate_id: "mandate_pending",
+          renewal_disabled_due_to_indian_card_mandate: true,
+          indian_card_mandate_hold_pending: true
+        )
+        @subscription.reload
+
+        result = described_class.new(logged_in_user: nil, ip: "127.0.0.1").subscription_manager_props(subscription: @subscription)
+
+        expect(result[:subscription]).to include(payment_method_update_required: false, payment_method_confirmation_pending: true)
       ensure
         Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
       end
