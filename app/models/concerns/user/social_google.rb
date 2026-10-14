@@ -57,7 +57,7 @@ module User::SocialGoogle
         # `@deleted.invalid` placeholder. Prefer the live account holding the Google address; never
         # create one, so a freed address stays locked.
         if user&.deleted? && user.email.to_s.downcase.end_with?("@#{User::DELETED_ACCOUNT_EMAIL_DOMAIN}")
-          email = data["info"]["email"] || data["extra"]["raw_info"]["email"]
+          email = verified_google_email(data)
           live_user = EmailFormatValidator.valid?(email) ? User.alive.find_by(email:) : nil
           user = live_user if live_user
         end
@@ -72,7 +72,10 @@ module User::SocialGoogle
         end
 
         if user.nil?
-          email = data["info"]["email"] || data["extra"]["raw_info"]["email"]
+          email = verified_google_email(data)
+          # An address Google has not verified must not create an account that would then hold the identity.
+          return nil if email.nil? && reported_google_email(data).present?
+
           user = User.where(email:).first if EmailFormatValidator.valid?(email)
 
           if user.nil?
@@ -118,7 +121,7 @@ module User::SocialGoogle
     def query_google(user, data, new_user: false, keep_pending_email: false)
       return if data.blank? || data.is_a?(String)
 
-      email = data["info"]["email"] || data["extra"]["raw_info"]["email"]
+      email = verified_google_email(data)
 
       # A password signup proves nothing about the address, and a confirmed row is no proof either (it
       # can be confirmed without mailbox access). A sign-in that brings the first Google identity for
@@ -155,21 +158,34 @@ module User::SocialGoogle
 
       user.skip_confirmation_notification!
       user.save!
-      # keep_pending_email and adopting paths prove only the current address, so confirming would apply a
-      # pending change Google never verified — and strand the next sign-in in the two-identity case.
+      # Both paths prove only the current address, so confirming would apply a pending change Google never
+      # verified (and, for keep_pending_email, strand the next sign-in in the two-identity case).
       user.confirm if user.has_unconfirmed_email? && !((keep_pending_email || adopting) && user.pending_reconfirmation?)
 
       user
     end
 
     private
+      # An unverified Google address proves nothing about the mailbox, so it must never match or create a row.
+      def verified_google_email(data)
+        verified = data.dig("info", "email_verified")
+        verified = data.dig("extra", "raw_info", "email_verified") if verified.nil?
+        return unless ActiveModel::Type::Boolean.new.cast(verified)
+
+        reported_google_email(data)
+      end
+
+      def reported_google_email(data)
+        data.dig("info", "email").presence || data.dig("extra", "raw_info", "email")
+      end
+
       # Support writes this placeholder with update_column. It is not an app email domain.
       def deleted_google_placeholder?(user)
         user&.deleted? && user.email.to_s.downcase.end_with?("@deleted.invalid")
       end
 
       def live_user_for_google_email(data)
-        email = data["info"]["email"] || data["extra"]["raw_info"]["email"]
+        email = verified_google_email(data)
         return unless EmailFormatValidator.valid?(email)
 
         User.alive.where(email:).first

@@ -249,6 +249,68 @@ describe User::SocialGoogle do
       end
     end
 
+    context "when Google has not verified the email" do
+      let(:address) { @data_copy2["extra"]["raw_info"]["email"] }
+      let(:unverified_data) do
+        @data_copy2.deep_dup.tap do |data|
+          data["info"]["image"] = nil
+          data["info"].delete("email")
+          data["info"]["email_verified"] = false
+          data["extra"]["raw_info"]["email_verified"] = false
+        end
+      end
+
+      it "does not adopt the account that holds the address through the raw_info fallback", :aggregate_failures do
+        existing_user = create(:unconfirmed_user, email: address, password: "chosen-by-its-owner")
+
+        expect(User.find_or_create_for_google_oauth2(unverified_data)).not_to eq(existing_user)
+
+        existing_user.reload
+        expect(existing_user.google_uid).to be_nil
+        expect(existing_user.valid_password?("chosen-by-its-owner")).to be(true)
+        expect(existing_user).not_to be_confirmed
+      end
+
+      it "does not adopt it when the verified-email field is false either" do
+        existing_user = create(:user, email: address)
+        unverified_data["info"]["email"] = address
+
+        expect(User.find_or_create_for_google_oauth2(unverified_data)).not_to eq(existing_user)
+      end
+
+      it "does not create an account for the address" do
+        expect { expect(User.find_or_create_for_google_oauth2(unverified_data)).to be_nil }.not_to change(User, :count)
+      end
+
+      it "reads the verified flag from raw_info when the info hash has none", :aggregate_failures do
+        existing_user = create(:user, email: address)
+        unverified_data["info"].delete("email_verified")
+
+        unverified_data["extra"]["raw_info"]["email_verified"] = "false"
+        expect(User.find_or_create_for_google_oauth2(unverified_data)).to be_nil
+
+        unverified_data["extra"]["raw_info"]["email_verified"] = true
+        expect(User.find_or_create_for_google_oauth2(unverified_data)).to eq(existing_user)
+      end
+
+      it "does not reach a live account past a deleted placeholder husk" do
+        husk = create(:user)
+        husk.update_columns(google_uid: unverified_data["uid"], email: "released-husk@deleted.invalid", deleted_at: Time.current)
+        live_user = create(:user, email: address)
+
+        expect(User.find_or_create_for_google_oauth2(unverified_data)).to eq(husk)
+        expect(live_user.reload.google_uid).to be_nil
+      end
+
+      it "still uses the raw_info address when Google marks it verified" do
+        existing_user = create(:user, email: address)
+        unverified_data["extra"]["raw_info"]["email_verified"] = true
+        unverified_data["info"]["email_verified"] = true
+
+        expect(User.find_or_create_for_google_oauth2(unverified_data)).to eq(existing_user)
+      end
+    end
+
     context "when the matched account was deleted and its email freed to another account" do
       let(:freed_address) { "spongebob-freed-1234@deleted.invalid" }
 
