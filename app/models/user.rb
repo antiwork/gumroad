@@ -1195,6 +1195,22 @@ class User < ApplicationRecord
     update!(last_active_sessions_invalidated_at: DateTime.current)
   end
 
+  # Google and Apple adoption already retire the password and sessions. Whoever created an
+  # unconfirmed account never proved the address, so their other ways in and their pending email
+  # change must not outlive the adoption either.
+  def revoke_unproven_access!
+    transaction do
+      self.unconfirmed_email = nil
+      self.confirmation_token = nil
+      User::SocialTwitter::TWITTER_PROPERTIES.each { |property| self[property] = nil }
+      save!
+      revoke_all_oauth_access!
+      webauthn_credentials.destroy_all
+      totp_credential&.destroy!
+      devices.destroy_all
+    end
+  end
+
   def subdomain
     Subdomain.from_username(username)
   end

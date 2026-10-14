@@ -64,14 +64,17 @@ module User::SocialApple
         # A password signup proves nothing about the address, and a confirmed row is no proof either (it
         # can be confirmed without mailbox access). A sign-in that brings the first Apple identity for
         # such a row is adopting it, so the password and the sessions the signup left behind go with it.
-        if user.provider.blank? && !user.user_external_authentications.exists?(provider: "apple")
+        adopting = user.provider.blank? && !user.user_external_authentications.exists?(provider: "apple")
+        if adopting
           user.password = Devise.friendly_token(User::RANDOM_PASSWORD_LENGTH)
           user.invalidate_active_sessions!
+          user.revoke_unproven_access! unless user.confirmed?
         end
 
         user.skip_confirmation_notification!
         user.save!
-        user.confirm if user.has_unconfirmed_email?
+        # Apple proves only the current address, so adoption must not apply a pending change.
+        user.confirm if user.has_unconfirmed_email? && !(adopting && user.pending_reconfirmation?)
 
         if data["uid"].present?
           user.user_external_authentications.find_or_create_by!(provider: "apple", uid: data["uid"])

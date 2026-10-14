@@ -123,9 +123,11 @@ module User::SocialGoogle
       # A password signup proves nothing about the address, and a confirmed row is no proof either (it
       # can be confirmed without mailbox access). A sign-in that brings the first Google identity for
       # such a row is adopting it, so the password and the sessions the signup left behind go with it.
-      if user.provider.blank? && user.google_uid.blank?
+      adopting = user.provider.blank? && user.google_uid.blank?
+      if adopting
         user.password = Devise.friendly_token(User::RANDOM_PASSWORD_LENGTH)
         user.invalidate_active_sessions!
+        user.revoke_unproven_access! unless user.confirmed?
       end
 
       # Don't set user properties if they already have values
@@ -153,9 +155,9 @@ module User::SocialGoogle
 
       user.skip_confirmation_notification!
       user.save!
-      # keep_pending_email paths prove only the current address, so confirming would apply a pending
-      # change Google never verified — and strand the next sign-in in the two-identity case.
-      user.confirm if user.has_unconfirmed_email? && !(keep_pending_email && user.pending_reconfirmation?)
+      # keep_pending_email and adopting paths prove only the current address, so confirming would apply a
+      # pending change Google never verified — and strand the next sign-in in the two-identity case.
+      user.confirm if user.has_unconfirmed_email? && !((keep_pending_email || adopting) && user.pending_reconfirmation?)
 
       user
     end

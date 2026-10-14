@@ -100,6 +100,40 @@ describe User::SocialApple do
         expect(confirmed_user.reload.valid_password?(password_set_at_signup)).to be(false)
       end
 
+      it "revokes every other way in the creator of an unconfirmed account set up and discards its pending email", :aggregate_failures do
+        unconfirmed_user = create(:unconfirmed_user, email: "apple-revoke@example.com", password: "chosen-by-whoever-signed-up")
+        unconfirmed_user.update!(email: "signup-pending@example.com")
+        token = create("doorkeeper/access_token", resource_owner_id: unconfirmed_user.id, scopes: "edit_products")
+        unconfirmed_user.webauthn_credentials.create!(webauthn_id: "signup-passkey", public_key: "public-key", sign_count: 0, nickname: "Passkey")
+        unconfirmed_user.create_totp_credential!(confirmed_at: Time.current)
+        create(:device, user: unconfirmed_user)
+        unconfirmed_user.update!(twitter_user_id: "9876543210")
+        data = apple_data.merge("uid" => "001234.apple-revoke", "info" => { "email" => "apple-revoke@example.com" })
+
+        expect(User.find_or_create_for_apple_oauth(data)).to eq(unconfirmed_user)
+
+        unconfirmed_user.reload
+        expect(unconfirmed_user).to be_confirmed
+        expect(unconfirmed_user.email).to eq("apple-revoke@example.com")
+        expect(unconfirmed_user.unconfirmed_email).to be_nil
+        expect(token.reload).to be_revoked
+        expect(unconfirmed_user.webauthn_credentials).to be_empty
+        expect(unconfirmed_user.totp_credential).to be_nil
+        expect(unconfirmed_user.devices).to be_empty
+        expect(unconfirmed_user.twitter_user_id).to be_nil
+      end
+
+      it "does not apply a confirmed account's pending email change", :aggregate_failures do
+        confirmed_user = create(:user, email: "apple-pending@example.com")
+        confirmed_user.update!(email: "owner-pending@example.com")
+        data = apple_data.merge("uid" => "001234.apple-pending", "info" => { "email" => "apple-pending@example.com" })
+
+        User.find_or_create_for_apple_oauth(data)
+
+        expect(confirmed_user.reload.email).to eq("apple-pending@example.com")
+        expect(confirmed_user.unconfirmed_email).to eq("owner-pending@example.com")
+      end
+
       it "invalidates the sessions the password signup left behind" do
         password_set_at_signup = "chosen-by-whoever-signed-up"
         unconfirmed_user = create(:unconfirmed_user, email: "apple-sessions@example.com", password: password_set_at_signup)

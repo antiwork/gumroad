@@ -77,6 +77,75 @@ describe User::SocialGoogle do
           .to change { created_user.reload.last_active_sessions_invalidated_at }.from(nil).to(be_present)
       end
 
+      def set_up_access_for(user)
+        third_party_token = create("doorkeeper/access_token", resource_owner_id: user.id, scopes: "edit_products")
+        mobile_app = create(:oauth_application, uid: OauthApplication::MOBILE_API_OAUTH_APPLICATION_UID)
+        mobile_token = create("doorkeeper/access_token", application: mobile_app, resource_owner_id: user.id, scopes: "mobile_api")
+        user.webauthn_credentials.create!(webauthn_id: "signup-passkey", public_key: "public-key", sign_count: 0, nickname: "Passkey")
+        user.create_totp_credential!(confirmed_at: Time.current)
+        create(:device, user:)
+        user.remember_me!
+        user.update!(twitter_user_id: "9876543210", twitter_handle: "signup", twitter_oauth_token: "token", twitter_oauth_secret: "secret")
+        { remember_cookie: User.serialize_into_cookie(user), tokens: [third_party_token, mobile_token] }
+      end
+
+      it "revokes every other way in the creator of an unconfirmed account set up", :aggregate_failures do
+        created_user = create(:unconfirmed_user, email: @data_copy2["info"]["email"], password: password_set_at_signup)
+        access = set_up_access_for(created_user)
+
+        expect(User.find_or_create_for_google_oauth2(@data_copy2)).to eq(created_user)
+
+        created_user.reload
+        expect(created_user).to be_confirmed
+        expect(User.serialize_from_cookie(*access[:remember_cookie])).to be_nil
+        expect(access[:tokens].map { _1.reload.revoked? }).to eq([true, true])
+        expect(created_user.webauthn_credentials).to be_empty
+        expect(created_user.totp_credential).to be_nil
+        expect(created_user.devices).to be_empty
+        expect(created_user.slice(*User::SocialTwitter::TWITTER_PROPERTIES).values).to all(be_nil)
+      end
+
+      it "discards the pending email change of an unconfirmed account and confirms the Google address", :aggregate_failures do
+        created_user = create(:unconfirmed_user, email: @data_copy2["info"]["email"], password: password_set_at_signup)
+        created_user.update!(email: "signup-pending@example.com")
+        expect(created_user.reload.unconfirmed_email).to eq("signup-pending@example.com")
+
+        User.find_or_create_for_google_oauth2(@data_copy2)
+
+        expect(created_user.reload.email).to eq(@data_copy2["info"]["email"])
+        expect(created_user.unconfirmed_email).to be_nil
+        expect(created_user).to be_confirmed
+      end
+
+      it "voids the emailed confirmation link even when the sign-in fails after the adoption drop", :aggregate_failures do
+        created_user = create(:unconfirmed_user, email: @data_copy2["info"]["email"], password: password_set_at_signup)
+        created_user.update!(email: "signup-pending@example.com")
+        pending_link_token = created_user.reload.confirmation_token
+        allow_any_instance_of(User).to receive(:skip_confirmation_notification!).and_raise(ActiveRecord::RecordInvalid.new(User.new))
+
+        expect(User.find_or_create_for_google_oauth2(@data_copy2)).to be_nil
+        expect(created_user.reload.valid_password?(password_set_at_signup)).to be(false)
+
+        expect(User.confirm_by_token(pending_link_token).errors).to be_present
+        expect(created_user.reload).not_to be_confirmed
+      end
+
+      it "keeps a confirmed account's other access and its pending email change", :aggregate_failures do
+        created_user = create(:user, email: @data_copy2["info"]["email"], password: password_set_at_signup)
+        access = set_up_access_for(created_user)
+        created_user.update!(email: "owner-pending@example.com")
+
+        User.find_or_create_for_google_oauth2(@data_copy2)
+
+        created_user.reload
+        expect(created_user.valid_password?(password_set_at_signup)).to be(false)
+        expect(created_user.email).to eq(@data_copy2["info"]["email"])
+        expect(created_user.unconfirmed_email).to eq("owner-pending@example.com")
+        expect(access[:tokens].first.reload).not_to be_revoked
+        expect(created_user.webauthn_credentials.count).to eq(1)
+        expect(created_user.twitter_user_id).to eq("9876543210")
+      end
+
       it "leaves the password and the sessions alone once the account has a Google identity", :aggregate_failures do
         created_user = create(:user, email: @data_copy2["info"]["email"], password: password_set_at_signup,
                                      google_uid: @data_copy2["uid"])
@@ -153,6 +222,20 @@ describe User::SocialGoogle do
 
         expect(live_user.reload).to be_confirmed
         expect(live_user.email).to eq(@data_copy2["info"]["email"])
+      end
+
+      it "revokes an unconfirmed live account's other access and discards its pending email", :aggregate_failures do
+        @data_copy2["info"]["image"] = nil
+        live_user = create(:unconfirmed_user, email: @data_copy2["info"]["email"])
+        live_user.update!(email: "signup-pending@example.com")
+        token = create("doorkeeper/access_token", resource_owner_id: live_user.id, scopes: "edit_products")
+
+        expect(User.find_or_create_for_google_oauth2(@data_copy2)).to eq(live_user)
+
+        expect(live_user.reload).to be_confirmed
+        expect(live_user.email).to eq(@data_copy2["info"]["email"])
+        expect(live_user.unconfirmed_email).to be_nil
+        expect(token.reload).to be_revoked
       end
 
       context "when the live account already has its own Google identity" do
