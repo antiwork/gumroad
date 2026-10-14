@@ -48,6 +48,9 @@ class User < ApplicationRecord
 
   MAX_LENGTH_NAME = 100
 
+  # Length of the random password set on accounts that have no password of their own.
+  RANDOM_PASSWORD_LENGTH = 20
+
   INVALID_NAME_FOR_EMAIL_DELIVERY_REGEX = /:/
 
   # Soft deletion keeps the row's email set, so a deleted account goes on

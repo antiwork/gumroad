@@ -20,7 +20,7 @@ module User::SocialApple
         if user.nil?
           user = User.new
           user.provider = :apple
-          user.password = Devise.friendly_token[0, 20]
+          user.password = Devise.friendly_token(User::RANDOM_PASSWORD_LENGTH)
           apply_apple_data(user, data, new_user: true)
 
           if user.email.present?
@@ -61,9 +61,13 @@ module User::SocialApple
           user.email = email
         end
 
-        # A password signup proves nothing about the address, and neither does a confirmed row (it can
-        # be confirmed without mailbox access), so an Apple sign-in drops that password.
-        user.password = Devise.friendly_token[0, 20] if user.provider.blank?
+        # A password signup proves nothing about the address, and a confirmed row is no proof either (it
+        # can be confirmed without mailbox access), so an Apple sign-in drops that password and the
+        # sessions the signup left behind.
+        if user.provider.blank?
+          user.password = Devise.friendly_token(User::RANDOM_PASSWORD_LENGTH)
+          user.invalidate_active_sessions!
+        end
 
         user.skip_confirmation_notification!
         user.save!

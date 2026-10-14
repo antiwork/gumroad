@@ -17,7 +17,7 @@ module User::StripeConnect
           email = data["info"]["email"]
           user.email = email if EmailFormatValidator.valid?(email)
           user.name = data["info"]["name"]
-          user.password = Devise.friendly_token[0, 20]
+          user.password = Devise.friendly_token(User::RANDOM_PASSWORD_LENGTH)
           user.skip_confirmation!
           user.save!
           user.user_compliance_infos.build.tap do |new_user_compliance_info|

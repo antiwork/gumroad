@@ -69,6 +69,13 @@ describe User::SocialGoogle do
 
         expect(created_user.reload.valid_password?(password_set_at_signup)).to be(false)
       end
+
+      it "invalidates the sessions the password signup left behind" do
+        created_user = create(:unconfirmed_user, email: @data_copy2["info"]["email"], password: password_set_at_signup)
+
+        expect { User.find_or_create_for_google_oauth2(@data_copy2) }
+          .to change { created_user.reload.last_active_sessions_invalidated_at }.from(nil).to(be_present)
+      end
     end
 
     context "when the matched account was deleted and its email freed to another account" do

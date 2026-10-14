@@ -49,7 +49,7 @@ class User::CreateBrandAccountService
       email: @email,
       username: @username,
       name: @name,
-      password: Devise.friendly_token,
+      password: Devise.friendly_token(User::RANDOM_PASSWORD_LENGTH),
       account_created_ip: @account_created_ip,
     )
     @brand_user.tos_agreements.build(ip: @account_created_ip) if @account_created_ip.present?

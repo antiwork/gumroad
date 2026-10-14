@@ -90,6 +90,15 @@ describe User::SocialApple do
 
         expect(confirmed_user.reload.valid_password?(password_set_at_signup)).to be(false)
       end
+
+      it "invalidates the sessions the password signup left behind" do
+        password_set_at_signup = "chosen-by-whoever-signed-up"
+        unconfirmed_user = create(:unconfirmed_user, email: "apple-sessions@example.com", password: password_set_at_signup)
+        data = apple_data.merge("uid" => "001234.apple-sessions", "info" => { "email" => "apple-sessions@example.com" })
+
+        expect { User.find_or_create_for_apple_oauth(data) }
+          .to change { unconfirmed_user.reload.last_active_sessions_invalidated_at }.from(nil).to(be_present)
+      end
     end
 
     context "when the uid is blank" do

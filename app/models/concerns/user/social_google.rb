@@ -78,7 +78,7 @@ module User::SocialGoogle
           if user.nil?
             user = User.new
             user.provider = :google_oauth2
-            user.password = Devise.friendly_token[0, 20]
+            user.password = Devise.friendly_token(User::RANDOM_PASSWORD_LENGTH)
             query_google(user, data, new_user: true)
 
             if user.email.present?
@@ -143,9 +143,13 @@ module User::SocialGoogle
       # Set user's avatar if they don't have one
       user.google_picture_url(data) unless user.avatar.attached?
 
-      # A password signup proves nothing about the address, and neither does a confirmed row (it can
-      # be confirmed without mailbox access), so a Google sign-in drops that password.
-      user.password = Devise.friendly_token[0, 20] if user.provider.blank?
+      # A password signup proves nothing about the address, and a confirmed row is no proof either (it
+      # can be confirmed without mailbox access), so a Google sign-in drops that password and the
+      # sessions the signup left behind.
+      if user.provider.blank?
+        user.password = Devise.friendly_token(User::RANDOM_PASSWORD_LENGTH)
+        user.invalidate_active_sessions!
+      end
 
       user.skip_confirmation_notification!
       user.save!

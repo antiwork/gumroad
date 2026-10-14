@@ -39,7 +39,7 @@ module User::SocialTwitter
         user = User.new
         user.provider = :twitter
         user.twitter_user_id = info["id"]
-        user.password = Devise.friendly_token[0, 20]
+        user.password = Devise.friendly_token(User::RANDOM_PASSWORD_LENGTH)
         user.skip_confirmation!
         user.save!
       end
