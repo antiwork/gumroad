@@ -710,9 +710,11 @@ class StripePayoutProcessor
     failed = false
     failure_reason = nil
     payout_requested = false
+    merchant_account = payment.user.merchant_accounts.find_by(charge_processor_merchant_id: payment.stripe_connect_account_id)
     # A relinked Stripe Connect account shares its id with the row a takeover retired; the live row wins.
-    merchant_accounts = payment.user.merchant_accounts.where(charge_processor_merchant_id: payment.stripe_connect_account_id)
-    merchant_account = merchant_accounts.alive.first || merchant_accounts.first
+    if merchant_account.retired_by_adoption?
+      merchant_account = payment.user.merchant_accounts.alive.find_by(charge_processor_merchant_id: payment.stripe_connect_account_id) || merchant_account
+    end
     # Also covers payouts prepared before the flag existed, and accounts retired between prepare and perform.
     payment.retired_account_drain = true if drainable_retired_account?(merchant_account)
     # A payout prepared before a takeover still names the rail that takeover retired.
