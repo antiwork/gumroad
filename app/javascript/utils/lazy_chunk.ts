@@ -1,3 +1,5 @@
+import { type ComponentType, lazy } from "react";
+
 // Network failures are removed from the browser's module map, so the same import can recover when
 // tried again. React.lazy does not make that retry itself: once the promise it receives rejects, it
 // remembers the rejection. Complete one retry before giving React the final promise.
@@ -17,3 +19,7 @@ export const fetchWithOneRetry = async <T>(fetch: () => Promise<T>, delayMs = RE
     }
   }
 };
+
+// React.lazy over one named export of a chunk, with the retry above.
+export const lazyWithRetry = <M, P>(load: () => Promise<M>, pick: (module: M) => ComponentType<P>) =>
+  lazy(async () => ({ default: pick(await fetchWithOneRetry(load)) }));

@@ -1,12 +1,12 @@
 import { Pencil } from "@boxicons/react";
 import * as React from "react";
 
-import { assertDefined } from "$app/utils/assert";
 import { classNames } from "$app/utils/classNames";
-import { assertResponseError, request, ResponseError } from "$app/utils/request";
+import { lazyWithRetry } from "$app/utils/lazy_chunk";
 
 import { NavigationButton } from "$app/components/Button";
 import { useAppDomain } from "$app/components/DomainSettings";
+import { FallbackOnError } from "$app/components/FallbackOnError";
 import {
   Product,
   ProductDiscount,
@@ -25,117 +25,18 @@ import { PriceTag } from "$app/components/Product/PriceTag";
 import { getBundleComparisonPriceCents } from "$app/components/Product/pricing";
 import { PurchaseButton } from "$app/components/Product/PurchaseButton";
 import { needsOptionChoice } from "$app/components/Product/purchaseReadiness";
-import {
-  Action,
-  AddSectionButton,
-  PageProps as EditSectionsProps,
-  EditSection,
-  Section as EditableSection,
-  ReducerContext as SectionReducerContext,
-  useSectionImageUploadSettings,
-} from "$app/components/Profile/EditSections";
-import { Section, SectionLayout, PageProps as SectionsProps } from "$app/components/Profile/Sections";
-import { ImageUploadSettingsContext } from "$app/components/RichTextEditor";
-import { showAlert } from "$app/components/server-components/Alert";
+import type { PageProps as EditSectionsProps } from "$app/components/Profile/EditSections";
+import { Section, PageProps as SectionsProps } from "$app/components/Profile/Sections";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
-import { useRefToLatest } from "$app/components/useRefToLatest";
 
 export type Props = ProductProps & { main_section_index: number } & (SectionsProps | EditSectionsProps);
 
-const SectionEditor = ({
-  props,
-  controls = true,
-  children,
-}: {
-  props: Extract<Props, EditSectionsProps>;
-  controls?: boolean;
-  children: React.ReactNode;
-}) => {
-  const { product } = props;
-  const [sections, setSections] = React.useState(() => {
-    const sections = [...props.sections];
-    // fake section (never rendered) to make things easier
-    sections.splice(props.main_section_index, 0, {
-      type: "SellerProfileFeaturedProductSection",
-      id: "",
-      featured_product_id: product.id,
-      header: "",
-      hide_header: true,
-    });
-    return sections;
-  });
-
-  const saveSections = async (sections: EditableSection[]) => {
-    setSections(sections);
-    const order = sections.map((section) => section.id);
-    const mainIndex = order.findIndex((id) => !id);
-    order.splice(mainIndex, 1);
-    try {
-      const response = await request({
-        method: "PUT",
-        url: Routes.sections_link_path(product.permalink),
-        accept: "json",
-        data: { sections: order, main_section_index: mainIndex },
-      });
-      if (!response.ok) throw new ResponseError();
-      showAlert("Changes saved!", "success");
-    } catch (e) {
-      assertResponseError(e);
-      showAlert(e.message, "error");
-    }
-  };
-
-  const sectionsRef = useRefToLatest(sections);
-  const dispatch = (action: Action) => {
-    const sections = sectionsRef.current;
-    switch (action.type) {
-      case "add-section": {
-        action.section.then((section) => {
-          const newSections = [...sections];
-          newSections.splice(action.index, 0, section);
-          void saveSections(newSections);
-        }, assertResponseError);
-        break;
-      }
-      case "update-section": {
-        setSections(sections.map((section) => (section.id === action.updated.id ? action.updated : section)));
-        break;
-      }
-      case "remove-section": {
-        void saveSections(sections.filter((section) => section.id !== action.id));
-        break;
-      }
-      case "move-section-up":
-      case "move-section-down": {
-        const index = sections.findIndex((section) => section.id === action.id);
-        const updatedSections = [...sections];
-        const [section] = updatedSections.splice(index, 1);
-        updatedSections.splice(index + (action.type === "move-section-up" ? -1 : 1), 0, assertDefined(section));
-        void saveSections(updatedSections);
-      }
-    }
-  };
-  const reducer = React.useMemo(() => [{ ...props, sections, product_id: product.id }, dispatch] as const, [sections]);
-  const imageUploadSettings = useSectionImageUploadSettings();
-
-  return (
-    <SectionReducerContext.Provider value={reducer}>
-      <ImageUploadSettingsContext.Provider value={imageUploadSettings}>
-        {sections.map((section, i) => (
-          <SectionLayout key={section.id} id={section.id}>
-            {controls ? <AddSectionButton index={i} /> : null}
-            {section.id ? (
-              <EditSection section={section} controls={controls} />
-            ) : (
-              <div className="mx-auto w-full max-w-6xl">{children}</div>
-            )}
-            {controls && i === sections.length - 1 ? <AddSectionButton index={i + 1} side="top" /> : null}
-          </SectionLayout>
-        ))}
-      </ImageUploadSettingsContext.Provider>
-    </SectionReducerContext.Provider>
-  );
-};
+// Only the seller viewing their own page gets the section editor; LoggedInUserLayout holds the page
+// until it arrives.
+const LazySectionEditor = lazyWithRetry(
+  () => import("$app/components/Product/SectionEditor"),
+  (module) => module.SectionEditor,
+);
 
 export const Layout = (
   props: Props & {
@@ -196,9 +97,11 @@ export const Layout = (
         hasHero={!!hasHero}
       />
       {"products" in props ? (
-        <SectionEditor props={props} controls={false}>
-          {productView}
-        </SectionEditor>
+        <FallbackOnError fallback={mainSection}>
+          <LazySectionEditor props={props} controls={false}>
+            {productView}
+          </LazySectionEditor>
+        </FallbackOnError>
       ) : props.sections.length > 0 ? (
         props.sections.map((section, i) => (
           <React.Fragment key={section.id}>

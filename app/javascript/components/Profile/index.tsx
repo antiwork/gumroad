@@ -7,7 +7,12 @@ import GuidGenerator from "$app/utils/guid_generator";
 import AutoLink from "$app/components/AutoLink";
 import { FollowUserFormBlock } from "$app/components/Profile/FollowUserForm";
 import { Layout } from "$app/components/Profile/Layout";
-import { PageProps as SectionsProps, Section, SectionLayout } from "$app/components/Profile/Sections";
+import {
+  PageProps as SectionsProps,
+  Section,
+  SectionLayout,
+  warmRichTextSection,
+} from "$app/components/Profile/Sections";
 import { Tabs as UITabs, Tab as UITab } from "$app/components/ui/Tabs";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { useRefToLatest } from "$app/components/useRefToLatest";
@@ -58,8 +63,9 @@ export function useTabs(initial: Tab[]) {
   const [selectedTabId, setSelectedTabId] = React.useState(
     (tabs.find((tab) => tab.sections.includes(urlSection.current ?? "")) ?? tabs[0])?.id,
   );
+  // Tab changes are transitions, so the current tab stays up while a lazy section loads.
   const setSelectedTab = (tab: TabWithId) => {
-    setSelectedTabId(tab.id);
+    React.startTransition(() => setSelectedTabId(tab.id));
     const section = tab.sections[0];
     const location = new URL(window.location.href);
     if (!section || section === location.searchParams.get("section")) return;
@@ -94,7 +100,7 @@ export function useTabs(initial: Tab[]) {
       if (section === urlSection.current) return;
       urlSection.current = section;
       const tab = section ? tabs.find((tab) => tab.sections.includes(urlSection.current ?? "")) : tabs[0];
-      if (tab) setSelectedTabId(tab.id);
+      if (tab) React.startTransition(() => setSelectedTabId(tab.id));
     };
     window.addEventListener("popstate", listener);
     return () => window.removeEventListener("popstate", listener);
@@ -106,6 +112,10 @@ export function useTabs(initial: Tab[]) {
 const PublicProfile = (props: Props) => {
   const { tabs, selectedTab, setSelectedTab } = useTabs(props.tabs);
   const sections = selectedTab?.sections.flatMap((id) => props.sections.find((section) => section.id === id) ?? []);
+  // Fetched now, a rich text section on another tab is ready before the visitor switches to it.
+  React.useEffect(() => {
+    if (props.sections.some((section) => section.type === "SellerProfileRichTextSection")) warmRichTextSection();
+  }, [props.sections]);
 
   return (
     <>

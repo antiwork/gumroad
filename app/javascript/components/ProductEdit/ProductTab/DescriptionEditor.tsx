@@ -19,7 +19,7 @@ import {
 } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 import { MoveNode } from "$app/components/TiptapExtensions/MoveNode";
-import { PublicFileEmbed } from "$app/components/TiptapExtensions/PublicFileEmbed";
+import { PublicFileEmbed, PublicFilesSettingsContext } from "$app/components/TiptapExtensions/PublicFileEmbed";
 import { Fieldset } from "$app/components/ui/Fieldset";
 import { Label } from "$app/components/ui/Label";
 import { useRunOnce } from "$app/components/useRunOnce";
@@ -39,27 +39,6 @@ export const useImageUpload = () => {
 export const publicFileIdFromResponse = (data: unknown): string => {
   if (!isRecord(data) || data.success !== true || !isString(data.id)) throw new ResponseError();
   return data.id;
-};
-
-export const PublicFilesSettingsContext = React.createContext<{
-  onUpload?: ({
-    file,
-    onSuccess,
-    onError,
-  }: {
-    file: File;
-    onSuccess?: (id: string) => void;
-    onError?: (error: Error | null) => void;
-  }) => void;
-  cancelUpload?: (id: string) => void;
-  updateFile?: (id: string, file: Partial<PublicFileWithStatus>) => void;
-  files: PublicFileWithStatus[];
-} | null>(null);
-
-export const usePublicFilesSettings = () => {
-  const context = React.useContext(PublicFilesSettingsContext);
-  if (!context) throw new Error("usePublicFilesSettings must be used within a PublicFilesSettingsContext");
-  return context;
 };
 
 const forEachPublicFile = (view: EditorView, id: string, cb: (descendant: ProseMirrorNode, nodePos: number) => void) =>

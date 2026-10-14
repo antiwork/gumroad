@@ -5,8 +5,7 @@ import StarterKit from "@tiptap/starter-kit";
 import * as React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { PublicFilesSettingsContext } from "$app/components/ProductEdit/ProductTab/DescriptionEditor";
-import { PublicFileEmbed } from "$app/components/TiptapExtensions/PublicFileEmbed";
+import { PublicFileEmbed, PublicFilesSettingsContext } from "$app/components/TiptapExtensions/PublicFileEmbed";
 
 const alerts = vi.hoisted((): { message: string; level: string }[] => []);
 vi.mock("$app/components/server-components/Alert", () => ({

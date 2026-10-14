@@ -1,5 +1,4 @@
 import { Star } from "@boxicons/react";
-import { EditorContent } from "@tiptap/react";
 import { differenceInYears, parseISO } from "date-fns";
 import * as React from "react";
 
@@ -66,6 +65,7 @@ import {
 } from "$app/components/Product/ConfigurationSelector";
 import { Covers as CoversComponent } from "$app/components/Product/Covers";
 import { DiscountExpirationCountdown } from "$app/components/Product/DiscountExpirationCountdown";
+import { LazyDescription } from "$app/components/Product/LazyDescription";
 import { PriceTag } from "$app/components/Product/PriceTag";
 import { getBundleComparisonPriceCents, getStandalonePrice } from "$app/components/Product/pricing";
 import { PurchaseButton } from "$app/components/Product/PurchaseButton";
@@ -73,16 +73,11 @@ import { initialOptionId } from "$app/components/Product/purchaseReadiness";
 import { Ribbon } from "$app/components/Product/Ribbon";
 import { ShareSection } from "$app/components/Product/ShareSection";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
-import { PublicFilesSettingsContext } from "$app/components/ProductEdit/ProductTab/DescriptionEditor";
 import { InstallmentPlan } from "$app/components/ProductEdit/state";
 import { RatingStars } from "$app/components/RatingStars";
 import { Review as ReviewComponent } from "$app/components/Review";
 import { Review as FormReview, ReviewForm } from "$app/components/ReviewForm";
-import { useRichTextEditor } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
-import { PublicFileEmbed } from "$app/components/TiptapExtensions/PublicFileEmbed";
-import { ReviewCard } from "$app/components/TiptapExtensions/ReviewCard";
-import { UpsellCard } from "$app/components/TiptapExtensions/UpsellCard";
 import { Alert } from "$app/components/ui/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { LinkButton } from "$app/components/ui/LinkButton";
@@ -321,14 +316,6 @@ export const Product = ({
   // this component under another heading, like the featured product on a profile, opt out.
   scaleLongTitle?: boolean;
 }) => {
-  const [pageLoaded, setPageLoaded] = React.useState(false);
-  const descriptionEditor = useRichTextEditor({
-    // delay initialization to avoid errors in SSR
-    initialValue: pageLoaded ? product.description_html : null,
-    extensions: [UpsellCard, PublicFileEmbed, ReviewCard],
-    editable: false,
-  });
-
   const notForSaleMessage = getNotForSaleMessage(product);
   const [discountCode, setDiscountCode] = React.useState(initialDiscountCode);
 
@@ -343,19 +330,11 @@ export const Product = ({
     if (maxQuantity !== null && selection.quantity > maxQuantity)
       setSelection?.({ ...selection, quantity: maxQuantity });
   }, [maxQuantity, selection.quantity]);
-  const publicFilesSettings = React.useMemo(
-    () => ({
-      files: product.public_files,
-    }),
-    [product.public_files],
-  );
 
   const addThirdPartyAnalytics = useAddThirdPartyAnalytics();
 
   const { searchParams } = new URL(useOriginalLocation());
   useRunOnce(() => {
-    setPageLoaded(true);
-
     if (disableAnalytics) return;
     if (product.seller) {
       startTrackingForSeller(product.seller.id, product.analytics);
@@ -545,20 +524,7 @@ export const Product = ({
         ) : null}
         <section className="border-t border-border p-6">
           <CollapsibleDescription>
-            {/* dir="auto" gives the description a base direction from its first strong
-                character; per-block direction for mixed-language content is handled by
-                the unicode-bidi: plaintext rule in _rich_text.scss (gumroad-private#1244). */}
-            {pageLoaded ? (
-              <PublicFilesSettingsContext.Provider value={publicFilesSettings}>
-                <EditorContent className="rich-text" dir="auto" editor={descriptionEditor} />
-              </PublicFilesSettingsContext.Provider>
-            ) : (
-              <div
-                className="rich-text"
-                dir="auto"
-                dangerouslySetInnerHTML={{ __html: product.description_html ?? "" }}
-              />
-            )}
+            <LazyDescription html={product.description_html} publicFiles={product.public_files} />
           </CollapsibleDescription>
         </section>
       </section>
