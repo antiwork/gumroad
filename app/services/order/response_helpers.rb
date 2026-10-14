@@ -33,12 +33,20 @@ module Order::ResponseHelpers
         is_tax_mismatch: purchase&.error_code == PurchaseErrorCode::TAX_VALIDATION_FAILED,
         card_country: (ISO3166::Country[card_country]&.common_name if card_country.present?),
         ip_country: purchase&.ip_country,
-        updated_product: purchase.present? ? CheckoutPresenter.new(logged_in_user: nil, ip: purchase.ip_address).checkout_product(purchase.link, purchase.link.cart_item({ rent: purchase.is_rental, option: purchase.variant_attributes.first&.external_id, recurrence: purchase.price&.recurrence, price: purchase.customizable_price? ? purchase.displayed_price_cents : nil }), { recommended_by: purchase.recommended_by.presence }) : nil,
+        updated_product: purchase.present? ? updated_product(purchase) : nil,
       }
       # `guest` is whether the request is unauthenticated, which is not the same as the purchase
       # lacking a purchaser. Only sent when it applies, so every other failure keeps its response
       # shape byte for byte.
       response[:owner_sign_in_remedy] = true if guest && purchase&.owner_sign_in_lifts_product_block?
       response
+    end
+
+    # The retry re-applies the line's discounts, so a pay-what-you-want line must come back at the
+    # buyer's undiscounted unit price. `cart_item` raises it to the current minimum.
+    def updated_product(purchase)
+      price = purchase.customizable_price? ? (purchase.pre_discount_unit_price_cents || purchase.displayed_price_cents) : nil
+      cart_item = purchase.link.cart_item({ rent: purchase.is_rental, option: purchase.variant_attributes.first&.external_id, recurrence: purchase.price&.recurrence, price: })
+      CheckoutPresenter.new(logged_in_user: nil, ip: purchase.ip_address).checkout_product(purchase.link, cart_item, { recommended_by: purchase.recommended_by.presence })
     end
 end

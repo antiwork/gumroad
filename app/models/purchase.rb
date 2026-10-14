@@ -91,6 +91,8 @@ class Purchase < ApplicationRecord
   attr_json_data_accessor :card_country_source
   attr_json_data_accessor :chargeback_reason
   attr_json_data_accessor :perceived_price_cents
+  # Pay-what-you-want only: one unit of the buyer's chosen price, before discounts and tip.
+  attr_json_data_accessor :pre_discount_unit_price_cents
   attr_json_data_accessor :recommender_model_name
   attr_json_data_accessor :custom_fee_per_thousand
   attr_json_data_accessor :last_content_page_id

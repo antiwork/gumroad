@@ -252,6 +252,53 @@ describe("Offer-code usage from product page", type: :system, js: true) do
     end
   end
 
+  context "when the first payment is declined" do
+    def decline_then_reload_checkout(product, **cart_options)
+      requests = []
+      subscriber = ActiveSupport::Notifications.subscribe("process_action.action_controller") do |*, payload|
+        requests << "#{payload[:controller]}##{payload[:action]}"
+      end
+
+      add_to_cart(product, **cart_options)
+      check_out(product, credit_card: { number: "4000000000009995" }, error: "Your card has insufficient funds.")
+      wait_until_true(sleep_interval: CheckoutPresenter::CART_SAVE_DEBOUNCE_DURATION_IN_SECONDS) do
+        last_order_request = requests.rindex { _1.start_with?("OrdersController#") }
+        last_order_request && requests.rindex("CheckoutController#update").to_i > last_order_request
+      end
+      visit current_path
+    ensure
+      ActiveSupport::Notifications.unsubscribe(subscriber) if subscriber
+    end
+
+    it "keeps the discount code for the retry" do
+      product = create(:product, price_cents: 10_00)
+      offer_code = create(:percentage_offer_code, products: [product], amount_percentage: 50)
+      visit "#{product.long_url}/#{offer_code.code}"
+
+      decline_then_reload_checkout(product, offer_code:)
+      expect(page).to have_selector("[aria-label='Discount code']", text: offer_code.code)
+      check_out(product)
+
+      purchase = product.sales.successful.sole
+      expect(purchase.price_cents).to eq(5_00)
+      expect(purchase.offer_code).to eq(offer_code)
+    end
+
+    it "charges a pay-what-you-want retry the price the buyer agreed to" do
+      product = create(:product, price_cents: 10_00, customizable_price: true)
+      offer_code = create(:percentage_offer_code, products: [product], amount_percentage: 90)
+      visit "#{product.long_url}/#{offer_code.code}"
+
+      decline_then_reload_checkout(product, pwyw_price: 5, offer_code:)
+      expect(product.sales.failed.sole.price_cents).to eq(5_00)
+      check_out(product)
+
+      purchase = product.sales.successful.sole
+      expect(purchase.price_cents).to eq(5_00)
+      expect(purchase.offer_code).to eq(offer_code)
+    end
+  end
+
   context "when purchasing a product with a quantity larger than 1" do
     it "displays the correct discount and the purchase succeeds" do
       product = create(:product, price_cents: 1000, quantity_enabled: true)

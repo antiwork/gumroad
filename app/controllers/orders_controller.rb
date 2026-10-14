@@ -270,7 +270,27 @@ class OrdersController < ApplicationController
         { code: response[:code], products: discounts } if discounts.any?
       end
 
-      Order::OfferCodeRecoveryService.merge_responses(preserved, revalidated)
+      Order::OfferCodeRecoveryService.merge_responses(preserved, submitted_offer_codes_for_retry(retry_line_items), revalidated)
+    end
+
+    # A refused line comes back at the buyer's undiscounted price, so its per-item code must
+    # come back too, or the retry charges full price.
+    def submitted_offer_codes_for_retry(retry_line_items)
+      retry_line_items
+        .select { _1[:discount_code].present? }
+        .group_by { OfferCode.normalize_code(_1[:discount_code]) }
+        .filter_map do |code, line_items|
+          products = line_items.to_h do |line_item|
+            [line_item[:uid], { permalink: line_item[:permalink], quantity: line_item[:quantity], discount_code: code, variant_external_id: line_item[:variants]&.first }]
+          end
+          result = OfferCodeDiscountComputingService.new(code, products, buyer: logged_in_user, key_by_input: true).process
+          next if result[:error_code].present?
+
+          discounts = result[:products_data].filter_map do |line_item_uid, data|
+            [products.fetch(line_item_uid)[:permalink], data[:discount]] unless data.dig(:discount, :once_per_cart)
+          end.to_h
+          { code: line_items.first[:discount_code], products: discounts } if discounts.any?
+        end
     end
 
     # Methods that confirm in-page: a failed attempt transitions the intent, so

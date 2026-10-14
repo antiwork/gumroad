@@ -48,6 +48,7 @@ class Purchase::CreateService < Purchase::BaseService
       # build primary (non-gift) purchase
       self.purchase = build_purchase(purchase_params.merge(gift_given: gift))
       purchase.submitted_pre_discount_price_cents = params[:submitted_pre_discount_price_cents]
+      purchase.pre_discount_unit_price_cents = submitted_pre_discount_unit_price_cents if purchase.customizable_price?
       purchase.once_per_cart_discount_allocation = params[:once_per_cart_discount_allocation]
       if purchase.once_per_cart_discount_allocation.present?
         purchase.offer_code = OfferCode.find_by(id: purchase.once_per_cart_discount_allocation[:offer_code_id])
@@ -455,6 +456,17 @@ class Purchase::CreateService < Purchase::BaseService
         error_message = product.user.gifting_disabled? ? "The creator has disabled gifting for their products." : "Gifting is not yet enabled for pre-orders."
         raise Purchase::PurchaseInvalid, error_message
       end
+    end
+
+    def submitted_pre_discount_unit_price_cents
+      submitted_total = Integer(purchase_params[:price_cents], exception: false)
+      return if submitted_total.nil?
+
+      unit_total = submitted_total - params[:tip_cents].to_i
+      quantity = purchase.quantity.to_i
+      return if unit_total.negative? || quantity <= 0 || unit_total % quantity != 0
+
+      unit_total / quantity
     end
 
     def validate_perceived_price

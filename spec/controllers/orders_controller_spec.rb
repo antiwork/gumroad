@@ -922,6 +922,26 @@ describe OrdersController, :vcr do
         expect(response.parsed_body["offer_codes"]).to eq(JSON.parse(recovered.to_json))
       end
 
+      it "returns a declined line's discount code so the retry keeps its discount" do
+        offer_code = create(:percentage_offer_code, user: product_1.user, products: [product_1, product_2], amount_percentage: 50)
+        purchases = double("order_purchases", successful: [])
+        allow(purchases).to receive(:each).and_return([])
+        order = double("order", persisted?: true, purchases:, send_charge_receipts: nil)
+        charge_responses = { "unique-id-0" => { success: false }, "unique-id-1" => { success: true } }
+        allow(Order::CreateService).to receive(:new).and_return(instance_double(Order::CreateService, perform: [order, {}, []]))
+        allow(Order::ChargeService).to receive(:new).and_return(instance_double(Order::ChargeService, perform: charge_responses))
+        allow(Order::OfferCodeRecoveryService).to receive(:for_order).with(order).and_return([])
+
+        post :create, params: { line_items: multiple_purchase_line_items.map { _1.merge(discount_code: offer_code.code) } }
+
+        expect(response.parsed_body["offer_codes"]).to match([
+          {
+            "code" => offer_code.code,
+            "products" => { product_1.unique_permalink => hash_including("type" => "percent", "percents" => 50) },
+          },
+        ])
+      end
+
       it "removes a capped once-per-cart code after another line consumes its last use" do
         purchases = double("order_purchases", successful: [])
         allow(purchases).to receive(:each).and_return([])

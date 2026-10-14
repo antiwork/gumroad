@@ -1047,6 +1047,35 @@ describe Order::CreateService, :vcr do
       expect(order.purchaser).to eq buyer
     end
 
+    context "when a discounted pay-what-you-want line is refused" do
+      let(:offer_code) { create(:percentage_offer_code, user: seller_1, products: [product_1], amount_percentage: 90) }
+
+      before do
+        seller_1.update!(tipping_enabled: true)
+        product_1.update!(price_cents: 10_00, customizable_price: true, max_purchase_count: 1)
+        params[:line_items] = [{
+          uid: "unique-id-0",
+          permalink: product_1.unique_permalink,
+          price_cents: 50_00 * 2 + 3_00,
+          perceived_price_cents: 5_00 * 2 + 3_00,
+          tip_cents: 3_00,
+          quantity: 2,
+          discount_code: offer_code.code,
+        }]
+      end
+
+      it "returns the buyer's undiscounted unit price for the retry, before tip" do
+        order, purchase_responses = Order::CreateService.new(params:).perform
+
+        expect(purchase_responses["unique-id-0"]).to include(success: false, error_message: "You have chosen a quantity that exceeds what is available.")
+        expect(purchase_responses["unique-id-0"][:updated_product][:price]).to eq(50_00)
+
+        purchase = Purchase.find(order.purchases.sole.id)
+        expect(purchase.purchase_offer_code_discount.offer_code).to eq(offer_code)
+        expect(Class.new { include Order::ResponseHelpers }.new.send(:error_response, "Declined", purchase:)[:updated_product][:price]).to eq(50_00)
+      end
+    end
+
     describe "recording the payment flow" do
       # The flow is recorded before the charge, so stub charging to keep these recording-focused
       # specs off Stripe while still exercising real submitted payment params.

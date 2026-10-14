@@ -48,6 +48,28 @@ describe Order::ResponseHelpers do
       expect(response[:error_code]).to eq(PurchaseErrorCode::TAX_VALIDATION_FAILED)
     end
 
+    describe "updated_product price for a pay-what-you-want purchase" do
+      let(:pwyw_product) { create(:product, user: seller, price_cents: 10_00, customizable_price: true) }
+
+      it "raises the buyer's unit price to a minimum the seller raised after the attempt" do
+        purchase = create(:failed_purchase, link: pwyw_product, pre_discount_unit_price_cents: 20_00)
+        pwyw_product.update!(price_cents: 25_00)
+
+        response = test_instance.send(:error_response, "Payment declined", purchase:)
+
+        expect(response[:updated_product][:price]).to eq(25_00)
+      end
+
+      it "falls back to the displayed price for a purchase that predates the stored unit price" do
+        purchase = create(:failed_purchase, link: pwyw_product, displayed_price_cents: 30_00)
+
+        response = test_instance.send(:error_response, "Payment declined", purchase:)
+
+        expect(purchase.pre_discount_unit_price_cents).to be_nil
+        expect(response[:updated_product][:price]).to eq(30_00)
+      end
+    end
+
     it "handles CN card country code correctly" do
       purchase = create(:failed_purchase, link: usd_product, total_transaction_cents: 10_00, card_country: "C2")
 
