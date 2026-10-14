@@ -4374,6 +4374,23 @@ describe Purchase::CreateService, :vcr do
         expect(prior.stripe_error_code).to eq "payment_intent_authentication_failure"
       end
 
+      it "fails the other purchases funded by the same declined cart intent" do
+        sibling = create(:purchase, email:, purchase_state: "in_progress", stripe_transaction_id: nil,
+                                    merchant_account: prior.merchant_account, charge_processor_id: StripeChargeProcessor.charge_processor_id)
+        sibling.create_processor_payment_intent!(intent_id: "pi_prior")
+        charge = create(:charge, merchant_account: prior.merchant_account, stripe_payment_intent_id: "pi_prior", client_confirmed: true)
+        charge.purchases << prior << sibling
+        stub_intent(status: "requires_payment_method", last_payment_error: { type: "card_error", code: "card_declined", decline_code: "generic_decline" })
+        allow(ChargeProcessor).to receive(:cancel_payment_intent!)
+
+        _, error = Purchase::CreateService.new(product:, params:).perform
+
+        expect(error).to be_nil
+        expect(prior.reload).to be_failed
+        expect(sibling.reload).to be_failed
+        expect(sibling.stripe_error_code).to eq "card_declined_generic_decline"
+      end
+
       it "keeps blocking while the intent awaits authentication" do
         stub_intent(status: "requires_action", next_action: { type: "use_stripe_sdk" })
         expect(ChargeProcessor).not_to receive(:cancel_payment_intent!)

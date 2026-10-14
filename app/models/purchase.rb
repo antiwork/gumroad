@@ -2519,15 +2519,24 @@ class Purchase < ApplicationRecord
     last_payment_error = payment_intent[:last_payment_error]
     return false if last_payment_error.blank?
 
+    stripe_error_code = StripeChargeProcessor.error_code_from_last_payment_error(last_payment_error.to_hash.stringify_keys)
     with_lock do
       next false unless in_progress?
 
-      stripe_error_code = StripeChargeProcessor.error_code_from_last_payment_error(last_payment_error.to_hash.stringify_keys)
-      self.stripe_error_code = stripe_error_code if stripe_error_code.present?
-      cancel_charge_intent!
+      ChargeProcessor.cancel_payment_intent!(merchant_account, processor_payment_intent_id)
+      # A cart charge funds every purchase in it from this one intent, so they fail together.
+      (charge&.charged_purchases || [self]).each do |purchase|
+        purchase = self if purchase.id == id
+        purchase.with_lock do
+          next unless purchase.in_progress?
+
+          purchase.stripe_error_code = stripe_error_code if stripe_error_code.present?
+          Purchase::MarkFailedService.new(purchase).perform
+        end
+      end
+      charge.destroy_presentment_records! if charge&.client_confirmed?
       failed?
     rescue ChargeProcessorError => e
-      restore_attributes([:stripe_error_code])
       logger.info "Could not cancel failed payment intent for purchase #{id}: #{e.message}"
       false
     end
