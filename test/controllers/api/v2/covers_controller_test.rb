@@ -73,6 +73,18 @@ class Api::V2::CoversControllerTest < ActionController::TestCase
     assert_equal "The signed_blob_id is invalid or expired.", body["message"]
   end
 
+  [123, 1.5, true, ["invalid"], { value: "invalid" }].each do |signed_blob_id|
+    test "POST create rejects malformed signed blob ID #{signed_blob_id.inspect} without creating a cover" do
+      assert_no_difference [-> { AssetPreview.count }, -> { ActiveStorage::Attachment.count }, -> { ActiveStorage::Blob.count }] do
+        post :create, params: create_params(signed_blob_id:), as: :json
+      end
+
+      body = response.parsed_body
+      assert_equal false, body["success"]
+      assert_equal "The signed_blob_id is invalid or expired.", body["message"]
+    end
+  end
+
   test "POST create returns a descriptive error for an unsupported file type" do
     post :create, params: create_params(signed_blob_id: uploaded_cover_blob("webp_image.webp", "image/webp").signed_id)
 

@@ -276,6 +276,19 @@ class Api::V2::ThumbnailsControllerTest < ActionController::TestCase
     assert_equal "The signed_blob_id is invalid or expired.", body["message"]
   end
 
+  [123, 1.5, true, ["invalid"], { value: "invalid" }].each do |signed_blob_id|
+    test "POST create rejects malformed signed blob ID #{signed_blob_id.inspect} without changing the thumbnail" do
+      assert_no_difference [-> { Thumbnail.count }, -> { ActiveStorage::Attachment.count }, -> { ActiveStorage::Blob.count }] do
+        post :create, params: edit_products_params(signed_blob_id:), as: :json
+      end
+
+      body = response.parsed_body
+      assert_equal false, body["success"]
+      assert_equal "The signed_blob_id is invalid or expired.", body["message"]
+      assert_nil @product.reload.thumbnail
+    end
+  end
+
   test "POST create returns error for invalid URLs" do
     post :create, params: edit_products_params(url: "ftp://example.com/thumbnail.png")
 

@@ -7,8 +7,15 @@ class Api::V2::CoversController < Api::V2::BaseController
   def create
     asset_preview = @product.asset_previews.build
 
-    if params[:signed_blob_id].present?
-      asset_preview.file.attach(params[:signed_blob_id])
+    signed_blob_id = params[:signed_blob_id]
+
+    if signed_blob_id.present?
+      # A non-String attachable raises ArgumentError, which the rescues below do not cover.
+      unless signed_blob_id.is_a?(String)
+        return render_response(false, message: "The signed_blob_id is invalid or expired.")
+      end
+
+      asset_preview.file.attach(signed_blob_id)
     elsif params[:url].present?
       asset_preview.url = params[:url]
     else

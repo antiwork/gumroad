@@ -9,8 +9,15 @@ class Api::V2::ThumbnailsController < Api::V2::BaseController
     thumbnail.unsplash_url = nil
     thumbnail.deleted_at = nil
 
-    if params[:signed_blob_id].present?
-      thumbnail.file.attach(params[:signed_blob_id])
+    signed_blob_id = params[:signed_blob_id]
+
+    if signed_blob_id.present?
+      # A non-String attachable raises ArgumentError, which the rescues below do not cover.
+      unless signed_blob_id.is_a?(String)
+        return render_response(false, message: "The signed_blob_id is invalid or expired.")
+      end
+
+      thumbnail.file.attach(signed_blob_id)
     elsif params[:url].present?
       thumbnail.url = params[:url]
     else
