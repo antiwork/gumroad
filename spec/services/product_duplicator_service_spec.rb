@@ -106,9 +106,11 @@ describe ProductDuplicatorService do
 
     expect(duplicate_product.product_taggings.size).to eq(tags.size)
     expect(duplicate_product.tags.size).to eq(tags.size)
-    expect(duplicate_product.tags.first.name).to eq(tags[:one])
-    expect(duplicate_product.tags.second.name).to eq(tags[:two])
-    expect(duplicate_product.tags.last.name).to eq(tags[:three])
+    expect(duplicate_product.tags.map(&:name)).to match_array(tags.values)
+    # A product's tags come back ordered by the `tags` row each name resolves to, not by the order
+    # they were added (see Product::Tags#save_tags!), so the duplicate is compared against the
+    # original rather than against the caller's list.
+    expect(duplicate_product.tags.map(&:name)).to eq(product.reload.tags.map(&:name))
 
     expect(duplicate_product.offer_codes.size).to eq(3)
     expect(duplicate_product.product_and_universal_offer_codes.size).to eq(4)
