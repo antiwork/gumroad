@@ -598,8 +598,8 @@ class Subscription < ApplicationRecord
       stripe_mandate_id.present?
   end
 
-  # True only when renewals resumed. A mandate approved outside the listing currency ends the hold for good, leaving
-  # indian_card_mandate_requires_reauthorization? set; an INR listing records its fixing before resuming.
+  # True only when renewals resumed. A mandate outside the listing currency, or an outdated fixing, ends the hold
+  # for good with reauthorization required; an INR listing records its fixing before resuming.
   def resume_held_indian_card_mandate!(mandate: nil, status: nil)
     return false unless indian_card_mandate_held?
 
@@ -613,7 +613,14 @@ class Subscription < ApplicationRecord
     end
 
     presentment_attributes = nil
-    if current_later_charge_presentment.nil?
+    fixing = current_later_charge_presentment
+    if fixing.present?
+      # An outdated fixing ends the hold under the lock below, whatever the currency support.
+      if indian_card_presentment_in_force?(fixing) && !indian_card_renewal_presentment_supported?(fixing.presentment_currency)
+        ErrorNotifier.notify("Held Indian card mandate cannot bill its price fixing yet", subscription: external_id, mandate_id: mandate.id)
+        return false
+      end
+    else
       currency = indian_card_mandate_listing_currency
       setup_intent = ChargeProcessor.get_setup_intent(renewal_merchant_account, card.stripe_setup_intent_id) if card.stripe_setup_intent_id.present?
       unless setup_intent.present? &&
@@ -647,16 +654,24 @@ class Subscription < ApplicationRecord
     end
 
     resumed = false
+    outdated = false
     transaction do
       lock!
-      if held_indian_card_mandate_unchanged?(card, mandate)
-        if presentment_attributes.present? && current_later_charge_presentment.nil?
-          later_charge_presentments.create!(**presentment_attributes, effective_from: Time.current)
-        end
-        update_renewal_for_indian_card_mandate!("active", expected_credit_card_id: card.id, mandate_id: mandate.id)
-        resumed = !renewal_disabled_due_to_indian_card_mandate?
+      next unless held_indian_card_mandate_unchanged?(card, mandate)
+
+      fixing = current_later_charge_presentment
+      if fixing.nil?
+        later_charge_presentments.create!(**presentment_attributes, effective_from: Time.current) if presentment_attributes.present?
+      elsif !indian_card_presentment_in_force?(fixing)
+        # The mandate was approved off recovery terms, not this row, and a fixing is never superseded.
+        outdated = true
+        require_indian_card_mandate_reauthorization!(clear_existing_mandate: true, notify_buyer_if_already_disabled: true)
+        next
       end
+      update_renewal_for_indian_card_mandate!("active", expected_credit_card_id: card.id, mandate_id: mandate.id)
+      resumed = !renewal_disabled_due_to_indian_card_mandate?
     end
+    ErrorNotifier.notify("Held Indian card mandate has an outdated price fixing", subscription: external_id, mandate_id: mandate.id) if outdated
     resumed
   rescue ChargeProcessorError, ActiveRecord::RecordInvalid => e
     ErrorNotifier.notify(e, subscription: external_id)
@@ -727,12 +742,9 @@ class Subscription < ApplicationRecord
 
     renewal_price_cents = current_subscription_price_cents(authenticated_offer_code_buyer:)
     presentment = current_later_charge_presentment
-    canonical_price_cents = LaterChargePresentment.canonical_price_cents_for(purchase)
-    canonical_price_cents = renewal_price_cents if canonical_price_cents.zero?
     presentment_matches = presentment.present? &&
-      presentment.canonical_price_cents == canonical_price_cents &&
-      indian_card_renewal_presentment_supported?(presentment.presentment_currency) &&
-      indian_card_presentment_price_current?(presentment, purchase)
+      indian_card_presentment_in_force?(presentment, purchase, renewal_price_cents:) &&
+      indian_card_renewal_presentment_supported?(presentment.presentment_currency)
     recovery_currency = indian_card_recovery_presentment_currency unless presentment_matches
     price_cap_rate = if presentment_matches
       purchase.rate_converted_to_usd.presence
@@ -855,6 +867,15 @@ class Subscription < ApplicationRecord
     amount = BigDecimal(canonical_cents.to_s) * BigDecimal(currency_units_per_usd.to_s)
     amount /= 100 if is_currency_type_single_unit?(currency)
     amount.ceil
+  end
+
+  # Whether mandate terms are sized off this fixing, leaving out the transient renewal-currency support check.
+  def indian_card_presentment_in_force?(presentment, purchase = original_purchase, renewal_price_cents: nil)
+    return false if purchase.nil?
+
+    canonical_price_cents = LaterChargePresentment.canonical_price_cents_for(purchase)
+    canonical_price_cents = renewal_price_cents || current_subscription_price_cents if canonical_price_cents.zero?
+    presentment.canonical_price_cents == canonical_price_cents && indian_card_presentment_price_current?(presentment, purchase)
   end
 
   # A listed-currency fixing is only current while its fixed price equals the plan's listed

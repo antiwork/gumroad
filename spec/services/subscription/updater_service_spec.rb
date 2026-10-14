@@ -3070,7 +3070,7 @@ describe Subscription::UpdaterService, :vcr do
             customer_matches: true,
             binding_matches: true,
             terms_match: true,
-            listing_currency_matches: true
+            hold_resumable: true
           )
         end
 
@@ -3219,7 +3219,38 @@ describe Subscription::UpdaterService, :vcr do
             expect(@subscription).not_to be_indian_card_mandate_held
             expect(ErrorNotifier).to have_received(:notify).with(
               "Indian card update rejected without an active e-mandate",
-              hash_including(subscription: @subscription.external_id, terms_match: true, listing_currency_matches: false)
+              hash_including(subscription: @subscription.external_id, terms_match: true, hold_resumable: false)
+            )
+          end
+
+          it "saves nothing when an outdated price fixing would be left for the hold to resume on" do
+            @product.update_column(:price_currency_type, Currency::INR)
+            @subscription.original_purchase.update_columns(displayed_price_currency_type: Currency::INR, rate_converted_to_usd: nil)
+            Redis::Namespace.new(:currencies, redis: $redis).set("INR", "80")
+            fixing = @subscription.later_charge_presentments.create!(
+              processor: StripeChargeProcessor.charge_processor_id,
+              presentment_currency: Currency::INR,
+              presentment_price_cents: @subscription.current_subscription_price_cents + 1_000,
+              canonical_price_cents: LaterChargePresentment.canonical_price_cents_for(@subscription.original_purchase),
+              signup_currency_units_per_usd: BigDecimal("80"),
+              effective_from: 1.day.ago
+            )
+            expect(@subscription.reload.indian_card_presentment_in_force?(fixing)).to be(false)
+            expect(@subscription.indian_card_mandate_terms[:currency]).to eq(Currency::INR)
+            allow(ErrorNotifier).to receive(:notify)
+
+            result = restart_with_replacement_card
+
+            expect(result).to eq(success: false, error_message: rejected_message)
+            @subscription.reload
+            expect(@subscription.credit_card).to eq(@credit_card)
+            expect(@subscription.stripe_mandate_id).to be_nil
+            expect(@subscription).not_to be_indian_card_mandate_held
+            expect(@subscription).not_to be_indian_card_mandate_hold_pending
+            expect(@subscription.later_charge_presentments.to_a).to eq([fixing])
+            expect(ErrorNotifier).to have_received(:notify).with(
+              "Indian card update rejected without an active e-mandate",
+              hash_including(subscription: @subscription.external_id, terms_match: true, hold_resumable: false)
             )
           end
 
@@ -3272,6 +3303,32 @@ describe Subscription::UpdaterService, :vcr do
               expect(@subscription).not_to be_renewal_disabled_due_to_indian_card_mandate
               expect(@subscription).not_to be_indian_card_mandate_hold_pending
               expect(@subscription.credit_card).to eq(replacement_card)
+            end
+
+            it "ends the hold and asks once for another card, without charging, when an outdated price fixing appeared during the hold" do
+              fixing = @subscription.later_charge_presentments.create!(
+                processor: StripeChargeProcessor.charge_processor_id,
+                presentment_currency: Currency::INR,
+                presentment_price_cents: @subscription.current_subscription_price_cents + 1_000,
+                canonical_price_cents: LaterChargePresentment.canonical_price_cents_for(@subscription.original_purchase),
+                signup_currency_units_per_usd: BigDecimal("80"),
+                effective_from: 1.day.ago
+              )
+              expect(@subscription.reload.indian_card_presentment_in_force?(fixing)).to be(false)
+              mail = instance_double(ActionMailer::MessageDelivery, deliver_later: true)
+              allow(CustomerLowPriorityMailer).to receive(:subscription_indian_card_mandate_invalid).and_return(mail)
+              allow(ErrorNotifier).to receive(:notify)
+              expect_any_instance_of(described_class).not_to receive(:charge_user!)
+
+              result = restart_with_saved_card
+
+              expect(result).to eq(success: false, error_message: Subscription::UpdaterService::HELD_MANDATE_ENDED_MESSAGE)
+              @subscription.reload
+              expect(@subscription).to be_indian_card_mandate_requires_reauthorization
+              expect(@subscription).not_to be_indian_card_mandate_held
+              expect(@subscription.later_charge_presentments.to_a).to eq([fixing])
+              expect(CustomerLowPriorityMailer).to have_received(:subscription_indian_card_mandate_invalid).with(@subscription.id).once
+              expect(mail).to have_received(:deliver_later).with(queue: "low").once
             end
 
             it "does not charge when the fixing cannot be recorded" do
