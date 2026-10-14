@@ -12,6 +12,7 @@ import { sanitizeHtml } from "$app/utils/sanitize";
 import { Button } from "$app/components/Button";
 import { MenuItem } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
+import { NodeActionsMenu, NodeActionsWrapper } from "$app/components/TiptapExtensions/NodeActionsMenu";
 import { createInsertCommand } from "$app/components/TiptapExtensions/utils";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
@@ -39,11 +40,26 @@ const VideoEmbed = Extension.create({
   ),
 });
 
+const RawNodeView = ({ editor, node, getPos, selected }: NodeViewProps) => {
+  const html = sanitizeHtml(assertString(node.attrs.html));
+  if (!editor.isEditable) return <NodeViewWrapper className="tiptap__raw" dangerouslySetInnerHTML={{ __html: html }} />;
+  return (
+    <NodeActionsWrapper selected={selected} asChild>
+      <NodeViewWrapper contentEditable={false}>
+        <NodeActionsMenu editor={editor} getPos={getPos} />
+        {/* The iframe swallows clicks; without this the block can never be selected. */}
+        <div className="tiptap__raw [&_iframe]:pointer-events-none" dangerouslySetInnerHTML={{ __html: html }} />
+      </NodeViewWrapper>
+    </NodeActionsWrapper>
+  );
+};
+
 export const Raw = TiptapNode.create({
   name: "raw",
   inline: () => false,
   group: () => "block",
   draggable: true,
+  addNodeView: () => ReactNodeViewRenderer(RawNodeView),
   addAttributes: () => ({
     html: { default: null },
     title: { default: null },

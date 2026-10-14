@@ -10,6 +10,7 @@ import {
   EmbedMediaForm,
   ExternalMediaFileEmbed,
   mediaEmbedUrlCandidates,
+  Raw,
 } from "$app/components/TiptapExtensions/MediaEmbed";
 
 const state = vi.hoisted(() => ({ requests: new Array<string>(), bodies: new Array<unknown>() }));
@@ -155,6 +156,52 @@ describe("ExternalMediaFileEmbed node view", () => {
       const remove = [...document.querySelectorAll("button")].find((button) => button.textContent?.trim() === "Remove");
 
       expect(remove, "remove control did not mount").toBeDefined();
+    } finally {
+      editor.destroy();
+    }
+  });
+});
+
+describe("Raw node view", () => {
+  it("offers a Delete action that removes the block, and keeps its iframe from eating clicks", async () => {
+    const editor = new Editor({
+      extensions: [StarterKit, Raw],
+      content: {
+        type: "doc",
+        content: [
+          {
+            type: "raw",
+            attrs: {
+              html: '<iframe src="about:blank"></iframe>',
+              title: "Flipbook",
+              url: "https://heyzine.com/x",
+            },
+          },
+          { type: "paragraph" },
+        ],
+      },
+    });
+
+    try {
+      await act(async () => {
+        render(<EditorContent editor={editor} />);
+      });
+      expect(document.querySelector(".tiptap__raw.\\[\\&_iframe\\]\\:pointer-events-none")).not.toBeNull();
+
+      const trigger = document.querySelector<HTMLElement>("[aria-label='Actions']");
+      if (!trigger) throw new Error("actions menu did not mount");
+      await act(async () => {
+        fireEvent.click(trigger);
+      });
+      const del = [...document.querySelectorAll("[role='menuitem'], button, div")].find(
+        (el) => el.children.length <= 2 && el.textContent?.trim() === "Delete",
+      );
+      if (!del) throw new Error("Delete item did not mount");
+      await act(async () => {
+        fireEvent.click(del);
+      });
+
+      expect(editor.getJSON().content?.some((n) => n.type === "raw")).toBe(false);
     } finally {
       editor.destroy();
     }
