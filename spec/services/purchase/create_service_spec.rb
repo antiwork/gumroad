@@ -4342,6 +4342,90 @@ describe Purchase::CreateService, :vcr do
         end.to change { Purchase.successful.count }.by(1)
       end
     end
+
+    context "when an unfinished earlier attempt has a payment intent" do
+      let(:in_progress_error) { "You have already attempted to purchase this product. We will email you shortly if the purchase is successful." }
+      let!(:prior) do
+        purchase = create(:purchase, link: product, email:, ip_address: "0.0.0.0", purchase_state: "in_progress",
+                                     stripe_transaction_id: nil, merchant_account: MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id),
+                                     charge_processor_id: StripeChargeProcessor.charge_processor_id, created_at: 5.minutes.ago)
+        purchase.create_processor_payment_intent!(intent_id: "pi_prior")
+        purchase
+      end
+
+      def stub_intent(status:, last_payment_error: nil, next_action: nil)
+        payment_intent = Stripe::PaymentIntent.construct_from(id: "pi_prior", status:, last_payment_error:, next_action:)
+        allow(ChargeProcessor).to receive(:get_charge_intent).and_call_original
+        allow(ChargeProcessor).to receive(:get_charge_intent).with(anything, "pi_prior")
+                                                             .and_return(instance_double(StripeChargeIntent, payment_intent:))
+      end
+
+      it "fails a prior whose intent was declined, records the decline, cancels the intent, and lets the retry through" do
+        stub_intent(status: "requires_payment_method", last_payment_error: { type: "invalid_request_error", code: "payment_intent_authentication_failure" })
+        expect(ChargeProcessor).to receive(:cancel_payment_intent!).with(prior.merchant_account, "pi_prior")
+
+        expect do
+          _, error = Purchase::CreateService.new(product:, params:).perform
+
+          expect(error).to be_nil
+        end.to change { Purchase.successful.count }.by(1)
+
+        expect(prior.reload).to be_failed
+        expect(prior.stripe_error_code).to eq "payment_intent_authentication_failure"
+      end
+
+      it "keeps blocking while the intent awaits authentication" do
+        stub_intent(status: "requires_action", next_action: { type: "use_stripe_sdk" })
+        expect(ChargeProcessor).not_to receive(:cancel_payment_intent!)
+
+        _, error = Purchase::CreateService.new(product:, params:).perform
+
+        expect(error).to eq in_progress_error
+        expect(prior.reload).to be_in_progress
+      end
+
+      it "keeps blocking while the intent is processing" do
+        stub_intent(status: "processing")
+        expect(ChargeProcessor).not_to receive(:cancel_payment_intent!)
+
+        _, error = Purchase::CreateService.new(product:, params:).perform
+
+        expect(error).to eq in_progress_error
+        expect(prior.reload).to be_in_progress
+      end
+
+      it "keeps blocking a requires_payment_method intent that was never attempted" do
+        stub_intent(status: "requires_payment_method")
+        expect(ChargeProcessor).not_to receive(:cancel_payment_intent!)
+
+        _, error = Purchase::CreateService.new(product:, params:).perform
+
+        expect(error).to eq in_progress_error
+        expect(prior.reload).to be_in_progress
+      end
+
+      it "keeps blocking when the intent cannot be read" do
+        allow(ChargeProcessor).to receive(:get_charge_intent).and_call_original
+        allow(ChargeProcessor).to receive(:get_charge_intent).with(anything, "pi_prior")
+                                                             .and_raise(ChargeProcessorUnavailableError)
+
+        _, error = Purchase::CreateService.new(product:, params:).perform
+
+        expect(error).to eq in_progress_error
+        expect(prior.reload).to be_in_progress
+      end
+
+      it "keeps blocking when the declined intent cannot be canceled" do
+        stub_intent(status: "requires_payment_method", last_payment_error: { type: "card_error", code: "card_declined" })
+        allow(ChargeProcessor).to receive(:cancel_payment_intent!).and_raise(ChargeProcessorInvalidRequestError)
+
+        _, error = Purchase::CreateService.new(product:, params:).perform
+
+        expect(error).to eq in_progress_error
+        expect(prior.reload).to be_in_progress
+        expect(prior.stripe_error_code).to be_nil
+      end
+    end
   end
 
   context "when max price in non-USD" do

@@ -38,6 +38,7 @@ class Purchase < ApplicationRecord
   MAX_PRICE_RANGE = (-2_147_483_647..2_147_483_647)
   BUYER_CURRENCY_QUOTE_ROUNDING_SLACK_CENTS = 5
   UNFINISHED_PURCHASE_RETRY_BLOCK = 15.minutes
+  FAILED_PAYMENT_INTENT_RECHECK_LIMIT = 3
 
   CHARGED_SUCCESS_STATES = %w[preorder_authorization_successful successful]
   NON_GIFT_SUCCESS_STATES = CHARGED_SUCCESS_STATES.dup.push("not_charged")
@@ -2498,6 +2499,38 @@ class Purchase < ApplicationRecord
     # are always canceled here by FailAbandonedPurchaseWorker. A fresh checkout builds
     # a new charge and re-persists its own snapshot, so at most one live set remains.
     charge.destroy_presentment_records! if charge&.client_confirmed?
+  end
+
+  # Does early what handle_event_failed! does on payment_intent.payment_failed, and also cancels
+  # the intent so the old tab cannot re-confirm it. Only a declined attempt qualifies
+  # (requires_payment_method with a last_payment_error); any other status can still settle.
+  # Read or cancel errors leave the purchase in_progress.
+  def fail_if_payment_intent_failed!
+    return false unless in_progress? && processor_payment_intent_id.present? && merchant_account.present?
+
+    begin
+      payment_intent = ChargeProcessor.get_charge_intent(merchant_account, processor_payment_intent_id)&.payment_intent
+    rescue StandardError => e
+      logger.info "Could not read payment intent for purchase #{id}: #{e.class} #{e.message}"
+      return false
+    end
+    return false unless payment_intent&.status == StripeIntentStatus::REQUIRES_PAYMENT_METHOD
+
+    last_payment_error = payment_intent[:last_payment_error]
+    return false if last_payment_error.blank?
+
+    with_lock do
+      next false unless in_progress?
+
+      stripe_error_code = StripeChargeProcessor.error_code_from_last_payment_error(last_payment_error.to_hash.stringify_keys)
+      self.stripe_error_code = stripe_error_code if stripe_error_code.present?
+      cancel_charge_intent!
+      failed?
+    rescue ChargeProcessorError => e
+      restore_attributes([:stripe_error_code])
+      logger.info "Could not cancel failed payment intent for purchase #{id}: #{e.message}"
+      false
+    end
   end
 
   # Attempts to cancel setup intent, assuming it hasn't succeeded or failed yet.
@@ -5985,6 +6018,7 @@ class Purchase < ApplicationRecord
       # in_progress/settling one hasn't finished, so a second charge there would be an actual
       # double charge rather than a deliberate repeat buy.
       already = already.reject(&:successful?) if confirmed_duplicate_purchase
+      already -= fail_priors_with_failed_payment_intent(already)
 
       add_errors_for_existing_purchase(already)
       return if errors.present?
@@ -6075,6 +6109,15 @@ class Purchase < ApplicationRecord
        .where("created_at > ?", 1.hour.ago)
 
       potential_duplicates.each(&:cancel_charge_intent)
+    end
+
+    # The payment_intent.payment_failed webhook that fails these can land minutes late, and until
+    # then the retry is refused with a promise of an email that will never come.
+    def fail_priors_with_failed_payment_intent(purchases)
+      purchases
+        .select { _1.in_progress? && _1.processor_payment_intent_id.present? }
+        .first(FAILED_PAYMENT_INTENT_RECHECK_LIMIT)
+        .select(&:fail_if_payment_intent_failed!)
     end
 
     # The wording here has to work for two different readers. On a normal purchase the person
