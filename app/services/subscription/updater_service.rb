@@ -284,8 +284,8 @@ class Subscription::UpdaterService
     # The rollback undid ending the hold, so end it again outside the transaction for the reauthorization and email to commit.
     subscription.reload.resume_held_indian_card_mandate! if @held_indian_card_mandate_ended
 
-    # The scan only rechecks unpaid memberships while held, so charge one the failed update left resumed.
-    if pre_resumed && !result[:success] && subscription.reload.last_successful_purchase.blank? && subscription.overdue_for_charge?
+    # Charge a membership the failed update left resumed: the scan skips unpaid ones and those whose last charge failed.
+    if pre_resumed && !result[:success] && subscription.reload.overdue_for_charge?
       RecurringChargeWorker.perform_async(subscription.id)
     end
 

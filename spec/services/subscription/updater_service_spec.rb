@@ -3441,9 +3441,10 @@ describe Subscription::UpdaterService, :vcr do
                 expect(@subscription.original_purchase.variant_attributes.to_a).to eq(original_variants)
               end
 
-              it "queues the charge for an unpaid membership when the update fails after resuming the hold" do
-                allow_any_instance_of(Subscription).to receive(:last_successful_purchase).and_return(nil)
-                allow_any_instance_of(Subscription).to receive(:overdue_for_charge?).and_return(true)
+              it "queues the charge for an overdue paid membership when the update fails after resuming the hold" do
+                @subscription.reload
+                expect(@subscription.last_successful_purchase).to be_present
+                expect(@subscription).to be_overdue_for_charge
                 allow_any_instance_of(described_class).to receive(:charge_user!).and_raise(Subscription::UpdateFailed, "declined")
                 RecurringChargeWorker.jobs.clear
 
