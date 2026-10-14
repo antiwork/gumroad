@@ -16,7 +16,6 @@ import {
   Option,
   Recurrences,
   PurchasingPowerParityDetails,
-  applySelection,
   computeDiscountedPrice,
   hasMetDiscountConditions,
 } from "$app/components/Product/ConfigurationSelector";
@@ -178,11 +177,6 @@ export const findCartItem = (cart: CartState, permalink: string, optionId: strin
 
 export const ACCEPTED_OFFER_UNAVAILABLE_ERROR_CODE = "accepted_offer_unavailable";
 
-export const isPwywItem = (item: CartItem) =>
-  item.product.is_tiered_membership
-    ? (item.product.options.find(({ id }) => id === item.option_id)?.is_pwyw ?? false)
-    : !!item.product.pwyw;
-
 // Refused lines go back into the cart for the buyer to retry. The server's refreshed product never carries
 // the accepted offer, so keep it from the cart item: dropping it charges list price after a reload. Only the
 // server knows whether the offer still applies, so drop it once a refusal says it doesn't.
@@ -195,22 +189,6 @@ export const cartItemsForRetry = (lines: { item: CartItem; result: LineItemResul
       ...item,
       ...updated,
       quantity: updated?.quantity || item.quantity,
-      // A PWYW line's refreshed price is the purchase's discounted total, not the unit price the buyer chose.
-      price:
-        updated && isPwywItem(item)
-          ? Math.max(
-              item.price,
-              applySelection(updated.product, null, {
-                rent: item.rent,
-                optionId: item.option_id,
-                recurrence: item.recurrence,
-                quantity: item.quantity,
-                price: { error: false, value: null },
-                callStartTime: item.call_start_time,
-                payInInstallments: item.pay_in_installments,
-              }).priceCents,
-            )
-          : (updated?.price ?? item.price),
       accepted_offer: offerRefused ? null : (item.accepted_offer ?? null),
     };
   });

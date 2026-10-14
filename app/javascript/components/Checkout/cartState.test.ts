@@ -670,48 +670,4 @@ describe("cartItemsForRetry", () => {
     ]);
     expect(retried[1]?.accepted_offer).toBeNull();
   });
-
-  const pwyw: CartItem = {
-    ...offered,
-    price: 5_000,
-    product: { ...offered.product, price_cents: 1_000, pwyw: { suggested_price_cents: null } },
-  };
-  const retryPwyw = (line: CartItem, updatedPrice: number) =>
-    cartItemsForRetry([
-      { item: line, result: { ...refused(), updated_product: { ...line, price: updatedPrice, accepted_offer: null } } },
-    ])[0];
-
-  it("keeps the unit price the buyer chose on a PWYW line instead of the purchase's discounted total", () => {
-    expect(retryPwyw(pwyw, 1_000)).toEqual(
-      expect.objectContaining({ price: 5_000, accepted_offer: offered.accepted_offer }),
-    );
-  });
-
-  it("raises a PWYW line to the listed minimum of the option and rental the buyer chose", () => {
-    const rental: CartItem = {
-      ...pwyw,
-      price: 300,
-      rent: true,
-      option_id: "option",
-      product: {
-        ...pwyw.product,
-        rental: { price_cents: 200, rent_only: false },
-        options: [
-          {
-            id: "option",
-            name: "Option",
-            quantity_left: null,
-            description: "",
-            price_difference_cents: 400,
-            recurrence_price_values: null,
-            is_pwyw: false,
-            duration_in_minutes: null,
-            upsell_offered_variant_id: null,
-          },
-        ],
-      },
-    };
-    expect(retryPwyw(rental, 300)?.price).toBe(600);
-    expect(retryPwyw({ ...rental, price: 900 }, 900)?.price).toBe(900);
-  });
 });
