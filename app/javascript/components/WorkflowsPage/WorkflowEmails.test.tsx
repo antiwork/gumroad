@@ -3,7 +3,8 @@
 // The workflow emails editor's Save button reads the shared image-upload guard; the guard has to
 // stay up until the CDN URL resolves, because the editor holds a blob: preview until then and the
 // sanitizer drops blob: srcs from a saved body.
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { type Editor } from "@tiptap/core";
 import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -34,7 +35,7 @@ const cdn = vi.hoisted(() => {
 });
 vi.mock("$app/utils/prepareImageForUpload", () => ({
   isLikelyImageFile: () => true,
-  prepareImageForUpload: async (file: File) => file,
+  prepareImageForUpload: (file: File) => Promise.resolve(file),
   heicDecodingLikely: () => false,
 }));
 type UploadCallback = (error: Error | null, blob: { key: string }) => void;
@@ -46,10 +47,22 @@ vi.mock("@rails/activestorage", () => ({
     }
   },
 }));
+const submission = vi.hoisted(
+  (): { transform: (() => unknown) | null; patch: ReturnType<typeof vi.fn<(payload: unknown) => void>> } => ({
+    transform: null,
+    patch: vi.fn(),
+  }),
+);
 vi.mock("@inertiajs/react", () => ({
   Link: ({ href, children }: { href: string; children?: React.ReactNode }) => <a href={href}>{children}</a>,
   usePage: () => ({ url: "/workflows/workflow-1/emails", props: {} }),
-  useForm: () => ({ processing: false, transform: () => {}, patch: () => {} }),
+  useForm: () => ({
+    processing: false,
+    transform: (transform: () => unknown) => {
+      submission.transform = transform;
+    },
+    patch: () => submission.patch(submission.transform?.()),
+  }),
 }));
 // The preview pane frames the workflow's public URL; letting it load pulls in an iframe fetch
 // happy-dom reports as an unhandled rejection.
@@ -129,10 +142,10 @@ const workflow: Workflow = {
   ],
 };
 
-const renderEditor = () =>
+const renderEditor = (overrides: Partial<Workflow> = {}) =>
   render(
     <CurrentSellerProvider value={seller}>
-      <WorkflowEmails context={context} workflow={workflow} />
+      <WorkflowEmails context={context} workflow={{ ...workflow, ...overrides }} />
     </CurrentSellerProvider>,
   );
 
@@ -146,6 +159,8 @@ const saveDisabled = () => screen.getByRole<HTMLButtonElement>("button", { name:
 const previewDisabled = () => screen.getByRole<HTMLButtonElement>("button", { name: "Preview Email" }).disabled;
 
 beforeEach(() => {
+  submission.patch.mockClear();
+  submission.transform = null;
   uploads.pending.length = 0;
   cdn.hold = false;
   cdn.release.length = 0;
@@ -154,6 +169,126 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("WorkflowEmails", () => {
+  it.each(["Save changes", "Preview Email", "Publish"])(
+    "saves the current message with %s immediately after editing",
+    async (action) => {
+      const { container } = renderEditor({ first_published_at: "2026-10-01T00:00:00Z" });
+      fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+      const element = assertDefined(
+        container.querySelector<HTMLElement & { editor: Editor }>('[aria-label="Email message"]'),
+      );
+      await waitFor(() => expect(element.textContent).toBe("Hello"));
+
+      act(() => {
+        element.editor.commands.setContent("<p><strong>Updated welcome message</strong></p>", true);
+      });
+      expect(element.textContent).toBe("Updated welcome message");
+      fireEvent.click(screen.getByRole("button", { name: action }));
+
+      expect(submission.patch).toHaveBeenCalledWith(
+        expect.objectContaining<{ workflow: unknown }>({
+          workflow: expect.objectContaining({
+            save_action_name: action === "Publish" ? "save_and_publish" : "save",
+            installments: [
+              expect.objectContaining({
+                message: "<p><strong>Updated welcome message</strong></p>",
+                send_preview_email: action === "Preview Email",
+              }),
+            ],
+          }),
+        }),
+      );
+    },
+  );
+
+  it("retains a message when collapsing and reopening before the preview updates", async () => {
+    const { container } = renderEditor();
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    const element = assertDefined(
+      container.querySelector<HTMLElement & { editor: Editor }>('[aria-label="Email message"]'),
+    );
+    await waitFor(() => expect(element.textContent).toBe("Hello"));
+    vi.useFakeTimers();
+    try {
+      act(() => {
+        element.editor.commands.setContent("<p><strong>Latest message</strong></p>", true);
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Collapse" }));
+      fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+      await act(async () => {
+        vi.advanceTimersByTime(1);
+        await Promise.resolve();
+      });
+      expect(container.querySelector('[aria-label="Email message"]')?.textContent).toBe("Latest message");
+      fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+      expect(submission.patch).toHaveBeenCalledWith(
+        expect.objectContaining<{ workflow: unknown }>({
+          workflow: expect.objectContaining({
+            installments: [expect.objectContaining({ message: "<p><strong>Latest message</strong></p>" })],
+          }),
+        }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps messages with their email ids when changing delivery order", async () => {
+    const first = assertDefined(workflow.installments[0]);
+    const { container } = renderEditor({
+      installments: [first, { ...first, external_id: "email-2", name: "Second", delayed_delivery_time_duration: 2 }],
+    });
+    screen.getAllByRole("button", { name: "Edit" }).forEach((button) => fireEvent.click(button));
+    await waitFor(() => expect(container.querySelectorAll('[aria-label="Email message"]')).toHaveLength(2));
+    const elements = container.querySelectorAll<HTMLElement & { editor: Editor }>('[aria-label="Email message"]');
+    act(() => {
+      assertDefined(elements[0]).editor.commands.setContent("<p><strong>First edited</strong></p>", true);
+      assertDefined(elements[1]).editor.commands.setContent("<p><strong>Second edited</strong></p>", true);
+    });
+    fireEvent.change(assertDefined(screen.getAllByRole("textbox", { name: "Duration" })[0]), {
+      target: { value: "3" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(submission.patch).toHaveBeenCalledWith(
+      expect.objectContaining<{ workflow: unknown }>({
+        workflow: expect.objectContaining({
+          installments: [
+            expect.objectContaining({ id: "email-2", message: "<p><strong>Second edited</strong></p>" }),
+            expect.objectContaining({ id: "email-1", message: "<p><strong>First edited</strong></p>" }),
+          ],
+        }),
+      }),
+    );
+  });
+
+  it("does not retain a deleted email when its preview update was pending", async () => {
+    const { container } = renderEditor();
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    const element = assertDefined(
+      container.querySelector<HTMLElement & { editor: Editor }>('[aria-label="Email message"]'),
+    );
+    await waitFor(() => expect(element.textContent).toBe("Hello"));
+    vi.useFakeTimers();
+    try {
+      act(() => {
+        element.editor.commands.setContent("<p><strong>Delete this edit</strong></p>", true);
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+      fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete" }));
+      act(() => {
+        vi.advanceTimersByTime(500);
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+      expect(submission.patch).toHaveBeenCalledWith(
+        expect.objectContaining<{ workflow: unknown }>({
+          workflow: expect.objectContaining({ installments: [] }),
+        }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("labels the email row actions in plain text", () => {
     renderEditor();
 
@@ -172,6 +307,7 @@ describe("WorkflowEmails", () => {
     pasteImage(container);
     await waitFor(() => expect(uploads.pending).toHaveLength(1));
     expect(saveDisabled()).toBe(true);
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Collapse" }).disabled).toBe(true);
 
     // The blob is up, but the editor still shows the local blob: preview; a save now would persist
     // a body without the image.
@@ -186,5 +322,6 @@ describe("WorkflowEmails", () => {
     );
     expect(saveDisabled()).toBe(false);
     expect(previewDisabled()).toBe(false);
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Collapse" }).disabled).toBe(false);
   });
 });
