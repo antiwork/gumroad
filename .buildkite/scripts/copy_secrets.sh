@@ -67,20 +67,36 @@ copy_secrets() {
   copy_secrets_logger "Copying files"
   cd "$src_root"
 
+  # Each sudo call costs the agent noticeable time, so the copy takes four calls in total
+  # instead of up to four per file. Ownership matches the per-file version: each file and
+  # each directory that held a file and did not exist yet belong to buildkite-agent.
+  local -a src_paths=() dest_paths=() new_dirs=()
+  local -A seen_dirs=()
+  local src_path dest_dir dir
   for rel in "${CREDENTIALS_PATHS[@]}"; do
-    find "$rel" -type f | while read -r src_path; do
-      dest_path="${app_dir}/${src_path}"
-      dest_dir=$(dirname "$dest_path")
-
-      if [ ! -d "$dest_dir" ]; then
-        sudo mkdir -p "$dest_dir"
-        sudo chown buildkite-agent:buildkite-agent "$dest_dir"
+    while read -r src_path; do
+      src_paths+=("$src_path")
+      dest_paths+=("${app_dir}/${src_path}")
+      dest_dir=$(dirname "${app_dir}/${src_path}")
+      if [ -z "${seen_dirs[$dest_dir]:-}" ] && [ ! -d "$dest_dir" ]; then
+        new_dirs+=("$dest_dir")
       fi
-
-      sudo cp "$src_path" "$dest_path"
-      sudo chown buildkite-agent:buildkite-agent "$dest_path"
-    done
+      dir=$dest_dir
+      while [ -z "${seen_dirs[$dir]:-}" ] && [ "$dir" != "/" ]; do
+        seen_dirs[$dir]=1
+        dir=$(dirname "$dir")
+      done
+    done < <(find "$rel" -type f)
   done
+
+  if [ ${#new_dirs[@]} -gt 0 ]; then
+    sudo mkdir -p "${new_dirs[@]}"
+    sudo chown buildkite-agent:buildkite-agent "${new_dirs[@]}"
+  fi
+  if [ ${#src_paths[@]} -gt 0 ]; then
+    sudo cp --parents "${src_paths[@]}" "$app_dir"
+    sudo chown buildkite-agent:buildkite-agent "${dest_paths[@]}"
+  fi
 
   cd "$app_dir"
   rm -rf "$CREDENTIALS_TMP_DIR"
