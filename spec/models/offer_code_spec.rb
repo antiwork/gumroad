@@ -901,16 +901,28 @@ describe OfferCode do
         expect(code.reload.sale_label).to be_nil
       end
 
-      it "accepts 32 characters and rejects 33" do
-        expect(universal_code(sale_label: "a" * 32)).to be_valid
+      it "is cleared on a code that is not auto-applied" do
+        code = universal_code(sale_label: "Black Friday")
+        code.save!
+        expect(code.reload.sale_label).to be_nil
 
-        code = universal_code(sale_label: "a" * 33)
+        code.update!(auto_apply: true, sale_label: "Black Friday")
+        expect(code.reload.sale_label).to eq("Black Friday")
+
+        code.update!(auto_apply: false)
+        expect(code.reload.sale_label).to be_nil
+      end
+
+      it "accepts 32 characters and rejects 33" do
+        expect(universal_code(auto_apply: true, sale_label: "a" * 32)).to be_valid
+
+        code = universal_code(auto_apply: true, sale_label: "a" * 33)
         expect(code).not_to be_valid
         expect(code.errors.full_messages).to include("The sale label can be at most 32 characters.")
       end
 
       it "rejects markup" do
-        code = universal_code(sale_label: "<b>Sale</b>")
+        code = universal_code(auto_apply: true, sale_label: "<b>Sale</b>")
 
         expect(code).not_to be_valid
         expect(code.errors.full_messages).to include("The sale label must be plain text.")

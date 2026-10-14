@@ -700,8 +700,9 @@ class OfferCode < ApplicationRecord
       @reindex_excluded_product_ids = excluded_products.ids if universal?
     end
 
+    # A label belongs to the auto-applied sale; clearing it here keeps API writes in line with the dashboard.
     def normalize_sale_label
-      self.sale_label = sale_label.to_s.strip.presence
+      self.sale_label = auto_apply? ? sale_label.to_s.strip.presence : nil
     end
 
     def validate_sale_label

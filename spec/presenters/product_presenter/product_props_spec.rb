@@ -465,6 +465,14 @@ describe ProductPresenter::ProductProps do
         expect(props[:sale_label]).to be_nil
       end
 
+      it "returns no label for a per-product default given a label without auto apply" do
+        own = seller.offer_codes.create!(code: "OWN10", amount_percentage: 10, products: [product], sale_label: "Flash sale")
+        product.update!(default_offer_code: own)
+
+        expect(props[:discount_code][:code]).to eq("OWN10")
+        expect(props[:sale_label]).to be_nil
+      end
+
       it "returns no label when the code has no label or the sale is over" do
         sale.update!(sale_label: nil)
         expect(props[:sale_label]).to be_nil
