@@ -99,6 +99,21 @@ describe Api::V2::OfferCodesController do
         expect(@user.offer_codes.alive.pluck(:code, :auto_apply)).to contain_exactly(["hi", false], ["omitted", false])
       end
 
+      it "keeps a code product-specific when universal is a string other than true" do
+        post @action, params: @params.merge(universal: "False")
+        post @action, params: @params.merge(name: "no", universal: "no")
+
+        codes = @user.offer_codes.alive
+        expect(codes.pluck(:code, :universal)).to contain_exactly(["hi", false], ["no", false])
+        expect(codes.map(&:products)).to all(contain_exactly(@product))
+      end
+
+      it "leaves auto apply off when it is a string other than true" do
+        post @action, params: @params.merge(universal: "true", auto_apply: "False")
+
+        expect(@user.offer_codes.alive.pluck(:code, :auto_apply)).to contain_exactly(["hi", false])
+      end
+
       describe "incorrect parameters" do
         it "returns error message" do
           post :create, params: @params.merge(amount_off: nil)
@@ -317,6 +332,24 @@ describe Api::V2::OfferCodesController do
 
         expect(response.parsed_body["success"]).to eq(true)
         expect(@offer_code.reload.auto_apply).to eq(true)
+      end
+
+      it "enables auto apply on a universal code from the string true" do
+        @offer_code.update!(universal: true, products: [])
+
+        put @action, params: @params.merge(auto_apply: "true")
+
+        expect(response.parsed_body["success"]).to eq(true)
+        expect(@offer_code.reload.auto_apply).to eq(true)
+      end
+
+      it "leaves auto apply off when it is a string other than true" do
+        @offer_code.update!(universal: true, products: [])
+
+        put @action, params: @params.merge(auto_apply: "False")
+
+        expect(response.parsed_body["success"]).to eq(true)
+        expect(@offer_code.reload.auto_apply).to eq(false)
       end
 
       it "fails gracefully on bad id" do

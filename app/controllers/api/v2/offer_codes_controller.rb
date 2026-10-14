@@ -13,9 +13,8 @@ class Api::V2::OfferCodesController < Api::V2::BaseController
   end
 
   def create
-    # Cast so a JSON body's real booleans mean the same as the documented "true" strings.
-    universal = ActiveModel::Type::Boolean.new.cast(params[:universal]) || false
-    auto_apply = ActiveModel::Type::Boolean.new.cast(params[:auto_apply]) || false
+    universal = true_param?(:universal)
+    auto_apply = true_param?(:auto_apply)
     offer_code = if params[:offer_type] == "percent"
       OfferCode.new(code: params[:name],
                     universal:,
@@ -68,7 +67,15 @@ class Api::V2::OfferCodesController < Api::V2::BaseController
 
   private
     def permitted_params
-      params.permit(:max_purchase_count, :minimum_amount_cents, :auto_apply, :sale_label)
+      permitted = params.permit(:max_purchase_count, :minimum_amount_cents, :auto_apply, :sale_label)
+      permitted[:auto_apply] = true_param?(:auto_apply) if permitted.key?(:auto_apply)
+      permitted
+    end
+
+    # Only a JSON true or the documented "true" string counts: Rails' boolean cast reads any
+    # string off its false list, such as "False" or "no", as true.
+    def true_param?(key)
+      params[key].in?([true, "true"])
     end
 
     def check_offer_code_params
