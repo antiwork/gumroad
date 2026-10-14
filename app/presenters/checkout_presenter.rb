@@ -313,7 +313,8 @@ class CheckoutPresenter
         is_in_free_trial: subscription.in_free_trial?,
         is_test: subscription.is_test_subscription,
         is_overdue_for_charge: subscription.overdue_for_charge?,
-        payment_method_update_required: subscription.status == "payment_method_update_required",
+        payment_method_update_required: subscription.status == "payment_method_update_required" && !subscription.indian_card_mandate_held?,
+        payment_method_confirmation_pending: subscription.alive?(include_pending_cancellation: false) && subscription.indian_card_mandate_held?,
         is_gift: subscription.gift?,
         is_installment_plan: subscription.is_installment_plan,
         # False when the seller has retired the recurrence this buyer is on; the row is still

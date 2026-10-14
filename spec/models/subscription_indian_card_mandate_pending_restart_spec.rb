@@ -104,6 +104,33 @@ describe Subscription do
     end
   end
 
+  describe "#indian_card_mandate_held?" do
+    let(:subscription) do
+      create(:subscription, stripe_mandate_id: "mandate_pending", renewal_disabled_due_to_indian_card_mandate: true, indian_card_mandate_hold_pending: true)
+    end
+
+    it "is true while renewals stay paused on the held mandate" do
+      expect(subscription).to be_indian_card_mandate_held
+    end
+
+    it "ends for good once renewals resume, so a later pause is not mistaken for the hold" do
+      subscription.update!(renewal_disabled_due_to_indian_card_mandate: false)
+      subscription.update!(renewal_disabled_due_to_indian_card_mandate: true)
+
+      expect(subscription.reload).not_to be_indian_card_mandate_hold_pending
+      expect(subscription).not_to be_indian_card_mandate_held
+    end
+
+    it "ends when the mandate needs reauthorization or is cleared" do
+      subscription.update!(indian_card_mandate_requires_reauthorization: true)
+      expect(subscription.reload).not_to be_indian_card_mandate_hold_pending
+
+      other = create(:subscription, stripe_mandate_id: "mandate_pending", renewal_disabled_due_to_indian_card_mandate: true, indian_card_mandate_hold_pending: true)
+      other.update!(stripe_mandate_id: nil)
+      expect(other.reload).not_to be_indian_card_mandate_hold_pending
+    end
+  end
+
   describe "#log_indian_card_mandate_restart" do
     let(:subscription) { create(:subscription, stripe_mandate_id: "mandate_active") }
 

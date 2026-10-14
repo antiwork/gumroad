@@ -56,6 +56,7 @@ class Subscription < ApplicationRecord
             8 => :renewal_disabled_due_to_indian_card_mandate,
             9 => :indian_card_mandate_requires_reauthorization,
             10 => :vat_exempt_territory,
+            11 => :indian_card_mandate_hold_pending,
             :column => "flags",
             :flag_query_mode => :bit_operator,
             check_for_column: false
@@ -84,6 +85,7 @@ class Subscription < ApplicationRecord
   validate :installment_plans_cannot_be_cancelled_by_buyer
 
   before_create :enable_mor_fee
+  before_save :end_indian_card_mandate_hold, unless: :indian_card_mandate_held?
   after_create :update_last_payment_option
   after_save :create_interruption_event, if: -> { deactivated_at_previously_changed? }
   after_create :create_interruption_event, if: -> { deactivated_at.present? } # needed in addition to the `after_save`. See https://github.com/gumroad/web/pull/26305#discussion_r1336425626
@@ -477,7 +479,13 @@ class Subscription < ApplicationRecord
         return unless status.in?(%w[inactive missing pending])
         return unless alive?(include_pending_cancellation: false)
 
-        notify_buyer &&= !renewal_disabled_due_to_indian_card_mandate? || notify_buyer_if_already_disabled
+        if status != "pending" && indian_card_mandate_held?
+          # The hold told the buyer we'd charge once the bank confirms, so they must hear that it didn't.
+          notify_buyer = true
+          self.indian_card_mandate_hold_pending = false
+        else
+          notify_buyer &&= !renewal_disabled_due_to_indian_card_mandate? || notify_buyer_if_already_disabled
+        end
         self.renewal_disabled_due_to_indian_card_mandate = true
       end
       save! if changed?
@@ -580,6 +588,66 @@ class Subscription < ApplicationRecord
     return unless stripe_mandate_id.present? && india_card_mandate_pending_restart_enabled?
 
     log_indian_card_mandate_hold_event("restarted")
+  end
+
+  # A live membership whose new card is saved while the bank confirms its mandate, with renewals still paused.
+  def indian_card_mandate_held?
+    indian_card_mandate_hold_pending? &&
+      renewal_disabled_due_to_indian_card_mandate? &&
+      !indian_card_mandate_requires_reauthorization? &&
+      stripe_mandate_id.present?
+  end
+
+  # Returns true only when renewals resumed. The hold saved the card without its price fixing, so the fixing is
+  # recorded first, and only for the mandate the buyer approved in the recovery currency.
+  def resume_held_indian_card_mandate!(mandate: nil, status: nil)
+    return false unless indian_card_mandate_held?
+
+    card = credit_card_to_charge
+    return false if card.nil?
+
+    mandate, status, = indian_card_mandate_for(card.id) if status.nil?
+    unless status == "active"
+      update_renewal_for_indian_card_mandate!(status, expected_credit_card_id: card.id, mandate_id: mandate&.id)
+      return false
+    end
+
+    presentment_attributes = nil
+    currency = indian_card_recovery_presentment_currency
+    if currency.present? && current_later_charge_presentment.nil?
+      setup_intent = ChargeProcessor.get_setup_intent(renewal_merchant_account, card.stripe_setup_intent_id) if card.stripe_setup_intent_id.present?
+      # An older mandate approved in USD cannot bill an INR fixing.
+      unless setup_intent.present? &&
+             setup_intent.mandate == mandate.id &&
+             mandate.id == stripe_mandate_id &&
+             setup_intent.metadata[:gumroad_subscription_id] == external_id &&
+             setup_intent.card_mandate_options&.currency.to_s.downcase == currency
+        ErrorNotifier.notify("Held Indian card mandate does not match its setup intent", subscription: external_id, mandate_id: mandate.id)
+        return false
+      end
+
+      presentment_attributes = indian_card_recovery_presentment_attributes(currency)
+      if presentment_attributes.nil?
+        ErrorNotifier.notify("Held Indian card mandate has no price fixing to record", subscription: external_id, mandate_id: mandate.id)
+        return false
+      end
+    end
+
+    resumed = false
+    transaction do
+      lock!
+      if indian_card_mandate_held? && credit_card_to_charge&.id == card.id && stripe_mandate_id == mandate.id
+        if presentment_attributes.present? && current_later_charge_presentment.nil?
+          later_charge_presentments.create!(**presentment_attributes, effective_from: Time.current)
+        end
+        update_renewal_for_indian_card_mandate!("active", expected_credit_card_id: card.id, mandate_id: mandate.id)
+        resumed = !renewal_disabled_due_to_indian_card_mandate?
+      end
+    end
+    resumed
+  rescue ChargeProcessorError, ActiveRecord::RecordInvalid => e
+    ErrorNotifier.notify(e, subscription: external_id)
+    false
   end
 
   def log_indian_card_mandate_hold_event(event, mandate_id: stripe_mandate_id, **fields)
@@ -833,6 +901,40 @@ class Subscription < ApplicationRecord
     currency = indian_card_recovery_presentment_currency
     return if currency.blank?
 
+    attributes = indian_card_recovery_presentment_attributes(currency)
+    return if attributes.nil?
+
+    purchase = original_purchase
+    presentment_price_cents = attributes[:presentment_price_cents]
+    with_lock do
+      current = current_later_charge_presentment
+      if current.present?
+        # A same-currency fixing at the plan's current price stays authoritative: FX
+        # re-fixing keeps the price and only moves the canonical value, which the renewal
+        # lane re-fixes itself. At any other price the mandate was approved off recovery
+        # terms, so the row must be superseded even when its canonical value matches.
+        return if current.presentment_currency == currency &&
+                  current.presentment_price_cents == presentment_price_cents
+        # Keep a cross-currency row exactly when indian_card_mandate_terms would bill it —
+        # the mandate was then approved in that row's currency, not in the recovery
+        # currency. Same predicate set as presentment_matches.
+        return if current.presentment_currency != currency &&
+                  current.canonical_price_cents == LaterChargePresentment.canonical_price_cents_for(purchase) &&
+                  indian_card_renewal_presentment_supported?(current.presentment_currency) &&
+                  indian_card_presentment_price_current?(current, purchase)
+      end
+
+      later_charge_presentments.create!(**attributes, effective_from: Time.current)
+    end
+  rescue ActiveRecord::RecordInvalid => e
+    # The reauthorization already succeeded; a failed fixing only delays recovery until the
+    # next renewal pauses again, so report it instead of failing the buyer's update.
+    ErrorNotifier.notify(e, subscription: external_id)
+    nil
+  end
+
+  # The listed-currency fixing a recovery would record, or nil when there is none to record. May fetch a rate.
+  def indian_card_recovery_presentment_attributes(currency)
     # Record the price the renewal will actually bill — the currently authorized renewal
     # amount, not the signup price, which stays discounted after a limited-duration
     # discount ends. The signup canonical and rate apply only while the two agree.
@@ -852,38 +954,13 @@ class Subscription < ApplicationRecord
     end
     return unless canonical_price_cents.positive?
 
-    with_lock do
-      current = current_later_charge_presentment
-      if current.present?
-        # A same-currency fixing at the plan's current price stays authoritative: FX
-        # re-fixing keeps the price and only moves the canonical value, which the renewal
-        # lane re-fixes itself. At any other price the mandate was approved off recovery
-        # terms, so the row must be superseded even when its canonical value matches.
-        return if current.presentment_currency == currency &&
-                  current.presentment_price_cents == presentment_price_cents
-        # Keep a cross-currency row exactly when indian_card_mandate_terms would bill it —
-        # the mandate was then approved in that row's currency, not in the recovery
-        # currency. Same predicate set as presentment_matches.
-        return if current.presentment_currency != currency &&
-                  current.canonical_price_cents == LaterChargePresentment.canonical_price_cents_for(purchase) &&
-                  indian_card_renewal_presentment_supported?(current.presentment_currency) &&
-                  indian_card_presentment_price_current?(current, purchase)
-      end
-
-      later_charge_presentments.create!(
-        processor: StripeChargeProcessor.charge_processor_id,
-        presentment_currency: currency,
-        presentment_price_cents:,
-        canonical_price_cents:,
-        signup_currency_units_per_usd: rate,
-        effective_from: Time.current
-      )
-    end
-  rescue ActiveRecord::RecordInvalid => e
-    # The reauthorization already succeeded; a failed fixing only delays recovery until the
-    # next renewal pauses again, so report it instead of failing the buyer's update.
-    ErrorNotifier.notify(e, subscription: external_id)
-    nil
+    {
+      processor: StripeChargeProcessor.charge_processor_id,
+      presentment_currency: currency,
+      presentment_price_cents:,
+      canonical_price_cents:,
+      signup_currency_units_per_usd: rate,
+    }
   end
 
   def indian_card_renewal_presentment_supported?(currency)
@@ -1927,6 +2004,10 @@ class Subscription < ApplicationRecord
 
     def enable_mor_fee
       self.mor_fee_applicable = true
+    end
+
+    def end_indian_card_mandate_hold
+      self.indian_card_mandate_hold_pending = false
     end
 
     def assign_seller

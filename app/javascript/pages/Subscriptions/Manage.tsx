@@ -86,6 +86,7 @@ type Props = {
     is_test: boolean;
     is_overdue_for_charge: boolean;
     payment_method_update_required: boolean;
+    payment_method_confirmation_pending: boolean;
     is_gift: boolean;
     is_installment_plan: boolean;
     current_recurrence_available: boolean;
@@ -463,7 +464,14 @@ export default function SubscriptionsManage() {
         </CardContent>
       ) : null}
 
-      {subscription.payment_method_update_required ? (
+      {subscription.payment_method_confirmation_pending ? (
+        <CardContent>
+          <Alert variant="warning" className="grow">
+            Your bank is still confirming your card for recurring payments. You keep access in the meantime, and we'll
+            charge the card once your bank confirms.
+          </Alert>
+        </CardContent>
+      ) : subscription.payment_method_update_required ? (
         <CardContent>
           <Alert variant="warning" className="grow">
             Automatic renewals are paused. You keep access in the meantime; update your payment method below to resume.

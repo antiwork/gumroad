@@ -44,6 +44,167 @@ describe RecurringChargeWorker, :vcr do
     Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
   end
 
+  describe "resuming a membership held on a pending Indian card mandate",
+           vcr: { cassette_name: "RecurringChargeWorker/doesn_t_call_charge_if_there_was_a_purchase_made_the_period_for_a_monthly_subscription" } do
+    let(:seller) { create(:user) }
+    let(:product) { create(:subscription_product, user: seller) }
+    let(:merchant_account) do
+      create(:merchant_account, user: nil, charge_processor_id: StripeChargeProcessor.charge_processor_id, charge_processor_merchant_id: nil)
+    end
+    let(:card) { create(:indian_stripe_credit_card, stripe_setup_intent_id: "seti_held") }
+    let(:subscription) { create(:subscription, link: product, credit_card: card) }
+    let!(:original_purchase) do
+      create(:membership_purchase, link: product, subscription:, is_original_subscription_purchase: true, merchant_account:, credit_card: card)
+    end
+    let(:mail) { instance_double(ActionMailer::MessageDelivery, deliver_later: true) }
+
+    before do
+      allow(MerchantAccount).to receive(:gumroad).with(StripeChargeProcessor.charge_processor_id).and_return(merchant_account)
+      Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller)
+      Feature.activate_user(Subscription::INDIA_CARD_MANDATE_PENDING_RESTART_FEATURE, seller)
+      product.update_column(:price_currency_type, Currency::INR)
+      # No signup rate, so the fixing prices off today's rate.
+      original_purchase.update_columns(
+        displayed_price_currency_type: Currency::INR,
+        displayed_price_cents: 80_000,
+        price_cents: 10_00,
+        total_transaction_cents: 10_00,
+        rate_converted_to_usd: nil
+      )
+      Redis::Namespace.new(:currencies, redis: $redis).set("INR", "80")
+      subscription.update!(stripe_mandate_id: "mandate_held", renewal_disabled_due_to_indian_card_mandate: true, indian_card_mandate_hold_pending: true)
+
+      @mandate_status = "active"
+      @setup_intent_currency = Currency::INR
+      @open_transactions_during_external_calls = []
+      record_open_transactions = -> { @open_transactions_during_external_calls << ActiveRecord::Base.connection.open_transactions }
+      allow(ChargeProcessor).to receive(:get_mandate) do
+        record_open_transactions.call
+        Stripe::Mandate.construct_from(id: "mandate_held", status: @mandate_status, payment_method: "pm_pending")
+      end
+      allow(ChargeProcessor).to receive(:get_setup_intent) do
+        record_open_transactions.call
+        instance_double(
+          StripeSetupIntent,
+          mandate: "mandate_held",
+          metadata: { gumroad_subscription_id: subscription.external_id },
+          card_mandate_options: Stripe::StripeObject.construct_from(currency: @setup_intent_currency)
+        )
+      end
+      allow_any_instance_of(Subscription).to receive(:get_rate).and_wrap_original do |method, *args|
+        record_open_transactions.call
+        method.call(*args)
+      end
+      allow(CustomerLowPriorityMailer).to receive(:subscription_indian_card_mandate_invalid).and_return(mail)
+      allow(ErrorNotifier).to receive(:notify)
+      allow(Rails.logger).to receive(:info).and_call_original
+    end
+
+    after do
+      Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller)
+      Feature.deactivate_user(Subscription::INDIA_CARD_MANDATE_PENDING_RESTART_FEATURE, seller)
+    end
+
+    def perform_after_period
+      travel_to(subscription.period.from_now + 1.day) do
+        described_class.new.perform(subscription.id, true)
+      end
+    end
+
+    it "records the INR fixing before it charges, outside any transaction around Stripe and the rate lookup" do
+      open_transactions_before = ActiveRecord::Base.connection.open_transactions
+      fixing_at_charge = nil
+      expect_any_instance_of(Subscription).to receive(:charge!) do |charged|
+        fixing_at_charge = charged.later_charge_presentments.sole
+      end
+
+      perform_after_period
+
+      expect(fixing_at_charge).to have_attributes(
+        presentment_currency: Currency::INR,
+        presentment_price_cents: 80_000,
+        canonical_price_cents: 10_00
+      )
+      subscription.reload
+      expect(subscription).not_to be_renewal_disabled_due_to_indian_card_mandate
+      expect(subscription).not_to be_indian_card_mandate_hold_pending
+      expect(@open_transactions_during_external_calls.size).to eq(3)
+      expect(@open_transactions_during_external_calls).to all(eq(open_transactions_before))
+      expect(Rails.logger).to have_received(:info).with("indian_card_mandate.pending_restart.renewal_resumed subscription_id=#{subscription.id} mandate_id=mandate_held")
+    end
+
+    it "keeps renewals paused and does not charge when there is no fixing to record" do
+      allow_any_instance_of(Subscription).to receive(:get_rate).and_return(nil)
+      expect_any_instance_of(Subscription).not_to receive(:charge!)
+
+      perform_after_period
+
+      subscription.reload
+      expect(subscription).to be_renewal_disabled_due_to_indian_card_mandate
+      expect(subscription).to be_indian_card_mandate_held
+      expect(subscription.later_charge_presentments).to be_empty
+    end
+
+    it "records no INR fixing for a mandate the bank approved in USD" do
+      @setup_intent_currency = Currency::USD
+      expect_any_instance_of(Subscription).not_to receive(:charge!)
+
+      perform_after_period
+
+      subscription.reload
+      expect(subscription).to be_indian_card_mandate_held
+      expect(subscription.later_charge_presentments).to be_empty
+      expect(ErrorNotifier).to have_received(:notify).with("Held Indian card mandate does not match its setup intent", subscription: subscription.external_id, mandate_id: "mandate_held")
+    end
+
+    it "records no INR fixing when a paused membership that was never held recovers" do
+      subscription.update!(indian_card_mandate_hold_pending: false)
+      expect_any_instance_of(Subscription).to receive(:charge!)
+
+      perform_after_period
+
+      expect(subscription.reload).not_to be_renewal_disabled_due_to_indian_card_mandate
+      expect(subscription.later_charge_presentments).to be_empty
+      expect(ChargeProcessor).not_to have_received(:get_setup_intent)
+    end
+
+    it "leaves an existing price fixing untouched and charges" do
+      fixing = create(:later_charge_presentment, owner: subscription, presentment_currency: Currency::INR, presentment_price_cents: 75_000, effective_from: 1.day.ago)
+      fixing_attributes = fixing.reload.attributes
+      expect_any_instance_of(Subscription).to receive(:charge!)
+
+      perform_after_period
+
+      expect(subscription.reload.later_charge_presentments.to_a).to eq([fixing])
+      expect(fixing.reload.attributes).to eq(fixing_attributes)
+      expect(subscription).not_to be_renewal_disabled_due_to_indian_card_mandate
+    end
+
+    it "tells the buyer once when the bank rejects the held mandate, and ends the hold" do
+      @mandate_status = "inactive"
+      expect_any_instance_of(Subscription).not_to receive(:charge!)
+
+      perform_after_period
+      perform_after_period
+
+      expect(CustomerLowPriorityMailer).to have_received(:subscription_indian_card_mandate_invalid).with(subscription.id).once
+      subscription.reload
+      expect(subscription).to be_renewal_disabled_due_to_indian_card_mandate
+      expect(subscription).not_to be_indian_card_mandate_hold_pending
+    end
+
+    it "keeps waiting while the bank is still confirming" do
+      @mandate_status = "pending"
+      expect_any_instance_of(Subscription).not_to receive(:charge!)
+
+      perform_after_period
+
+      subscription.reload
+      expect(subscription).to be_indian_card_mandate_held
+      expect(CustomerLowPriorityMailer).not_to have_received(:subscription_indian_card_mandate_invalid)
+    end
+  end
+
   it "doesn't call charge if there was a purchase made the period for a monthly subscription" do
     link = create(:product, user: create(:user), subscription_duration: "monthly")
     subscription = create(:subscription, user: create(:user), link:)
@@ -167,65 +328,6 @@ describe RecurringChargeWorker, :vcr do
         end
       ensure
         Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
-      end
-
-      describe "resuming a membership held on a pending Indian card mandate",
-               vcr: { cassette_name: "RecurringChargeWorker/doesn_t_call_charge_if_there_was_a_purchase_made_the_period_for_a_monthly_subscription" } do
-        before do
-          Feature.activate_user(Subscription::INDIA_CARD_MANDATE_PENDING_RESTART_FEATURE, @product.user)
-          @subscription.update!(renewal_disabled_due_to_indian_card_mandate: true, stripe_mandate_id: "mandate_confirmed")
-          allow_any_instance_of(Subscription).to receive(:india_card_mandate_reliability_enabled?).and_return(true)
-          allow_any_instance_of(Subscription).to receive(:refresh_indian_card_mandate!) do |subscription|
-            subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, false, true)
-            "active"
-          end
-          allow(Rails.logger).to receive(:info).and_call_original
-        end
-
-        after { Feature.deactivate_user(Subscription::INDIA_CARD_MANDATE_PENDING_RESTART_FEATURE, @product.user) }
-
-        it "records the price fixing the hold skipped before it charges" do
-          calls = []
-          allow_any_instance_of(Subscription).to receive(:record_indian_card_mandate_presentment!) { calls << :fixing }
-          allow_any_instance_of(Subscription).to receive(:charge!) { calls << :charge }
-
-          travel_to(@subscription.period.from_now + 1.day) do
-            described_class.new.perform(@subscription.id, true)
-          end
-
-          expect(calls).to eq([:fixing, :charge])
-          expect(Rails.logger).to have_received(:info).with("indian_card_mandate.pending_restart.renewal_resumed subscription_id=#{@subscription.id} mandate_id=mandate_confirmed")
-        end
-
-        it "re-fixes the price even when a fixing exists, so a stale one cannot outlive the new mandate" do
-          create(:later_charge_presentment, owner: @subscription, effective_from: 1.day.ago)
-
-          travel_to(@subscription.period.from_now + 1.day) do
-            expect_any_instance_of(Subscription).to receive(:record_indian_card_mandate_presentment!)
-            expect_any_instance_of(Subscription).to receive(:charge!)
-            described_class.new.perform(@subscription.id, true)
-          end
-        end
-
-        it "keeps renewals paused for the retry when recording the fixing fails" do
-          allow_any_instance_of(Subscription).to receive(:record_indian_card_mandate_presentment!).and_raise(ActiveRecord::StatementInvalid)
-
-          travel_to(@subscription.period.from_now + 1.day) do
-            expect_any_instance_of(Subscription).not_to receive(:charge!)
-            expect { described_class.new.perform(@subscription.id, true) }.to raise_error(ActiveRecord::StatementInvalid)
-          end
-          expect(@subscription.reload).to be_renewal_disabled_due_to_indian_card_mandate
-        end
-
-        it "records no fixing when the feature is off" do
-          Feature.deactivate_user(Subscription::INDIA_CARD_MANDATE_PENDING_RESTART_FEATURE, @product.user)
-
-          travel_to(@subscription.period.from_now + 1.day) do
-            expect_any_instance_of(Subscription).not_to receive(:record_indian_card_mandate_presentment!)
-            expect_any_instance_of(Subscription).to receive(:charge!)
-            described_class.new.perform(@subscription.id, true)
-          end
-        end
       end
     end
   end
