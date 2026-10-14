@@ -5,6 +5,7 @@ require "test_helper"
 # bin/ci-test-packages copies the test image's toolchain onto the CI runner by hand.
 # Specs pass on the runner and on the image alike only while the copies match.
 class CiRunnerImageParityTest < ActiveSupport::TestCase
+  # One ancestry: the Makefile's build_base_test builds web_base_test FROM web_base.
   IMAGE_DOCKERFILES = %w[docker/base/Dockerfile docker/base/Dockerfile.test docker/web/Dockerfile.test].freeze
   WKHTMLTOPDF_URL = %r{https://github\.com/wkhtmltopdf/wkhtmltopdf/releases/download/\S+?\.tar\.xz}
   IMAGEMAGICK_LIMIT = /name="(\w+)" value="\)\[\^"\]\+"\/\\1(\w+)"/
