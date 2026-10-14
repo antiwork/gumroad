@@ -30,7 +30,7 @@ import { useDedupeInFlight } from "$app/utils/dedupeInFlight";
 import { Taxonomy } from "$app/utils/discover";
 import { ALLOWED_EXTENSIONS } from "$app/utils/file";
 import GuidGenerator from "$app/utils/guid_generator";
-import { assertResponseError, request, ResponseError } from "$app/utils/request";
+import { request, ResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import { Modal } from "$app/components/Modal";
@@ -906,30 +906,29 @@ const ProductEditPage = (props: Props) => {
       isUploading: imagesUploading.size > 0,
       onUpload: (file: File) => {
         setImagesUploading((prev) => new Set(prev).add(file));
-        return new Promise<string>((resolve, reject) => {
+        return new Promise<{ key: string }>((resolve, reject) => {
           const upload = new DirectUpload(file, Routes.rails_direct_uploads_path());
           upload.create((error, blob) => {
+            if (error) reject(error);
+            else resolve(blob);
+          });
+        })
+          .then((blob) =>
+            request({
+              method: "GET",
+              accept: "json",
+              url: Routes.s3_utility_cdn_url_for_blob_path({ key: blob.key }),
+            }),
+          )
+          .then((response) => response.json())
+          .then((data) => cast<{ url: string }>(data).url)
+          .finally(() => {
             setImagesUploading((prev) => {
               const updated = new Set(prev);
               updated.delete(file);
               return updated;
             });
-
-            if (error) reject(error);
-            else
-              request({
-                method: "GET",
-                accept: "json",
-                url: Routes.s3_utility_cdn_url_for_blob_path({ key: blob.key }),
-              })
-                .then((response) => response.json())
-                .then((data) => resolve(cast<{ url: string }>(data).url))
-                .catch((e: unknown) => {
-                  assertResponseError(e);
-                  reject(e);
-                });
           });
-        });
       },
       allowedExtensions: ALLOWED_EXTENSIONS,
     }),
