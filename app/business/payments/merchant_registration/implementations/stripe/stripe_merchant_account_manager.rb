@@ -2567,8 +2567,9 @@ module StripeMerchantAccountManager
     # Now when they are disconnecting their own Stripe account, we try and reactivate their old gumroad-controlled Stripe account.
     # Their old Stripe account is the one associated with any unpaid balance, or with their active bank account
     # as we didn't delete the active bank account when they connected their own Stripe account.
-    stripe_account = user.merchant_accounts.stripe.where(id: user.unpaid_balances.pluck(:merchant_account_id).uniq).last
-    stripe_account ||= user.merchant_accounts.stripe.where(charge_processor_merchant_id: user.active_bank_account&.stripe_connect_account_id).last
+    reactivatable = user.merchant_accounts.stripe.not_retired_by_adoption
+    stripe_account = reactivatable.where(id: user.unpaid_balances.pluck(:merchant_account_id).uniq).last
+    stripe_account ||= reactivatable.where(charge_processor_merchant_id: user.active_bank_account&.stripe_connect_account_id).last
     return true if stripe_account.blank? || stripe_account.charge_processor_merchant_id.blank?
     stripe_account.deleted_at = stripe_account.charge_processor_deleted_at = nil
     stripe_account.charge_processor_alive_at = Time.current

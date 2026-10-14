@@ -123,6 +123,22 @@ describe User::SocialApple do
         expect(unconfirmed_user.twitter_user_id).to be_nil
       end
 
+      it "removes the payout destinations, team access and sale ping the creator of an unconfirmed account set up", :aggregate_failures do
+        unconfirmed_user = create(:unconfirmed_user, email: "apple-store@example.com", notification_endpoint: "https://ping.example.com/sales",
+                                                     payment_address: "paypal-payouts@example.com")
+        payout_destinations = [create(:merchant_account_stripe_connect, user: unconfirmed_user), create(:ach_account, user: unconfirmed_user)]
+        team = [create(:team_membership, seller: unconfirmed_user), create(:team_invitation, seller: unconfirmed_user, email: "invited-before-adoption@example.com")]
+        data = apple_data.merge("uid" => "001234.apple-store", "info" => { "email" => "apple-store@example.com" })
+
+        expect(User.find_or_create_for_apple_oauth(data)).to eq(unconfirmed_user)
+
+        unconfirmed_user.reload
+        expect(unconfirmed_user.notification_endpoint).to be_nil
+        expect(unconfirmed_user.payment_address).to be_blank
+        expect(payout_destinations.map { _1.reload.alive? }).to eq([false, false])
+        expect(team.map { _1.reload.deleted? }).to eq([true, true])
+      end
+
       it "does not apply a confirmed account's pending email change", :aggregate_failures do
         confirmed_user = create(:user, email: "apple-pending@example.com")
         confirmed_user.update!(email: "owner-pending@example.com")

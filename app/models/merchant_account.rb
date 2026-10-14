@@ -37,6 +37,9 @@ class MerchantAccount < ApplicationRecord
   # so a mismatch in one currency says nothing about the rest. Only that currency falls
   # back to USD — on managed and connected accounts alike.
   attr_json_data_accessor :settlement_currency_mismatch_map
+  # Set when a Google or Apple sign-in takes over a never-confirmed account, whose creator set this
+  # account up. StripeMerchantAccountManager.disconnect must not reactivate it for the address owner.
+  attr_json_data_accessor :retired_by_adoption_at
 
   validates :charge_processor_id, presence: true
   validates :charge_processor_merchant_id, presence: true, if: -> { user && charge_processor_alive? }
@@ -51,6 +54,7 @@ class MerchantAccount < ApplicationRecord
   scope :paypal, -> { where(charge_processor_id: PaypalChargeProcessor.charge_processor_id) }
   scope :stripe, -> { where(charge_processor_id: StripeChargeProcessor.charge_processor_id) }
   scope :stripe_connect, -> { stripe.where("json_data->>'$.meta.stripe_connect' = 'true'").where.not(user_id: nil) } # Logic should match method `#is_a_stripe_connect_account?`
+  scope :not_retired_by_adoption, -> { where("json_data->>'$.retired_by_adoption_at' IS NULL") }
 
   def self.gumroad(charge_processor_id)
     where(user_id: nil, charge_processor_id:).first
@@ -153,14 +157,20 @@ class MerchantAccount < ApplicationRecord
       (charge_processor_merchant_id.present? && in_flight_payments.where(stripe_connect_account_id: charge_processor_merchant_id).exists?)
   end
 
-  def delete_charge_processor_account!
+  def delete_charge_processor_account!(validate: true)
     clear_non_hash_json_data_for_disconnect!
-    mark_deleted!
+    mark_deleted!(validate:)
     self.meta = {} unless is_a_stripe_connect_account?
     self.charge_processor_deleted_at = Time.current
     self.charge_processor_alive_at = nil
     self.charge_processor_verified_at = nil
-    save!
+    save!(validate:)
+  end
+
+  def mark_retired_by_adoption!
+    clear_non_hash_json_data_for_disconnect!
+    self.retired_by_adoption_at = Time.current.iso8601
+    save!(validate: false)
   end
 
   def charge_processor_delete!

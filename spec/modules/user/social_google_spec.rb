@@ -105,6 +105,93 @@ describe User::SocialGoogle do
         expect(created_user.slice(*User::SocialTwitter::TWITTER_PROPERTIES).values).to all(be_nil)
       end
 
+      def set_up_store_for(user)
+        user.update!(notification_endpoint: "https://ping.example.com/sales", payment_address: "paypal-payouts@example.com",
+                     invalidated_paypal_payout_address: "refused-payouts@example.com")
+        {
+          payout_destinations: [
+            create(:merchant_account, user:),
+            create(:merchant_account_stripe_connect, user:),
+            create(:merchant_account_paypal, user:),
+            create(:ach_account, user:),
+          ],
+          team: [
+            create(:team_membership, seller: user),
+            create(:team_membership, user:),
+            create(:team_invitation, seller: user, email: "invited-before-adoption@example.com"),
+          ],
+        }
+      end
+
+      it "removes the payout destinations, team access and sale ping the creator of an unconfirmed account set up", :aggregate_failures do
+        created_user = create(:unconfirmed_user, email: @data_copy2["info"]["email"], password: password_set_at_signup)
+        store = set_up_store_for(created_user)
+        created_user.update!(check_merchant_account_is_linked: true)
+
+        expect(User.find_or_create_for_google_oauth2(@data_copy2)).to eq(created_user)
+
+        created_user.reload
+        expect(created_user.notification_endpoint).to be_nil
+        expect(created_user.payment_address).to be_blank
+        expect(created_user.invalidated_paypal_payout_address).to be_nil
+        expect(created_user.check_merchant_account_is_linked).to be(false)
+        expect(created_user.has_payout_information?).to be(false)
+        expect(store[:payout_destinations].map { _1.reload.alive? }).to eq([false, false, false, false])
+        expect(store[:payout_destinations].first(3).map(&:retired_by_adoption_at)).to all(be_present)
+        expect(store[:team].map { _1.reload.deleted? }).to eq([true, true, true])
+        stripe_connect_data = { "uid" => store[:payout_destinations].second.charge_processor_merchant_id,
+                                "info" => { "email" => created_user.email }, "extra" => { "extra_info" => { "country" => "US" } } }
+        expect(User.find_or_create_for_stripe_connect_account(stripe_connect_data)).to be_nil
+      end
+
+      it "does not let a later Stripe disconnect reactivate a payout account the creator set up", :aggregate_failures do
+        created_user = create(:unconfirmed_user, email: @data_copy2["info"]["email"], password: password_set_at_signup)
+        retired_account = create(:merchant_account, user: created_user)
+        earlier_account = create(:merchant_account, user: created_user).tap(&:delete_charge_processor_account!)
+        [retired_account, earlier_account].each { create(:balance, user: created_user, merchant_account: _1) }
+        User.find_or_create_for_google_oauth2(@data_copy2)
+        Feature.activate_user(:merchant_migration, created_user)
+        create(:merchant_account_stripe_connect, user: created_user)
+        allow_any_instance_of(User).to receive(:stripe_disconnect_allowed?).and_return(true)
+
+        expect(StripeMerchantAccountManager.disconnect(user: created_user.reload)).to be(true)
+
+        expect([retired_account, earlier_account].map { _1.reload.alive? }).to eq([false, false])
+        expect(created_user.reload.stripe_account).to be_nil
+      end
+
+      it "removes team and payout rows that no longer pass validation", :aggregate_failures do
+        created_user = create(:unconfirmed_user, email: @data_copy2["info"]["email"], password: password_set_at_signup)
+        invitation = create(:team_invitation, seller: created_user, email: "invited-before-adoption@example.com")
+        invitation.update_column(:email, "not an address")
+        merchant_account = create(:merchant_account, user: created_user)
+        create(:merchant_account).update_column(:charge_processor_merchant_id, merchant_account.charge_processor_merchant_id)
+        bank_account = create(:ach_account, user: created_user)
+        bank_account.update_column(:account_holder_full_name, nil)
+        expect([invitation, merchant_account, bank_account].map(&:valid?)).to eq([false, false, false])
+        earlier_account = create(:merchant_account, user: created_user).tap(&:delete_charge_processor_account!)
+        earlier_account.update_column(:json_data, '"not a hash"')
+
+        expect(User.find_or_create_for_google_oauth2(@data_copy2)).to eq(created_user)
+        expect(invitation.reload).to be_deleted
+        expect([merchant_account, bank_account].map { _1.reload.alive? }).to eq([false, false])
+        expect(earlier_account.reload.retired_by_adoption_at).to be_present
+      end
+
+      it "keeps the sign-in revocation when removing a payout destination fails", :aggregate_failures do
+        created_user = create(:unconfirmed_user, email: @data_copy2["info"]["email"], password: password_set_at_signup)
+        access = set_up_access_for(created_user)
+        create(:merchant_account_stripe_connect, user: created_user)
+        allow_any_instance_of(MerchantAccount).to receive(:delete_charge_processor_account!).and_raise(ActiveRecord::RecordInvalid.new(MerchantAccount.new))
+
+        expect(User.find_or_create_for_google_oauth2(@data_copy2)).to be_nil
+
+        created_user.reload
+        expect(access[:tokens].map { _1.reload.revoked? }).to eq([true, true])
+        expect(created_user.webauthn_credentials).to be_empty
+        expect(created_user.totp_credential).to be_nil
+      end
+
       it "discards the pending email change of an unconfirmed account and confirms the Google address", :aggregate_failures do
         created_user = create(:unconfirmed_user, email: @data_copy2["info"]["email"], password: password_set_at_signup)
         created_user.update!(email: "signup-pending@example.com")
@@ -133,11 +220,16 @@ describe User::SocialGoogle do
       it "keeps a confirmed account's other access and its pending email change", :aggregate_failures do
         created_user = create(:user, email: @data_copy2["info"]["email"], password: password_set_at_signup)
         access = set_up_access_for(created_user)
+        store = set_up_store_for(created_user)
         created_user.update!(email: "owner-pending@example.com")
 
         User.find_or_create_for_google_oauth2(@data_copy2)
 
+        expect(store[:payout_destinations].map { _1.reload.alive? }).to all(be(true))
+        expect(store[:team].map { _1.reload.deleted? }).to all(be(false))
         created_user.reload
+        expect(created_user.notification_endpoint).to eq("https://ping.example.com/sales")
+        expect(created_user.payment_address).to eq("paypal-payouts@example.com")
         expect(created_user.valid_password?(password_set_at_signup)).to be(false)
         expect(created_user.email).to eq(@data_copy2["info"]["email"])
         expect(created_user.unconfirmed_email).to eq("owner-pending@example.com")
