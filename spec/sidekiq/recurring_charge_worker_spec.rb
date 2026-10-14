@@ -168,6 +168,55 @@ describe RecurringChargeWorker, :vcr do
       ensure
         Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
       end
+
+      describe "resuming a membership held on a pending Indian card mandate",
+               vcr: { cassette_name: "RecurringChargeWorker/doesn_t_call_charge_if_there_was_a_purchase_made_the_period_for_a_monthly_subscription" } do
+        before do
+          Feature.activate_user(Subscription::INDIA_CARD_MANDATE_PENDING_RESTART_FEATURE, @product.user)
+          @subscription.update!(renewal_disabled_due_to_indian_card_mandate: true, stripe_mandate_id: "mandate_confirmed")
+          allow_any_instance_of(Subscription).to receive(:india_card_mandate_reliability_enabled?).and_return(true)
+          allow_any_instance_of(Subscription).to receive(:refresh_indian_card_mandate!) do |subscription|
+            subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, false, true)
+            "active"
+          end
+          allow(Rails.logger).to receive(:info).and_call_original
+        end
+
+        after { Feature.deactivate_user(Subscription::INDIA_CARD_MANDATE_PENDING_RESTART_FEATURE, @product.user) }
+
+        it "records the price fixing the hold skipped before it charges" do
+          calls = []
+          allow_any_instance_of(Subscription).to receive(:record_indian_card_mandate_presentment!) { calls << :fixing }
+          allow_any_instance_of(Subscription).to receive(:charge!) { calls << :charge }
+
+          travel_to(@subscription.period.from_now + 1.day) do
+            described_class.new.perform(@subscription.id, true)
+          end
+
+          expect(calls).to eq([:fixing, :charge])
+          expect(Rails.logger).to have_received(:info).with("indian_card_mandate.pending_restart.renewal_resumed subscription_id=#{@subscription.id} mandate_id=mandate_confirmed")
+        end
+
+        it "re-fixes the price even when a fixing exists, so a stale one cannot outlive the new mandate" do
+          create(:later_charge_presentment, owner: @subscription, effective_from: 1.day.ago)
+
+          travel_to(@subscription.period.from_now + 1.day) do
+            expect_any_instance_of(Subscription).to receive(:record_indian_card_mandate_presentment!)
+            expect_any_instance_of(Subscription).to receive(:charge!)
+            described_class.new.perform(@subscription.id, true)
+          end
+        end
+
+        it "records no fixing when the feature is off" do
+          Feature.deactivate_user(Subscription::INDIA_CARD_MANDATE_PENDING_RESTART_FEATURE, @product.user)
+
+          travel_to(@subscription.period.from_now + 1.day) do
+            expect_any_instance_of(Subscription).not_to receive(:record_indian_card_mandate_presentment!)
+            expect_any_instance_of(Subscription).to receive(:charge!)
+            described_class.new.perform(@subscription.id, true)
+          end
+        end
+      end
     end
   end
 

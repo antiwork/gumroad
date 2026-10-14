@@ -18,6 +18,11 @@ class RecurringChargeWorker
           subscription.reload
           return if subscription.renewal_disabled_due_to_indian_card_mandate?
           indian_card_mandate_recovered = true
+          if subscription.india_card_mandate_pending_restart_enabled?
+            # A hold on a pending mandate saved the card without its price fixing, and an INR renewal cannot bill without one.
+            subscription.record_indian_card_mandate_presentment!
+            subscription.log_indian_card_mandate_hold_event("renewal_resumed")
+          end
         end
         return if subscription.is_test_subscription || subscription.current_subscription_price_cents == 0
         return if subscription.charges_completed?

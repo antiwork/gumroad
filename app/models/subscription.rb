@@ -579,7 +579,12 @@ class Subscription < ApplicationRecord
   def log_indian_card_mandate_restart
     return unless stripe_mandate_id.present? && india_card_mandate_pending_restart_enabled?
 
-    Rails.logger.info("indian_card_mandate.pending_restart.restarted subscription_id=#{id} mandate_id=#{stripe_mandate_id}")
+    log_indian_card_mandate_hold_event("restarted")
+  end
+
+  def log_indian_card_mandate_hold_event(event, mandate_id: stripe_mandate_id, **fields)
+    details = fields.map { |key, value| " #{key}=#{value}" }.join
+    Rails.logger.info("indian_card_mandate.pending_restart.#{event} subscription_id=#{id} mandate_id=#{mandate_id}#{details}")
   end
 
   # The card a restart stored while its e-mandate was still pending. Handing it back when the buyer enters the

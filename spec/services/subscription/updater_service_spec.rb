@@ -2943,7 +2943,7 @@ describe Subscription::UpdaterService, :vcr do
           expect(@subscription).to be_renewal_disabled_due_to_indian_card_mandate
           expect(@subscription.purchases.count).to eq(@purchase_count_before)
           expect(plan_change.reload).to be_alive
-          expect(Rails.logger).to have_received(:info).with("indian_card_mandate.pending_restart.held subscription_id=#{@subscription.id} mandate_id=mandate_pending")
+          expect(Rails.logger).to have_received(:info).with("indian_card_mandate.pending_restart.held subscription_id=#{@subscription.id} mandate_id=mandate_pending path=restart card=new")
         end
 
         context "when the restart comes from someone other than the member" do
@@ -2995,18 +2995,6 @@ describe Subscription::UpdaterService, :vcr do
           end
         end
 
-        it "does not say the membership has not restarted when a live membership updates on a pending mandate" do
-          restart_with_replacement_card
-          @subscription.update!(cancelled_at: nil, cancelled_by_buyer: false)
-          expect(@subscription.reload).to be_alive(include_pending_cancellation: false)
-
-          result = restart_with_saved_card
-
-          expect(result).to eq(success: false, error_message: "We could not verify this card for recurring payments. Please update the payment method before you restart this subscription.")
-          expect(@subscription.reload).to be_renewal_disabled_due_to_indian_card_mandate
-          expect(@subscription.credit_card).to eq(replacement_card)
-        end
-
         it "asks the buyer to wait when they retry on the saved card before the bank confirms" do
           restart_with_replacement_card
           expect_any_instance_of(described_class).not_to receive(:charge_user!)
@@ -3016,6 +3004,7 @@ describe Subscription::UpdaterService, :vcr do
           expect(result).to eq(success: false, error_message: pending_message)
           expect(@subscription.reload).not_to be_alive(include_pending_cancellation: false)
           expect(@subscription).to be_renewal_disabled_due_to_indian_card_mandate
+          expect(Rails.logger).to have_received(:info).with("indian_card_mandate.pending_restart.held subscription_id=#{@subscription.id} mandate_id=mandate_pending path=restart card=saved")
         end
 
         it "restarts on the saved card once the bank confirms the mandate" do
@@ -3062,6 +3051,118 @@ describe Subscription::UpdaterService, :vcr do
 
           expect(result).to eq(success: false, error_message: rejected_message)
           expect(@subscription.reload.credit_card).to eq(@credit_card)
+        end
+
+        it "reports which hold condition failed when it rejects a pending mandate" do
+          allow(ErrorNotifier).to receive(:notify)
+
+          restart_with_replacement_card(logged_in_user: create(:user))
+
+          expect(ErrorNotifier).to have_received(:notify).with(
+            "Indian card update rejected without an active e-mandate",
+            subscription: @subscription.external_id,
+            mandate_status: "pending",
+            is_resubscribing: true,
+            renewal_paused_for_mandate: false,
+            new_purchase_present: false,
+            member_verified: false,
+            customer_matches: true,
+            binding_matches: true,
+            terms_match: true
+          )
+        end
+
+        context "when the membership is live with renewals paused for the mandate" do
+          let(:live_pending_message) { Subscription::UpdaterService::MANDATE_PENDING_RENEWAL_MESSAGE }
+
+          before do
+            @subscription.update!(cancelled_at: nil, cancelled_by_buyer: false, renewal_disabled_due_to_indian_card_mandate: true)
+            expect(@subscription.reload).to be_alive(include_pending_cancellation: false)
+          end
+
+          it "keeps the card with renewal still paused, and does not charge" do
+            expect_any_instance_of(described_class).not_to receive(:charge_user!)
+            # A fixing here would change the terms a retry's reuse check expects.
+            expect(@subscription).not_to receive(:record_indian_card_mandate_presentment!)
+
+            result = restart_with_replacement_card
+
+            expect(result).to eq(success: false, error_message: live_pending_message)
+            @subscription.reload
+            expect(@subscription).to be_alive(include_pending_cancellation: false)
+            expect(@subscription.credit_card).to eq(replacement_card)
+            expect(@subscription.stripe_mandate_id).to eq("mandate_pending")
+            expect(@subscription).to be_renewal_disabled_due_to_indian_card_mandate
+            expect(@subscription.purchases.count).to eq(@purchase_count_before)
+            expect(Rails.logger).to have_received(:info).with("indian_card_mandate.pending_restart.held subscription_id=#{@subscription.id} mandate_id=mandate_pending path=live card=new")
+          end
+
+          it "lets the reuse check hand the held card back" do
+            restart_with_replacement_card
+            allow(ChargeProcessor).to receive(:get_setup_intent).and_return(
+              instance_double(StripeSetupIntent, succeeded?: true, mandate: "mandate_pending", customer_id: "cus_replacement", payment_method_id: "pm_replacement")
+            )
+            allow_any_instance_of(Subscription).to receive(:indian_card_setup_intent_terms_match?).and_return(true)
+
+            expect(@subscription.reload.reusable_pending_indian_card).to eq(replacement_card)
+          end
+
+          it "saves nothing for someone other than the member" do
+            result = restart_with_replacement_card(logged_in_user: nil)
+
+            expect(result).to eq(success: false, error_message: rejected_message)
+            @subscription.reload
+            expect(@subscription.credit_card).to eq(@credit_card)
+            expect(@subscription.stripe_mandate_id).to be_nil
+            expect(Rails.logger).not_to have_received(:info).with(a_string_including("indian_card_mandate.pending_restart.held"))
+          end
+
+          it "still rejects a pending mandate when the update also changes the plan" do
+            params = upgrade_tier_params.merge(perceived_upgrade_price_cents: @new_tier_quarterly_price.price_cents)
+
+            result = restart_with_replacement_card(params)
+
+            expect(result).to eq(success: false, error_message: rejected_message)
+            expect(@subscription.reload.credit_card).to eq(@credit_card)
+            expect(@subscription.stripe_mandate_id).to be_nil
+          end
+
+          it "asks the buyer to wait without saying the membership has lapsed when they retry on the saved card" do
+            restart_with_replacement_card
+            expect_any_instance_of(described_class).not_to receive(:charge_user!)
+
+            result = restart_with_saved_card
+
+            expect(result).to eq(success: false, error_message: live_pending_message)
+            expect(@subscription.reload).to be_renewal_disabled_due_to_indian_card_mandate
+            expect(@subscription.credit_card).to eq(replacement_card)
+            expect(Rails.logger).to have_received(:info).with("indian_card_mandate.pending_restart.held subscription_id=#{@subscription.id} mandate_id=mandate_pending path=live card=saved")
+          end
+
+          it "resumes renewals on the saved card once the bank confirms the mandate" do
+            restart_with_replacement_card
+            @mandate_status = "active"
+            allow_any_instance_of(described_class).to receive(:charge_user!).and_return(success: true)
+            # The hold skipped the fixing, and an INR renewal fails without one.
+            expect(@subscription).to receive(:record_indian_card_mandate_presentment!).and_call_original
+
+            result = restart_with_saved_card
+
+            expect(result[:success]).to be(true)
+            @subscription.reload
+            expect(@subscription).not_to be_renewal_disabled_due_to_indian_card_mandate
+            expect(@subscription.credit_card).to eq(replacement_card)
+          end
+        end
+
+        it "still rejects a pending mandate on a live membership whose renewals are not paused" do
+          @subscription.update!(cancelled_at: nil, cancelled_by_buyer: false)
+
+          result = restart_with_replacement_card
+
+          expect(result).to eq(success: false, error_message: rejected_message)
+          expect(@subscription.reload.credit_card).to eq(@credit_card)
+          expect(@subscription.stripe_mandate_id).to be_nil
         end
       end
     end
