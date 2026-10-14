@@ -79,6 +79,11 @@ class Subscription::UpdaterService
     result = nil
     terminated_or_scheduled_for_termination = subscription.termination_date.present?
     self.had_indian_card_mandate_stop = subscription.renewal_disabled_due_to_indian_card_mandate?
+    # Resume a held mandate on the unchanged plan first, so a plan change below is checked like any active mandate.
+    if use_existing_card? && !is_resubscribing && subscription.indian_card_mandate_held?
+      subscription.resume_held_indian_card_mandate!
+      return { success: false, error_message: HELD_MANDATE_ENDED_MESSAGE } if subscription.indian_card_mandate_requires_reauthorization?
+    end
     replacement_card = nil
     had_saved_card = false
     seller_price_changed = is_resubscribing && price_changed?
@@ -499,6 +504,8 @@ class Subscription::UpdaterService
       end
 
       if !is_resubscribing && subscription.indian_card_mandate_held?
+        # Resuming checks the fixing against the plan, so never resume off a plan this update already changed.
+        raise Subscription::UpdateFailed, "There is a temporary problem, please try again (your card was not charged)." if new_purchase.present?
         unless subscription.resume_held_indian_card_mandate!(mandate:, status:)
           if subscription.indian_card_mandate_requires_reauthorization?
             @held_indian_card_mandate_ended = true

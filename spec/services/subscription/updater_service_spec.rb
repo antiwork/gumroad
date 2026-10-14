@@ -3361,6 +3361,37 @@ describe Subscription::UpdaterService, :vcr do
               expect(mail).to have_received(:deliver_later).with(queue: "low").once
             end
 
+            it "resumes the hold on the unchanged plan before a plan change on the saved card" do
+              fixing = @subscription.later_charge_presentments.create!(
+                processor: StripeChargeProcessor.charge_processor_id,
+                presentment_currency: Currency::INR,
+                presentment_price_cents: @subscription.current_subscription_price_cents,
+                canonical_price_cents: LaterChargePresentment.canonical_price_cents_for(@subscription.original_purchase),
+                signup_currency_units_per_usd: BigDecimal("80"),
+                effective_from: 1.day.ago
+              )
+              expect(@subscription.reload.indian_card_presentment_in_force?(fixing)).to be(true)
+              original_variants = @subscription.original_purchase.variant_attributes.to_a
+              allow(ErrorNotifier).to receive(:notify)
+              allow_any_instance_of(described_class).to receive(:charge_user!).and_return(success: true)
+
+              result = described_class.new(
+                subscription: @subscription.reload,
+                gumroad_guid: @gumroad_guid,
+                params: upgrade_tier_params.merge(perceived_upgrade_price_cents: @new_tier_quarterly_price.price_cents),
+                logged_in_user: @user,
+                remote_ip: @remote_ip,
+              ).perform
+
+              # The plan change then follows the active-mandate path, which asks for a new mandate after charging.
+              expect(result[:success]).to be(true)
+              expect(ErrorNotifier).not_to have_received(:notify).with("Held Indian card mandate has an outdated price fixing", anything)
+              @subscription.reload
+              expect(@subscription).not_to be_indian_card_mandate_hold_pending
+              expect(@subscription.original_purchase.variant_attributes.to_a).not_to eq(original_variants)
+              expect(@subscription.later_charge_presentments.first).to eq(fixing)
+            end
+
             it "does not charge when the fixing cannot be recorded" do
               allow_any_instance_of(Subscription).to receive(:indian_card_recovery_presentment_attributes).and_return(nil)
               allow(ErrorNotifier).to receive(:notify)
