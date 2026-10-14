@@ -934,12 +934,8 @@ describe OrdersController, :vcr do
 
         post :create, params: { line_items: multiple_purchase_line_items.map { _1.merge(discount_code: offer_code.code) } }
 
-        expect(response.parsed_body["offer_codes"]).to match([
-          {
-            "code" => offer_code.code,
-            "products" => { product_1.unique_permalink => hash_including("type" => "percent", "percents" => 50) },
-          },
-        ])
+        discount = hash_including("type" => "percent", "percents" => 50)
+        expect(response.parsed_body["offer_codes"]).to match([{ "code" => offer_code.code, "products" => { product_1.unique_permalink => discount } }])
       end
 
       it "removes a capped once-per-cart code after another line consumes its last use" do
