@@ -407,14 +407,16 @@ export const Product = ({
   // quantity this selection has not met, leaves the displayed price alone.
   const codeDiscounts = (attributes: typeof selectionAttributes) =>
     !attributes.pppDiscounted && attributes.discountedPriceCents < attributes.priceCents;
-  // With no option picked, each option shows its own price, so any discounted one earns the label.
+  // With no option picked, each visible option shows its own price, so any discounted one earns the label.
   const showSaleLabel =
     !!saleLabel &&
     discountCode === initialDiscountCode &&
     !!discountCode?.valid &&
     (product.options.length > 0 && selectedOption === null
-      ? product.options.some((option) =>
-          codeDiscounts(applySelection(product, discount, { ...selection, optionId: option.id })),
+      ? product.options.some(
+          (option) =>
+            !(product.hide_sold_out_variants && option.quantity_left === 0) &&
+            codeDiscounts(applySelection(product, discount, { ...selection, optionId: option.id })),
         )
       : codeDiscounts(selectionAttributes));
 

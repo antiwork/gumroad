@@ -160,6 +160,15 @@ describe("product page sale label with no tier selected", () => {
     expect(screen.queryByTestId("sale-label")).toBeNull();
   });
 
+  it("ignores a sold-out tier the page hides", () => {
+    renderMembership(sellerDiscount({ membership: ["pro"] }), {
+      hide_sold_out_variants: true,
+      options: [tier("basic", 1_000), { ...tier("pro", 2_000), quantity_left: 0 }],
+    });
+
+    expect(screen.queryByTestId("sale-label")).toBeNull();
+  });
+
   it("hides the label when a purchasing-power discount beats the code on every tier", () => {
     renderMembership(sellerDiscount(), { ppp_details: { country: "India", factor: 0.4, minimum_price: 99 } });
 
