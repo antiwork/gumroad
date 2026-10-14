@@ -61,6 +61,9 @@ import { useSortingTableDriver, Sort } from "$app/components/useSortingTableDriv
 import blackFridayIllustration from "$assets/images/illustrations/black_friday.svg";
 import placeholder from "$assets/images/placeholders/discounts.png";
 
+// Mirrors OfferCode::MAX_SALE_LABEL_LENGTH; the server rejects anything longer.
+const MAX_SALE_LABEL_LENGTH = 32;
+
 type ProductScopeKind = "product" | "option" | "deleted";
 
 type Product = {
@@ -1338,7 +1341,7 @@ const Form = ({
                     type="text"
                     id={`${uid}saleLabel`}
                     placeholder="Black Friday"
-                    maxLength={32}
+                    maxLength={MAX_SALE_LABEL_LENGTH}
                     value={saleLabel}
                     onChange={(evt) => setSaleLabel(evt.target.value)}
                   />

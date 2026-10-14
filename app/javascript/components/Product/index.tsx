@@ -401,6 +401,16 @@ export const Product = ({
     !product.rental?.rent_only &&
     (basePriceCents !== 0 || product.pwyw);
 
+  // The label names the price the buyer is looking at, so it only shows while the seller's
+  // auto-applied code is what produced that price: a PPP discount, or a code whose minimum
+  // quantity this selection has not met, leaves the displayed price alone.
+  const showSaleLabel =
+    !!saleLabel &&
+    discountCode === initialDiscountCode &&
+    !!discountCode?.valid &&
+    !pppDiscounted &&
+    discountedPriceCents < priceCents;
+
   return (
     <article className="relative grid rounded border border-border bg-background lg:grid-cols-[2fr_1fr]">
       <Covers covers={product.covers} mainCoverId={product.main_cover_id} productName={product.name} />
@@ -451,7 +461,7 @@ export const Product = ({
                 )}
                 buyerLocalOriginalPriceCents={product.buyer_local_original_price_cents}
               />
-              {saleLabel && discountCode === initialDiscountCode && discountCode?.valid ? (
+              {showSaleLabel ? (
                 <div className="mt-2" data-testid="sale-label">
                   <Pill size="small">{saleLabel}</Pill>
                 </div>
@@ -645,6 +655,14 @@ export const Product = ({
             discount={discountCode?.valid ? withConfiguredOncePerCartAmount(discountCode.discount) : null}
             ref={configurationSelectorRef}
           />
+          {/* Products whose price lives in the configuration selector (options, or
+              recurring tiers) never render the price cell above, so the label goes
+              beside that price instead of disappearing. */}
+          {!showPrice && showSaleLabel ? (
+            <div data-testid="sale-label">
+              <Pill size="small">{saleLabel}</Pill>
+            </div>
+          ) : null}
           {product.ppp_details && pppDiscounted ? (
             <Alert role="status" variant="info">
               This product supports purchasing power parity. Because you're located in{" "}

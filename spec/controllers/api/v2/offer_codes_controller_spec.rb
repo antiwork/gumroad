@@ -74,6 +74,15 @@ describe Api::V2::OfferCodesController do
         expect(response.parsed_body["offer_code"]).to include("auto_apply" => true, "sale_label" => "Black Friday")
       end
 
+      it "accepts a JSON boolean for auto_apply" do
+        post @action, params: @params.merge(universal: "true", auto_apply: true, sale_label: "Black Friday")
+
+        expect(response.parsed_body["success"]).to eq(true)
+        code = @user.offer_codes.alive.last
+        expect(code).to have_attributes(auto_apply: true, sale_label: "Black Friday", universal: true)
+        expect(response.parsed_body["offer_code"]).to include("auto_apply" => true, "sale_label" => "Black Friday")
+      end
+
       describe "incorrect parameters" do
         it "returns error message" do
           post :create, params: @params.merge(amount_off: nil)

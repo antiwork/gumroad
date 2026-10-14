@@ -13,12 +13,15 @@ class Api::V2::OfferCodesController < Api::V2::BaseController
   end
 
   def create
+    # A JSON boolean and the documented "true" string both mean on. Comparing the
+    # parameter to "true" dropped `auto_apply: true` from a JSON body silently.
+    auto_apply = ActiveModel::Type::Boolean.new.cast(params[:auto_apply]) || false
     offer_code = if params[:offer_type] == "percent"
       OfferCode.new(code: params[:name],
                     universal: params[:universal] == "true",
                     amount_percentage: params[:amount_off].to_i,
                     max_purchase_count: params[:max_purchase_count],
-                    auto_apply: params[:auto_apply] == "true",
+                    auto_apply:,
                     sale_label: params[:sale_label],
                     minimum_amount_cents: params[:minimum_amount_cents].presence)
     else
@@ -27,7 +30,7 @@ class Api::V2::OfferCodesController < Api::V2::BaseController
                     amount_cents: params[:amount_cents].presence || params[:amount_off].presence,
                     max_purchase_count: params[:max_purchase_count],
                     minimum_amount_cents: params[:minimum_amount_cents].presence,
-                    auto_apply: params[:auto_apply] == "true",
+                    auto_apply:,
                     sale_label: params[:sale_label],
                     currency_type: @product.price_currency_type)
     end

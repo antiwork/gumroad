@@ -57,6 +57,13 @@ class OfferCode < ApplicationRecord
 
 
   before_validation :normalize_sale_label
+  # validate_auto_apply reads the seller's alive auto-applied codes, and the dashboard and
+  # API v2 both write here. Two concurrent saves could each pass that check before either
+  # inserts, leaving two alive codes where only the first is ever read. Taking the seller's
+  # row lock first serializes them: the second save re-reads after the first commits and is
+  # refused. A raw locking read, not `user.lock!`, so a seller object with unsaved changes
+  # is never reloaded or raised on.
+  before_validation :lock_seller_for_auto_apply, if: :auto_apply?
 
   after_save :invalidate_product_cache
   after_save { Current.auto_apply_offer_codes = nil }
@@ -708,6 +715,12 @@ class OfferCode < ApplicationRecord
       elsif sale_label.match?(/[<>]/)
         errors.add(:base, "The sale label must be plain text.")
       end
+    end
+
+    def lock_seller_for_auto_apply
+      return if user_id.blank? || deleted_at.present?
+
+      User.where(id: user_id).lock.pick(:id)
     end
 
     # A seller has at most one shop-wide auto-applied code, and it must be a plain
