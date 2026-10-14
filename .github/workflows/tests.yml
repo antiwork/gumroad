@@ -325,7 +325,9 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: resend_callbacks/go.mod
-          cache-dependency-path: resend_callbacks/go.sum
+          # Fork PRs run here under pull_request_target, so a saved cache would be
+          # shared with main's runs. The module is small enough to fetch every time.
+          cache: false
       - run: test -z "$(gofmt -l .)"
       - run: go vet ./...
       - run: go test -race ./...
