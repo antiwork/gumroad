@@ -66,6 +66,34 @@ if env != "development"
   on_stopped do
     $stdout.syswrite("puma_shutdown event=master_workers_reaped pid=#{Process.pid} at=#{Time.now.utc.strftime("%Y-%m-%dT%H:%M:%S.%LZ")}\n")
   end
+
+  # Some workers never log worker_server_stopped and are killed at the container's kill
+  # timeout. Server#stop runs from the worker's TERM trap, so a stuck worker without the
+  # first line never ran its trap; one with it waits inside the graceful shutdown, and the
+  # thread dump shows on what. Workers that exit normally are gone before the dump.
+  shutdown_dump_after_seconds = 3
+  shutdown_dump_frames = 15
+  require "puma/server"
+  Puma::Server.prepend(Module.new do
+    define_method(:stop) do |*args|
+      # The master repeats its TERM while the worker waits.
+      return super(*args) if @shutdown_trace_started
+      @shutdown_trace_started = true
+      pid = Process.pid
+      $stdout.syswrite("puma_shutdown event=worker_stop_requested pid=#{pid} at=#{Time.now.utc.strftime("%Y-%m-%dT%H:%M:%S.%LZ")}\n")
+      Thread.new do
+        sleep shutdown_dump_after_seconds
+        threads = Thread.list - [Thread.current]
+        threads.each_with_index do |thread, i|
+          $stdout.syswrite("puma_shutdown event=worker_still_running pid=#{pid} thread=#{i + 1}/#{threads.size} name=#{thread.name.inspect} status=#{thread.status.inspect}\n")
+          Array(thread.backtrace).first(shutdown_dump_frames).each do |frame|
+            $stdout.syswrite("puma_shutdown event=thread_frame pid=#{pid} thread=#{i + 1} #{frame}\n")
+          end
+        end
+      end
+      super(*args)
+    end
+  end)
 end
 
 pidfile "tmp/pids/puma.pid"
