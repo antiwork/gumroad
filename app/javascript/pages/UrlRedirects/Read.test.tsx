@@ -23,8 +23,10 @@ const mocks = vi.hoisted(() => {
     getDocument: vi.fn(),
     // Shared pdfjs harness state. The module mocks below are hoisted above any test, so the
     // constructors have to read these lazily rather than close over a per-test object.
-    on: vi.fn<(type: string, listener: () => void) => void>(),
-    off: vi.fn<(type: string, listener: () => void) => void>(),
+    on: vi.fn<(type: string, listener: (event: { pageNumber: number }) => void) => void>(),
+    off: vi.fn<(type: string, listener: (event: { pageNumber: number }) => void) => void>(),
+    navigatePdf: vi.fn<(pageNumber: number) => void>(),
+    emitPdf: vi.fn<(type: string, event?: { pageNumber: number }) => void>(),
     viewer: {
       cleanup: vi.fn(),
       setDocument: vi.fn(),
@@ -52,8 +54,23 @@ vi.mock("pdfjs-dist/legacy/build/pdf.mjs", () => ({
 vi.mock("pdfjs-dist/legacy/build/pdf.worker.mjs?url", () => ({ default: "worker.js" }));
 vi.mock("pdfjs-dist/legacy/web/pdf_viewer.mjs", () => ({
   EventBus: class {
-    on = mocks.on;
-    off = mocks.off;
+    listeners = new Map<string, Set<(event: { pageNumber: number }) => void>>();
+    constructor() {
+      mocks.emitPdf.mockImplementation((type, event = { pageNumber: 1 }) => this.dispatch(type, event));
+    }
+    on(type: string, listener: (event: { pageNumber: number }) => void) {
+      mocks.on(type, listener);
+      const listeners = this.listeners.get(type) ?? new Set();
+      listeners.add(listener);
+      this.listeners.set(type, listeners);
+    }
+    off(type: string, listener: (event: { pageNumber: number }) => void) {
+      mocks.off(type, listener);
+      this.listeners.get(type)?.delete(listener);
+    }
+    dispatch(type: string, event: { pageNumber: number }) {
+      this.listeners.get(type)?.forEach((listener) => listener(event));
+    }
   },
   LinkTarget: mocks.LinkTarget,
   PDFLinkService: class {
@@ -64,11 +81,30 @@ vi.mock("pdfjs-dist/legacy/web/pdf_viewer.mjs", () => ({
     setDocument = vi.fn();
   },
   PDFSinglePageViewer: class {
+    eventBus: { dispatch: (type: string, event: { pageNumber: number }) => void };
+    pageNumber = 1;
+    constructor({ eventBus }: { eventBus: { dispatch: (type: string, event: { pageNumber: number }) => void } }) {
+      this.eventBus = eventBus;
+      mocks.navigatePdf.mockImplementation((pageNumber) => {
+        this.currentPageNumber = pageNumber;
+      });
+    }
     cleanup = mocks.viewer.cleanup;
-    setDocument = mocks.viewer.setDocument;
+    setDocument(document: { numPages: number } | null) {
+      mocks.viewer.setDocument(document);
+      this.pdfDocument = document;
+    }
     currentScaleValue = "";
     currentScale = 1;
-    pdfDocument = { numPages: 3 };
+    pdfDocument: { numPages: number } | null = null;
+    get currentPageNumber() {
+      return this.pageNumber;
+    }
+    set currentPageNumber(pageNumber: number) {
+      if (!this.pdfDocument || pageNumber === this.pageNumber) return;
+      this.pageNumber = pageNumber;
+      this.eventBus.dispatch("pagechanging", { pageNumber });
+    }
   },
 }));
 
@@ -200,30 +236,34 @@ describe("PDF reader teardown", () => {
 
     expect(mocks.off).toHaveBeenCalledWith("pagesinit", expect.any(Function));
     expect(mocks.off).toHaveBeenCalledWith("pagerender", expect.any(Function));
+    expect(mocks.off).toHaveBeenCalledWith("pagechanging", expect.any(Function));
     expect(mocks.viewer.cleanup).toHaveBeenCalled();
   });
 
-  it("removes each handler by the same reference it registered", async () => {
-    // eventBus.off is a no-op against a different function object, so anonymous handlers could
-    // never actually be removed.
-    render(<Read />);
+  it.each(["pagesinit", "pagerender", "pagechanging"])(
+    "removes the %s handler by the same reference it registered",
+    async (eventName) => {
+      // eventBus.off is a no-op against a different function object, so anonymous handlers could
+      // never actually be removed.
+      render(<Read />);
 
-    await waitFor(() => expect(mocks.on).toHaveBeenCalledWith("pagesinit", expect.any(Function)));
-    const registered = new Set<unknown>();
-    for (const [type, listener] of mocks.on.mock.calls) {
-      if (type === "pagesinit") registered.add(listener);
-    }
+      await waitFor(() => expect(mocks.on).toHaveBeenCalledWith(eventName, expect.any(Function)));
+      const registered = new Set<unknown>();
+      for (const [type, listener] of mocks.on.mock.calls) {
+        if (type === eventName) registered.add(listener);
+      }
 
-    cleanup();
+      cleanup();
 
-    // Every removed handler must be one of the exact function objects that was registered.
-    const removed: unknown[] = [];
-    for (const [type, listener] of mocks.off.mock.calls) {
-      if (type === "pagesinit") removed.push(listener);
-    }
-    expect(removed).toHaveLength(1);
-    expect(registered.has(removed[0])).toBe(true);
-  });
+      // Every removed handler must be one of the exact function objects that was registered.
+      const removed: unknown[] = [];
+      for (const [type, listener] of mocks.off.mock.calls) {
+        if (type === eventName) removed.push(listener);
+      }
+      expect(removed).toHaveLength(1);
+      expect(registered.has(removed[0])).toBe(true);
+    },
+  );
 
   it("destroys a document that finishes loading after the reader closed", async () => {
     // getDocument resolves after unmount: without the cancellation flag the parsed PDF would be
@@ -266,6 +306,109 @@ describe("PDF reader teardown", () => {
 
     await waitFor(() => expect(mocks.linkServiceOptions).toHaveLength(1));
     expect(mocks.linkServiceOptions.map((options) => options.externalLinkTarget)).toEqual([mocks.LinkTarget.BLANK]);
+  });
+
+  it("synchronizes navigation and saves progress after an internal PDF destination changes the page", async () => {
+    render(<Read />);
+    await waitFor(() => expect(mocks.getDocument).toHaveBeenCalled());
+    await act(async () => {
+      pdf.resolve();
+      await Promise.resolve();
+    });
+    act(() => mocks.emitPdf("pagesinit"));
+    expect(screen.getByText("1 of 3")).toBeDefined();
+    mocks.trackMediaLocationChanged.mockClear();
+
+    act(() => mocks.navigatePdf(3));
+
+    expect(document.querySelector(".pagination")?.textContent).toBe("3 of 3");
+    expect(mocks.trackMediaLocationChanged).toHaveBeenLastCalledWith(expect.objectContaining({ location: 3 }));
+    expect(screen.getByRole("button", { name: "Next" }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getByRole("button", { name: "Previous" }).hasAttribute("disabled")).toBe(false);
+    expect(mocks.trackMediaLocationChanged).toHaveBeenCalledTimes(1);
+    const slider = screen.getByRole("slider");
+    expect(slider instanceof HTMLInputElement && slider.value).toBe("3");
+    fireEvent.click(screen.getByRole("button", { name: "Previous" }));
+    expect(document.querySelector(".pagination")?.textContent).toBe("2 of 3");
+    expect(mocks.trackMediaLocationChanged).toHaveBeenCalledTimes(2);
+    expect(mocks.trackMediaLocationChanged).toHaveBeenLastCalledWith(expect.objectContaining({ location: 2 }));
+  });
+
+  it.each([null, 2, 3])("initializes and saves server resume page %s once", async (location) => {
+    mocks.usePage.mockReturnValue({
+      props: readerProps({
+        file_type: "pdf",
+        latest_media_location: location === null ? null : { location, timestamp: new Date().toISOString() },
+      }),
+    });
+    render(<Read />);
+    await waitFor(() => expect(mocks.getDocument).toHaveBeenCalled());
+    await act(async () => {
+      pdf.resolve();
+      await Promise.resolve();
+    });
+
+    act(() => mocks.emitPdf("pagesinit"));
+
+    const expected = location === 2 ? 2 : 1;
+    expect(document.querySelector(".pagination")?.textContent).toBe(`${expected} of 3`);
+    expect(mocks.trackMediaLocationChanged).toHaveBeenCalledTimes(1);
+    expect(mocks.trackMediaLocationChanged).toHaveBeenLastCalledWith(expect.objectContaining({ location: expected }));
+  });
+
+  it("reads the viewer's current page for rapid navigation and slider changes", async () => {
+    render(<Read />);
+    await waitFor(() => expect(mocks.getDocument).toHaveBeenCalled());
+    await act(async () => {
+      pdf.resolve();
+      await Promise.resolve();
+    });
+    act(() => mocks.emitPdf("pagesinit"));
+    mocks.trackMediaLocationChanged.mockClear();
+
+    act(() => {
+      fireEvent.keyDown(window, { key: "ArrowRight" });
+      fireEvent.keyDown(window, { key: "ArrowRight" });
+    });
+
+    expect(document.querySelector(".pagination")?.textContent).toBe("3 of 3");
+    expect(mocks.trackMediaLocationChanged).toHaveBeenCalledTimes(2);
+    fireEvent.change(screen.getByRole("slider"), { target: { value: "1" } });
+    expect(document.querySelector(".pagination")?.textContent).toBe("1 of 3");
+    expect(mocks.trackMediaLocationChanged).toHaveBeenCalledTimes(3);
+    expect(mocks.trackMediaLocationChanged).toHaveBeenLastCalledWith(expect.objectContaining({ location: 1 }));
+    fireEvent.keyDown(window, { key: "ArrowLeft" });
+    expect(mocks.trackMediaLocationChanged).toHaveBeenCalledTimes(3);
+  });
+
+  it("resumes a guest from the cookie saved by an internal destination without sending purchase progress", async () => {
+    const readId = `read-${crypto.randomUUID()}`;
+    mocks.usePage.mockReturnValue({
+      props: readerProps({ file_type: "pdf", purchase_id: null, latest_media_location: null, read_id: readId }),
+    });
+    const view = render(<Read />);
+    await waitFor(() => expect(mocks.getDocument).toHaveBeenCalled());
+    await act(async () => {
+      pdf.resolve();
+      await Promise.resolve();
+    });
+    act(() => mocks.emitPdf("pagesinit"));
+    act(() => mocks.navigatePdf(2));
+    expect(document.querySelector(".pagination")?.textContent).toBe("2 of 3");
+    expect(mocks.trackMediaLocationChanged).not.toHaveBeenCalled();
+    view.unmount();
+    mocks.getDocument.mockClear();
+
+    render(<Read />);
+    await waitFor(() => expect(mocks.getDocument).toHaveBeenCalled());
+    await act(async () => {
+      pdf.resolve();
+      await Promise.resolve();
+    });
+    act(() => mocks.emitPdf("pagesinit"));
+
+    expect(document.querySelector(".pagination")?.textContent).toBe("2 of 3");
+    expect(mocks.trackMediaLocationChanged).not.toHaveBeenCalled();
   });
 });
 
