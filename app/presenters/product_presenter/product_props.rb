@@ -120,11 +120,11 @@ class ProductPresenter::ProductProps
     def sale_label(discount_code_result)
       return unless discount_code_result&.dig(:valid)
 
-      default_code = product.effective_default_offer_code
-      return if default_code.nil? || default_code.sale_label.blank?
-      return unless OfferCode.normalize_code(discount_code_result[:code]).to_s.casecmp?(default_code.code.to_s)
+      auto_code = product.user.auto_apply_offer_code_for(product)
+      return if auto_code.nil? || auto_code.sale_label.blank?
+      return unless OfferCode.normalize_code(discount_code_result[:code]).to_s.casecmp?(auto_code.code.to_s)
 
-      default_code.sale_label
+      auto_code.sale_label
     end
 
     def discount_code_props(discount_code_from_url, quantity, buyer)

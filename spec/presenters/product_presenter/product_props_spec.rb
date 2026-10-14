@@ -465,6 +465,15 @@ describe ProductPresenter::ProductProps do
         expect(props[:sale_label]).to be_nil
       end
 
+      it "returns the label when the buyer's sale code beats the per-product default" do
+        own = create(:percentage_offer_code, products: [product], code: "OWN10", amount_percentage: 10)
+        product.update!(default_offer_code: own)
+        result = props(discount_code: "bf30")
+
+        expect(result[:discount_code]).to include(valid: true, code: "bf30")
+        expect(result[:sale_label]).to eq("Black Friday")
+      end
+
       it "returns no label for a per-product default given a label without auto apply" do
         own = seller.offer_codes.create!(code: "OWN10", amount_percentage: 10, products: [product], sale_label: "Flash sale")
         product.update!(default_offer_code: own)
