@@ -883,7 +883,7 @@ describe PurchasesController, :vcr do
         expect(PurchaseSearchService).to receive(:new).with(
           hash_including(
             created_on_or_after: Time.utc(2020, 8, 1).beginning_of_day,
-            created_before: Time.utc(2020, 8, 31).end_of_day,
+            created_before: Time.utc(2020, 9, 1),
         )).and_call_original
 
         params[:start_time] = "2020-08-01"
@@ -1924,6 +1924,43 @@ describe PurchasesController, :vcr do
           expect(response.body).to have_text("View content")
         end
       end
+    end
+  end
+end
+
+describe PurchasesController, "UTC sales export boundaries" do
+  [false, true].each do |force_async|
+    it "includes the final UTC second in #{force_async ? 'emailed' : 'downloaded'} exports" do
+      create(:merchant_account, user: nil) unless MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id)
+      seller = create(:named_seller, timezone: "Tokyo", created_at: Time.utc(2025, 1, 1))
+      product = create(:product, user: seller)
+      penultimate_second = create(:purchase, link: product, email: "first@example.com", created_at: Time.utc(2026, 1, 31, 23, 59, 58))
+      final_second = create(:purchase, link: product, email: "last@example.com", created_at: Time.utc(2026, 1, 31, 23, 59, 59))
+      next_day = create(:purchase, link: product, email: "next@example.com", created_at: Time.utc(2026, 2, 1))
+      index_model_records(Purchase)
+      sign_in seller
+
+      get :export
+      expect(response.body).to include(penultimate_second.external_id, final_second.external_id, next_day.external_id)
+
+      export_params = { start_time: "2026-01-31", end_time: "2026-01-31" }
+      export_params[:force_async] = true if force_async
+      Sidekiq::Testing.inline! do
+        get :export, params: export_params
+      end
+
+      csv = if force_async
+        expect(response).to redirect_to(customers_path)
+        email = ActionMailer::Base.deliveries.last
+        expect(email.to).to eq([seller.email])
+        email.attachments["sales_data.csv"].decoded
+      else
+        expect(response).to have_http_status(:ok)
+        response.body
+      end
+      expect(csv).to include(penultimate_second.external_id, final_second.external_id)
+      expect(csv).not_to include(next_day.external_id)
+      expect(CSV.parse(csv).size).to eq(4)
     end
   end
 end
