@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 
-import { manualChunks } from "../../../config/vite/manual-chunks";
+import { codeSplittingGroups, manualChunks, SHELL_ENTRY } from "../../../config/vite/manual-chunks";
+
+// A shell that statically imports React and lazy-loads a page that imports libphonenumber-js.
+const PAGE = "/repo/app/javascript/pages/Checkout/Show.tsx";
+const REACT = "/repo/node_modules/react/index.js";
+const PHONE = "/repo/node_modules/libphonenumber-js/index.js";
+const graph: Record<string, string[]> = { [SHELL_ENTRY]: [REACT], [REACT]: [], [PAGE]: [REACT, PHONE], [PHONE]: [] };
+const context = {
+  getModuleInfo: (id: string) => (id in graph ? { importedIds: graph[id] ?? [] } : null),
+};
 
 // No visible failure if these regress — the app still works, just ships extra bytes.
 describe("Inertia page bundle boundaries", () => {
@@ -19,10 +28,17 @@ describe("Inertia page bundle boundaries", () => {
   it("pins Vite's dynamic-import helper to the vendor chunk", async () => {
     const configSource = (await import("../../../vite.config.ts?raw")).default.replace(/\/\/[^\n]*/gu, "");
     expect(configSource).toMatch(/from\s+["']\.\/config\/vite\/manual-chunks\.ts["']/u);
-    expect(configSource).toMatch(/manualChunks,/u);
+    expect(configSource).toMatch(/groups:\s*codeSplittingGroups/u);
+    expect(codeSplittingGroups).toContainEqual({ name: manualChunks });
 
-    expect(manualChunks("vite/preload-helper")).toBe("vendor");
-    expect(manualChunks("/node_modules/vite/dist/client/preload-helper.js")).toBe("vendor");
-    expect(manualChunks("/node_modules/pdfjs-dist/build/pdf.js")).toBe("vendor-pdf");
+    expect(manualChunks("vite/preload-helper", context)).toBe("vendor");
+    expect(manualChunks("\0vite/preload-helper.js", context)).toBe("vendor");
+    expect(manualChunks("/node_modules/pdfjs-dist/build/pdf.js", context)).toBe("vendor-pdf");
+  });
+
+  it("keeps packages that only lazy-loaded pages import out of the vendor chunk", () => {
+    expect(manualChunks(REACT, context)).toBe("vendor");
+    expect(manualChunks(PHONE, context)).toBeUndefined();
+    expect(manualChunks(PAGE, context)).toBeUndefined();
   });
 });
