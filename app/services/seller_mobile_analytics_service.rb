@@ -33,6 +33,7 @@ class SellerMobileAnalyticsService
             filter: { term: { not_chargedback_or_chargedback_reversed: false } },
             aggs: {
               price_cents_total: { sum: { field: "price_cents" } },
+              amount_refunded_cents_total: { sum: { field: "amount_refunded_cents" } },
             }
           }
         }
@@ -56,7 +57,8 @@ class SellerMobileAnalyticsService
       revenue = \
         aggregations.price_cents_total.value - \
         aggregations.amount_refunded_cents_total.value - \
-        aggregations.chargedback_agg.price_cents_total.value
+        aggregations.chargedback_agg.price_cents_total.value + \
+        aggregations.chargedback_agg.amount_refunded_cents_total.value
       @result.merge!(
         revenue:,
         formatted_revenue: @user.formatted_dollar_amount(revenue),

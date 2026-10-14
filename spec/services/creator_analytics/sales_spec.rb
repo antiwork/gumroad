@@ -326,3 +326,35 @@ describe CreatorAnalytics::Sales, "DST handling" do
     end
   end
 end
+
+describe CreatorAnalytics::Sales, "refund and chargeback revenue" do
+  [
+    ["ordinary sale", 0, false, false, 10_00],
+    ["partially refunded sale", 3_00, false, false, 7_00],
+    ["fully refunded sale", 10_00, false, false, 0],
+    ["charged-back sale", 0, true, false, 0],
+    ["partially refunded charged-back sale", 3_00, true, false, 0],
+    ["reversed chargeback", 0, true, true, 10_00],
+    ["partially refunded reversed chargeback", 3_00, true, true, 7_00],
+  ].each do |name, refund_cents, charged_back, chargeback_reversed, expected_cents|
+    it "reports the remaining revenue for #{name}" do
+      create(:merchant_account, user: nil) unless MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id)
+      seller = create(:user, timezone: "UTC", email: "seller@example.com", created_at: Time.utc(2025, 1, 1))
+      product = create(:product, user: seller, price_cents: 10_00)
+      purchase = create(:purchase, link: product, email: "buyer@example.com", created_at: Time.utc(2026, 1, 1, 12), ip_country: "Japan", referrer: "https://example.com")
+      if refund_cents.positive?
+        expect(purchase.refund_purchase!(FlowOfFunds.build_simple_flow_of_funds(Currency::USD, -refund_cents), seller.id)).to eq(true)
+      end
+      purchase.update!(chargeback_date: Time.utc(2026, 1, 3), chargeback_reversed:) if charged_back
+      index_model_records(Purchase)
+
+      service = described_class.new(user: seller, products: [product], dates: [Date.new(2026, 1, 1)])
+
+      aggregate_failures do
+        expect(service.by_product_and_date).to eq([product.id, "2026-01-01"] => { count: 1, total: expected_cents })
+        expect(service.by_product_and_country_and_state).to eq([product.id, "Japan", nil] => { count: 1, total: expected_cents })
+        expect(service.by_product_and_referrer_and_date).to eq([product.id, "example.com", "2026-01-01"] => { count: 1, total: expected_cents })
+      end
+    end
+  end
+end

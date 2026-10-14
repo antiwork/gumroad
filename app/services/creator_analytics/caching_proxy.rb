@@ -2,6 +2,7 @@
 
 class CreatorAnalytics::CachingProxy
   REFERRAL_CACHE_VERSION = 1
+  REVENUE_CACHE_VERSION = 1
 
   include Formatters::Helpers
   include Formatters::ByDate
@@ -67,7 +68,7 @@ class CreatorAnalytics::CachingProxy
     end
 
     def cache_key_for_data(date, by: :date)
-      key = "#{user_cache_key}_by_#{by}_for_#{date}"
+      key = "#{user_cache_key}_by_#{by}_for_#{date}_revenue_v#{REVENUE_CACHE_VERSION}"
       by == :referral ? "#{key}_v#{REFERRAL_CACHE_VERSION}" : key
     end
 

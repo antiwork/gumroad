@@ -134,6 +134,7 @@ class CreatorAnalytics::Sales
                 filter: { term: { not_chargedback_or_chargedback_reversed: false } },
                 aggs: {
                   price_cents_total: { sum: { field: "price_cents" } },
+                  amount_refunded_cents_total: { sum: { field: "amount_refunded_cents" } },
                 }
               },
               total: {
@@ -142,8 +143,10 @@ class CreatorAnalytics::Sales
                     price_cents_total: "price_cents_total",
                     amount_refunded_cents_total: "amount_refunded_cents_total",
                     chargedback_price_cents_total: "chargedback_agg>price_cents_total",
+                    chargedback_amount_refunded_cents_total: "chargedback_agg>amount_refunded_cents_total",
                   },
-                  script: "params.price_cents_total - params.amount_refunded_cents_total - params.chargedback_price_cents_total"
+                  # Refunds already removed from gross must not be removed again by a chargeback.
+                  script: "params.price_cents_total - params.amount_refunded_cents_total - params.chargedback_price_cents_total + params.chargedback_amount_refunded_cents_total"
                 }
               }
             }
