@@ -5,7 +5,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { buildDiscountPayload, DiscountPayload } from "$app/data/offer_code";
 
-import DiscountsPage, { DiscountsPageProps, OfferCode } from "$app/components/CheckoutDashboard/DiscountsPage";
+import DiscountsPage, {
+  DiscountsPageProps,
+  MAX_SALE_LABEL_LENGTH,
+  OfferCode,
+} from "$app/components/CheckoutDashboard/DiscountsPage";
 
 vi.mock("$app/components/UserAgent", () => ({ useUserAgentInfo: () => ({ isMobile: false, locale: "en-US" }) }));
 vi.stubGlobal("Routes", new Proxy({}, { get: () => () => "#" }));
@@ -113,6 +117,26 @@ describe("DiscountsPage shop-wide auto-apply", () => {
     const label = screen.getByLabelText("Sale label (optional)");
     fireEvent.change(label, { target: { value: "Cyber week" } });
     expect(label).toHaveProperty("value", "Cyber week");
+  });
+
+  it("puts the sale label in its own field after the toggle, with a running character count", () => {
+    render(<DiscountsPage {...props([offerCode()])} />);
+    fireEvent.click(screen.getByRole("button", { name: "New discount" }));
+    fireEvent.click(screen.getByLabelText("All products"));
+    const toggle = screen.getByLabelText("Apply automatically on product pages");
+    fireEvent.click(toggle);
+
+    const input = screen.getByLabelText("Sale label (optional)");
+    const inputs = [...document.querySelectorAll("input")];
+    expect(inputs.indexOf(toggle)).toBeLessThan(inputs.indexOf(input));
+    const toggleLegends = [...(toggle.closest("fieldset")?.querySelectorAll("legend") ?? [])];
+    expect(toggleLegends.some((legend) => legend.textContent.includes("Sale label"))).toBe(false);
+    expect(input).toHaveProperty("maxLength", MAX_SALE_LABEL_LENGTH);
+
+    const hint = document.getElementById(input.getAttribute("aria-describedby") ?? "");
+    expect(hint?.textContent).toContain(`0 of ${MAX_SALE_LABEL_LENGTH} characters used`);
+    fireEvent.change(input, { target: { value: "Cyber week" } });
+    expect(hint?.textContent).toContain(`10 of ${MAX_SALE_LABEL_LENGTH} characters used`);
   });
 
   it("preloads the saved values when editing and marks the code as applied automatically", () => {

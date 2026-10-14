@@ -62,7 +62,7 @@ import blackFridayIllustration from "$assets/images/illustrations/black_friday.s
 import placeholder from "$assets/images/placeholders/discounts.png";
 
 // Mirrors OfferCode::MAX_SALE_LABEL_LENGTH; the server rejects anything longer.
-const MAX_SALE_LABEL_LENGTH = 32;
+export const MAX_SALE_LABEL_LENGTH = 32;
 
 type ProductScopeKind = "product" | "option" | "deleted";
 
@@ -1332,21 +1332,26 @@ const Form = ({
                 Buyers see the discounted price on your product pages without a link or code. Use the validity period
                 below to schedule the sale. A discount set on a single product still takes priority.
               </FieldsetDescription>
-              {autoApply ? (
-                <>
-                  <FieldsetTitle>
-                    <Label htmlFor={`${uid}saleLabel`}>Sale label (optional)</Label>
-                  </FieldsetTitle>
-                  <Input
-                    type="text"
-                    id={`${uid}saleLabel`}
-                    placeholder="Black Friday"
-                    maxLength={MAX_SALE_LABEL_LENGTH}
-                    value={saleLabel}
-                    onChange={(evt) => setSaleLabel(evt.target.value)}
-                  />
-                </>
-              ) : null}
+            </Fieldset>
+          ) : null}
+          {universal && autoApply ? (
+            <Fieldset>
+              <FieldsetTitle>
+                <Label htmlFor={`${uid}saleLabel`}>Sale label (optional)</Label>
+              </FieldsetTitle>
+              <Input
+                type="text"
+                id={`${uid}saleLabel`}
+                placeholder="Black Friday"
+                maxLength={MAX_SALE_LABEL_LENGTH}
+                aria-describedby={`${uid}saleLabelDescription`}
+                value={saleLabel}
+                onChange={(evt) => setSaleLabel(evt.target.value)}
+              />
+              <FieldsetDescription id={`${uid}saleLabelDescription`}>
+                Shown next to the discounted price on your product pages ({saleLabel.length} of {MAX_SALE_LABEL_LENGTH}{" "}
+                characters used).
+              </FieldsetDescription>
             </Fieldset>
           ) : null}
           {canSetDuration && !useTieredDiscounts ? (
