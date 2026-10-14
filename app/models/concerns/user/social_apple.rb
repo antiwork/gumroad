@@ -73,8 +73,8 @@ module User::SocialApple
 
         user.skip_confirmation_notification!
         user.save!
-        # Apple proves only the current address, so adoption must not apply a pending change.
-        user.confirm if user.has_unconfirmed_email? && !(adopting && user.pending_reconfirmation?)
+        # Apple proves only the current address, so a pending change waits for its emailed link.
+        user.confirm if user.has_unconfirmed_email? && !user.pending_reconfirmation?
 
         if data["uid"].present?
           user.user_external_authentications.find_or_create_by!(provider: "apple", uid: data["uid"])

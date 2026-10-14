@@ -54,6 +54,16 @@ describe User::SocialApple do
         expect(result).to eq(existing_user)
       end
 
+      it "does not apply a pending email change", :aggregate_failures do
+        original_email = existing_user.email
+        existing_user.update!(email: "pending-#{original_email}")
+
+        User.find_or_create_for_apple_oauth(apple_data)
+
+        expect(existing_user.reload.email).to eq(original_email)
+        expect(existing_user.unconfirmed_email).to eq("pending-#{original_email}")
+      end
+
       it "leaves the password and the sessions alone", :aggregate_failures do
         existing_user.update!(password: "chosen-by-its-owner")
 

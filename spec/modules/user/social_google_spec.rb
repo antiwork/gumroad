@@ -37,6 +37,17 @@ describe User::SocialGoogle do
       expect(created_user.reload.email).to eq(original_email)
     end
 
+    it "does not apply a pending email change on a returning sign-in", :aggregate_failures do
+      created_user = create(:user, google_uid: @data_copy1["uid"])
+      original_email = created_user.email
+      created_user.update!(email: "pending-#{original_email}")
+
+      User.find_or_create_for_google_oauth2(@data_copy1)
+
+      expect(created_user.reload.email).to eq(original_email)
+      expect(created_user.unconfirmed_email).to eq("pending-#{original_email}")
+    end
+
     it "finds a user using email when google's uid is missing and fills in uid" do
       created_user = create(:user, email: @data_copy2["info"]["email"])
       found_user = User.find_or_create_for_google_oauth2(@data_copy2)

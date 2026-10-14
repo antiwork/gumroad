@@ -93,10 +93,7 @@ module User::SocialGoogle
             query_google(user, data)
           end
         else
-          # A closed row keeps its uid after support frees the address, so this uid can be shared with
-          # a deleted account: the match proves the current address, not the pending replacement.
-          keep_pending_email = User.deleted.exists?(google_uid: data["uid"])
-          query_google(user, data, keep_pending_email:)
+          query_google(user, data)
         end
 
         user
@@ -118,7 +115,7 @@ module User::SocialGoogle
       nil
     end
 
-    def query_google(user, data, new_user: false, keep_pending_email: false)
+    def query_google(user, data, new_user: false)
       return if data.blank? || data.is_a?(String)
 
       email = verified_google_email(data)
@@ -158,9 +155,9 @@ module User::SocialGoogle
 
       user.skip_confirmation_notification!
       user.save!
-      # Both paths prove only the current address, so confirming would apply a pending change Google never
-      # verified (and, for keep_pending_email, strand the next sign-in in the two-identity case).
-      user.confirm if user.has_unconfirmed_email? && !((keep_pending_email || adopting) && user.pending_reconfirmation?)
+      # Google proves only the current address, so a pending change waits for its emailed link. Applying it
+      # here would also strand the next sign-in when the uid is shared with a deleted row.
+      user.confirm if user.has_unconfirmed_email? && !user.pending_reconfirmation?
 
       user
     end
