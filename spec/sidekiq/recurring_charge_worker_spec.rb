@@ -146,7 +146,7 @@ describe RecurringChargeWorker, :vcr do
       expect(subscription.later_charge_presentments).to be_empty
     end
 
-    it "ends the hold and asks the buyer once for a new card when the bank approved the mandate in USD" do
+    it "ends a hold from before the listing-currency guard once the bank approved its mandate in USD" do
       @setup_intent_currency = Currency::USD
       expect_any_instance_of(Subscription).not_to receive(:charge!)
 

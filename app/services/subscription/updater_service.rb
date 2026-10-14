@@ -366,7 +366,10 @@ class Subscription::UpdaterService
         billing_info: params[:contact_info],
         authenticated_offer_code_buyer: logged_in_user
       )
-      pending = status == "pending" && mandate_pending_hold_allowed?
+      # Resume ends an unfixed live hold whose mandate is not in the listing currency, so never create one.
+      listing_currency_matches = subscription.current_later_charge_presentment.present? ||
+        setup_intent&.card_mandate_options&.currency.to_s.downcase == subscription.indian_card_mandate_listing_currency
+      pending = status == "pending" && mandate_pending_hold_allowed? && (is_resubscribing || listing_currency_matches)
 
       unless (status == "active" || pending) && customer_matches && binding_matches && terms_match
         ErrorNotifier.notify(
@@ -379,7 +382,8 @@ class Subscription::UpdaterService
           member_verified: member_verified?,
           customer_matches:,
           binding_matches:,
-          terms_match:
+          terms_match:,
+          listing_currency_matches:
         )
         raise Subscription::UpdateFailed, "We could not verify this card for recurring payments. Please try the card again or use a different payment method."
       end

@@ -3069,7 +3069,8 @@ describe Subscription::UpdaterService, :vcr do
             member_verified: false,
             customer_matches: true,
             binding_matches: true,
-            terms_match: true
+            terms_match: true,
+            listing_currency_matches: true
           )
         end
 
@@ -3199,6 +3200,49 @@ describe Subscription::UpdaterService, :vcr do
             expect(result).to eq(success: false, error_message: Subscription::UpdaterService::MANDATE_PENDING_PLAN_CHANGE_MESSAGE)
             expect(@subscription.reload.original_purchase.variant_attributes.to_a).to eq(original_variants)
             expect(@subscription).to be_renewal_disabled_due_to_indian_card_mandate
+          end
+
+          it "saves nothing when an INR listing's mandate was approved in USD while INR is unavailable" do
+            @product.update_column(:price_currency_type, Currency::INR)
+            @subscription.original_purchase.update_columns(displayed_price_currency_type: Currency::INR, rate_converted_to_usd: nil)
+            Redis::Namespace.new(:currencies, redis: $redis).set("INR", "80")
+            allow_any_instance_of(Subscription).to receive(:indian_card_recovery_presentment_currency).and_return(nil)
+            expect(@subscription.reload.indian_card_mandate_terms[:currency]).to eq(Currency::USD)
+            allow(ErrorNotifier).to receive(:notify)
+
+            result = restart_with_replacement_card
+
+            expect(result).to eq(success: false, error_message: rejected_message)
+            @subscription.reload
+            expect(@subscription.credit_card).to eq(@credit_card)
+            expect(@subscription.stripe_mandate_id).to be_nil
+            expect(@subscription).not_to be_indian_card_mandate_held
+            expect(ErrorNotifier).to have_received(:notify).with(
+              "Indian card update rejected without an active e-mandate",
+              hash_including(subscription: @subscription.external_id, terms_match: true, listing_currency_matches: false)
+            )
+          end
+
+          it "holds a USD listing's card whose mandate was approved in its INR fixing" do
+            canonical_price_cents = LaterChargePresentment.canonical_price_cents_for(@subscription.original_purchase)
+            @subscription.later_charge_presentments.create!(
+              processor: StripeChargeProcessor.charge_processor_id,
+              presentment_currency: Currency::INR,
+              presentment_price_cents: canonical_price_cents * 80,
+              canonical_price_cents:,
+              signup_currency_units_per_usd: BigDecimal("80"),
+              effective_from: 1.day.ago
+            )
+            expect(@subscription.reload.indian_card_mandate_terms[:currency]).to eq(Currency::INR)
+            expect(@subscription.indian_card_mandate_listing_currency).to eq(Currency::USD)
+
+            result = restart_with_replacement_card
+
+            expect(result).to eq(success: false, error_message: live_pending_message)
+            @subscription.reload
+            expect(@subscription.credit_card).to eq(replacement_card)
+            expect(@subscription.stripe_mandate_id).to eq("mandate_pending")
+            expect(@subscription).to be_indian_card_mandate_held
           end
 
           context "with an INR listing" do
