@@ -688,8 +688,8 @@ class StripePayoutProcessor
     Country.new(compliance_info.legal_entity_country_code).supports_stripe_cross_border_payouts?
   end
 
-  # Refuses a payout on a rail a takeover retired. The takeover deleted the bank this account paid,
-  # so money prepared against the account before the takeover is not sent to that bank.
+  # Refuses a payout on a rail a takeover retired, so money prepared against it before the takeover
+  # is not sent, and reverses any internal transfer into it.
   def self.fail_payout_on_adoption_retired_rail!(payment, merchant_account)
     moved = payment.stripe_internal_transfer_id.present? ? "Internal transfer #{payment.stripe_internal_transfer_id} is being reversed" : "No money was moved"
     message = "Cannot process payout: destination Stripe account #{merchant_account.charge_processor_merchant_id} " \
