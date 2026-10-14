@@ -18,6 +18,8 @@ class Api::V2::OfferCodesController < Api::V2::BaseController
                     universal: params[:universal] == "true",
                     amount_percentage: params[:amount_off].to_i,
                     max_purchase_count: params[:max_purchase_count],
+                    auto_apply: params[:auto_apply] == "true",
+                    sale_label: params[:sale_label],
                     minimum_amount_cents: params[:minimum_amount_cents].presence)
     else
       OfferCode.new(code: params[:name],
@@ -25,6 +27,8 @@ class Api::V2::OfferCodesController < Api::V2::BaseController
                     amount_cents: params[:amount_cents].presence || params[:amount_off].presence,
                     max_purchase_count: params[:max_purchase_count],
                     minimum_amount_cents: params[:minimum_amount_cents].presence,
+                    auto_apply: params[:auto_apply] == "true",
+                    sale_label: params[:sale_label],
                     currency_type: @product.price_currency_type)
     end
 
@@ -61,7 +65,7 @@ class Api::V2::OfferCodesController < Api::V2::BaseController
 
   private
     def permitted_params
-      params.permit(:max_purchase_count, :minimum_amount_cents)
+      params.permit(:max_purchase_count, :minimum_amount_cents, :auto_apply, :sale_label)
     end
 
     def check_offer_code_params

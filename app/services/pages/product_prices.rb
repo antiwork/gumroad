@@ -75,10 +75,10 @@ class Pages::ProductPrices
     def warm_offer_code_uses(products)
       # A code's option scope can hold SKUs, which have no variant_category, so the categories
       # (read by BaseVariant#owning_product_id) are preloaded for the variants alone.
-      scoped_variants = products.filter_map(&:default_offer_code).flat_map(&:variants).grep(Variant)
+      scoped_variants = products.filter_map(&:effective_default_offer_code).flat_map(&:variants).grep(Variant)
       ActiveRecord::Associations::Preloader.new(records: scoped_variants, associations: :variant_category).call
       cache = (Current.default_offer_code_uses_left ||= {})
-      capped = products.filter_map(&:default_offer_code)
+      capped = products.filter_map(&:effective_default_offer_code)
                        .select { |code| code.max_purchase_count.present? }
                        .uniq(&:id)
                        .reject { |code| cache.key?(code.id) }

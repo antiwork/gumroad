@@ -1134,6 +1134,12 @@ class Link < ApplicationRecord
     offer_codes.alive.find_by_code(code) || universal_offer_codes.find_by_code(code)
   end
 
+  # The code that applies with no ?code= in the URL. An explicit per-product default wins over
+  # the seller's shop-wide auto-apply code: the seller set it on this product deliberately.
+  def effective_default_offer_code
+    default_offer_code.presence || user.auto_apply_offer_code_for(self)
+  end
+
   # A default discount buyers can no longer redeem: the code was deleted,
   # carries no code (checkout resolves defaults by code, and legacy rows could
   # point at codeless upsell discounts), or stopped applying to this product.

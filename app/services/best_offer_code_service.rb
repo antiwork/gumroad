@@ -6,7 +6,7 @@ class BestOfferCodeService
     @url_code = url_code.presence
     @quantity = quantity
     @buyer = buyer
-    @default_code = @product.default_offer_code&.code
+    @default_code = @product.effective_default_offer_code&.code
   end
 
   def result

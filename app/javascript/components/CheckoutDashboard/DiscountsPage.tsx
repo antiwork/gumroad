@@ -95,6 +95,8 @@ export type OfferCode = {
   minimum_amount_cents: number | null;
   once_per_cart: boolean;
   existing_customers_only: boolean;
+  auto_apply: boolean;
+  sale_label: string | null;
   ownership_products: Product[];
   ownership_duration_tiers: OwnershipDurationTier[] | null;
   option_ids_by_product: Record<string, string[]>;
@@ -637,6 +639,12 @@ const DiscountsPage = ({
                       : "Forever"}
                   </CardContent>
                 ) : null}
+                {selectedOfferCode.auto_apply ? (
+                  <CardContent>
+                    <h5 className="grow font-bold">Applied automatically</h5>
+                    {selectedOfferCode.sale_label ? `On product pages (${selectedOfferCode.sale_label})` : "On product pages"}
+                  </CardContent>
+                ) : null}
                 {selectedOfferCode.minimum_amount_cents !== null ? (
                   <CardContent>
                     <h5 className="grow font-bold">Minimum amount</h5>
@@ -765,6 +773,8 @@ const DiscountsPage = ({
             minimumAmount: offerCode.minimum_amount_cents,
             oncePerCart: offerCode.once_per_cart,
             existingCustomersOnly: offerCode.existing_customers_only,
+            autoApply: offerCode.auto_apply,
+            saleLabel: offerCode.sale_label,
             ownershipProductIds: offerCode.ownership_products.map(({ id }) => id),
             ownershipDurationTiers: offerCode.ownership_duration_tiers,
           });
@@ -814,6 +824,8 @@ const DiscountsPage = ({
             minimumAmount: offerCode.minimum_amount_cents,
             oncePerCart: offerCode.once_per_cart,
             existingCustomersOnly: offerCode.existing_customers_only,
+            autoApply: offerCode.auto_apply,
+            saleLabel: offerCode.sale_label,
             ownershipProductIds: offerCode.ownership_products.map(({ id }) => id),
             ownershipDurationTiers: offerCode.ownership_duration_tiers,
           });
@@ -1000,6 +1012,8 @@ const Form = ({
   const [durationInBillingCycles, setDurationInMonths] = React.useState(offerCode?.duration_in_billing_cycles ?? null);
 
   const [existingCustomersOnly, setExistingCustomersOnly] = React.useState(!!offerCode?.existing_customers_only);
+  const [autoApply, setAutoApply] = React.useState(!!offerCode?.auto_apply);
+  const [saleLabel, setSaleLabel] = React.useState(offerCode?.sale_label ?? "");
   const [ownershipProductIds, setOwnershipProductIds] = React.useState<{ value: string[]; error?: boolean }>({
     value: offerCode?.ownership_products.map(({ id }) => id) ?? [],
   });
@@ -1142,6 +1156,8 @@ const Form = ({
       minimum_amount_cents: hasMinimumAmount ? minimumAmount.value : null,
       once_per_cart: discount.type === "cents" && !useTieredDiscounts && oncePerCart,
       existing_customers_only: existingCustomersOnly,
+      auto_apply: universal && autoApply,
+      sale_label: universal && autoApply && saleLabel.trim() ? saleLabel.trim() : null,
       ownership_products: existingCustomersOnly ? ownershipProducts : [],
       ownership_duration_tiers: tieredPayload,
       option_ids_by_product: universal ? {} : optionIdsByProduct,
@@ -1298,6 +1314,34 @@ const Form = ({
               <FieldsetDescription>
                 The discount applies to all current and future products except the ones you exclude here.
               </FieldsetDescription>
+            </Fieldset>
+          ) : null}
+          {universal ? (
+            <Fieldset>
+              <Switch
+                checked={autoApply}
+                onChange={(evt) => setAutoApply(evt.target.checked)}
+                label="Apply automatically on product pages"
+              />
+              <FieldsetDescription>
+                Buyers see the discounted price on your product pages without a link or code. Use the validity period
+                below to schedule the sale. A discount set on a single product still takes priority.
+              </FieldsetDescription>
+              {autoApply ? (
+                <>
+                  <FieldsetTitle>
+                    <Label htmlFor={`${uid}saleLabel`}>Sale label (optional)</Label>
+                  </FieldsetTitle>
+                  <Input
+                    type="text"
+                    id={`${uid}saleLabel`}
+                    placeholder="Black Friday"
+                    maxLength={32}
+                    value={saleLabel}
+                    onChange={(evt) => setSaleLabel(evt.target.value)}
+                  />
+                </>
+              ) : null}
             </Fieldset>
           ) : null}
           {canSetDuration && !useTieredDiscounts ? (

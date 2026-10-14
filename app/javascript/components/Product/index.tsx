@@ -284,6 +284,7 @@ export type Props = {
   product: Product;
   purchase: Purchase | null;
   discount_code: ProductDiscount | null;
+  sale_label?: string | null;
   wishlists: WishlistForProduct[];
 };
 
@@ -294,6 +295,7 @@ export const Product = ({
   product,
   purchase,
   discountCode: initialDiscountCode,
+  saleLabel,
   ctaLabel,
   selection,
   setSelection,
@@ -307,6 +309,8 @@ export const Product = ({
   product: Product;
   purchase: Purchase | null;
   discountCode?: ProductDiscount | null;
+  // The seller's sale label; only sent when the displayed discount is their auto-applied code.
+  saleLabel?: string | null | undefined;
   ctaLabel?: string | undefined;
   selection: PriceSelection;
   setSelection?: React.Dispatch<React.SetStateAction<PriceSelection>>;
@@ -446,6 +450,11 @@ export const Product = ({
                 )}
                 buyerLocalOriginalPriceCents={product.buyer_local_original_price_cents}
               />
+              {saleLabel && discountCode === initialDiscountCode && discountCode?.valid ? (
+                <div className="mt-2" data-testid="sale-label">
+                  <Pill size="small">{saleLabel}</Pill>
+                </div>
+              ) : null}
             </div>
           ) : null}
           {sellerByline ? (

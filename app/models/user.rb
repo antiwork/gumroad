@@ -686,6 +686,23 @@ class User < ApplicationRecord
     1 - purchasing_power_parity_limit / 100.0
   end
 
+  # The seller's shop-wide auto-applied code when it applies to `product` (alive, currency match,
+  # not excluded), else nil. The code is resolved once per request (Current memo) with its
+  # exclusions loaded, so pricing a page of products adds no per-product query.
+  def auto_apply_offer_code_for(product)
+    code = auto_apply_offer_code
+    return if code.nil? || code.deleted? || code.code.blank? || !code.universal?
+
+    code if code.applicable?(product)
+  end
+
+  def auto_apply_offer_code
+    cache = (Current.auto_apply_offer_codes ||= {})
+    return cache[id] if cache.key?(id)
+
+    cache[id] = offer_codes.alive.universal.where(auto_apply: true).includes(:excluded_products, :variants).first
+  end
+
   def purchasing_power_parity_excluded_product_external_ids
     products.purchasing_power_parity_disabled.map(&:external_id)
   end

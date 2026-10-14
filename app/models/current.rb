@@ -8,5 +8,7 @@ class Current < ActiveSupport::CurrentAttributes
   # default_offer_code_uses_left memoizes offer_code_id => whether a capped default code
   # still has uses, for the same reason: the check is a purchases aggregate, and one code
   # can be the default on many products of a page.
-  attribute :admin_actor, :admin_token, :buyer_currency_merchant_accounts, :default_offer_code_uses_left
+  # auto_apply_offer_codes memoizes user_id => the seller's shop-wide auto-apply code (or nil),
+  # so a listing page resolves it once per seller instead of once per product.
+  attribute :admin_actor, :admin_token, :buyer_currency_merchant_accounts, :default_offer_code_uses_left, :auto_apply_offer_codes
 end

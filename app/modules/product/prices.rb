@@ -224,7 +224,7 @@ module Product::Prices
   # Pass `option:` when base_price_cents is that option's price, so an option-scoped code is
   # checked against that option instead of the lowest-priced one.
   def discounted_price_cents(base_price_cents, option: nil)
-    offer_code = default_offer_code
+    offer_code = effective_default_offer_code
     return base_price_cents if offer_code.blank? || offer_code.deleted? || offer_code.inactive? || offer_code.existing_customers_only?
     # A fixed-cents code stops matching after a product currency change; checkout's
     # find_offer_code refuses that pair, so the quote must too.

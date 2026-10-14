@@ -35,6 +35,7 @@ class OfferCode < ApplicationRecord
   alias_attribute :duration_in_billing_cycles, :duration_in_months
 
   MAX_OWNERSHIP_DURATION_TIERS = 10
+  MAX_SALE_LABEL_LENGTH = 32
   # Enough for the seller to recognise the products without an unbounded message.
   NAMED_DEFAULT_DISCOUNT_PRODUCTS = 3
 
@@ -51,9 +52,14 @@ class OfferCode < ApplicationRecord
   validate :validate_excluded_products
   validate :validate_default_discount_remains_applicable
   validate :validate_option_scope
+  validate :validate_auto_apply
+  validate :validate_sale_label
 
+
+  before_validation :normalize_sale_label
 
   after_save :invalidate_product_cache
+  after_save { Current.auto_apply_offer_codes = nil }
   after_save :reindex_associated_products
   after_save :note_column_applicability_changes
   after_commit :repair_detached_default_discounts, if: -> { @applicability_changed }
@@ -161,6 +167,8 @@ class OfferCode < ApplicationRecord
         max_purchase_count:,
         minimum_amount_cents:,
         universal: universal?,
+        auto_apply:,
+        sale_label:,
         times_used:
       }
 
@@ -182,6 +190,8 @@ class OfferCode < ApplicationRecord
       max_purchase_count:,
       minimum_amount_cents:,
       universal: universal?,
+      auto_apply:,
+      sale_label:,
       times_used:
     }
 
@@ -684,6 +694,38 @@ class OfferCode < ApplicationRecord
     def capture_reindex_product_ids
       @reindex_product_ids = products.ids
       @reindex_excluded_product_ids = excluded_products.ids if universal?
+    end
+
+    def normalize_sale_label
+      self.sale_label = sale_label.to_s.strip.presence
+    end
+
+    def validate_sale_label
+      return if sale_label.blank?
+
+      if sale_label.length > MAX_SALE_LABEL_LENGTH
+        errors.add(:base, "The sale label can be at most #{MAX_SALE_LABEL_LENGTH} characters.")
+      elsif sale_label.match?(/[<>]/)
+        errors.add(:base, "The sale label must be plain text.")
+      end
+    end
+
+    # A seller has at most one shop-wide auto-applied code, and it must be a plain
+    # "all products" discount. Never clears another code silently: the seller turns
+    # the other one off first.
+    def validate_auto_apply
+      return unless auto_apply?
+      return if deleted_at.present?
+
+      errors.add(:base, "Only a discount that applies to all products can be applied automatically.") unless universal?
+      errors.add(:base, "A cancellation or upsell discount cannot be applied automatically.") if is_cancellation_discount? || upsell.present?
+      return if user_id.blank?
+
+      other = OfferCode.alive.where(user_id:, auto_apply: true)
+      other = other.where.not(id:) if persisted?
+      if (existing = other.first)
+        errors.add(:base, "Another discount (#{existing.code}) is already applied automatically. Turn it off first.")
+      end
     end
 
     def validate_not_used_as_default_discount
