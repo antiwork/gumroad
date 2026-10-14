@@ -8,7 +8,7 @@ import { assertDefined } from "$app/utils/assert";
 import { cast } from "$app/utils/cast";
 import FileUtils, { ALLOWED_EXTENSIONS } from "$app/utils/file";
 import { isRecord, isString } from "$app/utils/guards";
-import { assertResponseError, readJson, request, ResponseError } from "$app/utils/request";
+import { readJson, request, ResponseError } from "$app/utils/request";
 
 import { PublicFileWithStatus } from "$app/components/ProductEdit/state";
 import {
@@ -313,30 +313,29 @@ export const DescriptionEditor = ({
     () => ({
       onUpload: (file: File) => {
         setImagesUploading((prev) => new Set(prev).add(file));
-        return new Promise<string>((resolve, reject) => {
+        return new Promise<{ key: string }>((resolve, reject) => {
           const upload = new DirectUpload(file, Routes.rails_direct_uploads_path());
           upload.create((error, blob) => {
+            if (error) reject(error);
+            else resolve(blob);
+          });
+        })
+          .then((blob) =>
+            request({
+              method: "GET",
+              accept: "json",
+              url: Routes.s3_utility_cdn_url_for_blob_path({ key: blob.key }),
+            }),
+          )
+          .then((response) => response.json())
+          .then((data) => cast<{ url: string }>(data).url)
+          .finally(() => {
             setImagesUploading((prev) => {
               const updated = new Set(prev);
               updated.delete(file);
               return updated;
             });
-
-            if (error) reject(error);
-            else
-              request({
-                method: "GET",
-                accept: "json",
-                url: Routes.s3_utility_cdn_url_for_blob_path({ key: blob.key }),
-              })
-                .then((response) => response.json())
-                .then((data) => resolve(cast<{ url: string }>(data).url))
-                .catch((e: unknown) => {
-                  assertResponseError(e);
-                  reject(e);
-                });
           });
-        });
       },
       allowedExtensions: ALLOWED_EXTENSIONS,
       maxFileSize: MAX_ALLOWED_IMAGE_SIZE_IN_BYTES,
