@@ -176,6 +176,17 @@ describe RecurringChargeWorker, :vcr do
       expect(subscription.later_charge_presentments).to be_empty
     end
 
+    it "keeps a price fixing recorded by someone else before the lock" do
+      fixing = nil
+      @on_get_setup_intent = -> { fixing ||= create(:later_charge_presentment, owner: subscription, presentment_currency: Currency::INR, presentment_price_cents: 75_000, effective_from: 1.minute.ago) }
+      expect_any_instance_of(Subscription).to receive(:charge!)
+
+      perform_after_period
+
+      expect(subscription.reload.later_charge_presentments.to_a).to eq([fixing])
+      expect(subscription).not_to be_renewal_disabled_due_to_indian_card_mandate
+    end
+
     it "leaves a newer hold alone when the mandate is replaced before the lock that would end the hold" do
       @setup_intent_currency = Currency::USD
       @on_get_setup_intent = -> { Subscription.where(id: subscription.id).update_all(stripe_mandate_id: "mandate_newer") }
