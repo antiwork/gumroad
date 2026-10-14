@@ -14,7 +14,10 @@ module User::SocialApple
       user = auth&.user
 
       if user.nil?
-        email = data.dig("info", "email")
+        email = verified_apple_email(data)
+        # An address Apple has not verified must not create an account that would then hold the identity.
+        return nil if email.nil? && data.dig("info", "email").present?
+
         user = User.where(email:).first if EmailFormatValidator.valid?(email)
 
         if user.nil?
@@ -50,7 +53,7 @@ module User::SocialApple
       def apply_apple_data(user, data, new_user: false)
         return if data.blank? || data.is_a?(String)
 
-        email = data.dig("info", "email")
+        email = verified_apple_email(data)
 
         if user.name.blank? && data.dig("info", "name").present?
           sanitized_name = data.dig("info", "name").gsub(User::INVALID_NAME_FOR_EMAIL_DELIVERY_REGEX, "")
@@ -81,6 +84,13 @@ module User::SocialApple
         end
 
         user
+      end
+
+      # Apple sends false for some Work & School accounts, and may send the flag as a string.
+      def verified_apple_email(data)
+        verified = data.dig("info", "email_verified")
+        verified = data.dig("extra", "raw_info", "id_info", "email_verified") if verified.nil?
+        data.dig("info", "email") if verified == true || verified == "true"
       end
   end
 end

@@ -3,6 +3,7 @@
   "uid": "001234.abcdef1234567890abcdef1234567890.1234",
   "info": {
     "email": "apple-user@example.com",
+    "email_verified": true,
     "name": "Jane Appleseed",
     "first_name": "Jane",
     "last_name": "Appleseed"

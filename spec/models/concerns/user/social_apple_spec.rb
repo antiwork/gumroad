@@ -12,6 +12,7 @@ describe User::SocialApple do
         "uid" => apple_uid,
         "info" => {
           "email" => "apple-user@example.com",
+          "email_verified" => true,
           "name" => "Jane Appleseed"
         }
       }
@@ -91,7 +92,7 @@ describe User::SocialApple do
       it "drops the password the signup never proved and confirms the account", :aggregate_failures do
         password_set_at_signup = "chosen-by-whoever-signed-up"
         unconfirmed_user = create(:unconfirmed_user, email: "apple-unconfirmed@example.com", password: password_set_at_signup)
-        data = apple_data.merge("uid" => "001234.apple-unconfirmed", "info" => { "email" => "apple-unconfirmed@example.com" })
+        data = apple_data.merge("uid" => "001234.apple-unconfirmed", "info" => { "email" => "apple-unconfirmed@example.com", "email_verified" => true })
 
         result = User.find_or_create_for_apple_oauth(data)
 
@@ -103,7 +104,7 @@ describe User::SocialApple do
       it "drops that password when the account had already confirmed its email" do
         password_set_at_signup = "chosen-by-whoever-signed-up"
         confirmed_user = create(:user, email: "apple-confirmed@example.com", password: password_set_at_signup)
-        data = apple_data.merge("uid" => "001234.apple-confirmed", "info" => { "email" => "apple-confirmed@example.com" })
+        data = apple_data.merge("uid" => "001234.apple-confirmed", "info" => { "email" => "apple-confirmed@example.com", "email_verified" => true })
 
         User.find_or_create_for_apple_oauth(data)
 
@@ -118,7 +119,7 @@ describe User::SocialApple do
         unconfirmed_user.create_totp_credential!(confirmed_at: Time.current)
         create(:device, user: unconfirmed_user)
         unconfirmed_user.update!(twitter_user_id: "9876543210")
-        data = apple_data.merge("uid" => "001234.apple-revoke", "info" => { "email" => "apple-revoke@example.com" })
+        data = apple_data.merge("uid" => "001234.apple-revoke", "info" => { "email" => "apple-revoke@example.com", "email_verified" => true })
 
         expect(User.find_or_create_for_apple_oauth(data)).to eq(unconfirmed_user)
 
@@ -138,7 +139,7 @@ describe User::SocialApple do
                                                      payment_address: "paypal-payouts@example.com")
         payout_destinations = [create(:merchant_account_stripe_connect, user: unconfirmed_user), create(:ach_account, user: unconfirmed_user)]
         team = [create(:team_membership, seller: unconfirmed_user), create(:team_invitation, seller: unconfirmed_user, email: "invited-before-adoption@example.com")]
-        data = apple_data.merge("uid" => "001234.apple-store", "info" => { "email" => "apple-store@example.com" })
+        data = apple_data.merge("uid" => "001234.apple-store", "info" => { "email" => "apple-store@example.com", "email_verified" => true })
 
         expect(User.find_or_create_for_apple_oauth(data)).to eq(unconfirmed_user)
 
@@ -152,7 +153,7 @@ describe User::SocialApple do
       it "does not apply a confirmed account's pending email change", :aggregate_failures do
         confirmed_user = create(:user, email: "apple-pending@example.com")
         confirmed_user.update!(email: "owner-pending@example.com")
-        data = apple_data.merge("uid" => "001234.apple-pending", "info" => { "email" => "apple-pending@example.com" })
+        data = apple_data.merge("uid" => "001234.apple-pending", "info" => { "email" => "apple-pending@example.com", "email_verified" => true })
 
         User.find_or_create_for_apple_oauth(data)
 
@@ -163,10 +164,53 @@ describe User::SocialApple do
       it "invalidates the sessions the password signup left behind" do
         password_set_at_signup = "chosen-by-whoever-signed-up"
         unconfirmed_user = create(:unconfirmed_user, email: "apple-sessions@example.com", password: password_set_at_signup)
-        data = apple_data.merge("uid" => "001234.apple-sessions", "info" => { "email" => "apple-sessions@example.com" })
+        data = apple_data.merge("uid" => "001234.apple-sessions", "info" => { "email" => "apple-sessions@example.com", "email_verified" => true })
 
         expect { User.find_or_create_for_apple_oauth(data) }
           .to change { unconfirmed_user.reload.last_active_sessions_invalidated_at }.from(nil).to(be_present)
+      end
+    end
+
+    describe "Apple's email_verified flag" do
+      let!(:existing_user) { create(:user, email: "apple-user@example.com", confirmed_at: nil) }
+
+      it "adopts the account for a boolean true" do
+        expect(User.find_or_create_for_apple_oauth(apple_data)).to eq(existing_user)
+      end
+
+      it "adopts the account for the string \"true\"" do
+        apple_data["info"].delete("email_verified")
+        apple_data["extra"] = { "raw_info" => { "id_info" => { "email_verified" => "true" } } }
+
+        expect(User.find_or_create_for_apple_oauth(apple_data)).to eq(existing_user)
+      end
+
+      [false, "false", nil].each do |flag|
+        it "refuses the sign-in when the flag is #{flag.inspect} and no account holds the Apple identity", :aggregate_failures do
+          existing_user.update!(password: "chosen-by-the-signup")
+          apple_data["info"]["email_verified"] = flag
+          apple_data["info"].compact!
+
+          expect { expect(User.find_or_create_for_apple_oauth(apple_data)).to be_nil }.not_to change { User.count }
+
+          expect(existing_user.reload.valid_password?("chosen-by-the-signup")).to be(true)
+          expect(existing_user.confirmed?).to be(false)
+          expect(UserExternalAuthentication.where(provider: "apple", uid: apple_uid)).to be_empty
+        end
+      end
+
+      it "refuses an unverified flag sent only in the raw id token" do
+        apple_data["info"].delete("email_verified")
+        apple_data["extra"] = { "raw_info" => { "id_info" => { "email_verified" => "false" } } }
+
+        expect(User.find_or_create_for_apple_oauth(apple_data)).to be_nil
+      end
+
+      it "still signs in the account that already holds the Apple identity" do
+        UserExternalAuthentication.create!(user: existing_user, provider: "apple", uid: apple_uid)
+        apple_data["info"]["email_verified"] = false
+
+        expect(User.find_or_create_for_apple_oauth(apple_data)).to eq(existing_user)
       end
     end
 
@@ -181,7 +225,7 @@ describe User::SocialApple do
 
     context "when name is nil" do
       it "creates a user without a name" do
-        data = apple_data.merge("info" => { "email" => "apple-user@example.com", "name" => nil })
+        data = apple_data.merge("info" => { "email" => "apple-user@example.com", "email_verified" => true, "name" => nil })
 
         User.find_or_create_for_apple_oauth(data)
 
