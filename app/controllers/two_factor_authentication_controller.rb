@@ -117,7 +117,9 @@ class TwoFactorAuthenticationController < ApplicationController
 
     def sign_in_with_two_factor_authentication(user)
       sign_in(user) unless user_signed_in?
-      user.confirm unless user.confirmed?
+      # The emailed code proves only the current address. An authenticator or recovery code proves who set it
+      # up, and confirming a pending change would apply an address the code never reached.
+      user.confirm if two_factor_auth_method == "email" && !user.confirmed? && !user.pending_reconfirmation?
 
       remember_two_factor_auth
       reset_two_factor_auth_login_session

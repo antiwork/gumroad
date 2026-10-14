@@ -89,6 +89,19 @@ describe TwoFactorAuthenticationController, type: :controller, inertia: true do
 
       expect(@user.reload.confirmed?).to eq true
     end
+
+    it "does not apply a pending email change the code was not sent to", :aggregate_failures do
+      @user.update!(confirmed_at: nil)
+      original_email = @user.email
+      @user.update!(email: "pending-#{original_email}")
+      expect(@user.reload.unconfirmed_email).to eq("pending-#{original_email}")
+
+      call_action
+
+      expect(@user.reload.email).to eq(original_email)
+      expect(@user.unconfirmed_email).to eq("pending-#{original_email}")
+      expect(@user).not_to be_confirmed
+    end
   end
 
   # `expected_login_url` is spelled out at each call site rather than derived from the request, so
@@ -448,6 +461,15 @@ describe TwoFactorAuthenticationController, type: :controller, inertia: true do
         expect(response).to redirect_to(controller.send(:login_path_for, @user))
       end
 
+      it "signs in an unconfirmed user without confirming the email address", :aggregate_failures do
+        @user.update!(confirmed_at: nil)
+
+        post :create, params: { token: totp_credential.otp_code, user_id: @user.encrypted_external_id }
+
+        expect(controller.logged_in_user).to eq(@user)
+        expect(@user.reload).not_to be_confirmed
+      end
+
       it "rejects an invalid TOTP code" do
         post :create, params: { token: "invalid", user_id: @user.encrypted_external_id }
 
@@ -488,6 +510,15 @@ describe TwoFactorAuthenticationController, type: :controller, inertia: true do
         expect(flash[:notice]).to eq "Successfully logged in!"
         expect(response).to redirect_to(controller.send(:login_path_for, @user))
         expect(totp_credential.reload.recovery_codes.size).to eq(9)
+      end
+
+      it "signs in an unconfirmed user without confirming the email address", :aggregate_failures do
+        @user.update!(confirmed_at: nil)
+
+        post :create, params: { token: recovery_codes.first, user_id: @user.encrypted_external_id }
+
+        expect(controller.logged_in_user).to eq(@user)
+        expect(@user.reload).not_to be_confirmed
       end
 
       it "rejects an already-used recovery code" do
