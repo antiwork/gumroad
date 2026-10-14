@@ -1139,9 +1139,14 @@ class Link < ApplicationRecord
   # would otherwise hold this product at full price through the shop-wide sale.
   def effective_default_offer_code
     explicit = default_offer_code
-    return explicit if explicit.present? && !explicit.deleted? && !explicit.inactive? && default_offer_code_uses_left?(explicit)
+    auto_code = user.auto_apply_offer_code_for(self)
+    return explicit if auto_code.nil?
+    return auto_code if explicit.nil?
 
-    user.auto_apply_offer_code_for(self) || explicit
+    # The detached check can query the code's products, so it runs last and only when there is
+    # an auto code to fall back to.
+    redeemable = !explicit.inactive? && explicit.is_currency_valid?(self) && default_offer_code_uses_left?(explicit) && !default_offer_code_detached?
+    redeemable ? explicit : auto_code
   end
 
   # A default discount buyers can no longer redeem: the code was deleted,

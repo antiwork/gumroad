@@ -229,8 +229,8 @@ describe Pages::ProductPrices do
 
     # discounted_price_cents reads default_offer_code for every product, so a profile whose
     # products are all discounted issues one offer-code query per product unless it is preloaded —
-    # on an uncached public page rendered up to MAX_ITEMS times. The second query is the codes'
-    # option scope (offer_codes_variants), also loaded once for the whole page.
+    # on an uncached public page rendered up to MAX_ITEMS times. The other two are the codes'
+    # option scope (offer_codes_variants) and the seller's auto-applied code, each loaded once.
     it "loads the default offer codes in a fixed number of queries regardless of how many products carry one" do
       offer_code = seller.offer_codes.create!(code: "half", amount_percentage: 50, products: [product])
       product.update!(default_offer_code: offer_code)
@@ -247,7 +247,7 @@ describe Pages::ProductPrices do
       described_class.build(seller, ip: nil)
       ActiveSupport::Notifications.unsubscribe(subscriber)
 
-      expect(queries.size).to eq(2)
+      expect(queries.size).to eq(3)
     end
 
     it "hands spent capped defaults over to the auto-applied code without a per-product uses read" do

@@ -168,12 +168,47 @@ describe Link do
       expect(product.reload.effective_default_offer_code).to eq(own)
       expect(product.discounted_price_cents(1000)).to eq(1000)
     end
+
+    context "when checkout refuses the explicit default" do
+      let(:other_product) { create(:product, user: seller, price_cents: 1000) }
+      let(:detached) { seller.offer_codes.create!(code: "ELSEWHERE", amount_percentage: 50, products: [other_product]) }
+
+      it "falls back to the auto-applied code when the explicit default no longer applies to the product" do
+        auto_code
+        product.update_column(:default_offer_code_id, detached.id)
+
+        expect(product.reload.effective_default_offer_code).to eq(auto_code)
+        expect(product.discounted_price_cents(1000)).to eq(800)
+      end
+
+      it "falls back to the auto-applied code when the explicit default has no code" do
+        auto_code
+        own.update_column(:code, nil)
+
+        expect(product.reload.effective_default_offer_code).to eq(auto_code)
+      end
+
+      it "falls back to the auto-applied code when a fixed-amount default no longer matches the product's currency" do
+        auto_code
+        own.update!(amount_percentage: nil, amount_cents: 300, currency_type: "usd")
+        product.update!(price_currency_type: "eur", price_range: "10")
+
+        expect(product.reload.effective_default_offer_code).to eq(auto_code)
+        expect(product.discounted_price_cents(1000)).to eq(800)
+      end
+
+      it "returns the explicit default unchanged when the seller has no auto-applied code" do
+        product.update_column(:default_offer_code_id, detached.id)
+
+        expect(product.reload.effective_default_offer_code).to eq(detached)
+      end
+    end
   end
 
   describe "repairing detached defaults after concurrent edits" do
     let(:seller) { create(:user) }
     let(:product) { create(:product, user: seller, price_cents: 2000) }
-    let(:other_product) { create(:product, user: seller) }
+    let(:other_product) { create(:product, user: seller, price_cents: 1000) }
 
     it "clears a default whose code was detached before the assignment committed" do
       offer_code = create(:offer_code, user: seller, products: [product, other_product])
