@@ -75,12 +75,19 @@ describe Api::V2::OfferCodesController do
       end
 
       it "accepts a JSON boolean for auto_apply" do
-        post @action, params: @params.merge(universal: "true", auto_apply: true, sale_label: "Black Friday")
+        post @action, params: @params.merge(universal: "true", auto_apply: true, sale_label: "Black Friday"), as: :json
 
         expect(response.parsed_body["success"]).to eq(true)
         code = @user.offer_codes.alive.last
         expect(code).to have_attributes(auto_apply: true, sale_label: "Black Friday", universal: true)
         expect(response.parsed_body["offer_code"]).to include("auto_apply" => true, "sale_label" => "Black Friday")
+      end
+
+      it "leaves auto apply off when it is false or omitted" do
+        post @action, params: @params.merge(universal: "true", auto_apply: "false")
+        post @action, params: @params.merge(name: "omitted", universal: "true")
+
+        expect(@user.offer_codes.alive.pluck(:code, :auto_apply)).to contain_exactly(["hi", false], ["omitted", false])
       end
 
       describe "incorrect parameters" do
@@ -292,6 +299,15 @@ describe Api::V2::OfferCodesController do
 
         expect(response.parsed_body["success"]).to eq(false)
         expect(@offer_code.reload.auto_apply).to eq(false)
+      end
+
+      it "enables auto apply on a universal code from a JSON boolean" do
+        @offer_code.update!(universal: true, products: [])
+
+        put @action, params: @params.merge(auto_apply: true), as: :json
+
+        expect(response.parsed_body["success"]).to eq(true)
+        expect(@offer_code.reload.auto_apply).to eq(true)
       end
 
       it "fails gracefully on bad id" do
