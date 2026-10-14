@@ -56,12 +56,6 @@ class InstallmentPresenter
       )
     else
       attrs.merge!(
-        clicked_urls: installment.clicked_urls.map do |(url, clicks_count)|
-          {
-            url: url == EmailEventInfo::VIEW_ATTACHMENTS_URL ? "View content" : url,
-            count: clicks_count
-          }
-        end,
         view_count: installment.shown_on_profile? ? installment.installment_events_count : nil,
         full_url: installment.full_url,
         has_been_blasted: installment.has_been_blasted?,
@@ -93,6 +87,16 @@ class InstallmentPresenter
 
   def edit_page_props
     { context: installment_form_context_props, installment: props }
+  end
+
+  # Not in `props`: it is a DynamoDB Query per post, and the list needs it only for the post the seller opens.
+  def clicked_urls_props
+    installment.clicked_urls.map do |(url, clicks_count)|
+      {
+        url: url == EmailEventInfo::VIEW_ATTACHMENTS_URL ? "View content" : url,
+        count: clicks_count
+      }
+    end
   end
 
   private

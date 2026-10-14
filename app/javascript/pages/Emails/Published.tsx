@@ -2,10 +2,12 @@ import { InfoCircle } from "@boxicons/react";
 import { router, usePage } from "@inertiajs/react";
 import React from "react";
 
-import { Pagination, PublishedInstallment } from "$app/data/installments";
+import { ClickedUrl, getClickedUrls, Pagination, PublishedInstallment } from "$app/data/installments";
 import { assertDefined } from "$app/utils/assert";
 import { cast } from "$app/utils/cast";
 import { formatStatNumber } from "$app/utils/formatStatNumber";
+import { asyncVoid } from "$app/utils/promise";
+import { AbortError, assertResponseError } from "$app/utils/request";
 
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { EmptyStatePlaceholder } from "$app/components/EmailsPage/EmptyStatePlaceholder";
@@ -17,7 +19,9 @@ import {
   type RemainingSend,
 } from "$app/components/EmailsPage/shared";
 import { useEmailSearch } from "$app/components/EmailsPage/useEmailSearch";
+import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Modal } from "$app/components/Modal";
+import { showAlert } from "$app/components/server-components/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { LinkButton } from "$app/components/ui/LinkButton";
 import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
@@ -179,7 +183,8 @@ export default function EmailsPublished() {
                           : "n/a"}
                       </TableCell>
                       <TableCell className="whitespace-nowrap">
-                        {installment.clicked_urls.length > 0 ? (
+                        {/* click_count goes up in the same write as a per-URL count, so a non-zero count means there are URLs to list. */}
+                        {installment.click_count > 0 ? (
                           <LinkButton
                             className="decoration-dotted underline-offset-2 hover:decoration-solid"
                             aria-label={`View clicked URLs for ${installment.name}`}
@@ -354,32 +359,10 @@ export default function EmailsPublished() {
               </Sheet>
             ) : null}
             {clickedUrlsInstallment ? (
-              <Modal
-                open
-                title="Clicked URLs"
+              <ClickedUrlsModal
+                installment={clickedUrlsInstallment}
                 onClose={() => setClickedUrlsInstallmentId(null)}
-                className="w-full max-w-2xl"
-              >
-                <p className="text-muted">{clickedUrlsInstallment.name}</p>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>URL</TableHead>
-                      <TableHead className="text-right">Clicks</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {clickedUrlsInstallment.clicked_urls.map(({ url, count }) => (
-                      <TableRow key={url}>
-                        <TableCell className="break-all whitespace-normal">{url}</TableCell>
-                        <TableCell className="text-right whitespace-nowrap">
-                          {formatStatNumber({ value: count })}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </Modal>
+              />
             ) : null}
             <DeleteEmailModal
               installment={deletingInstallment}
@@ -398,3 +381,50 @@ export default function EmailsPublished() {
     </EmailsLayout>
   );
 }
+
+const ClickedUrlsModal = ({ installment, onClose }: { installment: PublishedInstallment; onClose: () => void }) => {
+  const [clickedUrls, setClickedUrls] = React.useState<ClickedUrl[] | null>(null);
+
+  React.useEffect(() => {
+    const abort = new AbortController();
+    asyncVoid(async () => {
+      try {
+        setClickedUrls(await getClickedUrls(installment.external_id, abort.signal));
+      } catch (error) {
+        if (error instanceof AbortError) return;
+        assertResponseError(error);
+        showAlert("Sorry, something went wrong. Please try again.", "error");
+        onClose();
+      }
+    })();
+    return () => abort.abort();
+  }, [installment.external_id]);
+
+  return (
+    <Modal open title="Clicked URLs" onClose={onClose} className="w-full max-w-2xl">
+      <p className="text-muted">{installment.name}</p>
+      {clickedUrls ? (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>URL</TableHead>
+              <TableHead className="text-right">Clicks</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {clickedUrls.map(({ url, count }) => (
+              <TableRow key={url}>
+                <TableCell className="break-all whitespace-normal">{url}</TableCell>
+                <TableCell className="text-right whitespace-nowrap">{formatStatNumber({ value: count })}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      ) : (
+        <div className="flex justify-center">
+          <LoadingSpinner className="size-8" />
+        </div>
+      )}
+    </Modal>
+  );
+};
