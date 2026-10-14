@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
-import { act, cleanup, fireEvent, render } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { Editor } from "@tiptap/core";
+import { NodeSelection } from "@tiptap/pm/state";
 import { EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import * as React from "react";
@@ -163,47 +164,75 @@ describe("ExternalMediaFileEmbed node view", () => {
 });
 
 describe("Raw node view", () => {
-  it("offers a Delete action that removes the block, and keeps its iframe from eating clicks", async () => {
+  const INTRO = { type: "paragraph", content: [{ type: "text", text: "Intro" }] };
+  const RAW = {
+    type: "raw",
+    attrs: { html: '<iframe src="about:blank"></iframe>', title: "Flipbook", url: "https://heyzine.com/x" },
+  };
+  const mount = async (editable: boolean) => {
     const editor = new Editor({
       extensions: [StarterKit, Raw],
-      content: {
-        type: "doc",
-        content: [
-          {
-            type: "raw",
-            attrs: {
-              html: '<iframe src="about:blank"></iframe>',
-              title: "Flipbook",
-              url: "https://heyzine.com/x",
-            },
-          },
-          { type: "paragraph" },
-        ],
-      },
+      editable,
+      content: { type: "doc", content: [INTRO, RAW, { type: "horizontalRule" }] },
     });
+    await act(async () => {
+      render(<EditorContent editor={editor} />);
+    });
+    return editor;
+  };
+  const topLevelTypes = (editor: Editor) => editor.getJSON().content?.map((node) => node.type);
 
+  it("selects the block on a click that reaches it, so Backspace removes it and not its neighbour", async () => {
+    const editor = await mount(true);
     try {
+      const embed = editor.view.dom.querySelector<HTMLElement>(".tiptap__raw");
+      if (!embed) throw new Error("embed did not mount");
+      expect(embed.classList).toContain("[&_iframe]:pointer-events-none");
+      // happy-dom has no layout, so hand ProseMirror the clicked element; the system spec covers
+      // the iframe letting the click through.
+      vi.spyOn(document, "elementFromPoint").mockReturnValue(embed);
+      expect(editor.state.selection instanceof NodeSelection).toBe(false);
       await act(async () => {
-        render(<EditorContent editor={editor} />);
+        fireEvent.mouseDown(embed, { button: 0, clientX: 1, clientY: 1 });
+        fireEvent.mouseUp(embed, { button: 0, clientX: 1, clientY: 1 });
       });
-      expect(document.querySelector(".tiptap__raw.\\[\\&_iframe\\]\\:pointer-events-none")).not.toBeNull();
+      const { selection } = editor.state;
+      expect(selection instanceof NodeSelection && selection.node.type.name).toBe("raw");
 
+      act(() => {
+        editor.commands.keyboardShortcut("Backspace");
+      });
+      expect(topLevelTypes(editor)).toEqual(["paragraph", "horizontalRule"]);
+    } finally {
+      vi.restoreAllMocks();
+      editor.destroy();
+    }
+  });
+
+  it("offers a Delete action that removes the block only while editing", async () => {
+    const editor = await mount(true);
+    try {
       const trigger = document.querySelector<HTMLElement>("[aria-label='Actions']");
       if (!trigger) throw new Error("actions menu did not mount");
       await act(async () => {
         fireEvent.click(trigger);
       });
-      const del = [...document.querySelectorAll("[role='menuitem'], button, div")].find(
-        (el) => el.children.length <= 2 && el.textContent?.trim() === "Delete",
-      );
-      if (!del) throw new Error("Delete item did not mount");
       await act(async () => {
-        fireEvent.click(del);
+        fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
       });
-
-      expect(editor.getJSON().content?.some((n) => n.type === "raw")).toBe(false);
+      expect(topLevelTypes(editor)).toEqual(["paragraph", "horizontalRule"]);
     } finally {
       editor.destroy();
+    }
+
+    const readOnly = await mount(false);
+    try {
+      const embed = readOnly.view.dom.querySelector(".tiptap__raw");
+      expect(embed?.parentElement).toBe(readOnly.view.dom);
+      expect(embed?.getAttribute("data-url")).toBe("https://heyzine.com/x");
+      expect(readOnly.view.dom.querySelector("[aria-label='Actions']")).toBeNull();
+    } finally {
+      readOnly.destroy();
     }
   });
 });
