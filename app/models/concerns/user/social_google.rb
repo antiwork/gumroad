@@ -120,6 +120,14 @@ module User::SocialGoogle
 
       email = data["info"]["email"] || data["extra"]["raw_info"]["email"]
 
+      # A password signup proves nothing about the address, and a confirmed row is no proof either (it
+      # can be confirmed without mailbox access). A sign-in that brings the first Google identity for
+      # such a row is adopting it, so the password and the sessions the signup left behind go with it.
+      if user.provider.blank? && user.google_uid.blank?
+        user.password = Devise.friendly_token(User::RANDOM_PASSWORD_LENGTH)
+        user.invalidate_active_sessions!
+      end
+
       # Don't set user properties if they already have values
       user.google_uid ||= data["uid"]
 
@@ -142,14 +150,6 @@ module User::SocialGoogle
 
       # Set user's avatar if they don't have one
       user.google_picture_url(data) unless user.avatar.attached?
-
-      # A password signup proves nothing about the address, and a confirmed row is no proof either (it
-      # can be confirmed without mailbox access), so a Google sign-in drops that password and the
-      # sessions the signup left behind.
-      if user.provider.blank?
-        user.password = Devise.friendly_token(User::RANDOM_PASSWORD_LENGTH)
-        user.invalidate_active_sessions!
-      end
 
       user.skip_confirmation_notification!
       user.save!

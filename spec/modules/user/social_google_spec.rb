@@ -76,6 +76,16 @@ describe User::SocialGoogle do
         expect { User.find_or_create_for_google_oauth2(@data_copy2) }
           .to change { created_user.reload.last_active_sessions_invalidated_at }.from(nil).to(be_present)
       end
+
+      it "leaves the password and the sessions alone once the account has a Google identity", :aggregate_failures do
+        created_user = create(:user, email: @data_copy2["info"]["email"], password: password_set_at_signup,
+                                     google_uid: @data_copy2["uid"])
+
+        User.find_or_create_for_google_oauth2(@data_copy2)
+
+        expect(created_user.reload.valid_password?(password_set_at_signup)).to be(true)
+        expect(created_user.last_active_sessions_invalidated_at).to be_nil
+      end
     end
 
     context "when the matched account was deleted and its email freed to another account" do

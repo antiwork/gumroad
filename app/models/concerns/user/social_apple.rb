@@ -62,9 +62,9 @@ module User::SocialApple
         end
 
         # A password signup proves nothing about the address, and a confirmed row is no proof either (it
-        # can be confirmed without mailbox access), so an Apple sign-in drops that password and the
-        # sessions the signup left behind.
-        if user.provider.blank?
+        # can be confirmed without mailbox access). A sign-in that brings the first Apple identity for
+        # such a row is adopting it, so the password and the sessions the signup left behind go with it.
+        if user.provider.blank? && !user.user_external_authentications.exists?(provider: "apple")
           user.password = Devise.friendly_token(User::RANDOM_PASSWORD_LENGTH)
           user.invalidate_active_sessions!
         end

@@ -53,6 +53,15 @@ describe User::SocialApple do
         result = User.find_or_create_for_apple_oauth(apple_data)
         expect(result).to eq(existing_user)
       end
+
+      it "leaves the password and the sessions alone", :aggregate_failures do
+        existing_user.update!(password: "chosen-by-its-owner")
+
+        expect { User.find_or_create_for_apple_oauth(apple_data) }
+          .not_to change { existing_user.reload.last_active_sessions_invalidated_at }
+
+        expect(existing_user.reload.valid_password?("chosen-by-its-owner")).to be(true)
+      end
     end
 
     context "when a user with the same email exists" do
