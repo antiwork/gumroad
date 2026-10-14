@@ -13,16 +13,23 @@ class RecurringChargeWorker
         return unless subscription.alive?(include_pending_cancellation: false)
         indian_card_mandate_recovered = false
         if subscription.india_card_mandate_reliability_enabled? && subscription.renewal_disabled_due_to_indian_card_mandate?
-          # Keep access active while the charge waits for a mandate that Stripe can use.
-          return unless subscription.refresh_indian_card_mandate! == "active"
-          subscription.reload
-          return if subscription.renewal_disabled_due_to_indian_card_mandate?
-          indian_card_mandate_recovered = true
-          if subscription.india_card_mandate_pending_restart_enabled?
+          pending_restart_enabled = false
+          # Clearing the pause and recording the fixing commit together: a retry after a failed fixing must still
+          # see the pause, or the failed-purchase guard below skips the charge for good.
+          recovered = Subscription.transaction(requires_new: true) do
+            # Keep access active while the charge waits for a mandate that Stripe can use.
+            next false unless subscription.refresh_indian_card_mandate! == "active"
+            subscription.reload
+            next false if subscription.renewal_disabled_due_to_indian_card_mandate?
+
+            pending_restart_enabled = subscription.india_card_mandate_pending_restart_enabled?
             # A hold on a pending mandate saved the card without its price fixing, and an INR renewal cannot bill without one.
-            subscription.record_indian_card_mandate_presentment!
-            subscription.log_indian_card_mandate_hold_event("renewal_resumed")
+            subscription.record_indian_card_mandate_presentment! if pending_restart_enabled
+            true
           end
+          return unless recovered
+          indian_card_mandate_recovered = true
+          subscription.log_indian_card_mandate_hold_event("renewal_resumed") if pending_restart_enabled
         end
         return if subscription.is_test_subscription || subscription.current_subscription_price_cents == 0
         return if subscription.charges_completed?

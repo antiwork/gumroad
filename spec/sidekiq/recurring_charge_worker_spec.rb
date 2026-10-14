@@ -207,6 +207,16 @@ describe RecurringChargeWorker, :vcr do
           end
         end
 
+        it "keeps renewals paused for the retry when recording the fixing fails" do
+          allow_any_instance_of(Subscription).to receive(:record_indian_card_mandate_presentment!).and_raise(ActiveRecord::StatementInvalid)
+
+          travel_to(@subscription.period.from_now + 1.day) do
+            expect_any_instance_of(Subscription).not_to receive(:charge!)
+            expect { described_class.new.perform(@subscription.id, true) }.to raise_error(ActiveRecord::StatementInvalid)
+          end
+          expect(@subscription.reload).to be_renewal_disabled_due_to_indian_card_mandate
+        end
+
         it "records no fixing when the feature is off" do
           Feature.deactivate_user(Subscription::INDIA_CARD_MANDATE_PENDING_RESTART_FEATURE, @product.user)
 

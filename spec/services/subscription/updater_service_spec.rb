@@ -3139,6 +3139,24 @@ describe Subscription::UpdaterService, :vcr do
             expect(Rails.logger).to have_received(:info).with("indian_card_mandate.pending_restart.held subscription_id=#{@subscription.id} mandate_id=mandate_pending path=live card=saved")
           end
 
+          it "says the plan has not changed when a plan change meets the pending saved card" do
+            restart_with_replacement_card
+            original_variants = @subscription.reload.original_purchase.variant_attributes.to_a
+            expect_any_instance_of(described_class).not_to receive(:charge_user!)
+
+            result = described_class.new(
+              subscription: @subscription.reload,
+              gumroad_guid: @gumroad_guid,
+              params: upgrade_tier_params.merge(perceived_upgrade_price_cents: @new_tier_quarterly_price.price_cents),
+              logged_in_user: @user,
+              remote_ip: @remote_ip,
+            ).perform
+
+            expect(result).to eq(success: false, error_message: Subscription::UpdaterService::MANDATE_PENDING_PLAN_CHANGE_MESSAGE)
+            expect(@subscription.reload.original_purchase.variant_attributes.to_a).to eq(original_variants)
+            expect(@subscription).to be_renewal_disabled_due_to_indian_card_mandate
+          end
+
           it "resumes renewals on the saved card once the bank confirms the mandate" do
             restart_with_replacement_card
             @mandate_status = "active"
