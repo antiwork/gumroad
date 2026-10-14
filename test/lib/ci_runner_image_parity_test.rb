@@ -52,6 +52,18 @@ class CiRunnerImageParityTest < ActiveSupport::TestCase
     assert_equal image_limits, runner.scan(IMAGEMAGICK_LIMIT).to_h
   end
 
+  # bin/reuse-full-suite takes the shards from test_fast and test_slow and finds a
+  # branch's runner jobs by name, so a mismatch makes main run the full suite again.
+  test "the runner's full-suite jobs keep the image jobs' names and shards" do
+    jobs = YAML.load_file(Rails.root.join(".github/workflows/tests.yml"))["jobs"]
+    %w[fast slow].each do |kind|
+      image, runner = jobs["test_#{kind}"], jobs["test_#{kind}_runner"]
+      assert_equal image.dig("strategy", "matrix"), runner.dig("strategy", "matrix")
+      assert_equal "Test #{kind.capitalize} ${{ matrix.ci_node_index }}", runner["name"]
+      assert image["name"].start_with?(runner["name"])
+    end
+  end
+
   test "the image installs every package the runner installs" do
     runner_packages = runner[/^PACKAGES=\((.+)\)$/, 1].split
     assert_empty runner_packages - image_packages.to_a
