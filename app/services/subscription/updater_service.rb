@@ -366,12 +366,13 @@ class Subscription::UpdaterService
         billing_info: params[:contact_info],
         authenticated_offer_code_buyer: logged_in_user
       )
-      # Resume ends a live hold on an outdated fixing, or an unfixed one outside the listing currency, so never create one.
+      # Resume ends a hold whose mandate currency is not the in-force fixing's (or, unfixed, the listing's), so never create one.
       fixing = subscription.current_later_charge_presentment
+      mandate_currency = setup_intent&.card_mandate_options&.currency.to_s.downcase
       hold_resumable = if fixing.present?
-        subscription.indian_card_presentment_in_force?(fixing)
+        subscription.indian_card_presentment_in_force?(fixing) && mandate_currency == fixing.presentment_currency
       else
-        setup_intent&.card_mandate_options&.currency.to_s.downcase == subscription.indian_card_mandate_listing_currency
+        mandate_currency == subscription.indian_card_mandate_listing_currency
       end
       pending = status == "pending" && mandate_pending_hold_allowed? && (is_resubscribing || hold_resumable)
 

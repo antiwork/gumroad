@@ -3276,6 +3276,36 @@ describe Subscription::UpdaterService, :vcr do
             expect(@subscription).to be_indian_card_mandate_held
           end
 
+          it "saves nothing when the mandate was approved in USD while its in-force INR fixing is briefly unavailable" do
+            canonical_price_cents = LaterChargePresentment.canonical_price_cents_for(@subscription.original_purchase)
+            fixing = @subscription.later_charge_presentments.create!(
+              processor: StripeChargeProcessor.charge_processor_id,
+              presentment_currency: Currency::INR,
+              presentment_price_cents: canonical_price_cents * 80,
+              canonical_price_cents:,
+              signup_currency_units_per_usd: BigDecimal("80"),
+              effective_from: 1.day.ago
+            )
+            expect(@subscription.reload.indian_card_presentment_in_force?(fixing)).to be(true)
+            allow_any_instance_of(MerchantAccount).to receive(:settlement_currency_mismatch_active?).and_return(true)
+            expect(@subscription.indian_card_mandate_terms[:currency]).to eq(Currency::USD)
+            allow(ErrorNotifier).to receive(:notify)
+
+            result = restart_with_replacement_card
+
+            expect(result).to eq(success: false, error_message: rejected_message)
+            @subscription.reload
+            expect(@subscription.credit_card).to eq(@credit_card)
+            expect(@subscription.stripe_mandate_id).to be_nil
+            expect(@subscription).not_to be_indian_card_mandate_held
+            expect(@subscription).not_to be_indian_card_mandate_hold_pending
+            expect(@subscription.later_charge_presentments.to_a).to eq([fixing])
+            expect(ErrorNotifier).to have_received(:notify).with(
+              "Indian card update rejected without an active e-mandate",
+              hash_including(subscription: @subscription.external_id, terms_match: true, hold_resumable: false)
+            )
+          end
+
           context "with an INR listing" do
             before do
               @product.update_column(:price_currency_type, Currency::INR)

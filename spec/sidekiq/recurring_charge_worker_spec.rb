@@ -273,6 +273,21 @@ describe RecurringChargeWorker, :vcr do
         expect(ChargeProcessor).to have_received(:get_setup_intent)
       end
 
+      it "keeps the hold, without charging, when someone else records an INR price fixing after the USD check" do
+        fixing = nil
+        @on_get_setup_intent = -> { fixing ||= create(:later_charge_presentment, owner: subscription, presentment_currency: Currency::INR, presentment_price_cents: 80_000, effective_from: 1.minute.ago) }
+        expect_any_instance_of(Subscription).not_to receive(:charge!)
+
+        perform_after_period
+
+        subscription.reload
+        expect(subscription.indian_card_presentment_in_force?(fixing)).to be(true)
+        expect(subscription.later_charge_presentments.to_a).to eq([fixing])
+        expect(subscription).to be_indian_card_mandate_held
+        expect(subscription).not_to be_indian_card_mandate_requires_reauthorization
+        expect(CustomerLowPriorityMailer).not_to have_received(:subscription_indian_card_mandate_invalid)
+      end
+
       it "ends the hold when the bank approved the mandate in INR" do
         @setup_intent_currency = Currency::INR
         expect_any_instance_of(Subscription).not_to receive(:charge!)
@@ -308,7 +323,29 @@ describe RecurringChargeWorker, :vcr do
       expect(subscription.reload.later_charge_presentments.to_a).to eq([fixing])
       expect(fixing.reload.attributes).to eq(fixing_attributes)
       expect(subscription).not_to be_renewal_disabled_due_to_indian_card_mandate
-      expect(ChargeProcessor).not_to have_received(:get_setup_intent)
+      expect(ChargeProcessor).to have_received(:get_setup_intent)
+    end
+
+    it "ends the hold, without charging, when the mandate was approved in USD against an in-force INR price fixing" do
+      fixing = create(:later_charge_presentment, owner: subscription, presentment_currency: Currency::INR, presentment_price_cents: 80_000, effective_from: 1.day.ago)
+      expect(subscription.reload.indian_card_presentment_in_force?(fixing)).to be(true)
+      fixing_attributes = fixing.reload.attributes
+      @setup_intent_currency = Currency::USD
+      expect_any_instance_of(Subscription).not_to receive(:charge!)
+
+      perform_after_period
+      perform_after_period
+
+      subscription.reload
+      expect(subscription.later_charge_presentments.to_a).to eq([fixing])
+      expect(fixing.reload.attributes).to eq(fixing_attributes)
+      expect(subscription).to be_indian_card_mandate_requires_reauthorization
+      expect(subscription.stripe_mandate_id).to be_nil
+      expect(subscription).not_to be_indian_card_mandate_held
+      expect(subscription).to be_renewal_disabled_due_to_indian_card_mandate
+      expect(CustomerLowPriorityMailer).to have_received(:subscription_indian_card_mandate_invalid).with(subscription.id).once
+      expect(mail).to have_received(:deliver_later).with(queue: "low").once
+      expect(ErrorNotifier).to have_received(:notify).with("Held Indian card mandate does not match its setup intent", subscription: subscription.external_id, mandate_id: "mandate_held")
     end
 
     it "ends the hold, without charging or replacing it, when the existing price fixing is outdated" do
@@ -358,6 +395,7 @@ describe RecurringChargeWorker, :vcr do
       expect(subscription).to be_indian_card_mandate_held
       expect(subscription).not_to be_indian_card_mandate_requires_reauthorization
       expect(subscription.later_charge_presentments.to_a).to eq([fixing])
+      expect(ChargeProcessor).to have_received(:get_setup_intent)
       expect(CustomerLowPriorityMailer).not_to have_received(:subscription_indian_card_mandate_invalid)
       expect(ErrorNotifier).to have_received(:notify).with("Held Indian card mandate cannot bill its price fixing yet", subscription: subscription.external_id, mandate_id: "mandate_held")
     end
