@@ -75,12 +75,21 @@ describe Api::V2::OfferCodesController do
       end
 
       it "accepts a JSON boolean for auto_apply" do
-        post @action, params: @params.merge(universal: "true", auto_apply: true, sale_label: "Black Friday"), as: :json
+        post @action, params: @params.merge(universal: true, auto_apply: true, sale_label: "Black Friday"), as: :json
 
         expect(response.parsed_body["success"]).to eq(true)
         code = @user.offer_codes.alive.last
         expect(code).to have_attributes(auto_apply: true, sale_label: "Black Friday", universal: true)
         expect(response.parsed_body["offer_code"]).to include("auto_apply" => true, "sale_label" => "Black Friday")
+      end
+
+      it "creates a universal percent code from a JSON boolean" do
+        post @action, params: @params.merge(offer_type: "percent", universal: true), as: :json
+
+        expect(response.parsed_body["success"]).to eq(true)
+        code = @user.offer_codes.alive.last
+        expect(code).to have_attributes(universal: true, amount_percentage: 31, auto_apply: false)
+        expect(code.products).to be_empty
       end
 
       it "leaves auto apply off when it is false or omitted" do

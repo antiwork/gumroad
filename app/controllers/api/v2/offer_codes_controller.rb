@@ -13,12 +13,12 @@ class Api::V2::OfferCodesController < Api::V2::BaseController
   end
 
   def create
-    # A JSON boolean and the documented "true" string both mean on. Comparing the
-    # parameter to "true" dropped `auto_apply: true` from a JSON body silently.
+    # Cast so a JSON body's real booleans mean the same as the documented "true" strings.
+    universal = ActiveModel::Type::Boolean.new.cast(params[:universal]) || false
     auto_apply = ActiveModel::Type::Boolean.new.cast(params[:auto_apply]) || false
     offer_code = if params[:offer_type] == "percent"
       OfferCode.new(code: params[:name],
-                    universal: params[:universal] == "true",
+                    universal:,
                     amount_percentage: params[:amount_off].to_i,
                     max_purchase_count: params[:max_purchase_count],
                     auto_apply:,
@@ -26,7 +26,7 @@ class Api::V2::OfferCodesController < Api::V2::BaseController
                     minimum_amount_cents: params[:minimum_amount_cents].presence)
     else
       OfferCode.new(code: params[:name],
-                    universal: params[:universal] == "true",
+                    universal:,
                     amount_cents: params[:amount_cents].presence || params[:amount_off].presence,
                     max_purchase_count: params[:max_purchase_count],
                     minimum_amount_cents: params[:minimum_amount_cents].presence,
@@ -36,7 +36,7 @@ class Api::V2::OfferCodesController < Api::V2::BaseController
     end
 
     offer_code.user = @product.user
-    offer_code.products << @product unless params[:universal] == "true"
+    offer_code.products << @product unless universal
     offer_code.created_via_cli = true if request_from_cli?
 
     if offer_code.save
