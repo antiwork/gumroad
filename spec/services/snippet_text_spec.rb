@@ -24,8 +24,6 @@ describe SnippetText do
     end
 
     context "when the cut lands on sentence punctuation" do
-      # 153 characters, then a period and a space: the word-boundary cut stops right after the
-      # period, so appending the omission to what was kept published "…day to day....".
       let(:text) { ("a" * 153) + ". And then a lot more words to push past the cap." }
 
       it "replaces the punctuation with the omission instead of doubling it" do
@@ -42,8 +40,15 @@ describe SnippetText do
     end
 
     context "when the cut lands on an ellipsis the seller wrote" do
-      # The seller's own ellipsis ends the kept text, so the omission must not stack onto it.
       let(:text) { ("a" * 150) + "... " + ("b" * 60) }
+
+      it "keeps one omission instead of stacking two" do
+        expect(SnippetText.truncate(text)).to eq(("a" * 150) + "...")
+      end
+    end
+
+    context "when the cut lands on a unicode ellipsis the seller wrote" do
+      let(:text) { ("a" * 150) + "… " + ("b" * 60) }
 
       it "keeps one omission instead of stacking two" do
         expect(SnippetText.truncate(text)).to eq(("a" * 150) + "...")
