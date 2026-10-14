@@ -33,6 +33,10 @@ import { useRunOnce } from "$app/components/useRunOnce";
 
 type SaleInfo = { sale_id: string; product_id: string | null; product_permalink: string | null };
 
+const AudioPlaybackContext = React.createContext<
+  [string | null, React.Dispatch<React.SetStateAction<string | null>>] | null
+>(null);
+
 export const RichContentView = ({
   richContent,
   saleInfo,
@@ -43,6 +47,7 @@ export const RichContentView = ({
   license: License | null;
 }) => {
   const { rootDomain } = useDomains();
+  const audioPlayback = React.useState<string | null>(null);
   const licenseKey = license?.license_key ?? null;
   const editor = useRichTextEditor({
     ariaLabel: "Product content",
@@ -71,9 +76,11 @@ export const RichContentView = ({
   };
 
   return (
-    <LicenseProvider value={licenseInfo}>
-      <EditorContent className="rich-text grid h-full flex-1" editor={editor} />
-    </LicenseProvider>
+    <AudioPlaybackContext.Provider value={audioPlayback}>
+      <LicenseProvider value={licenseInfo}>
+        <EditorContent className="rich-text grid h-full flex-1" editor={editor} />
+      </LicenseProvider>
+    </AudioPlaybackContext.Provider>
   );
 };
 
@@ -203,7 +210,8 @@ export const connectedFileRowClassName = (isLastInGroup: boolean) =>
 const FileEmbedNodeView = ({ node, getPos, editor }: NodeViewProps) => {
   const contentFiles = useContentFiles();
   const file = contentFiles.find((file) => file.id === node.attrs.id);
-  const [playingAudioForId, setPlayingAudioForId] = React.useState<null | string>(null);
+  const [playingAudioEmbedId, setPlayingAudioEmbedId] = assertDefined(React.useContext(AudioPlaybackContext));
+  const audioEmbedId = React.useId();
   const pos = getPos();
   const groupNode =
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Tiptap types are wrong
@@ -219,8 +227,8 @@ const FileEmbedNodeView = ({ node, getPos, editor }: NodeViewProps) => {
   const fileRow = file ? (
     <FileRow
       file={file}
-      playingAudioForId={playingAudioForId}
-      setPlayingAudioForId={setPlayingAudioForId}
+      playingAudioForId={playingAudioEmbedId === audioEmbedId ? file.id : null}
+      setPlayingAudioForId={(id) => setPlayingAudioEmbedId(id === null ? null : audioEmbedId)}
       isEmbed
       isTreeItem={!!groupNode}
       collapsed={!!node.attrs.collapsed}

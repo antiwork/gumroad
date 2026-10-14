@@ -23,7 +23,7 @@ type Props = {
 
 export const AudioPlayer = (props: Props) => {
   const userAgentInfo = useUserAgentInfo();
-  const [isPlaying, setIsPlaying] = React.useState(props.isPlaying ?? false);
+  const [isPlaying, setIsPlaying] = React.useState(false);
   const [isLoaded, setIsLoaded] = React.useState(false);
   // An undecodable file (a corrupt upload, or a container the browser can't read)
   // never fires loadedmetadata, so without this the row spins forever.
@@ -37,6 +37,14 @@ export const AudioPlayer = (props: Props) => {
     setDuration(0);
   }, [props.src]);
   const ref = React.useRef<HTMLAudioElement>(null);
+  const playbackRequest = React.useRef(0);
+  React.useEffect(() => {
+    const audio = ref.current;
+    return () => {
+      playbackRequest.current += 1;
+      audio?.pause();
+    };
+  }, [props.src]);
 
   const formattedTime = (num: number) => {
     num = Math.floor(num);
@@ -60,6 +68,7 @@ export const AudioPlayer = (props: Props) => {
 
   const playAudio = withAudio(
     asyncVoid(async (audio: HTMLAudioElement) => {
+      const requestId = ++playbackRequest.current;
       try {
         await audio.play();
       } catch {
@@ -67,12 +76,14 @@ export const AudioPlayer = (props: Props) => {
         // (and on a pause race, which is not an error) — never let it escape.
         return;
       }
+      if (requestId !== playbackRequest.current) return;
       setIsPlaying(true);
       props.onPlay?.();
     }),
   );
 
   const pauseAudio = withAudio((audio) => {
+    playbackRequest.current += 1;
     audio.pause();
     setIsPlaying(false);
     props.onPause?.();
@@ -101,7 +112,7 @@ export const AudioPlayer = (props: Props) => {
     audio.currentTime = isResumableMediaLocation(props.startTime, props.contentLength ?? audio.duration)
       ? props.startTime
       : 0;
-    playAudio();
+    if (props.isPlaying !== false) playAudio();
     props.onLoadedMetadata?.(audio.duration);
   });
 
