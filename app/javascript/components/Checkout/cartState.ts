@@ -175,6 +175,24 @@ export const hasFreeTrial = (item: CartItem, isGift: boolean) => item.product.fr
 export const findCartItem = (cart: CartState, permalink: string, optionId: string | null) =>
   cart.items.find((item) => item.product.permalink === permalink && item.option_id === optionId);
 
+export const ACCEPTED_OFFER_UNAVAILABLE_ERROR_CODE = "accepted_offer_unavailable";
+
+// Refused lines go back into the cart for the buyer to retry. The server's refreshed product never carries
+// the accepted offer, so keep it from the cart item: dropping it charges list price after a reload. Only the
+// server knows whether the offer still applies, so drop it once a refusal says it doesn't.
+export const cartItemsForRetry = (lines: { item: CartItem; result: LineItemResult | undefined }[]): CartItem[] =>
+  lines.flatMap(({ item, result }) => {
+    if (!result || result.success) return [];
+    const updated = result.updated_product;
+    const offerRefused = "error_code" in result && result.error_code === ACCEPTED_OFFER_UNAVAILABLE_ERROR_CODE;
+    return {
+      ...item,
+      ...updated,
+      quantity: updated?.quantity || item.quantity,
+      accepted_offer: offerRefused ? null : (item.accepted_offer ?? null),
+    };
+  });
+
 type DiscountedPrice = {
   discount:
     | { type: "code"; value: Discount; code: string }

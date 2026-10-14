@@ -122,6 +122,53 @@ describe("Product checkout with upsells", type: :system, js: true) do
       expect(purchase.offer_code).to eq(cross_sell.offer_code)
     end
 
+    context "when the first payment is declined and the buyer reloads checkout before retrying" do
+      let(:upsell_offer_code) { build(:offer_code, user: seller, products: [product], code: nil, amount_cents: nil, amount_percentage: 90) }
+
+      before do
+        product.update!(price_cents: 10_00)
+        cross_sell.update!(offer_code: upsell_offer_code)
+      end
+
+      it "charges the discounted price the buyer accepted" do
+        requests = []
+        subscriber = ActiveSupport::Notifications.subscribe("process_action.action_controller") do |*, payload|
+          requests << "#{payload[:controller]}##{payload[:action]}"
+        end
+
+        visit selected_product.long_url
+        add_to_cart(selected_product)
+        fill_checkout_form(selected_product, credit_card: { number: "4000000000009995" })
+
+        click_on "Pay"
+        within_modal "Cross-sell" do
+          click_on "Add to cart"
+        end
+        expect(page).to have_alert(text: "Your card has insufficient funds.")
+
+        declined_purchase = Purchase.where(link: product).last
+        expect(declined_purchase.purchase_state).to eq("failed")
+        expect(declined_purchase.offer_code).to eq(upsell_offer_code)
+
+        wait_until_true(sleep_interval: CheckoutPresenter::CART_SAVE_DEBOUNCE_DURATION_IN_SECONDS) do
+          last_order_request = requests.rindex { _1.start_with?("OrdersController#") }
+          last_order_request && requests.rindex("CheckoutController#update").to_i > last_order_request
+        end
+        visit current_path
+
+        expect(page).to have_cart_item("Offered product")
+        expect(page).to have_text("Discounts US$-9", normalize_ws: true)
+        check_out(selected_product)
+
+        purchase = Purchase.successful.find_by!(link: product)
+        expect(purchase.offer_code).to eq(upsell_offer_code)
+        expect(purchase.price_cents).to eq(1_00)
+        expect(purchase.upsell_purchase.upsell).to eq(cross_sell)
+      ensure
+        ActiveSupport::Notifications.unsubscribe(subscriber) if subscriber
+      end
+    end
+
     context "when the buyer tips" do
       before do
         seller.update!(tipping_enabled: true)

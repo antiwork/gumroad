@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Discount } from "$app/parsers/checkout";
 
-import { getDiscountedPrice } from "$app/components/Checkout/cartState";
+import { cartItemsForRetry, getDiscountedPrice } from "$app/components/Checkout/cartState";
 import type { CartItem, CartState, Product } from "$app/components/Checkout/cartState";
 
 const product: Product = {
@@ -605,5 +605,69 @@ describe("getDiscountedPrice", () => {
     const copiedItem = { ...secondItem, option_id: "offered-option" };
 
     expect(getDiscountedPrice(cart, copiedItem, secondItem).price).toBe(1_900);
+  });
+});
+
+describe("cartItemsForRetry", () => {
+  const triggering: CartItem = {
+    ...item,
+    quantity: 1,
+    product: { ...product, id: "triggering", permalink: "triggering" },
+  };
+  const offered: CartItem = {
+    ...item,
+    quantity: 1,
+    product: { ...product, id: "offered", permalink: "offered" },
+    accepted_offer: { id: "cross-sell", original_product_id: "triggering" },
+  };
+  const refused = (error_code: string | null = null) => ({
+    success: false as const,
+    error_message: "Your card was declined.",
+    name: null,
+    formatted_price: null,
+    error_code,
+    is_tax_mismatch: false,
+    card_country: null,
+    ip_country: null,
+    updated_product: null,
+  });
+
+  it("keeps the accepted offer when the line that triggered it is retried too", () => {
+    const retried = cartItemsForRetry([
+      { item: triggering, result: refused() },
+      { item: offered, result: refused() },
+    ]);
+    expect(retried.map(({ accepted_offer }) => accepted_offer)).toEqual([null, offered.accepted_offer]);
+  });
+
+  it("keeps the accepted offer when the triggering product was not part of the payment", () => {
+    expect(cartItemsForRetry([{ item: offered, result: refused() }])[0]?.accepted_offer).toEqual(
+      offered.accepted_offer,
+    );
+  });
+
+  it("keeps a version upsell, whose triggering product is the retried line itself", () => {
+    const upgraded = { ...offered, accepted_offer: { id: "upsell", original_product_id: "offered" } };
+    expect(cartItemsForRetry([{ item: upgraded, result: refused() }])[0]?.accepted_offer).toEqual(
+      upgraded.accepted_offer,
+    );
+  });
+
+  it("keeps the accepted offer when the line that triggered it was charged, until the server refuses it", () => {
+    const retried = cartItemsForRetry([
+      { item: triggering, result: undefined },
+      { item: offered, result: refused() },
+    ]);
+    expect(retried).toEqual([
+      expect.objectContaining({ product: offered.product, accepted_offer: offered.accepted_offer }),
+    ]);
+  });
+
+  it("drops the accepted offer when the server refused the offer itself", () => {
+    const retried = cartItemsForRetry([
+      { item: triggering, result: refused() },
+      { item: offered, result: refused("accepted_offer_unavailable") },
+    ]);
+    expect(retried[1]?.accepted_offer).toBeNull();
   });
 });

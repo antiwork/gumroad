@@ -36,6 +36,7 @@ import {
 import {
   type CartItem,
   type CartState,
+  cartItemsForRetry,
   convertToUSD,
   CrossSell,
   findCartItem,
@@ -732,17 +733,9 @@ const CheckoutIndexPage = () => {
       if (duplicatePurchaseResults.length > 0 && duplicatePurchaseResults.length === failedResults.length) {
         // Drop the successful lines from the cart now — same as the failedItems filter below —
         // so "Buy again" only resubmits the lines awaiting confirmation.
-        const remainingItems = cartForm.data.cart.items.flatMap((item) => {
-          const lineItem = result.lineItems[getCartItemUid(item)];
-          return lineItem && !lineItem.success
-            ? {
-                ...item,
-                ...lineItem.updated_product,
-                quantity: lineItem.updated_product?.quantity || item.quantity,
-                accepted_offer: null,
-              }
-            : [];
-        });
+        const remainingItems = cartItemsForRetry(
+          cartForm.data.cart.items.map((item) => ({ item, result: result.lineItems[getCartItemUid(item)] })),
+        );
         debouncedSaveCartState.cancel();
         cartForm.setData((prev) => ({ cart: { ...prev.cart, items: remainingItems } }));
         setDuplicatePurchaseConfirmation({
@@ -753,17 +746,9 @@ const CheckoutIndexPage = () => {
         return;
       }
 
-      const failedItems = cartForm.data.cart.items.flatMap((item) => {
-        const lineItem = result.lineItems[getCartItemUid(item)];
-        return lineItem && !lineItem.success
-          ? {
-              ...item,
-              ...lineItem.updated_product,
-              quantity: lineItem.updated_product?.quantity || item.quantity,
-              accepted_offer: null,
-            }
-          : [];
-      });
+      const failedItems = cartItemsForRetry(
+        cartForm.data.cart.items.map((item) => ({ item, result: result.lineItems[getCartItemUid(item)] })),
+      );
 
       let redirectTo: null | "content-page" | "library-page" = null;
       const firstResult = results[0].result;
@@ -873,17 +858,9 @@ const CheckoutIndexPage = () => {
           cart: {
             ...prev.cart,
             items: retryable
-              ? prev.cart.items.flatMap((item) => {
-                  const lineItem = retryable.lineItems[getCartItemUid(item)];
-                  return lineItem && !lineItem.success
-                    ? {
-                        ...item,
-                        ...lineItem.updated_product,
-                        quantity: lineItem.updated_product?.quantity || item.quantity,
-                        accepted_offer: null,
-                      }
-                    : [];
-                })
+              ? cartItemsForRetry(
+                  prev.cart.items.map((item) => ({ item, result: retryable.lineItems[getCartItemUid(item)] })),
+                )
               : [],
             ...(retryable
               ? {

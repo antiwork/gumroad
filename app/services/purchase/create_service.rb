@@ -122,11 +122,15 @@ class Purchase::CreateService < Purchase::BaseService
 
       if params[:accepted_offer].present?
         upsell = Upsell.available_to_customers.find_by_external_id(params[:accepted_offer][:id])
-        raise Purchase::PurchaseInvalid, "Sorry, this offer is no longer available." unless upsell.present?
+        unless upsell.present?
+          purchase.error_code = PurchaseErrorCode::ACCEPTED_OFFER_UNAVAILABLE
+          raise Purchase::PurchaseInvalid, "Sorry, this offer is no longer available."
+        end
         if upsell.cross_sell?
           if upsell.not_replace_selected_products?
             cart_product_permalinks = params[:cart_items].reject { _1[:permalink] == product.unique_permalink }.map { _1[:permalink] }
             if upsell.not_is_content_upsell? && (upsell.universal ? product.user.products : upsell.selected_products).where(unique_permalink: cart_product_permalinks).empty?
+              purchase.error_code = PurchaseErrorCode::ACCEPTED_OFFER_UNAVAILABLE
               raise Purchase::PurchaseInvalid, "The cart does not have any products to which the upsell applies."
             end
           end
@@ -149,7 +153,10 @@ class Purchase::CreateService < Purchase::BaseService
             ) :
             nil
         )
-        raise Purchase::PurchaseInvalid, purchase.upsell_purchase.errors.first.message unless purchase.upsell_purchase.valid?
+        unless purchase.upsell_purchase.valid?
+          purchase.error_code = PurchaseErrorCode::ACCEPTED_OFFER_UNAVAILABLE
+          raise Purchase::PurchaseInvalid, purchase.upsell_purchase.errors.first.message
+        end
       end
 
       locked_listed_rate = listed_currency_rate_hint(purchase)
