@@ -16,6 +16,8 @@ steps:
       - .buildkite/scripts/build_web.sh
       - 'echo "--- :gear: Compile assets"'
       - .buildkite/scripts/compile_assets.sh
+      - 'echo "--- :docker: Build resend callbacks image"'
+      - .buildkite/scripts/build_resend_callbacks.sh
     artifact_paths: "log/**/*"
     # The sum of the old per-step limits: a base image rebuild alone can take most of an hour.
     timeout_in_minutes: 110

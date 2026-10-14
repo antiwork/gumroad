@@ -309,6 +309,27 @@ jobs:
           bundler-cache: true
       - run: bundle exec rubocop --format github
 
+  resend_callbacks:
+    name: Test resend callbacks
+    runs-on: ubicloud-standard-2
+    needs: ci_gate
+    if: ${{ github.event_name != 'pull_request_target' || github.event.pull_request.head.repo.full_name != github.repository }}
+    defaults:
+      run:
+        working-directory: resend_callbacks
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: resend_callbacks/go.mod
+          cache-dependency-path: resend_callbacks/go.sum
+      - run: test -z "$(gofmt -l .)"
+      - run: go vet ./...
+      - run: go test -race ./...
+
   migration_versions:
     name: Migration versions
     runs-on: ubicloud-standard-2
