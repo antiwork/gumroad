@@ -6,6 +6,12 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"iter"
+	"maps"
+	"math"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -48,6 +54,10 @@ func (q *sidekiqQueue) enqueue(ctx context.Context, event map[string]any) error 
 }
 
 func newJobPayload(event map[string]any, now time.Time) ([]byte, error) {
+	// The job object and its args array sit above the event.
+	if err := serializableByRuby(event, 3); err != nil {
+		return nil, err
+	}
 	jid := make([]byte, 12)
 	if _, err := rand.Read(jid); err != nil {
 		return nil, err
@@ -68,4 +78,34 @@ func newJobPayload(event map[string]any, now time.Time) ([]byte, error) {
 		EnqueuedAt: at,
 	})
 	return bytes.TrimSuffix(payload.Bytes(), []byte("\n")), err
+}
+
+// serializableByRuby fails where Sidekiq.dump_json (JSON.generate) raises on the same
+// job: any container nested deeper than max_nesting, or a float Rails parsed to Infinity.
+func serializableByRuby(value any, depth int) error {
+	var items iter.Seq[any]
+	switch v := value.(type) {
+	case map[string]any:
+		items = maps.Values(v)
+	case []any:
+		items = slices.Values(v)
+	case json.Number:
+		if strings.ContainsAny(string(v), ".eE") {
+			if f, _ := v.Float64(); math.IsInf(f, 0) {
+				return errors.New("number Ruby reads as Infinity")
+			}
+		}
+		return nil
+	default:
+		return nil
+	}
+	if depth > maxNesting {
+		return errors.New("job nested too deeply for JSON.generate")
+	}
+	for item := range items {
+		if err := serializableByRuby(item, depth+1); err != nil {
+			return err
+		}
+	}
+	return nil
 }

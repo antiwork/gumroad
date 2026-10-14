@@ -79,7 +79,7 @@ func (s *server) resendWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	event, err := buildEvent(body, r.URL.Query())
+	event, err := buildEvent(body, r.URL.Query(), r.Header.Get("Content-Type"))
 	if err != nil {
 		s.fail(w, r, &s.malformed, http.StatusBadRequest, "Unparseable Resend webhook body", err)
 		return
