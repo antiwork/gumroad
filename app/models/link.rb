@@ -1143,9 +1143,10 @@ class Link < ApplicationRecord
     return explicit if auto_code.nil?
     return auto_code if explicit.nil?
 
-    # The detached check can query the code's products, so it runs last and only when there is
-    # an auto code to fall back to.
-    redeemable = !explicit.inactive? && explicit.is_currency_valid?(self) && default_offer_code_uses_left?(explicit) && !default_offer_code_detached?
+    # In-memory checks only: scope detachment (default_offer_code_detached?) costs a query per
+    # product on card pages, and OfferCode#repair_detached_default_discounts clears those defaults.
+    redeemable = !explicit.deleted? && explicit.code.present? && !explicit.inactive? &&
+                 explicit.is_currency_valid?(self) && default_offer_code_uses_left?(explicit)
     redeemable ? explicit : auto_code
   end
 

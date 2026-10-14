@@ -170,17 +170,6 @@ describe Link do
     end
 
     context "when checkout refuses the explicit default" do
-      let(:other_product) { create(:product, user: seller, price_cents: 1000) }
-      let(:detached) { seller.offer_codes.create!(code: "ELSEWHERE", amount_percentage: 50, products: [other_product]) }
-
-      it "falls back to the auto-applied code when the explicit default no longer applies to the product" do
-        auto_code
-        product.update_column(:default_offer_code_id, detached.id)
-
-        expect(product.reload.effective_default_offer_code).to eq(auto_code)
-        expect(product.discounted_price_cents(1000)).to eq(800)
-      end
-
       it "falls back to the auto-applied code when the explicit default has no code" do
         auto_code
         own.update_column(:code, nil)
@@ -198,9 +187,9 @@ describe Link do
       end
 
       it "returns the explicit default unchanged when the seller has no auto-applied code" do
-        product.update_column(:default_offer_code_id, detached.id)
+        own.update_column(:code, nil)
 
-        expect(product.reload.effective_default_offer_code).to eq(detached)
+        expect(product.reload.effective_default_offer_code).to eq(own)
       end
     end
   end

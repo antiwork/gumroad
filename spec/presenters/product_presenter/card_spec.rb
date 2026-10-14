@@ -163,7 +163,7 @@ describe ProductPresenter::Card do
         queries
       end
 
-      it "resolves every seller's auto-applied code in a fixed number of queries" do
+      it "resolves every seller's auto-applied code and products' own defaults in a fixed number of queries" do
         add_sellers = lambda do |count|
           Array.new(count) do |i|
             seller = create(:user)
@@ -171,6 +171,7 @@ describe ProductPresenter::Card do
             if i.even?
               code = seller.offer_codes.create!(code: "SHOP#{seller.id}", amount_percentage: 20, universal: true, products: [], auto_apply: true)
               code.excluded_products << create(:product, user: seller)
+              product.update!(default_offer_code: seller.offer_codes.create!(code: "OWN#{seller.id}", amount_percentage: 50, products: [product]))
             end
             product
           end
@@ -187,11 +188,11 @@ describe ProductPresenter::Card do
 
         products = add_sellers.call(2)
         cards, few = render_cards.call(products)
-        expect(cards.map { _1[:price_cents] }).to eq([800, 1000])
+        expect(cards.map { _1[:price_cents] }).to eq([500, 1000])
 
         products += add_sellers.call(4)
         cards, many = render_cards.call(products)
-        expect(cards.map { _1[:price_cents] }).to eq([800, 1000] * 3)
+        expect(cards.map { _1[:price_cents] }).to eq([500, 1000] * 3)
         expect(many.size).to eq(few.size)
       end
 
