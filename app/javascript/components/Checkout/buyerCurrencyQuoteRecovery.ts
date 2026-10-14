@@ -2,7 +2,12 @@ import * as React from "react";
 
 import { type CartPurchaseResult, type OfferCodes } from "$app/data/purchase";
 
-import { type CartItem, type CartState, withRefreshedExchangeRates } from "$app/components/Checkout/cartState";
+import {
+  type CartItem,
+  type CartState,
+  isPwywItem,
+  withRefreshedExchangeRates,
+} from "$app/components/Checkout/cartState";
 
 // What the checkout has to do when the server refuses the local-currency quote at charge time.
 //
@@ -119,11 +124,6 @@ export const recoverFromInvalidBuyerCurrencyQuote = ({
 // The refusal also carries a rebuilt cart line. A one-cent listed price bump can pass purchase
 // creation and still fail the amount token; retrying the old price would mint the same token.
 const cartItemUid = (item: CartItem) => `${item.product.permalink} ${item.option_id ?? ""}`;
-
-const isPwywItem = (item: CartItem) =>
-  item.product.is_tiered_membership
-    ? (item.product.options.find(({ id }) => id === item.option_id)?.is_pwyw ?? false)
-    : !!item.product.pwyw;
 
 export const withUpdatedCartItems = (cart: CartState, lineItems: CartPurchaseResult["lineItems"]): CartState => {
   let changed = false;

@@ -4,15 +4,19 @@ import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { type SurchargesResponse } from "$app/data/customer_surcharge";
+import { PaymentConfirmedError } from "$app/data/order";
+import { type StartCartPurchaseRequestPayload } from "$app/data/purchase";
 import CheckoutPage from "$app/pages/Checkout/Show";
 import { PLACEHOLDER_CART_ITEM } from "$app/utils/cart";
+import { cast } from "$app/utils/cast";
 
-import { type CartState } from "$app/components/Checkout/cartState";
+import { type CartItem, type CartState } from "$app/components/Checkout/cartState";
 import { type CheckoutPaymentConfig, useState } from "$app/components/Checkout/payment";
 
 const mocks = vi.hoisted(() => {
   const props: Record<string, unknown> = {};
-  return { props, surcharges: vi.fn(), order: vi.fn(), clientOrder: vi.fn(), analytics: vi.fn() };
+  const savedCarts: CartState[] = [];
+  return { props, savedCarts, surcharges: vi.fn(), order: vi.fn(), clientOrder: vi.fn(), analytics: vi.fn() };
 });
 vi.mock("$app/data/customer_surcharge", () => ({ getSurcharges: mocks.surcharges }));
 vi.mock("$app/data/order", () => ({
@@ -42,7 +46,7 @@ vi.mock("@inertiajs/react", () => ({
   usePage: () => ({ props: mocks.props }),
   useForm: (initial: { cart: CartState }) => {
     const [data, setData] = React.useState(initial);
-    return { data, setData, patch: vi.fn(), cancel: vi.fn() };
+    return { data, setData, patch: vi.fn(() => mocks.savedCarts.push(data.cart)), cancel: vi.fn() };
   },
 }));
 // Replace only collection of payment credentials. Show's real pay(), reducer, quote fetch,
@@ -201,6 +205,7 @@ beforeEach(() => {
   };
 });
 afterEach(() => {
+  mocks.savedCarts.length = 0;
   cleanup();
   vi.useRealTimers();
   vi.resetAllMocks();
@@ -397,4 +402,71 @@ it("keeps a method-forced listed currency when a matching preference is persiste
   expect(mocks.clientOrder).toHaveBeenCalledOnce();
   expect(mocks.clientOrder.mock.calls[0]?.[0].directListedAmountToken).toBe("listed-1600");
   expect(screen.getByLabelText("buyer currency").textContent).toBe("eur");
+});
+
+const acceptedOffer = {
+  id: "cross-sell",
+  original_product_id: "original-product",
+  discount: { type: "percent" as const, percents: 90, product_ids: null, expires_at: null, minimum_quantity: null },
+};
+
+const refusal = (item: CartItem, errorCode: string | null) => ({
+  success: false,
+  error_message: "Your card was declined.",
+  name: "Test product",
+  formatted_price: "$10",
+  error_code: errorCode,
+  is_tax_mismatch: false,
+  card_country: null,
+  ip_country: null,
+  updated_product: { ...item, accepted_offer: null },
+});
+
+describe.each([false, true])("checkout refused line with an accepted offer (client-confirm=%s)", (client) => {
+  it.each([
+    ["a declined card", null],
+    ["a duplicate purchase awaiting confirmation", "duplicate_purchase_confirmation_required"],
+  ])("keeps the accepted offer on the line saved for retry after %s", async (_, errorCode) => {
+    mocks.props.checkout_payment = config(client);
+    const cart = cast<CartState>(mocks.props.cart);
+    const item = cast<CartItem>(cart.items[0]);
+    mocks.props.cart = { ...cart, items: [{ ...item, accepted_offer: acceptedOffer }] };
+    mocks.surcharges.mockResolvedValue(quote("2999-01-01T00:00:00Z", 140));
+    (client ? mocks.clientOrder : mocks.order).mockResolvedValue({
+      lineItems: { "test-product ": { ...refusal(item, errorCode), permalink: "test-product" } },
+      canBuyerSignUp: false,
+      offerCodes: [],
+    });
+    render(<CheckoutPage />);
+    await act(() => vi.advanceTimersByTimeAsync(400));
+    fireEvent.click(screen.getByRole("button", { name: "Pay" }));
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    const [request] = cast<[StartCartPurchaseRequestPayload]>((client ? mocks.clientOrder : mocks.order).mock.calls[0]);
+    expect(request.lineItems[0]?.acceptedOffer).toEqual(acceptedOffer);
+    mocks.savedCarts.length = 0;
+    await act(() => vi.advanceTimersByTimeAsync(1000));
+
+    expect(mocks.savedCarts.at(-1)?.items).toEqual([expect.objectContaining({ accepted_offer: acceptedOffer })]);
+  });
+
+  it("keeps the accepted offer on an uncharged line left in the cart after a partly processed payment", async () => {
+    mocks.props.checkout_payment = config(client);
+    const cart = cast<CartState>(mocks.props.cart);
+    const item = cast<CartItem>(cart.items[0]);
+    mocks.props.cart = { ...cart, items: [{ ...item, accepted_offer: acceptedOffer }] };
+    mocks.surcharges.mockResolvedValue(quote("2999-01-01T00:00:00Z", 140));
+    (client ? mocks.clientOrder : mocks.order).mockRejectedValue(
+      Object.assign(new PaymentConfirmedError(), {
+        retryable: { lineItems: { "test-product ": refusal(item, null) }, offerCodes: [] },
+      }),
+    );
+    render(<CheckoutPage />);
+    await act(() => vi.advanceTimersByTimeAsync(400));
+    fireEvent.click(screen.getByRole("button", { name: "Pay" }));
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    mocks.savedCarts.length = 0;
+    await act(() => vi.advanceTimersByTimeAsync(1000));
+
+    expect(mocks.savedCarts.at(-1)?.items).toEqual([expect.objectContaining({ accepted_offer: acceptedOffer })]);
+  });
 });

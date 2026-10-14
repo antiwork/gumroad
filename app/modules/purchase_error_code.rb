@@ -83,6 +83,7 @@ module PurchaseErrorCode
   # in-progress/settling cases, the buyer can resolve this one: the client offers a "buy again"
   # confirmation and retries with confirmed_duplicate_purchase, which widens only this check.
   DUPLICATE_PURCHASE_CONFIRMATION_REQUIRED = "duplicate_purchase_confirmation_required"
+  ACCEPTED_OFFER_UNAVAILABLE = "accepted_offer_unavailable"
 
   PAYPAL_ERROR_CODES = {
     "2000" => "Do Not Honor",

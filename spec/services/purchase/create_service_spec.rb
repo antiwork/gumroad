@@ -1101,13 +1101,14 @@ describe Purchase::CreateService, :vcr do
       end
 
       it "returns an error" do
-        _, error = Purchase::CreateService.new(
+        purchase, error = Purchase::CreateService.new(
           product:,
           params:,
           buyer:
         ).perform
 
         expect(error).to eq("Sorry, this offer is no longer available.")
+        expect(purchase.error_code).to eq(PurchaseErrorCode::ACCEPTED_OFFER_UNAVAILABLE)
       end
     end
 
@@ -1117,12 +1118,13 @@ describe Purchase::CreateService, :vcr do
       end
 
       it "returns an error" do
-        _, error = Purchase::CreateService.new(
+        purchase, error = Purchase::CreateService.new(
           product:,
           params:,
           buyer:
         ).perform
         expect(error).to eq("The upsell purchase must have an associated upsell variant.")
+        expect(purchase.error_code).to eq(PurchaseErrorCode::ACCEPTED_OFFER_UNAVAILABLE)
       end
     end
   end
@@ -1210,13 +1212,14 @@ describe Purchase::CreateService, :vcr do
       end
 
       it "returns an error" do
-        _, error = Purchase::CreateService.new(
+        purchase, error = Purchase::CreateService.new(
           product:,
           params:,
           buyer:
         ).perform
 
         expect(error).to eq("The cart does not have any products to which the upsell applies.")
+        expect(purchase.error_code).to eq(PurchaseErrorCode::ACCEPTED_OFFER_UNAVAILABLE)
       end
 
       context "when the cross-sell is a replacement cross-sell" do
