@@ -79,6 +79,7 @@ export const AudioPlayerContainer = ({
       src={mediaUrl}
       isPlaying={isPlaying}
       onPlay={playAudio}
+      onPlayRequest={playAudio}
       onPause={pauseAudio}
       onTimeUpdate={updateProgress}
       onSeeked={(currentTime) => {

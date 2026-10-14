@@ -13,6 +13,7 @@ type Props = {
   startTime?: number;
   contentLength?: number | null;
   onPlay?: () => void;
+  onPlayRequest?: () => void;
   onPause?: () => void;
   onSeeked?: (currentTime: number) => void;
   onTimeUpdate?: (currentTime: number) => void;
@@ -140,7 +141,15 @@ export const AudioPlayer = (props: Props) => {
                 <PauseCircle className="size-5" />
               </button>
             ) : (
-              <button type="button" className="cursor-pointer all-unset" onClick={playAudio} aria-label="Play">
+              <button
+                type="button"
+                className="cursor-pointer all-unset"
+                onClick={() => {
+                  props.onPlayRequest?.();
+                  playAudio();
+                }}
+                aria-label="Play"
+              >
                 <PlayCircle className="size-5" />
               </button>
             )}

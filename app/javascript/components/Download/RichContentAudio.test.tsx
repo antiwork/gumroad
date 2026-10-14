@@ -213,3 +213,31 @@ it("shows a playable control when the browser rejects the initial play request",
   expect(screen.queryByRole("button", { name: "Pause" })).toBeNull();
   expect(screen.getByRole("button", { name: "Play" })).toBeDefined();
 });
+
+it("does not let a delayed resume from a deselected player replace a newer track", async () => {
+  let finishFirstResume: (() => void) | undefined;
+  let firstPlays = 0;
+  play.mockImplementation(function (this: HTMLMediaElement) {
+    Object.defineProperty(this, "paused", { configurable: true, value: false });
+    if (this.src.endsWith("first.mp3") && ++firstPlays === 2)
+      return new Promise<void>((resolve) => {
+        finishFirstResume = resolve;
+      });
+    return Promise.resolve();
+  });
+  renderAudioFiles();
+  const buttons = await screen.findAllByRole("button", { name: "Play Button" });
+  fireEvent.click(assertDefined(buttons[0]));
+  await loadAudio(audioAt(0));
+  fireEvent.click(assertDefined(buttons[1]));
+  await loadAudio(audioAt(1));
+  fireEvent.click(within(assertDefined(audioAt(0).parentElement)).getByRole("button", { name: "Play" }));
+  fireEvent.click(within(assertDefined(audioAt(1).parentElement)).getByRole("button", { name: "Play" }));
+  await act(async () => {
+    finishFirstResume?.();
+    await Promise.resolve();
+  });
+
+  expect(audioAt(0).paused).toBe(true);
+  expect(audioAt(1).paused).toBe(false);
+});
