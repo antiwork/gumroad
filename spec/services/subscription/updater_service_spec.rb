@@ -3392,6 +3392,68 @@ describe Subscription::UpdaterService, :vcr do
               expect(@subscription.later_charge_presentments.first).to eq(fixing)
             end
 
+            context "with an in-force fixing and a plan change on the saved card" do
+              let(:plan_change_params) { upgrade_tier_params.merge(perceived_upgrade_price_cents: @new_tier_quarterly_price.price_cents) }
+              let(:plan_change) do
+                described_class.new(
+                  subscription: @subscription.reload,
+                  gumroad_guid: @gumroad_guid,
+                  params: plan_change_params,
+                  logged_in_user: @user,
+                  remote_ip: @remote_ip,
+                )
+              end
+
+              before do
+                @subscription.later_charge_presentments.create!(
+                  processor: StripeChargeProcessor.charge_processor_id,
+                  presentment_currency: Currency::INR,
+                  presentment_price_cents: @subscription.current_subscription_price_cents,
+                  canonical_price_cents: LaterChargePresentment.canonical_price_cents_for(@subscription.original_purchase),
+                  signup_currency_units_per_usd: BigDecimal("80"),
+                  effective_from: 1.day.ago
+                )
+                allow(ErrorNotifier).to receive(:notify)
+              end
+
+              it "keeps the buyer's contact edits after resuming the hold" do
+                allow_any_instance_of(described_class).to receive(:charge_user!).and_return(success: true)
+                plan_change_params[:contact_info] = { email: "edited@example.com", zip_code: "10001" }
+
+                expect(plan_change.perform[:success]).to be(true)
+
+                expect(@subscription.reload.original_purchase).to have_attributes(email: "edited@example.com", zip_code: "10001")
+              end
+
+              it "does not resume inside the plan change when resuming first did not finish" do
+                calls = 0
+                allow_any_instance_of(Subscription).to receive(:resume_held_indian_card_mandate!).and_wrap_original do |original, *args, **kwargs|
+                  calls += 1
+                  calls == 1 ? false : original.call(*args, **kwargs)
+                end
+                original_variants = @subscription.original_purchase.variant_attributes.to_a
+                expect_any_instance_of(described_class).not_to receive(:charge_user!)
+
+                result = plan_change.perform
+
+                expect(result).to eq(success: false, error_message: "There is a temporary problem, please try again (your card was not charged).")
+                expect(@subscription.reload).to be_indian_card_mandate_held
+                expect(@subscription.original_purchase.variant_attributes.to_a).to eq(original_variants)
+              end
+
+              it "queues the charge for an unpaid membership when the update fails after resuming the hold" do
+                allow_any_instance_of(Subscription).to receive(:last_successful_purchase).and_return(nil)
+                allow_any_instance_of(Subscription).to receive(:overdue_for_charge?).and_return(true)
+                allow_any_instance_of(described_class).to receive(:charge_user!).and_raise(Subscription::UpdateFailed, "declined")
+                RecurringChargeWorker.jobs.clear
+
+                expect(plan_change.perform).to eq(success: false, error_message: "declined")
+
+                expect(@subscription.reload).not_to be_indian_card_mandate_held
+                expect(RecurringChargeWorker).to have_enqueued_sidekiq_job(@subscription.id).immediately
+              end
+            end
+
             it "does not charge when the fixing cannot be recorded" do
               allow_any_instance_of(Subscription).to receive(:indian_card_recovery_presentment_attributes).and_return(nil)
               allow(ErrorNotifier).to receive(:notify)

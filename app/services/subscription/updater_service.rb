@@ -80,9 +80,12 @@ class Subscription::UpdaterService
     terminated_or_scheduled_for_termination = subscription.termination_date.present?
     self.had_indian_card_mandate_stop = subscription.renewal_disabled_due_to_indian_card_mandate?
     # Resume a held mandate on the unchanged plan first, so a plan change below is checked like any active mandate.
+    pre_resumed = false
     if use_existing_card? && !is_resubscribing && subscription.indian_card_mandate_held?
-      subscription.resume_held_indian_card_mandate!
+      pre_resumed = subscription.resume_held_indian_card_mandate!
       return { success: false, error_message: HELD_MANDATE_ENDED_MESSAGE } if subscription.indian_card_mandate_requires_reauthorization?
+      # Resuming reloads the subscription, so drop the stale copy before contact edits are written to it.
+      self.original_purchase = subscription.original_purchase
     end
     replacement_card = nil
     had_saved_card = false
@@ -280,6 +283,11 @@ class Subscription::UpdaterService
 
     # The rollback undid ending the hold, so end it again outside the transaction for the reauthorization and email to commit.
     subscription.reload.resume_held_indian_card_mandate! if @held_indian_card_mandate_ended
+
+    # The scan only rechecks unpaid memberships while held, so charge one the failed update left resumed.
+    if pre_resumed && !result[:success] && subscription.reload.last_successful_purchase.blank? && subscription.overdue_for_charge?
+      RecurringChargeWorker.perform_async(subscription.id)
+    end
 
     subscription.update_flag!(:is_resubscription_pending_confirmation, true, true) if is_resubscribing && result[:requires_card_action]
 
