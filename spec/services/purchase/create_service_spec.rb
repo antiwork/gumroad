@@ -4392,7 +4392,7 @@ describe Purchase::CreateService, :vcr do
       end
 
       it "keeps blocking while the intent awaits authentication" do
-        stub_intent(status: "requires_action", next_action: { type: "use_stripe_sdk" })
+        stub_intent(status: "requires_action", next_action: { type: "use_stripe_sdk" }, last_payment_error: { type: "card_error", code: "card_declined" })
         expect(ChargeProcessor).not_to receive(:cancel_payment_intent!)
 
         _, error = Purchase::CreateService.new(product:, params:).perform
@@ -4402,7 +4402,7 @@ describe Purchase::CreateService, :vcr do
       end
 
       it "keeps blocking while the intent is processing" do
-        stub_intent(status: "processing")
+        stub_intent(status: "processing", last_payment_error: { type: "card_error", code: "card_declined" })
         expect(ChargeProcessor).not_to receive(:cancel_payment_intent!)
 
         _, error = Purchase::CreateService.new(product:, params:).perform
