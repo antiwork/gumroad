@@ -173,6 +173,12 @@ class MerchantAccount < ApplicationRecord
     save!(validate: false)
   end
 
+  # A takeover retires the rail and deletes the bank it paid, so it is not a payout destination
+  # again: nothing drains to it and it cannot be restored.
+  def retired_by_adoption?
+    retired_by_adoption_at.present?
+  end
+
   def charge_processor_delete!
     case charge_processor_id
     when StripeChargeProcessor.charge_processor_id

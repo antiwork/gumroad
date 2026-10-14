@@ -72,6 +72,20 @@ describe RestoreBankPayoutRail do
     expect(user.reload.payment_address).to eq("paypal@example.com")
   end
 
+  it "refuses a rail a Google or Apple takeover retired" do
+    merchant_account.delete_charge_processor_account!
+    merchant_account.mark_retired_by_adoption!
+    bank_account.mark_deleted!
+
+    result = described_class.new(user:).process
+
+    expect(result.success).to be(false)
+    expect(result.error).to eq(:retired_by_adoption)
+    expect(bank_account.reload).to be_deleted
+    expect(merchant_account.reload).to be_deleted
+    expect(user.reload.active_bank_account).to be_nil
+  end
+
   it "refuses a deleted bank account from a different country" do
     bank_account.destroy!
     us_bank_account = create(:ach_account, user:, stripe_connect_account_id: merchant_account.charge_processor_merchant_id)

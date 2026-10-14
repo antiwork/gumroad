@@ -628,6 +628,57 @@ describe StripePayoutProcessor do
         expect(credit.reload).to be_unpaid
       end
 
+      def adopt_and_retire_account!(charge_processor_merchant_id)
+        account = create(:merchant_account, user: seller, currency: Currency::AUD,
+                                            charge_processor_merchant_id:)
+        account.delete_charge_processor_account!
+        account.mark_retired_by_adoption!
+        account
+      end
+
+      it "refuses to drain an account a takeover retired, so the bank it removed is not paid" do
+        account = adopt_and_retire_account!("acct_adopted_aud")
+        removed_bank = create(:ach_account, user: seller, deleted_at: Time.current,
+                                            stripe_connect_account_id: account.charge_processor_merchant_id,
+                                            stripe_bank_account_id: "ba_adopted")
+        credit = create(:balance, user: seller, merchant_account: account, state: "processing", date: 2.days.ago.to_date,
+                                  amount_cents: 300_00, holding_currency: Currency::AUD, holding_amount_cents: 450_00)
+        payment = build_payment(seller, [credit], account.charge_processor_merchant_id)
+        expect_no_stripe_money_movement
+
+        errors = described_class.prepare_payment_and_set_amount(payment, [credit], account, Currency::AUD)
+
+        expect(errors.sole).to include("acct_adopted_aud", "is retired")
+        payment.reload
+        expect(payment).to be_failed
+        expect(payment.failure_reason).to eq(Payment::FailureReason::DESTINATION_ACCOUNT_RETIRED)
+        expect(payment.bank_account).not_to eq(removed_bank)
+        expect(credit.reload).to be_unpaid
+      end
+
+      it "refuses a payout prepared before the takeover instead of paying the bank it removed" do
+        account = create(:merchant_account, user: seller, currency: Currency::AUD, charge_processor_merchant_id: "acct_adopted_aud")
+        removed_bank = create(:ach_account, user: seller, stripe_connect_account_id: account.charge_processor_merchant_id,
+                                            stripe_bank_account_id: "ba_adopted")
+        credit = create(:balance, user: seller, merchant_account: account, state: "processing", date: 2.days.ago.to_date,
+                                  amount_cents: 300_00, holding_currency: Currency::AUD, holding_amount_cents: 450_00)
+        payment = create(:payment, user: seller, bank_account: removed_bank, processor: PayoutProcessorType::STRIPE,
+                                   state: "processing", stripe_connect_account_id: account.charge_processor_merchant_id,
+                                   currency: Currency::AUD, amount_cents: 450_00, balances: [credit])
+        account.delete_charge_processor_account!
+        account.mark_retired_by_adoption!
+        expect(Stripe::Payout).not_to receive(:create)
+
+        errors = described_class.perform_payment(payment)
+
+        expect(errors.sole).to include("acct_adopted_aud", "is retired")
+        payment.reload
+        expect(payment).to be_failed
+        expect(payment.failure_reason).to eq(Payment::FailureReason::DESTINATION_ACCOUNT_RETIRED)
+        expect(payment.retired_account_drain).to be_falsey
+        expect(credit.reload).to be_unpaid
+      end
+
       it "drains to the retired account's own bank even after the seller added one on the replacement account" do
         account = create(:merchant_account, user: seller, currency: Currency::AUD,
                                             charge_processor_merchant_id: "acct_two_banks_aud", deleted_at: Time.current)

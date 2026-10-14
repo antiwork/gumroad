@@ -73,6 +73,9 @@ class RestoreBankPayoutRail
         .find { |ma| !ma.is_a_stripe_connect_account? }
       merchant_account = user.merchant_accounts.deleted.lock(lock).find_by(id: merchant_account.id) if merchant_account
       return [nil, nil, :no_deleted_merchant_account] if merchant_account.nil? || merchant_account.charge_processor_merchant_id.blank?
+      # A takeover retires this rail and deletes the bank it paid; reviving it would hand the
+      # payouts back to the bank the takeover removed.
+      return [nil, nil, :retired_by_adoption] if merchant_account.retired_by_adoption?
       country = user.alive_user_compliance_info&.legal_entity_country_code
       unless country.present? && bank_account.country == country && merchant_account.country == country
         return [nil, nil, :incompatible_bank_rail]

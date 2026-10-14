@@ -295,7 +295,7 @@ class StripePayoutProcessor
   end
 
   def self.drainable_retired_account?(merchant_account)
-    !merchant_account.active? && merchant_account.is_a_gumroad_managed_stripe_account?
+    !merchant_account.retired_by_adoption? && !merchant_account.active? && merchant_account.is_a_gumroad_managed_stripe_account?
   end
 
   # Include soft-deleted rows, since the retired account's former bank is usually no longer the live
@@ -686,6 +686,19 @@ class StripePayoutProcessor
     Country.new(compliance_info.legal_entity_country_code).supports_stripe_cross_border_payouts?
   end
 
+  # Refuses a payout on a rail a takeover retired. The takeover deleted the bank this account paid,
+  # so money prepared against the account before the takeover is not sent to that bank.
+  def self.fail_payout_on_adoption_retired_rail!(payment, merchant_account)
+    message = retired_destination_error(merchant_account, payment.balances)
+    payment.stripe_connect_account_id = merchant_account.charge_processor_merchant_id
+    payment.error_message = message.truncate(1000)
+    payment.mark_failed!(Payment::FailureReason::DESTINATION_ACCOUNT_RETIRED)
+    payment.errors.add(:base, message)
+    reverse_internal_transfer_or_hold_payouts!(payment, Payment::FailureReason::DESTINATION_ACCOUNT_RETIRED)
+    [message]
+  end
+  private_class_method :fail_payout_on_adoption_retired_rail!
+
   # Public: Actually sends the money.
   # Returns an array of errors.
   def self.perform_payment(payment)
@@ -697,6 +710,8 @@ class StripePayoutProcessor
     merchant_account = payment.user.merchant_accounts.find_by(charge_processor_merchant_id: payment.stripe_connect_account_id)
     # Also covers payouts prepared before the flag existed, and accounts retired between prepare and perform.
     payment.retired_account_drain = true if drainable_retired_account?(merchant_account)
+    # A payout prepared before a takeover still names the bank that takeover removed.
+    return fail_payout_on_adoption_retired_rail!(payment, merchant_account) if merchant_account.retired_by_adoption?
     if merchant_account.is_a_stripe_connect_account?
       stripe_transfer = Stripe::Transfer.retrieve(payment.stripe_internal_transfer_id)
       payment.stripe_transfer_id = stripe_transfer.destination_payment

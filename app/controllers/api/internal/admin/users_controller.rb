@@ -612,6 +612,7 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
                   when :no_deleted_bank_account then "No removed bank account to restore"
                   when :no_deleted_merchant_account then "No removed Stripe account matches the bank account"
                   when :not_removed_by_paypal_switch then "The bank account was not removed by a PayPal switch"
+                  when :retired_by_adoption then "The bank rail was removed when a Google or Apple sign-in took over the account, so it cannot be restored"
                   when :stripe_account_unavailable then "The Stripe account is closed or cannot receive payouts"
         end
         return render json: { success: false, message: }, status: :unprocessable_entity
