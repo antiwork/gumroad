@@ -145,4 +145,13 @@ describe("DiscountsPage shop-wide auto-apply", () => {
     expect(screen.getByText("Applied automatically")).toBeTruthy();
     expect(screen.getByText("On product pages (Easter)")).toBeTruthy();
   });
+
+  it("starts a duplicate of the auto-applied code with auto apply off", () => {
+    render(<DiscountsPage {...props([offerCode({ auto_apply: true, sale_label: "Easter" })])} />);
+    fireEvent.click(screen.getByText("Black Friday"));
+    fireEvent.click(screen.getByRole("button", { name: "Duplicate" }));
+
+    expect(screen.getByLabelText("Apply automatically on product pages")).toHaveProperty("checked", false);
+    expect(screen.queryByLabelText("Sale label (optional)")).toBeNull();
+  });
 });

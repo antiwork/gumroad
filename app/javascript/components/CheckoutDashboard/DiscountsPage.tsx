@@ -803,7 +803,9 @@ const DiscountsPage = ({
       black_friday_code_name={black_friday_code_name}
       title="Create discount"
       submitLabel={isLoading ? "Adding discount..." : "Add discount"}
-      offerCode={selectedOfferCode ? { ...selectedOfferCode, code: "" } : undefined}
+      offerCode={
+        selectedOfferCode ? { ...selectedOfferCode, code: "", auto_apply: false, sale_label: null } : undefined
+      }
       isBlackFridayMode={isBlackFridayMode}
       cancel={() => {
         setIsBlackFridayMode(false);
