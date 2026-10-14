@@ -21,7 +21,6 @@ describe PaginatedInstallmentsPresenter do
 
         expect(result[:pagination]).to eq(count: 2, next: 2)
         expect(result[:installments].sole).to eq(InstallmentPresenter.new(seller:, installment: published_installment2).props)
-        expect(result[:has_posts]).to be(true)
       end
     end
 
@@ -77,17 +76,6 @@ describe PaginatedInstallmentsPresenter do
 
       it "raises an error" do
         expect { presenter.props }.to raise_error(ArgumentError, "Invalid type")
-      end
-    end
-
-    context "when seller has no installments" do
-      let(:seller_without_installments) { create(:user) }
-      let(:presenter) { described_class.new(seller: seller_without_installments, type:, page:, query:) }
-
-      it "returns has_posts as false" do
-        result = presenter.props
-
-        expect(result[:has_posts]).to be(false)
       end
     end
 
@@ -209,6 +197,22 @@ describe PaginatedInstallmentsPresenter do
         expect(installments.map { _1[:click_count] }).to eq([1, 1])
         expect(EmailEngagementDynamoStore.client).not_to have_received(:query)
       end
+    end
+  end
+
+  describe "#has_posts?" do
+    let(:seller) { create(:user) }
+
+    it "returns true when the seller has an email of the given type" do
+      create(:installment, seller:, published_at: 1.day.ago)
+
+      expect(described_class.new(seller:, type: "published").has_posts?).to be(true)
+    end
+
+    it "returns false when the seller has emails only of another type" do
+      create(:installment, seller:)
+
+      expect(described_class.new(seller:, type: "published").has_posts?).to be(false)
     end
   end
 end
