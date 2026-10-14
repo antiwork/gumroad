@@ -730,6 +730,25 @@ describe CustomerMailer do
       expect(cell_displays.last).to match(/\A(table-cell|revert)\z/)
     end
 
+    it "wraps a long product name onto up to three lines and keeps the seller row on one line" do
+      product = create(:product, name: "Avant la suite: Un moment pour faire le point | SIF-260109-08")
+      purchase = create(:purchase, link: product)
+      mail = CustomerMailer.receipt(purchase.id)
+      body = mail.html_part&.decoded || mail.body.decoded
+
+      cell = Nokogiri::HTML(Premailer::Rails::CustomizedPremailer.new(body).to_inline_css).at_css(".item .product-checkout-cell")
+      declaration = ->(node, property) { node["style"].to_s.scan(/(?:\A|;)\s*#{property}:\s*([^;]+)/).flatten.last&.strip }
+      name = cell.at_css("h4")
+      seller_row = cell.at_css(".footer").parent
+
+      expect(name.text.strip).to eq(product.name)
+      expect(declaration.(name, "white-space")).to eq("normal")
+      expect(declaration.(name, "max-height")).to eq("66px")
+      expect(declaration.(name, "-webkit-line-clamp")).to eq("3")
+      expect(declaration.(seller_row, "white-space")).to eq("nowrap")
+      expect(declaration.(seller_row, "max-height")).to eq("22px")
+    end
+
     it "discloses sales tax when it was taxed" do
       user = create(:user)
       link = create(:product, user:)
