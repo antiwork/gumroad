@@ -425,6 +425,25 @@ describe StripePayoutProcessor do
       expect(bank_account.reload).to be_deleted
     end
 
+    it "refuses and reverses a pre-takeover payout to a Stripe Connect account the takeover retired", :aggregate_failures do
+      seller = create(:user)
+      retired = create(:merchant_account_stripe_connect, user: seller, charge_processor_merchant_id: "acct_connect_adopted")
+      payment = create(:payment, user: seller, processor: PayoutProcessorType::STRIPE, state: "processing",
+                                 stripe_connect_account_id: "acct_connect_adopted", stripe_internal_transfer_id: "tr_connect_adopted",
+                                 processor_fee_cents: 0)
+      retired.delete_charge_processor_account!
+      retired.mark_retired_by_adoption!
+      allow(described_class).to receive(:reverse_internal_transfer_or_defer!)
+      expect(Stripe::Transfer).not_to receive(:retrieve)
+
+      errors = described_class.perform_payment(payment)
+
+      expect(errors.sole).to include("acct_connect_adopted", "Internal transfer tr_connect_adopted is being reversed")
+      expect(described_class).to have_received(:reverse_internal_transfer_or_defer!).with(payment)
+      expect(payment.reload).to be_failed
+      expect(payment.failure_reason).to eq(Payment::FailureReason::DESTINATION_ACCOUNT_RETIRED)
+    end
+
     it "completes a payout to a relinked Stripe Connect account whose older row a takeover retired", :aggregate_failures do
       seller = create(:user)
       retired = create(:merchant_account_stripe_connect, user: seller, charge_processor_merchant_id: "acct_relinked")
