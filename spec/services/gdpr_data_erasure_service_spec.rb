@@ -917,17 +917,28 @@ describe GdprDataErasureService do
       expect(result[:summary]).to include(carts_anonymized: 0, sent_post_emails_deleted: 0, audience_members_anonymized: 0, followers_anonymized: 0)
     end
 
-    it "anonymizes follows linked to the account under an earlier address and leaves other people's rows under it" do
+    it "anonymizes follows linked to the account under an earlier address, drops their audience follower details, and leaves other people's rows under it" do
       old_email = "john.old@example.com"
       anonymized_email = "deleted-#{user.id}@deleted.gumroad.com"
       seller, both_addresses_seller, two_old_addresses_seller, unrelated_seller = create_list(:user, 4)
       linked = create(:active_follower, user: seller, email: old_email, follower_user_id: user.id)
+      shared_member = AudienceMember.find_by!(seller:, email: old_email)
+      shared_member.details["purchases"] = [{ "id" => 1, "product_id" => 1, "price_cents" => 100, "created_at" => 7.days.ago.iso8601, "country" => "United States" }]
+      shared_member.save!
       current = create(:active_follower, user: both_addresses_seller, email: user.email, follower_user_id: user.id)
       create(:active_follower, user: both_addresses_seller, email: old_email, follower_user_id: user.id)
       create(:deleted_follower, user: two_old_addresses_seller, email: "john.older@example.com", follower_user_id: user.id)
       alive_old = create(:active_follower, user: two_old_addresses_seller, email: old_email, follower_user_id: user.id)
       unlinked = create(:active_follower, user: unrelated_seller, email: old_email)
       other_account = create(:active_follower, user: create(:user), email: old_email, follower_user_id: create(:user).id)
+      stranger = create(:active_follower, user: seller, email: "john.older@example.com")
+      linked_member_ids = AudienceMember.where(seller: [both_addresses_seller, two_old_addresses_seller], email: old_email).ids
+      unrelated_member_id = AudienceMember.find_by!(seller: unrelated_seller, email: old_email).id
+      recreate_model_index(AudienceMember)
+      index_model_records(AudienceMember)
+      indexed = ->(id) { EsClient.get(index: AudienceMember.index_name, id:, ignore: 404)["_source"]&.slice("email", "follower", "customer") }
+      expect(linked_member_ids.size).to eq(2)
+      expect(indexed.(shared_member.id)).to eq("email" => old_email, "follower" => true, "customer" => true)
 
       result = described_class.new(user, performed_by: admin).perform!
 
@@ -935,8 +946,15 @@ describe GdprDataErasureService do
       expect(linked.reload.email).to eq(anonymized_email)
       expect(Follower.where(followed_id: both_addresses_seller.id).pluck(:id, :email)).to eq([[current.id, anonymized_email]])
       expect(Follower.where(followed_id: two_old_addresses_seller.id).pluck(:id, :email)).to eq([[alive_old.id, anonymized_email]])
-      expect([unlinked, other_account].map { _1.reload.email }).to eq([old_email, old_email])
-      expect(AudienceMember.find_by(seller: unrelated_seller, email: old_email)).to be_follower
+      expect([unlinked, other_account, stranger].map { _1.reload.email }).to eq([old_email, old_email, "john.older@example.com"])
+      expect(AudienceMember.find_by(seller:, email: "john.older@example.com")).to be_follower
+      expect(AudienceMember.where(seller: [both_addresses_seller, two_old_addresses_seller], email: [old_email, "john.older@example.com"])).to be_empty
+      expect(linked_member_ids.map { EsClient.exists?(index: AudienceMember.index_name, id: _1) }).to eq([false, false])
+      expect(shared_member.reload).to have_attributes(follower: false, customer: true)
+      expect(shared_member.details["purchases"].pluck("id")).to eq([1])
+      expect(indexed.(shared_member.id)).to eq("email" => old_email, "follower" => false, "customer" => true)
+      expect(AudienceMember.find(unrelated_member_id)).to be_follower
+      expect(indexed.(unrelated_member_id)).to include("email" => old_email, "follower" => true)
       expect(result[:summary]).to include(followers_anonymized: 3)
     end
 
@@ -954,7 +972,24 @@ describe GdprDataErasureService do
       expect([rerun[:success], again[:success]]).to eq([true, true])
       expect(Follower.where(followed_id: seller.id).pluck(:id, :email)).to eq([[erased.id, anonymized_email]])
       expect(left_behind.reload.email).to eq(anonymized_email)
+      expect(AudienceMember.where(email: "john.old@example.com")).to be_empty
       expect([rerun, again].map { _1[:summary][:followers_anonymized] }).to eq([1, 0])
+    end
+
+    it "keeps a purchase added to a linked follow's audience member after the erasure first read it" do
+      seller = create(:user)
+      create(:active_follower, user: seller, email: "john.old@example.com", follower_user_id: user.id)
+      member = AudienceMember.find_by!(seller:, email: "john.old@example.com")
+      purchase = { "id" => 1, "product_id" => 1, "price_cents" => 100, "created_at" => 7.days.ago.iso8601, "country" => "United States" }
+      allow(AudienceMember).to receive(:lock).and_wrap_original do |original, *args|
+        AudienceMember.find(member.id).then { _1.update_columns(details: _1.details.merge("purchases" => [purchase])) }
+        original.call(*args)
+      end
+
+      expect(described_class.new(user, performed_by: admin).perform![:success]).to eq(true)
+
+      expect(member.reload).to have_attributes(follower: false, customer: true)
+      expect(member.details.keys).to eq(["purchases"])
     end
 
     it "rolls back the residual cleanup with the rest of the erasure when a step fails" do

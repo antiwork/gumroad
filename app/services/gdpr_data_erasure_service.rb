@@ -572,9 +572,10 @@ class GdprDataErasureService
     # never rewrites. Matched on that link only: an old address alone is no proof its rows are theirs.
     def anonymize_linked_followers!(anonymized_email)
       linked = Follower.where(follower_user_id: @user.id).where.not(email: anonymized_email)
-                       .pluck(:id, :followed_id, :deleted_at)
+                       .pluck(:id, :followed_id, :deleted_at, :email)
       return if linked.empty?
 
+      remove_linked_follower_audience_details!(linked)
       # (email, followed_id) is unique, so at most one row per followed seller can take the address.
       taken_followed_ids = Follower.where(email: anonymized_email, followed_id: linked.map(&:second).uniq).pluck(:followed_id)
       kept_ids = linked.reject { taken_followed_ids.include?(_2) }
@@ -582,6 +583,34 @@ class GdprDataErasureService
                        .map { |_, rows| rows.min_by { |id, _, deleted_at| [deleted_at ? 1 : 0, id] }.first }
       Follower.where(id: linked.map(&:first) - kept_ids).delete_all
       @counts[:followers] += Follower.where(id: kept_ids).update_all(email: anonymized_email)
+    end
+
+    # The rewrite skips Follower's audience callbacks, and afterwards the follow's own unsubscribe
+    # looks under the new address, so the old-address member would keep receiving posts. Only a
+    # follower detail pointing at one of these rows is removed; anyone else's details on it stay.
+    def remove_linked_follower_audience_details!(linked)
+      follower_ids = linked.map(&:first)
+      owned = ->(member) { follower_ids.include?(member.details.dig("follower", "id")) }
+      candidate_ids = AudienceMember.where(seller_id: linked.map(&:second).uniq, email: linked.map(&:fourth).uniq)
+                                    .filter_map { _1.id if owned.(_1) }
+      return if candidate_ids.empty?
+
+      reindex_ids, unindex_ids = [], []
+      candidate_ids.each do |member_id|
+        # Re-read under the lock, or a purchase or affiliate added since the read above is lost.
+        member = AudienceMember.lock.find_by(id: member_id)
+        next unless member && owned.(member)
+
+        member.details.delete("follower")
+        if member.valid?
+          member.save!
+          reindex_ids << member.id
+        else
+          member.destroy!
+          unindex_ids << member.id
+        end
+      end
+      record_pending_audience_search_index!(reindex_ids:, unindex_ids:)
     end
 
     # Written in the erasure's transaction so the ids commit exactly when the rows do. After that
