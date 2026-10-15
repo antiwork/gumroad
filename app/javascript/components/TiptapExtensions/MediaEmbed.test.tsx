@@ -26,6 +26,9 @@ vi.mock("$app/utils/request", () => ({
 
 const ID = "xwE0xYM0S6k";
 const CANONICAL = `https://www.youtube.com/watch?v=${ID}`;
+const EMBED_URL = `https://www.youtube.com/embed/${ID}`;
+const SHORT_URL = `https://youtu.be/${ID}`;
+const NOCOOKIE = `https://www.youtube-nocookie.com/embed/${ID}`;
 const EMBED = {
   html: '<iframe src="https://iframely.net/api/iframe?url=x"></iframe>',
   title: "Welcome",
@@ -79,19 +82,20 @@ describe("mediaEmbedUrlCandidates", () => {
   it("keeps a start offset, since dropping it would change what the embed plays", () => {
     expect(mediaEmbedUrlCandidates(`https://youtu.be/${ID}?t=42`)).toEqual([
       `${CANONICAL}&t=42`,
-      `https://www.youtube.com/embed/${ID}?start=42`,
+      `${EMBED_URL}?start=42`,
+      `${SHORT_URL}?t=42`,
+      `${NOCOOKIE}?start=42`,
     ]);
     expect(mediaEmbedUrlCandidates(`https://www.youtube.com/watch?v=${ID}&start=1m10s`)).toEqual([
       `${CANONICAL}&t=1m10s`,
-      `https://www.youtube.com/embed/${ID}?start=70`,
+      `${EMBED_URL}?start=70`,
+      `${SHORT_URL}?t=1m10s`,
+      `${NOCOOKIE}?start=70`,
     ]);
   });
 
-  it("offers a second, distinct spelling so one poisoned cache key cannot kill the embed", () => {
-    expect(mediaEmbedUrlCandidates(`https://youtu.be/${ID}`)).toEqual([
-      CANONICAL,
-      `https://www.youtube.com/embed/${ID}`,
-    ]);
+  it("offers distinct spellings, so one poisoned cache key cannot kill the embed", () => {
+    expect(mediaEmbedUrlCandidates(SHORT_URL)).toEqual([CANONICAL, EMBED_URL, SHORT_URL, NOCOOKIE]);
   });
 
   it("passes playlist-context and non-YouTube URLs through unchanged", () => {
@@ -128,6 +132,24 @@ describe("EmbedMediaForm", () => {
 
     expect(askedUrls()).toEqual([CANONICAL, `https://www.youtube.com/embed/${ID}`]);
     expect(onEmbedReceived).toHaveBeenCalledWith(EMBED);
+  });
+
+  it("keeps walking distinct spellings when more than one lookup is poisoned", async () => {
+    state.bodies = [NOT_FOUND, NOT_FOUND, EMBED];
+
+    const onEmbedReceived = await insertUrl(SHORT_URL);
+
+    expect(askedUrls()).toEqual([CANONICAL, EMBED_URL, SHORT_URL]);
+    expect(onEmbedReceived).toHaveBeenCalledWith(EMBED);
+  });
+
+  it("gives up only after every spelling has been asked", async () => {
+    state.bodies = [NOT_FOUND];
+
+    const onEmbedReceived = await insertUrl(SHORT_URL);
+
+    expect(askedUrls()).toEqual([CANONICAL, EMBED_URL, SHORT_URL, NOCOOKIE]);
+    expect(onEmbedReceived).not.toHaveBeenCalled();
   });
 
   it("does not retry a non-YouTube URL iframely cannot embed", async () => {

@@ -134,7 +134,6 @@ const isIframelyEmbedData = (data: unknown): data is IframelyEmbedData =>
   isString(data.provider_name) &&
   (data.thumbnail_url === undefined || isString(data.thumbnail_url));
 
-// Iframely stores the exact URL we ask for, so use one canonical spelling first and a distinct fallback.
 const YOUTUBE_VIDEO_ID = /^[A-Za-z0-9_-]{11}$/u;
 const YOUTUBE_START_TIME = /^(?=\d)(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s?)?$/u;
 
@@ -158,6 +157,16 @@ const youtubeStartSeconds = (value: string | null): number | null => {
   return Number(match[1] ?? 0) * 3600 + Number(match[2] ?? 0) * 60 + Number(match[3] ?? 0);
 };
 
+// Iframely caches each lookup against the exact URL string it was asked for, so a spelling whose
+// lookup once failed keeps returning that failure: ask distinct spellings, in order, until one
+// comes back usable. A healthy video stores its embed against the first spelling.
+const YOUTUBE_EMBED_SPELLINGS: { url: (id: string) => string; startParam: "t" | "start" }[] = [
+  { url: (id) => `https://www.youtube.com/watch?v=${id}`, startParam: "t" },
+  { url: (id) => `https://www.youtube.com/embed/${id}`, startParam: "start" },
+  { url: (id) => `https://youtu.be/${id}`, startParam: "t" },
+  { url: (id) => `https://www.youtube-nocookie.com/embed/${id}`, startParam: "start" },
+];
+
 export const mediaEmbedUrlCandidates = (raw: string): string[] => {
   let parsed: URL;
   try {
@@ -176,13 +185,13 @@ export const mediaEmbedUrlCandidates = (raw: string): string[] => {
   if (!id || !YOUTUBE_VIDEO_ID.test(id)) return [raw];
   const start = parsed.searchParams.get("t") ?? parsed.searchParams.get("start");
   const startSeconds = youtubeStartSeconds(start);
-  const canonical = new URL(`https://www.youtube.com/watch?v=${id}`);
-  const fallback = new URL(`https://www.youtube.com/embed/${id}`);
-  if (start && startSeconds !== null) {
-    canonical.searchParams.set("t", start);
-    fallback.searchParams.set("start", String(startSeconds));
-  }
-  return [canonical.toString(), fallback.toString()];
+  return YOUTUBE_EMBED_SPELLINGS.map(({ url, startParam }) => {
+    const candidate = new URL(url(id));
+    if (start && startSeconds !== null) {
+      candidate.searchParams.set(startParam, startParam === "t" ? start : String(startSeconds));
+    }
+    return candidate.toString();
+  });
 };
 
 export type EmbedMediaFormProps = {
