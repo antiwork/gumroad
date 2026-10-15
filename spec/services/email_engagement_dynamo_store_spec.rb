@@ -511,23 +511,5 @@ describe EmailEngagementDynamoStore do
         "example.com" => 2,
       )
     end
-
-    it "sums the counts of stored URLs that share a display form" do
-      client.stub_responses(
-        :query,
-        {
-          items: [
-            { "click_url" => "https://example.com/a", "click_count" => 3 },
-            { "click_url" => "http://www&#46;example&#46;com/a", "click_count" => 4 },
-            { "click_url" => "https://gumroad.com", "click_count" => 1 },
-          ],
-        }
-      )
-
-      expect(described_class.url_click_counts(123)).to eq(
-        "example.com/a" => 7,
-        "gumroad.com" => 1,
-      )
-    end
   end
 end

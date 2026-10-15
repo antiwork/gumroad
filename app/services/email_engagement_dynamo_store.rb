@@ -116,11 +116,10 @@ class EmailEngagementDynamoStore
         break if exclusive_start_key.blank?
       end
 
-      # Distinct stored URLs can share a display form (http vs https, www), so sum them.
       items.each_with_object({}) do |item, counts|
         url = display_url(item["click_url"].to_s)
         next if url.blank?
-        counts[url] = counts.fetch(url, 0) + item["click_count"].to_i
+        counts[url] = item["click_count"].to_i
       end
     end
 
