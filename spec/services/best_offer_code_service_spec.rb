@@ -516,6 +516,25 @@ describe BestOfferCodeService do
         end
       end
 
+      [[{ minimum_quantity: 2 }, "quantity"], [{ minimum_amount_cents: 20_00 }, "spend"]].each do |minimum, kind|
+        context "when a larger sale has a #{kind} minimum" do
+          let(:auto_code) do
+            seller.offer_codes.create!(code: "SHOP50", amount_percentage: 50, universal: true, products: [], auto_apply: true, **minimum)
+          end
+          let(:own) do
+            create(:offer_code, user: seller, products: [product], ownership_products: [product], existing_customers_only: true,
+                                code: "RENEW20", amount_cents: nil, amount_percentage: 20, currency_type: nil)
+          end
+
+          it "keeps a qualifying buyer's default until the order meets the sale's minimum" do
+            create(:purchase, purchaser: buyer, link: product, seller:, price_cents: product.price_cents)
+
+            expect(described_class.new(product:, buyer:).result).to include(valid: true, code: "RENEW20")
+            expect(described_class.new(product:, buyer:, quantity: 2).result).to include(valid: true, code: "SHOP50")
+          end
+        end
+      end
+
       context "when a fixed default no longer matches the product currency" do
         let(:own) do
           create(:offer_code, user: seller, products: [product], ownership_products: [product], existing_customers_only: true,

@@ -1,11 +1,14 @@
 # frozen_string_literal: true
 
 class BestOfferCodeService
-  def initialize(product:, url_code: nil, quantity: 1, buyer: nil)
+  # comparison_price_cents is the unit price the buyer already chose (the wanted redirect knows
+  # it); without it the defaults are weighed on the price the card quotes.
+  def initialize(product:, url_code: nil, quantity: 1, buyer: nil, comparison_price_cents: nil)
     @product = product
     @url_code = url_code.presence
     @quantity = quantity
     @buyer = buyer
+    @comparison_price_cents = comparison_price_cents
     @default_codes = default_codes
   end
 
@@ -44,16 +47,35 @@ class BestOfferCodeService
 
     # A qualifying buyer keeps their existing-customer default only when it takes more off than the
     # shop-wide sale, so it never prices them above the sale everyone else sees; a tie keeps it.
-    # Weighed on the price the card quotes, since a tiered membership's own price_cents is 0.
+    # Weighed on the chosen price, else the one the card quotes: a tiered membership's price_cents is 0.
     def best_default_code_result
       @default_codes.map { evaluate_code(_1) }.select { _1[:valid] }.reduce do |best, candidate|
-        price_cents = default_comparison_price_cents
-        amount_off_from_discount(candidate[:discount], price_cents) > amount_off_from_discount(best[:discount], price_cents) ? candidate : best
+        default_comparison_amount(candidate[:discount]) > default_comparison_amount(best[:discount]) ? candidate : best
       end
     end
 
+    # evaluate_code lifts the quantity to the code's minimum and the preview skips the spend
+    # minimum, so a code the initial quote cannot meet still comes back valid. applySelection drops
+    # it at that quote, so it takes nothing off here.
+    def default_comparison_amount(discount)
+      price_cents = default_comparison_price_cents
+      return 0 unless met_discount_conditions?(discount, price_cents)
+
+      amount_off_from_discount(discount, price_cents)
+    end
+
+    # Mirrors applySelection's gate, which checks both minimums at the stock-capped quantity.
+    def met_discount_conditions?(discount, price_cents)
+      quantity = default_comparison_quantity
+      quantity >= discount[:minimum_quantity].to_i && price_cents * quantity >= discount[:minimum_amount_cents].to_i
+    end
+
+    def default_comparison_quantity
+      @default_comparison_quantity ||= [@quantity, @product.remaining_for_sale_count].compact.min
+    end
+
     def default_comparison_price_cents
-      @default_comparison_price_cents ||= @product.display_price_cents(for_default_duration: true)
+      @default_comparison_price_cents ||= @comparison_price_cents || @product.display_price_cents(for_default_duration: true)
     end
 
     def evaluate_code(code)
