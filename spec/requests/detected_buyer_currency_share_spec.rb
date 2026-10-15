@@ -56,6 +56,18 @@ describe "detected_buyer_currency Inertia share", type: :request do
     expect(inertia_props(products_path)).not_to have_key("detected_buyer_currency")
   end
 
+  it "skips the lookup on a partial reload that does not request the detected currency" do
+    get "#{seller.subdomain_with_protocol}/", headers: {
+      "X-Inertia" => "true",
+      "X-Inertia-Partial-Component" => "Users/Show",
+      "X-Inertia-Partial-Data" => "creator_profile",
+    }
+
+    expect(response).to be_successful
+    expect(JSON.parse(response.body).fetch("props")).to have_key("creator_profile")
+    expect(GeoIp).not_to have_received(:lookup)
+  end
+
   it "omits the detected currency when the lookup finds no supported currency" do
     allow(GeoIp).to receive(:lookup).and_return(nil)
 

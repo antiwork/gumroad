@@ -45,6 +45,10 @@ describe "RenderingExtension" do
           }
         )
       end
+
+      it "lists its keys in CUSTOM_CONTEXT_KEYS" do
+        expect(custom_context.keys).to eq(RenderingExtension::CUSTOM_CONTEXT_KEYS)
+      end
     end
 
     context "when user is logged in" do

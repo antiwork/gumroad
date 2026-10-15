@@ -3,6 +3,11 @@
 module RenderingExtension
   extend self
 
+  # InertiaRendering shares each of these as its own lazy prop, so keep it in sync with the hash below.
+  CUSTOM_CONTEXT_KEYS = %i[
+    design_settings domain_settings user_agent_info logged_in_user current_seller csp_nonce locale feature_flags
+  ].freeze
+
   def custom_context(view_context)
     pundit_user = view_context.pundit_user
     {
