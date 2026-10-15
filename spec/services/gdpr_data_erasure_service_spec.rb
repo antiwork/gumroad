@@ -1040,6 +1040,52 @@ describe GdprDataErasureService do
       expect(user.reload).to have_attributes(gdpr_audience_reindex_member_ids: [], gdpr_audience_unindex_member_ids: [999_002])
     end
 
+    it "queues no audience search jobs when a transaction around the erasure rolls back" do
+      follower = create(:active_follower, email: user.email)
+      conflicting_seller = create(:user)
+      create(:active_follower, user: conflicting_seller, email: user.email)
+      create(:audience_member, seller: conflicting_seller, email: "deleted-#{user.id}@deleted.gumroad.com")
+      ElasticsearchIndexerWorker.jobs.clear
+
+      ActiveRecord::Base.transaction do
+        expect(described_class.new(user, performed_by: admin).perform![:success]).to eq(true)
+        raise ActiveRecord::Rollback
+      end
+
+      expect(ElasticsearchIndexerWorker.jobs.select { _1["args"][1]["class_name"] == "AudienceMember" }).to be_empty
+      expect(User.find(user.id)).to have_attributes(email: "john@example.com", gdpr_audience_reindex_member_ids: [], gdpr_audience_unindex_member_ids: [])
+      expect(follower.reload.email).to eq("john@example.com")
+    end
+
+    it "scrubs guest carts under the address and a former affiliate's sent post emails, and leaves carts on a device another account shares" do
+      original_email = user.email
+      user.update_columns(google_uid: "google-subject")
+      guest_cart = create(:cart, :guest, email: original_email, ip_address: "127.0.0.3", browser_guid: "guest-guid")
+      shared_device_cart = create(:cart, :guest, email: nil, ip_address: "127.0.0.4", browser_guid: "own-guid")
+      other_cart = create(:cart, :guest, email: "other@example.com", browser_guid: "other-guid")
+      create(:cart, user:, email: original_email, browser_guid: "own-guid")
+      other_user_cart = create(:cart, user: create(:user), email: "shared@example.com", browser_guid: "own-guid")
+      affiliate_seller = create(:user)
+      create(:direct_affiliate, seller: affiliate_seller, affiliate_user: user, deleted_at: Time.current)
+      affiliate_sent = create(:sent_post_email, post: create(:installment, seller: affiliate_seller), email: original_email)
+      seller = create(:user)
+      post = create(:installment, seller:)
+      create(:purchase, link: create(:product, user: seller), email: original_email)
+      sent = create(:sent_post_email, post:, email: original_email)
+      other_sent = create(:sent_post_email, post:, email: "other@example.com")
+
+      described_class.new(user, performed_by: admin).perform!
+
+      expect(guest_cart.reload).to have_attributes(email: "deleted-#{user.id}@deleted.gumroad.com", ip_address: nil, browser_guid: nil)
+      # own-guid is also on another account's cart, so it does not tie this address-less cart to the user.
+      expect(shared_device_cart.reload).to have_attributes(ip_address: "127.0.0.4", browser_guid: "own-guid")
+      expect(other_cart.reload.email).to eq("other@example.com")
+      expect(other_user_cart.reload).to have_attributes(email: "shared@example.com", browser_guid: "own-guid")
+      expect(SentPostEmail.where(id: [affiliate_sent.id, sent.id])).to be_empty
+      expect(SentPostEmail.exists?(other_sent.id)).to be(true)
+      expect(user.reload.google_uid).to be_nil
+    end
+
     it "deletes the user's device records" do
       ios_device = create(:device, user:, token: "ios-device-token")
       android_device = create(:android_device, user:, token: "android-device-token")
