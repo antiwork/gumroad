@@ -13,7 +13,7 @@
 #     copy:     String | nil,                # the most useful thing to copy (the url, or an id)
 #   }
 #
-# Discount coverage comes from the seller's record. Use that record's currency for the card too.
+# Discount currency and coverage come from the seller's record.
 # Unknown shapes are skipped; the model's prose still carries the answer.
 module Ai::StoreAgentObjectFormatter
   MAX_PRODUCT_NAMES = 3
@@ -112,7 +112,7 @@ module Ai::StoreAgentObjectFormatter
       end
       batch.each do |item|
         currency, coverage = details[item["id"]]
-        card = discount(item, currency:, coverage:)
+        card = discount(item, currency:, coverage:, time_zone: seller && ActiveSupport::TimeZone[seller.timezone.to_s])
         cards << card unless existing_objects.include?(card) || cards.include?(card)
       end
     end
@@ -136,7 +136,7 @@ module Ai::StoreAgentObjectFormatter
     names.to_sentence.presence || "No products"
   end
 
-  def discount(json, currency: nil, coverage: nil)
+  def discount(json, currency: nil, coverage: nil, time_zone: nil)
     return nil unless json.is_a?(Hash) && (json["name"] || json["id"])
     amount = if json["percent_off"].present?
       "#{json['percent_off']}% off"
@@ -151,14 +151,23 @@ module Ai::StoreAgentObjectFormatter
                                ["Applies to", coverage],
                                ["Apply automatically", json.key?("auto_apply") ? (json["auto_apply"] ? "On" : "Off") : nil],
                                ["Sale label", json["auto_apply"] ? (json["sale_label"].presence || OfferCode::DEFAULT_SALE_LABEL) : nil],
-                               ["Starts at", json["valid_at"]],
-                               ["Ends at", json["expires_at"]],
+                               ["Starts at", local_time(json["valid_at"], time_zone)],
+                               ["Ends at", local_time(json["expires_at"], time_zone)],
                                ["Times used", json["times_used"]],
                                ["Max uses", json["max_purchase_count"]],
                              ]),
       url: nil,
       copy: json["name"].presence || json["id"], # the code is the useful thing to copy
     }
+  end
+
+  # The seller's own clock, with the zone named, so the card never shows a bare UTC offset.
+  def local_time(value, time_zone)
+    return value if value.blank?
+
+    Time.iso8601(value.to_s).in_time_zone(time_zone || Time.zone).strftime("%b %-d, %Y, %-l:%M %p %Z")
+  rescue ArgumentError
+    value.to_s
   end
 
   def sale(json)

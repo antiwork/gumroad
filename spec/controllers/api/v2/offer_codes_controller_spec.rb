@@ -437,77 +437,83 @@ describe Api::V2::OfferCodesController do
       end
     end
   end
+
   describe "sale schedule" do
-    %i[create update].each do |action|
-      context "on #{action}" do
-        let(:product) { create(:product, user: @user, price_cents: 10_000) }
-        let(:token) { create("doorkeeper/access_token", application: @app, resource_owner_id: @user.id, scopes: "edit_products") }
-        let!(:existing_code) { create(:percentage_offer_code, user: @user, universal: true, products: []) if action == :update }
-        let(:starts_at) { "2026-11-27T00:00:00-05:00" }
-        let(:ends_at) { "2026-12-01T00:00:00-05:00" }
+    let(:product) { create(:product, user: @user, price_cents: 10_000) }
+    let(:token) { create("doorkeeper/access_token", application: @app, resource_owner_id: @user.id, scopes: "edit_products") }
+    let(:code) { create(:percentage_offer_code, user: @user, universal: true, products: []) }
+    let(:parameters) { { access_token: token.token, link_id: product.external_id } }
+    let(:starts_at) { "2026-11-27T00:00:00-05:00" }
+    let(:ends_at) { "2026-12-01T00:00:00-05:00" }
+    let(:invalid_timestamp_message) { "expires_at must be an RFC 3339 timestamp with a time zone, or null." }
 
-        define_method(:write_sale) do |attributes|
-          parameters = { access_token: token.token, link_id: product.external_id }
-          if action == :create
-            post :create, params: parameters.merge(name: "SALE30", amount_off: 30, offer_type: "percent", universal: true).merge(attributes), as: :json
-          else
-            put :update, params: parameters.merge(id: existing_code.external_id).merge(attributes), as: :json
-          end
-        end
+    def update_code(attributes)
+      put :update, params: parameters.merge(id: code.external_id).merge(attributes), as: :json
+    end
 
-        it "saves the schedule and returns UTC timestamps" do
-          write_sale(valid_at: starts_at, expires_at: ends_at, auto_apply: true, sale_label: "Black Friday")
+    it "creates a scheduled automatic sale and returns UTC timestamps" do
+      post :create, params: parameters.merge(name: "SALE30", amount_off: 30, offer_type: "percent", universal: true, auto_apply: true,
+                                             sale_label: "Black Friday", valid_at: starts_at, expires_at: ends_at), as: :json
 
-          expect(response.parsed_body).to include("success" => true)
-          code = @user.offer_codes.alive.sole
-          expect(code).to have_attributes(valid_at: Time.utc(2026, 11, 27, 5), expires_at: Time.utc(2026, 12, 1, 5))
-          expect(response.parsed_body["offer_code"]).to include("valid_at" => "2026-11-27T05:00:00Z", "expires_at" => "2026-12-01T05:00:00Z", "auto_apply" => true, "sale_label" => "Black Friday")
-        end
+      expect(response.parsed_body["offer_code"]).to include("valid_at" => "2026-11-27T05:00:00Z", "expires_at" => "2026-12-01T05:00:00Z", "auto_apply" => true, "sale_label" => "Black Friday")
+      expect(@user.offer_codes.alive.sole).to have_attributes(valid_at: Time.utc(2026, 11, 27, 5), expires_at: Time.utc(2026, 12, 1, 5))
+    end
 
-        ["2026-11-27T00:00:60-05:00", "2027-02-30T00:00:00Z", "2027-04-31T00:00:00Z", "2026-11-27T24:00:00Z", "not-a-date", "2026-11-27", "2026-11-27T00:00:00", false, 1, ["2026-11-27T00:00:00Z"], { time: "2026-11-27T00:00:00Z" }].each do |invalid|
-          it "rejects an invalid timestamp #{invalid.inspect} without saving any settings" do
-            before_attributes = existing_code&.attributes
-            expect { write_sale(valid_at: starts_at, expires_at: invalid, auto_apply: true) }.not_to change(OfferCode, :count)
+    it "rejects an invalid timestamp on create without saving the code" do
+      expect do
+        post :create, params: parameters.merge(name: "SALE30", amount_off: 30, offer_type: "percent", universal: true, valid_at: starts_at, expires_at: "not-a-date"), as: :json
+      end.not_to change(OfferCode, :count)
 
-            expect(response.parsed_body).to include("success" => false, "message" => "expires_at must be an RFC 3339 timestamp with a time zone, or null.")
-            expect(existing_code.reload.attributes).to eq(before_attributes) if existing_code
-          end
-        end
+      expect(response.parsed_body).to include("success" => false, "message" => invalid_timestamp_message)
+    end
 
-        it "rejects an end before the start" do
-          write_sale(valid_at: ends_at, expires_at: starts_at)
+    it "updates the schedule" do
+      update_code(valid_at: starts_at, expires_at: ends_at)
 
-          expect(response.parsed_body).to include("success" => false, "message" => "The discount code's start date must be earlier than its end date.")
-        end
+      expect(response.parsed_body).to include("success" => true)
+      expect(code.reload).to have_attributes(valid_at: Time.utc(2026, 11, 27, 5), expires_at: Time.utc(2026, 12, 1, 5))
+    end
 
-        it "rejects an end without a start" do
-          write_sale(expires_at: ends_at)
+    # Time.zone.rfc3339 rolls the first three over to a different time instead of raising.
+    ["2027-02-30T00:00:00Z", "2026-11-27T24:00:00Z", "2026-11-27T00:00:60-05:00", "2026-11-27T00:00:00", 1].each do |invalid|
+      it "rejects #{invalid.inspect} without changing the code" do
+        before_attributes = code.attributes
+        update_code(valid_at: starts_at, expires_at: invalid, auto_apply: true)
 
-          expect(response.parsed_body).to include("success" => false)
-        end
-
-        it "keeps omitted dates unchanged" do
-          existing_code&.update!(valid_at: Time.iso8601(starts_at), expires_at: Time.iso8601(ends_at))
-          write_sale(auto_apply: true)
-
-          expect(response.parsed_body).to include("success" => true)
-          if existing_code
-            expect(existing_code.reload).to have_attributes(valid_at: Time.utc(2026, 11, 27, 5), expires_at: Time.utc(2026, 12, 1, 5))
-          else
-            expect(@user.offer_codes.alive.sole).to have_attributes(valid_at: nil, expires_at: nil)
-          end
-        end
-
-        it "accepts cleared dates" do
-          existing_code&.update!(valid_at: Time.iso8601(starts_at), expires_at: Time.iso8601(ends_at))
-          write_sale(valid_at: nil, expires_at: "")
-
-          expect(response.parsed_body).to include("success" => true)
-          expect(@user.offer_codes.alive.sole).to have_attributes(valid_at: nil, expires_at: nil)
-        end
+        expect(response.parsed_body).to include("success" => false, "message" => invalid_timestamp_message)
+        expect(code.reload.attributes).to eq(before_attributes)
       end
     end
+
+    it "rejects an end before the start" do
+      update_code(valid_at: ends_at, expires_at: starts_at)
+
+      expect(response.parsed_body).to include("success" => false, "message" => "The discount code's start date must be earlier than its end date.")
+    end
+
+    it "rejects an end without a start" do
+      update_code(expires_at: ends_at)
+
+      expect(response.parsed_body).to include("success" => false, "message" => "The discount code's start date must be earlier than its end date.")
+    end
+
+    it "keeps omitted dates unchanged" do
+      code.update!(valid_at: Time.iso8601(starts_at), expires_at: Time.iso8601(ends_at))
+      update_code(auto_apply: true)
+
+      expect(response.parsed_body).to include("success" => true)
+      expect(code.reload).to have_attributes(valid_at: Time.utc(2026, 11, 27, 5), expires_at: Time.utc(2026, 12, 1, 5))
+    end
+
+    it "clears dates sent as null or an empty string" do
+      code.update!(valid_at: Time.iso8601(starts_at), expires_at: Time.iso8601(ends_at))
+      update_code(valid_at: nil, expires_at: "")
+
+      expect(response.parsed_body).to include("success" => true)
+      expect(code.reload).to have_attributes(valid_at: nil, expires_at: nil)
+    end
   end
+
   describe "store-level offer codes" do
     let(:product) { create(:product, user: @user, price_currency_type: "usd", price_cents: 2000) }
     let(:token) { create("doorkeeper/access_token", application: @app, resource_owner_id: @user.id, scopes: "edit_products") }

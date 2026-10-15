@@ -33,7 +33,7 @@ const SaleParameters = () => (
     />
     <ApiParameter
       name="valid_at"
-      description="(optional) Start time as an RFC 3339 timestamp with a time zone, such as 2026-11-27T00:00:00-05:00. Seconds must be 00 through 59."
+      description="(optional) Start time as an RFC 3339 timestamp with a time zone, such as 2026-11-27T00:00:00-05:00."
     />
     <ApiParameter
       name="expires_at"
@@ -47,7 +47,7 @@ const SaleRules = () => (
     Automatic application requires a universal discount. Only one non-deleted discount per seller can have automatic
     application enabled, including scheduled and expired discounts. Disable the current automatic discount before
     enabling another. A product's own default discount takes priority while buyers can redeem it. Fixed discounts apply
-    only to products with the same currency. These settings do not change the product's base price.
+    only to products with the same currency.
   </p>
 );
 

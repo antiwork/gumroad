@@ -522,19 +522,11 @@ class Ai::StoreAgentService
       endpoints. Do not offer to set those up as an alternative, even if other Gumroad interfaces
       support them. Use only the settings listed in the endpoint; none enforces subscriber eligibility.
     - To create an automatic shop-wide sale, set universal=true and auto_apply=true on create_offer_code.
-      First call list_store_offer_codes with auto_apply=true to check for an existing automatic sale.
-      A product-scoped list can omit a sale in another currency or one that excludes that product.
-      Only one non-deleted code per seller can have auto_apply=true, including scheduled and expired codes.
-      Disable the current automatic sale before enabling another. Do not disable it without the creator's request.
-      sale_label accepts plain text, up to 32 characters. Blank labels display Sale.
-      A product's own default discount takes priority while buyers can redeem it.
-      Read get_store_offer_code before using update_store_offer_code to change a sale's schedule, label, or automatic application.
-      Update can enable auto_apply only for a code that is already universal; it cannot change universal or the amount.
-      valid_at and expires_at use RFC 3339 timestamps with a time zone.
-      Ask which time zone to use when the creator's request and store context do not specify one.
-      An end requires a start, and must follow it. Omitted fields stay unchanged.
-      Null or an empty string clears a date. Clear both dates to remove the schedule.
-      auto_apply=false stops automatic application and clears the label. Buyers can still redeem the code manually.
+      First call list_store_offer_codes with auto_apply=true. A seller can have only one automatic code,
+      and a product-scoped list can miss it. Change or disable it with update_store_offer_code, which
+      cannot change universal or the amount. Do not disable a sale unless the creator asks.
+      Send valid_at and expires_at as RFC 3339 timestamps in the store's time zone unless the creator
+      names another. Send null to clear a date.
     - For email to buyers of a particular product, create_email needs audience=product and a real
       product_id or link_id from the conversation or api_read. If missing or rejected, look up the
       requested product with api_read within the tool budget, or ask which product they mean.
@@ -1431,11 +1423,22 @@ class Ai::StoreAgentService
     # Assemble the system prompt with the live read/write endpoint manifests embedded, so the model
     # is told exactly which endpoint ids exist and what each does.
     def system_prompt
-      format(
+      prompt = format(
         SYSTEM_PROMPT_HEADER,
         reads: Ai::StoreAgentApiCatalog.manifest(:read),
         writes: Ai::StoreAgentApiCatalog.manifest(:write),
       )
+      "#{prompt}\n\n#{store_time_context}"
+    end
+
+    # Lets the model turn "Friday at midnight" into a timestamp without asking for the zone.
+    def store_time_context
+      now = Time.current.in_time_zone(seller_time_zone)
+      "Store time zone: #{seller_time_zone.tzinfo.name}. Current time there: #{now.iso8601}."
+    end
+
+    def seller_time_zone
+      @seller_time_zone ||= ActiveSupport::TimeZone[seller.timezone.to_s] || Time.zone
     end
 
     # The re-ask after a truncated turn carries one extra instruction the ordinary turns must not
@@ -1815,6 +1818,11 @@ class Ai::StoreAgentService
       return nil if value.nil?
       return value.to_json unless value.is_a?(String) || value.is_a?(Numeric) || value == true || value == false
       case key.to_s
+      when "auto_apply"
+        # The API turns on automatic application only for true or "true".
+        value.in?([true, "true"]) ? "On" : "Off"
+      when "valid_at", "expires_at"
+        Ai::StoreAgentObjectFormatter.local_time(value, seller_time_zone)
       when "price", "amount_cents", "minimum_amount_cents"
         # Format real cents in the currency's own subunit (JPY has none, so 1000 -> ¥1,000, not ¥10).
         # Anything that isn't a number/digit-string — a blank, a boolean, or a hallucinated "free" —

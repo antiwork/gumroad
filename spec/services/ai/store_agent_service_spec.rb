@@ -373,7 +373,10 @@ describe Ai::StoreAgentService do
       let(:ends_at) { "2026-12-01T00:00:00-05:00" }
       let(:executor) { Ai::StoreAgentActionExecutor.new(seller:, pundit_user:) }
 
-      before { allow(Ai::StoreAgentApiClient).to receive(:new).and_call_original }
+      before do
+        seller.update!(timezone: "Eastern Time (US & Canada)")
+        allow(Ai::StoreAgentApiClient).to receive(:new).and_call_original
+      end
 
       def propose_sale(endpoint:, body:, code: nil)
         path_params = { "link_id" => product.external_id }
@@ -391,8 +394,8 @@ describe Ai::StoreAgentService do
         action = nil
         expect { action = propose_sale(endpoint: "create_offer_code", body:) }.not_to change(OfferCode, :count)
         expect(action[:fields]).to include(
-          { label: "Apply automatically", value: "true" }, { label: "Sale label", value: "Black Friday" },
-          { label: "Starts at", value: starts_at }, { label: "Ends at", value: ends_at },
+          { label: "Apply automatically", value: "On" }, { label: "Sale label", value: "Black Friday" },
+          { label: "Starts at", value: "Nov 27, 2026, 12:00 AM EST" }, { label: "Ends at", value: "Dec 1, 2026, 12:00 AM EST" },
           { label: "Redemption", value: "Automatic on product pages; no code required" },
         )
 
@@ -403,9 +406,21 @@ describe Ai::StoreAgentService do
         expect(code).to have_attributes(auto_apply: true, sale_label: "Black Friday", valid_at: Time.utc(2026, 11, 27, 5), expires_at: Time.utc(2026, 12, 1, 5))
         expect(result[:object][:fields]).to include(
           { label: "Apply automatically", value: "On" }, { label: "Sale label", value: "Black Friday" },
-          { label: "Starts at", value: "2026-11-27T05:00:00Z" }, { label: "Ends at", value: "2026-12-01T05:00:00Z" },
+          { label: "Starts at", value: "Nov 27, 2026, 12:00 AM EST" }, { label: "Ends at", value: "Dec 1, 2026, 12:00 AM EST" },
         )
         travel_to(Time.utc(2026, 11, 28)) { expect(product.reload.discounted_price_cents(2000)).to eq(1400) }
+      end
+
+      it "gives the model the store's time zone and local time" do
+        captured = nil
+        allow(client).to receive(:messages) do |args|
+          captured = args
+          text_result("ok")
+        end
+
+        travel_to(Time.utc(2026, 10, 15, 18)) { service.respond(messages: [{ role: "user", content: "hi" }]) }
+
+        expect(captured[:system]).to include("Store time zone: America/New_York. Current time there: 2026-10-15T14:00:00-04:00.")
       end
 
       it "reschedules and disables an existing automatic sale only after confirmation" do
