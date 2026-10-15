@@ -635,6 +635,37 @@ describe BestOfferCodeService do
 
         expect(described_class.new(product:, buyer:).result).to include(valid: true, code: "RENEW")
       end
+
+      it "weighs a once-per-cart fixed default on the lowest tier, so only a larger one beats the sale" do
+        own = create(:offer_code, user: seller, products: [product], ownership_products: [owned], existing_customers_only: true,
+                                  code: "RENEW", amount_cents: 5_00, currency_type: "usd", once_per_cart: true)
+        product.update!(default_offer_code: own)
+
+        expect(described_class.new(product:, buyer:).result).to include(valid: true, code: "RENEW")
+
+        own.update!(amount_cents: 2_00)
+
+        expect(described_class.new(product:, buyer:).result).to include(valid: true, code: "SHOP30")
+      end
+
+      context "when the sale takes a fixed amount once per cart" do
+        let(:auto_code) do
+          seller.offer_codes.create!(code: "SHOP5", amount_cents: 5_00, currency_type: "usd", universal: true, products: [], auto_apply: true,
+                                     once_per_cart: true)
+        end
+
+        it "weighs the sale on the lowest tier, so only a larger default beats it" do
+          own = create(:offer_code, user: seller, products: [product], ownership_products: [owned], existing_customers_only: true,
+                                    code: "RENEW", amount_cents: nil, amount_percentage: 10, currency_type: nil)
+          product.update!(default_offer_code: own)
+
+          expect(described_class.new(product:, buyer:).result).to include(valid: true, code: "SHOP5")
+
+          own.update!(amount_percentage: 60)
+
+          expect(described_class.new(product:, buyer:).result).to include(valid: true, code: "RENEW")
+        end
+      end
     end
 
     it "gives no discount to an excluded product" do

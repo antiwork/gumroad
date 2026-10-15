@@ -111,10 +111,14 @@ class BestOfferCodeService
       }
     end
 
+    # A once-per-cart code's cents are allocated against price_cents, which is 0 on a tiered
+    # membership; the page takes the configured amount off the quoted total instead.
     def amount_off_from_discount(discount, price_cents, quantity)
       return 0 unless discount
-      if discount[:type] == "fixed"
-        discount[:cents] * (discount[:once_per_cart] ? 1 : quantity)
+      if discount[:type] == "fixed" && discount[:once_per_cart]
+        [discount[:once_per_cart_amount_cents] || discount[:cents], price_cents * quantity].min
+      elsif discount[:type] == "fixed"
+        discount[:cents] * quantity
       else
         (price_cents * discount[:percents] / 100.0).round * quantity
       end
