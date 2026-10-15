@@ -824,14 +824,6 @@ describe UsersController do
       end
     end
 
-    it "turns off free download emails for the free_downloads type" do
-      secure_id = @user.secure_external_id(scope: "email_unsubscribe")
-      get :email_unsubscribe, params: { email_type: "free_downloads", id: secure_id }
-      expect(@user.reload.enable_free_downloads_email).to be(false)
-      expect(@user.enable_payment_email).to be(true)
-      expect(response).to redirect_to(root_path)
-    end
-
     context "with regular external id when user exists" do
       it "redirects to secure redirect page for confirmation" do
         get :email_unsubscribe, params: { email_type: "notify", id: @user.external_id }

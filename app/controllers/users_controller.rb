@@ -155,9 +155,6 @@ class UsersController < ApplicationController
     if params[:email_type] == "notify"
       @user.enable_payment_email = false
       flash[:notice] = "You have been unsubscribed from purchase notifications."
-    elsif params[:email_type] == "free_downloads"
-      @user.enable_free_downloads_email = false
-      flash[:notice] = "You have been unsubscribed from free download notifications."
     elsif params[:email_type] == "seller_update"
       @user.weekly_notification = false
       flash[:notice] = "You have been unsubscribed from weekly sales updates."
