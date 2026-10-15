@@ -235,12 +235,15 @@ module Ai::StoreAgentApiCatalog
     ep("delete_custom_field", :delete, "/products/:link_id/custom_fields/:id", "Delete a product custom field.", scope: "edit_products", path_params: %w[link_id id]),
 
     # ---- Offer codes / discounts (per product) ----
+    ep("list_store_offer_codes", :get, "/offer_codes", "List all store discount codes, including automatic sales excluded from a product or priced in another currency. Use auto_apply=true to find the current automatic sale. Returns 10 per page. Pass next_page_key as page_key until no next page remains.", read: true, scope: "view_sales", params: %w[auto_apply page_key]),
+    ep("get_store_offer_code", :get, "/offer_codes/:id", "Get one store discount code by its id.", read: true, scope: "view_sales", path_params: %w[id]),
+    ep("update_store_offer_code", :put, "/offer_codes/:id", "Update a store discount code.", scope: "edit_products", path_params: %w[id], params: %w[max_purchase_count minimum_amount_cents auto_apply sale_label valid_at expires_at]),
     ep("list_offer_codes", :get, "/products/:link_id/offer_codes", "List a product's discount codes.", read: true, scope: "view_sales", path_params: %w[link_id]),
     ep("get_offer_code", :get, "/products/:link_id/offer_codes/:id", "Get one discount code.", read: true, scope: "view_sales", path_params: %w[link_id id]),
     ep("create_offer_code", :post, "/products/:link_id/offer_codes", "Create a discount code.", scope: "edit_products",
-                                                                                                path_params: %w[link_id], params: %w[name amount_off offer_type max_purchase_count universal amount_cents minimum_amount_cents]),
-    ep("update_offer_code", :put, "/products/:link_id/offer_codes/:id", "Update a discount code (max purchase count).", scope: "edit_products",
-                                                                                                                        path_params: %w[link_id id], params: %w[max_purchase_count minimum_amount_cents]),
+                                                                                                path_params: %w[link_id], params: %w[name amount_off offer_type max_purchase_count universal amount_cents minimum_amount_cents auto_apply sale_label valid_at expires_at]),
+    ep("update_offer_code", :put, "/products/:link_id/offer_codes/:id", "Update a discount code.", scope: "edit_products",
+                                                                                                   path_params: %w[link_id id], params: %w[max_purchase_count minimum_amount_cents auto_apply sale_label valid_at expires_at]),
     ep("delete_offer_code", :delete, "/products/:link_id/offer_codes/:id", "Delete a discount code.", scope: "edit_products", path_params: %w[link_id id]),
 
     # ---- Variant categories & variants (per product) ----

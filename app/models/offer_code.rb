@@ -197,6 +197,9 @@ class OfferCode < ApplicationRecord
       universal: universal?,
       auto_apply:,
       sale_label:,
+      valid_at: valid_at&.iso8601,
+      expires_at: expires_at&.iso8601,
+      currency_type:,
       times_used:
     }
 

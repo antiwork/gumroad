@@ -520,8 +520,21 @@ class Ai::StoreAgentService
       approves a supported change, not an undisclosed relaxation of their request.
       You also cannot configure existing-customer or product-ownership eligibility through these
       endpoints. Do not offer to set those up as an alternative, even if other Gumroad interfaces
-      support them. Offer only the product coverage, discount, usage limit, or minimum spend
-      options explicitly listed in the endpoint; none enforces subscriber eligibility.
+      support them. Use only the settings listed in the endpoint; none enforces subscriber eligibility.
+    - To create an automatic shop-wide sale, set universal=true and auto_apply=true on create_offer_code.
+      First call list_store_offer_codes with auto_apply=true to check for an existing automatic sale.
+      A product-scoped list can omit a sale in another currency or one that excludes that product.
+      Only one non-deleted code per seller can have auto_apply=true, including scheduled and expired codes.
+      Disable the current automatic sale before enabling another. Do not disable it without the creator's request.
+      sale_label accepts plain text, up to 32 characters. Blank labels display Sale.
+      A product's own default discount takes priority while buyers can redeem it.
+      Read get_store_offer_code before using update_store_offer_code to change a sale's schedule, label, or automatic application.
+      Update can enable auto_apply only for a code that is already universal; it cannot change universal or the amount.
+      valid_at and expires_at use RFC 3339 timestamps with a time zone.
+      Ask which time zone to use when the creator's request and store context do not specify one.
+      An end requires a start, and must follow it. Omitted fields stay unchanged.
+      Null or an empty string clears a date. Clear both dates to remove the schedule.
+      auto_apply=false stops automatic application and clears the label. Buyers can still redeem the code manually.
     - For email to buyers of a particular product, create_email needs audience=product and a real
       product_id or link_id from the conversation or api_read. If missing or rejected, look up the
       requested product with api_read within the tool budget, or ask which product they mean.
@@ -1684,7 +1697,7 @@ class Ai::StoreAgentService
     end
 
     # Friendlier labels for a couple of offer-code body keys; everything else is humanized generically.
-    OFFER_CODE_LABELS = { "name" => "Code", "max_purchase_count" => "Max uses" }.freeze
+    OFFER_CODE_LABELS = { "name" => "Code", "max_purchase_count" => "Max uses", "auto_apply" => "Apply automatically", "sale_label" => "Sale label", "valid_at" => "Starts at", "expires_at" => "Ends at" }.freeze
     # Shown for a body key the model set to blank/null, so a "clear this field" mutation stays visible
     # rather than silently dropping off the card while still executing.
     BLANK_VALUE = "(blank)"
@@ -1748,7 +1761,10 @@ class Ai::StoreAgentService
         end
       end
       rows << { label: "Max uses", value: "Unlimited" } if endpoint.id == "create_offer_code" && !body.key?("max_purchase_count")
-      rows << { label: "Redemption", value: "Anyone with the code; no subscriber check" } if endpoint.id == "create_offer_code"
+      if endpoint.id == "create_offer_code"
+        redemption = body["auto_apply"].in?([true, "true"]) ? "Automatic on product pages; no code required" : "Anyone with the code; no subscriber check"
+        rows << { label: "Redemption", value: redemption }
+      end
 
       rows
     end

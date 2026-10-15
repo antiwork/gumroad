@@ -41,7 +41,10 @@ import {
   DeleteOfferCode,
   GetOfferCode,
   GetOfferCodes,
+  GetStoreOfferCode,
+  GetStoreOfferCodes,
   UpdateOfferCode,
+  UpdateStoreOfferCode,
 } from "$app/components/ApiDocumentation/Endpoints/OfferCodes";
 import { GetPayout, GetPayouts, GetUpcomingPayouts } from "$app/components/ApiDocumentation/Endpoints/Payouts";
 import { GetProductReviews } from "$app/components/ApiDocumentation/Endpoints/ProductReviews";
@@ -208,6 +211,9 @@ export default function Api() {
               </ApiResource>
 
               <ApiResource name="Offer codes" id="offer-codes">
+                <GetStoreOfferCodes />
+                <GetStoreOfferCode />
+                <UpdateStoreOfferCode />
                 <GetOfferCodes />
                 <GetOfferCode />
                 <CreateOfferCode />

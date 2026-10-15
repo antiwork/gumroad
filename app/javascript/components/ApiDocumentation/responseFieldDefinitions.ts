@@ -933,6 +933,31 @@ export const OFFER_CODE_FIELDS: FieldDefinition[] = [
     description: "Minimum order total in cents required for the offer code to apply. null when there is no minimum.",
   },
   { name: "universal", type: "boolean", description: "Whether this code applies to all products" },
+  {
+    name: "currency_type",
+    type: "string | null",
+    description: "Currency for a fixed discount. Percentage discounts have no currency restriction.",
+  },
+  {
+    name: "auto_apply",
+    type: "boolean",
+    description: "Whether this universal code applies automatically during its validity period",
+  },
+  {
+    name: "sale_label",
+    type: "string | null",
+    description: 'Label for the automatic sale. The storefront displays "Sale" when this field is null.',
+  },
+  {
+    name: "valid_at",
+    type: "string | null",
+    description: "Start time as an RFC 3339 timestamp in UTC. null means no start limit.",
+  },
+  {
+    name: "expires_at",
+    type: "string | null",
+    description: "End time as an RFC 3339 timestamp in UTC. null means no end limit.",
+  },
   { name: "times_used", type: "number", description: "Number of times this code has been redeemed" },
 ];
 

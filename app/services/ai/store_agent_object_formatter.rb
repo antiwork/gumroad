@@ -13,7 +13,7 @@
 #     copy:     String | nil,                # the most useful thing to copy (the url, or an id)
 #   }
 #
-# Discount currency and coverage come from the seller's record because v2 omits them.
+# Discount coverage comes from the seller's record. Use that record's currency for the card too.
 # Unknown shapes are skipped; the model's prose still carries the answer.
 module Ai::StoreAgentObjectFormatter
   MAX_PRODUCT_NAMES = 3
@@ -35,9 +35,9 @@ module Ai::StoreAgentObjectFormatter
       Array(response["products"]).filter_map { |p| product(p) }
     when "get_product", "create_product", "update_product", "enable_product", "disable_product", "update_product_sections"
       [product(response["product"] || response)].compact
-    when "list_offer_codes"
+    when "list_offer_codes", "list_store_offer_codes"
       discounts(Array(response["offer_codes"] || response["products"]), seller:, limit:, existing_objects:)
-    when "get_offer_code", "create_offer_code", "update_offer_code"
+    when "get_offer_code", "create_offer_code", "update_offer_code", "get_store_offer_code", "update_store_offer_code"
       discounts([response["offer_code"] || response], seller:, limit:, existing_objects:)
     when "list_sales"
       Array(response["sales"]).filter_map { |s| sale(s) }
@@ -149,6 +149,10 @@ module Ai::StoreAgentObjectFormatter
       subtitle: amount,
       fields: compact_fields([
                                ["Applies to", coverage],
+                               ["Apply automatically", json.key?("auto_apply") ? (json["auto_apply"] ? "On" : "Off") : nil],
+                               ["Sale label", json["auto_apply"] ? (json["sale_label"].presence || OfferCode::DEFAULT_SALE_LABEL) : nil],
+                               ["Starts at", json["valid_at"]],
+                               ["Ends at", json["expires_at"]],
                                ["Times used", json["times_used"]],
                                ["Max uses", json["max_purchase_count"]],
                              ]),
