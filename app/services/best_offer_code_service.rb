@@ -44,10 +44,16 @@ class BestOfferCodeService
 
     # A qualifying buyer keeps their existing-customer default only when it takes more off than the
     # shop-wide sale, so it never prices them above the sale everyone else sees; a tie keeps it.
+    # Weighed on the price the card quotes, since a tiered membership's own price_cents is 0.
     def best_default_code_result
       @default_codes.map { evaluate_code(_1) }.select { _1[:valid] }.reduce do |best, candidate|
-        amount_off_from_discount(candidate[:discount]) > amount_off_from_discount(best[:discount]) ? candidate : best
+        price_cents = default_comparison_price_cents
+        amount_off_from_discount(candidate[:discount], price_cents) > amount_off_from_discount(best[:discount], price_cents) ? candidate : best
       end
+    end
+
+    def default_comparison_price_cents
+      @default_comparison_price_cents ||= @product.display_price_cents(for_default_duration: true)
     end
 
     def evaluate_code(code)
@@ -81,12 +87,12 @@ class BestOfferCodeService
       }
     end
 
-    def amount_off_from_discount(discount)
+    def amount_off_from_discount(discount, price_cents = @product.price_cents)
       return 0 unless discount
       if discount[:type] == "fixed"
         discount[:cents] * (discount[:once_per_cart] ? 1 : @quantity)
       else
-        (@product.price_cents * discount[:percents] / 100.0).round * @quantity
+        (price_cents * discount[:percents] / 100.0).round * @quantity
       end
     end
 end

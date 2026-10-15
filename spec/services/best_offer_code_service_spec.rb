@@ -534,6 +534,48 @@ describe BestOfferCodeService do
       end
     end
 
+    context "with an existing-customers-only default on a membership priced only by its tiers" do
+      let(:product) do
+        create(:membership_product_with_preset_tiered_pricing, user: seller,
+                                                               recurrence_price_values: [{ monthly: { enabled: true, price: 10 } }, { monthly: { enabled: true, price: 20 } }])
+      end
+      let(:owned) { create(:product, user: seller, price_cents: 10_00) }
+      let(:buyer) { create(:user) }
+
+      before do
+        auto_code
+        create(:purchase, purchaser: buyer, link: owned, seller:, price_cents: owned.price_cents)
+      end
+
+      it "weighs a percent default on the lowest tier, so only a larger one beats the sale" do
+        own = create(:offer_code, user: seller, products: [product], ownership_products: [owned], existing_customers_only: true,
+                                  code: "RENEW", amount_cents: nil, amount_percentage: 10, currency_type: nil)
+        product.update!(default_offer_code: own)
+
+        expect(described_class.new(product:, buyer:).result).to include(valid: true, code: "SHOP30")
+        expect(product.price_cents).to eq(0)
+        expect(product.display_price_cents(for_default_duration: true)).to eq(10_00)
+
+        own.update!(amount_percentage: 50)
+
+        expect(described_class.new(product:, buyer:).result).to include(valid: true, code: "RENEW")
+      end
+
+      it "weighs a fixed default against the sale's share of the lowest tier, so only a larger one beats it" do
+        own = create(:offer_code, user: seller, products: [product], ownership_products: [owned], existing_customers_only: true,
+                                  code: "RENEW", amount_cents: 2_00, currency_type: "usd")
+        product.update!(default_offer_code: own)
+
+        expect(described_class.new(product:, buyer:).result).to include(valid: true, code: "SHOP30")
+        expect(product.price_cents).to eq(0)
+        expect(product.display_price_cents(for_default_duration: true)).to eq(10_00)
+
+        own.update!(amount_cents: 5_00)
+
+        expect(described_class.new(product:, buyer:).result).to include(valid: true, code: "RENEW")
+      end
+    end
+
     it "gives no discount to an excluded product" do
       auto_code.update!(excluded_products: [product])
 
