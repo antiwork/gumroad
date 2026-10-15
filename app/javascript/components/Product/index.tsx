@@ -411,7 +411,11 @@ export const Product = ({
       <div
         role="status"
         data-testid="sale-banner"
-        className="flex items-center gap-2 bg-accent-with-text px-6 py-3 font-bold text-accent-foreground"
+        // Without covers, the desktop banner fills the card's top-right corner and follows its inner radius.
+        className={classNames(
+          "flex items-center gap-2 border-b border-border bg-accent-with-text px-6 py-3 font-bold text-accent-foreground",
+          product.covers.length === 0 && "lg:rounded-tr-[calc(var(--radius)_-_var(--border-width))]",
+        )}
       >
         <DiscountIcon pack="filled" className="size-5 shrink-0" aria-hidden="true" />
         <span className="min-w-0 wrap-break-word" data-testid="sale-label">
