@@ -453,6 +453,29 @@ describe("PaymentElementInput", () => {
     expect(elementsMounts.unmounts).toBe(2);
   });
 
+  it("updates a USD mount's method list in place when Klarna enters or leaves at the same currency", () => {
+    const usdOptions: PaymentElementClientConfirmConfig = {
+      ...methodForcedElementsOptions,
+      currency: "usd",
+      payment_method_types: ["card", "link"],
+      inr_local_methods: ["upi"],
+      payment_method_max_amount_cents: { upi: 100_000_00 },
+    };
+    const withKlarna = { ...usdOptions, payment_method_types: ["card", "link", "klarna"] };
+    const { rerender } = render(
+      <PaymentElementInput {...props} elementsOptions={usdOptions} amount={5_000} mountCurrency="usd" />,
+    );
+    rerender(<PaymentElementInput {...props} elementsOptions={withKlarna} amount={6_000} mountCurrency="usd" />);
+
+    expect(elementsRender.options?.paymentMethodTypes).toEqual(["card", "link", "klarna"]);
+
+    rerender(<PaymentElementInput {...props} elementsOptions={usdOptions} amount={5_000} mountCurrency="usd" />);
+
+    expect(elementsRender.options?.paymentMethodTypes).toEqual(["card", "link"]);
+    expect(elementsMounts.paymentMethodTypes).toEqual([["card", "link"]]);
+    expect(elementsMounts.unmounts).toBe(0);
+  });
+
   it("creates an over-cap INR remount's Elements without UPI", () => {
     const remountOptions: PaymentElementClientConfirmConfig = {
       stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,

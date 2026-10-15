@@ -399,14 +399,21 @@ const StripePaymentElementProvider = ({
     ),
   );
   const currency = currencyOverride ?? elementsOptions.currency;
-  const paymentMethodTypes = paymentMethodTypesForMountCurrency(elementsOptions, currency, amount);
-  const paymentMethodTypesKey = paymentMethodTypes.join(",");
+  const paymentMethodTypes = React.useMemo(
+    () => paymentMethodTypesForMountCurrency(elementsOptions, currency, amount),
+    [elementsOptions, currency, amount],
+  );
+  // Only a cap crossing remounts (Stripe rejects a session listing a method above its cap); other
+  // list changes, e.g. Klarna after a cart edit, reach the live element via elements.update().
+  const capDroppedKey = paymentMethodTypesForMountCurrency(elementsOptions, currency, null)
+    .filter((method) => !paymentMethodTypes.includes(method))
+    .join(",");
   // Creation options, captured together. Later amounts reach the live element via elements.update(),
-  // but a currency or method-list change remounts Elements (see key), and the new instance must not
-  // reuse an amount in the previous currency's units or one above a newly listed method's cap.
-  const [creation, setCreation] = React.useState({ currency, paymentMethodTypesKey, paymentMethodTypes, amount });
-  if (creation.currency !== currency || creation.paymentMethodTypesKey !== paymentMethodTypesKey) {
-    setCreation({ currency, paymentMethodTypesKey, paymentMethodTypes, amount });
+  // but a remount (see key) must not reuse an amount in the previous currency's units or one above
+  // a newly listed method's cap.
+  const [creation, setCreation] = React.useState({ currency, capDroppedKey, amount });
+  if (creation.currency !== currency || creation.capDroppedKey !== capDroppedKey) {
+    setCreation({ currency, capDroppedKey, amount });
   }
   const initialAmount = creation.amount;
   const font = useFont();
@@ -427,7 +434,7 @@ const StripePaymentElementProvider = ({
       currency,
       ...(initialAmount === null ? {} : { amount: initialAmount }),
       ...(setupFutureUsage ? { setupFutureUsage } : {}),
-      paymentMethodTypes: creation.paymentMethodTypes,
+      paymentMethodTypes,
       // Stripe rejects createConfirmationToken({ elements }) when payment_method_creation is manual.
       ...("payment_method_creation" in elementsOptions
         ? { paymentMethodCreation: elementsOptions.payment_method_creation }
@@ -506,12 +513,12 @@ const StripePaymentElementProvider = ({
     [
       borderRadius,
       colors,
-      creation.paymentMethodTypes,
       currency,
       elementsOptions,
       flatLayout,
       fontFamily,
       initialAmount,
+      paymentMethodTypes,
       setupFutureUsage,
       stripeFonts,
     ],
@@ -521,11 +528,11 @@ const StripePaymentElementProvider = ({
     // The key includes the effective mount currency so a currency change (e.g. the buyer-currency
     // FX quote arriving after the initial USD mount, or disappearing when the buyer opts to save
     // their card) remounts Elements — Stripe supports amount updates on a live element but not
-    // currency changes. Future-use setup and the method list are also creation-time configuration.
+    // currency changes. Future-use setup and cap-dropped methods are also creation-time configuration.
     <Elements
       stripe={stripePromise}
       options={options}
-      key={`${elementsOptions.stripe_elements_mode}-${currency}-${setupFutureUsage ?? "none"}-${paymentMethodTypesKey}`}
+      key={`${elementsOptions.stripe_elements_mode}-${currency}-${setupFutureUsage ?? "none"}-${capDroppedKey}`}
     >
       {children}
     </Elements>
