@@ -214,7 +214,7 @@ export const UpdateOfferCode = ({ storeWide = false }: { storeWide?: boolean }) 
   <ApiEndpoint
     method="put"
     path={storeWide ? "/offer_codes/:id" : "/products/:product_id/offer_codes/:id"}
-    description="Edit one of your store's discount codes. This endpoint requires edit_products."
+    description="Edit one of your store's offer codes. This endpoint requires edit_products."
   >
     <ApiParameters>
       <ApiParameter name="max_purchase_count" description="(optional)" />
@@ -267,12 +267,12 @@ export const GetStoreOfferCodes = () => (
   <ApiEndpoint
     method="get"
     path="/offer_codes"
-    description="List all non-deleted discount codes in your store, including scheduled and expired codes. This endpoint requires view_sales or edit_products."
+    description="List all non-deleted offer codes in your store, including scheduled and expired codes. This endpoint requires view_sales or edit_products."
   >
     <p>
-      Use this endpoint to find the current automatic sale, including codes that exclude a product or use another
-      currency. Set auto_apply=true to find the current automatic sale without reading all codes. Results contain 10
-      codes per page, newest first. Pass next_page_key as page_key until the response has no next_page_key.
+      Set auto_apply=true to find the current automatic sale without reading all codes, including codes that exclude a
+      product or use another currency. Results contain 10 codes per page, newest first. Pass next_page_key as page_key
+      until the response has no next_page_key.
     </p>
     <ApiParameters>
       <ApiParameter
@@ -287,7 +287,7 @@ export const GetStoreOfferCodes = () => (
     <ApiResponseFields>
       {renderFields([
         { name: "success", type: "boolean", description: "Whether the request succeeded" },
-        { name: "offer_codes", type: "array", description: "The store's discount codes", children: OFFER_CODE_FIELDS },
+        { name: "offer_codes", type: "array", description: "The store's offer codes", children: OFFER_CODE_FIELDS },
         {
           name: "next_page_key",
           type: "string",
@@ -309,7 +309,7 @@ export const GetStoreOfferCode = () => (
   <ApiEndpoint
     method="get"
     path="/offer_codes/:id"
-    description="Read one of your store's discount codes by its ID. This endpoint requires view_sales or edit_products."
+    description="Read one of your store's offer codes by its ID. This endpoint requires view_sales or edit_products."
   >
     <OfferCodeResponseFields />
   </ApiEndpoint>
