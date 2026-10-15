@@ -890,8 +890,8 @@ describe GdprDataErasureService do
     it "removes the Google and Apple sign-in ids, leaving other accounts' sign-ins alone" do
       user.update!(google_uid: "google-subject-1")
       create(:user, google_uid: "google-subject-2")
-      UserExternalAuthentication.create!(user:, provider: "apple", uid: "apple-subject-1")
-      other_apple_sign_in = UserExternalAuthentication.create!(user: create(:user), provider: "apple", uid: "apple-subject-2")
+      create(:user_external_authentication, user:, provider: "apple", uid: "apple-subject-1")
+      other_apple_sign_in = create(:user_external_authentication, user: create(:user), provider: "apple", uid: "apple-subject-2")
 
       described_class.new(user, performed_by: admin).perform!
 

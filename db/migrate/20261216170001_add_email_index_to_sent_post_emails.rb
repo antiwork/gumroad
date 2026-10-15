@@ -5,16 +5,18 @@ class AddEmailIndexToSentPostEmails < ActiveRecord::Migration[7.1]
   # have run the old one, so both directions have to cope with the index being there.
   SUPERSEDED_VERSION = "20261216160001"
   INDEX_NAME = "index_sent_post_emails_on_email"
+  # Matches idx_audience_on_email.
+  EMAIL_INDEX_PREFIX_LENGTH = 191
 
   disable_ddl_transaction!
 
   def up
     # The only other index is (post_id, email), so erasing one recipient's rows
-    # across every seller's posts scans the table. 191 matches idx_audience_on_email.
+    # across every seller's posts scans the table.
     #
     # if_not_exists so the pt-osc copy can be run out of band ahead of the deploy
     # instead of inside it (gumroad-private#1810).
-    add_index :sent_post_emails, :email, name: INDEX_NAME, length: 191, if_not_exists: true
+    add_index :sent_post_emails, :email, name: INDEX_NAME, length: EMAIL_INDEX_PREFIX_LENGTH, if_not_exists: true
   end
 
   def down
