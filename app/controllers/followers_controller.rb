@@ -31,7 +31,7 @@ class FollowersController < ApplicationController
     searched_followers = all_followers
     searched_followers = searched_followers.where("email LIKE ?", "%#{email}%") if email.present?
 
-    pagination, paginated_followers = pagy(
+    pagination, paginated_followers = pagy_countless(
       searched_followers,
       page: params[:page],
       limit: FOLLOWERS_PER_PAGE
