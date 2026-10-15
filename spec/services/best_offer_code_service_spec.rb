@@ -535,6 +535,48 @@ describe BestOfferCodeService do
         end
       end
 
+      context "when fewer units remain than the buyer asks for" do
+        let(:own) do
+          create(:offer_code, user: seller, products: [product], ownership_products: [product], existing_customers_only: true,
+                              code: "RENEW20", amount_cents: nil, amount_percentage: 20, currency_type: nil)
+        end
+
+        before { create(:purchase, purchaser: buyer, link: product, seller:, price_cents: product.price_cents) }
+
+        context "and the sale's quantity minimum needs more than remain" do
+          let(:auto_code) do
+            seller.offer_codes.create!(code: "SHOP50", amount_percentage: 50, universal: true, products: [], auto_apply: true, minimum_quantity: 2)
+          end
+
+          it "keeps a qualifying buyer's default until enough units remain" do
+            product.update!(max_purchase_count: 2)
+
+            expect(described_class.new(product:, buyer:, quantity: 3).result).to include(valid: true, code: "RENEW20")
+
+            product.update!(max_purchase_count: 4)
+
+            expect(described_class.new(product:, buyer:, quantity: 3).result).to include(valid: true, code: "SHOP50")
+          end
+        end
+
+        context "and the sale takes a fixed amount once per cart" do
+          let(:auto_code) do
+            seller.offer_codes.create!(code: "SHOP5", amount_cents: 5_00, currency_type: "usd", universal: true, products: [], auto_apply: true,
+                                       once_per_cart: true)
+          end
+
+          it "weighs a percent default on the units that remain" do
+            product.update!(max_purchase_count: 2)
+
+            expect(described_class.new(product:, buyer:, quantity: 3).result).to include(valid: true, code: "SHOP5")
+
+            product.update!(max_purchase_count: 4)
+
+            expect(described_class.new(product:, buyer:, quantity: 3).result).to include(valid: true, code: "RENEW20")
+          end
+        end
+      end
+
       context "when a fixed default no longer matches the product currency" do
         let(:own) do
           create(:offer_code, user: seller, products: [product], ownership_products: [product], existing_customers_only: true,

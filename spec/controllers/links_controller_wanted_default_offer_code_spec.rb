@@ -22,18 +22,23 @@ describe LinksController, type: :controller do
     sign_in buyer
   end
 
-  def checkout_params_for(tier_name)
-    get :show, params: { id: product.unique_permalink, wanted: "true", option: product.tiers.find_by!(name: tier_name).external_id }
+  def checkout_params_for(tier_name, code:)
+    get :show, params: { id: product.unique_permalink, wanted: "true", option: product.tiers.find_by!(name: tier_name).external_id, code: }.compact
 
     expect(response).to be_redirect
     Rack::Utils.parse_query(URI.parse(response.location).query)
   end
 
-  it "forwards a qualifying buyer's percent default when it beats a fixed sale on the tier they chose" do
-    expect(checkout_params_for("Second Tier")).to include("code" => "RENEW20", "price" => "10000")
-  end
+  # The product page's initial CTA already carries the sale's code before the buyer picks a tier.
+  [nil, "SHOP5"].each do |code|
+    context code ? "when the link carries the sale's code" : "when the link carries no code" do
+      it "forwards a qualifying buyer's percent default when it beats a fixed sale on the tier they chose" do
+        expect(checkout_params_for("Second Tier", code:)).to include("code" => "RENEW20", "price" => "10000")
+      end
 
-  it "forwards the fixed sale when it beats the percent default on the tier they chose" do
-    expect(checkout_params_for("First Tier")).to include("code" => "SHOP5", "price" => "1000")
+      it "forwards the fixed sale when it beats the percent default on the tier they chose" do
+        expect(checkout_params_for("First Tier", code:)).to include("code" => "SHOP5", "price" => "1000")
+      end
+    end
   end
 end

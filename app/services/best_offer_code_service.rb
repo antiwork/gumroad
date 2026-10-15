@@ -2,7 +2,8 @@
 
 class BestOfferCodeService
   # comparison_price_cents is the unit price the buyer already chose (the wanted redirect knows
-  # it); without it the defaults are weighed on the price the card quotes.
+  # it), and every comparison uses it. Without it the defaults are weighed on the price the card
+  # quotes, and the URL code against the default on price_cents.
   def initialize(product:, url_code: nil, quantity: 1, buyer: nil, comparison_price_cents: nil)
     @product = product
     @url_code = url_code.presence
@@ -28,8 +29,9 @@ class BestOfferCodeService
     return url_code_result if !default_code_valid
     return default_code_result if !url_code_valid
 
-    url_code_amount = amount_off_from_discount(url_code_result[:discount])
-    default_code_amount = amount_off_from_discount(default_code_result[:discount])
+    price_cents = @comparison_price_cents || @product.price_cents
+    url_code_amount = amount_off_from_discount(url_code_result[:discount], price_cents, @quantity)
+    default_code_amount = amount_off_from_discount(default_code_result[:discount], price_cents, @quantity)
 
     url_code_amount > default_code_amount ? url_code_result : default_code_result
   end
@@ -61,7 +63,7 @@ class BestOfferCodeService
       price_cents = default_comparison_price_cents
       return 0 unless met_discount_conditions?(discount, price_cents)
 
-      amount_off_from_discount(discount, price_cents)
+      amount_off_from_discount(discount, price_cents, default_comparison_quantity)
     end
 
     # Mirrors applySelection's gate, which checks both minimums at the stock-capped quantity.
@@ -109,12 +111,12 @@ class BestOfferCodeService
       }
     end
 
-    def amount_off_from_discount(discount, price_cents = @product.price_cents)
+    def amount_off_from_discount(discount, price_cents, quantity)
       return 0 unless discount
       if discount[:type] == "fixed"
-        discount[:cents] * (discount[:once_per_cart] ? 1 : @quantity)
+        discount[:cents] * (discount[:once_per_cart] ? 1 : quantity)
       else
-        (price_cents * discount[:percents] / 100.0).round * @quantity
+        (price_cents * discount[:percents] / 100.0).round * quantity
       end
     end
 end
