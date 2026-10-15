@@ -677,6 +677,17 @@ describe("ProductShowScenario", type: :system, js: true) do
     let(:non_discover_url) { product.long_url }
 
     it_behaves_like "discover navigation when layout is discover", selected_taxonomy: "Design"
+
+    it "draws the More menu on the seller's background so its text stays readable" do
+      product.user.seller_profile.update!(background_color: "#000000")
+      visit discover_url
+
+      find("[role=menuitem]", text: "More").hover
+      menu = find("[role=menu][aria-label='More']")
+
+      expect(menu.evaluate_script("getComputedStyle(this).backgroundColor")).to eq("rgb(0, 0, 0)")
+      expect(menu.evaluate_script("getComputedStyle(this).color")).to eq("rgb(255, 255, 255)")
+    end
   end
 
   context "sold out variants" do
