@@ -71,6 +71,7 @@ export type CardProduct = {
   duration_in_months: number | null;
   recurrence: RecurrenceId | null;
   description?: string;
+  co_purchase?: boolean;
 };
 
 export type AnalyticsData = {

@@ -501,7 +501,9 @@ const FormPage = ({
               can_gift: !giftingDisabled,
             },
           }}
-          recommendedProduct={recommendationType !== "no_recommendations" ? cardProduct : undefined}
+          recommendedProduct={
+            recommendationType !== "no_recommendations" ? { ...cardProduct, co_purchase: true } : undefined
+          }
           stripeLinkEnabled={!linkDisabled}
         />
       </WithPreviewSidebar>

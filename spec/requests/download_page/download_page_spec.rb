@@ -948,21 +948,22 @@ describe("Download Page", type: :system, js: true) do
       url_options = { layout: "profile", recommended_by: "more_like_this", recommender_model_name: "sales" }
 
       visit url_redirect.download_page_url
-      expect(page).to have_text("Customers who bought this product also bought")
+      expect(page).to have_text("More from this creator")
+      expect(page).to_not have_text("Customers who bought this product also bought")
       expect(page).to have_link("Other Product", href: other_product.long_url(**url_options))
       expect(page).to_not have_text("Affiliate Product")
       expect(page).to_not have_text("Global Affiliate Product")
 
       content.update!(description: [{ "type" => RichContent::MORE_LIKE_THIS_NODE_TYPE, "attrs" => { "recommendationType" => "directly_affiliated_products" } }])
       visit url_redirect.download_page_url
-      expect(page).to have_text("Customers who bought this product also bought")
+      expect(page).to have_text("You may also like")
       expect(page).to have_link("Other Product", href: other_product.long_url(**url_options))
       expect(page).to have_link("Affiliate Product", href: affiliate_product.long_url(**url_options, affiliate_id: affiliate.external_id_numeric))
       expect(page).to_not have_text("Global Affiliate Product")
 
       content.update!(description: [{ "type" => RichContent::MORE_LIKE_THIS_NODE_TYPE, "attrs" => { "recommendationType" => "gumroad_affiliates_products" } }])
       visit url_redirect.download_page_url
-      expect(page).to have_text("Customers who bought this product also bought")
+      expect(page).to have_text("You may also like")
       expect(page).to have_link("Other Product", href: other_product.long_url(**url_options))
       expect(page).to have_link("Affiliate Product", href: affiliate_product.long_url(**url_options, affiliate_id: affiliate.external_id_numeric))
       expect(page).to have_link("Global Affiliate Product", href: global_affiliate_product.long_url(**url_options, affiliate_id: product.user.global_affiliate.external_id_numeric))

@@ -4,6 +4,7 @@ import * as React from "react";
 import { isWalletPaymentElementType } from "$app/data/card_payment_method_data";
 import type { SurchargesResponse } from "$app/data/customer_surcharge";
 import { computeOfferDiscount } from "$app/data/offer_code";
+import { recommendedProductsHeading } from "$app/data/recommended_products";
 import { CardProduct, COMMISSION_DEPOSIT_PROPORTION } from "$app/parsers/product";
 import { isOpenTuple } from "$app/utils/array";
 import { classNames } from "$app/utils/classNames";
@@ -784,7 +785,12 @@ export const Checkout = ({
               </CartItemList>
               {recommendedProducts && recommendedProducts.length > 0 ? (
                 <section className="flex flex-col gap-4">
-                  <h2>Customers who bought {cart.items.length === 1 ? "this item" : "these items"} also bought</h2>
+                  <h2>
+                    {recommendedProductsHeading(
+                      recommendedProducts,
+                      cart.items.length === 1 ? "this item" : "these items",
+                    )}
+                  </h2>
                   <ProductCardGrid narrow>
                     {recommendedProducts.map((product, idx) => (
                       // All of this grid is off-screen. so we just eager load the first image

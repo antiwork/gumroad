@@ -39,6 +39,7 @@ class RecommendedProducts::CheckoutService < RecommendedProducts::BaseService
       if cart_seller_ids&.include?(product.user_id) || direct_affiliate_id.present? || (global_affiliate.present? && product.user.not_disable_global_affiliate? && product.recommendable?)
         RecommendedProducts::ProductInfo.new(
           product,
+          source: RecommendedProducts::ProductInfo::CO_PURCHASE,
           affiliate_id: direct_affiliate_id || global_affiliate&.external_id_numeric
         )
       end
@@ -57,7 +58,7 @@ class RecommendedProducts::CheckoutService < RecommendedProducts::BaseService
       )
       products = search_result[:products].includes(ProductPresenter::ASSOCIATIONS_FOR_CARD)
 
-      product_infos += products.map { RecommendedProducts::ProductInfo.new(_1) }
+      product_infos += products.map { RecommendedProducts::ProductInfo.new(_1, source: RecommendedProducts::ProductInfo::CREATOR_FEATURED) }
     end
 
     build_result(product_infos:)

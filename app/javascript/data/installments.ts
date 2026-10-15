@@ -47,7 +47,6 @@ export type PublishedInstallment = SavedInstallment & {
   sent_count: number | null;
   click_count: number;
   click_rate: number | null;
-  clicked_urls: { url: string; count: number }[];
   open_count: number;
   open_rate: number | null;
   view_count: number | null;
@@ -157,6 +156,20 @@ export function getRecipientCount(requestPayload: RecipientCountRequestPayload) 
     response,
     cancel: () => abort.abort(),
   };
+}
+
+export type ClickedUrl = { url: string; count: number };
+
+export async function getClickedUrls(externalId: string, abortSignal?: AbortSignal) {
+  const response = await request({
+    method: "GET",
+    accept: "json",
+    url: Routes.internal_installment_clicked_urls_path(externalId),
+    abortSignal,
+  });
+
+  if (!response.ok) throw new ResponseError();
+  return cast<{ clicked_urls: ClickedUrl[] }>(await response.json()).clicked_urls;
 }
 
 export async function getNonOpenerCount(externalId: string) {

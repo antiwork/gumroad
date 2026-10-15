@@ -1,11 +1,19 @@
 # frozen_string_literal: true
 
 class RecommendedProducts::ProductInfo
-  attr_accessor :recommended_by, :recommender_model_name, :target
-  attr_reader :product, :affiliate_id
+  CO_PURCHASE = "co_purchase"
+  CREATOR_FEATURED = "creator_featured"
 
-  def initialize(product, affiliate_id: nil)
+  attr_accessor :recommended_by, :recommender_model_name, :target
+  attr_reader :product, :affiliate_id, :source
+
+  def initialize(product, source:, affiliate_id: nil)
     @product = product
+    @source = source
     @affiliate_id = affiliate_id
+  end
+
+  def co_purchase?
+    source == CO_PURCHASE
   end
 end
