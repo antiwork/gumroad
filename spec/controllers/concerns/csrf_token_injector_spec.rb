@@ -35,6 +35,34 @@ describe CsrfTokenInjector, type: :controller do
     expect(Nokogiri::HTML(response.body).at_xpath("//meta[@name='csrf-token']/@content").value).to be_present
   end
 
+  describe "streamed responses" do
+    controller do
+      include ActionController::Live
+      include CsrfTokenInjector
+
+      def stream_action
+        response.headers["Content-Type"] = "text/event-stream"
+        response.stream.write("data: hi\n\n")
+        response.stream.close
+      end
+    end
+
+    before do
+      routes.draw { get :stream_action, to: "anonymous#stream_action" }
+      allow_any_instance_of(ActionController::Base).to receive(:protect_against_forgery?).and_return(true)
+    end
+
+    # Puma iterates a Live body while the controller thread still writes, so it reads the queue
+    # itself; a body read in the after_action would take the end marker and leave Puma waiting.
+    it "leaves the stream's chunks and end marker for the server to read" do
+      get :stream_action
+
+      chunks = []
+      Timeout.timeout(2) { response.stream.send(:each_chunk) { |chunk| chunks << chunk } }
+      expect(chunks).to eq(["data: hi\n\n"])
+    end
+  end
+
   describe "CSRF token exfiltration prevention" do
     controller do
       include CsrfTokenInjector

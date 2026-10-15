@@ -233,3 +233,77 @@ describe("version selector accessibility", () => {
     expect(screen.getByRole("radio", { name: "Listener's Edition" }).getAttribute("itemprop")).toBeNull();
   });
 });
+
+describe("minimum spend in option previews", () => {
+  const discount = {
+    type: "percent" as const,
+    percents: 30,
+    product_ids: null,
+    expires_at: null,
+    minimum_quantity: null,
+    duration_in_billing_cycles: null,
+    minimum_amount_cents: 1_200,
+  };
+
+  it("keeps an option below the minimum at its full price", () => {
+    render(<ConfigurationSelector product={versionedProduct} selection={initialSelection} discount={discount} />);
+
+    expect(
+      screen.getByRole("radio", { name: "Listener's Edition" }).querySelector('[itemprop="price"]')?.textContent,
+    ).toBe("9.99");
+    expect(
+      screen.getByRole("radio", { name: "Collector's Edition" }).querySelector('[itemprop="price"]')?.textContent,
+    ).toBe("10.49");
+  });
+
+  it("keeps a discount that the checkout validates against the full cart", () => {
+    render(
+      <ConfigurationSelector
+        product={versionedProduct}
+        selection={initialSelection}
+        discount={discount}
+        discountForSelection={() => discount}
+      />,
+    );
+
+    expect(
+      screen.getByRole("radio", { name: "Listener's Edition" }).querySelector('[itemprop="price"]')?.textContent,
+    ).toBe("6.99");
+  });
+});
+
+describe("discounts validated against the full cart", () => {
+  it.each([
+    {
+      name: "minimum quantity across multiple options",
+      discount: { type: "percent" as const, percents: 30, minimum_quantity: 2 },
+      expectedPrice: "6.99",
+    },
+    {
+      name: "allocated cart discount",
+      discount: { type: "fixed" as const, cents: 500, once_per_cart: true, once_per_cart_amount_cents: 1500 },
+      expectedPrice: "4.99",
+    },
+  ])("preserves the $name", ({ discount, expectedPrice }) => {
+    const validatedDiscount = {
+      product_ids: null,
+      expires_at: null,
+      minimum_quantity: null,
+      duration_in_billing_cycles: null,
+      minimum_amount_cents: null,
+      ...discount,
+    };
+    render(
+      <ConfigurationSelector
+        product={versionedProduct}
+        selection={initialSelection}
+        discount={validatedDiscount}
+        discountForSelection={() => validatedDiscount}
+      />,
+    );
+
+    expect(
+      screen.getByRole("radio", { name: "Listener's Edition" }).querySelector('[itemprop="price"]')?.textContent,
+    ).toBe(expectedPrice);
+  });
+});

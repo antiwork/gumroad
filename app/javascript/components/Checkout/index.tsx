@@ -1047,7 +1047,8 @@ const CartItemComponent = ({
     item.product,
     discount.discount && discount.discount.type !== "ppp" ? discount.discount.value : null,
     selection,
-    { preserveOncePerCartAllocation: true },
+    // Checkout has already checked discount eligibility across the cart.
+    { preserveOncePerCartAllocation: true, discountConditionsVerified: true },
   );
 
   const saveChanges = () => {
