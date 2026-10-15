@@ -103,8 +103,8 @@ class OauthDeviceAuthorization < ApplicationRecord
   def approved? = status == STATUS_APPROVED
   def denied? = status == STATUS_DENIED
   def consumed? = status == STATUS_CONSUMED
-  def expired? = expires_at <= Time.current
-  def approvable? = pending? && !expired?
+  def expired?(at = Time.current) = expires_at <= at
+  def approvable?(at = Time.current) = pending? && !expired?(at)
   # The client's final poll lands at expires_at, so an approval after its previous poll needs one more interval.
   def in_approval_grace? = approved? && approved_at.present? && approved_at < expires_at && Time.current < expires_at + poll_interval_seconds.seconds
   def scope_list = scopes.split
@@ -129,14 +129,15 @@ class OauthDeviceAuthorization < ApplicationRecord
 
     oauth_application.with_lock do
       with_lock do
-        if approvable?
+        now = Time.current
+        if approvable?(now)
           if access_revoked_after_creation_for?(resource_owner)
             mark_denied!(resource_owner:, ip_address:, user_agent:)
           else
             update!(
               resource_owner:,
               status: STATUS_APPROVED,
-              approved_at: Time.current,
+              approved_at: now,
               approved_ip_address: ip_address,
               approved_user_agent: user_agent
             )

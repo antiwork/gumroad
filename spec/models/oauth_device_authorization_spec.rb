@@ -129,18 +129,22 @@ describe OauthDeviceAuthorization do
       end
     end
 
-    it "returns expired_token for a pending code polled just after expiry without recording the poll" do
+    it "issues a token for an approval whose expiry check passed just before the window closed" do
       freeze_time
       device_authorization = create(
         :oauth_device_authorization,
         oauth_application:,
-        expires_at: 1.second.ago,
+        expires_at: 1.second.from_now,
         poll_interval_seconds: described_class::POLL_INTERVAL.to_i
       )
+      allow(device_authorization).to receive(:access_revoked_after_creation_for?).and_wrap_original do |method, *args|
+        travel 1.second
+        method.call(*args)
+      end
 
+      expect(device_authorization.approve!(resource_owner: create(:user), ip_address: "203.0.113.10", user_agent: "RSpec")).to be(true)
       expect(device_authorization.poll!(oauth_application:, ip_address: "203.0.113.10", user_agent: "RSpec"))
-        .to eq([described_class::POLL_EXPIRED_TOKEN, nil])
-      expect(device_authorization.reload).to have_attributes(poll_count: 0, last_polled_at: nil)
+        .to eq([described_class::POLL_APPROVED, Doorkeeper::AccessToken.last])
     end
 
     it "returns expired_token if cleanup deletes the authorization before the row lock" do
