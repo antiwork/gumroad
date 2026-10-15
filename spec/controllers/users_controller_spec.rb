@@ -596,8 +596,7 @@ describe UsersController do
         html = Nokogiri::HTML.parse(response.body)
         style_tag = html.at_css('style[inertia="custom_styles"]')
         expect(style_tag).to be_present
-        decoded_content = CGI.unescapeHTML(style_tag.text)
-        expect(decoded_content).to include(seller.seller_profile.custom_styles.to_s)
+        expect(style_tag.text).to include(seller.seller_profile.custom_styles.to_s)
       end
     end
 
@@ -1044,8 +1043,7 @@ describe UsersController do
       html = Nokogiri::HTML.parse(response.body)
       style_tag = html.at_css('style[inertia="custom_styles"]')
       expect(style_tag).to be_present
-      decoded_content = CGI.unescapeHTML(style_tag.text)
-      expect(decoded_content).to include(creator.seller_profile.custom_styles.to_s)
+      expect(style_tag.text).to include(creator.seller_profile.custom_styles.to_s)
     end
 
     it "does not set custom_styles meta when user has no custom_styles" do
@@ -1094,8 +1092,7 @@ describe UsersController do
       html = Nokogiri::HTML.parse(response.body)
       style_tag = html.at_css('style[inertia="custom_styles"]')
       expect(style_tag).to be_present
-      decoded_content = CGI.unescapeHTML(style_tag.text)
-      expect(decoded_content).to include(creator.seller_profile.custom_styles.to_s)
+      expect(style_tag.text).to include(creator.seller_profile.custom_styles.to_s)
     end
   end
 end
