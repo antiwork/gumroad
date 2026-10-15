@@ -95,6 +95,54 @@ describe OauthDeviceAuthorization do
       expect(device_authorization.reload.status).to eq(described_class::STATUS_DENIED)
     end
 
+    it "issues a token for a code approved before expiry until the row's own poll interval past expiry" do
+      interval = described_class::SLOW_DOWN_INTERVAL.to_i
+      expires_at = 5.minutes.from_now.change(usec: 0)
+      grace_attributes = {
+        oauth_application:,
+        resource_owner: create(:user),
+        status: described_class::STATUS_APPROVED,
+        approved_at: expires_at - 10.seconds,
+        expires_at:,
+        poll_interval_seconds: interval
+      }
+      last_grace_poll = create(:oauth_device_authorization, **grace_attributes)
+      past_grace_poll = create(:oauth_device_authorization, **grace_attributes)
+
+      travel_to(expires_at + interval.seconds - 1.second) do
+        result = nil
+        expect do
+          result = last_grace_poll.poll!(oauth_application:, ip_address: "203.0.113.10", user_agent: "RSpec")
+        end.to change { Doorkeeper::AccessToken.count }.by(1)
+
+        expect(result).to eq([described_class::POLL_APPROVED, Doorkeeper::AccessToken.last])
+        expect(last_grace_poll.reload.status).to eq(described_class::STATUS_CONSUMED)
+      end
+
+      travel_to(expires_at + interval.seconds) do
+        expect do
+          expect(past_grace_poll.poll!(oauth_application:, ip_address: "203.0.113.10", user_agent: "RSpec"))
+            .to eq([described_class::POLL_EXPIRED_TOKEN, nil])
+        end.not_to change { Doorkeeper::AccessToken.count }
+
+        expect(past_grace_poll.reload.status).to eq(described_class::STATUS_APPROVED)
+      end
+    end
+
+    it "returns expired_token for a pending code polled just after expiry without recording the poll" do
+      freeze_time
+      device_authorization = create(
+        :oauth_device_authorization,
+        oauth_application:,
+        expires_at: 1.second.ago,
+        poll_interval_seconds: described_class::POLL_INTERVAL.to_i
+      )
+
+      expect(device_authorization.poll!(oauth_application:, ip_address: "203.0.113.10", user_agent: "RSpec"))
+        .to eq([described_class::POLL_EXPIRED_TOKEN, nil])
+      expect(device_authorization.reload).to have_attributes(poll_count: 0, last_polled_at: nil)
+    end
+
     it "returns expired_token if cleanup deletes the authorization before the row lock" do
       device_authorization = create(:oauth_device_authorization, oauth_application:, expires_at: 1.second.ago)
       allow(device_authorization).to receive(:with_lock).and_raise(ActiveRecord::RecordNotFound)

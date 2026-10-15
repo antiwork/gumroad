@@ -274,6 +274,28 @@ describe "OAuth device authorizations", type: :request do
       expect(access_token.reload).to be_revoked
     end
 
+    it "exchanges a code approved in the window's last poll interval on the poll that lands after expiry" do
+      approval_lead = 10.seconds
+      poll_lag = 20.seconds
+      body = create_device_code
+      sign_in user
+      device_authorization = OauthDeviceAuthorization.last
+
+      travel_to(device_authorization.expires_at - approval_lead)
+      submit_device_authorization(body["user_code"], decision: "approve")
+
+      expect(response.body).to include("Authorization complete")
+
+      travel approval_lead + poll_lag
+      expect do
+        post oauth_token_path, params: { grant_type: OauthDeviceAuthorization::GRANT_TYPE, client_id: oauth_application.uid, device_code: body["device_code"] }
+      end.to change { Doorkeeper::AccessToken.count }.by(1)
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to include("access_token" => Doorkeeper::AccessToken.last.token)
+      expect(device_authorization.reload).to have_attributes(status: OauthDeviceAuthorization::STATUS_CONSUMED)
+    end
+
     it "does not exchange an approved code after the user revokes the application" do
       access_token = create(
         "doorkeeper/access_token",
@@ -670,10 +692,6 @@ describe "OAuth device authorizations", type: :request do
         errors << response.parsed_body["error"]
       end
 
-      # The limit covers every client behind one address, so a window has to leave room for a
-      # second login; the cadence handed to the client is the cadence the window accepts; and a
-      # window that is never polled, or answered with anything but "pending" while the code is
-      # unapproved, strands the login just as surely as one that overruns the budget.
       expect(errors.count).to be_between(2, 20)
       expect(errors.count("authorization_pending")).to be >= errors.count - 1
       expect(errors).not_to include("slow_down")

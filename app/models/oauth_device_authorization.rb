@@ -6,8 +6,7 @@ class OauthDeviceAuthorization < ApplicationRecord
   GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code"
   DEVICE_REDIRECT_URI = GRANT_TYPE
   EXPIRES_IN = 10.minutes
-  # Sized so a whole 10-minute window stays near 20 polls of the token endpoint, which is rate
-  # limited per client IP: a 5-second cadence spent that budget minutes in and stranded approvals.
+  # The token endpoint is rate limited per client IP.
   POLL_INTERVAL = 30.seconds
   SLOW_DOWN_INCREMENT = 5.seconds
   SLOW_DOWN_INTERVAL = POLL_INTERVAL + SLOW_DOWN_INCREMENT
@@ -34,7 +33,16 @@ class OauthDeviceAuthorization < ApplicationRecord
   validates :device_code_digest, :user_code_digest, uniqueness: true
   validates :status, inclusion: { in: STATUSES }
 
-  scope :expired_for_cleanup, -> { where(status: EXPIRABLE_STATUSES).where("expires_at <= ?", Time.current) }
+  scope :expired_for_cleanup, -> {
+    now = Time.current
+    where(status: EXPIRABLE_STATUSES)
+      .where("expires_at <= ?", now)
+      .where.not(
+        "status = ? AND approved_at IS NOT NULL AND approved_at < expires_at AND DATE_ADD(expires_at, INTERVAL poll_interval_seconds SECOND) > ?",
+        STATUS_APPROVED,
+        now
+      )
+  }
 
   def self.create_for!(oauth_application:, scopes:, ip_address:, user_agent:)
     attempts = 0
@@ -97,6 +105,8 @@ class OauthDeviceAuthorization < ApplicationRecord
   def consumed? = status == STATUS_CONSUMED
   def expired? = expires_at <= Time.current
   def approvable? = pending? && !expired?
+  # The client's final poll lands at expires_at, so an approval after its previous poll needs one more interval.
+  def in_approval_grace? = approved? && approved_at.present? && approved_at < expires_at && Time.current < expires_at + poll_interval_seconds.seconds
   def scope_list = scopes.split
 
   def access_revoked_after_creation_for?(resource_owner)
@@ -163,7 +173,7 @@ class OauthDeviceAuthorization < ApplicationRecord
           [POLL_EXPIRED_TOKEN, nil]
         elsif denied?
           [POLL_ACCESS_DENIED, nil]
-        elsif expired?
+        elsif expired? && !in_approval_grace?
           [POLL_EXPIRED_TOKEN, nil]
         elsif pending?
           too_recent = polled_too_recently?
