@@ -116,14 +116,14 @@ const membership = (overrides: Partial<ProductData> = {}): ProductData => ({
   ...overrides,
 });
 
-const sellerDiscount = (optionIdsByProduct?: Record<string, string[]>): Discount => ({
+const sellerDiscount = (optionIdsByProduct?: Record<string, string[]>, minimumAmountCents?: number): Discount => ({
   type: "percent",
   percents: 30,
   product_ids: null,
   expires_at: null,
   minimum_quantity: null,
   duration_in_billing_cycles: null,
-  minimum_amount_cents: null,
+  minimum_amount_cents: minimumAmountCents ?? null,
   ...(optionIdsByProduct ? { option_ids_by_product: optionIdsByProduct } : {}),
 });
 
@@ -152,6 +152,18 @@ describe("product page sale label with no tier selected", () => {
     renderMembership(sellerDiscount({ membership: ["pro"] }));
 
     expect(screen.getByTestId("sale-label").textContent).toBe("Black Friday");
+  });
+
+  it("shows the label when only a tier above the code's minimum amount qualifies", () => {
+    renderMembership(sellerDiscount(undefined, 1_500));
+
+    expect(screen.getByTestId("sale-label").textContent).toBe("Black Friday");
+  });
+
+  it("hides the label when every tier is below the code's minimum amount", () => {
+    renderMembership(sellerDiscount(undefined, 5_000));
+
+    expect(screen.queryByTestId("sale-label")).toBeNull();
   });
 
   it("hides the label when the code discounts none of the tiers", () => {
