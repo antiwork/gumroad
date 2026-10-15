@@ -216,14 +216,63 @@ describe("product page sale label", () => {
     const banner = screen.getByTestId("sale-banner");
     expect(banner.textContent).toContain("Black Friday");
     expect(banner.textContent).toContain("30% off");
+    expect(screen.queryByText(/off will be applied at checkout/u)).toBeNull();
   });
 
-  it("puts the price in the purchase column with the buy button", () => {
+  it("keeps a mobile price above the description and a desktop price in the purchase column", () => {
     const { container } = renderProduct();
 
     const columns = container.querySelectorAll(":scope > article > section");
     const purchaseColumn = columns[columns.length - 1];
-    expect(purchaseColumn?.querySelector("[itemprop=price]")).not.toBeNull();
-    expect(columns[0]?.querySelector("[itemprop=price]")).toBeNull();
+    const mobilePrice = columns[0]?.querySelector("[itemprop=price]");
+    const desktopPrice = purchaseColumn?.querySelector("[itemprop=price]");
+    expect(mobilePrice?.closest(".lg\\:hidden")).not.toBeNull();
+    expect(desktopPrice?.closest(".hidden.lg\\:block")).not.toBeNull();
+    expect(mobilePrice?.textContent).toBe(desktopPrice?.textContent);
+    expect(screen.getByTestId("mobile-sale-label").closest(".lg\\:hidden")).toBe(mobilePrice?.closest(".lg\\:hidden"));
+    expect(screen.getByTestId("sale-banner").closest(".hidden.lg\\:block")).toBeTruthy();
+  });
+
+  it("keeps the minimum spend and expiry when the sale banner replaces the code message", () => {
+    render(
+      <Product
+        product={product()}
+        purchase={null}
+        discountCode={{
+          ...autoAppliedCode,
+          discount: {
+            ...sellerDiscount,
+            minimum_amount_cents: 1_000,
+            expires_at: new Date(Date.now() + 60_000).toISOString(),
+          },
+        }}
+        saleLabel="Black Friday"
+        selection={selection}
+        disableAnalytics
+      />,
+    );
+
+    expect(screen.getByText(/This discount will apply when you spend/u).textContent).toContain("$10");
+    expect(screen.getByText(/This discount expires in/u)).toBeTruthy();
+    expect(screen.queryByText(/off will be applied at checkout/u)).toBeNull();
+  });
+
+  it("shows the end date when a distant expiry is the automatic sale's only term", () => {
+    render(
+      <Product
+        product={product()}
+        purchase={null}
+        discountCode={{
+          ...autoAppliedCode,
+          discount: { ...sellerDiscount, expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() },
+        }}
+        saleLabel="Black Friday"
+        selection={selection}
+        disableAnalytics
+      />,
+    );
+
+    expect(screen.getByText(/This sale ends on/u)).toBeTruthy();
+    expect(screen.queryByText(/off will be applied at checkout/u)).toBeNull();
   });
 });

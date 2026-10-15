@@ -402,6 +402,50 @@ export const Product = ({
         )
       : codeDiscounts(selectionAttributes));
 
+  const renderSaleBanner = (mobile = false) =>
+    showSaleLabel && discount ? (
+      <div
+        role="status"
+        data-testid={mobile ? "mobile-sale-banner" : "sale-banner"}
+        className="flex items-center gap-2 bg-accent-with-text px-6 py-3 font-bold text-accent-foreground"
+      >
+        <DiscountIcon pack="filled" className="size-5 shrink-0" aria-hidden="true" />
+        <span className="min-w-0 wrap-break-word" data-testid={mobile ? "mobile-sale-label" : "sale-label"}>
+          {saleLabel}
+        </span>
+        <span className="ml-auto shrink-0">{formatDiscountAmount(discount, buyerLocalContextFor(product))} off</span>
+      </div>
+    ) : null;
+
+  const priceTag = showPrice ? (
+    <PriceTag
+      currencyCode={product.currency_code}
+      oldPrice={
+        comparisonPriceCents !== null && discountedPriceCents < comparisonPriceCents ? comparisonPriceCents : undefined
+      }
+      price={discountedPriceCents}
+      url={product.long_url}
+      isPayWhatYouWant={!!product.pwyw}
+      isSalesLimited={product.is_sales_limited}
+      creatorName={product.seller?.name}
+      buyerCurrency={product.buyer_currency}
+      buyerLocalCurrencyRate={product.buyer_local_currency_rate}
+      buyerLocalCurrencySubunitToUnit={product.buyer_local_currency_subunit_to_unit}
+      buyerLocalPriceCents={buyerLocalPriceCentsForSelection(
+        product.buyer_local_price_cents,
+        discountCode?.valid ? discountCode.discount : null,
+        selection.quantity,
+      )}
+      buyerLocalOriginalPriceCents={product.buyer_local_original_price_cents}
+    />
+  ) : null;
+  const hasDiscountTerms =
+    discount &&
+    (discount.minimum_quantity ||
+      (discount.duration_in_billing_cycles && product.is_recurring_billing) ||
+      discount.minimum_amount_cents ||
+      discount.expires_at);
+
   return (
     <article className="relative grid rounded border border-border bg-background lg:grid-cols-[2fr_1fr]">
       <Covers covers={product.covers} mainCoverId={product.main_cover_id} productName={product.name} />
@@ -425,6 +469,12 @@ export const Product = ({
             {product.name}
           </h1>
         </header>
+        {priceTag ? (
+          <div className="border-t border-border lg:hidden">
+            {renderSaleBanner(true)}
+            <div className="px-6 py-4">{priceTag}</div>
+          </div>
+        ) : null}
         {sellerByline || hasRatings ? (
           <section className="grid grid-cols-1 gap-[1px] border-t border-border p-0 sm:grid-cols-[minmax(0,1fr)_auto]">
             {sellerByline ? (
@@ -534,46 +584,9 @@ export const Product = ({
         </section>
       </section>
       <section>
-        {showSaleLabel && discount ? (
-          <div
-            role="status"
-            data-testid="sale-banner"
-            className="flex items-center gap-2 bg-accent-with-text px-6 py-3 font-bold text-accent-foreground"
-          >
-            <DiscountIcon pack="filled" className="size-5 shrink-0" aria-hidden="true" />
-            <span className="min-w-0 wrap-break-word" data-testid="sale-label">
-              {saleLabel}
-            </span>
-            <span className="ml-auto shrink-0">
-              {formatDiscountAmount(discount, buyerLocalContextFor(product))} off
-            </span>
-          </div>
-        ) : null}
+        {showSaleLabel ? <div className={showPrice ? "hidden lg:block" : undefined}>{renderSaleBanner()}</div> : null}
         <section className="grid gap-4 p-6 not-first:border-t">
-          {showPrice ? (
-            <PriceTag
-              currencyCode={product.currency_code}
-              oldPrice={
-                comparisonPriceCents !== null && discountedPriceCents < comparisonPriceCents
-                  ? comparisonPriceCents
-                  : undefined
-              }
-              price={discountedPriceCents}
-              url={product.long_url}
-              isPayWhatYouWant={!!product.pwyw}
-              isSalesLimited={product.is_sales_limited}
-              creatorName={product.seller?.name}
-              buyerCurrency={product.buyer_currency}
-              buyerLocalCurrencyRate={product.buyer_local_currency_rate}
-              buyerLocalCurrencySubunitToUnit={product.buyer_local_currency_subunit_to_unit}
-              buyerLocalPriceCents={buyerLocalPriceCentsForSelection(
-                product.buyer_local_price_cents,
-                discountCode?.valid ? discountCode.discount : null,
-                selection.quantity,
-              )}
-              buyerLocalOriginalPriceCents={product.buyer_local_original_price_cents}
-            />
-          ) : null}
+          {priceTag ? <div className="hidden lg:block">{priceTag}</div> : null}
           {notForSaleMessage ? (
             <Alert role="status" variant="warning">
               {notForSaleMessage}
@@ -589,12 +602,19 @@ export const Product = ({
               (discountedPriceCents < priceCents ||
                 discountCode.discount.minimum_quantity ||
                 (discountCode.discount.type === "fixed" && discountCode.discount.once_per_cart)) &&
-              !pppDiscounted ? (
+              !pppDiscounted &&
+              (!showSaleLabel || hasDiscountTerms) ? (
                 <Alert role="status" variant="success">
                   <div className="flex flex-col gap-4">
-                    {discountCode.discount.minimum_quantity
-                      ? `Get ${formatDiscountAmount(discountCode.discount, buyerLocalContextFor(product))} off when you buy ${discountCode.discount.minimum_quantity} or more (Code ${discountCode.code.toUpperCase()})`
-                      : `${formatDiscountAmount(discountCode.discount, buyerLocalContextFor(product))} off will be applied at checkout (Code ${discountCode.code.toUpperCase()})`}
+                    {showSaleLabel ? (
+                      discountCode.discount.minimum_quantity ? (
+                        <div>Applies when you buy {discountCode.discount.minimum_quantity} or more.</div>
+                      ) : null
+                    ) : discountCode.discount.minimum_quantity ? (
+                      `Get ${formatDiscountAmount(discountCode.discount, buyerLocalContextFor(product))} off when you buy ${discountCode.discount.minimum_quantity} or more (Code ${discountCode.code.toUpperCase()})`
+                    ) : (
+                      `${formatDiscountAmount(discountCode.discount, buyerLocalContextFor(product))} off will be applied at checkout (Code ${discountCode.code.toUpperCase()})`
+                    )}
                     {discountCode.discount.duration_in_billing_cycles && product.is_recurring_billing ? (
                       <div>This discount will only apply to the first payment of your subscription.</div>
                     ) : null}
@@ -620,6 +640,7 @@ export const Product = ({
                     {discountCode.discount.expires_at ? (
                       <DiscountExpirationCountdown
                         expiresAt={new Date(discountCode.discount.expires_at)}
+                        showEndDate={showSaleLabel}
                         onExpiration={() => setDiscountCode({ valid: false, error_code: "inactive" })}
                       />
                     ) : null}

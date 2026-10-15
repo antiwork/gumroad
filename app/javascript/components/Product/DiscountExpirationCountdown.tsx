@@ -2,6 +2,9 @@ import { intervalToDuration, Duration } from "date-fns";
 import * as React from "react";
 
 import Countdown from "$app/utils/countdown";
+import { formatDate } from "$app/utils/date";
+
+const MAX_COUNTDOWN_SECONDS = 60 * 60 * 24 * 7;
 
 const formatDurationComponent = (component?: number) => (component ?? 0).toString().padStart(2, "0");
 const formatDuration = (duration: Duration) => {
@@ -16,9 +19,11 @@ const formatDuration = (duration: Duration) => {
 export const DiscountExpirationCountdown = ({
   onExpiration,
   expiresAt,
+  showEndDate = false,
 }: {
   expiresAt: Date;
   onExpiration: () => void;
+  showEndDate?: boolean;
 }) => {
   const [secondsUntilExpiration, setSecondsUntilExpiration] = React.useState(
     (expiresAt.getTime() - new Date().getTime()) / 1000,
@@ -37,8 +42,17 @@ export const DiscountExpirationCountdown = ({
     // onExpiration are read from the first render only, so the interval is never rebuilt.
   }, []);
 
-  // Don't render the countdown if it's greater than 7 days
-  if (secondsUntilExpiration > 60 * 60 * 24 * 7) return null;
+  if (secondsUntilExpiration > MAX_COUNTDOWN_SECONDS) {
+    return showEndDate ? (
+      <div>
+        This sale ends on{" "}
+        <time dateTime={expiresAt.toISOString()} suppressHydrationWarning>
+          {formatDate(expiresAt)}
+        </time>
+        .
+      </div>
+    ) : null;
+  }
 
   return (
     <div>
