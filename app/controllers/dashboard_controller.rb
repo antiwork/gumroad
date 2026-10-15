@@ -7,6 +7,8 @@ class DashboardController < Sellers::BaseController
 
   layout "inertia", only: :index
 
+  FULL_ROLLOUT_PERCENTAGE = 100
+
   def index
     authorize :dashboard
     session.delete(:social_connect_return)
@@ -82,7 +84,7 @@ class DashboardController < Sellers::BaseController
       started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
       props = yield
       percentage = Flipper[CreatorHomePresenter::SALES_QUERY_FLAG].percentage_of_actors_value
-      return props unless percentage > 0 && percentage < 100
+      return props unless percentage.positive? && percentage < FULL_ROLLOUT_PERCENTAGE
 
       Rails.logger.info(
         {

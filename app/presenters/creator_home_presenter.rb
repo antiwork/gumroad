@@ -6,6 +6,10 @@ class CreatorHomePresenter
   ACTIVITY_ITEMS_LIMIT = 10
   BALANCE_ITEMS_LIMIT = 3
   SALES_QUERY_FLAG = :dashboard_home_sales_query
+  # The best-seller card covers today and this many days before it; its "Last 7 days" column sums
+  # the last LAST_WEEK_DAYS of that window.
+  SALES_LOOKBACK_DAYS = 30
+  LAST_WEEK_DAYS = 7
 
   attr_reader :pundit_user, :seller
 
@@ -108,7 +112,7 @@ class CreatorHomePresenter
     # today, 7 and 31 days. One seller-wide aggregation over purchases answers that: no page views
     # (the card never shows them) and no catalogue query to build a product filter.
     def best_selling_products(today)
-      dates = (today - 30..today).to_a
+      dates = (today - SALES_LOOKBACK_DAYS..today).to_a
       days_by_product = Hash.new { |hash, product_id| hash[product_id] = {} }
       CreatorAnalytics::Sales.new(user: seller, dates:).by_product_and_date.each do |(product_id, date), day|
         days_by_product[product_id][date] = day
@@ -134,7 +138,7 @@ class CreatorHomePresenter
     end
 
     def best_selling_products_from_analytics(today)
-      analytics = CreatorAnalytics::CachingProxy.new(seller).data_for_dates(today - 30, today)
+      analytics = CreatorAnalytics::CachingProxy.new(seller).data_for_dates(today - SALES_LOOKBACK_DAYS, today)
       top_sales_data = analytics[:by_date][:sales]
         .sort_by { |_, sales| -sales&.sum }.take(BALANCE_ITEMS_LIMIT)
 
@@ -153,7 +157,7 @@ class CreatorHomePresenter
       end.compact
     end
 
-    # daily_totals: revenue per day for the 31 days ending today.
+    # daily_totals: revenue per day across the SALES_LOOKBACK_DAYS window, ending today.
     def product_card(product, daily_totals)
       {
         "id" => product.unique_permalink,
@@ -163,7 +167,7 @@ class CreatorHomePresenter
         "revenue" => product.total_usd_cents,
         "visits" => product.number_of_views,
         "today" => daily_totals.last,
-        "last_7" => daily_totals.last(7).sum,
+        "last_7" => daily_totals.last(LAST_WEEK_DAYS).sum,
         "last_30" => daily_totals.sum,
       }
     end
