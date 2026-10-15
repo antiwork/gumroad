@@ -203,10 +203,18 @@ workflow_check(
    "--card-declined verdict-input.json", "card_declined: $card_declined"].all? { |part| record["run"].to_s.include?(part) },
   "Record the verdict"
 )
+# Gumclaw forwards a github-actions comment only when it carries this marker, so
+# render the comment as the step builds it.
+card_line = tell_run.lines.each_cons(2).find { |condition, _| condition.include?('[ "$REASON" = "test_card_declined" ]') }&.last.to_s.strip
+rendered, = Open3.capture2(
+  { "PR_AUTHOR" => "author", "SHA" => "abc123", "RUN_URL" => "https://example.com/runs/1" },
+  "bash", "-c", "set -euo pipefail; #{card_line}; printf '%s' \"$body\""
+)
 workflow_check(
-  "the original PR hears that the test card was declined",
-  tell_run.include?('[ "$REASON" = "test_card_declined" ]') && tell_run.include?("block list"),
-  "Tell the original PR"
+  "the original PR hears that the test card was declined, and Gumclaw gets the recovery",
+  rendered.start_with?("@author ") && rendered.include?("@gumclaw will check the block list") &&
+    rendered.end_with?("\n\n<!-- gumclaw:test-card-decline sha=abc123 run=https://example.com/runs/1 -->"),
+  rendered.inspect
 )
 workflow_check(
   "the retry workflow records whether it started a retry",
