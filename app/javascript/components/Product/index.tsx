@@ -384,11 +384,11 @@ export const Product = ({
 
   // The label names the price the buyer is looking at, so it only shows while the seller's
   // auto-applied code is what produced that price: a PPP discount, or a code whose minimum
-  // quantity or minimum amount this selection has not met, leaves the displayed price alone.
+  // quantity or minimum amount (checked against the total spend) this selection has not met, leaves the displayed price alone.
   const codeDiscounts = (attributes: typeof selectionAttributes) =>
     !attributes.pppDiscounted &&
     attributes.discountedPriceCents < attributes.priceCents &&
-    attributes.priceCents >= (discount?.minimum_amount_cents ?? 0);
+    attributes.priceCents * selection.quantity >= (discount?.minimum_amount_cents ?? 0);
   // With no option picked, each visible option shows its own price, so any discounted one earns the label.
   const showSaleLabel =
     !!saleLabel &&

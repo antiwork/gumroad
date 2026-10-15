@@ -250,6 +250,16 @@ describe("product page sale label on a product with no options", () => {
     expect(screen.getByTestId("sale-label").textContent).toBe("Black Friday");
   });
 
+  it("counts the selected quantity toward the code's minimum amount", () => {
+    renderMembership(
+      sellerDiscount(undefined, minimumAmountCents),
+      digitalProduct({ price_cents: belowMinimumPriceCents, is_quantity_enabled: true }),
+      { ...noRecurrenceSelected, quantity: 2 },
+    );
+
+    expect(screen.getByTestId("sale-label").textContent).toBe("Black Friday");
+  });
+
   it("shows the label when the code has no minimum amount", () => {
     renderMembership(sellerDiscount(), digitalProduct({ price_cents: belowMinimumPriceCents }), noRecurrenceSelected);
 
