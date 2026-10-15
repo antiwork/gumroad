@@ -117,10 +117,10 @@ describe ConfirmationsController do
     end
 
     describe "when the person confirming is signed in as somebody else" do
-      let(:creator) { create(:user) }
+      let(:seller) { create(:user) }
       let(:brand_account) do
         service = User::CreateBrandAccountService.new(
-          creator:,
+          creator: seller,
           email: "brand@example.com",
           username: "creatorbrand",
           name: "Creator Brand",
@@ -130,20 +130,20 @@ describe ConfirmationsController do
         service.brand_user
       end
 
-      before { sign_in creator }
+      before { sign_in seller }
 
-      it "confirms the brand account without replacing the creator's session" do
+      it "confirms the brand account without replacing the signed-in user's session" do
         expect do
           get :show, params: { confirmation_token: brand_account.confirmation_token }
         end.to change { brand_account.reload.confirmed? }.from(false).to(true)
 
-        expect(request.env["warden"].user(:user)).to eq(creator)
+        expect(request.env["warden"].user(:user)).to eq(seller)
       end
 
-      it "does not invalidate the creator's other sessions" do
+      it "does not invalidate the signed-in user's other sessions" do
         expect do
           get :show, params: { confirmation_token: brand_account.confirmation_token }
-        end.to_not change { creator.reload.last_active_sessions_invalidated_at }
+        end.to_not change { seller.reload.last_active_sessions_invalidated_at }
       end
 
       it "still invalidates the confirmed account's other sessions" do
