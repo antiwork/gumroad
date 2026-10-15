@@ -17,6 +17,10 @@ module CsrfTokenInjector
   end
 
   def inject_csrf_token
+    # Reading a Live response's body drains its stream, including the end marker that Puma
+    # waits for, so the request never finishes and its Puma thread stays blocked.
+    return if response.stream.is_a?(ActionController::Live::Buffer)
+
     token = form_authenticity_token
     return if !protect_against_forgery?
 
