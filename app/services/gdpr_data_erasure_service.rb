@@ -46,6 +46,8 @@ class GdprDataErasureService
       delete_device_records!
       anonymize_carts!(anonymized_email:, original_email:, guest_cart_browser_guids:)
       anonymize_credit_cards!(credit_card_ids)
+      # Before the purchases lose the addresses its member lookup is keyed by.
+      remove_own_purchase_audience_details!(anonymized_email:, original_email:)
       anonymize_buyer_purchases!(anonymized_email:, original_email:)
       erase_email_keyed_records!(anonymized_email:, original_email:)
       anonymize_linked_followers!(anonymized_email)
@@ -575,7 +577,7 @@ class GdprDataErasureService
                        .pluck(:id, :followed_id, :deleted_at, :email)
       return if linked.empty?
 
-      remove_linked_follower_audience_details!(linked)
+      remove_owned_audience_details!(handles: linked.map { [_2, _4] }, follower_ids: linked.map(&:first))
       # (email, followed_id) is unique, so at most one row per followed seller can take the address.
       taken_followed_ids = Follower.where(email: anonymized_email, followed_id: linked.map(&:second).uniq).pluck(:followed_id)
       kept_ids = linked.reject { taken_followed_ids.include?(_2) }
@@ -585,14 +587,26 @@ class GdprDataErasureService
       @counts[:followers] += Follower.where(id: kept_ids).update_all(email: anonymized_email)
     end
 
-    # The rewrite skips Follower's audience callbacks, and afterwards the follow's own unsubscribe
-    # looks under the new address, so the old-address member would keep receiving posts. Only a
-    # follower detail pointing at one of these rows is removed; anyone else's details on it stay.
-    def remove_linked_follower_audience_details!(linked)
-      follower_ids = linked.map(&:first)
+    # A purchase under another of the account's addresses is projected onto the seller's member there.
+    # Matched on purchaser_id; members under the current address are the email-keyed step's to erase.
+    def remove_own_purchase_audience_details!(anonymized_email:, original_email:)
+      purchases = Purchase.where(purchaser_id: @user.id).where.not(email: [original_email, anonymized_email].compact_blank)
+                          .pluck(:id, :seller_id, :email)
+      return if purchases.empty?
+
+      remove_owned_audience_details!(handles: purchases.map { [_2, _3] }, purchase_ids: purchases.map(&:first))
+    end
+
+    # Follows and purchases are rewritten without their audience callbacks, so the (seller, address)
+    # member would keep receiving posts, and a follow's own unsubscribe would look under the new
+    # address. Only the details these ids name are removed; anyone else's on the member stay.
+    def remove_owned_audience_details!(handles:, follower_ids: [], purchase_ids: [])
+      purchase_ids = purchase_ids.to_set
+      owned_follower = ->(details) { follower_ids.include?(details&.dig("follower", "id")) }
+      owned_purchase = ->(purchase) { purchase_ids.include?(purchase["id"]) }
       # An already-anonymized member has NULL details.
-      owned = ->(member) { follower_ids.include?(member.details&.dig("follower", "id")) }
-      candidate_ids = AudienceMember.where(seller_id: linked.map(&:second).uniq, email: linked.map(&:fourth).uniq)
+      owned = ->(member) { owned_follower.(member.details) || Array.wrap(member.details&.dig("purchases")).any?(&owned_purchase) }
+      candidate_ids = AudienceMember.where(seller_id: handles.map(&:first).uniq, email: handles.map(&:second).uniq)
                                     .filter_map { _1.id if owned.(_1) }
       return if candidate_ids.empty?
 
@@ -602,7 +616,8 @@ class GdprDataErasureService
         member = AudienceMember.lock.find_by(id: member_id)
         next unless member && owned.(member)
 
-        member.details.delete("follower")
+        member.details.delete("follower") if owned_follower.(member.details)
+        member.details["purchases"]&.reject!(&owned_purchase)
         if member.valid?
           member.save!
           reindex_ids << member.id

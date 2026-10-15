@@ -976,6 +976,33 @@ describe GdprDataErasureService do
       expect([rerun, again].map { _1[:summary][:followers_anonymized] }).to eq([1, 0])
     end
 
+    it "removes the account's own purchases from audience members under an earlier address and keeps other buyers' purchases there" do
+      old_email = "john.old@example.com"
+      anonymized_email = "deleted-#{user.id}@deleted.gumroad.com"
+      shared_seller, solo_seller = create_list(:user, 2)
+      own_shared = create(:free_purchase, link: create(:product, user: shared_seller), purchaser: user, email: old_email)
+      other_account = create(:free_purchase, link: create(:product, user: shared_seller), purchaser: create(:user), email: old_email)
+      guest = create(:free_purchase, link: create(:product, user: shared_seller), purchaser: nil, email: old_email)
+      own_solo = create(:free_purchase, link: create(:product, user: solo_seller), purchaser: user, email: old_email)
+      shared_member = AudienceMember.find_by!(seller: shared_seller, email: old_email)
+      solo_member_id = AudienceMember.find_by!(seller: solo_seller, email: old_email).id
+      expect(shared_member.details["purchases"].pluck("id")).to contain_exactly(own_shared.id, other_account.id, guest.id)
+      recreate_model_index(AudienceMember)
+      index_model_records(AudienceMember)
+      indexed_purchase_ids = ->(id) { EsClient.get(index: AudienceMember.index_name, id:, ignore: 404)["_source"]&.fetch("purchases")&.pluck("id") }
+
+      result = described_class.new(user, performed_by: admin).perform!
+
+      expect(result[:success]).to eq(true)
+      expect(shared_member.reload.details["purchases"].pluck("id")).to contain_exactly(other_account.id, guest.id)
+      expect(shared_member).to have_attributes(email: old_email, customer: true)
+      expect(indexed_purchase_ids.(shared_member.id)).to contain_exactly(other_account.id, guest.id)
+      expect(AudienceMember.exists?(solo_member_id)).to be(false)
+      expect(EsClient.exists?(index: AudienceMember.index_name, id: solo_member_id)).to be(false)
+      expect([own_shared, own_solo].map { _1.reload.email }).to eq([anonymized_email, anonymized_email])
+      expect([other_account, guest].map { _1.reload.email }).to eq([old_email, old_email])
+    end
+
     it "erases an account whose linked follow an earlier erasure of its old address already anonymized" do
       seller = create(:user)
       follower = create(:active_follower, user: seller, email: "john.old@example.com", follower_user_id: user.id)
