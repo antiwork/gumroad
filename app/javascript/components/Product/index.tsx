@@ -384,11 +384,13 @@ export const Product = ({
 
   // The label names the price the buyer is looking at, so it only shows while the seller's
   // auto-applied code is what produced that price: a PPP discount, or a code whose minimum
-  // quantity or minimum amount (checked against the total spend) this selection has not met, leaves the displayed price alone.
+  // quantity or minimum amount (unit price × quantity, capped at stock) this selection has not
+  // met, leaves the displayed price alone.
   const codeDiscounts = (attributes: typeof selectionAttributes) =>
     !attributes.pppDiscounted &&
     attributes.discountedPriceCents < attributes.priceCents &&
-    attributes.priceCents * selection.quantity >= (discount?.minimum_amount_cents ?? 0);
+    attributes.priceCents * Math.min(selection.quantity, attributes.maxQuantity ?? Infinity) >=
+      (discount?.minimum_amount_cents ?? 0);
   // With no option picked, each visible option shows its own price, so any discounted one earns the label.
   const showSaleLabel =
     !!saleLabel &&
@@ -402,21 +404,27 @@ export const Product = ({
         )
       : codeDiscounts(selectionAttributes));
 
-  const renderSaleBanner = (mobile = false) =>
+  const hasDiscountTerms =
+    discount &&
+    (discount.minimum_quantity ||
+      (discount.duration_in_billing_cycles && product.is_recurring_billing) ||
+      discount.minimum_amount_cents ||
+      discount.expires_at);
+
+  const saleBanner =
     showSaleLabel && discount ? (
       <div
         role="status"
-        data-testid={mobile ? "mobile-sale-banner" : "sale-banner"}
+        data-testid="sale-banner"
         className="flex items-center gap-2 bg-accent-with-text px-6 py-3 font-bold text-accent-foreground"
       >
         <DiscountIcon pack="filled" className="size-5 shrink-0" aria-hidden="true" />
-        <span className="min-w-0 wrap-break-word" data-testid={mobile ? "mobile-sale-label" : "sale-label"}>
+        <span className="min-w-0 wrap-break-word" data-testid="sale-label">
           {saleLabel}
         </span>
         <span className="ml-auto shrink-0">{formatDiscountAmount(discount, buyerLocalContextFor(product))} off</span>
       </div>
     ) : null;
-
   const priceTag = showPrice ? (
     <PriceTag
       currencyCode={product.currency_code}
@@ -439,42 +447,44 @@ export const Product = ({
       buyerLocalOriginalPriceCents={product.buyer_local_original_price_cents}
     />
   ) : null;
-  const hasDiscountTerms =
-    discount &&
-    (discount.minimum_quantity ||
-      (discount.duration_in_billing_cycles && product.is_recurring_billing) ||
-      discount.minimum_amount_cents ||
-      discount.expires_at);
 
   return (
-    <article className="relative grid rounded border border-border bg-background lg:grid-cols-[2fr_1fr]">
+    <article
+      className={classNames(
+        "relative grid rounded border border-border bg-background [grid-template-areas:'covers'_'title'_'price'_'details'_'controls'] lg:grid-cols-[2fr_1fr] lg:grid-rows-[auto_auto_1fr]",
+        saleBanner || priceTag
+          ? "lg:[grid-template-areas:'covers_covers'_'title_price'_'details_controls']"
+          : "lg:[grid-template-areas:'covers_covers'_'title_controls'_'details_controls']",
+      )}
+    >
       <Covers covers={product.covers} mainCoverId={product.main_cover_id} productName={product.name} />
       {product.quantity_remaining !== null ? <Ribbon>{product.quantity_remaining} left</Ribbon> : null}
-      <section className="lg:border-r">
-        <header className="grid gap-4 p-6 not-first:border-t">
-          {/* dir="auto" lets an RTL product name (Hebrew, Arabic) render right-to-left
+      <header className="grid gap-4 p-6 [grid-area:title] lg:border-r">
+        {/* dir="auto" lets an RTL product name (Hebrew, Arabic) render right-to-left
               instead of inheriting the document's LTR base direction, which misplaces
               neutral characters like quotes and digits (gumroad-private#1259; same
               rationale as the description fix in #6138).
               wrap-break-word overrides the inherited global overflow-wrap: anywhere, which
               splits titles mid-word in narrow in-app browsers. */}
-          <h1
-            itemProp="name"
-            dir="auto"
-            className={classNames(
-              "wrap-break-word",
-              scaleLongTitle && product.name.trim().length > LONG_TITLE_LENGTH && "text-[2rem] max-sm:text-[1.5rem]",
-            )}
-          >
-            {product.name}
-          </h1>
-        </header>
-        {priceTag ? (
-          <div className="border-t border-border lg:hidden">
-            {renderSaleBanner(true)}
-            <div className="px-6 py-4">{priceTag}</div>
-          </div>
-        ) : null}
+        <h1
+          itemProp="name"
+          dir="auto"
+          className={classNames(
+            "wrap-break-word",
+            scaleLongTitle && product.name.trim().length > LONG_TITLE_LENGTH && "text-[2rem] max-sm:text-[1.5rem]",
+          )}
+        >
+          {product.name}
+        </h1>
+      </header>
+      {/* Align the desktop title and price so both layouts keep one accessible reading order. */}
+      {saleBanner || priceTag ? (
+        <section className="border-t [grid-area:price] lg:border-t-0">
+          {saleBanner}
+          {priceTag ? <div className="px-6 py-4 lg:pt-6 lg:pb-0">{priceTag}</div> : null}
+        </section>
+      ) : null}
+      <section className="[grid-area:details] lg:border-r">
         {sellerByline || hasRatings ? (
           <section className="grid grid-cols-1 gap-[1px] border-t border-border p-0 sm:grid-cols-[minmax(0,1fr)_auto]">
             {sellerByline ? (
@@ -583,10 +593,8 @@ export const Product = ({
           </CollapsibleDescription>
         </section>
       </section>
-      <section>
-        {showSaleLabel ? <div className={showPrice ? "hidden lg:block" : undefined}>{renderSaleBanner()}</div> : null}
-        <section className="grid gap-4 p-6 not-first:border-t">
-          {priceTag ? <div className="hidden lg:block">{priceTag}</div> : null}
+      <section className="[grid-area:controls]">
+        <section className="grid gap-4 border-t p-6 lg:border-t-0">
           {notForSaleMessage ? (
             <Alert role="status" variant="warning">
               {notForSaleMessage}
@@ -796,7 +804,7 @@ const Covers = ({
       activeCoverId={activeCoverId}
       setActiveCoverId={setActiveCoverId}
       productName={productName}
-      className={activeCoverId ? "" : "pb-[25%]"}
+      className={classNames("[grid-area:covers]", !activeCoverId && "pb-[25%]")}
     />
   );
 };

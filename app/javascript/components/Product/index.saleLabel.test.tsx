@@ -4,6 +4,7 @@ import * as React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { Discount } from "$app/parsers/checkout";
+import { assertDefined } from "$app/utils/assert";
 
 import { Product, type Product as ProductData, type ProductDiscount } from "$app/components/Product";
 import type { PriceSelection } from "$app/components/Product/ConfigurationSelector";
@@ -38,7 +39,6 @@ vi.mock("$app/components/DomainSettings", () => ({
   useAppDomain: () => "example.com",
   useDomains: () => ({ scheme: "https", rootDomain: "example.com" }),
 }));
-vi.mock("$app/components/useIsAboveBreakpoint", () => ({ useIsAboveBreakpoint: () => false }));
 vi.mock("$app/components/Product/ConfigurationSelector", () => {
   const ConfigurationSelector = React.forwardRef(() => null);
   ConfigurationSelector.displayName = "ConfigurationSelector";
@@ -219,20 +219,6 @@ describe("product page sale label", () => {
     expect(screen.queryByText(/off will be applied at checkout/u)).toBeNull();
   });
 
-  it("keeps a mobile price above the description and a desktop price in the purchase column", () => {
-    const { container } = renderProduct();
-
-    const columns = container.querySelectorAll(":scope > article > section");
-    const purchaseColumn = columns[columns.length - 1];
-    const mobilePrice = columns[0]?.querySelector("[itemprop=price]");
-    const desktopPrice = purchaseColumn?.querySelector("[itemprop=price]");
-    expect(mobilePrice?.closest(".lg\\:hidden")).not.toBeNull();
-    expect(desktopPrice?.closest(".hidden.lg\\:block")).not.toBeNull();
-    expect(mobilePrice?.textContent).toBe(desktopPrice?.textContent);
-    expect(screen.getByTestId("mobile-sale-label").closest(".lg\\:hidden")).toBe(mobilePrice?.closest(".lg\\:hidden"));
-    expect(screen.getByTestId("sale-banner").closest(".hidden.lg\\:block")).toBeTruthy();
-  });
-
   it("keeps the minimum spend and expiry when the sale banner replaces the code message", () => {
     render(
       <Product
@@ -274,5 +260,22 @@ describe("product page sale label", () => {
 
     expect(screen.getByText(/This sale ends on/u)).toBeTruthy();
     expect(screen.queryByText(/off will be applied at checkout/u)).toBeNull();
+  });
+});
+
+describe("product page price and sale banner placement", () => {
+  it("renders one banner and price before the description", () => {
+    const { container } = renderProduct({ description_html: "<p>About this product</p>" });
+    const banner = screen.getByTestId("sale-banner");
+    const price = assertDefined(container.querySelector("[itemprop=price]"));
+    expect(container.querySelectorAll("[itemprop=price]")).toHaveLength(1);
+
+    const elements = Array.from(container.querySelectorAll("*"));
+    const titleIndex = elements.indexOf(screen.getByRole("heading", { level: 1 }));
+    const descriptionIndex = elements.indexOf(screen.getByText("About this product"));
+    expect(elements.indexOf(banner)).toBeGreaterThan(titleIndex);
+    expect(elements.indexOf(price)).toBeGreaterThan(elements.indexOf(banner));
+    expect(elements.indexOf(price)).toBeLessThan(descriptionIndex);
+    expect(descriptionIndex).toBeLessThan(elements.indexOf(screen.getByRole("link", { name: "I want this!" })));
   });
 });

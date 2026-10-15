@@ -585,4 +585,64 @@ describe("Offer-code usage from product page", type: :system, js: true) do
       end
     end
   end
+
+  describe "shop-wide sale banner and price placement" do
+    let(:product) { create(:product, price_cents: 2000) }
+
+    before do |example|
+      if example.metadata[:without_standalone_price]
+        create(:variant, variant_category: create(:variant_category, link: product))
+      else
+        product.user.offer_codes.create!(code: "spring30", amount_percentage: 30, universal: true, products: [], auto_apply: true, sale_label: "Spring sale")
+      end
+      visit "/l/#{product.unique_permalink}"
+      # Set the viewport after navigation because the driver reapplies its emulation on navigation.
+      width = example.metadata[:narrow_view] ? 390 : 1440
+      page.driver.browser.execute_cdp("Emulation.setDeviceMetricsOverride", width:, height: 900, mobile: false, deviceScaleFactor: 1)
+      expect(page.evaluate_script("window.innerWidth")).to eq(width)
+    end
+
+    after do
+      page.driver.browser.execute_cdp("Emulation.clearDeviceMetricsOverride")
+    end
+
+    def rect(element)
+      element.evaluate_script("this.getBoundingClientRect().toJSON()")
+    end
+
+    it "shows the banner and price once, under the title and before the description, on phones", :narrow_view do
+      article = find("h1", text: product.name).find(:xpath, "ancestor::article")
+      banner = article.find("[data-testid='sale-banner']", text: "Spring sale 30% off", normalize_ws: true)
+      price = article.find("[itemprop='price']", text: "$20 $14", normalize_ws: true)
+      description = article.find(".rich-text", text: product.description)
+      expect(rect(banner)["top"]).to be >= rect(article.find("h1"))["bottom"]
+      expect(rect(price)["top"]).to be >= rect(banner)["bottom"]
+      expect(rect(description)["top"]).to be > rect(price)["bottom"]
+      expect(rect(article.find_link("I want this!"))["top"]).to be > rect(description)["top"]
+      expect(article).to have_selector("[data-testid='sale-banner']", count: 1)
+      expect(article).to have_selector("[itemprop='price']", count: 1)
+      expect(article).to have_xpath(".//*[@itemprop='price']/following::*[contains(concat(' ', @class, ' '), ' rich-text ')]")
+    end
+
+    it "shows the banner and price once, in the column with the buy button, on desktop" do
+      article = find("h1", text: product.name).find(:xpath, "ancestor::article")
+      banner = article.find("[data-testid='sale-banner']", text: "Spring sale 30% off", normalize_ws: true)
+      price = article.find("[itemprop='price']", text: "$20 $14", normalize_ws: true)
+      button = article.find_link("I want this!")
+      expect(rect(banner)["left"]).to be > rect(article.find("h1"))["right"]
+      expect(rect(price)["left"]).to be >= rect(banner)["left"]
+      expect(rect(button)["left"]).to eq(rect(price.find(:xpath, ".."))["left"])
+      expect(rect(button)["top"]).to be > rect(price)["bottom"]
+      expect(article).to have_selector("[data-testid='sale-banner']", count: 1)
+      expect(article).to have_selector("[itemprop='price']", count: 1)
+    end
+
+    it "keeps options beside the title when no standalone price exists", :without_standalone_price do
+      article = find("h1", text: product.name).find(:xpath, "ancestor::article")
+      expect(article).to have_no_selector("[data-testid='sale-banner'], [itemprop='price']")
+      options = article.find("[data-option-picker]")
+      expect(rect(options)["top"]).to be < rect(article.find("h1"))["bottom"]
+      expect(rect(options)["left"]).to be > rect(article.find("h1"))["right"]
+    end
+  end
 end
