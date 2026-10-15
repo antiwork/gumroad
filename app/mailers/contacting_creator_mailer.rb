@@ -86,7 +86,7 @@ class ContactingCreatorMailer < ApplicationMailer
 
     @buyer_name = @purchase.try(:full_name)
     @seller = @product.user
-    @unsub_link = user_unsubscribe_url(id: @seller.secure_external_id(scope: "email_unsubscribe"), email_type: :notify)
+    @unsub_link = user_unsubscribe_url(id: @seller.secure_external_id(scope: "email_unsubscribe"), email_type: @purchase&.price_cents == 0 ? :free_downloads : :notify)
     @reply_to = @purchase.try(:email)
 
     set_notify_of_sale_headers(is_preorder:)

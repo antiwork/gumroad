@@ -883,8 +883,14 @@ describe ContactingCreatorMailer do
       purchase = create(:purchase, link: product, seller: product.user, stripe_transaction_id: nil, stripe_fingerprint: nil)
       mail = ContactingCreatorMailer.notify(purchase.id)
       expect(mail.subject).to eq "New download of #{product.name}"
+      expect(mail.body.encoded).to include("email_type=free_downloads")
 
       expect_push_alert(seller.id, mail.subject)
+    end
+
+    it "links the footer unsubscribe to purchase notifications for paid sales" do
+      mail = ContactingCreatorMailer.notify(purchase.id)
+      expect(mail.body.encoded).to include("email_type=notify")
     end
 
     it "works without a purchaser" do
