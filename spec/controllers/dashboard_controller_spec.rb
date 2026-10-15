@@ -49,6 +49,29 @@ describe DashboardController, type: :controller, inertia: true do
       expect(inertia.props[:prompt_passkey_setup]).to be(false)
     end
 
+    describe "seller-wide sales query rollout" do
+      before { allow(Rails.logger).to receive(:info).and_call_original }
+
+      it "logs the seller's arm and props time once while the rollout is partial" do
+        Feature.activate_percentage(:dashboard_home_sales_query, 50)
+
+        get :index
+
+        arm = Feature.active?(:dashboard_home_sales_query, seller) ? "treatment" : "control"
+        expect(Rails.logger).to have_received(:info).with(
+          a_string_including(%("event":"dashboard_home_sales_query_exposure","arm":"#{arm}","large_seller":false,"props_ms":))
+        ).once
+      end
+
+      it "logs nothing at a full rollout, which has no control arm" do
+        Feature.activate(:dashboard_home_sales_query)
+
+        get :index
+
+        expect(Rails.logger).not_to have_received(:info).with(a_string_including("dashboard_home_sales_query_exposure"))
+      end
+    end
+
     context "when seller has no activity" do
       it "renders the page" do
         get :index

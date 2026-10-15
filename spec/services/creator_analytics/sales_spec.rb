@@ -58,6 +58,16 @@ describe CreatorAnalytics::Sales do
       expect(result).to eq(expected_result)
     end
 
+    it "covers every product the seller sells, and no one else's, without a product list" do
+      other_seller_product = create(:product)
+      create(:purchase, link: other_seller_product, created_at: Time.utc(2021, 1, 2))
+      index_model_records(Purchase)
+
+      result = described_class.new(user: @user, products: nil, dates: (Date.new(2021, 1, 1) .. Date.new(2021, 1, 3)).to_a).by_product_and_date
+
+      expect(result).to eq(expected_result)
+    end
+
     context "when user time zone is Pacific Time" do
       let(:user_timezone) { "Pacific Time (US & Canada)" }
 

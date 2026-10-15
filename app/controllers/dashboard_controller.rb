@@ -15,8 +15,7 @@ class DashboardController < Sellers::BaseController
       redirect_to products_url
     else
       LargeSeller.create_if_warranted(current_seller)
-      presenter = CreatorHomePresenter.new(pundit_user)
-      props = presenter.creator_home_props
+      props = log_sales_query_exposure { CreatorHomePresenter.new(pundit_user).creator_home_props }
       SocialConnectFunnel.record_offers!(
         user: current_seller,
         connections: props[:social_connections],
@@ -74,4 +73,27 @@ class DashboardController < Sellers::BaseController
 
     head :ok
   end
+
+  private
+    # One line per dashboard load while the flag is mid-ramp. request_uuid joins it to the
+    # request's lograge line, which carries the full server time; best_sellers lets the arms be
+    # checked for showing the same cards.
+    def log_sales_query_exposure
+      started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      props = yield
+      percentage = Flipper[CreatorHomePresenter::SALES_QUERY_FLAG].percentage_of_actors_value
+      return props unless percentage > 0 && percentage < 100
+
+      Rails.logger.info(
+        {
+          event: "dashboard_home_sales_query_exposure",
+          arm: Feature.active?(CreatorHomePresenter::SALES_QUERY_FLAG, current_seller) ? "treatment" : "control",
+          large_seller: LargeSeller.where(user: current_seller).exists?,
+          props_ms: ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - started_at) * 1000).round,
+          best_sellers: props[:sales].size,
+          request_uuid: request.uuid,
+        }.to_json,
+      )
+      props
+    end
 end
