@@ -19,10 +19,12 @@ class ConfirmationsController < Devise::ConfirmationsController
     end
 
     if @user.confirm
-      # A creator who confirms a brand account they administer is already signed in as
-      # themselves; signing in as the new account would strand them in it, since a brand
-      # account has no memberships of its own to switch back from.
-      unless user_signed_in? && logged_in_user != @user
+      if user_signed_in? && logged_in_user != @user
+        # Confirming an address must not take over a session that belongs to someone else: a
+        # creator confirming a brand account they administer is signed in as themselves, and
+        # that account has no memberships to switch back from. Its other sessions still go.
+        @user.invalidate_browser_sessions!
+      else
         sign_in @user
         logged_in_user.reload
 

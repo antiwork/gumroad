@@ -135,6 +135,12 @@ describe ConfirmationsController do
           get :show, params: { confirmation_token: brand_account.confirmation_token }
         end.to_not change { creator.reload.last_active_sessions_invalidated_at }
       end
+
+      it "still invalidates the confirmed account's other sessions" do
+        expect do
+          get :show, params: { confirmation_token: brand_account.confirmation_token }
+        end.to change { brand_account.reload.last_active_sessions_invalidated_at }.from(nil)
+      end
     end
 
     describe "logged out" do
