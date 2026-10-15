@@ -104,6 +104,16 @@ describe ConfirmationsController do
           get :show, params: { confirmation_token: @user.confirmation_token }
         end.to change { @user.reload.last_active_sessions_invalidated_at }.from(nil)
       end
+
+      it "refreshes the current session's sign-in timestamp so it stays active" do
+        request.env["warden"].session["last_sign_in_at"] = 1.hour.ago.to_i
+
+        freeze_time do
+          get :show, params: { confirmation_token: @user.confirmation_token }
+
+          expect(request.env["warden"].session["last_sign_in_at"]).to eq(DateTime.current.to_i)
+        end
+      end
     end
 
     describe "when the person confirming is signed in as somebody else" do
