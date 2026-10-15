@@ -731,7 +731,7 @@ describe CustomerMailer do
     end
 
     it "wraps a long product name onto up to three lines and keeps the seller row on one line" do
-      product = create(:product, name: "Before the next step: A moment to take stock | TST-250101-001")
+      product = create(:product, name: "Petit et léger: Un retour vers le jardin vert | JRD-241117-11")
       purchase = create(:purchase, link: product)
       mail = CustomerMailer.receipt(purchase.id)
       body = mail.html_part&.decoded || mail.body.decoded
@@ -743,7 +743,8 @@ describe CustomerMailer do
 
       expect(name.text.strip).to eq(product.name)
       expect(declaration.(name, "white-space")).to eq("normal")
-      expect(declaration.(name, "max-height")).to eq("66px")
+      expect(declaration.(name, "font-size")).to eq("14px")
+      expect(declaration.(name, "max-height")).to eq("54.6px")
       expect(declaration.(name, "-webkit-line-clamp")).to eq("3")
       expect(declaration.(seller_row, "white-space")).to eq("nowrap")
       expect(declaration.(seller_row, "max-height")).to eq("22px")

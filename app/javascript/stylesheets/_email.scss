@@ -532,13 +532,14 @@ $accent-color: map-get($colors, "pink"); // [1]
               max-height: size(nth($line-heights, 3));
             }
 
-            // The fixed cover column leaves ~150px for the name on a phone, so one line shows only
-            // the first ~20 characters. Three lines still fit the 128px cell and keep it readable.
+            // At the small size, three lines fit most ~60-character names on a phone beside the cover
+            // and the seller row. Gmail ignores line-clamp, so max-height is what clips there.
             &:first-child > h4 {
+              @include font-size(1);
               white-space: normal;
               overflow-wrap: break-word;
               @include max-lines(3);
-              max-height: size(nth($line-heights, 3) * 3);
+              max-height: nth($font-sizes, 1) * nth($line-heights, 1) * 3;
             }
 
             h4 {
