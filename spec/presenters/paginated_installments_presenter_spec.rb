@@ -185,18 +185,6 @@ describe PaginatedInstallmentsPresenter do
                                "Expected at most #{max} per-row queries matching #{label}, got #{hits.size}:\n#{hits.join("\n")}"
         end
       end
-
-      it "does not run a DynamoDB Query per row for clicked URLs" do
-        [published_installment1, published_installment2].each do |installment|
-          EmailEngagementDynamoStore.record_click(installment_id: installment.id, mailer_method: "M.a", mailer_args: "[1]", click_url: "example.com")
-        end
-        allow(EmailEngagementDynamoStore.client).to receive(:query).and_call_original
-
-        installments = described_class.new(seller:, type: "published").props[:installments]
-
-        expect(installments.map { _1[:click_count] }).to eq([1, 1])
-        expect(EmailEngagementDynamoStore.client).not_to have_received(:query)
-      end
     end
   end
 

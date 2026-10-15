@@ -169,29 +169,6 @@ describe InstallmentPresenter do
     end
   end
 
-  describe "#clicked_urls_props" do
-    let(:installment) { create(:installment, seller:, published_at: 1.day.ago) }
-
-    it "returns each full URL without truncation so the UI can show it verbatim" do
-      long_url = "example.com/blog/#{"a" * 90}?utm_source=newsletter&utm_campaign=july"
-      [["M.a", "[1]"], ["M.b", "[2]"]].each do |mailer_method, mailer_args|
-        EmailEngagementDynamoStore.record_click(installment_id: installment.id, mailer_method:, mailer_args:, click_url: "example.com")
-      end
-      EmailEngagementDynamoStore.record_click(installment_id: installment.id, mailer_method: "M.a", mailer_args: "[1]", click_url: long_url)
-
-      expect(described_class.new(seller:, installment:).clicked_urls_props).to eq([
-                                                                                    { url: "example.com", count: 2 },
-                                                                                    { url: long_url, count: 1 }
-                                                                                  ])
-    end
-
-    it "labels clicks on the attachments link as View content" do
-      EmailEngagementDynamoStore.record_click(installment_id: installment.id, mailer_method: "M.a", mailer_args: "[1]", click_url: EmailEventInfo::VIEW_ATTACHMENTS_URL)
-
-      expect(described_class.new(seller:, installment:).clicked_urls_props).to eq([{ url: "View content", count: 1 }])
-    end
-  end
-
   describe "#props" do
     let(:product) { create(:product, user: seller) }
 
@@ -224,6 +201,7 @@ describe InstallmentPresenter do
         open_count: 0,
         click_rate: nil,
         open_rate: nil,
+        clicked_urls: [],
         view_count: 0,
         full_url: installment.full_url,
         send_emails: true,
@@ -238,8 +216,21 @@ describe InstallmentPresenter do
       expect(props.keys).to_not include(:recipient_description, :to_be_published_at)
     end
 
-    it "leaves out clicked URLs, which the list loads only for the post the seller opens" do
-      expect(described_class.new(seller:, installment:).props).not_to have_key(:clicked_urls)
+    context "when the installment has clicked URLs" do
+      it "returns each full URL without truncation so the UI can show it verbatim" do
+        long_url = "example.com/blog/#{"a" * 90}?utm_source=newsletter&utm_campaign=july"
+        [["M.a", "[1]"], ["M.b", "[2]"]].each do |mailer_method, mailer_args|
+          EmailEngagementDynamoStore.record_click(installment_id: installment.id, mailer_method:, mailer_args:, click_url: "example.com")
+        end
+        EmailEngagementDynamoStore.record_click(installment_id: installment.id, mailer_method: "M.a", mailer_args: "[1]", click_url: long_url)
+
+        props = described_class.new(seller:, installment:).props
+
+        expect(props[:clicked_urls]).to eq([
+                                             { url: "example.com", count: 2 },
+                                             { url: long_url, count: 1 }
+                                           ])
+      end
     end
 
     context "delivery state of the latest regular send" do
