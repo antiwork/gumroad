@@ -731,7 +731,7 @@ describe CustomerMailer do
     end
 
     it "wraps a long product name onto up to three lines and keeps the seller row on one line" do
-      product = create(:product, name: "Avant la suite: Un moment pour faire le point | SIF-260109-08")
+      product = create(:product, name: "Before the next step: A moment to take stock | TST-250101-001")
       purchase = create(:purchase, link: product)
       mail = CustomerMailer.receipt(purchase.id)
       body = mail.html_part&.decoded || mail.body.decoded
