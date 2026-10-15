@@ -188,4 +188,22 @@ describe MerchantRegistrationMailer do
       expect(mail.body.encoded).to include("below the $1 minimum")
     end
   end
+
+  describe "#stripe_restraint_notice" do
+    let(:user) { create(:user) }
+
+    let(:mail) do
+      described_class.stripe_restraint_notice(user.id, "Scale LLP", "cwallace@scalefirm.com")
+    end
+
+    it "relays the court order and the law firm's contact details" do
+      expect(mail.subject).to eq("Important notice regarding your Gumroad payment account")
+      expect(mail.to).to eq([user.email])
+      expect(mail.reply_to).to eq([ApplicationMailer::SUPPORT_EMAIL])
+      expect(mail.body.encoded).to include("court order")
+      expect(mail.body.encoded).to include("Your payouts are paused")
+      expect(mail.body.encoded).to include("Scale LLP", "cwallace@scalefirm.com")
+      expect(mail.body.encoded).to include("We cannot give legal advice")
+    end
+  end
 end

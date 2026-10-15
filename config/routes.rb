@@ -456,6 +456,10 @@ Rails.application.routes.draw do
             end
           end
 
+          # Stripe court-order notices: the mail-side automation notifies the seller by acct_ id
+          # (gumroad-private#3598).
+          resources :stripe_restraint_notices, only: [:create]
+
           resources :users, only: [] do
             collection do
               get :info

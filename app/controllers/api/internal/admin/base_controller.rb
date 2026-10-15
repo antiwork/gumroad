@@ -16,7 +16,10 @@ class Api::Internal::Admin::BaseController < Api::Internal::BaseController
   # that says a suppression was removed without saying for whom.
   ADMIN_AUDIT_ACTION_UNREDACTED_PARAM_KEYS = {
     "sendgrid_emails.remove_suppression" => %w[email],
-    "stranded_buyers.recover" => %w[email]
+    "stranded_buyers.recover" => %w[email],
+    # The law firm's address is what the notice is about: an audit row that hid it would record
+    # that a seller was notified without recording who the notice points them at.
+    "stripe_restraint_notices.create" => %w[firm_email]
   }.freeze
   ADMIN_AUDIT_ACTIONS_ALLOWING_NULL_TARGET = %w[
     products.file_download_url
