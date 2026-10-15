@@ -3122,9 +3122,14 @@ describe Purchase::CreateService, :vcr do
     let(:zip_field) { create(:custom_field, products: [product], name: "zip") }
 
     it "rejects the purchase when is_gift is set without any gift fields" do
-      params[:is_gift] = "true"
-
-      purchase, error = Purchase::CreateService.new(product:, params:).perform
+      # A chargeable would build a Stripe payment method the guard never reaches.
+      purchase, error = Purchase::CreateService.new(
+        product:,
+        params: {
+          is_gift: "true",
+          purchase: { email:, quantity: 1, perceived_price_cents: price, ip_address: "0.0.0.0", session_id: "a107d0b7ab5ab3c1eeb7d3aaf9792977", is_mobile: false, browser_guid: },
+        }
+      ).perform
 
       expect(purchase).to be_nil
       expect(error).to eq("This gift is missing the recipient details. Please refresh the page and try again.")
