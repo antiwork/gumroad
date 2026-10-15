@@ -82,6 +82,7 @@ import { Alert } from "$app/components/ui/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { LinkButton } from "$app/components/ui/LinkButton";
 import { useAddThirdPartyAnalytics } from "$app/components/useAddThirdPartyAnalytics";
+import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { useOnChange } from "$app/components/useOnChange";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { useUserAgentInfo } from "$app/components/UserAgent";
@@ -337,6 +338,7 @@ export const Product = ({
   }, [maxQuantity, selection.quantity]);
 
   const addThirdPartyAnalytics = useAddThirdPartyAnalytics();
+  const isDesktop = useIsAboveBreakpoint("lg");
 
   const { searchParams } = new URL(useOriginalLocation());
   useRunOnce(() => {
@@ -384,11 +386,13 @@ export const Product = ({
 
   // The label names the price the buyer is looking at, so it only shows while the seller's
   // auto-applied code is what produced that price: a PPP discount, or a code whose minimum
-  // quantity or minimum amount (checked against the total spend) this selection has not met, leaves the displayed price alone.
+  // quantity or minimum amount (unit price × quantity, capped at stock) this selection has not
+  // met, leaves the displayed price alone.
   const codeDiscounts = (attributes: typeof selectionAttributes) =>
     !attributes.pppDiscounted &&
     attributes.discountedPriceCents < attributes.priceCents &&
-    attributes.priceCents * selection.quantity >= (discount?.minimum_amount_cents ?? 0);
+    attributes.priceCents * Math.min(selection.quantity, attributes.maxQuantity ?? Infinity) >=
+      (discount?.minimum_amount_cents ?? 0);
   // With no option picked, each visible option shows its own price, so any discounted one earns the label.
   const showSaleLabel =
     !!saleLabel &&
@@ -401,6 +405,43 @@ export const Product = ({
             codeDiscounts(applySelection(product, discount, { ...selection, optionId: option.id })),
         )
       : codeDiscounts(selectionAttributes));
+
+  const saleBanner =
+    showSaleLabel && discount ? (
+      <div
+        role="status"
+        data-testid="sale-banner"
+        className="flex items-center gap-2 bg-accent-with-text px-6 py-3 font-bold text-accent-foreground"
+      >
+        <DiscountIcon pack="filled" className="size-5 shrink-0" aria-hidden="true" />
+        <span className="min-w-0 wrap-break-word" data-testid="sale-label">
+          {saleLabel}
+        </span>
+        <span className="ml-auto shrink-0">{formatDiscountAmount(discount, buyerLocalContextFor(product))} off</span>
+      </div>
+    ) : null;
+  const priceTag = showPrice ? (
+    <PriceTag
+      currencyCode={product.currency_code}
+      oldPrice={
+        comparisonPriceCents !== null && discountedPriceCents < comparisonPriceCents ? comparisonPriceCents : undefined
+      }
+      price={discountedPriceCents}
+      url={product.long_url}
+      isPayWhatYouWant={!!product.pwyw}
+      isSalesLimited={product.is_sales_limited}
+      creatorName={product.seller?.name}
+      buyerCurrency={product.buyer_currency}
+      buyerLocalCurrencyRate={product.buyer_local_currency_rate}
+      buyerLocalCurrencySubunitToUnit={product.buyer_local_currency_subunit_to_unit}
+      buyerLocalPriceCents={buyerLocalPriceCentsForSelection(
+        product.buyer_local_price_cents,
+        discountCode?.valid ? discountCode.discount : null,
+        selection.quantity,
+      )}
+      buyerLocalOriginalPriceCents={product.buyer_local_original_price_cents}
+    />
+  ) : null;
 
   return (
     <article className="relative grid rounded border border-border bg-background lg:grid-cols-[2fr_1fr]">
@@ -425,6 +466,14 @@ export const Product = ({
             {product.name}
           </h1>
         </header>
+        {/* Below lg the purchase column stacks under the description, so phones keep the
+            price and sale banner under the title instead. */}
+        {!isDesktop && (saleBanner || priceTag) ? (
+          <section className="border-t border-border">
+            {saleBanner}
+            {priceTag ? <div className="px-6 py-4">{priceTag}</div> : null}
+          </section>
+        ) : null}
         {sellerByline || hasRatings ? (
           <section className="grid grid-cols-1 gap-[1px] border-t border-border p-0 sm:grid-cols-[minmax(0,1fr)_auto]">
             {sellerByline ? (
@@ -534,46 +583,9 @@ export const Product = ({
         </section>
       </section>
       <section>
-        {showSaleLabel && discount ? (
-          <div
-            role="status"
-            data-testid="sale-banner"
-            className="flex items-center gap-2 bg-accent-with-text px-6 py-3 font-bold text-accent-foreground"
-          >
-            <DiscountIcon pack="filled" className="size-5 shrink-0" aria-hidden="true" />
-            <span className="min-w-0 wrap-break-word" data-testid="sale-label">
-              {saleLabel}
-            </span>
-            <span className="ml-auto shrink-0">
-              {formatDiscountAmount(discount, buyerLocalContextFor(product))} off
-            </span>
-          </div>
-        ) : null}
+        {isDesktop ? saleBanner : null}
         <section className="grid gap-4 p-6 not-first:border-t">
-          {showPrice ? (
-            <PriceTag
-              currencyCode={product.currency_code}
-              oldPrice={
-                comparisonPriceCents !== null && discountedPriceCents < comparisonPriceCents
-                  ? comparisonPriceCents
-                  : undefined
-              }
-              price={discountedPriceCents}
-              url={product.long_url}
-              isPayWhatYouWant={!!product.pwyw}
-              isSalesLimited={product.is_sales_limited}
-              creatorName={product.seller?.name}
-              buyerCurrency={product.buyer_currency}
-              buyerLocalCurrencyRate={product.buyer_local_currency_rate}
-              buyerLocalCurrencySubunitToUnit={product.buyer_local_currency_subunit_to_unit}
-              buyerLocalPriceCents={buyerLocalPriceCentsForSelection(
-                product.buyer_local_price_cents,
-                discountCode?.valid ? discountCode.discount : null,
-                selection.quantity,
-              )}
-              buyerLocalOriginalPriceCents={product.buyer_local_original_price_cents}
-            />
-          ) : null}
+          {isDesktop ? priceTag : null}
           {notForSaleMessage ? (
             <Alert role="status" variant="warning">
               {notForSaleMessage}

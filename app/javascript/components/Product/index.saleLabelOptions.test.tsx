@@ -260,6 +260,17 @@ describe("product page sale label on a product with no options", () => {
     expect(screen.getByTestId("sale-label").textContent).toBe("Black Friday");
   });
 
+  it("hides the label when the selected quantity still leaves the total below the code's minimum amount", () => {
+    const unitPriceUnderHalfTheMinimumCents = 700;
+    renderMembership(
+      sellerDiscount(undefined, minimumAmountCents),
+      digitalProduct({ price_cents: unitPriceUnderHalfTheMinimumCents, is_quantity_enabled: true }),
+      { ...noRecurrenceSelected, quantity: 2 },
+    );
+
+    expect(screen.queryByTestId("sale-label")).toBeNull();
+  });
+
   it("shows the label when the code has no minimum amount", () => {
     renderMembership(sellerDiscount(), digitalProduct({ price_cents: belowMinimumPriceCents }), noRecurrenceSelected);
 
@@ -296,5 +307,24 @@ describe("product page sale label on a product with variants priced around the c
     renderMembership(sellerDiscount(undefined, minimumAmountCents), product, selectVariant("deluxe"));
 
     expect(screen.getByTestId("sale-label").textContent).toBe("Black Friday");
+  });
+});
+
+describe("product page sale label on a product with a nearly sold-out variant", () => {
+  // $10 with one left and $5 unlimited: at quantity 2 only the $10 variant would reach the $15
+  // minimum, but it can't be bought twice.
+  const product = digitalProduct({
+    price_cents: 0,
+    is_quantity_enabled: true,
+    options: [
+      { ...tier("last-one", 0), price_difference_cents: 1_000, recurrence_price_values: null, quantity_left: 1 },
+      { ...tier("unlimited", 0), price_difference_cents: 500, recurrence_price_values: null },
+    ],
+  });
+
+  it("hides the label when no variant reaches the code's minimum amount at a quantity it can be bought in", () => {
+    renderMembership(sellerDiscount(undefined, minimumAmountCents), product, { ...noRecurrenceSelected, quantity: 2 });
+
+    expect(screen.queryByTestId("sale-label")).toBeNull();
   });
 });

@@ -4,6 +4,7 @@ import * as React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { Discount } from "$app/parsers/checkout";
+import { assertDefined } from "$app/utils/assert";
 
 import { Product, type Product as ProductData, type ProductDiscount } from "$app/components/Product";
 import type { PriceSelection } from "$app/components/Product/ConfigurationSelector";
@@ -38,7 +39,8 @@ vi.mock("$app/components/DomainSettings", () => ({
   useAppDomain: () => "example.com",
   useDomains: () => ({ scheme: "https", rootDomain: "example.com" }),
 }));
-vi.mock("$app/components/useIsAboveBreakpoint", () => ({ useIsAboveBreakpoint: () => false }));
+const breakpoint = vi.hoisted(() => ({ above: false }));
+vi.mock("$app/components/useIsAboveBreakpoint", () => ({ useIsAboveBreakpoint: () => breakpoint.above }));
 vi.mock("$app/components/Product/ConfigurationSelector", () => {
   const ConfigurationSelector = React.forwardRef(() => null);
   ConfigurationSelector.displayName = "ConfigurationSelector";
@@ -76,6 +78,7 @@ afterEach(() => {
   prices.priceCents = 2_000;
   prices.discountedPriceCents = 1_400;
   prices.pppDiscounted = false;
+  breakpoint.above = false;
 });
 
 const selection: PriceSelection = {
@@ -217,13 +220,49 @@ describe("product page sale label", () => {
     expect(banner.textContent).toContain("Black Friday");
     expect(banner.textContent).toContain("30% off");
   });
+});
 
-  it("puts the price in the purchase column with the buy button", () => {
-    const { container } = renderProduct();
+describe("product page price and sale banner placement", () => {
+  const columnOf = (element: Element) => element.closest("article > section");
 
-    const columns = container.querySelectorAll(":scope > article > section");
-    const purchaseColumn = columns[columns.length - 1];
-    expect(purchaseColumn?.querySelector("[itemprop=price]")).not.toBeNull();
-    expect(columns[0]?.querySelector("[itemprop=price]")).toBeNull();
+  const renderPlacement = () => {
+    const { container } = renderProduct({ description_html: "<p>About this product</p>" });
+    // getByTestId throws on a second banner.
+    const banner = screen.getByTestId("sale-banner");
+    expect(container.querySelectorAll("[itemprop=price]")).toHaveLength(1);
+    return {
+      container,
+      banner,
+      price: assertDefined(container.querySelector("[itemprop=price]")),
+      titleColumn: columnOf(screen.getByRole("heading", { level: 1 })),
+      purchaseColumn: columnOf(screen.getByRole("link", { name: "I want this!" })),
+    };
+  };
+
+  it("shows them once, under the title and before the description, on phones", () => {
+    const { container, banner, price, titleColumn, purchaseColumn } = renderPlacement();
+
+    expect(titleColumn).not.toBe(purchaseColumn);
+    expect(columnOf(banner)).toBe(titleColumn);
+    expect(columnOf(price)).toBe(titleColumn);
+    expect(purchaseColumn?.contains(banner)).toBe(false);
+    expect(purchaseColumn?.contains(price)).toBe(false);
+
+    const elements = Array.from(container.querySelectorAll("*"));
+    const descriptionIndex = elements.indexOf(screen.getByText("About this product"));
+    expect(elements.indexOf(banner)).toBeLessThan(descriptionIndex);
+    expect(elements.indexOf(price)).toBeLessThan(descriptionIndex);
+  });
+
+  it("shows them once, in the purchase column with the buy button, on desktop", () => {
+    breakpoint.above = true;
+
+    const { banner, price, titleColumn, purchaseColumn } = renderPlacement();
+
+    expect(titleColumn).not.toBe(purchaseColumn);
+    expect(columnOf(banner)).toBe(purchaseColumn);
+    expect(columnOf(price)).toBe(purchaseColumn);
+    expect(titleColumn?.contains(banner)).toBe(false);
+    expect(titleColumn?.contains(price)).toBe(false);
   });
 });

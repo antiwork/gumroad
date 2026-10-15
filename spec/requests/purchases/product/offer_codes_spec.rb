@@ -585,4 +585,42 @@ describe("Offer-code usage from product page", type: :system, js: true) do
       end
     end
   end
+
+  describe "shop-wide sale banner and price placement" do
+    let(:product) { create(:product, price_cents: 2000) }
+
+    before do
+      product.user.offer_codes.create!(code: "spring30", amount_percentage: 30, universal: true, products: [], auto_apply: true, sale_label: "Spring sale")
+      visit "/l/#{product.unique_permalink}"
+    end
+
+    def product_column(containing)
+      containing.find(:xpath, "ancestor::section[parent::article]")
+    end
+
+    it "shows the banner and price once, under the title and before the description, on phones", :mobile_view do
+      article = find("h1", text: product.name).find(:xpath, "ancestor::article")
+      title_column = product_column(article.find("h1"))
+      expect(title_column).to have_selector("[data-testid='sale-banner']", text: "Spring sale 30% off", normalize_ws: true)
+      expect(title_column).to have_selector("[itemprop='price']", text: "$20 $14", normalize_ws: true)
+      expect(title_column).to have_selector(".rich-text", text: product.description)
+      ["@data-testid='sale-banner'", "@itemprop='price'"].each do |attribute|
+        expect(title_column).to have_xpath(".//*[#{attribute}]/following::*[contains(concat(' ', @class, ' '), ' rich-text ')]")
+      end
+      expect(article).to have_selector("[data-testid='sale-banner']", count: 1)
+      expect(article).to have_selector("[itemprop='price']", count: 1)
+      expect(product_column(article.find_link("I want this!"))).to have_no_selector("[data-testid='sale-banner'], [itemprop='price']")
+    end
+
+    it "shows the banner and price once, in the column with the buy button, on desktop" do
+      article = find("h1", text: product.name).find(:xpath, "ancestor::article")
+      purchase_column = product_column(article.find_link("I want this!"))
+
+      expect(purchase_column).to have_selector("[data-testid='sale-banner']", text: "Spring sale 30% off", normalize_ws: true)
+      expect(purchase_column).to have_selector("[itemprop='price']", text: "$20 $14", normalize_ws: true)
+      expect(article).to have_selector("[data-testid='sale-banner']", count: 1)
+      expect(article).to have_selector("[itemprop='price']", count: 1)
+      expect(product_column(article.find("h1"))).to have_no_selector("[data-testid='sale-banner'], [itemprop='price']")
+    end
+  end
 end
