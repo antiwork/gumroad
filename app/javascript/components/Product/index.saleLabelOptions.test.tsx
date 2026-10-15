@@ -127,7 +127,11 @@ const sellerDiscount = (optionIdsByProduct?: Record<string, string[]>, minimumAm
   ...(optionIdsByProduct ? { option_ids_by_product: optionIdsByProduct } : {}),
 });
 
-const renderMembership = (discount: Discount, productOverrides: Partial<ProductData> = {}) => {
+const renderMembership = (
+  discount: Discount,
+  productOverrides: Partial<ProductData> = {},
+  selection: PriceSelection = noTierSelected,
+) => {
   const autoAppliedCode: ProductDiscount = { valid: true, code: "blackfriday", discount };
   return render(
     <Product
@@ -135,7 +139,7 @@ const renderMembership = (discount: Discount, productOverrides: Partial<ProductD
       purchase={null}
       discountCode={autoAppliedCode}
       saleLabel="Black Friday"
-      selection={noTierSelected}
+      selection={selection}
       disableAnalytics
     />,
   );
@@ -185,5 +189,102 @@ describe("product page sale label with no tier selected", () => {
     renderMembership(sellerDiscount(), { ppp_details: { country: "India", factor: 0.4, minimum_price: 99 } });
 
     expect(screen.queryByTestId("sale-label")).toBeNull();
+  });
+});
+
+const minimumAmountCents = 1_500;
+const belowMinimumPriceCents = 1_000;
+
+describe("product page sale label with a tier selected", () => {
+  const selectTier = (optionId: string): PriceSelection => ({ ...noTierSelected, optionId });
+
+  it("shows the label when the selected tier meets the code's minimum amount", () => {
+    renderMembership(sellerDiscount(undefined, minimumAmountCents), {}, selectTier("pro"));
+
+    expect(screen.getByTestId("sale-label").textContent).toBe("Black Friday");
+  });
+
+  it("hides the label when the selected tier is below the code's minimum amount", () => {
+    renderMembership(sellerDiscount(undefined, minimumAmountCents), {}, selectTier("basic"));
+
+    expect(screen.queryByTestId("sale-label")).toBeNull();
+  });
+
+  it("shows the label when the selected tier's price equals the code's minimum amount", () => {
+    const proMonthlyPriceCents = 2_000;
+    renderMembership(sellerDiscount(undefined, proMonthlyPriceCents), {}, selectTier("pro"));
+
+    expect(screen.getByTestId("sale-label").textContent).toBe("Black Friday");
+  });
+});
+
+const noRecurrenceSelected: PriceSelection = { ...noTierSelected, recurrence: null };
+
+const digitalProduct = (overrides: Partial<ProductData> = {}): Partial<ProductData> => ({
+  is_tiered_membership: false,
+  is_recurring_billing: false,
+  recurrences: null,
+  native_type: "digital",
+  options: [],
+  ...overrides,
+});
+
+describe("product page sale label on a product with no options", () => {
+  it("hides the label when the price is below the code's minimum amount", () => {
+    renderMembership(
+      sellerDiscount(undefined, minimumAmountCents),
+      digitalProduct({ price_cents: belowMinimumPriceCents }),
+      noRecurrenceSelected,
+    );
+
+    expect(screen.queryByTestId("sale-label")).toBeNull();
+  });
+
+  it("shows the label when the price equals the code's minimum amount", () => {
+    renderMembership(
+      sellerDiscount(undefined, minimumAmountCents),
+      digitalProduct({ price_cents: minimumAmountCents }),
+      noRecurrenceSelected,
+    );
+
+    expect(screen.getByTestId("sale-label").textContent).toBe("Black Friday");
+  });
+
+  it("shows the label when the code has no minimum amount", () => {
+    renderMembership(sellerDiscount(), digitalProduct({ price_cents: belowMinimumPriceCents }), noRecurrenceSelected);
+
+    expect(screen.getByTestId("sale-label").textContent).toBe("Black Friday");
+  });
+});
+
+describe("product page sale label on a product with variants priced around the code's minimum amount", () => {
+  const variant = (id: string, priceDifferenceCents: number): Option => ({
+    ...tier(id, 0),
+    price_difference_cents: priceDifferenceCents,
+    recurrence_price_values: null,
+  });
+  // A $10 standard variant and a $40 deluxe one, either side of the $15 minimum.
+  const product = digitalProduct({
+    price_cents: belowMinimumPriceCents,
+    options: [variant("standard", 0), variant("deluxe", 3_000)],
+  });
+  const selectVariant = (optionId: string | null): PriceSelection => ({ ...noRecurrenceSelected, optionId });
+
+  it("shows the label when no variant is selected and one of them qualifies", () => {
+    renderMembership(sellerDiscount(undefined, minimumAmountCents), product, selectVariant(null));
+
+    expect(screen.getByTestId("sale-label").textContent).toBe("Black Friday");
+  });
+
+  it("hides the label when the selected variant is below the code's minimum amount", () => {
+    renderMembership(sellerDiscount(undefined, minimumAmountCents), product, selectVariant("standard"));
+
+    expect(screen.queryByTestId("sale-label")).toBeNull();
+  });
+
+  it("shows the label when the selected variant meets the code's minimum amount", () => {
+    renderMembership(sellerDiscount(undefined, minimumAmountCents), product, selectVariant("deluxe"));
+
+    expect(screen.getByTestId("sale-label").textContent).toBe("Black Friday");
   });
 });

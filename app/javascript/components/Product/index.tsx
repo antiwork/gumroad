@@ -384,7 +384,7 @@ export const Product = ({
 
   // The label names the price the buyer is looking at, so it only shows while the seller's
   // auto-applied code is what produced that price: a PPP discount, or a code whose minimum
-  // quantity this selection has not met, leaves the displayed price alone.
+  // quantity or minimum amount this selection has not met, leaves the displayed price alone.
   const codeDiscounts = (attributes: typeof selectionAttributes) =>
     !attributes.pppDiscounted &&
     attributes.discountedPriceCents < attributes.priceCents &&

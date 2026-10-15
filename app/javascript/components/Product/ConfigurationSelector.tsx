@@ -366,7 +366,7 @@ export const OptionRadioButton = ({
           </Alert>
         ) : null}
         {hidePrice ? null : (
-          <Pill id={priceId} className="shrink-0">
+          <Pill id={priceId} className="shrink-0 gap-1">
             {discountedPriceCents < priceCents ? (
               <>
                 <s>{formatBuyerLocalOrSetPrice(priceCents, buyerLocalContext)}</s>{" "}
