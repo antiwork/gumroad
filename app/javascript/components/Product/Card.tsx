@@ -162,6 +162,6 @@ const Rating = ({ ratings, style }: { ratings: Ratings; style?: React.CSSPropert
 
 const SaleLabel = ({ label }: { label: string }) => (
   <Pill size="small" color="primary" className="min-w-0" data-testid="sale-label">
-    {label}
+    <span className="truncate">{label}</span>
   </Pill>
 );

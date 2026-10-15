@@ -490,6 +490,15 @@ describe ProductPresenter::ProductProps do
         Current.reset
         expect(props[:sale_label]).to be_nil
       end
+
+      it "returns no label when the code's minimum amount is above the product's price" do
+        sale.update!(minimum_amount_cents: product.price_cents + 1)
+        expect(props[:sale_label]).to be_nil
+
+        sale.update!(minimum_amount_cents: product.price_cents)
+        Current.reset
+        expect(props[:sale_label]).to eq("Black Friday")
+      end
     end
 
     context "with default discount code" do

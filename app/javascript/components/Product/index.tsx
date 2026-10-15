@@ -401,13 +401,14 @@ export const Product = ({
     !product.rental?.rent_only &&
     (basePriceCents !== 0 || product.pwyw);
 
+  const hasRatings = product.ratings != null && product.ratings.count > 0;
+
   // The label names the price the buyer is looking at, so it only shows while the seller's
   // auto-applied code is what produced that price: a PPP discount, or a code whose minimum
   // quantity this selection has not met, leaves the displayed price alone.
   const codeDiscounts = (attributes: typeof selectionAttributes) =>
     !attributes.pppDiscounted && attributes.discountedPriceCents < attributes.priceCents;
   // With no option picked, each visible option shows its own price, so any discounted one earns the label.
-  const hasRatings = product.ratings != null && product.ratings.count > 0;
   const showSaleLabel =
     !!saleLabel &&
     discountCode === initialDiscountCode &&
@@ -572,7 +573,7 @@ export const Product = ({
             className="flex items-center gap-2 bg-accent-with-text px-6 py-3 font-bold text-accent-foreground"
           >
             <DiscountIcon pack="filled" className="size-5 shrink-0" aria-hidden="true" />
-            <span className="min-w-0 truncate" data-testid="sale-label">
+            <span className="min-w-0 wrap-break-word" data-testid="sale-label">
               {saleLabel}
             </span>
             <span className="ml-auto shrink-0">

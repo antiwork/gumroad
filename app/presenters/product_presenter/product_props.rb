@@ -123,6 +123,8 @@ class ProductPresenter::ProductProps
       auto_code = product.user.auto_apply_offer_code_for(product)
       return if auto_code.nil?
       return unless OfferCode.normalize_code(discount_code_result[:code]).to_s.casecmp?(auto_code.code.to_s)
+      # Same rule as Product::Prices#discounted_price_cents: a single item checkout will not honour it.
+      return if auto_code.minimum_amount_cents.to_i > product.display_price_cents(for_default_duration: true)
 
       auto_code.sale_label.presence || OfferCode::DEFAULT_SALE_LABEL
     end
