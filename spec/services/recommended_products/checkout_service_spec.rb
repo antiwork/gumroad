@@ -282,6 +282,7 @@ describe RecommendedProducts::CheckoutService do
               limit: 5
             )
             expect(product_infos.map(&:product)).to eq([products.first, additional_product1])
+            expect(product_infos.map(&:source)).to eq([RecommendedProducts::ProductInfo::CO_PURCHASE, RecommendedProducts::ProductInfo::CREATOR_FEATURED])
           end
         end
 

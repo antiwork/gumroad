@@ -731,7 +731,7 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
         click_on "More like this"
       end
 
-      expect(page).to have_selector("h2", text: "Customers who bought this product also bought")
+      expect(page).to have_selector("h2", text: "More from this creator")
 
       within ".node-moreLikeThis" do
         wait_for_ajax

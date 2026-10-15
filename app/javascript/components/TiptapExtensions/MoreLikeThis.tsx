@@ -3,7 +3,12 @@ import { Node as TiptapNode } from "@tiptap/core";
 import { NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
 import * as React from "react";
 
-import { getRecommendedProducts, isRecommendationType, RecommendationType } from "$app/data/recommended_products";
+import {
+  getRecommendedProducts,
+  isRecommendationType,
+  RecommendationType,
+  recommendedProductsHeading,
+} from "$app/data/recommended_products";
 import { CardProduct } from "$app/parsers/product";
 import { cast } from "$app/utils/cast";
 
@@ -132,7 +137,7 @@ const MoreLikeThisNodeView = ({ editor, node, extension, selected, getPos }: Nod
             ]}
           />
         ) : null}
-        <h2>Customers who bought this product also bought</h2>
+        {isLoading ? null : <h2>{recommendedProductsHeading(recommendedProducts ?? [], "this product")}</h2>}
         <br />
         {isLoading ? (
           <ProductCardGrid narrow>
