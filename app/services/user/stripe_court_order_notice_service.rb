@@ -121,8 +121,10 @@ class User::StripeCourtOrderNoticeService
       raise Error.new("notice_key was already used for a different notice", status: :conflict)
     end
 
+    # Hashed because the column's collation ignores case, and keys that differ only by case are
+    # different notices.
     def idempotency_key
-      "#{IDEMPOTENCY_KEY_PREFIX}:#{notice_key}"
+      "#{IDEMPOTENCY_KEY_PREFIX}:#{Digest::SHA256.hexdigest(notice_key)}"
     end
 
     def content

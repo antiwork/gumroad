@@ -42,17 +42,40 @@ describe User::StripeCourtOrderNoticeService, "concurrency" do
     described_class.new(stripe_account_id:, firm_name:, firm_email:, notice_key: "test-court-order-notice-0002", author_id: @admin_user.id)
   end
 
+  # Returns the thread and its MySQL connection id, so a barrier can wait on that connection alone.
   def in_thread(&block)
-    Thread.new do
-      ActiveRecord::Base.connection_pool.with_connection(&block)
+    connection_id = Queue.new
+    thread = Thread.new do
+      ActiveRecord::Base.connection_pool.with_connection do |connection|
+        connection_id << connection.select_value("SELECT CONNECTION_ID()")
+        block.call
+      end
     rescue => e
       @errors << e
     end
+    [thread, Timeout.timeout(10) { connection_id.pop }]
   end
 
-  def wait_for_lock_wait
+  def wait_for_lock_wait(connection_id, table: "users")
     Timeout.timeout(10) do
-      sleep 0.05 until ActiveRecord::Base.uncached { ActiveRecord::Base.connection.select_value("SELECT COUNT(*) FROM performance_schema.data_lock_waits") }.to_i.positive?
+      loop do
+        lock_waits = ActiveRecord::Base.uncached do
+          ActiveRecord::Base.connection.select_value(<<~SQL.squish)
+            SELECT COUNT(*)
+            FROM performance_schema.data_lock_waits AS lock_waits
+            INNER JOIN performance_schema.data_locks AS requested_lock
+              ON requested_lock.ENGINE_LOCK_ID = lock_waits.REQUESTING_ENGINE_LOCK_ID
+            INNER JOIN performance_schema.threads AS requesting_thread
+              ON requesting_thread.THREAD_ID = lock_waits.REQUESTING_THREAD_ID
+            WHERE requesting_thread.PROCESSLIST_ID = #{connection_id.to_i}
+              AND requested_lock.OBJECT_SCHEMA = DATABASE()
+              AND requested_lock.OBJECT_NAME = #{ActiveRecord::Base.connection.quote(table)}
+          SQL
+        end
+        break if lock_waits.to_i.positive?
+
+        sleep 0.05
+      end
     end
   end
 
@@ -62,10 +85,10 @@ describe User::StripeCourtOrderNoticeService, "concurrency" do
 
   it "queues once for two simultaneous calls and answers the second already_sent" do
     statuses = Queue.new
-    first = in_thread { statuses << notice.perform.status }
+    first, = in_thread { statuses << notice.perform.status }
     Timeout.timeout(10) { @pushed.pop }
-    second = in_thread { statuses << notice.perform.status }
-    wait_for_lock_wait
+    second, second_connection_id = in_thread { statuses << notice.perform.status }
+    wait_for_lock_wait(second_connection_id)
 
     @release << :commit
     join(first, second)
@@ -80,10 +103,10 @@ describe User::StripeCourtOrderNoticeService, "concurrency" do
   end
 
   it "makes a job that starts before the commit wait, then send" do
-    service = in_thread { notice.perform }
+    service, = in_thread { notice.perform }
     Timeout.timeout(10) { @pushed.pop }
-    job = in_thread { StripeCourtOrderNoticeEmailJob.drain }
-    wait_for_lock_wait
+    job, job_connection_id = in_thread { StripeCourtOrderNoticeEmailJob.drain }
+    wait_for_lock_wait(job_connection_id)
     expect(ActionMailer::Base.deliveries).to be_empty
 
     @release << :commit
@@ -108,10 +131,10 @@ describe User::StripeCourtOrderNoticeService, "concurrency" do
   end
 
   it "makes a waiting job send nothing when the transaction rolls back, and a retry sends once" do
-    service = in_thread { notice.perform }
+    service, = in_thread { notice.perform }
     Timeout.timeout(10) { @pushed.pop }
-    job = in_thread { StripeCourtOrderNoticeEmailJob.drain }
-    wait_for_lock_wait
+    job, job_connection_id = in_thread { StripeCourtOrderNoticeEmailJob.drain }
+    wait_for_lock_wait(job_connection_id)
 
     @release << :rollback
     join(service, job)

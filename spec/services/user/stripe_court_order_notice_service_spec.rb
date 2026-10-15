@@ -22,7 +22,7 @@ describe User::StripeCourtOrderNoticeService do
   end
 
   def notice_comments
-    seller.comments.where(idempotency_key: "stripe_court_order_notice:#{notice_key}")
+    seller.comments.where(idempotency_key: "stripe_court_order_notice:#{Digest::SHA256.hexdigest(notice_key)}")
   end
 
   describe "input validation" do
@@ -220,7 +220,18 @@ describe User::StripeCourtOrderNoticeService do
     it "stores the longest allowed notice key" do
       long_key = "k" * 200
 
-      expect(notice(notice_key: long_key).perform.comment.reload.idempotency_key).to eq("stripe_court_order_notice:#{long_key}")
+      comment = notice(notice_key: long_key).perform.comment.reload
+
+      expect(comment.idempotency_key).to eq("stripe_court_order_notice:#{Digest::SHA256.hexdigest(long_key)}")
+      expect(comment.content).to end_with("Notice key: #{long_key}")
+    end
+
+    it "keeps notice keys that differ only by case apart" do
+      expect(notice(notice_key: "Notice-Key-0001").perform.status).to eq(:queued)
+      expect(notice(notice_key: "notice-key-0001").perform.status).to eq(:queued)
+
+      expect(seller.comments.count).to eq(2)
+      expect(StripeCourtOrderNoticeEmailJob.jobs.size).to eq(2)
     end
 
     it "rolls the comment back when the job push is refused" do
