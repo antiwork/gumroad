@@ -8,7 +8,8 @@
 #     "conclusion": "<the triggering run's own conclusion>",
 #     "event": "push", "head_branch": "main",
 #     "head_sha": "<the run's commit>", "main_sha": "<main's tip now>",
-#     "summaries": { "<job_id>": "<the shard log's last RSpec summary line>" } }
+#     "summaries": { "<job_id>": "<the shard log's last RSpec summary line>" },
+#     "declines": { "<job_id>": <true when the shard log says "Your card was declined."> } }
 #
 # Knapsack re-runs only the failed examples of a retried RSpec shard, and nothing
 # of a cancelled one. So a retry is safe only when every shard finished and each
@@ -20,7 +21,9 @@
 # summary lines `--spec-failed` needs. `--spec-failed` prints true when one of
 # them reported failing tests, null when one printed no summary (a timeout, or
 # a load error that stopped the runner: it cannot tell which), and false
-# otherwise.
+# otherwise. `--declined-log <log>` prints whether a shard log shows a declined
+# test card, and `--card-declined` prints true when most of the failed shards
+# did, which points at the shared Stripe test account.
 #
 # Exit codes match bin/classify-hung-checkout: 0 rerun, 1 skip, 2 could not run.
 
@@ -40,6 +43,12 @@ EXAMPLE_FAILURES = /\A\d+ examples?, ([1-9]\d*) failures?(, \d+ pending)?\z/
 # More red shards than this reads as a real break, and re-running it only delays
 # the red.
 MAX_FAILED_SHARDS = 2
+
+# A blocked test card is what a failed check found: after "Also found" or `" in "`
+# in a Capybara message, or after `got:` in an RSpec one. A spec that expects the
+# decline prints it as the expected value or in its source line, which do not count.
+DECLINED = "Your card was declined."
+FOUND_DECLINE = [/Also found .*#{Regexp.escape(DECLINED)}/, /\bgot: .*#{Regexp.escape(DECLINED)}/, /" in ".*#{Regexp.escape(DECLINED)}/].freeze
 
 FAILED = %w[failure timed_out].freeze
 JOB_RED = %w[failure timed_out startup_failure cancelled].freeze
@@ -102,6 +111,18 @@ def spec_failed(jobs, summaries)
   false
 end
 
+def declined_log?(text)
+  text.each_line.any? { |line| line.include?(DECLINED) && FOUND_DECLINE.any? { |found| line.match?(found) } }
+end
+
+# A blocked test card declines every checkout, so it fails specs in most red shards
+# at once. Up to MAX_FAILED_SHARDS red shards get a retry instead.
+def card_declined(jobs, declines)
+  failed = test_step_failures(jobs)
+  declined = failed.count { |job| declines[job["id"].to_s] == true }
+  declined > MAX_FAILED_SHARDS && declined * 2 > failed.size
+end
+
 def failed_rspec_shards(jobs)
   jobs.select { |job| job["conclusion"] == "failure" && RSPEC_KINDS.include?(shard_kind(job)) }
 end
@@ -159,7 +180,19 @@ end
 raw = ARGV.reject { |arg| arg.start_with?("--") }.first
 rspec_shards_only = ARGV.include?("--rspec-shards")
 spec_failed_only = ARGV.include?("--spec-failed")
+card_declined_only = ARGV.include?("--card-declined")
 test_step_failures_only = ARGV.include?("--test-step-failures")
+
+# A shard log, not a JSON payload.
+if ARGV.include?("--declined-log")
+  begin
+    puts declined_log?(File.binread(raw).force_encoding("UTF-8").scrub)
+    exit 0
+  rescue TypeError, SystemCallError => e
+    warn "Main spec-failure classifier could not read the log: #{e.message}"
+    exit EXIT_OPERATIONAL
+  end
+end
 
 begin
   # API payloads carry commit messages; the runner's locale may not be UTF-8.
@@ -181,6 +214,11 @@ end
 
 if spec_failed_only
   puts JSON.dump(spec_failed(Array(payload["jobs"]), payload["summaries"].is_a?(Hash) ? payload["summaries"] : {}))
+  exit 0
+end
+
+if card_declined_only
+  puts JSON.dump(card_declined(Array(payload["jobs"]), payload["declines"].is_a?(Hash) ? payload["declines"] : {}))
   exit 0
 end
 

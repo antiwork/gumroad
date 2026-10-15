@@ -147,7 +147,7 @@ jobs:
         run: |
           set -uo pipefail
           assess() {
-            local try id summary
+            local try id summary declined
             for try in 1 2 3; do
               gh api --paginate \
                 "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/attempts/${ATTEMPT}/jobs?per_page=100" \
@@ -159,7 +159,8 @@ jobs:
 
             # The summary line of each shard that failed in its test step. A
             # timed-out shard has none, so it does not count as a spec failure.
-            echo '{}' > summaries.json
+            # Each log also says whether a checkout's test card was declined.
+            echo '{"summaries": {}, "declines": {}}' > shards.json
             for id in $(ruby bin/classify-main-spec-failure --test-step-failures jobs.json); do
               # Not `gh api`: it refuses logs with escape codes, and its override flag may be too new for the runner.
               curl -fsSL -H "Authorization: Bearer ${GH_TOKEN}" \
@@ -168,17 +169,23 @@ jobs:
               summary=$(sed 's/\x1b\[[0-9;]*m//g' shard.raw | tr -d '\r' \
                 | grep -aoE '[0-9]+ examples?, [0-9]+ failures?.*$|[0-9]+ runs, [0-9]+ assertions, [0-9]+ failures, [0-9]+ errors, [0-9]+ skips' \
                 | tail -1) || summary=""
-              jq --arg id "$id" --arg summary "$summary" '.[$id] = $summary' summaries.json > summaries.tmp || return 1
-              mv summaries.tmp summaries.json
+              declined=$(ruby bin/classify-main-spec-failure --declined-log shard.raw) \
+                || { echo "could not classify the log of job ${id}" > error.txt; return 1; }
+              jq --arg id "$id" --arg summary "$summary" --argjson declined "$declined" \
+                '.summaries[$id] = $summary | .declines[$id] = $declined' shards.json > shards.tmp || return 1
+              mv shards.tmp shards.json
             done
-            jq --slurpfile summaries summaries.json '. + {summaries: $summaries[0]}' jobs.json > verdict-input.json || return 1
+            jq --slurpfile shards shards.json '. + $shards[0]' jobs.json > verdict-input.json || return 1
             ruby bin/classify-main-spec-failure --spec-failed verdict-input.json > spec_failed.txt || return 1
+            ruby bin/classify-main-spec-failure --card-declined verdict-input.json > card_declined.txt || return 1
           }
 
           : > error.txt
           spec_failed=null
+          card_declined=null
           if assess; then
             spec_failed=$(cat spec_failed.txt)
+            card_declined=$(cat card_declined.txt)
           elif [ ! -s error.txt ]; then
             echo "could not classify the attempt" > error.txt
           fi
@@ -190,9 +197,9 @@ jobs:
           fi
           jq -n --argjson run_id "$RUN_ID" --argjson attempt "$ATTEMPT" --arg sha "$SHA" \
             --argjson retried "$RETRIED" --argjson retry_failed "$retry_failed" \
-            --argjson spec_failed "$spec_failed" --arg error "$(cat error.txt)" \
+            --argjson spec_failed "$spec_failed" --argjson card_declined "$card_declined" --arg error "$(cat error.txt)" \
             '{run_id: $run_id, attempt: $attempt, sha: $sha, retried: $retried, retry_failed: $retry_failed,
-              spec_failed: $spec_failed, error: (if $error == "" then null else $error end)}' > verdict.json
+              spec_failed: $spec_failed, card_declined: $card_declined, error: (if $error == "" then null else $error end)}' > verdict.json
           cat verdict.json
 
       - uses: actions/upload-artifact@v4

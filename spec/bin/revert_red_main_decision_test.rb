@@ -19,8 +19,9 @@ RED_RUN = { "id" => 37404168421, "head_sha" => "f69c0d04c49600000000000000000000
             "conclusion" => "failure", "event" => "push", "head_branch" => "main", "run_attempt" => 2,
             "display_title" => "Fix the café — checkout" }.freeze
 
-def payload(run: RED_RUN, spec_failed: true, attempt: 2, production: "ahead", deploying: true, retry_failed: false, error: nil)
-  { "run" => run, "verdict" => { "attempt" => attempt, "spec_failed" => spec_failed, "retry_failed" => retry_failed, "error" => error },
+def payload(run: RED_RUN, spec_failed: true, attempt: 2, production: "ahead", deploying: true, retry_failed: false, error: nil, card_declined: false)
+  { "run" => run,
+    "verdict" => { "attempt" => attempt, "spec_failed" => spec_failed, "retry_failed" => retry_failed, "card_declined" => card_declined, "error" => error },
     "production" => production, "deploying" => deploying }
 end
 
@@ -65,6 +66,12 @@ check("a pull request run", payload(run: RED_RUN.merge("event" => "pull_request_
 check("a push to another branch", payload(run: RED_RUN.merge("head_branch" => "feature")), expect: :skip, reason: "not_main_push")
 
 check("an infrastructure failure", payload(spec_failed: false), expect: :skip, reason: "no_spec_failure")
+
+# A blocked shared test card fails every commit alike, so a revert would undo a good one.
+check("a shipped commit whose shards declined the test card", payload(card_declined: true), expect: :notify, reason: "test_card_declined")
+check("declined test cards on a commit that never deployed", payload(card_declined: true, production: "behind", deploying: false), expect: :skip, reason: "not_deployed")
+check("a verdict from before card declines were recorded", payload(card_declined: nil), expect: :revert, reason: "shipped")
+check("declined test cards in a verdict missing a spec answer", payload(card_declined: true, spec_failed: nil), expect: :notify, reason: "test_card_declined")
 
 # The commit shipped, but nothing confirms the failure is final: ask a person.
 check("the retry request failed", payload(retry_failed: true), expect: :notify, reason: "retry_failed")
@@ -189,6 +196,17 @@ workflow_check(
   "the verdict step records errors instead of failing",
   !record["run"].to_s.include?("set -e") && record["run"].to_s.include?("error.txt") && record["env"].key?("RETRY_WANTED"),
   "Record the verdict"
+)
+workflow_check(
+  "the verdict records whether shards declined the test card",
+  ["--declined-log shard.raw", ".declines[$id] = $declined", "'. + $shards[0]' jobs.json > verdict-input.json",
+   "--card-declined verdict-input.json", "card_declined: $card_declined"].all? { |part| record["run"].to_s.include?(part) },
+  "Record the verdict"
+)
+workflow_check(
+  "the original PR hears that the test card was declined",
+  tell_run.include?('[ "$REASON" = "test_card_declined" ]') && tell_run.include?("block list"),
+  "Tell the original PR"
 )
 workflow_check(
   "the retry workflow records whether it started a retry",
