@@ -39,6 +39,11 @@ class Api::Internal::Admin::StripeCourtOrderNoticesController < Api::Internal::A
       params.key?(:dry_run) && ActiveModel::Type::Boolean.new.cast(params[:dry_run]) == false
     end
 
+    # A dry run writes nothing, so it skips the token's usage stamp too.
+    def record_admin_token_use?
+      send_requested?
+    end
+
     def render_preview(result)
       mail = result.mail
       render json: {

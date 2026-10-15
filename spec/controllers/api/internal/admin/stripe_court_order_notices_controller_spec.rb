@@ -24,7 +24,8 @@ describe Api::Internal::Admin::StripeCourtOrderNoticesController do
 
     before do
       create(:merchant_account, user: seller, charge_processor_merchant_id: "acct_1TestCourtOrder04")
-      request.headers["Authorization"] = "Bearer #{AdminApiToken.mint!(actor_user_id: admin_user.id)}"
+      @per_actor_token = AdminApiToken.mint!(actor_user_id: admin_user.id)
+      request.headers["Authorization"] = "Bearer #{@per_actor_token}"
     end
 
     it "rejects the legacy shared admin token" do
@@ -57,8 +58,7 @@ describe Api::Internal::Admin::StripeCourtOrderNoticesController do
         "subject" => "Important notice regarding your Gumroad payment account"
       )
       expect(body["email"]["html_body"]).to include("Law firm: Example Legal LLP")
-      # The token's usage stamp is the auth layer's, written for every admin API call.
-      expect(writes).to all(match(/\AUPDATE `admin_api_tokens`/))
+      expect(writes).to eq([])
       expect(Comment.count).to eq(0)
       expect(AdminApiAuditLog.count).to eq(0)
       expect(StripeCourtOrderNoticeEmailJob.jobs.size).to eq(0)
@@ -72,6 +72,7 @@ describe Api::Internal::Admin::StripeCourtOrderNoticesController do
     end
 
     it "queues the email, records the comment and audits the write when dry_run is false" do
+      freeze_time
       post :create, params: notice_params.merge(dry_run: false)
 
       expect(response).to have_http_status(:ok)
@@ -85,6 +86,7 @@ describe Api::Internal::Admin::StripeCourtOrderNoticesController do
       audit_log = AdminApiAuditLog.sole
       expect(audit_log.action).to eq("stripe_court_order_notices.create")
       expect(audit_log.target_id).to eq(seller.id)
+      expect(AdminApiToken.authenticate(@per_actor_token).last_used_at).to eq(Time.current)
     end
 
     it "answers already_sent for a repeat, and a later dry run reports it" do

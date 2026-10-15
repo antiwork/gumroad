@@ -48,7 +48,12 @@ class Api::Internal::Admin::BaseController < Api::Internal::BaseController
       return render_insufficient_scope unless admin_api_token.scope == required_token_scope
 
       set_current_admin_actor!(admin_api_token.actor_user, admin_token: admin_api_token)
-      admin_api_token.record_used!
+      admin_api_token.record_used! if record_admin_token_use?
+    end
+
+    # A controller can skip the usage stamp for requests that must write nothing, such as previews.
+    def record_admin_token_use?
+      true
     end
 
     def require_per_actor_token!
