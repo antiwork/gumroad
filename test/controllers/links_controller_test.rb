@@ -5953,6 +5953,30 @@ class LinksControllerShowTest < ActionController::TestCase
     assert(style_tags.any? { |tag| tag.text.include?("--accent:") && tag.text.include?("background-color:") })
   end
 
+  test "GET show preloads the default font from the asset host when the seller uses it" do
+    original_asset_host = ActionController::Base.asset_host
+    ActionController::Base.asset_host = "https://assets.example.com"
+    product = create_product(user: @user)
+
+    get :show, params: { id: product.unique_permalink }
+
+    assert_response :success
+    assert_select "head link[rel=preload][as=font][type='font/woff2'][crossorigin=anonymous][href=?]",
+                  "https://assets.example.com/fonts/ABCFavorit-Regular.woff2", count: 1
+  ensure
+    ActionController::Base.asset_host = original_asset_host
+  end
+
+  test "GET show does not preload the default font when the seller picked another font" do
+    @user.seller_profile.update!(font: "Inter")
+    product = create_product(user: @user)
+
+    get :show, params: { id: product.unique_permalink }
+
+    assert_response :success
+    assert_select "link[rel=preload][as=font]", count: 0
+  end
+
   test "GET show does not set no index header by default" do
     product = create_product(user: @user)
     get :show, params: { id: product.unique_permalink }

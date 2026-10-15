@@ -424,6 +424,33 @@ describe UsersController do
       expect(response.body).to have_selector("meta[name='description'][content='#{"f" * 300}']", visible: false)
     end
 
+    describe "default font preload" do
+      before { @request.host = seller.subdomain }
+
+      it "preloads the default font from the asset host when the seller uses it" do
+        original_asset_host = ActionController::Base.asset_host
+        ActionController::Base.asset_host = "https://assets.example.com"
+
+        get :show, params: { username: seller.username }
+
+        expect(response.body).to have_selector(
+          "head link[rel='preload'][as='font'][type='font/woff2'][crossorigin='anonymous']" \
+          "[href='https://assets.example.com/fonts/ABCFavorit-Regular.woff2']",
+          visible: false,
+        )
+      ensure
+        ActionController::Base.asset_host = original_asset_host
+      end
+
+      it "does not preload the default font when the seller picked another font" do
+        seller.seller_profile.update!(font: "Inter")
+
+        get :show, params: { username: seller.username }
+
+        expect(response.body).not_to have_selector("link[rel='preload'][as='font']", visible: false)
+      end
+    end
+
     describe "share card meta tags" do
       def meta_content(property)
         Nokogiri::HTML.parse(response.body).xpath("//meta[@property='#{property}']/@content").text
