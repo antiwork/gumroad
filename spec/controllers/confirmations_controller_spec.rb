@@ -146,10 +146,26 @@ describe ConfirmationsController do
         end.to_not change { seller.reload.last_active_sessions_invalidated_at }
       end
 
-      it "still invalidates the confirmed account's other sessions" do
+      it "still invalidates the confirmed account's browser sessions, but not its mobile app sign-ins" do
+        application = create(:oauth_application, uid: OauthApplication::MOBILE_API_OAUTH_APPLICATION_UID)
+        mobile_token = create("doorkeeper/access_token", application:, resource_owner_id: brand_account.id, scopes: "mobile_api")
+
         expect do
           get :show, params: { confirmation_token: brand_account.confirmation_token }
         end.to change { brand_account.reload.last_active_sessions_invalidated_at }.from(nil)
+
+        expect(mobile_token.reload.revoked_at).to be_nil
+      end
+
+      it "sends the signed-in user to their own home, not the confirmed account's" do
+        buyer = create(:user, confirmed_at: nil)
+        create(:purchase, purchaser: buyer)
+
+        get :show, params: { confirmation_token: buyer.confirmation_token }
+
+        expect(buyer.reload.confirmed?).to be(true)
+        expect(response).to redirect_to(dashboard_path)
+        expect(flash[:notice]).to eq("Your account has been successfully confirmed!")
       end
     end
 

@@ -187,6 +187,26 @@ describe LinksController, :vcr, type: :controller do
         expect(response.body).to include(%(<meta property="og:description" content="A hands-on guide to etching sliders.">))
       end
 
+      it "caps the meta and og description at the standard product page's snippet length" do
+        product.update!(description: "<p>#{'Long marketing copy about the product. ' * 40}</p>")
+
+        get :show, params: { id: product.unique_permalink }
+
+        plaintext = product.reload.plaintext_description
+        expect(plaintext.length).to be > SnippetText::MAX_LENGTH
+        capped = SnippetText.truncate(plaintext)
+        expect(capped.length).to be <= SnippetText::MAX_LENGTH
+
+        # Same cut as PageMeta::Product, so the two surfaces cannot disagree.
+        expect(response.body).to include(%(<meta name="description" content="#{ERB::Util.h(capped)}">))
+        expect(response.body).to include(%(<meta property="og:description" content="#{ERB::Util.h(capped)}">))
+        # The uncapped description must not reach the head...
+        expect(response.body).not_to include(%(<meta name="description" content="#{ERB::Util.h(plaintext)}">))
+        expect(response.body).not_to include(%(<meta property="og:description" content="#{ERB::Util.h(plaintext)}">))
+        # ...but the full text still reaches crawlers through the hidden summary.
+        expect(response.body).to include("<p>#{ERB::Util.h(plaintext)}</p>")
+      end
+
       it "falls back to the standard page's default description when the product has none" do
         product.update!(description: nil)
 

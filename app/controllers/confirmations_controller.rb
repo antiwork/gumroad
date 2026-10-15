@@ -20,9 +20,9 @@ class ConfirmationsController < Devise::ConfirmationsController
 
     if @user.confirm
       if user_signed_in? && logged_in_user != @user
-        # Confirming an address must not take over a session that belongs to someone else: a
-        # creator confirming a brand account they administer is signed in as themselves, and
-        # that account has no memberships to switch back from. Its other sessions still go.
+        # Confirming an address must not take over someone else's session: a creator confirming a brand
+        # account they administer is signed in as themselves, and that account has no memberships to
+        # switch back from. The confirmed account's browser sessions still go.
         @user.invalidate_browser_sessions!
       else
         sign_in @user
@@ -32,7 +32,7 @@ class ConfirmationsController < Devise::ConfirmationsController
       end
 
       flash[:notice] = "Your account has been successfully confirmed!"
-      redirect_to after_confirmation_path_for(:user, @user)
+      redirect_to after_confirmation_path_for(:user, logged_in_user)
     else
       # The token resolved, so the link is current; the failure is in applying the
       # pending address (already confirmed, or the address was taken since).
