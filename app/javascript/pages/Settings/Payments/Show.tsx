@@ -456,12 +456,17 @@ export default function PaymentsPage() {
     // any field clears that set (see updateComplianceInfo), which would re-run this effect with no
     // invalid field left and scroll the seller back to the top of the form mid-keystroke — away from
     // the very field the banner just told them to fill in.
-    if (firstInvalidField) {
-      firstInvalidField.scrollIntoView({ behavior: "smooth", block: "center" });
-      firstInvalidField.focus({ preventScroll: true });
-    } else {
-      formRef.current?.scrollIntoView({ behavior: "smooth" });
-    }
+    //
+    // The scroll waits two frames: a server-rejected save arrives through an Inertia visit that
+    // restores the preserved scroll position a frame after this effect, cancelling an earlier scroll.
+    let frame = requestAnimationFrame(() => {
+      frame = requestAnimationFrame(() => {
+        if (firstInvalidField) firstInvalidField.scrollIntoView({ behavior: "smooth", block: "center" });
+        else formRef.current?.scrollIntoView({ behavior: "smooth" });
+      });
+    });
+    firstInvalidField?.focus({ preventScroll: true });
+    return () => cancelAnimationFrame(frame);
     // errorFieldNames is deliberately NOT a dependency — see the comment above.
   }, [errors, clientErrorMessage, failedSaveAttempts]);
 

@@ -55,6 +55,52 @@ describe("Payments Settings Scenario", type: :system, js: true) do
     end
   end
 
+  describe "sticky header" do
+    let(:user) { create(:named_user, payment_address: nil) }
+
+    before do
+      create(:user_compliance_info, user:)
+      login_as user
+    end
+
+    def scroll_to_bottom
+      find_field("Address") # the form has rendered, so the page is at its full height
+      page.execute_script("const main = document.querySelector('main'); main.scrollTo(0, main.scrollHeight)")
+    end
+
+    it "keeps Update settings on screen after scrolling to the bottom of the page" do
+      visit settings_payments_path
+      scroll_to_bottom
+
+      expect(page).to have_button("Update settings", obscured: false)
+    end
+
+    it "stops a field reached with Shift+Tab below the header rather than underneath it" do
+      visit settings_payments_path
+      # Park Address just above the scrolled area, with City (the next field) focused.
+      page.execute_script(<<~JS, find_field("Address"), find_field("City"))
+        const [address, city] = arguments;
+        const main = address.closest("main");
+        main.scrollTop += address.getBoundingClientRect().bottom - main.getBoundingClientRect().top + 1;
+        city.focus({ preventScroll: true });
+      JS
+      page.driver.browser.action.key_down(:shift).send_keys(:tab).key_up(:shift).perform
+
+      expect(page).to have_field("Address", focused: true, obscured: false)
+    end
+
+    it "shows a server-side save error when saving from the bottom of the page" do
+      create(:ach_account, user:)
+      user.update_columns(unconfirmed_email: user.email, email: nil)
+
+      visit settings_payments_path
+      scroll_to_bottom
+      click_on "Update settings"
+
+      expect(page).to have_status(text: "You have to confirm your email address before you can do that.", obscured: false)
+    end
+  end
+
   describe("Payout Information Collection", type: :system, js: true) do
     include_context "with Stripe API stubs"
 
