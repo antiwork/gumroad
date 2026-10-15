@@ -19,10 +19,17 @@ class ConfirmationsController < Devise::ConfirmationsController
     end
 
     if @user.confirm
-      sign_in @user
-      logged_in_user.reload
+      if user_signed_in? && logged_in_user != @user
+        # Confirming an address must not take over a session that belongs to someone else: a
+        # creator confirming a brand account they administer is signed in as themselves, and
+        # that account has no memberships to switch back from. Its other sessions still go.
+        @user.invalidate_browser_sessions!
+      else
+        sign_in @user
+        logged_in_user.reload
 
-      invalidate_active_sessions_except_the_current_session!(revoke_mobile_tokens: false)
+        invalidate_active_sessions_except_the_current_session!(revoke_mobile_tokens: false)
+      end
 
       flash[:notice] = "Your account has been successfully confirmed!"
       redirect_to after_confirmation_path_for(:user, @user)

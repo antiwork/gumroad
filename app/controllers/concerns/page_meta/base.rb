@@ -67,6 +67,15 @@ module PageMeta::Base
       set_meta_tag(tag_name: "style", inner_content: seller_profile.custom_styles.html_safe, head_key: "custom_styles")
     end
 
+    # The href must equal the @font-face URL in stylesheets/_font.scss, which resolves against the asset
+    # host, and fonts always load in CORS mode. If either differs, the browser downloads the font twice.
+    def set_default_font_preload_meta_tag(seller_profile)
+      return unless seller_profile.font == "ABC Favorit"
+
+      set_meta_tag(tag_name: "link", rel: "preload", href: ActionController::Base.helpers.font_path("ABCFavorit-Regular.woff2"),
+                   as: "font", type: "font/woff2", crossorigin: "anonymous", head_key: "default_font_preload")
+    end
+
     def set_meta_tag(**options)
       new_tag = InertiaRails::MetaTag.new(**options)
       meta_tags[new_tag[:head_key]] = new_tag

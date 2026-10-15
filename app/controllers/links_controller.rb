@@ -1379,6 +1379,7 @@ class LinksController < ApplicationController
       set_meta_tag(title: @product.name)
       set_product_page_meta(@product)
       set_custom_styles_meta_tag(@product.user.seller_profile)
+      set_default_font_preload_meta_tag(@product.user.seller_profile)
       @body_id               = "product_page"
       @is_on_product_page    = true
       @debug                 = params[:debug] && !Rails.env.production?

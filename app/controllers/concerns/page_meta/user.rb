@@ -57,5 +57,6 @@ module PageMeta::User
       if user.seller_profile.custom_styles.present?
         set_custom_styles_meta_tag(user.seller_profile)
       end
+      set_default_font_preload_meta_tag(user.seller_profile)
     end
 end

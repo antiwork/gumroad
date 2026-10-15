@@ -29,19 +29,21 @@ import {
   getMinPriceCents,
 } from "$app/utils/currency";
 import { formatCallDate } from "$app/utils/date";
+import { fetchWithOneRetry, lazyWithRetry } from "$app/utils/lazy_chunk";
 import { applyOfferCodeToCents, discountAppliesToOption } from "$app/utils/offer-code";
 import { formatInstallmentPaymentSchedule } from "$app/utils/price";
 import { isSingleChargeDuration, recurrenceNames, recurrenceLabels, RecurrenceId } from "$app/utils/recurringPricing";
 
 import { Breaklines } from "$app/components/Breaklines";
 import { Button } from "$app/components/Button";
+import { FallbackOnError } from "$app/components/FallbackOnError";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { NumberInput } from "$app/components/NumberInput";
 import { PriceInput } from "$app/components/PriceInput";
 import { needsOptionChoice } from "$app/components/Product/purchaseReadiness";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { Alert } from "$app/components/ui/Alert";
-import { Calendar } from "$app/components/ui/Calendar";
+import { CalendarPlaceholder } from "$app/components/ui/CalendarPlaceholder";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
@@ -413,6 +415,15 @@ const getClientTimeZone = () => ({
 const roundToNearestDisplayTime = (time: Date) =>
   roundToNearestMinutes(time, { nearestTo: 30, roundingMethod: "ceil" });
 
+// react-day-picker brings its own copy of date-fns, and only call products show a calendar.
+const importCalendar = () => import("$app/components/ui/Calendar");
+const Calendar = lazyWithRetry(importCalendar, (module) => module.Calendar);
+
+// Offline, the import would fail and React.lazy would keep that failure for the rest of the visit.
+const warmCalendar = () => {
+  if (navigator.onLine) void fetchWithOneRetry(importCalendar).catch(() => {});
+};
+
 const CallDateAndTimeSelector = ({
   product,
   selectedOption,
@@ -532,6 +543,7 @@ const CallDateAndTimeSelector = ({
   const dateSelectId = React.useId();
   const timeGroupName = React.useId();
   const selectedDateValue = selectedStartTime ? format(selectedStartTime, "yyyy-MM-dd") : "";
+  const calendarStartMonth = firstAvailableStartTime ?? new Date();
 
   if (firstAvailableStartTime === null && !isLoading) {
     return (
@@ -575,17 +587,21 @@ const CallDateAndTimeSelector = ({
               );
             })}
           </Select>
-          <Calendar
-            locale={{ code: "en-US" }}
-            mode="single"
-            selected={selectedStartTime}
-            startMonth={firstAvailableStartTime ?? new Date()}
-            endMonth={lastAvailability ? new Date(lastAvailability.end_time) : new Date()}
-            disabled={(date) => !isAvailableOnDate(date)}
-            onSelect={(date) => {
-              if (date) setSelectedDateFromReactCalendar(date);
-            }}
-          />
+          <FallbackOnError fallback={null}>
+            <React.Suspense fallback={<CalendarPlaceholder month={calendarStartMonth} />}>
+              <Calendar
+                locale={{ code: "en-US" }}
+                mode="single"
+                selected={selectedStartTime}
+                startMonth={calendarStartMonth}
+                endMonth={lastAvailability ? new Date(lastAvailability.end_time) : new Date()}
+                disabled={(date) => !isAvailableOnDate(date)}
+                onSelect={(date) => {
+                  if (date) setSelectedDateFromReactCalendar(date);
+                }}
+              />
+            </React.Suspense>
+          </FallbackOnError>
         </Fieldset>
       </section>
       {selectedStartTime ? (
@@ -791,6 +807,10 @@ export const ConfigurationSelector = React.forwardRef<
       target?.scrollIntoView(arg ?? { block: "nearest" });
     },
   }));
+  // Fetched now, the calendar is ready when the buyer picks a duration.
+  React.useEffect(() => {
+    if (product.native_type === "call") warmCalendar();
+  }, [product.native_type]);
   const buyerCurrencyCode = currencyCodeList.find((code) => code === product.buyer_currency) ?? null;
   const pwywInput = (
     <PWYWInput

@@ -53,21 +53,24 @@ export default function FollowersPage() {
   const updateSearch = useDebouncedCallback((email: string) => {
     router.reload({
       data: { email: email || undefined, page: 1 },
+      only: ["followers", "has_more", "page", "email"],
       reset: ["followers", "has_more"],
       preserveUrl: true,
     });
   }, 500);
 
   React.useEffect(() => {
-    if (searchQuery !== email) {
-      updateSearch(searchQuery);
+    // The server strips the term, so an untrimmed comparison would search again once the response sets `email`.
+    const query = searchQuery.trim();
+    if (query !== email) {
+      updateSearch(query);
     }
   }, [searchQuery, email, updateSearch]);
 
   const loadMore = () => {
     if (!has_more || isLoadingMore) return;
     router.reload({
-      data: { email: searchQuery || undefined, page: page + 1 },
+      data: { email: email || undefined, page: page + 1 },
       only: ["followers", "has_more", "page"],
       preserveUrl: true,
       onStart: () => setIsLoadingMore(true),

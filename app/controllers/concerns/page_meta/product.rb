@@ -48,6 +48,13 @@ module PageMeta::Product
         set_meta_tag(tag_name: "link", rel: "preload", as: "image", href: asset.url)
       end
 
+      # The page imports the calendar after it mounts, where it would wait behind the description's
+      # editor. Only call products show a calendar, so only they fetch it with the page's scripts.
+      if product.native_type == Link::NATIVE_TYPE_CALL
+        set_meta_tag(tag_name: "link", rel: "modulepreload", crossorigin: "anonymous",
+                     href: helpers.vite_asset_path("components/ui/Calendar.tsx"), head_key: "call-calendar")
+      end
+
       set_meta_tag(tag_name: "link", rel: "canonical", href: canonical_url, head_key: "canonical")
 
       if (structured_data = product.structured_data(host: custom_domain_host_for_meta(product))).any?

@@ -4,10 +4,9 @@
   <% bclass = ["group/body"] %>
   <% bclass.push "mac" if request.headers["User-Agent"]&.include? "Macintosh" %>
   <% bclass.push(@body_class) if @body_class %>
-  <% custom_context = RenderingExtension.custom_context(self) %>
   <body id="<%= @body_id %>" class="<%= bclass.join(" ") %>" style="<%= params[:as_embed] && "background: transparent" %>">
-    <div id="design-settings" data-settings="<%= custom_context[:design_settings].to_json %>" style="display: none;"></div>
-    <div id="user-agent-info" data-settings="<%= custom_context[:user_agent_info].to_json %>" style="display: none;"></div>
+    <div id="design-settings" data-settings="<%= RenderingExtension.design_settings(self).to_json %>" style="display: none;"></div>
+    <div id="user-agent-info" data-settings="<%= RenderingExtension.user_agent_info(self).to_json %>" style="display: none;"></div>
     <%= render("layouts/shared/flash") %>
     <%= render("discover/seo_links") if @discover_category_links.present? %>
     <%= content_for?(:content) ? yield(:content) : yield %>

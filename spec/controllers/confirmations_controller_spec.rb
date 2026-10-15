@@ -98,6 +98,59 @@ describe ConfirmationsController do
           @user.reload.confirmed?
         }.from(false).to(true)
       end
+
+      it "invalidates the user's other sessions" do
+        expect do
+          get :show, params: { confirmation_token: @user.confirmation_token }
+        end.to change { @user.reload.last_active_sessions_invalidated_at }.from(nil)
+      end
+
+      it "refreshes the current session's sign-in timestamp so it stays active" do
+        request.env["warden"].session["last_sign_in_at"] = 1.hour.ago.to_i
+
+        freeze_time do
+          get :show, params: { confirmation_token: @user.confirmation_token }
+
+          expect(request.env["warden"].session["last_sign_in_at"]).to eq(DateTime.current.to_i)
+        end
+      end
+    end
+
+    describe "when the person confirming is signed in as somebody else" do
+      let(:seller) { create(:user) }
+      let(:brand_account) do
+        service = User::CreateBrandAccountService.new(
+          creator: seller,
+          email: "brand@example.com",
+          username: "creatorbrand",
+          name: "Creator Brand",
+          account_created_ip: "1.2.3.4",
+        )
+        service.perform
+        service.brand_user
+      end
+
+      before { sign_in seller }
+
+      it "confirms the brand account without replacing the signed-in user's session" do
+        expect do
+          get :show, params: { confirmation_token: brand_account.confirmation_token }
+        end.to change { brand_account.reload.confirmed? }.from(false).to(true)
+
+        expect(request.env["warden"].user(:user)).to eq(seller)
+      end
+
+      it "does not invalidate the signed-in user's other sessions" do
+        expect do
+          get :show, params: { confirmation_token: brand_account.confirmation_token }
+        end.to_not change { seller.reload.last_active_sessions_invalidated_at }
+      end
+
+      it "still invalidates the confirmed account's other sessions" do
+        expect do
+          get :show, params: { confirmation_token: brand_account.confirmation_token }
+        end.to change { brand_account.reload.last_active_sessions_invalidated_at }.from(nil)
+      end
     end
 
     describe "logged out" do

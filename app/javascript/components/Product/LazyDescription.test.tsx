@@ -66,13 +66,20 @@ describe("LazyDescription", () => {
 describe("Description", () => {
   const renderDescription = async () => {
     const initialValues: unknown[] = [];
+    const editor: { content?: unknown } = {};
     vi.doMock("$app/components/RichTextEditor", () => ({
+      // Like the real hook, the content lands in a microtask queued by an effect.
       useRichTextEditor: ({ initialValue }: { initialValue: unknown }) => {
         initialValues.push(initialValue);
-        return null;
+        React.useEffect(() => queueMicrotask(() => (editor.content = initialValue)), [initialValue]);
+        return editor;
       },
     }));
-    vi.doMock("@tiptap/react", () => ({ EditorContent: () => <div data-testid="editor" /> }));
+    vi.doMock("@tiptap/react", () => ({
+      EditorContent: ({ editor }: { editor: { content?: unknown } }) => (
+        <div data-testid="editor" data-content={String(editor.content)} />
+      ),
+    }));
     // The stubbed editor never uses its extensions; stubbing them keeps Tiptap out of the test.
     vi.doMock("$app/components/TiptapExtensions/PublicFileEmbed", () => ({
       PublicFileEmbed: {},
@@ -102,11 +109,13 @@ describe("Description", () => {
     expect(renderToStaticMarkup(element)).toBe("<p>Stored fallback</p>");
   });
 
-  it("creates the editor empty and fills it after mount, so stored HTML parses as before", async () => {
+  it("shows the editor only once it holds the stored HTML, which it gets after mount", async () => {
     const { element, initialValues } = await renderDescription();
     render(element);
 
-    expect(await screen.findByTestId("editor")).toBeTruthy();
+    // An editor shown before its content lands is empty for a frame and shifts the page below it.
+    expect((await screen.findByTestId("editor")).dataset.content).toBe(STORED_HTML);
+    // Created empty and filled later, so the stored HTML parses the way it always has.
     expect(initialValues[0]).toBeNull();
     expect(initialValues.at(-1)).toBe(STORED_HTML);
   });
