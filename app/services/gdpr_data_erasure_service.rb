@@ -21,6 +21,7 @@ class GdprDataErasureService
   def perform!
     original_email = @user.email
     credit_card_ids = credit_card_ids_for_erasure
+    sent_post_email_seller_ids = sent_post_email_seller_ids_for_erasure(original_email)
     # Read before the transaction so the Stripe deletion below has the accounts to hand. The values
     # would survive the transaction unchanged, but resolving them up front keeps the deletion
     # independent of what erasure does to the account in between.
@@ -39,7 +40,8 @@ class GdprDataErasureService
       anonymized_email = anonymize_user_pii!
       anonymize_compliance_info!
       delete_device_records!
-      anonymize_carts!(anonymized_email)
+      anonymize_carts!(anonymized_email, original_email:)
+      delete_sent_post_emails!(original_email:, seller_ids: sent_post_email_seller_ids)
       anonymize_credit_cards!(credit_card_ids)
       anonymize_buyer_purchases!(anonymized_email:, original_email:)
       log_erasure!
@@ -242,6 +244,7 @@ class GdprDataErasureService
         facebook_pixel_id: nil,
         notification_endpoint: nil,
         otp_secret_key: nil,
+        google_uid: nil,
       )
 
       # A removed PayPal payout address is the same email PII as `payment_address` above, just moved
@@ -480,12 +483,37 @@ class GdprDataErasureService
            .uniq
     end
 
-    def anonymize_carts!(anonymized_email)
-      @user.carts.update_all(
-        email: anonymized_email,
-        ip_address: nil,
-        browser_guid: nil,
-      )
+    def anonymize_carts!(anonymized_email, original_email:)
+      scrub = { email: anonymized_email, ip_address: nil, browser_guid: nil }
+      browser_guids = @user.carts.where.not(browser_guid: nil).distinct.pluck(:browser_guid)
+      @user.carts.update_all(scrub)
+      return if original_email.blank?
+
+      # Guest-session carts have no user_id; they are found by email and by the browser guids of the user's own carts.
+      Cart.where(email: original_email).update_all(scrub)
+      Cart.where(browser_guid: browser_guids).update_all(scrub) if browser_guids.any?
+    end
+
+    # sent_post_emails is only indexed (post_id, email), so an email-only delete is a full scan. Resolve the
+    # sellers whose posts could have emailed this address first, before purchases/audience are anonymized.
+    def sent_post_email_seller_ids_for_erasure(original_email)
+      return [] if original_email.blank?
+
+      [
+        Purchase.where(email: original_email).distinct.pluck(:seller_id),
+        Purchase.where(purchaser_id: @user.id).distinct.pluck(:seller_id),
+        Follower.where(email: original_email).distinct.pluck(:followed_id),
+        AudienceMember.where(email: original_email).distinct.pluck(:seller_id),
+      ].flatten.compact.uniq
+    end
+
+    def delete_sent_post_emails!(original_email:, seller_ids:)
+      return if original_email.blank? || seller_ids.empty?
+
+      email = original_email.downcase
+      Installment.where(seller_id: seller_ids).in_batches(of: 1_000) do |batch|
+        SentPostEmail.where(post_id: batch.pluck(:id), email:).delete_all
+      end
     end
 
     def delete_device_records!

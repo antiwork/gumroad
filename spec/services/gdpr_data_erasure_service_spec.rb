@@ -819,6 +819,33 @@ describe GdprDataErasureService do
       expect(credit_card.recurring_authorization_max_amount_cents).to be_nil
     end
 
+    it "scrubs guest-session carts, deletes the email's sent_post_emails rows and clears google_uid" do
+      original_email = user.email
+      user.update_columns(google_uid: "google-subject")
+      guest_cart = create(:cart, user: nil, email: original_email, ip_address: "127.0.0.3", browser_guid: "guest-guid")
+      guid_cart = create(:cart, user: nil, email: nil, browser_guid: "own-guid")
+      other_cart = create(:cart, user: nil, email: "other@example.com", browser_guid: "other-guid")
+      create(:cart, user:, email: original_email, browser_guid: "own-guid")
+      seller = create(:user)
+      post = create(:installment, seller:)
+      create(:purchase, link: create(:product, user: seller), email: original_email)
+      sent = SentPostEmail.create!(post:, email: original_email)
+      other_sent = SentPostEmail.create!(post:, email: "other@example.com")
+
+      described_class.new(user, performed_by: admin).perform!
+
+      [guest_cart, guid_cart].each do |cart|
+        expect(cart.reload.email).to satisfy { |e| e.nil? || e.start_with?("deleted-") }
+        expect(cart.ip_address).to be_nil
+        expect(cart.browser_guid).to be_nil
+      end
+      expect(guest_cart.email).to eq("deleted-#{user.id}@deleted.gumroad.com")
+      expect(other_cart.reload.email).to eq("other@example.com")
+      expect(SentPostEmail.exists?(sent.id)).to be(false)
+      expect(SentPostEmail.exists?(other_sent.id)).to be(true)
+      expect(user.reload.google_uid).to be_nil
+    end
+
     it "deletes the user's device records" do
       ios_device = create(:device, user:, token: "ios-device-token")
       android_device = create(:android_device, user:, token: "android-device-token")
