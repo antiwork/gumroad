@@ -5,8 +5,10 @@ import * as React from "react";
 import { confirmLineItem } from "$app/data/purchase";
 import { updateSubscription } from "$app/data/subscription";
 import {
+  applySubscriptionSelection,
   initialSubscriptionUnitPrice,
   selectedSubscriptionTotal,
+  subscriptionDiscountForSelection,
   subscriptionPWYWMinimumUnitPrice,
   withOncePerCartMinimum,
 } from "$app/pages/Subscriptions/price";
@@ -36,7 +38,6 @@ import {
   PriceSelection,
   ConfigurationSelector,
   Product as ConfigurationSelectorProduct,
-  applySelection,
 } from "$app/components/Product/ConfigurationSelector";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
@@ -175,7 +176,7 @@ export default function SubscriptionsManage() {
     ppp_details: null,
   };
 
-  const { isPWYW, priceCents, discountedPriceCents, discountedTotalCents } = applySelection(
+  const { isPWYW, priceCents, discountedPriceCents, discountedTotalCents } = applySubscriptionSelection(
     configurationSelectorProduct,
     pricingDiscount,
     selection,
@@ -487,6 +488,9 @@ export default function SubscriptionsManage() {
             setSelection={setSelection}
             initialSelection={initialSelection}
             discount={pricingDiscount}
+            discountForSelection={(previewSelection) =>
+              subscriptionDiscountForSelection(configurationSelectorProduct, pricingDiscount, previewSelection)
+            }
             pwywMinimumPriceCents={subscriptionPWYWMinimumUnitPrice(priceCents, discountedPriceCents, pricingDiscount)}
           />
         </CardContent>

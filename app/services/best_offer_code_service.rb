@@ -33,11 +33,12 @@ class BestOfferCodeService
 
   private
     # The buyer's own existing-customer default goes first; when they do not qualify, the
-    # effective default (the shop-wide sale, if one runs) applies instead.
+    # effective default (the shop-wide sale, if one runs) applies instead. evaluate_code does not
+    # check currency, so a fixed default left behind by a product currency change must be skipped here.
     def default_codes
       explicit = @product.default_offer_code
       codes = [@product.effective_default_offer_code]
-      codes.unshift(explicit) if explicit&.existing_customers_only?
+      codes.unshift(explicit) if explicit&.existing_customers_only? && explicit.is_currency_valid?(@product)
       codes.compact.uniq.filter_map { _1.code.presence }
     end
 

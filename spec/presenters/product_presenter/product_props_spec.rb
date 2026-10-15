@@ -474,6 +474,16 @@ describe ProductPresenter::ProductProps do
         expect(result[:sale_label]).to eq("Black Friday")
       end
 
+      it "falls back to the sale for a visitor an existing-customers-only default rejects" do
+        renewal = seller.offer_codes.create!(code: "RENEW10", amount_percentage: 10, products: [product],
+                                             existing_customers_only: true, ownership_products: [product])
+        product.update!(default_offer_code: renewal)
+        result = props
+
+        expect(result[:discount_code]).to include(valid: true, code: "BF30")
+        expect(result[:sale_label]).to eq("Black Friday")
+      end
+
       it "returns no label for a per-product default given a label without auto apply" do
         own = seller.offer_codes.create!(code: "OWN10", amount_percentage: 10, products: [product], sale_label: "Flash sale")
         product.update!(default_offer_code: own)

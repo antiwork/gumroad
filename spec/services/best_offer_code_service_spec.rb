@@ -500,6 +500,23 @@ describe BestOfferCodeService do
 
         expect(described_class.new(product:, buyer:).result).to include(valid: true, code: "RENEW50")
       end
+
+      context "when a fixed default no longer matches the product currency" do
+        let(:own) do
+          create(:offer_code, user: seller, products: [product], ownership_products: [product], existing_customers_only: true,
+                              code: "RENEW5", amount_cents: 500, currency_type: "usd")
+        end
+
+        it "gives a qualifying buyer the shop-wide sale" do
+          create(:purchase, purchaser: buyer, link: product, seller:, price_cents: product.price_cents)
+          product.update!(price_currency_type: "eur", price_range: "10")
+
+          result = described_class.new(product:, buyer:).result
+
+          expect(result).to include(valid: true, code: "SHOP30")
+          expect(result[:discount]).to include(type: "percent", percents: 30)
+        end
+      end
     end
 
     it "gives no discount to an excluded product" do
