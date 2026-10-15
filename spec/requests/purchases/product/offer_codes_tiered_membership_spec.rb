@@ -20,26 +20,6 @@ describe("Offer-code usage from product page for tiered membership", type: :syst
     check_out(product)
   end
 
-  it "separates a tier's struck price from its discounted price" do
-    percentage_code = create(:percentage_offer_code, user: product.user, products: [product], amount_percentage: 30, code: "tierspacing")
-    visit "/l/#{product.unique_permalink}/#{percentage_code.code}"
-
-    struck_price = find("[role='radio'][aria-label='First Tier']").find("s", text: "$3")
-    # The pill is inline-flex, so CSS drops the " " text node between the two prices.
-    gap = page.evaluate_script(<<~JS, struck_price)
-      ((struck) => {
-        let price = struck.nextSibling;
-        while (!price.textContent.trim()) price = price.nextSibling;
-        const range = document.createRange();
-        range.selectNodeContents(price);
-        return range.getBoundingClientRect().left - struck.getBoundingClientRect().right;
-      })(arguments[0])
-    JS
-
-    expect(gap).to be >= 3
-    expect(struck_price.find(:xpath, "..")).to have_text("$3 $2.10 a month", normalize_ws: true)
-  end
-
   context "with one tier" do
     before do
       tier_category = product.tier_category

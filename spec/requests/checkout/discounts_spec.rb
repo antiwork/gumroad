@@ -1282,4 +1282,42 @@ describe("Checkout discounts page", type: :system, js: true) do
       expect(offer_code.universal).to eq(true)
     end
   end
+
+  describe "automatic sales" do
+    it "turns automatic application on with a label and off again" do
+      visit checkout_discounts_path
+
+      find(:table_row, { "Discount" => "Discount 3" }).click
+      within_modal("Discount 3") { click_on "Edit" }
+      check "Apply automatically on product pages"
+      fill_in "Sale label (optional)", with: "Spring sale"
+      click_on "Save changes"
+
+      expect(page).to have_alert(text: "Successfully updated discount!")
+      expect(offer_code3.reload).to have_attributes(auto_apply: true, sale_label: "Spring sale")
+
+      find(:table_row, { "Discount" => "Discount 3" }).click
+      within_modal "Discount 3" do
+        expect(page).to have_text("On product pages (Spring sale)")
+        click_on "Edit"
+      end
+      uncheck "Apply automatically on product pages"
+      expect(page).to have_no_field("Sale label (optional)")
+      click_on "Save changes"
+
+      find(:table_row, { "Discount" => "Discount 3" }).click
+      within_modal("Discount 3") { expect(page).to have_no_text("Applied automatically") }
+      expect(offer_code3.reload).to have_attributes(auto_apply: false, sale_label: nil)
+    end
+
+    it "starts a duplicate of an automatic sale with automatic application off" do
+      offer_code3.update!(auto_apply: true, sale_label: "Spring sale")
+      visit checkout_discounts_path
+
+      find(:table_row, { "Discount" => "Discount 3" }).click
+      within_modal("Discount 3") { click_on "Duplicate" }
+
+      expect(page).to have_unchecked_field("Apply automatically on product pages")
+    end
+  end
 end

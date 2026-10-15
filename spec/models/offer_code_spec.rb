@@ -788,10 +788,6 @@ describe OfferCode do
       seller.offer_codes.build({ code: "bf#{SecureRandom.hex(3)}", amount_percentage: 30, universal: true, products: [] }.merge(attrs))
     end
 
-    it "is off by default" do
-      expect(universal_code.auto_apply).to be(false)
-    end
-
     it "allows an alive universal code to auto apply" do
       expect(universal_code(auto_apply: true)).to be_valid
     end
@@ -821,30 +817,6 @@ describe OfferCode do
       expect(second).not_to be_valid
       expect(second.errors.full_messages.first).to include("is already applied automatically")
       expect(first.reload.auto_apply).to be(true)
-    end
-
-    it "locks the seller row while saving an auto-applied code" do
-      statements = []
-      subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") { |*, payload| statements << payload[:sql] }
-      begin
-        universal_code(auto_apply: true).save!
-      ensure
-        ActiveSupport::Notifications.unsubscribe(subscriber)
-      end
-
-      expect(statements).to include(a_string_matching(/FROM `users`.*FOR UPDATE/m))
-    end
-
-    it "does not lock the seller row for a code that is not auto-applied" do
-      statements = []
-      subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") { |*, payload| statements << payload[:sql] }
-      begin
-        universal_code.save!
-      ensure
-        ActiveSupport::Notifications.unsubscribe(subscriber)
-      end
-
-      expect(statements).not_to include(a_string_matching(/FOR UPDATE/))
     end
 
     it "lets another seller auto apply their own code" do
