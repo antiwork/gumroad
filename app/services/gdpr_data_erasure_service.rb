@@ -48,6 +48,7 @@ class GdprDataErasureService
       anonymize_credit_cards!(credit_card_ids)
       anonymize_buyer_purchases!(anonymized_email:, original_email:)
       erase_email_keyed_records!(anonymized_email:, original_email:)
+      anonymize_linked_followers!(anonymized_email)
       log_erasure!
       # Every run, not only the one that rewrote the rows: a rerun is what writes the documents an
       # earlier run recorded but could not write.
@@ -567,6 +568,22 @@ class GdprDataErasureService
       )
     end
 
+    # A signed-in follow keeps follower_user_id and the address of that moment, which an email change
+    # never rewrites. Matched on that link only: an old address alone is no proof its rows are theirs.
+    def anonymize_linked_followers!(anonymized_email)
+      linked = Follower.where(follower_user_id: @user.id).where.not(email: anonymized_email)
+                       .pluck(:id, :followed_id, :deleted_at)
+      return if linked.empty?
+
+      # (email, followed_id) is unique, so at most one row per followed seller can take the address.
+      taken_followed_ids = Follower.where(email: anonymized_email, followed_id: linked.map(&:second).uniq).pluck(:followed_id)
+      kept_ids = linked.reject { taken_followed_ids.include?(_2) }
+                       .group_by(&:second)
+                       .map { |_, rows| rows.min_by { |id, _, deleted_at| [deleted_at ? 1 : 0, id] }.first }
+      Follower.where(id: linked.map(&:first) - kept_ids).delete_all
+      @counts[:followers] += Follower.where(id: kept_ids).update_all(email: anonymized_email)
+    end
+
     # Written in the erasure's transaction so the ids commit exactly when the rows do. After that
     # commit nothing can find these documents again: the rows no longer hold the address, and the
     # conflicting members are gone. Locked and unioned so a concurrent run cannot drop ids.
@@ -580,13 +597,9 @@ class GdprDataErasureService
       end
     end
 
-    # Written through the indexer inline rather than queued: production pushes with reliable_push!,
-    # which holds a job in this process's memory instead of raising when Redis is down, so a queued
-    # job is no proof the document changed. The ids are cleared only once every write succeeded, and
-    # only the ones this call wrote, so a partial failure retries all of them on the next run.
-    #
-    # Rescued rather than raised: the erasure has already committed, and a raise here would skip the
-    # guardian deletion that follows.
+    # Inline, not queued: reliable_push! can hold a job in console memory without raising, so the ids
+    # are cleared only after every write completes and are kept on failure. Rescued so the guardian
+    # deletion that follows still runs.
     def write_pending_audience_search_documents!
       reindex_ids = unindex_ids = []
       # A lagging replica would hand back the pre-erasure row, and its body would put the address

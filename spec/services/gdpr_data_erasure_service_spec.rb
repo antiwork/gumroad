@@ -917,6 +917,46 @@ describe GdprDataErasureService do
       expect(result[:summary]).to include(carts_anonymized: 0, sent_post_emails_deleted: 0, audience_members_anonymized: 0, followers_anonymized: 0)
     end
 
+    it "anonymizes follows linked to the account under an earlier address and leaves other people's rows under it" do
+      old_email = "john.old@example.com"
+      anonymized_email = "deleted-#{user.id}@deleted.gumroad.com"
+      seller, both_addresses_seller, two_old_addresses_seller, unrelated_seller = create_list(:user, 4)
+      linked = create(:active_follower, user: seller, email: old_email, follower_user_id: user.id)
+      current = create(:active_follower, user: both_addresses_seller, email: user.email, follower_user_id: user.id)
+      create(:active_follower, user: both_addresses_seller, email: old_email, follower_user_id: user.id)
+      create(:deleted_follower, user: two_old_addresses_seller, email: "john.older@example.com", follower_user_id: user.id)
+      alive_old = create(:active_follower, user: two_old_addresses_seller, email: old_email, follower_user_id: user.id)
+      unlinked = create(:active_follower, user: unrelated_seller, email: old_email)
+      other_account = create(:active_follower, user: create(:user), email: old_email, follower_user_id: create(:user).id)
+
+      result = described_class.new(user, performed_by: admin).perform!
+
+      expect(result[:success]).to eq(true)
+      expect(linked.reload.email).to eq(anonymized_email)
+      expect(Follower.where(followed_id: both_addresses_seller.id).pluck(:id, :email)).to eq([[current.id, anonymized_email]])
+      expect(Follower.where(followed_id: two_old_addresses_seller.id).pluck(:id, :email)).to eq([[alive_old.id, anonymized_email]])
+      expect([unlinked, other_account].map { _1.reload.email }).to eq([old_email, old_email])
+      expect(AudienceMember.find_by(seller: unrelated_seller, email: old_email)).to be_follower
+      expect(result[:summary]).to include(followers_anonymized: 3)
+    end
+
+    it "anonymizes linked follows a previous run left under an earlier address when the erasure is run again" do
+      seller, other_seller = create_list(:user, 2)
+      anonymized_email = "deleted-#{user.id}@deleted.gumroad.com"
+      erased = create(:active_follower, user: seller, email: user.email, follower_user_id: user.id)
+      described_class.new(user, performed_by: admin).perform!
+      create(:active_follower, user: seller, email: "john.old@example.com", follower_user_id: user.id)
+      left_behind = create(:active_follower, user: other_seller, email: "john.old@example.com", follower_user_id: user.id)
+
+      rerun = described_class.new(user.reload, performed_by: admin).perform!
+      again = described_class.new(user.reload, performed_by: admin).perform!
+
+      expect([rerun[:success], again[:success]]).to eq([true, true])
+      expect(Follower.where(followed_id: seller.id).pluck(:id, :email)).to eq([[erased.id, anonymized_email]])
+      expect(left_behind.reload.email).to eq(anonymized_email)
+      expect([rerun, again].map { _1[:summary][:followers_anonymized] }).to eq([1, 0])
+    end
+
     it "rolls back the residual cleanup with the rest of the erasure when a step fails" do
       guest_cart = create(:cart, :guest, email: user.email)
       sent_post_email = create(:sent_post_email, email: user.email)
