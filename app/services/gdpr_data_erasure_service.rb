@@ -4,6 +4,7 @@ class GdprDataErasureService
   ANONYMIZED_EMAIL_DOMAIN = "deleted.gumroad.com"
   ANONYMIZED_NAME = "[deleted]"
   ANONYMIZED_VALUE = "[redacted]"
+  SENT_POST_EMAIL_DELETE_BATCH_SIZE = 1_000
 
   # Fields that must be retained for tax/legal compliance (Article 17(3)(b))
   # Transaction records, payout history, tax documents are kept.
@@ -487,11 +488,11 @@ class GdprDataErasureService
       scrub = { email: anonymized_email, ip_address: nil, browser_guid: nil }
       browser_guids = @user.carts.where.not(browser_guid: nil).distinct.pluck(:browser_guid)
       @user.carts.update_all(scrub)
-      return if original_email.blank?
 
       # Guest-session carts have no user_id; they are found by email and by the browser guids of the user's own carts.
-      Cart.where(email: original_email).update_all(scrub)
-      Cart.where(browser_guid: browser_guids).update_all(scrub) if browser_guids.any?
+      guest_carts = Cart.where(user_id: nil)
+      guest_carts.where(email: original_email).update_all(scrub) if original_email.present?
+      guest_carts.where(browser_guid: browser_guids).update_all(scrub) if browser_guids.any?
     end
 
     # sent_post_emails is only indexed (post_id, email), so an email-only delete is a full scan. Resolve the
@@ -504,6 +505,7 @@ class GdprDataErasureService
         Purchase.where(purchaser_id: @user.id).distinct.pluck(:seller_id),
         Follower.where(email: original_email).distinct.pluck(:followed_id),
         AudienceMember.where(email: original_email).distinct.pluck(:seller_id),
+        Affiliate.where(affiliate_user_id: @user.id).distinct.pluck(:seller_id),
       ].flatten.compact.uniq
     end
 
@@ -511,7 +513,7 @@ class GdprDataErasureService
       return if original_email.blank? || seller_ids.empty?
 
       email = original_email.downcase
-      Installment.where(seller_id: seller_ids).in_batches(of: 1_000) do |batch|
+      Installment.where(seller_id: seller_ids).in_batches(of: SENT_POST_EMAIL_DELETE_BATCH_SIZE) do |batch|
         SentPostEmail.where(post_id: batch.pluck(:id), email:).delete_all
       end
     end

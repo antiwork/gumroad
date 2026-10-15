@@ -826,6 +826,11 @@ describe GdprDataErasureService do
       guid_cart = create(:cart, user: nil, email: nil, browser_guid: "own-guid")
       other_cart = create(:cart, user: nil, email: "other@example.com", browser_guid: "other-guid")
       create(:cart, user:, email: original_email, browser_guid: "own-guid")
+      other_user_cart = create(:cart, user: create(:user), email: "shared@example.com", browser_guid: "own-guid")
+      affiliate_seller = create(:user)
+      affiliate_post = create(:installment, seller: affiliate_seller)
+      create(:direct_affiliate, seller: affiliate_seller, affiliate_user: user, deleted_at: Time.current)
+      affiliate_sent = SentPostEmail.create!(post: affiliate_post, email: original_email)
       seller = create(:user)
       post = create(:installment, seller:)
       create(:purchase, link: create(:product, user: seller), email: original_email)
@@ -841,6 +846,9 @@ describe GdprDataErasureService do
       end
       expect(guest_cart.email).to eq("deleted-#{user.id}@deleted.gumroad.com")
       expect(other_cart.reload.email).to eq("other@example.com")
+      expect(other_user_cart.reload.email).to eq("shared@example.com")
+      expect(other_user_cart.browser_guid).to eq("own-guid")
+      expect(SentPostEmail.exists?(affiliate_sent.id)).to be(false)
       expect(SentPostEmail.exists?(sent.id)).to be(false)
       expect(SentPostEmail.exists?(other_sent.id)).to be(true)
       expect(user.reload.google_uid).to be_nil
