@@ -33,6 +33,18 @@ describe "InstallmentTracking"  do
       urls = @installment.clicked_urls
       expect(urls).to eq decoded_hash
     end
+
+    it "orders urls by their summed count when stored urls share a display form" do
+      record_click(@installment, recipient: "[1, 1]", url: "https://example.com/a")
+      record_click(@installment, recipient: "[2, 2]", url: "https://example.com/a")
+      record_click(@installment, recipient: "[3, 3]", url: "http://www.example.com/a")
+      record_click(@installment, recipient: "[4, 4]", url: "http://www.example.com/a")
+      record_click(@installment, recipient: "[1, 1]", url: "https://gumroad.com")
+      record_click(@installment, recipient: "[2, 2]", url: "https://gumroad.com")
+      record_click(@installment, recipient: "[3, 3]", url: "https://gumroad.com")
+
+      expect(@installment.clicked_urls.to_a).to eq([["example.com/a", 4], ["gumroad.com", 3]])
+    end
   end
 
   describe "#click_rate_percent" do

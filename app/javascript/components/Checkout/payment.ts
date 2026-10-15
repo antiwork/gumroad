@@ -90,6 +90,9 @@ export type PaymentElementClientConfirmConfig = {
   // Methods the browser may add only after remounting in INR. Listing UPI on a USD
   // element makes Stripe reject the whole session, card included.
   inr_local_methods?: string[];
+  // Server-owned per-method caps in the method's forced-currency minor units. Stripe rejects the
+  // whole session, card included, when a listed method's cap is below the element amount.
+  payment_method_max_amount_cents?: Record<string, number>;
   // Signed server copy of payment_method_types above, echoed back at /orders/prepare so the
   // deferred intent is built from the list this page actually mounted rather than a second
   // server-side resolution (gumroad-private#1528). Opaque to the browser.
@@ -113,8 +116,10 @@ const FORCED_CURRENCY_PAYMENT_METHODS: Record<string, string> = {
 export function paymentMethodTypesForMountCurrency(
   elementsOptions: Pick<PaymentElementConfig | PaymentElementClientConfirmConfig, "payment_method_types"> & {
     inr_local_methods?: string[];
+    payment_method_max_amount_cents?: Record<string, number>;
   },
   currency: string,
+  amount: number | null,
 ): string[] {
   const mount = currency.toLowerCase();
   let types = [...elementsOptions.payment_method_types];
@@ -130,7 +135,11 @@ export function paymentMethodTypesForMountCurrency(
       if (!types.includes(method)) types.push(method);
     }
   }
-  return types;
+  const maxAmounts = elementsOptions.payment_method_max_amount_cents ?? {};
+  return types.filter((method) => {
+    const max = maxAmounts[method];
+    return max === undefined || amount === null || amount <= max;
+  });
 }
 // request_apple_pay_merchant_tokens: subscription carts ask Apple for an MPAN (survives a
 // device wipe) instead of a device token. payment_element_wallets: PE renders wallets

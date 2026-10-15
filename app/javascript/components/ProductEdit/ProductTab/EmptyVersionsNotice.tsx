@@ -35,6 +35,21 @@ export const EmptyVersionsNotice = () => {
   const { product } = useProductEditContext();
 
   if (!FILE_DELIVERING_TYPES.includes(product.native_type)) return null;
+
+  // With no versions the deliverable is the product-level one (the product's own
+  // files and content pages), so there is no version list to inspect — and when
+  // both are empty the buyer gets the empty download page this notice is about.
+  if (product.variants.length === 0) {
+    if (product.files.length > 0 || product.rich_content.some(pageHasContent)) return null;
+
+    return (
+      <Alert role="status" variant="warning">
+        This product has no files or content. Buyers who purchase it get an empty download page — add content in the
+        Content tab.
+      </Alert>
+    );
+  }
+
   // Shared content means every version delivers the product-level content, so a
   // version's own empty list is not a gap.
   if (product.has_same_rich_content_for_all_variants) return null;

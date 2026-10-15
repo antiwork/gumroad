@@ -1,6 +1,6 @@
 import { PlayCircle, Trash, TwitterX, Video } from "@boxicons/react";
 import { Editor, Extension, Node as TiptapNode } from "@tiptap/core";
-import { DOMOutputSpec } from "@tiptap/pm/model";
+import { DOMOutputSpec, DOMSerializer, Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
 import * as React from "react";
 
@@ -40,15 +40,20 @@ const VideoEmbed = Extension.create({
   ),
 });
 
+const renderRawDOM = (editor: Editor, node: ProseMirrorNode) =>
+  DOMSerializer.fromSchema(editor.schema).serializeNode(node);
+
 const RawNodeView = ({ editor, node, getPos, selected }: NodeViewProps) => {
-  const html = sanitizeHtml(assertString(node.attrs.html));
-  if (!editor.isEditable) return <NodeViewWrapper className="tiptap__raw" dangerouslySetInnerHTML={{ __html: html }} />;
+  const dom = React.useMemo(() => renderRawDOM(editor, node), [editor, node]);
   return (
     <NodeActionsWrapper selected={selected} asChild>
       <NodeViewWrapper contentEditable={false}>
         <NodeActionsMenu editor={editor} getPos={getPos} />
         {/* The iframe swallows clicks; without this the block can never be selected. */}
-        <div className="tiptap__raw [&_iframe]:pointer-events-none" dangerouslySetInnerHTML={{ __html: html }} />
+        <div
+          className="tiptap__raw [&_iframe]:pointer-events-none"
+          dangerouslySetInnerHTML={{ __html: dom instanceof Element ? dom.innerHTML : "" }}
+        />
       </NodeViewWrapper>
     </NodeActionsWrapper>
   );
@@ -59,7 +64,12 @@ export const Raw = TiptapNode.create({
   inline: () => false,
   group: () => "block",
   draggable: true,
-  addNodeView: () => ReactNodeViewRenderer(RawNodeView),
+  addNodeView: () => {
+    const renderEditable = ReactNodeViewRenderer(RawNodeView);
+    // Read-only editors render the same DOM as the saved HTML.
+    return (props) =>
+      props.editor.isEditable ? renderEditable(props) : { dom: renderRawDOM(props.editor, props.node) };
+  },
   addAttributes: () => ({
     html: { default: null },
     title: { default: null },

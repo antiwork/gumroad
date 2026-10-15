@@ -46,12 +46,14 @@ class PaginatedInstallmentsPresenter
 
     installments = installments.to_a
     Installment.preload_engagement_summaries!(installments)
-    current_seller = seller
     {
       installments: installments.map { InstallmentPresenter.new(seller:, installment: _1).props },
       pagination: pagiation_metadata,
-      has_posts: current_seller.installments.alive.not_workflow_installment.public_send(type).exists?,
     }
+  end
+
+  def has_posts?
+    seller.installments.alive.not_workflow_installment.public_send(type).exists?
   end
 
   private

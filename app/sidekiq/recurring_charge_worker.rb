@@ -13,10 +13,15 @@ class RecurringChargeWorker
         return unless subscription.alive?(include_pending_cancellation: false)
         indian_card_mandate_recovered = false
         if subscription.india_card_mandate_reliability_enabled? && subscription.renewal_disabled_due_to_indian_card_mandate?
-          # Keep access active while the charge waits for a mandate that Stripe can use.
-          return unless subscription.refresh_indian_card_mandate! == "active"
-          subscription.reload
-          return if subscription.renewal_disabled_due_to_indian_card_mandate?
+          if subscription.indian_card_mandate_held?
+            return unless subscription.resume_held_indian_card_mandate!
+            subscription.log_indian_card_mandate_hold_event("renewal_resumed")
+          else
+            # Keep access active while the charge waits for a mandate that Stripe can use.
+            return unless subscription.refresh_indian_card_mandate! == "active"
+            subscription.reload
+            return if subscription.renewal_disabled_due_to_indian_card_mandate?
+          end
           indian_card_mandate_recovered = true
         end
         return if subscription.is_test_subscription || subscription.current_subscription_price_cents == 0

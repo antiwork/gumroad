@@ -2899,11 +2899,11 @@ describe Subscription::UpdaterService, :vcr do
           service.perform
         end
 
-        def restart_with_saved_card
+        def restart_with_saved_card(params = restart_params)
           described_class.new(
             subscription: @subscription.reload,
             gumroad_guid: @gumroad_guid,
-            params: restart_params,
+            params:,
             logged_in_user: @user,
             remote_ip: @remote_ip,
           ).perform
@@ -2941,9 +2941,10 @@ describe Subscription::UpdaterService, :vcr do
           expect(@subscription.credit_card).to eq(replacement_card)
           expect(@subscription.stripe_mandate_id).to eq("mandate_pending")
           expect(@subscription).to be_renewal_disabled_due_to_indian_card_mandate
+          expect(@subscription).not_to be_indian_card_mandate_hold_pending
           expect(@subscription.purchases.count).to eq(@purchase_count_before)
           expect(plan_change.reload).to be_alive
-          expect(Rails.logger).to have_received(:info).with("indian_card_mandate.pending_restart.held subscription_id=#{@subscription.id} mandate_id=mandate_pending")
+          expect(Rails.logger).to have_received(:info).with("indian_card_mandate.pending_restart.held subscription_id=#{@subscription.id} mandate_id=mandate_pending path=restart card=new")
         end
 
         context "when the restart comes from someone other than the member" do
@@ -2995,18 +2996,6 @@ describe Subscription::UpdaterService, :vcr do
           end
         end
 
-        it "does not say the membership has not restarted when a live membership updates on a pending mandate" do
-          restart_with_replacement_card
-          @subscription.update!(cancelled_at: nil, cancelled_by_buyer: false)
-          expect(@subscription.reload).to be_alive(include_pending_cancellation: false)
-
-          result = restart_with_saved_card
-
-          expect(result).to eq(success: false, error_message: "We could not verify this card for recurring payments. Please update the payment method before you restart this subscription.")
-          expect(@subscription.reload).to be_renewal_disabled_due_to_indian_card_mandate
-          expect(@subscription.credit_card).to eq(replacement_card)
-        end
-
         it "asks the buyer to wait when they retry on the saved card before the bank confirms" do
           restart_with_replacement_card
           expect_any_instance_of(described_class).not_to receive(:charge_user!)
@@ -3016,6 +3005,7 @@ describe Subscription::UpdaterService, :vcr do
           expect(result).to eq(success: false, error_message: pending_message)
           expect(@subscription.reload).not_to be_alive(include_pending_cancellation: false)
           expect(@subscription).to be_renewal_disabled_due_to_indian_card_mandate
+          expect(Rails.logger).to have_received(:info).with("indian_card_mandate.pending_restart.held subscription_id=#{@subscription.id} mandate_id=mandate_pending path=restart card=saved")
         end
 
         it "restarts on the saved card once the bank confirms the mandate" do
@@ -3062,6 +3052,431 @@ describe Subscription::UpdaterService, :vcr do
 
           expect(result).to eq(success: false, error_message: rejected_message)
           expect(@subscription.reload.credit_card).to eq(@credit_card)
+        end
+
+        it "reports which hold condition failed when it rejects a pending mandate" do
+          allow(ErrorNotifier).to receive(:notify)
+
+          restart_with_replacement_card(logged_in_user: create(:user))
+
+          expect(ErrorNotifier).to have_received(:notify).with(
+            "Indian card update rejected without an active e-mandate",
+            subscription: @subscription.external_id,
+            mandate_status: "pending",
+            is_resubscribing: true,
+            renewal_paused_for_mandate: false,
+            new_purchase_present: false,
+            member_verified: false,
+            customer_matches: true,
+            binding_matches: true,
+            terms_match: true,
+            hold_resumable: true
+          )
+        end
+
+        context "when the membership is live with renewals paused for the mandate" do
+          let(:live_pending_message) { Subscription::UpdaterService::MANDATE_PENDING_RENEWAL_MESSAGE }
+
+          before do
+            @subscription.update!(cancelled_at: nil, cancelled_by_buyer: false, renewal_disabled_due_to_indian_card_mandate: true)
+            expect(@subscription.reload).to be_alive(include_pending_cancellation: false)
+          end
+
+          it "keeps the card with renewal still paused, and does not charge" do
+            expect_any_instance_of(described_class).not_to receive(:charge_user!)
+            # A fixing here would change the terms a retry's reuse check expects.
+            expect(@subscription).not_to receive(:record_indian_card_mandate_presentment!)
+
+            result = restart_with_replacement_card
+
+            expect(result).to eq(success: false, error_message: live_pending_message)
+            @subscription.reload
+            expect(@subscription).to be_alive(include_pending_cancellation: false)
+            expect(@subscription.credit_card).to eq(replacement_card)
+            expect(@subscription.stripe_mandate_id).to eq("mandate_pending")
+            expect(@subscription).to be_renewal_disabled_due_to_indian_card_mandate
+            expect(@subscription).to be_indian_card_mandate_held
+            expect(@subscription.purchases.count).to eq(@purchase_count_before)
+            expect(Rails.logger).to have_received(:info).with("indian_card_mandate.pending_restart.held subscription_id=#{@subscription.id} mandate_id=mandate_pending path=live card=new")
+          end
+
+          it "lets the reuse check hand the held card back" do
+            restart_with_replacement_card
+            allow(ChargeProcessor).to receive(:get_setup_intent).and_return(
+              instance_double(StripeSetupIntent, succeeded?: true, mandate: "mandate_pending", customer_id: "cus_replacement", payment_method_id: "pm_replacement")
+            )
+            allow_any_instance_of(Subscription).to receive(:indian_card_setup_intent_terms_match?).and_return(true)
+
+            expect(@subscription.reload.reusable_pending_indian_card).to eq(replacement_card)
+          end
+
+          it "saves nothing for someone other than the member" do
+            result = restart_with_replacement_card(logged_in_user: nil)
+
+            expect(result).to eq(success: false, error_message: rejected_message)
+            @subscription.reload
+            expect(@subscription.credit_card).to eq(@credit_card)
+            expect(@subscription.stripe_mandate_id).to be_nil
+            expect(Rails.logger).not_to have_received(:info).with(a_string_including("indian_card_mandate.pending_restart.held"))
+          end
+
+          it "still rejects a pending mandate when the update also changes the plan" do
+            params = upgrade_tier_params.merge(perceived_upgrade_price_cents: @new_tier_quarterly_price.price_cents)
+
+            result = restart_with_replacement_card(params)
+
+            expect(result).to eq(success: false, error_message: rejected_message)
+            expect(@subscription.reload.credit_card).to eq(@credit_card)
+            expect(@subscription.stripe_mandate_id).to be_nil
+          end
+
+          it "asks the buyer to wait without claiming to save anything when they retry on the saved card" do
+            restart_with_replacement_card
+            original_name = @subscription.reload.original_purchase.full_name
+            expect_any_instance_of(described_class).not_to receive(:charge_user!)
+
+            result = restart_with_saved_card(restart_params.merge(contact_info: { full_name: "Changed Name" }))
+
+            expect(result).to eq(success: false, error_message: Subscription::UpdaterService::MANDATE_PENDING_SAVED_CARD_MESSAGE)
+            expect(@subscription.reload).to be_indian_card_mandate_held
+            expect(@subscription.credit_card).to eq(replacement_card)
+            expect(@subscription.original_purchase.full_name).to eq(original_name)
+            expect(Rails.logger).to have_received(:info).with("indian_card_mandate.pending_restart.held subscription_id=#{@subscription.id} mandate_id=mandate_pending path=live card=saved")
+          end
+
+          it "asks the buyer to come back once the bank confirms when the saved card is not held" do
+            restart_with_replacement_card
+            @subscription.reload.update!(indian_card_mandate_hold_pending: false)
+            expect_any_instance_of(described_class).not_to receive(:charge_user!)
+
+            result = restart_with_saved_card
+
+            expect(result).to eq(success: false, error_message: Subscription::UpdaterService::MANDATE_PENDING_SAVED_CARD_RETRY_MESSAGE)
+            expect(@subscription.reload).to be_renewal_disabled_due_to_indian_card_mandate
+            expect(@subscription).not_to be_indian_card_mandate_held
+          end
+
+          it "ends the hold and asks once for another card, without charging, when the saved card's mandate was approved in another currency" do
+            restart_with_replacement_card
+            @mandate_status = "active"
+            mail = instance_double(ActionMailer::MessageDelivery, deliver_later: true)
+            allow(CustomerLowPriorityMailer).to receive(:subscription_indian_card_mandate_invalid).and_return(mail)
+            allow(ChargeProcessor).to receive(:get_setup_intent).and_return(
+              instance_double(
+                StripeSetupIntent,
+                mandate: "mandate_pending",
+                metadata: { gumroad_subscription_id: @subscription.external_id },
+                card_mandate_options: Stripe::StripeObject.construct_from(currency: Currency::INR)
+              )
+            )
+            allow(ErrorNotifier).to receive(:notify)
+            expect_any_instance_of(described_class).not_to receive(:charge_user!)
+
+            result = restart_with_saved_card
+
+            expect(result).to eq(success: false, error_message: Subscription::UpdaterService::HELD_MANDATE_ENDED_MESSAGE)
+            @subscription.reload
+            expect(@subscription).to be_indian_card_mandate_requires_reauthorization
+            expect(@subscription.stripe_mandate_id).to be_nil
+            expect(@subscription).not_to be_indian_card_mandate_held
+            expect(@subscription.purchases.count).to eq(@purchase_count_before)
+            expect(CustomerLowPriorityMailer).to have_received(:subscription_indian_card_mandate_invalid).with(@subscription.id).once
+            expect(mail).to have_received(:deliver_later).with(queue: "low").once
+          end
+
+          it "says the plan has not changed when a plan change meets the pending saved card" do
+            restart_with_replacement_card
+            original_variants = @subscription.reload.original_purchase.variant_attributes.to_a
+            expect_any_instance_of(described_class).not_to receive(:charge_user!)
+
+            result = described_class.new(
+              subscription: @subscription.reload,
+              gumroad_guid: @gumroad_guid,
+              params: upgrade_tier_params.merge(perceived_upgrade_price_cents: @new_tier_quarterly_price.price_cents),
+              logged_in_user: @user,
+              remote_ip: @remote_ip,
+            ).perform
+
+            expect(result).to eq(success: false, error_message: Subscription::UpdaterService::MANDATE_PENDING_PLAN_CHANGE_MESSAGE)
+            expect(@subscription.reload.original_purchase.variant_attributes.to_a).to eq(original_variants)
+            expect(@subscription).to be_renewal_disabled_due_to_indian_card_mandate
+          end
+
+          it "saves nothing when an INR listing's mandate was approved in USD while INR is unavailable" do
+            @product.update_column(:price_currency_type, Currency::INR)
+            @subscription.original_purchase.update_columns(displayed_price_currency_type: Currency::INR, rate_converted_to_usd: nil)
+            Redis::Namespace.new(:currencies, redis: $redis).set("INR", "80")
+            allow_any_instance_of(Subscription).to receive(:indian_card_recovery_presentment_currency).and_return(nil)
+            expect(@subscription.reload.indian_card_mandate_terms[:currency]).to eq(Currency::USD)
+            allow(ErrorNotifier).to receive(:notify)
+
+            result = restart_with_replacement_card
+
+            expect(result).to eq(success: false, error_message: rejected_message)
+            @subscription.reload
+            expect(@subscription.credit_card).to eq(@credit_card)
+            expect(@subscription.stripe_mandate_id).to be_nil
+            expect(@subscription).not_to be_indian_card_mandate_held
+            expect(ErrorNotifier).to have_received(:notify).with(
+              "Indian card update rejected without an active e-mandate",
+              hash_including(subscription: @subscription.external_id, terms_match: true, hold_resumable: false)
+            )
+          end
+
+          it "saves nothing when an outdated price fixing would be left for the hold to resume on" do
+            @product.update_column(:price_currency_type, Currency::INR)
+            @subscription.original_purchase.update_columns(displayed_price_currency_type: Currency::INR, rate_converted_to_usd: nil)
+            Redis::Namespace.new(:currencies, redis: $redis).set("INR", "80")
+            fixing = @subscription.later_charge_presentments.create!(
+              processor: StripeChargeProcessor.charge_processor_id,
+              presentment_currency: Currency::INR,
+              presentment_price_cents: @subscription.current_subscription_price_cents + 1_000,
+              canonical_price_cents: LaterChargePresentment.canonical_price_cents_for(@subscription.original_purchase),
+              signup_currency_units_per_usd: BigDecimal("80"),
+              effective_from: 1.day.ago
+            )
+            expect(@subscription.reload.indian_card_presentment_in_force?(fixing)).to be(false)
+            expect(@subscription.indian_card_mandate_terms[:currency]).to eq(Currency::INR)
+            allow(ErrorNotifier).to receive(:notify)
+
+            result = restart_with_replacement_card
+
+            expect(result).to eq(success: false, error_message: rejected_message)
+            @subscription.reload
+            expect(@subscription.credit_card).to eq(@credit_card)
+            expect(@subscription.stripe_mandate_id).to be_nil
+            expect(@subscription).not_to be_indian_card_mandate_held
+            expect(@subscription).not_to be_indian_card_mandate_hold_pending
+            expect(@subscription.later_charge_presentments.to_a).to eq([fixing])
+            expect(ErrorNotifier).to have_received(:notify).with(
+              "Indian card update rejected without an active e-mandate",
+              hash_including(subscription: @subscription.external_id, terms_match: true, hold_resumable: false)
+            )
+          end
+
+          it "holds a USD listing's card whose mandate was approved in its INR fixing" do
+            canonical_price_cents = LaterChargePresentment.canonical_price_cents_for(@subscription.original_purchase)
+            @subscription.later_charge_presentments.create!(
+              processor: StripeChargeProcessor.charge_processor_id,
+              presentment_currency: Currency::INR,
+              presentment_price_cents: canonical_price_cents * 80,
+              canonical_price_cents:,
+              signup_currency_units_per_usd: BigDecimal("80"),
+              effective_from: 1.day.ago
+            )
+            expect(@subscription.reload.indian_card_mandate_terms[:currency]).to eq(Currency::INR)
+            expect(@subscription.indian_card_mandate_listing_currency).to eq(Currency::USD)
+
+            result = restart_with_replacement_card
+
+            expect(result).to eq(success: false, error_message: live_pending_message)
+            @subscription.reload
+            expect(@subscription.credit_card).to eq(replacement_card)
+            expect(@subscription.stripe_mandate_id).to eq("mandate_pending")
+            expect(@subscription).to be_indian_card_mandate_held
+          end
+
+          it "saves nothing when the mandate was approved in USD while its in-force INR fixing is briefly unavailable" do
+            canonical_price_cents = LaterChargePresentment.canonical_price_cents_for(@subscription.original_purchase)
+            fixing = @subscription.later_charge_presentments.create!(
+              processor: StripeChargeProcessor.charge_processor_id,
+              presentment_currency: Currency::INR,
+              presentment_price_cents: canonical_price_cents * 80,
+              canonical_price_cents:,
+              signup_currency_units_per_usd: BigDecimal("80"),
+              effective_from: 1.day.ago
+            )
+            expect(@subscription.reload.indian_card_presentment_in_force?(fixing)).to be(true)
+            allow_any_instance_of(MerchantAccount).to receive(:settlement_currency_mismatch_active?).and_return(true)
+            expect(@subscription.indian_card_mandate_terms[:currency]).to eq(Currency::USD)
+            allow(ErrorNotifier).to receive(:notify)
+
+            result = restart_with_replacement_card
+
+            expect(result).to eq(success: false, error_message: rejected_message)
+            @subscription.reload
+            expect(@subscription.credit_card).to eq(@credit_card)
+            expect(@subscription.stripe_mandate_id).to be_nil
+            expect(@subscription).not_to be_indian_card_mandate_held
+            expect(@subscription).not_to be_indian_card_mandate_hold_pending
+            expect(@subscription.later_charge_presentments.to_a).to eq([fixing])
+            expect(ErrorNotifier).to have_received(:notify).with(
+              "Indian card update rejected without an active e-mandate",
+              hash_including(subscription: @subscription.external_id, terms_match: true, hold_resumable: false)
+            )
+          end
+
+          context "with an INR listing" do
+            before do
+              @product.update_column(:price_currency_type, Currency::INR)
+              @subscription.original_purchase.update_columns(displayed_price_currency_type: Currency::INR, rate_converted_to_usd: nil)
+              Redis::Namespace.new(:currencies, redis: $redis).set("INR", "80")
+              restart_with_replacement_card
+              expect(@subscription.reload).to be_indian_card_mandate_held
+              @mandate_status = "active"
+            end
+
+            it "records the fixing the hold skipped before resuming renewals on the saved card" do
+              fixing_at_charge = nil
+              allow_any_instance_of(described_class).to receive(:charge_user!) do
+                fixing_at_charge = @subscription.later_charge_presentments.sole
+                { success: true }
+              end
+
+              result = restart_with_saved_card
+
+              expect(result[:success]).to be(true)
+              expect(fixing_at_charge).to have_attributes(
+                presentment_currency: Currency::INR,
+                presentment_price_cents: @subscription.reload.current_subscription_price_cents
+              )
+              expect(@subscription).not_to be_renewal_disabled_due_to_indian_card_mandate
+              expect(@subscription).not_to be_indian_card_mandate_hold_pending
+              expect(@subscription.credit_card).to eq(replacement_card)
+            end
+
+            it "ends the hold and asks once for another card, without charging, when an outdated price fixing appeared during the hold" do
+              fixing = @subscription.later_charge_presentments.create!(
+                processor: StripeChargeProcessor.charge_processor_id,
+                presentment_currency: Currency::INR,
+                presentment_price_cents: @subscription.current_subscription_price_cents + 1_000,
+                canonical_price_cents: LaterChargePresentment.canonical_price_cents_for(@subscription.original_purchase),
+                signup_currency_units_per_usd: BigDecimal("80"),
+                effective_from: 1.day.ago
+              )
+              expect(@subscription.reload.indian_card_presentment_in_force?(fixing)).to be(false)
+              mail = instance_double(ActionMailer::MessageDelivery, deliver_later: true)
+              allow(CustomerLowPriorityMailer).to receive(:subscription_indian_card_mandate_invalid).and_return(mail)
+              allow(ErrorNotifier).to receive(:notify)
+              expect_any_instance_of(described_class).not_to receive(:charge_user!)
+
+              result = restart_with_saved_card
+
+              expect(result).to eq(success: false, error_message: Subscription::UpdaterService::HELD_MANDATE_ENDED_MESSAGE)
+              @subscription.reload
+              expect(@subscription).to be_indian_card_mandate_requires_reauthorization
+              expect(@subscription).not_to be_indian_card_mandate_held
+              expect(@subscription.later_charge_presentments.to_a).to eq([fixing])
+              expect(CustomerLowPriorityMailer).to have_received(:subscription_indian_card_mandate_invalid).with(@subscription.id).once
+              expect(mail).to have_received(:deliver_later).with(queue: "low").once
+            end
+
+            it "resumes the hold on the unchanged plan before a plan change on the saved card" do
+              fixing = @subscription.later_charge_presentments.create!(
+                processor: StripeChargeProcessor.charge_processor_id,
+                presentment_currency: Currency::INR,
+                presentment_price_cents: @subscription.current_subscription_price_cents,
+                canonical_price_cents: LaterChargePresentment.canonical_price_cents_for(@subscription.original_purchase),
+                signup_currency_units_per_usd: BigDecimal("80"),
+                effective_from: 1.day.ago
+              )
+              expect(@subscription.reload.indian_card_presentment_in_force?(fixing)).to be(true)
+              original_variants = @subscription.original_purchase.variant_attributes.to_a
+              allow(ErrorNotifier).to receive(:notify)
+              allow_any_instance_of(described_class).to receive(:charge_user!).and_return(success: true)
+
+              result = described_class.new(
+                subscription: @subscription.reload,
+                gumroad_guid: @gumroad_guid,
+                params: upgrade_tier_params.merge(perceived_upgrade_price_cents: @new_tier_quarterly_price.price_cents),
+                logged_in_user: @user,
+                remote_ip: @remote_ip,
+              ).perform
+
+              # The plan change then follows the active-mandate path, which asks for a new mandate after charging.
+              expect(result[:success]).to be(true)
+              expect(ErrorNotifier).not_to have_received(:notify).with("Held Indian card mandate has an outdated price fixing", anything)
+              @subscription.reload
+              expect(@subscription).not_to be_indian_card_mandate_hold_pending
+              expect(@subscription.original_purchase.variant_attributes.to_a).not_to eq(original_variants)
+              expect(@subscription.later_charge_presentments.first).to eq(fixing)
+            end
+
+            context "with an in-force fixing and a plan change on the saved card" do
+              let(:plan_change_params) { upgrade_tier_params.merge(perceived_upgrade_price_cents: @new_tier_quarterly_price.price_cents) }
+              let(:plan_change) do
+                described_class.new(
+                  subscription: @subscription.reload,
+                  gumroad_guid: @gumroad_guid,
+                  params: plan_change_params,
+                  logged_in_user: @user,
+                  remote_ip: @remote_ip,
+                )
+              end
+
+              before do
+                @subscription.later_charge_presentments.create!(
+                  processor: StripeChargeProcessor.charge_processor_id,
+                  presentment_currency: Currency::INR,
+                  presentment_price_cents: @subscription.current_subscription_price_cents,
+                  canonical_price_cents: LaterChargePresentment.canonical_price_cents_for(@subscription.original_purchase),
+                  signup_currency_units_per_usd: BigDecimal("80"),
+                  effective_from: 1.day.ago
+                )
+                allow(ErrorNotifier).to receive(:notify)
+              end
+
+              it "keeps the buyer's contact edits after resuming the hold" do
+                allow_any_instance_of(described_class).to receive(:charge_user!).and_return(success: true)
+                plan_change_params[:contact_info] = { email: "edited@example.com", zip_code: "10001" }
+
+                expect(plan_change.perform[:success]).to be(true)
+
+                expect(@subscription.reload.original_purchase).to have_attributes(email: "edited@example.com", zip_code: "10001")
+              end
+
+              it "does not resume inside the plan change when resuming first did not finish" do
+                calls = 0
+                allow_any_instance_of(Subscription).to receive(:resume_held_indian_card_mandate!).and_wrap_original do |original, *args, **kwargs|
+                  calls += 1
+                  calls == 1 ? false : original.call(*args, **kwargs)
+                end
+                original_variants = @subscription.original_purchase.variant_attributes.to_a
+                expect_any_instance_of(described_class).not_to receive(:charge_user!)
+
+                result = plan_change.perform
+
+                expect(result).to eq(success: false, error_message: "There is a temporary problem, please try again (your card was not charged).")
+                expect(@subscription.reload).to be_indian_card_mandate_held
+                expect(@subscription.original_purchase.variant_attributes.to_a).to eq(original_variants)
+              end
+
+              it "queues the charge for an overdue paid membership when the update fails after resuming the hold" do
+                @subscription.reload
+                expect(@subscription.last_successful_purchase).to be_present
+                expect(@subscription).to be_overdue_for_charge
+                allow_any_instance_of(described_class).to receive(:charge_user!).and_raise(Subscription::UpdateFailed, "declined")
+                RecurringChargeWorker.jobs.clear
+
+                expect(plan_change.perform).to eq(success: false, error_message: "declined")
+
+                expect(@subscription.reload).not_to be_indian_card_mandate_held
+                expect(RecurringChargeWorker).to have_enqueued_sidekiq_job(@subscription.id).immediately
+              end
+            end
+
+            it "does not charge when the fixing cannot be recorded" do
+              allow_any_instance_of(Subscription).to receive(:indian_card_recovery_presentment_attributes).and_return(nil)
+              allow(ErrorNotifier).to receive(:notify)
+              expect_any_instance_of(described_class).not_to receive(:charge_user!)
+
+              result = restart_with_saved_card
+
+              expect(result).to eq(success: false, error_message: "There is a temporary problem, please try again (your card was not charged).")
+              expect(@subscription.reload).to be_indian_card_mandate_held
+              expect(@subscription.later_charge_presentments).to be_empty
+            end
+          end
+        end
+
+        it "still rejects a pending mandate on a live membership whose renewals are not paused" do
+          @subscription.update!(cancelled_at: nil, cancelled_by_buyer: false)
+
+          result = restart_with_replacement_card
+
+          expect(result).to eq(success: false, error_message: rejected_message)
+          expect(@subscription.reload.credit_card).to eq(@credit_card)
+          expect(@subscription.stripe_mandate_id).to be_nil
         end
       end
     end

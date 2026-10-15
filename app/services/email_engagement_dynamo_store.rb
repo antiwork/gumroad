@@ -21,10 +21,14 @@ class EmailEngagementDynamoStore
   BATCH_GET_MAX_ATTEMPTS = 5
   TRANSACT_CONFLICT_MAX_ATTEMPTS = 3
   TRANSACT_CONFLICT_BACKOFF = 0.02
-  # Reasons that leave a transaction worth retrying in place. A throttle or
-  # validation reason means DynamoDB is rejecting the transact for a reason a
-  # retry will not clear, so it must raise for Sidekiq's own backoff instead.
-  RETRYABLE_CANCELLATION_CODES = ["ConditionalCheckFailed", "TransactionConflict", "None"].freeze
+  # A throttled SUMMARY item takes longer to clear than a conflict, so a throttled
+  # transaction backs off for up to ~1.5s in total before raising.
+  TRANSACT_THROTTLE_MAX_ATTEMPTS = 5
+  TRANSACT_THROTTLE_BACKOFF = 0.1
+  THROTTLE_CANCELLATION_CODES = ["ThrottlingError", "ProvisionedThroughputExceeded"].freeze
+  # Reasons that leave a transaction worth retrying in place. Any other reason (a
+  # validation error, an item collection limit) won't clear on retry, so it raises.
+  RETRYABLE_CANCELLATION_CODES = (["TransactionConflict", "None"] + THROTTLE_CANCELLATION_CODES).freeze
 
   class << self
     attr_writer :client
@@ -112,10 +116,11 @@ class EmailEngagementDynamoStore
         break if exclusive_start_key.blank?
       end
 
+      # Distinct stored URLs can share a display form (http vs https, www), so sum them.
       items.each_with_object({}) do |item, counts|
         url = display_url(item["click_url"].to_s)
         next if url.blank?
-        counts[url] = item["click_count"].to_i
+        counts[url] = counts.fetch(url, 0) + item["click_count"].to_i
       end
     end
 
@@ -271,37 +276,34 @@ class EmailEngagementDynamoStore
       end
 
       # Every open and click for one post increments that post's single SUMMARY item, so a
-      # callback burst contends on it. Conflicts clear in milliseconds, but raising sends the
-      # whole event back to Sidekiq, which re-runs the MySQL half too and pushes the retry
-      # onto the queue depth that scales the worker fleet. Absorb them here instead.
+      # callback burst contends on it and DynamoDB throttles it. Absorb conflicts and
+      # throttles here rather than spending the event's few Sidekiq retries on them.
       def transact_unless_exists(transact_items)
         attempts = 0
+        throttled = false
         begin
           client.transact_write_items(transact_items:)
           true
         rescue Aws::DynamoDB::Errors::TransactionCanceledException => e
-          return false if conditional_check_failed?(e)
-          raise unless transaction_conflict?(e)
+          codes = cancellation_codes(e)
+          # Only the put is conditional and these items are never deleted, so a failed
+          # condition is a duplicate whatever else cancelled the transaction.
+          return false if codes.include?("ConditionalCheckFailed")
+          raise unless retryable_cancellation?(codes)
 
           attempts += 1
-          raise if attempts >= TRANSACT_CONFLICT_MAX_ATTEMPTS
+          # Once throttled, keep the throttle budget even if a conflict cancels a later attempt.
+          throttled ||= codes.intersect?(THROTTLE_CANCELLATION_CODES)
+          max_attempts, backoff = throttled ? [TRANSACT_THROTTLE_MAX_ATTEMPTS, TRANSACT_THROTTLE_BACKOFF] : [TRANSACT_CONFLICT_MAX_ATTEMPTS, TRANSACT_CONFLICT_BACKOFF]
+          raise if attempts >= max_attempts
           # Jittered so contending writers don't line up again on the next attempt.
-          sleep(rand * TRANSACT_CONFLICT_BACKOFF * 2**(attempts - 1))
+          sleep(rand * backoff * 2**(attempts - 1))
           retry
         end
       end
 
-      # A cancellation is the expected duplicate only when fully explained by
-      # condition checks; a throttle or validation failure still raises so Sidekiq
-      # retries the event.
-      def conditional_check_failed?(error)
-        codes = cancellation_codes(error)
-        codes.any? && codes.all? { |code| ["ConditionalCheckFailed", "None"].include?(code) }
-      end
-
-      def transaction_conflict?(error)
-        codes = cancellation_codes(error)
-        codes.include?("TransactionConflict") &&
+      def retryable_cancellation?(codes)
+        (codes.include?("TransactionConflict") || codes.intersect?(THROTTLE_CANCELLATION_CODES)) &&
           codes.all? { |code| RETRYABLE_CANCELLATION_CODES.include?(code) }
       end
 

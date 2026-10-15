@@ -573,6 +573,28 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
       expect(description["attrs"]["html"]).to include(iframely_base)
       expect(description["attrs"]["html"]).to include("url=#{escaped_url}")
     end
+
+    it "selects a non-video embed on click so Backspace removes it and keeps its neighbours" do
+      product = create(:product, user: seller)
+      file = create(:product_file, display_name: "Workbook", link: product)
+      create(:product_rich_content, entity: product, description: [
+               { "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Intro" }] },
+               { "type" => "raw", "attrs" => { "html" => %(<iframe src="about:blank"></iframe>), "title" => "Flipbook", "url" => "https://heyzine.com/flip-book/x.html" } },
+               { "type" => "fileEmbed", "attrs" => { "id" => file.external_id, "uid" => SecureRandom.uuid } },
+             ])
+      visit edit_link_path(product) + "/content"
+
+      expect(page).to have_selector(".tiptap__raw")
+      expect(page).to_not have_selector(".outline-accent .tiptap__raw")
+      find("[aria-label='Content editor'] .tiptap__raw").click
+      expect(page).to have_selector(".outline-accent .tiptap__raw")
+      send_keys(:backspace)
+      expect(page).to_not have_selector(".tiptap__raw")
+      expect(page).to have_embed(name: "Workbook")
+
+      save_change
+      expect(product.reload.rich_contents.first.description.map { _1["type"] }).to eq(["paragraph", "fileEmbed"])
+    end
   end
 
   describe "public files in the product description" do
@@ -709,7 +731,7 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
         click_on "More like this"
       end
 
-      expect(page).to have_selector("h2", text: "Customers who bought this product also bought")
+      expect(page).to have_selector("h2", text: "More from this creator")
 
       within ".node-moreLikeThis" do
         wait_for_ajax

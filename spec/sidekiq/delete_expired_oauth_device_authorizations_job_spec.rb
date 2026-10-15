@@ -21,5 +21,27 @@ describe DeleteExpiredOauthDeviceAuthorizationsJob do
       expect { expired_denied.reload }.to raise_error(ActiveRecord::RecordNotFound)
       expect(active_authorization.reload).to be_present
     end
+
+    it "keeps approved device authorizations until their poll interval past expiry has passed" do
+      freeze_time
+      interval = OauthDeviceAuthorization::POLL_INTERVAL.to_i
+      approved_attributes = { status: OauthDeviceAuthorization::STATUS_APPROVED, resource_owner: create(:user), poll_interval_seconds: interval }
+
+      in_grace = create(:oauth_device_authorization, **approved_attributes, expires_at: 1.second.ago, approved_at: 2.seconds.ago)
+      past_grace = create(:oauth_device_authorization, **approved_attributes, expires_at: interval.seconds.ago, approved_at: (interval + 1).seconds.ago)
+      without_approved_at = create(:oauth_device_authorization, **approved_attributes, expires_at: 1.second.ago, approved_at: nil)
+      approved_at_expiry = create(:oauth_device_authorization, **approved_attributes, expires_at: 1.second.ago, approved_at: 1.second.ago)
+      consumed_in_grace = create(:oauth_device_authorization, **approved_attributes, status: OauthDeviceAuthorization::STATUS_CONSUMED, expires_at: 1.second.ago, approved_at: 2.seconds.ago)
+
+      expect do
+        described_class.new.perform
+      end.to change { OauthDeviceAuthorization.count }.by(-4)
+
+      expect(in_grace.reload).to be_present
+      expect { past_grace.reload }.to raise_error(ActiveRecord::RecordNotFound)
+      expect { without_approved_at.reload }.to raise_error(ActiveRecord::RecordNotFound)
+      expect { approved_at_expiry.reload }.to raise_error(ActiveRecord::RecordNotFound)
+      expect { consumed_in_grace.reload }.to raise_error(ActiveRecord::RecordNotFound)
+    end
   end
 end

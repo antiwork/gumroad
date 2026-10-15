@@ -18,17 +18,31 @@ import (
 )
 
 const (
-	defaultPort = "3000"
+	defaultPort    = "3000"
+	countsInterval = time.Minute
+
 	// Inside the Nomad task's 30s kill_timeout.
-	shutdownTimeout    = 25 * time.Second
-	countsInterval     = time.Minute
+	shutdownTimeout = 25 * time.Second
+
 	startupPingTimeout = 30 * time.Second
+	pingRetryInterval  = time.Second
+
+	// Per Redis call: each startup ping and each enqueue's SADD + LPUSH. A slow Redis
+	// fails the request, so Resend retries it.
+	redisTimeout  = 2 * time.Second
+	redisPoolSize = 64
+
+	readHeaderTimeout = 10 * time.Second
+	requestTimeout    = 30 * time.Second
+	// nginx expires its upstream keepalive sockets at 15s, so it never sends on one
+	// this server is closing.
+	idleTimeout = 20 * time.Second
 )
 
 func pingRedis(client *redis.Client, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	for {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), redisTimeout)
 		err := client.Ping(ctx).Err()
 		cancel()
 		if err == nil {
@@ -37,7 +51,7 @@ func pingRedis(client *redis.Client, timeout time.Duration) error {
 		if time.Now().After(deadline) {
 			return fmt.Errorf("Sidekiq Redis is unreachable: %w", err)
 		}
-		time.Sleep(time.Second)
+		time.Sleep(pingRetryInterval)
 	}
 }
 
@@ -74,10 +88,10 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	redisOptions.DialTimeout = 2 * time.Second
-	redisOptions.ReadTimeout = 2 * time.Second
-	redisOptions.WriteTimeout = 2 * time.Second
-	redisOptions.PoolSize = 64
+	redisOptions.DialTimeout = redisTimeout
+	redisOptions.ReadTimeout = redisTimeout
+	redisOptions.WriteTimeout = redisTimeout
+	redisOptions.PoolSize = redisPoolSize
 	client := redis.NewClient(redisOptions)
 	defer client.Close()
 	// A wrong host must fail the task, so the zone roll restores the previous job,
@@ -105,12 +119,10 @@ func run(logger *slog.Logger) error {
 	httpServer := &http.Server{
 		Addr:              ":" + port,
 		Handler:           s.routes(),
-		ReadHeaderTimeout: 10 * time.Second,
-		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      30 * time.Second,
-		// nginx expires its upstream keepalive sockets at 15s, so it never sends on
-		// one this server is closing.
-		IdleTimeout: 20 * time.Second,
+		ReadHeaderTimeout: readHeaderTimeout,
+		ReadTimeout:       requestTimeout,
+		WriteTimeout:      requestTimeout,
+		IdleTimeout:       idleTimeout,
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
