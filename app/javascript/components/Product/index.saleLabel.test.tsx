@@ -185,7 +185,7 @@ describe("product page sale label", () => {
     expect(screen.queryByTestId("sale-label")).toBeNull();
   });
 
-  it("hides the label when the seller has not set one", () => {
+  it("hides the label when the page sends none", () => {
     renderProduct({}, null);
 
     expect(screen.queryByTestId("sale-label")).toBeNull();
@@ -208,5 +208,22 @@ describe("product page sale label", () => {
     });
 
     expect(screen.getByTestId("sale-label").textContent).toBe("Black Friday");
+  });
+
+  it("shows the label in a banner with the code's amount", () => {
+    renderProduct();
+
+    const banner = screen.getByTestId("sale-banner");
+    expect(banner.textContent).toContain("Black Friday");
+    expect(banner.textContent).toContain("30% off");
+  });
+
+  it("puts the price in the purchase column with the buy button", () => {
+    const { container } = renderProduct();
+
+    const columns = container.querySelectorAll(":scope > article > section");
+    const purchaseColumn = columns[columns.length - 1];
+    expect(purchaseColumn?.querySelector("[itemprop=price]")).not.toBeNull();
+    expect(columns[0]?.querySelector("[itemprop=price]")).toBeNull();
   });
 });

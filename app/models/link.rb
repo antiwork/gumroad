@@ -1150,6 +1150,14 @@ class Link < ApplicationRecord
     redeemable ? explicit : auto_code
   end
 
+  # The label for a discount produced by the seller's auto-applied code; "Sale" when they set none.
+  def auto_apply_sale_label
+    code = effective_default_offer_code
+    return if code.nil? || code != user.auto_apply_offer_code_for(self)
+
+    code.sale_label.presence || OfferCode::DEFAULT_SALE_LABEL
+  end
+
   # A default discount buyers can no longer redeem: the code was deleted,
   # carries no code (checkout resolves defaults by code, and legacy rows could
   # point at codeless upsell discounts), or stopped applying to this product.

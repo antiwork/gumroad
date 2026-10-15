@@ -163,6 +163,40 @@ describe ProductPresenter::Card do
         queries
       end
 
+      describe "shop-wide sale" do
+        let(:seller) { create(:user) }
+        let(:product) { create(:product, user: seller, price_cents: 2000) }
+        let!(:sale) { seller.offer_codes.create!(code: "BF30", amount_percentage: 30, universal: true, products: [], auto_apply: true, sale_label: "Black Friday") }
+
+        before { Current.reset }
+
+        it "prices the card with the auto-applied code and carries its label" do
+          props = described_class.new(product:).for_web
+          expect(props).to include(price_cents: 1400, original_price_cents: 2000, sale_label: "Black Friday")
+        end
+
+        it "falls back to the default label when the code has none" do
+          sale.update!(sale_label: nil)
+          Current.reset
+          expect(described_class.new(product:).for_web[:sale_label]).to eq("Sale")
+        end
+
+        it "omits the label when a per-product default produced the price" do
+          product.update!(default_offer_code: seller.offer_codes.create!(code: "OWN10", amount_percentage: 10, products: [product]))
+          props = described_class.new(product:).for_web
+          expect(props).to include(price_cents: 1800, original_price_cents: 2000)
+          expect(props).not_to have_key(:sale_label)
+        end
+
+        it "omits the label when the code does not discount the card price" do
+          sale.update!(minimum_quantity: 2)
+          Current.reset
+          props = described_class.new(product:).for_web
+          expect(props[:price_cents]).to eq(2000)
+          expect(props).not_to have_key(:sale_label)
+        end
+      end
+
       it "resolves every seller's auto-applied code and products' own defaults in a fixed number of queries" do
         add_sellers = lambda do |count|
           Array.new(count) do |i|

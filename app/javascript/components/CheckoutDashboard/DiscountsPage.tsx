@@ -1351,8 +1351,8 @@ const Form = ({
                 onChange={(evt) => setSaleLabel(evt.target.value)}
               />
               <FieldsetDescription id={`${uid}saleLabelDescription`}>
-                Shown next to the discounted price on your product pages ({saleLabel.length} of {MAX_SALE_LABEL_LENGTH}{" "}
-                characters used).
+                Shown with the discounted price on your product pages and profile, or "Sale" if left empty (
+                {saleLabel.length} of {MAX_SALE_LABEL_LENGTH} characters used).
               </FieldsetDescription>
             </Fieldset>
           ) : null}

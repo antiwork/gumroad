@@ -482,9 +482,9 @@ describe ProductPresenter::ProductProps do
         expect(props[:sale_label]).to be_nil
       end
 
-      it "returns no label when the code has no label or the sale is over" do
+      it "returns the default label when the code has none, and no label once the sale is over" do
         sale.update!(sale_label: nil)
-        expect(props[:sale_label]).to be_nil
+        expect(props[:sale_label]).to eq("Sale")
 
         sale.update!(sale_label: "Black Friday", valid_at: 3.days.ago, expires_at: 1.day.ago)
         Current.reset

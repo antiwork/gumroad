@@ -1,4 +1,4 @@
-import { Star } from "@boxicons/react";
+import { Discount as DiscountIcon, Star } from "@boxicons/react";
 import { EditorContent } from "@tiptap/react";
 import { differenceInYears, parseISO } from "date-fns";
 import * as React from "react";
@@ -86,7 +86,6 @@ import { UpsellCard } from "$app/components/TiptapExtensions/UpsellCard";
 import { Alert } from "$app/components/ui/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { LinkButton } from "$app/components/ui/LinkButton";
-import { Pill } from "$app/components/ui/Pill";
 import { useAddThirdPartyAnalytics } from "$app/components/useAddThirdPartyAnalytics";
 import { useOnChange } from "$app/components/useOnChange";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
@@ -408,6 +407,7 @@ export const Product = ({
   const codeDiscounts = (attributes: typeof selectionAttributes) =>
     !attributes.pppDiscounted && attributes.discountedPriceCents < attributes.priceCents;
   // With no option picked, each visible option shows its own price, so any discounted one earns the label.
+  const hasRatings = product.ratings != null && product.ratings.count > 0;
   const showSaleLabel =
     !!saleLabel &&
     discountCode === initialDiscountCode &&
@@ -443,68 +443,41 @@ export const Product = ({
             {product.name}
           </h1>
         </header>
-        {/* Stack on mobile: an inflated price in an auto track leaves the name ~1ch
-            wide, and overflow-wrap:anywhere then stacks it one character at a time. */}
-        <section className="grid grid-cols-1 gap-[1px] border-t border-border p-0 sm:grid-cols-[auto_auto_minmax(max-content,1fr)]">
-          {showPrice ? (
-            <div className="px-6 py-4 outline outline-offset-0 outline-border">
-              <PriceTag
-                currencyCode={product.currency_code}
-                oldPrice={
-                  comparisonPriceCents !== null && discountedPriceCents < comparisonPriceCents
-                    ? comparisonPriceCents
-                    : undefined
-                }
-                price={discountedPriceCents}
-                url={product.long_url}
-                isPayWhatYouWant={!!product.pwyw}
-                isSalesLimited={product.is_sales_limited}
-                creatorName={product.seller?.name}
-                buyerCurrency={product.buyer_currency}
-                buyerLocalCurrencyRate={product.buyer_local_currency_rate}
-                buyerLocalCurrencySubunitToUnit={product.buyer_local_currency_subunit_to_unit}
-                buyerLocalPriceCents={buyerLocalPriceCentsForSelection(
-                  product.buyer_local_price_cents,
-                  discountCode?.valid ? discountCode.discount : null,
-                  selection.quantity,
+        {sellerByline || hasRatings ? (
+          <section className="grid grid-cols-1 gap-[1px] border-t border-border p-0 sm:grid-cols-[minmax(0,1fr)_auto]">
+            {sellerByline ? (
+              <div
+                className={classNames(
+                  "flex min-w-0 flex-wrap items-center gap-2 px-6 py-4 outline outline-offset-0 outline-border",
+                  !hasRatings && "sm:col-span-full",
                 )}
-                buyerLocalOriginalPriceCents={product.buyer_local_original_price_cents}
-              />
-              {showSaleLabel ? (
-                <div className="mt-2" data-testid="sale-label">
-                  <Pill size="small">{saleLabel}</Pill>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-          {sellerByline ? (
-            <div
-              className={classNames(
-                "flex min-w-0 flex-wrap items-center gap-2 px-6 py-4 outline outline-offset-0 outline-border",
-                !showPrice && "col-span-full sm:col-auto",
-                showPrice && !(product.ratings != null && product.ratings.count > 0) && "sm:col-[2/-1]",
-              )}
-            >
-              {product.collaborating_user ? (
-                <>
-                  {sellerByline} with{" "}
-                  <AuthorByline
-                    name={product.collaborating_user.name}
-                    profileUrl={product.collaborating_user.profile_url}
-                    avatarUrl={product.collaborating_user.avatar_url}
-                  />
-                </>
-              ) : (
-                sellerByline
-              )}
-            </div>
-          ) : null}
-          {product.ratings != null && product.ratings.count > 0 ? (
-            <div className="flex items-center px-6 py-4 outline outline-offset-0 outline-border max-sm:col-span-full">
-              <RatingsSummary ratings={product.ratings} />
-            </div>
-          ) : null}
-        </section>
+              >
+                {product.collaborating_user ? (
+                  <>
+                    {sellerByline} with{" "}
+                    <AuthorByline
+                      name={product.collaborating_user.name}
+                      profileUrl={product.collaborating_user.profile_url}
+                      avatarUrl={product.collaborating_user.avatar_url}
+                    />
+                  </>
+                ) : (
+                  sellerByline
+                )}
+              </div>
+            ) : null}
+            {product.ratings != null && hasRatings ? (
+              <div
+                className={classNames(
+                  "flex items-center px-6 py-4 outline outline-offset-0 outline-border",
+                  !sellerByline && "sm:col-span-full",
+                )}
+              >
+                <RatingsSummary ratings={product.ratings} />
+              </div>
+            ) : null}
+          </section>
+        ) : null}
         {purchase !== null ? (
           <ExistingPurchaseCard
             purchase={purchase}
@@ -592,7 +565,46 @@ export const Product = ({
         </section>
       </section>
       <section>
+        {showSaleLabel && discount ? (
+          <div
+            role="status"
+            data-testid="sale-banner"
+            className="flex items-center gap-2 bg-accent-with-text px-6 py-3 font-bold text-accent-foreground"
+          >
+            <DiscountIcon pack="filled" className="size-5 shrink-0" aria-hidden="true" />
+            <span className="min-w-0 truncate" data-testid="sale-label">
+              {saleLabel}
+            </span>
+            <span className="ml-auto shrink-0">
+              {formatDiscountAmount(discount, buyerLocalContextFor(product))} off
+            </span>
+          </div>
+        ) : null}
         <section className="grid gap-4 p-6 not-first:border-t">
+          {showPrice ? (
+            <PriceTag
+              currencyCode={product.currency_code}
+              oldPrice={
+                comparisonPriceCents !== null && discountedPriceCents < comparisonPriceCents
+                  ? comparisonPriceCents
+                  : undefined
+              }
+              price={discountedPriceCents}
+              url={product.long_url}
+              isPayWhatYouWant={!!product.pwyw}
+              isSalesLimited={product.is_sales_limited}
+              creatorName={product.seller?.name}
+              buyerCurrency={product.buyer_currency}
+              buyerLocalCurrencyRate={product.buyer_local_currency_rate}
+              buyerLocalCurrencySubunitToUnit={product.buyer_local_currency_subunit_to_unit}
+              buyerLocalPriceCents={buyerLocalPriceCentsForSelection(
+                product.buyer_local_price_cents,
+                discountCode?.valid ? discountCode.discount : null,
+                selection.quantity,
+              )}
+              buyerLocalOriginalPriceCents={product.buyer_local_original_price_cents}
+            />
+          ) : null}
           {notForSaleMessage ? (
             <Alert role="status" variant="warning">
               {notForSaleMessage}
@@ -664,14 +676,6 @@ export const Product = ({
             discount={discountCode?.valid ? withConfiguredOncePerCartAmount(discountCode.discount) : null}
             ref={configurationSelectorRef}
           />
-          {/* Products whose price lives in the configuration selector (options, or
-              recurring tiers) never render the price cell above, so the label goes
-              beside that price instead of disappearing. */}
-          {!showPrice && showSaleLabel ? (
-            <div data-testid="sale-label">
-              <Pill size="small">{saleLabel}</Pill>
-            </div>
-          ) : null}
           {product.ppp_details && pppDiscounted ? (
             <Alert role="status" variant="info">
               This product supports purchasing power parity. Because you're located in{" "}

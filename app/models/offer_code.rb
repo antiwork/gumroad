@@ -36,6 +36,7 @@ class OfferCode < ApplicationRecord
 
   MAX_OWNERSHIP_DURATION_TIERS = 10
   MAX_SALE_LABEL_LENGTH = 32
+  DEFAULT_SALE_LABEL = "Sale"
   # Enough for the seller to recognise the products without an unbounded message.
   NAMED_DEFAULT_DISCOUNT_PRODUCTS = 3
 

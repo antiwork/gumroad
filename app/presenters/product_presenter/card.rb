@@ -60,6 +60,8 @@ class ProductPresenter::Card
 
     # Include base_price_cents when there's a discount to show original price with strikethrough
     props[:original_price_cents] = original_price_cents if original_price_cents.present?
+    sale_label = original_price_cents.present? ? product.auto_apply_sale_label : nil
+    props[:sale_label] = sale_label if sale_label
 
     if compute_description
       props[:description] = truncate_description(product.plaintext_description, description_max_length)
