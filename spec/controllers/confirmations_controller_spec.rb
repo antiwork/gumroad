@@ -127,7 +127,7 @@ describe ConfirmationsController do
           get :show, params: { confirmation_token: brand_account.confirmation_token }
         end.to change { brand_account.reload.confirmed? }.from(false).to(true)
 
-        expect(subject.logged_in_user).to eq(creator)
+        expect(request.env["warden"].user(:user)).to eq(creator)
       end
 
       it "does not invalidate the creator's other sessions" do
