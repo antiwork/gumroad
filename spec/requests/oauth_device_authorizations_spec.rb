@@ -659,6 +659,23 @@ describe "OAuth device authorizations", type: :request do
       expect(response.parsed_body).to include("error" => "slow_down", "interval" => (OauthDeviceAuthorization::SLOW_DOWN_INTERVAL + OauthDeviceAuthorization::SLOW_DOWN_INCREMENT).to_i)
     end
 
+    it "keeps a whole window's polling inside the per-IP budget for the token endpoint" do
+      body = create_device_code
+      interval = body["interval"]
+      errors = []
+
+      while Time.current + interval.seconds <= OauthDeviceAuthorization.last.expires_at
+        travel interval.seconds
+        post oauth_token_path, params: { grant_type: OauthDeviceAuthorization::GRANT_TYPE, client_id: oauth_application.uid, device_code: body["device_code"] }
+        errors << response.parsed_body["error"]
+      end
+
+      # The limit covers every client behind one address, so a window has to leave room for a
+      # second login; and the cadence handed to the client is the cadence the window accepts.
+      expect(errors.count).to be <= 20
+      expect(errors).not_to include("slow_down")
+    end
+
     it "does not run the device grant on OAuth token alias routes" do
       body = create_device_code
       device_authorization = OauthDeviceAuthorization.last

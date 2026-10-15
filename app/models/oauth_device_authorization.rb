@@ -6,9 +6,11 @@ class OauthDeviceAuthorization < ApplicationRecord
   GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code"
   DEVICE_REDIRECT_URI = GRANT_TYPE
   EXPIRES_IN = 10.minutes
-  POLL_INTERVAL = 5.seconds
-  SLOW_DOWN_INTERVAL = 10.seconds
+  # Sized so a whole 10-minute window stays near 20 polls of the token endpoint, which is rate
+  # limited per client IP: a 5-second cadence spent that budget minutes in and stranded approvals.
+  POLL_INTERVAL = 30.seconds
   SLOW_DOWN_INCREMENT = 5.seconds
+  SLOW_DOWN_INTERVAL = POLL_INTERVAL + SLOW_DOWN_INCREMENT
   MAX_CODE_GENERATION_ATTEMPTS = 3
 
   STATUS_PENDING = "pending"
@@ -48,6 +50,7 @@ class OauthDeviceAuthorization < ApplicationRecord
         device_code_digest: digest(device_code),
         user_code_digest: digest(normalize_user_code(user_code)),
         expires_at: EXPIRES_IN.from_now,
+        poll_interval_seconds: POLL_INTERVAL.to_i,
         created_ip_address: ip_address,
         created_user_agent: user_agent
       )
