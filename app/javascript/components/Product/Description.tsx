@@ -26,9 +26,16 @@ export const Description = ({
     editable: false,
   });
   useRunOnce(() => setMounted(true));
+  // The editor applies that content in a microtask queued by its own effect, which runs before this
+  // one, so this microtask lands after it. Until then the stored HTML stays: an editor shown empty
+  // for a frame collapses the description and shifts the page below it.
+  const [filled, setFilled] = React.useState(false);
+  React.useEffect(() => {
+    if (editor && mounted) queueMicrotask(() => setFilled(true));
+  }, [editor, mounted]);
   const publicFilesSettings = React.useMemo(() => ({ files: publicFiles }), [publicFiles]);
 
-  return mounted ? (
+  return filled ? (
     <PublicFilesSettingsContext.Provider value={publicFilesSettings}>
       <EditorContent className="rich-text" dir="auto" editor={editor} />
     </PublicFilesSettingsContext.Provider>
