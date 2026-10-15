@@ -49,9 +49,9 @@ class GdprDataErasureService
       anonymize_buyer_purchases!(anonymized_email:, original_email:)
       erase_email_keyed_records!(anonymized_email:, original_email:)
       log_erasure!
-      # Every run, not only the one that rewrote the rows: a rerun is what queues the members an
-      # earlier run recorded but could not queue.
-      AfterCommitEverywhere.after_commit { enqueue_pending_audience_search_index_jobs! }
+      # Every run, not only the one that rewrote the rows: a rerun is what writes the documents an
+      # earlier run recorded but could not write.
+      AfterCommitEverywhere.after_commit { write_pending_audience_search_documents! }
     end
     # Set only once the anonymize has committed, because it is what makes an unfinished Stripe
     # deletion a retained-PII problem. A failure BEFORE this point erased nothing, and remediating
@@ -580,38 +580,47 @@ class GdprDataErasureService
       end
     end
 
+    # Written through the indexer inline rather than queued: production pushes with reliable_push!,
+    # which holds a job in this process's memory instead of raising when Redis is down, so a queued
+    # job is no proof the document changed. The ids are cleared only once every write succeeded, and
+    # only the ones this call wrote, so a partial failure retries all of them on the next run.
+    #
     # Rescued rather than raised: the erasure has already committed, and a raise here would skip the
-    # guardian deletion that follows. The ids are cleared only once every job is queued, and only the
-    # ones this call queued, so a partial failure re-queues all of them on the next run.
-    def enqueue_pending_audience_search_index_jobs!
-      @user.reload
-      reindex_ids = @user.gdpr_audience_reindex_member_ids
-      unindex_ids = @user.gdpr_audience_unindex_member_ids
-      return if reindex_ids.empty? && unindex_ids.empty?
+    # guardian deletion that follows.
+    def write_pending_audience_search_documents!
+      reindex_ids = unindex_ids = []
+      # A lagging replica would hand back the pre-erasure row, and its body would put the address
+      # back in the index.
+      ApplicationRecord.connected_to(role: :writing) do
+        @user.reload
+        reindex_ids = @user.gdpr_audience_reindex_member_ids
+        unindex_ids = @user.gdpr_audience_unindex_member_ids
+        return if reindex_ids.empty? && unindex_ids.empty?
 
-      # The body goes inline because the worker reads from a possibly-lagging replica.
-      members = AudienceMember.where(id: reindex_ids).to_a
-      # A member deleted since has no row to index, so its document is removed instead.
-      unindex_ids |= reindex_ids - members.map(&:id)
-      members.each do |member|
-        ElasticsearchIndexerWorker.perform_async("index", { "record_id" => member.id, "class_name" => "AudienceMember", "body" => member.as_indexed_json })
-      end
-      unindex_ids.each do |member_id|
-        ElasticsearchIndexerWorker.perform_async("delete", { "record_id" => member_id, "class_name" => "AudienceMember" })
-      end
+        members = AudienceMember.where(id: reindex_ids).to_a
+        # A member deleted since has no row to index, so its document is removed instead.
+        unindex_ids |= reindex_ids - members.map(&:id)
+        indexer = ElasticsearchIndexerWorker.new
+        members.each do |member|
+          indexer.perform("index", { "record_id" => member.id, "class_name" => "AudienceMember", "body" => member.as_indexed_json })
+        end
+        unindex_ids.each do |member_id|
+          indexer.perform("delete", { "record_id" => member_id, "class_name" => "AudienceMember" })
+        end
 
-      @user.reload.with_lock do
-        @user.gdpr_audience_reindex_member_ids = (@user.gdpr_audience_reindex_member_ids - reindex_ids).presence
-        @user.gdpr_audience_unindex_member_ids = (@user.gdpr_audience_unindex_member_ids - unindex_ids).presence
-        @user.save!(validate: false)
+        @user.reload.with_lock do
+          @user.gdpr_audience_reindex_member_ids = (@user.gdpr_audience_reindex_member_ids - reindex_ids).presence
+          @user.gdpr_audience_unindex_member_ids = (@user.gdpr_audience_unindex_member_ids - unindex_ids).presence
+          @user.save!(validate: false)
+        end
       end
     rescue => e
-      Rails.logger.error("GDPR: could not queue audience reindex for user #{@user.id}: #{e.message}")
+      Rails.logger.error("GDPR: could not update audience search documents for user #{@user.id}: #{e.message}")
       ErrorNotifier.notify(e)
       @search_index_error = "Erasure incomplete: audience member search record(s) " \
-                            "#{(reindex_ids.to_a | unindex_ids.to_a).join(', ')} could not be queued for " \
-                            "reindex or removal and may still show the original address in search. Run the " \
-                            "erasure again to queue them before confirming the request as fulfilled."
+                            "#{(reindex_ids | unindex_ids).join(', ')} could not be updated or removed in " \
+                            "search and may still show the original address there. Run the erasure again to " \
+                            "retry them before confirming the request as fulfilled."
       record_incomplete_search_index_note!
     end
 

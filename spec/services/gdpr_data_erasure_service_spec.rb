@@ -854,7 +854,7 @@ describe GdprDataErasureService do
       expect(result[:summary][:sent_post_emails_deleted]).to eq(2)
     end
 
-    it "anonymizes the address on other sellers' audience, follower and imported customer rows" do
+    it "anonymizes the address on other sellers' audience, follower and imported customer rows and in their search documents" do
       seller = create(:user)
       follower = create(:active_follower, user: seller, email: user.email)
       imported_customer = create(:imported_customer, email: user.email)
@@ -863,14 +863,20 @@ describe GdprDataErasureService do
       conflicting_seller = create(:user)
       conflicting_member_id = create(:active_follower, user: conflicting_seller, email: user.email).then { AudienceMember.find_by!(seller: conflicting_seller, email: _1.email).id }
       create(:audience_member, seller: conflicting_seller, email: anonymized_email)
+      member_id = AudienceMember.find_by!(seller:, email: user.email).id
+      other_member_id = AudienceMember.find_by!(seller:, email: "someone@example.com").id
+      recreate_model_index(AudienceMember)
+      index_model_records(AudienceMember)
+      indexed_email = ->(id) { EsClient.get(index: AudienceMember.index_name, id:, ignore: 404)["_source"]&.fetch("email") }
+      expect([member_id, conflicting_member_id, other_member_id].map(&indexed_email)).to eq(["john@example.com", "john@example.com", "someone@example.com"])
       ElasticsearchIndexerWorker.jobs.clear
 
       result = described_class.new(user, performed_by: admin).perform!
 
-      member = AudienceMember.find_by(seller:, email: anonymized_email)
-      search_jobs = ElasticsearchIndexerWorker.jobs.map { _1["args"] }
-      expect(search_jobs).to include(["index", hash_including("record_id" => member.id, "body" => hash_including("email" => anonymized_email))])
-      expect(search_jobs).to include(["delete", { "record_id" => conflicting_member_id, "class_name" => "AudienceMember" }])
+      expect(indexed_email.(member_id)).to eq(anonymized_email)
+      expect(EsClient.exists?(index: AudienceMember.index_name, id: conflicting_member_id)).to be(false)
+      expect(indexed_email.(other_member_id)).to eq("someone@example.com")
+      expect(ElasticsearchIndexerWorker.jobs.select { _1["args"][1]["class_name"] == "AudienceMember" }).to be_empty
       expect(user.reload).to have_attributes(gdpr_audience_reindex_member_ids: [], gdpr_audience_unindex_member_ids: [])
       expect(follower.reload.email).to eq(anonymized_email)
       expect(imported_customer.reload.email).to eq(anonymized_email)
@@ -917,6 +923,8 @@ describe GdprDataErasureService do
       follower = create(:active_follower, email: user.email)
       create(:audience_member, seller: follower.user, email: "deleted-#{user.id}@deleted.gumroad.com")
       allow_any_instance_of(GdprAudienceRecordsAnonymizer).to receive(:anonymize_imported_customers!).and_raise(StandardError, "boom")
+      allow(EsClient).to receive(:index).and_call_original
+      allow(EsClient).to receive(:delete).and_call_original
       ElasticsearchIndexerWorker.jobs.clear
 
       result = described_class.new(user, performed_by: admin).perform!
@@ -926,6 +934,8 @@ describe GdprDataErasureService do
       expect(guest_cart.reload.email).to eq("john@example.com")
       expect(SentPostEmail.exists?(sent_post_email.id)).to eq(true)
       expect(AudienceMember.where(email: "john@example.com").count).to eq(1)
+      expect(EsClient).not_to have_received(:index)
+      expect(EsClient).not_to have_received(:delete)
       expect(ElasticsearchIndexerWorker.jobs.select { _1["args"][1]["class_name"] == "AudienceMember" }).to be_empty
     end
 
@@ -941,9 +951,9 @@ describe GdprDataErasureService do
         raise "transient failure" if log_attempts == 1
         original.call
       end
-      ElasticsearchIndexerWorker.jobs.clear
+      allow(EsClient).to receive(:index).and_call_original
       expect(service.perform![:success]).to eq(false)
-      expect(ElasticsearchIndexerWorker.jobs.select { _1["args"][1]["class_name"] == "AudienceMember" }).to be_empty
+      expect(EsClient).not_to have_received(:index)
 
       result = service.perform!
 
@@ -953,72 +963,75 @@ describe GdprDataErasureService do
       expect(guest_cart.reload.email).to eq(anonymized_email)
       expect(SentPostEmail.where(email: "john@example.com")).to be_empty
       expect(follower.reload.email).to eq(anonymized_email)
+      expect(EsClient).to have_received(:index).with(hash_including(id: AudienceMember.find_by!(email: anonymized_email).id))
       expect(result[:summary]).to include(products_deleted: 1, carts_anonymized: 1, sent_post_emails_deleted: 1, audience_members_anonymized: 1, followers_anonymized: 1)
     end
 
-    it "keeps the members it could not queue for reindex or removal on the account until a rerun queues them" do
+    it "keeps the members whose search documents it could not write on the account until a rerun writes them" do
       user.update!(gumroad_day_timezone: "Pacific Time (US & Canada)")
       anonymized_email = "deleted-#{user.id}@deleted.gumroad.com"
       seller = create(:user)
-      create(:active_follower, user: seller, email: user.email)
+      member_id = create(:active_follower, user: seller, email: user.email).then { AudienceMember.find_by!(seller:, email: _1.email).id }
       departed_seller = create(:user)
-      create(:active_follower, user: departed_seller, email: user.email)
+      departed_member_id = create(:active_follower, user: departed_seller, email: user.email).then { AudienceMember.find_by!(seller: departed_seller, email: _1.email).id }
       conflicting_seller = create(:user)
       conflicting_member_id = create(:active_follower, user: conflicting_seller, email: user.email).then { AudienceMember.find_by!(seller: conflicting_seller, email: _1.email).id }
       create(:audience_member, seller: conflicting_seller, email: anonymized_email)
-      redis_down_for = ["delete"]
-      allow(ElasticsearchIndexerWorker).to receive(:perform_async).and_wrap_original do |original, *args|
-        raise Redis::CannotConnectError, "redis down" if args[1]["class_name"] == "AudienceMember" && args[0].in?(redis_down_for)
-        original.call(*args)
+      recreate_model_index(AudienceMember)
+      index_model_records(AudienceMember)
+      elasticsearch_down_for = [:index, :delete]
+      [:index, :delete].each do |operation|
+        allow(EsClient).to receive(operation).and_wrap_original do |original, *args|
+          raise Faraday::ConnectionFailed, "elasticsearch down" if operation.in?(elasticsearch_down_for) && args.first[:index] == AudienceMember.index_name
+          original.call(*args)
+        end
       end
       allow(ErrorNotifier).to receive(:notify)
-      audience_search_jobs = -> { ElasticsearchIndexerWorker.jobs.map { _1["args"] }.select { _2["class_name"] == "AudienceMember" } }
+      indexed_email = ->(id) { EsClient.get(index: AudienceMember.index_name, id:, ignore: 404)["_source"]&.fetch("email") }
       payout_notes = -> { user.reload.comments.where(comment_type: Comment::COMMENT_TYPE_PAYOUT_NOTE).pluck(:content) }
 
-      ElasticsearchIndexerWorker.jobs.clear
       first = described_class.new(user, performed_by: admin).perform!
 
-      member = AudienceMember.find_by!(seller:, email: anonymized_email)
-      departed_member = AudienceMember.find_by!(seller: departed_seller, email: anonymized_email)
       expect(first[:success]).to eq(false)
-      expect(first[:error]).to include(member.id.to_s, departed_member.id.to_s, conflicting_member_id.to_s)
+      expect(first[:error]).to include(member_id.to_s, departed_member_id.to_s, conflicting_member_id.to_s)
       expect(payout_notes.call).to contain_exactly(a_string_including("GDPR: Erasure incomplete", conflicting_member_id.to_s))
+      expect([member_id, conflicting_member_id].map(&indexed_email)).to eq(["john@example.com", "john@example.com"])
       expect(user.reload).to have_attributes(
-        gdpr_audience_reindex_member_ids: contain_exactly(member.id, departed_member.id),
+        gdpr_audience_reindex_member_ids: contain_exactly(member_id, departed_member_id),
         gdpr_audience_unindex_member_ids: [conflicting_member_id],
       )
 
-      redis_down_for = ["index", "delete"]
-      ElasticsearchIndexerWorker.jobs.clear
+      elasticsearch_down_for = [:delete]
       still_down = described_class.new(User.find(user.id), performed_by: admin).perform!
 
       expect(still_down[:success]).to eq(false)
-      expect(still_down[:error]).to include(conflicting_member_id.to_s)
+      expect(still_down[:error]).to include(member_id.to_s, conflicting_member_id.to_s)
       expect(payout_notes.call.size).to eq(2)
-      expect(audience_search_jobs.call).to be_empty
-      expect(user.reload.gdpr_audience_unindex_member_ids).to eq([conflicting_member_id])
+      expect(indexed_email.(member_id)).to eq(anonymized_email)
+      expect(indexed_email.(conflicting_member_id)).to eq("john@example.com")
+      expect(user.reload).to have_attributes(
+        gdpr_audience_reindex_member_ids: contain_exactly(member_id, departed_member_id),
+        gdpr_audience_unindex_member_ids: [conflicting_member_id],
+      )
 
-      redis_down_for = []
-      departed_member.delete
-      ElasticsearchIndexerWorker.jobs.clear
+      elasticsearch_down_for = []
+      AudienceMember.where(id: departed_member_id).delete_all
       restored = described_class.new(User.find(user.id), performed_by: admin).perform!
 
       expect(restored[:success]).to eq(true)
-      expect(audience_search_jobs.call).to contain_exactly(
-        ["index", hash_including("record_id" => member.id, "body" => hash_including("email" => anonymized_email))],
-        ["delete", { "record_id" => departed_member.id, "class_name" => "AudienceMember" }],
-        ["delete", { "record_id" => conflicting_member_id, "class_name" => "AudienceMember" }],
-      )
+      expect(indexed_email.(member_id)).to eq(anonymized_email)
+      expect([departed_member_id, conflicting_member_id].map { EsClient.exists?(index: AudienceMember.index_name, id: _1) }).to eq([false, false])
       expect(user.reload).to have_attributes(gdpr_audience_reindex_member_ids: [], gdpr_audience_unindex_member_ids: [], gumroad_day_timezone: "Pacific Time (US & Canada)")
     end
 
-    it "keeps the member ids another run records while this one is queueing them" do
+    it "keeps the member ids another run records while this one is writing them" do
       user.update!(gdpr_audience_unindex_member_ids: [999_001])
       create(:active_follower, email: user.email)
-      queued_once = false
-      allow(ElasticsearchIndexerWorker).to receive(:perform_async).and_wrap_original do |original, *args|
-        if args[1]["class_name"] == "AudienceMember" && !queued_once
-          queued_once = true
+      recreate_model_index(AudienceMember)
+      written_once = false
+      allow(EsClient).to receive(:index).and_wrap_original do |original, *args|
+        unless written_once
+          written_once = true
           concurrent_run = User.find(user.id)
           concurrent_run.with_lock do
             concurrent_run.gdpr_audience_unindex_member_ids = concurrent_run.gdpr_audience_unindex_member_ids | [999_002]
@@ -1027,32 +1040,38 @@ describe GdprDataErasureService do
         end
         original.call(*args)
       end
-      ElasticsearchIndexerWorker.jobs.clear
+      allow(EsClient).to receive(:delete).and_call_original
 
       result = described_class.new(user, performed_by: admin).perform!
 
       member = AudienceMember.find_by!(email: "deleted-#{user.id}@deleted.gumroad.com")
       expect(result[:success]).to eq(true)
-      expect(ElasticsearchIndexerWorker.jobs.map { _1["args"] }).to include(
-        ["index", hash_including("record_id" => member.id)],
-        ["delete", { "record_id" => 999_001, "class_name" => "AudienceMember" }],
-      )
+      expect(EsClient.get(index: AudienceMember.index_name, id: member.id)["_source"]["email"]).to eq(member.email)
+      expect(EsClient).to have_received(:delete).with(hash_including(index: AudienceMember.index_name, id: 999_001))
       expect(user.reload).to have_attributes(gdpr_audience_reindex_member_ids: [], gdpr_audience_unindex_member_ids: [999_002])
     end
 
-    it "queues no audience search jobs when a transaction around the erasure rolls back" do
+    it "writes nothing to the audience search index when a transaction around the erasure rolls back" do
       follower = create(:active_follower, email: user.email)
       conflicting_seller = create(:user)
       create(:active_follower, user: conflicting_seller, email: user.email)
       create(:audience_member, seller: conflicting_seller, email: "deleted-#{user.id}@deleted.gumroad.com")
-      ElasticsearchIndexerWorker.jobs.clear
+      member_ids = AudienceMember.where(email: user.email).ids
+      recreate_model_index(AudienceMember)
+      index_model_records(AudienceMember)
+      indexed_emails = -> { member_ids.map { EsClient.get(index: AudienceMember.index_name, id: _1, ignore: 404)["_source"]&.fetch("email") } }
+      allow(EsClient).to receive(:index).and_call_original
+      allow(EsClient).to receive(:delete).and_call_original
 
       ActiveRecord::Base.transaction do
         expect(described_class.new(user, performed_by: admin).perform![:success]).to eq(true)
+        expect(indexed_emails.call).to eq(["john@example.com", "john@example.com"])
         raise ActiveRecord::Rollback
       end
 
-      expect(ElasticsearchIndexerWorker.jobs.select { _1["args"][1]["class_name"] == "AudienceMember" }).to be_empty
+      expect(EsClient).not_to have_received(:index)
+      expect(EsClient).not_to have_received(:delete)
+      expect(indexed_emails.call).to eq(["john@example.com", "john@example.com"])
       expect(User.find(user.id)).to have_attributes(email: "john@example.com", gdpr_audience_reindex_member_ids: [], gdpr_audience_unindex_member_ids: [])
       expect(follower.reload.email).to eq("john@example.com")
     end
