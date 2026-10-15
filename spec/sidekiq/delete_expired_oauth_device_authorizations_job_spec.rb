@@ -30,14 +30,18 @@ describe DeleteExpiredOauthDeviceAuthorizationsJob do
       in_grace = create(:oauth_device_authorization, **approved_attributes, expires_at: 1.second.ago, approved_at: 2.seconds.ago)
       past_grace = create(:oauth_device_authorization, **approved_attributes, expires_at: interval.seconds.ago, approved_at: (interval + 1).seconds.ago)
       without_approved_at = create(:oauth_device_authorization, **approved_attributes, expires_at: 1.second.ago, approved_at: nil)
+      approved_at_expiry = create(:oauth_device_authorization, **approved_attributes, expires_at: 1.second.ago, approved_at: 1.second.ago)
+      consumed_in_grace = create(:oauth_device_authorization, **approved_attributes, status: OauthDeviceAuthorization::STATUS_CONSUMED, expires_at: 1.second.ago, approved_at: 2.seconds.ago)
 
       expect do
         described_class.new.perform
-      end.to change { OauthDeviceAuthorization.count }.by(-2)
+      end.to change { OauthDeviceAuthorization.count }.by(-4)
 
       expect(in_grace.reload).to be_present
       expect { past_grace.reload }.to raise_error(ActiveRecord::RecordNotFound)
       expect { without_approved_at.reload }.to raise_error(ActiveRecord::RecordNotFound)
+      expect { approved_at_expiry.reload }.to raise_error(ActiveRecord::RecordNotFound)
+      expect { consumed_in_grace.reload }.to raise_error(ActiveRecord::RecordNotFound)
     end
   end
 end
