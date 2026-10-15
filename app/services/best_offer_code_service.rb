@@ -6,14 +6,14 @@ class BestOfferCodeService
     @url_code = url_code.presence
     @quantity = quantity
     @buyer = buyer
-    @default_code = @product.default_offer_code&.code
+    @default_codes = default_codes
   end
 
   def result
-    return nil if @url_code.blank? && @default_code.blank?
+    return nil if @url_code.blank? && @default_codes.empty?
 
     url_code_result = evaluate_code(@url_code)
-    default_code_result = evaluate_code(@default_code)
+    default_code_result = @default_codes.lazy.map { evaluate_code(_1) }.find { _1[:valid] }
 
     url_code_valid = url_code_result&.dig(:valid) == true
     default_code_valid = default_code_result&.dig(:valid) == true
@@ -32,6 +32,15 @@ class BestOfferCodeService
   end
 
   private
+    # The buyer's own existing-customer default goes first; when they do not qualify, the
+    # effective default (the shop-wide sale, if one runs) applies instead.
+    def default_codes
+      explicit = @product.default_offer_code
+      codes = [@product.effective_default_offer_code]
+      codes.unshift(explicit) if explicit&.existing_customers_only?
+      codes.compact.uniq.filter_map { _1.code.presence }
+    end
+
     def evaluate_code(code)
       return { valid: false, error_code: :missing_code } if code.blank?
 

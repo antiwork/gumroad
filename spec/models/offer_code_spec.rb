@@ -781,6 +781,134 @@ describe OfferCode do
     end
   end
 
+  describe "shop-wide auto apply and sale label" do
+    let(:seller) { @product.user }
+
+    def universal_code(attrs = {})
+      seller.offer_codes.build({ code: "bf#{SecureRandom.hex(3)}", amount_percentage: 30, universal: true, products: [] }.merge(attrs))
+    end
+
+    it "allows an alive universal code to auto apply" do
+      expect(universal_code(auto_apply: true)).to be_valid
+    end
+
+    it "rejects auto apply on a product-specific code" do
+      code = seller.offer_codes.build(code: "single", amount_percentage: 30, products: [@product], auto_apply: true)
+
+      expect(code).not_to be_valid
+      expect(code.errors.full_messages).to include("Only a discount that applies to all products can be applied automatically.")
+    end
+
+    it "rejects auto apply on a cancellation discount" do
+      code = universal_code(auto_apply: true)
+      code.is_cancellation_discount = true
+      allow(code).to receive(:validate_cancellation_discount_product_type)
+      allow(code).to receive(:validate_cancellation_discount_uniqueness)
+
+      expect(code).not_to be_valid
+      expect(code.errors.full_messages).to include("A cancellation or upsell discount cannot be applied automatically.")
+    end
+
+    it "allows only one alive auto-applied code per seller and never clears the other" do
+      first = universal_code(auto_apply: true)
+      first.save!
+
+      second = universal_code(auto_apply: true)
+      expect(second).not_to be_valid
+      expect(second.errors.full_messages.first).to include("is already applied automatically")
+      expect(first.reload.auto_apply).to be(true)
+    end
+
+    it "lets another seller auto apply their own code" do
+      universal_code(auto_apply: true).save!
+      other = create(:user)
+
+      expect(other.offer_codes.build(code: "other", amount_percentage: 10, universal: true, products: [], auto_apply: true)).to be_valid
+    end
+
+    it "ignores a deleted auto-applied code when checking uniqueness" do
+      first = universal_code(auto_apply: true)
+      first.save!
+      first.update!(deleted_at: Time.current)
+
+      expect(universal_code(auto_apply: true)).to be_valid
+    end
+
+    it "keeps the same code valid on re-save" do
+      code = universal_code(auto_apply: true)
+      code.save!
+
+      expect(code.reload).to be_valid
+    end
+
+    it "refreshes the seller's preloaded auto-applied code after a save" do
+      preloaded = User.includes(:auto_apply_offer_code).find(seller.id)
+      expect(preloaded.auto_apply_offer_code).to be_nil
+
+      code = preloaded.offer_codes.create!(code: "shop", amount_percentage: 30, universal: true, products: [], auto_apply: true)
+      expect(preloaded.auto_apply_offer_code).to eq(code)
+
+      code.update!(auto_apply: false)
+      expect(preloaded.auto_apply_offer_code).to be_nil
+    end
+
+    it "saves a nil auto_apply as false" do
+      code = universal_code(auto_apply: nil)
+      expect(code.save).to be(true)
+      expect(code.reload.auto_apply).to be(false)
+
+      code.update!(auto_apply: true)
+      expect(code.update(auto_apply: nil)).to be(true)
+      expect(code.auto_apply).to be(false)
+      expect(code.reload.auto_apply).to be(false)
+    end
+
+    describe "sale_label" do
+      it "strips whitespace and turns blank into nil" do
+        code = universal_code(auto_apply: true, sale_label: "  Black Friday  ")
+        code.save!
+        expect(code.sale_label).to eq("Black Friday")
+
+        code.update!(sale_label: "   ")
+        expect(code.reload.sale_label).to be_nil
+      end
+
+      it "is cleared on a code that is not auto-applied" do
+        code = universal_code(sale_label: "Black Friday")
+        code.save!
+        expect(code.reload.sale_label).to be_nil
+
+        code.update!(auto_apply: true, sale_label: "Black Friday")
+        expect(code.reload.sale_label).to eq("Black Friday")
+
+        code.update!(auto_apply: false)
+        expect(code.reload.sale_label).to be_nil
+      end
+
+      it "accepts 32 characters and rejects 33" do
+        expect(universal_code(auto_apply: true, sale_label: "a" * 32)).to be_valid
+
+        code = universal_code(auto_apply: true, sale_label: "a" * 33)
+        expect(code).not_to be_valid
+        expect(code.errors.full_messages).to include("The sale label can be at most 32 characters.")
+      end
+
+      it "rejects markup" do
+        code = universal_code(auto_apply: true, sale_label: "<b>Sale</b>")
+
+        expect(code).not_to be_valid
+        expect(code.errors.full_messages).to include("The sale label must be plain text.")
+      end
+    end
+
+    it "includes both fields in as_json" do
+      code = universal_code(auto_apply: true, sale_label: "Easter")
+
+      expect(code.as_json).to include(auto_apply: true, sale_label: "Easter")
+      expect(code.as_json(api_scopes: ["edit_products"])).to include(auto_apply: true, sale_label: "Easter")
+    end
+  end
+
   describe "#as_json" do
     describe "percentage offer codes" do
       before do

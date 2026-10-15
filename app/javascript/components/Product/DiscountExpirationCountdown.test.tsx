@@ -49,4 +49,22 @@ describe("DiscountExpirationCountdown", () => {
     expect(onExpiration).toHaveBeenCalledTimes(1);
     expect(countdownConstructor).not.toHaveBeenCalled();
   });
+
+  it("shows a distant sale end date while keeping its expiration timer active", () => {
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    const { container } = render(
+      <DiscountExpirationCountdown expiresAt={expiresAt} showEndDate onExpiration={() => undefined} />,
+    );
+
+    expect(container.textContent).toContain("This sale ends on");
+    expect(container.querySelector("time")?.dateTime).toBe(expiresAt.toISOString());
+    expect(countdownConstructor).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps distant expiry details hidden unless requested", () => {
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    const { container } = render(<DiscountExpirationCountdown expiresAt={expiresAt} onExpiration={() => undefined} />);
+
+    expect(container.textContent).toBe("");
+  });
 });

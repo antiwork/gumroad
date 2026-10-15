@@ -10,6 +10,7 @@ import { AuthorByline } from "$app/components/Product/AuthorByline";
 import { PriceTag } from "$app/components/Product/PriceTag";
 import { Ribbon } from "$app/components/Product/Ribbon";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
+import { Pill } from "$app/components/ui/Pill";
 import { ProductCard, ProductCardFigure, ProductCardFooter, ProductCardHeader } from "$app/components/ui/ProductCard";
 import { StretchedLink } from "$app/components/ui/StretchedLink";
 import { useRunOnce } from "$app/components/useRunOnce";
@@ -52,7 +53,7 @@ export const Card = ({
         {product.ratings?.count ? <Rating ratings={product.ratings} /> : null}
       </ProductCardHeader>
       <ProductCardFooter>
-        <div className="flex-1 p-4">
+        <div className={classNames("flex-1 p-4", product.sale_label && "flex flex-wrap items-center gap-2")}>
           <PriceTag
             url={product.url}
             currencyCode={product.currency_code}
@@ -72,6 +73,7 @@ export const Card = ({
             buyerLocalPriceCents={product.buyer_local_price_cents}
             buyerLocalOriginalPriceCents={product.buyer_local_original_price_cents}
           />
+          {product.sale_label ? <SaleLabel label={product.sale_label} /> : null}
         </div>
         {footerAction}
       </ProductCardFooter>
@@ -115,7 +117,7 @@ export const HorizontalCard = ({ product, big, eager }: { product: CardProduct; 
           ) : null}
         </ProductCardHeader>
         <ProductCardFooter className="items-center max-lg:flex-col max-lg:items-stretch max-lg:divide-x-0 max-lg:divide-y lg:divide-x-0">
-          <div className="flex-1 p-4 lg:p-0">
+          <div className={classNames("flex-1 p-4 lg:p-0", product.sale_label && "flex flex-wrap items-center gap-2")}>
             <PriceTag
               url={product.url}
               currencyCode={product.currency_code}
@@ -135,6 +137,7 @@ export const HorizontalCard = ({ product, big, eager }: { product: CardProduct; 
               buyerLocalPriceCents={product.buyer_local_price_cents}
               buyerLocalOriginalPriceCents={product.buyer_local_original_price_cents}
             />
+            {product.sale_label ? <SaleLabel label={product.sale_label} /> : null}
           </div>
           {product.ratings?.count ? (
             <div className="p-4 lg:p-0">
@@ -155,4 +158,10 @@ const Rating = ({ ratings, style }: { ratings: Ratings; style?: React.CSSPropert
       {`(${formatOrderOfMagnitude(ratings.count, 1)})`}
     </span>
   </div>
+);
+
+const SaleLabel = ({ label }: { label: string }) => (
+  <Pill size="small" color="primary" className="min-w-0" data-testid="sale-label">
+    <span className="truncate">{label}</span>
+  </Pill>
 );

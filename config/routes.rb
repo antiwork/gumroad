@@ -110,6 +110,7 @@ Rails.application.routes.draw do
       # works instead of guessing. Addressed by the article's slug, same as the web route.
       resources :help_articles, only: [:index, :show], param: :slug, path: "help/articles"
       resource :refund_policy, only: [:show, :update], controller: :refund_policies
+      resources :offer_codes, only: [:index, :show, :update]
       resources :links, path: "products", only: [:index, :show, :update, :create, :destroy] do
         collection do
           get :comps

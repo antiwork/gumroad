@@ -153,6 +153,7 @@ describe ProductPresenter::ProductProps do
                 minimum_amount_cents: nil,
               },
             },
+            sale_label: nil,
             purchase: {
               content_url: nil,
               created_at: purchase.created_at,
@@ -397,6 +398,7 @@ describe ProductPresenter::ProductProps do
               bundle_products: [],
               public_files: [],
             },
+            sale_label: nil,
             discount_code: nil,
             purchase: {
               content_url: nil,
@@ -423,6 +425,70 @@ describe ProductPresenter::ProductProps do
 
           expect(described_class.new(product:).props(seller_custom_domain_url: nil, request:, pundit_user: nil)[:seller]).to be_nil
         end
+      end
+    end
+
+    context "with a shop-wide auto-applied code and sale label" do
+      let(:product) { create(:product, user: seller, price_cents: 1000) }
+      let!(:sale) { seller.offer_codes.create!(code: "BF30", amount_percentage: 30, universal: true, products: [], auto_apply: true, sale_label: "Black Friday") }
+
+      before { Current.reset }
+
+      def props(**opts)
+        presenter.props(seller_custom_domain_url: nil, request:, pundit_user: nil, **opts)
+      end
+
+      it "returns the label when the auto-applied code produced the discount" do
+        result = props
+
+        expect(result[:discount_code]).to include(valid: true, code: "BF30")
+        expect(result[:sale_label]).to eq("Black Friday")
+      end
+
+      it "returns no label when a different, better url code won" do
+        better = create(:percentage_offer_code, products: [product], code: "BIG50", amount_percentage: 50)
+        result = props(discount_code: better.code)
+
+        expect(result[:discount_code][:code]).to eq("BIG50")
+        expect(result[:sale_label]).to be_nil
+      end
+
+      it "returns the label when the buyer arrives with the sale code itself" do
+        expect(props(discount_code: "bf30")[:sale_label]).to eq("Black Friday")
+      end
+
+      it "returns no label when a per-product default wins" do
+        own = create(:percentage_offer_code, products: [product], code: "OWN10", amount_percentage: 10)
+        product.update!(default_offer_code: own)
+
+        expect(props[:discount_code][:code]).to eq("OWN10")
+        expect(props[:sale_label]).to be_nil
+      end
+
+      it "returns the label when the buyer's sale code beats the per-product default" do
+        own = create(:percentage_offer_code, products: [product], code: "OWN10", amount_percentage: 10)
+        product.update!(default_offer_code: own)
+        result = props(discount_code: "bf30")
+
+        expect(result[:discount_code]).to include(valid: true, code: "bf30")
+        expect(result[:sale_label]).to eq("Black Friday")
+      end
+
+      it "returns no label for a per-product default given a label without auto apply" do
+        own = seller.offer_codes.create!(code: "OWN10", amount_percentage: 10, products: [product], sale_label: "Flash sale")
+        product.update!(default_offer_code: own)
+
+        expect(props[:discount_code][:code]).to eq("OWN10")
+        expect(props[:sale_label]).to be_nil
+      end
+
+      it "returns the default label when the code has none, and no label once the sale is over" do
+        sale.update!(sale_label: nil)
+        expect(props[:sale_label]).to eq("Sale")
+
+        sale.update!(sale_label: "Black Friday", valid_at: 3.days.ago, expires_at: 1.day.ago)
+        Current.reset
+        expect(props[:sale_label]).to be_nil
       end
     end
 

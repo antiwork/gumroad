@@ -389,6 +389,24 @@ describe ProfileSectionsPresenter do
       end
     end
 
+    context "when the seller runs a shop-wide auto-applied sale" do
+      let!(:new_seller_products) { create_list(:product, 2, user: new_seller, price_cents: 2000) }
+      let!(:sale) { new_seller.offer_codes.create!(code: "BF30", amount_percentage: 30, universal: true, products: [], auto_apply: true, sale_label: "Black Friday") }
+
+      before do
+        Link.import(force: true, refresh: true)
+        Current.reset
+      end
+
+      it "prices every profile card with the sale and labels it" do
+        props = presenter.props(request:, pundit_user: visitor_pundit_user, seller_custom_domain_url: nil, editing: false, include_default_products_section: true)
+
+        cards = props[:sections].first[:search_results][:products]
+        expect(cards.size).to eq(2)
+        expect(cards).to all(include(price_cents: 1400, original_price_cents: 2000, sale_label: "Black Friday"))
+      end
+    end
+
     context "when the seller has no products and no profile sections" do
       it "returns no sections, preserving the email signup fallback" do
         props = presenter.props(request:, pundit_user: visitor_pundit_user, seller_custom_domain_url: nil, editing: false, include_default_products_section: true)

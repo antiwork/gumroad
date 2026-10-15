@@ -55,6 +55,7 @@ export type CardProduct = {
   ratings: Ratings | null;
   price_cents: number;
   original_price_cents?: number;
+  sale_label?: string;
   currency_code: CurrencyCode;
   buyer_currency?: string;
   buyer_local_currency_rate?: number;

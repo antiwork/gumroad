@@ -1,4 +1,4 @@
-import { Star } from "@boxicons/react";
+import { Discount as DiscountIcon, Star } from "@boxicons/react";
 import { differenceInYears, parseISO } from "date-fns";
 import * as React from "react";
 
@@ -279,6 +279,7 @@ export type Props = {
   product: Product;
   purchase: Purchase | null;
   discount_code: ProductDiscount | null;
+  sale_label?: string | null;
   wishlists: WishlistForProduct[];
 };
 
@@ -289,6 +290,7 @@ export const Product = ({
   product,
   purchase,
   discountCode: initialDiscountCode,
+  saleLabel,
   ctaLabel,
   selection,
   setSelection,
@@ -302,6 +304,8 @@ export const Product = ({
   product: Product;
   purchase: Purchase | null;
   discountCode?: ProductDiscount | null;
+  // The seller's sale label; only sent when the displayed discount is their auto-applied code.
+  saleLabel?: string | null | undefined;
   ctaLabel?: string | undefined;
   selection: PriceSelection;
   setSelection?: React.Dispatch<React.SetStateAction<PriceSelection>>;
@@ -323,7 +327,8 @@ export const Product = ({
     setDiscountCode(initialDiscountCode);
   }, [initialDiscountCode]);
 
-  const selectionAttributes = applySelection(product, discountCode?.valid ? discountCode.discount : null, selection);
+  const discount = discountCode?.valid ? discountCode.discount : null;
+  const selectionAttributes = applySelection(product, discount, selection);
   let { basePriceCents } = selectionAttributes;
   const { priceCents, discountedPriceCents, pppDiscounted, maxQuantity, selectedOption } = selectionAttributes;
   React.useEffect(() => {
@@ -375,86 +380,145 @@ export const Product = ({
     !product.rental?.rent_only &&
     (basePriceCents !== 0 || product.pwyw);
 
+  const hasRatings = product.ratings != null && product.ratings.count > 0;
+
+  // The label names the price the buyer sees, so it shows only while the code produced that price.
+  // applySelection already drops a code whose minimum quantity or amount this selection misses.
+  const codeDiscounts = (attributes: typeof selectionAttributes) =>
+    !attributes.pppDiscounted && attributes.discountedPriceCents < attributes.priceCents;
+  // With no option picked, each visible option shows its own price, so any discounted one earns the label.
+  const showSaleLabel =
+    !!saleLabel &&
+    discountCode === initialDiscountCode &&
+    !!discountCode?.valid &&
+    (product.options.length > 0 && selectedOption === null
+      ? product.options.some(
+          (option) =>
+            !(product.hide_sold_out_variants && option.quantity_left === 0) &&
+            codeDiscounts(applySelection(product, discount, { ...selection, optionId: option.id })),
+        )
+      : codeDiscounts(selectionAttributes));
+
+  const hasDiscountTerms =
+    discount &&
+    (discount.minimum_quantity ||
+      (discount.duration_in_billing_cycles && product.is_recurring_billing) ||
+      discount.minimum_amount_cents ||
+      discount.expires_at);
+
+  const saleBanner =
+    showSaleLabel && discount ? (
+      <div
+        role="status"
+        data-testid="sale-banner"
+        // Without covers, the desktop banner fills the card's top-right corner and follows its inner radius.
+        className={classNames(
+          "flex items-center gap-2 border-b border-border bg-accent-with-text px-6 py-3 font-bold text-accent-foreground",
+          product.covers.length === 0 && "lg:rounded-tr-[calc(var(--radius)_-_var(--border-width))]",
+        )}
+      >
+        <DiscountIcon pack="filled" className="size-5 shrink-0" aria-hidden="true" />
+        <span className="min-w-0 wrap-break-word" data-testid="sale-label">
+          {saleLabel}
+        </span>
+        <span className="ml-auto shrink-0">{formatDiscountAmount(discount, buyerLocalContextFor(product))} off</span>
+      </div>
+    ) : null;
+  const priceTag = showPrice ? (
+    <PriceTag
+      currencyCode={product.currency_code}
+      oldPrice={
+        comparisonPriceCents !== null && discountedPriceCents < comparisonPriceCents ? comparisonPriceCents : undefined
+      }
+      price={discountedPriceCents}
+      url={product.long_url}
+      isPayWhatYouWant={!!product.pwyw}
+      isSalesLimited={product.is_sales_limited}
+      creatorName={product.seller?.name}
+      buyerCurrency={product.buyer_currency}
+      buyerLocalCurrencyRate={product.buyer_local_currency_rate}
+      buyerLocalCurrencySubunitToUnit={product.buyer_local_currency_subunit_to_unit}
+      buyerLocalPriceCents={buyerLocalPriceCentsForSelection(
+        product.buyer_local_price_cents,
+        discount,
+        selection.quantity,
+      )}
+      buyerLocalOriginalPriceCents={product.buyer_local_original_price_cents}
+    />
+  ) : null;
+
   return (
-    <article className="relative grid rounded border border-border bg-background lg:grid-cols-[2fr_1fr]">
+    <article
+      className={classNames(
+        "relative grid rounded border border-border bg-background [grid-template-areas:'covers'_'title'_'price'_'details'_'controls'] lg:grid-cols-[2fr_1fr] lg:grid-rows-[auto_auto_1fr]",
+        saleBanner || priceTag
+          ? "lg:[grid-template-areas:'covers_covers'_'title_price'_'details_controls']"
+          : "lg:[grid-template-areas:'covers_covers'_'title_controls'_'details_controls']",
+      )}
+    >
       <Covers covers={product.covers} mainCoverId={product.main_cover_id} productName={product.name} />
       {product.quantity_remaining !== null ? <Ribbon>{product.quantity_remaining} left</Ribbon> : null}
-      <section className="lg:border-r">
-        <header className="grid gap-4 p-6 not-first:border-t">
-          {/* dir="auto" lets an RTL product name (Hebrew, Arabic) render right-to-left
+      <header className="grid gap-4 p-6 [grid-area:title] lg:border-r">
+        {/* dir="auto" lets an RTL product name (Hebrew, Arabic) render right-to-left
               instead of inheriting the document's LTR base direction, which misplaces
               neutral characters like quotes and digits (gumroad-private#1259; same
               rationale as the description fix in #6138).
               wrap-break-word overrides the inherited global overflow-wrap: anywhere, which
               splits titles mid-word in narrow in-app browsers. */}
-          <h1
-            itemProp="name"
-            dir="auto"
-            className={classNames(
-              "wrap-break-word",
-              scaleLongTitle && product.name.trim().length > LONG_TITLE_LENGTH && "text-[2rem] max-sm:text-[1.5rem]",
-            )}
-          >
-            {product.name}
-          </h1>
-        </header>
-        {/* Stack on mobile: an inflated price in an auto track leaves the name ~1ch
-            wide, and overflow-wrap:anywhere then stacks it one character at a time. */}
-        <section className="grid grid-cols-1 gap-[1px] border-t border-border p-0 sm:grid-cols-[auto_auto_minmax(max-content,1fr)]">
-          {showPrice ? (
-            <div className="px-6 py-4 outline outline-offset-0 outline-border">
-              <PriceTag
-                currencyCode={product.currency_code}
-                oldPrice={
-                  comparisonPriceCents !== null && discountedPriceCents < comparisonPriceCents
-                    ? comparisonPriceCents
-                    : undefined
-                }
-                price={discountedPriceCents}
-                url={product.long_url}
-                isPayWhatYouWant={!!product.pwyw}
-                isSalesLimited={product.is_sales_limited}
-                creatorName={product.seller?.name}
-                buyerCurrency={product.buyer_currency}
-                buyerLocalCurrencyRate={product.buyer_local_currency_rate}
-                buyerLocalCurrencySubunitToUnit={product.buyer_local_currency_subunit_to_unit}
-                buyerLocalPriceCents={buyerLocalPriceCentsForSelection(
-                  product.buyer_local_price_cents,
-                  discountCode?.valid ? discountCode.discount : null,
-                  selection.quantity,
-                )}
-                buyerLocalOriginalPriceCents={product.buyer_local_original_price_cents}
-              />
-            </div>
-          ) : null}
-          {sellerByline ? (
-            <div
-              className={classNames(
-                "flex min-w-0 flex-wrap items-center gap-2 px-6 py-4 outline outline-offset-0 outline-border",
-                !showPrice && "col-span-full sm:col-auto",
-                showPrice && !(product.ratings != null && product.ratings.count > 0) && "sm:col-[2/-1]",
-              )}
-            >
-              {product.collaborating_user ? (
-                <>
-                  {sellerByline} with{" "}
-                  <AuthorByline
-                    name={product.collaborating_user.name}
-                    profileUrl={product.collaborating_user.profile_url}
-                    avatarUrl={product.collaborating_user.avatar_url}
-                  />
-                </>
-              ) : (
-                sellerByline
-              )}
-            </div>
-          ) : null}
-          {product.ratings != null && product.ratings.count > 0 ? (
-            <div className="flex items-center px-6 py-4 outline outline-offset-0 outline-border max-sm:col-span-full">
-              <RatingsSummary ratings={product.ratings} />
-            </div>
-          ) : null}
+        <h1
+          itemProp="name"
+          dir="auto"
+          className={classNames(
+            "wrap-break-word",
+            scaleLongTitle && product.name.trim().length > LONG_TITLE_LENGTH && "text-[2rem] max-sm:text-[1.5rem]",
+          )}
+        >
+          {product.name}
+        </h1>
+      </header>
+      {/* Align the desktop title and price so both layouts keep one accessible reading order. */}
+      {saleBanner || priceTag ? (
+        <section className="border-t [grid-area:price] lg:border-t-0">
+          {saleBanner}
+          {priceTag ? <div className="px-6 py-4 lg:pt-6 lg:pb-0">{priceTag}</div> : null}
         </section>
+      ) : null}
+      <div className="[grid-area:details] lg:border-r">
+        {sellerByline || hasRatings ? (
+          <section className="grid grid-cols-1 gap-[1px] border-t border-border p-0 sm:grid-cols-[minmax(0,1fr)_auto]">
+            {sellerByline ? (
+              <div
+                className={classNames(
+                  "flex min-w-0 flex-wrap items-center gap-2 px-6 py-4 outline outline-offset-0 outline-border",
+                  !hasRatings && "sm:col-span-full",
+                )}
+              >
+                {product.collaborating_user ? (
+                  <>
+                    {sellerByline} with{" "}
+                    <AuthorByline
+                      name={product.collaborating_user.name}
+                      profileUrl={product.collaborating_user.profile_url}
+                      avatarUrl={product.collaborating_user.avatar_url}
+                    />
+                  </>
+                ) : (
+                  sellerByline
+                )}
+              </div>
+            ) : null}
+            {product.ratings != null && hasRatings ? (
+              <div
+                className={classNames(
+                  "flex items-center px-6 py-4 outline outline-offset-0 outline-border",
+                  !sellerByline && "sm:col-span-full",
+                )}
+              >
+                <RatingsSummary ratings={product.ratings} />
+              </div>
+            ) : null}
+          </section>
+        ) : null}
         {purchase !== null ? (
           <ExistingPurchaseCard
             purchase={purchase}
@@ -527,9 +591,9 @@ export const Product = ({
             <LazyDescription html={product.description_html} publicFiles={product.public_files} />
           </CollapsibleDescription>
         </section>
-      </section>
-      <section>
-        <section className="grid gap-4 p-6 not-first:border-t">
+      </div>
+      <section className="[grid-area:controls]">
+        <section className="grid gap-4 border-t p-6 lg:border-t-0">
           {notForSaleMessage ? (
             <Alert role="status" variant="warning">
               {notForSaleMessage}
@@ -542,15 +606,26 @@ export const Product = ({
           ) : null}
           {discountCode ? (
             discountCode.valid ? (
-              (discountedPriceCents < priceCents ||
-                discountCode.discount.minimum_quantity ||
-                (discountCode.discount.type === "fixed" && discountCode.discount.once_per_cart)) &&
-              !pppDiscounted ? (
+              (
+                showSaleLabel
+                  ? hasDiscountTerms
+                  : (discountedPriceCents < priceCents ||
+                      discountCode.discount.minimum_quantity ||
+                      discountCode.discount.minimum_amount_cents ||
+                      (discountCode.discount.type === "fixed" && discountCode.discount.once_per_cart)) &&
+                    !pppDiscounted
+              ) ? (
                 <Alert role="status" variant="success">
                   <div className="flex flex-col gap-4">
-                    {discountCode.discount.minimum_quantity
-                      ? `Get ${formatDiscountAmount(discountCode.discount, buyerLocalContextFor(product))} off when you buy ${discountCode.discount.minimum_quantity} or more (Code ${discountCode.code.toUpperCase()})`
-                      : `${formatDiscountAmount(discountCode.discount, buyerLocalContextFor(product))} off will be applied at checkout (Code ${discountCode.code.toUpperCase()})`}
+                    {showSaleLabel ? (
+                      discountCode.discount.minimum_quantity ? (
+                        <div>Applies when you buy {discountCode.discount.minimum_quantity} or more.</div>
+                      ) : null
+                    ) : discountCode.discount.minimum_quantity ? (
+                      `Get ${formatDiscountAmount(discountCode.discount, buyerLocalContextFor(product))} off when you buy ${discountCode.discount.minimum_quantity} or more (Code ${discountCode.code.toUpperCase()})`
+                    ) : (
+                      `${formatDiscountAmount(discountCode.discount, buyerLocalContextFor(product))} off will be applied at checkout (Code ${discountCode.code.toUpperCase()})`
+                    )}
                     {discountCode.discount.duration_in_billing_cycles && product.is_recurring_billing ? (
                       <div>This discount will only apply to the first payment of your subscription.</div>
                     ) : null}
@@ -576,6 +651,7 @@ export const Product = ({
                     {discountCode.discount.expires_at ? (
                       <DiscountExpirationCountdown
                         expiresAt={new Date(discountCode.discount.expires_at)}
+                        showEndDate={showSaleLabel}
                         onExpiration={() => setDiscountCode({ valid: false, error_code: "inactive" })}
                       />
                     ) : null}
@@ -731,7 +807,7 @@ const Covers = ({
       activeCoverId={activeCoverId}
       setActiveCoverId={setActiveCoverId}
       productName={productName}
-      className={activeCoverId ? "" : "pb-[25%]"}
+      className={classNames("[grid-area:covers]", !activeCoverId && "pb-[25%]")}
     />
   );
 };

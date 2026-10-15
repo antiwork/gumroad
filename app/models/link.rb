@@ -1134,6 +1134,32 @@ class Link < ApplicationRecord
     offer_codes.alive.find_by_code(code) || universal_offer_codes.find_by_code(code)
   end
 
+  # The code that applies with no ?code= in the URL. An explicit per-product default wins over
+  # the seller's shop-wide auto-apply code only while buyers can still redeem it; a lapsed one
+  # would otherwise hold this product at full price through the shop-wide sale.
+  def effective_default_offer_code
+    explicit = default_offer_code
+    auto_code = user.auto_apply_offer_code_for(self)
+    return explicit if auto_code.nil?
+    return auto_code if explicit.nil?
+
+    # In-memory checks only: scope detachment (default_offer_code_detached?) costs a query per
+    # product on card pages, and OfferCode#repair_detached_default_discounts clears those defaults.
+    # An existing-customers-only default cannot price the page for an unknown buyer, so the sale
+    # takes over here; BestOfferCodeService still tries it first for a buyer who qualifies.
+    redeemable = !explicit.deleted? && explicit.code.present? && !explicit.inactive? && !explicit.existing_customers_only? &&
+                 explicit.is_currency_valid?(self) && default_offer_code_uses_left?(explicit)
+    redeemable ? explicit : auto_code
+  end
+
+  # The label for a discount produced by the seller's auto-applied code; "Sale" when they set none.
+  def auto_apply_sale_label
+    code = effective_default_offer_code
+    return if code.nil? || code != user.auto_apply_offer_code_for(self)
+
+    code.sale_label.presence || OfferCode::DEFAULT_SALE_LABEL
+  end
+
   # A default discount buyers can no longer redeem: the code was deleted,
   # carries no code (checkout resolves defaults by code, and legacy rows could
   # point at codeless upsell discounts), or stopped applying to this product.

@@ -229,8 +229,8 @@ describe Pages::ProductPrices do
 
     # discounted_price_cents reads default_offer_code for every product, so a profile whose
     # products are all discounted issues one offer-code query per product unless it is preloaded —
-    # on an uncached public page rendered up to MAX_ITEMS times. The second query is the codes'
-    # option scope (offer_codes_variants), also loaded once for the whole page.
+    # on an uncached public page rendered up to MAX_ITEMS times. The other two are the codes'
+    # option scope (offer_codes_variants) and the seller's auto-applied code, each loaded once.
     it "loads the default offer codes in a fixed number of queries regardless of how many products carry one" do
       offer_code = seller.offer_codes.create!(code: "half", amount_percentage: 50, products: [product])
       product.update!(default_offer_code: offer_code)
@@ -247,7 +247,54 @@ describe Pages::ProductPrices do
       described_class.build(seller, ip: nil)
       ActiveSupport::Notifications.unsubscribe(subscriber)
 
-      expect(queries.size).to eq(2)
+      expect(queries.size).to eq(3)
+    end
+
+    it "hands spent capped defaults over to the auto-applied code without a per-product uses read" do
+      seller.offer_codes.create!(code: "shop", amount_percentage: 20, universal: true, products: [], auto_apply: true)
+      add_spent_default = lambda do |target|
+        code = seller.offer_codes.create!(code: "own#{target.id}", amount_percentage: 50, products: [target], max_purchase_count: 1)
+        target.update!(default_offer_code: code)
+        create(:purchase, link: target, offer_code: code, seller:)
+      end
+      add_spent_default.call(product)
+      count_queries = lambda do
+        Current.reset
+        queries = 0
+        subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |*, payload|
+          queries += 1 unless payload[:name] == "SCHEMA"
+        end
+        prices = described_class.build(seller, ip: nil)
+        ActiveSupport::Notifications.unsubscribe(subscriber)
+        [prices, queries]
+      end
+
+      prices, few = count_queries.call
+      expect(prices[product.general_permalink][:price_cents]).to eq(1120)
+
+      3.times { add_spent_default.call(create(:product, user: seller, price_cents: 1000)) }
+      prices, many = count_queries.call
+
+      expect(prices.values.map { _1[:price_cents] }).to contain_exactly(1120, 800, 800, 800)
+      expect(many).to eq(few)
+    end
+
+    it "prices every product with a shop-wide auto-applied code in a fixed number of queries" do
+      seller.offer_codes.create!(code: "shop", amount_percentage: 50, universal: true, products: [], auto_apply: true)
+      Current.reset
+
+      queries = []
+      count = ->(*, payload) { queries << payload[:sql] if payload[:sql].include?("offer_codes") && payload[:name] != "SCHEMA" }
+      baseline = ActiveSupport::Notifications.subscribed(count, "sql.active_record") { described_class.build(seller, ip: nil) }
+      expect(baseline[product.general_permalink][:price_cents]).to eq(700)
+      few = queries.size
+
+      3.times { create(:product, user: seller, price_cents: 1000) }
+      queries.clear
+      Current.reset
+      ActiveSupport::Notifications.subscribed(count, "sql.active_record") { described_class.build(seller, ip: nil) }
+
+      expect(queries.size).to eq(few)
     end
 
     it "quotes the discount only when the code covers the lowest-priced option" do
@@ -664,6 +711,8 @@ describe Pages::ProductPrices do
     # catches that N+1 and any future per-product read this uncached public path grows.
     it "issues the same number of queries however many tiered memberships the catalogue holds" do
       count_queries = lambda do
+        # One request's worth of per-request memos (the seller's auto-apply code) each time.
+        Current.reset
         queries = 0
         subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |*, payload|
           queries += 1 unless payload[:name] == "SCHEMA"

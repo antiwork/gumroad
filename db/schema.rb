@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_16_160001) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_16_170000) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -1528,6 +1528,8 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_16_160001) do
     t.bigint "flags", default: 0, null: false
     t.boolean "existing_customers_only", default: false, null: false
     t.json "ownership_duration_tiers"
+    t.boolean "auto_apply", default: false, null: false
+    t.string "sale_label"
     t.index ["code", "link_id"], name: "index_offer_codes_on_code_and_link_id"
     t.index ["link_id"], name: "index_offer_codes_on_link_id"
     t.index ["name", "link_id"], name: "index_offer_codes_on_name_and_link_id", length: { name: 191 }

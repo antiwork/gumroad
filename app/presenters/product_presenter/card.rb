@@ -14,7 +14,7 @@ class ProductPresenter::Card
     {
       default_offer_code: :variants,
       tiers: :alive_prices,
-      user: [:custom_domain, { avatar_attachment: { blob: { variant_records: { image_attachment: :blob } } } }],
+      user: [:custom_domain, { auto_apply_offer_code: [:excluded_products, :variants], avatar_attachment: { blob: { variant_records: { image_attachment: :blob } } } }],
       variant_categories_alive: :alive_variants,
       thumbnail_alive: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } },
       display_asset_previews: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } },
@@ -60,6 +60,8 @@ class ProductPresenter::Card
 
     # Include base_price_cents when there's a discount to show original price with strikethrough
     props[:original_price_cents] = original_price_cents if original_price_cents.present?
+    sale_label = original_price_cents.present? ? product.auto_apply_sale_label : nil
+    props[:sale_label] = sale_label if sale_label
 
     if compute_description
       props[:description] = truncate_description(product.plaintext_description, description_max_length)

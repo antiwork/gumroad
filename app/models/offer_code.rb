@@ -35,6 +35,8 @@ class OfferCode < ApplicationRecord
   alias_attribute :duration_in_billing_cycles, :duration_in_months
 
   MAX_OWNERSHIP_DURATION_TIERS = 10
+  MAX_SALE_LABEL_LENGTH = 32
+  DEFAULT_SALE_LABEL = "Sale"
   # Enough for the seller to recognise the products without an unbounded message.
   NAMED_DEFAULT_DISCOUNT_PRODUCTS = 3
 
@@ -51,9 +53,18 @@ class OfferCode < ApplicationRecord
   validate :validate_excluded_products
   validate :validate_default_discount_remains_applicable
   validate :validate_option_scope
+  validate :validate_auto_apply
+  validate :validate_sale_label
 
+
+  before_validation :normalize_sale_label
+  # Before validate_auto_apply, so concurrent auto-apply saves for one seller serialize on the
+  # seller row. A raw locking read: `user.lock!` reloads the seller, or raises on unsaved changes.
+  before_validation :lock_seller_for_auto_apply, if: :auto_apply?
+  before_validation { self.auto_apply = false if auto_apply.nil? }
 
   after_save :invalidate_product_cache
+  after_save :forget_auto_apply_offer_code
   after_save :reindex_associated_products
   after_save :note_column_applicability_changes
   after_commit :repair_detached_default_discounts, if: -> { @applicability_changed }
@@ -161,6 +172,8 @@ class OfferCode < ApplicationRecord
         max_purchase_count:,
         minimum_amount_cents:,
         universal: universal?,
+        auto_apply:,
+        sale_label:,
         times_used:
       }
 
@@ -182,6 +195,11 @@ class OfferCode < ApplicationRecord
       max_purchase_count:,
       minimum_amount_cents:,
       universal: universal?,
+      auto_apply:,
+      sale_label:,
+      valid_at: valid_at&.iso8601,
+      expires_at: expires_at&.iso8601,
+      currency_type:,
       times_used:
     }
 
@@ -684,6 +702,53 @@ class OfferCode < ApplicationRecord
     def capture_reindex_product_ids
       @reindex_product_ids = products.ids
       @reindex_excluded_product_ids = excluded_products.ids if universal?
+    end
+
+    # A label belongs to the auto-applied sale; clearing it here keeps API writes in line with the dashboard.
+    def normalize_sale_label
+      self.sale_label = auto_apply? ? sale_label.to_s.strip.presence : nil
+    end
+
+    def validate_sale_label
+      return if sale_label.blank?
+
+      if sale_label.length > MAX_SALE_LABEL_LENGTH
+        errors.add(:base, "The sale label can be at most #{MAX_SALE_LABEL_LENGTH} characters.")
+      elsif sale_label.match?(/[<>]/)
+        errors.add(:base, "The sale label must be plain text.")
+      end
+    end
+
+    def forget_auto_apply_offer_code
+      Current.auto_apply_offer_codes = nil
+      association(:user).target&.association(:auto_apply_offer_code)&.reset
+    end
+
+    def lock_seller_for_auto_apply
+      return if user_id.blank? || deleted_at.present?
+
+      User.where(id: user_id).lock.pick(:id)
+    end
+
+    # A seller has at most one shop-wide auto-applied code, and it must be a plain
+    # "all products" discount. Never clears another code silently: the seller turns
+    # the other one off first.
+    def validate_auto_apply
+      return unless auto_apply?
+      return if deleted_at.present?
+
+      errors.add(:base, "Only a discount that applies to all products can be applied automatically.") unless universal?
+      errors.add(:base, "A cancellation or upsell discount cannot be applied automatically.") if is_cancellation_discount? || upsell.present?
+      return if user_id.blank?
+
+      # `update` assigns associations before the seller lock, fixing the REPEATABLE READ snapshot,
+      # so it needs a current read. A create's first read is the seller lock; locking here too would
+      # take gap locks that can deadlock two sellers' concurrent inserts.
+      other = OfferCode.alive.where(user_id:, auto_apply: true)
+      other = other.where.not(id:).lock if persisted?
+      if (existing = other.first)
+        errors.add(:base, "Another discount (#{existing.code}) is already applied automatically. Turn it off first.")
+      end
     end
 
     def validate_not_used_as_default_discount

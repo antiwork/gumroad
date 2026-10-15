@@ -367,6 +367,109 @@ describe Ai::StoreAgentService do
       end
     end
 
+    context "automatic sales through the real v2 API" do
+      let!(:product) { create(:product, user: seller, price_cents: 2000) }
+      let(:starts_at) { "2026-11-27T00:00:00-05:00" }
+      let(:ends_at) { "2026-12-01T00:00:00-05:00" }
+      let(:executor) { Ai::StoreAgentActionExecutor.new(seller:, pundit_user:) }
+
+      before do
+        seller.update!(timezone: "Eastern Time (US & Canada)")
+        allow(Ai::StoreAgentApiClient).to receive(:new).and_call_original
+      end
+
+      def propose_sale(endpoint:, body:, code: nil)
+        path_params = { "link_id" => product.external_id }
+        path_params["id"] = code.external_id if code
+        allow(client).to receive(:messages).and_return(
+          tool_result("api_write", { "endpoint" => endpoint, "path_params" => path_params, "params" => body }),
+          text_result("Ready.", outcome: "proposal_ready"),
+        )
+        service.respond(messages: [{ role: "user", content: "Set up this automatic sale." }]).fetch(:proposed_action)
+      end
+
+      it "proposes a labeled schedule without saving and applies it after confirmation" do
+        body = { "name" => "BLACKFRIDAY30", "amount_off" => 30, "offer_type" => "percent", "universal" => true,
+                 "auto_apply" => true, "sale_label" => "Black Friday", "valid_at" => starts_at, "expires_at" => ends_at }
+        action = nil
+        expect { action = propose_sale(endpoint: "create_offer_code", body:) }.not_to change(OfferCode, :count)
+        expect(action[:fields]).to include(
+          { label: "Apply automatically", value: "On" }, { label: "Sale label", value: "Black Friday" },
+          { label: "Starts at", value: "Nov 27, 2026, 12:00 AM EST" }, { label: "Ends at", value: "Dec 1, 2026, 12:00 AM EST" },
+          { label: "Redemption", value: "Automatic on product pages; no code required" },
+        )
+
+        result = executor.execute(type: action[:type], params: action[:params])
+
+        expect(result[:success]).to be(true), result.inspect
+        code = seller.offer_codes.alive.sole
+        expect(code).to have_attributes(auto_apply: true, sale_label: "Black Friday", valid_at: Time.utc(2026, 11, 27, 5), expires_at: Time.utc(2026, 12, 1, 5))
+        expect(result[:object][:fields]).to include(
+          { label: "Apply automatically", value: "On" }, { label: "Sale label", value: "Black Friday" },
+          { label: "Starts at", value: "Nov 27, 2026, 12:00 AM EST" }, { label: "Ends at", value: "Dec 1, 2026, 12:00 AM EST" },
+        )
+        travel_to(Time.utc(2026, 11, 28)) { expect(product.reload.discounted_price_cents(2000)).to eq(1400) }
+      end
+
+      it "gives the model the store's time zone and local time" do
+        captured = nil
+        allow(client).to receive(:messages) do |args|
+          captured = args
+          text_result("ok")
+        end
+
+        travel_to(Time.utc(2026, 10, 15, 18)) { service.respond(messages: [{ role: "user", content: "hi" }]) }
+
+        expect(captured[:system]).to include("Store time zone: America/New_York. Current time there: 2026-10-15T14:00:00-04:00.")
+      end
+
+      it "reschedules and disables an existing automatic sale only after confirmation" do
+        code = create(:percentage_offer_code, user: seller, universal: true, products: [], auto_apply: true, sale_label: "Old sale")
+        body = { "auto_apply" => true, "sale_label" => "New sale", "valid_at" => starts_at, "expires_at" => ends_at }
+        action = propose_sale(endpoint: "update_offer_code", body:, code:)
+        expect(code.reload).to have_attributes(sale_label: "Old sale", valid_at: nil, expires_at: nil)
+        result = executor.execute(type: action[:type], params: action[:params])
+        expect(result[:success]).to be(true), result.inspect
+        expect(code.reload).to have_attributes(sale_label: "New sale", valid_at: Time.utc(2026, 11, 27, 5), expires_at: Time.utc(2026, 12, 1, 5))
+
+        action = propose_sale(endpoint: "update_offer_code", body: { "auto_apply" => false, "valid_at" => "", "expires_at" => "" }, code:)
+        expect(code.reload.auto_apply).to be(true)
+        result = executor.execute(type: action[:type], params: action[:params])
+        expect(result[:success]).to be(true), result.inspect
+        expect(code.reload).to have_attributes(auto_apply: false, sale_label: nil, valid_at: nil, expires_at: nil)
+        expect(result[:object][:fields]).to include({ label: "Apply automatically", value: "Off" })
+      end
+
+      it "finds and disables an automatic sale outside the product's scope" do
+        code = create(:offer_code, user: seller, universal: true, products: [], amount_percentage: nil, amount_cents: 100, currency_type: "eur", auto_apply: true, excluded_products: [product])
+        expect(product.product_and_universal_offer_codes).not_to include(code)
+        allow(client).to receive(:messages).and_return(
+          tool_result("api_read", { "endpoint" => "list_store_offer_codes", "params" => { "auto_apply" => true } }),
+          tool_result("api_read", { "endpoint" => "get_store_offer_code", "path_params" => { "id" => code.external_id } }),
+          tool_result("api_write", { "endpoint" => "update_store_offer_code", "path_params" => { "id" => code.external_id }, "params" => { "auto_apply" => false } }),
+          text_result("Ready.", outcome: "proposal_ready"),
+        )
+
+        action = service.respond(messages: [{ role: "user", content: "Turn off the current automatic sale." }]).fetch(:proposed_action)
+        expect(code.reload.auto_apply).to be(true)
+        result = executor.execute(type: action[:type], params: action[:params])
+
+        expect(result[:success]).to be(true), result.inspect
+        expect(code.reload.auto_apply).to be(false)
+        expect(result[:object][:fields]).to include({ label: "Apply automatically", value: "Off" })
+      end
+
+      it "refuses a second automatic sale through the real API" do
+        existing = create(:percentage_offer_code, user: seller, universal: true, products: [], auto_apply: true)
+        action = propose_sale(endpoint: "create_offer_code", body: { "name" => "SECOND", "amount_off" => 30, "offer_type" => "percent", "universal" => true, "auto_apply" => true })
+        result = nil
+        expect { result = executor.execute(type: action[:type], params: action[:params]) }.not_to change(OfferCode, :count)
+        expect(result[:success]).to be(false)
+        expect(result[:message]).to include("is already applied automatically")
+        expect(existing.reload.auto_apply).to be(true)
+      end
+    end
+
     context "discount coverage through the real v2 API" do
       let!(:usd_product) { create(:product, user: seller, name: "USD guide", price_currency_type: "usd", price_cents: 1000) }
       let!(:eur_product) { create(:product, user: seller, name: "EUR guide", price_currency_type: "eur", price_cents: 1000) }

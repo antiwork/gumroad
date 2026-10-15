@@ -85,6 +85,7 @@ class ProductPresenter::ProductProps
         public_files: product.alive_public_files.attached.map { PublicFilePresenter.new(public_file: _1).props },
       },
       discount_code: discount_code_result,
+      sale_label: sale_label(discount_code_result),
       purchase: purchase_props(product.purchase_info_for_product_page(pundit_user&.user, incoming_browser_guid(request), purchase_id:, purchase_email_digest:)),
       wishlists: pundit_user&.seller.present? ? (
         pundit_user.seller.wishlists.alive.includes(:alive_wishlist_products).map { |wishlist| WishlistPresenter.new(wishlist:).listing_props(product:) }
@@ -112,6 +113,18 @@ class ProductPresenter::ProductProps
       return if request.try(:env)&.[](ApplicationController::MINTED_GUMROAD_GUID_ENV_KEY)
 
       request.cookie_jar[:_gumroad_guid]
+    end
+
+    # Only the seller's own auto-applied sale gets its label: a buyer who arrived with a different
+    # ?code= that won the discount must not see this label next to a price it did not produce.
+    def sale_label(discount_code_result)
+      return unless discount_code_result&.dig(:valid)
+
+      auto_code = product.user.auto_apply_offer_code_for(product)
+      return if auto_code.nil?
+      return unless OfferCode.normalize_code(discount_code_result[:code]).to_s.casecmp?(auto_code.code.to_s)
+
+      auto_code.sale_label.presence || OfferCode::DEFAULT_SALE_LABEL
     end
 
     def discount_code_props(discount_code_from_url, quantity, buyer)

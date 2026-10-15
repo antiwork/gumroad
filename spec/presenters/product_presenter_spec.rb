@@ -170,6 +170,7 @@ describe ProductPresenter do
             public_files: [],
           },
           discount_code: nil,
+          sale_label: nil,
           purchase: {
             content_url: nil,
             id: purchase.external_id,

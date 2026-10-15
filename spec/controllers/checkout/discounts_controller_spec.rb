@@ -249,6 +249,28 @@ describe Checkout::DiscountsController do
       let(:record) { OfferCode }
     end
 
+    it "saves the auto apply toggle and sale label" do
+      post :create, params: {
+        name: "BF", code: "bf30", amount_percentage: 30, universal: true, selected_product_ids: [],
+        auto_apply: true, sale_label: "  Black Friday ",
+      }, as: :json
+
+      expect(response.parsed_body["success"]).to eq(true)
+      offer_code = seller.offer_codes.find_by(code: "bf30")
+      expect(offer_code.auto_apply).to eq(true)
+      expect(offer_code.sale_label).to eq("Black Friday")
+      expect(response.parsed_body["offer_codes"].first).to include("auto_apply" => true, "sale_label" => "Black Friday")
+    end
+
+    it "refuses a second auto-applied code with a clear message" do
+      seller.offer_codes.create!(code: "first", amount_percentage: 10, universal: true, products: [], auto_apply: true)
+
+      post :create, params: { name: "BF", code: "bf30", amount_percentage: 30, universal: true, selected_product_ids: [], auto_apply: true }, as: :json
+
+      expect(response.parsed_body["success"]).to eq(false)
+      expect(response.parsed_body["error_message"]).to include("already applied automatically")
+    end
+
     it "returns HTTP success and creates an offer code" do
       valid_at = ActiveSupport::TimeZone[seller.timezone].parse("January 1 #{Time.current.year - 1}")
       expires_at = ActiveSupport::TimeZone[seller.timezone].parse("January 1 #{Time.current.year + 1}")
@@ -581,6 +603,17 @@ describe Checkout::DiscountsController do
       let(:policy_klass) { Checkout::OfferCodePolicy }
       let(:record) { offer_code }
       let(:request_params) { { id: offer_code.external_id } }
+    end
+
+    it "turns auto apply and the label on and off" do
+      universal = create(:offer_code, user: seller, products: [], universal: true, code: "uni", amount_percentage: 10, currency_type: nil)
+
+      put :update, params: { id: universal.external_id, universal: true, selected_product_ids: [], auto_apply: true, sale_label: "Easter" }, as: :json
+      expect(response.parsed_body["success"]).to eq(true)
+      expect(universal.reload).to have_attributes(auto_apply: true, sale_label: "Easter")
+
+      put :update, params: { id: universal.external_id, universal: true, selected_product_ids: [], auto_apply: false, sale_label: nil }, as: :json
+      expect(universal.reload).to have_attributes(auto_apply: false, sale_label: nil)
     end
 
     it "returns HTTP success and updates the offer code" do

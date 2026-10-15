@@ -260,7 +260,10 @@ export const applySelection = (
   product: Product,
   discount: Discount | null,
   selection: PriceSelection,
-  { preserveOncePerCartAllocation = false }: { preserveOncePerCartAllocation?: boolean } = {},
+  {
+    preserveOncePerCartAllocation = false,
+    discountConditionsVerified = false,
+  }: { preserveOncePerCartAllocation?: boolean; discountConditionsVerified?: boolean } = {},
 ) => {
   const basePriceCents = !product.is_legacy_subscription
     ? selection.rent && product.rental
@@ -273,7 +276,11 @@ export const applySelection = (
   // An option the code is not scoped to keeps its normal price, before and after purchase.
   const optionDiscount = discount && discountAppliesToOption(discount, product, selection.optionId) ? discount : null;
   const applicableDiscount =
-    optionDiscount && hasMetDiscountConditions(optionDiscount, selection.quantity)
+    optionDiscount &&
+    (discountConditionsVerified ||
+      (hasMetDiscountConditions(optionDiscount, Math.min(selection.quantity, maxQuantity ?? Infinity)) &&
+        priceCents * Math.min(selection.quantity, maxQuantity ?? Infinity) >=
+          (optionDiscount.minimum_amount_cents ?? 0)))
       ? preserveOncePerCartAllocation
         ? optionDiscount
         : withConfiguredOncePerCartAmount(optionDiscount)
@@ -287,6 +294,7 @@ export const applySelection = (
     selectedOption,
     basePriceCents,
     priceCents,
+    applicableDiscount,
     discountedPriceCents: discountedPrice.value,
     discountedTotalCents,
     pppDiscounted: discountedPrice.ppp,
@@ -368,7 +376,7 @@ export const OptionRadioButton = ({
           </Alert>
         ) : null}
         {hidePrice ? null : (
-          <Pill id={priceId} className="shrink-0">
+          <Pill id={priceId} className="shrink-0 gap-1">
             {discountedPriceCents < priceCents ? (
               <>
                 <s>{formatBuyerLocalOrSetPrice(priceCents, buyerLocalContext)}</s>{" "}
@@ -751,10 +759,8 @@ export const ConfigurationSelector = React.forwardRef<
       ...(typeof update === "function" ? update(prevSelection) : update),
     }));
   const previewDiscount = (previewSelection: PriceSelection) => {
-    const previewed = discountForSelection ? discountForSelection(previewSelection) : discount;
-    // Every option's radio shows the price the buyer would pay for it, so the code is dropped for
-    // the options it is not scoped to.
-    return previewed && discountAppliesToOption(previewed, product, previewSelection.optionId) ? previewed : null;
+    if (discountForSelection) return discountForSelection(previewSelection);
+    return applySelection(product, discount, previewSelection).applicableDiscount;
   };
 
   const selectedOption = product.options.find(({ id }) => id === selection.optionId) ?? null;
@@ -767,7 +773,10 @@ export const ConfigurationSelector = React.forwardRef<
     hasRentOption,
     hasMultipleRecurrences,
     hasConfigurableQuantity,
-  } = applySelection(product, discount, selection);
+  } = applySelection(product, discount, selection, {
+    discountConditionsVerified: !!discountForSelection,
+    preserveOncePerCartAllocation: !!discountForSelection,
+  });
   const suggestedPriceCents = Math.max(
     (selectedOption && selection.recurrence
       ? selectedOption.recurrence_price_values?.[selection.recurrence]?.suggested_price_cents

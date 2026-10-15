@@ -45,7 +45,16 @@ export const Layout = (
     hideSellerByline?: boolean;
   },
 ) => {
-  const { product, purchase, discount_code: discountCode, cart, hasHero, wishlists, main_section_index } = props;
+  const {
+    product,
+    purchase,
+    discount_code: discountCode,
+    sale_label: saleLabel,
+    cart,
+    hasHero,
+    wishlists,
+    main_section_index,
+  } = props;
   const [selection, setSelection] = useSelectionFromUrl(product);
   const ctaButtonRef = React.useRef<HTMLAnchorElement>(null);
   const ctaLabel = cart ? "Add to cart" : undefined;
@@ -59,6 +68,7 @@ export const Layout = (
         product={product}
         purchase={purchase}
         discountCode={discountCode ?? null}
+        saleLabel={saleLabel ?? null}
         ctaLabel={ctaLabel}
         selection={selection}
         setSelection={setSelection}

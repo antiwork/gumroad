@@ -61,6 +61,9 @@ import { useSortingTableDriver, Sort } from "$app/components/useSortingTableDriv
 import blackFridayIllustration from "$assets/images/illustrations/black_friday.svg";
 import placeholder from "$assets/images/placeholders/discounts.png";
 
+// Mirrors OfferCode::MAX_SALE_LABEL_LENGTH; the server rejects anything longer.
+export const MAX_SALE_LABEL_LENGTH = 32;
+
 type ProductScopeKind = "product" | "option" | "deleted";
 
 type Product = {
@@ -95,6 +98,8 @@ export type OfferCode = {
   minimum_amount_cents: number | null;
   once_per_cart: boolean;
   existing_customers_only: boolean;
+  auto_apply: boolean;
+  sale_label: string | null;
   ownership_products: Product[];
   ownership_duration_tiers: OwnershipDurationTier[] | null;
   option_ids_by_product: Record<string, string[]>;
@@ -637,6 +642,14 @@ const DiscountsPage = ({
                       : "Forever"}
                   </CardContent>
                 ) : null}
+                {selectedOfferCode.auto_apply ? (
+                  <CardContent>
+                    <h5 className="grow font-bold">Applied automatically</h5>
+                    {selectedOfferCode.sale_label
+                      ? `On product pages (${selectedOfferCode.sale_label})`
+                      : "On product pages"}
+                  </CardContent>
+                ) : null}
                 {selectedOfferCode.minimum_amount_cents !== null ? (
                   <CardContent>
                     <h5 className="grow font-bold">Minimum amount</h5>
@@ -765,6 +778,8 @@ const DiscountsPage = ({
             minimumAmount: offerCode.minimum_amount_cents,
             oncePerCart: offerCode.once_per_cart,
             existingCustomersOnly: offerCode.existing_customers_only,
+            autoApply: offerCode.auto_apply,
+            saleLabel: offerCode.sale_label,
             ownershipProductIds: offerCode.ownership_products.map(({ id }) => id),
             ownershipDurationTiers: offerCode.ownership_duration_tiers,
           });
@@ -788,7 +803,9 @@ const DiscountsPage = ({
       black_friday_code_name={black_friday_code_name}
       title="Create discount"
       submitLabel={isLoading ? "Adding discount..." : "Add discount"}
-      offerCode={selectedOfferCode ? { ...selectedOfferCode, code: "" } : undefined}
+      offerCode={
+        selectedOfferCode ? { ...selectedOfferCode, code: "", auto_apply: false, sale_label: null } : undefined
+      }
       isBlackFridayMode={isBlackFridayMode}
       cancel={() => {
         setIsBlackFridayMode(false);
@@ -814,6 +831,8 @@ const DiscountsPage = ({
             minimumAmount: offerCode.minimum_amount_cents,
             oncePerCart: offerCode.once_per_cart,
             existingCustomersOnly: offerCode.existing_customers_only,
+            autoApply: offerCode.auto_apply,
+            saleLabel: offerCode.sale_label,
             ownershipProductIds: offerCode.ownership_products.map(({ id }) => id),
             ownershipDurationTiers: offerCode.ownership_duration_tiers,
           });
@@ -1000,6 +1019,8 @@ const Form = ({
   const [durationInBillingCycles, setDurationInMonths] = React.useState(offerCode?.duration_in_billing_cycles ?? null);
 
   const [existingCustomersOnly, setExistingCustomersOnly] = React.useState(!!offerCode?.existing_customers_only);
+  const [autoApply, setAutoApply] = React.useState(!!offerCode?.auto_apply);
+  const [saleLabel, setSaleLabel] = React.useState(offerCode?.sale_label ?? "");
   const [ownershipProductIds, setOwnershipProductIds] = React.useState<{ value: string[]; error?: boolean }>({
     value: offerCode?.ownership_products.map(({ id }) => id) ?? [],
   });
@@ -1142,6 +1163,8 @@ const Form = ({
       minimum_amount_cents: hasMinimumAmount ? minimumAmount.value : null,
       once_per_cart: discount.type === "cents" && !useTieredDiscounts && oncePerCart,
       existing_customers_only: existingCustomersOnly,
+      auto_apply: universal && autoApply,
+      sale_label: universal && autoApply && saleLabel.trim() ? saleLabel.trim() : null,
       ownership_products: existingCustomersOnly ? ownershipProducts : [],
       ownership_duration_tiers: tieredPayload,
       option_ids_by_product: universal ? {} : optionIdsByProduct,
@@ -1297,6 +1320,39 @@ const Form = ({
               />
               <FieldsetDescription>
                 The discount applies to all current and future products except the ones you exclude here.
+              </FieldsetDescription>
+            </Fieldset>
+          ) : null}
+          {universal ? (
+            <Fieldset>
+              <Switch
+                checked={autoApply}
+                onChange={(evt) => setAutoApply(evt.target.checked)}
+                label="Apply automatically on product pages"
+              />
+              <FieldsetDescription>
+                Buyers see the discounted price on your product pages without a link or code. Use the validity period
+                below to schedule the sale. A discount set on a single product still takes priority.
+              </FieldsetDescription>
+            </Fieldset>
+          ) : null}
+          {universal && autoApply ? (
+            <Fieldset>
+              <FieldsetTitle>
+                <Label htmlFor={`${uid}saleLabel`}>Sale label (optional)</Label>
+              </FieldsetTitle>
+              <Input
+                type="text"
+                id={`${uid}saleLabel`}
+                placeholder="Black Friday"
+                maxLength={MAX_SALE_LABEL_LENGTH}
+                aria-describedby={`${uid}saleLabelDescription`}
+                value={saleLabel}
+                onChange={(evt) => setSaleLabel(evt.target.value)}
+              />
+              <FieldsetDescription id={`${uid}saleLabelDescription`}>
+                Shown with the discounted price on your product pages and profile, or "Sale" if left empty (
+                {saleLabel.length} of {MAX_SALE_LABEL_LENGTH} characters used).
               </FieldsetDescription>
             </Fieldset>
           ) : null}
