@@ -976,6 +976,20 @@ describe GdprDataErasureService do
       expect([rerun, again].map { _1[:summary][:followers_anonymized] }).to eq([1, 0])
     end
 
+    it "erases an account whose linked follow an earlier erasure of its old address already anonymized" do
+      seller = create(:user)
+      follower = create(:active_follower, user: seller, email: "john.old@example.com", follower_user_id: user.id)
+      earlier_erasure = GdprAudienceRecordsAnonymizer.new(email: "john.old@example.com", anonymized_email: "buyer-1@deleted.gumroad.com")
+      earlier_erasure.anonymize_audience_members!
+      earlier_erasure.anonymize_followers!
+
+      result = described_class.new(user, performed_by: admin).perform!
+
+      expect(result[:success]).to eq(true)
+      expect(follower.reload.email).to eq("deleted-#{user.id}@deleted.gumroad.com")
+      expect(AudienceMember.find_by!(seller:, email: "buyer-1@deleted.gumroad.com")).to have_attributes(details: nil, follower: false)
+    end
+
     it "keeps a purchase added to a linked follow's audience member after the erasure first read it" do
       seller = create(:user)
       create(:active_follower, user: seller, email: "john.old@example.com", follower_user_id: user.id)

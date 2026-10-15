@@ -590,7 +590,8 @@ class GdprDataErasureService
     # follower detail pointing at one of these rows is removed; anyone else's details on it stay.
     def remove_linked_follower_audience_details!(linked)
       follower_ids = linked.map(&:first)
-      owned = ->(member) { follower_ids.include?(member.details.dig("follower", "id")) }
+      # An already-anonymized member has NULL details.
+      owned = ->(member) { follower_ids.include?(member.details&.dig("follower", "id")) }
       candidate_ids = AudienceMember.where(seller_id: linked.map(&:second).uniq, email: linked.map(&:fourth).uniq)
                                     .filter_map { _1.id if owned.(_1) }
       return if candidate_ids.empty?
