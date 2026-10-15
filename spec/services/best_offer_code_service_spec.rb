@@ -479,6 +479,29 @@ describe BestOfferCodeService do
       expect(described_class.new(product: product).result).to include(valid: true, code: "OWN10")
     end
 
+    context "with an existing-customers-only default" do
+      let(:buyer) { create(:user) }
+      let(:own) do
+        create(:offer_code, user: seller, products: [product], ownership_products: [product], existing_customers_only: true,
+                            code: "RENEW50", amount_cents: nil, amount_percentage: 50, currency_type: nil)
+      end
+
+      before do
+        auto_code
+        product.update!(default_offer_code: own)
+      end
+
+      it "gives a buyer who does not qualify the shop-wide sale" do
+        expect(described_class.new(product:, buyer:).result).to include(valid: true, code: "SHOP30")
+      end
+
+      it "keeps the existing-customer default for a buyer who qualifies" do
+        create(:purchase, purchaser: buyer, link: product, seller:, price_cents: product.price_cents)
+
+        expect(described_class.new(product:, buyer:).result).to include(valid: true, code: "RENEW50")
+      end
+    end
+
     it "gives no discount to an excluded product" do
       auto_code.update!(excluded_products: [product])
 
