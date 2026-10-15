@@ -484,7 +484,7 @@ export const Product = ({
           {priceTag ? <div className="px-6 py-4 lg:pt-6 lg:pb-0">{priceTag}</div> : null}
         </section>
       ) : null}
-      <section className="[grid-area:details] lg:border-r">
+      <div className="[grid-area:details] lg:border-r">
         {sellerByline || hasRatings ? (
           <section className="grid grid-cols-1 gap-[1px] border-t border-border p-0 sm:grid-cols-[minmax(0,1fr)_auto]">
             {sellerByline ? (
@@ -592,7 +592,7 @@ export const Product = ({
             <LazyDescription html={product.description_html} publicFiles={product.public_files} />
           </CollapsibleDescription>
         </section>
-      </section>
+      </div>
       <section className="[grid-area:controls]">
         <section className="grid gap-4 border-t p-6 lg:border-t-0">
           {notForSaleMessage ? (
@@ -607,11 +607,15 @@ export const Product = ({
           ) : null}
           {discountCode ? (
             discountCode.valid ? (
-              (discountedPriceCents < priceCents ||
-                discountCode.discount.minimum_quantity ||
-                (discountCode.discount.type === "fixed" && discountCode.discount.once_per_cart)) &&
-              !pppDiscounted &&
-              (!showSaleLabel || hasDiscountTerms) ? (
+              (
+                showSaleLabel
+                  ? hasDiscountTerms
+                  : (discountedPriceCents < priceCents ||
+                      discountCode.discount.minimum_quantity ||
+                      discountCode.discount.minimum_amount_cents ||
+                      (discountCode.discount.type === "fixed" && discountCode.discount.once_per_cart)) &&
+                    !pppDiscounted
+              ) ? (
                 <Alert role="status" variant="success">
                   <div className="flex flex-col gap-4">
                     {showSaleLabel ? (

@@ -104,7 +104,7 @@ export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
     const [referrer, setReferrer] = React.useState("");
     useRunOnce(() => setReferrer(document.referrer));
 
-    const { selectedOption, priceCents, pppDiscounted, discountedPriceCents } = applySelection(
+    const { selectedOption, priceCents, pppDiscounted, discountedPriceCents, maxQuantity } = applySelection(
       product,
       discountCode?.valid ? discountCode.discount : null,
       selection,
@@ -129,7 +129,12 @@ export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
     if ((product.pwyw || selectedOption?.is_pwyw) && selection.price.value != null) {
       if (pppDiscounted && product.ppp_details) {
         price /= product.ppp_details.factor;
-      } else if (discountCode?.valid && hasMetDiscountConditions(discountCode.discount, selection.quantity)) {
+      } else if (
+        discountCode?.valid &&
+        hasMetDiscountConditions(discountCode.discount, selection.quantity) &&
+        Math.max(price, priceCents) * Math.min(selection.quantity, maxQuantity ?? Infinity) >=
+          (discountCode.discount.minimum_amount_cents ?? 0)
+      ) {
         price = getUndiscountedPWYWPrice(price, discountCode.discount, selection.quantity, {
           discounted: discountedPriceCents,
           undiscounted: priceCents,

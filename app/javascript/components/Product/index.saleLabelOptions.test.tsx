@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -43,7 +43,10 @@ vi.mock("$app/components/Product/ConfigurationSelector", async (importOriginal) 
 vi.mock("$app/components/Product/Thumbnail", () => ({ Thumbnail: () => <div data-testid="thumbnail" /> }));
 vi.mock("$app/components/Product/ShareSection", () => ({ ShareSection: () => null }));
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 const noTierSelected: PriceSelection = {
   rent: false,
@@ -326,5 +329,59 @@ describe("product page sale label on a product with a nearly sold-out variant", 
     renderMembership(sellerDiscount(undefined, minimumAmountCents), product, { ...noRecurrenceSelected, quantity: 2 });
 
     expect(screen.queryByTestId("sale-label")).toBeNull();
+  });
+});
+
+describe("automatic sale terms before selecting a membership tier", () => {
+  it("shows the end date without selecting a tier", () => {
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    const { container } = renderMembership({ ...sellerDiscount(), expires_at: expiresAt.toISOString() });
+
+    expect(screen.getByTestId("sale-label").textContent).toBe("Black Friday");
+    expect(container.querySelector("time")?.dateTime).toBe(expiresAt.toISOString());
+  });
+
+  it("removes the sale banner when the discount expires without selecting a tier", () => {
+    vi.useFakeTimers();
+    renderMembership({ ...sellerDiscount(), expires_at: new Date(Date.now() + 60_000).toISOString() });
+    expect(screen.getByTestId("sale-label").textContent).toBe("Black Friday");
+
+    act(() => vi.advanceTimersByTime(2_000));
+
+    expect(screen.queryByTestId("sale-label")).toBeNull();
+    expect(screen.getByText("Sorry, the discount code you wish to use is inactive.")).toBeTruthy();
+  });
+});
+
+describe("automatic sale prices with a minimum spend", () => {
+  it.each([
+    { quantity: 1, stock: null, expectedPrice: "10" },
+    { quantity: 2, stock: null, expectedPrice: "7" },
+    { quantity: 2, stock: 1, expectedPrice: "10" },
+  ])("shows $expectedPrice with quantity $quantity and stock $stock", ({ quantity, stock, expectedPrice }) => {
+    const { container } = renderMembership(
+      sellerDiscount(undefined, 1_500),
+      digitalProduct({ price_cents: 1_000, is_quantity_enabled: true, quantity_remaining: stock }),
+      { ...noRecurrenceSelected, quantity },
+    );
+
+    expect(container.querySelector('[itemprop="price"]')?.getAttribute("content")).toBe(expectedPrice);
+  });
+});
+
+describe("minimum spend on a price set by the buyer", () => {
+  it.each([
+    { enteredPrice: 1_000, checkoutPrice: 1_000 },
+    { enteredPrice: 1_499, checkoutPrice: 1_499 },
+    { enteredPrice: 1_500, checkoutPrice: 2_143 },
+  ])("keeps the buyer's price of $enteredPrice consistent at checkout", ({ enteredPrice, checkoutPrice }) => {
+    const { container } = renderMembership(
+      sellerDiscount(undefined, 1_500),
+      digitalProduct({ price_cents: 1_000, pwyw: { suggested_price_cents: 1_000 } }),
+      { ...noRecurrenceSelected, price: { error: false, value: enteredPrice } },
+    );
+    const link = container.querySelector<HTMLAnchorElement>('a[href^="https://example.com/checkout"]');
+    if (!link) throw new Error("Expected a checkout link");
+    expect(new URL(link.href).searchParams.get("price")).toBe(checkoutPrice.toString());
   });
 });
