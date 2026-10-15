@@ -13,7 +13,6 @@ require "tempfile"
 require "yaml"
 
 CLASSIFIER = File.expand_path("../../bin/classify-main-spec-failure", __dir__)
-MAIN_SHA = "2b00057fe05db4549704188b58a46a7217bd1728"
 
 $failures = []
 $count = 0
@@ -37,9 +36,7 @@ def attempt(jobs, **overrides)
     "summaries" => summaries,
     "conclusion" => "failure",
     "event" => "push",
-    "head_branch" => "main",
-    "head_sha" => MAIN_SHA,
-    "main_sha" => MAIN_SHA
+    "head_branch" => "main"
   }.merge(overrides.transform_keys(&:to_s))
 end
 
@@ -171,18 +168,15 @@ check(
   expect: :skip
 )
 
-# The run that holds production is the tip's run; an older commit already ships
-# in the newer one.
+# An early deploy can ship a commit before its suite ends, so a flake on a commit
+# that main has moved past still needs its retry before a revert reads it as final.
 check(
-  "the commit is no longer main's tip",
-  attempt([job("Test Slow 12", "failure", SPEC_FAILURE)], main_sha: "4eca2d9d310fe71dc3e9b53113ecd6aa40a92f55"),
-  expect: :skip
-)
-
-check(
-  "a missing head sha",
-  attempt([job("Test Slow 12", "failure", SPEC_FAILURE)], head_sha: ""),
-  expect: :skip
+  "a commit that is no longer main's tip",
+  attempt(
+    [job("Test Slow 34", "failure", SPEC_FAILURE)],
+    head_sha: "8c49aff27d963e0453582662a153e9194715d36b", main_sha: "23e9dbef16a7d5e0d1d9a3cbf3a0b1d2c3e4f5a6"
+  ),
+  expect: :rerun
 )
 
 check(
@@ -383,6 +377,104 @@ end
   else
     puts "  FAIL  --declined-log: #{name}"
     $failures << "--declined-log #{name}: expected #{expected}, got #{printed.strip.inspect}"
+  end
+end
+
+# --chromedriver-log reads one raw shard log, timestamps and colors included. Only
+# a log whose every failure is a refused ChromeDriver connection counts.
+def stamped(text)
+  text.lines.map { |line| "2026-10-15T19:46:21.8260503Z #{line}" }.join
+end
+
+def rspec_failure(number, error)
+  <<~LOG
+    \e[31m  #{number}) Product page shows the price\e[0m
+         Failure/Error: visit short_link_path(product)
+
+         #{error}
+         # /bundle_path/ruby/3.4.0/gems/capybara-3.40.0/lib/capybara/session.rb:281:in 'Capybara::Session#visit'
+         # ./spec/support/capybara_helpers.rb:36:in 'CapybaraHelpers#visit'
+  LOG
+end
+
+REFUSED = "Errno::ECONNREFUSED:\n       Failed to open TCP connection to 127.0.0.1:9515 (Connection refused - connect(2) for \"127.0.0.1\" port 9515)"
+# rspec-retry groups each try of an example under one number.
+RETRIED_REFUSED = <<~LOG
+  2) Product page shows the tax
+     Got 0 failures and 2 other errors:
+
+     2.1) Failure/Error: super
+
+          Errno::ECONNREFUSED:
+            Failed to open TCP connection to 127.0.0.1:9515 (Connection refused - connect(2) for "127.0.0.1" port 9515)
+          # /bundle_path/ruby/3.4.0/gems/timeout-0.6.1/lib/timeout.rb:296:in 'block in Timeout.timeout'
+          # Errno::ECONNREFUSED:
+          #   Connection refused - connect(2) for "127.0.0.1" port 9515
+
+     2.2) Failure/Error: super
+
+          Errno::ECONNREFUSED:
+            Failed to open TCP connection to 127.0.0.1:9515 (Connection refused - connect(2) for "127.0.0.1" port 9515)
+          # /bundle_path/ruby/3.4.0/gems/timeout-0.6.1/lib/timeout.rb:296:in 'block in Timeout.timeout'
+LOG
+FINISHED = "Finished in 3 minutes 51.7 seconds (files took 11.51 seconds to load)\n144 examples, 72 failures\n"
+EXPECTATION = "expected to find text \"$10\" in \"Product\""
+# A real failure whose cause chain mentions the refused connection: only the
+# error above the backtrace counts.
+CAUSED_BY_REFUSED = "#{EXPECTATION}\n     # ./spec/requests/product_spec.rb:12\n     # ------------------\n     # --- Caused by: ---\n     # Errno::ECONNREFUSED:\n     #   127.0.0.1:9515"
+
+{
+  "every failure lost ChromeDriver" => [stamped("Failures:\n\n#{rspec_failure(1, REFUSED)}\n#{RETRIED_REFUSED}\n#{FINISHED}"), "true"],
+  "one real failure among refused ones" => [stamped("Failures:\n\n#{rspec_failure(1, REFUSED)}\n#{rspec_failure(2, EXPECTATION)}\n#{FINISHED}"), "false"],
+  "a real failure whose cause mentions ChromeDriver" => [stamped("Failures:\n\n#{rspec_failure(1, CAUSED_BY_REFUSED)}\n#{FINISHED}"), "false"],
+  "a refused connection to another port" => [stamped("Failures:\n\n#{rspec_failure(1, REFUSED.gsub('9515', '6379'))}\n#{FINISHED}"), "false"],
+  "a refused connection outside the failure list" => [stamped("#{REFUSED}\n#{FINISHED}"), "false"],
+  "a failure list with no failures in it" => [stamped("Failures:\n\n#{FINISHED}"), "false"]
+}.each do |name, (log, expected)|
+  $count += 1
+  printed = Tempfile.create(["shard", ".log"]) do |file|
+    file.write(log)
+    file.flush
+    run("", "--chromedriver-log", file.path).last
+  end
+  if printed.strip == expected
+    puts "  ok    --chromedriver-log: #{name}"
+  else
+    puts "  FAIL  --chromedriver-log: #{name}"
+    $failures << "--chromedriver-log #{name}: expected #{expected}, got #{printed.strip.inspect}"
+  end
+end
+
+# --chromedriver-down tells the revert verdict that a dead driver, not the code,
+# failed every shard that failed in its test step.
+def chromedriver_shards(refused:, other: [])
+  refused_jobs = Array.new(refused) { |index| job("Test Slow #{index}", "failure", SPEC_FAILURE) }
+  payload = attempt(refused_jobs + other, chromedriver: refused_jobs.to_h { |j| [j["id"].to_s, true] })
+  payload["summaries"].merge!(other.to_h { |j| [j["id"].to_s, "1342 runs, 4447 assertions, 1 failures, 0 errors, 0 skips"] }) if other.any?
+  payload
+end
+
+{
+  "one shard that lost ChromeDriver" => [chromedriver_shards(refused: 1), "true"],
+  "three shards that lost ChromeDriver" => [chromedriver_shards(refused: 3), "true"],
+  "a lost ChromeDriver next to a real failure" => [chromedriver_shards(refused: 1, other: [job("Test Minitest 1", "failure", MINITEST_FAILURE)]), "false"],
+  "a lost ChromeDriver next to a shard that never reached its tests" =>
+    [chromedriver_shards(refused: 1, other: [job("Test Slow 3", "failure", HUNG_CHECKOUT)]), "true"],
+  # Nothing shows what failed a shard with no summary, or one that timed out.
+  "a lost ChromeDriver next to a shard with no summary" =>
+    [chromedriver_shards(refused: 1, other: [job("Test Slow 3", "failure", SPEC_FAILURE)]).tap { |p| p["summaries"][p["jobs"].last["id"].to_s] = "" }, "false"],
+  "a lost ChromeDriver next to a timed-out shard" =>
+    [chromedriver_shards(refused: 1, other: [job("Test Minitest 1", "timed_out", [["Run Minitest", "cancelled"]])]), "false"],
+  "a verdict input without ChromeDriver answers" => [attempt([job("Test Slow 1", "failure", SPEC_FAILURE)]), "false"],
+  "no shard that reported failing tests" => [attempt([job("Test Slow 3", "failure", HUNG_CHECKOUT)], chromedriver: {}), "false"]
+}.each do |name, (payload, expected)|
+  $count += 1
+  _, printed = run(JSON.dump(payload), "--chromedriver-down")
+  if printed.strip == expected
+    puts "  ok    --chromedriver-down: #{name}"
+  else
+    puts "  FAIL  --chromedriver-down: #{name}"
+    $failures << "--chromedriver-down #{name}: expected #{expected}, got #{printed.strip.inspect}"
   end
 end
 

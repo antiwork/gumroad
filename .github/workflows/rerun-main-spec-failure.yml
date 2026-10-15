@@ -44,13 +44,11 @@ jobs:
           CONCLUSION: ${{ github.event.workflow_run.conclusion }}
           EVENT: ${{ github.event.workflow_run.event }}
           HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
-          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
           gh api --paginate \
             "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/attempts/${ATTEMPT}/jobs?per_page=100" \
             --jq '.jobs[]' | jq -s '{jobs: .}' > jobs.json
-          MAIN_SHA=$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq .sha)
 
           # Knapsack stores a shard's failures for the retry only if its queue ended
           # normally, without fallback mode.
@@ -77,8 +75,8 @@ jobs:
           done
 
           jq --arg conclusion "$CONCLUSION" --arg event "$EVENT" --arg head_branch "$HEAD_BRANCH" \
-             --arg head_sha "$HEAD_SHA" --arg main_sha "$MAIN_SHA" --slurpfile summaries summaries.json \
-            '. + {conclusion: $conclusion, event: $event, head_branch: $head_branch, head_sha: $head_sha, main_sha: $main_sha, summaries: $summaries[0]}' \
+             --slurpfile summaries summaries.json \
+            '. + {conclusion: $conclusion, event: $event, head_branch: $head_branch, summaries: $summaries[0]}' \
             jobs.json > attempt.json
           set +e
           ruby bin/classify-main-spec-failure attempt.json
@@ -98,17 +96,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RUN_ID: ${{ github.event.workflow_run.id }}
           ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
-          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
           run=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}" --jq '"\(.run_attempt) \(.status)"')
           if [ "$run" != "$ATTEMPT completed" ]; then
             echo "Skip: the run is now at '$run', not '$ATTEMPT completed'."
-            exit 0
-          fi
-          main_sha=$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq .sha)
-          if [ "$main_sha" != "$HEAD_SHA" ]; then
-            echo "Skip: main moved to $main_sha; its own run ships this commit."
             exit 0
           fi
           gh run rerun "$RUN_ID" --failed -R "$GITHUB_REPOSITORY"
@@ -159,8 +151,9 @@ jobs:
 
             # The summary line of each shard that failed in its test step. A
             # timed-out shard has none, so it does not count as a spec failure.
-            # Each log also says whether a checkout's test card was declined.
-            echo '{"summaries": {}, "declines": {}}' > shards.json
+            # Each log also says whether a checkout's test card was declined, and
+            # whether ChromeDriver refused every failed example.
+            echo '{"summaries": {}, "declines": {}, "chromedriver": {}}' > shards.json
             for id in $(ruby bin/classify-main-spec-failure --test-step-failures jobs.json); do
               # Not `gh api`: it refuses logs with escape codes, and its override flag may be too new for the runner.
               curl -fsSL -H "Authorization: Bearer ${GH_TOKEN}" \
@@ -171,35 +164,42 @@ jobs:
                 | tail -1) || summary=""
               declined=$(ruby bin/classify-main-spec-failure --declined-log shard.raw) \
                 || { echo "could not classify the log of job ${id}" > error.txt; return 1; }
-              jq --arg id "$id" --arg summary "$summary" --argjson declined "$declined" \
-                '.summaries[$id] = $summary | .declines[$id] = $declined' shards.json > shards.tmp || return 1
+              refused=$(ruby bin/classify-main-spec-failure --chromedriver-log shard.raw) \
+                || { echo "could not classify the log of job ${id}" > error.txt; return 1; }
+              jq --arg id "$id" --arg summary "$summary" --argjson declined "$declined" --argjson refused "$refused" \
+                '.summaries[$id] = $summary | .declines[$id] = $declined | .chromedriver[$id] = $refused' shards.json > shards.tmp || return 1
               mv shards.tmp shards.json
             done
             jq --slurpfile shards shards.json '. + $shards[0]' jobs.json > verdict-input.json || return 1
             ruby bin/classify-main-spec-failure --spec-failed verdict-input.json > spec_failed.txt || return 1
             ruby bin/classify-main-spec-failure --card-declined verdict-input.json > card_declined.txt || return 1
+            ruby bin/classify-main-spec-failure --chromedriver-down verdict-input.json > chromedriver_down.txt || return 1
           }
 
           : > error.txt
           spec_failed=null
           card_declined=null
+          chromedriver_down=null
           if assess; then
             spec_failed=$(cat spec_failed.txt)
             card_declined=$(cat card_declined.txt)
+            chromedriver_down=$(cat chromedriver_down.txt)
           elif [ ! -s error.txt ]; then
             echo "could not classify the attempt" > error.txt
           fi
           # Wanted, not started, and the job failed: the retry request itself
-          # failed. A deliberate skip (main moved) leaves the job green.
+          # failed. A deliberate skip (the run moved on) leaves the job green.
           retry_failed=false
           if [ "$RETRY_WANTED" = "true" ] && [ "$RETRIED" != "true" ] && [ "$RERUN_RESULT" = "failure" ]; then
             retry_failed=true
           fi
           jq -n --argjson run_id "$RUN_ID" --argjson attempt "$ATTEMPT" --arg sha "$SHA" \
             --argjson retried "$RETRIED" --argjson retry_failed "$retry_failed" \
-            --argjson spec_failed "$spec_failed" --argjson card_declined "$card_declined" --arg error "$(cat error.txt)" \
+            --argjson spec_failed "$spec_failed" --argjson card_declined "$card_declined" \
+            --argjson chromedriver_down "$chromedriver_down" --arg error "$(cat error.txt)" \
             '{run_id: $run_id, attempt: $attempt, sha: $sha, retried: $retried, retry_failed: $retry_failed,
-              spec_failed: $spec_failed, card_declined: $card_declined, error: (if $error == "" then null else $error end)}' > verdict.json
+              spec_failed: $spec_failed, card_declined: $card_declined, chromedriver_down: $chromedriver_down,
+              error: (if $error == "" then null else $error end)}' > verdict.json
           cat verdict.json
 
       - uses: actions/upload-artifact@v4

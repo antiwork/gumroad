@@ -7,7 +7,8 @@
 #   { "run": { ... GET /repos/{repo}/actions/runs/{id}, read after the retry
 #              decision ... },
 #     "verdict": { "attempt": n, "spec_failed": bool or null, "retry_failed": bool,
-#                  "card_declined": bool or null, "error": string or null,
+#                  "card_declined": bool or null, "chromedriver_down": bool or null,
+#                  "error": string or null,
 #                  ... the retry workflow's verdict for that attempt ... },
 #     "production": "<compare status of sha...production-release>",
 #     "deploying": <true when a running build of the commit opened its gate,
@@ -18,7 +19,8 @@
 # When a shipped commit's failure cannot be confirmed (the retry request
 # failed, or the verdict could not read the run), a person is asked instead. So
 # is a failure that declined the test card in many shards: that is the shared
-# Stripe test account's block list, and it fails every commit alike.
+# Stripe test account's block list, and it fails every commit alike. So is a
+# failure where ChromeDriver refused every failed example: the driver died.
 #
 # Prints one `revert-red-main decision=… reason=…` line. Exit codes: 0 revert,
 # 1 no revert, 2 could not run, 3 ask a person.
@@ -55,6 +57,7 @@ def verdict(payload)
 
   return [EXIT_NOTIFY, "test_card_declined"] if verdict["card_declined"] == true
   return [EXIT_NOTIFY, "retry_failed"] if verdict["retry_failed"] == true
+  return [EXIT_NOTIFY, "chromedriver_down"] if verdict["chromedriver_down"] == true
   return [EXIT_NOTIFY, "verdict_incomplete"] if verdict["error"] || ![true, false].include?(verdict["spec_failed"])
   # Infrastructure failures say nothing about the code.
   return [EXIT_SKIP, "no_spec_failure"] unless verdict["spec_failed"] == true

@@ -7,9 +7,9 @@
 #   { "jobs": [ ... GET /repos/{repo}/actions/runs/{id}/attempts/{n}/jobs ... ],
 #     "conclusion": "<the triggering run's own conclusion>",
 #     "event": "push", "head_branch": "main",
-#     "head_sha": "<the run's commit>", "main_sha": "<main's tip now>",
 #     "summaries": { "<job_id>": "<the shard log's last RSpec summary line>" },
-#     "declines": { "<job_id>": <true when the shard log says "Your card was declined."> } }
+#     "declines": { "<job_id>": <true when the shard log says "Your card was declined."> },
+#     "chromedriver": { "<job_id>": <true when every failure in the shard log is ChromeDriver refusing> } }
 #
 # Knapsack re-runs only the failed examples of a retried RSpec shard, and nothing
 # of a cancelled one. So a retry is safe only when every shard finished and each
@@ -23,7 +23,10 @@
 # a load error that stopped the runner: it cannot tell which), and false
 # otherwise. `--declined-log <log>` prints whether a shard log shows a declined
 # test card, and `--card-declined` prints true when most of the failed shards
-# did, which points at the shared Stripe test account.
+# did, which points at the shared Stripe test account. `--chromedriver-log <log>`
+# prints whether every failure in a shard log is a refused connection to
+# ChromeDriver, and `--chromedriver-down` prints true when that holds for every
+# shard that failed in its test step.
 #
 # Exit codes match bin/classify-hung-checkout: 0 rerun, 1 skip, 2 could not run.
 
@@ -49,6 +52,12 @@ MAX_FAILED_SHARDS = 2
 # decline prints it as the expected value or in its source line, which do not count.
 DECLINED = "Your card was declined."
 FOUND_DECLINE = [/Also found .*#{Regexp.escape(DECLINED)}/, /\bgot: .*#{Regexp.escape(DECLINED)}/, /" in ".*#{Regexp.escape(DECLINED)}/].freeze
+
+# A refused connection to ChromeDriver's default port: the driver process died,
+# and every browser spec after it fails the same way, whatever the code.
+CHROMEDRIVER_REFUSED = ["Errno::ECONNREFUSED", "127.0.0.1:9515"].freeze
+LOG_TIMESTAMP = /\A\d{4}-\d\d-\d\dT\S+Z /
+BACKTRACE_LINE = %r{\A# [./]}
 
 FAILED = %w[failure timed_out].freeze
 JOB_RED = %w[failure timed_out startup_failure cancelled].freeze
@@ -115,6 +124,27 @@ def declined_log?(text)
   text.each_line.any? { |line| line.include?(DECLINED) && FOUND_DECLINE.any? { |found| line.match?(found) } }
 end
 
+# Each RSpec failure starts at "Failure/Error:"; its error ends where its
+# backtrace starts. A log with no failure list proves nothing.
+def chromedriver_log?(text)
+  lines = text.each_line.map { |line| line.gsub(/\e\[[0-9;]*m/, "").sub(LOG_TIMESTAMP, "").strip }
+  start = lines.index("Failures:")
+  return false unless start
+  errors = lines[start..].take_while { |line| !line.start_with?("Finished in ") }
+                         .slice_before { |line| line.include?("Failure/Error:") }.drop(1)
+  errors.any? && errors.all? do |error|
+    head = error.take_while { |line| !line.match?(BACKTRACE_LINE) }.join("\n")
+    CHROMEDRIVER_REFUSED.all? { |part| head.include?(part) }
+  end
+end
+
+# Every shard that failed in its test step, so a timeout or a shard with no
+# summary leaves the answer false: nothing shows ChromeDriver failed it.
+def chromedriver_down(jobs, refused)
+  failed = test_step_failures(jobs)
+  failed.any? && test_step_timeouts(jobs).empty? && failed.all? { |job| refused[job["id"].to_s] == true }
+end
+
 # A blocked test card declines every checkout, so it fails specs in most red shards
 # at once. Up to MAX_FAILED_SHARDS red shards get a retry instead.
 def card_declined(jobs, declines)
@@ -138,14 +168,8 @@ def verdict(payload)
     return [EXIT_SKIP, "skip: not a main push (#{payload['event'].inspect} on #{payload['head_branch'].inspect})"]
   end
 
-  # A newer main commit contains this one, and its own run unblocks the deploy
-  # that ships both. Re-running here would only add a second deploy.
-  head_sha = payload["head_sha"].to_s
-  main_sha = payload["main_sha"].to_s
-  if head_sha.empty? || head_sha != main_sha
-    return [EXIT_SKIP, "skip: #{head_sha[0, 12].inspect} is no longer main's tip (#{main_sha[0, 12].inspect})"]
-  end
-
+  # Not limited to main's tip: an early deploy can ship any commit before its
+  # suite ends.
   red = jobs.select { |job| JOB_RED.include?(job["conclusion"]) }
   return [EXIT_SKIP, "skip: no red job on this attempt"] if red.empty?
 
@@ -181,12 +205,14 @@ raw = ARGV.reject { |arg| arg.start_with?("--") }.first
 rspec_shards_only = ARGV.include?("--rspec-shards")
 spec_failed_only = ARGV.include?("--spec-failed")
 card_declined_only = ARGV.include?("--card-declined")
+chromedriver_down_only = ARGV.include?("--chromedriver-down")
 test_step_failures_only = ARGV.include?("--test-step-failures")
 
 # A shard log, not a JSON payload.
-if ARGV.include?("--declined-log")
+LOG_FLAGS = { "--declined-log" => :declined_log?, "--chromedriver-log" => :chromedriver_log? }.freeze
+if (log_check = LOG_FLAGS[ARGV.find { |arg| LOG_FLAGS.key?(arg) }])
   begin
-    puts declined_log?(File.binread(raw).force_encoding("UTF-8").scrub)
+    puts send(log_check, File.binread(raw).force_encoding("UTF-8").scrub)
     exit 0
   rescue TypeError, SystemCallError => e
     warn "Main spec-failure classifier could not read the log: #{e.message}"
@@ -219,6 +245,11 @@ end
 
 if card_declined_only
   puts JSON.dump(card_declined(Array(payload["jobs"]), payload["declines"].is_a?(Hash) ? payload["declines"] : {}))
+  exit 0
+end
+
+if chromedriver_down_only
+  puts JSON.dump(chromedriver_down(Array(payload["jobs"]), payload["chromedriver"].is_a?(Hash) ? payload["chromedriver"] : {}))
   exit 0
 end
 

@@ -21,7 +21,10 @@ jobs:
       notify: ${{ steps.decide.outputs.notify }}
       reason: ${{ steps.decide.outputs.reason }}
       sha: ${{ steps.decide.outputs.sha }}
-      run_url: ${{ steps.decide.outputs.run_url }}
+      # The run id, not its URL: the URL holds the repository name, which is
+      # also the value of a secret here (the Buildkite pipeline slug), and
+      # GitHub drops any job output that contains a secret.
+      run_id: ${{ steps.decide.outputs.run_id }}
       pr_number: ${{ steps.decide.outputs.pr_number }}
       pr_author: ${{ steps.decide.outputs.pr_author }}
     steps:
@@ -120,7 +123,7 @@ jobs:
           {
             echo "reason=${reason}"
             echo "sha=${sha}"
-            echo "run_url=$(jq -r .html_url run.json)"
+            echo "run_id=${run_id}"
             echo "pr_number=$(jq -r '.number // empty' pr.json)"
             echo "pr_author=$(jq -r '.user.login // empty' pr.json)"
           } >> "$GITHUB_OUTPUT"
@@ -161,11 +164,12 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GUMCLAW_GITHUB_PAT }}
           SHA: ${{ needs.decide.outputs.sha }}
-          RUN_URL: ${{ needs.decide.outputs.run_url }}
+          RUN_ID: ${{ needs.decide.outputs.run_id }}
           PR_NUMBER: ${{ needs.decide.outputs.pr_number }}
           PR_AUTHOR: ${{ needs.decide.outputs.pr_author }}
         run: |
           set -euo pipefail
+          RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}"
           branch="revert-red-main-${SHA:0:12}"
           # Same-repo PRs into main only: a fork can pick the same branch name.
           existing=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$branch" --base main --state all \
@@ -229,7 +233,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           SHA: ${{ needs.decide.outputs.sha }}
-          RUN_URL: ${{ needs.decide.outputs.run_url }}
+          RUN_ID: ${{ needs.decide.outputs.run_id }}
           PR_NUMBER: ${{ needs.decide.outputs.pr_number }}
           PR_AUTHOR: ${{ needs.decide.outputs.pr_author }}
           NOTIFY: ${{ needs.decide.outputs.notify }}
@@ -238,8 +242,11 @@ jobs:
           REVERT_URL: ${{ needs.open.outputs.url }}
         run: |
           set -euo pipefail
+          RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}"
           if [ "$NOTIFY" = "true" ] && [ "$REASON" = "test_card_declined" ]; then
             body="@${PR_AUTHOR} the full Tests suite on \`main\` failed on ${SHA} with \"Your card was declined.\" in many shards: ${RUN_URL}. That usually means the shared Stripe test card is on the test account's block list, which fails every commit alike. @gumclaw will check the block list, remove the card if it is blocked, and re-run the failed jobs. If the card is not blocked, the commit needs a revert or a fix forward."$'\n\n'"<!-- gumclaw:test-card-decline sha=${SHA} run=${RUN_URL} -->"
+          elif [ "$NOTIFY" = "true" ] && [ "$REASON" = "chromedriver_down" ]; then
+            body="@${PR_AUTHOR} the full Tests suite on \`main\` failed on ${SHA} after it deployed, but every failed test lost its connection to ChromeDriver: ${RUN_URL}. That is a dead browser driver on the runner, not the code. Please re-run the failed jobs."
           elif [ "$NOTIFY" = "true" ] && [ "$REASON" = "deploy_state_unknown" ]; then
             body="@${PR_AUTHOR} the full Tests suite on \`main\` failed on ${SHA}: ${RUN_URL}. Production does not contain it yet, and Buildkite could not say whether its deploy is running. Please check the deploy before you choose to revert."
           elif [ "$NOTIFY" = "true" ]; then

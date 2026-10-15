@@ -8,6 +8,7 @@
 require "json"
 require "open3"
 require "tempfile"
+require "tmpdir"
 require "yaml"
 
 DECISION = File.expand_path("../../bin/revert-red-main-decision", __dir__)
@@ -19,9 +20,11 @@ RED_RUN = { "id" => 37404168421, "head_sha" => "f69c0d04c49600000000000000000000
             "conclusion" => "failure", "event" => "push", "head_branch" => "main", "run_attempt" => 2,
             "display_title" => "Fix the café — checkout" }.freeze
 
-def payload(run: RED_RUN, spec_failed: true, attempt: 2, production: "ahead", deploying: true, retry_failed: false, error: nil, card_declined: false)
+def payload(run: RED_RUN, spec_failed: true, attempt: 2, production: "ahead", deploying: true, retry_failed: false, error: nil, card_declined: false,
+            chromedriver_down: false)
   { "run" => run,
-    "verdict" => { "attempt" => attempt, "spec_failed" => spec_failed, "retry_failed" => retry_failed, "card_declined" => card_declined, "error" => error },
+    "verdict" => { "attempt" => attempt, "spec_failed" => spec_failed, "retry_failed" => retry_failed, "card_declined" => card_declined,
+                   "chromedriver_down" => chromedriver_down, "error" => error },
     "production" => production, "deploying" => deploying }
 end
 
@@ -72,6 +75,11 @@ check("a shipped commit whose shards declined the test card", payload(card_decli
 check("declined test cards on a commit that never deployed", payload(card_declined: true, production: "behind", deploying: false), expect: :skip, reason: "not_deployed")
 check("a verdict from before card declines were recorded", payload(card_declined: nil), expect: :revert, reason: "shipped")
 check("declined test cards in a verdict missing a spec answer", payload(card_declined: true, spec_failed: nil), expect: :notify, reason: "test_card_declined")
+
+# A dead ChromeDriver fails every browser spec after it, whatever the code.
+check("a shipped commit whose failures all lost ChromeDriver", payload(chromedriver_down: true), expect: :notify, reason: "chromedriver_down")
+check("a lost ChromeDriver on a commit that never deployed", payload(chromedriver_down: true, production: "behind", deploying: false), expect: :skip, reason: "not_deployed")
+check("a verdict from before ChromeDriver was recorded", payload(chromedriver_down: nil), expect: :revert, reason: "shipped")
 
 # The commit shipped, but nothing confirms the failure is final: ask a person.
 check("the retry request failed", payload(retry_failed: true), expect: :notify, reason: "retry_failed")
@@ -198,6 +206,19 @@ workflow_check(
   "Record the verdict"
 )
 workflow_check(
+  "the verdict records whether ChromeDriver refused every failure",
+  ["--chromedriver-log shard.raw", ".chromedriver[$id] = $refused", "--chromedriver-down verdict-input.json",
+   "chromedriver_down: $chromedriver_down"].all? { |part| record["run"].to_s.include?(part) },
+  "Record the verdict"
+)
+# A newer commit on main does not ship this one before its suite ends: an early
+# deploy may already have shipped it, so its flake still needs the retry.
+workflow_check(
+  "the retry runs on a commit that main has moved past",
+  !rerun_step["run"].to_s.include?("commits/main") && !RETRY.dig("jobs", "rerun", "steps").to_s.include?("main_sha"),
+  rerun_step["run"].to_s
+)
+workflow_check(
   "the verdict records whether shards declined the test card",
   ["--declined-log shard.raw", ".declines[$id] = $declined", "'. + $shards[0]' jobs.json > verdict-input.json",
    "--card-declined verdict-input.json", "card_declined: $card_declined"].all? { |part| record["run"].to_s.include?(part) },
@@ -215,6 +236,52 @@ workflow_check(
   rendered.start_with?("@author ") && rendered.include?("@gumclaw will check the block list") &&
     rendered.end_with?("\n\n<!-- gumclaw:test-card-decline sha=abc123 run=https://example.com/runs/1 -->"),
   rendered.inspect
+)
+
+# GitHub drops a job output that contains a secret's value, and the run URL holds
+# the repository name, which is also the Buildkite pipeline slug. So the decide
+# job passes the run id, and each consumer builds the URL.
+decide_outputs = jobs.dig("decide", "outputs")
+workflow_check(
+  "the decide job passes the run id and no URL",
+  decide_outputs["run_id"] == "${{ steps.decide.outputs.run_id }}" && decide_outputs.values.none? { |value| value.include?("url") } &&
+    decide_run.include?('echo "run_id=${run_id}"') && !decide_run.include?("html_url"),
+  decide_outputs.inspect
+)
+open_step = jobs.dig("open", "steps").find { |step| step["name"] == "Open the revert PR" }
+url_line = 'RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}"'
+workflow_check(
+  "the revert PR body links the run",
+  open_step.dig("env", "RUN_ID") == "${{ needs.decide.outputs.run_id }}" &&
+    open_step["run"].to_s.index(url_line).to_i.between?(1, open_step["run"].to_s.index("> body.md").to_i),
+  open_step["env"].inspect
+)
+
+# Runs the whole step with a `gh` stub that prints the comment it would post.
+def tell_comment(script, env)
+  Dir.mktmpdir do |dir|
+    File.write(File.join(dir, "gh"), "#!/usr/bin/env bash\nwhile [ $# -gt 0 ]; do [ \"$1\" = --body ] && printf '%s' \"$2\"; shift; done\n")
+    File.chmod(0o755, File.join(dir, "gh"))
+    base = { "PATH" => "#{dir}:#{ENV.fetch('PATH')}", "GITHUB_SERVER_URL" => "https://github.com", "GITHUB_REPOSITORY" => "antiwork/gumroad",
+             "SHA" => "abc123", "RUN_ID" => "38794492890", "PR_NUMBER" => "8435", "PR_AUTHOR" => "author",
+             "NOTIFY" => "", "REASON" => "", "OPENED" => "", "REVERT_URL" => "" }
+    out, = Open3.capture2(base.merge(env), "bash", "-c", script)
+    out
+  end
+end
+RUN_LINK = "https://github.com/antiwork/gumroad/actions/runs/38794492890"
+workflow_check(
+  "the original PR hears where the run is",
+  tell["steps"].first.dig("env", "RUN_ID") == "${{ needs.decide.outputs.run_id }}" &&
+    tell_comment(tell_run, "OPENED" => "true", "REVERT_URL" => "https://github.com/antiwork/gumroad/pull/8440").include?("deployed: #{RUN_LINK}. A revert PR"),
+  tell_comment(tell_run, "OPENED" => "true").inspect
+)
+chromedriver_comment = tell_comment(tell_run, "NOTIFY" => "true", "REASON" => "chromedriver_down")
+workflow_check(
+  "a lost ChromeDriver gets its own message",
+  chromedriver_comment.start_with?("@author ") && chromedriver_comment.include?("ChromeDriver: #{RUN_LINK}.") &&
+    chromedriver_comment.end_with?("Please re-run the failed jobs."),
+  chromedriver_comment.inspect
 )
 workflow_check(
   "the retry workflow records whether it started a retry",
