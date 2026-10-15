@@ -176,7 +176,7 @@ describe ReceiptPresenter::RecommendedProductsInfo do
       expect(recommended_products_info.title).to eq("Customers who bought this item also bought")
     end
 
-    it "names the creator when the creator's featured products fill the whole row" do
+    it "uses the creator heading when the creator's featured products fill the whole row" do
       featured_product
       stub_co_purchases
 
@@ -184,7 +184,7 @@ describe ReceiptPresenter::RecommendedProductsInfo do
       expect(recommended_products_info.title).to eq("More from this creator")
     end
 
-    it "names the creator when featured products fill part of the row" do
+    it "uses the creator heading when featured products fill part of the row" do
       featured_product
       stub_co_purchases(co_purchased_product)
 
@@ -205,7 +205,7 @@ describe ReceiptPresenter::RecommendedProductsInfo do
     context "when the purchase doesn't have a purchaser (guest checkout)" do
       before { purchase.update!(purchaser: nil) }
 
-      it "names the creator when the creator's featured products fill the row" do
+      it "uses the creator heading when the creator's featured products fill the row" do
         featured_product
         stub_co_purchases
 
