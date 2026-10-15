@@ -6,7 +6,6 @@ FactoryBot.define do
     scopes { "view_profile" }
     status { OauthDeviceAuthorization::STATUS_PENDING }
     expires_at { OauthDeviceAuthorization::EXPIRES_IN.from_now }
-    poll_interval_seconds { OauthDeviceAuthorization::POLL_INTERVAL.to_i }
     created_ip_address { "203.0.113.1" }
     created_user_agent { "RSpec" }
 
