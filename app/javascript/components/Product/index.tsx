@@ -382,15 +382,10 @@ export const Product = ({
 
   const hasRatings = product.ratings != null && product.ratings.count > 0;
 
-  // The label names the price the buyer is looking at, so it only shows while the seller's
-  // auto-applied code is what produced that price: a PPP discount, or a code whose minimum
-  // quantity or minimum amount (unit price × quantity, capped at stock) this selection has not
-  // met, leaves the displayed price alone.
+  // The label names the price the buyer sees, so it shows only while the code produced that price.
+  // applySelection already drops a code whose minimum quantity or amount this selection misses.
   const codeDiscounts = (attributes: typeof selectionAttributes) =>
-    !attributes.pppDiscounted &&
-    attributes.discountedPriceCents < attributes.priceCents &&
-    attributes.priceCents * Math.min(selection.quantity, attributes.maxQuantity ?? Infinity) >=
-      (discount?.minimum_amount_cents ?? 0);
+    !attributes.pppDiscounted && attributes.discountedPriceCents < attributes.priceCents;
   // With no option picked, each visible option shows its own price, so any discounted one earns the label.
   const showSaleLabel =
     !!saleLabel &&
@@ -441,7 +436,7 @@ export const Product = ({
       buyerLocalCurrencySubunitToUnit={product.buyer_local_currency_subunit_to_unit}
       buyerLocalPriceCents={buyerLocalPriceCentsForSelection(
         product.buyer_local_price_cents,
-        discountCode?.valid ? discountCode.discount : null,
+        discount,
         selection.quantity,
       )}
       buyerLocalOriginalPriceCents={product.buyer_local_original_price_cents}
