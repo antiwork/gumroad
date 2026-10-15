@@ -4,6 +4,17 @@ require "spec_helper"
 require "shared_examples/authorize_called"
 
 describe "Widget Page scenario", js: true, type: :system do
+  # The preview iframe resizes to its content, and it resizes again when the product description's
+  # editor loads. Hovering before the final height lands can leave the cursor off the copy button.
+  def wait_for_embed_preview_to_settle
+    iframe = find("iframe[src*='embed=true'][style*='height']", wait: 10)
+    height = within_frame(iframe) do
+      expect(page).to have_css(".rich-text .ProseMirror", wait: 10)
+      evaluate_script("document.querySelector('#app section').parentElement.clientHeight")
+    end
+    expect(page).to have_css("iframe[src*='embed=true'][style*='height: #{height}px']")
+  end
+
   context "when no user is logged in" do
     before do
       @demo_product = create(:product, user: create(:named_user), unique_permalink: "demo")
@@ -28,8 +39,7 @@ describe "Widget Page scenario", js: true, type: :system do
 
       expect(page).to have_field("Widget code", with: %(<script src="#{UrlService.root_domain_with_protocol}/js/gumroad-embed.js"></script>\n<div class="gumroad-product-embed"><a href="#{@demo_product.long_url}">Loading...</a></div>))
 
-      # wait for embed iframe to load, so no layout shift happens when hovering the copy button
-      expect(page).to have_css("iframe[src*='embed=true'][style*='height']", wait: 10)
+      wait_for_embed_preview_to_settle
 
       copy_button = find_button("Copy embed code")
       copy_button.hover
@@ -97,8 +107,7 @@ describe "Widget Page scenario", js: true, type: :system do
         select_tab("Embed")
         expect(page).to have_field("Widget code", with: %(<script src="#{@base_url}/js/gumroad-embed.js"></script>\n<div class="gumroad-product-embed"><a href="#{@product.long_url}">Loading...</a></div>))
 
-        # wait for embed iframe to load, so no layout shift happens when hovering the copy button
-        expect(page).to have_css("iframe[src*='embed=true'][style*='height']", wait: 10)
+        wait_for_embed_preview_to_settle
 
         copy_button = find_button("Copy embed code")
         expect(copy_button).not_to have_tooltip(text: "Copy to Clipboard")
