@@ -1061,6 +1061,7 @@ describe GdprDataErasureService do
       original_email = user.email
       user.update_columns(google_uid: "google-subject")
       guest_cart = create(:cart, :guest, email: original_email, ip_address: "127.0.0.3", browser_guid: "guest-guid")
+      relative_cart = create(:cart, :guest, email: "relative@example.com", ip_address: "127.0.0.5", browser_guid: "own-guid", deleted_at: 1.day.ago)
       shared_device_cart = create(:cart, :guest, email: nil, ip_address: "127.0.0.4", browser_guid: "own-guid")
       other_cart = create(:cart, :guest, email: "other@example.com", browser_guid: "other-guid")
       create(:cart, user:, email: original_email, browser_guid: "own-guid")
@@ -1079,6 +1080,7 @@ describe GdprDataErasureService do
       expect(guest_cart.reload).to have_attributes(email: "deleted-#{user.id}@deleted.gumroad.com", ip_address: nil, browser_guid: nil)
       # own-guid is also on another account's cart, so it does not tie this address-less cart to the user.
       expect(shared_device_cart.reload).to have_attributes(ip_address: "127.0.0.4", browser_guid: "own-guid")
+      expect(relative_cart.reload).to have_attributes(email: "relative@example.com", ip_address: "127.0.0.5", browser_guid: "own-guid")
       expect(other_cart.reload.email).to eq("other@example.com")
       expect(other_user_cart.reload).to have_attributes(email: "shared@example.com", browser_guid: "own-guid")
       expect(SentPostEmail.where(id: [affiliate_sent.id, sent.id])).to be_empty
