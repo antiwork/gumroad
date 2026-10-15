@@ -3,7 +3,7 @@
 require "spec_helper"
 require "timeout"
 
-describe User::StripeCourtOrderNoticeService, "concurrency" do
+describe StripeRestraintNoticeService, "concurrency" do
   self.use_transactional_tests = false
 
   let(:stripe_account_id) { "acct_1TestCourtOrder02" }
@@ -19,7 +19,7 @@ describe User::StripeCourtOrderNoticeService, "concurrency" do
     @errors = Queue.new
     # Holds the service's transaction open right after the job push, until the example says
     # whether it commits or rolls back.
-    allow(StripeCourtOrderNoticeEmailJob).to receive(:perform_async).and_wrap_original do |original, *args|
+    allow(StripeRestraintNoticeEmailJob).to receive(:perform_async).and_wrap_original do |original, *args|
       jid = original.call(*args)
       @pushed << true
       raise ActiveRecord::ConnectionFailed, "lost connection before commit" if Timeout.timeout(10) { @release.pop } == :rollback
@@ -83,29 +83,81 @@ describe User::StripeCourtOrderNoticeService, "concurrency" do
     threads.each { expect(_1.join(10)).to be_truthy }
   end
 
-  it "queues once for two simultaneous calls and answers the second already_sent" do
+  it "records one notice for two simultaneous calls and sends it once" do
     statuses = Queue.new
     first, = in_thread { statuses << notice.perform.status }
     Timeout.timeout(10) { @pushed.pop }
     second, second_connection_id = in_thread { statuses << notice.perform.status }
     wait_for_lock_wait(second_connection_id)
 
-    @release << :commit
+    2.times { @release << :commit }
     join(first, second)
 
     expect(@errors).to be_empty
-    expect(2.times.map { statuses.pop }).to contain_exactly(:queued, :already_sent)
+    expect(2.times.map { statuses.pop }).to eq([:queued, :queued])
     expect(@seller.comments.count).to eq(1)
-    expect(StripeCourtOrderNoticeEmailJob.jobs.size).to eq(1)
+    expect(StripeRestraintNoticeEmailJob.jobs.size).to eq(2)
 
-    StripeCourtOrderNoticeEmailJob.drain
+    StripeRestraintNoticeEmailJob.drain
     expect(ActionMailer::Base.deliveries.map(&:to)).to eq([["seller-concurrency@example.com"]])
+    expect(notice.perform.status).to eq(:already_sent)
+  end
+
+  it "makes a second copy of the job wait for the first send, then skip it" do
+    2.times { @release << :commit }
+    2.times { notice.perform }
+    copies = StripeRestraintNoticeEmailJob.jobs.map { _1["args"] }
+    sending = Queue.new
+    send_release = Queue.new
+    allow(MerchantRegistrationMailer).to receive(:stripe_restraint_notice).and_wrap_original do |original, *args|
+      sending << true
+      Timeout.timeout(10) { send_release.pop }
+      original.call(*args)
+    end
+
+    first, = in_thread { StripeRestraintNoticeEmailJob.new.perform(*copies.first) }
+    Timeout.timeout(10) { sending.pop }
+    second, second_connection_id = in_thread { StripeRestraintNoticeEmailJob.new.perform(*copies.last) }
+    wait_for_lock_wait(second_connection_id)
+
+    2.times { send_release << true }
+    join(first, second)
+
+    expect(@errors).to be_empty
+    expect(ActionMailer::Base.deliveries.size).to eq(1)
+  end
+
+  it "sees an acceptance committed after a caller's REPEATABLE READ snapshot was taken" do
+    @release << :commit
+    notice.perform
+    args = StripeRestraintNoticeEmailJob.jobs.sole["args"]
+    snapshot_taken = Queue.new
+    proceed = Queue.new
+    outcome = Queue.new
+    stale_caller, = in_thread do
+      ApplicationRecord.transaction do
+        Comment.where(commentable: @seller).to_a
+        snapshot_taken << true
+        Timeout.timeout(10) { proceed.pop }
+        StripeRestraintNoticeEmailJob.new.perform(*args)
+        outcome << notice.perform.status
+      end
+    end
+    Timeout.timeout(10) { snapshot_taken.pop }
+
+    StripeRestraintNoticeEmailJob.drain
+    proceed << true
+    join(stale_caller)
+
+    expect(@errors).to be_empty
+    expect(outcome.pop).to eq(:already_sent)
+    expect(ActionMailer::Base.deliveries.size).to eq(1)
   end
 
   it "makes a job that starts before the commit wait, then send" do
     service, = in_thread { notice.perform }
     Timeout.timeout(10) { @pushed.pop }
-    job, job_connection_id = in_thread { StripeCourtOrderNoticeEmailJob.drain }
+    job, job_connection_id = in_thread { StripeRestraintNoticeEmailJob.drain }
     wait_for_lock_wait(job_connection_id)
     expect(ActionMailer::Base.deliveries).to be_empty
 
@@ -117,15 +169,15 @@ describe User::StripeCourtOrderNoticeService, "concurrency" do
   end
 
   it "commits nothing when the push is refused or fails, and the retry sends once" do
-    allow(StripeCourtOrderNoticeEmailJob).to receive(:perform_async).and_return(nil)
+    allow(StripeRestraintNoticeEmailJob).to receive(:perform_async).and_return(nil)
     expect { notice.perform }.to raise_error(described_class::Error, "The notice email could not be queued")
-    allow(StripeCourtOrderNoticeEmailJob).to receive(:perform_async).and_raise(RedisClient::CannotConnectError, "Connection refused")
-    expect { notice.perform }.to raise_error(RedisClient::CannotConnectError)
+    allow(StripeRestraintNoticeEmailJob).to receive(:perform_async).and_raise(RedisClient::CannotConnectError, "Connection refused")
+    expect { notice.perform }.to raise_error(described_class::Error, "The notice email could not be queued")
     expect(@seller.comments.count).to eq(0)
 
-    allow(StripeCourtOrderNoticeEmailJob).to receive(:perform_async).and_call_original
+    allow(StripeRestraintNoticeEmailJob).to receive(:perform_async).and_call_original
     expect(notice.perform.status).to eq(:queued)
-    StripeCourtOrderNoticeEmailJob.drain
+    StripeRestraintNoticeEmailJob.drain
 
     expect(ActionMailer::Base.deliveries.size).to eq(1)
   end
@@ -133,7 +185,7 @@ describe User::StripeCourtOrderNoticeService, "concurrency" do
   it "makes a waiting job send nothing when the transaction rolls back, and a retry sends once" do
     service, = in_thread { notice.perform }
     Timeout.timeout(10) { @pushed.pop }
-    job, job_connection_id = in_thread { StripeCourtOrderNoticeEmailJob.drain }
+    job, job_connection_id = in_thread { StripeRestraintNoticeEmailJob.drain }
     wait_for_lock_wait(job_connection_id)
 
     @release << :rollback
@@ -146,7 +198,7 @@ describe User::StripeCourtOrderNoticeService, "concurrency" do
 
     @release << :commit
     expect(notice.perform.status).to eq(:queued)
-    StripeCourtOrderNoticeEmailJob.drain
+    StripeRestraintNoticeEmailJob.drain
 
     expect(ActionMailer::Base.deliveries.size).to eq(1)
   end

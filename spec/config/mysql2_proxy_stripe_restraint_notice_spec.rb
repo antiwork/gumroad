@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe "mysql2 proxy Stripe court order notice routing" do
+describe "mysql2 proxy Stripe restraint notice routing" do
   include_context "real mysql2 proxy pools"
 
   it "checks the notice and addresses the email from the primary, not a lagging replica" do
@@ -15,7 +15,7 @@ describe "mysql2 proxy Stripe court order notice routing" do
     expect(serving_pool).to eq("replica")
 
     reads = record_serving_reads do
-      StripeCourtOrderNoticeEmailJob.new.perform(seller.id, comment.id, "Example Legal LLP", "notices@example.com")
+      StripeRestraintNoticeEmailJob.new.perform(seller.id, comment.id, "Example Legal LLP", "notices@example.com")
     end
 
     expect(ActionMailer::Base.deliveries.sole.to).to eq(["seller@example.com"])

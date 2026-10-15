@@ -118,10 +118,10 @@ describe MerchantRegistrationMailer do
     end
   end
 
-  describe "stripe_court_order_notice" do
+  describe "stripe_restraint_notice" do
     it "tells the seller about the court order and gives them the law firm's contact" do
       user = create(:user)
-      mail = described_class.stripe_court_order_notice(user.id, "Example Legal LLP", "notices@example.com")
+      mail = described_class.stripe_restraint_notice(user.id, "Example Legal LLP", "notices@example.com")
 
       expect(mail.subject).to eq("Important notice regarding your Gumroad payment account")
       expect(mail.to).to eq([user.email])
@@ -139,7 +139,7 @@ describe MerchantRegistrationMailer do
     end
 
     it "escapes the firm name" do
-      mail = described_class.stripe_court_order_notice(create(:user).id, "<b>Example</b> & Partners", "notices@example.com")
+      mail = described_class.stripe_restraint_notice(create(:user).id, "<b>Example</b> & Partners", "notices@example.com")
 
       expect(mail.body.decoded).to include("&lt;b&gt;Example&lt;/b&gt; &amp; Partners")
     end
@@ -213,24 +213,6 @@ describe MerchantRegistrationMailer do
       mail = described_class.stripe_account_rejected(user.id)
 
       expect(mail.body.encoded).to include("below the $1 minimum")
-    end
-  end
-
-  describe "#stripe_restraint_notice" do
-    let(:user) { create(:user) }
-
-    let(:mail) do
-      described_class.stripe_restraint_notice(user.id, "Scale LLP", "lawyer@example.com")
-    end
-
-    it "relays the court order and the law firm's contact details" do
-      expect(mail.subject).to eq("Important notice regarding your Gumroad payment account")
-      expect(mail.to).to eq([user.email])
-      expect(mail.reply_to).to eq([ApplicationMailer::SUPPORT_EMAIL])
-      expect(mail.body.encoded).to include("court order")
-      expect(mail.body.encoded).to include("Your payouts are paused")
-      expect(mail.body.encoded).to include("Scale LLP", "lawyer@example.com")
-      expect(mail.body.encoded).to include("We cannot give legal advice")
     end
   end
 end

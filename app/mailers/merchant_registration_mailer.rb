@@ -49,13 +49,6 @@ class MerchantRegistrationMailer < ApplicationMailer
     mail(subject: "Your payouts are temporarily paused", from: NOREPLY_EMAIL_WITH_NAME, reply_to: SUPPORT_EMAIL, to: user.email)
   end
 
-  def stripe_court_order_notice(user_id, firm_name, firm_email)
-    user = User.find(user_id)
-    @firm_name = firm_name
-    @firm_email = firm_email
-    mail(subject: "Important notice regarding your Gumroad payment account", from: NOREPLY_EMAIL_WITH_NAME, reply_to: SUPPORT_EMAIL, to: user.email)
-  end
-
   # Stripe told us a court order froze the seller's connected account. Stripe has already paused the
   # account; we only relay the law firm's contact details and never advise on the order itself
   # (gumroad-private#3598).
