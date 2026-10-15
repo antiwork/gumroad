@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import { Button, NavigationButton } from "$app/components/Button";
+import { FallbackOnError } from "$app/components/FallbackOnError";
 
 // Catches the case where the product editor's code cannot be downloaded at all.
 //
@@ -38,18 +39,6 @@ const ProductEditLoadFailed = () => (
   </div>
 );
 
-// Error boundaries have no hook equivalent, so this has to be a class component.
-export class ProductEditBoundary extends React.Component<{ children: React.ReactNode }, { failed: boolean }> {
-  constructor(props: { children: React.ReactNode }) {
-    super(props);
-    this.state = { failed: false };
-  }
-
-  static getDerivedStateFromError() {
-    return { failed: true };
-  }
-
-  override render() {
-    return this.state.failed ? <ProductEditLoadFailed /> : this.props.children;
-  }
-}
+export const ProductEditBoundary = ({ children }: { children: React.ReactNode }) => (
+  <FallbackOnError fallback={<ProductEditLoadFailed />}>{children}</FallbackOnError>
+);

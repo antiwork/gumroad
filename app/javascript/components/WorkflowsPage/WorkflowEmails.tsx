@@ -104,6 +104,8 @@ const WorkflowEmails = ({ context, workflow }: WorkflowEmailsProps) => {
   const [sendToPastCustomers, setSendToPastCustomers] = React.useState(workflow.send_to_past_customers);
   const [files, filesDispatch] = React.useReducer(filesReducer, installmentsFilesToFilesState(workflow.installments));
   const [emails, setEmails] = React.useState<EmailFormState[]>(installmentsToEmails(workflow.installments));
+  // Preview state is debounced; saves and reopened rows need the current message.
+  const currentMessages = React.useRef(new Map<string, string>());
 
   const form = useForm({});
   const workflowTrigger = determineWorkflowTrigger(workflow);
@@ -163,6 +165,7 @@ const WorkflowEmails = ({ context, workflow }: WorkflowEmailsProps) => {
   );
   const deleteEmail = (emailId: string) => {
     setDeletingEmailId(null);
+    currentMessages.current.delete(emailId);
     setEmails((prev) => prev.filter((prevEmail) => prevEmail.id !== emailId));
     setExpandedEmailIds((prev) => {
       const updated = new Set(prev);
@@ -200,7 +203,7 @@ const WorkflowEmails = ({ context, workflow }: WorkflowEmailsProps) => {
           return {
             id: email.id,
             name: email.name,
-            message: email.message,
+            message: currentMessages.current.get(email.id) ?? email.message,
             time_period: email.delayed_delivery_time_period,
             time_duration: email.delayed_delivery_time_duration,
             send_preview_email: email.id === sendPreviewForEmailId,
@@ -306,7 +309,7 @@ const WorkflowEmails = ({ context, workflow }: WorkflowEmailsProps) => {
                           {sortedEmails.map((email) => (
                             <EmailRow
                               key={email.id}
-                              email={email}
+                              email={{ ...email, message: currentMessages.current.get(email.id) ?? email.message }}
                               workflowTrigger={workflowTrigger}
                               expanded={expandedEmailIds.has(email.id)}
                               focusedFieldInfo={focusedFieldInfo}
@@ -328,10 +331,13 @@ const WorkflowEmails = ({ context, workflow }: WorkflowEmailsProps) => {
                               }
                               onDelete={() => setDeletingEmailId(email.id)}
                               onChange={(value) => updateEmail(email.id, value)}
+                              onMessageChange={(message) => currentMessages.current.set(email.id, message)}
                               onSendPreviewEmail={() => handleSave({ sendPreviewForEmailId: email.id })}
                               isSaving={form.processing || imageSettings.isUploading}
                               hasUploadingImages={
-                                imageSettings.isUploading ? email.message.includes('src="blob:') : false
+                                imageSettings.isUploading
+                                  ? (currentMessages.current.get(email.id) ?? email.message).includes('src="blob:')
+                                  : false
                               }
                             />
                           ))}
@@ -386,6 +392,7 @@ type EmailRowProps = {
   invalidFieldNames: InvalidFieldNames[];
   toggleExpanded: () => void;
   onChange: (value: Partial<EditableEmailFormState>) => void;
+  onMessageChange: (message: string) => void;
   onFocus: (fieldName: FocusedFieldInfo["fieldName"]) => void;
   onDelete: () => void;
   onSendPreviewEmail: () => void;
@@ -400,6 +407,7 @@ const EmailRow = ({
   invalidFieldNames,
   toggleExpanded,
   onChange,
+  onMessageChange,
   onFocus,
   onDelete,
   onSendPreviewEmail,
@@ -408,6 +416,7 @@ const EmailRow = ({
 }: EmailRowProps) => {
   const [editorContent, setEditorContent] = React.useState(email.message);
   const handleMessageChange = useDebouncedCallback((message: string) => onChange({ message }), 500);
+  React.useEffect(() => () => handleMessageChange.cancel(), [handleMessageChange]);
   const nameInputRef = React.useRef<null | HTMLInputElement>(null);
   const emailFiles = useFiles((files) => files.filter(({ email_id }) => email_id === email.id));
   React.useEffect(() => {
@@ -520,7 +529,10 @@ const EmailRow = ({
               placeholder="Write a personalized message..."
               extensions={[...(isAbandonedCartWorkflow ? [AbandonedCartProductList] : [])]}
               initialValue={editorContent}
-              onChange={handleMessageChange}
+              onChange={(message) => {
+                onMessageChange(message);
+                handleMessageChange(message);
+              }}
               onCreate={(editor) => editor.on("focus", () => onFocus("message"))}
             />
             {isAbandonedCartWorkflow ? null : (

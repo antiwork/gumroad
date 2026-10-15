@@ -532,6 +532,15 @@ $accent-color: map-get($colors, "pink"); // [1]
               max-height: size(nth($line-heights, 3));
             }
 
+            // The fixed cover column leaves ~150px for the name on a phone, so one line shows only
+            // the first ~20 characters. Three lines still fit the 128px cell and keep it readable.
+            &:first-child > h4 {
+              white-space: normal;
+              overflow-wrap: break-word;
+              @include max-lines(3);
+              max-height: size(nth($line-heights, 3) * 3);
+            }
+
             h4 {
               font-weight: bold;
             }

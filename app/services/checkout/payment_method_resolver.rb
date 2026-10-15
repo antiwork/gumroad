@@ -40,6 +40,9 @@ class Checkout::PaymentMethodResolver
   UPI_RECURRING_SERVICING_FEATURE = :upi_autopay_renewals
   # Stripe caps each UPI recurring debit at INR 15,000. Gumroad stores INR in paise.
   UPI_RECURRING_MAX_INR_CENTS = 1_500_000
+  # Stripe rejects the whole Elements session/intent, card included, when UPI is listed above
+  # its one-time cap: https://docs.stripe.com/payments/upi#transaction-limits
+  UPI_MAX_INR_CENTS = 100_000_00
   # Per-seller Flipper flag so it can ramp and roll back independently (gumroad-private#933).
   # Klarna forces no presentment currency, so it rides the canonical-USD lane and is absent from
   # Checkout::BuyerCurrencyEligibility's forced-currency registry.

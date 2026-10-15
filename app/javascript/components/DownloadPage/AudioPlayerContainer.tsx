@@ -27,7 +27,7 @@ export const AudioPlayerContainer = ({
 }) => {
   const { purchaseId, redirectId } = usePurchaseInfo();
   const [mediaUrls] = useMediaUrls();
-  const [isPlaying, setIsPlaying] = React.useState(false);
+  const [isPlaying, setIsPlaying] = React.useState(playingAudioForId === fileId);
   const duration = React.useRef(0);
   const mediaUrl = (mediaUrls[fileId] ?? [])[0];
 
@@ -79,6 +79,7 @@ export const AudioPlayerContainer = ({
       src={mediaUrl}
       isPlaying={isPlaying}
       onPlay={playAudio}
+      onPlayRequest={playAudio}
       onPause={pauseAudio}
       onTimeUpdate={updateProgress}
       onSeeked={(currentTime) => {

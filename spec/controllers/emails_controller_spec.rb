@@ -14,6 +14,46 @@ describe EmailsController, type: :controller, inertia: true do
 
   include_context "with user signed in as admin for seller"
 
+  shared_examples "an emails list page that skips has_posts and emails_view on partial reloads" do |action, component|
+    # The dashboard nav runs a plain `seller.installments.exists?` on full visits; match the alive, non-workflow scope only.
+    let(:has_posts_query) do
+      /\ASELECT 1 AS one FROM `installments` WHERE `installments`\.`seller_id` = #{seller.id} AND `installments`\.`deleted_at` IS NULL AND `installments`\.`workflow_id` IS NULL/
+    end
+
+    def capture_queries(&block)
+      queries = []
+      callback = ->(*, payload) { queries << payload[:sql] unless payload[:cached] }
+      ActiveSupport::Notifications.subscribed(callback, "sql.active_record", &block)
+      queries
+    end
+
+    it "returns has_posts and logs a page view on a full visit" do
+      queries = nil
+      expect do
+        queries = capture_queries { get action }
+      end.to change { Event.where(event_name: "emails_view").count }.by(1)
+
+      expect(inertia.props[:has_posts]).to be(true)
+      expect(queries.grep(has_posts_query)).not_to be_empty
+    end
+
+    it "skips the has_posts query and the page view on a Load more partial reload" do
+      request.headers["X-Inertia"] = "true"
+      request.headers["X-Inertia-Partial-Component"] = component
+      request.headers["X-Inertia-Partial-Data"] = "installments,pagination"
+
+      queries = nil
+      expect do
+        queries = capture_queries { get action, params: { page: 2 } }
+      end.not_to change { Event.count }
+
+      props = response.parsed_body.fetch("props")
+      expect(props).to include("installments", "pagination")
+      expect(props).not_to have_key("has_posts")
+      expect(queries.grep(has_posts_query)).to be_empty
+    end
+  end
+
   describe "GET index" do
     it_behaves_like "authorize called for action", :get, :index do
       let(:record) { Installment }
@@ -53,6 +93,12 @@ describe EmailsController, type: :controller, inertia: true do
         has_posts: be_in([true, false])
       )
     end
+
+    context "with an existing published email" do
+      before { create(:installment, seller:, published_at: 1.day.ago) }
+
+      it_behaves_like "an emails list page that skips has_posts and emails_view on partial reloads", :published, "Emails/Published"
+    end
   end
 
   describe "GET scheduled" do
@@ -74,6 +120,12 @@ describe EmailsController, type: :controller, inertia: true do
         has_posts: be_in([true, false])
       )
     end
+
+    context "with an existing scheduled email" do
+      before { create(:scheduled_installment, seller:) }
+
+      it_behaves_like "an emails list page that skips has_posts and emails_view on partial reloads", :scheduled, "Emails/Scheduled"
+    end
   end
 
   describe "GET drafts" do
@@ -94,6 +146,12 @@ describe EmailsController, type: :controller, inertia: true do
         pagination: be_a(Hash),
         has_posts: be_in([true, false])
       )
+    end
+
+    context "with an existing draft email" do
+      before { create(:installment, seller:) }
+
+      it_behaves_like "an emails list page that skips has_posts and emails_view on partial reloads", :drafts, "Emails/Drafts"
     end
   end
 

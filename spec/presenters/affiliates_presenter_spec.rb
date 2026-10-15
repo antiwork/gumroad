@@ -49,6 +49,17 @@ describe AffiliatesPresenter do
       })
     end
 
+    it "loads every affiliate's products without a query per affiliate" do
+      # Requests run with the query cache on, which serves each row's identical seller product count.
+      index_queries = -> { ActiveRecord::Base.cache { count_queries { described_class.new(pundit_user).index_props } } }
+      index_queries.call
+      one_affiliate = index_queries.call
+
+      2.times { create(:direct_affiliate, seller:, products: [create(:product, user: seller)]) }
+
+      expect(index_queries.call).to eq(one_affiliate)
+    end
+
     context "when search query is present" do
       context "when partially matching an affiliate user" do
         let(:query) { "affil" }

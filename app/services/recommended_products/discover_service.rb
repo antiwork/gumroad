@@ -15,7 +15,7 @@ class RecommendedProducts::DiscoverService < RecommendedProducts::BaseService
   def product_infos
     recommended_products = fetch_recommended_products(for_seller_ids: nil).alive.not_archived.includes(ProductPresenter::ASSOCIATIONS_FOR_CARD).reject(&:rated_as_adult?)
     product_infos = recommended_products.map do
-      RecommendedProducts::ProductInfo.new(_1)
+      RecommendedProducts::ProductInfo.new(_1, source: RecommendedProducts::ProductInfo::CO_PURCHASE)
     end.take(limit)
 
     build_result(product_infos:)

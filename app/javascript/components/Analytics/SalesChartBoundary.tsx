@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import { Button } from "$app/components/Button";
+import { FallbackOnError } from "$app/components/FallbackOnError";
 
 // Keep chart chunk failures inside the chart box; the rest of Analytics remains useful.
 // Reloading is the recovery because React.lazy caches a rejected import for this document.
@@ -11,18 +12,6 @@ const SalesChartLoadFailed = () => (
   </div>
 );
 
-// Error boundaries have no hook equivalent, so this has to be a class component.
-export class SalesChartBoundary extends React.Component<{ children: React.ReactNode }, { failed: boolean }> {
-  constructor(props: { children: React.ReactNode }) {
-    super(props);
-    this.state = { failed: false };
-  }
-
-  static getDerivedStateFromError() {
-    return { failed: true };
-  }
-
-  override render() {
-    return this.state.failed ? <SalesChartLoadFailed /> : this.props.children;
-  }
-}
+export const SalesChartBoundary = ({ children }: { children: React.ReactNode }) => (
+  <FallbackOnError fallback={<SalesChartLoadFailed />}>{children}</FallbackOnError>
+);

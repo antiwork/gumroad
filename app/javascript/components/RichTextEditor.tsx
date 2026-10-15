@@ -267,6 +267,7 @@ export const useRichTextEditor = ({
   id,
   className,
   editable = true,
+  immediatelyRender = false,
   extensions = [],
   allowUpsells = true,
   onChange,
@@ -279,6 +280,9 @@ export const useRichTextEditor = ({
   placeholder?: string | undefined;
   initialValue: Content;
   editable?: boolean | undefined;
+  // Creates the editor during the first render instead of after it, so the first paint already
+  // shows the content.
+  immediatelyRender?: boolean | undefined;
   extensions?: Extensions | undefined;
   // First-class Pages publish as static HTML with no client JS, and Page#content
   // sanitization drops <upsell-card>. Keep the insert off that surface.
@@ -365,7 +369,7 @@ export const useRichTextEditor = ({
 
   const editor = useEditor({
     ...baseEditorOptions(dedupedExtensions),
-    immediatelyRender: false,
+    immediatelyRender,
     editable,
     editorProps: {
       attributes: {

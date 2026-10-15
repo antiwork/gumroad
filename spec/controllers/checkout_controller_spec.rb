@@ -465,7 +465,7 @@ describe CheckoutController, type: :controller, inertia: true do
 
         expect(response).to be_successful
         expect(inertia.component).to eq("Checkout/Show")
-        expect(inertia.props.deep_symbolize_keys[:recommended_products]).to eq([product_cards.first])
+        expect(inertia.props.deep_symbolize_keys[:recommended_products]).to eq([product_cards.first.merge(co_purchase: true)])
       end
 
       it "returns empty array when recommendations time out" do

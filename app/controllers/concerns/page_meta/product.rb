@@ -10,9 +10,9 @@ module PageMeta::Product
     def set_product_page_meta(product)
       product_description = product.description.present? ? product.plaintext_description : "Available on Gumroad"
       # Descriptions can run to thousands of characters; crawlers cut the snippet to ~160 chars,
-      # so the rest is pure head weight. Cut on a word boundary: the default slices the last word
-      # in half, and this same string is the og/twitter description that link previews show verbatim.
-      product_description = product_description.truncate(160, separator: " ")
+      # so the rest is pure head weight. SnippetText caps it on a word boundary — this same
+      # string is the og/twitter description that link previews show verbatim.
+      product_description = SnippetText.truncate(product_description)
 
       # On a seller's own domain the page must point search engines at that domain, not at
       # the *.gumroad.com subdomain Link#long_url defaults to — otherwise Search Console

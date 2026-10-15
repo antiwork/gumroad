@@ -77,6 +77,7 @@ class Installment < ApplicationRecord
   friendly_id :slug_candidates, use: :slugged
 
   attr_accessor :publishing
+  attr_writer :dynamo_engagement_summary
 
   validates :name, length: { maximum: 255 }
   validate :message_must_be_provided, :validate_call_to_action_url_and_text, :validate_channel,
@@ -752,6 +753,12 @@ class Installment < ApplicationRecord
   def unique_open_count
     # DDB GetItem is cheap; caching it pins a first-read zero while opens still stream in.
     dynamo_engagement_summary[:open_count]
+  end
+
+  # One BatchGetItem for a list of posts, instead of a GetItem round trip per row.
+  def self.preload_engagement_summaries!(installments)
+    summaries = EmailEngagementDynamoStore.summaries(installments.map(&:id))
+    installments.each { _1.dynamo_engagement_summary = summaries[_1.id] }
   end
 
   # One SUMMARY read serves both counters when a render misses both caches.

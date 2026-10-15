@@ -51,6 +51,45 @@ describe CreatorAnalytics::CachingProxy do
       expect(@service.data_for_dates(date, date, by: :referral)).to eq(result)
     end
 
+    it "ignores revenue cached before refunds and chargebacks were deduplicated" do
+      create(:merchant_account, user: nil) unless MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id)
+      create(:large_seller, user: @user)
+      date = @dates.first
+      add_page_view(@product, Time.utc(2019, 1, 30, 12), referrer_domain: "example.com", country: "Japan")
+      ProductPageView.__elasticsearch__.refresh_index!
+      purchase = create(:purchase, link: @product, created_at: Time.utc(2019, 1, 30, 12), price_cents: 10_00, email: "buyer@example.com", ip_country: "Japan", referrer: "https://example.com")
+      purchase.refund_purchase!(FlowOfFunds.build_simple_flow_of_funds(Currency::USD, -3_00), @user.id)
+      purchase.update!(chargeback_date: Time.utc(2019, 2, 1))
+      index_model_records(Purchase)
+
+      [:date, :state, :referral].each do |by|
+        legacy_key = "#{@service.send(:user_cache_key)}_by_#{by}_for_#{date}"
+        legacy_key += "_v1" if by == :referral
+        expected = web_data(by, date, date)
+        legacy_data = expected.deep_dup
+        totals = legacy_data.fetch("by_#{by}".to_sym).fetch(:totals).fetch(@product.unique_permalink)
+        case by
+        when :date then totals[0] = -3_00
+        when :state then totals["Japan"] = -3_00
+        when :referral then totals["example.com"][0] = -3_00
+        end
+        legacy = create(:computed_sales_analytics_day, key: legacy_key, data: legacy_data.to_json)
+
+        result = @service.data_for_dates(date, date, by:)
+        observed_totals = result.fetch("by_#{by}".to_sym).fetch(:totals).fetch(@product.unique_permalink)
+        observed_cents = case by
+                         when :date then observed_totals.first
+                         when :state then observed_totals.fetch("Japan")
+                         when :referral then observed_totals.fetch("example.com").first
+        end
+        expect(observed_cents).to eq(0)
+        expect(result).to equal_with_indifferent_access(expected)
+        @service.overwrite_cache(date, by:)
+        expect(@service.data_for_dates(date, date, by:)).to equal_with_indifferent_access(expected)
+        expect(legacy.reload.data).to eq(legacy_data.to_json)
+      end
+    end
+
     it "returns merged mix of cached and generated data" do
       allow(@service).to receive(:use_cache?).and_return(true)
 
@@ -262,13 +301,13 @@ describe CreatorAnalytics::CachingProxy do
     it "returns cache key for data by date" do
       user = create(:user, timezone: "Rome")
       cache_key = described_class.new(user).send(:cache_key_for_data, Date.new(2020, 12, 3))
-      expect(cache_key).to eq("seller_analytics_v0_user_#{user.id}_Rome_by_date_for_2020-12-03")
+      expect(cache_key).to eq("seller_analytics_v0_user_#{user.id}_Rome_by_date_for_2020-12-03_revenue_v1")
     end
 
-    it "keeps the existing state cache namespace" do
+    it "returns cache key for data by state" do
       user = create(:user, timezone: "Rome")
       cache_key = described_class.new(user).send(:cache_key_for_data, Date.new(2020, 12, 3), by: :state)
-      expect(cache_key).to eq("seller_analytics_v0_user_#{user.id}_Rome_by_state_for_2020-12-03")
+      expect(cache_key).to eq("seller_analytics_v0_user_#{user.id}_Rome_by_state_for_2020-12-03_revenue_v1")
     end
   end
 

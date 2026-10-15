@@ -11,7 +11,7 @@ class RecommendedProductsController < ApplicationController
         target: product_info.target,
         recommender_model_name: product_info.recommender_model_name,
         affiliate_id: product_info.affiliate_id,
-      )
+      ).merge(co_purchase: product_info.co_purchase?)
     end
     render json: results
   end

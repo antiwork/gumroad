@@ -12,6 +12,13 @@ export type RecommendationType = (typeof recommendationTypes)[number];
 export const isRecommendationType = (value: unknown): value is RecommendationType =>
   isOneOf(value, recommendationTypes);
 
+export const recommendedProductsHeading = (products: CardProduct[], purchasedItems: string) => {
+  if (products.every((product) => product.co_purchase)) return `Customers who bought ${purchasedItems} also bought`;
+  return new Set(products.map((product) => product.seller?.id)).size === 1
+    ? "More from this creator"
+    : "You may also like";
+};
+
 export async function getRecommendedProducts(
   cartProductIds: string[],
   limit: number,

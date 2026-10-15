@@ -431,6 +431,10 @@ class Purchase::CreateService < Purchase::BaseService
     end
 
     def create_gift
+      # `is_gift` can arrive with none of the gift fields set (hand-built or stale clients), and
+      # `gift_params` is nil in that case while the lookups below read it as a hash.
+      raise Purchase::PurchaseInvalid, "This gift is missing the recipient details. Please refresh the page and try again." if gift_params.blank?
+
       # A seller buying their own product can only ever be a test purchase, and test purchases were
       # never built for gifts, so this case has to be rejected. The message names what the seller
       # actually did and points at the supported way to give a product away, because the old wording

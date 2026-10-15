@@ -62,6 +62,23 @@ describe Checkout::DiscountsController do
       let(:record) { OfferCode }
     end
 
+    it "loads every offer code's options and their categories in one query each" do
+      stub_const("Checkout::DiscountsController::PER_PAGE", 3)
+      product = create(:product, user: seller)
+      offer_codes.each do |offer_code|
+        option = create(:variant, variant_category: create(:variant_category, link: product))
+        offer_code.update!(universal: false, products: [product], variants: [option])
+      end
+
+      category_queries = nil
+      option_queries = count_queries(matching: /offer_codes_variants/) do
+        category_queries = count_queries(matching: /FROM `variant_categories`/) { get :paged, params: { page: 1 } }
+      end
+
+      expect([option_queries, category_queries]).to eq([1, 1])
+      expect(response.parsed_body["offer_codes"].size).to eq(3)
+    end
+
     it "returns HTTP success and renders correct JSON response" do
       get :paged, params: { page: 1 }
       expect(response).to be_successful

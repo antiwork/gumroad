@@ -57,20 +57,25 @@ class Affiliate < ApplicationRecord
   scope :valid_for_product, ->(product) { for_product(product).alive.joins(:affiliate_user).merge(User.not_suspended) }
 
   validate :eligible_for_stripe_payments
-  def enabled_products
+  # A no-op when a list already preloaded them, so it renders without a query per row.
+  def product_affiliates_with_products
+    ActiveRecord::Associations::Preloader.new(records: [self], associations: { product_affiliates: :product }).call
     product_affiliates
-      .joins(:product)
-      .merge(Link.alive)
-      .select("affiliates_links.*, links.unique_permalink, links.name")
-      .map do
-        {
-          id: ObfuscateIds.encrypt_numeric(_1.link_id),
-          name: _1.name,
-          fee_percent: _1.affiliate_percentage || affiliate_percentage,
-          destination_url: _1.destination_url,
-          referral_url: construct_permalink(_1.unique_permalink)
-        }
-      end
+  end
+
+  def enabled_products
+    product_affiliates_with_products.filter_map do |product_affiliate|
+      product = product_affiliate.product
+      next unless product&.alive?
+
+      {
+        id: ObfuscateIds.encrypt_numeric(product_affiliate.link_id),
+        name: product.name,
+        fee_percent: product_affiliate.affiliate_percentage || affiliate_percentage,
+        destination_url: product_affiliate.destination_url,
+        referral_url: construct_permalink(product.unique_permalink)
+      }
+    end
   end
 
   def affiliate_info

@@ -11,6 +11,12 @@ const pageNames = {
 };
 export type Page = keyof typeof pageNames;
 
+const pagePaths: Record<Page, () => string> = {
+  discounts: () => Routes.checkout_discounts_path(),
+  form: () => Routes.checkout_form_path(),
+  upsells: () => Routes.checkout_upsells_path(),
+};
+
 export const Layout = ({
   currentPage,
   children,
@@ -33,7 +39,7 @@ const Header = ({ actions, pages, currentPage }: { currentPage: Page; pages: Pag
     <Tabs>
       {pages.map((page) => (
         <Tab key={page} isSelected={page === currentPage} asChild>
-          <Link href={Routes[`checkout_${page}_path`]()} className="no-underline">
+          <Link href={pagePaths[page]()} className="no-underline">
             {pageNames[page]}
           </Link>
         </Tab>

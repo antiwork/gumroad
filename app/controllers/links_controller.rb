@@ -1378,7 +1378,7 @@ class LinksController < ApplicationController
       @user                  = @product.user
       set_meta_tag(title: @product.name)
       set_product_page_meta(@product)
-      set_meta_tag(tag_name: "style", inner_content: @product.user.seller_profile.custom_styles.to_s, head_key: "custom_styles")
+      set_custom_styles_meta_tag(@product.user.seller_profile)
       @body_id               = "product_page"
       @is_on_product_page    = true
       @debug                 = params[:debug] && !Rails.env.production?

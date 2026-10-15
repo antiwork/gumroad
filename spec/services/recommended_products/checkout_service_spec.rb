@@ -130,6 +130,7 @@ describe RecommendedProducts::CheckoutService do
           )
           expect(product_infos.map(&:product)).to eq([recommendable_product, products.first])
           expect(product_infos.first.affiliate_id).to eq(affiliate.external_id_numeric)
+          expect(product_infos.map(&:source)).to eq([RecommendedProducts::ProductInfo::CO_PURCHASE, RecommendedProducts::ProductInfo::CREATOR_FEATURED])
           expect(product_infos.map(&:recommended_by).uniq).to eq([RecommendationType::GUMROAD_MORE_LIKE_THIS_RECOMMENDATION])
           expect(product_infos.map(&:recommender_model_name).uniq).to eq([recommender_model_name])
           expect(product_infos.map(&:target).uniq).to eq([Product::Layout::PROFILE])
@@ -282,6 +283,7 @@ describe RecommendedProducts::CheckoutService do
               limit: 5
             )
             expect(product_infos.map(&:product)).to eq([products.first, additional_product1])
+            expect(product_infos.map(&:source)).to eq([RecommendedProducts::ProductInfo::CO_PURCHASE, RecommendedProducts::ProductInfo::CREATOR_FEATURED])
           end
         end
 

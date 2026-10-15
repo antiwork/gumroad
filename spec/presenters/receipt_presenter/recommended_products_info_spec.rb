@@ -157,6 +157,64 @@ describe ReceiptPresenter::RecommendedProductsInfo do
     end
   end
 
+  describe "#title" do
+    let(:chargeable) { purchase }
+    let(:co_purchased_product) { create(:product, user: seller, name: "Co-purchased product") }
+    let(:featured_product) { create(:product, user: seller, name: "Featured product") }
+
+    before { purchase.update!(purchaser:) }
+
+    def stub_co_purchases(*products)
+      allow(RecommendedProductsService).to receive(:fetch).and_return(Link.where(id: products.map(&:id)))
+      index_model_records(Link)
+    end
+
+    it "keeps the co-purchase heading when every product has co-purchase data" do
+      stub_co_purchases(co_purchased_product)
+
+      expect(recommended_products_info.products.map { _1[:name] }).to eq(["Co-purchased product"])
+      expect(recommended_products_info.title).to eq("Customers who bought this item also bought")
+    end
+
+    it "uses the creator heading when the creator's featured products fill the whole row" do
+      featured_product
+      stub_co_purchases
+
+      expect(recommended_products_info.products.map { _1[:name] }).to eq(["Featured product"])
+      expect(recommended_products_info.title).to eq("More from this creator")
+    end
+
+    it "uses the creator heading when featured products fill part of the row" do
+      featured_product
+      stub_co_purchases(co_purchased_product)
+
+      expect(recommended_products_info.products.map { _1[:name] }).to eq(["Co-purchased product", "Featured product"])
+      expect(recommended_products_info.title).to eq("More from this creator")
+    end
+
+    it "uses a generic heading when a partly featured row spans several creators" do
+      seller.update!(recommendation_type: User::RecommendationType::GUMROAD_AFFILIATES_PRODUCTS)
+      recommendable_product = create(:product, :recommendable, name: "Recommended product")
+      featured_product
+      stub_co_purchases(recommendable_product)
+
+      expect(recommended_products_info.products.map { _1[:name] }).to eq(["Recommended product", "Featured product"])
+      expect(recommended_products_info.title).to eq("You may also like")
+    end
+
+    context "when the purchase doesn't have a purchaser (guest checkout)" do
+      before { purchase.update!(purchaser: nil) }
+
+      it "uses the creator heading when the creator's featured products fill the row" do
+        featured_product
+        stub_co_purchases
+
+        expect(recommended_products_info.products.map { _1[:name] }).to eq(["Featured product"])
+        expect(recommended_products_info.title).to eq("More from this creator")
+      end
+    end
+  end
+
   describe "for Charge", :vcr do
     let(:charge) { create(:charge, seller:, purchases: [purchase]) }
     let!(:order) { charge.order }

@@ -60,7 +60,7 @@ describe RecommendedProductsController do
         params: { cart_product_ids: [cart_product.external_id], on_discover_page: "false", limit: "5" },
         session: { recommender_model_name: }
       )
-      expect(response.parsed_body).to eq([product_cards.first.with_indifferent_access])
+      expect(response.parsed_body).to eq([product_cards.first.merge(co_purchase: true).with_indifferent_access])
     end
   end
 end

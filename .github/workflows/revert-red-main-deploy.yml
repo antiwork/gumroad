@@ -238,7 +238,9 @@ jobs:
           REVERT_URL: ${{ needs.open.outputs.url }}
         run: |
           set -euo pipefail
-          if [ "$NOTIFY" = "true" ] && [ "$REASON" = "deploy_state_unknown" ]; then
+          if [ "$NOTIFY" = "true" ] && [ "$REASON" = "test_card_declined" ]; then
+            body="@${PR_AUTHOR} the full Tests suite on \`main\` failed on ${SHA} with \"Your card was declined.\" in many shards: ${RUN_URL}. That usually means the shared Stripe test card is on the test account's block list, which fails every commit alike. @gumclaw will check the block list, remove the card if it is blocked, and re-run the failed jobs. If the card is not blocked, the commit needs a revert or a fix forward."$'\n\n'"<!-- gumclaw:test-card-decline sha=${SHA} run=${RUN_URL} -->"
+          elif [ "$NOTIFY" = "true" ] && [ "$REASON" = "deploy_state_unknown" ]; then
             body="@${PR_AUTHOR} the full Tests suite on \`main\` failed on ${SHA}: ${RUN_URL}. Production does not contain it yet, and Buildkite could not say whether its deploy is running. Please check the deploy before you choose to revert."
           elif [ "$NOTIFY" = "true" ]; then
             body="@${PR_AUTHOR} the full Tests suite on \`main\` failed on ${SHA} after it deployed, and the automation could not confirm the failure (${REASON}): ${RUN_URL}. Please re-run the failed jobs, or revert."

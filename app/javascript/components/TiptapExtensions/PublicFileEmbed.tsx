@@ -14,7 +14,7 @@ import {
 import { AudioPlayer } from "$app/components/AudioPlayer";
 import { Button } from "$app/components/Button";
 import { FileRowContent } from "$app/components/FileRowContent";
-import { usePublicFilesSettings } from "$app/components/ProductEdit/ProductTab/DescriptionEditor";
+import { PublicFileWithStatus } from "$app/components/ProductEdit/state";
 import { MenuItem } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 import { NodeActionsMenu, NodeActionsWrapper } from "$app/components/TiptapExtensions/NodeActionsMenu";
@@ -22,6 +22,27 @@ import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 import { Row, RowActions, RowContent, RowDetails } from "$app/components/ui/Rows";
+
+export const PublicFilesSettingsContext = React.createContext<{
+  onUpload?: ({
+    file,
+    onSuccess,
+    onError,
+  }: {
+    file: File;
+    onSuccess?: (id: string) => void;
+    onError?: (error: Error | null) => void;
+  }) => void;
+  cancelUpload?: (id: string) => void;
+  updateFile?: (id: string, file: Partial<PublicFileWithStatus>) => void;
+  files: PublicFileWithStatus[];
+} | null>(null);
+
+export const usePublicFilesSettings = () => {
+  const context = React.useContext(PublicFilesSettingsContext);
+  if (!context) throw new Error("usePublicFilesSettings must be used within a PublicFilesSettingsContext");
+  return context;
+};
 
 const NodeView = ({ editor, node, getPos }: NodeViewProps) => {
   const uid = React.useId();

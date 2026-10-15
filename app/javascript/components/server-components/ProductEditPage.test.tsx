@@ -14,6 +14,7 @@ import { confirmRemovedVariantPageDeletions } from "$app/data/product_save_contr
 
 import { CancellationDiscountSelector } from "$app/components/ProductEdit/ProductTab/CancellationDiscountSelector";
 import { type FileEntry, ProductEditContext, type Product, type Version } from "$app/components/ProductEdit/state";
+import { type ImageUploadSettings, useImageUploadSettings } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 import { ProductEditPage, type ProductEditPageProps } from "$app/components/server-components/ProductEditPage";
 
@@ -27,25 +28,39 @@ const contextCapture: { current: ProductEditContextValue | null; showCancellatio
   };
 const saveProductMock = vi.hoisted(() => vi.fn());
 const applyRichContentPageSaveResponseSpy = vi.hoisted(() => vi.fn());
+const imageSettingsCapture: { current: ImageUploadSettings | null } = { current: null };
+const imageUploads = vi.hoisted((): { pending: ((error: Error | null, blob: { key: string }) => void)[] } => ({
+  pending: [],
+}));
+vi.mock("@rails/activestorage", () => ({
+  DirectUpload: class {
+    create(callback: (error: Error | null, blob: { key: string }) => void) {
+      imageUploads.pending.push(callback);
+    }
+  },
+}));
 
 vi.mock("react-router-dom", async (importOriginal) => ({
   ...(await importOriginal<typeof import("react-router-dom")>()),
   createBrowserRouter: () => ({}),
-  RouterProvider: () => (
-    <ProductEditContext.Consumer>
-      {(value) => {
-        contextCapture.current = value;
-        if (contextCapture.showCancellationDiscount) {
-          contextCapture.renders += 1;
-          const MAX_EDITOR_RENDERS = 20;
-          // Bound the broken effect loop so the regression fails without hanging the runner.
-          if (contextCapture.renders > MAX_EDITOR_RENDERS) return <p role="alert">Editor did not settle</p>;
-          return <CancellationDiscountSelector />;
-        }
-        return null;
-      }}
-    </ProductEditContext.Consumer>
-  ),
+  RouterProvider: () => {
+    imageSettingsCapture.current = useImageUploadSettings();
+    return (
+      <ProductEditContext.Consumer>
+        {(value) => {
+          contextCapture.current = value;
+          if (contextCapture.showCancellationDiscount) {
+            contextCapture.renders += 1;
+            const MAX_EDITOR_RENDERS = 20;
+            // Bound the broken effect loop so the regression fails without hanging the runner.
+            if (contextCapture.renders > MAX_EDITOR_RENDERS) return <p role="alert">Editor did not settle</p>;
+            return <CancellationDiscountSelector />;
+          }
+          return null;
+        }}
+      </ProductEditContext.Consumer>
+    );
+  },
 }));
 
 vi.mock("$app/data/product_edit", async (importOriginal) => {
@@ -67,6 +82,7 @@ beforeEach(() => {
   contextCapture.showCancellationDiscount = false;
   contextCapture.renders = 0;
   saveProductMock.mockReset();
+  imageUploads.pending.length = 0;
 });
 
 afterEach(cleanup);
@@ -600,7 +616,7 @@ it("keeps a newly-created variant's move provenance after its own id is remapped
   // itself created.
   const call = applyRichContentPageSaveResponseSpy.mock.calls[0];
   expect(call).toBeDefined();
-  const sentScope = call?.[4];
+  const sentScope: unknown = call?.[4];
   expect(sentScope).toBe("server-new-tier");
   expect(contextCapture.current?.richContentIdMappings["server-new-tier\u0000moved-page"]).toBe(
     "server-page-canonical",
@@ -2019,3 +2035,105 @@ it("shows an unmarked installment-plan clear refusal inline, keeps the seller's 
   expect(saveProductMock.mock.calls[1]?.[2]).toMatchObject({ name: "Unsaved name" });
   expect(screen.queryByRole("alert")).toBeNull();
 });
+
+it("keeps content image uploads busy until their CDN URLs resolve", async () => {
+  vi.stubGlobal("Routes", new Proxy({}, { get: (_, name: string) => () => `/${name}` }));
+  let releaseCdn: ((response: Response) => void) | undefined;
+  vi.stubGlobal(
+    "fetch",
+    () =>
+      new Promise<Response>((resolve) => {
+        releaseCdn = resolve;
+      }),
+  );
+  try {
+    render(<ProductEditPage {...buildTieredProps(buildTieredProduct([]))} />);
+    let uploaded: Promise<string> | undefined;
+    act(() => {
+      uploaded = imageSettingsCapture.current?.onUpload(
+        new File(["pixels"], "content.png", { type: "image/png" }),
+        "blob:preview",
+      );
+    });
+    expect(imageSettingsCapture.current?.isUploading).toBe(true);
+    act(() => {
+      imageUploads.pending[0]?.(null, { key: "content-blob" });
+    });
+    await waitFor(() => expect(releaseCdn).toBeDefined());
+    expect(imageSettingsCapture.current?.isUploading).toBe(true);
+    await act(async () => {
+      releaseCdn?.(
+        new Response(JSON.stringify({ url: "https://cdn.example.com/content.png" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+      await expect(uploaded).resolves.toBe("https://cdn.example.com/content.png");
+    });
+    expect(imageSettingsCapture.current?.isUploading).toBe(false);
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
+it.each(["upload", "CDN lookup"])(
+  "releases content image guards after a failed %s and permits retry",
+  async (failure) => {
+    vi.stubGlobal("Routes", new Proxy({}, { get: (_, name: string) => () => `/${name}` }));
+    const responses: ((response: Response) => void)[] = [];
+    vi.stubGlobal(
+      "fetch",
+      () =>
+        new Promise<Response>((resolve) => {
+          responses.push(resolve);
+        }),
+    );
+    try {
+      render(<ProductEditPage {...buildTieredProps(buildTieredProduct([]))} />);
+      let result: Promise<unknown> | undefined;
+      act(() => {
+        result = imageSettingsCapture.current
+          ?.onUpload(new File(["pixels"], "content.png"), "blob:preview")
+          ?.catch((error: unknown) => error);
+      });
+      expect(imageSettingsCapture.current?.isUploading).toBe(true);
+      if (failure === "upload") {
+        await act(async () => {
+          imageUploads.pending.shift()?.(new Error("Upload failed"), { key: "unused" });
+          expect(await result).toBeInstanceOf(Error);
+        });
+      } else {
+        act(() => {
+          imageUploads.pending.shift()?.(null, { key: "content-blob" });
+        });
+        await waitFor(() => expect(responses).toHaveLength(1));
+        await act(async () => {
+          responses.shift()?.(new Response("Unavailable", { status: 500 }));
+          expect(await result).toBeInstanceOf(Error);
+        });
+      }
+      expect(imageSettingsCapture.current?.isUploading).toBe(false);
+      act(() => {
+        result = imageSettingsCapture.current?.onUpload(new File(["pixels"], "retry.png"), "blob:retry");
+      });
+      expect(imageSettingsCapture.current?.isUploading).toBe(true);
+      act(() => {
+        imageUploads.pending.shift()?.(null, { key: "retry-blob" });
+      });
+      await waitFor(() => expect(responses).toHaveLength(1));
+      expect(imageSettingsCapture.current?.isUploading).toBe(true);
+      await act(async () => {
+        responses.shift()?.(
+          new Response(JSON.stringify({ url: "https://cdn.example.com/retry.png" }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+        );
+        expect(await result).toBe("https://cdn.example.com/retry.png");
+      });
+      expect(imageSettingsCapture.current?.isUploading).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  },
+);

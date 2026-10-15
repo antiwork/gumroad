@@ -6,7 +6,7 @@ import AutoImport from "unplugin-auto-import/vite";
 import { defineConfig } from "vite";
 import RubyPlugin from "vite-plugin-ruby";
 
-import { manualChunks } from "./config/vite/manual-chunks.ts";
+import { codeSplittingGroups } from "./config/vite/manual-chunks.ts";
 import { staleModuleGuard } from "./config/vite/stale-module-guard.ts";
 
 const rootPath = path.dirname(fileURLToPath(import.meta.url));
@@ -22,14 +22,6 @@ function stripCjsExportsPlugin() {
   };
 }
 
-// Vendor chunk splitting — keeps large, leaf-node dependencies in stable,
-// independently cacheable chunks so that app-code deploys don't bust CDN
-// caches for vendor code that rarely changes.
-//
-// Strategy: pull out large libraries that DON'T import React (pure JS libs)
-// into their own chunks. Everything React-dependent stays in one "vendor"
-// chunk to avoid circular cross-chunk imports between React internals and
-// the many small packages that re-export them.
 // Some client-side security software (antivirus web shields, tracker blockers, corporate
 // proxies) block or quarantine requests purely on the URL/filename containing tracker-like
 // words such as "google_analytics". Our chunk names come from the source module name, so a
@@ -97,7 +89,7 @@ export default defineConfig(() => ({
     // pattern explicit so it survives Vite major bumps.
     rollupOptions: {
       output: {
-        manualChunks,
+        codeSplitting: { groups: codeSplittingGroups },
         // [name]-[hash] keeps filenames readable in devtools / logs.
         // sanitizeChunkName strips tracker-like words (see above) so client-side
         // blockers can't take a page down by refusing one of its static imports.
@@ -106,8 +98,8 @@ export default defineConfig(() => ({
         assetFileNames: "assets/[name]-[hash][extname]",
       },
     },
-    // Raise chunk size warning limit — the combined vendor chunk is large
-    // but it's a single cacheable unit that changes infrequently.
+    // Raise chunk size warning limit — the vendor chunk is large but it's a single cacheable unit
+    // that changes infrequently.
     chunkSizeWarningLimit: 800,
   },
 }));

@@ -14,8 +14,7 @@ permissions:
 
 jobs:
   # Branch pushes in this repository only: a fork's code must not run next to the
-  # secrets this build uses. A run-all-specs branch already built the image in
-  # Tests, so the build finds the tag and stops.
+  # secrets this build uses.
   build:
     if: >-
       github.event.workflow_run.conclusion == 'success' &&

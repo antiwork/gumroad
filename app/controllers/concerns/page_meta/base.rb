@@ -61,6 +61,12 @@ module PageMeta::Base
       set_meta_tag(tag_name: "link", rel: "apple-touch-icon", href: image_path("pink-icon.png"), head_key: "apple-touch-icon")
     end
 
+    # SellerProfile compiles custom_styles only from allowlisted and hex-checked values. Browsers do
+    # not decode entities inside <style>, so escaped quotes would void the font family declaration.
+    def set_custom_styles_meta_tag(seller_profile)
+      set_meta_tag(tag_name: "style", inner_content: seller_profile.custom_styles.html_safe, head_key: "custom_styles")
+    end
+
     def set_meta_tag(**options)
       new_tag = InertiaRails::MetaTag.new(**options)
       meta_tags[new_tag[:head_key]] = new_tag

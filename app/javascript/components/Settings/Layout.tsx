@@ -21,6 +21,19 @@ const PAGE_TITLES = {
   advanced: "Advanced",
 };
 
+const PAGE_PATHS: Record<Page, () => string> = {
+  main: () => Routes.settings_main_path(),
+  profile: () => Routes.settings_profile_path(),
+  team: () => Routes.settings_team_path(),
+  payments: () => Routes.settings_payments_path(),
+  billing: () => Routes.settings_billing_path(),
+  authorized_applications: () => Routes.settings_authorized_applications_path(),
+  password: () => Routes.settings_password_path(),
+  social_connections: () => Routes.settings_social_connections_path(),
+  third_party_analytics: () => Routes.settings_third_party_analytics_path(),
+  advanced: () => Routes.settings_advanced_path(),
+};
+
 type Props = {
   onSave?: () => void;
   pages: Page[];
@@ -62,7 +75,7 @@ export const Layout = ({ onSave, pages, currentPage, children, canUpdate }: Prop
         <Tabs>
           {pages.map((page) => (
             <Tab key={page} isSelected={currentPage === page} asChild>
-              <Link href={Routes[`settings_${page}_path`]()}>{PAGE_TITLES[page]}</Link>
+              <Link href={PAGE_PATHS[page]()}>{PAGE_TITLES[page]}</Link>
             </Tab>
           ))}
         </Tabs>

@@ -73,7 +73,7 @@ class CollaboratorPresenter
     end
 
     def products(with_product_url: false)
-      collaborator&.product_affiliates&.includes(:product)&.map do |pa|
+      collaborator&.product_affiliates_with_products&.map do |pa|
         {
           id: pa.product.external_id,
           name: pa.product.name,

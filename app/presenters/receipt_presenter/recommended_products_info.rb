@@ -11,7 +11,14 @@ class ReceiptPresenter::RecommendedProductsInfo
   end
 
   def title
-    "Customers who bought #{receipt_product_ids.size == 1 ? "this item" : "these items"} also bought"
+    product_infos = recommendations ? recommended_product_infos : []
+    if product_infos.all?(&:co_purchase?)
+      "Customers who bought #{receipt_product_ids.size == 1 ? "this item" : "these items"} also bought"
+    elsif product_infos.map { _1.product.user_id }.uniq.one?
+      "More from this creator"
+    else
+      "You may also like"
+    end
   end
 
   def products

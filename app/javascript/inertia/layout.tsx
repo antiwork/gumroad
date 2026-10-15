@@ -78,7 +78,10 @@ export function LoggedInUserLayout({ children }: { children: React.ReactNode }) 
       <CurrentSellerProvider value={parseCurrentSeller(current_seller)}>
         <MetaTags />
         <Alert initial={null} />
-        {children}
+        {/* Product and profile pages lazy-load parts that have nothing to show in their place (rich
+            text sections, the seller's section editor). The page stays blank until they arrive, so
+            nothing renders half-built and then shifts. */}
+        <React.Suspense fallback={null}>{children}</React.Suspense>
       </CurrentSellerProvider>
     </LoggedInUserProvider>
   );

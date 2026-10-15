@@ -197,7 +197,7 @@ class Checkout::DiscountsController < Sellers::BaseController
       offer_codes = current_seller.offer_codes
                       .alive
                       .where.not(code: nil)
-                      .includes(:products, :ownership_products, :excluded_products)
+                      .includes(:products, :ownership_products, :excluded_products, :variants)
                       .sorted_by(**paged_params[:sort].to_h.symbolize_keys).order(updated_at: :desc)
       offer_codes = offer_codes.where("name LIKE :query OR code LIKE :query", query: "%#{params[:query]}%") if params[:query].present?
       offer_codes_count = offer_codes.count.is_a?(Hash) ? offer_codes.count.length : offer_codes.count
@@ -216,6 +216,8 @@ class Checkout::DiscountsController < Sellers::BaseController
       rescue Pagy::OverflowError => e
         pagination, offer_codes = pagy(offer_codes, page: e.pagy.last, limit: PER_PAGE)
       end
+      # Only Variant has `variant_category` (a Sku reads its own link_id), so this can't be a nested include.
+      ActiveRecord::Associations::Preloader.new(records: offer_codes.flat_map(&:variants).grep(Variant), associations: :variant_category).call
 
       [PagyPresenter.new(pagination).props, offer_codes]
     end

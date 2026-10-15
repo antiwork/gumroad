@@ -209,38 +209,13 @@ const PdfReader = ({
   const contentRef = React.useRef<HTMLDivElement>(null);
   const pdfViewerRef = React.useRef<PDFSinglePageViewer | null>(null);
 
-  const updatePage = React.useCallback(
-    (val: "previous" | "next" | number, pages: number = pageCount) => {
-      let newPageNumber = pageNumber;
-      if (val === "next") {
-        newPageNumber += 1;
-      } else if (val === "previous") {
-        newPageNumber -= 1;
-      } else {
-        newPageNumber = val;
-      }
-      newPageNumber = Math.max(1, Math.min(newPageNumber, pages));
-      setPageNumber(newPageNumber);
-      if (pdfViewerRef.current) {
-        pdfViewerRef.current.currentPageNumber = newPageNumber;
-      }
-      if (purchase_id) {
-        void trackMediaLocationChanged({
-          urlRedirectId: url_redirect_id,
-          productFileId: product_file_id,
-          purchaseId: purchase_id,
-          location: newPageNumber,
-        });
-      }
-      document.cookie = `${encodeURIComponent(read_id)}=${encodeURIComponent(
-        JSON.stringify({
-          location: newPageNumber,
-          timestamp: new Date(),
-        }),
-      )}`;
-    },
-    [pageNumber, pageCount, purchase_id, url_redirect_id, product_file_id, read_id],
-  );
+  const updatePage = React.useCallback((val: "previous" | "next" | number) => {
+    const viewer = pdfViewerRef.current;
+    if (!viewer?.pdfDocument) return;
+    const requestedPage =
+      val === "next" ? viewer.currentPageNumber + 1 : val === "previous" ? viewer.currentPageNumber - 1 : val;
+    viewer.currentPageNumber = Math.max(1, Math.min(requestedPage, viewer.pdfDocument.numPages));
+  }, []);
 
   const zoomIn = () => {
     if (!pdfViewerRef.current) return;
@@ -275,12 +250,12 @@ const PdfReader = ({
           new Date(latest_media_location.timestamp) > new Date(latestMediaLocationFromCookies.timestamp))
       ) {
         const location = latest_media_location.location;
-        updatePage(location >= pageCount ? 1 : location, pageCount);
+        updatePage(location >= pageCount ? 1 : location);
       } else if (latestMediaLocationFromCookies.location != null) {
         const location = latestMediaLocationFromCookies.location;
-        updatePage(location >= pageCount ? 1 : location, pageCount);
+        updatePage(location >= pageCount ? 1 : location);
       } else {
-        updatePage(1, pageCount);
+        updatePage(1);
       }
     };
 
@@ -313,10 +288,27 @@ const PdfReader = ({
       pdfLinkService.setViewer(pdfSinglePageViewer);
       pdfViewerRef.current = pdfSinglePageViewer;
 
+      const onPageChange = ({ pageNumber }: { pageNumber: number }) => {
+        setPageNumber(pageNumber);
+        if (purchase_id) {
+          void trackMediaLocationChanged({
+            urlRedirectId: url_redirect_id,
+            productFileId: product_file_id,
+            purchaseId: purchase_id,
+            location: pageNumber,
+          });
+        }
+        document.cookie = `${encodeURIComponent(read_id)}=${encodeURIComponent(
+          JSON.stringify({ location: pageNumber, timestamp: new Date() }),
+        )}`;
+      };
       const onPagesInit = () => {
         pdfSinglePageViewer.currentScaleValue = "page-fit";
         setIsLoading(false);
+        const previousPage = pdfSinglePageViewer.currentPageNumber;
         resumeFromLastLocation(pdfViewerRef.current?.pdfDocument?.numPages ?? 1);
+        // Setting the current page to itself does not emit pagechanging.
+        if (pdfSinglePageViewer.currentPageNumber === previousPage) onPageChange({ pageNumber: previousPage });
       };
       const onPageRender = () => {
         const page = container.querySelector(".page");
@@ -327,12 +319,14 @@ const PdfReader = ({
 
       eventBus.on("pagesinit", onPagesInit);
       eventBus.on("pagerender", onPageRender);
+      eventBus.on("pagechanging", onPageChange);
 
       // Named handlers so they can be removed by reference — eventBus.off is a no-op against an
       // anonymous function, which is why these were extracted above.
       teardown = () => {
         eventBus.off("pagesinit", onPagesInit);
         eventBus.off("pagerender", onPageRender);
+        eventBus.off("pagechanging", onPageChange);
         pdfSinglePageViewer.cleanup();
       };
 

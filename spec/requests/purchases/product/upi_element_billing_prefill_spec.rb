@@ -111,4 +111,27 @@ describe "UPI Payment Element billing handling", type: :system, js: true do
       expect(page).to have_no_text("Full name")
     end
   end
+
+  it "keeps checkout on screen when a USD cart's INR total is above UPI's per-payment cap" do
+    product = create(:product_with_pdf_file, user: @seller, price_cents: 199_900)
+    visit("/l/#{product.unique_permalink}")
+    add_to_cart(product)
+
+    checkout_payment = checkout_payment_props
+    expect(checkout_payment["integration"]).to eq("payment_element_client_confirm")
+    expect(checkout_payment.dig("elements_options", "inr_local_methods")).to include("upi")
+    expect(page).to have_text(/Total\s*₹/, wait: 20)
+
+    # Listing UPI on the INR remount made Stripe destroy the element; the debounced name prefill
+    # then updated the destroyed element and React unmounted the whole checkout.
+    find_field("Full name").send_keys("Synthetic Buyer")
+    sleep 2
+    expect(page).to have_field("Full name", with: "Synthetic Buyer")
+    expect(page).to have_text(/Total\s*₹/)
+
+    within_payment_element_frame do
+      expect(page).to have_xpath(".//*[normalize-space(text())='Card']", visible: :all, wait: 20)
+      expect(page).to have_no_xpath(".//*[normalize-space(text())='UPI']", visible: :all)
+    end
+  end
 end

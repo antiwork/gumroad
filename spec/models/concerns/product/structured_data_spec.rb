@@ -413,6 +413,20 @@ describe Product::StructuredData do
           end
         end
 
+        context "when the cut lands on sentence punctuation" do
+          # 153 characters, then a period and a space: the word-boundary cut stops right after
+          # the period, so the JSON-LD snippet used to read "…day to day....".
+          let(:long_description) { ("a" * 153) + ". And then a lot more words to push past the cap." }
+
+          before do
+            product.update!(description: long_description)
+          end
+
+          it "replaces the punctuation with the omission instead of doubling it" do
+            expect(product.structured_data["description"]).to eq(("a" * 153) + "...")
+          end
+        end
+
         context "when words in a long description are separated by newlines" do
           let(:long_description) { (1..40).map { |i| "word#{i}" }.join("\n") }
 

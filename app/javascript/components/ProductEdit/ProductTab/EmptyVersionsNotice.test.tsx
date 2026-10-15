@@ -5,7 +5,7 @@ import { afterEach, expect, it, vi } from "vitest";
 
 import { type Page } from "$app/components/ProductEdit/ContentTab/PageTab";
 import { EmptyVersionsNotice } from "$app/components/ProductEdit/ProductTab/EmptyVersionsNotice";
-import { type Product, type Version } from "$app/components/ProductEdit/state";
+import { type FileEntry, type Product, type Version } from "$app/components/ProductEdit/state";
 
 const context = vi.hoisted(() => {
   const paragraph = (text?: string) => ({ type: "paragraph", ...(text ? { content: [{ type: "text", text }] } : {}) });
@@ -26,6 +26,23 @@ const context = vi.hoisted(() => {
     rich_content: richContent,
     price_difference_cents: null,
   });
+  const file: FileEntry = {
+    display_name: "choir.pdf",
+    description: null,
+    extension: "pdf",
+    file_size: 1_024,
+    is_pdf: true,
+    pdf_stamp_enabled: false,
+    hide_kindle_and_read_buttons: false,
+    is_streamable: false,
+    stream_only: false,
+    is_transcoding_in_progress: false,
+    id: "file",
+    url: null,
+    subtitle_files: [],
+    status: { type: "existing" },
+    thumbnail: null,
+  };
   const product: Product = {
     name: "Test product",
     description: "",
@@ -96,7 +113,7 @@ const context = vi.hoisted(() => {
     public_files: [],
     community_chat_enabled: false,
   };
-  return { page, blankPage, version, product };
+  return { page, blankPage, version, file, product };
 });
 
 vi.mock("$app/components/ProductEdit/state", async (importOriginal) => ({
@@ -109,6 +126,8 @@ afterEach(() => {
   context.product.variants = [];
   context.product.native_type = "digital";
   context.product.has_same_rich_content_for_all_variants = false;
+  context.product.files = [];
+  context.product.rich_content = [];
 });
 
 it("names the versions that have no files and no content, and leaves the others out", () => {
@@ -195,6 +214,52 @@ it("counts a page holding a file embed as content", () => {
     description: { type: "doc", content: [{ type: "fileEmbed", attrs: { id: "file" } }] },
   };
   context.product.variants = [context.version("1", "SMALL CHOIR", [embed])];
+
+  render(<EmptyVersionsNotice />);
+
+  expect(screen.queryByRole("status")).toBeNull();
+});
+
+it("flags a product with no versions, no files and no content", () => {
+  render(<EmptyVersionsNotice />);
+
+  expect(screen.getByRole("status").textContent).toContain("This product has no files or content");
+});
+
+it("leaves a product with no versions alone once it has a file", () => {
+  context.product.files = [context.file];
+
+  render(<EmptyVersionsNotice />);
+
+  expect(screen.queryByRole("status")).toBeNull();
+});
+
+it("leaves a product with no versions alone once a page has content", () => {
+  context.product.rich_content = [context.page];
+
+  render(<EmptyVersionsNotice />);
+
+  expect(screen.queryByRole("status")).toBeNull();
+});
+
+it("still flags a product with no versions whose only page is the blank placeholder the editor creates", () => {
+  context.product.rich_content = [context.blankPage];
+
+  render(<EmptyVersionsNotice />);
+
+  expect(screen.getByRole("status").textContent).toContain("This product has no files or content");
+});
+
+it("flags a product with no versions when the shared-content flag is on but the product level is blank", () => {
+  context.product.has_same_rich_content_for_all_variants = true;
+
+  render(<EmptyVersionsNotice />);
+
+  expect(screen.getByRole("status").textContent).toContain("This product has no files or content");
+});
+
+it("stays silent for a physical product with no versions", () => {
+  context.product.native_type = "physical";
 
   render(<EmptyVersionsNotice />);
 

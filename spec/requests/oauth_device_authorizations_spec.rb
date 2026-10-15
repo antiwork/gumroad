@@ -274,6 +274,28 @@ describe "OAuth device authorizations", type: :request do
       expect(access_token.reload).to be_revoked
     end
 
+    it "exchanges a code approved in the window's last poll interval on the poll that lands after expiry" do
+      approval_lead = 10.seconds
+      poll_lag = 20.seconds
+      body = create_device_code
+      sign_in user
+      device_authorization = OauthDeviceAuthorization.last
+
+      travel_to(device_authorization.expires_at - approval_lead)
+      submit_device_authorization(body["user_code"], decision: "approve")
+
+      expect(response.body).to include("Authorization complete")
+
+      travel approval_lead + poll_lag
+      expect do
+        post oauth_token_path, params: { grant_type: OauthDeviceAuthorization::GRANT_TYPE, client_id: oauth_application.uid, device_code: body["device_code"] }
+      end.to change { Doorkeeper::AccessToken.count }.by(1)
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to include("access_token" => Doorkeeper::AccessToken.last.token)
+      expect(device_authorization.reload).to have_attributes(status: OauthDeviceAuthorization::STATUS_CONSUMED)
+    end
+
     it "does not exchange an approved code after the user revokes the application" do
       access_token = create(
         "doorkeeper/access_token",
@@ -657,6 +679,22 @@ describe "OAuth device authorizations", type: :request do
 
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body).to include("error" => "slow_down", "interval" => (OauthDeviceAuthorization::SLOW_DOWN_INTERVAL + OauthDeviceAuthorization::SLOW_DOWN_INCREMENT).to_i)
+    end
+
+    it "keeps a whole window's polling inside the per-IP budget for the token endpoint" do
+      body = create_device_code
+      interval = body["interval"]
+      errors = []
+
+      while Time.current + interval.seconds <= OauthDeviceAuthorization.last.expires_at
+        travel interval.seconds
+        post oauth_token_path, params: { grant_type: OauthDeviceAuthorization::GRANT_TYPE, client_id: oauth_application.uid, device_code: body["device_code"] }
+        errors << response.parsed_body["error"]
+      end
+
+      expect(errors.count).to be_between(2, 20)
+      expect(errors.count("authorization_pending")).to be >= errors.count - 1
+      expect(errors).not_to include("slow_down")
     end
 
     it "does not run the device grant on OAuth token alias routes" do

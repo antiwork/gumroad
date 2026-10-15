@@ -17,7 +17,7 @@ class EmailsController < Sellers::BaseController
 
   def published
     authorize Installment, :index?
-    create_user_event("emails_view")
+    create_emails_view_event
 
     presenter = PaginatedInstallmentsPresenter.new(
       seller: current_seller,
@@ -29,13 +29,13 @@ class EmailsController < Sellers::BaseController
     render inertia: "Emails/Published", props: {
       installments: InertiaRails.merge { props[:installments] },
       pagination: props[:pagination],
-      has_posts: props[:has_posts],
+      has_posts: -> { presenter.has_posts? },
     }
   end
 
   def scheduled
     authorize Installment, :index?
-    create_user_event("emails_view")
+    create_emails_view_event
 
     presenter = PaginatedInstallmentsPresenter.new(
       seller: current_seller,
@@ -47,13 +47,13 @@ class EmailsController < Sellers::BaseController
     render inertia: "Emails/Scheduled", props: {
       installments: InertiaRails.merge { props[:installments] },
       pagination: props[:pagination],
-      has_posts: props[:has_posts],
+      has_posts: -> { presenter.has_posts? },
     }
   end
 
   def drafts
     authorize Installment, :index?
-    create_user_event("emails_view")
+    create_emails_view_event
 
     presenter = PaginatedInstallmentsPresenter.new(
       seller: current_seller,
@@ -65,7 +65,7 @@ class EmailsController < Sellers::BaseController
     render inertia: "Emails/Drafts", props: {
       installments: InertiaRails.merge { props[:installments] },
       pagination: props[:pagination],
-      has_posts: props[:has_posts],
+      has_posts: -> { presenter.has_posts? },
     }
   end
 
@@ -109,6 +109,11 @@ class EmailsController < Sellers::BaseController
   private
     def set_default_page_title
       set_meta_tag(title: "Emails")
+    end
+
+    # Load more and search are partial reloads of a page the seller already viewed.
+    def create_emails_view_event
+      create_user_event("emails_view") unless request.inertia_partial?
     end
 
     def set_installment

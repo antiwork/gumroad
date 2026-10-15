@@ -310,6 +310,10 @@ class Checkout::StripePaymentPresenter
         } : nil,
         payment_method_types:,
         inr_local_methods: inr_local_method_types,
+        # In the method's forced-currency minor units; the browser drops a method its amount exceeds.
+        payment_method_max_amount_cents: {
+          Checkout::PaymentMethodResolver::UPI_PAYMENT_METHOD_TYPE => Checkout::PaymentMethodResolver::UPI_MAX_INR_CENTS,
+        },
         payment_method_list_token: issued_payment_method_list_token(
           payment_method_types,
           inr_local_method_types:,

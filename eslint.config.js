@@ -34,6 +34,13 @@ const baseConfig = {
     "no-empty": ["error", { allowEmptyCatch: true }],
     "no-lone-blocks": "error",
     "no-lonely-if": "error",
+    "no-restricted-syntax": [
+      "error",
+      {
+        selector: "MemberExpression[object.name='Routes'][computed=true]",
+        message: "Reference route helpers statically: a computed `Routes[...]` lookup ships every route on every page.",
+      },
+    ],
     "no-var": "error",
     "no-unneeded-ternary": "error",
     "no-useless-call": "error",

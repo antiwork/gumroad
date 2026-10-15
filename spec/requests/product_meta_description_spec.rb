@@ -60,6 +60,19 @@ describe "product page meta tags", type: :request do
     end
   end
 
+  context "when the cut lands on sentence punctuation" do
+    # 153 characters, then a period and a space: the word-boundary cut stops right after the
+    # period, so the emitted tag used to read "…day to day....".
+    let(:product) { create(:product, user: seller, description: ("a" * 153) + ". And then a lot more words to push past the cap.") }
+
+    it "replaces the punctuation with the omission instead of doubling it" do
+      get "http://#{seller.subdomain}/l/#{product.unique_permalink}"
+
+      expect(rendered_meta_description).to eq(("a" * 153) + "...")
+      expect(rendered_og_description).to eq(("a" * 153) + "...")
+    end
+  end
+
   context "when the description already fits in a snippet" do
     let(:product) { create(:product, user: seller, description: "A short and sweet product description.") }
 

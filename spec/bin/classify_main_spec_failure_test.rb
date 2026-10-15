@@ -9,6 +9,7 @@
 
 require "json"
 require "open3"
+require "tempfile"
 require "yaml"
 
 CLASSIFIER = File.expand_path("../../bin/classify-main-spec-failure", __dir__)
@@ -328,6 +329,60 @@ end
   else
     puts "  FAIL  --spec-failed: #{name}"
     $failures << "--spec-failed #{name}: expected #{expected}, got #{printed.strip.inspect}"
+  end
+end
+
+# --card-declined tells the revert verdict that the shared Stripe test card was
+# declined across shards, which no commit causes on its own.
+def declined_shards(declined, other: 0, steps: SPEC_FAILURE)
+  declined_jobs = Array.new(declined) { |index| job("Test Slow #{index}", "failure", steps) }
+  other_jobs = Array.new(other) { |index| job("Test Fast #{index}", "failure", SPEC_FAILURE) }
+  attempt(declined_jobs + other_jobs, declines: declined_jobs.to_h { |j| [j["id"].to_s, true] })
+end
+
+{
+  "three shards that declined the test card" => [declined_shards(3), "true"],
+  "two shards that declined the test card, which a retry covers" => [declined_shards(2), "false"],
+  "declines in a minority of the red shards" => [declined_shards(3, other: 4), "false"],
+  "declines in most of the red shards" => [declined_shards(4, other: 3), "true"],
+  "declines in shards that never reached their tests" => [declined_shards(3, steps: HUNG_CHECKOUT), "false"],
+  "a verdict input without declines" => [attempt(Array.new(3) { job("Test Slow 1", "failure", SPEC_FAILURE) }), "false"]
+}.each do |name, (payload, expected)|
+  $count += 1
+  _, printed = run(JSON.dump(payload), "--card-declined")
+  if printed.strip == expected
+    puts "  ok    --card-declined: #{name}"
+  else
+    puts "  FAIL  --card-declined: #{name}"
+    $failures << "--card-declined #{name}: expected #{expected}, got #{printed.strip.inspect}"
+  end
+end
+
+# --declined-log reads one shard log. A blocked card is what a failed check
+# found; a spec that expects the decline prints it on the expected side.
+{
+  "an alert check that found the decline" =>
+    [%(expected to find alert with text "Your purchase was successful!" but there were no matches. Also found "", "Your card was declined."), "true"],
+  "a text check that found the decline" =>
+    [%(expected to find text "Your purchase was successful!" in "Checkout\\nYour card was declined."), "true"],
+  "a colored eq failure that got the decline" => [%(\e[31m     got: "Your card was declined."\e[0m), "true"],
+  "an alert check that expected the decline" =>
+    [%(expected to find alert with text "Your card was declined." but there were no matches. Also found "Your purchase was successful!"), "false"],
+  "an eq failure that expected the decline" => [%(     expected: "Your card was declined."\n          got: "Your purchase was successful!"), "false"],
+  "the failing source line" => [%(Failure/Error: expect(page).to have_alert(text: "Your card was declined.")), "false"],
+  "a log without the decline" => ["45 examples, 1 failure", "false"]
+}.each do |name, (log, expected)|
+  $count += 1
+  printed = Tempfile.create(["shard", ".log"]) do |file|
+    file.write(log)
+    file.flush
+    run("", "--declined-log", file.path).last
+  end
+  if printed.strip == expected
+    puts "  ok    --declined-log: #{name}"
+  else
+    puts "  FAIL  --declined-log: #{name}"
+    $failures << "--declined-log #{name}: expected #{expected}, got #{printed.strip.inspect}"
   end
 end
 

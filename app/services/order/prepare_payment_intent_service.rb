@@ -1131,6 +1131,14 @@ class Order::PreparePaymentIntentService
       # already failed the order closed).
       method_types -= [Checkout::PaymentMethodResolver::KLARNA_PAYMENT_METHOD_TYPE] unless klarna_final_amount_within_window?
 
+      # The signed INR list carries UPI regardless of amount, but an over-cap UPI listing fails
+      # CREATE for a card buyer too; the element already dropped UPI for this total.
+      if intent_currency == Currency::INR &&
+          @previewed_payment_method_type != Checkout::PaymentMethodResolver::UPI_PAYMENT_METHOD_TYPE &&
+          presentment.presentment_total_cents > Checkout::PaymentMethodResolver::UPI_MAX_INR_CENTS
+        method_types -= [Checkout::PaymentMethodResolver::UPI_PAYMENT_METHOD_TYPE]
+      end
+
       method_types
     end
 

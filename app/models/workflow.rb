@@ -16,6 +16,8 @@ class Workflow < ApplicationRecord
   belongs_to :base_variant, optional: true
   has_many :installments
   has_many :alive_installments, -> { alive }, class_name: "Installment"
+  has_many :alive_installments_in_delivery_order, -> { alive.joins(:installment_rule).order("installment_rules.delayed_delivery_time ASC", :id) },
+           class_name: "Installment", inverse_of: :workflow
 
   attr_json_data_accessor :workflow_trigger
 

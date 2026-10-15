@@ -71,7 +71,10 @@ class Upsell < ApplicationRecord
           name: product.name,
         }
       end,
-      upsell_variants: upsell_variants.alive.map do |upsell_variant|
+      # Filtered in Ruby so a list that preloaded the variants does not query them per upsell.
+      upsell_variants: upsell_variants.filter_map do |upsell_variant|
+        next unless upsell_variant.alive?
+
         {
           id: upsell_variant.external_id,
           selected_variant: {

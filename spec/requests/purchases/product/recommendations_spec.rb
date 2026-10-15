@@ -180,6 +180,23 @@ describe "RecommendationsScenario", type: :system, js: true do
       expect(purchase.recommended_purchase_info.recommendation_type).to eq(RecommendationType::GUMROAD_MORE_LIKE_THIS_RECOMMENDATION)
     end
 
+    it "uses a neutral heading when the creator's featured products fill part of the row" do
+      seller3 = create(:recommendable_user)
+      bought, co_purchased, featured = ["Bought", "Co-purchased", "Featured"].map { create(:product, user: seller3, name: "Seller 3 #{_1}") }
+      SalesRelatedProductsInfo.update_sales_counts(product_id: bought.id, related_product_ids: [co_purchased.id], increment: 1)
+      rebuild_srpis_cache
+      index_model_records(Link)
+
+      visit bought.long_url
+      add_to_cart(bought)
+
+      within_section "More from this creator" do
+        expect(page).to have_selector("article", text: co_purchased.name)
+        expect(page).to have_selector("article", text: featured.name)
+      end
+      expect(page).to_not have_section("Customers who bought this item also bought")
+    end
+
     context "when at least one creator has Gumroad affiliate recommendations enabled" do
       before do
         seller1.update!(recommendation_type: User::RecommendationType::GUMROAD_AFFILIATES_PRODUCTS)
