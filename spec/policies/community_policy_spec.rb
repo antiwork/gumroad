@@ -199,4 +199,84 @@ describe CommunityPolicy do
       end
     end
   end
+
+  describe "#index? existence check flag" do
+    let(:flag) { described_class::EXISTENCE_CHECK_FLAG }
+
+    def index_for(user)
+      described_class.new(SellerContext.new(user:, seller: user), Community).index?
+    end
+
+    def user_in_arm(treatment:)
+      50.times do
+        candidate = create(:user)
+        return candidate if Feature.active?(flag, candidate) == treatment
+      end
+      raise "no #{treatment ? "treatment" : "control"} user in 50 draws"
+    end
+
+    def existence_check_log_lines
+      lines = []
+      allow(Rails.logger).to receive(:info).and_wrap_original do |original, *args, &block|
+        lines << args.first if args.first.is_a?(String)
+        original.call(*args, &block)
+      end
+      yield
+      lines.filter_map { JSON.parse(_1) rescue nil }.select { _1["event"] == flag.to_s }
+    end
+
+    context "when the flag is off" do
+      it "answers with accessible_communities_ids" do
+        expect(seller).not_to receive(:has_accessible_communities?)
+        expect(index_for(seller)).to eq(true)
+      end
+    end
+
+    context "when the flag is on" do
+      before { Feature.activate(flag) }
+
+      it "answers with the existence check" do
+        expect(seller).to receive(:has_accessible_communities?).and_call_original
+        expect(seller).not_to receive(:accessible_communities_ids)
+        expect(index_for(seller)).to eq(true)
+      end
+
+      it "grants a buyer and denies a user without communities" do
+        expect(index_for(buyer)).to eq(true)
+        expect(index_for(create(:user))).to eq(false)
+      end
+
+      it "does not log" do
+        expect(existence_check_log_lines { index_for(seller) }).to be_empty
+      end
+    end
+
+    context "when the flag is at 100% of actors" do
+      before { Feature.activate_percentage(flag, 100) }
+
+      it "answers with the existence check and does not log" do
+        expect(seller).to receive(:has_accessible_communities?).and_call_original
+        expect(existence_check_log_lines { expect(index_for(seller)).to eq(true) }).to be_empty
+      end
+    end
+
+    context "when the flag is mid-ramp" do
+      before { Feature.activate_percentage(flag, 50) }
+
+      it "logs the arm, result, and elapsed time once per evaluation" do
+        treatment_user = user_in_arm(treatment: true)
+        control_user = user_in_arm(treatment: false)
+
+        lines = existence_check_log_lines do
+          expect(index_for(treatment_user)).to eq(false)
+          expect(index_for(control_user)).to eq(false)
+        end
+
+        expect(lines.map { _1.values_at("arm", "user_id", "has_communities") }).to eq(
+          [["treatment", treatment_user.id, false], ["control", control_user.id, false]]
+        )
+        expect(lines.map { _1["elapsed_ms"] }).to all(be_a(Numeric))
+      end
+    end
+  end
 end

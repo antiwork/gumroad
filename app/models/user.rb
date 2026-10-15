@@ -1550,6 +1550,24 @@ class User < ApplicationRecord
     end.compact.uniq
   end
 
+  # Same answer as `accessible_communities_ids.any?`, as LIMIT 1 lookups. The OR on
+  # purchaser_id/email is split so each half can use its own purchases index.
+  def has_accessible_communities?
+    return true if seller_communities.with_chat_enabled_product.exists?
+
+    purchased = Community.with_chat_enabled_product
+      .joins("INNER JOIN purchases ON purchases.link_id = links.id")
+      .merge(Purchase.successful)
+    return true if purchased.where(purchases: { purchaser_id: id }).exists?
+    # A nil email never matched `purchases.email = ?`; a hash condition would turn it into IS NULL.
+    return false if email.nil?
+
+    # Skip the rows checked above; `!=` alone would also drop guest purchases (NULL purchaser_id).
+    purchased.where(purchases: { email: })
+      .where("purchases.purchaser_id IS NULL OR purchases.purchaser_id != ?", id)
+      .exists?
+  end
+
   def paypal_payout_email
     return payment_address if payment_address.present?
 

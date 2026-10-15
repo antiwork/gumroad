@@ -4846,6 +4846,117 @@ describe User, :vcr do
     end
   end
 
+  describe "#has_accessible_communities?" do
+    let!(:user) { create(:user) }
+    let(:product) { create(:product, user:, community_chat_enabled: true) }
+    let(:other_product) { create(:product, community_chat_enabled: true) }
+
+    def expect_parity_with_accessible_communities_ids(expected)
+      expect(user.accessible_communities_ids.any?).to eq(expected)
+      expect(user.has_accessible_communities?).to eq(expected)
+    end
+
+    it "returns false when the user has no communities" do
+      create(:product, user:)
+      create(:purchase, purchaser: user, link: create(:product))
+
+      expect_parity_with_accessible_communities_ids(false)
+    end
+
+    shared_examples "a reachable community" do
+      it "returns true" do
+        expect_parity_with_accessible_communities_ids(true)
+      end
+
+      it "returns false when the product is deleted" do
+        community_product.mark_deleted!
+        expect_parity_with_accessible_communities_ids(false)
+      end
+
+      it "returns false when the product is banned" do
+        community_product.update!(banned_at: Time.current)
+        expect_parity_with_accessible_communities_ids(false)
+      end
+
+      it "returns false when the product is unpublished" do
+        community_product.update!(purchase_disabled_at: Time.current)
+        expect_parity_with_accessible_communities_ids(false)
+      end
+
+      it "returns false when community chat is disabled" do
+        community_product.update!(community_chat_enabled: false)
+        expect_parity_with_accessible_communities_ids(false)
+      end
+
+      it "returns false when the community is deleted" do
+        community.mark_deleted!
+        expect_parity_with_accessible_communities_ids(false)
+      end
+    end
+
+    shared_examples "a purchased community" do
+      include_examples "a reachable community"
+
+      it "returns false when the purchase is not successful" do
+        purchase.update!(purchase_state: "failed")
+        expect_parity_with_accessible_communities_ids(false)
+      end
+    end
+
+    context "when the user owns a community" do
+      let(:community_product) { product }
+      let!(:community) { create(:community, seller: user, resource: product) }
+
+      include_examples "a reachable community"
+
+      it "stops after one query" do
+        expect(count_queries { user.has_accessible_communities? }).to eq(1)
+      end
+    end
+
+    context "when the user bought a product with a community" do
+      let(:community_product) { other_product }
+      let!(:community) { create(:community, seller: other_product.user, resource: other_product) }
+
+      context "with their account" do
+        let!(:purchase) { create(:purchase, purchaser: user, link: other_product) }
+
+        include_examples "a purchased community"
+
+        it "stops after the seller and purchaser lookups" do
+          expect(count_queries { user.has_accessible_communities? }).to eq(2)
+        end
+      end
+
+      context "with their email from another account" do
+        let!(:purchase) { create(:purchase, purchaser: create(:user), email: user.email, link: other_product) }
+
+        include_examples "a purchased community"
+      end
+
+      context "with their email and no account" do
+        let!(:purchase) { create(:purchase, purchaser: nil, email: user.email, link: other_product) }
+
+        include_examples "a purchased community"
+      end
+    end
+
+    it "does not match guest purchases without an email when the user has a nil email" do
+      create(:community, seller: other_product.user, resource: other_product)
+      create(:purchase, purchaser: nil, link: other_product).update_column(:email, nil)
+      user.update_column(:email, nil)
+
+      expect_parity_with_accessible_communities_ids(false)
+    end
+
+    it "runs three LIMIT 1 lookups when nothing matches" do
+      create(:community, seller: other_product.user, resource: other_product)
+
+      expect(count_queries { user.has_accessible_communities? }).to eq(3)
+      expect(count_queries(matching: /LIMIT 1\z/) { user.has_accessible_communities? }).to eq(3)
+    end
+  end
+
   describe "#purchased_small_bets?" do
     let(:user) { create(:user) }
     let(:small_bets_product) { create(:product) }
