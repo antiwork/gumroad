@@ -19,10 +19,15 @@ class ConfirmationsController < Devise::ConfirmationsController
     end
 
     if @user.confirm
-      sign_in @user
-      logged_in_user.reload
+      # A creator who confirms a brand account they administer is already signed in as
+      # themselves; signing in as the new account would strand them in it, since a brand
+      # account has no memberships of its own to switch back from.
+      unless user_signed_in? && logged_in_user != @user
+        sign_in @user
+        logged_in_user.reload
 
-      invalidate_active_sessions_except_the_current_session!(revoke_mobile_tokens: false)
+        invalidate_active_sessions_except_the_current_session!(revoke_mobile_tokens: false)
+      end
 
       flash[:notice] = "Your account has been successfully confirmed!"
       redirect_to after_confirmation_path_for(:user, @user)

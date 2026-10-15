@@ -98,6 +98,43 @@ describe ConfirmationsController do
           @user.reload.confirmed?
         }.from(false).to(true)
       end
+
+      it "invalidates the user's other sessions" do
+        expect do
+          get :show, params: { confirmation_token: @user.confirmation_token }
+        end.to change { @user.reload.last_active_sessions_invalidated_at }.from(nil)
+      end
+    end
+
+    describe "when the person confirming is signed in as somebody else" do
+      let(:creator) { create(:user) }
+      let(:brand_account) do
+        service = User::CreateBrandAccountService.new(
+          creator:,
+          email: "brand@example.com",
+          username: "creatorbrand",
+          name: "Creator Brand",
+          account_created_ip: "1.2.3.4",
+        )
+        service.perform
+        service.brand_user
+      end
+
+      before { sign_in creator }
+
+      it "confirms the brand account without replacing the creator's session" do
+        expect do
+          get :show, params: { confirmation_token: brand_account.confirmation_token }
+        end.to change { brand_account.reload.confirmed? }.from(false).to(true)
+
+        expect(subject.logged_in_user).to eq(creator)
+      end
+
+      it "does not invalidate the creator's other sessions" do
+        expect do
+          get :show, params: { confirmation_token: brand_account.confirmation_token }
+        end.to_not change { creator.reload.last_active_sessions_invalidated_at }
+      end
     end
 
     describe "logged out" do
