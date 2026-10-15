@@ -21,7 +21,8 @@ describe AdultKeywordDetector do
      "Tentacle Monster Hat",
      "ns fw",
      "Signature Seerie Episode 12 - Saucy",
-     "a saucy magic trick"].each do |text|
+     "a saucy magic trick",
+     "Does not check AHRI matchups or SEER2 ratings"].each do |text|
       expect(described_class.adult?(text)).to eq(false)
     end
   end

@@ -9,7 +9,7 @@ class AdultKeywordDetector
       ["futa", "pussy", "bondage", "bdsm", "lewd", "ahegao", "nude", "milking", "topless", "lolita", "lewds",
        "creampie", "dildo", "gape", "semen", "cuckold", "hairjob", "tickling", "hogtied", "uncensored", "thong",
        "pinup", "impregnation", "gagged", "hentai", "squirt", "orgasm", "virginkiller", "abdl", "crotch",
-       "breast inflation", "ahri", "granblue", "lingerie",
+       "breast inflation", "granblue", "lingerie",
        "boudoir", "kink", "shibari", "gutpunch", "gutpunching", "abs punch", "necro",
        "vibrator", "fetish", "nsfw", "footjob", "joi"].join("|") +
     ")\\b"
