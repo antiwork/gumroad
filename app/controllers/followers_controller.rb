@@ -19,7 +19,8 @@ class FollowersController < ApplicationController
   def index
     authorize [:audience, Follower]
 
-    create_user_event("followers_view")
+    # Load more and search are partial reloads of a page the seller already viewed.
+    create_user_event("followers_view") unless request.inertia_partial?
 
     set_meta_tag(title: "Subscribers")
     set_meta_tag(property: "og:title", content: "Posts")
@@ -38,7 +39,7 @@ class FollowersController < ApplicationController
 
     render inertia: "Followers/Index", props: {
       followers: InertiaRails.merge { paginated_followers.as_json(pundit_user:) },
-      total_count: all_followers.count,
+      total_count: -> { all_followers.count },
       page: pagination.page,
       has_more: pagination.next.present?,
       email:,

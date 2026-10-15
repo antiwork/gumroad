@@ -67,6 +67,66 @@ describe FollowersController, inertia: true do
         expect(inertia.props[:page]).to eq(2)
         expect(inertia.props[:total_count]).to eq(25)
       end
+
+      context "with more than one page of matching followers" do
+        before do
+          create_list(:active_follower, 21, user: seller) do |follower, index|
+            follower.update!(email: "test#{index}@example.com")
+          end
+        end
+
+        # The search adds `email LIKE` to the paginated count, so an unfiltered count can only be total_count's.
+        def capture_unfiltered_count_queries(&block)
+          queries = []
+          callback = lambda do |*, payload|
+            sql = payload[:sql]
+            queries << sql if sql.start_with?("SELECT COUNT(*) FROM `followers`") && !sql.include?("LIKE")
+          end
+          ActiveSupport::Notifications.subscribed(callback, "sql.active_record", &block)
+          queries
+        end
+
+        def simulate_partial_reload(only:, reset: nil)
+          request.headers["X-Inertia"] = "true"
+          request.headers["X-Inertia-Partial-Component"] = "Followers/Index"
+          request.headers["X-Inertia-Partial-Data"] = only
+          request.headers["X-Inertia-Reset"] = reset if reset
+        end
+
+        it "logs a page view and counts all followers on a full visit" do
+          queries = capture_unfiltered_count_queries do
+            expect { get :index, params: { email: "test" } }.to change { Event.where(event_name: "followers_view").count }.by(1)
+          end
+
+          expect(inertia.props[:total_count]).to eq(21)
+          expect(queries).not_to be_empty
+        end
+
+        it "skips the page view and the total count on a Load more partial reload" do
+          simulate_partial_reload(only: "followers,has_more,page")
+
+          queries = capture_unfiltered_count_queries do
+            expect { get :index, params: { email: "test", page: 2 } }.not_to change { Event.count }
+          end
+
+          expect(inertia.props).to include("followers", "has_more", "page" => 2)
+          expect(inertia.props).not_to have_key("total_count")
+          expect(queries).to be_empty
+        end
+
+        # The search reload passes `reset` and no `only`; Inertia sends the reset keys as the partial data.
+        it "skips the page view and the total count on a search partial reload" do
+          simulate_partial_reload(only: "followers,has_more", reset: "followers,has_more")
+
+          queries = capture_unfiltered_count_queries do
+            expect { get :index, params: { email: "test", page: 1 } }.not_to change { Event.count }
+          end
+
+          expect(inertia.props).to include("followers", "has_more")
+          expect(inertia.props).not_to have_key("total_count")
+          expect(queries).to be_empty
+        end
+      end
     end
 
     describe "DELETE destroy" do
