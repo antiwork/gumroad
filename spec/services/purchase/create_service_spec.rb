@@ -3121,6 +3121,15 @@ describe Purchase::CreateService, :vcr do
     let(:country_field) { create(:custom_field, products: [product], name: "country") }
     let(:zip_field) { create(:custom_field, products: [product], name: "zip") }
 
+    it "rejects the purchase when is_gift is set without any gift fields" do
+      params[:is_gift] = "true"
+
+      purchase, error = Purchase::CreateService.new(product:, params:).perform
+
+      expect(purchase).to be_nil
+      expect(error).to eq("This gift is missing the recipient details. Please refresh the page and try again.")
+    end
+
     let(:gift_params) do
       params[:is_gift] = "true"
       params[:gift] = {
