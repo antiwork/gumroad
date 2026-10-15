@@ -495,10 +495,25 @@ describe BestOfferCodeService do
         expect(described_class.new(product:, buyer:).result).to include(valid: true, code: "SHOP30")
       end
 
-      it "keeps the existing-customer default for a buyer who qualifies" do
+      it "keeps a larger existing-customer default for a buyer who qualifies" do
         create(:purchase, purchaser: buyer, link: product, seller:, price_cents: product.price_cents)
 
         expect(described_class.new(product:, buyer:).result).to include(valid: true, code: "RENEW50")
+      end
+
+      [[10, "SHOP30", "the larger shop-wide sale"], [30, "RENEW30", "their default on a tie"]].each do |percentage, winner, outcome|
+        context "when a qualifying buyer's default takes #{percentage}% off" do
+          let(:own) do
+            create(:offer_code, user: seller, products: [product], ownership_products: [product], existing_customers_only: true,
+                                code: "RENEW#{percentage}", amount_cents: nil, amount_percentage: percentage, currency_type: nil)
+          end
+
+          it "gives them #{outcome}" do
+            create(:purchase, purchaser: buyer, link: product, seller:, price_cents: product.price_cents)
+
+            expect(described_class.new(product:, buyer:).result).to include(valid: true, code: winner)
+          end
+        end
       end
 
       context "when a fixed default no longer matches the product currency" do

@@ -1146,7 +1146,7 @@ class Link < ApplicationRecord
     # In-memory checks only: scope detachment (default_offer_code_detached?) costs a query per
     # product on card pages, and OfferCode#repair_detached_default_discounts clears those defaults.
     # An existing-customers-only default cannot price the page for an unknown buyer, so the sale
-    # takes over here; BestOfferCodeService still tries it first for a buyer who qualifies.
+    # takes over here; BestOfferCodeService still weighs it against the sale for a buyer who qualifies.
     redeemable = !explicit.deleted? && explicit.code.present? && !explicit.inactive? && !explicit.existing_customers_only? &&
                  explicit.is_currency_valid?(self) && default_offer_code_uses_left?(explicit)
     redeemable ? explicit : auto_code

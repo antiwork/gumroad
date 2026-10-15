@@ -13,7 +13,7 @@ class BestOfferCodeService
     return nil if @url_code.blank? && @default_codes.empty?
 
     url_code_result = evaluate_code(@url_code)
-    default_code_result = @default_codes.lazy.map { evaluate_code(_1) }.find { _1[:valid] }
+    default_code_result = best_default_code_result
 
     url_code_valid = url_code_result&.dig(:valid) == true
     default_code_valid = default_code_result&.dig(:valid) == true
@@ -32,14 +32,22 @@ class BestOfferCodeService
   end
 
   private
-    # The buyer's own existing-customer default goes first; when they do not qualify, the
-    # effective default (the shop-wide sale, if one runs) applies instead. evaluate_code does not
-    # check currency, so a fixed default left behind by a product currency change must be skipped here.
+    # The buyer's own existing-customer default goes first, then the effective default (the
+    # shop-wide sale, if one runs). evaluate_code does not check currency, so a fixed default left
+    # behind by a product currency change must be skipped here.
     def default_codes
       explicit = @product.default_offer_code
       codes = [@product.effective_default_offer_code]
       codes.unshift(explicit) if explicit&.existing_customers_only? && explicit.is_currency_valid?(@product)
       codes.compact.uniq.filter_map { _1.code.presence }
+    end
+
+    # A qualifying buyer keeps their existing-customer default only when it takes more off than the
+    # shop-wide sale, so it never prices them above the sale everyone else sees; a tie keeps it.
+    def best_default_code_result
+      @default_codes.map { evaluate_code(_1) }.select { _1[:valid] }.reduce do |best, candidate|
+        amount_off_from_discount(candidate[:discount]) > amount_off_from_discount(best[:discount]) ? candidate : best
+      end
     end
 
     def evaluate_code(code)

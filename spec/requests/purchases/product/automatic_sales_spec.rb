@@ -66,6 +66,35 @@ describe "Automatic sales on product pages", type: :system, js: true do
     expect(Purchase.last.price_cents).to eq(1400)
   end
 
+  it "keeps a qualifying buyer on the card's sale price when their existing-customer code takes less off" do
+    seller = create(:compliant_user)
+    product = create(:product, user: seller, price_cents: 1000)
+    card_product = create(:product, user: seller, name: "Card product", price_cents: 1000)
+    owned_product = create(:product, user: seller, price_cents: 2000)
+    renewal = seller.offer_codes.create!(code: "RENEW10", amount_percentage: 10, products: [card_product],
+                                         existing_customers_only: true, ownership_products: [owned_product])
+    card_product.update!(default_offer_code: renewal)
+    seller.offer_codes.create!(code: "SHOP30", amount_percentage: 30, universal: true, auto_apply: true)
+    Link.import(refresh: true, force: true)
+    cards = create(:seller_profile_products_section, seller:, product:, header: "More products", shown_products: [card_product.id])
+    product.update!(sections: [cards.id])
+    buyer = create(:user)
+    create(:purchase, purchaser: buyer, link: owned_product, seller:, price_cents: 0)
+
+    login_as buyer
+    visit short_link_path(product)
+    within_section "More products", section_element: :section do
+      expect(page).to have_text("$10 $7", normalize_ws: true)
+      click_on "Card product"
+    end
+
+    expect(page).to have_selector("[itemprop='price']", text: "$10 $7", exact_text: true, normalize_ws: true)
+    expect(page).to have_selector("[data-testid='sale-banner']", text: "Sale")
+    click_on "Add to cart"
+    expect(page).to have_cart_item("Card product")
+    expect(page).to have_text("Total US$7", normalize_ws: true)
+  end
+
   it "labels profile cards and the featured product with the sale" do
     seller = create(:user)
     product = create(:product, user: seller, price_cents: 1000)
