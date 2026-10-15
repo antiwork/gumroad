@@ -64,6 +64,13 @@ const staticClosure = (page: string) => {
   return { files: [...files].map((file) => file.slice(SOURCE_ROOT.length + 1)), packages: [...packages] };
 };
 
+const STOREFRONT_PAGES = [
+  "pages/Products/Show.tsx",
+  "pages/Products/Profile/Show.tsx",
+  "pages/Products/Discover/Show.tsx",
+  "pages/Users/Show.tsx",
+];
+
 // No visible failure if these regress — the app still works, just ships extra bytes.
 describe("Inertia page bundle boundaries", () => {
   it("keeps colocated page tests out of the page glob", async () => {
@@ -95,12 +102,7 @@ describe("Inertia page bundle boundaries", () => {
     expect(manualChunks(PAGE, context)).toBeUndefined();
   });
 
-  it.each([
-    "pages/Products/Show.tsx",
-    "pages/Products/Profile/Show.tsx",
-    "pages/Products/Discover/Show.tsx",
-    "pages/Users/Show.tsx",
-  ])("keeps the rich text editor off the blocking path of %s", (page) => {
+  it.each(STOREFRONT_PAGES)("keeps the rich text editor off the blocking path of %s", (page) => {
     const { files, packages } = staticClosure(page);
     // Guards against the walker silently resolving nothing.
     expect(files).toEqual(expect.arrayContaining(["components/Profile/Sections.tsx", "components/Product/index.tsx"]));
@@ -116,4 +118,16 @@ describe("Inertia page bundle boundaries", () => {
       ),
     ).toEqual([]);
   });
+
+  // Checkout imports ConfigurationSelector for its pricing helpers.
+  it.each([...STOREFRONT_PAGES, "pages/Checkout/Show.tsx"])(
+    "keeps the call calendar off the blocking path of %s",
+    (page) => {
+      const { files, packages } = staticClosure(page);
+      expect(files).toContain("components/Product/ConfigurationSelector.tsx");
+
+      expect(packages).not.toContain("react-day-picker");
+      expect(files).not.toContain("components/ui/Calendar.tsx");
+    },
+  );
 });
