@@ -456,6 +456,8 @@ Rails.application.routes.draw do
             end
           end
 
+          resources :stripe_court_order_notices, only: [:create]
+
           resources :users, only: [] do
             collection do
               get :info

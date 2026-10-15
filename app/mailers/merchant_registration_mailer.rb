@@ -49,6 +49,13 @@ class MerchantRegistrationMailer < ApplicationMailer
     mail(subject: "Your payouts are temporarily paused", from: NOREPLY_EMAIL_WITH_NAME, reply_to: SUPPORT_EMAIL, to: user.email)
   end
 
+  def stripe_court_order_notice(user_id, firm_name, firm_email)
+    user = User.find(user_id)
+    @firm_name = firm_name
+    @firm_email = firm_email
+    mail(subject: "Important notice regarding your Gumroad payment account", from: NOREPLY_EMAIL_WITH_NAME, reply_to: SUPPORT_EMAIL, to: user.email)
+  end
+
   def stripe_account_rejected(user_id)
     @user = User.find(user_id)
     # Whether the remaining balance pays out automatically depends on whether
