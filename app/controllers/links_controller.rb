@@ -2366,6 +2366,14 @@ class LinksController < ApplicationController
       # interpolates it into an attribute and into the document body below, so escape it here
       # (ERB::Util.h covers quotes as well as &/</>).
       escaped_description = ERB::Util.h(description)
+      # Crawlers cut the snippet at ~160 chars, so everything past that is pure head weight,
+      # and og:description is what link previews render verbatim. PageMeta::Product caps the
+      # standard product page's meta/og through SnippetText; this wrapper hand-builds its own
+      # <head> and was missed when that cap landed, so a long description published thousands
+      # of characters into both tags while the JSON-LD below — which does go through
+      # SnippetText — stayed short. The full text still reaches crawlers in the .seo-summary
+      # body below, exactly as the standard product page renders it in its body.
+      escaped_meta_description = ERB::Util.h(SnippetText.truncate(description))
       structured_data = product.structured_data(host: custom_domain_host_for_meta(product))
       # json_escape keeps the JSON valid while escaping <, >, & so a
       # description containing "</script>" can't break out of the script tag.
@@ -2395,9 +2403,9 @@ class LinksController < ApplicationController
             <meta name="viewport" content="width=device-width, initial-scale=1">
             <title>#{title}</title>
             <link rel="canonical" href="#{canonical}">
-            <meta name="description" content="#{escaped_description}">
+            <meta name="description" content="#{escaped_meta_description}">
             <meta property="og:title" content="#{title}">
-            <meta property="og:description" content="#{escaped_description}">
+            <meta property="og:description" content="#{escaped_meta_description}">
             <meta property="og:type" content="product">
             <meta property="og:url" content="#{canonical}">
             #{share_image_tags}
