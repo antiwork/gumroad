@@ -6,7 +6,7 @@ module RenderingExtension
   def custom_context(view_context)
     pundit_user = view_context.pundit_user
     {
-      design_settings: { font: { name: "ABC Favorit", url: view_context.font_url("ABCFavorit-Regular.woff2") } },
+      design_settings: design_settings(view_context),
       domain_settings: {
         scheme: PROTOCOL,
         app_domain: DOMAIN,
@@ -16,9 +16,7 @@ module RenderingExtension
         third_party_analytics_domain: THIRD_PARTY_ANALYTICS_DOMAIN,
         api_domain: API_DOMAIN,
       },
-      user_agent_info: {
-        is_mobile: view_context.controller.is_mobile?,
-      },
+      user_agent_info: user_agent_info(view_context),
       logged_in_user: logged_in_user_props(pundit_user),
       current_seller: current_seller_props(pundit_user),
       csp_nonce: SecureHeaders.content_security_policy_script_nonce(view_context.request),
@@ -27,6 +25,15 @@ module RenderingExtension
         disable_stripe_signup: Feature.active?(:disable_stripe_signup),
       }
     }
+  end
+
+  # The layouts read these two on every HTML page, so they must not build the rest of the context.
+  def design_settings(view_context)
+    { font: { name: "ABC Favorit", url: view_context.font_url("ABCFavorit-Regular.woff2") } }
+  end
+
+  def user_agent_info(view_context)
+    { is_mobile: view_context.controller.is_mobile? }
   end
 
   private
