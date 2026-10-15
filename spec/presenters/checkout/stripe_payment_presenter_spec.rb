@@ -101,6 +101,7 @@ describe Checkout::StripePaymentPresenter do
           (currency == "usd" ? nil : { currency:, subunit_to_unit: 100 }),
         payment_method_types:,
         inr_local_methods:,
+        payment_method_max_amount_cents: { "upi" => 100_000_00 },
         # The presenter signs the list it mounted, so the fixture pins the post-strip list: a
         # region or amount strip that failed to reach the issuer would show up here.
         payment_method_list_token: "issued:#{payment_method_types.join(",")}",

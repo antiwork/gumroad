@@ -3319,14 +3319,14 @@ describe Order::PreparePaymentIntentService, :vcr do
         Feature.deactivate_user(:checkout_local_method_upi, seller)
       end
 
-      def locked_inr_quote
+      def locked_inr_quote(presentment_total_cents: 83_000, fx_rate: BigDecimal("83.0"))
         Checkout::BuyerCurrencyQuote::Result.new(
           currency: Currency::INR,
-          presentment_total_cents: 83_000,
-          charge_presentment_total_cents: 83_000,
+          presentment_total_cents:,
+          charge_presentment_total_cents: presentment_total_cents,
           rounding_delta_cents: 0,
           stripe_fx_quote_id: "fxq_displayed_inr",
-          fx_rate: BigDecimal("83.0"),
+          fx_rate:,
           stripe_fx_quote_expires_at: 30.minutes.from_now,
         )
       end
@@ -3366,6 +3366,47 @@ describe Order::PreparePaymentIntentService, :vcr do
         expect(responses["unique-id-0"][:success]).to eq(true), responses.inspect
         expect(create_args[:currency]).to eq(Currency::INR)
         expect(create_args[:payment_method_types]).to eq(%w[card link upi])
+      end
+
+      it "drops UPI from a card buyer's INR intent when the total is above Stripe's UPI cap" do
+        order, params = build_order
+        params = params.merge(
+          payment_element_mount_currency: Currency::INR,
+          buyer_currency_quote: "displayed-inr-quote",
+          payment_method_list_token: Checkout::PaymentMethodListToken.issue(
+            payment_method_types: %w[card link],
+            sellers: [seller],
+            inr_payment_method_types: %w[card link upi],
+          ),
+        )
+        order.purchases.each { _1.update!(ip_country: "India") }
+        allow(Checkout::BuyerCurrencyQuote).to receive(:quoted_currency_hint)
+          .with("displayed-inr-quote")
+          .and_return(Currency::INR)
+        over_cap_quote = locked_inr_quote(
+          presentment_total_cents: Checkout::PaymentMethodResolver::UPI_MAX_INR_CENTS + 1,
+          fx_rate: BigDecimal("10000.001"),
+        )
+        allow(Checkout::BuyerCurrencyQuote).to receive(:verify!).and_return(over_cap_quote)
+        allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
+
+        preview = Stripe::StripeObject.construct_from(type: "card", card: { country: "IN" })
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+
+        charge_intent = instance_double(StripeChargeIntent, id: "pi_card_inr_over_cap", client_secret: "pi_card_inr_over_cap_secret")
+        create_args = nil
+        allow(StripeDeferredPaymentIntent).to receive(:create) do |**kwargs|
+          create_args = kwargs
+          charge_intent
+        end
+
+        responses = described_class.new(order:, params:, confirmation_token: "ctoken_card_inr_over_cap").perform
+
+        expect(responses["unique-id-0"][:success]).to eq(true), responses.inspect
+        expect(create_args[:currency]).to eq(Currency::INR)
+        expect(create_args[:amount_cents]).to eq(Checkout::PaymentMethodResolver::UPI_MAX_INR_CENTS + 1)
+        expect(create_args[:payment_method_types]).to eq(%w[card link])
       end
 
       it "strips UPI from a verified INR remount list after the launch flag rolls back" do

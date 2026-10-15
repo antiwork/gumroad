@@ -3833,8 +3833,8 @@ describe("paymentMethodTypesForMountCurrency", () => {
   };
 
   it("keeps iDEAL on an EUR mount and drops it on a CAD remount", () => {
-    expect(paymentMethodTypesForMountCurrency(listedEur, "eur")).toEqual(["card", "link", "ideal", "bancontact"]);
-    expect(paymentMethodTypesForMountCurrency(listedEur, "cad")).toEqual(["card", "link"]);
+    expect(paymentMethodTypesForMountCurrency(listedEur, "eur", null)).toEqual(["card", "link", "ideal", "bancontact"]);
+    expect(paymentMethodTypesForMountCurrency(listedEur, "cad", null)).toEqual(["card", "link"]);
   });
 
   it("adds UPI only after an INR remount and drops Cash App", () => {
@@ -3843,7 +3843,28 @@ describe("paymentMethodTypesForMountCurrency", () => {
       inr_local_methods: ["upi"],
     };
 
-    expect(paymentMethodTypesForMountCurrency(usdMount, "usd")).toEqual(["card", "link", "cashapp"]);
-    expect(paymentMethodTypesForMountCurrency(usdMount, "inr")).toEqual(["card", "link", "upi"]);
+    expect(paymentMethodTypesForMountCurrency(usdMount, "usd", null)).toEqual(["card", "link", "cashapp"]);
+    expect(paymentMethodTypesForMountCurrency(usdMount, "inr", null)).toEqual(["card", "link", "upi"]);
+  });
+
+  describe("with a server-provided UPI amount cap", () => {
+    const payment_method_max_amount_cents = { upi: 100_000_00 };
+    const usdRemount = {
+      payment_method_types: ["card", "link"],
+      inr_local_methods: ["upi"],
+      payment_method_max_amount_cents,
+    };
+    const inrListed = { payment_method_types: ["card", "link", "upi"], payment_method_max_amount_cents };
+
+    it("keeps UPI up to the cap and drops it above, whether listed directly or added on the INR remount", () => {
+      expect(paymentMethodTypesForMountCurrency(usdRemount, "inr", 100_000_00)).toEqual(["card", "link", "upi"]);
+      expect(paymentMethodTypesForMountCurrency(usdRemount, "inr", 100_000_01)).toEqual(["card", "link"]);
+      expect(paymentMethodTypesForMountCurrency(inrListed, "inr", 100_000_00)).toEqual(["card", "link", "upi"]);
+      expect(paymentMethodTypesForMountCurrency(inrListed, "inr", 191_948_00)).toEqual(["card", "link"]);
+    });
+
+    it("keeps UPI while the amount is not yet known", () => {
+      expect(paymentMethodTypesForMountCurrency(inrListed, "inr", null)).toEqual(["card", "link", "upi"]);
+    });
   });
 });

@@ -26,6 +26,7 @@ import {
 import { type PaymentElementApplePayOption } from "$app/components/Checkout/paymentElementApplePayOption";
 import { useFont } from "$app/components/DesignSettings";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
+import { showAlert } from "$app/components/server-components/Alert";
 import { Fieldset } from "$app/components/ui/Fieldset";
 
 export type PaymentElementController = { stripe: Stripe; elements: StripeElements; mountCurrency: string };
@@ -250,6 +251,10 @@ const PaymentElementControllerInput = ({
   const stripe = useStripe();
   const elements = useElements();
   const [ready, setReady] = React.useState(false);
+  // A load error destroys the element; react-stripe-js would still call update() on it for the
+  // next option change (e.g. the debounced name prefill), which throws and blanks checkout.
+  // Resets with the rest of this state when the provider's key remounts Elements.
+  const [loadFailed, setLoadFailed] = React.useState(false);
   // Which payment-method row the buyer currently has selected inside the element ("card",
   // "apple_pay", "google_pay", ...), reported by the element's change event. State (not a ref)
   // because it drives the fields option below, which must reach the mounted element via
@@ -258,13 +263,13 @@ const PaymentElementControllerInput = ({
   const billingDetailsCollection = paymentElementBillingDetailsCollection(selectedType, hasShippingCart);
 
   React.useEffect(() => {
-    onReady(stripe && elements && ready ? { stripe, elements, mountCurrency } : null);
+    onReady(stripe && elements && ready && !loadFailed ? { stripe, elements, mountCurrency } : null);
     return () => onReady(null);
-  }, [stripe, elements, ready, mountCurrency, onReady]);
+  }, [stripe, elements, ready, loadFailed, mountCurrency, onReady]);
 
   React.useEffect(() => {
-    if (amount !== null) elements?.update({ amount });
-  }, [amount, elements]);
+    if (amount !== null && !loadFailed) elements?.update({ amount });
+  }, [amount, elements, loadFailed]);
 
   // The element's defaultValues: Link's email prefill plus the name/country checkout already
   // knows. Stripe treats defaultValues as INITIAL values, applied only when a field first
@@ -283,6 +288,8 @@ const PaymentElementControllerInput = ({
     };
     return Object.keys(billingDetails).length > 0 ? { billingDetails } : undefined;
   }, [stripeLinkEnabled, linkPrefillEmail, defaultCountry, defaultName]);
+
+  if (loadFailed) return null;
 
   return (
     <PaymentElement
@@ -355,6 +362,10 @@ const PaymentElementControllerInput = ({
         ...(applePayOption ? { applePay: applePayOption } : {}),
       }}
       onReady={() => setReady(true)}
+      onLoadError={() => {
+        setLoadFailed(true);
+        showAlert("Sorry, we couldn't load the payment form. Please refresh the page and try again.", "error");
+      }}
       onFocus={() => {
         onTouched();
         onFocus?.();
@@ -388,16 +399,15 @@ const StripePaymentElementProvider = ({
     ),
   );
   const currency = currencyOverride ?? elementsOptions.currency;
-  // The amount and currency Elements is CREATED with, captured together. Later amount
-  // changes reach the live element through elements.update() in
-  // PaymentElementControllerInput, so this deliberately does not follow every amount
-  // change. But a currency change remounts Elements (the currency is part of its key
-  // below), and the new instance must not be created with an amount captured under the
-  // previous currency — that value is denominated in the previous currency's minor
-  // units (e.g. a CAD total reused for a USD mount). Re-capture the amount at the
-  // moment the currency changes so creation options are always internally consistent.
-  const [creation, setCreation] = React.useState({ currency, amount });
-  if (creation.currency !== currency) setCreation({ currency, amount });
+  const paymentMethodTypes = paymentMethodTypesForMountCurrency(elementsOptions, currency, amount);
+  const paymentMethodTypesKey = paymentMethodTypes.join(",");
+  // Creation options, captured together. Later amounts reach the live element via elements.update(),
+  // but a currency or method-list change remounts Elements (see key), and the new instance must not
+  // reuse an amount in the previous currency's units or one above a newly listed method's cap.
+  const [creation, setCreation] = React.useState({ currency, paymentMethodTypesKey, paymentMethodTypes, amount });
+  if (creation.currency !== currency || creation.paymentMethodTypesKey !== paymentMethodTypesKey) {
+    setCreation({ currency, paymentMethodTypesKey, paymentMethodTypes, amount });
+  }
   const initialAmount = creation.amount;
   const font = useFont();
   const checkoutTheme = useCheckoutTheme();
@@ -417,7 +427,7 @@ const StripePaymentElementProvider = ({
       currency,
       ...(initialAmount === null ? {} : { amount: initialAmount }),
       ...(setupFutureUsage ? { setupFutureUsage } : {}),
-      paymentMethodTypes: paymentMethodTypesForMountCurrency(elementsOptions, currency),
+      paymentMethodTypes: creation.paymentMethodTypes,
       // Stripe rejects createConfirmationToken({ elements }) when payment_method_creation is manual.
       ...("payment_method_creation" in elementsOptions
         ? { paymentMethodCreation: elementsOptions.payment_method_creation }
@@ -496,6 +506,7 @@ const StripePaymentElementProvider = ({
     [
       borderRadius,
       colors,
+      creation.paymentMethodTypes,
       currency,
       elementsOptions,
       flatLayout,
@@ -510,11 +521,11 @@ const StripePaymentElementProvider = ({
     // The key includes the effective mount currency so a currency change (e.g. the buyer-currency
     // FX quote arriving after the initial USD mount, or disappearing when the buyer opts to save
     // their card) remounts Elements — Stripe supports amount updates on a live element but not
-    // currency changes. Future-use setup is also creation-time configuration.
+    // currency changes. Future-use setup and the method list are also creation-time configuration.
     <Elements
       stripe={stripePromise}
       options={options}
-      key={`${elementsOptions.stripe_elements_mode}-${currency}-${setupFutureUsage ?? "none"}`}
+      key={`${elementsOptions.stripe_elements_mode}-${currency}-${setupFutureUsage ?? "none"}-${paymentMethodTypesKey}`}
     >
       {children}
     </Elements>

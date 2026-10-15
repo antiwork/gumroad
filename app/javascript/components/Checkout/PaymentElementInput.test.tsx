@@ -10,6 +10,7 @@ import {
   type PaymentElementConfig,
 } from "$app/components/Checkout/payment";
 import { PaymentElementInput, type PaymentElementController } from "$app/components/Checkout/PaymentElementInput";
+import { showAlert } from "$app/components/server-components/Alert";
 
 const elementsMounts = vi.hoisted<{
   currencies: string[];
@@ -46,7 +47,9 @@ const paymentElementRender = vi.hoisted<{
   } | null;
   onChange: ((event: { value: { type: string }; complete: boolean; empty: boolean }) => void) | null;
   onFocus: (() => void) | null;
-}>(() => ({ options: null, onChange: null, onFocus: null }));
+  onLoadError: (() => void) | null;
+  mounted: boolean;
+}>(() => ({ options: null, onChange: null, onFocus: null, onLoadError: null, mounted: false }));
 
 vi.mock("@stripe/react-stripe-js", async () => {
   const React = await import("react");
@@ -87,16 +90,25 @@ vi.mock("@stripe/react-stripe-js", async () => {
       options,
       onChange,
       onFocus,
+      onLoadError,
     }: {
       onReady: () => void;
       options: { fields?: { billingDetails?: unknown } };
       onChange?: (event: { value: { type: string }; complete: boolean; empty: boolean }) => void;
       onFocus?: () => void;
+      onLoadError?: () => void;
     }) => {
       paymentElementRender.options = options;
       paymentElementRender.onChange = onChange ?? null;
       paymentElementRender.onFocus = onFocus ?? null;
+      paymentElementRender.onLoadError = onLoadError ?? null;
       React.useEffect(onReady, [onReady]);
+      React.useEffect(() => {
+        paymentElementRender.mounted = true;
+        return () => {
+          paymentElementRender.mounted = false;
+        };
+      }, []);
       return null;
     },
     useElements: () => elements,
@@ -118,6 +130,7 @@ vi.mock("$app/utils/styles", () => ({
 }));
 vi.mock("$app/components/DesignSettings", () => ({ useFont: () => ({ name: "Inter", url: "inter.woff2" }) }));
 vi.mock("$app/components/LoadingSpinner", () => ({ LoadingSpinner: () => null }));
+vi.mock("$app/components/server-components/Alert", () => ({ showAlert: vi.fn() }));
 vi.mock("$app/components/ui/Fieldset", () => ({
   Fieldset: ({ children }: { children: React.ReactNode }) => children,
 }));
@@ -186,6 +199,7 @@ describe("PaymentElementInput", () => {
     elementsMounts.unmounts = 0;
     elementsRender.options = null;
     props.onReady.mockClear();
+    vi.mocked(showAlert).mockClear();
   });
 
   afterEach(() => {
@@ -402,6 +416,90 @@ describe("PaymentElementInput", () => {
       ["card", "link", "cashapp"],
       ["card", "link", "upi"],
     ]);
+  });
+
+  it("remounts Elements without UPI when the amount crosses UPI's cap, and with it when it drops back", () => {
+    const inrListedOptions: PaymentElementClientConfirmConfig = {
+      ...methodForcedElementsOptions,
+      currency: "inr",
+      presentment_amount_cents: 90_000_00,
+      listed_currency_display: { currency: "inr", subunit_to_unit: 100 },
+      payment_method_types: ["card", "link", "upi"],
+      payment_method_max_amount_cents: { upi: 100_000_00 },
+    };
+    const { rerender } = render(
+      <PaymentElementInput {...props} elementsOptions={inrListedOptions} amount={90_000_00} mountCurrency="inr" />,
+    );
+    rerender(
+      <PaymentElementInput {...props} elementsOptions={inrListedOptions} amount={95_000_00} mountCurrency="inr" />,
+    );
+
+    expect(elementsMounts.unmounts).toBe(0);
+
+    rerender(
+      <PaymentElementInput {...props} elementsOptions={inrListedOptions} amount={100_000_01} mountCurrency="inr" />,
+    );
+    rerender(
+      <PaymentElementInput {...props} elementsOptions={inrListedOptions} amount={99_000_00} mountCurrency="inr" />,
+    );
+
+    // Each new instance is created with the amount that crossed the cap, never the stale one.
+    expect(elementsMounts.paymentMethodTypes).toEqual([
+      ["card", "link", "upi"],
+      ["card", "link"],
+      ["card", "link", "upi"],
+    ]);
+    expect(elementsMounts.amounts).toEqual([90_000_00, 100_000_01, 99_000_00]);
+    expect(elementsMounts.unmounts).toBe(2);
+  });
+
+  it("creates an over-cap INR remount's Elements without UPI", () => {
+    const remountOptions: PaymentElementClientConfirmConfig = {
+      stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
+      currency: "usd",
+      buyer_currency_presentment: true,
+      presentment_amount_cents: null,
+      listed_currency_display: null,
+      payment_method_types: ["card", "link"],
+      inr_local_methods: ["upi"],
+      payment_method_max_amount_cents: { upi: 100_000_00 },
+      payment_method_list_token: "signed-list",
+      stripe_link_enabled: true,
+      stripe_connect_account_id: null,
+    };
+    const { rerender } = render(
+      <PaymentElementInput {...props} elementsOptions={remountOptions} amount={199_900} mountCurrency="usd" />,
+    );
+    rerender(
+      <PaymentElementInput {...props} elementsOptions={remountOptions} amount={191_948_00} mountCurrency="inr" />,
+    );
+
+    expect(elementsMounts.currencies).toEqual(["usd", "inr"]);
+    expect(elementsMounts.paymentMethodTypes).toEqual([
+      ["card", "link"],
+      ["card", "link"],
+    ]);
+  });
+
+  it("unmounts the element, reports no controller, and alerts when the element fails to load", () => {
+    const { rerender } = render(<PaymentElementInput {...props} amount={1_625} mountCurrency="cad" />);
+
+    expect(paymentElementRender.mounted).toBe(true);
+    expect(props.onReady.mock.lastCall?.[0]).not.toBeNull();
+
+    act(() => paymentElementRender.onLoadError?.());
+
+    expect(paymentElementRender.mounted).toBe(false);
+    expect(props.onReady).toHaveBeenLastCalledWith(null);
+    expect(showAlert).toHaveBeenCalledWith(
+      "Sorry, we couldn't load the payment form. Please refresh the page and try again.",
+      "error",
+    );
+
+    rerender(<PaymentElementInput {...props} amount={1_300} mountCurrency="usd" />);
+
+    expect(paymentElementRender.mounted).toBe(true);
+    expect(props.onReady.mock.lastCall?.[0]).toMatchObject({ mountCurrency: "usd" });
   });
 
   it("declares off-session future use for recurring UPI registration", () => {
