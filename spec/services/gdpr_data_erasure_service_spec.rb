@@ -830,12 +830,12 @@ describe GdprDataErasureService do
       affiliate_seller = create(:user)
       affiliate_post = create(:installment, seller: affiliate_seller)
       create(:direct_affiliate, seller: affiliate_seller, affiliate_user: user, deleted_at: Time.current)
-      affiliate_sent = SentPostEmail.create!(post: affiliate_post, email: original_email)
+      affiliate_sent = create(:sent_post_email, post: affiliate_post, email: original_email)
       seller = create(:user)
       post = create(:installment, seller:)
       create(:purchase, link: create(:product, user: seller), email: original_email)
-      sent = SentPostEmail.create!(post:, email: original_email)
-      other_sent = SentPostEmail.create!(post:, email: "other@example.com")
+      sent = create(:sent_post_email, post:, email: original_email)
+      other_sent = create(:sent_post_email, post:, email: "other@example.com")
 
       described_class.new(user, performed_by: admin).perform!
 
