@@ -71,6 +71,42 @@ describe("Followers", js: true, type: :system) do
     end
   end
 
+  describe "search with more than one page of followers" do
+    before do
+      (@page_limit + 5).times { |index| create(:active_follower, user: seller, email: "zed#{index}@example.com") }
+      @page_limit.times { |index| create(:active_follower, user: seller, email: "other#{index}@example.com") }
+      visit followers_path
+    end
+
+    it "loads the second page of the search results after an earlier Load more" do
+      click_on "Load more"
+      expect(page).to have_selector(:table_row, text: "@example.com", count: @page_limit * 2)
+
+      select_disclosure "Toggle Search" do
+        fill_in("Search followers", with: "zed")
+      end
+      expect(page).to_not have_selector(:table_row, text: "other")
+      expect(page).to have_selector(:table_row, text: "zed", count: @page_limit)
+
+      click_on "Load more"
+      expect(page).to have_selector(:table_row, text: "zed", count: @page_limit + 5)
+      expect(page).to_not have_button "Load more"
+    end
+
+    # Backspacing sends "z" just before ""; if "" were skipped, "z" would stick and hide every "other" row.
+    it "lists every follower again when the search is cleared" do
+      select_disclosure "Toggle Search" do
+        fill_in("Search followers", with: "zed")
+      end
+      expect(page).to_not have_selector(:table_row, text: "other")
+
+      select_disclosure "Toggle Search" do
+        fill_in("Search followers", with: "", fill_options: { clear: :backspace })
+      end
+      expect(page).to have_selector(:table_row, text: "other")
+    end
+  end
+
   describe "follower drawer" do
     before do
       visit followers_path

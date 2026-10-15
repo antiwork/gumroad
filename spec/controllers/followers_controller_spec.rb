@@ -110,15 +110,14 @@ describe FollowersController, inertia: true do
           expect(queries).to be_empty
         end
 
-        # The search reload passes `reset` and no `only`; Inertia sends the reset keys as the partial data.
         it "skips the page view and every count on a search partial reload" do
-          simulate_partial_reload(only: "followers,has_more", reset: "followers,has_more")
+          simulate_partial_reload(only: "followers,has_more,page,email", reset: "followers,has_more")
 
           queries = capture_follower_count_queries do
             expect { get :index, params: { email: "test", page: 1 } }.not_to change { Event.count }
           end
 
-          expect(inertia.props).to include("followers", "has_more")
+          expect(inertia.props).to include("followers", "has_more", "page" => 1, "email" => "test")
           expect(inertia.props).not_to have_key("total_count")
           expect(queries).to be_empty
         end
