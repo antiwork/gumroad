@@ -137,7 +137,9 @@ const MoreLikeThisNodeView = ({ editor, node, extension, selected, getPos }: Nod
             ]}
           />
         ) : null}
-        {isLoading ? null : <h2>{recommendedProductsHeading(recommendedProducts ?? [], "this product")}</h2>}
+        <h2 className={isLoading ? "invisible" : undefined}>
+          {recommendedProductsHeading(recommendedProducts ?? [], "this product")}
+        </h2>
         <br />
         {isLoading ? (
           <ProductCardGrid narrow>
