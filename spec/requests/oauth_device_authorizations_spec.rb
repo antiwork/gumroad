@@ -671,8 +671,11 @@ describe "OAuth device authorizations", type: :request do
       end
 
       # The limit covers every client behind one address, so a window has to leave room for a
-      # second login; and the cadence handed to the client is the cadence the window accepts.
-      expect(errors.count).to be <= 20
+      # second login; the cadence handed to the client is the cadence the window accepts; and a
+      # window that is never polled, or answered with anything but "pending" while the code is
+      # unapproved, strands the login just as surely as one that overruns the budget.
+      expect(errors.count).to be_between(2, 20)
+      expect(errors.count("authorization_pending")).to be >= errors.count - 1
       expect(errors).not_to include("slow_down")
     end
 
