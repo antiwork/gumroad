@@ -138,6 +138,14 @@ describe Link do
       expect(BestOfferCodeService.new(product:).result).to include(valid: true, code: "SHOP20")
     end
 
+    it "prices an existing-customers-only default's product with the auto-applied code" do
+      auto_code
+      own.update!(existing_customers_only: true, ownership_products: [product])
+
+      expect(product.reload.effective_default_offer_code).to eq(auto_code)
+      expect(product.discounted_price_cents(1000)).to eq(800)
+    end
+
     it "falls back to the auto-applied code before the explicit default starts" do
       auto_code
       own.update!(valid_at: 1.day.from_now)
