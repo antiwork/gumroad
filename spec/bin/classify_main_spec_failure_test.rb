@@ -429,7 +429,9 @@ CAUSED_BY_REFUSED = "#{EXPECTATION}\n     # ./spec/requests/product_spec.rb:12\n
   "a real failure whose cause mentions ChromeDriver" => [stamped("Failures:\n\n#{rspec_failure(1, CAUSED_BY_REFUSED)}\n#{FINISHED}"), "false"],
   "a refused connection to another port" => [stamped("Failures:\n\n#{rspec_failure(1, REFUSED.gsub('9515', '6379'))}\n#{FINISHED}"), "false"],
   "a refused connection outside the failure list" => [stamped("#{REFUSED}\n#{FINISHED}"), "false"],
-  "a failure list with no failures in it" => [stamped("Failures:\n\n#{FINISHED}"), "false"]
+  "a failure list with no failures in it" => [stamped("Failures:\n\n#{FINISHED}"), "false"],
+  # The runner died while it printed the list: later failures are unknown.
+  "a failure list that stops before it ends" => [stamped("Failures:\n\n#{rspec_failure(1, REFUSED)}"), "false"]
 }.each do |name, (log, expected)|
   $count += 1
   printed = Tempfile.create(["shard", ".log"]) do |file|
@@ -461,8 +463,8 @@ end
   "a lost ChromeDriver next to a shard that never reached its tests" =>
     [chromedriver_shards(refused: 1, other: [job("Test Slow 3", "failure", HUNG_CHECKOUT)]), "true"],
   # Nothing shows what failed a shard with no summary, or one that timed out.
-  "a lost ChromeDriver next to a shard with no summary" =>
-    [chromedriver_shards(refused: 1, other: [job("Test Slow 3", "failure", SPEC_FAILURE)]).tap { |p| p["summaries"][p["jobs"].last["id"].to_s] = "" }, "false"],
+  "a shard whose refused log has no summary" =>
+    [chromedriver_shards(refused: 1).tap { |p| p["summaries"].transform_values! { "" } }, "false"],
   "a lost ChromeDriver next to a timed-out shard" =>
     [chromedriver_shards(refused: 1, other: [job("Test Minitest 1", "timed_out", [["Run Minitest", "cancelled"]])]), "false"],
   "a verdict input without ChromeDriver answers" => [attempt([job("Test Slow 1", "failure", SPEC_FAILURE)]), "false"],

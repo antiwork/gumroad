@@ -125,24 +125,26 @@ def declined_log?(text)
 end
 
 # Each RSpec failure starts at "Failure/Error:"; its error ends where its
-# backtrace starts. A log with no failure list proves nothing.
+# backtrace starts. Only a failure list that RSpec finished printing proves
+# anything.
 def chromedriver_log?(text)
   lines = text.each_line.map { |line| line.gsub(/\e\[[0-9;]*m/, "").sub(LOG_TIMESTAMP, "").strip }
   start = lines.index("Failures:")
-  return false unless start
-  errors = lines[start..].take_while { |line| !line.start_with?("Finished in ") }
-                         .slice_before { |line| line.include?("Failure/Error:") }.drop(1)
+  length = start && lines[start..].index { |line| line.start_with?("Finished in ") }
+  return false unless length
+  errors = lines[start, length].slice_before { |line| line.include?("Failure/Error:") }.drop(1)
   errors.any? && errors.all? do |error|
     head = error.take_while { |line| !line.match?(BACKTRACE_LINE) }.join("\n")
     CHROMEDRIVER_REFUSED.all? { |part| head.include?(part) }
   end
 end
 
-# Every shard that failed in its test step, so a timeout or a shard with no
-# summary leaves the answer false: nothing shows ChromeDriver failed it.
-def chromedriver_down(jobs, refused)
+# Every shard that failed in its test step, each with a summary that counts its
+# failures: a timeout or a missing summary leaves failures nobody accounted for.
+def chromedriver_down(jobs, summaries, refused)
   failed = test_step_failures(jobs)
-  failed.any? && test_step_timeouts(jobs).empty? && failed.all? { |job| refused[job["id"].to_s] == true }
+  failed.any? && test_step_timeouts(jobs).empty? &&
+    failed.all? { |job| reported_failures?(summaries[job["id"].to_s]) && refused[job["id"].to_s] == true }
 end
 
 # A blocked test card declines every checkout, so it fails specs in most red shards
@@ -249,7 +251,8 @@ if card_declined_only
 end
 
 if chromedriver_down_only
-  puts JSON.dump(chromedriver_down(Array(payload["jobs"]), payload["chromedriver"].is_a?(Hash) ? payload["chromedriver"] : {}))
+  summaries = payload["summaries"].is_a?(Hash) ? payload["summaries"] : {}
+  puts JSON.dump(chromedriver_down(Array(payload["jobs"]), summaries, payload["chromedriver"].is_a?(Hash) ? payload["chromedriver"] : {}))
   exit 0
 end
 
