@@ -16,12 +16,12 @@ describe Api::Internal::Admin::StripeRestraintNoticesController do
 
     let(:seller) { create(:user, email: "restrained-seller@example.com") }
     let(:account_id) { "acct_1SA76bS5BbOI7YuG" }
-    let(:notice_key) { "stripe-restraint:#{account_id}:cwallace@scalefirm.com:8f14e45f" }
+    let(:notice_key) { "stripe-restraint:#{account_id}:lawyer@example.com:8f14e45f" }
     let(:notice_params) do
       {
         stripe_account_id: account_id,
         firm_name: "Scale LLP",
-        firm_email: "cwallace@scalefirm.com",
+        firm_email: "lawyer@example.com",
         notice_key:,
       }
     end
@@ -52,7 +52,7 @@ describe Api::Internal::Admin::StripeRestraintNoticesController do
       expect(body["dry_run"]).to be(true)
       expect(body["user_external_id"]).to eq(seller.external_id)
       expect(body["already_sent"]).to be(false)
-      expect(body["rendered_email"]["body"]).to include("Scale LLP", "cwallace@scalefirm.com")
+      expect(body["rendered_email"]["body"]).to include("Scale LLP", "lawyer@example.com")
       # The call itself is still recorded: a dry run is an admin API call, not a read.
       expect(AdminApiAuditLog.last.action).to eq("stripe_restraint_notices.create")
     end
@@ -80,7 +80,7 @@ describe Api::Internal::Admin::StripeRestraintNoticesController do
       expect(audit_log.target_external_id).to eq(seller.external_id)
       # The law firm's address is what the notice is about — the audit row must say who the seller
       # was pointed at.
-      expect(audit_log.params_snapshot["firm_email"]).to eq("cwallace@scalefirm.com")
+      expect(audit_log.params_snapshot["firm_email"]).to eq("lawyer@example.com")
     end
 
     it "returns already_sent on a repeat call and does not notify again" do
@@ -124,6 +124,14 @@ describe Api::Internal::Admin::StripeRestraintNoticesController do
 
       expect(response).to have_http_status(:conflict)
       expect(response.parsed_body["success"]).to be(false)
+    end
+
+    it "treats an empty dry_run value as a dry run" do
+      expect do
+        post :create, params: notice_params.merge(dry_run: "")
+      end.to_not have_enqueued_mail(MerchantRegistrationMailer, :stripe_restraint_notice)
+
+      expect(response.parsed_body["dry_run"]).to be(true)
     end
   end
 end

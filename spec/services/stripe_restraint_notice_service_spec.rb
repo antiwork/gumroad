@@ -5,12 +5,12 @@ require "spec_helper"
 describe StripeRestraintNoticeService do
   let(:seller) { create(:user, email: "restrained-seller@example.com") }
   let(:account_id) { "acct_1SA76bS5BbOI7YuG" }
-  let(:notice_key) { "stripe-restraint:#{account_id}:cwallace@scalefirm.com:8f14e45f" }
+  let(:notice_key) { "stripe-restraint:#{account_id}:lawyer@example.com:8f14e45f" }
   let(:notice_params) do
     {
       stripe_account_id: account_id,
       firm_name: "Scale LLP",
-      firm_email: "cwallace@scalefirm.com",
+      firm_email: "lawyer@example.com",
       notice_key:,
     }
   end
@@ -76,7 +76,7 @@ describe StripeRestraintNoticeService do
       expect(result.rendered_email[:to]).to eq(seller.email)
       expect(result.rendered_email[:reply_to]).to eq(ApplicationMailer::SUPPORT_EMAIL)
       expect(result.rendered_email[:subject]).to eq("Important notice regarding your Gumroad payment account")
-      expect(result.rendered_email[:body]).to include("Scale LLP", "cwallace@scalefirm.com", "court order")
+      expect(result.rendered_email[:body]).to include("Scale LLP", "lawyer@example.com", "court order")
       expect(result.rendered_email[:body]).to include("Your payouts are paused")
     end
 
@@ -87,7 +87,7 @@ describe StripeRestraintNoticeService do
         result = described_class.call(**notice_params.merge(dry_run: false))
       end.to change { seller.comments.where(idempotency_key: notice_key).count }.by(1)
         .and have_enqueued_mail(MerchantRegistrationMailer, :stripe_restraint_notice)
-        .with(seller.id, "Scale LLP", "cwallace@scalefirm.com")
+        .with(seller.id, "Scale LLP", "lawyer@example.com")
 
       expect(result.already_sent).to be(false)
       expect(result.comment_id).to eq(seller.comments.find_by(idempotency_key: notice_key).id)
@@ -122,6 +122,26 @@ describe StripeRestraintNoticeService do
       expect do
         described_class.call(**notice_params.merge(firm_name: "Other LLP", dry_run: false))
       end.to raise_error(User::CreateAdminCommentService::IdempotencyConflictError)
+    end
+
+    it "removes the note when queuing the mail fails so a retry still sends it" do
+      allow(MerchantRegistrationMailer).to receive(:stripe_restraint_notice).and_raise(Redis::CannotConnectError)
+
+      expect do
+        described_class.call(**notice_params.merge(dry_run: false))
+      end.to raise_error(Redis::CannotConnectError)
+      expect(seller.comments.where(idempotency_key: notice_key)).to be_empty
+
+      allow(MerchantRegistrationMailer).to receive(:stripe_restraint_notice).and_call_original
+      expect do
+        described_class.call(**notice_params.merge(dry_run: false))
+      end.to have_enqueued_mail(MerchantRegistrationMailer, :stripe_restraint_notice)
+    end
+
+    it "rejects a notice whose note cannot be saved instead of reporting it as already sent" do
+      expect do
+        described_class.call(**notice_params.merge(firm_name: "a" * 10_001, dry_run: false))
+      end.to raise_error(described_class::InvalidNoticeError)
     end
   end
 end

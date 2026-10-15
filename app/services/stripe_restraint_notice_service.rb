@@ -56,8 +56,18 @@ class StripeRestraintNoticeService
         content: comment_content(stripe_account_id: stripe_account_id.to_s.strip, firm_name:, firm_email:, notice_key:),
         idempotency_key: notice_key,
       ).perform
+      raise InvalidNoticeError, comment.errors.full_messages.to_sentence unless comment.persisted?
+
       sent_now = comment.previously_new_record?
-      MerchantRegistrationMailer.stripe_restraint_notice(user.id, firm_name, firm_email).deliver_later if sent_now
+      if sent_now
+        begin
+          MerchantRegistrationMailer.stripe_restraint_notice(user.id, firm_name, firm_email).deliver_later
+        rescue StandardError
+          # The note is the idempotency guard: leaving it behind would make a retry skip the mail.
+          comment.destroy
+          raise
+        end
+      end
 
       Result.new(
         user_external_id: user.external_id,

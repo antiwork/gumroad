@@ -193,7 +193,7 @@ describe MerchantRegistrationMailer do
     let(:user) { create(:user) }
 
     let(:mail) do
-      described_class.stripe_restraint_notice(user.id, "Scale LLP", "cwallace@scalefirm.com")
+      described_class.stripe_restraint_notice(user.id, "Scale LLP", "lawyer@example.com")
     end
 
     it "relays the court order and the law firm's contact details" do
@@ -202,7 +202,7 @@ describe MerchantRegistrationMailer do
       expect(mail.reply_to).to eq([ApplicationMailer::SUPPORT_EMAIL])
       expect(mail.body.encoded).to include("court order")
       expect(mail.body.encoded).to include("Your payouts are paused")
-      expect(mail.body.encoded).to include("Scale LLP", "cwallace@scalefirm.com")
+      expect(mail.body.encoded).to include("Scale LLP", "lawyer@example.com")
       expect(mail.body.encoded).to include("We cannot give legal advice")
     end
   end

@@ -9,7 +9,7 @@ class Api::Internal::Admin::StripeRestraintNoticesController < Api::Internal::Ad
   before_action :fetch_user_for_write, only: :create
 
   def create
-    dry_run = params.key?(:dry_run) ? ActiveModel::Type::Boolean.new.cast(params[:dry_run]) : true
+    dry_run = params[:dry_run].to_s.strip.downcase.then { |value| !%w[false 0 f off no].include?(value) }
 
     record_admin_write(action: "stripe_restraint_notices.create", target: @user) do
       result = StripeRestraintNoticeService.call(
