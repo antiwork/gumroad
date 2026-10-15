@@ -101,6 +101,10 @@ class GdprBuyerErasureService
       Rails.logger.warn("GDPR buyer erasure: step '#{step_name}' timed out for #{@anonymized_email} and was skipped (non-critical): #{e.class}")
     end
 
+    def audience_records
+      @audience_records ||= GdprAudienceRecordsAnonymizer.new(email:, anonymized_email: @anonymized_email)
+    end
+
     def generate_anonymized_email
       digest = OpenSSL::HMAC.hexdigest("SHA256", Rails.application.secret_key_base, email)[0..15]
       "buyer-#{digest}@#{ANONYMIZED_EMAIL_DOMAIN}"
@@ -153,51 +157,15 @@ class GdprBuyerErasureService
     end
 
     def anonymize_audience_members!
-      conflict_seller_ids = AudienceMember.where(email: @anonymized_email).pluck(:seller_id)
-      if conflict_seller_ids.any?
-        conflicting_members = AudienceMember.where(email: email, seller_id: conflict_seller_ids)
-        deleted_member_ids = conflicting_members.ids
-        conflicting_members.delete_all
-        deleted_member_ids.each do |member_id|
-          ElasticsearchIndexerWorker.perform_async("delete", { "record_id" => member_id, "class_name" => "AudienceMember" })
-        end
-      end
-
-      anonymized_attributes = {
-        email: @anonymized_email,
-        details: nil,
-        customer: false,
-        follower: false,
-        affiliate: false,
-        min_paid_cents: nil,
-        max_paid_cents: nil,
-        min_created_at: nil,
-        max_created_at: nil,
-        min_purchase_created_at: nil,
-        max_purchase_created_at: nil,
-        follower_created_at: nil,
-        min_affiliate_created_at: nil,
-        max_affiliate_created_at: nil,
-      }
-      members = AudienceMember.where(email: email).to_a
-      counts[:audience_members] = AudienceMember.where(id: members.map(&:id)).update_all(anonymized_attributes)
-      # The indexer worker re-reads rows from a possibly-lagging replica; passing the
-      # document body inline guarantees the pre-erasure PII can never be re-indexed.
-      members.each do |member|
-        member.assign_attributes(anonymized_attributes)
-        ElasticsearchIndexerWorker.perform_async(
-          "index",
-          { "record_id" => member.id, "class_name" => "AudienceMember", "body" => member.as_indexed_json },
-        )
-      end
+      counts[:audience_members] = audience_records.anonymize_audience_members!
+    ensure
+      # These steps are not in a transaction, so a delete that already ran must reach the index
+      # even when a later statement in the step times out.
+      audience_records.enqueue_search_index_jobs!
     end
 
     def anonymize_followers!
-      conflict_followed_ids = Follower.where(email: @anonymized_email).pluck(:followed_id)
-      Follower.where(email: email, followed_id: conflict_followed_ids).delete_all if conflict_followed_ids.any?
-      counts[:followers] = Follower.where(email: email).update_all(
-        email: @anonymized_email,
-      )
+      counts[:followers] = audience_records.anonymize_followers!
     end
 
     def anonymize_carts!
@@ -214,9 +182,7 @@ class GdprBuyerErasureService
     end
 
     def anonymize_imported_customers!
-      counts[:imported_customers] = ImportedCustomer.where(email: email).update_all(
-        email: @anonymized_email,
-      )
+      counts[:imported_customers] = audience_records.anonymize_imported_customers!
     end
 
     def anonymize_sent_post_emails!

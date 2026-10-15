@@ -11,16 +11,21 @@ class GdprDataErasureService
   def initialize(user, performed_by:)
     @user = user
     @performed_by = performed_by
-    @products_deleted = 0
-    @unreachable_guardian_person_ids = []
-    @unscanned_guardian_account_ids = []
-    @scanned_guardian_account_ids = []
-    @local_erasure_committed = false
+    reset_run_state!
   end
 
   def perform!
+    # A failed run rolls back the rows but not this object: @user would still hold the anonymized
+    # email and deleted_at, and a retry would then skip deactivation and every email-keyed step.
+    @user.reload
+    reset_run_state!
+
+    # Only the confirmed address: unconfirmed_email was typed in but never proven to be theirs, so
+    # matching other people's rows on it could erase a stranger's data.
     original_email = @user.email
     credit_card_ids = credit_card_ids_for_erasure
+    # Read before anything below nulls the browser_guid columns this attribution is built from.
+    guest_cart_browser_guids = exclusive_browser_guids(original_email)
     # Read before the transaction so the Stripe deletion below has the accounts to hand. The values
     # would survive the transaction unchanged, but resolving them up front keeps the deletion
     # independent of what erasure does to the account in between.
@@ -39,10 +44,14 @@ class GdprDataErasureService
       anonymized_email = anonymize_user_pii!
       anonymize_compliance_info!
       delete_device_records!
-      anonymize_carts!(anonymized_email)
+      anonymize_carts!(anonymized_email:, original_email:, guest_cart_browser_guids:)
       anonymize_credit_cards!(credit_card_ids)
       anonymize_buyer_purchases!(anonymized_email:, original_email:)
+      erase_email_keyed_records!(anonymized_email:, original_email:)
       log_erasure!
+      # Every run, not only the one that rewrote the rows: a rerun is what queues the members an
+      # earlier run recorded but could not queue.
+      AfterCommitEverywhere.after_commit { enqueue_pending_audience_search_index_jobs! }
     end
     # Set only once the anonymize has committed, because it is what makes an unfinished Stripe
     # deletion a retained-PII problem. A failure BEFORE this point erased nothing, and remediating
@@ -81,10 +90,11 @@ class GdprDataErasureService
 
       return {
         success: false,
-        error: incomplete_erasure_error(retained_guardian_person_ids),
+        error: [incomplete_erasure_error(retained_guardian_person_ids), @search_index_error].compact.join(" "),
         summary: erasure_summary
       }
     end
+    return { success: false, error: @search_index_error, summary: erasure_summary } if @search_index_error
 
     { success: true, summary: erasure_summary }
   rescue => e
@@ -98,6 +108,16 @@ class GdprDataErasureService
   end
 
   private
+    def reset_run_state!
+      @products_deleted = 0
+      @unreachable_guardian_person_ids = []
+      @unscanned_guardian_account_ids = []
+      @scanned_guardian_account_ids = []
+      @local_erasure_committed = false
+      @counts = Hash.new(0)
+      @search_index_error = nil
+    end
+
     # Hands every recorded guardian Person to the retry job and leaves the durable note. Selects on
     # the recorded stripe_person_id, which anonymize! deliberately does not clear — it is the only
     # handle left once the identifying columns are nil.
@@ -222,6 +242,7 @@ class GdprDataErasureService
         account_created_ip: nil,
         payment_address: nil,
         unconfirmed_email: nil,
+        google_uid: nil,
         bio: nil,
         twitter_handle: nil,
         twitter_user_id: nil,
@@ -255,6 +276,7 @@ class GdprDataErasureService
       # Erasure soft-deletes the user rather than destroying it, so the association's
       # `dependent: :destroy` never runs and the platform uid/handle must be removed here.
       @user.social_connect_verifications.destroy_all
+      @user.user_external_authentications.destroy_all
       @user.youtube_identity&.destroy
       @user.instagram_identity&.destroy
       @user.tiktok_identity&.destroy
@@ -480,12 +502,125 @@ class GdprDataErasureService
            .uniq
     end
 
-    def anonymize_carts!(anonymized_email)
-      @user.carts.update_all(
-        email: anonymized_email,
-        ip_address: nil,
-        browser_guid: nil,
+    def anonymize_carts!(anonymized_email:, original_email:, guest_cart_browser_guids:)
+      attributes = { email: anonymized_email, ip_address: nil, browser_guid: nil }
+      @counts[:carts] += @user.carts.update_all(attributes)
+
+      # A checkout started before signing in leaves a cart with no user_id, keyed only by the
+      # address typed into it.
+      if email_keyed_erasure?(original_email:, anonymized_email:)
+        @counts[:carts] += Cart.where(user_id: nil, email: original_email).update_all(attributes)
+      end
+
+      # A guest cart that never got an address can only be tied to this person by its device.
+      return if guest_cart_browser_guids.empty?
+      @counts[:carts] += Cart.where(user_id: nil, email: [nil, ""], browser_guid: guest_cart_browser_guids)
+                             .update_all(ip_address: nil, browser_guid: nil)
+    end
+
+    # Browser GUIDs this person used that nobody else is known to have used. A GUID is a device
+    # cookie, so one that also appears on another account's cart or purchase, or under another
+    # address, is a shared device: an address-less guest cart on it could be anyone's.
+    def exclusive_browser_guids(original_email)
+      own_guids = [
+        @user.carts.distinct.pluck(:browser_guid),
+        Purchase.where(purchaser_id: @user.id).distinct.pluck(:browser_guid),
+      ]
+      if original_email.present?
+        own_guids << Cart.where(user_id: nil, email: original_email).distinct.pluck(:browser_guid)
+        own_guids << Purchase.where(purchaser_id: nil, email: original_email).distinct.pluck(:browser_guid)
+      end
+      own_guids = own_guids.flatten.compact_blank.uniq
+      return [] if own_guids.empty?
+
+      other_identity = [nil, "", original_email.presence].compact
+      shared_guids = [
+        Cart.where(browser_guid: own_guids).where.not(user_id: [nil, @user.id]),
+        Cart.where(browser_guid: own_guids, user_id: nil).where.not(email: other_identity),
+        Purchase.where(browser_guid: own_guids).where.not(purchaser_id: [nil, @user.id]),
+        Purchase.where(browser_guid: own_guids, purchaser_id: nil).where.not(email: other_identity),
+      ].flat_map { _1.distinct.pluck(:browser_guid) }
+
+      own_guids - shared_guids
+    end
+
+    # False on a rerun, where the account already holds the anonymized address: matching on it
+    # finds the rows erasure itself rewrote, and the conflict handling would then delete them.
+    def email_keyed_erasure?(original_email:, anonymized_email:)
+      original_email.present? && !original_email.casecmp?(anonymized_email)
+    end
+
+    def erase_email_keyed_records!(anonymized_email:, original_email:)
+      return unless email_keyed_erasure?(original_email:, anonymized_email:)
+
+      # Marketing-send dedupe rows, across every seller's posts. Nothing requires keeping them, so
+      # they are deleted rather than rewritten. Served by index_sent_post_emails_on_email.
+      @counts[:sent_post_emails] = SentPostEmail.where(email: original_email).delete_all
+
+      audience_records = GdprAudienceRecordsAnonymizer.new(email: original_email, anonymized_email:)
+      @counts[:audience_members] = audience_records.anonymize_audience_members!
+      @counts[:followers] = audience_records.anonymize_followers!
+      @counts[:imported_customers] = audience_records.anonymize_imported_customers!
+      record_pending_audience_search_index!(
+        reindex_ids: audience_records.pending_search_index_record_ids("index"),
+        unindex_ids: audience_records.pending_search_index_record_ids("delete"),
       )
+    end
+
+    # Written in the erasure's transaction so the ids commit exactly when the rows do. After that
+    # commit nothing can find these documents again: the rows no longer hold the address, and the
+    # conflicting members are gone. Locked and unioned so a concurrent run cannot drop ids.
+    def record_pending_audience_search_index!(reindex_ids:, unindex_ids:)
+      return if reindex_ids.empty? && unindex_ids.empty?
+
+      @user.reload.with_lock do
+        @user.gdpr_audience_reindex_member_ids = @user.gdpr_audience_reindex_member_ids | reindex_ids
+        @user.gdpr_audience_unindex_member_ids = @user.gdpr_audience_unindex_member_ids | unindex_ids
+        @user.save!(validate: false)
+      end
+    end
+
+    # Rescued rather than raised: the erasure has already committed, and a raise here would skip the
+    # guardian deletion that follows. The ids are cleared only once every job is queued, and only the
+    # ones this call queued, so a partial failure re-queues all of them on the next run.
+    def enqueue_pending_audience_search_index_jobs!
+      @user.reload
+      reindex_ids = @user.gdpr_audience_reindex_member_ids
+      unindex_ids = @user.gdpr_audience_unindex_member_ids
+      return if reindex_ids.empty? && unindex_ids.empty?
+
+      # The body goes inline because the worker reads from a possibly-lagging replica.
+      members = AudienceMember.where(id: reindex_ids).to_a
+      # A member deleted since has no row to index, so its document is removed instead.
+      unindex_ids |= reindex_ids - members.map(&:id)
+      members.each do |member|
+        ElasticsearchIndexerWorker.perform_async("index", { "record_id" => member.id, "class_name" => "AudienceMember", "body" => member.as_indexed_json })
+      end
+      unindex_ids.each do |member_id|
+        ElasticsearchIndexerWorker.perform_async("delete", { "record_id" => member_id, "class_name" => "AudienceMember" })
+      end
+
+      @user.reload.with_lock do
+        @user.gdpr_audience_reindex_member_ids = (@user.gdpr_audience_reindex_member_ids - reindex_ids).presence
+        @user.gdpr_audience_unindex_member_ids = (@user.gdpr_audience_unindex_member_ids - unindex_ids).presence
+        @user.save!(validate: false)
+      end
+    rescue => e
+      Rails.logger.error("GDPR: could not queue audience reindex for user #{@user.id}: #{e.message}")
+      ErrorNotifier.notify(e)
+      @search_index_error = "Erasure incomplete: audience member search record(s) " \
+                            "#{(reindex_ids.to_a | unindex_ids.to_a).join(', ')} could not be queued for " \
+                            "reindex or removal and may still show the original address in search. Run the " \
+                            "erasure again to queue them before confirming the request as fulfilled."
+      record_incomplete_search_index_note!
+    end
+
+    # Durable like the guardian note: the returned error is gone once the console session is.
+    def record_incomplete_search_index_note!
+      @user.add_payout_note(content: "GDPR: #{@search_index_error}", seller_visible: false)
+    rescue => e
+      Rails.logger.error("GDPR: failed to record incomplete-erasure note for user #{@user.id}: #{e.message}")
+      ErrorNotifier.notify(e)
     end
 
     def delete_device_records!
@@ -599,6 +734,11 @@ class GdprDataErasureService
         purchases_anonymized: true,
         account_deactivated: true,
         products_deleted: @products_deleted,
+        carts_anonymized: @counts[:carts],
+        sent_post_emails_deleted: @counts[:sent_post_emails],
+        audience_members_anonymized: @counts[:audience_members],
+        followers_anonymized: @counts[:followers],
+        imported_customers_anonymized: @counts[:imported_customers],
         external_cleanup_needed: [
           "Helper/Supabase (customer conversations)",
           "Gmail (correspondence)",

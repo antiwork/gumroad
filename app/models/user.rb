@@ -230,6 +230,10 @@ class User < ApplicationRecord
   # support can put it back and so the payout code can still find the rejection that stands against
   # it. See Payment#invalidate_paypal_payout_address.
   attr_json_data_accessor :invalidated_paypal_payout_address
+  # Audience members whose search documents a GDPR erasure still has to queue a reindex or removal
+  # for. Ids only: the original address is already gone from the rows. See GdprDataErasureService.
+  attr_json_data_accessor :gdpr_audience_reindex_member_ids, default: -> { [] }
+  attr_json_data_accessor :gdpr_audience_unindex_member_ids, default: -> { [] }
   attr_json_data_accessor :au_backtax_sales_cents, default: 0
   attr_json_data_accessor :au_backtax_owed_cents, default: 0
   attr_json_data_accessor :gumroad_day_timezone
