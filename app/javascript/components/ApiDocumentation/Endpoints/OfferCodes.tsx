@@ -270,9 +270,9 @@ export const GetStoreOfferCodes = () => (
     description="List all non-deleted offer codes in your store, including scheduled and expired codes. This endpoint requires view_sales or edit_products."
   >
     <p>
-      Set auto_apply=true to find the current automatic sale without reading all codes, including codes that exclude a
-      product or use another currency. Results contain 10 codes per page, newest first. Pass next_page_key as page_key
-      until the response has no next_page_key.
+      Set auto_apply=true to find the current automatic sale, including one that excludes a product or uses another
+      currency, without reading all codes. Results contain 10 codes per page, newest first. Pass next_page_key as
+      page_key until the response has no next_page_key.
     </p>
     <ApiParameters>
       <ApiParameter
