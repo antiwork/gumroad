@@ -134,6 +134,7 @@ class GdprDataErasureService
       @counts = Hash.new(0)
       @search_index_error = nil
       @sent_post_email_error = nil
+      @sent_post_email_recheck_generation = nil
     end
 
     # Hands every recorded guardian Person to the retry job and leaves the durable note. Selects on
@@ -579,7 +580,11 @@ class GdprDataErasureService
       # they are deleted rather than rewritten.
       @counts[:sent_post_emails] = delete_sent_post_emails!(sent_post_email_ids)
       # Commits with the anonymize, so a run that dies before the post-commit pass still leaves it set.
-      write_sent_post_email_recheck_pending!(true)
+      @sent_post_email_recheck_generation = SecureRandom.hex(8)
+      @user.reload.with_lock do
+        @user.gdpr_sent_post_emails_recheck_pending = @sent_post_email_recheck_generation
+        @user.save!(validate: false)
+      end
 
       audience_records = GdprAudienceRecordsAnonymizer.new(email: original_email, anonymized_email:)
       @counts[:audience_members] = audience_records.anonymize_audience_members!
@@ -597,7 +602,11 @@ class GdprDataErasureService
     def delete_late_sent_post_emails!(original_email)
       ApplicationRecord.connected_to(role: :writing) do
         @counts[:sent_post_emails] += delete_sent_post_emails!(SentPostEmail.ids_for_email(original_email))
-        write_sent_post_email_recheck_pending!(nil)
+        unless clear_sent_post_email_recheck_pending!
+          @sent_post_email_error = "Erasure incomplete: a later run of this erasure has not finished rechecking " \
+                                   "sent post email records for the original address. Check that run's result " \
+                                   "before confirming the request as fulfilled."
+        end
       end
     rescue => e
       Rails.logger.error("GDPR: could not recheck sent post emails for user #{@user.id}: #{e.message}")
@@ -624,10 +633,17 @@ class GdprDataErasureService
                                "sent post email records. Run the erasure again before confirming the request as fulfilled."
     end
 
-    def write_sent_post_email_recheck_pending!(pending)
+    # Clears only this run's generation. A run that committed later wrote its own, and its recheck
+    # starts after this one's commit, so only that recheck can cover both. False while it is pending.
+    def clear_sent_post_email_recheck_pending!
       @user.reload.with_lock do
-        @user.gdpr_sent_post_emails_recheck_pending = pending
-        @user.save!(validate: false)
+        pending = @user.gdpr_sent_post_emails_recheck_pending
+        if pending == @sent_post_email_recheck_generation
+          @user.gdpr_sent_post_emails_recheck_pending = nil
+          @user.save!(validate: false)
+          pending = nil
+        end
+        pending.nil?
       end
     end
 

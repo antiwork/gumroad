@@ -871,7 +871,7 @@ describe GdprDataErasureService do
       expect(result[:success]).to eq(true)
       expect(SentPostEmail.where(email: "john@example.com")).to be_empty
       expect(result[:summary][:sent_post_emails_deleted]).to eq(1)
-      expect(pending_during_recheck).to be(true)
+      expect(pending_during_recheck).to be_present
       expect(user.reload.gdpr_sent_post_emails_recheck_pending).to be_nil
     end
 
@@ -889,7 +889,8 @@ describe GdprDataErasureService do
       expect(result[:success]).to eq(false)
       expect(result[:error]).to include("sent post email records for the original address could not be rechecked")
       expect(user.reload.email).to eq("deleted-#{user.id}@deleted.gumroad.com")
-      expect(user.gdpr_sent_post_emails_recheck_pending).to be(true)
+      pending_generation = user.gdpr_sent_post_emails_recheck_pending
+      expect(pending_generation).to be_present
       expect(notes.call.last).to include("sent post email records for the original address could not be rechecked")
 
       rerun = described_class.new(User.find(user.id), performed_by: admin).perform!
@@ -898,13 +899,32 @@ describe GdprDataErasureService do
       expect(rerun[:error]).to include("an earlier run did not finish rechecking sent post email records")
       expect(rerun[:error]).to include("clear the account's gdpr_sent_post_emails_recheck_pending")
       expect(notes.call.last).to include("an earlier run did not finish rechecking sent post email records")
-      expect(user.reload.gdpr_sent_post_emails_recheck_pending).to be(true)
+      expect(user.reload.gdpr_sent_post_emails_recheck_pending).to eq(pending_generation)
       expect(lookups).to eq(2)
 
       user.gdpr_sent_post_emails_recheck_pending = nil
       user.save!(validate: false)
 
       expect(described_class.new(User.find(user.id), performed_by: admin).perform!).to include(success: true)
+    end
+
+    it "does not let a run's finished recheck clear the pending recheck of a run that committed after it" do
+      allow(SentPostEmail).to receive(:ids_for_email).and_wrap_original do |original, email|
+        if User.find(user.id).gdpr_sent_post_emails_recheck_pending.present?
+          # Another run read the address before this one committed, then committed its own generation.
+          later_run = User.find(user.id)
+          later_run.gdpr_sent_post_emails_recheck_pending = "later-run-generation"
+          later_run.save!(validate: false)
+        end
+        original.call(email)
+      end
+
+      result = described_class.new(user, performed_by: admin).perform!
+
+      expect(result[:success]).to eq(false)
+      expect(result[:error]).to include("a later run of this erasure has not finished rechecking sent post email records")
+      expect(user.reload.gdpr_sent_post_emails_recheck_pending).to eq("later-run-generation")
+      expect(described_class.new(User.find(user.id), performed_by: admin).perform!).to include(success: false)
     end
 
     it "leaves no pending sent post email recheck when the erasure rolls back" do
