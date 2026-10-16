@@ -139,6 +139,10 @@ class Settings::PaymentsController < Settings::BaseController
       if current_seller.has_stripe_account_connected?
         return redirect_with_error("You cannot change your payout method to #{payout_type} because you have a stripe account connected.")
       end
+      if payout_type != "PayPal" && current_seller.stripe_account.blank? && current_seller.stripe_connect_account.present?
+        # No managed Stripe account is created next to a Connect row, and saving this would stop the PayPal rail.
+        return redirect_with_error("We can't set up #{payout_type} payouts for your account yet. Your current payout method has not been changed. Please contact support.")
+      end
     end
 
     # Only a seller without a Stripe account and with a saved military ZIP gets the transaction: if the save

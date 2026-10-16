@@ -644,14 +644,13 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
             create(:merchant_account_stripe_connect, user:)
           end
 
-          it "does not create a gumroad-managed Stripe account next to Connect" do
+          it "does not create a gumroad-managed Stripe account next to Connect, and does not save the bank account" do
             expect(StripeMerchantAccountManager).not_to receive(:create_account)
 
-            put :update, params: all_params
+            expect { put :update, params: all_params }.not_to change { user.reload.active_bank_account }
 
             expect(response).to redirect_to(settings_payments_path)
-            expect(response).to have_http_status :see_other
-            expect(flash[:notice]).to eq("Thanks! You're all set.")
+            expect(session[:inertia_errors][:base].first).to include("We can't set up bank account payouts for your account yet")
           end
         end
 
