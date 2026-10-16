@@ -30,7 +30,7 @@ import {
   titleWithFallback,
   useFilesInGroup,
 } from "$app/components/ProductEdit/ContentTab/FileEmbedGroup";
-import { FileEntry, useProductEditContext } from "$app/components/ProductEdit/state";
+import { FileEntry, ThumbnailFile, useProductEditContext } from "$app/components/ProductEdit/state";
 import { useS3UploadConfig } from "$app/components/S3UploadConfig";
 import { Separator } from "$app/components/Separator";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -66,8 +66,20 @@ export const getDraggedFileEmbed = (editor: Editor) => {
 const DEFAULT_FILE_ROW_HEIGHT = 82;
 // Large enough for the buyer's row thumbnail on a 3x screen; View loads the original.
 const IMAGE_THUMBNAIL_MAX_SIDE = 384;
+// The load event only reads the header; drawImage decodes the pixels, so this check runs first.
 // Decoding a larger texture can exhaust the tab's memory; those rows keep the icon.
 const IMAGE_THUMBNAIL_MAX_SOURCE_PIXELS = 8192 * 8192;
+const PENDING_THUMBNAIL: ThumbnailFile = { url: "", signed_id: "", status: { type: "uploading" } };
+// One decode at a time, so dropping a folder of large textures does not decode them all at once.
+let imageThumbnailQueue: Promise<unknown> = Promise.resolve();
+const enqueueImageThumbnail = <T,>(task: () => Promise<T>) => {
+  const run = imageThumbnailQueue.then(task);
+  imageThumbnailQueue = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+};
 
 const FileEmbedNodeView = ({
   node,
@@ -179,17 +191,32 @@ const FileEmbedNodeView = ({
     };
   };
   // Without a thumbnail the row keeps its file icon, so a failure here needs no alert.
-  const generateImageThumbnail = async (localFileUrl: string, extension: string) => {
-    const image = await loadImageElement(localFileUrl);
-    const { naturalWidth: width, naturalHeight: height } = image;
-    if (width * height > IMAGE_THUMBNAIL_MAX_SOURCE_PIXELS) return;
-    const scale = Math.min(1, IMAGE_THUMBNAIL_MAX_SIDE / Math.max(width, height));
-    const canvas = drawToCanvas(image, Math.max(1, Math.round(width * scale)), Math.max(1, Math.round(height * scale)));
+  const generateImageThumbnail = (localFileUrl: string, extension: string) => {
+    // Pending from the start: a queued thumbnail must also hold Save.
+    setGeneratedThumbnail(localFileUrl, PENDING_THUMBNAIL);
     // PNG keeps the alpha channel that UV maps and decals depend on.
     const isJpeg = ["JPG", "JPEG"].includes(extension.toUpperCase());
     const type = isJpeg ? "image/jpeg" : "image/png";
-    const blob = await canvasToBlob(canvas, type, 0.85);
-    uploadThumbnail(new File([blob], isJpeg ? "thumbnail.jpg" : "thumbnail.png", { type }), localFileUrl);
+    enqueueImageThumbnail(async () => {
+      const image = await loadImageElement(localFileUrl);
+      const { naturalWidth: width, naturalHeight: height } = image;
+      if (width * height > IMAGE_THUMBNAIL_MAX_SOURCE_PIXELS) return null;
+      const scale = Math.min(1, IMAGE_THUMBNAIL_MAX_SIDE / Math.max(width, height));
+      const canvas = drawToCanvas(
+        image,
+        Math.max(1, Math.round(width * scale)),
+        Math.max(1, Math.round(height * scale)),
+      );
+      // Drops the full-size decode now instead of at the next GC, before the next queued image.
+      image.src = "";
+      return canvasToBlob(canvas, type, 0.85);
+    })
+      .then((blob) =>
+        blob
+          ? uploadThumbnail(new File([blob], isJpeg ? "thumbnail.jpg" : "thumbnail.png", { type }), localFileUrl)
+          : setGeneratedThumbnail(localFileUrl, null),
+      )
+      .catch(() => setGeneratedThumbnail(localFileUrl, null));
   };
   // not using the built-in deleteNode here as that one does not delete empty parent nodes
   const deleteNode = () => {
@@ -214,8 +241,8 @@ const FileEmbedNodeView = ({
   React.useEffect(() => {
     if (file?.status.type !== "unsaved" || file.status.uploadStatus.type !== "uploading") return;
     if (file.is_streamable) generateThumbnail();
-    else if (file.extension && FileUtils.isBrowserRenderableImage(file.extension))
-      generateImageThumbnail(file.status.url, file.extension).catch(() => undefined);
+    else if (!file.thumbnail && file.extension && FileUtils.isBrowserRenderableImage(file.extension))
+      generateImageThumbnail(file.status.url, file.extension);
   }, [file?.status.type, localFileUrl]);
 
   const pos = getPos();
@@ -246,18 +273,32 @@ const FileEmbedNodeView = ({
       product.files = product.files.map((existing) => (existing.id === file.id ? { ...existing, ...data } : existing));
     });
 
+  // A thumbnail generated from a failed attempt must not land on the file that "Upload again" brought in.
+  const setGeneratedThumbnail = (generatedFrom: string, thumbnail: ThumbnailFile | null) =>
+    updateProduct((product) => {
+      product.files = product.files.map((existing) =>
+        existing.id === file.id && existing.status.type === "unsaved" && existing.status.url === generatedFrom
+          ? { ...existing, thumbnail }
+          : existing,
+      );
+    });
+
   const uploadThumbnail = (thumbnail: File, generatedFrom?: string) => {
-    if (thumbnail.size > 5 * 1024 * 1024)
+    if (thumbnail.size > 5 * 1024 * 1024) {
+      if (generatedFrom != null) setGeneratedThumbnail(generatedFrom, null);
       return showAlert(
         "Could not process your thumbnail, please upload an image with size smaller than 5 MB.",
         "error",
       );
+    }
 
     setLoadingVideo(true);
+    if (generatedFrom != null) setGeneratedThumbnail(generatedFrom, PENDING_THUMBNAIL);
     const upload = new DirectUpload(thumbnail, Routes.rails_direct_uploads_path());
     upload.create((error, blob) => {
+      setLoadingVideo(false);
       if (error) {
-        setLoadingVideo(false);
+        if (generatedFrom != null) setGeneratedThumbnail(generatedFrom, null);
         return showAlert(error.message, "error");
       }
       const uploaded: FileEntry["thumbnail"] = {
@@ -266,16 +307,7 @@ const FileEmbedNodeView = ({
         status: { type: "unsaved" },
       };
       if (generatedFrom == null) updateFile({ thumbnail: uploaded });
-      // A frame from a failed attempt must not land on the file that "Upload again" brought in.
-      else
-        updateProduct((product) => {
-          product.files = product.files.map((existing) =>
-            existing.id === file.id && existing.status.type === "unsaved" && existing.status.url === generatedFrom
-              ? { ...existing, thumbnail: uploaded }
-              : existing,
-          );
-        });
-      setLoadingVideo(false);
+      else setGeneratedThumbnail(generatedFrom, uploaded);
     });
   };
 
@@ -287,6 +319,8 @@ const FileEmbedNodeView = ({
     );
 
   const isFailedUpload = file.status.type === "unsaved" && file.status.uploadStatus.type === "failed";
+  // Product state outlives this node view, so a remount mid-upload still shows the spinner.
+  const isThumbnailLoading = loadingVideo || file.thumbnail?.status.type === "uploading";
   const imageThumbnailUrl =
     !isFailedUpload && FileUtils.isBrowserRenderableImage(file.extension) ? file.thumbnail?.url : null;
   const isComplete = !(
@@ -505,7 +539,7 @@ const FileEmbedNodeView = ({
         >
           {file.is_streamable && !node.attrs.collapsed && !isFailedUpload ? (
             <RowDetails asChild>
-              {loadingVideo ? (
+              {isThumbnailLoading ? (
                 <figure className="preview" style={frameStyle}>
                   <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)" }}>
                     <LoadingSpinner className="size-16" />
@@ -587,7 +621,7 @@ const FileEmbedNodeView = ({
           <RowContent className="content">
             {!isFailedUpload && file.is_streamable && node.attrs.collapsed ? (
               <label className="thumbnail" aria-label="Upload a thumbnail">
-                {loadingVideo ? (
+                {isThumbnailLoading ? (
                   <div style={{ placeSelf: "center" }}>
                     <LoadingSpinner className="size-12" />
                   </div>

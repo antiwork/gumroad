@@ -406,5 +406,6 @@ export type ExistingFileEntry = FileEntry & { attached_product_name: string | nu
 export type ThumbnailFile = {
   url: string;
   signed_id: string;
-  status: { type: "saved" } | { type: "existing" } | { type: "unsaved" };
+  // "uploading" holds Save until a thumbnail the editor generated has its signed_id.
+  status: { type: "saved" } | { type: "existing" } | { type: "unsaved" } | { type: "uploading" };
 };

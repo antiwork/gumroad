@@ -209,7 +209,14 @@ export const Layout = ({
     file.status.type === "unsaved" && file.status.uploadStatus.type === "uploading";
   const isUploadingFiles =
     product.public_files.some((f) => f.status?.type === "unsaved" && f.status.uploadStatus.type === "uploading") ||
-    product.files.some((file) => isUploadingFile(file) || file.subtitle_files.some(isUploadingFile));
+    product.files.some(
+      (file) =>
+        isUploadingFile(file) ||
+        file.subtitle_files.some(isUploadingFile) ||
+        // A failed file is left out of the save, so its thumbnail does not hold Save.
+        (file.thumbnail?.status.type === "uploading" &&
+          !(file.status.type === "unsaved" && file.status.uploadStatus.type === "failed")),
+    );
   const imageSettings = useImageUploadSettings();
   const isUploadingFilesOrImages = isLoading || isUploadingFiles || !!imageSettings?.isUploading;
   const isBusy = isUploadingFilesOrImages || saving || saveBlocked || isPublishing;
