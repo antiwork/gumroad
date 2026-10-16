@@ -150,7 +150,7 @@ describe CreatorHomePresenter do
       )
     end
 
-    shared_examples "best selling products" do
+    describe "best selling products" do
       it "includes product data", :sidekiq_inline, :elasticsearch_wait_for_refresh  do
         recreate_model_index(Purchase)
 
@@ -278,13 +278,10 @@ describe CreatorHomePresenter do
 
       before { tied_products.each { create(:purchase, link: _1, price_cents: _1.price_cents, created_at: 2.days.ago) } }
 
-      [false, true].each do |sales_query|
-        it "keeps the newest products #{sales_query ? "with" : "without"} the seller-wide sales query", :sidekiq_inline, :elasticsearch_wait_for_refresh do
-          sales_query ? Feature.activate_user(:dashboard_home_sales_query, seller) : Feature.deactivate(:dashboard_home_sales_query)
-          tied_products.first(3).each { _1.update!(deleted_at: Time.current) }
+      it "keeps the newest products", :sidekiq_inline, :elasticsearch_wait_for_refresh do
+        tied_products.first(3).each { _1.update!(deleted_at: Time.current) }
 
-          expect(presenter.creator_home_props[:sales].map { _1["id"] }).to match_array(tied_products.last(3).map(&:unique_permalink))
-        end
+        expect(presenter.creator_home_props[:sales].map { _1["id"] }).to match_array(tied_products.last(3).map(&:unique_permalink))
       end
     end
 
@@ -293,58 +290,42 @@ describe CreatorHomePresenter do
 
       before { create(:purchase, link: archived, price_cents: archived.price_cents, created_at: 40.days.ago) }
 
-      [false, true].each do |sales_query|
-        it "still lists it #{sales_query ? "with" : "without"} the seller-wide sales query", :sidekiq_inline, :elasticsearch_wait_for_refresh do
-          sales_query ? Feature.activate_user(:dashboard_home_sales_query, seller) : Feature.deactivate(:dashboard_home_sales_query)
-
-          expect(presenter.creator_home_props[:sales].map { _1["id"] }).to eq([archived.unique_permalink])
-        end
+      it "still lists it", :sidekiq_inline, :elasticsearch_wait_for_refresh do
+        expect(presenter.creator_home_props[:sales].map { _1["id"] }).to eq([archived.unique_permalink])
       end
     end
 
-    context "with the analytics-backed best sellers" do
-      before { Feature.deactivate(:dashboard_home_sales_query) }
+    it "fills empty best-seller slots with the newest live products", :sidekiq_inline, :elasticsearch_wait_for_refresh do
+      sold = create(:product, user: seller)
+      older = create(:product, user: seller)
+      newer = create(:product, user: seller)
+      create(:product, user: seller, archived: true)
+      create(:product, user: seller, deleted_at: Time.current)
+      create(:purchase, link: sold, price_cents: sold.price_cents, created_at: 2.days.ago)
 
-      it_behaves_like "best selling products"
+      expect(presenter.creator_home_props[:sales].map { _1["id"] }).to eq([sold, newer, older].map(&:unique_permalink))
     end
 
-    context "with the seller-wide sales query" do
-      before { Feature.activate_user(:dashboard_home_sales_query, seller) }
+    it "skips the page view aggregation the card never shows" do
+      expect(CreatorAnalytics::ProductPageViews).not_to receive(:new)
 
-      it_behaves_like "best selling products"
+      presenter.creator_home_props
+    end
 
-      it "fills empty best-seller slots with the newest live products", :sidekiq_inline, :elasticsearch_wait_for_refresh do
-        sold = create(:product, user: seller)
-        older = create(:product, user: seller)
-        newer = create(:product, user: seller)
-        create(:product, user: seller, archived: true)
-        create(:product, user: seller, deleted_at: Time.current)
-        create(:purchase, link: sold, price_cents: sold.price_cents, created_at: 2.days.ago)
+    it "runs the same number of queries however many products the seller has", :sidekiq_inline, :elasticsearch_wait_for_refresh do
+      # Both counts must come from the ranked path: a purchase not yet searchable would send the
+      # first count through the fill query instead.
+      create_list(:product, 3, user: seller).each { create(:purchase, link: _1, price_cents: _1.price_cents) }
+      index_model_records(Purchase)
+      described_class.new(pundit_user).creator_home_props # warm caches
+      few = count_queries { described_class.new(pundit_user).creator_home_props }
 
-        expect(presenter.creator_home_props[:sales].map { _1["id"] }).to eq([sold, newer, older].map(&:unique_permalink))
-      end
+      create_list(:product, 10, user: seller).each { create(:purchase, link: _1, price_cents: _1.price_cents) }
+      index_model_records(Purchase)
+      described_class.new(pundit_user).creator_home_props
+      many = count_queries { described_class.new(pundit_user).creator_home_props }
 
-      it "skips the page view aggregation the card never shows" do
-        expect(CreatorAnalytics::ProductPageViews).not_to receive(:new)
-
-        presenter.creator_home_props
-      end
-
-      it "runs the same number of queries however many products the seller has", :sidekiq_inline, :elasticsearch_wait_for_refresh do
-        # Both counts must come from the ranked path: a purchase not yet searchable would send the
-        # first count through the fill query instead.
-        create_list(:product, 3, user: seller).each { create(:purchase, link: _1, price_cents: _1.price_cents) }
-        index_model_records(Purchase)
-        described_class.new(pundit_user).creator_home_props # warm caches
-        few = count_queries { described_class.new(pundit_user).creator_home_props }
-
-        create_list(:product, 10, user: seller).each { create(:purchase, link: _1, price_cents: _1.price_cents) }
-        index_model_records(Purchase)
-        described_class.new(pundit_user).creator_home_props
-        many = count_queries { described_class.new(pundit_user).creator_home_props }
-
-        expect(many).to eq(few)
-      end
+      expect(many).to eq(few)
     end
 
     it "includes sorted interlaced activity items", :sidekiq_inline, :elasticsearch_wait_for_refresh do
