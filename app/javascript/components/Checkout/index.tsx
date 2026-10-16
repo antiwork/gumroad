@@ -56,6 +56,7 @@ import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
 import { Select } from "$app/components/ui/Select";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
+import { useRefToLatest } from "$app/components/useRefToLatest";
 import { useRunOnce } from "$app/components/useRunOnce";
 import { WithTooltip } from "$app/components/WithTooltip";
 
@@ -253,6 +254,17 @@ const CurrencyRefusalNotice = ({ summaryCurrencyCode }: { summaryCurrencyCode: s
   );
 };
 
+const discountRequestProducts = (items: CartItemProps[]) =>
+  Object.fromEntries(
+    items.map((item, index) => [
+      index,
+      { permalink: item.product.permalink, quantity: item.quantity, variant_external_id: item.option_id ?? "" },
+    ]),
+  );
+
+// A code kept without lines: a default the cart has not met yet, or one a reload found ineligible.
+const isDormant = ({ products }: DiscountCode) => Object.keys(products).length === 0;
+
 export const Checkout = ({
   discoverUrl,
   cart,
@@ -279,7 +291,8 @@ export const Checkout = ({
   // drop each other's codes. `codes` don't take lines from each other and the solver keeps the
   // later one on a tie, so pass them lowest tie priority first. `takeover` takes the code's lines
   // from the cart's other codes; `refresh` re-quotes those for an added product. `silent` is for
-  // codes the buyer didn't ask for, which apply where they can without alerts.
+  // codes the buyer didn't ask for, which apply where they can without alerts. `automatic` defaults
+  // stay in the cart even where PPP or an unmet condition beats them, for the solver to weigh later.
   async function applyDiscount(
     codes: string[],
     {
@@ -287,15 +300,11 @@ export const Checkout = ({
       takeover = false,
       refresh = false,
       silent = false,
-    }: { fromUrl?: boolean; takeover?: boolean; refresh?: boolean; silent?: boolean },
+      automatic = false,
+    }: { fromUrl?: boolean; takeover?: boolean; refresh?: boolean; silent?: boolean; automatic?: boolean },
   ) {
     setLoadingDiscount(true);
-    const products = Object.fromEntries(
-      cart.items.map((item, index) => [
-        index,
-        { permalink: item.product.permalink, quantity: item.quantity, variant_external_id: item.option_id ?? "" },
-      ]),
-    );
+    const products = discountRequestProducts(cart.items);
     const others = cart.discountCodes.filter(({ code }) => !codes.includes(code));
     const [discounts, refreshed] = await Promise.all([
       Promise.all(codes.map((code) => computeOfferDiscount({ code, products }))),
@@ -329,7 +338,7 @@ export const Checkout = ({
     if (codes.length > 0 && applied.length === 0) {
       const invalid = discounts.find((discount) => !discount.valid);
       if (invalid?.valid === false && !silent) showAlert(invalid.error_message, "error");
-    } else if (applied.length > 0 && pppDiscountGreaterCount === appliedPermalinks.length) {
+    } else if (!automatic && applied.length > 0 && pppDiscountGreaterCount === appliedPermalinks.length) {
       if (!silent)
         showAlert(
           "The offer code will not be applied because the purchasing power parity discount is greater than the offer code discount for all products.",
@@ -341,7 +350,7 @@ export const Checkout = ({
       const warnings = [
         ...new Set(
           [
-            pppDiscountGreaterCount > 0
+            pppDiscountGreaterCount > 0 && !automatic
               ? "The offer code will not be applied to some products for which the purchasing power parity discount is greater than the offer code discount."
               : null,
             ...applied.map(({ notice }) => notice),
@@ -351,6 +360,16 @@ export const Checkout = ({
       if (warnings.length > 0 && !silent) showAlert(warnings.join(" "), "warning");
       group = applied.map(({ code, products, fromUrl }) => ({ code, products, fromUrl }));
     }
+    // A default with no lines yet keeps its place; requoteDormantDiscounts asks again after an edit.
+    if (automatic)
+      group = codes.map(
+        (code) =>
+          group.find((item) => item.code === code) ?? {
+            code,
+            products: cart.discountCodes.find((item) => item.code === code)?.products ?? {},
+            fromUrl,
+          },
+      );
     if (applied.length > 0) setNewDiscountCode("");
 
     const takenPermalinks = new Set(takeover && group.length > 0 ? appliedPermalinks : []);
@@ -377,11 +396,38 @@ export const Checkout = ({
     if (group.length > 0 || refreshed.length > 0)
       updateCart({
         discountCodes: [...kept.slice(0, position), ...group, ...kept.slice(position)].filter(
-          (item) => group.includes(item) || Object.keys(item.products).length > 0,
+          (item) =>
+            group.includes(item) ||
+            Object.keys(item.products).length > 0 ||
+            (takenPermalinks.size === 0 &&
+              cart.discountCodes.some((stored) => stored.code === item.code && isDormant(stored))),
         ),
       });
 
     setLoadingDiscount(false);
+  }
+
+  const latestCart = useRefToLatest(cart);
+  async function requoteDormantDiscounts(items: CartItemProps[]) {
+    const dormant = cart.discountCodes.filter(isDormant);
+    if (dormant.length === 0) return;
+    const products = discountRequestProducts(items);
+    const discounts = await Promise.all(dormant.map(({ code }) => computeOfferDiscount({ code, products })));
+    // A later edit asks again with its own items.
+    if (latestCart.current.items !== items) return;
+    const fresh = new Map(
+      dormant.flatMap(({ code }, index) => {
+        const discount = discounts[index];
+        return discount?.valid ? [[code, discount.products_data] as const] : [];
+      }),
+    );
+    if (fresh.size > 0)
+      updateCart({
+        discountCodes: latestCart.current.discountCodes.map((item) => {
+          const products = fresh.get(item.code);
+          return products && isDormant(item) ? { ...item, products } : item;
+        }),
+      });
   }
 
   const hasAddedProduct = !!new URL(useOriginalLocation()).searchParams.get("product");
@@ -399,6 +445,7 @@ export const Checkout = ({
         takeover: !isDefault && !implicitDefaults,
         refresh: hasAddedProduct,
         silent: implicitDefaults,
+        automatic: isDefault || implicitDefaults,
       });
     if (code) {
       url.searchParams.delete("code");
@@ -634,6 +681,7 @@ export const Checkout = ({
                     presentmentPriceCents={localAmounts?.linePriceCents[index] ?? null}
                     noCentsIfWhole={noCentsIfWhole}
                     updateCart={updateCart}
+                    requoteDormantDiscounts={(items) => void requoteDormantDiscounts(items)}
                   />
                 ))}
                 {state.products.length === 1 && state.products[0]?.canGift && !state.products[0]?.payInInstallments ? (
@@ -1064,10 +1112,12 @@ const CartItemComponent = ({
   buyerCurrencyDisplay,
   presentmentPriceCents,
   noCentsIfWhole,
+  requoteDormantDiscounts,
 }: {
   item: CartItemProps;
   cart: CartState;
   updateCart: (update: Partial<CartState>) => void;
+  requoteDormantDiscounts: (items: CartItemProps[]) => void;
   isGift: boolean;
   buyerCurrencyDisplay?: CheckoutLocalCurrencyFormat | null;
   // This line's share of the locked buyer-currency total, allocated by the server. When
@@ -1137,6 +1187,7 @@ const CartItemComponent = ({
       pay_in_installments: selection.payInInstallments,
     };
     updateCart({ items });
+    requoteDormantDiscounts(items);
     setEditPopoverOpen(false);
   };
 
@@ -1252,10 +1303,12 @@ const CartItemComponent = ({
               onClick={() => {
                 const newItems = cart.items.filter((i) => i !== item);
                 updateCart({
-                  discountCodes: cart.discountCodes.filter(({ products }) =>
-                    Object.keys(products).some((permalink) =>
-                      newItems.some((item) => item.product.permalink === permalink),
-                    ),
+                  discountCodes: cart.discountCodes.filter(
+                    (code) =>
+                      (newItems.length > 0 && isDormant(code)) ||
+                      Object.keys(code.products).some((permalink) =>
+                        newItems.some((item) => item.product.permalink === permalink),
+                      ),
                   ),
                   items: newItems.map(({ accepted_offer, ...rest }) => ({
                     ...rest,

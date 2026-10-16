@@ -290,6 +290,77 @@ describe "Automatic sales on product pages", type: :system, js: true do
       expect(page).to have_no_alert(text: "purchasing power parity discount is greater")
     end
 
+    def edit_cart_item(name, &block)
+      within_cart_item name do
+        select_disclosure "Edit" do
+          block.call
+          click_on "Save changes"
+        end
+      end
+    end
+
+    it "applies a sale with a minimum quantity once a cart edit meets it, also after a reload" do
+      product = create(:product, user: seller, name: "Target product", price_cents: 1000, quantity_enabled: true)
+      make_default_for_existing_customers(product)
+      seller.offer_codes.create!(code: "BULK50", amount_percentage: 50, universal: true, products: [], auto_apply: true, minimum_quantity: 2)
+      profile_product = show_on_profile(product)
+
+      login_as buyer
+      visit short_link_path(profile_product)
+      within_section "More products", section_element: :section do
+        click_on "Target product"
+      end
+      within find(:article) do
+        expect(Rack::Utils.parse_query(URI.parse(find(:link, "Add to cart")[:href]).query)["code"]).to eq("RENEW20")
+      end
+      click_on "Add to cart"
+      expect(page).to have_cart_item("Target product")
+      expect(page).to have_text("Total US$8", normalize_ws: true)
+
+      edit_cart_item("Target product") { fill_in "Quantity", with: 2 }
+      expect(page).to have_text("Total US$10", normalize_ws: true)
+      edit_cart_item("Target product") { fill_in "Quantity", with: 1 }
+      expect(page).to have_text("Total US$8", normalize_ws: true)
+      wait_until_true(sleep_interval: 0.2) do
+        cart = Cart.fetch_by(user: buyer, browser_guid: nil)
+        cart&.alive_cart_products&.sole&.quantity == 1 && cart.discount_codes.pluck("code").sort == %w[BULK50 RENEW20]
+      end
+
+      visit checkout_path
+      expect(page).to have_text("Total US$8", normalize_ws: true)
+      edit_cart_item("Target product") { fill_in "Quantity", with: 2 }
+      expect(page).to have_text("Total US$10", normalize_ws: true)
+    end
+
+    it "keeps the defaults when purchasing power parity wins at first, so a cheaper tier gets the loyalty code" do
+      seller.update!(purchasing_power_parity_enabled: true)
+      membership = tiered_membership
+      loyalty = seller.offer_codes.create!(code: "RENEW5", amount_cents: 500, currency_type: "usd", products: [membership],
+                                           existing_customers_only: true, ownership_products: [owned_product])
+      membership.update!(default_offer_code: loyalty)
+      seller.offer_codes.create!(code: "SHOP20", amount_percentage: 20, universal: true, products: [], auto_apply: true)
+      profile_product = show_on_profile(membership)
+      PurchasingPowerParityService.new.set_factor("LV", 0.7)
+      allow_any_instance_of(ActionDispatch::Request).to receive(:remote_ip).and_return("109.110.31.255")
+
+      login_as buyer
+      visit short_link_path(profile_product)
+      within_section "More products", section_element: :section do
+        click_on "Target membership"
+      end
+      choose "Second Tier"
+      within find(:article) do
+        expect(Rack::Utils.parse_query(URI.parse(find(:link, "Add to cart")[:href]).query)).not_to have_key("code")
+      end
+      click_on "Add to cart"
+      expect(page).to have_cart_item("Target membership")
+      expect(page).to have_text("Total US$70", normalize_ws: true)
+
+      edit_cart_item("Target membership") { choose "First Tier" }
+      expect(page).to have_text("Total US$5", normalize_ws: true)
+      expect(page).to have_no_alert(text: "purchasing power parity discount is greater")
+    end
+
     # The product page leaves the code off its CTA once PPP wins, so this arrives by checkout link.
     it "weighs the existing-customer code when purchasing power parity beats the sale in a checkout link" do
       seller.update!(purchasing_power_parity_enabled: true)

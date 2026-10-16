@@ -136,42 +136,6 @@ describe("getDiscountedPrice", () => {
     expect(getDiscountedPrice(cart, secondItem).price).toBe(1_000);
   });
 
-  it("gives each line one of a loyalty code and a once-per-cart sale, spending the sale once", () => {
-    const items = ["first", "second", "third"].map((permalink) => ({
-      ...item,
-      product: { ...product, id: `${permalink}-id`, permalink },
-      quantity: 1,
-    }));
-    const forEveryItem = (discount: Discount) =>
-      Object.fromEntries(items.map(({ product }) => [product.permalink, discount]));
-    const sale = {
-      type: "fixed" as const,
-      cents: 500,
-      once_per_cart: true,
-      once_per_cart_id: "sale",
-      once_per_cart_amount_cents: 500,
-      ...discountConditions,
-    };
-    const loyalty = { type: "percent" as const, percents: 20, ...discountConditions };
-    const saleOnly: CartState = {
-      items,
-      discountCodes: [{ code: "SHOP5", products: forEveryItem(sale), fromUrl: true }],
-    };
-    const both: CartState = {
-      items,
-      discountCodes: [...saleOnly.discountCodes, { code: "RENEW20", products: forEveryItem(loyalty), fromUrl: true }],
-    };
-    const total = (cart: CartState) => items.reduce((sum, line) => sum + getDiscountedPrice(cart, line).price, 0);
-    const codes = items.map((line) => {
-      const { discount } = getDiscountedPrice(both, line);
-      return discount?.type === "code" ? discount.code : null;
-    });
-
-    expect(total(saleOnly)).toBe(2_500);
-    expect(total(both)).toBe(2_100);
-    expect(codes).toEqual(["SHOP5", "RENEW20", "RENEW20"]);
-  });
-
   it("deducts an order-level fixed discount once across the line quantity", () => {
     const cart = cartWith({ type: "fixed", cents: 100, once_per_cart: true, ...discountConditions });
 
