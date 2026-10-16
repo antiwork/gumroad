@@ -19,8 +19,10 @@ class SentPostEmail < ApplicationRecord
       .pluck(:id)
   end
 
+  # A locking read, so a retry inside a transaction sees rows committed after its snapshot. A plain read
+  # would keep missing them and insert_all_emails would recurse until the stack runs out.
   def self.missing_emails(post:, emails:)
-    emails - where(post:, email: emails).pluck(:email)
+    emails - where(post:, email: emails).lock("FOR SHARE").pluck(:email)
   end
 
   # `source` is the record the address was read from. The claim is written only while that row still

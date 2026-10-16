@@ -49,4 +49,22 @@ describe PostBlastSending, "recording accepted recipients while a member row is 
     release << true
     holder&.join(10)
   end
+
+  it "skips an address another connection recorded after the write transaction's snapshot" do
+    # A fallback that re-reads the snapshot never sees the duplicate, so it retries the insert forever.
+    outcome = begin
+      Timeout.timeout(10) do
+        ActiveRecord::Base.transaction do
+          SentPostEmail.where(post_id: @post.id).to_a # the first plain read fixes the snapshot
+          Thread.new { ActiveRecord::Base.connection_pool.with_connection { SentPostEmail.create!(post_id: @post.id, email: "unrelated@example.com") } }.join(10)
+          SentPostEmail.insert_all_emails(post: @post, emails: ["unrelated@example.com", "contended@example.com"])
+        end
+      end
+    rescue SystemStackError, Timeout::Error => e
+      e.class
+    end
+
+    expect(outcome).to eq(["contended@example.com"])
+    expect(SentPostEmail.where(post_id: @post.id).order(:email).pluck(:email)).to eq(["contended@example.com", "unrelated@example.com"])
+  end
 end
