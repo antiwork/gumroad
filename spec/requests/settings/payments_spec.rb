@@ -285,7 +285,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       Feature.activate_user(:merchant_migration, @user)
       refresh
       choose "Stripe"
-      expect(page).to have_text("All sales will incur a 0% Gumroad fee.")
+      expect(page).to have_text("You pay a 0% Gumroad fee on all sales.")
       expect(page).not_to have_selector("dt", text: "Direct sales")
       expect(page).to have_content("This feature is available in all countries where Stripe operates, except India, Indonesia, Malaysia, Mexico, Philippines, and Thailand.")
       expect(page).to have_link("all countries where Stripe operates", href: "https://stripe.com/en-in/global")
@@ -302,11 +302,11 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       visit settings_payments_path
 
       choose "Debit Card"
-      expect(page).to have_text("All sales will incur fees based on how customers find your product:")
+      expect(page).to have_text("Your fees depend on how buyers find your product:")
       expect(page).to have_selector("dt", text: "Direct sales")
       expect(page).to have_selector("dd", text: "10% + 50¢ Gumroad fee + 2.9% + 30¢ credit card fee")
       expect(page).to have_selector("dt", text: "Discover sales")
-      expect(page).to have_selector("dd", text: "30% flat")
+      expect(page).to have_selector("dd", text: "30% total, credit card fee included")
     end
 
     it "does not show the deprecated Stripe Connect option even if the can_connect_stripe flag is enabled" do

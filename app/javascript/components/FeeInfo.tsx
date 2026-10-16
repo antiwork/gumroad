@@ -15,7 +15,8 @@ export const FeeInfoDetails = ({ feeInfo }: { feeInfo: FeeInfo }) => (
         <dl>
           {feeInfo.items.map((item) => (
             <CardContent key={item.label} className="gap-x-4 gap-y-1">
-              <dt className="font-bold">{item.label}</dt>
+              {/* Stacked at every width: the card's width varies by page, so with any breakpoint one long value wraps alone. */}
+              <dt className="basis-full font-bold">{item.label}</dt>
               <dd>{item.value}</dd>
             </CardContent>
           ))}

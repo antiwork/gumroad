@@ -42,10 +42,10 @@ describe Checkout::FormPresenter do
               payout_setup_method: "paypal_email",
             },
             connect_account_fee_info: {
-              summary: "All sales will incur fees based on how customers find your product:",
+              summary: "Your fees depend on how buyers find your product:",
               items: [
-                { label: "Direct sales", value: "10% + 50¢" },
-                { label: "Discover sales", value: "30% flat" },
+                { label: "Direct sales", value: "10% + 50¢ Gumroad fee" },
+                { label: "Discover sales", value: "30% Gumroad fee" },
               ],
             },
           }
@@ -58,7 +58,7 @@ describe Checkout::FormPresenter do
       end
 
       it "returns a 0% Gumroad fee with no fee items" do
-        expect(presenter.form_props[:connect_account_fee_info]).to eq(summary: "All sales will incur a 0% Gumroad fee.", items: [])
+        expect(presenter.form_props[:connect_account_fee_info]).to eq(summary: "You pay a 0% Gumroad fee on all sales.", items: [])
       end
     end
 

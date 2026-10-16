@@ -263,11 +263,11 @@ describe("Checkout form page", type: :system, js: true) do
 
         expect(page).to have_link("Connect with PayPal", inert: false)
         expect(page).not_to have_text("You must set up how you receive payouts")
-        expect(page).to have_text("All sales will incur fees based on how customers find your product:")
+        expect(page).to have_text("Your fees depend on how buyers find your product:")
         expect(page).to have_selector("dt", text: "Direct sales")
-        expect(page).to have_selector("dd", text: "10% + 50¢")
+        expect(page).to have_selector("dd", text: "10% + 50¢ Gumroad fee")
         expect(page).to have_selector("dt", text: "Discover sales")
-        expect(page).to have_selector("dd", text: "30% flat")
+        expect(page).to have_selector("dd", text: "30% Gumroad fee")
       end
 
       context "when the seller is in an unsupported country" do
