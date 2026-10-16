@@ -14,6 +14,8 @@ type Props = {
   isUploading?: boolean;
   hideIcon?: boolean;
   thumbnailUrl?: string | null | undefined;
+  // Set when other rows on the page show a thumbnail, so every file name starts at the same x.
+  reserveThumbnailSlot?: boolean | undefined;
 };
 export const FileRowContent = ({
   extension,
@@ -23,13 +25,18 @@ export const FileRowContent = ({
   isUploading,
   hideIcon,
   thumbnailUrl,
+  reserveThumbnailSlot,
 }: Props) => (
   <>
     {isUploading ? (
       <LoadingSpinner className="size-8" />
     ) : thumbnailUrl ? (
       <img src={thumbnailUrl} alt="" className="h-12 w-16 shrink-0 rounded-sm object-cover" />
-    ) : hideIcon ? null : (
+    ) : hideIcon ? null : reserveThumbnailSlot ? (
+      <div className="flex h-12 w-16 shrink-0 items-center justify-center">
+        <FileKindIcon extension={extension} />
+      </div>
+    ) : (
       <FileKindIcon extension={extension} />
     )}
     <div>

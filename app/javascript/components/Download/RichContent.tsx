@@ -14,7 +14,7 @@ import { assertResponseError } from "$app/utils/request";
 
 import { Button, buttonVariants, NavigationButton } from "$app/components/Button";
 import { useDomains } from "$app/components/DomainSettings";
-import { FileRow, shouldShowSubtitlesForFile } from "$app/components/Download/FileList";
+import { FileItem, FileRow, imageThumbnailUrlFor, shouldShowSubtitlesForFile } from "$app/components/Download/FileList";
 import { License, useContentFiles } from "$app/components/DownloadPage/WithContent";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
@@ -207,6 +207,17 @@ const TiptapButton = TiptapNode.create<LinkRenderOptions>({
 export const connectedFileRowClassName = (isLastInGroup: boolean) =>
   isLastInGroup ? "border-none!" : "rounded-b-none! border-0! border-b! border-border";
 
+// Only the current page counts: contentFiles holds the files of every page.
+const pageHasImageThumbnail = (doc: ProseMirrorNode, files: FileItem[]) => {
+  const thumbnailFileIds = new Set(files.filter((file) => imageThumbnailUrlFor(file)).map((file) => file.id));
+  let found = false;
+  doc.descendants((node) => {
+    if (node.type.name === FileEmbed.name && thumbnailFileIds.has(String(node.attrs.id))) found = true;
+    return !found;
+  });
+  return found;
+};
+
 const FileEmbedNodeView = ({ node, getPos, editor }: NodeViewProps) => {
   const contentFiles = useContentFiles();
   const file = contentFiles.find((file) => file.id === node.attrs.id);
@@ -232,6 +243,7 @@ const FileEmbedNodeView = ({ node, getPos, editor }: NodeViewProps) => {
       isEmbed
       isTreeItem={!!groupNode}
       collapsed={!!node.attrs.collapsed}
+      reserveThumbnailSlot={pageHasImageThumbnail(editor.state.doc, contentFiles)}
       className={isConnectedRow ? connectedFileRowClassName(isLastInGroup) : undefined}
     />
   ) : null;
