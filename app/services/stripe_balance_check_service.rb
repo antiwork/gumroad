@@ -20,7 +20,8 @@ class StripeBalanceCheckService
     # still points at the cycle that just paid for the rest of Friday, so after Friday's run the
     # amount and the run dates would describe different cycles.
     @payout_end_date = cycle_last_run_at.to_date - User::PayoutSchedule::PAYOUT_DELAY_DAYS
-    @upcoming_payouts_cents = PayoutEstimates.estimate_gumroad_held_stripe_cents(@payout_end_date)
+    @per_user_payouts_cents = PayoutEstimates.estimate_gumroad_held_stripe_cents_per_user(@payout_end_date)
+    @upcoming_payouts_cents = @per_user_payouts_cents.values.sum
 
     balance = Stripe::Balance.retrieve
     @available_cents = usd_cents(balance.available)
@@ -43,10 +44,11 @@ class StripeBalanceCheckService
     topup_amount_cents > 0
   end
 
-  # Information only: what each weekday's run draws on its own. `topup_needed?` deliberately does
-  # not read it -- the amount the next run alone draws has no per-run estimate behind it.
+  # Information only: what each weekday's run draws on its own, from the same per-user estimate the
+  # cycle total comes from. `topup_needed?` deliberately does not read it -- the amount the next
+  # run alone draws has no per-run estimate behind it.
   def per_run_estimate_cents
-    @per_run_estimate_cents ||= PayoutEstimates.estimate_gumroad_held_stripe_cents_by_weekday(payout_end_date)
+    @per_run_estimate_cents ||= PayoutEstimates.split_gumroad_held_stripe_cents_by_weekday(@per_user_payouts_cents)
   end
 
   # The daily check that lands the morning before the cycle's first run. It re-sends the verdict

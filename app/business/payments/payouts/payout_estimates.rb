@@ -17,11 +17,11 @@ module PayoutEstimates
     estimate_gumroad_held_stripe_cents_per_user(date).values.sum
   end
 
-  # The same cohort split by the weekday its sellers are paid on (PayoutRailSchedule). The weekly
-  # jobs draw the balance one cohort at a time, so this is what each run needs on its own rather
-  # than the whole cycle at once.
-  def self.estimate_gumroad_held_stripe_cents_by_weekday(date)
-    per_user_cents = estimate_gumroad_held_stripe_cents_per_user(date)
+  # The same per-user amounts split by the weekday each seller's own rail is paid on
+  # (PayoutRailSchedule). The weekly jobs draw the balance one cohort at a time, so this is what
+  # each run needs on its own rather than the whole cycle at once. Takes the per-user result so a
+  # caller that already has it does not pay for the aggregate twice.
+  def self.split_gumroad_held_stripe_cents_by_weekday(per_user_cents)
     return {} if per_user_cents.empty?
 
     # A seller's weekday comes from their active bank account, the lowest-id alive one.

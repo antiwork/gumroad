@@ -114,7 +114,7 @@ describe PayoutEstimates do
     end
   end
 
-  describe "estimate_gumroad_held_stripe_cents_by_weekday" do
+  describe "split_gumroad_held_stripe_cents_by_weekday" do
     let(:date) { Date.today }
     let(:gumroad_ma) { create(:merchant_account, user: nil, charge_processor_id: StripeChargeProcessor.charge_processor_id) }
 
@@ -124,24 +124,28 @@ describe PayoutEstimates do
       create(:balance, user: seller, date: date - 1, amount_cents:, merchant_account: gumroad_ma)
     end
 
+    def split
+      described_class.split_gumroad_held_stripe_cents_by_weekday(
+        described_class.estimate_gumroad_held_stripe_cents_per_user(date)
+      )
+    end
+
     it "splits the estimate by the weekday each seller's rail is paid on" do
       seller_paid_on(:armenia_bank_account, 100_00) # cross-border bank rail, Tuesday
       seller_paid_on(:ach_account, 200_00)          # US bank rail, Thursday
 
-      expect(described_class.estimate_gumroad_held_stripe_cents_by_weekday(date))
-        .to eq(tuesday: 100_00, thursday: 200_00)
+      expect(split).to eq(tuesday: 100_00, thursday: 200_00)
     end
 
     it "totals the same amount as the unsplit estimate" do
       seller_paid_on(:armenia_bank_account, 100_00)
       seller_paid_on(:ach_account, 200_00)
 
-      expect(described_class.estimate_gumroad_held_stripe_cents_by_weekday(date).values.sum)
-        .to eq(described_class.estimate_gumroad_held_stripe_cents(date))
+      expect(split.values.sum).to eq(described_class.estimate_gumroad_held_stripe_cents(date))
     end
 
     it "is empty when nobody is payable from the Stripe balance" do
-      expect(described_class.estimate_gumroad_held_stripe_cents_by_weekday(date)).to eq({})
+      expect(split).to eq({})
     end
   end
 

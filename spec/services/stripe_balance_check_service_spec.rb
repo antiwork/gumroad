@@ -6,9 +6,9 @@ describe StripeBalanceCheckService do
   let(:now) { Time.utc(2026, 9, 15, 14, 0) } # Tuesday, after the 10:00 run
 
   before do
-    allow(PayoutEstimates).to receive(:estimate_gumroad_held_stripe_cents)
-      .and_return(300_000_00)
-    allow(PayoutEstimates).to receive(:estimate_gumroad_held_stripe_cents_by_weekday)
+    allow(PayoutEstimates).to receive(:estimate_gumroad_held_stripe_cents_per_user)
+      .and_return({ 1 => 300_000_00 })
+    allow(PayoutEstimates).to receive(:split_gumroad_held_stripe_cents_by_weekday)
       .and_return({})
     stub_balance(available: 800_000_00, pending: 200_000_00)
     allow(Stripe::Payout).to receive(:list).and_return(double(auto_paging_each: []))
@@ -51,7 +51,7 @@ describe StripeBalanceCheckService do
     end
 
     it "asks the estimate for the announced cycle after Friday's run, when the platform's own next cutoff is a week behind" do
-      expect(PayoutEstimates).to receive(:estimate_gumroad_held_stripe_cents).with(Date.new(2026, 9, 18)).and_return(300_000_00)
+      expect(PayoutEstimates).to receive(:estimate_gumroad_held_stripe_cents_per_user).with(Date.new(2026, 9, 18)).and_return({ 1 => 300_000_00 })
 
       described_class.new(now: Time.utc(2026, 9, 18, 14, 0))
     end
@@ -113,9 +113,11 @@ describe StripeBalanceCheckService do
   end
 
   describe "#per_run_estimate_cents" do
-    it "splits the announced cycle's estimate by the weekday each run draws" do
-      expect(PayoutEstimates).to receive(:estimate_gumroad_held_stripe_cents_by_weekday)
-        .with(Date.new(2026, 9, 11))
+    it "splits the announced cycle's per-user estimate by the weekday each run draws" do
+      allow(PayoutEstimates).to receive(:estimate_gumroad_held_stripe_cents_per_user)
+        .with(Date.new(2026, 9, 11)).and_return({ 1 => 120_000_00, 2 => 90_000_00, 3 => 90_000_00 })
+      expect(PayoutEstimates).to receive(:split_gumroad_held_stripe_cents_by_weekday)
+        .with({ 1 => 120_000_00, 2 => 90_000_00, 3 => 90_000_00 })
         .and_return({ tuesday: 120_000_00, wednesday: 90_000_00, thursday: 90_000_00 })
 
       expect(described_class.new(now:).per_run_estimate_cents)
