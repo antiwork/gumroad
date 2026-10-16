@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import { DefinitionList } from "$app/components/ui/DefinitionList";
+import { Card, CardContent } from "$app/components/ui/Card";
 
 export type FeeInfo = {
   summary: string;
@@ -8,17 +8,19 @@ export type FeeInfo = {
 };
 
 export const FeeInfoDetails = ({ feeInfo }: { feeInfo: FeeInfo }) => (
-  <div className="grid gap-2">
+  <div className="grid gap-3">
     <p>{feeInfo.summary}</p>
     {feeInfo.items.length > 0 ? (
-      <DefinitionList className="gap-y-1">
-        {feeInfo.items.map((item) => (
-          <React.Fragment key={item.label}>
-            <dt className="text-muted">{item.label}</dt>
-            <dd>{item.value}</dd>
-          </React.Fragment>
-        ))}
-      </DefinitionList>
+      <Card asChild>
+        <dl>
+          {feeInfo.items.map((item) => (
+            <CardContent key={item.label} className="gap-x-4 gap-y-1">
+              <dt className="font-bold">{item.label}</dt>
+              <dd>{item.value}</dd>
+            </CardContent>
+          ))}
+        </dl>
+      </Card>
     ) : null}
   </div>
 );
