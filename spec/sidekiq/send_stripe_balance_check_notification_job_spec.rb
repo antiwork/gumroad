@@ -35,7 +35,7 @@ describe SendStripeBalanceCheckNotificationJob do
 
         expect(InternalNotificationWorker).to have_enqueued_sidekiq_job("payments", "Stripe Balance Check", kind_of(String), "red")
         message = InternalNotificationWorker.jobs.last["args"][2]
-        expect(message).to start_with("Action needed by Wednesday, September 16.\n")
+        expect(message).to start_with("Action needed by Wednesday, September 16 at 10:00 UTC (6:00 AM ET).\n")
         expect(message).to include("Stripe balance as of 14:00 UTC: $200,000 ($150,000 available + $50,000 pending, which normally settles")
         expect(message).to include("Seller payouts for balances up to September 11 need $300,000")
         expect(message).to include("between the next run (Wednesday, September 16 at 10:00 UTC (6:00 AM ET)) and the last run of the cycle (Friday, September 18 at 10:00 UTC (6:00 AM ET)).")

@@ -34,7 +34,7 @@ class SendStripeBalanceCheckNotificationJob
       needs_topup = balance_check.topup_needed?
 
       lines = [
-        needs_topup ? "Action needed by #{balance_check.next_payout_run_at.strftime('%A, %B %-d')}." : "No action needed yet.",
+        needs_topup ? "Action needed by #{first_run}." : "No action needed yet.",
         "Stripe balance as of #{balance_check.snapshot_at.strftime('%H:%M UTC')}: " \
         "#{formatted_dollar_amount(balance_check.current_balance_cents)} " \
         "(#{formatted_dollar_amount(balance_check.available_cents)} available + " \
