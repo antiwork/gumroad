@@ -14,7 +14,7 @@ import { assertResponseError } from "$app/utils/request";
 
 import { Button, buttonVariants, NavigationButton } from "$app/components/Button";
 import { useDomains } from "$app/components/DomainSettings";
-import { FileRow, shouldShowSubtitlesForFile } from "$app/components/Download/FileList";
+import { FileRow, imageThumbnailUrlFor, shouldShowSubtitlesForFile } from "$app/components/Download/FileList";
 import { License, useContentFiles } from "$app/components/DownloadPage/WithContent";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
@@ -232,6 +232,7 @@ const FileEmbedNodeView = ({ node, getPos, editor }: NodeViewProps) => {
       isEmbed
       isTreeItem={!!groupNode}
       collapsed={!!node.attrs.collapsed}
+      reserveThumbnailSlot={contentFiles.some((contentFile) => !!imageThumbnailUrlFor(contentFile))}
       className={isConnectedRow ? connectedFileRowClassName(isLastInGroup) : undefined}
     />
   ) : null;

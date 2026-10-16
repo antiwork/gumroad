@@ -1400,6 +1400,11 @@ describe("Download Page – Rich Text Editor Content", type: :system, js: true) 
         expect(page).to have_selector(".type-icon")
         expect(page).not_to have_button("View")
       end
+
+      name_lefts = ["Brick albedo", "Brick height"].map do |name|
+        find("h4", text: name).evaluate_script("this.getBoundingClientRect().left")
+      end
+      expect(name_lefts.uniq.size).to eq(1)
     end
 
     it "fits the original image to the screen on phones", :mobile_view do

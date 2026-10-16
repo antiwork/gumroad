@@ -159,6 +159,8 @@ const FolderRow = ({
   );
 };
 
+export const imageThumbnailUrlFor = (file: FileItem) => (file.view_url ? file.thumbnail_url : null);
+
 export const shouldShowSubtitlesForFile = (file: FileItem) =>
   file.stream_url != null && file.download_url != null && file.subtitle_files != null && file.subtitle_files.length > 0;
 
@@ -169,6 +171,7 @@ export const FileRow = ({
   isEmbed = false,
   isTreeItem = true,
   collapsed: initialCollapsed = false,
+  reserveThumbnailSlot = false,
   className,
 }: {
   file: FileItem;
@@ -177,6 +180,7 @@ export const FileRow = ({
   isEmbed?: boolean;
   isTreeItem?: boolean;
   collapsed?: boolean;
+  reserveThumbnailSlot?: boolean;
   className?: string | undefined;
 }) => {
   const isMobileAppWebView = useIsMobileAppView();
@@ -241,7 +245,7 @@ export const FileRow = ({
 
   const isEmbeddedVideo = isEmbed && !!streamUrl;
   const viewUrl = file.view_url ?? null;
-  const imageThumbnailUrl = viewUrl ? file.thumbnail_url : null;
+  const imageThumbnailUrl = imageThumbnailUrlFor(file);
 
   return (
     <Row
@@ -280,6 +284,7 @@ export const FileRow = ({
           externalLinkUrl={externalLinkUrl}
           hideIcon={isEmbeddedVideo}
           thumbnailUrl={imageThumbnailUrl}
+          reserveThumbnailSlot={reserveThumbnailSlot}
           details={
             <>
               {file.extension ? <li>{file.extension}</li> : null}
@@ -311,11 +316,7 @@ export const FileRow = ({
 
         {downloadButton}
 
-        {viewUrl ? (
-          <Button color="primary" onClick={() => setIsViewingImage(true)}>
-            View
-          </Button>
-        ) : null}
+        {viewUrl ? <Button onClick={() => setIsViewingImage(true)}>View</Button> : null}
 
         {!isEmbed && streamUrl != null ? (
           <TrackClick eventName="stream_click" file={file} resumeAt={resumeLocation || 0} contentLength={file.duration}>
