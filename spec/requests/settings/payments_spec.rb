@@ -351,7 +351,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
       expect(page).to have_field("Stripe account", with: merchant_account.charge_processor_merchant_id, disabled: true)
       within_fieldset("Stripe account") { expect(page).not_to have_css(".text-success") }
-      note = find("[role=status]", exact_text: "Card sales don't go to this Stripe account right now. They go to your Gumroad balance, and we pay them out on your regular payout schedule. The Payouts page shows where your next payout goes.")
+      note = find("[role=status]", exact_text: "Card sales don't go to this Stripe account right now. They go to your Gumroad balance, and we pay them out on your regular payout schedule. Once a payout is scheduled, the Payouts page shows where it goes.")
       expect(note.evaluate_script("getComputedStyle(this).color")).to eq(find("legend", text: "Stripe account").evaluate_script("getComputedStyle(this).color"))
       expect(note).to have_link("Payouts page", href: balance_path)
       expect(page).to have_button("Disconnect Stripe account")
