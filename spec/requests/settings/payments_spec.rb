@@ -314,7 +314,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       visit settings_payments_path
 
       within_fieldset("Stripe account") { expect(page).to have_css(".text-success") }
-      expect(page).not_to have_text("not currently receiving card sales")
+      expect(page).not_to have_text("Card sales don't go to this Stripe account")
       click_on "Disconnect Stripe account"
 
       expect(page).to have_content("Pay to the order of")
@@ -349,8 +349,9 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
       within_fieldset("Stripe account") do
         expect(page).to have_text(merchant_account.charge_processor_merchant_id)
-        note = find("p", exact_text: "This Stripe account is linked, but it is not currently receiving card sales.")
+        note = find("p", exact_text: "Card sales don't go to this Stripe account right now. They go to your Gumroad balance, and we pay them out on your regular payout schedule. The Payouts page shows where your next payout goes.")
         expect(note.evaluate_script("getComputedStyle(this).color")).to eq(find("legend").evaluate_script("getComputedStyle(this).color"))
+        expect(note).to have_link("Payouts page", href: balance_path)
         expect(page).not_to have_css(".text-success")
       end
       expect(page).to have_button("Disconnect Stripe account")

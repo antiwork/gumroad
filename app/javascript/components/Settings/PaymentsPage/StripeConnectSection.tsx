@@ -80,7 +80,14 @@ const StripeConnectSection = ({
                 ) : null}
               </InputGroup>
               {stripeConnect.stripe_connect_routing_active ? null : (
-                <p>This Stripe account is linked, but it is not currently receiving card sales.</p>
+                <p>
+                  Card sales don't go to this Stripe account right now. They go to your Gumroad balance, and we pay them
+                  out on your regular payout schedule. The{" "}
+                  <a href={Routes.balance_path()} className="underline">
+                    Payouts page
+                  </a>{" "}
+                  shows where your next payout goes.
+                </p>
               )}
             </Fieldset>
             <p>
