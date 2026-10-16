@@ -8,6 +8,8 @@ describe StripeBalanceCheckService do
   before do
     allow(PayoutEstimates).to receive(:estimate_gumroad_held_stripe_cents)
       .and_return(300_000_00)
+    allow(PayoutEstimates).to receive(:estimate_gumroad_held_stripe_cents_by_weekday)
+      .and_return({})
     stub_balance(available: 800_000_00, pending: 200_000_00)
     allow(Stripe::Payout).to receive(:list).and_return(double(auto_paging_each: []))
   end
@@ -99,6 +101,34 @@ describe StripeBalanceCheckService do
       expect(described_class.new(now: Time.utc(2026, 9, 15, 14, 0)).cycle_last_run_at).to eq(Time.utc(2026, 9, 18, 10, 0)) # Tue pm -> this Fri
       expect(described_class.new(now: Time.utc(2026, 9, 18, 9, 0)).cycle_last_run_at).to eq(Time.utc(2026, 9, 18, 10, 0))  # Fri am -> today
       expect(described_class.new(now: Time.utc(2026, 9, 18, 14, 0)).cycle_last_run_at).to eq(Time.utc(2026, 9, 25, 10, 0)) # Fri pm -> next Fri
+    end
+  end
+
+  describe "#snapshot_at" do
+    it "is the moment the balance was read, in UTC" do
+      Time.use_zone("America/Los_Angeles") do
+        expect(described_class.new(now: Time.zone.local(2026, 12, 18, 2)).snapshot_at).to eq(Time.utc(2026, 12, 18, 10))
+      end
+    end
+  end
+
+  describe "#per_run_estimate_cents" do
+    it "splits the announced cycle's estimate by the weekday each run draws" do
+      expect(PayoutEstimates).to receive(:estimate_gumroad_held_stripe_cents_by_weekday)
+        .with(Date.new(2026, 9, 11))
+        .and_return({ tuesday: 120_000_00, wednesday: 90_000_00, thursday: 90_000_00 })
+
+      expect(described_class.new(now:).per_run_estimate_cents)
+        .to eq(tuesday: 120_000_00, wednesday: 90_000_00, thursday: 90_000_00)
+    end
+  end
+
+  describe "#day_before_first_run?" do
+    it "is true only on the day before the cycle's first run" do
+      expect(described_class.new(now: Time.utc(2026, 9, 14, 14, 0)).day_before_first_run?).to eq(true)  # Monday, next run Tuesday
+      expect(described_class.new(now: Time.utc(2026, 9, 13, 14, 0)).day_before_first_run?).to eq(false) # Sunday, next run Tuesday
+      expect(described_class.new(now: Time.utc(2026, 9, 15, 14, 0)).day_before_first_run?).to eq(false) # Tuesday pm, next run Wednesday
+      expect(described_class.new(now: Time.utc(2026, 9, 18, 14, 0)).day_before_first_run?).to eq(false) # Friday pm, next run Tuesday
     end
   end
 

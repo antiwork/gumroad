@@ -14,7 +14,8 @@ class StripeBalanceCheckService
   UNSETTLED_PAYOUT_STATUSES = %w[pending in_transit].freeze
 
   def initialize(now: Time.current)
-    @now = now.utc
+    # The moment the balance was read. Two readings of a moving balance are not a contradiction.
+    @snapshot_at = now.utc
     # The cutoff of the cycle this check announces, not `next_scheduled_payout_end_date`: that one
     # still points at the cycle that just paid for the rest of Friday, so after Friday's run the
     # amount and the run dates would describe different cycles.
@@ -28,7 +29,7 @@ class StripeBalanceCheckService
     @pending_cents = [usd_cents(balance.pending), 0].max
   end
 
-  attr_reader :upcoming_payouts_cents, :available_cents, :pending_cents, :payout_end_date
+  attr_reader :snapshot_at, :upcoming_payouts_cents, :available_cents, :pending_cents, :payout_end_date
 
   def current_balance_cents
     available_cents + pending_cents
@@ -42,11 +43,23 @@ class StripeBalanceCheckService
     topup_amount_cents > 0
   end
 
+  # Information only: what each weekday's run draws on its own. `topup_needed?` deliberately does
+  # not read it -- the amount the next run alone draws has no per-run estimate behind it.
+  def per_run_estimate_cents
+    @per_run_estimate_cents ||= PayoutEstimates.estimate_gumroad_held_stripe_cents_by_weekday(payout_end_date)
+  end
+
+  # The daily check that lands the morning before the cycle's first run. It re-sends the verdict
+  # even with no transition, so the team gets a definite read before any money moves.
+  def day_before_first_run?
+    next_payout_run_at.wday == PAYOUT_RUN_WDAYS.first && next_payout_run_at.to_date == snapshot_at.to_date + 1
+  end
+
   # The next scheduled payout run: the first draw on the balance.
   def next_payout_run_at
     @next_payout_run_at ||= begin
-      run_at = @now.beginning_of_day + PAYOUT_RUN_HOUR_UTC.hours
-      run_at += 1.day if run_at <= @now
+      run_at = snapshot_at.beginning_of_day + PAYOUT_RUN_HOUR_UTC.hours
+      run_at += 1.day if run_at <= snapshot_at
       run_at += 1.day until PAYOUT_RUN_WDAYS.include?(run_at.wday)
       run_at
     end
@@ -77,7 +90,7 @@ class StripeBalanceCheckService
   private
     def last_day_usd_payouts
       @last_day_usd_payouts ||= Stripe::Payout.list(
-        created: { gte: (@now - 1.day).to_i },
+        created: { gte: (snapshot_at - 1.day).to_i },
         limit: 100
       ).auto_paging_each.select { |payout| payout.currency == Currency::USD }
     end

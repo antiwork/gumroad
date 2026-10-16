@@ -14,6 +14,28 @@ module PayoutEstimates
   # same period are not modelled, so the estimate errs slightly on the high
   # side -- the safe direction for "is the balance high enough?".
   def self.estimate_gumroad_held_stripe_cents(date)
+    estimate_gumroad_held_stripe_cents_per_user(date).values.sum
+  end
+
+  # The same cohort split by the weekday its sellers are paid on (PayoutRailSchedule). The weekly
+  # jobs draw the balance one cohort at a time, so this is what each run needs on its own rather
+  # than the whole cycle at once.
+  def self.estimate_gumroad_held_stripe_cents_by_weekday(date)
+    per_user_cents = estimate_gumroad_held_stripe_cents_per_user(date)
+    return {} if per_user_cents.empty?
+
+    # A seller's weekday comes from their active bank account, the lowest-id alive one.
+    bank_account_type_by_user = {}
+    BankAccount.alive.where(user_id: per_user_cents.keys).order(:id).pluck(:user_id, :type).each do |user_id, type|
+      bank_account_type_by_user[user_id] ||= type
+    end
+
+    per_user_cents.each_with_object(Hash.new(0)) do |(user_id, amount_cents), by_weekday|
+      by_weekday[PayoutRailSchedule.weekday_for_bank_account_type(bank_account_type_by_user[user_id])] += amount_cents
+    end
+  end
+
+  def self.estimate_gumroad_held_stripe_cents_per_user(date)
     merchant_account_ids = MerchantAccount.where(
       user_id: nil,
       charge_processor_id: StripeChargeProcessor.charge_processor_id
@@ -30,8 +52,6 @@ module PayoutEstimates
            .group(:user_id)
            .having("SUM(balances.amount_cents) >= ?", Payouts::MIN_AMOUNT_CENTS)
            .sum(:amount_cents)
-           .values
-           .sum
   end
 
   def self.estimate_held_amount_cents(date, processor_type)
