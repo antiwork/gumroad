@@ -296,6 +296,12 @@ export const Checkout = ({
   );
   const [failedFor, setFailedFor] = React.useState<Record<string, string>>({});
   const [automaticArrivalPending, setAutomaticArrivalPending] = React.useState(false);
+  // Lines a quote just wrote change the totals, so Pay waits one more render: the parent's
+  // product update must reset surcharges before a pending submit is allowed to resume.
+  const [quotedLinesSettling, setQuotedLinesSettling] = React.useState(false);
+  React.useEffect(() => {
+    if (quotedLinesSettling) setQuotedLinesSettling(false);
+  }, [quotedLinesSettling]);
 
   const isGift = state.gift != null;
 
@@ -415,11 +421,17 @@ export const Checkout = ({
       });
     // Paired with the codes written above, which come from the same snapshot: a code another
     // write filled meanwhile is dormant again here and gets asked again.
-    const answered = [
-      ...codes.filter((_, index) => !requestFailed(discounts[index])),
-      ...others.filter((_, index) => refresh && !requestFailed(refreshed[index])).map(({ code }) => code),
+    const failed = [
+      ...codes.filter((_, index) => requestFailed(discounts[index])),
+      ...others.filter((_, index) => refresh && requestFailed(refreshed[index])).map(({ code }) => code),
     ];
-    setQuotedFor({ ...quotedFor, ...Object.fromEntries(answered.map((code) => [code, itemsKey])) });
+    const answered = [...codes, ...(refresh ? others.map(({ code }) => code) : [])].filter(
+      (code) => !failed.includes(code),
+    );
+    setQuotedFor({
+      ...Object.fromEntries(Object.entries(quotedFor).filter(([code]) => !failed.includes(code))),
+      ...Object.fromEntries(answered.map((code) => [code, itemsKey])),
+    });
 
     setLoadingDiscount(false);
     if (automatic) setAutomaticArrivalPending(false);
@@ -428,7 +440,7 @@ export const Checkout = ({
   const unresolvedCodes = cart.discountCodes
     .filter((item) => isDormant(item) && quotedFor[item.code] !== itemsKey)
     .map(({ code }) => code);
-  const discountQuotesPending = automaticArrivalPending || unresolvedCodes.length > 0;
+  const discountQuotesPending = automaticArrivalPending || quotedLinesSettling || unresolvedCodes.length > 0;
   React.useEffect(() => {
     if (state.discountQuotesPending !== discountQuotesPending)
       dispatch({ type: "set-discount-quotes-pending", pending: discountQuotesPending });
@@ -460,13 +472,15 @@ export const Checkout = ({
       }),
     );
     const failed = codes.filter((_, index) => requestFailed(discounts[index]));
-    if (fresh.size > 0)
+    if (fresh.size > 0) {
       updateCart({
         discountCodes: committed.current.cart.discountCodes.map((item) => {
           const products = fresh.get(item.code);
           return products && isDormant(item) ? { ...item, products } : item;
         }),
       });
+      setQuotedLinesSettling(true);
+    }
     setQuotedFor((prev) => ({
       ...prev,
       ...Object.fromEntries(codes.filter((code) => !failed.includes(code)).map((code) => [code, key])),

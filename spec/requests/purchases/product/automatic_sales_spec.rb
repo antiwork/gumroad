@@ -421,6 +421,38 @@ describe "Automatic sales on product pages", type: :system, js: true do
       expect(page).to have_text("BULK50", normalize_ws: true)
     end
 
+    it "keeps Pay closed when a saved cart's sale cannot be re-quoted for an added product" do
+      product, profile_product = bulk_sale_product(loyalty: false)
+      other_product = create(:product, user: seller, name: "Other product", price_cents: 1000)
+
+      open_from_profile(profile_product)
+      fill_in "Quantity", with: 2
+      click_on "Add to cart"
+      expect(page).to have_text("Total US$10", normalize_ws: true)
+      edit_cart_item("Target product") { fill_in "Quantity", with: 1 }
+      wait_until_true(sleep_interval: 0.2) do
+        cart = CartProduct.alive.find_by(product:)&.cart
+        cart&.alive_cart_products&.sole&.quantity == 1 && cart.discount_codes.pluck("code") == %w[BULK50]
+      end
+
+      failing = Concurrent::AtomicBoolean.new(true)
+      allow_any_instance_of(OfferCodesController).to receive(:compute_discount).and_wrap_original do |original, *args|
+        next original.receiver.head(:internal_server_error) if failing.true? && original.receiver.params[:code] == "BULK50"
+
+        original.call(*args)
+      end
+      visit other_product.long_url
+      add_to_cart(other_product)
+      expect(page).to have_cart_item("Other product")
+      expect(page).to have_alert(text: "We couldn't refresh your payment details. Please reload the page to continue.")
+      expect(page).not_to have_button("Pay", disabled: false, wait: 3)
+
+      failing.make_false
+      visit checkout_path
+      expect(page).to have_text("Total US$20", normalize_ws: true)
+      expect(page).to have_button("Pay", disabled: false)
+    end
+
     it "keeps the defaults when purchasing power parity wins at first, so a cheaper tier gets the loyalty code" do
       seller.update!(purchasing_power_parity_enabled: true)
       membership = tiered_membership
