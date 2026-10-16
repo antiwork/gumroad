@@ -43,6 +43,7 @@ echo "make $*" >> "$CALLS"
 [ -s "${PAGES_TAILWIND_CACHE_DIR:-/nonexistent}/pages_tailwind.tar.gz" ] && echo "pages-restored $(cat "$PAGES_TAILWIND_CACHE_DIR/pages_tailwind.tar.gz")" >> "$CALLS"
 [ "${MAKE_WRITES_PAGES:-}" = 1 ] && echo built > "$PAGES_TAILWIND_CACHE_DIR/pages_tailwind.tar.gz.new"
 sleep "${MAKE_SECONDS:-0}"
+echo "make-done $*" >> "$CALLS"
 STUB
 # Stands in for prescale_web_clusters.sh, so no case reaches AWS.
 cat > "$WORK/prescale" <<'STUB'
@@ -90,9 +91,16 @@ run_script() {
 }
 
 compiled() { grep -q "^make build_production" "$WORK/calls"; }
+# The pre-scale runs in the background, so its line can land after the script's next calls.
+wait_for_prescale() {
+  local _
+  for _ in $(seq 1 30); do grep -q "^prescale" "$WORK/calls" && return 0; sleep 0.1; done
+  return 1
+}
 prescaled_once_after_compile() {
   local make_line prescale_line
-  make_line=$(grep -n "^make build_production" "$WORK/calls" | cut -d: -f1)
+  wait_for_prescale || return 1
+  make_line=$(grep -n "^make-done build_production" "$WORK/calls" | cut -d: -f1)
   prescale_line=$(grep -n "^prescale" "$WORK/calls" | cut -d: -f1)
   [ "$(grep -c "Pre-scaling the web clusters" "$WORK/out")" = 1 ] && [ -n "$make_line" ] && [ -n "$prescale_line" ] && [ "$prescale_line" -gt "$make_line" ]
 }
@@ -232,10 +240,10 @@ prescale_line=$(grep -n "^prescale" "$WORK/calls" | cut -d: -f1)
 
 rm -rf "$WORK/bucket"; run_script MAKE_SECONDS=1; rc=$?
 [ $rc = 0 ] && prescaled_once_after_compile && ok "a full compile pre-scales the web clusters once the compile finishes" || fail "miss pre-scale (rc=$rc): $(cat "$WORK/calls")"
-prescale_line=$(grep -n "^prescale" "$WORK/calls" | cut -d: -f1)
-push_line=$(grep -n "^docker push ecr.example/gumroad/web:production-0123456789ab" "$WORK/calls" | cut -d: -f1)
-[ -n "$push_line" ] && [ -n "$prescale_line" ] && [ "$prescale_line" -lt "$push_line" ] \
-  && ok "the full-compile pre-scale starts before the image push" || fail "pre-scale after the push: $(cat "$WORK/calls")"
+start_line=$(grep -n "Pre-scaling the web clusters" "$WORK/out" | cut -d: -f1)
+push_line=$(grep -n "Push attempt 1" "$WORK/out" | head -1 | cut -d: -f1)
+[ -n "$push_line" ] && [ -n "$start_line" ] && [ "$start_line" -lt "$push_line" ] \
+  && ok "the full-compile pre-scale starts before the image push" || fail "pre-scale after the push: $(cat "$WORK/out")"
 grep -q "prescale: raised the web clusters" "$WORK/out" && ok "the pre-scale's log is printed when the compile ends" || fail "pre-scale log missing: $(tail -3 "$WORK/out")"
 
 seed_cache; : > "$WORK/calls"; started=$SECONDS
@@ -257,7 +265,7 @@ run_script; rc=$?
   || { fail "failed compile left the node_modules cache directory (rc=$rc)"; rm -rf .main-node-modules-cache; }
 [ $rc != 0 ] && [ ! -e .main-pages-tailwind-cache ] && ok "a failed compile still removes the pages CSS cache directory" \
   || { fail "failed compile left the pages CSS cache directory (rc=$rc)"; rm -rf .main-pages-tailwind-cache; }
-printf '#!/bin/bash\necho "make $*" >> "$CALLS"\nsleep "${MAKE_SECONDS:-0}"\n' > "$WORK/bin/make"
+printf '#!/bin/bash\necho "make $*" >> "$CALLS"\nsleep "${MAKE_SECONDS:-0}"\necho "make-done $*" >> "$CALLS"\n' > "$WORK/bin/make"
 
 seed_cache; run_script BUILDKITE_BRANCH=comp-assets-test MAKE_SECONDS=2; rc=$?
 [ $rc = 0 ] && ! grep -q "Pre-scaling" "$WORK/out" && ! prescaled && ok "only main pre-scales the production web clusters" || fail "comp-assets branch pre-scaled (rc=$rc)"
