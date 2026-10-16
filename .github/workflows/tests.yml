@@ -621,7 +621,7 @@ jobs:
             -e KNAPSACK_PRO_COMMIT_HASH \
             -e KNAPSACK_PRO_BRANCH \
             -e KNAPSACK_PRO_CI_NODE_BUILD_ID \
-            -e KNAPSACK_PRO_CI_NODE_RETRY_COUNT \
+            -e KNAPSACK_PRO_CI_NODE_RETRY_COUNT="$((GITHUB_RUN_ATTEMPT - 1))" \
             -e KNAPSACK_PRO_PROJECT_DIR \
             -e KNAPSACK_PRO_FIXED_QUEUE_SPLIT \
             -e CI \
@@ -640,7 +640,9 @@ jobs:
           KNAPSACK_PRO_COMMIT_HASH: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
           KNAPSACK_PRO_BRANCH: ${{ github.event_name == 'pull_request_target' && github.head_ref || github.ref_name }}
           KNAPSACK_PRO_CI_NODE_BUILD_ID: ${{ github.run_id }}
-          KNAPSACK_PRO_CI_NODE_RETRY_COUNT: ${{ github.run_attempt }}
+          # Knapsack counts retries from 0 and GitHub attempts from 1. A count above 0 forbids
+          # Knapsack's fallback, so a first attempt must pass 0: the docker run above computes it,
+          # and on the runner the gem reads GITHUB_RUN_ATTEMPT itself.
           KNAPSACK_PRO_PROJECT_DIR: /app
           KNAPSACK_PRO_FIXED_QUEUE_SPLIT: true
           CI: true
@@ -818,7 +820,7 @@ jobs:
             -e KNAPSACK_PRO_COMMIT_HASH \
             -e KNAPSACK_PRO_BRANCH \
             -e KNAPSACK_PRO_CI_NODE_BUILD_ID \
-            -e KNAPSACK_PRO_CI_NODE_RETRY_COUNT \
+            -e KNAPSACK_PRO_CI_NODE_RETRY_COUNT="$((GITHUB_RUN_ATTEMPT - 1))" \
             -e KNAPSACK_PRO_PROJECT_DIR \
             -e KNAPSACK_PRO_FIXED_QUEUE_SPLIT \
             -e CI \
@@ -836,7 +838,6 @@ jobs:
           KNAPSACK_PRO_COMMIT_HASH: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
           KNAPSACK_PRO_BRANCH: ${{ github.event_name == 'pull_request_target' && github.head_ref || github.ref_name }}
           KNAPSACK_PRO_CI_NODE_BUILD_ID: ${{ github.run_id }}
-          KNAPSACK_PRO_CI_NODE_RETRY_COUNT: ${{ github.run_attempt }}
           KNAPSACK_PRO_PROJECT_DIR: /app
           KNAPSACK_PRO_FIXED_QUEUE_SPLIT: true
           CI: true
@@ -1047,7 +1048,7 @@ jobs:
             -e KNAPSACK_PRO_COMMIT_HASH \
             -e KNAPSACK_PRO_BRANCH \
             -e KNAPSACK_PRO_CI_NODE_BUILD_ID \
-            -e KNAPSACK_PRO_CI_NODE_RETRY_COUNT \
+            -e KNAPSACK_PRO_CI_NODE_RETRY_COUNT="$((GITHUB_RUN_ATTEMPT - 1))" \
             -e KNAPSACK_PRO_PROJECT_DIR \
             -e KNAPSACK_PRO_FIXED_QUEUE_SPLIT \
             -e CI \
@@ -1064,7 +1065,6 @@ jobs:
           KNAPSACK_PRO_COMMIT_HASH: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
           KNAPSACK_PRO_BRANCH: ${{ github.event_name == 'pull_request_target' && github.head_ref || github.ref_name }}
           KNAPSACK_PRO_CI_NODE_BUILD_ID: ${{ github.run_id }}
-          KNAPSACK_PRO_CI_NODE_RETRY_COUNT: ${{ github.run_attempt }}
           KNAPSACK_PRO_PROJECT_DIR: /app
           KNAPSACK_PRO_FIXED_QUEUE_SPLIT: true
           CI: true
@@ -1169,7 +1169,6 @@ jobs:
           # Knapsack 10 keys the queue on this. It would read GITHUB_RUN_ID, which every
           # runner job in this run shares.
           KNAPSACK_PRO_TEST_QUEUE_ID: ${{ github.run_id }}-relevant
-          KNAPSACK_PRO_CI_NODE_RETRY_COUNT: ${{ github.run_attempt }}
           KNAPSACK_PRO_FIXED_QUEUE_SPLIT: true
           CI: true
       - name: Archive capybara artifacts
@@ -1243,7 +1242,6 @@ jobs:
           # Knapsack 10 keys the queue on this. It would read GITHUB_RUN_ID, which every
           # runner job in this run shares.
           KNAPSACK_PRO_TEST_QUEUE_ID: ${{ github.run_id }}-fast
-          KNAPSACK_PRO_CI_NODE_RETRY_COUNT: ${{ github.run_attempt }}
           KNAPSACK_PRO_FIXED_QUEUE_SPLIT: true
           CI: true
       - name: Archive capybara artifacts
@@ -1324,7 +1322,6 @@ jobs:
           # Knapsack 10 keys the queue on this. It would read GITHUB_RUN_ID, which every
           # runner job in this run shares.
           KNAPSACK_PRO_TEST_QUEUE_ID: ${{ github.run_id }}-slow
-          KNAPSACK_PRO_CI_NODE_RETRY_COUNT: ${{ github.run_attempt }}
           KNAPSACK_PRO_FIXED_QUEUE_SPLIT: true
           CI: true
       - name: Archive capybara artifacts
