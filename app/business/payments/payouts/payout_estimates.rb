@@ -24,13 +24,10 @@ module PayoutEstimates
   def self.split_gumroad_held_stripe_cents_by_weekday(per_user_cents)
     return {} if per_user_cents.empty?
 
-    # A seller's weekday comes from their active bank account, the lowest-id alive one. Sliced like
-    # Payouts' own lookup: one IN list over the whole cohort can outgrow the range optimizer.
+    # A seller's weekday comes from their active bank account, the lowest-id alive one.
     bank_account_type_by_user = {}
-    per_user_cents.keys.each_slice(Payouts::BANK_ACCOUNT_LOOKUP_BATCH_SIZE) do |user_ids|
-      BankAccount.alive.where(user_id: user_ids).order(:id).pluck(:user_id, :type).each do |user_id, type|
-        bank_account_type_by_user[user_id] ||= type
-      end
+    BankAccount.alive.where(user_id: per_user_cents.keys).order(:id).pluck(:user_id, :type).each do |user_id, type|
+      bank_account_type_by_user[user_id] ||= type
     end
 
     per_user_cents.each_with_object(Hash.new(0)) do |(user_id, amount_cents), by_weekday|

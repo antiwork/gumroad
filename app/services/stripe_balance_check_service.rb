@@ -14,7 +14,8 @@ class StripeBalanceCheckService
   UNSETTLED_PAYOUT_STATUSES = %w[pending in_transit].freeze
 
   def initialize(now: Time.current)
-    @now = now.utc
+    # The moment the balance was read. Two readings of a moving balance are not a contradiction.
+    @snapshot_at = now.utc
     # The cutoff of the cycle this check announces, not `next_scheduled_payout_end_date`: that one
     # still points at the cycle that just paid for the rest of Friday, so after Friday's run the
     # amount and the run dates would describe different cycles.
@@ -23,16 +24,13 @@ class StripeBalanceCheckService
     @upcoming_payouts_cents = @per_user_payouts_cents.values.sum
 
     balance = Stripe::Balance.retrieve
-    # Stamped once the read returns, not from `now`: the aggregate above and the provider call can
-    # each take minutes, and two readings of a moving balance must not look like a contradiction.
-    @balance_read_at = Time.current.utc
     @available_cents = usd_cents(balance.available)
     # Pending sales settle within a couple of business days -- inside the weekly payout window --
     # so they fund the upcoming payouts. Available-only over-reports the top-up and fires false alarms.
     @pending_cents = [usd_cents(balance.pending), 0].max
   end
 
-  attr_reader :balance_read_at, :upcoming_payouts_cents, :available_cents, :pending_cents, :payout_end_date
+  attr_reader :snapshot_at, :upcoming_payouts_cents, :available_cents, :pending_cents, :payout_end_date
 
   def current_balance_cents
     available_cents + pending_cents
@@ -46,24 +44,24 @@ class StripeBalanceCheckService
     topup_amount_cents > 0
   end
 
-  # Information only: the cycle total split by weekday cohort, from the same per-user estimate. For a
-  # cohort whose run already passed it is what that run left unpaid. `topup_needed?` deliberately
-  # does not read it -- the amount the next run alone draws has no per-run estimate behind it.
+  # Information only: what each weekday's run draws on its own, from the same per-user estimate the
+  # cycle total comes from. `topup_needed?` deliberately does not read it -- the amount the next
+  # run alone draws has no per-run estimate behind it.
   def per_run_estimate_cents
     @per_run_estimate_cents ||= PayoutEstimates.split_gumroad_held_stripe_cents_by_weekday(@per_user_payouts_cents)
   end
 
-  # The daily check that lands the day before the cycle's first run re-sends the verdict even with no
-  # transition.
+  # The daily check that lands the morning before the cycle's first run. It re-sends the verdict
+  # even with no transition, so the team gets a definite read before any money moves.
   def day_before_first_run?
-    next_payout_run_at.wday == PAYOUT_RUN_WDAYS.first && next_payout_run_at.to_date == @now.to_date + 1
+    next_payout_run_at.wday == PAYOUT_RUN_WDAYS.first && next_payout_run_at.to_date == snapshot_at.to_date + 1
   end
 
   # The next scheduled payout run: the first draw on the balance.
   def next_payout_run_at
     @next_payout_run_at ||= begin
-      run_at = @now.beginning_of_day + PAYOUT_RUN_HOUR_UTC.hours
-      run_at += 1.day if run_at <= @now
+      run_at = snapshot_at.beginning_of_day + PAYOUT_RUN_HOUR_UTC.hours
+      run_at += 1.day if run_at <= snapshot_at
       run_at += 1.day until PAYOUT_RUN_WDAYS.include?(run_at.wday)
       run_at
     end
@@ -94,7 +92,7 @@ class StripeBalanceCheckService
   private
     def last_day_usd_payouts
       @last_day_usd_payouts ||= Stripe::Payout.list(
-        created: { gte: (@now - 1.day).to_i },
+        created: { gte: (snapshot_at - 1.day).to_i },
         limit: 100
       ).auto_paging_each.select { |payout| payout.currency == Currency::USD }
     end

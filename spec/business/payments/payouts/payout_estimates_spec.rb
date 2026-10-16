@@ -144,22 +144,6 @@ describe PayoutEstimates do
       expect(split.values.sum).to eq(described_class.estimate_gumroad_held_stripe_cents(date))
     end
 
-    it "looks bank accounts up in Payouts-sized slices and still maps every seller" do
-      stub_const("Payouts::BANK_ACCOUNT_LOOKUP_BATCH_SIZE", 1)
-      seller_paid_on(:armenia_bank_account, 100_00)
-      seller_paid_on(:ach_account, 200_00)
-      per_user_cents = described_class.estimate_gumroad_held_stripe_cents_per_user(date)
-
-      lookups = 0
-      count_lookups = ->(*, payload) { lookups += 1 if payload[:sql].include?("FROM `bank_accounts`") }
-      split = ActiveSupport::Notifications.subscribed(count_lookups, "sql.active_record") do
-        described_class.split_gumroad_held_stripe_cents_by_weekday(per_user_cents)
-      end
-
-      expect(split).to eq(tuesday: 100_00, thursday: 200_00)
-      expect(lookups).to eq(2)
-    end
-
     it "is empty when nobody is payable from the Stripe balance" do
       expect(split).to eq({})
     end
