@@ -95,6 +95,34 @@ describe "Tiered Membership Offer code Spec", type: :system, js: true, retry: 2 
       expect(@subscription.original_purchase.offer_code_id).to eq offer_code.id
     end
 
+    context "and the code has a spend minimum above the lower tier's price" do
+      let(:offer_code) { create(:universal_offer_code, amount_cents: 200, minimum_amount_cents: 5_00) }
+
+      before do
+        # The cached discount has no spend minimum, so only an uncached subscription sends the
+        # code's minimum to the Manage page.
+        @original_purchase.purchase_offer_code_discount.destroy!
+      end
+
+      it "keeps the code when downgrading below the minimum" do
+        visit "/subscriptions/#{@subscription.external_id}/manage?token=#{@subscription.token}"
+
+        expect(page).to have_radio_button(@lower_tier.name, text: "$4 $2", normalize_ws: true)
+        choose @lower_tier.name
+
+        wait_for_checkout_surcharges_loaded
+        expect(page).to have_button("Update membership", disabled: false)
+
+        expect do
+          click_on "Update membership"
+          wait_for_ajax
+          expect(page).to have_alert(text: "Your membership will be updated at the end of your current billing cycle.")
+        end.to change { SubscriptionPlanChange.count }.from(0).to(1)
+
+        expect(@subscription.subscription_plan_changes.first.perceived_price_cents).to eq 2_00
+      end
+    end
+
     context "for a PWYW product" do
       before do
         [@original_tier, @new_tier, @lower_tier].each do |tier|
