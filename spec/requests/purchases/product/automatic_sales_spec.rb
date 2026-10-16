@@ -421,36 +421,43 @@ describe "Automatic sales on product pages", type: :system, js: true do
       expect(page).to have_text("BULK50", normalize_ws: true)
     end
 
-    it "keeps Pay closed when a saved cart's sale cannot be re-quoted for an added product" do
-      product, profile_product = bulk_sale_product(loyalty: false)
-      other_product = create(:product, user: seller, name: "Other product", price_cents: 1000)
+    # Quantity 1 leaves the saved sale without lines; at 2 it keeps lines and the added product would qualify.
+    [1, 2].each do |quantity|
+      it "keeps Pay closed when a saved cart's sale at quantity #{quantity} cannot be re-quoted for an added product" do
+        product, profile_product = bulk_sale_product(loyalty: false)
+        other_product = create(:product, user: seller, name: "Other product", price_cents: 1000, quantity_enabled: true)
 
-      open_from_profile(profile_product)
-      fill_in "Quantity", with: 2
-      click_on "Add to cart"
-      expect(page).to have_text("Total US$10", normalize_ws: true)
-      edit_cart_item("Target product") { fill_in "Quantity", with: 1 }
-      wait_until_true(sleep_interval: 0.2) do
-        cart = CartProduct.alive.find_by(product:)&.cart
-        cart&.alive_cart_products&.sole&.quantity == 1 && cart.discount_codes.pluck("code") == %w[BULK50]
+        open_from_profile(profile_product)
+        fill_in "Quantity", with: 2
+        click_on "Add to cart"
+        expect(page).to have_text("Total US$10", normalize_ws: true)
+        edit_cart_item("Target product") { fill_in "Quantity", with: 1 } if quantity == 1
+        wait_until_true(sleep_interval: 0.2) do
+          cart = CartProduct.alive.find_by(product:)&.cart
+          cart&.alive_cart_products&.sole&.quantity == quantity && cart.discount_codes.pluck("code") == %w[BULK50]
+        end
+
+        failing = Concurrent::AtomicBoolean.new(true)
+        allow_any_instance_of(OfferCodesController).to receive(:compute_discount).and_wrap_original do |original, *args|
+          next original.receiver.head(:internal_server_error) if failing.true? && original.receiver.params[:code] == "BULK50"
+
+          original.call(*args)
+        end
+        visit other_product.long_url
+        add_to_cart(other_product, quantity:, offer_code: (seller.offer_codes.find_by!(code: "BULK50") if quantity == 2))
+        expect(page).to have_cart_item("Other product")
+        expect(page).to have_alert(text: "We couldn't refresh your payment details. Please reload the page to continue.")
+        # Every other Pay gate has opened: the cart is saved, its total quoted and the card form mounted.
+        wait_until_true(sleep_interval: 0.2) { CartProduct.alive.exists?(product: other_product) }
+        expect(page).to have_text("Total US$#{quantity == 2 ? 30 : 20}", normalize_ws: true)
+        within_payment_element_frame { expect(page).to have_field("Card number", visible: :all, wait: 20) }
+        expect(page).not_to have_button("Pay", disabled: false, wait: 3)
+
+        failing.make_false
+        visit checkout_path
+        expect(page).to have_text("Total US$20", normalize_ws: true)
+        expect(page).to have_button("Pay", disabled: false)
       end
-
-      failing = Concurrent::AtomicBoolean.new(true)
-      allow_any_instance_of(OfferCodesController).to receive(:compute_discount).and_wrap_original do |original, *args|
-        next original.receiver.head(:internal_server_error) if failing.true? && original.receiver.params[:code] == "BULK50"
-
-        original.call(*args)
-      end
-      visit other_product.long_url
-      add_to_cart(other_product)
-      expect(page).to have_cart_item("Other product")
-      expect(page).to have_alert(text: "We couldn't refresh your payment details. Please reload the page to continue.")
-      expect(page).not_to have_button("Pay", disabled: false, wait: 3)
-
-      failing.make_false
-      visit checkout_path
-      expect(page).to have_text("Total US$20", normalize_ws: true)
-      expect(page).to have_button("Pay", disabled: false)
     end
 
     it "keeps the defaults when purchasing power parity wins at first, so a cheaper tier gets the loyalty code" do

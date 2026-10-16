@@ -296,6 +296,7 @@ export const Checkout = ({
   );
   const [failedFor, setFailedFor] = React.useState<Record<string, string>>({});
   const [automaticArrivalPending, setAutomaticArrivalPending] = React.useState(false);
+  const [unquotedCodesWithLines, setUnquotedCodesWithLines] = React.useState<string[]>([]);
   // Lines a quote just wrote change the totals, so Pay waits one more render: the parent's
   // product update must reset surcharges before a pending submit is allowed to resume.
   const [quotedLinesSettling, setQuotedLinesSettling] = React.useState(false);
@@ -409,16 +410,14 @@ export const Checkout = ({
           cart.discountCodes.findIndex(({ code }) => codes.includes(code)),
           0,
         );
-    if (group.length > 0 || refreshed.length > 0)
-      updateCart({
-        discountCodes: [...kept.slice(0, position), ...group, ...kept.slice(position)].filter(
-          (item) =>
-            group.includes(item) ||
-            Object.keys(item.products).length > 0 ||
-            (takenPermalinks.size === 0 &&
-              cart.discountCodes.some((stored) => stored.code === item.code && isDormant(stored))),
-        ),
-      });
+    const discountCodes = [...kept.slice(0, position), ...group, ...kept.slice(position)].filter(
+      (item) =>
+        group.includes(item) ||
+        Object.keys(item.products).length > 0 ||
+        (takenPermalinks.size === 0 &&
+          cart.discountCodes.some((stored) => stored.code === item.code && isDormant(stored))),
+    );
+    if (group.length > 0 || refreshed.length > 0) updateCart({ discountCodes });
     // Paired with the codes written above, which come from the same snapshot: a code another
     // write filled meanwhile is dormant again here and gets asked again.
     const failed = [
@@ -432,6 +431,14 @@ export const Checkout = ({
       ...Object.fromEntries(Object.entries(quotedFor).filter(([code]) => !failed.includes(code))),
       ...Object.fromEntries(answered.map((code) => [code, itemsKey])),
     });
+    // An arrival's failed code that kept its old lines is never re-asked, so its eligibility for
+    // the added product stays unknown until a reload.
+    const failedWithLines =
+      automatic || refresh
+        ? failed.filter((code) => discountCodes.some((item) => item.code === code && !isDormant(item)))
+        : [];
+    setUnquotedCodesWithLines((prev) => [...prev.filter((code) => !answered.includes(code)), ...failedWithLines]);
+    if (failedWithLines.length > 0) showAlert(CHECKOUT_PAYMENT_REFRESH_FAILED_MESSAGE, "error");
 
     setLoadingDiscount(false);
     if (automatic) setAutomaticArrivalPending(false);
@@ -440,7 +447,11 @@ export const Checkout = ({
   const unresolvedCodes = cart.discountCodes
     .filter((item) => isDormant(item) && quotedFor[item.code] !== itemsKey)
     .map(({ code }) => code);
-  const discountQuotesPending = automaticArrivalPending || quotedLinesSettling || unresolvedCodes.length > 0;
+  const discountQuotesPending =
+    automaticArrivalPending ||
+    quotedLinesSettling ||
+    unresolvedCodes.length > 0 ||
+    cart.discountCodes.some((item) => unquotedCodesWithLines.includes(item.code) && !isDormant(item));
   React.useEffect(() => {
     if (state.discountQuotesPending !== discountQuotesPending)
       dispatch({ type: "set-discount-quotes-pending", pending: discountQuotesPending });
