@@ -555,6 +555,68 @@ class GdprBuyerErasureServiceGuestBuyerDataTest < ActiveSupport::TestCase
     assert_match(/boom/, error.message)
   end
 
+  test "anonymizes sent post emails and drops the ones on posts that already hold the anonymized email" do
+    anonymized = GdprBuyerErasureService.new(@buyer_email, performed_by: @admin).send(:generate_anonymized_email)
+    seller = @purchase1.seller
+    rewritten = SentPostEmail.create!(post: create_installment(seller:), email: @buyer_email)
+    conflicting_post = create_installment(seller:)
+    conflicting = SentPostEmail.create!(post: conflicting_post, email: @buyer_email)
+    already_anonymized = SentPostEmail.create!(post: conflicting_post, email: anonymized)
+    other_buyer = SentPostEmail.create!(post: conflicting_post, email: "other@example.com")
+
+    result = GdprBuyerErasureService.new(@buyer_email, performed_by: @admin).perform!
+
+    assert_equal 1, result[:counts][:sent_post_emails]
+    assert_equal anonymized, rewritten.reload.email
+    assert_not SentPostEmail.exists?(conflicting.id)
+    assert_equal anonymized, already_anonymized.reload.email
+    assert_equal "other@example.com", other_buyer.reload.email
+  end
+
+  test "anonymizes sent post emails across batches, including a batch where every row conflicts" do
+    anonymized = GdprBuyerErasureService.new(@buyer_email, performed_by: @admin).send(:generate_anonymized_email)
+    seller = @purchase1.seller
+    # Rows come back in (post_id, email) index order, so the two conflicting posts fill the first batch.
+    conflicting = 2.times.map do
+      post = create_installment(seller:)
+      SentPostEmail.create!(post:, email: anonymized)
+      SentPostEmail.create!(post:, email: @buyer_email)
+    end
+    rewritten = 3.times.map { SentPostEmail.create!(post: create_installment(seller:), email: @buyer_email) }
+
+    result = with_const_on(GdprBuyerErasureService, :SENT_POST_EMAIL_BATCH_SIZE, 2) do
+      GdprBuyerErasureService.new(@buyer_email, performed_by: @admin).perform!
+    end
+
+    assert_equal 3, result[:counts][:sent_post_emails]
+    assert_not SentPostEmail.where(id: conflicting.map(&:id)).exists?
+    assert_equal [anonymized] * 3, rewritten.map { _1.reload.email }
+    assert_not SentPostEmail.where(email: @buyer_email).exists?
+  end
+
+  test "reaches sent post emails only through statements an index can bound" do
+    anonymized = GdprBuyerErasureService.new(@buyer_email, performed_by: @admin).send(:generate_anonymized_email)
+    seller = @purchase1.seller
+    SentPostEmail.create!(post: create_installment(seller:), email: @buyer_email)
+    conflicting_post = create_installment(seller:)
+    SentPostEmail.create!(post: conflicting_post, email: @buyer_email)
+    SentPostEmail.create!(post: conflicting_post, email: anonymized)
+    statements = []
+    capture = ->(*, payload) { statements << payload[:sql] if payload[:sql].match?(/\A\s*(SELECT|UPDATE|DELETE)\b.*`sent_post_emails`/m) }
+
+    ActiveSupport::Notifications.subscribed(capture, "sql.active_record") do
+      GdprBuyerErasureService.new(@buyer_email, performed_by: @admin).perform!
+    end
+
+    assert_predicate statements, :present?
+    # On a table this small the optimizer may scan even when it could seek, so the chosen plan proves
+    # nothing; possible_keys stays empty only when no index can bound the statement.
+    statements.each do |sql|
+      plan = SentPostEmail.connection.select_all("EXPLAIN #{sql}").first
+      assert_predicate plan["possible_keys"], :present?, "No index can bound: #{sql}"
+    end
+  end
+
   test "returns an empty skipped list when nothing times out" do
     result = GdprBuyerErasureService.new(@buyer_email, performed_by: @admin).perform!
 

@@ -5,7 +5,6 @@ class CreatorHomePresenter
 
   ACTIVITY_ITEMS_LIMIT = 10
   BALANCE_ITEMS_LIMIT = 3
-  SALES_QUERY_FLAG = :dashboard_home_sales_query
   # The best-seller card covers today and this many days before it; its "Last 7 days" column sums
   # the last LAST_WEEK_DAYS of that window.
   SALES_LOOKBACK_DAYS = 30
@@ -39,11 +38,7 @@ class CreatorHomePresenter
     end
 
     today = Time.now.in_time_zone(seller.timezone).to_date
-    sales = if Feature.active?(SALES_QUERY_FLAG, seller)
-      best_selling_products(today)
-    else
-      best_selling_products_from_analytics(today)
-    end
+    sales = best_selling_products(today)
     balances = UserBalanceStatsService.new(user: seller).fetch_overview
 
     stripe_verification_message = nil
@@ -118,11 +113,11 @@ class CreatorHomePresenter
         days_by_product[product_id][date] = day
       end
 
-      # Ties go to the newest product, as in the analytics-backed card.
+      # Ties go to the newest product.
       ranked_ids = days_by_product.sort_by { |product_id, days| [-days.values.sum { _1[:count] }, -product_id] }
         .first(BALANCE_ITEMS_LIMIT).map(&:first)
-      # Spare slots go to the newest products the analytics-backed card would also list: anything
-      # that ever sold (archived included) or is live and not archived.
+      # Spare slots go to the newest products analytics lists: anything that ever sold (archived
+      # included) or is live and not archived.
       if ranked_ids.size < BALANCE_ITEMS_LIMIT
         ranked_ids += seller.products_for_creator_analytics.alive.where.not(id: ranked_ids)
           .limit(BALANCE_ITEMS_LIMIT - ranked_ids.size).ids
@@ -135,26 +130,6 @@ class CreatorHomePresenter
 
         product_card(product, dates.map { days_by_product[product_id].dig(_1.to_s, :total) || 0 })
       end
-    end
-
-    def best_selling_products_from_analytics(today)
-      analytics = CreatorAnalytics::CachingProxy.new(seller).data_for_dates(today - SALES_LOOKBACK_DAYS, today)
-      top_sales_data = analytics[:by_date][:sales]
-        .sort_by { |_, sales| -sales&.sum }.take(BALANCE_ITEMS_LIMIT)
-
-      product_permalinks = top_sales_data.map(&:first)
-      products_by_permalink = seller.products
-        .where(unique_permalink: product_permalinks)
-        .includes(THUMBNAIL_INCLUDES)
-        .select(&:alive?)
-        .index_by(&:unique_permalink)
-
-      top_sales_data.map do |p|
-        product = products_by_permalink[p[0]]
-        next unless product
-
-        product_card(product, analytics[:by_date][:totals][product.unique_permalink] || [0])
-      end.compact
     end
 
     # daily_totals: revenue per day across the SALES_LOOKBACK_DAYS window, ending today.

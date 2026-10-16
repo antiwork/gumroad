@@ -7,12 +7,15 @@ describe SendStripeBalanceCheckNotificationJob do
     let(:balance_check) do
       instance_double(
         StripeBalanceCheckService,
+        snapshot_at: Time.utc(2026, 9, 15, 14, 0),
         upcoming_payouts_cents: 300_000_00,
         available_cents: 150_000_00,
         pending_cents: 50_000_00,
         current_balance_cents: 200_000_00,
         topup_amount_cents: 100_000_00,
         topup_needed?: true,
+        day_before_first_run?: false,
+        per_run_estimate_cents: { tuesday: 120_000_00, wednesday: 90_000_00, thursday: 90_000_00 },
         payout_end_date: Date.new(2026, 9, 11),
         next_payout_run_at: Time.utc(2026, 9, 16, 10, 0),
         cycle_last_run_at: Time.utc(2026, 9, 18, 10, 0),
@@ -27,17 +30,32 @@ describe SendStripeBalanceCheckNotificationJob do
     end
 
     context "when the balance is insufficient" do
-      it "sends a notification naming the deadline, the breakdown and the action, and sets the redis key to true" do
+      it "sends a notification leading with the verdict, naming the deadline, the breakdown and the action, and sets the redis key to true" do
         described_class.new.perform
 
         expect(InternalNotificationWorker).to have_enqueued_sidekiq_job("payments", "Stripe Balance Check", kind_of(String), "red")
         message = InternalNotificationWorker.jobs.last["args"][2]
+        expect(message).to start_with("Action needed by Wednesday, September 16.\n")
+        expect(message).to include("Stripe balance as of 14:00 UTC: $200,000 ($150,000 available + $50,000 pending, which normally settles")
         expect(message).to include("Seller payouts for balances up to September 11 need $300,000")
         expect(message).to include("between the next run (Wednesday, September 16 at 10:00 UTC (6:00 AM ET)) and the last run of the cycle (Friday, September 18 at 10:00 UTC (6:00 AM ET)).")
-        expect(message).to include("Stripe balance: $200,000 ($150,000 available + $50,000 pending, which normally settles")
+        expect(message).to include("Estimated per run: Tuesday $120,000, Wednesday $90,000, Thursday $90,000.")
+        expect(message).to include("Worst case, if the whole cycle were drawn on the next run: $150,000.")
         expect(message).to include("Of Stripe's USD bank payouts created in the last 24 hours, $301,513.34 has reached the bank and $12,000 is still in flight.")
         expect(message).to include("A top-up of $100,000 is needed, ideally before Wednesday, September 16 at 10:00 UTC (6:00 AM ET) and no later than Friday, September 18 at 10:00 UTC (6:00 AM ET). Nothing tops up automatically")
         expect($redis.get(RedisKey.stripe_balance_topup_needed)).to eq("true")
+      end
+
+      it "leads with no action when the whole balance covers the cycle, and still shows the worst case and the per-run split" do
+        allow(balance_check).to receive_messages(topup_needed?: false, topup_amount_cents: -100_000_00, current_balance_cents: 400_000_00)
+        $redis.set(RedisKey.stripe_balance_topup_needed, true)
+
+        described_class.new.perform
+
+        message = InternalNotificationWorker.jobs.last["args"][2]
+        expect(message).to start_with("No action needed yet.\n")
+        expect(message).to include("Worst case, if the whole cycle were drawn on the next run: $150,000.")
+        expect(message).to include("Nothing to do yet: the balance covers the next run.")
       end
     end
 
@@ -61,7 +79,7 @@ describe SendStripeBalanceCheckNotificationJob do
         described_class.new.perform
 
         expect(InternalNotificationWorker).to have_enqueued_sidekiq_job("payments", "Stripe Balance Check", kind_of(String), "green")
-        expect(InternalNotificationWorker.jobs.last["args"][2]).to include("No top-up needed: the balance now covers the cycle. Nothing to do.")
+        expect(InternalNotificationWorker.jobs.last["args"][2]).to include("Nothing to do yet: the balance covers the next run.")
         expect($redis.get(RedisKey.stripe_balance_topup_needed)).to eq("false")
       end
 
@@ -97,6 +115,27 @@ describe SendStripeBalanceCheckNotificationJob do
 
         expect(InternalNotificationWorker).to have_enqueued_sidekiq_job("payments", "Stripe Balance Check", kind_of(String), "green")
         expect($redis.get(RedisKey.stripe_balance_topup_needed)).to eq("false")
+      end
+
+      it "re-sends the verdict on the Monday before the cycle's first run, with no transition to report" do
+        allow(balance_check).to receive(:day_before_first_run?).and_return(true)
+        $redis.set(RedisKey.stripe_balance_topup_needed, false)
+
+        described_class.new.perform
+
+        expect(InternalNotificationWorker).to have_enqueued_sidekiq_job("payments", "Stripe Balance Check", kind_of(String), "green")
+        message = InternalNotificationWorker.jobs.last["args"][2]
+        expect(message).to start_with("No action needed yet.\n")
+        expect(message).to include("This is re-sent on the Monday before the cycle's first run.")
+        expect($redis.get(RedisKey.stripe_balance_topup_needed)).to eq("false")
+      end
+
+      it "does not re-send the verdict on the other days of the week" do
+        $redis.set(RedisKey.stripe_balance_topup_needed, false)
+
+        described_class.new.perform
+
+        expect(InternalNotificationWorker.jobs.size).to eq(0)
       end
     end
 

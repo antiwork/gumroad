@@ -114,6 +114,41 @@ describe PayoutEstimates do
     end
   end
 
+  describe "split_gumroad_held_stripe_cents_by_weekday" do
+    let(:date) { Date.today }
+    let(:gumroad_ma) { create(:merchant_account, user: nil, charge_processor_id: StripeChargeProcessor.charge_processor_id) }
+
+    def seller_paid_on(bank_account_type, amount_cents)
+      seller = create(:user_with_compliance_info)
+      create(bank_account_type, user: seller)
+      create(:balance, user: seller, date: date - 1, amount_cents:, merchant_account: gumroad_ma)
+    end
+
+    def split
+      described_class.split_gumroad_held_stripe_cents_by_weekday(
+        described_class.estimate_gumroad_held_stripe_cents_per_user(date)
+      )
+    end
+
+    it "splits the estimate by the weekday each seller's rail is paid on" do
+      seller_paid_on(:armenia_bank_account, 100_00) # cross-border bank rail, Tuesday
+      seller_paid_on(:ach_account, 200_00)          # US bank rail, Thursday
+
+      expect(split).to eq(tuesday: 100_00, thursday: 200_00)
+    end
+
+    it "totals the same amount as the unsplit estimate" do
+      seller_paid_on(:armenia_bank_account, 100_00)
+      seller_paid_on(:ach_account, 200_00)
+
+      expect(split.values.sum).to eq(described_class.estimate_gumroad_held_stripe_cents(date))
+    end
+
+    it "is empty when nobody is payable from the Stripe balance" do
+      expect(split).to eq({})
+    end
+  end
+
   describe "estimate_payments_for_balances_up_to_date_for_users" do
     describe "common payment cases (ACH via Stripe)" do
       let(:payout_date) { Date.today - 1 }
