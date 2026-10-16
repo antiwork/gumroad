@@ -126,15 +126,15 @@ describe PayoutEstimates do
 
     it "splits the estimate by the weekday each seller's rail is paid on" do
       seller_paid_on(:armenia_bank_account, 100_00) # cross-border bank rail, Tuesday
-      seller_paid_on(:ach_account, 50_00)           # US bank rail, Thursday
+      seller_paid_on(:ach_account, 200_00)          # US bank rail, Thursday
 
       expect(described_class.estimate_gumroad_held_stripe_cents_by_weekday(date))
-        .to eq(tuesday: 100_00, thursday: 50_00)
+        .to eq(tuesday: 100_00, thursday: 200_00)
     end
 
     it "totals the same amount as the unsplit estimate" do
       seller_paid_on(:armenia_bank_account, 100_00)
-      seller_paid_on(:ach_account, 50_00)
+      seller_paid_on(:ach_account, 200_00)
 
       expect(described_class.estimate_gumroad_held_stripe_cents_by_weekday(date).values.sum)
         .to eq(described_class.estimate_gumroad_held_stripe_cents(date))
