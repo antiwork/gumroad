@@ -62,7 +62,7 @@ const renderForCountry = (
         hasConnectedStripe={false}
         user={makeUser(countryCode, supportsIban)}
         isFormDisabled={false}
-        feeInfoText=""
+        feeInfo={{ summary: "", items: [] }}
         showNewBankAccount
         setShowNewBankAccount={() => {}}
         errorFieldNames={new Set()}
@@ -271,7 +271,7 @@ describe("BankAccountSection Bolivia bank picker", () => {
         hasConnectedStripe={false}
         user={makeUser("BO")}
         isFormDisabled={false}
-        feeInfoText=""
+        feeInfo={{ summary: "", items: [] }}
         showNewBankAccount={false}
         setShowNewBankAccount={() => {}}
         errorFieldNames={new Set()}

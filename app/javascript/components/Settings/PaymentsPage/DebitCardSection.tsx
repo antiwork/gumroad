@@ -3,24 +3,25 @@ import * as React from "react";
 import { SavedCreditCard } from "$app/parsers/card";
 import type { PayoutDebitCardData } from "$app/types/payments";
 
+import { FeeInfoDetails, type FeeInfo } from "$app/components/FeeInfo";
 import { PayoutCreditCard } from "$app/components/PayoutPage/CreditCard";
 import { Alert } from "$app/components/ui/Alert";
 
 const DebitCardSection = ({
   isFormDisabled,
   hasConnectedStripe,
-  feeInfoText,
+  feeInfo,
   savedCard,
   setDebitCard,
 }: {
   isFormDisabled: boolean;
   hasConnectedStripe: boolean;
-  feeInfoText: string;
+  feeInfo: FeeInfo;
   savedCard: SavedCreditCard | null;
   setDebitCard: (debitCard: PayoutDebitCardData) => void;
 }) => (
   <>
-    <div className="whitespace-pre-line">{feeInfoText}</div>
+    <FeeInfoDetails feeInfo={feeInfo} />
     <section className="grid gap-8">
       <PayoutCreditCard saved_card={savedCard} is_form_disabled={isFormDisabled} setDebitCard={setDebitCard} />
     </section>

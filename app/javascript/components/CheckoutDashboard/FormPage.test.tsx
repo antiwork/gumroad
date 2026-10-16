@@ -65,7 +65,7 @@ const props = (giftingDisabled: boolean, user: Partial<FormPageProps["user"]> = 
     paypal_disconnect_blocks_publishing: false,
     payout_setup_method: "bank_account",
   },
-  connect_account_fee_info_text: "",
+  connect_account_fee_info: { summary: "", items: [] },
 });
 
 describe("FormPage gifting preview", () => {

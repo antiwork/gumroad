@@ -6,6 +6,7 @@ import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
+import { FeeInfoDetails, type FeeInfo } from "$app/components/FeeInfo";
 import { showAlert } from "$app/components/server-components/Alert";
 import { SocialAuthButton } from "$app/components/SocialAuthButton";
 import { Alert } from "$app/components/ui/Alert";
@@ -24,11 +25,11 @@ export type StripeConnect = {
 const StripeConnectSection = ({
   stripeConnect,
   isFormDisabled,
-  connectAccountFeeInfoText,
+  connectAccountFeeInfo,
 }: {
   stripeConnect: StripeConnect;
   isFormDisabled: boolean;
-  connectAccountFeeInfoText: string;
+  connectAccountFeeInfo: FeeInfo;
 }) => {
   const [isDisconnecting, setisDisconnecting] = React.useState(false);
   const disconnectStripe = asyncVoid(async () => {
@@ -60,12 +61,8 @@ const StripeConnectSection = ({
     <section>
       <div className="grid gap-8">
         <div className="flex flex-col gap-4">
-          <div
-            dangerouslySetInnerHTML={{
-              __html: `${connectAccountFeeInfoText}\n${stripeConnect.supported_countries_help_text}`,
-            }}
-            className="whitespace-pre-line"
-          ></div>
+          <FeeInfoDetails feeInfo={connectAccountFeeInfo} />
+          <p dangerouslySetInnerHTML={{ __html: stripeConnect.supported_countries_help_text }} />
         </div>
         {stripeConnect.has_connected_stripe ? (
           <div className="grid gap-8">

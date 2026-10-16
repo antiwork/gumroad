@@ -802,28 +802,11 @@ class SettingsPresenter
     end
 
     def fee_info(user_compliance_info)
-      processor_fee_percent = (Purchase::PROCESSOR_FEE_PER_THOUSAND / 10.0).round(1)
-      processor_fee_percent = processor_fee_percent.to_i == processor_fee_percent ? processor_fee_percent.to_i : processor_fee_percent
-      processor_fee_fixed_cents = Purchase::PROCESSOR_FIXED_FEE_CENTS
-
-      discover_fee_percent = (Purchase::GUMROAD_DISCOVER_FEE_PER_THOUSAND / 10.0).round(1)
-      discover_fee_percent = discover_fee_percent.to_i == discover_fee_percent ? discover_fee_percent.to_i : discover_fee_percent
-      direct_fee_percent = (seller.gumroad_fee_per_thousand / 10.0).round(1)
-      direct_fee_percent = direct_fee_percent.to_i == direct_fee_percent ? direct_fee_percent.to_i : direct_fee_percent
-      fixed_fee_cents = Purchase::GUMROAD_FIXED_FEE_CENTS
-
-      if user_compliance_info&.country_code == Compliance::Countries::BRA.alpha2
-        {
-          card_fee_info_text: "All sales will incur fees based on how customers find your product:\n\n• Direct sales: #{direct_fee_percent}% + #{fixed_fee_cents}¢ Gumroad fee + #{processor_fee_percent}% + #{processor_fee_fixed_cents}¢ credit card fee.\n• Discover sales: #{discover_fee_percent}% flat\n",
-          connect_account_fee_info_text: "All sales will incur a 0% Gumroad fee.",
-          paypal_fee_info_text: "All sales will incur fees based on how customers find your product:\n\n• Direct sales: #{direct_fee_percent}% + #{fixed_fee_cents}¢ Gumroad fee + #{processor_fee_percent}% + #{processor_fee_fixed_cents}¢ PayPal fee.\n• Discover sales: #{discover_fee_percent}% flat\n"
-        }
-      else
-        {
-          card_fee_info_text: "All sales will incur fees based on how customers find your product:\n\n• Direct sales: #{direct_fee_percent}% + #{fixed_fee_cents}¢ Gumroad fee + #{processor_fee_percent}% + #{processor_fee_fixed_cents}¢ credit card fee.\n• Discover sales: #{discover_fee_percent}% flat\n",
-          connect_account_fee_info_text: "All sales will incur fees based on how customers find your product:\n\n• Direct sales: #{direct_fee_percent}% + #{fixed_fee_cents}¢\n• Discover sales: #{discover_fee_percent}% flat\n",
-          paypal_fee_info_text: "All sales will incur fees based on how customers find your product:\n\n• Direct sales: #{direct_fee_percent}% + #{fixed_fee_cents}¢ Gumroad fee + #{processor_fee_percent}% + #{processor_fee_fixed_cents}¢ PayPal fee.\n• Discover sales: #{discover_fee_percent}% flat\n",
-        }
-      end
+      presenter = FeeInfoPresenter.new(seller:, country_code: user_compliance_info&.country_code)
+      {
+        card_fee_info: presenter.card_fee_info,
+        paypal_fee_info: presenter.paypal_fee_info,
+        connect_account_fee_info: presenter.connect_account_fee_info,
+      }
     end
 end
