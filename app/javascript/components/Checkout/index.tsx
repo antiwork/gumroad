@@ -3,7 +3,7 @@ import * as React from "react";
 
 import { isWalletPaymentElementType } from "$app/data/card_payment_method_data";
 import type { SurchargesResponse } from "$app/data/customer_surcharge";
-import { computeOfferDiscount } from "$app/data/offer_code";
+import { computeOfferDiscount, type OfferCodeResponseData } from "$app/data/offer_code";
 import { recommendedProductsHeading } from "$app/data/recommended_products";
 import { CardProduct, COMMISSION_DEPOSIT_PROPORTION } from "$app/parsers/product";
 import { isOpenTuple } from "$app/utils/array";
@@ -56,7 +56,6 @@ import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
 import { Select } from "$app/components/ui/Select";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
-import { useRefToLatest } from "$app/components/useRefToLatest";
 import { useRunOnce } from "$app/components/useRunOnce";
 import { WithTooltip } from "$app/components/WithTooltip";
 
@@ -83,6 +82,7 @@ import {
   type CartItem as CartItemProps,
   findCartItem,
 } from "./cartState";
+import { CHECKOUT_PAYMENT_REFRESH_FAILED_MESSAGE } from "./checkoutPaymentRefresh";
 import {
   canDisplayBuyerCurrencyQuote,
   canUseStripePaymentElementClientConfirm,
@@ -262,6 +262,11 @@ const discountRequestProducts = (items: CartItemProps[]) =>
     ]),
   );
 
+const requestFailed = (discount: OfferCodeResponseData | undefined) =>
+  !!discount && !discount.valid && !!discount.request_failed;
+
+const discountQuoteKey = (items: CartItemProps[]) => JSON.stringify(discountRequestProducts(items));
+
 // A code kept without lines: a default the cart has not met yet, or one a reload found ineligible.
 const isDormant = ({ products }: DiscountCode) => Object.keys(products).length === 0;
 
@@ -281,18 +286,22 @@ export const Checkout = ({
   existingCustomerDefaultOfferCodeValid?: boolean;
   recommendedProducts?: CardProduct[] | null;
 }) => {
-  const [state] = useState();
+  const [state, dispatch] = useState();
   const [newDiscountCode, setNewDiscountCode] = React.useState("");
   const [loadingDiscount, setLoadingDiscount] = React.useState(false);
+  const itemsKey = discountQuoteKey(cart.items);
+  // The quote inputs each code's lines were last answered for. The presenter quoted the initial cart.
+  const [quotedFor, setQuotedFor] = React.useState<Record<string, string>>(() =>
+    Object.fromEntries(cart.discountCodes.map(({ code }) => [code, itemsKey])),
+  );
+  const [failedFor, setFailedFor] = React.useState<Record<string, string>>({});
+  const [automaticArrivalPending, setAutomaticArrivalPending] = React.useState(false);
 
   const isGift = state.gift != null;
 
-  // One updateCart for everything: each call writes from this render's `cart`, so concurrent calls
-  // drop each other's codes. `codes` don't take lines from each other and the solver keeps the
-  // later one on a tie, so pass them lowest tie priority first. `takeover` takes the code's lines
-  // from the cart's other codes; `refresh` re-quotes those for an added product. `silent` is for
-  // codes the buyer didn't ask for, which apply where they can without alerts. `automatic` defaults
-  // stay in the cart even where PPP or an unmet condition beats them, for the solver to weigh later.
+  // One updateCart per call: each writes from this render's `cart`, so parallel calls drop each
+  // other's codes. The solver keeps the later code on a tie, so pass `codes` lowest priority first.
+  // `automatic` defaults stay even where PPP or an unmet condition beats them, for later edits.
   async function applyDiscount(
     codes: string[],
     {
@@ -304,6 +313,7 @@ export const Checkout = ({
     }: { fromUrl?: boolean; takeover?: boolean; refresh?: boolean; silent?: boolean; automatic?: boolean },
   ) {
     setLoadingDiscount(true);
+    if (automatic) setAutomaticArrivalPending(true);
     const products = discountRequestProducts(cart.items);
     const others = cart.discountCodes.filter(({ code }) => !codes.includes(code));
     const [discounts, refreshed] = await Promise.all([
@@ -360,7 +370,7 @@ export const Checkout = ({
       if (warnings.length > 0 && !silent) showAlert(warnings.join(" "), "warning");
       group = applied.map(({ code, products, fromUrl }) => ({ code, products, fromUrl }));
     }
-    // A default with no lines yet keeps its place; requoteDormantDiscounts asks again after an edit.
+    // A default with no lines yet keeps its place and is asked again once the quote inputs change.
     if (automatic)
       group = codes.map(
         (code) =>
@@ -403,32 +413,74 @@ export const Checkout = ({
               cart.discountCodes.some((stored) => stored.code === item.code && isDormant(stored))),
         ),
       });
+    // Paired with the codes written above, which come from the same snapshot: a code another
+    // write filled meanwhile is dormant again here and gets asked again.
+    const answered = [
+      ...codes.filter((_, index) => !requestFailed(discounts[index])),
+      ...others.filter((_, index) => refresh && !requestFailed(refreshed[index])).map(({ code }) => code),
+    ];
+    setQuotedFor({ ...quotedFor, ...Object.fromEntries(answered.map((code) => [code, itemsKey])) });
 
     setLoadingDiscount(false);
+    if (automatic) setAutomaticArrivalPending(false);
   }
 
-  const latestCart = useRefToLatest(cart);
-  async function requoteDormantDiscounts(items: CartItemProps[]) {
-    const dormant = cart.discountCodes.filter(isDormant);
-    if (dormant.length === 0) return;
+  const unresolvedCodes = cart.discountCodes
+    .filter((item) => isDormant(item) && quotedFor[item.code] !== itemsKey)
+    .map(({ code }) => code);
+  const discountQuotesPending = automaticArrivalPending || unresolvedCodes.length > 0;
+  React.useEffect(() => {
+    if (state.discountQuotesPending !== discountQuotesPending)
+      dispatch({ type: "set-discount-quotes-pending", pending: discountQuotesPending });
+  }, [discountQuotesPending, state.discountQuotesPending]);
+
+  const committed = React.useRef({ cart, itemsKey });
+  React.useEffect(() => {
+    committed.current = { cart, itemsKey };
+  });
+  const requoteInFlight = React.useRef<string | null>(null);
+  // An answer only counts for the inputs it was asked with: a later edit asks again. A failed
+  // request is retried once, then Pay stays closed, since the code's eligibility is unknown.
+  async function requoteDormantDiscounts(codes: string[], items: CartItemProps[], key: string) {
+    const flight = `${key}\n${codes.join("\n")}`;
+    requoteInFlight.current = flight;
     const products = discountRequestProducts(items);
-    const discounts = await Promise.all(dormant.map(({ code }) => computeOfferDiscount({ code, products })));
-    // A later edit asks again with its own items.
-    if (latestCart.current.items !== items) return;
+    const discounts = await Promise.all(
+      codes.map(async (code) => {
+        const discount = await computeOfferDiscount({ code, products });
+        return requestFailed(discount) ? computeOfferDiscount({ code, products }) : discount;
+      }),
+    );
+    if (requoteInFlight.current === flight) requoteInFlight.current = null;
+    if (committed.current.itemsKey !== key) return;
     const fresh = new Map(
-      dormant.flatMap(({ code }, index) => {
+      codes.flatMap((code, index) => {
         const discount = discounts[index];
         return discount?.valid ? [[code, discount.products_data] as const] : [];
       }),
     );
+    const failed = codes.filter((_, index) => requestFailed(discounts[index]));
     if (fresh.size > 0)
       updateCart({
-        discountCodes: latestCart.current.discountCodes.map((item) => {
+        discountCodes: committed.current.cart.discountCodes.map((item) => {
           const products = fresh.get(item.code);
           return products && isDormant(item) ? { ...item, products } : item;
         }),
       });
+    setQuotedFor((prev) => ({
+      ...prev,
+      ...Object.fromEntries(codes.filter((code) => !failed.includes(code)).map((code) => [code, key])),
+    }));
+    if (failed.length > 0) {
+      setFailedFor((prev) => ({ ...prev, ...Object.fromEntries(failed.map((code) => [code, key])) }));
+      showAlert(CHECKOUT_PAYMENT_REFRESH_FAILED_MESSAGE, "error");
+    }
   }
+  const requotableCodes = unresolvedCodes.filter((code) => failedFor[code] !== itemsKey).join("\n");
+  React.useEffect(() => {
+    if (loadingDiscount || !requotableCodes || requoteInFlight.current === `${itemsKey}\n${requotableCodes}`) return;
+    void requoteDormantDiscounts(requotableCodes.split("\n"), cart.items, itemsKey);
+  }, [loadingDiscount, itemsKey, requotableCodes]);
 
   const hasAddedProduct = !!new URL(useOriginalLocation()).searchParams.get("product");
   useRunOnce(() => {
@@ -681,7 +733,6 @@ export const Checkout = ({
                     presentmentPriceCents={localAmounts?.linePriceCents[index] ?? null}
                     noCentsIfWhole={noCentsIfWhole}
                     updateCart={updateCart}
-                    requoteDormantDiscounts={(items) => void requoteDormantDiscounts(items)}
                   />
                 ))}
                 {state.products.length === 1 && state.products[0]?.canGift && !state.products[0]?.payInInstallments ? (
@@ -1112,12 +1163,10 @@ const CartItemComponent = ({
   buyerCurrencyDisplay,
   presentmentPriceCents,
   noCentsIfWhole,
-  requoteDormantDiscounts,
 }: {
   item: CartItemProps;
   cart: CartState;
   updateCart: (update: Partial<CartState>) => void;
-  requoteDormantDiscounts: (items: CartItemProps[]) => void;
   isGift: boolean;
   buyerCurrencyDisplay?: CheckoutLocalCurrencyFormat | null;
   // This line's share of the locked buyer-currency total, allocated by the server. When
@@ -1187,7 +1236,6 @@ const CartItemComponent = ({
       pay_in_installments: selection.payInInstallments,
     };
     updateCart({ items });
-    requoteDormantDiscounts(items);
     setEditPopoverOpen(false);
   };
 

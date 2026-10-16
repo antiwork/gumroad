@@ -236,6 +236,7 @@ const state = (overrides: Partial<State> = {}): State => ({
   savedCreditCard: null,
   checkoutPayment: paymentElementConfig,
   checkoutPaymentStale: false,
+  discountQuotesPending: false,
   resumeSubmitAfterCheckoutPayment: false,
   validationFailedCount: 0,
   awaitingBuyerConfirmation: false,

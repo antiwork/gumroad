@@ -299,20 +299,48 @@ describe "Automatic sales on product pages", type: :system, js: true do
       end
     end
 
-    it "applies a sale with a minimum quantity once a cart edit meets it, also after a reload" do
+    def bulk_sale_product(loyalty: true)
       product = create(:product, user: seller, name: "Target product", price_cents: 1000, quantity_enabled: true)
-      make_default_for_existing_customers(product)
+      make_default_for_existing_customers(product) if loyalty
       seller.offer_codes.create!(code: "BULK50", amount_percentage: 50, universal: true, products: [], auto_apply: true, minimum_quantity: 2)
-      profile_product = show_on_profile(product)
+      [product, show_on_profile(product)]
+    end
 
-      login_as buyer
+    def open_from_profile(profile_product)
       visit short_link_path(profile_product)
       within_section "More products", section_element: :section do
         click_on "Target product"
       end
-      within find(:article) do
-        expect(Rack::Utils.parse_query(URI.parse(find(:link, "Add to cart")[:href]).query)["code"]).to eq("RENEW20")
+    end
+
+    def cta_code
+      within(find(:article)) { Rack::Utils.parse_query(URI.parse(find(:link, "Add to cart")[:href]).query)["code"] }
+    end
+
+    # Holds BULK50 quotes for this quantity on the server until the example releases them.
+    def hold_sale_quotes(quantity)
+      held = Concurrent::Event.new
+      @release_sale_quotes = Concurrent::Event.new
+      release = @release_sale_quotes
+      allow_any_instance_of(OfferCodesController).to receive(:compute_discount).and_wrap_original do |original, *args|
+        params = original.receiver.params
+        if params[:code] == "BULK50" && params[:products].to_unsafe_h.values.map { _1["quantity"].to_i } == [quantity]
+          held.set
+          release.wait(15)
+        end
+        original.call(*args)
       end
+      held
+    end
+
+    after { @release_sale_quotes&.set }
+
+    it "applies a sale with a minimum quantity once a cart edit meets it, also after a reload" do
+      _product, profile_product = bulk_sale_product
+
+      login_as buyer
+      open_from_profile(profile_product)
+      expect(cta_code).to eq("RENEW20")
       click_on "Add to cart"
       expect(page).to have_cart_item("Target product")
       expect(page).to have_text("Total US$8", normalize_ws: true)
@@ -330,6 +358,67 @@ describe "Automatic sales on product pages", type: :system, js: true do
       expect(page).to have_text("Total US$8", normalize_ws: true)
       edit_cart_item("Target product") { fill_in "Quantity", with: 2 }
       expect(page).to have_text("Total US$10", normalize_ws: true)
+    end
+
+    it "applies the sale when the buyer raises the quantity before the arrival's quotes return" do
+      _product, profile_product = bulk_sale_product
+      held = hold_sale_quotes(1)
+
+      login_as buyer
+      open_from_profile(profile_product)
+      click_on "Add to cart"
+      expect(held.wait(10)).to be(true)
+      edit_cart_item("Target product") { fill_in "Quantity", with: 2 }
+      @release_sale_quotes.set
+
+      expect(page).to have_text("Total US$10", normalize_ws: true)
+      expect(page).to have_button("Pay", disabled: false)
+    end
+
+    it "keeps Pay closed until the sale's quote for a raised quantity returns" do
+      _product, profile_product = bulk_sale_product
+
+      login_as buyer
+      open_from_profile(profile_product)
+      click_on "Add to cart"
+      expect(page).to have_text("Total US$8", normalize_ws: true)
+      expect(page).to have_button("Pay", disabled: false)
+
+      held = hold_sale_quotes(2)
+      edit_cart_item("Target product") { fill_in "Quantity", with: 2 }
+      expect(held.wait(10)).to be(true)
+      expect(page).to have_text("Total US$16", normalize_ws: true)
+      expect(page).not_to have_button("Pay", disabled: false, wait: 3)
+
+      @release_sale_quotes.set
+      expect(page).to have_text("Total US$10", normalize_ws: true)
+      expect(page).to have_button("Pay", disabled: false)
+    end
+
+    it "applies a held quote for a raised quantity after a guest types their email" do
+      product, profile_product = bulk_sale_product(loyalty: false)
+
+      open_from_profile(profile_product)
+      fill_in "Quantity", with: 2
+      expect(cta_code).to eq("BULK50")
+      click_on "Add to cart"
+      expect(page).to have_text("Total US$10", normalize_ws: true)
+      edit_cart_item("Target product") { fill_in "Quantity", with: 1 }
+      wait_until_true(sleep_interval: 0.2) do
+        cart = CartProduct.alive.find_by(product:)&.cart
+        cart&.alive_cart_products&.sole&.quantity == 1 && cart.discount_codes.pluck("code") == %w[BULK50]
+      end
+
+      visit checkout_path
+      expect(page).to have_text("Total US$10", normalize_ws: true)
+      held = hold_sale_quotes(2)
+      edit_cart_item("Target product") { fill_in "Quantity", with: 2 }
+      expect(held.wait(10)).to be(true)
+      fill_in "Email address", with: "guest@example.com"
+      @release_sale_quotes.set
+
+      expect(page).to have_text("Total US$10", normalize_ws: true)
+      expect(page).to have_text("BULK50", normalize_ws: true)
     end
 
     it "keeps the defaults when purchasing power parity wins at first, so a cheaper tier gets the loyalty code" do

@@ -420,6 +420,8 @@ export type State = {
   // tick, that "validate" is refused back to "input", and nothing ever re-submits — the buyer is
   // left on the checkout page with no feedback after the purchase they already confirmed.
   resumeSubmitAfterCheckoutPayment: boolean;
+  // True while the cart still waits on an automatic default's quote, which can lower the total.
+  discountQuotesPending: boolean;
   // Counts submits refused by client-side validation. A refused submit usually goes "input" →
   // "input" (Pay is clicked from "input" and the failure sets "input" again), so effects keyed
   // on the status type alone never see it — PaymentForm keys its scroll-to-first-error effect
@@ -529,6 +531,7 @@ type PublicAction =
   | { type: "update-checkout-payment"; checkoutPayment: CheckoutPaymentConfig }
   | { type: "refresh-expired-buyer-currency-quote"; beforeSubmit?: boolean }
   | { type: "set-awaiting-buyer-confirmation"; awaiting: boolean }
+  | { type: "set-discount-quotes-pending"; pending: boolean }
   | { type: "cancel" };
 
 type Action =
@@ -943,7 +946,13 @@ export function isSubmitDisabled(state: State) {
   // checkoutPaymentStale: a cart edit is still waiting on the server's answer for which element
   // this cart should be paying through. Same reasoning as an unloaded surcharge response — the
   // buyer must not be able to pay on a configuration computed for the previous cart.
-  return isProcessing(state) || state.surcharges.type !== "loaded" || state.checkoutPaymentStale || emailTypoBlocking;
+  return (
+    isProcessing(state) ||
+    state.surcharges.type !== "loaded" ||
+    state.checkoutPaymentStale ||
+    state.discountQuotesPending ||
+    emailTypoBlocking
+  );
 }
 
 export function isCardReadyToPay({
@@ -1675,6 +1684,9 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
     case "set-awaiting-buyer-confirmation":
       state.awaitingBuyerConfirmation = action.awaiting;
       break;
+    case "set-discount-quotes-pending":
+      state.discountQuotesPending = action.pending;
+      break;
     case "cancel":
       // Cancelling clears a pending resume too: the buyer (or an error path) has backed out of the
       // submit, so a configuration refresh landing later must not restart it behind their back.
@@ -1933,6 +1945,7 @@ export function createReducer(initial: {
       checkoutPaymentStale: false,
       awaitingBuyerConfirmation: false,
       resumeSubmitAfterCheckoutPayment: false,
+      discountQuotesPending: false,
       validationFailedCount: 0,
       willSaveCard: false,
       // Matches PaymentForm's own default (`useState(!!state.savedCreditCard)`), so the summary is
