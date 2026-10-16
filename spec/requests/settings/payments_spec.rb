@@ -349,7 +349,8 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
       within_fieldset("Stripe account") do
         expect(page).to have_text(merchant_account.charge_processor_merchant_id)
-        expect(page).to have_text("This Stripe account is linked, but it is not currently receiving card sales.")
+        note = find("p", exact_text: "This Stripe account is linked, but it is not currently receiving card sales.")
+        expect(note.evaluate_script("getComputedStyle(this).color")).to eq(find("legend").evaluate_script("getComputedStyle(this).color"))
         expect(page).not_to have_css(".text-success")
       end
       expect(page).to have_button("Disconnect Stripe account")

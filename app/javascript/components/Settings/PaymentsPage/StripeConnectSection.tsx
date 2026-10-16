@@ -9,7 +9,7 @@ import { Button } from "$app/components/Button";
 import { showAlert } from "$app/components/server-components/Alert";
 import { SocialAuthButton } from "$app/components/SocialAuthButton";
 import { Alert } from "$app/components/ui/Alert";
-import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { InputGroup } from "$app/components/ui/InputGroup";
 import { Label } from "$app/components/ui/Label";
 
@@ -80,9 +80,7 @@ const StripeConnectSection = ({
                 ) : null}
               </InputGroup>
               {stripeConnect.stripe_connect_routing_active ? null : (
-                <FieldsetDescription>
-                  This Stripe account is linked, but it is not currently receiving card sales.
-                </FieldsetDescription>
+                <p>This Stripe account is linked, but it is not currently receiving card sales.</p>
               )}
             </Fieldset>
             <p>
