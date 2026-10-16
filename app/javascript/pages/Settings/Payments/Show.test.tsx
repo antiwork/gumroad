@@ -127,6 +127,7 @@ const pageProps = (userOverrides: Partial<User> = {}, complianceOverrides: Parti
   stripe_connect: {
     has_connected_stripe: false,
     stripe_connect_account_id: null,
+    stripe_connect_routing_active: false,
     stripe_disconnect_allowed: false,
     supported_countries_help_text: "",
   },

@@ -118,6 +118,33 @@ describe MerchantRegistrationMailer do
     end
   end
 
+  describe "stripe_restraint_notice" do
+    it "tells the seller about the court order and gives them the law firm's contact" do
+      user = create(:user)
+      mail = described_class.stripe_restraint_notice(user.id, "Example Legal LLP", "notices@example.com")
+
+      expect(mail.subject).to eq("Important notice regarding your Gumroad payment account")
+      expect(mail.to).to eq([user.email])
+      expect(mail.from).to eq([ApplicationMailer::NOREPLY_EMAIL])
+      expect(mail.reply_to).to eq([ApplicationMailer::SUPPORT_EMAIL])
+      text = Nokogiri::HTML(mail.body.decoded).text.squish
+      expect(text).to include(
+        "Hi, Stripe, our payment processor, received a court order about your Gumroad payment account and acted on it. " \
+        "Your payouts are paused. They stay paused until Stripe receives confirmation from the court that the matter is resolved. " \
+        "If you have questions about the court order, contact the law firm listed below: " \
+        "Law firm: Example Legal LLP Email: notices@example.com " \
+        "We cannot give legal advice, and we cannot lift this pause. If you have questions about your Gumroad account, reply to this email."
+      )
+      expect(mail.body.decoded).to include('href="mailto:notices@example.com"')
+    end
+
+    it "escapes the firm name" do
+      mail = described_class.stripe_restraint_notice(create(:user).id, "<b>Example</b> & Partners", "notices@example.com")
+
+      expect(mail.body.decoded).to include("&lt;b&gt;Example&lt;/b&gt; &amp; Partners")
+    end
+  end
+
   describe "stripe_account_rejected" do
     let(:user) { create(:user) }
     # The rejected merchant account makes the $1 payout floor apply, which is

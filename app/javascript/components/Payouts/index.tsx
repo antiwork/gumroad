@@ -161,7 +161,7 @@ type CurrentPayoutsDataWithUserNotPayable = {
   balance_cents?: number | null;
   skipped_payout_date?: string | null;
   payout_note?: string | null;
-  has_stripe_connect: boolean;
+  stripe_connect_routing_active: boolean;
 };
 
 type CurrentPayoutStatus = "paused" | "payable" | "processing" | "completed";
@@ -171,7 +171,7 @@ type CurrentPeriodPayoutData = (
   | { status: "processing"; payment_external_id: string; arrival_date: string | null; type: PayoutType }
   | { status: Exclude<CurrentPayoutStatus, "processing" | "completed"> }
 ) & {
-  has_stripe_connect: boolean;
+  stripe_connect_routing_active: boolean;
   is_current_period: boolean;
   should_be_shown_currencies_always: boolean;
   displayable_payout_period_range: string;

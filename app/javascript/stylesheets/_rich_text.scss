@@ -64,7 +64,7 @@
     margin-bottom: spacer(5);
 
     img {
-      width: 100%;
+      max-width: 100%;
       object-fit: contain;
       border-radius: border-radius(1);
     }

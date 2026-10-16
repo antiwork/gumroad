@@ -43,6 +43,7 @@ echo "make $*" >> "$CALLS"
 [ -s "${PAGES_TAILWIND_CACHE_DIR:-/nonexistent}/pages_tailwind.tar.gz" ] && echo "pages-restored $(cat "$PAGES_TAILWIND_CACHE_DIR/pages_tailwind.tar.gz")" >> "$CALLS"
 [ "${MAKE_WRITES_PAGES:-}" = 1 ] && echo built > "$PAGES_TAILWIND_CACHE_DIR/pages_tailwind.tar.gz.new"
 sleep "${MAKE_SECONDS:-0}"
+echo "make-done $*" >> "$CALLS"
 STUB
 # Stands in for prescale_web_clusters.sh, so no case reaches AWS.
 cat > "$WORK/prescale" <<'STUB'
@@ -90,6 +91,19 @@ run_script() {
 }
 
 compiled() { grep -q "^make build_production" "$WORK/calls"; }
+# The pre-scale runs in the background, so its line can land after the script's next calls.
+wait_for_prescale() {
+  local _
+  for _ in $(seq 1 30); do grep -q "^prescale" "$WORK/calls" && return 0; sleep 0.1; done
+  return 1
+}
+prescaled_once_after_compile() {
+  local make_line prescale_line
+  wait_for_prescale || return 1
+  make_line=$(grep -n "^make-done build_production" "$WORK/calls" | cut -d: -f1)
+  prescale_line=$(grep -n "^prescale" "$WORK/calls" | cut -d: -f1)
+  [ "$(grep -c "Pre-scaling the web clusters" "$WORK/out")" = 1 ] && [ -n "$make_line" ] && [ -n "$prescale_line" ] && [ "$prescale_line" -gt "$make_line" ]
+}
 served() { grep -q "^docker commit production-assets-from-cache ecr.example/gumroad/web:production-0123456789ab" "$WORK/calls"; }
 pushed() { grep -q "^docker push ecr.example/gumroad/web:production-0123456789ab" "$WORK/calls"; }
 uploaded() { grep -q "push_assets_to_s3.sh" "$WORK/calls"; }
@@ -189,12 +203,12 @@ seed_cache; echo junk >> "$ENTRY"; run_script; rc=$?
 
 seed_cache; run_script RUN_RC=1; rc=$?
 [ $rc = 0 ] && compiled && ! uploaded && pushed && ok "an image that cannot be built from the cache falls back to the full compile" || fail "image build failure (rc=$rc)"
-grep -q "Pre-scaling the web clusters in 210s" "$WORK/out" && ! grep -q "Pre-scaling the web clusters in 0s" "$WORK/out" \
-  && ok "the fallback compile pre-scales on the full compile's delay" || fail "fallback pre-scale: $(grep -i pre-scal "$WORK/out")"
+prescaled_once_after_compile \
+  && ok "the fallback compile pre-scales once, after the compile" || fail "fallback pre-scale: $(grep -i pre-scal "$WORK/out")"
 
 seed_cache; run_script COMMIT_RC=1; rc=$?
-[ $rc = 0 ] && compiled && grep -q "Pre-scaling the web clusters in 210s" "$WORK/out" && ! grep -q "Pre-scaling the web clusters in 0s" "$WORK/out" \
-  && ok "a cache image that fails to commit pre-scales only on the fallback compile's delay" || fail "commit failure pre-scale (rc=$rc): $(grep -i pre-scal "$WORK/out")"
+[ $rc = 0 ] && compiled && prescaled_once_after_compile \
+  && ok "a cache image that fails to commit pre-scales once, after the fallback compile" || fail "commit failure pre-scale (rc=$rc): $(grep -i pre-scal "$WORK/out")"
 
 seed_cache; run_script S3_RC=1; rc=$?
 [ $rc != 0 ] && ! pushed && ! compiled && ok "a failed S3 upload stops the build before the image is pushed" || fail "S3 failure (rc=$rc)"
@@ -217,45 +231,43 @@ rm -rf "$WORK/bucket"; run_script BUILDKITE_BRANCH=preview-test; rc=$?
 prescaled() { sleep 2; grep -q "^prescale" "$WORK/calls"; }
 
 seed_cache; run_script S3_SECONDS=2; rc=$?
-[ $rc = 0 ] && served && grep -q "^prescale" "$WORK/calls" && grep -q "Pre-scaling the web clusters in 0s" "$WORK/out" \
+[ $rc = 0 ] && served && grep -q "^prescale" "$WORK/calls" && grep -q "Pre-scaling the web clusters" "$WORK/out" \
   && ok "a hit pre-scales the web clusters once its image is built, during the S3 upload" || fail "hit pre-scale (rc=$rc): $(grep -i pre-scal "$WORK/out")"
 commit_line=$(grep -n "^docker commit production-assets-from-cache" "$WORK/calls" | cut -d: -f1)
 prescale_line=$(grep -n "^prescale" "$WORK/calls" | cut -d: -f1)
 [ -n "$commit_line" ] && [ -n "$prescale_line" ] && [ "$prescale_line" -gt "$commit_line" ] \
   && ok "the hit pre-scale starts after the image commit" || fail "pre-scale before the commit: $(cat "$WORK/calls")"
 
-rm -rf "$WORK/bucket"; run_script; rc=$?
-[ $rc = 0 ] && grep -q "Pre-scaling the web clusters in 210s" "$WORK/out" && ok "a full compile pre-scales the web clusters 210 s after it starts" || fail "miss pre-scale delay (rc=$rc): $(grep -i pre-scal "$WORK/out")"
-
-rm -rf "$WORK/bucket"; run_script PRESCALE_DELAY_SECONDS=1 MAKE_SECONDS=3; rc=$?
-[ $rc = 0 ] && prescaled && ok "the pre-scale runs once its delay passes during the compile" || fail "pre-scale did not run (rc=$rc)"
+rm -rf "$WORK/bucket"; run_script MAKE_SECONDS=1; rc=$?
+[ $rc = 0 ] && prescaled_once_after_compile && ok "a full compile pre-scales the web clusters once the compile finishes" || fail "miss pre-scale (rc=$rc): $(cat "$WORK/calls")"
+start_line=$(grep -n "Pre-scaling the web clusters" "$WORK/out" | cut -d: -f1)
+push_line=$(grep -n "Push attempt 1" "$WORK/out" | head -1 | cut -d: -f1)
+[ -n "$push_line" ] && [ -n "$start_line" ] && [ "$start_line" -lt "$push_line" ] \
+  && ok "the full-compile pre-scale starts before the image push" || fail "pre-scale after the push: $(cat "$WORK/out")"
 grep -q "prescale: raised the web clusters" "$WORK/out" && ok "the pre-scale's log is printed when the compile ends" || fail "pre-scale log missing: $(tail -3 "$WORK/out")"
 
 seed_cache; : > "$WORK/calls"; started=$SECONDS
 PATH="$WORK/bin:$PATH" CALLS="$WORK/calls" BUCKET_DIR="$WORK/bucket" ANNOTATIONS="$WORK/annotations" \
   BUILDKITE_BRANCH=main BUILDKITE_MESSAGE="Change something" \
   PRESCALE_SCRIPT="$WORK/prescale" PRESCALE_SECONDS=8 bash "$SCRIPT" 2>&1 | cat > "$WORK/out"
-[ $((SECONDS - started)) -lt 5 ] && ok "a slow pre-scale does not hold the compile's output open" || fail "slow pre-scale held output for $((SECONDS - started)) s"
-
-rm -rf "$WORK/bucket"; run_script PRESCALE_DELAY_SECONDS=1; rc=$?
-[ $rc = 0 ] && ! prescaled && ok "a compile that ends before the delay cancels the pre-scale" || fail "pre-scale ran after the compile ended"
+[ $((SECONDS - started)) -lt 5 ] && ok "a slow pre-scale does not hold a cache hit's output open" || fail "slow pre-scale held output for $((SECONDS - started)) s"
 
 rm -rf "$WORK/bucket"; : > "$WORK/calls"; started=$SECONDS
 PATH="$WORK/bin:$PATH" CALLS="$WORK/calls" BUCKET_DIR="$WORK/bucket" ANNOTATIONS="$WORK/annotations" \
   BUILDKITE_BRANCH=main BUILDKITE_MESSAGE="Change something" \
-  PRESCALE_SCRIPT="$WORK/prescale" PRESCALE_DELAY_SECONDS=8 bash "$SCRIPT" 2>&1 | cat > "$WORK/out"
-[ $((SECONDS - started)) -lt 5 ] && ok "a cancelled pre-scale does not hold the job's output open" || fail "output held open for $((SECONDS - started)) s"
+  PRESCALE_SCRIPT="$WORK/prescale" PRESCALE_SECONDS=8 bash "$SCRIPT" 2>&1 | cat > "$WORK/out"
+[ $((SECONDS - started)) -lt 5 ] && ok "a slow pre-scale does not hold a full compile's output open" || fail "slow pre-scale held output for $((SECONDS - started)) s"
 
 rm -rf "$WORK/bucket"; printf '#!/bin/bash\necho "make $*" >> "$CALLS"\nexit 2\n' > "$WORK/bin/make"
-run_script PRESCALE_DELAY_SECONDS=1; rc=$?
-[ $rc != 0 ] && ! prescaled && ok "a failed compile cancels the pre-scale" || fail "failed compile (rc=$rc)"
+run_script; rc=$?
+[ $rc != 0 ] && ! prescaled && ok "a failed compile does not pre-scale" || fail "failed compile (rc=$rc)"
 [ $rc != 0 ] && [ ! -e .main-node-modules-cache ] && ok "a failed compile still removes the node_modules cache directory" \
   || { fail "failed compile left the node_modules cache directory (rc=$rc)"; rm -rf .main-node-modules-cache; }
 [ $rc != 0 ] && [ ! -e .main-pages-tailwind-cache ] && ok "a failed compile still removes the pages CSS cache directory" \
   || { fail "failed compile left the pages CSS cache directory (rc=$rc)"; rm -rf .main-pages-tailwind-cache; }
-printf '#!/bin/bash\necho "make $*" >> "$CALLS"\nsleep "${MAKE_SECONDS:-0}"\n' > "$WORK/bin/make"
+printf '#!/bin/bash\necho "make $*" >> "$CALLS"\nsleep "${MAKE_SECONDS:-0}"\necho "make-done $*" >> "$CALLS"\n' > "$WORK/bin/make"
 
-seed_cache; run_script BUILDKITE_BRANCH=comp-assets-test PRESCALE_DELAY_SECONDS=0 MAKE_SECONDS=2; rc=$?
+seed_cache; run_script BUILDKITE_BRANCH=comp-assets-test MAKE_SECONDS=2; rc=$?
 [ $rc = 0 ] && ! grep -q "Pre-scaling" "$WORK/out" && ! prescaled && ok "only main pre-scales the production web clusters" || fail "comp-assets branch pre-scaled (rc=$rc)"
 
 echo

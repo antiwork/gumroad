@@ -5,6 +5,11 @@ class CreatorHomePresenter
 
   ACTIVITY_ITEMS_LIMIT = 10
   BALANCE_ITEMS_LIMIT = 3
+  SALES_QUERY_FLAG = :dashboard_home_sales_query
+  # The best-seller card covers today and this many days before it; its "Last 7 days" column sums
+  # the last LAST_WEEK_DAYS of that window.
+  SALES_LOOKBACK_DAYS = 30
+  LAST_WEEK_DAYS = 7
 
   attr_reader :pundit_user, :seller
 
@@ -34,33 +39,11 @@ class CreatorHomePresenter
     end
 
     today = Time.now.in_time_zone(seller.timezone).to_date
-    analytics = CreatorAnalytics::CachingProxy.new(seller).data_for_dates(today - 30, today)
-    top_sales_data = analytics[:by_date][:sales]
-      .sort_by { |_, sales| -sales&.sum }.take(BALANCE_ITEMS_LIMIT)
-
-    product_permalinks = top_sales_data.map(&:first)
-    products_by_permalink = seller.products
-      .where(unique_permalink: product_permalinks)
-      .includes(thumbnail_alive: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } })
-      .select(&:alive?)
-      .index_by(&:unique_permalink)
-
-    sales = top_sales_data.map do |p|
-      product = products_by_permalink[p[0]]
-      next unless product
-
-      {
-        "id" => product.unique_permalink,
-        "name" => product.name,
-        "thumbnail" => product.thumbnail_alive&.url,
-        "sales" => product.successful_sales_count,
-        "revenue" => product.total_usd_cents,
-        "visits" => product.number_of_views,
-        "today" => analytics[:by_date][:totals][product.unique_permalink]&.last || 0,
-        "last_7" => analytics[:by_date][:totals][product.unique_permalink]&.last(7)&.sum || 0,
-        "last_30" => analytics[:by_date][:totals][product.unique_permalink]&.sum || 0,
-      }
-    end.compact
+    sales = if Feature.active?(SALES_QUERY_FLAG, seller)
+      best_selling_products(today)
+    else
+      best_selling_products_from_analytics(today)
+    end
     balances = UserBalanceStatsService.new(user: seller).fetch_overview
 
     stripe_verification_message = nil
@@ -123,6 +106,72 @@ class CreatorHomePresenter
   end
 
   private
+    THUMBNAIL_INCLUDES = { thumbnail_alive: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } } }.freeze
+
+    # The card ranks products by units sold in the last 31 days and shows each one's revenue for
+    # today, 7 and 31 days. One seller-wide aggregation over purchases answers that: no page views
+    # (the card never shows them) and no catalogue query to build a product filter.
+    def best_selling_products(today)
+      dates = (today - SALES_LOOKBACK_DAYS..today).to_a
+      days_by_product = Hash.new { |hash, product_id| hash[product_id] = {} }
+      CreatorAnalytics::Sales.new(user: seller, dates:).by_product_and_date.each do |(product_id, date), day|
+        days_by_product[product_id][date] = day
+      end
+
+      # Ties go to the newest product, as in the analytics-backed card.
+      ranked_ids = days_by_product.sort_by { |product_id, days| [-days.values.sum { _1[:count] }, -product_id] }
+        .first(BALANCE_ITEMS_LIMIT).map(&:first)
+      # Spare slots go to the newest products the analytics-backed card would also list: anything
+      # that ever sold (archived included) or is live and not archived.
+      if ranked_ids.size < BALANCE_ITEMS_LIMIT
+        ranked_ids += seller.products_for_creator_analytics.alive.where.not(id: ranked_ids)
+          .limit(BALANCE_ITEMS_LIMIT - ranked_ids.size).ids
+      end
+
+      products_by_id = seller.products.where(id: ranked_ids).includes(THUMBNAIL_INCLUDES).index_by(&:id)
+      ranked_ids.filter_map do |product_id|
+        product = products_by_id[product_id]
+        next unless product&.alive?
+
+        product_card(product, dates.map { days_by_product[product_id].dig(_1.to_s, :total) || 0 })
+      end
+    end
+
+    def best_selling_products_from_analytics(today)
+      analytics = CreatorAnalytics::CachingProxy.new(seller).data_for_dates(today - SALES_LOOKBACK_DAYS, today)
+      top_sales_data = analytics[:by_date][:sales]
+        .sort_by { |_, sales| -sales&.sum }.take(BALANCE_ITEMS_LIMIT)
+
+      product_permalinks = top_sales_data.map(&:first)
+      products_by_permalink = seller.products
+        .where(unique_permalink: product_permalinks)
+        .includes(THUMBNAIL_INCLUDES)
+        .select(&:alive?)
+        .index_by(&:unique_permalink)
+
+      top_sales_data.map do |p|
+        product = products_by_permalink[p[0]]
+        next unless product
+
+        product_card(product, analytics[:by_date][:totals][product.unique_permalink] || [0])
+      end.compact
+    end
+
+    # daily_totals: revenue per day across the SALES_LOOKBACK_DAYS window, ending today.
+    def product_card(product, daily_totals)
+      {
+        "id" => product.unique_permalink,
+        "name" => product.name,
+        "thumbnail" => product.thumbnail_alive&.url,
+        "sales" => product.successful_sales_count,
+        "revenue" => product.total_usd_cents,
+        "visits" => product.number_of_views,
+        "today" => daily_totals.last,
+        "last_7" => daily_totals.last(LAST_WEEK_DAYS).sum,
+        "last_30" => daily_totals.sum,
+      }
+    end
+
     def social_connection_props
       return {} if seller.has_dismissed_getting_started_checklist?
       return {} unless Pundit.policy!(pundit_user, [:settings, :profile]).manage_social_connections?

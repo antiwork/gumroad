@@ -16,6 +16,7 @@ import { Label } from "$app/components/ui/Label";
 export type StripeConnect = {
   has_connected_stripe: boolean;
   stripe_connect_account_id: string | null;
+  stripe_connect_routing_active: boolean;
   stripe_disconnect_allowed: boolean;
   supported_countries_help_text: string;
 };
@@ -74,8 +75,13 @@ const StripeConnectSection = ({
               </FieldsetTitle>
               <InputGroup readOnly>
                 <span className="flex-1">{stripeConnect.stripe_connect_account_id}</span>
-                <CheckCircle pack="filled" className="size-5 text-success" />
+                {stripeConnect.stripe_connect_routing_active ? (
+                  <CheckCircle pack="filled" className="size-5 text-success" />
+                ) : null}
               </InputGroup>
+              {stripeConnect.stripe_connect_routing_active ? null : (
+                <p>This Stripe account is linked, but it is not currently receiving card sales.</p>
+              )}
             </Fieldset>
             <p>
               <Button

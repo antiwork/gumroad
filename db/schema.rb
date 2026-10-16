@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_16_170000) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_16_170001) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -3427,6 +3427,7 @@ create_table "ping_deliveries", charset: "utf8mb4", collation: "utf8mb4_unicode_
     t.integer "user_id"
     t.datetime "deleted_at", precision: nil
     t.text "json_data"
+    t.index ["country", "deleted_at", "state"], name: "index_zip_tax_rates_on_country_and_deleted_at_and_state"
     t.index ["user_id"], name: "index_zip_tax_rates_on_user_id"
     t.index ["zip_code"], name: "index_zip_tax_rates_on_zip_code"
   end

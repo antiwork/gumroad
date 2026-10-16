@@ -13,6 +13,14 @@ class Community < ApplicationRecord
 
   validates :seller_id, uniqueness: { scope: [:resource_id, :resource_type, :deleted_at] }
 
+  # SQL form of the `resource.alive? && resource.community_chat_enabled?` filter in
+  # User#accessible_communities_ids. Joins `links`, so callers can join `purchases` onto it.
+  scope :with_chat_enabled_product, -> {
+    alive
+      .joins("INNER JOIN links ON communities.resource_type = 'Link' AND communities.resource_id = links.id")
+      .merge(Link.alive.community_chat_enabled)
+  }
+
   def name = resource.name
 
   def thumbnail_url

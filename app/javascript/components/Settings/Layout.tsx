@@ -57,12 +57,28 @@ export const Layout = ({ onSave, pages, currentPage, children, canUpdate }: Prop
     postToMobileApp({ type: "settingsCanUpdate", canUpdate: canSave });
   }, [isMobileAppWebView, canSave]);
 
+  // The header sticks to the top of the layout's scrolling <main>. Pad that scroller by the header's
+  // height so focus moves and scrollIntoView stop below the header instead of underneath it.
+  const headerRef = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    const header = headerRef.current;
+    const scroller = header?.parentElement;
+    if (!header || !scroller) return;
+    const observer = new ResizeObserver(() => (scroller.style.scrollPaddingTop = `${header.offsetHeight}px`));
+    observer.observe(header);
+    return () => {
+      observer.disconnect();
+      scroller.style.scrollPaddingTop = "";
+    };
+  }, []);
+
   if (isMobileAppWebView) return <div>{children}</div>;
 
   return (
     <>
       <PageHeader
-        className="sticky-top"
+        ref={headerRef}
+        className="sticky top-0 z-10 bg-body"
         title="Settings"
         actions={
           onSave ? (

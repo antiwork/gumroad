@@ -2,7 +2,7 @@
 
 class CommunityPolicy < ApplicationPolicy
   def index?
-    user.accessible_communities_ids.any?
+    user.has_accessible_communities?
   end
 
   def show?

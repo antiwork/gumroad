@@ -16,7 +16,10 @@ class Api::Internal::Admin::BaseController < Api::Internal::BaseController
   # that says a suppression was removed without saying for whom.
   ADMIN_AUDIT_ACTION_UNREDACTED_PARAM_KEYS = {
     "sendgrid_emails.remove_suppression" => %w[email],
-    "stranded_buyers.recover" => %w[email]
+    "stranded_buyers.recover" => %w[email],
+    # The law firm's address is what the notice is about: an audit row that hid it would record
+    # that a seller was notified without recording who the notice points them at.
+    "stripe_restraint_notices.create" => %w[firm_email]
   }.freeze
   ADMIN_AUDIT_ACTIONS_ALLOWING_NULL_TARGET = %w[
     products.file_download_url
@@ -48,7 +51,12 @@ class Api::Internal::Admin::BaseController < Api::Internal::BaseController
       return render_insufficient_scope unless admin_api_token.scope == required_token_scope
 
       set_current_admin_actor!(admin_api_token.actor_user, admin_token: admin_api_token)
-      admin_api_token.record_used!
+      admin_api_token.record_used! if record_admin_token_use?
+    end
+
+    # A controller can skip the usage stamp for requests that must write nothing, such as previews.
+    def record_admin_token_use?
+      true
     end
 
     def require_per_actor_token!

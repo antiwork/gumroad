@@ -150,125 +150,201 @@ describe CreatorHomePresenter do
       )
     end
 
-    it "includes product data", :sidekiq_inline, :elasticsearch_wait_for_refresh  do
-      recreate_model_index(Purchase)
+    shared_examples "best selling products" do
+      it "includes product data", :sidekiq_inline, :elasticsearch_wait_for_refresh  do
+        recreate_model_index(Purchase)
 
-      product1 = create(:product, user: seller)
-      product2 = create(:product, user: seller)
+        product1 = create(:product, user: seller)
+        product2 = create(:product, user: seller)
 
-      create(:purchase, link: product1, price_cents: 100, created_at: 30.days.ago)
-      create(:purchase, link: product2, price_cents: 500, created_at: Time.current)
-      create(:purchase, link: product2, price_cents: 1500, created_at: 6.days.ago)
+        create(:purchase, link: product1, price_cents: 100, created_at: 30.days.ago)
+        create(:purchase, link: product2, price_cents: 500, created_at: Time.current)
+        create(:purchase, link: product2, price_cents: 1500, created_at: 6.days.ago)
 
-      expect(presenter.creator_home_props[:sales]).to match(
-        [
-          {
-            "id" => product2.unique_permalink,
-            "name" => "The Works of Edgar Gumstein",
-            "thumbnail" => nil,
-            "revenue" => 2000.0,
-            "sales" => 2,
-            "visits" => 0,
-            "today" => 500,
-            "last_7" => 2000,
-            "last_30" => 2000,
-          },
-          {
-            "id" => product1.unique_permalink,
-            "name" => "The Works of Edgar Gumstein",
-            "thumbnail" => nil,
-            "sales" => 1,
-            "revenue" => 100.0,
-            "visits" => 0,
-            "today" => 0,
-            "last_7" => 0,
-            "last_30" => 100,
-          },
-        ]
-      )
+        expect(presenter.creator_home_props[:sales]).to match(
+          [
+            {
+              "id" => product2.unique_permalink,
+              "name" => "The Works of Edgar Gumstein",
+              "thumbnail" => nil,
+              "revenue" => 2000.0,
+              "sales" => 2,
+              "visits" => 0,
+              "today" => 500,
+              "last_7" => 2000,
+              "last_30" => 2000,
+            },
+            {
+              "id" => product1.unique_permalink,
+              "name" => "The Works of Edgar Gumstein",
+              "thumbnail" => nil,
+              "sales" => 1,
+              "revenue" => 100.0,
+              "visits" => 0,
+              "today" => 0,
+              "last_7" => 0,
+              "last_30" => 100,
+            },
+          ]
+        )
+      end
+
+      it "excludes soft-deleted thumbnails from product data" do
+        # TODO(tech debt): Remove the top-level travel_to.
+        travel_back
+
+        product1 = create(:product, user: seller)
+        product2 = create(:product, user: seller)
+        thumbnail1 = create(:thumbnail, product: product1)
+        thumbnail2 = create(:thumbnail, product: product2)
+        thumbnail1.mark_deleted!
+
+        sales_data = presenter.creator_home_props[:sales]
+
+        product1_data = sales_data.find { |s| s["id"] == product1.unique_permalink }
+        product2_data = sales_data.find { |s| s["id"] == product2.unique_permalink }
+
+        expect(product1_data["thumbnail"]).to be_nil
+        expect(product2_data["thumbnail"]).to eq(thumbnail2.url)
+      end
+
+      it "excludes deleted products from the Best Selling section", :sidekiq_inline, :elasticsearch_wait_for_refresh do
+        active_product = create(:product, user: seller, price_cents: 1000)
+        deleted_product = create(:product, user: seller, price_cents: 2000)
+
+        create_list(:purchase, 3, link: active_product, price_cents: active_product.price_cents, created_at: 1.day.ago)
+        create_list(:purchase, 5, link: deleted_product, price_cents: deleted_product.price_cents, created_at: 2.days.ago)
+
+        deleted_product.update!(deleted_at: Time.current)
+
+        sales_data = presenter.creator_home_props[:sales]
+        expect(sales_data.map { |p| p["id"] }).to contain_exactly(active_product.unique_permalink)
+        expect(sales_data).not_to include(hash_including("id" => deleted_product.unique_permalink))
+      end
+
+      it "shows the 3 most sold products in past 30 days", :sidekiq_inline, :elasticsearch_wait_for_refresh do
+        product1 = create(:product, user: seller)
+        product2 = create(:product, user: seller)
+        product3 = create(:product, user: seller, price_cents: 1500)
+        product4 = create(:product, user: seller, price_cents: 99)
+
+        create_list(:purchase, 10, link: product1, price_cents: product1.price_cents, created_at: 31.days.ago)
+        create_list(:purchase, 5, link: product2, price_cents: product2.price_cents, created_at: 3.days.ago)
+        create_list(:purchase, 2, link: product3, price_cents: product3.price_cents, created_at: 6.days.ago)
+        create_list(:purchase, 7, link: product4, price_cents: product4.price_cents, created_at: 1.day.ago)
+
+        expect(presenter.creator_home_props[:sales]).to match(
+          [
+            {
+              "id" => product4.unique_permalink,
+              "name" => "The Works of Edgar Gumstein",
+              "thumbnail" => nil,
+              "sales" => 7,
+              "revenue" => 693.0,
+              "visits" => 0,
+              "today" => 0,
+              "last_7" => 693,
+              "last_30" => 693,
+            },
+            {
+              "id" => product2.unique_permalink,
+              "name" => "The Works of Edgar Gumstein",
+              "thumbnail" => nil,
+              "revenue" => 500.0,
+              "sales" => 5,
+              "visits" => 0,
+              "today" => 0,
+              "last_7" => 500,
+              "last_30" => 500,
+            },
+            {
+              "id" => product3.unique_permalink,
+              "name" => "The Works of Edgar Gumstein",
+              "thumbnail" => nil,
+              "sales" => 2,
+              "revenue" => 3000.0,
+              "visits" => 0,
+              "today" => 0,
+              "last_7" => 3000,
+              "last_30" => 3000,
+            },
+          ]
+        )
+      end
     end
 
-    it "excludes soft-deleted thumbnails from product data" do
-      # TODO(tech debt): Remove the top-level travel_to.
-      travel_back
+    context "when best sellers tie on sales" do
+      let(:tied_products) { create_list(:product, 6, user: seller) }
 
-      product1 = create(:product, user: seller)
-      product2 = create(:product, user: seller)
-      thumbnail1 = create(:thumbnail, product: product1)
-      thumbnail2 = create(:thumbnail, product: product2)
-      thumbnail1.mark_deleted!
+      before { tied_products.each { create(:purchase, link: _1, price_cents: _1.price_cents, created_at: 2.days.ago) } }
 
-      sales_data = presenter.creator_home_props[:sales]
+      [false, true].each do |sales_query|
+        it "keeps the newest products #{sales_query ? "with" : "without"} the seller-wide sales query", :sidekiq_inline, :elasticsearch_wait_for_refresh do
+          sales_query ? Feature.activate_user(:dashboard_home_sales_query, seller) : Feature.deactivate(:dashboard_home_sales_query)
+          tied_products.first(3).each { _1.update!(deleted_at: Time.current) }
 
-      product1_data = sales_data.find { |s| s["id"] == product1.unique_permalink }
-      product2_data = sales_data.find { |s| s["id"] == product2.unique_permalink }
-
-      expect(product1_data["thumbnail"]).to be_nil
-      expect(product2_data["thumbnail"]).to eq(thumbnail2.url)
+          expect(presenter.creator_home_props[:sales].map { _1["id"] }).to match_array(tied_products.last(3).map(&:unique_permalink))
+        end
+      end
     end
 
-    it "excludes deleted products from the Best Selling section", :sidekiq_inline, :elasticsearch_wait_for_refresh do
-      active_product = create(:product, user: seller, price_cents: 1000)
-      deleted_product = create(:product, user: seller, price_cents: 2000)
+    context "when the only product with sales is archived and sold over 31 days ago" do
+      let(:archived) { create(:product, user: seller, archived: true) }
 
-      create_list(:purchase, 3, link: active_product, price_cents: active_product.price_cents, created_at: 1.day.ago)
-      create_list(:purchase, 5, link: deleted_product, price_cents: deleted_product.price_cents, created_at: 2.days.ago)
+      before { create(:purchase, link: archived, price_cents: archived.price_cents, created_at: 40.days.ago) }
 
-      deleted_product.update!(deleted_at: Time.current)
+      [false, true].each do |sales_query|
+        it "still lists it #{sales_query ? "with" : "without"} the seller-wide sales query", :sidekiq_inline, :elasticsearch_wait_for_refresh do
+          sales_query ? Feature.activate_user(:dashboard_home_sales_query, seller) : Feature.deactivate(:dashboard_home_sales_query)
 
-      sales_data = presenter.creator_home_props[:sales]
-      expect(sales_data.map { |p| p["id"] }).to contain_exactly(active_product.unique_permalink)
-      expect(sales_data).not_to include(hash_including("id" => deleted_product.unique_permalink))
+          expect(presenter.creator_home_props[:sales].map { _1["id"] }).to eq([archived.unique_permalink])
+        end
+      end
     end
 
-    it "shows the 3 most sold products in past 30 days", :sidekiq_inline, :elasticsearch_wait_for_refresh do
-      product1 = create(:product, user: seller)
-      product2 = create(:product, user: seller)
-      product3 = create(:product, user: seller, price_cents: 1500)
-      product4 = create(:product, user: seller, price_cents: 99)
+    context "with the analytics-backed best sellers" do
+      before { Feature.deactivate(:dashboard_home_sales_query) }
 
-      create_list(:purchase, 10, link: product1, price_cents: product1.price_cents, created_at: 31.days.ago)
-      create_list(:purchase, 5, link: product2, price_cents: product2.price_cents, created_at: 3.days.ago)
-      create_list(:purchase, 2, link: product3, price_cents: product3.price_cents, created_at: 6.days.ago)
-      create_list(:purchase, 7, link: product4, price_cents: product4.price_cents, created_at: 1.day.ago)
+      it_behaves_like "best selling products"
+    end
 
-      expect(presenter.creator_home_props[:sales]).to match(
-        [
-          {
-            "id" => product4.unique_permalink,
-            "name" => "The Works of Edgar Gumstein",
-            "thumbnail" => nil,
-            "sales" => 7,
-            "revenue" => 693.0,
-            "visits" => 0,
-            "today" => 0,
-            "last_7" => 693,
-            "last_30" => 693,
-          },
-          {
-            "id" => product2.unique_permalink,
-            "name" => "The Works of Edgar Gumstein",
-            "thumbnail" => nil,
-            "revenue" => 500.0,
-            "sales" => 5,
-            "visits" => 0,
-            "today" => 0,
-            "last_7" => 500,
-            "last_30" => 500,
-          },
-          {
-            "id" => product3.unique_permalink,
-            "name" => "The Works of Edgar Gumstein",
-            "thumbnail" => nil,
-            "sales" => 2,
-            "revenue" => 3000.0,
-            "visits" => 0,
-            "today" => 0,
-            "last_7" => 3000,
-            "last_30" => 3000,
-          },
-        ]
-      )
+    context "with the seller-wide sales query" do
+      before { Feature.activate_user(:dashboard_home_sales_query, seller) }
+
+      it_behaves_like "best selling products"
+
+      it "fills empty best-seller slots with the newest live products", :sidekiq_inline, :elasticsearch_wait_for_refresh do
+        sold = create(:product, user: seller)
+        older = create(:product, user: seller)
+        newer = create(:product, user: seller)
+        create(:product, user: seller, archived: true)
+        create(:product, user: seller, deleted_at: Time.current)
+        create(:purchase, link: sold, price_cents: sold.price_cents, created_at: 2.days.ago)
+
+        expect(presenter.creator_home_props[:sales].map { _1["id"] }).to eq([sold, newer, older].map(&:unique_permalink))
+      end
+
+      it "skips the page view aggregation the card never shows" do
+        expect(CreatorAnalytics::ProductPageViews).not_to receive(:new)
+
+        presenter.creator_home_props
+      end
+
+      it "runs the same number of queries however many products the seller has", :sidekiq_inline, :elasticsearch_wait_for_refresh do
+        # Both counts must come from the ranked path: a purchase not yet searchable would send the
+        # first count through the fill query instead.
+        create_list(:product, 3, user: seller).each { create(:purchase, link: _1, price_cents: _1.price_cents) }
+        index_model_records(Purchase)
+        described_class.new(pundit_user).creator_home_props # warm caches
+        few = count_queries { described_class.new(pundit_user).creator_home_props }
+
+        create_list(:product, 10, user: seller).each { create(:purchase, link: _1, price_cents: _1.price_cents) }
+        index_model_records(Purchase)
+        described_class.new(pundit_user).creator_home_props
+        many = count_queries { described_class.new(pundit_user).creator_home_props }
+
+        expect(many).to eq(few)
+      end
     end
 
     it "includes sorted interlaced activity items", :sidekiq_inline, :elasticsearch_wait_for_refresh do

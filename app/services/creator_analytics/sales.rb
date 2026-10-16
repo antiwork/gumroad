@@ -11,7 +11,9 @@ class CreatorAnalytics::Sales
   # limited to short date ranges to keep Elasticsearch bucket counts sane.
   MAX_HOURLY_DATE_RANGE_DAYS = 7
 
-  def initialize(user:, products:, dates:, interval: "day")
+  # `products: nil` covers every product the user sells, filtering on seller_id instead of a list
+  # of product ids, so a caller that only ranks products needs no catalogue query first.
+  def initialize(user:, dates:, products: nil, interval: "day")
     raise ArgumentError, "interval must be one of: #{VALID_INTERVALS.join(", ")}" unless VALID_INTERVALS.include?(interval)
     if interval == "hour" && (dates.last - dates.first).to_i > MAX_HOURLY_DATE_RANGE_DAYS
       raise ArgumentError, "date range cannot exceed #{MAX_HOURLY_DATE_RANGE_DAYS} days for the hour interval"
@@ -21,8 +23,8 @@ class CreatorAnalytics::Sales
     @products = products
     @dates = dates
     @interval = interval
-    @query = PurchaseSearchService.new(SEARCH_OPTIONS).body[:query]
-    @query[:bool][:filter] << { terms: { product_id: @products.map(&:id) } }
+    @query = PurchaseSearchService.new(@products.nil? ? SEARCH_OPTIONS.merge(seller: @user) : SEARCH_OPTIONS).body[:query]
+    @query[:bool][:filter] << { terms: { product_id: @products.map(&:id) } } unless @products.nil?
     @query[:bool][:must] << CreatorAnalytics::DateQuery.day_range(field: :created_at, start_date: @dates.first, end_date: @dates.last, timezone: @user.timezone)
   end
 

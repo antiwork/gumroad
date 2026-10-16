@@ -1059,3 +1059,34 @@ describe("PaymentForm payment method visibility", () => {
     expect(paypalMock.loadScript.mock.calls.at(-1)?.[0]).not.toHaveProperty("disableFunding");
   });
 });
+
+describe("PaymentForm before the first quote", () => {
+  beforeEach(cleanup);
+  afterEach(cleanup);
+
+  const renderForm = (checkoutState: State) =>
+    render(
+      <LoggedInUserProvider value={null}>
+        <StateContext.Provider value={[checkoutState, vi.fn()] as const}>
+          <PaymentForm />
+        </StateContext.Provider>
+      </LoggedInUserProvider>,
+    );
+  const paid = (checkoutState: State): State => ({
+    ...checkoutState,
+    products: checkoutState.products.map((product) => ({ ...product, price: 1000, requirePayment: true })),
+  });
+
+  it("shows a free cart's own layout while its quote loads", () => {
+    renderForm(state({ surcharges: { type: "pending" } }));
+    expect(screen.queryByText("Pay with")).toBeNull();
+    expect(screen.queryByLabelText("Full name")).toBeNull();
+    expect(screen.queryByLabelText("ZIP code")).toBeNull();
+  });
+
+  it("keeps the card form for a paid cart while its quote loads", () => {
+    renderForm(paid(state({ surcharges: { type: "pending" } })));
+    expect(screen.getByText("Pay with")).toBeTruthy();
+    expect(screen.getByLabelText("Full name")).toBeTruthy();
+  });
+});

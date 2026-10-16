@@ -63,6 +63,7 @@ import {
   paymentElementCollectsFullBillingDetails,
   requiresPaymentElementReusablePaymentMethod,
   requiresReusablePaymentMethodForCardCollection,
+  quoteWillBeFree,
   requiresPayment,
   requiresReusablePaymentMethod,
   shouldSuppressClientConfirmWallets,
@@ -226,7 +227,9 @@ const ZipCodeInput = () => {
   );
 };
 
-const SharedInputs = () => {
+// `awaitingFreeQuote` is set while a cart that can only total zero waits for its quote, when
+// requiresPayment cannot know yet; it keeps the payment-only fields from showing and then leaving.
+const SharedInputs = ({ awaitingFreeQuote = false }: { awaitingFreeQuote?: boolean }) => {
   const uid = React.useId();
   const loggedInUser = useLoggedInUser();
   const [state, dispatch] = useState();
@@ -365,8 +368,9 @@ const SharedInputs = () => {
   // field would force the buyer to retype it — PR #6191 review) and tokenization passes the
   // form's name alongside.
   const elementCollectsFullBillingDetails = paymentElementCollectsFullBillingDetails(state);
-  const showCountryInput = !(hasShipping(state) || !requiresPayment(state)) && !elementCollectsFullBillingDetails;
-  const showFullNameInput = requiresPayment(state) && !hasShipping(state);
+  const payable = requiresPayment(state) && !awaitingFreeQuote;
+  const showCountryInput = !(hasShipping(state) || !payable) && !elementCollectsFullBillingDetails;
+  const showFullNameInput = payable && !hasShipping(state);
 
   // These fields render inside the same box as the "Pay with" section (one card: email address,
   // then the payment methods right below) rather than a separate "Contact information" card, so
@@ -1929,6 +1933,9 @@ export const PaymentForm = ({
   const loggedInUser = useLoggedInUser();
   const isTestPurchase = loggedInUser && state.products.find((product) => product.testPurchase);
   const isFreePurchase = isTestPurchase || !requiresPayment(state);
+  // Without a quote the total reads as unknown, so a free cart would show the card form and then
+  // collapse to the free one when the quote lands (and again on every re-quote).
+  const showFreeLayout = isFreePurchase || (state.surcharges.type !== "loaded" && quoteWillBeFree(state));
 
   const recaptcha = useRecaptcha({
     siteKey: state.recaptchaKey,
@@ -2000,7 +2007,7 @@ export const PaymentForm = ({
     <div className={`flex flex-col gap-6 ${className}`} aria-label="Payment form" ref={paymentFormRef}>
       {showCustomFields ? <CustomFields className="p-4 sm:p-5" /> : null}
       <CustomerDetails className="flex flex-wrap items-center justify-between gap-4 p-4 sm:p-5" />
-      {!isFreePurchase ? (
+      {!showFreeLayout ? (
         // One box for the whole payment step: the buyer's email address (plus name/country when
         // the selected payment method doesn't collect them) sits directly above "Pay with", so
         // contact details and payment methods read as a single flow instead of two cards.
@@ -2028,7 +2035,7 @@ export const PaymentForm = ({
         <Card borderless={borderless}>
           <CardContent className="sm:p-5">
             <div className="flex grow flex-col gap-4">
-              <SharedInputs />
+              <SharedInputs awaitingFreeQuote={!isFreePurchase} />
               <PayButton className="flex" card={false} isTestPurchase={!!isTestPurchase} />
             </div>
           </CardContent>

@@ -12,19 +12,29 @@ describe PayoutsPresenter do
       expect(instance.next_payout_period_data).to include(
         status: "not_payable",
         is_user_payable: false,
-        has_stripe_connect: false
+        stripe_connect_routing_active: false
       )
     end
 
-    it "returns has_stripe_connect set to false if the user is not stripe connect" do
+    it "returns stripe_connect_routing_active set to false if the user is not stripe connect" do
       user = create(:user, user_risk_state: "compliant")
       instance = described_class.new(seller: user)
 
-      expect(instance.next_payout_period_data).to include(has_stripe_connect: false)
+      expect(instance.next_payout_period_data).to include(stripe_connect_routing_active: false)
     end
 
-    it "returns has_stripe_connect set to true if the user is stripe connect" do
+    it "returns stripe_connect_routing_active set to false for a linked Stripe account that card sales are not routed to" do
       user = create(:user, user_risk_state: "compliant")
+      create(:merchant_account_stripe_connect, user:)
+      expect(user.has_stripe_account_connected?).to be false
+
+      instance = described_class.new(seller: user)
+
+      expect(instance.next_payout_period_data).to include(stripe_connect_routing_active: false)
+    end
+
+    it "returns stripe_connect_routing_active set to true if the user is stripe connect" do
+      user = create(:user, user_risk_state: "compliant", check_merchant_account_is_linked: true)
       MerchantAccount.create!(
         user: user,
         charge_processor_id: StripeChargeProcessor.charge_processor_id,
@@ -35,7 +45,7 @@ describe PayoutsPresenter do
       )
       instance = described_class.new(seller: user)
 
-      expect(instance.next_payout_period_data).to include(has_stripe_connect: true)
+      expect(instance.next_payout_period_data).to include(stripe_connect_routing_active: true)
     end
   end
 
@@ -64,8 +74,8 @@ describe PayoutsPresenter do
       expect(instance.processing_payout_periods_data).to eq([])
     end
 
-    it "adds has_stripe_connect to each processing payout period" do
-      user = create(:user, user_risk_state: "compliant")
+    it "adds stripe_connect_routing_active to each processing payout period" do
+      user = create(:user, user_risk_state: "compliant", check_merchant_account_is_linked: true)
       MerchantAccount.create!(
         user: user,
         charge_processor_id: StripeChargeProcessor.charge_processor_id,
@@ -77,7 +87,7 @@ describe PayoutsPresenter do
       instance = described_class.new(seller: user)
 
       instance.processing_payout_periods_data.each do |period|
-        expect(period).to include(has_stripe_connect: true)
+        expect(period).to include(stripe_connect_routing_active: true)
       end
     end
   end

@@ -771,7 +771,7 @@ export default function PayoutsIndex() {
           </Alert>
         ) : null}
         {next_payout_period_data != null ? (
-          next_payout_period_data.has_stripe_connect ? (
+          next_payout_period_data.stripe_connect_routing_active ? (
             <Alert variant="info" role="status">
               <p>For Stripe Connect users, all future payouts will be deposited directly to your Stripe account</p>
             </Alert>

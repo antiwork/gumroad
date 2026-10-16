@@ -365,8 +365,11 @@ export const Checkout = ({
   // Only while a replacement is actually in flight. An errored fetch keeps the snapshot on screen
   // (it is the quote the buyer was returned to) but nothing is coming, so the summary must stop
   // saying it is working.
-  const isRequoting =
-    (state.surcharges.type === "pending" || state.surcharges.type === "loading") && summarySurcharges !== null;
+  const quoteInFlight = state.surcharges.type === "pending" || state.surcharges.type === "loading";
+  const isRequoting = quoteInFlight && summarySurcharges !== null;
+  // The first quote fills the Subtotal and Total rows. Holding their space while it loads keeps the
+  // payment form below from jumping when it lands, which on phones is mid-tap on the email field.
+  const awaitingFirstQuote = quoteInFlight && summarySurcharges === null;
 
   const total = getTotalPriceFromSurcharges(summarySurcharges);
   const visibleDiscounts = cart.discountCodes.filter(
@@ -537,6 +540,24 @@ export const Checkout = ({
   // an all-whole cart keeps the compact US$10 look.
   const noCentsIfWhole = summaryAmountsAreAllWhole(summaryDisplayedCents, localCurrency?.subunitToUnit ?? 100);
 
+  // Recommendations arrive after the page renders. They sit after the payment form in the
+  // single-column (phone) order, so their arrival cannot push the form down. On wide screens the
+  // form spans both grid rows and they sit under the cart.
+  const recommendations =
+    recommendedProducts && recommendedProducts.length > 0 ? (
+      <section className="flex flex-col gap-4 @[64rem]:col-start-1 @[64rem]:-mt-2">
+        <h2>
+          {recommendedProductsHeading(recommendedProducts, cart.items.length === 1 ? "this item" : "these items")}
+        </h2>
+        <ProductCardGrid narrow>
+          {recommendedProducts.map((product, idx) => (
+            // All of this grid is off-screen. so we just eager load the first image
+            <Card key={product.id} product={product} eager={idx === 0} />
+          ))}
+        </ProductCardGrid>
+      </section>
+    ) : null;
+
   return (
     // data-checkout-scope bounds PaymentForm's scroll-to-first-error scan: wide enough to reach
     // the tip and gift fields above it, narrow enough to ignore the rest of the page.
@@ -553,7 +574,14 @@ export const Checkout = ({
       />
       {isOpenTuple(cart.items, 1) ? (
         <div className="grid gap-8 p-4 md:p-8 md:px-16">
-          <div className="grid grid-cols-1 items-start gap-x-16 gap-y-8 @[64rem]:grid-cols-[2fr_minmax(26rem,1fr)]">
+          <div
+            className={classNames(
+              "grid grid-cols-1 items-start gap-x-16 gap-y-8 @[64rem]:grid-cols-[2fr_minmax(26rem,1fr)]",
+              // A flexible second row takes whatever height the spanning form needs beyond the cart,
+              // so the cart row stays its own height and recommendations start right below it.
+              recommendations && "@[64rem]:grid-rows-[auto_1fr]",
+            )}
+          >
             <div className="grid gap-6">
               <CartItemList>
                 {cart.items.map((item, index) => (
@@ -589,7 +617,7 @@ export const Checkout = ({
                 <div
                   className={classNames("grid gap-4 p-4 sm:px-5", displayTipSelector && "border-t border-border")}
                   data-checkout-price-rows="true"
-                  aria-busy={isRequoting}
+                  aria-busy={isRequoting || awaitingFirstQuote}
                 >
                   {summarySurcharges ? (
                     <>
@@ -642,6 +670,8 @@ export const Checkout = ({
                         />
                       ) : null}
                     </>
+                  ) : awaitingFirstQuote ? (
+                    <CartPriceItem title="Subtotal" price={null} isRequoting />
                   ) : null}
                   {visibleDiscounts.length || discount > 0 ? (
                     <div className="grid grid-flow-col justify-between gap-4">
@@ -781,29 +811,18 @@ export const Checkout = ({
                       </div>
                     ) : null}
                   </>
+                ) : awaitingFirstQuote ? (
+                  <footer className="grid gap-4 border-t border-border p-4 sm:px-5" aria-busy>
+                    <CartPriceItem title="Total" price={null} variant="large" isRequoting />
+                  </footer>
                 ) : null}
               </CartItemList>
-              {recommendedProducts && recommendedProducts.length > 0 ? (
-                <section className="flex flex-col gap-4">
-                  <h2>
-                    {recommendedProductsHeading(
-                      recommendedProducts,
-                      cart.items.length === 1 ? "this item" : "these items",
-                    )}
-                  </h2>
-                  <ProductCardGrid narrow>
-                    {recommendedProducts.map((product, idx) => (
-                      // All of this grid is off-screen. so we just eager load the first image
-                      <Card key={product.id} product={product} eager={idx === 0} />
-                    ))}
-                  </ProductCardGrid>
-                </section>
-              ) : null}
             </div>
-            <PaymentForm />
+            <PaymentForm className={classNames(recommendations && "@[64rem]:row-span-2")} />
             <NavigationButton className="@[64rem]:hidden" href={cart.returnUrl ?? discoverUrl}>
               Continue shopping
             </NavigationButton>
+            {recommendations}
           </div>
         </div>
       ) : (

@@ -556,6 +556,11 @@ export function requiresPayment(state: State) {
   return getTotalPrice(state) !== 0 || state.products.some((item) => item.requirePayment);
 }
 
+// A cart with nothing priced or shipped can only quote zero (tipping is off on a zero total), so its
+// free layout is known before the quote lands. Layout only: paying still waits for the quote.
+export const quoteWillBeFree = (state: State) =>
+  getTotalPriceFromProducts(state) === 0 && !hasShipping(state) && !state.products.some((item) => item.requirePayment);
+
 function hasMultipleSellers(state: State) {
   return new Set(state.products.map((product) => product.creator.id)).size > 1;
 }

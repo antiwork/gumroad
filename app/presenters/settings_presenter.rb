@@ -782,6 +782,7 @@ class SettingsPresenter
       {
         has_connected_stripe: seller.stripe_connect_account.present?,
         stripe_connect_account_id: seller.stripe_connect_account&.charge_processor_merchant_id,
+        stripe_connect_routing_active: seller.has_stripe_account_connected?,
         stripe_disconnect_allowed: seller.stripe_disconnect_allowed?,
         supported_countries_help_text: "This feature is available in <a href='https://stripe.com/en-in/global'>all countries where Stripe operates</a>, except India, Indonesia, Malaysia, Mexico, Philippines, and Thailand.",
       }

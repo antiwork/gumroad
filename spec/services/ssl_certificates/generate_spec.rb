@@ -201,39 +201,35 @@ describe SslCertificates::Generate do
         allow_any_instance_of(CustomDomainVerificationService).to receive(:domains_resolving_to_gumroad).and_return([])
       end
 
-      after do
-        Rails.cache.delete("domain_check_www.example.com")
-      end
-
       it "returns false when no domains resolve to Gumroad" do
         expect(@obj.send(:can_order_certificates?)).to eq [false, "No domains resolve to Gumroad"]
       end
 
-      it "caches the negative result so the renewal fanout can skip the domain" do
+      it "backs off orders so the renewal fanout can skip the domain" do
         @obj.send(:can_order_certificates?)
 
-        expect(Rails.cache.read("domain_check_www.example.com")).to eq false
+        expect($redis.ttl(RedisKey.ssl_certificate_order_backoff("www.example.com"))).to be_within(5).of(@obj.send(:invalid_domain_cache_expires_in).to_i)
+        expect(@custom_domain.certificate_orderable?).to eq false
+      end
+
+      it "keeps the back-off when Rails.cache is emptied by a deploy" do
+        @obj.send(:can_order_certificates?)
+        Rails.cache.clear
+
         expect(@custom_domain.certificate_orderable?).to eq false
       end
     end
 
-    context "when DNS resolves again after a cached order failure" do
+    context "when DNS resolves again after a failed order" do
       before do
-        Rails.cache.write("domain_check_www.example.com", false)
+        @custom_domain.back_off_certificate_orders!(1.hour)
         allow_any_instance_of(CustomDomainVerificationService).to receive(:domains_resolving_to_gumroad).and_return(["www.example.com"])
       end
 
-      it "orders and clears the stale negative cache" do
+      it "orders and clears the stale back-off" do
         expect(@obj.send(:can_order_certificates?)).to eq true
-        expect(Rails.cache.read("domain_check_www.example.com")).to be_nil
         expect(@custom_domain.certificate_orderable?).to eq true
       end
-    end
-  end
-
-  describe "#domain_check_cache_key" do
-    it "returns domin check cache key" do
-      expect(@obj.send(:domain_check_cache_key)).to eq "domain_check_www.example.com"
     end
   end
 
@@ -358,15 +354,12 @@ describe SslCertificates::Generate do
         @custom_domain.set_ssl_certificate_issued_at!
       end
 
-      it "writes the information to cache and resets custom_domain's ssl_certificate_issued_at attribute" do
-        cache_double = double(".cache")
-        allow(Rails).to receive(:cache).and_return(cache_double)
-
-        expect(cache_double).to receive(:write).with("domain_check_#{@custom_domain.domain}", false, expires_in: @obj.send(:invalid_domain_cache_expires_in))
+      it "backs off further orders and resets custom_domain's ssl_certificate_issued_at attribute" do
         expect(@obj).to receive(:log_message).with(@custom_domain.domain, "LetsEncrypt order failed. Next retry in about 8 hours.")
 
         @obj.process
 
+        expect($redis.ttl(RedisKey.ssl_certificate_order_backoff(@custom_domain.domain))).to be_within(5).of(@obj.send(:invalid_domain_cache_expires_in).to_i)
         expect(@custom_domain.reload.ssl_certificate_issued_at).to be_nil
       end
     end
