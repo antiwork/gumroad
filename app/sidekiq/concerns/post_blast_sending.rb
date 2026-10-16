@@ -363,7 +363,10 @@ module PostBlastSending
   def store_recipients_as_sent(members)
     attempts = 0
     begin
-      store_recipients_still_at_their_address(members)
+      # Rows nobody is holding are committed first, so a member a long erasure has locked holds back only
+      # its own row: if waiting for it times out, the rest of the accepted slice is already recorded.
+      unlocked_ids = store_recipients_still_at_their_address(members, lock: "FOR SHARE SKIP LOCKED")
+      store_recipients_still_at_their_address(members.reject { unlocked_ids.include?(_1.id) }, lock: "FOR SHARE")
     rescue StandardError
       attempts += 1
       raise if attempts >= POST_ACCEPT_WRITE_ATTEMPTS
@@ -377,12 +380,17 @@ module PostBlastSending
   # that locked first is waited for and then seen, and one that locks second waits for this commit and
   # deletes the rows in its post-commit recheck. A member removed meanwhile gets no row, so if they
   # rejoin, this post can reach them once more.
-  def store_recipients_still_at_their_address(members)
+  #
+  # Returns the ids of the member rows it locked.
+  def store_recipients_still_at_their_address(members, lock:)
+    return Set.new if members.empty?
+
     ApplicationRecord.connected_to(role: :writing) do
       ApplicationRecord.transaction do
-        current_emails = AudienceMember.where(id: members.map(&:id)).lock("FOR SHARE").pluck(:id, :email).to_h
+        current_emails = AudienceMember.where(id: members.map(&:id)).lock(lock).pluck(:id, :email).to_h
         emails = members.filter_map { _1.email if current_emails[_1.id] == _1.email }
         SentPostEmail.insert_all_emails(post: @post, emails:)
+        current_emails.keys.to_set
       end
     end
   end

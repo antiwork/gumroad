@@ -601,8 +601,9 @@ class GdprDataErasureService
 
     # A send that locked its source before the anonymize did can have written a row since the first
     # lookup, so one more pass on the primary deletes those. Every sent_post_emails writer checks its
-    # source under a share lock, so none writes the old address after the commit. A rerun cannot redo
-    # this pass, so the pending flag stays set until it succeeds.
+    # source under a share lock, so none writes the old address from a source this erasure rewrote after
+    # the commit; another account's row under the same address still can. A rerun cannot redo this pass,
+    # so the pending flag stays set until it succeeds.
     def delete_late_sent_post_emails!(original_email)
       rechecked = false
       ApplicationRecord.connected_to(role: :writing) do

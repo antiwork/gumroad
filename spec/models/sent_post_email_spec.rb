@@ -88,6 +88,8 @@ describe SentPostEmail do
         captured_email = rewritten.email
         rewritten.class.where(id: rewritten.id).update_all(email: "deleted-1@deleted.gumroad.com")
         counter = 0
+        logged = []
+        allow(Rails.logger).to receive(:info).and_wrap_original { |original, message| logged << message.to_s; original.call(message) }
 
         described_class.ensure_uniqueness(post:, email: captured_email, source: rewritten) { counter += 1 }
         rewritten.class.where(id: rewritten.id).delete_all
@@ -95,6 +97,9 @@ describe SentPostEmail do
 
         expect(counter).to eq(0)
         expect(described_class.where(post:)).to be_empty
+        skip_line = "SentPostEmail: skipped post #{post.id} for #{rewritten.class.name} #{rewritten.id}, whose address changed"
+        expect(logged.count(skip_line)).to eq(2)
+        expect(logged.join).not_to include("buyer@example.com", "deleted-1@deleted.gumroad.com")
       end
     end
   end

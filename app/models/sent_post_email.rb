@@ -25,8 +25,8 @@ class SentPostEmail < ApplicationRecord
 
   # `source` is the record the address was read from. The claim is written only while that row still
   # holds the address, under a share lock: a GDPR erasure that rewrites the row either commits first and
-  # is seen here, or waits for this commit and deletes the claim in its post-commit recheck. The lock is
-  # released before the block runs.
+  # is seen here, or waits for this commit, and its cleanup then removes or rewrites the claim. The lock
+  # is released before the block runs.
   def self.ensure_uniqueness(post:, email:, source:)
     return if email.blank?
     claimed = ApplicationRecord.connected_to(role: :writing) do
@@ -37,6 +37,8 @@ class SentPostEmail < ApplicationRecord
   rescue ActiveRecord::RecordNotUnique
     # noop
   else
+    # Ids only: the address is what may have just been erased.
+    Rails.logger.info("SentPostEmail: skipped post #{post.id} for #{source.class.name} #{source.id}, whose address changed") unless claimed
     yield if claimed
   end
 
