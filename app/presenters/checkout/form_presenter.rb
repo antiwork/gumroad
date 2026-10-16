@@ -29,7 +29,7 @@ class Checkout::FormPresenter
       card_product: cart_product.present? ? ProductPresenter.card_for_web(product: cart_product) : nil,
       products: products.map { |product| { id: product.external_id, name: product.name, archived: product.archived? } },
       paypal_connect:,
-      connect_account_fee_info_text:,
+      connect_account_fee_info:,
     }
   end
 
@@ -73,18 +73,8 @@ class Checkout::FormPresenter
       }
     end
 
-    def connect_account_fee_info_text
+    def connect_account_fee_info
       seller = pundit_user.seller
-      if seller.alive_user_compliance_info&.country_code == Compliance::Countries::BRA.alpha2
-        "All sales will incur a 0% Gumroad fee."
-      else
-        discover_fee_percent = (Purchase::GUMROAD_DISCOVER_FEE_PER_THOUSAND / 10.0).round(1)
-        discover_fee_percent = discover_fee_percent.to_i == discover_fee_percent ? discover_fee_percent.to_i : discover_fee_percent
-        direct_fee_percent = (seller.gumroad_fee_per_thousand / 10.0).round(1)
-        direct_fee_percent = direct_fee_percent.to_i == direct_fee_percent ? direct_fee_percent.to_i : direct_fee_percent
-        fixed_fee_cents = Purchase::GUMROAD_FIXED_FEE_CENTS
-
-        "All sales will incur fees based on how customers find your product:\n\n• Direct sales: #{direct_fee_percent}% + #{fixed_fee_cents}¢\n• Discover sales: #{discover_fee_percent}% flat\n"
-      end
+      FeeInfoPresenter.new(seller:, country_code: seller.alive_user_compliance_info&.country_code).connect_account_fee_info
     end
 end

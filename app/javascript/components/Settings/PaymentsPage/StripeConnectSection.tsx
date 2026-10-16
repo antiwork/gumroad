@@ -6,6 +6,7 @@ import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
+import { FeeInfoDetails, type FeeInfo } from "$app/components/FeeInfo";
 import { showAlert } from "$app/components/server-components/Alert";
 import { SocialAuthButton } from "$app/components/SocialAuthButton";
 import { Alert } from "$app/components/ui/Alert";
@@ -25,11 +26,11 @@ export type StripeConnect = {
 const StripeConnectSection = ({
   stripeConnect,
   isFormDisabled,
-  connectAccountFeeInfoText,
+  connectAccountFeeInfo,
 }: {
   stripeConnect: StripeConnect;
   isFormDisabled: boolean;
-  connectAccountFeeInfoText: string;
+  connectAccountFeeInfo: FeeInfo;
 }) => {
   const uid = React.useId();
   const [isDisconnecting, setisDisconnecting] = React.useState(false);
@@ -60,7 +61,7 @@ const StripeConnectSection = ({
 
   return (
     <section className="grid gap-8">
-      <div className="whitespace-pre-line">{connectAccountFeeInfoText}</div>
+      <FeeInfoDetails feeInfo={connectAccountFeeInfo} />
       {stripeConnect.has_connected_stripe ? (
         <>
           <div className="grid gap-4">

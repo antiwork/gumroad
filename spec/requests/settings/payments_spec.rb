@@ -285,6 +285,8 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       Feature.activate_user(:merchant_migration, @user)
       refresh
       choose "Stripe"
+      expect(page).to have_text("All sales will incur a 0% Gumroad fee.")
+      expect(page).not_to have_selector("dt", text: "Direct sales")
       expect(page).to have_content("This feature is available in all countries where Stripe operates, except India, Indonesia, Malaysia, Mexico, Philippines, and Thailand.")
       expect(page).to have_link("all countries where Stripe operates", href: "https://stripe.com/en-in/global")
       OmniAuth.config.test_mode = true
@@ -294,6 +296,17 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       expect(page).to have_alert(text: "You have successfully connected your Stripe account!")
       expect(page).to have_button("Disconnect")
       expect(page).not_to have_text("This feature is available in all countries where Stripe operates")
+    end
+
+    it "lists the sales fees for the selected payout method" do
+      visit settings_payments_path
+
+      choose "Debit Card"
+      expect(page).to have_text("All sales will incur fees based on how customers find your product:")
+      expect(page).to have_selector("dt", text: "Direct sales")
+      expect(page).to have_selector("dd", text: "10% + 50¢ Gumroad fee + 2.9% + 30¢ credit card fee")
+      expect(page).to have_selector("dt", text: "Discover sales")
+      expect(page).to have_selector("dd", text: "30% flat")
     end
 
     it "does not show the deprecated Stripe Connect option even if the can_connect_stripe flag is enabled" do
@@ -994,6 +1007,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       @user.update(payment_address: "barny@paypal.com")
       visit settings_payments_path
       expect(page).to have_field("PayPal Email")
+      expect(page).to have_selector("dd", text: "10% + 50¢ Gumroad fee + 2.9% + 30¢ PayPal fee")
     end
 
     it "warns a Zambian creator that PayPal cannot receive payouts there" do

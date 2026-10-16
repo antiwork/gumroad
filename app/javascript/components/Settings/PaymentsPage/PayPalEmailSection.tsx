@@ -2,6 +2,7 @@ import * as React from "react";
 
 import type { FormFieldName, PayoutMethod } from "$app/types/payments";
 
+import { FeeInfoDetails, type FeeInfo } from "$app/components/FeeInfo";
 import { Alert } from "$app/components/ui/Alert";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
@@ -17,7 +18,7 @@ const PayPalEmailSection = ({
   paypalEmailAddress,
   setPaypalEmailAddress,
   hasConnectedStripe,
-  feeInfoText,
+  feeInfo,
   updatePayoutMethod,
   errorFieldNames,
   user,
@@ -29,7 +30,7 @@ const PayPalEmailSection = ({
   paypalEmailAddress: string | null;
   setPaypalEmailAddress: (newPaypalEmailAddress: string) => void;
   hasConnectedStripe: boolean;
-  feeInfoText: string;
+  feeInfo: FeeInfo;
   updatePayoutMethod: (payoutMethod: PayoutMethod) => void;
   errorFieldNames: Set<FormFieldName>;
   user: { country_code: string | null; no_payout_rail_in_country: boolean };
@@ -43,7 +44,7 @@ const PayPalEmailSection = ({
           PayPal payouts are subject to a 2% processing fee.
         </Alert>
       ) : null}
-      <div className="whitespace-pre-line">{feeInfoText}</div>
+      <FeeInfoDetails feeInfo={feeInfo} />
       <div className="grid gap-4">
         {canSetupBankPayouts && !isFormDisabled ? (
           <Alert role="status" variant="info">

@@ -5,6 +5,7 @@ import type { FormFieldName, User } from "$app/types/payments";
 import { COUNTRY_ACCOUNT_NUMBER_HINTS, COUNTRY_IBAN_PLACEHOLDERS } from "$app/utils/payoutAccountNumbers";
 
 import { Button } from "$app/components/Button";
+import { FeeInfoDetails, type FeeInfo } from "$app/components/FeeInfo";
 import { Alert } from "$app/components/ui/Alert";
 import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
@@ -776,7 +777,7 @@ const BankAccountSection = ({
   hasConnectedStripe,
   user,
   isFormDisabled,
-  feeInfoText,
+  feeInfo,
   showNewBankAccount,
   setShowNewBankAccount,
   errorFieldNames,
@@ -787,7 +788,7 @@ const BankAccountSection = ({
   hasConnectedStripe: boolean;
   user: User;
   isFormDisabled: boolean;
-  feeInfoText: string;
+  feeInfo: FeeInfo;
   showNewBankAccount: boolean;
   setShowNewBankAccount: (showNewBankAccount: boolean) => void;
   errorFieldNames: Set<FormFieldName>;
@@ -1029,7 +1030,7 @@ const BankAccountSection = ({
 
   return (
     <>
-      <div className="whitespace-pre-line">{feeInfoText}</div>
+      <FeeInfoDetails feeInfo={feeInfo} />
       <section className="grid gap-8">
         <Fieldset
           state={errorFieldNames.has("account_holder_full_name") || jpHolderNameClientError ? "danger" : undefined}

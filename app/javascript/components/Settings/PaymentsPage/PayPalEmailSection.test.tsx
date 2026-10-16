@@ -36,7 +36,7 @@ const renderSection = (
       paypalEmailAddress="seller@example.com"
       setPaypalEmailAddress={() => {}}
       hasConnectedStripe={false}
-      feeInfoText=""
+      feeInfo={{ summary: "", items: [] }}
       updatePayoutMethod={updatePayoutMethod}
       errorFieldNames={new Set<FormFieldName>()}
       user={{ country_code: countryCode, no_payout_rail_in_country: noPayoutRailInCountry }}

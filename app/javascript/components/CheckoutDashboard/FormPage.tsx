@@ -12,6 +12,7 @@ import { CartItem } from "$app/components/Checkout/cartState";
 import { CheckoutPreview } from "$app/components/CheckoutDashboard/CheckoutPreview";
 import { Layout, Page } from "$app/components/CheckoutDashboard/Layout";
 import PayPalConnectSection, { PayPalConnect } from "$app/components/CheckoutDashboard/PayPalConnectSection";
+import { type FeeInfo } from "$app/components/FeeInfo";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { WithPreviewSidebar } from "$app/components/PreviewSidebar";
 import { Select } from "$app/components/Select";
@@ -70,7 +71,7 @@ export type FormPageProps = {
   custom_fields: CustomField[];
   products: SimpleProduct[];
   paypal_connect: PayPalConnect;
-  connect_account_fee_info_text: string;
+  connect_account_fee_info: FeeInfo;
 };
 
 const FormPage = ({
@@ -89,7 +90,7 @@ const FormPage = ({
   custom_fields,
   products,
   paypal_connect,
-  connect_account_fee_info_text,
+  connect_account_fee_info,
 }: FormPageProps) => {
   const loggedInUser = useLoggedInUser();
 
@@ -484,10 +485,7 @@ const FormPage = ({
             </div>
           </section>
           {paypal_connect.show_paypal_connect ? (
-            <PayPalConnectSection
-              paypalConnect={paypal_connect}
-              connectAccountFeeInfoText={connect_account_fee_info_text}
-            />
+            <PayPalConnectSection paypalConnect={paypal_connect} connectAccountFeeInfo={connect_account_fee_info} />
           ) : null}
         </div>
         <CheckoutPreview

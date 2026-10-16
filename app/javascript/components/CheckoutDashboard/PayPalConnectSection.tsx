@@ -6,6 +6,7 @@ import { asyncVoid } from "$app/utils/promise";
 import { request } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
+import { FeeInfoDetails, type FeeInfo } from "$app/components/FeeInfo";
 import { Modal } from "$app/components/Modal";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
@@ -49,10 +50,10 @@ const EligibilityAlert = () => (
 
 const PayPalConnectSection = ({
   paypalConnect,
-  connectAccountFeeInfoText,
+  connectAccountFeeInfo,
 }: {
   paypalConnect: PayPalConnect;
-  connectAccountFeeInfoText: string;
+  connectAccountFeeInfo: FeeInfo;
 }) => {
   const [confirmingDisconnect, setConfirmingDisconnect] = React.useState(false);
 
@@ -97,7 +98,7 @@ const PayPalConnectSection = ({
       </p>
       {!paypalConnect.charge_processor_merchant_id ? (
         <>
-          <p>{connectAccountFeeInfoText}</p>
+          <FeeInfoDetails feeInfo={connectAccountFeeInfo} />
           <div>
             <ConnectWithPayPalButton disabled={!paypalConnect.allow_paypal_connect} />
           </div>
@@ -105,7 +106,7 @@ const PayPalConnectSection = ({
         </>
       ) : paypalConnect.charge_processor_verified ? (
         <>
-          <p>{connectAccountFeeInfoText}</p>
+          <FeeInfoDetails feeInfo={connectAccountFeeInfo} />
           <div className="grid gap-8">
             <Fieldset>
               <FieldsetTitle>
@@ -165,7 +166,7 @@ const PayPalConnectSection = ({
         </>
       ) : (
         <>
-          <p>{connectAccountFeeInfoText}</p>
+          <FeeInfoDetails feeInfo={connectAccountFeeInfo} />
           <p>
             <ConnectWithPayPalButton disabled={!paypalConnect.allow_paypal_connect} />
           </p>
