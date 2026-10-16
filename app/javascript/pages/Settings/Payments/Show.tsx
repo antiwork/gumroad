@@ -200,8 +200,7 @@ type PaymentsPageProps = {
   paypal_address: string | null;
   stripe_connect: StripeConnect;
   fee_info: {
-    card_fee_info: FeeInfo;
-    paypal_fee_info: FeeInfo;
+    merchant_account_fee_info: FeeInfo;
     connect_account_fee_info: FeeInfo;
   };
   min_dob_year: number;
@@ -1655,7 +1654,7 @@ export default function PaymentsPage() {
                 hasConnectedStripe={props.stripe_connect.has_connected_stripe}
                 user={props.user}
                 isFormDisabled={props.is_form_disabled}
-                feeInfo={props.fee_info.card_fee_info}
+                feeInfo={props.fee_info.merchant_account_fee_info}
                 showNewBankAccount={showNewBankAccount}
                 setShowNewBankAccount={setShowNewBankAccount}
                 errorFieldNames={errorFieldNames}
@@ -1664,7 +1663,7 @@ export default function PaymentsPage() {
               <DebitCardSection
                 isFormDisabled={props.is_form_disabled}
                 hasConnectedStripe={props.stripe_connect.has_connected_stripe}
-                feeInfo={props.fee_info.card_fee_info}
+                feeInfo={props.fee_info.merchant_account_fee_info}
                 savedCard={props.bank_account_details.card}
                 setDebitCard={setDebitCard}
               />
@@ -1676,7 +1675,7 @@ export default function PaymentsPage() {
                 paypalEmailAddress={form.data.payment_address}
                 setPaypalEmailAddress={(value) => form.setData("payment_address", value)}
                 hasConnectedStripe={props.stripe_connect.has_connected_stripe}
-                feeInfo={props.fee_info.paypal_fee_info}
+                feeInfo={props.fee_info.merchant_account_fee_info}
                 updatePayoutMethod={updatePayoutMethod}
                 errorFieldNames={errorFieldNames}
                 user={props.user}

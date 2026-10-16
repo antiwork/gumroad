@@ -304,9 +304,9 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       choose "Debit Card"
       expect(page).to have_text("Your fees depend on how buyers find your product:")
       expect(page).to have_selector("dt", text: "Direct sales")
-      expect(page).to have_selector("dd", text: "10% + 50¢ Gumroad fee + 2.9% + 30¢ credit card fee")
+      expect(page).to have_selector("dd", text: "10% + 50¢ Gumroad fee + 2.9% + 30¢ processing fee")
       expect(page).to have_selector("dt", text: "Discover sales")
-      expect(page).to have_selector("dd", text: "30% total, credit card fee included")
+      expect(page).to have_selector("dd", text: "30%, processing fee included")
     end
 
     it "does not show the deprecated Stripe Connect option even if the can_connect_stripe flag is enabled" do
@@ -1007,7 +1007,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       @user.update(payment_address: "barny@paypal.com")
       visit settings_payments_path
       expect(page).to have_field("PayPal Email")
-      expect(page).to have_selector("dd", text: "10% + 50¢ Gumroad fee + 2.9% + 30¢ PayPal fee")
+      expect(page).to have_selector("dd", text: "10% + 50¢ Gumroad fee + 2.9% + 30¢ processing fee")
     end
 
     it "warns a Zambian creator that PayPal cannot receive payouts there" do

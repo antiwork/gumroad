@@ -804,8 +804,7 @@ class SettingsPresenter
     def fee_info(user_compliance_info)
       presenter = FeeInfoPresenter.new(seller:, country_code: user_compliance_info&.country_code)
       {
-        card_fee_info: presenter.card_fee_info,
-        paypal_fee_info: presenter.paypal_fee_info,
+        merchant_account_fee_info: presenter.merchant_account_fee_info,
         connect_account_fee_info: presenter.connect_account_fee_info,
       }
     end

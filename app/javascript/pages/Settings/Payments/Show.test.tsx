@@ -132,8 +132,7 @@ const pageProps = (userOverrides: Partial<User> = {}, complianceOverrides: Parti
     supported_countries_help_text: "",
   },
   fee_info: {
-    card_fee_info: { summary: "", items: [] },
-    paypal_fee_info: { summary: "", items: [] },
+    merchant_account_fee_info: { summary: "", items: [] },
     connect_account_fee_info: { summary: "", items: [] },
   },
   min_dob_year: 2008,

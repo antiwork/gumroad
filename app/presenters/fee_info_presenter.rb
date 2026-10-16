@@ -10,12 +10,13 @@ class FeeInfoPresenter
     @country_code = country_code
   end
 
-  def card_fee_info
-    processor_fee_info("credit card fee")
-  end
-
-  def paypal_fee_info
-    processor_fee_info("PayPal fee")
+  # Payout method does not change how a sale is charged: every sale on Gumroad's merchant account pays the same processor fee.
+  def merchant_account_fee_info
+    processor_fee = "#{format_percent(Purchase::PROCESSOR_FEE_PER_THOUSAND)}% + #{Purchase::PROCESSOR_FIXED_FEE_CENTS}¢ processing fee"
+    breakdown(
+      direct_sales: "#{gumroad_fee} Gumroad fee + #{processor_fee}",
+      discover_sales: "#{discover_fee}, processing fee included",
+    )
   end
 
   def connect_account_fee_info
@@ -25,15 +26,6 @@ class FeeInfoPresenter
   end
 
   private
-    # On Gumroad's merchant account the Discover fee absorbs the processor fee, so the Discover percent is the whole fee.
-    def processor_fee_info(processor_fee_name)
-      processor_fee = "#{format_percent(Purchase::PROCESSOR_FEE_PER_THOUSAND)}% + #{Purchase::PROCESSOR_FIXED_FEE_CENTS}¢ #{processor_fee_name}"
-      breakdown(
-        direct_sales: "#{gumroad_fee} Gumroad fee + #{processor_fee}",
-        discover_sales: "#{discover_fee} total, #{processor_fee_name} included",
-      )
-    end
-
     def breakdown(direct_sales:, discover_sales:)
       {
         summary: SUMMARY,
