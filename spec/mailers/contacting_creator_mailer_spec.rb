@@ -383,7 +383,6 @@ describe ContactingCreatorMailer do
       let(:dispute) { create(:dispute_formalized, purchase:) }
 
       it "sends chargeback notice correctly" do
-        purchase.update_columns(purchase_chargeback_balance_id: create(:balance).id)
         mail = ContactingCreatorMailer.chargeback_notice(dispute.id)
         expect(mail.to).to eq [seller.email]
         expect(mail.subject).to eq "A sale has been disputed"
@@ -395,7 +394,7 @@ describe ContactingCreatorMailer do
       end
 
       context "when the purchase was already refunded in full and no chargeback debit was booked" do
-        before { purchase.update_columns(purchase_chargeback_balance_id: nil) }
+        before { purchase.update_columns(purchase_chargeback_balance_id: nil, stripe_refunded: true) }
 
         it "does not claim a deduction or a re-credit" do
           mail = ContactingCreatorMailer.chargeback_notice(dispute.id)

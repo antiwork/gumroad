@@ -101,7 +101,8 @@ class ContactingCreatorMailer < ApplicationMailer
     @disputable = dispute.disputable
     @is_paypal = @disputable.charge_processor == PaypalChargeProcessor.charge_processor_id
     @seller = @disputable.seller
-    @balance_deducted = @disputable.disputed_purchases.any? { _1.purchase_chargeback_balance.present? }
+    # A missing debit alone is not proof of a refund: Stripe Connect sales never book one.
+    @balance_deducted = @disputable.disputed_purchases.any? { _1.purchase_chargeback_balance.present? || !_1.stripe_refunded? }
 
     dispute_evidence = dispute.dispute_evidence
     # Recomputed at delivery, not at enqueue: a notice queued with an hour left can be delivered with
