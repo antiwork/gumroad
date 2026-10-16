@@ -5,8 +5,11 @@ class GdprDataErasureService
   ANONYMIZED_NAME = "[deleted]"
   ANONYMIZED_VALUE = "[redacted]"
   SENT_POST_EMAIL_DELETE_BATCH_SIZE = 1_000
-  SENT_POST_EMAIL_MANUAL_STEP = "A rerun cannot find them: delete them by hand, then clear the account's " \
-                                "gdpr_sent_post_emails_recheck_pending, before confirming the request as fulfilled."
+  # Clearing a value other than the one noted would hide a newer run's unfinished recheck.
+  SENT_POST_EMAIL_MANUAL_STEP = "A rerun cannot find them. Once no other erasure of this account is running, note " \
+                                "the account's gdpr_sent_post_emails_recheck_pending value, delete the original " \
+                                "address's sent post email rows by hand, then clear that field only if it still " \
+                                "holds the value you noted, before confirming the request as fulfilled."
 
   # Fields that must be retained for tax/legal compliance (Article 17(3)(b))
   # Transaction records, payout history, tax documents are kept.
@@ -600,19 +603,28 @@ class GdprDataErasureService
     # catches rows inserted up to this point. A send that already holds the old address can still
     # write one later. A rerun cannot redo this pass, so the pending flag stays set until it succeeds.
     def delete_late_sent_post_emails!(original_email)
+      rechecked = false
       ApplicationRecord.connected_to(role: :writing) do
         @counts[:sent_post_emails] += delete_sent_post_emails!(SentPostEmail.ids_for_email(original_email))
+        rechecked = true
         unless clear_sent_post_email_recheck_pending!
           @sent_post_email_error = "Erasure incomplete: a later run of this erasure has not finished rechecking " \
-                                   "sent post email records for the original address. Check that run's result " \
-                                   "before confirming the request as fulfilled."
+                                   "sent post email records for the original address. Wait for that run to " \
+                                   "finish and check its result before confirming the request as fulfilled."
         end
       end
     rescue => e
       Rails.logger.error("GDPR: could not recheck sent post emails for user #{@user.id}: #{e.message}")
       ErrorNotifier.notify(e)
-      @sent_post_email_error = "Erasure incomplete: sent post email records for the original address could " \
-                               "not be rechecked after the erasure. #{SENT_POST_EMAIL_MANUAL_STEP}"
+      # After a finished recheck only the marker write failed: the rows are likely gone, but the marker
+      # still says otherwise and every rerun trusts it.
+      failure = if rechecked
+        "were rechecked after the erasure, but its pending recheck marker could not be cleared"
+      else
+        "could not be rechecked after the erasure"
+      end
+      @sent_post_email_error = "Erasure incomplete: sent post email records for the original address " \
+                               "#{failure}. #{SENT_POST_EMAIL_MANUAL_STEP}"
       record_incomplete_erasure_step_note!(@sent_post_email_error)
     end
 

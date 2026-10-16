@@ -182,6 +182,45 @@ describe GdprDataErasureService do
         expect(Stripe::Account).to have_received(:delete_person).with("acct_erasure_test", "person_erase_me")
       end
 
+      it "still deletes the guardian's person when a rerun cannot read the pending sent post email recheck" do
+        guardian = create(:guardian, user:, stripe_person_id: "person_erase_me")
+        create(:user_compliance_info, user:, birthday: 15.years.ago.to_date, guardian:)
+        user.update_columns(email: "deleted-#{user.id}@deleted.gumroad.com")
+        user.gdpr_sent_post_emails_recheck_pending = "earlier-run-generation"
+        user.save!(validate: false)
+        allow_any_instance_of(User).to receive(:gdpr_sent_post_emails_recheck_pending)
+          .and_raise(ActiveRecord::ConnectionNotEstablished, "primary unavailable")
+
+        result = described_class.new(User.find(user.id), performed_by: admin).perform!
+
+        expect(result[:success]).to eq(false)
+        expect(result[:error]).to include("could not check whether an earlier run finished rechecking sent post email records")
+        expect(Stripe::Account).to have_received(:delete_person).with("acct_erasure_test", "person_erase_me")
+      end
+
+      it "keeps the recheck pending and still deletes the guardian's person when the marker cannot be cleared" do
+        guardian = create(:guardian, user:, stripe_person_id: "person_erase_me")
+        create(:user_compliance_info, user:, birthday: 15.years.ago.to_date, guardian:)
+        create(:sent_post_email, email: user.email)
+        # The clear is the only row lock taken on an account that already holds a marker.
+        allow_any_instance_of(User).to receive(:with_lock).and_wrap_original do |original, *args, &block|
+          raise ActiveRecord::LockWaitTimeout, "Lock wait timeout exceeded" if original.receiver.gdpr_sent_post_emails_recheck_pending.present?
+          original.call(*args, &block)
+        end
+
+        result = described_class.new(user, performed_by: admin).perform!
+
+        expect(result[:success]).to eq(false)
+        expect(result[:error]).to include("were rechecked after the erasure, but its pending recheck marker could not be cleared")
+        expect(result[:error]).to include("Once no other erasure of this account is running")
+        expect(user.reload.gdpr_sent_post_emails_recheck_pending).to be_present
+        expect(SentPostEmail.where(email: "john@example.com")).to be_empty
+        expect(Stripe::Account).to have_received(:delete_person).with("acct_erasure_test", "person_erase_me")
+        expect(user.comments.where(comment_type: Comment::COMMENT_TYPE_PAYOUT_NOTE).last.content)
+          .to include("its pending recheck marker could not be cleared")
+        expect(described_class.new(User.find(user.id), performed_by: admin).perform!).to include(success: false)
+      end
+
       # The gap a recorded id alone cannot close: a sync that created the Person but failed before
       # saving its id leaves no local pointer, and erasure cannot wait for a next sync to supply one.
       it "deletes a guardian person Stripe holds that we never recorded an id for" do
@@ -897,7 +936,8 @@ describe GdprDataErasureService do
 
       expect(rerun[:success]).to eq(false)
       expect(rerun[:error]).to include("an earlier run did not finish rechecking sent post email records")
-      expect(rerun[:error]).to include("clear the account's gdpr_sent_post_emails_recheck_pending")
+      expect(rerun[:error]).to include("Once no other erasure of this account is running, note the account's gdpr_sent_post_emails_recheck_pending value")
+      expect(rerun[:error]).to include("clear that field only if it still holds the value you noted")
       expect(notes.call.last).to include("an earlier run did not finish rechecking sent post email records")
       expect(user.reload.gdpr_sent_post_emails_recheck_pending).to eq(pending_generation)
       expect(lookups).to eq(2)
