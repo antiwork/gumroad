@@ -237,6 +237,9 @@ class User < ApplicationRecord
   # for. Ids only: the original address is already gone from the rows. See GdprDataErasureService.
   attr_json_data_accessor :gdpr_audience_reindex_member_ids, default: -> { [] }
   attr_json_data_accessor :gdpr_audience_unindex_member_ids, default: -> { [] }
+  # Set while a GDPR erasure's post-commit sent_post_emails pass has not succeeded. No rerun can redo
+  # that pass, so only someone who has deleted the rows by hand clears it.
+  attr_json_data_accessor :gdpr_sent_post_emails_recheck_pending
   attr_json_data_accessor :au_backtax_sales_cents, default: 0
   attr_json_data_accessor :au_backtax_owed_cents, default: 0
   attr_json_data_accessor :gumroad_day_timezone
