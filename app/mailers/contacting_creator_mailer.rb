@@ -101,8 +101,7 @@ class ContactingCreatorMailer < ApplicationMailer
     @disputable = dispute.disputable
     @is_paypal = @disputable.charge_processor == PaypalChargeProcessor.charge_processor_id
     @seller = @disputable.seller
-    # A missing debit alone is not proof of a refund: Stripe Connect sales never book one.
-    @balance_deducted = @disputable.disputed_purchases.any? { _1.purchase_chargeback_balance.present? || !_1.stripe_refunded? }
+    @balance_debit = chargeback_balance_debit(@disputable)
 
     dispute_evidence = dispute.dispute_evidence
     # Recomputed at delivery, not at enqueue: a notice queued with an hour left can be delivered with
@@ -846,6 +845,23 @@ class ContactingCreatorMailer < ApplicationMailer
 
     def format_dispute_evidence_due_at(due_at)
       due_at.in_time_zone(@seller.timezone.presence || Time.zone).strftime("%B %-d, %Y at %-l:%M %p %Z")
+    end
+
+    # Mirrors what formalization booked: Purchase#decrement_balance_for_refund_or_chargeback! skips
+    # sales refunded in full or paid into a Stripe Connect account, and debits only the unrefunded
+    # part of a partially refunded one. A win credits back only what was debited.
+    def chargeback_balance_debit(disputable)
+      purchases = disputable.disputed_purchases
+      debited = purchases.select(&:purchase_chargeback_balance_id?)
+
+      if debited.empty?
+        return :stripe_connect if disputable.charged_using_stripe_connect_account?
+        purchases.all?(&:stripe_refunded?) ? :refunded : :none
+      elsif debited.size == purchases.size && debited.none?(&:stripe_partially_refunded?)
+        :full
+      else
+        :partial
+      end
     end
 
     def should_send_email?

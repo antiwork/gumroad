@@ -378,11 +378,27 @@ describe ContactingCreatorMailer do
   describe "chargeback notice" do
     let(:seller) { create(:named_seller) }
 
+    # Books the seller debit through the formalization path, so a sale it skips stays undebited.
+    def book_chargeback_debits(dispute)
+      disputable = Dispute.find(dispute.id).disputable
+      event_flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::USD, -disputable.disputed_amount_cents)
+      disputable.disputed_purchases.each do |disputed_purchase|
+        disputed_purchase.decrement_balance_for_refund_or_chargeback!(disputable.build_flow_of_funds(event_flow_of_funds, disputed_purchase), dispute:)
+      end
+    end
+
+    def refund_before_dispute(refunded_purchase, amount_cents)
+      refunded_purchase.refund_purchase!(FlowOfFunds.build_simple_flow_of_funds(Currency::USD, -amount_cents), seller.id)
+    end
+
     context "for a dispute on Purchase" do
       let(:purchase) { create(:purchase, link: create(:product, user: seller)) }
       let(:dispute) { create(:dispute_formalized, purchase:) }
 
       it "sends chargeback notice correctly" do
+        book_chargeback_debits(dispute)
+        expect(purchase.reload.purchase_chargeback_balance).to be_present
+
         mail = ContactingCreatorMailer.chargeback_notice(dispute.id)
         expect(mail.to).to eq [seller.email]
         expect(mail.subject).to eq "A sale has been disputed"
@@ -390,19 +406,74 @@ describe ContactingCreatorMailer do
         expect(mail.body.encoded).to include "A customer of yours (#{purchase.email}) has disputed their purchase of #{purchase.link.name} for #{purchase.formatted_disputed_amount}."
         expect(mail.body.encoded).to include "We have deducted the amount from your balance, and are looking into it for you."
         expect(mail.body.encoded).to include "We fight every dispute. If we succeed, you will automatically be re-credited the full amount. This process takes up to 75 days."
+        expect(mail.body.encoded).to include "another notification once we have won the dispute."
         expect(mail.body.encoded).not_to include "Any additional information you can provide"
       end
 
-      context "when the purchase was already refunded in full and no chargeback debit was booked" do
-        before { purchase.update_columns(purchase_chargeback_balance_id: nil, stripe_refunded: true) }
+      context "when the sale was refunded in full before the dispute" do
+        before do
+          refund_before_dispute(purchase, purchase.total_transaction_cents)
+          book_chargeback_debits(dispute)
+        end
 
-        it "does not claim a deduction or a re-credit" do
+        it "claims no deduction, no re-credit, and no won notification" do
+          expect(purchase.reload.purchase_chargeback_balance).to be_nil
+
           mail = ContactingCreatorMailer.chargeback_notice(dispute.id)
 
           expect(mail.body.encoded).to include "This sale was already refunded in full, so nothing has been deducted from your balance."
-          expect(mail.body.encoded).to include "winning the dispute will not change your balance."
-          expect(mail.body.encoded).not_to include "We have deducted the amount"
+          expect(mail.body.encoded).to include "We fight every dispute. Because the money already went back to your customer, winning the dispute will not change your balance."
+          expect(mail.body.encoded).not_to include "We have deducted"
           expect(mail.body.encoded).not_to include "re-credited"
+          expect(mail.body.encoded).not_to include "another notification once we have won"
+        end
+      end
+
+      context "when the sale was partially refunded before the dispute" do
+        before do
+          refund_before_dispute(purchase, purchase.price_cents / 2)
+          book_chargeback_debits(dispute)
+        end
+
+        it "claims only the unrefunded part as deducted and re-credited" do
+          expect(purchase.reload.purchase_chargeback_balance).to be_present
+
+          mail = ContactingCreatorMailer.chargeback_notice(dispute.id)
+
+          expect(mail.body.encoded).to include "We have deducted the unrefunded part of that amount from your balance, and are looking into it for you."
+          expect(mail.body.encoded).to include "We fight every dispute. If we succeed, you will automatically be re-credited the amount we deducted. This process takes up to 75 days."
+          expect(mail.body.encoded).not_to include "We have deducted the amount from your balance"
+          expect(mail.body.encoded).not_to include "re-credited the full amount"
+        end
+      end
+
+      context "when the sale was paid into a Stripe Connect account" do
+        let(:purchase) do
+          create(:purchase, link: create(:product, user: seller), email: "buyer@example.com",
+                            merchant_account: create(:merchant_account_stripe_connect, user: seller))
+        end
+
+        before { book_chargeback_debits(dispute) }
+
+        it "says nothing left the Gumroad balance and points the seller to Stripe" do
+          expect(purchase.reload.purchase_chargeback_balance).to be_nil
+
+          mail = ContactingCreatorMailer.chargeback_notice(dispute.id)
+
+          expect(mail.body.encoded).to include "This sale was paid into your connected Stripe account, so nothing has been deducted from your Gumroad balance."
+          expect(mail.body.encoded).to include "We don't fight disputes on sales paid into your connected Stripe account, so please respond to this one in your Stripe dashboard."
+          expect(mail.body.encoded).not_to include "already refunded"
+          expect(mail.body.encoded).not_to include "We have deducted"
+          expect(mail.body.encoded).not_to include "re-credited"
+          expect(mail.body.encoded).not_to include "We fight every dispute"
+        end
+
+        context "when it was also refunded in full" do
+          before { refund_before_dispute(purchase, purchase.total_transaction_cents) }
+
+          it "still points the seller to Stripe" do
+            expect(ContactingCreatorMailer.chargeback_notice(dispute.id).body.encoded).to include "This sale was paid into your connected Stripe account"
+          end
         end
       end
 
@@ -571,6 +642,8 @@ describe ContactingCreatorMailer do
           mail = ContactingCreatorMailer.chargeback_notice(dispute.id)
 
           expect(mail.body.encoded).to include "A customer of yours (#{purchase.email}) has disputed their purchase of #{purchase.link.name} for #{purchase.formatted_disputed_amount}."
+          expect(mail.body.encoded).not_to include "deducted"
+          expect(mail.body.encoded).not_to include "re-credited"
           expect(mail.body.encoded).to_not include "send PayPal our delivery record for this order"
           Feature.activate(:submit_paypal_dispute_evidence)
           expect(ContactingCreatorMailer.chargeback_notice(dispute.id).body.encoded).to include "send PayPal our delivery record for this order"
@@ -591,6 +664,9 @@ describe ContactingCreatorMailer do
       let(:dispute) { create(:dispute_formalized_on_charge, purchase: nil, charge:) }
 
       it "sends chargeback notice correctly" do
+        book_chargeback_debits(dispute)
+        expect(charge.purchases.reload.map(&:purchase_chargeback_balance)).to all(be_present)
+
         mail = ContactingCreatorMailer.chargeback_notice(dispute.id)
         expect(mail.to).to eq [seller.email]
         expect(mail.subject).to eq "A sale has been disputed"
@@ -602,6 +678,43 @@ describe ContactingCreatorMailer do
         expect(mail.body.encoded).to include "We have deducted the amount from your balance, and are looking into it for you."
         expect(mail.body.encoded).to include "We fight every dispute. If we succeed, you will automatically be re-credited the full amount. This process takes up to 75 days."
         expect(mail.body.encoded).not_to include "Any additional information you can provide"
+      end
+
+      context "when the charge mixes unrefunded, partially refunded, and fully refunded sales" do
+        before do
+          fully_refunded, partially_refunded, _unrefunded = charge.purchases.sort_by(&:id)
+          refund_before_dispute(fully_refunded, fully_refunded.total_transaction_cents)
+          refund_before_dispute(partially_refunded, partially_refunded.price_cents / 2)
+          book_chargeback_debits(dispute)
+        end
+
+        it "claims only the unrefunded part as deducted and re-credited" do
+          expect(charge.purchases.reload.sort_by(&:id).map { _1.purchase_chargeback_balance.present? }).to eq [false, true, true]
+
+          mail = ContactingCreatorMailer.chargeback_notice(dispute.id)
+
+          expect(mail.body.encoded).to include "We have deducted the unrefunded part of that amount from your balance, and are looking into it for you."
+          expect(mail.body.encoded).to include "We fight every dispute. If we succeed, you will automatically be re-credited the amount we deducted. This process takes up to 75 days."
+          expect(mail.body.encoded).not_to include "already refunded in full"
+          expect(mail.body.encoded).not_to include "re-credited the full amount"
+        end
+      end
+
+      context "when every sale on the charge was refunded in full before the dispute" do
+        before do
+          charge.purchases.each { refund_before_dispute(_1, _1.total_transaction_cents) }
+          book_chargeback_debits(dispute)
+        end
+
+        it "claims no deduction or re-credit" do
+          expect(charge.purchases.reload.map(&:purchase_chargeback_balance)).to all(be_nil)
+
+          mail = ContactingCreatorMailer.chargeback_notice(dispute.id)
+
+          expect(mail.body.encoded).to include "This sale was already refunded in full, so nothing has been deducted from your balance."
+          expect(mail.body.encoded).not_to include "We have deducted"
+          expect(mail.body.encoded).not_to include "re-credited"
+        end
       end
 
       context "when the seller is contacted to submit evidence" do

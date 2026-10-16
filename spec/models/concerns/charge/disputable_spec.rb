@@ -765,6 +765,143 @@ describe Charge::Disputable, :vcr do
         end
       end
 
+      describe "the seller's notice against what formalization and a win actually book" do
+        let(:won_event) { build(:charge_event_dispute_won, charge_id: "ch_zitkxbhds3zqlt") }
+
+        def refund_before_dispute(refunded_purchase, amount_cents)
+          refunded_purchase.refund_purchase!(FlowOfFunds.build_simple_flow_of_funds(Currency::USD, -amount_cents), seller.id)
+        end
+
+        def notice_body(disputable)
+          ContactingCreatorMailer.chargeback_notice(disputable.reload.dispute.id).body.encoded
+        end
+
+        it "claims the full debit and full re-credit it books for an unrefunded sale" do
+          Purchase.handle_charge_event(event)
+
+          expect(seller.reload.unpaid_balance_cents).to eq initial_balance - purchase.payment_cents
+          body = notice_body(purchase)
+          expect(body).to include "We have deducted the amount from your balance, and are looking into it for you."
+          expect(body).to include "If we succeed, you will automatically be re-credited the full amount."
+
+          Purchase.handle_charge_event(won_event)
+          expect(seller.reload.unpaid_balance_cents).to eq initial_balance
+        end
+
+        context "when the sale was refunded in full before the dispute" do
+          before { refund_before_dispute(purchase, purchase.total_transaction_cents) }
+
+          it "claims no debit or re-credit, and neither formalization nor the win books one" do
+            balance_after_refund = seller.reload.unpaid_balance_cents
+
+            Purchase.handle_charge_event(event)
+
+            expect(seller.reload.unpaid_balance_cents).to eq balance_after_refund
+            body = notice_body(purchase)
+            expect(body).to include "This sale was already refunded in full, so nothing has been deducted from your balance."
+            expect(body).to include "winning the dispute will not change your balance."
+            expect(body).not_to include "We have deducted"
+            expect(body).not_to include "re-credited"
+            # handle_event_dispute_won! sends no won email for a sale refunded in full.
+            expect(body).not_to include "another notification once we have won"
+
+            expect { Purchase.handle_charge_event(won_event) }.not_to change { seller.reload.unpaid_balance_cents }
+            expect(Credit.where(chargebacked_purchase_id: purchase.id)).to be_empty
+          end
+        end
+
+        context "when the sale was partially refunded before the dispute" do
+          before { refund_before_dispute(purchase, purchase.price_cents / 2) }
+
+          it "claims only the unrefunded part, which is what the win credits back" do
+            balance_before_dispute = seller.reload.unpaid_balance_cents
+
+            Purchase.handle_charge_event(event)
+
+            debited_cents = balance_before_dispute - seller.reload.unpaid_balance_cents
+            expect(debited_cents).to be_between(1, purchase.payment_cents - 1)
+            body = notice_body(purchase)
+            expect(body).to include "We have deducted the unrefunded part of that amount from your balance, and are looking into it for you."
+            expect(body).to include "If we succeed, you will automatically be re-credited the amount we deducted."
+            expect(body).not_to include "re-credited the full amount"
+
+            Purchase.handle_charge_event(won_event)
+            expect(seller.reload.unpaid_balance_cents).to eq balance_before_dispute
+          end
+        end
+
+        context "when the sale was paid into a Stripe Connect account" do
+          before { purchase.update!(merchant_account: create(:merchant_account_stripe_connect, user: seller)) }
+
+          it "claims no Gumroad debit and does not say we fight it, and neither event moves the balance" do
+            expect { Purchase.handle_charge_event(event) }.not_to change { seller.reload.unpaid_balance_cents }
+
+            body = notice_body(purchase)
+            expect(body).to include "This sale was paid into your connected Stripe account, so nothing has been deducted from your Gumroad balance."
+            expect(body).to include "please respond to this one in your Stripe dashboard."
+            expect(body).not_to include "already refunded"
+            expect(body).not_to include "We have deducted"
+            expect(body).not_to include "re-credited"
+            expect(body).not_to include "We fight every dispute"
+            expect(FightDisputeJob.jobs.size).to eq(0)
+
+            expect { Purchase.handle_charge_event(won_event) }.not_to change { seller.reload.unpaid_balance_cents }
+          end
+        end
+
+        context "when the purchase was made with PayPal Connect" do
+          before do
+            purchase.update!(charge_processor_id: PaypalChargeProcessor.charge_processor_id,
+                             merchant_account: create(:merchant_account_paypal, user: seller))
+          end
+
+          it "books no Gumroad debit and the notice claims none" do
+            expect { Purchase.handle_charge_event(event) }.not_to change { seller.reload.unpaid_balance_cents }
+
+            body = notice_body(purchase)
+            expect(body).to include "The dispute is handled in your PayPal account"
+            expect(body).not_to include "deducted"
+            expect(body).not_to include "re-credited"
+          end
+        end
+
+        context "when a charge mixes unrefunded, partially refunded, and fully refunded sales" do
+          let!(:charge) do
+            charge = create(:charge, seller:, processor: StripeChargeProcessor.charge_processor_id,
+                                     processor_transaction_id: "ch_zitkxbhds3zqlt", amount_cents: 3_00)
+            3.times do
+              charge.purchases << create(:purchase, link: create(:product, user: seller), seller:, email: "buyer@example.com",
+                                                    price_cents: 100, total_transaction_cents: 100, fee_cents: 30)
+            end
+            charge
+          end
+
+          before do
+            allow(DisputeEvidence::GenerateReceiptImageService).to receive(:perform)
+              .and_return(File.read(Rails.root.join("spec", "support", "fixtures", "test-small.jpg")))
+            fully_refunded, partially_refunded, _unrefunded = charge.purchases.sort_by(&:id)
+            refund_before_dispute(fully_refunded, fully_refunded.total_transaction_cents)
+            refund_before_dispute(partially_refunded, partially_refunded.price_cents / 2)
+          end
+
+          it "claims only the unrefunded part, which is what the win credits back" do
+            balance_before_dispute = seller.reload.unpaid_balance_cents
+
+            Purchase.handle_charge_event(event)
+
+            expect(charge.purchases.reload.sort_by(&:id).map(&:purchase_chargeback_balance_id).map(&:present?)).to eq [false, true, true]
+            expect(seller.reload.unpaid_balance_cents).to be < balance_before_dispute
+            body = notice_body(charge)
+            expect(body).to include "We have deducted the unrefunded part of that amount from your balance, and are looking into it for you."
+            expect(body).to include "If we succeed, you will automatically be re-credited the amount we deducted."
+            expect(body).not_to include "already refunded in full"
+
+            Purchase.handle_charge_event(won_event)
+            expect(seller.reload.unpaid_balance_cents).to eq balance_before_dispute
+          end
+        end
+      end
+
       describe "webhook replay safety" do
         let!(:purchase_event) { create(:event, event_name: "purchase", purchase_id: purchase.id, link_id: product.id) }
 
