@@ -22,7 +22,7 @@ A fork PR that skips the evidence gets the same answer as one of ours that skips
 
 **Bug reports and questions are still welcome** — [email support@gumroad.com](mailto:support@gumroad.com). The fork route above is for pull requests.
 
-Merged fork commits keep your authorship, so contributions show up under your name in the history. We rebuild your change as a single commit inside this repo rather than merging your fork, so that commit carries a `Co-authored-by: <your name> <your email>` trailer — your GitHub noreply address is fine, and it has to go in when the commit is written, because the squash is all the history keeps. Emailing us a link to your fork PR counts as contributing under the [license terms](#license) at the bottom of this guide.
+Rather than merging your fork commits, we rebuild your change as one commit in this repo and credit you as its co-author: whoever implements it asks for your name and an email on your GitHub account (your noreply address works) and adds `Co-authored-by: Your Name <you@example.com>` to that commit. Only the final squash commit reaches `main`, so whoever merges must check that the same line ends the squash commit message, after a blank line, and add it if it's missing. Emailing us a link to your fork PR counts as contributing under the [license terms](#license) at the bottom of this guide.
 
 We read every submission, but we can't promise a reply to each one or a timeline for review.
 
