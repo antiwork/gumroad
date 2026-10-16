@@ -4,6 +4,7 @@ import * as React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { SurchargesResponse } from "$app/data/customer_surcharge";
+import type { CardProduct } from "$app/parsers/product";
 
 import type { CartItem, CartState, Product as CartProduct } from "$app/components/Checkout/cartState";
 import { Checkout } from "$app/components/Checkout/index";
@@ -13,7 +14,10 @@ vi.stubGlobal("Routes", new Proxy({}, { get: () => () => "#" }));
 
 // Subtrees that talk to Stripe/network or need browser APIs irrelevant to the amounts
 // being asserted.
-vi.mock("$app/components/Checkout/PaymentForm", () => ({ PaymentForm: () => null }));
+vi.mock("$app/components/Checkout/PaymentForm", () => ({ PaymentForm: () => <div aria-label="Payment form" /> }));
+vi.mock("$app/components/Product/Card", () => ({
+  Card: ({ product }: { product: { name: string } }) => <article>{product.name}</article>,
+}));
 vi.mock("$app/components/server-components/Alert", () => ({ showAlert: vi.fn(), dismissAlert: vi.fn() }));
 // Pulls in vendor analytics scripts ($vendor/facebook_pixel) that vitest cannot resolve.
 vi.mock("$app/utils/user_analytics", () => ({ trackUserProductAction: vi.fn(), startTrackingForSeller: vi.fn() }));
@@ -1366,5 +1370,48 @@ describe("Checkout currency picker", () => {
 
     expect(getByLabelText("Currency")).toBeTruthy();
     expect(dispatch).toHaveBeenCalledWith({ type: "set-value", buyerCurrency: "cad" });
+  });
+});
+
+describe("Checkout layout while content loads", () => {
+  const recommendation: CardProduct = {
+    id: "rec-1",
+    permalink: "rec",
+    name: "Recommended thing",
+    seller: { id: "seller-a", name: "Seller A", profile_url: "#", avatar_url: null, is_verified: false },
+    ratings: null,
+    price_cents: 500,
+    currency_code: "usd",
+    thumbnail_url: null,
+    native_type: "digital",
+    url: "#",
+    is_pay_what_you_want: false,
+    quantity_remaining: null,
+    is_sales_limited: false,
+    duration_in_months: null,
+    recurrence: null,
+  };
+  const cart: CartState = { items: [cartItem()], discountCodes: [] };
+  const renderLayout = (state: State) =>
+    render(
+      <StateContext.Provider value={[state, vi.fn()]}>
+        <Checkout discoverUrl="#" cart={cart} updateCart={vi.fn()} recommendedProducts={[recommendation]} />
+      </StateContext.Provider>,
+    );
+  const followsPaymentForm = (view: ReturnType<typeof render>, text: string) =>
+    !!(
+      view.getByLabelText("Payment form").compareDocumentPosition(view.getByText(text)) &
+      Node.DOCUMENT_POSITION_FOLLOWING
+    );
+
+  it("holds the Subtotal and Total rows while the first quote loads", () => {
+    const view = renderLayout(buildState({ surcharges: { type: "pending" } }));
+    expect(view.getByText("Subtotal")).toBeTruthy();
+    expect(view.getByText("Total")).toBeTruthy();
+  });
+
+  it("puts recommendations after the payment form, so their arrival cannot move it", () => {
+    const view = renderLayout(buildState());
+    expect(followsPaymentForm(view, "Recommended thing")).toBe(true);
   });
 });

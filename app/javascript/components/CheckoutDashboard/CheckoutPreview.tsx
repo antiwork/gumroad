@@ -38,7 +38,9 @@ export const CheckoutPreview = ({
         saveAddress: false,
         gift: { type: "normal", email: "", note: "", hideGifter: false },
         customFieldValues: {},
-        surcharges: { type: "pending" },
+        // No quote ever arrives for this sample cart; "pending" would hold the summary's loading
+        // rows open forever.
+        surcharges: { type: "error" },
         status: { type: "input", errors: new Set() },
         paymentMethod: "card",
         usStates: ["AA"],

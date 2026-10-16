@@ -181,7 +181,9 @@ describe "Checkout cart", :js, type: :system do
           expect(page).to have_text("Discounts get-it-for-free US$-10", normalize_ws: true)
           expect(page).not_to have_selector(:fieldset, "Card information")
 
-          expect(cart.reload.discount_codes).to eq([{ "code" => "get-it-for-free", "fromUrl" => true }])
+          # The cart save is debounced, so it can land after the page shows the discount.
+          poll_until { cart.reload.discount_codes.present? }
+          expect(cart.discount_codes).to eq([{ "code" => "get-it-for-free", "fromUrl" => true }])
         end
       end
 

@@ -22,6 +22,7 @@ import {
   isCardReadyToPay,
   isSubmitDisabled,
   paymentMethodTypesForMountCurrency,
+  quoteWillBeFree,
   reduceCheckoutState,
   requiresPaymentElementReusablePaymentMethod,
   requiresReusablePaymentMethodForCardCollection,
@@ -1085,6 +1086,32 @@ describe("requiresReusablePaymentMethod", () => {
     expect(requiresReusablePaymentMethod(state({ products: [product({ subscription_id: "sub_123" })] }))).toBe(true);
     expect(requiresReusablePaymentMethod(state({ products: [product({ recurrence: "monthly" })] }))).toBe(false);
     expect(requiresReusablePaymentMethod(state({ products: [product({ nativeType: "commission" })] }))).toBe(true);
+  });
+});
+
+describe("quoteWillBeFree", () => {
+  it("is true for a cart with nothing priced or shipped", () => {
+    expect(quoteWillBeFree(state({ products: [product({ price: 0, requirePayment: false })] }))).toBe(true);
+  });
+
+  it("is false when any line is priced", () => {
+    expect(
+      quoteWillBeFree(
+        state({ products: [product({ price: 0, requirePayment: false }), product({ permalink: "b", price: 500 })] }),
+      ),
+    ).toBe(false);
+  });
+
+  it("is false when a free line ships, since shipping can be charged", () => {
+    expect(
+      quoteWillBeFree(state({ products: [product({ price: 0, requirePayment: false, requireShipping: true })] })),
+    ).toBe(false);
+  });
+
+  it("is false for a free trial that collects a card", () => {
+    expect(
+      quoteWillBeFree(state({ products: [product({ price: 0, hasFreeTrial: true, requirePayment: true })] })),
+    ).toBe(false);
   });
 });
 
