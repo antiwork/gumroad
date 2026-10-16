@@ -854,6 +854,40 @@ describe GdprDataErasureService do
       expect(result[:summary][:sent_post_emails_deleted]).to eq(2)
     end
 
+    it "deletes a sent post email row a send inserts after the first lookup" do
+      post = create(:installment)
+      lookups = 0
+      allow(SentPostEmail).to receive(:ids_for_email).and_wrap_original do |original, email|
+        original.call(email).tap do
+          lookups += 1
+          create(:sent_post_email, post:, email:) if lookups == 1
+        end
+      end
+
+      result = described_class.new(user, performed_by: admin).perform!
+
+      expect(result[:success]).to eq(true)
+      expect(SentPostEmail.where(email: "john@example.com")).to be_empty
+      expect(result[:summary][:sent_post_emails_deleted]).to eq(1)
+    end
+
+    it "reports the erasure as incomplete when the post-commit sent post email recheck fails" do
+      lookups = 0
+      allow(SentPostEmail).to receive(:ids_for_email).and_wrap_original do |original, email|
+        lookups += 1
+        raise ActiveRecord::StatementTimeout, "timed out" if lookups == 2
+        original.call(email)
+      end
+
+      result = described_class.new(user, performed_by: admin).perform!
+
+      expect(result[:success]).to eq(false)
+      expect(result[:error]).to include("sent post email records for the original address could not be rechecked")
+      expect(user.reload.email).to eq("deleted-#{user.id}@deleted.gumroad.com")
+      note = user.comments.where(comment_type: Comment::COMMENT_TYPE_PAYOUT_NOTE).last
+      expect(note.content).to include("sent post email records for the original address could not be rechecked")
+    end
+
     it "anonymizes the address on other sellers' audience, follower and imported customer rows and in their search documents" do
       seller = create(:user)
       follower = create(:active_follower, user: seller, email: user.email)

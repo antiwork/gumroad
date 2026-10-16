@@ -20,6 +20,29 @@ describe SentPostEmail do
     end
   end
 
+  describe ".ids_for_email" do
+    it "returns the address's rows across every post" do
+      first_row = create(:sent_post_email, email: "buyer@example.com")
+      second_row = create(:sent_post_email, email: "buyer@example.com")
+      create(:sent_post_email, email: "other@example.com")
+
+      expect(described_class.ids_for_email("buyer@example.com")).to match_array([first_row.id, second_row.id])
+    end
+
+    it "reads the (post_id, email) index with a skip scan" do
+      create(:sent_post_email, email: "buyer@example.com")
+      sql = nil
+      capture = ->(*, payload) { sql = payload[:sql] if payload[:sql].include?("sent_post_emails") }
+      ActiveSupport::Notifications.subscribed(capture, "sql.active_record") do
+        described_class.ids_for_email("buyer@example.com")
+      end
+
+      plan = described_class.connection.select_all("EXPLAIN #{sql}").first
+      expect(plan["key"]).to eq("index_sent_post_emails_on_post_id_and_email")
+      expect(plan["Extra"]).to include("Using index for skip scan")
+    end
+  end
+
   describe ".missing_emails" do
     it "returns array of emails currently not stored" do
       create(:sent_post_email, post:, email: "foo")

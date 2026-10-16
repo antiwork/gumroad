@@ -4,6 +4,7 @@ class GdprDataErasureService
   ANONYMIZED_EMAIL_DOMAIN = "deleted.gumroad.com"
   ANONYMIZED_NAME = "[deleted]"
   ANONYMIZED_VALUE = "[redacted]"
+  SENT_POST_EMAIL_DELETE_BATCH_SIZE = 1_000
 
   # Fields that must be retained for tax/legal compliance (Article 17(3)(b))
   # Transaction records, payout history, tax documents are kept.
@@ -26,6 +27,10 @@ class GdprDataErasureService
     credit_card_ids = credit_card_ids_for_erasure
     # Read before anything below nulls the browser_guid columns this attribution is built from.
     guest_cart_browser_guids = exclusive_browser_guids(original_email)
+    # Read before the transaction: the lookup takes seconds, and the erasure's row locks would be held
+    # for all of it.
+    erase_sent_post_emails = email_keyed_erasure?(original_email:, anonymized_email: anonymized_account_email)
+    sent_post_email_ids = erase_sent_post_emails ? SentPostEmail.ids_for_email(original_email) : []
     # Read before the transaction so the Stripe deletion below has the accounts to hand. The values
     # would survive the transaction unchanged, but resolving them up front keeps the deletion
     # independent of what erasure does to the account in between.
@@ -49,7 +54,7 @@ class GdprDataErasureService
       # Before the purchases lose the addresses its member lookup is keyed by.
       remove_own_purchase_audience_details!(anonymized_email:, original_email:)
       anonymize_buyer_purchases!(anonymized_email:, original_email:)
-      erase_email_keyed_records!(anonymized_email:, original_email:)
+      erase_email_keyed_records!(anonymized_email:, original_email:, sent_post_email_ids:)
       anonymize_linked_followers!(anonymized_email)
       log_erasure!
       # Every run, not only the one that rewrote the rows: a rerun is what writes the documents an
@@ -61,6 +66,7 @@ class GdprDataErasureService
     # there would delete the guardian Person of an account that is still live and still needs it.
     @local_erasure_committed = true
 
+    delete_late_sent_post_emails!(original_email) if erase_sent_post_emails
     remove_profile_assets!
     # Re-resolved after the commit and unioned with the snapshot, because an account created while
     # the transaction ran is absent from the snapshot and a sync can put a guardian Person on it.
@@ -93,11 +99,13 @@ class GdprDataErasureService
 
       return {
         success: false,
-        error: [incomplete_erasure_error(retained_guardian_person_ids), @search_index_error].compact.join(" "),
+        error: [incomplete_erasure_error(retained_guardian_person_ids), @search_index_error, @sent_post_email_error].compact.join(" "),
         summary: erasure_summary
       }
     end
-    return { success: false, error: @search_index_error, summary: erasure_summary } if @search_index_error
+    if @search_index_error || @sent_post_email_error
+      return { success: false, error: [@search_index_error, @sent_post_email_error].compact.join(" "), summary: erasure_summary }
+    end
 
     { success: true, summary: erasure_summary }
   rescue => e
@@ -119,6 +127,7 @@ class GdprDataErasureService
       @local_erasure_committed = false
       @counts = Hash.new(0)
       @search_index_error = nil
+      @sent_post_email_error = nil
     end
 
     # Hands every recorded guardian Person to the retry job and leaves the durable note. Selects on
@@ -232,8 +241,12 @@ class GdprDataErasureService
       products_deleted
     end
 
+    def anonymized_account_email
+      "deleted-#{@user.id}@#{ANONYMIZED_EMAIL_DOMAIN}"
+    end
+
     def anonymize_user_pii!
-      anonymized_email = "deleted-#{@user.id}@#{ANONYMIZED_EMAIL_DOMAIN}"
+      anonymized_email = anonymized_account_email
 
       @user.update_columns(
         email: anonymized_email,
@@ -553,12 +566,12 @@ class GdprDataErasureService
       original_email.present? && !original_email.casecmp?(anonymized_email)
     end
 
-    def erase_email_keyed_records!(anonymized_email:, original_email:)
+    def erase_email_keyed_records!(anonymized_email:, original_email:, sent_post_email_ids:)
       return unless email_keyed_erasure?(original_email:, anonymized_email:)
 
       # Marketing-send dedupe rows, across every seller's posts. Nothing requires keeping them, so
-      # they are deleted rather than rewritten. Served by index_sent_post_emails_on_email.
-      @counts[:sent_post_emails] = SentPostEmail.where(email: original_email).delete_all
+      # they are deleted rather than rewritten.
+      @counts[:sent_post_emails] = delete_sent_post_emails!(sent_post_email_ids)
 
       audience_records = GdprAudienceRecordsAnonymizer.new(email: original_email, anonymized_email:)
       @counts[:audience_members] = audience_records.anonymize_audience_members!
@@ -568,6 +581,26 @@ class GdprDataErasureService
         reindex_ids: audience_records.pending_search_index_record_ids("index"),
         unindex_ids: audience_records.pending_search_index_record_ids("delete"),
       )
+    end
+
+    # A send can insert a row between the first lookup and the commit. Once the commit lands nothing
+    # addresses a new send to this email, so one more pass on the primary catches those rows. A rerun
+    # cannot, and retry state would have to keep the address, so a failure goes to the operator instead.
+    def delete_late_sent_post_emails!(original_email)
+      ApplicationRecord.connected_to(role: :writing) do
+        @counts[:sent_post_emails] += delete_sent_post_emails!(SentPostEmail.ids_for_email(original_email))
+      end
+    rescue => e
+      Rails.logger.error("GDPR: could not recheck sent post emails for user #{@user.id}: #{e.message}")
+      ErrorNotifier.notify(e)
+      @sent_post_email_error = "Erasure incomplete: sent post email records for the original address could " \
+                               "not be rechecked after the erasure. Delete them by hand before confirming " \
+                               "the request as fulfilled; a rerun cannot find them."
+      record_incomplete_erasure_step_note!(@sent_post_email_error)
+    end
+
+    def delete_sent_post_emails!(ids)
+      ids.each_slice(SENT_POST_EMAIL_DELETE_BATCH_SIZE).sum { SentPostEmail.where(id: _1).delete_all }
     end
 
     # A signed-in follow keeps follower_user_id and the address of that moment, which an email change
@@ -679,12 +712,12 @@ class GdprDataErasureService
                             "#{(reindex_ids | unindex_ids).join(', ')} could not be updated or removed in " \
                             "search and may still show the original address there. Run the erasure again to " \
                             "retry them before confirming the request as fulfilled."
-      record_incomplete_search_index_note!
+      record_incomplete_erasure_step_note!(@search_index_error)
     end
 
     # Durable like the guardian note: the returned error is gone once the console session is.
-    def record_incomplete_search_index_note!
-      @user.add_payout_note(content: "GDPR: #{@search_index_error}", seller_visible: false)
+    def record_incomplete_erasure_step_note!(error)
+      @user.add_payout_note(content: "GDPR: #{error}", seller_visible: false)
     rescue => e
       Rails.logger.error("GDPR: failed to record incomplete-erasure note for user #{@user.id}: #{e.message}")
       ErrorNotifier.notify(e)
