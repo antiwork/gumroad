@@ -256,11 +256,14 @@ export const Checkout = ({
   discoverUrl,
   cart,
   updateCart,
+  defaultOfferCodes = [],
   recommendedProducts,
 }: {
   discoverUrl: string;
   cart: CartState;
   updateCart: (updated: Partial<CartState>) => void;
+  // The arriving product's defaults this buyer can redeem.
+  defaultOfferCodes?: string[];
   recommendedProducts?: CardProduct[] | null;
 }) => {
   const [state] = useState();
@@ -269,17 +272,18 @@ export const Checkout = ({
 
   const isGift = state.gift != null;
 
-  async function applyDiscount(code: string, fromUrl = false) {
+  async function applyDiscount(code: string, fromUrl = false, alongsideCodes: string[] = []) {
     setLoadingDiscount(true);
-    const discount = await computeOfferDiscount({
-      code,
-      products: Object.fromEntries(
-        cart.items.map((item, index) => [
-          index,
-          { permalink: item.product.permalink, quantity: item.quantity, variant_external_id: item.option_id ?? "" },
-        ]),
-      ),
-    });
+    const products = Object.fromEntries(
+      cart.items.map((item, index) => [
+        index,
+        { permalink: item.product.permalink, quantity: item.quantity, variant_external_id: item.option_id ?? "" },
+      ]),
+    );
+    const [discount, alongsideDiscounts] = await Promise.all([
+      computeOfferDiscount({ code, products }),
+      Promise.all(alongsideCodes.map((code) => computeOfferDiscount({ code, products }))),
+    ]);
     if (discount.valid) {
       const entries = Object.entries(discount.products_data);
       const pppDiscountGreaterCount = entries.reduce((acc, [permalink, discount]) => {
@@ -307,6 +311,11 @@ export const Checkout = ({
         updateCart({
           discountCodes: [
             { code, products: discount.products_data, fromUrl },
+            // Added without taking products over, so each line keeps whichever code saves it more.
+            ...alongsideCodes.flatMap((alongsideCode, index) => {
+              const alongside = alongsideDiscounts[index];
+              return alongside?.valid ? [{ code: alongsideCode, products: alongside.products_data, fromUrl }] : [];
+            }),
             ...cart.discountCodes
               .map((item) => ({
                 ...item,
@@ -314,7 +323,10 @@ export const Checkout = ({
                   Object.entries(item.products).filter(([permalink]) => !(permalink in discount.products_data)),
                 ),
               }))
-              .filter((item) => item.code !== code && Object.keys(item.products).length > 0),
+              .filter(
+                (item) =>
+                  item.code !== code && !alongsideCodes.includes(item.code) && Object.keys(item.products).length > 0,
+              ),
           ],
         });
       }
@@ -330,9 +342,17 @@ export const Checkout = ({
   useRunOnce(() => {
     const url = new URL(window.location.href);
     const code = url.searchParams.get("code");
-    if (hasAddedProduct) cart.discountCodes.forEach(({ code }) => void applyDiscount(code));
+    // A default the product page picked was weighed on one quote; the others ride along so the
+    // cart can re-weigh them per line. Re-applying them separately would race and strip them.
+    const alongsideCodes =
+      code && defaultOfferCodes.includes(code) ? defaultOfferCodes.filter((candidate) => candidate !== code) : [];
+    const appliedTogether = alongsideCodes.length > 0 ? [code, ...alongsideCodes] : [];
+    if (hasAddedProduct)
+      cart.discountCodes
+        .filter(({ code }) => !appliedTogether.includes(code))
+        .forEach(({ code }) => void applyDiscount(code));
     if (code) {
-      void applyDiscount(code, true);
+      void applyDiscount(code, true, alongsideCodes);
       url.searchParams.delete("code");
       window.history.replaceState(window.history.state, "", url.toString());
     }

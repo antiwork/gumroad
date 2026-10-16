@@ -112,6 +112,7 @@ type CheckoutIndexPageProps = {
     discover_url: string;
     gift: Gift | null;
     max_allowed_cart_products: number;
+    default_offer_codes: string[];
     paypal_client_id: string;
     recaptcha_key: string | null;
     recaptcha_score_based: boolean;
@@ -188,6 +189,7 @@ const CheckoutIndexPage = () => {
       recaptcha_challenge_key,
       paypal_client_id,
       max_allowed_cart_products,
+      default_offer_codes,
       cart_save_debounce_ms,
       tip_options,
       default_tip_option,
@@ -1127,6 +1129,7 @@ const CheckoutIndexPage = () => {
             discoverUrl={discover_url}
             cart={cartForm.data.cart}
             updateCart={(updated) => cartForm.setData((prev) => ({ cart: { ...prev.cart, ...updated } }))}
+            defaultOfferCodes={default_offer_codes}
             recommendedProducts={props.recommended_products ?? null}
           />
         </CheckoutThemeProvider>

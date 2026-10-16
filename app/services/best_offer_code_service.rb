@@ -36,6 +36,10 @@ class BestOfferCodeService
     url_code_amount > default_code_amount ? url_code_result : default_code_result
   end
 
+  def valid_default_codes
+    @default_codes.select { evaluate_code(_1)[:valid] }
+  end
+
   private
     # The buyer's own existing-customer default goes first, then the effective default (the
     # shop-wide sale, if one runs). evaluate_code does not check currency, so a fixed default left

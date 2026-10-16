@@ -95,6 +95,45 @@ describe "Automatic sales on product pages", type: :system, js: true do
     expect(page).to have_text("Total US$7", normalize_ws: true)
   end
 
+  it "weighs a qualifying buyer's existing-customer code against the sale on the tier they check out and edit" do
+    seller = create(:compliant_user)
+    product = create(:product, user: seller, price_cents: 1000)
+    membership = create(:membership_product_with_preset_tiered_pricing, user: seller, name: "Target membership",
+                                                                        recurrence_price_values: [
+                                                                          { "monthly" => { enabled: true, price: 10 } },
+                                                                          { "monthly" => { enabled: true, price: 100 } },
+                                                                        ])
+    owned_product = create(:product, user: seller, price_cents: 2000)
+    renewal = seller.offer_codes.create!(code: "RENEW20", amount_percentage: 20, products: [membership],
+                                         existing_customers_only: true, ownership_products: [owned_product])
+    membership.update!(default_offer_code: renewal)
+    seller.offer_codes.create!(code: "SHOP5", amount_cents: 500, currency_type: "usd", universal: true, products: [], auto_apply: true)
+    Link.import(refresh: true, force: true)
+    cards = create(:seller_profile_products_section, seller:, product:, header: "More products", shown_products: [membership.id])
+    product.update!(sections: [cards.id])
+    buyer = create(:user)
+    create(:purchase, purchaser: buyer, link: owned_product, seller:, price_cents: 0)
+
+    login_as buyer
+    visit short_link_path(product)
+    within_section "More products", section_element: :section do
+      click_on "Target membership"
+    end
+    choose "Second Tier"
+    click_on "Add to cart"
+
+    expect(page).to have_cart_item("Target membership")
+    expect(page).to have_text("Total US$80", normalize_ws: true)
+
+    within_cart_item "Target membership" do
+      select_disclosure "Edit" do
+        choose "First Tier"
+        click_on "Save changes"
+      end
+    end
+    expect(page).to have_text("Total US$5", normalize_ws: true)
+  end
+
   it "labels profile cards and the featured product with the sale" do
     seller = create(:user)
     product = create(:product, user: seller, price_cents: 1000)

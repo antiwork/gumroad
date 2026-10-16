@@ -86,6 +86,7 @@ class CheckoutPresenter
       **add_single_product_props(params:, user:),
       **checkout_wishlist_props(params:),
       **checkout_wishlist_gift_props(params:),
+      default_offer_codes: single_product_default_offer_codes(params:, user:),
     }
   end
 
@@ -347,6 +348,12 @@ class CheckoutPresenter
       {
         add_products: [checkout_product(product, cart_item, params, arrival: true)].compact
       }
+    end
+
+    # The product page weighs these on one quote; the cart weighs them again per line.
+    def single_product_default_offer_codes(params:, user:)
+      product = single_product(params, user:)
+      product ? BestOfferCodeService.new(product:, buyer: logged_in_user).valid_default_codes : []
     end
 
     def checkout_wishlist_props(params:)
