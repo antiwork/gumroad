@@ -838,7 +838,7 @@ describe Charge::Disputable, :vcr do
 
             body = notice_body(purchase)
             expect(body).to include "This sale was paid into your connected Stripe account, so nothing has been deducted from your Gumroad balance."
-            expect(body).to include "please respond to this one in your Stripe dashboard."
+            expect(body).to include "you can respond and submit evidence through Stripe's dispute process."
             expect(body).not_to include "already refunded"
             expect(body).not_to include "We have deducted"
             expect(body).not_to include "re-credited"
@@ -846,6 +846,27 @@ describe Charge::Disputable, :vcr do
             expect(FightDisputeJob.jobs.size).to eq(0)
 
             expect { Purchase.handle_charge_event(won_event) }.not_to change { seller.reload.unpaid_balance_cents }
+          end
+        end
+
+        context "when a refund that skipped the seller balance left the sale refunded in full" do
+          before do
+            purchase.refund_purchase!(FlowOfFunds.build_simple_flow_of_funds(Currency::USD, -purchase.total_transaction_cents), seller.id, gumroad_funded: true)
+          end
+
+          it "claims the full debit it books but no re-credit, and the win credits nothing" do
+            balance_before_dispute = seller.reload.unpaid_balance_cents
+
+            Purchase.handle_charge_event(event)
+
+            expect(seller.reload.unpaid_balance_cents).to eq balance_before_dispute - purchase.payment_cents
+            body = notice_body(purchase)
+            expect(body).to include "We have deducted the amount from your balance, and are looking into it for you."
+            expect(body).not_to include "re-credited"
+            expect(body).not_to include "another notification once we have won"
+
+            expect { Purchase.handle_charge_event(won_event) }.not_to change { seller.reload.unpaid_balance_cents }
+            expect(Credit.where(chargebacked_purchase_id: purchase.id)).to be_empty
           end
         end
 
@@ -895,6 +916,36 @@ describe Charge::Disputable, :vcr do
             expect(body).to include "We have deducted the unrefunded part of that amount from your balance, and are looking into it for you."
             expect(body).to include "If we succeed, you will automatically be re-credited the amount we deducted."
             expect(body).not_to include "already refunded in full"
+
+            Purchase.handle_charge_event(won_event)
+            expect(seller.reload.unpaid_balance_cents).to eq balance_before_dispute
+          end
+        end
+
+        context "when a charge carries a free item from the same cart" do
+          let!(:charge) do
+            charge = create(:charge, seller:, processor: StripeChargeProcessor.charge_processor_id,
+                                     processor_transaction_id: "ch_zitkxbhds3zqlt", amount_cents: 1_00)
+            charge.purchases << create(:purchase, link: create(:product, user: seller), seller:, email: "buyer@example.com",
+                                                  price_cents: 100, total_transaction_cents: 100, fee_cents: 30)
+            charge.purchases << create(:free_purchase, link: create(:product, user: seller, price_cents: 0), seller:, email: "buyer@example.com")
+            charge
+          end
+
+          before do
+            allow(DisputeEvidence::GenerateReceiptImageService).to receive(:perform)
+              .and_return(File.read(Rails.root.join("spec", "support", "fixtures", "test-small.jpg")))
+          end
+
+          it "claims the full debit and re-credit it books for the paid item" do
+            balance_before_dispute = seller.reload.unpaid_balance_cents
+
+            Purchase.handle_charge_event(event)
+
+            expect(charge.purchases.reload.map { [_1.free_purchase?, _1.purchase_chargeback_balance_id.present?] }).to contain_exactly([false, true], [true, false])
+            body = notice_body(charge)
+            expect(body).to include "We have deducted the amount from your balance, and are looking into it for you."
+            expect(body).to include "If we succeed, you will automatically be re-credited the full amount."
 
             Purchase.handle_charge_event(won_event)
             expect(seller.reload.unpaid_balance_cents).to eq balance_before_dispute

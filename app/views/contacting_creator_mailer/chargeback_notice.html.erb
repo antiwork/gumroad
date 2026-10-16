@@ -50,7 +50,7 @@
     <% case @balance_debit %>
     <% when :stripe_connect %>
       <p>
-        We don't fight disputes on sales paid into your connected Stripe account, so please respond to this one in your Stripe dashboard.
+        We don't fight disputes on sales paid into your connected Stripe account, but you can respond and submit evidence through Stripe's dispute process.
       </p>
     <% when :refunded %>
       <p>
@@ -58,17 +58,19 @@
       </p>
     <% else %>
       <p>
-        <% if @balance_debit == :full %>
+        <% if @win_credit == :full %>
           We fight every dispute. If we succeed, you will automatically be re-credited the full amount. This process takes up to 75 days.
-        <% elsif @balance_debit == :partial %>
+        <% elsif @win_credit == :partial %>
           We fight every dispute. If we succeed, you will automatically be re-credited the amount we deducted. This process takes up to 75 days.
         <% else %>
           We fight every dispute.
         <% end %>
       </p>
-      <p>
-        You'll get another notification once we have won the dispute. If you haven't received that notification, we have not yet won this dispute.
-      </p>
+      <% if @won_notification %>
+        <p>
+          You'll get another notification once we have won the dispute. If you haven't received that notification, we have not yet won this dispute.
+        </p>
+      <% end %>
     <% end %>
   <% end %>
 </div>

@@ -453,27 +453,47 @@ describe ContactingCreatorMailer do
                             merchant_account: create(:merchant_account_stripe_connect, user: seller))
         end
 
-        before { book_chargeback_debits(dispute) }
-
         it "says nothing left the Gumroad balance and points the seller to Stripe" do
+          book_chargeback_debits(dispute)
           expect(purchase.reload.purchase_chargeback_balance).to be_nil
 
           mail = ContactingCreatorMailer.chargeback_notice(dispute.id)
 
           expect(mail.body.encoded).to include "This sale was paid into your connected Stripe account, so nothing has been deducted from your Gumroad balance."
-          expect(mail.body.encoded).to include "We don't fight disputes on sales paid into your connected Stripe account, so please respond to this one in your Stripe dashboard."
+          expect(mail.body.encoded).to include "We don't fight disputes on sales paid into your connected Stripe account, but you can respond and submit evidence through Stripe's dispute process."
           expect(mail.body.encoded).not_to include "already refunded"
           expect(mail.body.encoded).not_to include "We have deducted"
           expect(mail.body.encoded).not_to include "re-credited"
           expect(mail.body.encoded).not_to include "We fight every dispute"
         end
 
-        context "when it was also refunded in full" do
-          before { refund_before_dispute(purchase, purchase.total_transaction_cents) }
+        it "still points the seller to Stripe when the sale was also refunded in full before the dispute" do
+          refund_before_dispute(purchase, purchase.total_transaction_cents)
+          book_chargeback_debits(dispute)
+          expect(purchase.reload.purchase_chargeback_balance).to be_nil
 
-          it "still points the seller to Stripe" do
-            expect(ContactingCreatorMailer.chargeback_notice(dispute.id).body.encoded).to include "This sale was paid into your connected Stripe account"
-          end
+          body = ContactingCreatorMailer.chargeback_notice(dispute.id).body.encoded
+
+          expect(body).to include "This sale was paid into your connected Stripe account"
+          expect(body).not_to include "already refunded"
+        end
+      end
+
+      context "when a refund that skipped the seller balance left the sale refunded in full" do
+        before do
+          purchase.refund_purchase!(FlowOfFunds.build_simple_flow_of_funds(Currency::USD, -purchase.total_transaction_cents), seller.id, gumroad_funded: true)
+          book_chargeback_debits(dispute)
+        end
+
+        it "claims the deduction it booked but no re-credit, since a win skips refunded sales" do
+          expect(purchase.reload).to be_refunded
+          expect(purchase.purchase_chargeback_balance).to be_present
+
+          mail = ContactingCreatorMailer.chargeback_notice(dispute.id)
+
+          expect(mail.body.encoded).to include "We have deducted the amount from your balance, and are looking into it for you."
+          expect(mail.body.encoded).not_to include "re-credited"
+          expect(mail.body.encoded).not_to include "another notification once we have won"
         end
       end
 
@@ -697,6 +717,25 @@ describe ContactingCreatorMailer do
           expect(mail.body.encoded).to include "We fight every dispute. If we succeed, you will automatically be re-credited the amount we deducted. This process takes up to 75 days."
           expect(mail.body.encoded).not_to include "already refunded in full"
           expect(mail.body.encoded).not_to include "re-credited the full amount"
+        end
+      end
+
+      context "when the charge also carries a free item from the same cart" do
+        before do
+          charge.purchases << create(:free_purchase, link: create(:product, user: seller, price_cents: 0), email: "buyer@example.com")
+          book_chargeback_debits(dispute)
+        end
+
+        it "claims the full deduction and re-credit, since nothing was refunded" do
+          free_purchase, paid_purchases = charge.purchases.reload.partition(&:free_purchase?)
+          expect(free_purchase.sole.purchase_chargeback_balance).to be_nil
+          expect(paid_purchases.map(&:purchase_chargeback_balance)).to all(be_present)
+
+          mail = ContactingCreatorMailer.chargeback_notice(dispute.id)
+
+          expect(mail.body.encoded).to include "We have deducted the amount from your balance, and are looking into it for you."
+          expect(mail.body.encoded).to include "We fight every dispute. If we succeed, you will automatically be re-credited the full amount. This process takes up to 75 days."
+          expect(mail.body.encoded).not_to include "unrefunded part"
         end
       end
 

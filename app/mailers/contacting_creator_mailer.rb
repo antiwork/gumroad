@@ -102,6 +102,9 @@ class ContactingCreatorMailer < ApplicationMailer
     @is_paypal = @disputable.charge_processor == PaypalChargeProcessor.charge_processor_id
     @seller = @disputable.seller
     @balance_debit = chargeback_balance_debit(@disputable)
+    @win_credit = chargeback_win_credit(@disputable, @balance_debit)
+    # Mirrors the guard on ContactingCreatorMailer.chargeback_won in handle_event_dispute_won!.
+    @won_notification = !@disputable.disputed_purchases.all?(&:refunded?)
 
     dispute_evidence = dispute.dispute_evidence
     # Recomputed at delivery, not at enqueue: a notice queued with an hour left can be delivered with
@@ -847,21 +850,30 @@ class ContactingCreatorMailer < ApplicationMailer
       due_at.in_time_zone(@seller.timezone.presence || Time.zone).strftime("%B %-d, %Y at %-l:%M %p %Z")
     end
 
-    # Mirrors what formalization booked: Purchase#decrement_balance_for_refund_or_chargeback! skips
-    # sales refunded in full or paid into a Stripe Connect account, and debits only the unrefunded
-    # part of a partially refunded one. A win credits back only what was debited.
+    # Reads what Purchase#decrement_balance_for_refund_or_chargeback! booked: nothing for a sale refunded
+    # in full or paid into Stripe Connect, only the unrefunded part of a partial refund. A cart's free
+    # items share the charge but carry no debit, so only a refund makes the deduction partial.
     def chargeback_balance_debit(disputable)
       purchases = disputable.disputed_purchases
       debited = purchases.select(&:purchase_chargeback_balance_id?)
 
       if debited.empty?
         return :stripe_connect if disputable.charged_using_stripe_connect_account?
-        purchases.all?(&:stripe_refunded?) ? :refunded : :none
-      elsif debited.size == purchases.size && debited.none?(&:stripe_partially_refunded?)
-        :full
-      else
+        purchases.reject(&:free_purchase?).all?(&:refunded?) ? :refunded : :none
+      elsif debited.any?(&:stripe_partially_refunded?) || purchases.any? { _1.refunded? && !_1.purchase_chargeback_balance_id? }
         :partial
+      else
+        :full
       end
+    end
+
+    # handle_event_dispute_won! credits only purchases that aren't refunded, so a debit booked against a
+    # refunded sale (a refund that skipped the seller balance) is never credited back.
+    def chargeback_win_credit(disputable, balance_debit)
+      return unless balance_debit.in?([:full, :partial])
+      return if disputable.disputed_purchases.any? { _1.purchase_chargeback_balance_id? && _1.refunded? }
+
+      balance_debit
     end
 
     def should_send_email?
