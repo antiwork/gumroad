@@ -15,9 +15,6 @@ class SendStripeBalanceCheckNotificationJob
 
     was_needed = $redis.get(RedisKey.stripe_balance_topup_needed) == "true"
     needs_topup = balance_check.topup_needed?
-    # The check runs daily, so the one that lands the morning before the cycle's first run is the
-    # Monday: it re-sends the verdict with no transition, so the team gets a definite read before
-    # any money moves.
     recheck_due = !needs_topup && balance_check.day_before_first_run?
     # Preserve the transition if message construction or enqueueing fails; a retry must still send the all-clear.
     if needs_topup || was_needed || recheck_due
@@ -41,9 +38,9 @@ class SendStripeBalanceCheckNotificationJob
         "(#{formatted_dollar_amount(balance_check.available_cents)} available + " \
         "#{pending} pending, which normally settles within a couple of business days).",
         "Seller payouts for balances up to #{period_end} need #{formatted_dollar_amount(balance_check.upcoming_payouts_cents)} " \
-        "from Gumroad's Stripe balance in total. The payout jobs run Tuesday to Friday at 10:00 UTC, each paying one group " \
-        "of sellers, so the money is drawn in parts between the next run (#{first_run}) and the last run of the cycle " \
-        "(#{last_run}).",
+        "from Gumroad's Stripe balance in total, counting any sellers an earlier run this cycle left unpaid. " \
+        "The payout jobs run Tuesday to Friday at 10:00 UTC, each drawing separately for its own group of sellers; " \
+        "the next run is #{first_run} and the last run of the cycle is #{last_run}.",
         cohort_split(balance_check),
         "Gap counting pending (available + pending against the whole cycle, assuming the #{pending} pending settles " \
         "before it is drawn): #{formatted_dollar_amount([balance_check.topup_amount_cents, 0].max)}. " \

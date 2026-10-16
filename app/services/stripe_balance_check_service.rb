@@ -53,8 +53,8 @@ class StripeBalanceCheckService
     @per_run_estimate_cents ||= PayoutEstimates.split_gumroad_held_stripe_cents_by_weekday(@per_user_payouts_cents)
   end
 
-  # The daily check that lands the morning before the cycle's first run. It re-sends the verdict
-  # even with no transition, so the team gets a definite read before any money moves.
+  # The daily check that lands the day before the cycle's first run re-sends the verdict even with no
+  # transition.
   def day_before_first_run?
     next_payout_run_at.wday == PAYOUT_RUN_WDAYS.first && next_payout_run_at.to_date == @now.to_date + 1
   end

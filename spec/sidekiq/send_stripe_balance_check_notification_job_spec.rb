@@ -38,7 +38,7 @@ describe SendStripeBalanceCheckNotificationJob do
         expect(message).to start_with("Action needed, conservatively before the next run: Wednesday, September 16 at 10:00 UTC (6:00 AM ET).\n")
         expect(message).to include("Stripe balance as of 14:02 UTC: $200,000 ($150,000 available + $50,000 pending, which normally settles")
         expect(message).to include("Seller payouts for balances up to September 11 need $300,000")
-        expect(message).to include("between the next run (Wednesday, September 16 at 10:00 UTC (6:00 AM ET)) and the last run of the cycle (Friday, September 18 at 10:00 UTC (6:00 AM ET)).")
+        expect(message).to include("the next run is Wednesday, September 16 at 10:00 UTC (6:00 AM ET) and the last run of the cycle is Friday, September 18 at 10:00 UTC (6:00 AM ET).")
         expect(message).to include("Gap counting pending (available + pending against the whole cycle, assuming the $50,000 pending settles before it is drawn): $100,000. " \
                                    "Gap if none of the pending settles in time (available alone against the whole cycle): $150,000.")
         expect(message).to include("Of Stripe's USD bank payouts created in the last 24 hours, $301,513.34 has reached the bank and $12,000 is still in flight.")
@@ -54,7 +54,7 @@ describe SendStripeBalanceCheckNotificationJob do
         message = InternalNotificationWorker.jobs.last["args"][2]
         expect(message).to include("By weekday cohort (estimates, which err high): runs still ahead: Wednesday $90,000, Thursday $90,000; " \
                                    "already run this cycle and still unpaid (in the total above; re-issued or manual payouts can still draw it): Tuesday $120,000.")
-        expect(message).to include("need $300,000 from Gumroad's Stripe balance in total")
+        expect(message).to include("need $300,000 from Gumroad's Stripe balance in total, counting any sellers an earlier run this cycle left unpaid.")
       end
 
       it "still sends the red verdict when the optional cohort lookup fails, and reports the failure" do
@@ -73,7 +73,8 @@ describe SendStripeBalanceCheckNotificationJob do
 
       it "sends nothing and keeps the previous state when the core estimate fails" do
         $redis.set(RedisKey.stripe_balance_topup_needed, true)
-        allow(StripeBalanceCheckService).to receive(:new).and_raise(ActiveRecord::StatementTimeout)
+        allow(StripeBalanceCheckService).to receive(:new).and_call_original
+        allow(PayoutEstimates).to receive(:estimate_gumroad_held_stripe_cents_per_user).and_raise(ActiveRecord::StatementTimeout)
 
         expect { described_class.new.perform }.to raise_error(ActiveRecord::StatementTimeout)
         expect(InternalNotificationWorker.jobs.size).to eq(0)
