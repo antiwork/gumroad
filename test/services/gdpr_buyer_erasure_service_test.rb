@@ -573,6 +573,27 @@ class GdprBuyerErasureServiceGuestBuyerDataTest < ActiveSupport::TestCase
     assert_equal "other@example.com", other_buyer.reload.email
   end
 
+  test "anonymizes sent post emails across batches, including a batch where every row conflicts" do
+    anonymized = GdprBuyerErasureService.new(@buyer_email, performed_by: @admin).send(:generate_anonymized_email)
+    seller = @purchase1.seller
+    # Rows come back in (post_id, email) index order, so the two conflicting posts fill the first batch.
+    conflicting = 2.times.map do
+      post = create_installment(seller:)
+      SentPostEmail.create!(post:, email: anonymized)
+      SentPostEmail.create!(post:, email: @buyer_email)
+    end
+    rewritten = 3.times.map { SentPostEmail.create!(post: create_installment(seller:), email: @buyer_email) }
+
+    result = with_const_on(GdprBuyerErasureService, :SENT_POST_EMAIL_BATCH_SIZE, 2) do
+      GdprBuyerErasureService.new(@buyer_email, performed_by: @admin).perform!
+    end
+
+    assert_equal 3, result[:counts][:sent_post_emails]
+    assert_not SentPostEmail.where(id: conflicting.map(&:id)).exists?
+    assert_equal [anonymized] * 3, rewritten.map { _1.reload.email }
+    assert_not SentPostEmail.where(email: @buyer_email).exists?
+  end
+
   test "reaches sent post emails only through statements an index can bound" do
     anonymized = GdprBuyerErasureService.new(@buyer_email, performed_by: @admin).send(:generate_anonymized_email)
     seller = @purchase1.seller
