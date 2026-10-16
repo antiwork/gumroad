@@ -131,7 +131,7 @@ describe MerchantRegistrationMailer do
       expect(text).to include(
         "Hi, Stripe, our payment processor, received a court order about your Gumroad payment account and acted on it. " \
         "Your payouts are paused. They stay paused until Stripe receives confirmation from the court that the matter is resolved. " \
-        "If you have questions about the court order, contact the court or the law firm that sent it: " \
+        "If you have questions about the court order, contact the law firm listed below: " \
         "Law firm: Example Legal LLP Email: notices@example.com " \
         "We cannot give legal advice, and we cannot lift this pause. If you have questions about your Gumroad account, reply to this email."
       )
