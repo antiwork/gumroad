@@ -22,7 +22,7 @@
     </p>
   <% else %>
     <p>
-      A customer of yours (<%= @disputable.customer_email %>) has disputed their purchase of <%= @disputable.multiple_purchases? ? "the following items" : @disputable.purchase_for_dispute_evidence.link.name %> for <%= @disputable.formatted_disputed_amount %>. We have deducted the amount from your balance, and are looking into it for you.
+      A customer of yours (<%= @disputable.customer_email %>) has disputed their purchase of <%= @disputable.multiple_purchases? ? "the following items" : @disputable.purchase_for_dispute_evidence.link.name %> for <%= @disputable.formatted_disputed_amount %>.<% if @balance_deducted %> We have deducted the amount from your balance, and are looking into it for you.<% else %> This sale was already refunded in full, so nothing has been deducted from your balance.<% end %>
     </p>
     <% if @disputable.multiple_purchases? %>
       <% @disputable.disputed_purchases.each do |purchase| %>
@@ -36,7 +36,7 @@
     </p>
     <%= @dispute_evidence_content %>
     <p>
-      We fight every dispute. If we succeed, you will automatically be re-credited the full amount. This process takes up to 75 days.
+      We fight every dispute.<% if @balance_deducted %> If we succeed, you will automatically be re-credited the full amount. This process takes up to 75 days.<% else %> Because the money already went back to your customer, winning the dispute will not change your balance.<% end %>
     </p>
     <p>
       You'll get another notification once we have won the dispute. If you haven't received that notification, we have not yet won this dispute.

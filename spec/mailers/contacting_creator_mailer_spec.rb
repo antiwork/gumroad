@@ -383,6 +383,7 @@ describe ContactingCreatorMailer do
       let(:dispute) { create(:dispute_formalized, purchase:) }
 
       it "sends chargeback notice correctly" do
+        purchase.update_columns(purchase_chargeback_balance_id: create(:balance).id)
         mail = ContactingCreatorMailer.chargeback_notice(dispute.id)
         expect(mail.to).to eq [seller.email]
         expect(mail.subject).to eq "A sale has been disputed"
@@ -391,6 +392,19 @@ describe ContactingCreatorMailer do
         expect(mail.body.encoded).to include "We have deducted the amount from your balance, and are looking into it for you."
         expect(mail.body.encoded).to include "We fight every dispute. If we succeed, you will automatically be re-credited the full amount. This process takes up to 75 days."
         expect(mail.body.encoded).not_to include "Any additional information you can provide"
+      end
+
+      context "when the purchase was already refunded in full and no chargeback debit was booked" do
+        before { purchase.update_columns(purchase_chargeback_balance_id: nil) }
+
+        it "does not claim a deduction or a re-credit" do
+          mail = ContactingCreatorMailer.chargeback_notice(dispute.id)
+
+          expect(mail.body.encoded).to include "This sale was already refunded in full, so nothing has been deducted from your balance."
+          expect(mail.body.encoded).to include "winning the dispute will not change your balance."
+          expect(mail.body.encoded).not_to include "We have deducted the amount"
+          expect(mail.body.encoded).not_to include "re-credited"
+        end
       end
 
       context "when the seller is contacted to submit evidence" do
