@@ -1407,6 +1407,21 @@ describe("Download Page – Rich Text Editor Content", type: :system, js: true) 
       expect(name_lefts.uniq.size).to eq(1)
     end
 
+    it "keeps the plain icon on a page without image thumbnails" do
+      @product.alive_rich_contents.first.update!(title: "Textures", position: 0)
+      guide = create(:product_file, link: @product, url: "#{S3_BASE_URL}specs/brick-guide.pdf", filetype: "pdf", filegroup: "document", display_name: "Brick guide")
+      create(:rich_content, entity: @product, title: "Guide", position: 1, description: [{ "type" => "fileEmbed", "attrs" => { "id" => guide.external_id, "uid" => SecureRandom.uuid } }])
+
+      visit("/d/#{@url_redirect.token}")
+      select_tab("Guide")
+
+      within find_embed(name: "Brick guide") do
+        icon_right = find(".type-icon").evaluate_script("this.getBoundingClientRect().right")
+        name_left = find("h4").evaluate_script("this.getBoundingClientRect().left")
+        expect(name_left - icon_right).to be <= 8
+      end
+    end
+
     it "fits the original image to the screen on phones", :mobile_view do
       # The headless mobile driver has no device emulation, only an 800px window.
       page.current_window.resize_to(375, 812)
