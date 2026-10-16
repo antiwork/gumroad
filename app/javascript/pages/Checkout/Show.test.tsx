@@ -68,7 +68,7 @@ vi.mock("@inertiajs/react", () => ({
 // Replace only collection of payment credentials. Show's real pay(), reducer, quote fetch,
 // and choice of order endpoint remain in the test; no processor or payment is contacted.
 vi.mock("$app/components/Checkout", () => ({
-  Checkout: ({ updateCart }: { updateCart: (updated: Partial<CartState>) => void }) => {
+  Checkout: ({ cart, updateCart }: { cart: CartState; updateCart: (updated: Partial<CartState>) => void }) => {
     const [state, dispatch] = useState();
     React.useEffect(() => {
       if (state.status.type === "validating") dispatch({ type: "start-payment" });
@@ -109,6 +109,15 @@ vi.mock("$app/components/Checkout", () => ({
         <button onClick={() => updateCart({ discountCodes: [{ code: "SHOP5", products: {}, fromUrl: true }] })}>
           Apply code
         </button>
+        {[1, 2, 3].map((quantity) => (
+          <button
+            key={quantity}
+            onClick={() => updateCart({ items: cart.items.map((item) => ({ ...item, quantity })) })}
+          >
+            Quantity {quantity}
+          </button>
+        ))}
+        <p aria-label="payment stale">{String(state.checkoutPaymentStale)}</p>
       </>
     );
   },
@@ -442,6 +451,35 @@ it("holds a cart save until the one in flight finishes, then sends the cart as i
     inFlight.onFinish({});
   });
   expect(mocks.savedCarts.map(({ discountCodes }) => discountCodes.map(({ code }) => code))).toEqual([[], ["SHOP5"]]);
+});
+
+it("does not let a queued save's answer lift the hold for a cart it did not send", async () => {
+  mocks.props.checkout_payment = config(false);
+  mocks.surcharges.mockResolvedValue(quote("2999-01-01T00:00:00Z"));
+  render(<CheckoutPage />);
+  await act(() => vi.advanceTimersByTimeAsync(1000));
+  const first = cast<CartSaveVisit>(mocks.saveVisits[0]);
+  first.onStart?.();
+
+  fireEvent.click(screen.getByRole("button", { name: "Quantity 2" }));
+  await act(() => vi.advanceTimersByTimeAsync(1000));
+  fireEvent.click(screen.getByRole("button", { name: "Quantity 3" }));
+  act(() => {
+    first.onSuccess({ props: { checkout_payment: config(false) } });
+    first.onFinish({});
+  });
+  expect(mocks.savedCarts.map(({ items }) => items[0]?.quantity)).toEqual([1, 3]);
+  const queued = cast<CartSaveVisit>(mocks.saveVisits[1]);
+  queued.onStart?.();
+
+  fireEvent.click(screen.getByRole("button", { name: "Quantity 2" }));
+  expect(screen.getByLabelText("payment stale").textContent).toBe("true");
+  act(() => {
+    queued.onSuccess({ props: { checkout_payment: config(false) } });
+    queued.onFinish({});
+  });
+
+  expect(screen.getByLabelText("payment stale").textContent).toBe("true");
 });
 
 const acceptedOffer = {

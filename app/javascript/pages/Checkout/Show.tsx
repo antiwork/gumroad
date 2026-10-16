@@ -928,7 +928,7 @@ const CheckoutIndexPage = () => {
   // with the older cart. A save issued meanwhile waits for the one in flight; only the latest
   // waits, and it sends the cart as it stands when it goes out.
   const cartSaveInFlightRef = React.useRef<symbol | null>(null);
-  const queuedCartSaveRef = React.useRef<CartSaveCallbacks | null>(null);
+  const queuedCartSaveRef = React.useRef<(() => CartSaveCallbacks) | null>(null);
   const paymentStarted = state.status.type !== "input" && state.status.type !== "offering";
   React.useEffect(() => {
     if (!paymentStarted) return;
@@ -947,11 +947,13 @@ const CheckoutIndexPage = () => {
     queuedCartSaveRef.current = null;
   }, [paymentStarted]);
 
-  const saveCart = (callbacks: CartSaveCallbacks) => {
+  // Takes a factory so a queued save's callbacks record the cart it actually sends.
+  const saveCart = (buildCallbacks: () => CartSaveCallbacks) => {
     if (cartSaveInFlightRef.current) {
-      queuedCartSaveRef.current = callbacks;
+      queuedCartSaveRef.current = buildCallbacks;
       return;
     }
+    const callbacks = buildCallbacks();
     const generation = cartSaveGenerationRef.current;
     const save = Symbol("cart save");
 
@@ -995,9 +997,9 @@ const CheckoutIndexPage = () => {
   const currentPaymentLaneCartKeyRef = React.useRef("");
 
   const debouncedSaveCartState = useDebouncedCallback(() => {
-    saveCartRef.current(
+    saveCartRef.current(() =>
       buildCartSaveRefreshCallbacks({
-        save: (callbacks) => saveCartRef.current(callbacks),
+        save: (callbacks) => saveCartRef.current(() => callbacks),
         currentCartKey: () => currentPaymentLaneCartKeyRef.current,
         // The one path that lifts the hold on Pay. The save that asked is the only place that knows
         // the configuration describes the cart the buyer is looking at — see checkoutPaymentRefresh.

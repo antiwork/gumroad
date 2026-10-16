@@ -172,10 +172,8 @@ export const buildCartSaveRefreshCallbacks = ({
       delivered = { checkoutPayment: page.props[CHECKOUT_PAYMENT_PROP] };
     },
     onFinish: (visit) => {
-      // A newer save took this one's place. It carries the buyer's latest cart and its response is
-      // what will lift the hold, so this save neither adopts its own answer — which describes the
-      // cart from before that newer edit — nor recovers on the newer save's behalf, which would
-      // race two saves and let this older one's answer be adopted for the newer one's cart.
+      // Payment or a navigation displaced this save, so its answer no longer speaks for the cart
+      // on screen: it neither adopts nor recovers.
       if (visit?.cancelled === true || visit?.interrupted === true) return;
 
       // The buyer edited the cart while this save was in flight and the newer save has not gone out
