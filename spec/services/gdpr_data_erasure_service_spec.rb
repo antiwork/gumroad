@@ -879,6 +879,24 @@ describe GdprDataErasureService do
       expect(result[:summary][:carts_anonymized]).to eq(3)
     end
 
+    it "redacts the account's earlier PII from its own and its purchases' version history", :versioning do
+      user.update!(name: "John Q Doe", bio: "Newer bio", username: "johnqdoe")
+      purchase = create(:purchase, purchaser: user, email: user.email, full_name: "John Doe")
+      purchase.update!(full_name: "John Q Doe")
+      other_user = create(:user, email: "other@example.com", name: "Other name")
+      other_user.update!(name: "Other newer name")
+      history = ->(record) { record.versions.reload.flat_map { [_1.object, _1.object_changes] }.compact.join }
+
+      result = described_class.new(user, performed_by: admin).perform!
+
+      expect(result[:success]).to eq(true)
+      [user, purchase].each do |record|
+        expect(history.(record)).not_to include("john@example.com", "John Doe", "My bio", "123 Main St", "johnqdoe")
+      end
+      expect(history.(other_user)).to include("other@example.com", "Other name")
+      expect(result[:summary][:versions_redacted]).to be >= 4
+    end
+
     it "deletes the address's sent post email rows on every seller's posts and keeps everyone else's" do
       first_post = create(:installment)
       second_post = create(:installment)

@@ -62,6 +62,7 @@ class GdprBuyerErasureService
     # lock, and the admin sees which (if any) tables were deferred.
     {
       purchases: -> { anonymize_purchases! },
+      purchase_versions: -> { redact_purchase_versions! },
       events: -> { anonymize_events! },
       audience_members: -> { anonymize_audience_members! },
       followers: -> { anonymize_followers! },
@@ -112,7 +113,17 @@ class GdprBuyerErasureService
     end
 
     def anonymize_purchases!
-      counts[:purchases] = Purchase.where(id: @purchase_ids).update_all(
+      counts[:purchases] = Purchase.where(id: @purchase_ids).update_all(purchase_pii)
+    end
+
+    # Its own step: a rerun finds the purchases again through @anonymized_email, so a timeout here
+    # does not lose them.
+    def redact_purchase_versions!
+      counts[:purchase_versions] = GdprVersionRedactor.redact!(item_type: "Purchase", item_ids: @purchase_ids, attributes: purchase_pii.keys)
+    end
+
+    def purchase_pii
+      {
         email: @anonymized_email,
         full_name: ANONYMIZED_NAME,
         street_address: nil,
@@ -136,7 +147,7 @@ class GdprBuyerErasureService
         session_id: nil,
         referrer: nil,
         custom_fields: nil,
-      )
+      }
     end
 
     def anonymize_events!

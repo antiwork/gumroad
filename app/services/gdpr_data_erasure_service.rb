@@ -258,7 +258,7 @@ class GdprDataErasureService
     def anonymize_user_pii!
       anonymized_email = anonymized_account_email
 
-      @user.update_columns(
+      pii = {
         email: anonymized_email,
         name: ANONYMIZED_NAME,
         encrypted_password: "",
@@ -289,7 +289,8 @@ class GdprDataErasureService
         facebook_pixel_id: nil,
         notification_endpoint: nil,
         otp_secret_key: nil,
-      )
+      }
+      @user.update_columns(pii)
 
       # A removed PayPal payout address is the same email PII as `payment_address` above, just moved
       # into json_data (Payment#invalidate_paypal_payout_address). update_columns bypasses the
@@ -298,6 +299,9 @@ class GdprDataErasureService
         @user.invalidated_paypal_payout_address = nil
         @user.save!(validate: false)
       end
+      # json_data holds that PayPal address in earlier snapshots. deactivate_account! clears username
+      # through update!, so the old handle is in the versions too.
+      @counts[:versions] += GdprVersionRedactor.redact!(item_type: "User", item_ids: @user.id, attributes: pii.keys + %i[json_data username])
 
       # Erasure soft-deletes the user rather than destroying it, so the association's
       # `dependent: :destroy` never runs and the platform uid/handle must be removed here.
@@ -818,9 +822,12 @@ class GdprDataErasureService
     end
 
     def anonymize_buyer_purchases!(anonymized_email:, original_email:)
-      # Anonymize PII on purchases made as a buyer
       # Keep transaction amounts and dates for tax/legal compliance
-      Purchase.where(purchaser_id: @user.id).update_all(
+      # Locked so a concurrent reassignment cannot move a row to another buyer before the update.
+      purchase_ids = Purchase.where(purchaser_id: @user.id).lock.pluck(:id)
+      # Guest purchases made under the account's address
+      purchase_ids += Purchase.where(email: original_email, purchaser_id: nil).lock.pluck(:id) if original_email.present?
+      pii = {
         email: anonymized_email,
         full_name: ANONYMIZED_NAME,
         street_address: nil,
@@ -830,22 +837,9 @@ class GdprDataErasureService
         country: nil,
         ip_address: nil,
         browser_guid: nil,
-      )
-
-      # Anonymize purchases by email (guest purchases)
-      return if original_email.blank?
-
-      Purchase.where(email: original_email, purchaser_id: nil).update_all(
-        email: anonymized_email,
-        full_name: ANONYMIZED_NAME,
-        street_address: nil,
-        city: nil,
-        state: nil,
-        zip_code: nil,
-        country: nil,
-        ip_address: nil,
-        browser_guid: nil,
-      )
+      }
+      Purchase.where(id: purchase_ids).update_all(pii)
+      @counts[:versions] += GdprVersionRedactor.redact!(item_type: "Purchase", item_ids: purchase_ids, attributes: pii.keys)
     end
 
     def remove_profile_assets!
@@ -901,6 +895,7 @@ class GdprDataErasureService
         audience_members_anonymized: @counts[:audience_members],
         followers_anonymized: @counts[:followers],
         imported_customers_anonymized: @counts[:imported_customers],
+        versions_redacted: @counts[:versions],
         external_cleanup_needed: [
           "Helper/Supabase (customer conversations)",
           "Gmail (correspondence)",
