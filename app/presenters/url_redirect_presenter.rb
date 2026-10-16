@@ -262,6 +262,7 @@ class UrlRedirectPresenter
 
     def map_file(file)
       media_location = media_locations_by_file[file.id]
+      download_url = url_redirect.is_file_downloadable?(file) ? url_redirect_download_product_files_path(url_redirect.token, { product_file_ids: [file.external_id] }) : nil
 
       {
         type: "file",
@@ -272,7 +273,9 @@ class UrlRedirectPresenter
         pagelength: (file.epub? ? nil : file.pagelength),
         duration: file.duration,
         id: file.external_id,
-        download_url: url_redirect.is_file_downloadable?(file) ? url_redirect_download_product_files_path(url_redirect.token, { product_file_ids: [file.external_id] }) : nil,
+        download_url:,
+        # The original, not the thumbnail: texture buyers judge texel detail at 1:1.
+        view_url: file.browser_renderable_image? ? download_url : nil,
         stream_url: file.streamable? ? url_redirect_stream_page_for_product_file_path(url_redirect.token, file.external_id) : nil,
         kindle_data: file.can_send_to_kindle? && !file.try(:hide_kindle_and_read_buttons?) ?
                        { email: logged_in_user&.kindle_email, icon_url: ActionController::Base.helpers.image_path("white-15.png") } :
@@ -340,6 +343,7 @@ class UrlRedirectPresenter
         duration: nil,
         id: file.signed_id,
         download_url: file.blob.url,
+        view_url: nil,
         stream_url: nil,
         kindle_data: nil,
         latest_media_location: nil,

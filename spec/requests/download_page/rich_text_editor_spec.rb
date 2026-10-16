@@ -1367,6 +1367,56 @@ describe("Download Page – Rich Text Editor Content", type: :system, js: true) 
     end
   end
 
+  context "image files" do
+    before do
+      @product = create(:product, user: @user)
+      @url_redirect = create(:url_redirect, link: @product, purchase: create(:purchase, link: @product, purchaser: @buyer))
+      thumbnail = ActiveStorage::Blob.create_and_upload!(io: fixture_file_upload("test-small.png"), filename: "thumbnail.png")
+      @texture = create(:product_file, link: @product, url: "#{S3_BASE_URL}specs/brick-albedo.png", filetype: "png", filegroup: "image", display_name: "Brick albedo", thumbnail:)
+      @raw_texture = create(:product_file, link: @product, url: "#{S3_BASE_URL}specs/brick-height.tga", filetype: "tga", filegroup: "url", display_name: "Brick height")
+      embed_files_for_product(product: @product, files: [@texture, @raw_texture])
+
+      original = ActiveStorage::Blob.create_and_upload!(io: fixture_file_upload("test.png"), filename: "brick-albedo.png")
+      allow_any_instance_of(UrlRedirect).to receive(:signed_location_for_file).and_return(original.url)
+    end
+
+    it "shows the thumbnail in the row and opens the original image at full size" do
+      visit("/d/#{@url_redirect.token}")
+
+      within find_embed(name: "Brick albedo") do
+        expect(page).to have_image(src: @texture.thumbnail_url)
+        expect(page).not_to have_selector(".type-icon")
+        click_on "View"
+      end
+
+      within_modal "Brick albedo" do
+        image = find("img[alt='Brick albedo']")
+        expect(image.evaluate_script("this.naturalWidth")).to eq(1006)
+        expect(image.evaluate_script("this.getBoundingClientRect().width")).to eq(1006)
+        expect(page).to have_link("Download", href: url_redirect_download_product_files_path(@url_redirect.token, { product_file_ids: [@texture.external_id] }))
+      end
+
+      within find_embed(name: "Brick height") do
+        expect(page).to have_selector(".type-icon")
+        expect(page).not_to have_button("View")
+      end
+    end
+
+    it "fits the original image to the screen on phones", :mobile_view do
+      # The headless mobile driver has no device emulation, only an 800px window.
+      page.current_window.resize_to(375, 812)
+      visit("/d/#{@url_redirect.token}")
+
+      within(find_embed(name: "Brick albedo")) { click_on "View" }
+
+      within_modal "Brick albedo" do
+        image = find("img[alt='Brick albedo']")
+        expect(image.evaluate_script("this.naturalWidth")).to eq(1006)
+        expect(image.evaluate_script("this.getBoundingClientRect().right")).to be <= page.evaluate_script("window.innerWidth")
+      end
+    end
+  end
+
   context "product with file embed groups" do
     it_behaves_like "a product with 'Download all' buttons on file embed groups" do
       let!(:product) { create(:product, user: @user) }

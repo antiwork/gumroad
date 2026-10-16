@@ -13,10 +13,25 @@ type Props = {
   externalLinkUrl: string | null;
   isUploading?: boolean;
   hideIcon?: boolean;
+  thumbnailUrl?: string | null | undefined;
 };
-export const FileRowContent = ({ extension, name, details, externalLinkUrl, isUploading, hideIcon }: Props) => (
+export const FileRowContent = ({
+  extension,
+  name,
+  details,
+  externalLinkUrl,
+  isUploading,
+  hideIcon,
+  thumbnailUrl,
+}: Props) => (
   <>
-    {isUploading ? <LoadingSpinner className="size-8" /> : hideIcon ? null : <FileKindIcon extension={extension} />}
+    {isUploading ? (
+      <LoadingSpinner className="size-8" />
+    ) : thumbnailUrl ? (
+      <img src={thumbnailUrl} alt="" className="h-12 w-16 shrink-0 rounded-sm object-cover" />
+    ) : hideIcon ? null : (
+      <FileKindIcon extension={extension} />
+    )}
     <div>
       <h4>
         {extension === "URL" && externalLinkUrl ? (

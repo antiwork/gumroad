@@ -13,6 +13,7 @@ import FileUtils from "$app/utils/file";
 import { assertString } from "$app/utils/guards";
 import { createJWPlayer } from "$app/utils/jwPlayer";
 import { getMimeType } from "$app/utils/mimetypes";
+import { canvasToBlob, drawToCanvas, loadImageElement } from "$app/utils/prepareImageForUpload";
 import { summarizeUploadProgress } from "$app/utils/summarizeUploadProgress";
 import { videoFrameIsPortrait, videoFrameStyle, videoPlayerAspectRatio } from "$app/utils/videoFrame";
 
@@ -63,6 +64,10 @@ export const getDraggedFileEmbed = (editor: Editor) => {
 };
 
 const DEFAULT_FILE_ROW_HEIGHT = 82;
+// Large enough for the buyer's row thumbnail on a 3x screen; View loads the original.
+const IMAGE_THUMBNAIL_MAX_SIDE = 384;
+// Decoding a larger texture can exhaust the tab's memory; those rows keep the icon.
+const IMAGE_THUMBNAIL_MAX_SOURCE_PIXELS = 8192 * 8192;
 
 const FileEmbedNodeView = ({
   node,
@@ -173,6 +178,19 @@ const FileEmbedNodeView = ({
       );
     };
   };
+  // Without a thumbnail the row keeps its file icon, so a failure here needs no alert.
+  const generateImageThumbnail = async (localFileUrl: string, extension: string) => {
+    const image = await loadImageElement(localFileUrl);
+    const { naturalWidth: width, naturalHeight: height } = image;
+    if (width * height > IMAGE_THUMBNAIL_MAX_SOURCE_PIXELS) return;
+    const scale = Math.min(1, IMAGE_THUMBNAIL_MAX_SIDE / Math.max(width, height));
+    const canvas = drawToCanvas(image, Math.max(1, Math.round(width * scale)), Math.max(1, Math.round(height * scale)));
+    // PNG keeps the alpha channel that UV maps and decals depend on.
+    const isJpeg = ["JPG", "JPEG"].includes(extension.toUpperCase());
+    const type = isJpeg ? "image/jpeg" : "image/png";
+    const blob = await canvasToBlob(canvas, type, 0.85);
+    uploadThumbnail(new File([blob], isJpeg ? "thumbnail.jpg" : "thumbnail.png", { type }), localFileUrl);
+  };
   // not using the built-in deleteNode here as that one does not delete empty parent nodes
   const deleteNode = () => {
     queueMicrotask(() => {
@@ -194,8 +212,10 @@ const FileEmbedNodeView = ({
   // "Upload again" keeps the status type but brings a new local file to thumbnail.
   const localFileUrl = file?.status.type === "unsaved" ? file.status.url : null;
   React.useEffect(() => {
-    if (file?.is_streamable && file.status.type === "unsaved" && file.status.uploadStatus.type === "uploading")
-      generateThumbnail();
+    if (file?.status.type !== "unsaved" || file.status.uploadStatus.type !== "uploading") return;
+    if (file.is_streamable) generateThumbnail();
+    else if (file.extension && FileUtils.isBrowserRenderableImage(file.extension))
+      generateImageThumbnail(file.status.url, file.extension).catch(() => undefined);
   }, [file?.status.type, localFileUrl]);
 
   const pos = getPos();
@@ -236,7 +256,10 @@ const FileEmbedNodeView = ({
     setLoadingVideo(true);
     const upload = new DirectUpload(thumbnail, Routes.rails_direct_uploads_path());
     upload.create((error, blob) => {
-      if (error) return showAlert(error.message, "error");
+      if (error) {
+        setLoadingVideo(false);
+        return showAlert(error.message, "error");
+      }
       const uploaded: FileEntry["thumbnail"] = {
         url: Routes.s3_utility_cdn_url_for_blob_path({ key: blob.key }),
         signed_id: blob.signed_id,
@@ -264,6 +287,8 @@ const FileEmbedNodeView = ({
     );
 
   const isFailedUpload = file.status.type === "unsaved" && file.status.uploadStatus.type === "failed";
+  const imageThumbnailUrl =
+    !isFailedUpload && FileUtils.isBrowserRenderableImage(file.extension) ? file.thumbnail?.url : null;
   const isComplete = !(
     (file.status.type === "unsaved" && file.status.uploadStatus.type === "uploading") ||
     (file.status.type === "dropbox" && file.status.uploadState === "in_progress")
@@ -583,6 +608,7 @@ const FileEmbedNodeView = ({
               externalLinkUrl={file.url}
               isUploading={!isComplete}
               hideIcon={file.is_streamable ? !isFailedUpload : false}
+              thumbnailUrl={imageThumbnailUrl}
               details={
                 <>
                   {file.extension ? <li>{file.extension}</li> : null}

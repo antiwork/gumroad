@@ -383,6 +383,34 @@ describe("File embeds in product content editor", type: :system, js: true) do
     end
   end
 
+  it "generates a thumbnail for an uploaded image that buyers see on the download page" do
+    product = create(:product, user: seller)
+    visit edit_link_path(product)
+    select_tab "Content"
+
+    select_disclosure "Upload files"
+    attach_product_file(file_fixture("test.png"))
+    wait_for_file_embed_to_finish_uploading(name: "test")
+    within(find_embed(name: "test")) do
+      expect(page).to have_selector("img[src*='/s3_utility/cdn_url_for_blob']")
+      expect(page).not_to have_selector(".type-icon")
+    end
+    save_change
+
+    image_file = product.alive_product_files.sole
+    expect(image_file.thumbnail).to be_attached
+    expect(image_file.thumbnail.content_type).to eq("image/png")
+    image_file.thumbnail.analyze
+    expect(image_file.thumbnail.metadata.values_at("width", "height")).to eq([384, 384])
+
+    visit create(:url_redirect, link: product, purchase: nil).download_page_url
+    within(find_embed(name: "test")) do
+      expect(page).to have_image(src: image_file.thumbnail_url)
+      expect(page).not_to have_selector(".type-icon")
+      expect(page).to have_button("View")
+    end
+  end
+
   it "auto-creates a file grouping when multiple files are uploaded simultaneously" do
     product = create(:product, user: seller)
     visit edit_link_path(product)
