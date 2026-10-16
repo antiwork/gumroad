@@ -30,6 +30,22 @@ describe SendLastPostJob do
       create(:post, :published, link: product, created_before: 1.day.ago)
     end
 
+    # An erasure can commit between reading the purchase's address and claiming the dedupe row.
+    it "claims nothing and sends nothing once the purchase no longer holds the address" do
+      claimed_sources = []
+      allow(SentPostEmail).to receive(:ensure_uniqueness).and_wrap_original do |original, **kwargs, &block|
+        claimed_sources << kwargs[:source]
+        kwargs[:source].class.where(id: kwargs[:source].id).update_all(email: "deleted-1@deleted.gumroad.com")
+        original.call(**kwargs, &block)
+      end
+      expect(PostSendgridApi).not_to receive(:process)
+
+      described_class.new.perform(purchase.id)
+
+      expect(claimed_sources).to eq([purchase])
+      expect(SentPostEmail.where(email: purchase.email)).to be_empty
+    end
+
     shared_examples_for "sending latest post" do
       before { post.update!(published_at: 1.minute.ago) }
 

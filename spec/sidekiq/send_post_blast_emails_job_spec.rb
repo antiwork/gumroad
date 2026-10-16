@@ -1795,6 +1795,42 @@ describe SendPostBlastEmailsJob, :freeze_time do
     end
   end
 
+  # The provider call holds no locks, so an erasure can commit and run its post-commit recheck while it
+  # is in flight. The sent rows written after acceptance must not bring the erased address back.
+  describe "recipients rewritten or removed during the provider call" do
+    let(:post) { create(:follower_post, :published, seller: @seller) }
+    let(:blast) { create(:blast, :just_requested, post:) }
+    let!(:erased_follower) { create(:active_follower, user: @seller, email: "erase.me@example.com") }
+    let!(:other_follower) { create(:active_follower, user: @seller, email: "other@example.com") }
+
+    def during_provider_call(&hook)
+      ran = false
+      stub = ->(*, **) { ran ||= (hook.call || true) }
+      allow(PostSendgridApi).to receive(:process, &stub)
+      allow(PostResendApi).to receive(:process, &stub)
+    end
+
+    it "writes no sent row for an address erased during the call, and still writes the other recipients'" do
+      account = create(:user, email: "erase.me@example.com")
+      erasure = nil
+      during_provider_call { erasure = GdprDataErasureService.new(account, performed_by: create(:user)).perform! }
+
+      described_class.new.perform(blast.id)
+
+      expect(erasure[:success]).to be(true)
+      expect(SentPostEmail.where(email: "erase.me@example.com")).to be_empty
+      expect(SentPostEmail.where(post:).pluck(:email)).to eq(["other@example.com"])
+    end
+
+    it "writes no sent row for a member removed during the call, and still writes the other recipients'" do
+      during_provider_call { AudienceMember.where(seller: @seller, email: "erase.me@example.com").delete_all }
+
+      described_class.new.perform(blast.id)
+
+      expect(SentPostEmail.where(post:).pluck(:email)).to eq(["other@example.com"])
+    end
+  end
+
   def expect_sent_count(count)
     expect(PostSendgridApi.mails.size).to eq(count)
   end

@@ -17,7 +17,7 @@ class SendLastPostJob
     post = posts.find { _1.purchase_passes_filters(purchase) }
     return if post.nil?
 
-    SentPostEmail.ensure_uniqueness(post:, email: purchase.email) do
+    SentPostEmail.ensure_uniqueness(post:, email: purchase.email, source: purchase) do
       recipient = { email: purchase.email, purchase:, subscription: }
       recipient[:url_redirect] = post.generate_url_redirect_for_subscription(subscription) if post.has_files?
       PostEmailApi.process(post:, recipients: [recipient])

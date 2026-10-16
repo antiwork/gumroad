@@ -454,7 +454,7 @@ class Installment < ApplicationRecord
       worker = reschedule_reference_time.present? ? SendWorkflowInstallmentRescheduleJob : SendWorkflowInstallmentWorker
       worker.perform_at(expected_delivery_time_for_sale + 1.minute, *args)
     else
-      SentPostEmail.ensure_uniqueness(post: self, email: sale.email) do
+      SentPostEmail.ensure_uniqueness(post: self, email: sale.email, source: sale) do
         recipient = { email: sale.email, purchase: sale }
         recipient[:url_redirect] = generate_url_redirect_for_purchase(sale) if has_files?
         send_email(recipient)
@@ -477,7 +477,7 @@ class Installment < ApplicationRecord
 
     return if workflow.present? && !workflow.applies_to_purchase?(sale)
 
-    SentPostEmail.ensure_uniqueness(post: self, email: sale.email) do
+    SentPostEmail.ensure_uniqueness(post: self, email: sale.email, source: sale) do
       recipient = { email: sale.email, purchase: sale, subscription: }
       recipient[:url_redirect] = generate_url_redirect_for_subscription(sale) if has_files?
       send_email(recipient)
@@ -488,7 +488,7 @@ class Installment < ApplicationRecord
     follower = Follower.find_by(id: follower_id)
     return if follower.nil? || follower.deleted? || follower.unconfirmed? # check for nil followers because we removed duplicates that may have been queued
 
-    SentPostEmail.ensure_uniqueness(post: self, email: follower.email) do
+    SentPostEmail.ensure_uniqueness(post: self, email: follower.email, source: follower) do
       recipient = { email: follower.email, follower: }
       recipient[:url_redirect] = generate_url_redirect_for_follower if has_files?
       send_email(recipient)
@@ -499,7 +499,7 @@ class Installment < ApplicationRecord
     affiliate_user = User.find_by(id: affiliate_user_id)
     return if affiliate_user.nil?
 
-    SentPostEmail.ensure_uniqueness(post: self, email: affiliate_user.email) do
+    SentPostEmail.ensure_uniqueness(post: self, email: affiliate_user.email, source: affiliate_user) do
       recipient = { email: affiliate_user.email, affiliate: affiliate_user }
       recipient[:url_redirect] = generate_url_redirect_for_affiliate if has_files?
       send_email(recipient)

@@ -468,6 +468,70 @@ describe "InstallmentSendInstallment"  do
   end
 end
 
+# An erasure can commit between reading a recipient's address and claiming the dedupe row. Each sender
+# passes the record it read the address from, and nothing is claimed or sent once that row changed.
+describe Installment, "sending to an address rewritten before its claim" do
+  let(:seller) { create(:user) }
+  let(:product) { create(:product, user: seller) }
+  let(:claimed_sources) { [] }
+
+  before do
+    allow(PostSendgridApi).to receive(:process)
+    allow(PostResendApi).to receive(:process)
+    allow(SentPostEmail).to receive(:ensure_uniqueness).and_wrap_original do |original, **kwargs, &block|
+      claimed_sources << kwargs[:source]
+      kwargs[:source].class.where(id: kwargs[:source].id).update_all(email: "deleted-1@deleted.gumroad.com")
+      original.call(**kwargs, &block)
+    end
+  end
+
+  def expect_nothing_claimed_or_sent(installment, source)
+    expect(claimed_sources).to eq([source])
+    expect(SentPostEmail.where(post: installment)).to be_empty
+    expect(PostSendgridApi).not_to have_received(:process)
+    expect(PostResendApi).not_to have_received(:process)
+  end
+
+  it "claims nothing for a purchase workflow post" do
+    installment = create(:installment, link: product, workflow: create(:workflow, seller:, link: product))
+    purchase = create(:purchase, link: product, created_at: 1.week.ago)
+
+    installment.send_installment_from_workflow_for_purchase(purchase.id)
+
+    expect_nothing_claimed_or_sent(installment, purchase)
+  end
+
+  it "claims nothing for a member cancellation workflow post" do
+    membership = create(:membership_product, user: seller)
+    workflow = create(:workflow, seller:, link: membership, workflow_trigger: Workflow::MEMBER_CANCELLATION_WORKFLOW_TRIGGER)
+    installment = create(:installment, link: membership, workflow:, workflow_trigger: Workflow::MEMBER_CANCELLATION_WORKFLOW_TRIGGER)
+    purchase = create(:membership_purchase, link: membership, seller:)
+    purchase.subscription.update!(cancelled_at: 1.hour.ago, deactivated_at: 1.hour.ago)
+
+    installment.send_installment_from_workflow_for_member_cancellation(purchase.subscription.id)
+
+    expect_nothing_claimed_or_sent(installment, purchase)
+  end
+
+  it "claims nothing for a follower workflow post" do
+    installment = create(:follower_installment, seller:, workflow: create(:workflow, seller:, link: nil, workflow_type: Workflow::FOLLOWER_TYPE))
+    follower = create(:active_follower, user: seller, email: "follower@example.com")
+
+    installment.send_installment_from_workflow_for_follower(follower.id)
+
+    expect_nothing_claimed_or_sent(installment, follower)
+  end
+
+  it "claims nothing for an affiliate workflow post" do
+    installment = create(:installment, link: product, workflow: create(:workflow, seller:, link: product))
+    affiliate_user = create(:user, email: "affiliate@example.com")
+
+    installment.send_installment_from_workflow_for_affiliate_user(affiliate_user.id)
+
+    expect_nothing_claimed_or_sent(installment, affiliate_user)
+  end
+end
+
 describe Installment, "workflow reschedule references", :freeze_time do
   it "preserves the reschedule reference when it defers the email" do
     seller = create(:user)

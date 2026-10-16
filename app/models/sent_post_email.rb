@@ -23,13 +23,21 @@ class SentPostEmail < ApplicationRecord
     emails - where(post:, email: emails).pluck(:email)
   end
 
-  def self.ensure_uniqueness(post:, email:)
+  # `source` is the record the address was read from. The claim is written only while that row still
+  # holds the address, under a share lock: a GDPR erasure that rewrites the row either commits first and
+  # is seen here, or waits for this commit and deletes the claim in its post-commit recheck. The lock is
+  # released before the block runs.
+  def self.ensure_uniqueness(post:, email:, source:)
     return if email.blank?
-    create!(post:, email:)
+    claimed = ApplicationRecord.connected_to(role: :writing) do
+      transaction do
+        source.class.where(id: source.id).lock("FOR SHARE").pick(:email) == email && create!(post:, email:)
+      end
+    end
   rescue ActiveRecord::RecordNotUnique
     # noop
   else
-    yield
+    yield if claimed
   end
 
   # Returns array of emails that were just inserted.

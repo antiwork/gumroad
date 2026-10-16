@@ -363,12 +363,27 @@ module PostBlastSending
   def store_recipients_as_sent(members)
     attempts = 0
     begin
-      SentPostEmail.insert_all_emails(post: @post, emails: members.map(&:email))
+      store_recipients_still_at_their_address(members)
     rescue StandardError
       attempts += 1
       raise if attempts >= POST_ACCEPT_WRITE_ATTEMPTS
       sleep(attempts)
       retry
+    end
+  end
+
+  # The members were loaded before the unlocked provider call, so a GDPR erasure may have rewritten or
+  # removed one since. Each row is share-locked and written only if it still holds the address: an erasure
+  # that locked first is waited for and then seen, and one that locks second waits for this commit and
+  # deletes the rows in its post-commit recheck. A member removed meanwhile gets no row, so if they
+  # rejoin, this post can reach them once more.
+  def store_recipients_still_at_their_address(members)
+    ApplicationRecord.connected_to(role: :writing) do
+      ApplicationRecord.transaction do
+        current_emails = AudienceMember.where(id: members.map(&:id)).lock("FOR SHARE").pluck(:id, :email).to_h
+        emails = members.filter_map { _1.email if current_emails[_1.id] == _1.email }
+        SentPostEmail.insert_all_emails(post: @post, emails:)
+      end
     end
   end
 
