@@ -83,6 +83,8 @@ class RedisKey
     def seller_age_threshold_days = "seller_age_threshold_days"
     def sales_report_jobs = "sales_report_jobs"
     def acme_challenge(token) = "acme_challenge:#{token}"
+    # Not Rails.cache: its namespace changes on every deploy, which reset this back-off.
+    def ssl_certificate_order_backoff(domain) = "ssl_certificate_order_backoff:#{domain}"
     def paypal_topup_needed = "paypal:topup_needed"
     # Set (with a TTL) by each weekly payout batch job while it runs, so the
     # deploy pipeline can ask "is a payout batch in flight right now?" instead

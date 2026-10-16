@@ -148,11 +148,19 @@ class CustomDomain < ApplicationRecord
 
   # Cheap enqueue gate for SslCertificates::Renew: skips domains that cannot get
   # a certificate right now (names Let's Encrypt rejects outright, or a recent
-  # failed order cached by the worker). The worker still runs the full checks.
+  # failed order backed off by the worker). The worker still runs the full checks.
   def certificate_orderable?
     certificate_domain_valid? &&
       certificate_domain_allowed? &&
-      Rails.cache.read(domain_check_cache_key) != false
+      !$redis.exists?(certificate_order_backoff_key)
+  end
+
+  def back_off_certificate_orders!(expires_in)
+    $redis.set(certificate_order_backoff_key, "1", ex: expires_in.to_i)
+  end
+
+  def clear_certificate_order_backoff!
+    $redis.del(certificate_order_backoff_key)
   end
 
   def has_valid_certificate?(renew_certificate_in)
@@ -192,10 +200,8 @@ class CustomDomain < ApplicationRecord
       [DOMAIN, ROOT_DOMAIN, SHORT_DOMAIN, DISCOVER_DOMAIN, API_DOMAIN, INTERNAL_GUMROAD_DOMAIN].freeze
     end
 
-    # Matches SslCertificates::Generate#domain_check_cache_key so the negative
-    # cache the worker writes on a failed order is honored here too.
-    def domain_check_cache_key
-      "domain_check_#{domain}"
+    def certificate_order_backoff_key
+      RedisKey.ssl_certificate_order_backoff(domain)
     end
 
     def persist_routability!(routable:, checked_domain:, observed_at:, clear_certificate:)

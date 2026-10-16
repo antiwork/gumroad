@@ -215,20 +215,21 @@ describe CustomDomain do
   describe "#certificate_orderable?" do
     before do
       @domain = create(:custom_domain, domain: "www.example.com")
-      Rails.cache.clear
     end
 
-    after do
-      Rails.cache.delete("domain_check_www.example.com")
-    end
-
-    it "returns true for a structurally valid domain with no negative cache" do
+    it "returns true for a structurally valid domain with no order back-off" do
       expect(@domain.certificate_orderable?).to eq true
     end
 
-    it "returns false for a domain whose order was recently cached as failed" do
-      Rails.cache.write("domain_check_www.example.com", false)
+    it "returns false while a recent failed order is backed off" do
+      @domain.back_off_certificate_orders!(1.hour)
       expect(@domain.certificate_orderable?).to eq false
+    end
+
+    it "returns true again once the back-off is cleared" do
+      @domain.back_off_certificate_orders!(1.hour)
+      @domain.clear_certificate_order_backoff!
+      expect(@domain.certificate_orderable?).to eq true
     end
 
     it "returns false for a name Let's Encrypt rejects outright" do
