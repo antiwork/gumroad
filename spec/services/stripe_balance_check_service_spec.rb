@@ -104,26 +104,32 @@ describe StripeBalanceCheckService do
     end
   end
 
-  describe "#snapshot_at" do
-    it "is the moment the balance was read, in UTC" do
+  describe "#balance_read_at" do
+    it "is in UTC" do
       Time.use_zone("America/Los_Angeles") do
-        expect(described_class.new(now: Time.zone.local(2026, 12, 18, 2)).snapshot_at).to eq(Time.utc(2026, 12, 18, 10))
+        travel_to(Time.zone.local(2026, 12, 18, 2)) do
+          service = described_class.new
+          expect(service.balance_read_at).to eq(Time.utc(2026, 12, 18, 10))
+          expect(service.balance_read_at.zone).to eq("UTC")
+        end
       end
     end
 
-    it "matches the balance reading when the estimate takes minutes" do
-      read_at = nil
-      allow(Stripe::Balance).to receive(:retrieve) do
-        read_at = Time.current
-        Stripe::Balance.construct_from(available: [], pending: [])
-      end
+    it "is when the provider read returned, after a slow estimate and a slow provider call, while the schedule keeps the injected time" do
       allow(PayoutEstimates).to receive(:estimate_gumroad_held_stripe_cents_per_user) do
         travel 150.seconds
         { 1 => 300_000_00 }
       end
+      allow(Stripe::Balance).to receive(:retrieve) do
+        travel 40.seconds
+        Stripe::Balance.construct_from(available: [], pending: [])
+      end
 
-      freeze_time do
-        expect(described_class.new.snapshot_at).to eq(read_at)
+      travel_to(Time.utc(2026, 9, 18, 9, 59)) do
+        service = described_class.new(now: Time.current)
+
+        expect(service.balance_read_at).to eq(Time.utc(2026, 9, 18, 10, 2, 10))
+        expect(service.next_payout_run_at).to eq(Time.utc(2026, 9, 18, 10)) # from the injected 09:59, not the 10:02 read
       end
     end
   end

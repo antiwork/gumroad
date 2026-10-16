@@ -32,19 +32,23 @@ class SendStripeBalanceCheckNotificationJob
       last_run = format_run(balance_check.cycle_last_run_at)
       period_end = balance_check.payout_end_date.strftime("%B %-d")
       needs_topup = balance_check.topup_needed?
+      pending = formatted_dollar_amount(balance_check.pending_cents)
 
       lines = [
-        needs_topup ? "Action needed by #{first_run}." : "No action needed yet.",
-        "Stripe balance as of #{balance_check.snapshot_at.strftime('%H:%M UTC')}: " \
+        needs_topup ? "Action needed, conservatively before the next run: #{first_run}." : "No action needed yet.",
+        "Stripe balance as of #{balance_check.balance_read_at.strftime('%H:%M UTC')}: " \
         "#{formatted_dollar_amount(balance_check.current_balance_cents)} " \
         "(#{formatted_dollar_amount(balance_check.available_cents)} available + " \
-        "#{formatted_dollar_amount(balance_check.pending_cents)} pending, which normally settles within a couple of business days).",
+        "#{pending} pending, which normally settles within a couple of business days).",
         "Seller payouts for balances up to #{period_end} need #{formatted_dollar_amount(balance_check.upcoming_payouts_cents)} " \
         "from Gumroad's Stripe balance in total. The payout jobs run Tuesday to Friday at 10:00 UTC, each paying one group " \
         "of sellers, so the money is drawn in parts between the next run (#{first_run}) and the last run of the cycle " \
-        "(#{last_run}). #{per_run_split(balance_check)}" \
-        "Worst-case shortfall, if the whole cycle were drawn on the next run before any pending money settles: " \
-        "#{formatted_dollar_amount(worst_case_topup_cents(balance_check))}.",
+        "(#{last_run}).",
+        cohort_split(balance_check),
+        "Gap counting pending (available + pending against the whole cycle, assuming the #{pending} pending settles " \
+        "before it is drawn): #{formatted_dollar_amount([balance_check.topup_amount_cents, 0].max)}. " \
+        "Gap if none of the pending settles in time (available alone against the whole cycle): " \
+        "#{formatted_dollar_amount(available_only_gap_cents(balance_check))}.",
         "Of Stripe's USD bank payouts created in the last 24 hours, " \
         "#{formatted_dollar_amount(balance_check.swept_to_bank_last_day_cents)} has reached the bank and " \
         "#{formatted_dollar_amount(balance_check.sweeps_in_flight_last_day_cents)} is still in flight. " \
@@ -52,34 +56,50 @@ class SendStripeBalanceCheckNotificationJob
       ]
 
       if needs_topup
-        lines << "A top-up of #{formatted_dollar_amount(balance_check.topup_amount_cents)} is needed, ideally before #{first_run} " \
-                 "and no later than #{last_run}. " \
+        lines << "Top up #{formatted_dollar_amount(balance_check.topup_amount_cents)}, the gap counting pending. " \
+                 "The check compares the whole cycle with available + pending and does not measure what the next run " \
+                 "alone draws, so treat the next run as the deadline to be safe. " \
                  "Nothing tops up automatically: add funds in the Stripe dashboard (Balances > Add to balance) " \
                  "or move the money to the Stripe account from the bank. Payouts the balance cannot cover fail with " \
                  "\"insufficient funds\" and have to be re-run by hand."
       else
-        lines << "Nothing to do yet: counting pending, the balance covers the whole cycle. This is re-sent on the Monday before the cycle's first run."
+        recheck = balance_check.day_before_first_run? ? "This is the Monday re-check before the cycle's first run." : "A re-check goes out on the Monday before the cycle's first run."
+        lines << "Nothing to do yet: available + pending covers the whole cycle, assuming the pending settles before it " \
+                 "is drawn. This does not check that settled funds alone cover the next run. #{recheck}"
       end
 
       lines.join("\n")
     end
 
-    # What would be short if the next run had to fund the whole cycle at once: the gap the pending
-    # money is expected to close by then.
-    def worst_case_topup_cents(balance_check)
+    def available_only_gap_cents(balance_check)
       [balance_check.upcoming_payouts_cents - balance_check.available_cents, 0].max
     end
 
-    def per_run_split(balance_check)
+    # Cohorts whose run already passed this cycle are sellers that run left unpaid (other payout
+    # cadences, holds, failures). They stay in the total, so label them instead of dropping them.
+    def cohort_split(balance_check)
       by_weekday = balance_check.per_run_estimate_cents
-      runs = StripeBalanceCheckService::PAYOUT_RUN_WDAYS.filter_map do |wday|
+      ahead = []
+      past = []
+      StripeBalanceCheckService::PAYOUT_RUN_WDAYS.each do |wday|
         weekday = PayoutRailSchedule::WEEKDAYS[wday]
         cents = by_weekday[weekday].to_i
-        "#{weekday.to_s.capitalize} #{formatted_dollar_amount(cents)}" if cents.positive?
-      end
-      return "" if runs.empty?
+        next unless cents.positive?
 
-      "Estimated per run: #{runs.join(', ')}. "
+        run_at = balance_check.cycle_last_run_at - (StripeBalanceCheckService::PAYOUT_RUN_WDAYS.last - wday).days
+        (run_at < balance_check.next_payout_run_at ? past : ahead) << "#{weekday.to_s.capitalize} #{formatted_dollar_amount(cents)}"
+      end
+
+      parts = []
+      parts << "runs still ahead: #{ahead.join(', ')}" if ahead.any?
+      parts << "already run this cycle and still unpaid (in the total above, not a forecast of another draw): #{past.join(', ')}" if past.any?
+      return "By weekday cohort: nothing payable." if parts.empty?
+
+      "By weekday cohort (estimates, which err high): #{parts.join('; ')}."
+    rescue ActiveRecord::ActiveRecordError => e
+      # Information only: a failed lookup must not stop the verdict from going out.
+      ErrorNotifier.notify(e)
+      "By weekday cohort: unavailable this time (the lookup failed and was reported). The total above is unaffected."
     end
 
     def format_run(run_at)
