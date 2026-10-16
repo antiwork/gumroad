@@ -10,6 +10,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { SocialAuthButton } from "$app/components/SocialAuthButton";
 import { Alert } from "$app/components/ui/Alert";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
 import { InputGroup } from "$app/components/ui/InputGroup";
 import { Label } from "$app/components/ui/Label";
 
@@ -30,6 +31,7 @@ const StripeConnectSection = ({
   isFormDisabled: boolean;
   connectAccountFeeInfoText: string;
 }) => {
+  const uid = React.useId();
   const [isDisconnecting, setisDisconnecting] = React.useState(false);
   const disconnectStripe = asyncVoid(async () => {
     setisDisconnecting(true);
@@ -57,40 +59,32 @@ const StripeConnectSection = ({
   });
 
   return (
-    <section>
-      <div className="grid gap-8">
-        <div className="flex flex-col gap-4">
-          <div
-            dangerouslySetInnerHTML={{
-              __html: `${connectAccountFeeInfoText}\n${stripeConnect.supported_countries_help_text}`,
-            }}
-            className="whitespace-pre-line"
-          ></div>
-        </div>
-        {stripeConnect.has_connected_stripe ? (
-          <div className="grid gap-8">
+    <section className="grid gap-8">
+      <div className="whitespace-pre-line">{connectAccountFeeInfoText}</div>
+      {stripeConnect.has_connected_stripe ? (
+        <>
+          <div className="grid gap-4">
             <Fieldset>
               <FieldsetTitle>
-                <Label>Stripe account</Label>
+                <Label htmlFor={`${uid}-stripe-account`}>Stripe account</Label>
               </FieldsetTitle>
-              <InputGroup readOnly>
-                <span className="flex-1">{stripeConnect.stripe_connect_account_id}</span>
+              <InputGroup disabled>
+                <Input id={`${uid}-stripe-account`} disabled value={stripeConnect.stripe_connect_account_id ?? ""} />
                 {stripeConnect.stripe_connect_routing_active ? (
-                  <CheckCircle pack="filled" className="size-5 text-success" />
+                  <CheckCircle pack="filled" className="size-5 text-success" aria-label="Receiving card sales" />
                 ) : null}
               </InputGroup>
-              {stripeConnect.stripe_connect_routing_active ? null : (
-                <p>
-                  Card sales don't go to this Stripe account right now. They go to your Gumroad balance, and we pay them
-                  out on your regular payout schedule. The{" "}
-                  <a href={Routes.balance_path()} className="underline">
-                    Payouts page
-                  </a>{" "}
-                  shows where your next payout goes.
-                </p>
-              )}
             </Fieldset>
-            <p>
+            {stripeConnect.stripe_connect_routing_active ? null : (
+              <Alert role="status" variant="info">
+                Card sales don't go to this Stripe account right now. They go to your Gumroad balance, and we pay them
+                out on your regular payout schedule. The <a href={Routes.balance_path()}>Payouts page</a> shows where
+                your next payout goes.
+              </Alert>
+            )}
+          </div>
+          <div className="grid gap-4">
+            <div>
               <Button
                 color="stripe"
                 disabled={isFormDisabled || isDisconnecting || !stripeConnect.stripe_disconnect_allowed}
@@ -99,7 +93,7 @@ const StripeConnectSection = ({
                 <Stripe pack="brands" className="size-5" />
                 Disconnect Stripe account
               </Button>
-            </p>
+            </div>
             {!stripeConnect.stripe_disconnect_allowed ? (
               <Alert variant="warning">
                 You cannot disconnect your Stripe account because it is being used for active subscription or preorder
@@ -107,7 +101,10 @@ const StripeConnectSection = ({
               </Alert>
             ) : null}
           </div>
-        ) : (
+        </>
+      ) : (
+        <>
+          <div dangerouslySetInnerHTML={{ __html: stripeConnect.supported_countries_help_text }} />
           <div>
             <SocialAuthButton
               provider="stripe"
@@ -120,8 +117,8 @@ const StripeConnectSection = ({
               Connect with Stripe
             </SocialAuthButton>
           </div>
-        )}
-      </div>
+        </>
+      )}
     </section>
   );
 };

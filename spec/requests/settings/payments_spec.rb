@@ -293,6 +293,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
       expect(page).to have_alert(text: "You have successfully connected your Stripe account!")
       expect(page).to have_button("Disconnect")
+      expect(page).not_to have_text("This feature is available in all countries where Stripe operates")
     end
 
     it "does not show the deprecated Stripe Connect option even if the can_connect_stripe flag is enabled" do
@@ -313,6 +314,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
       visit settings_payments_path
 
+      expect(page).to have_field("Stripe account", with: @user.stripe_connect_account.charge_processor_merchant_id, disabled: true)
       within_fieldset("Stripe account") { expect(page).to have_css(".text-success") }
       expect(page).not_to have_text("Card sales don't go to this Stripe account")
       click_on "Disconnect Stripe account"
@@ -347,13 +349,11 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
       visit settings_payments_path
 
-      within_fieldset("Stripe account") do
-        expect(page).to have_text(merchant_account.charge_processor_merchant_id)
-        note = find("p", exact_text: "Card sales don't go to this Stripe account right now. They go to your Gumroad balance, and we pay them out on your regular payout schedule. The Payouts page shows where your next payout goes.")
-        expect(note.evaluate_script("getComputedStyle(this).color")).to eq(find("legend").evaluate_script("getComputedStyle(this).color"))
-        expect(note).to have_link("Payouts page", href: balance_path)
-        expect(page).not_to have_css(".text-success")
-      end
+      expect(page).to have_field("Stripe account", with: merchant_account.charge_processor_merchant_id, disabled: true)
+      within_fieldset("Stripe account") { expect(page).not_to have_css(".text-success") }
+      note = find("[role=status]", exact_text: "Card sales don't go to this Stripe account right now. They go to your Gumroad balance, and we pay them out on your regular payout schedule. The Payouts page shows where your next payout goes.")
+      expect(note.evaluate_script("getComputedStyle(this).color")).to eq(find("legend", text: "Stripe account").evaluate_script("getComputedStyle(this).color"))
+      expect(note).to have_link("Payouts page", href: balance_path)
       expect(page).to have_button("Disconnect Stripe account")
       expect(page).not_to have_button("Connect with Stripe")
     end
