@@ -134,6 +134,94 @@ describe "Automatic sales on product pages", type: :system, js: true do
     expect(page).to have_text("Total US$5", normalize_ws: true)
   end
 
+  context "when a qualifying buyer's existing-customer default competes with the sale in the cart" do
+    let(:seller) { create(:compliant_user) }
+    let(:buyer) { create(:user) }
+    let(:owned_product) { create(:product, user: seller, price_cents: 2000) }
+
+    before { create(:purchase, purchaser: buyer, link: owned_product, seller:, price_cents: 0) }
+
+    def make_default_for_existing_customers(product)
+      renewal = seller.offer_codes.create!(code: "RENEW20", amount_percentage: 20, products: [product],
+                                           existing_customers_only: true, ownership_products: [owned_product])
+      product.update!(default_offer_code: renewal)
+      renewal
+    end
+
+    def tiered_membership
+      create(:membership_product_with_preset_tiered_pricing, user: seller, name: "Target membership",
+                                                             recurrence_price_values: [
+                                                               { "monthly" => { enabled: true, price: 10 } },
+                                                               { "monthly" => { enabled: true, price: 100 } },
+                                                             ])
+    end
+
+    it "records the lifetime existing-customer code, not a one-cycle sale that saves the same amount" do
+      membership = tiered_membership
+      renewal = make_default_for_existing_customers(membership)
+      seller.offer_codes.create!(code: "SHOP2", amount_cents: 200, currency_type: "usd", universal: true, products: [],
+                                 auto_apply: true, duration_in_billing_cycles: 1)
+
+      login_as buyer
+      visit membership.long_url
+      add_to_cart(membership, option: "First Tier", offer_code: renewal)
+
+      expect(page).to have_text("Total US$8", normalize_ws: true)
+      check_out(membership, logged_in_user: buyer)
+
+      purchase = membership.sales.successful.sole
+      expect(purchase.offer_code.code).to eq("RENEW20")
+      expect(purchase.price_cents).to eq(800)
+    end
+
+    # The saved cart is what the first arrival leaves behind: Second Tier with both defaults.
+    it "keeps weighing the existing-customer code after the buyer adds a product that only has the sale, and after a reload" do
+      product = create(:product, user: seller, name: "Sale-only product", price_cents: 1000)
+      membership = tiered_membership
+      make_default_for_existing_customers(membership)
+      sale = seller.offer_codes.create!(code: "SHOP5", amount_cents: 500, currency_type: "usd", universal: true, products: [], auto_apply: true)
+      cart = create(:cart, user: buyer, discount_codes: [{ code: "SHOP5", fromUrl: true }, { code: "RENEW20", fromUrl: true }])
+      create(:cart_product, cart:, product: membership, option: membership.alive_variants.find_by!(name: "Second Tier"),
+                            recurrence: "monthly", price: 10_000)
+
+      login_as buyer
+      visit checkout_path
+      expect(page).to have_text("Total US$80", normalize_ws: true)
+
+      visit product.long_url
+      add_to_cart(product, offer_code: sale)
+      expect(page).to have_cart_item("Sale-only product")
+      expect(page).to have_text("Total US$85", normalize_ws: true)
+
+      wait_until_true(sleep_interval: CheckoutPresenter::CART_SAVE_DEBOUNCE_DURATION_IN_SECONDS) do
+        cart.reload.alive_cart_products.count == 2 && cart.discount_codes.pluck("code").sort == %w[RENEW20 SHOP5]
+      end
+      visit checkout_path
+      expect(page).to have_cart_item("Target membership")
+      expect(page).to have_text("Total US$85", normalize_ws: true)
+    end
+
+    # The product page leaves the code off its CTA once PPP wins, so this arrives by checkout link.
+    it "weighs the existing-customer code when purchasing power parity beats the sale in a checkout link" do
+      seller.update!(purchasing_power_parity_enabled: true)
+      product = create(:product, user: seller, name: "Target product", price_cents: 1000)
+      editions = create(:variant_category, link: product, title: "Edition")
+      create(:variant, variant_category: editions, name: "Basic", price_difference_cents: 0)
+      premium = create(:variant, variant_category: editions, name: "Premium", price_difference_cents: 9000)
+      make_default_for_existing_customers(product)
+      seller.offer_codes.create!(code: "SHOP5", amount_cents: 500, currency_type: "usd", universal: true, products: [], auto_apply: true)
+      PurchasingPowerParityService.new.set_factor("LV", 0.9)
+      allow_any_instance_of(ActionDispatch::Request).to receive(:remote_ip).and_return("109.110.31.255")
+
+      login_as buyer
+      visit checkout_path(product: product.unique_permalink, option: premium.external_id, quantity: 1, code: "SHOP5")
+
+      expect(page).to have_cart_item("Target product")
+      expect(page).to have_text("Total US$80", normalize_ws: true)
+      expect(page).to have_no_alert(text: "purchasing power parity discount is greater")
+    end
+  end
+
   it "labels profile cards and the featured product with the sale" do
     seller = create(:user)
     product = create(:product, user: seller, price_cents: 1000)

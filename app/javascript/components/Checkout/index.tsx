@@ -75,6 +75,7 @@ import {
 } from "./buyerCurrencyDisplay";
 import {
   type CartState,
+  type DiscountCode,
   convertToUSD,
   hasFreeTrial,
   getDiscountedPrice,
@@ -272,7 +273,18 @@ export const Checkout = ({
 
   const isGift = state.gift != null;
 
-  async function applyDiscount(code: string, fromUrl = false, alongsideCodes: string[] = []) {
+  // One updateCart for everything: each call writes from this render's `cart`, so concurrent calls
+  // drop each other's codes. `codes` don't take lines from each other and the solver keeps the
+  // later one on a tie, so pass them lowest tie priority first. `takeover` takes the code's lines
+  // from the cart's other codes; `refresh` re-quotes those for an added product.
+  async function applyDiscount(
+    codes: string[],
+    {
+      fromUrl = false,
+      takeover = false,
+      refresh = false,
+    }: { fromUrl?: boolean; takeover?: boolean; refresh?: boolean },
+  ) {
     setLoadingDiscount(true);
     const products = Object.fromEntries(
       cart.items.map((item, index) => [
@@ -280,60 +292,89 @@ export const Checkout = ({
         { permalink: item.product.permalink, quantity: item.quantity, variant_external_id: item.option_id ?? "" },
       ]),
     );
-    const [discount, alongsideDiscounts] = await Promise.all([
-      computeOfferDiscount({ code, products }),
-      Promise.all(alongsideCodes.map((code) => computeOfferDiscount({ code, products }))),
+    const others = cart.discountCodes.filter(({ code }) => !codes.includes(code));
+    const [discounts, refreshed] = await Promise.all([
+      Promise.all(codes.map((code) => computeOfferDiscount({ code, products }))),
+      Promise.all(refresh ? others.map(({ code }) => computeOfferDiscount({ code, products })) : []),
     ]);
-    if (discount.valid) {
-      const entries = Object.entries(discount.products_data);
-      const pppDiscountGreaterCount = entries.reduce((acc, [permalink, discount]) => {
-        const item = cart.items.find(({ product }) => product.permalink === permalink);
-        const configuredDiscount = withConfiguredOncePerCartAmount(discount);
-        return item && computeSelectionDiscountedPrice(item.price, configuredDiscount, item.product, item.quantity).ppp
-          ? acc + 1
-          : acc;
-      }, 0);
-      if (pppDiscountGreaterCount === entries.length) {
-        showAlert(
-          "The offer code will not be applied because the purchasing power parity discount is greater than the offer code discount for all products.",
-          "error",
-        );
-      } else {
-        // One showAlert, because the toast is a single slot — a second call replaces the first
-        // before it paints. Both reasons can be true and each names a different set of lines.
-        const warnings = [
-          pppDiscountGreaterCount > 0
-            ? "The offer code will not be applied to some products for which the purchasing power parity discount is greater than the offer code discount."
-            : null,
-          discount.notice,
-        ].filter(Boolean);
-        if (warnings.length > 0) showAlert(warnings.join(" "), "warning");
-        updateCart({
-          discountCodes: [
-            { code, products: discount.products_data, fromUrl },
-            // Added without taking products over, so each line keeps whichever code saves it more.
-            ...alongsideCodes.flatMap((alongsideCode, index) => {
-              const alongside = alongsideDiscounts[index];
-              return alongside?.valid ? [{ code: alongsideCode, products: alongside.products_data, fromUrl }] : [];
-            }),
-            ...cart.discountCodes
-              .map((item) => ({
-                ...item,
-                products: Object.fromEntries(
-                  Object.entries(item.products).filter(([permalink]) => !(permalink in discount.products_data)),
-                ),
-              }))
-              .filter(
-                (item) =>
-                  item.code !== code && !alongsideCodes.includes(item.code) && Object.keys(item.products).length > 0,
-              ),
-          ],
-        });
-      }
-      setNewDiscountCode("");
+    const applied = codes.flatMap((code, index) => {
+      const discount = discounts[index];
+      return discount?.valid ? [{ code, products: discount.products_data, fromUrl, notice: discount.notice }] : [];
+    });
+    // A line counts as lost to PPP only when PPP beats every code here that covers it.
+    const appliedPermalinks = [...new Set(applied.flatMap(({ products }) => Object.keys(products)))];
+    const pppDiscountGreaterCount = appliedPermalinks.filter((permalink) => {
+      const item = cart.items.find(({ product }) => product.permalink === permalink);
+      return (
+        !!item &&
+        applied.every(({ products }) => {
+          const discount = products[permalink];
+          return (
+            !discount ||
+            computeSelectionDiscountedPrice(
+              item.price,
+              withConfiguredOncePerCartAmount(discount),
+              item.product,
+              item.quantity,
+            ).ppp
+          );
+        })
+      );
+    }).length;
+    let group: DiscountCode[] = [];
+    if (codes.length > 0 && applied.length === 0) {
+      const invalid = discounts.find((discount) => !discount.valid);
+      if (invalid?.valid === false) showAlert(invalid.error_message, "error");
+    } else if (applied.length > 0 && pppDiscountGreaterCount === appliedPermalinks.length) {
+      showAlert(
+        "The offer code will not be applied because the purchasing power parity discount is greater than the offer code discount for all products.",
+        "error",
+      );
     } else {
-      showAlert(discount.error_message, "error");
+      // One showAlert, because the toast is a single slot — a second call replaces the first
+      // before it paints. Both reasons can be true and each names a different set of lines.
+      const warnings = [
+        ...new Set(
+          [
+            pppDiscountGreaterCount > 0
+              ? "The offer code will not be applied to some products for which the purchasing power parity discount is greater than the offer code discount."
+              : null,
+            ...applied.map(({ notice }) => notice),
+          ].filter(Boolean),
+        ),
+      ];
+      if (warnings.length > 0) showAlert(warnings.join(" "), "warning");
+      group = applied.map(({ code, products, fromUrl }) => ({ code, products, fromUrl }));
     }
+    if (applied.length > 0) setNewDiscountCode("");
+
+    const takenPermalinks = new Set(takeover && group.length > 0 ? appliedPermalinks : []);
+    const refreshedByCode = new Map(others.map(({ code }, index) => [code, refreshed[index]]));
+    const kept = cart.discountCodes
+      .filter((item) => !group.some(({ code }) => code === item.code))
+      .map((item) => {
+        const fresh = refreshedByCode.get(item.code);
+        const products = fresh?.valid ? fresh.products_data : item.products;
+        return {
+          ...item,
+          products: Object.fromEntries(
+            Object.entries(products).filter(([permalink]) => !takenPermalinks.has(permalink)),
+          ),
+        };
+      });
+    // A group code already in the cart keeps its tie order against the codes around it.
+    const position = takeover
+      ? 0
+      : Math.max(
+          cart.discountCodes.findIndex(({ code }) => codes.includes(code)),
+          0,
+        );
+    if (group.length > 0 || refreshed.length > 0)
+      updateCart({
+        discountCodes: [...kept.slice(0, position), ...group, ...kept.slice(position)].filter(
+          (item) => group.includes(item) || Object.keys(item.products).length > 0,
+        ),
+      });
 
     setLoadingDiscount(false);
   }
@@ -342,17 +383,16 @@ export const Checkout = ({
   useRunOnce(() => {
     const url = new URL(window.location.href);
     const code = url.searchParams.get("code");
-    // A default the product page picked was weighed on one quote; the others ride along so the
-    // cart can re-weigh them per line. Re-applying them separately would race and strip them.
-    const alongsideCodes =
-      code && defaultOfferCodes.includes(code) ? defaultOfferCodes.filter((candidate) => candidate !== code) : [];
-    const appliedTogether = alongsideCodes.length > 0 ? [code, ...alongsideCodes] : [];
-    if (hasAddedProduct)
-      cart.discountCodes
-        .filter(({ code }) => !appliedTogether.includes(code))
-        .forEach(({ code }) => void applyDiscount(code));
+    // A default the product page picked was weighed on one quote, so all of the arriving product's
+    // defaults are weighed again per line. The server lists them most preferred first.
+    const isDefault = !!code && defaultOfferCodes.includes(code);
+    if (code || (hasAddedProduct && cart.discountCodes.length > 0))
+      void applyDiscount(isDefault ? [...defaultOfferCodes].reverse() : code ? [code] : [], {
+        fromUrl: true,
+        takeover: !isDefault,
+        refresh: hasAddedProduct,
+      });
     if (code) {
-      void applyDiscount(code, true, alongsideCodes);
       url.searchParams.delete("code");
       window.history.replaceState(window.history.state, "", url.toString());
     }
@@ -717,7 +757,7 @@ export const Checkout = ({
                       className="flex! gap-2"
                       onSubmit={(e) => {
                         e.preventDefault();
-                        void applyDiscount(newDiscountCode);
+                        void applyDiscount([newDiscountCode], { takeover: true });
                       }}
                     >
                       <Input
