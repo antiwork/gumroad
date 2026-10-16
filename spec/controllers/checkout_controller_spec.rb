@@ -43,6 +43,7 @@ describe CheckoutController, type: :controller, inertia: true do
                                                countries: Compliance::Countries.for_select.to_h,
                                                country: nil,
                                                default_offer_codes: [],
+                                               existing_customer_default_offer_code_valid: false,
                                                default_tip_option: 0,
                                                discover_url: discover_url(protocol: PROTOCOL, host: DISCOVER_DOMAIN),
                                                gift: nil,

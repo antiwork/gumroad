@@ -174,31 +174,120 @@ describe "Automatic sales on product pages", type: :system, js: true do
       expect(purchase.price_cents).to eq(800)
     end
 
-    # The saved cart is what the first arrival leaves behind: Second Tier with both defaults.
+    def show_on_profile(product)
+      profile_product = create(:product, user: seller, price_cents: 1000)
+      Link.import(refresh: true, force: true)
+      cards = create(:seller_profile_products_section, seller:, product: profile_product, header: "More products", shown_products: [product.id])
+      profile_product.update!(sections: [cards.id])
+      profile_product
+    end
+
+    def persisted_cart_holds?(products:, codes:)
+      cart = Cart.fetch_by(user: buyer, browser_guid: nil)
+      cart.present? && cart.alive_cart_products.map(&:product).sort_by(&:id) == products.sort_by(&:id) &&
+        cart.discount_codes.pluck("code").sort == codes.sort
+    end
+
     it "keeps weighing the existing-customer code after the buyer adds a product that only has the sale, and after a reload" do
       product = create(:product, user: seller, name: "Sale-only product", price_cents: 1000)
       membership = tiered_membership
       make_default_for_existing_customers(membership)
       sale = seller.offer_codes.create!(code: "SHOP5", amount_cents: 500, currency_type: "usd", universal: true, products: [], auto_apply: true)
-      cart = create(:cart, user: buyer, discount_codes: [{ code: "SHOP5", fromUrl: true }, { code: "RENEW20", fromUrl: true }])
-      create(:cart_product, cart:, product: membership, option: membership.alive_variants.find_by!(name: "Second Tier"),
-                            recurrence: "monthly", price: 10_000)
+      profile_product = show_on_profile(membership)
 
       login_as buyer
-      visit checkout_path
+      visit short_link_path(profile_product)
+      within_section "More products", section_element: :section do
+        click_on "Target membership"
+      end
+      choose "Second Tier"
+      click_on "Add to cart"
+      expect(page).to have_cart_item("Target membership")
       expect(page).to have_text("Total US$80", normalize_ws: true)
+      wait_until_true(sleep_interval: 0.2) { persisted_cart_holds?(products: [membership], codes: %w[RENEW20 SHOP5]) }
 
       visit product.long_url
       add_to_cart(product, offer_code: sale)
       expect(page).to have_cart_item("Sale-only product")
       expect(page).to have_text("Total US$85", normalize_ws: true)
+      wait_until_true(sleep_interval: 0.2) { persisted_cart_holds?(products: [membership, product], codes: %w[RENEW20 SHOP5]) }
 
-      wait_until_true(sleep_interval: CheckoutPresenter::CART_SAVE_DEBOUNCE_DURATION_IN_SECONDS) do
-        cart.reload.alive_cart_products.count == 2 && cart.discount_codes.pluck("code").sort == %w[RENEW20 SHOP5]
-      end
       visit checkout_path
       expect(page).to have_cart_item("Target membership")
+      expect(page).to have_cart_item("Sale-only product")
       expect(page).to have_text("Total US$85", normalize_ws: true)
+      expect(persisted_cart_holds?(products: [membership, product], codes: %w[RENEW20 SHOP5])).to be(true)
+    end
+
+    # Holds the page's first cart save on the server until a later save has been written, and the
+    # arrival's quotes until that first save has reached the server, so it is still in flight when
+    # the codes are ready.
+    it "persists the arrival's codes while the page's first cart save is still being written" do
+      membership = tiered_membership
+      make_default_for_existing_customers(membership)
+      seller.offer_codes.create!(code: "SHOP5", amount_cents: 500, currency_type: "usd", universal: true, products: [], auto_apply: true)
+      profile_product = show_on_profile(membership)
+
+      login_as buyer
+      visit short_link_path(profile_product)
+      within_section "More products", section_element: :section do
+        click_on "Target membership"
+      end
+      choose "Second Tier"
+
+      first_save_reached_server = Concurrent::Event.new
+      later_save_written = Concurrent::Event.new
+      first_save = Concurrent::AtomicBoolean.new(true)
+      saves_written = Concurrent::AtomicFixnum.new
+      allow_any_instance_of(OfferCodesController).to receive(:compute_discount).and_wrap_original do |original, *args|
+        first_save_reached_server.wait(3)
+        original.call(*args)
+      end
+      allow_any_instance_of(CheckoutController).to receive(:update).and_wrap_original do |original, *args|
+        held = first_save.make_false
+        first_save_reached_server.set
+        later_save_written.wait(3) if held
+        original.call(*args)
+      ensure
+        saves_written.increment
+        later_save_written.set unless held
+      end
+      click_on "Add to cart"
+
+      expect(page).to have_cart_item("Target membership")
+      expect(page).to have_text("Total US$80", normalize_ws: true)
+      wait_until_true(sleep_interval: 0.2) { saves_written.value >= 2 }
+      expect(persisted_cart_holds?(products: [membership], codes: %w[RENEW20 SHOP5])).to be(true)
+    end
+
+    it "weighs the existing-customer code when the product page leaves the code off because purchasing power parity beats the sale" do
+      seller.update!(purchasing_power_parity_enabled: true)
+      product = create(:product, user: seller, name: "Target product", price_cents: 1000)
+      editions = create(:variant_category, link: product, title: "Edition")
+      create(:variant, variant_category: editions, name: "Basic", price_difference_cents: 0)
+      premium = create(:variant, variant_category: editions, name: "Premium", price_difference_cents: 9000)
+      make_default_for_existing_customers(product)
+      seller.offer_codes.create!(code: "SHOP5", amount_cents: 500, currency_type: "usd", universal: true, products: [], auto_apply: true)
+      profile_product = show_on_profile(product)
+      PurchasingPowerParityService.new.set_factor("LV", 0.9)
+      allow_any_instance_of(ActionDispatch::Request).to receive(:remote_ip).and_return("109.110.31.255")
+
+      login_as buyer
+      visit short_link_path(profile_product)
+      within_section "More products", section_element: :section do
+        click_on "Target product"
+      end
+      choose "Premium"
+      within find(:article) do
+        query = Rack::Utils.parse_query(URI.parse(find(:link, "Add to cart")[:href]).query)
+        expect(query["option"]).to eq(premium.external_id)
+        expect(query).not_to have_key("code")
+      end
+      click_on "Add to cart"
+
+      expect(page).to have_cart_item("Target product")
+      expect(page).to have_text("Total US$80", normalize_ws: true)
+      expect(page).to have_no_alert(text: "purchasing power parity discount is greater")
     end
 
     # The product page leaves the code off its CTA once PPP wins, so this arrives by checkout link.

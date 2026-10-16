@@ -37,7 +37,14 @@ class BestOfferCodeService
   end
 
   def valid_default_codes
-    @default_codes.select { evaluate_code(_1)[:valid] }
+    @valid_default_codes ||= @default_codes.select { evaluate_code(_1)[:valid] }
+  end
+
+  # The checkout weighs a qualifying buyer's defaults even when the product page sent no code,
+  # because the page leaves the code off once PPP beats its own pick.
+  def existing_customer_default_valid?
+    explicit = @product.default_offer_code
+    !!explicit&.existing_customers_only? && valid_default_codes.include?(explicit.code)
   end
 
   private

@@ -258,6 +258,7 @@ export const Checkout = ({
   cart,
   updateCart,
   defaultOfferCodes = [],
+  existingCustomerDefaultOfferCodeValid = false,
   recommendedProducts,
 }: {
   discoverUrl: string;
@@ -265,6 +266,7 @@ export const Checkout = ({
   updateCart: (updated: Partial<CartState>) => void;
   // The arriving product's defaults this buyer can redeem.
   defaultOfferCodes?: string[];
+  existingCustomerDefaultOfferCodeValid?: boolean;
   recommendedProducts?: CardProduct[] | null;
 }) => {
   const [state] = useState();
@@ -276,14 +278,16 @@ export const Checkout = ({
   // One updateCart for everything: each call writes from this render's `cart`, so concurrent calls
   // drop each other's codes. `codes` don't take lines from each other and the solver keeps the
   // later one on a tie, so pass them lowest tie priority first. `takeover` takes the code's lines
-  // from the cart's other codes; `refresh` re-quotes those for an added product.
+  // from the cart's other codes; `refresh` re-quotes those for an added product. `silent` is for
+  // codes the buyer didn't ask for, which apply where they can without alerts.
   async function applyDiscount(
     codes: string[],
     {
       fromUrl = false,
       takeover = false,
       refresh = false,
-    }: { fromUrl?: boolean; takeover?: boolean; refresh?: boolean },
+      silent = false,
+    }: { fromUrl?: boolean; takeover?: boolean; refresh?: boolean; silent?: boolean },
   ) {
     setLoadingDiscount(true);
     const products = Object.fromEntries(
@@ -324,12 +328,13 @@ export const Checkout = ({
     let group: DiscountCode[] = [];
     if (codes.length > 0 && applied.length === 0) {
       const invalid = discounts.find((discount) => !discount.valid);
-      if (invalid?.valid === false) showAlert(invalid.error_message, "error");
+      if (invalid?.valid === false && !silent) showAlert(invalid.error_message, "error");
     } else if (applied.length > 0 && pppDiscountGreaterCount === appliedPermalinks.length) {
-      showAlert(
-        "The offer code will not be applied because the purchasing power parity discount is greater than the offer code discount for all products.",
-        "error",
-      );
+      if (!silent)
+        showAlert(
+          "The offer code will not be applied because the purchasing power parity discount is greater than the offer code discount for all products.",
+          "error",
+        );
     } else {
       // One showAlert, because the toast is a single slot — a second call replaces the first
       // before it paints. Both reasons can be true and each names a different set of lines.
@@ -343,7 +348,7 @@ export const Checkout = ({
           ].filter(Boolean),
         ),
       ];
-      if (warnings.length > 0) showAlert(warnings.join(" "), "warning");
+      if (warnings.length > 0 && !silent) showAlert(warnings.join(" "), "warning");
       group = applied.map(({ code, products, fromUrl }) => ({ code, products, fromUrl }));
     }
     if (applied.length > 0) setNewDiscountCode("");
@@ -384,13 +389,16 @@ export const Checkout = ({
     const url = new URL(window.location.href);
     const code = url.searchParams.get("code");
     // A default the product page picked was weighed on one quote, so all of the arriving product's
-    // defaults are weighed again per line. The server lists them most preferred first.
+    // defaults are weighed again per line. The server lists them most preferred first. A qualifying
+    // buyer's defaults are also weighed when the page sent no code, as it does once PPP beats its pick.
     const isDefault = !!code && defaultOfferCodes.includes(code);
-    if (code || (hasAddedProduct && cart.discountCodes.length > 0))
-      void applyDiscount(isDefault ? [...defaultOfferCodes].reverse() : code ? [code] : [], {
+    const implicitDefaults = !code && hasAddedProduct && existingCustomerDefaultOfferCodeValid;
+    if (code || (hasAddedProduct && cart.discountCodes.length > 0) || implicitDefaults)
+      void applyDiscount(isDefault || implicitDefaults ? [...defaultOfferCodes].reverse() : code ? [code] : [], {
         fromUrl: true,
-        takeover: !isDefault,
+        takeover: !isDefault && !implicitDefaults,
         refresh: hasAddedProduct,
+        silent: implicitDefaults,
       });
     if (code) {
       url.searchParams.delete("code");

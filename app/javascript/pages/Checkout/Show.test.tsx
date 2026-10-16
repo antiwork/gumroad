@@ -11,12 +11,24 @@ import { PLACEHOLDER_CART_ITEM } from "$app/utils/cart";
 import { cast } from "$app/utils/cast";
 
 import { type CartItem, type CartState } from "$app/components/Checkout/cartState";
+import { type CartSaveCallbacks } from "$app/components/Checkout/checkoutPaymentRefresh";
 import { type CheckoutPaymentConfig, useState } from "$app/components/Checkout/payment";
+
+type CartSaveVisit = CartSaveCallbacks & { onStart?: () => void };
 
 const mocks = vi.hoisted(() => {
   const props: Record<string, unknown> = {};
   const savedCarts: CartState[] = [];
-  return { props, savedCarts, surcharges: vi.fn(), order: vi.fn(), clientOrder: vi.fn(), analytics: vi.fn() };
+  const saveVisits: CartSaveVisit[] = [];
+  return {
+    props,
+    savedCarts,
+    saveVisits,
+    surcharges: vi.fn(),
+    order: vi.fn(),
+    clientOrder: vi.fn(),
+    analytics: vi.fn(),
+  };
 });
 vi.mock("$app/data/customer_surcharge", () => ({ getSurcharges: mocks.surcharges }));
 vi.mock("$app/data/order", () => ({
@@ -46,13 +58,17 @@ vi.mock("@inertiajs/react", () => ({
   usePage: () => ({ props: mocks.props }),
   useForm: (initial: { cart: CartState }) => {
     const [data, setData] = React.useState(initial);
-    return { data, setData, patch: vi.fn(() => mocks.savedCarts.push(data.cart)), cancel: vi.fn() };
+    const patch = vi.fn((_url: string, visit: CartSaveVisit) => {
+      mocks.savedCarts.push(data.cart);
+      mocks.saveVisits.push(visit);
+    });
+    return { data, setData, patch, cancel: vi.fn() };
   },
 }));
 // Replace only collection of payment credentials. Show's real pay(), reducer, quote fetch,
 // and choice of order endpoint remain in the test; no processor or payment is contacted.
 vi.mock("$app/components/Checkout", () => ({
-  Checkout: () => {
+  Checkout: ({ updateCart }: { updateCart: (updated: Partial<CartState>) => void }) => {
     const [state, dispatch] = useState();
     React.useEffect(() => {
       if (state.status.type === "validating") dispatch({ type: "start-payment" });
@@ -90,6 +106,9 @@ vi.mock("$app/components/Checkout", () => ({
         </output>
         <p>{state.warning}</p>
         <p aria-label="buyer currency">{state.buyerCurrency}</p>
+        <button onClick={() => updateCart({ discountCodes: [{ code: "SHOP5", products: {}, fromUrl: true }] })}>
+          Apply code
+        </button>
       </>
     );
   },
@@ -206,6 +225,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   mocks.savedCarts.length = 0;
+  mocks.saveVisits.length = 0;
   cleanup();
   vi.useRealTimers();
   vi.resetAllMocks();
@@ -402,6 +422,26 @@ it("keeps a method-forced listed currency when a matching preference is persiste
   expect(mocks.clientOrder).toHaveBeenCalledOnce();
   expect(mocks.clientOrder.mock.calls[0]?.[0].directListedAmountToken).toBe("listed-1600");
   expect(screen.getByLabelText("buyer currency").textContent).toBe("eur");
+});
+
+it("holds a cart save until the one in flight finishes, then sends the cart as it stands", async () => {
+  mocks.props.checkout_payment = config(false);
+  mocks.surcharges.mockResolvedValue(quote("2999-01-01T00:00:00Z"));
+  render(<CheckoutPage />);
+  await act(() => vi.advanceTimersByTimeAsync(1000));
+  expect(mocks.savedCarts.map(({ discountCodes }) => discountCodes)).toEqual([[]]);
+  const inFlight = cast<CartSaveVisit>(mocks.saveVisits[0]);
+  inFlight.onStart?.();
+
+  fireEvent.click(screen.getByRole("button", { name: "Apply code" }));
+  await act(() => vi.advanceTimersByTimeAsync(1000));
+  expect(mocks.savedCarts).toHaveLength(1);
+
+  act(() => {
+    inFlight.onSuccess({ props: { checkout_payment: config(false) } });
+    inFlight.onFinish({});
+  });
+  expect(mocks.savedCarts.map(({ discountCodes }) => discountCodes.map(({ code }) => code))).toEqual([[], ["SHOP5"]]);
 });
 
 const acceptedOffer = {

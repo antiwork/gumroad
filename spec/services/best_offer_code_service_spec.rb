@@ -631,6 +631,22 @@ describe BestOfferCodeService do
         expect(described_class.new(product:, buyer: create(:user)).valid_default_codes).to eq(%w[SHOP30])
       end
 
+      it "flags the existing-customer default only for a buyer who can redeem it" do
+        expect(described_class.new(product:, buyer:).existing_customer_default_valid?).to be(false)
+
+        own = create(:offer_code, user: seller, products: [product], ownership_products: [owned], existing_customers_only: true,
+                                  code: "RENEW", amount_cents: nil, amount_percentage: 10, currency_type: nil)
+        product.update!(default_offer_code: own)
+
+        expect(described_class.new(product:, buyer:).existing_customer_default_valid?).to be(true)
+        expect(described_class.new(product:, buyer: create(:user)).existing_customer_default_valid?).to be(false)
+        expect(described_class.new(product:).existing_customer_default_valid?).to be(false)
+
+        own.update!(existing_customers_only: false)
+
+        expect(described_class.new(product: product.reload, buyer:).existing_customer_default_valid?).to be(false)
+      end
+
       it "weighs a fixed default against the sale's share of the lowest tier, so only a larger one beats it" do
         own = create(:offer_code, user: seller, products: [product], ownership_products: [owned], existing_customers_only: true,
                                   code: "RENEW", amount_cents: 2_00, currency_type: "usd")
