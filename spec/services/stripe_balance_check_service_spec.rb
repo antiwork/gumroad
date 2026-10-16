@@ -110,6 +110,22 @@ describe StripeBalanceCheckService do
         expect(described_class.new(now: Time.zone.local(2026, 12, 18, 2)).snapshot_at).to eq(Time.utc(2026, 12, 18, 10))
       end
     end
+
+    it "matches the balance reading when the estimate takes minutes" do
+      read_at = nil
+      allow(Stripe::Balance).to receive(:retrieve) do
+        read_at = Time.current
+        Stripe::Balance.construct_from(available: [], pending: [])
+      end
+      allow(PayoutEstimates).to receive(:estimate_gumroad_held_stripe_cents_per_user) do
+        travel 150.seconds
+        { 1 => 300_000_00 }
+      end
+
+      freeze_time do
+        expect(described_class.new.snapshot_at).to eq(read_at)
+      end
+    end
   end
 
   describe "#per_run_estimate_cents" do

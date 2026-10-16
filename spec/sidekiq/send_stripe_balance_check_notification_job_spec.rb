@@ -40,7 +40,7 @@ describe SendStripeBalanceCheckNotificationJob do
         expect(message).to include("Seller payouts for balances up to September 11 need $300,000")
         expect(message).to include("between the next run (Wednesday, September 16 at 10:00 UTC (6:00 AM ET)) and the last run of the cycle (Friday, September 18 at 10:00 UTC (6:00 AM ET)).")
         expect(message).to include("Estimated per run: Tuesday $120,000, Wednesday $90,000, Thursday $90,000.")
-        expect(message).to include("Worst case, if the whole cycle were drawn on the next run: $150,000.")
+        expect(message).to include("Worst-case shortfall, if the whole cycle were drawn on the next run before any pending money settles: $150,000.")
         expect(message).to include("Of Stripe's USD bank payouts created in the last 24 hours, $301,513.34 has reached the bank and $12,000 is still in flight.")
         expect(message).to include("A top-up of $100,000 is needed, ideally before Wednesday, September 16 at 10:00 UTC (6:00 AM ET) and no later than Friday, September 18 at 10:00 UTC (6:00 AM ET). Nothing tops up automatically")
         expect($redis.get(RedisKey.stripe_balance_topup_needed)).to eq("true")
@@ -54,8 +54,8 @@ describe SendStripeBalanceCheckNotificationJob do
 
         message = InternalNotificationWorker.jobs.last["args"][2]
         expect(message).to start_with("No action needed yet.\n")
-        expect(message).to include("Worst case, if the whole cycle were drawn on the next run: $150,000.")
-        expect(message).to include("Nothing to do yet: the balance covers the next run.")
+        expect(message).to include("Worst-case shortfall, if the whole cycle were drawn on the next run before any pending money settles: $150,000.")
+        expect(message).to include("Nothing to do yet: counting pending, the balance covers the whole cycle.")
       end
     end
 
@@ -79,7 +79,7 @@ describe SendStripeBalanceCheckNotificationJob do
         described_class.new.perform
 
         expect(InternalNotificationWorker).to have_enqueued_sidekiq_job("payments", "Stripe Balance Check", kind_of(String), "green")
-        expect(InternalNotificationWorker.jobs.last["args"][2]).to include("Nothing to do yet: the balance covers the next run.")
+        expect(InternalNotificationWorker.jobs.last["args"][2]).to include("Nothing to do yet: counting pending, the balance covers the whole cycle.")
         expect($redis.get(RedisKey.stripe_balance_topup_needed)).to eq("false")
       end
 

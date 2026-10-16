@@ -43,7 +43,8 @@ class SendStripeBalanceCheckNotificationJob
         "from Gumroad's Stripe balance in total. The payout jobs run Tuesday to Friday at 10:00 UTC, each paying one group " \
         "of sellers, so the money is drawn in parts between the next run (#{first_run}) and the last run of the cycle " \
         "(#{last_run}). #{per_run_split(balance_check)}" \
-        "Worst case, if the whole cycle were drawn on the next run: #{formatted_dollar_amount(worst_case_topup_cents(balance_check))}.",
+        "Worst-case shortfall, if the whole cycle were drawn on the next run before any pending money settles: " \
+        "#{formatted_dollar_amount(worst_case_topup_cents(balance_check))}.",
         "Of Stripe's USD bank payouts created in the last 24 hours, " \
         "#{formatted_dollar_amount(balance_check.swept_to_bank_last_day_cents)} has reached the bank and " \
         "#{formatted_dollar_amount(balance_check.sweeps_in_flight_last_day_cents)} is still in flight. " \
@@ -57,7 +58,7 @@ class SendStripeBalanceCheckNotificationJob
                  "or move the money to the Stripe account from the bank. Payouts the balance cannot cover fail with " \
                  "\"insufficient funds\" and have to be re-run by hand."
       else
-        lines << "Nothing to do yet: the balance covers the next run. This is re-sent on the Monday before the cycle's first run."
+        lines << "Nothing to do yet: counting pending, the balance covers the whole cycle. This is re-sent on the Monday before the cycle's first run."
       end
 
       lines.join("\n")

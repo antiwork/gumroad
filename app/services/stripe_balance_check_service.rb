@@ -16,18 +16,19 @@ class StripeBalanceCheckService
   def initialize(now: Time.current)
     # The moment the balance was read. Two readings of a moving balance are not a contradiction.
     @snapshot_at = now.utc
+    # Read before the estimate: the aggregate can take minutes, and snapshot_at labels this reading.
+    balance = Stripe::Balance.retrieve
+    @available_cents = usd_cents(balance.available)
+    # Pending sales settle within a couple of business days -- inside the weekly payout window --
+    # so they fund the upcoming payouts. Available-only over-reports the top-up and fires false alarms.
+    @pending_cents = [usd_cents(balance.pending), 0].max
+
     # The cutoff of the cycle this check announces, not `next_scheduled_payout_end_date`: that one
     # still points at the cycle that just paid for the rest of Friday, so after Friday's run the
     # amount and the run dates would describe different cycles.
     @payout_end_date = cycle_last_run_at.to_date - User::PayoutSchedule::PAYOUT_DELAY_DAYS
     @per_user_payouts_cents = PayoutEstimates.estimate_gumroad_held_stripe_cents_per_user(@payout_end_date)
     @upcoming_payouts_cents = @per_user_payouts_cents.values.sum
-
-    balance = Stripe::Balance.retrieve
-    @available_cents = usd_cents(balance.available)
-    # Pending sales settle within a couple of business days -- inside the weekly payout window --
-    # so they fund the upcoming payouts. Available-only over-reports the top-up and fires false alarms.
-    @pending_cents = [usd_cents(balance.pending), 0].max
   end
 
   attr_reader :snapshot_at, :upcoming_payouts_cents, :available_cents, :pending_cents, :payout_end_date
