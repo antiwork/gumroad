@@ -82,11 +82,11 @@ const StripeConnectSection = ({
               {stripeConnect.stripe_connect_routing_active ? null : (
                 <p>
                   Card sales don't go to this Stripe account right now. They go to your Gumroad balance, and we pay them
-                  out on your regular payout schedule. The{" "}
+                  out on your regular payout schedule. Once a payout is scheduled, the{" "}
                   <a href={Routes.balance_path()} className="underline">
                     Payouts page
                   </a>{" "}
-                  shows where your next payout goes.
+                  shows where it goes.
                 </p>
               )}
             </Fieldset>
