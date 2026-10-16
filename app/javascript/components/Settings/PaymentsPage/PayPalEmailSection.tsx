@@ -41,7 +41,7 @@ const PayPalEmailSection = ({
     <section className="grid gap-8">
       {showPayPalPayoutsFeeNote ? (
         <Alert role="status" variant="info">
-          PayPal payouts are subject to a 2% processing fee.
+          PayPal payouts have a 2% payout fee.
         </Alert>
       ) : null}
       <FeeInfoDetails feeInfo={feeInfo} />
