@@ -2314,6 +2314,60 @@ describe("reduceCheckoutState", () => {
         expect(quoted.resumeSubmitAfterCheckoutPayment).toBe(false);
       });
 
+      it("refuses a submit while an automatic discount quote is pending", () => {
+        const quoting = reduceCheckoutState(state(), { type: "set-discount-quotes-pending", pending: true });
+
+        const refused = reduceCheckoutState(quoting, { type: "offer" });
+        expect(refused.status).toEqual({ type: "input", errors: new Set() });
+
+        const quoted = reduceCheckoutState(refused, { type: "set-discount-quotes-pending", pending: false });
+        // A refused click is not a confirmed submit, so nothing resumes; the next click goes through.
+        expect(quoted.status).toEqual({ type: "input", errors: new Set() });
+        expect(reduceCheckoutState(quoted, { type: "offer" }).status).toEqual({ type: "offering" });
+      });
+
+      it("resumes an accepted offer once, after both the configuration and the discount quotes are ready", () => {
+        // acceptOffer invalidates and validates in one tick; the cart edit then re-quotes a dormant code.
+        const refused = reduceCheckoutState(
+          reduceCheckoutState(state({ status: { type: "offering" } }), { type: "invalidate-checkout-payment" }),
+          { type: "validate" },
+        );
+        const quoting = reduceCheckoutState(refused, { type: "set-discount-quotes-pending", pending: true });
+
+        const refreshed = reduceCheckoutState(quoting, {
+          type: "update-checkout-payment",
+          checkoutPayment: paymentElementConfig,
+        });
+        expect(refreshed.status).toEqual({ type: "input", errors: new Set() });
+        expect(refreshed.resumeSubmitAfterCheckoutPayment).toBe(true);
+
+        const quoted = reduceCheckoutState(refreshed, { type: "set-discount-quotes-pending", pending: false });
+        expect(quoted.status).toEqual({ type: "validating" });
+        expect(quoted.resumeSubmitAfterCheckoutPayment).toBe(false);
+        expect(reduceCheckoutState(quoted, { type: "set-discount-quotes-pending", pending: false }).status).toEqual({
+          type: "validating",
+        });
+      });
+
+      it("keeps a confirmed submit waiting while a discount quote has failed, and a cancel stays cancelled", () => {
+        const failed = reduceCheckoutState(state({ status: { type: "offering" } }), {
+          type: "set-discount-quotes-pending",
+          pending: true,
+        });
+
+        const refused = reduceCheckoutState(failed, { type: "validate" });
+        expect(refused.status).toEqual({ type: "input", errors: new Set() });
+        expect(refused.resumeSubmitAfterCheckoutPayment).toBe(true);
+        expect(
+          reduceCheckoutState(refused, { type: "update-checkout-payment", checkoutPayment: paymentElementConfig })
+            .status,
+        ).toEqual({ type: "input", errors: new Set() });
+
+        const cancelled = reduceCheckoutState(refused, { type: "cancel" });
+        const quoted = reduceCheckoutState(cancelled, { type: "set-discount-quotes-pending", pending: false });
+        expect(quoted.status).toEqual({ type: "input", errors: new Set() });
+      });
+
       it("resumes on the configuration when the quote landed first", () => {
         // The other arrival order. Whichever of the two completes the pair performs the resume.
         const stale = reduceCheckoutState(state({ status: { type: "offering" }, surcharges: { type: "pending" } }), {

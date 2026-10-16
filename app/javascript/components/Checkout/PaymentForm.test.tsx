@@ -624,6 +624,42 @@ describe("PaymentForm validation-failure feedback", () => {
     expect(paymentElementInputRender.walletsEnabled).toBe(false);
   });
 
+  it("keeps the native PayPal button from starting a payment while a discount quote is pending", async () => {
+    const checkoutState = state({
+      country: "US",
+      zipCode: "10001",
+      paymentMethod: "paypal",
+      paypalClientId: "paypal-client-id",
+      customFieldValues: { "field-1": "Nick" },
+      discountQuotesPending: true,
+      products: state().products.map((product) => ({
+        ...product,
+        price: 1_000,
+        requirePayment: true,
+        supportsPaypal: "native" as const,
+        paypalCardFundingDisabled: false,
+      })),
+    });
+    const harness: CheckoutHarness = { dispatch: () => undefined, actions: [] };
+    render(<StatefulPaymentForm initial={checkoutState} harness={harness} />);
+    await waitFor(() => expect(paypalMock.buttonsConfig).not.toBeNull());
+    const click = paypalMock.buttonsConfig?.onClick;
+    if (click === undefined) throw new Error("expected PayPal onClick");
+
+    // The SDK only creates the billing agreement once onClick resolves.
+    const blocked = { resolve: vi.fn(), reject: vi.fn() };
+    await click({}, blocked);
+    expect(blocked.reject).toHaveBeenCalledOnce();
+    expect(blocked.resolve).not.toHaveBeenCalled();
+    expect(paypalMock.createBillingAgreement).not.toHaveBeenCalled();
+
+    act(() => harness.dispatch({ type: "set-discount-quotes-pending", pending: false }));
+    const allowed = { resolve: vi.fn(), reject: vi.fn() };
+    await click({}, allowed);
+    expect(allowed.resolve).toHaveBeenCalledOnce();
+    expect(allowed.reject).not.toHaveBeenCalled();
+  });
+
   it("does not reuse a native PayPal agreement after PayPal changes the tax location", async () => {
     const surchargeResult = {
       vat_id_valid: false,
