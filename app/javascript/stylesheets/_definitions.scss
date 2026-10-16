@@ -155,6 +155,9 @@ $z-indices: (
 }
 
 $light-body-bg: #f4f4f0 !default;
+// The dark tokens below repaint app surfaces only. Email entrypoints set this to false so a client
+// reporting a dark preference cannot recolour a message the client itself renders on a light body.
+$include-dark-tokens: true !default;
 @mixin globals {
   @for $i from 1 through length($spacers) {
     --spacer-#{$i}: #{nth($spacers, $i)};
@@ -214,18 +217,20 @@ $light-body-bg: #f4f4f0 !default;
   --form-element-height: #{$form-element-height};
   --transition-duration: 0.14s;
 
-  @media (prefers-color-scheme: dark) {
-    --body-bg: #242423;
-    --primary: 221 221 221;
-    --contrast-primary: 0 0 0;
-    --color: 221 221 221;
-    --filled: 0 0 0;
-    --neutral-color: 221 221 221;
-    --neutral-filled: 0 0 0;
-    --neutral-border-alpha: 0.35;
-    --contrast-filled: 221 221 221;
-    --contrast-black: 221 221 221;
-    --border-alpha: 0.35;
+  @if $include-dark-tokens {
+    @media (prefers-color-scheme: dark) {
+      --body-bg: #242423;
+      --primary: 221 221 221;
+      --contrast-primary: 0 0 0;
+      --color: 221 221 221;
+      --filled: 0 0 0;
+      --neutral-color: 221 221 221;
+      --neutral-filled: 0 0 0;
+      --neutral-border-alpha: 0.35;
+      --contrast-filled: 221 221 221;
+      --contrast-black: 221 221 221;
+      --border-alpha: 0.35;
+    }
   }
 }
 

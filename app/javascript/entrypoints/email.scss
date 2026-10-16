@@ -2,6 +2,9 @@
 $unit: 16px;
 // Our default body bg looks weird in email clients
 $light-body-bg: #ffffff;
+// Email has no dark theme: the client owns the message background, so the app's dark tokens would
+// paint light text and hairlines onto it. Keep this false here.
+$include-dark-tokens: false;
 
 @import "../stylesheets/colors";
 @import "../stylesheets/definitions";
