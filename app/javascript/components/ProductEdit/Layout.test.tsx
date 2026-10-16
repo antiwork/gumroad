@@ -255,6 +255,28 @@ describe("ProductEdit Layout save gating", () => {
     expect(screen.getByRole<HTMLButtonElement>("button", { name: "Save and continue" }).disabled).toBe(true);
   });
 
+  it("keeps Save disabled while a generated thumbnail is still uploading", () => {
+    product.files = [
+      {
+        ...unsavedFile("uploading"),
+        status: { type: "unsaved", uploadStatus: { type: "uploaded" }, url: "blob:texture" },
+        thumbnail: { url: "", signed_id: "", status: { type: "uploading" } },
+      },
+    ];
+    renderLayout(minor);
+
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Save and continue" }).disabled).toBe(true);
+  });
+
+  it("does not let the thumbnail of a failed upload hold Save", () => {
+    product.files = [
+      { ...unsavedFile("failed"), thumbnail: { url: "", signed_id: "", status: { type: "uploading" } } },
+    ];
+    renderLayout(minor);
+
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Save and continue" }).disabled).toBe(false);
+  });
+
   it("re-enables Save when the only unsaved file failed to upload", () => {
     product.files = [unsavedFile("failed")];
     renderLayout(minor);

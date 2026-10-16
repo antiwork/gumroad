@@ -7,6 +7,8 @@ class ProductFile < ApplicationRecord
   SUPPORTED_THUMBNAIL_IMAGE_CONTENT_TYPES = /jpeg|gif|png|jpg/i
   MAXIMUM_THUMBNAIL_FILE_SIZE = 5.megabytes
   MAX_EPUB_READER_ARCHIVE_SIZE = 32.megabytes
+  # TGA, EXR, TIFF, DDS and PSD textures are images too, but no browser draws them.
+  BROWSER_RENDERABLE_IMAGE_FILETYPES = %w[png jpg jpeg gif webp].freeze
 
   # Enqueueing the retirement job (see `stored_file_present?`) is best-effort, but
   # only these failures are expected: Redis is unreachable, or the Sidekiq client
@@ -262,6 +264,10 @@ class ProductFile < ApplicationRecord
     pdf? || (epub? && (size.nil? || size <= MAX_EPUB_READER_ARCHIVE_SIZE))
   end
 
+  def browser_renderable_image?
+    BROWSER_RENDERABLE_IMAGE_FILETYPES.include?(filetype)
+  end
+
   # Downloads can only be turned off where the buyer has another way to open the file:
   # the video player, or the in-browser reader. Mirrors the read page's own gate, so
   # turning the flag on can never leave a buyer with nothing to open.
@@ -474,8 +480,10 @@ class ProductFile < ApplicationRecord
   end
 
   def thumbnail_url
-    return unless streamable?
+    return unless streamable? || browser_renderable_image?
     return unless thumbnail.attached?
+    # The editor uploads image thumbnails already downscaled, so they skip the variant.
+    return cdn_url_for(thumbnail.url) if browser_renderable_image?
 
     cached_variant_url = Rails.cache.fetch("attachment_product_file_thumbnail_#{thumbnail.id}_variant_url") { thumbnail_variant.url }
     cdn_url_for(cached_variant_url)

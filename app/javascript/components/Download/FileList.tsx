@@ -30,6 +30,7 @@ import { AudioPlayerContainer } from "$app/components/DownloadPage/AudioPlayerCo
 import { useIsMobileAppView, useMediaUrls, usePurchaseInfo } from "$app/components/DownloadPage/WithContent";
 import { FileRowContent } from "$app/components/FileRowContent";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
+import { Modal } from "$app/components/Modal";
 import { PlayVideoIcon } from "$app/components/PlayVideoIcon";
 import { ProgressPie } from "$app/components/ProgressPie";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -69,6 +70,8 @@ export type FileItem = {
   duration: number | null;
   content_length: number | null;
   download_url: string | null;
+  // Set for images a browser can draw; it opens the original file, not the thumbnail.
+  view_url?: string | null;
   latest_media_location: LatestMediaLocation | null;
   stream_url: string | null;
   external_link_url: string | null;
@@ -196,6 +199,7 @@ export const FileRow = ({
   }, [savedLocation, file.content_length, file.duration]);
   const [isExpanded, setIsExpanded] = React.useState(false);
   const [isCollapsed, setIsCollapsed] = React.useState(initialCollapsed);
+  const [isViewingImage, setIsViewingImage] = React.useState(false);
   const downloadUrl = file.download_url;
   const downloadButton = downloadUrl ? (
     <TrackClick eventName="download_click" file={file}>
@@ -236,6 +240,8 @@ export const FileRow = ({
   }
 
   const isEmbeddedVideo = isEmbed && !!streamUrl;
+  const viewUrl = file.view_url ?? null;
+  const imageThumbnailUrl = viewUrl ? file.thumbnail_url : null;
 
   return (
     <Row
@@ -273,6 +279,7 @@ export const FileRow = ({
           name={file.file_name}
           externalLinkUrl={externalLinkUrl}
           hideIcon={isEmbeddedVideo}
+          thumbnailUrl={imageThumbnailUrl}
           details={
             <>
               {file.extension ? <li>{file.extension}</li> : null}
@@ -303,6 +310,12 @@ export const FileRow = ({
         ) : null}
 
         {downloadButton}
+
+        {viewUrl ? (
+          <Button color="primary" onClick={() => setIsViewingImage(true)}>
+            View
+          </Button>
+        ) : null}
 
         {!isEmbed && streamUrl != null ? (
           <TrackClick eventName="stream_click" file={file} resumeAt={resumeLocation || 0} contentLength={file.duration}>
@@ -379,6 +392,18 @@ export const FileRow = ({
         ) : null}
       </RowActions>
 
+      {viewUrl ? (
+        <Modal
+          open={isViewingImage}
+          onClose={() => setIsViewingImage(false)}
+          title={file.file_name}
+          footer={downloadButton}
+          className="max-w-[calc(100vw-2rem)] max-sm:w-[calc(100vw-2rem)]"
+        >
+          <OriginalImage src={viewUrl} alt={file.file_name} />
+        </Modal>
+      ) : null}
+
       {FileUtils.isAudioExtension(file.extension) && isShowingAudioDrawer ? (
         <RowDetails className="drawer">
           <AudioPlayerContainer
@@ -413,6 +438,24 @@ export const FileRow = ({
 
       {file.description?.trim() ? <p style={{ whiteSpace: "pre-wrap" }}>{file.description}</p> : null}
     </Row>
+  );
+};
+
+// Shown at 1:1 so texture buyers can judge texel detail; phones fit it to the screen instead.
+const OriginalImage = ({ src, alt }: { src: string; alt: string }) => {
+  const [status, setStatus] = React.useState<"loading" | "loaded" | "failed">("loading");
+  if (status === "failed") return <p>This image could not be shown. Download it to open it.</p>;
+  return (
+    <div className="min-h-0 overflow-auto">
+      {status === "loading" ? <LoadingSpinner className="mx-auto size-8" /> : null}
+      <img
+        src={src}
+        alt={alt}
+        onLoad={() => setStatus("loaded")}
+        onError={() => setStatus("failed")}
+        className={cx("max-w-none max-sm:h-auto max-sm:max-w-full", { hidden: status === "loading" })}
+      />
+    </div>
   );
 };
 

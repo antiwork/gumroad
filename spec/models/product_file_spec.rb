@@ -1274,6 +1274,15 @@ describe ProductFile do
         expect(product_file.thumbnail_url).to match("https://public-files.gumroad.com/#{product_file.thumbnail_variant.key}")
       end
 
+      it "returns a thumbnail for images a browser can draw, and none for other image formats" do
+        png = create(:product_file, url: "#{S3_BASE_URL}specs/brick-albedo.png", filetype: "png", filegroup: "image")
+        tga = create(:product_file, url: "#{S3_BASE_URL}specs/brick-height.tga", filetype: "tga", filegroup: "url")
+        [png, tga].each { _1.thumbnail.attach(io: File.open(Rails.root.join("spec", "support", "fixtures", "smilie.png")), filename: "smilie.png") }
+
+        expect(png.thumbnail_url).to be_present
+        expect(tga.thumbnail_url).to be_nil
+      end
+
       it "returns the original thumbnail URL when the thumbnail variant processing fails" do
         product_file = create(:streamable_video)
         product_file.thumbnail.attach(io: File.open(Rails.root.join("spec", "support", "fixtures", "smilie.png")), filename: "smilie.png")

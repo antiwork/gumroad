@@ -49,7 +49,7 @@ export const isLikelyImageFile = (file: File): boolean => {
   return DECODE_EXTENSIONS.includes(ext);
 };
 
-const loadImageElement = (url: string): Promise<HTMLImageElement> =>
+export const loadImageElement = (url: string): Promise<HTMLImageElement> =>
   new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => resolve(img);
@@ -73,7 +73,7 @@ const decodeImage = async (file: File): Promise<ImageBitmap | HTMLImageElement> 
   }
 };
 
-const canvasToBlob = (canvas: HTMLCanvasElement, type: string, quality: number): Promise<Blob> =>
+export const canvasToBlob = (canvas: HTMLCanvasElement, type: string, quality: number): Promise<Blob> =>
   new Promise((resolve, reject) => {
     canvas.toBlob(
       (blob) => {
@@ -85,7 +85,11 @@ const canvasToBlob = (canvas: HTMLCanvasElement, type: string, quality: number):
     );
   });
 
-const drawToCanvas = (source: ImageBitmap | HTMLImageElement, width: number, height: number): HTMLCanvasElement => {
+export const drawToCanvas = (
+  source: ImageBitmap | HTMLImageElement,
+  width: number,
+  height: number,
+): HTMLCanvasElement => {
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;

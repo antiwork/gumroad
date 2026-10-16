@@ -63,6 +63,9 @@ const FileUtils = {
     const streamableExtensions = ["mp4", "m4v", "mov", "mpeg", "mpeg4", "wmv", "movie", "ogv", "avi", "webm"];
     return streamableExtensions.includes(extension.toLowerCase());
   },
+  // Mirrors ProductFile::BROWSER_RENDERABLE_IMAGE_FILETYPES.
+  isBrowserRenderableImage: (extension: string | null) =>
+    extension != null && ALLOWED_EXTENSIONS.includes(extension.toLowerCase()),
   isAudioExtension: (extension: string | null) =>
     extension !== null && FILE_TYPE_EXTENSIONS_MAP.audio.includes(extension),
   isDocumentExtension: (extension: string | null) =>
