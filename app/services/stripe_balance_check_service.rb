@@ -46,9 +46,9 @@ class StripeBalanceCheckService
     topup_amount_cents > 0
   end
 
-  # Information only: what each weekday's run draws on its own, from the same per-user estimate the
-  # cycle total comes from. `topup_needed?` deliberately does not read it -- the amount the next
-  # run alone draws has no per-run estimate behind it.
+  # Information only: the cycle total split by weekday cohort, from the same per-user estimate. For a
+  # cohort whose run already passed it is what that run left unpaid. `topup_needed?` deliberately
+  # does not read it -- the amount the next run alone draws has no per-run estimate behind it.
   def per_run_estimate_cents
     @per_run_estimate_cents ||= PayoutEstimates.split_gumroad_held_stripe_cents_by_weekday(@per_user_payouts_cents)
   end

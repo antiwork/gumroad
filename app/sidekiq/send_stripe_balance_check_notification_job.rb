@@ -76,7 +76,8 @@ class SendStripeBalanceCheckNotificationJob
     end
 
     # Cohorts whose run already passed this cycle are sellers that run left unpaid (other payout
-    # cadences, holds, failures). They stay in the total, so label them instead of dropping them.
+    # cadences, holds, failures). They stay in the total, and the daily transient-failure requeue and
+    # manual payouts can still draw part of them, so label them instead of dropping them.
     def cohort_split(balance_check)
       by_weekday = balance_check.per_run_estimate_cents
       ahead = []
@@ -92,7 +93,7 @@ class SendStripeBalanceCheckNotificationJob
 
       parts = []
       parts << "runs still ahead: #{ahead.join(', ')}" if ahead.any?
-      parts << "already run this cycle and still unpaid (in the total above, not a forecast of another draw): #{past.join(', ')}" if past.any?
+      parts << "already run this cycle and still unpaid (in the total above; re-issued or manual payouts can still draw it): #{past.join(', ')}" if past.any?
       return "By weekday cohort: nothing payable." if parts.empty?
 
       "By weekday cohort (estimates, which err high): #{parts.join('; ')}."

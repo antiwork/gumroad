@@ -53,7 +53,7 @@ describe SendStripeBalanceCheckNotificationJob do
 
         message = InternalNotificationWorker.jobs.last["args"][2]
         expect(message).to include("By weekday cohort (estimates, which err high): runs still ahead: Wednesday $90,000, Thursday $90,000; " \
-                                   "already run this cycle and still unpaid (in the total above, not a forecast of another draw): Tuesday $120,000.")
+                                   "already run this cycle and still unpaid (in the total above; re-issued or manual payouts can still draw it): Tuesday $120,000.")
         expect(message).to include("need $300,000 from Gumroad's Stripe balance in total")
       end
 
