@@ -20,13 +20,13 @@ class PayoutsPresenter
 
   def next_payout_period_data
     payout_periods[:next_payout_period_data]&.merge(
-      has_stripe_connect: seller.stripe_connect_account.present?
+      stripe_connect_routing_active: seller.has_stripe_account_connected?
     )
   end
 
   def processing_payout_periods_data
     payout_periods[:processing_payout_periods_data].map do |item|
-      item.merge(has_stripe_connect: seller.stripe_connect_account.present?)
+      item.merge(stripe_connect_routing_active: seller.has_stripe_account_connected?)
     end
   end
 

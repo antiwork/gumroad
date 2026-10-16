@@ -130,7 +130,7 @@ describe "Balance Pages Scenario", js: true, type: :system do
           payout_method_type: "none",
           payout_note: nil,
           type: Payouts::PAYOUT_TYPE_STANDARD,
-          has_stripe_connect: false
+          stripe_connect_routing_active: false
         }
 
         allow_any_instance_of(UserBalanceStatsService).to receive(:payout_period_data).and_return(data)
@@ -180,7 +180,7 @@ describe "Balance Pages Scenario", js: true, type: :system do
             payout_method_type: "bank",
             payout_note: "Payout on November 7, 2024 was skipped because a bank account wasn't added at the time.",
             type: Payouts::PAYOUT_TYPE_STANDARD,
-            has_stripe_connect: false
+            stripe_connect_routing_active: false
           }.merge(params[:permitted_params].index_with { |_p| "000" })
           allow_any_instance_of(UserBalanceStatsService).to receive(:payout_period_data).and_return(data)
           create(:payment, user: seller)
@@ -229,7 +229,7 @@ describe "Balance Pages Scenario", js: true, type: :system do
           payout_method_type: "stripe_connect",
           payout_note: nil,
           type: Payouts::PAYOUT_TYPE_STANDARD,
-          has_stripe_connect: true
+          stripe_connect_routing_active: true
         }
         allow_any_instance_of(UserBalanceStatsService).to receive(:payout_period_data).and_return(data)
 
@@ -279,7 +279,7 @@ describe "Balance Pages Scenario", js: true, type: :system do
           stripe_connect_account_id: merchant_account.charge_processor_merchant_id,
           payout_method_type: "stripe_connect",
           type: Payouts::PAYOUT_TYPE_STANDARD,
-          has_stripe_connect: true
+          stripe_connect_routing_active: true
         }
         allow_any_instance_of(UserBalanceStatsService).to receive(:payout_period_data).and_return(top_period_data)
         allow_any_instance_of(PayoutsPresenter).to receive(:payout_period_data).and_return(data)
@@ -385,12 +385,27 @@ describe "Balance Pages Scenario", js: true, type: :system do
               payout_method_type: "stripe_connect",
               payout_note: nil,
               type: Payouts::PAYOUT_TYPE_STANDARD,
-              has_stripe_connect: true
+              stripe_connect_routing_active: true
             }
             allow_any_instance_of(UserBalanceStatsService).to receive(:payout_period_data).and_return(data)
+            seller.update!(check_merchant_account_is_linked: true)
 
             visit balance_path
             expect(page).to have_content("For Stripe Connect users, all future payouts will be deposited directly to your Stripe account")
+          end
+
+          it "shows the next payout when a linked Stripe account is not receiving card sales" do
+            create(:user_compliance_info_business, user: seller, country: "Chile")
+            Feature.activate_user(:merchant_migration, seller)
+            merchant_account
+            expect(seller.has_stripe_account_connected?).to be false
+
+            travel_to(Date.parse("2013-08-14")) do
+              visit balance_path
+
+              expect(page).to have_section("Next payout: August 16th, 2013")
+              expect(page).not_to have_content("all future payouts will be deposited directly to your Stripe account")
+            end
           end
         end
 
@@ -502,7 +517,7 @@ describe "Balance Pages Scenario", js: true, type: :system do
               payout_method_type: "none",
               payout_note: nil,
               type: Payouts::PAYOUT_TYPE_STANDARD,
-              has_stripe_connect: false
+              stripe_connect_routing_active: false
             }
             allow_any_instance_of(UserBalanceStatsService).to receive(:payout_period_data).and_return(data)
 
@@ -804,7 +819,7 @@ describe "Balance Pages Scenario", js: true, type: :system do
           payout_method_type: "bank",
           payout_note: nil,
           type: Payouts::PAYOUT_TYPE_STANDARD,
-          has_stripe_connect: false
+          stripe_connect_routing_active: false
         }
         allow_any_instance_of(UserBalanceStatsService).to receive(:payout_period_data).and_return(data)
 
@@ -851,7 +866,7 @@ describe "Balance Pages Scenario", js: true, type: :system do
           payout_method_type: "bank",
           payout_note: nil,
           type: "standard",
-          has_stripe_connect: false,
+          stripe_connect_routing_active: false,
           minimum_payout_amount_cents: 10_000,
           is_payable: true
         }

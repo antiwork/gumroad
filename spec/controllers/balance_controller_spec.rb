@@ -36,7 +36,7 @@ describe BalanceController, type: :controller, inertia: true do
                                                               status: "not_payable",
                                                               balance_cents: 0,
                                                               payout_note: nil,
-                                                              has_stripe_connect: false
+                                                              stripe_connect_routing_active: false
                                                             })
       expect(inertia.props[:past_payout_period_data]).to be_present
       expect(inertia.props[:pagination]).to be_present

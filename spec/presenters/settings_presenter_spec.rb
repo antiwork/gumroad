@@ -693,6 +693,7 @@ describe SettingsPresenter do
         stripe_connect: {
           has_connected_stripe: false,
           stripe_connect_account_id: nil,
+          stripe_connect_routing_active: false,
           stripe_disconnect_allowed: true,
           supported_countries_help_text: "This feature is available in <a href='https://stripe.com/en-in/global'>all countries where Stripe operates</a>, except India, Indonesia, Malaysia, Mexico, Philippines, and Thailand.",
         },
@@ -1019,6 +1020,7 @@ describe SettingsPresenter do
                                                                        stripe_connect: {
                                                                          has_connected_stripe: true,
                                                                          stripe_connect_account_id: stripe_connect_account.charge_processor_merchant_id,
+                                                                         stripe_connect_routing_active: false,
                                                                          stripe_disconnect_allowed: true,
                                                                          supported_countries_help_text: "This feature is available in <a href='https://stripe.com/en-in/global'>all countries where Stripe operates</a>, except India, Indonesia, Malaysia, Mexico, Philippines, and Thailand.",
                                                                        },

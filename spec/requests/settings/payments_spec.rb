@@ -313,6 +313,8 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
       visit settings_payments_path
 
+      within_fieldset("Stripe account") { expect(page).to have_css(".text-success") }
+      expect(page).not_to have_text("not currently receiving card sales")
       click_on "Disconnect Stripe account"
 
       expect(page).to have_content("Pay to the order of")
@@ -335,6 +337,23 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       expect(page).to have_content("You cannot disconnect your Stripe account because it is being used for active subscription or preorder payments.")
 
       expect(find_button("Disconnect Stripe account", disabled: true)[:disabled]).to eq "true"
+    end
+
+    it "shows a linked Stripe account that is not receiving card sales and keeps it manageable" do
+      create(:user_compliance_info_business, user: @user, country: "Chile")
+      Feature.activate_user(:merchant_migration, @user)
+      merchant_account = create(:merchant_account_stripe_connect, user: @user)
+      expect(@user.has_stripe_account_connected?).to be false
+
+      visit settings_payments_path
+
+      within_fieldset("Stripe account") do
+        expect(page).to have_text(merchant_account.charge_processor_merchant_id)
+        expect(page).to have_text("This Stripe account is linked, but it is not currently receiving card sales.")
+        expect(page).not_to have_css(".text-success")
+      end
+      expect(page).to have_button("Disconnect Stripe account")
+      expect(page).not_to have_button("Connect with Stripe")
     end
 
     it "allows Stripe Connect users to update payout schedule without compliance validation" do
