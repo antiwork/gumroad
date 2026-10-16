@@ -416,24 +416,27 @@ const b = 2;</code></pre>
       <p>Great deals!</p>
     HTML
 
+    upsell_url = "http://app.test.gumroad.com:31337/checkout?accepted_offer_id=#{CGI.escape(upsell.external_id)}&amp;product=#{product.unique_permalink}"
     assert_equal(%(<p>Check out these products:</p>
 <div class="item">
   <div class="product-checkout-cell">
-    <div class="figure">
-        <img alt="The Works of Edgar Gumstein" src="/images/native_types/thumbnails/digital.png">
-    </div>
-    <div class="section">
-      <div class="content">
-        <div class="section">
-          <h4><a href="http://app.test.gumroad.com:31337/checkout?accepted_offer_id=#{CGI.escape(upsell.external_id)}&amp;product=#{product.unique_permalink}">The Works of Edgar Gumstein</a></h4>
-        </div>
-        <div class="section">
-            <s style="display: inline;">$10</s>
-          $8
-        </div>
+  <div class="figure">
+      <a target="_blank" href="#{upsell_url}"><img alt="The Works of Edgar Gumstein" src="/images/native_types/thumbnails/digital.png"></a>
+  </div>
+  <div class="section">
+    <div class="content">
+      <div class="section" title="The Works of Edgar Gumstein">
+        <h4>
+          <a target="_blank" href="#{upsell_url}">The Works of Edgar Gumstein</a>
+        </h4>
       </div>
+      <div class="section">
+      <s style="display: inline;">$10</s>
+    $8
+</div>
     </div>
   </div>
+</div>
 </div>
 
 <p>Great deals!</p>

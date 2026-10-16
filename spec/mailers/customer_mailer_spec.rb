@@ -730,8 +730,8 @@ describe CustomerMailer do
       expect(cell_displays.last).to match(/\A(table-cell|revert)\z/)
     end
 
-    it "wraps a long product name onto up to three lines and keeps the seller row on one line" do
-      product = create(:product, name: "Petit et léger: Un retour vers le jardin vert | JRD-241117-11")
+    it "shows a long product name in full beside a cover that fills the row" do
+      product = create(:product, name: "The complete illustrated field guide to woodland birds, nests, songs and seasons of Northern Europe")
       purchase = create(:purchase, link: product)
       mail = CustomerMailer.receipt(purchase.id)
       body = mail.html_part&.decoded || mail.body.decoded
@@ -744,8 +744,13 @@ describe CustomerMailer do
       expect(name.text.strip).to eq(product.name)
       expect(declaration.(name, "white-space")).to eq("normal")
       expect(declaration.(name, "font-size")).to eq("14px")
-      expect(declaration.(name, "max-height")).to eq("54.6px")
-      expect(declaration.(name, "-webkit-line-clamp")).to eq("3")
+      expect(declaration.(name, "max-height")).to eq("none")
+      expect(declaration.(name, "-webkit-line-clamp")).to be_nil
+      cover = cell.at_css(".figure img")
+      expect(cover["src"]).to eq(product.for_email_thumbnail_url)
+      expect(declaration.(cover, "min-height")).to eq("100%")
+      expect(declaration.(cover, "max-width")).to eq("none")
+      expect(declaration.(cell.at_css(".figure"), "overflow")).to eq("hidden")
       expect(declaration.(seller_row, "white-space")).to eq("nowrap")
       expect(declaration.(seller_row, "max-height")).to eq("22px")
     end
