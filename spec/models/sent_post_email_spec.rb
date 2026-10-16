@@ -60,12 +60,20 @@ describe SentPostEmail do
       described_class.ensure_uniqueness(post:, email: "foo@example.com", source: create(:follower, email: "foo@example.com")) { counter += 1 }
       expect(counter).to eq(1)
 
-      described_class.ensure_uniqueness(post:, email: "FOO@example.com", source: create(:purchase, email: "FOO@example.com")) { counter += 1 }
+      # Follower keeps the case it was given, so this reaches the unique key rather than the source check.
+      mixed_case_source = create(:follower, email: "FOO@example.com")
+      logged = []
+      allow(Rails.logger).to receive(:info).and_wrap_original { |original, message| logged << message.to_s; original.call(message) }
+      described_class.ensure_uniqueness(post:, email: mixed_case_source.email, source: mixed_case_source) { counter += 1 }
       expect(counter).to eq(1)
+      expect(logged.grep(/SentPostEmail: skipped/)).to be_empty
+
+      described_class.ensure_uniqueness(post:, email: "baz@example.com", source: create(:purchase, email: "baz@example.com")) { counter += 1 }
+      expect(counter).to eq(2)
 
       described_class.ensure_uniqueness(post:, email: "bar@example.com", source: create(:user, email: "bar@example.com")) { counter += 1 }
-      expect(counter).to eq(2)
-      expect(described_class.where(post:).pluck(:email)).to match_array(["foo@example.com", "bar@example.com"])
+      expect(counter).to eq(3)
+      expect(described_class.where(post:).pluck(:email)).to match_array(["foo@example.com", "baz@example.com", "bar@example.com"])
     end
 
     it "does not raise error if email is blank" do
