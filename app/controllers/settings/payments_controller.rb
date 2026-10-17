@@ -139,9 +139,16 @@ class Settings::PaymentsController < Settings::BaseController
       if current_seller.has_stripe_account_connected?
         return redirect_with_error("You cannot change your payout method to #{payout_type} because you have a stripe account connected.")
       end
-      if payout_type != "PayPal" && current_seller.stripe_account.blank? && current_seller.stripe_connect_account.present?
+      # Checked by instrument, not payout_type: UpdatePayoutMethod saves a card or account number even when
+      # payment_address is also sent, and a holder-name-only bank_account just renames the existing bank.
+      new_stripe_payout_type = if params[:card].present?
+        "debit card"
+      elsif params.dig(:bank_account, :account_number).present?
+        "bank account"
+      end
+      if new_stripe_payout_type && current_seller.stripe_account.blank? && current_seller.stripe_connect_account.present?
         # No managed Stripe account is created next to a Connect row, and saving this would stop the PayPal rail.
-        return redirect_with_error("We can't set up #{payout_type} payouts for your account yet. Your current payout method has not been changed. Please contact support.")
+        return redirect_with_error("We can't set up #{new_stripe_payout_type} payouts for your account yet. Your current payout method has not been changed. Please contact support.")
       end
     end
 

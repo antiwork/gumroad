@@ -630,27 +630,152 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
           end
         end
 
-        describe "user has a bank account and a Stripe Connect account" do
+        describe "user has a Stripe Connect account that is not routing charges" do
+          let(:bank_account_params) do
+            {
+              type: AchAccount.name,
+              account_number: "000123456789",
+              account_number_confirmation: "000123456789",
+              routing_number: "110000000",
+              account_holder_full_name: "gumbot"
+            }
+          end
+          let!(:connect_account) { create(:merchant_account_stripe_connect, user:) }
+
           before do
-            all_params.merge!(
-              bank_account: {
-                type: AchAccount.name,
-                account_number: "000123456789",
-                account_number_confirmation: "000123456789",
-                routing_number: "110000000",
-                account_holder_full_name: "gumbot"
-              }
-            )
-            create(:merchant_account_stripe_connect, user:)
+            user.update!(payment_address: "old-paypal@example.com", invalidated_paypal_payout_address: "older-paypal@example.com")
+            expect(user.has_stripe_account_connected?).to be(false)
           end
 
-          it "does not create a gumroad-managed Stripe account next to Connect, and does not save the bank account" do
+          def expect_new_payout_method_rejected(payout_type, &block)
+            payout_weekday = user.payout_weekday
+
+            expect(&block).to not_change { user.bank_accounts.count }
+              .and not_change { user.tos_agreements.count }
+              .and not_change { user.reload.payment_address }
+              .and not_change { user.reload.invalidated_paypal_payout_address }
+              .and not_change { user.reload.alive_user_compliance_info.id }
+              .and not_change { user.merchant_accounts.count }
+
+            user.reload
+            expect(HandleNewBankAccountWorker.jobs.size).to eq(0)
+            expect(user.current_payout_processor).to eq(PayoutProcessorType::PAYPAL)
+            expect(user.payout_weekday).to eq(payout_weekday)
+            expect(user.check_merchant_account_is_linked).to be(false)
+            expect(user.stripe_account).to be_nil
+            expect(user.stripe_connect_account).to eq(connect_account)
+            expect(response).to redirect_to(settings_payments_path)
+            expect(response).to have_http_status :found
+            expect(session[:inertia_errors][:base]).to eq(["We can't set up #{payout_type} payouts for your account yet. Your current payout method has not been changed. Please contact support."])
+          end
+
+          { "form" => {}, "JSON" => { as: :json } }.each do |request_type, request_options|
+            it "rejects a new bank account without writing anything (#{request_type} request)" do
+              expect(StripeMerchantAccountManager).not_to receive(:create_account)
+
+              expect_new_payout_method_rejected("bank account") do
+                put :update, params: all_params.merge(bank_account: bank_account_params), **request_options
+              end
+            end
+          end
+
+          it "rejects a new debit card before asking Stripe about it" do
+            expect(ChargeProcessor).not_to receive(:get_chargeable_for_params)
+
+            expect_new_payout_method_rejected("debit card") do
+              put :update, params: { card: { stripe_token: "tok_synthetic" } }
+            end
+          end
+
+          it "rejects a new bank account sent along with a PayPal address" do
+            expect_new_payout_method_rejected("bank account") do
+              put :update, params: all_params.merge(bank_account: bank_account_params, payment_address: "new-paypal@example.com")
+            end
+          end
+
+          it "rejects a new debit card sent along with a PayPal address" do
+            expect(ChargeProcessor).not_to receive(:get_chargeable_for_params)
+
+            expect_new_payout_method_rejected("debit card") do
+              put :update, params: { card: { stripe_token: "tok_synthetic" }, payment_address: "new-paypal@example.com" }
+            end
+          end
+
+          describe "and an existing bank account" do
+            let!(:bank_account) { create(:ach_account, user:) }
+
+            before do
+              user.update!(payment_address: "")
+              HandleNewBankAccountWorker.jobs.clear
+            end
+
+            it "saves an account holder name edit to the existing bank account" do
+              put :update, params: { bank_account: { type: AchAccount.name, account_holder_full_name: "Synthetic Holder" } }
+
+              expect_save_success_flash_message
+              expect(user.reload.active_bank_account).to eq(bank_account)
+              expect(bank_account.reload.account_holder_full_name).to eq("Synthetic Holder")
+              expect(user.bank_accounts.count).to eq(1)
+            end
+
+            it "saves compliance details and payout preferences sent with the unchanged account holder name" do
+              expect(StripeMerchantAccountManager).not_to receive(:create_account)
+
+              put :update, params: all_params.merge(
+                bank_account: { type: AchAccount.name, account_holder_full_name: bank_account.account_holder_full_name },
+                payout_threshold_cents: 20_000,
+                payout_frequency: User::PayoutSchedule::MONTHLY,
+                payouts_paused_by_user: true
+              )
+
+              expect_save_success_flash_message
+              user.reload
+              expect(user.alive_user_compliance_info.first_name).to eq("barnabas")
+              expect(user.payout_threshold_cents.to_i).to eq(20_000)
+              expect(user.payout_frequency).to eq(User::PayoutSchedule::MONTHLY)
+              expect(user.payouts_paused_by_user).to be(true)
+              expect(user.active_bank_account).to eq(bank_account)
+              expect(user.bank_accounts.count).to eq(1)
+              expect(user.stripe_account).to be_nil
+              expect(HandleNewBankAccountWorker.jobs.size).to eq(0)
+            end
+          end
+
+          it "saves compliance details without a payout method change" do
+            put :update, params: all_params
+
+            expect_save_success_flash_message
+            expect(user.reload.alive_user_compliance_info.first_name).to eq("barnabas")
+          end
+
+          it "saves a PayPal address" do
+            user.alive_user_compliance_info.dup_and_save { |nuci| nuci.country = "Brazil" }
+
+            put :update, params: { payment_address: "new-paypal@example.com" }
+
+            expect_save_success_flash_message
+            expect(user.reload.payment_address).to eq("new-paypal@example.com")
+          end
+
+          it "saves a new bank account when a gumroad-managed account already exists" do
+            create(:merchant_account, user:)
             expect(StripeMerchantAccountManager).not_to receive(:create_account)
 
-            expect { put :update, params: all_params }.not_to change { user.reload.active_bank_account }
+            put :update, params: all_params.merge(bank_account: bank_account_params)
 
-            expect(response).to redirect_to(settings_payments_path)
-            expect(session[:inertia_errors][:base].first).to include("We can't set up bank account payouts for your account yet")
+            expect_save_success_flash_message
+            expect(user.reload.active_bank_account).to be_an_instance_of(AchAccount)
+            expect(HandleNewBankAccountWorker.jobs.size).to eq(1)
+          end
+
+          it "keeps the connected-account rejection when Connect is routing charges" do
+            user.update!(check_merchant_account_is_linked: true)
+
+            expect do
+              put :update, params: all_params.merge(bank_account: bank_account_params)
+            end.to not_change { user.bank_accounts.count }.and not_change { user.tos_agreements.count }
+
+            expect(session[:inertia_errors][:base]).to eq(["You cannot change your payout method to bank account because you have a stripe account connected."])
           end
         end
 
