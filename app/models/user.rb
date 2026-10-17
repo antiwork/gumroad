@@ -1082,7 +1082,9 @@ class User < ApplicationRecord
     # account floor would be premature.
     return Payouts::REJECTED_ACCOUNT_MIN_AMOUNT_CENTS if stripe_rejected_payout_floor_applies?
 
-    [payout_threshold_cents, minimum_payout_threshold_cents].max
+    # json_data stores the writer's value uncast, so a threshold written through a
+    # string-typed client is a String and comparing it with the integer minimum raised.
+    [payout_threshold_cents.to_i, minimum_payout_threshold_cents].max
   end
 
   # Memoized because the weekly payout batch calls minimum_payout_amount_cents
