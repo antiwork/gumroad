@@ -8,6 +8,7 @@ class S3UtilityController < Sellers::BaseController
   def generate_multipart_signature
     to_sign = params["to_sign"]
     return render(json: { success: false, error: "Missing required parameter: to_sign" }, status: :bad_request) if to_sign.blank?
+    return render(json: { success: false, error: "Invalid parameter: to_sign" }, status: :bad_request) unless to_sign.is_a?(String)
 
     # Prevent attackers from using newlines to split the request body and bypass the seller check
     to_sign.split(/[\n\r\s]/).grep(/\A\//).each do |url|
