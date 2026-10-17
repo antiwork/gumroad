@@ -29,6 +29,17 @@ describe AffiliatesController, type: :controller, inertia: true do
         expect(inertia.props[:affiliates]).to be_present
       end
 
+      it "falls back to the first page when the page parameter cannot be read" do
+        create(:direct_affiliate, seller:, affiliate_user:)
+        create(:affiliate_request, seller:)
+
+        get :index, params: { page: "-1" }
+
+        expect(response).to be_successful
+        expect(inertia.props[:pagination][:page]).to eq(1)
+        expect(inertia.props[:affiliate_requests]).to be_present
+      end
+
       context "when creator does not have any affiliates" do
         it "redirects to the onboarding page" do
           get :index

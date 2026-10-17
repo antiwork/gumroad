@@ -17,7 +17,7 @@ class AffiliatesController < Sellers::BaseController
   def index
     authorize DirectAffiliate
 
-    page = params[:page]&.to_i
+    page = [params[:page].to_i, 1].max
     query = params[:query]
     sort_params = extract_sort_params
 
@@ -26,11 +26,13 @@ class AffiliatesController < Sellers::BaseController
       page:,
       query:,
       sort: sort_params,
-      should_get_affiliate_requests: page.nil? || page == 1
+      # Only the first page carries the pending requests, so an unreadable page that
+      # AffiliatesPresenter clamps to page 1 has to be decided on the clamped value too.
+      should_get_affiliate_requests: page == 1
     )
     affiliates_data = presenter.index_props
 
-    if affiliates_data[:affiliates].empty? && affiliates_data[:affiliate_requests].empty? && (page.nil? || page == 1) && query.blank? &&
+    if affiliates_data[:affiliates].empty? && affiliates_data[:affiliate_requests].empty? && page == 1 && query.blank? &&
         !current_seller.self_service_affiliate_products.enabled.exists?
       return redirect_to onboarding_affiliates_path
     end
