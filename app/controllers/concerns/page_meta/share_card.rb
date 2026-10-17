@@ -1,16 +1,9 @@
 # frozen_string_literal: true
 
-# The seller's share-card tags, in one place.
-#
-# Three <head>s serve the same og:image/twitter:image tags for a seller:
-#
-# - the profile root, through PageMeta::User (set_meta_tag)
-# - the profile's custom-HTML wrapper, hand-built in UsersController
-# - a slugged page's <head>, hand-built in UserPagesController
-#
-# Each grew its own copy and then drifted — gp#1548 (the card served on
-# twitter:image only) and gp#3690 (slugged pages served no image at all) are
-# both that drift. Every site now reads this module instead.
+# The seller's share-card tags, in one place: the chain that resolves the image
+# and the ordered tag list. The raw values and the HTML are both derived from
+# that one list, so the set_meta_tag callers and the hand-built <head>s cannot
+# serve different tags for the same seller.
 module PageMeta
   module ShareCard
     SOURCE_SUBSCRIBE_PREVIEW = :subscribe_preview
@@ -52,8 +45,8 @@ module PageMeta
           @tag_specs ||= begin
             url_html = ERB::Util.h(url)
             name_html = ERB::Util.h(name)
-            # The possessive suffix is literal, not escaped: it has always
-            # rendered that way in the profile wrapper's alt text.
+            # Escape the name only — escaping the whole string would turn the
+            # literal possessive suffix into an HTML entity.
             alt_html = subscribe_preview? ? name_html : "#{name_html}'s profile picture"
             specs = [["og:image", url, url_html]]
             if subscribe_preview?
@@ -76,10 +69,9 @@ module PageMeta
     end
 
     # nil when the seller has neither a generated preview nor an uploaded
-    # avatar. avatar_url always resolves — to Gumroad's default avatar — so
-    # advertising it without this check would present that placeholder as the
-    # seller's share image; with no card the tags are omitted and scrapers fall
-    # back to their own.
+    # avatar: avatar_url always resolves — to Gumroad's default avatar — so
+    # announcing it would present that placeholder as the seller's share image.
+    # With no card the tags are omitted and scrapers use their own fallback.
     def self.for(user)
       if user.subscribe_preview_url.present?
         Card.new(source: SOURCE_SUBSCRIBE_PREVIEW, url: user.subscribe_preview_url, name: user.name_or_username.to_s)

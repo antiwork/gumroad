@@ -139,8 +139,6 @@ describe "Public serving of seller pages", type: :request do
       )
     end
 
-    # The reported bug: a shared /<slug> link unfurled to a blank card because
-    # the head carried og:title and og:url but no image at all (gp#3690).
     it "serves the seller's subscribe-preview card on og:image and twitter:image" do
       attach_subscribe_preview(seller)
 

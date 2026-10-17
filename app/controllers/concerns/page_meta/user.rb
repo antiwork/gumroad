@@ -29,13 +29,11 @@ module PageMeta::User
       set_meta_tag(property: "og:description", content: description)
 
       card = PageMeta::ShareCard.for(user)
-      if card
-        # The chain and the tag list live in PageMeta::ShareCard, shared with the
-        # two hand-built <head>s so the three surfaces cannot drift (gp#1548).
-        card.attributes.each { |property, content| set_meta_tag(property:, content:) }
-      elsif user.name.present?
-        # No share image to announce, so the card title carries the seller's
-        # name instead of the "Subscribe to ..." phrasing set above.
+      card.attributes.each { |property, content| set_meta_tag(property:, content:) } if card
+
+      # Only the generated preview reads as "Subscribe to ..."; with an uploaded
+      # avatar, or no image at all, the title carries the seller's name instead.
+      if user.name.present? && !card&.subscribe_preview?
         set_meta_tag(property: "og:title", content: user.name)
       end
 

@@ -516,6 +516,9 @@ describe UsersController do
           expect(avatar_seller.avatar).to be_attached
           expect(meta_content("og:image")).to eq(avatar_seller.avatar_url)
           expect(meta_content("og:image:alt")).to eq("#{avatar_seller.name_or_username}'s profile picture")
+          # An avatar is not the generated preview, so the title keeps the seller's
+          # name rather than the "Subscribe to ..." phrasing.
+          expect(meta_content("og:title")).to eq(avatar_seller.name)
           # The card's dimensions describe the generated PNG, not an arbitrary
           # avatar upload — advertising them here would lie to the crawler.
           expect(meta_content("og:image:width")).to be_empty

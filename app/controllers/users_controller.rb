@@ -298,11 +298,9 @@ class UsersController < ApplicationController
         <link rel="shortcut icon" href="#{favicon_url}">
         <link rel="apple-touch-icon" href="#{favicon_url}">
       HTML
-      # Share-card chain (PageMeta::ShareCard): subscribe-preview, then uploaded
-      # avatar, then this wrapper's own generic banner. This <head> is
-      # hand-built, so the banner fallback must be an absolute URL: a relative
-      # path would resolve against the seller's custom domain, which does not
-      # serve Gumroad's assets.
+      # This <head> is hand-built, so the banner fallback must be an absolute URL:
+      # a relative path would resolve against the seller's custom domain, which
+      # does not serve Gumroad's assets.
       share_card = PageMeta::ShareCard.for(user)
       share_image_tags = if share_card
         share_card.to_html

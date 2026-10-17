@@ -95,9 +95,8 @@ class UserPagesController < ApplicationController
       HTML
     end
 
-    # The seller's share card, the same chain the profile root serves one level
-    # up (PageMeta::ShareCard): without it a shared /<slug> link rendered a blank
-    # placeholder card (gp#3690).
+    # Same chain as the profile root (PageMeta::ShareCard); "" when the seller
+    # has no card, so the scraper falls back to its own image.
     def page_share_image_tags
       card = PageMeta::ShareCard.for(@user)
       card ? card.to_html : ""
