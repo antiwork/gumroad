@@ -8,17 +8,16 @@ class GlobalAffiliates::ProductEligibilityController < Sellers::BaseController
   # connection to whatever port the caller names. Allow only the ports our own domains use, plus the
   # web defaults so a pasted http:// URL still resolves.
   GUMROAD_PORTS = ([80, 443] + [ROOT_DOMAIN, SHORT_DOMAIN, DOMAIN].map { |domain| Addressable::URI.parse("#{PROTOCOL}://#{domain}").inferred_port }).uniq.freeze
-  UNREACHABLE_URL_ERRORS = [
-    SocketError, Errno::ECONNREFUSED, Errno::EHOSTUNREACH, Errno::ENETUNREACH, Errno::ETIMEDOUT,
-    Timeout::Error, HTTParty::Error, JSON::ParserError,
-  ].freeze
+  # HTTParty's own redirect budget. We follow the hops ourselves so each one can be checked first.
+  MAX_REDIRECTS = 5
+  FETCH_TIMEOUT_SECONDS = 5
 
   def show
     authorize [:products, :affiliated], :index?
 
     product_data = fetch_and_parse_product_data
     render json: { success: true, product: product_data }
-  rescue InvalidUrl, URI::InvalidURIError, Addressable::URI::InvalidURIError, *UNREACHABLE_URL_ERRORS
+  rescue InvalidUrl, JSON::ParserError, HTTParty::Error, *INTERNET_EXCEPTIONS
     render json: { success: false, error: "Please provide a valid Gumroad product URL" }
   end
 
@@ -32,15 +31,11 @@ class GlobalAffiliates::ProductEligibilityController < Sellers::BaseController
     # surface (ProductPresenter::PublicApiProps), so it must not be exposed
     # there; resolving it locally keeps that boundary clean.
     def fetch_and_parse_product_data
-      uri = Addressable::URI.parse(params[:url])
-      raise InvalidUrl unless GUMROAD_DOMAINS.include?(uri&.domain) && GUMROAD_PORTS.include?(uri.inferred_port)
-      uri.path = uri.path + ".json"
-
-      response = HTTParty.get(uri.to_s, timeout: 5)
+      response = fetch_product_json(validate_gumroad_url(params[:url]))
       raise InvalidUrl unless response.ok?
 
-      data = response.to_hash
-      raise InvalidUrl unless data["api_version"] == ProductPresenter::PublicApiProps::API_VERSION && data["permalink"].present?
+      data = response.parsed_response
+      raise InvalidUrl unless data.is_a?(Hash) && data["api_version"] == ProductPresenter::PublicApiProps::API_VERSION && data["permalink"].present?
 
       id = data["id"]
       raise InvalidUrl if id.blank?
@@ -54,5 +49,31 @@ class GlobalAffiliates::ProductEligibilityController < Sellers::BaseController
         "recommendable" => product.recommendable?,
         "short_url" => product.long_url,
       }
+    end
+
+    # Scheme, host and port all have to be ours. The registrable-domain check alone let any port
+    # through, and the fetch follows redirects — including the one an affiliate's stored
+    # destination_url produces, which can name any host.
+    def validate_gumroad_url(url)
+      uri = Addressable::URI.parse(url)
+      raise InvalidUrl unless %w[http https].include?(uri&.scheme) && GUMROAD_DOMAINS.include?(uri.domain) && GUMROAD_PORTS.include?(uri.inferred_port)
+
+      uri
+    end
+
+    def fetch_product_json(uri)
+      uri.path = "#{uri.path}.json"
+
+      MAX_REDIRECTS.times do
+        response = HTTParty.get(uri.to_s, timeout: FETCH_TIMEOUT_SECONDS, follow_redirects: false)
+        return response unless response.code.between?(300, 399)
+
+        location = response.response["location"].to_s
+        raise InvalidUrl if location.blank?
+
+        uri = validate_gumroad_url(Addressable::URI.join(uri, location).to_s)
+      end
+
+      raise InvalidUrl
     end
 end

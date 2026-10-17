@@ -163,6 +163,62 @@ describe GlobalAffiliates::ProductEligibilityController do
       end
     end
 
+    context "when the Gumroad URL redirects to a host we do not serve" do
+      let(:url) { "#{PROTOCOL}://#{DOMAIN}/l/redirected" }
+      let(:off_site_url) { "http://192.0.2.1/l/redirected.json" }
+
+      before do
+        stub_request(:get, "#{url}.json").to_return(status: 302, headers: { "Location" => off_site_url })
+        # The off-site host answers with product JSON the parser would accept, so the guard has to be
+        # what refuses the hop.
+        stub_request(:get, off_site_url)
+          .to_return(status: 200, body: { api_version: ProductPresenter::PublicApiProps::API_VERSION, id: create(:product).external_id, permalink: "redirected" }.to_json, headers: { "Content-Type" => "application/json" })
+      end
+
+      it "returns an error without requesting the off-site host" do
+        get :show, format: :json, params: { url: }
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be(false)
+        expect(response.parsed_body["error"]).to eq("Please provide a valid Gumroad product URL")
+        expect(a_request(:get, off_site_url)).not_to have_been_made
+      end
+    end
+
+    context "when the Gumroad URL redirects to another host we serve" do
+      let(:url) { "#{PROTOCOL}://#{DOMAIN}/l/redirected" }
+      let(:redirect_url) { "#{PROTOCOL}://#{ROOT_DOMAIN}/l/redirected.json" }
+      let(:product) { create(:product, name: "Eligible Product") }
+
+      before do
+        stub_request(:get, "#{url}.json").to_return(status: 301, headers: { "Location" => redirect_url })
+        stub_request(:get, redirect_url)
+          .to_return(status: 200, body: { api_version: ProductPresenter::PublicApiProps::API_VERSION, id: product.external_id, permalink: product.general_permalink }.to_json, headers: { "Content-Type" => "application/json" })
+      end
+
+      it "follows it and returns the eligibility fields" do
+        get :show, format: :json, params: { url: }
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be(true)
+        expect(response.parsed_body["product"]["name"]).to eq(product.name)
+      end
+    end
+
+    context "when the URL does not use http or https" do
+      let(:url) { "ftp://#{DOMAIN}/l/product" }
+
+      it "returns an error without opening a connection" do
+        expect(HTTParty).not_to receive(:get)
+
+        get :show, format: :json, params: { url: }
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be(false)
+        expect(response.parsed_body["error"]).to eq("Please provide a valid Gumroad product URL")
+      end
+    end
+
     context "with non-ASCII characters in URL" do
       let(:url) { "https://gumroad.com/discover.json?a=123\u201D" }
 
