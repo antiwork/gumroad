@@ -47,17 +47,41 @@ describe CreateStripeApplePayDomainWorker do
     allow(Rails.env).to receive(:test?).and_return(false)
   end
 
-  it "leaves an existing registration alone when the host belongs to a released username" do
+  it "takes the registration over from the account that used to hold the username" do
+    previous_owner = create(:user, username: "reusedseller")
     StripeApplePayDomain.create!(
-      user: create(:user, username: "reusedseller"),
+      user: previous_owner,
       domain: "sampleusername.gumroad.dev",
       stripe_id: "apwc_existing"
     )
     expect(Stripe::ApplePayDomain).not_to receive(:create)
 
     expect { described_class.new.perform(@user.id) }.not_to raise_error
-    expect(StripeApplePayDomain.where(domain: "sampleusername.gumroad.dev").pluck(:user_id))
-      .to eq([User.find_by(username: "reusedseller").id])
+    expect(StripeApplePayDomain.find_by(domain: "sampleusername.gumroad.dev").user_id).to eq(@user.id)
+  end
+
+  it "leaves its own registration untouched" do
+    StripeApplePayDomain.create!(user: @user, domain: "sampleusername.gumroad.dev", stripe_id: "apwc_own")
+    expect(Stripe::ApplePayDomain).not_to receive(:create)
+
+    expect { described_class.new.perform(@user.id) }.not_to raise_error
+    expect(StripeApplePayDomain.find_by(domain: "sampleusername.gumroad.dev").stripe_id).to eq("apwc_own")
+  end
+
+  it "keeps the host registered when the previous owner's delete job runs afterwards" do
+    previous_owner = create(:user, username: "reusedseller")
+    StripeApplePayDomain.create!(
+      user: previous_owner,
+      domain: "sampleusername.gumroad.dev",
+      stripe_id: "apwc_existing"
+    )
+
+    described_class.new.perform(@user.id)
+
+    expect(Stripe::ApplePayDomain).not_to receive(:delete)
+    DeleteStripeApplePayDomainWorker.new.perform(previous_owner.id, "sampleusername.gumroad.dev")
+
+    expect(StripeApplePayDomain.find_by(domain: "sampleusername.gumroad.dev")&.user_id).to eq(@user.id)
   end
 
   it "treats a row inserted by a concurrent worker as already registered" do

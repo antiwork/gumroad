@@ -23,11 +23,16 @@ class CreateStripeApplePayDomainWorker
 
     user = User.find(user_id)
     domain ||= Subdomain.from_username(user.username)
+    return if domain.blank?
 
-    # The unique index is on domain alone, and a deleted account leaves its row behind, so a later
-    # signup that reuses that username still has the host registered: a per-user lookup would insert
-    # into a taken domain.
-    return if domain.blank? || StripeApplePayDomain.exists?(domain:)
+    # A row outlives the account that wrote it: a deleted account's is never removed, and a renamed
+    # one is still queued for deletion when a later signup takes the freed username. Hand it over so
+    # that pending delete finds no row instead of taking the host's wallet buttons with it.
+    existing = StripeApplePayDomain.find_by(domain:)
+    if existing
+      existing.update!(user_id:) if existing.user_id != user_id
+      return
+    end
 
     response = Stripe::ApplePayDomain.create(domain_name: domain)
     return unless response
