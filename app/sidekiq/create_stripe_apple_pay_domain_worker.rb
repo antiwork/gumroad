@@ -36,7 +36,7 @@ class CreateStripeApplePayDomainWorker
       stripe_id: response.id
     )
   rescue ActiveRecord::RecordNotUnique
-    # A concurrent create inserted first. Claim its row, or retry if a delete has removed it since.
+    # A concurrent create inserted first. Claim its row, or retry if it is gone here or on Stripe.
     raise unless claim_existing_registration(user_id, domain)
   end
 
@@ -47,8 +47,24 @@ class CreateStripeApplePayDomainWorker
     def claim_existing_registration(user_id, domain)
       StripeApplePayDomain.transaction do
         existing = StripeApplePayDomain.lock.find_by(domain:)
-        existing.update!(user_id:) if existing && existing.user_id != user_id
-        existing.present?
+        next false if existing.nil?
+        next true if existing.user_id == user_id
+
+        # The previous holder's delete can reach Stripe and still fail with every response lost.
+        if registration_missing_on_stripe?(existing.stripe_id)
+          existing.destroy!
+          next false
+        end
+        existing.update!(user_id:)
+        true
       end
+    end
+
+    def registration_missing_on_stripe?(stripe_id)
+      Stripe::ApplePayDomain.retrieve(stripe_id)
+      false
+    rescue Stripe::InvalidRequestError => e
+      raise unless e.code == "resource_missing"
+      true
     end
 end

@@ -102,4 +102,39 @@ describe DeleteStripeApplePayDomainWorker, "while the username's new holder regi
       job.join
     end
   end
+
+  it "registers the host afresh when the previous holder's delete reached Stripe but lost every response" do
+    registered = Set["apwc_previous"]
+    domains_url = "https://api.stripe.com/v1/apple_pay/domains"
+    stub_request(:delete, "#{domains_url}/apwc_previous").to_return do
+      registered.delete("apwc_previous")
+      raise Net::ReadTimeout
+    end
+    stub_request(:get, %r{\A#{domains_url}/apwc_\w+\z}).to_return do |request|
+      stripe_id = request.uri.path.split("/").last
+      if registered.include?(stripe_id)
+        { status: 200, body: { id: stripe_id, object: "apple_pay_domain", domain_name: domain }.to_json }
+      else
+        { status: 404, body: { error: { code: "resource_missing", type: "invalid_request_error", param: "domain",
+                                        message: "No such apple_pay_domain: '#{stripe_id}'" } }.to_json }
+      end
+    end
+    stub_request(:post, domains_url).with(body: { domain_name: domain }).to_return do
+      registered << "apwc_new_holder"
+      { status: 200, body: { id: "apwc_new_holder", object: "apple_pay_domain", domain_name: domain }.to_json }
+    end
+    previous_row_id = StripeApplePayDomain.find_by!(domain:).id
+
+    expect { described_class.new.perform(previous_holder.id, domain) }.to raise_error(Stripe::APIConnectionError)
+    CreateStripeApplePayDomainWorker.new.perform(new_holder.id, domain)
+    described_class.new.perform(previous_holder.id, domain)
+
+    rows = StripeApplePayDomain.where(domain:)
+    aggregate_failures do
+      expect(rows.pluck(:user_id, :stripe_id)).to eq([[new_holder.id, "apwc_new_holder"]])
+      expect(rows.sole.id).not_to eq(previous_row_id)
+      expect(registered).to eq(Set["apwc_new_holder"])
+      expect(a_request(:delete, "#{domains_url}/apwc_new_holder")).not_to have_been_made
+    end
+  end
 end

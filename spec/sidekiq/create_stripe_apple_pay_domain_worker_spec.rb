@@ -17,6 +17,8 @@ describe CreateStripeApplePayDomainWorker, :vcr do
 
     # No HTTP from here on: the domain index is the case under test, and Stripe is stubbed out.
     context "when the host already has a row", vcr: false do
+      before { allow(Stripe::ApplePayDomain).to receive(:retrieve) { |stripe_id| double(id: stripe_id) } }
+
       it "takes the registration over from the account that used to hold the username" do
         previous_owner = create(:user, username: "reusedseller")
         StripeApplePayDomain.create!(
@@ -53,11 +55,29 @@ describe CreateStripeApplePayDomainWorker, :vcr do
 
         expect(StripeApplePayDomain.find_by(domain: "sampleusername.gumroad.dev")&.user_id).to eq(@user.id)
       end
+
+      it "raises for a retry and leaves the row alone when Stripe does not say the registration is gone" do
+        previous_owner = create(:user, username: "reusedseller")
+        StripeApplePayDomain.create!(user: previous_owner, domain: "sampleusername.gumroad.dev", stripe_id: "apwc_existing")
+        expect(Stripe::ApplePayDomain).not_to receive(:create)
+
+        [
+          Stripe::APIConnectionError.new("Timed out connecting to Stripe"),
+          Stripe::InvalidRequestError.new("Invalid request", "domain", http_status: 400, code: "parameter_invalid"),
+        ].each do |error|
+          allow(Stripe::ApplePayDomain).to receive(:retrieve).with("apwc_existing").and_raise(error)
+
+          expect { described_class.new.perform(@user.id) }.to raise_error(error.class)
+          expect(StripeApplePayDomain.where(domain: "sampleusername.gumroad.dev").pluck(:user_id, :stripe_id))
+            .to eq([[previous_owner.id, "apwc_existing"]])
+        end
+      end
     end
 
     context "when a concurrent create inserts the host's row first", vcr: false do
       before do
         concurrent_holder = create(:user, username: "concurrentseller")
+        allow(Stripe::ApplePayDomain).to receive(:retrieve) { |stripe_id| double(id: stripe_id) }
         allow(Stripe::ApplePayDomain).to receive(:create) do
           @concurrent_row = StripeApplePayDomain.create!(
             user: concurrent_holder,
@@ -81,6 +101,15 @@ describe CreateStripeApplePayDomainWorker, :vcr do
         end
 
         expect { described_class.new.perform(@user.id) }.to raise_error(ActiveRecord::RecordNotUnique)
+      end
+
+      it "raises for a retry when Stripe no longer has that row's registration" do
+        allow(Stripe::ApplePayDomain).to receive(:retrieve).with("apwc_concurrent").and_raise(
+          Stripe::InvalidRequestError.new("No such apple_pay_domain: 'apwc_concurrent'", "domain", http_status: 404, code: "resource_missing")
+        )
+
+        expect { described_class.new.perform(@user.id) }.to raise_error(ActiveRecord::RecordNotUnique)
+        expect(StripeApplePayDomain.exists?(domain: "sampleusername.gumroad.dev")).to be(false)
       end
     end
   end
