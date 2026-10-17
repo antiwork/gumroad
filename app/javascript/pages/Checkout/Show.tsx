@@ -112,6 +112,8 @@ type CheckoutIndexPageProps = {
     discover_url: string;
     gift: Gift | null;
     max_allowed_cart_products: number;
+    default_offer_codes: string[];
+    existing_customer_default_offer_code_valid: boolean;
     paypal_client_id: string;
     recaptcha_key: string | null;
     recaptcha_score_based: boolean;
@@ -188,6 +190,8 @@ const CheckoutIndexPage = () => {
       recaptcha_challenge_key,
       paypal_client_id,
       max_allowed_cart_products,
+      default_offer_codes,
+      existing_customer_default_offer_code_valid,
       cart_save_debounce_ms,
       tip_options,
       default_tip_option,
@@ -909,7 +913,7 @@ const CheckoutIndexPage = () => {
   //
   // The recovery has to be a save rather than a bare re-request of the configuration: a save sends
   // the cart the client currently holds, so its answer is the configuration for that same cart.
-  // Saves also supersede one another, so a recovery cannot race the buyer's next edit.
+  // Saves go out one at a time, so a recovery cannot race the buyer's next edit.
   //
   // Once payment starts, the cart the buyer edited is no longer the cart that matters, and a save
   // still carrying it must not be allowed to answer: its response re-renders `cart` from the
@@ -919,6 +923,12 @@ const CheckoutIndexPage = () => {
   // payment started are dropped; saves issued from the trimmed post-checkout cart are the current
   // generation and go through.
   const cartSaveGenerationRef = React.useRef(0);
+  // One cart save on the wire at a time. Aborting a dispatched save does not stop the server from
+  // committing it, so a newer save that interrupted it could commit first and then be overwritten
+  // with the older cart. A save issued meanwhile waits for the one in flight; only the latest
+  // waits, and it sends the cart as it stands when it goes out.
+  const cartSaveInFlightRef = React.useRef<symbol | null>(null);
+  const queuedCartSaveRef = React.useRef<(() => CartSaveCallbacks) | null>(null);
   const paymentStarted = state.status.type !== "input" && state.status.type !== "offering";
   React.useEffect(() => {
     if (!paymentStarted) return;
@@ -933,10 +943,19 @@ const CheckoutIndexPage = () => {
     // `onFinish` — so this cannot race a later, legitimate save.
     cartForm.cancel();
     cartSaveGenerationRef.current += 1;
+    cartSaveInFlightRef.current = null;
+    queuedCartSaveRef.current = null;
   }, [paymentStarted]);
 
-  const saveCart = (callbacks: CartSaveCallbacks) => {
+  // Takes a factory so a queued save's callbacks record the cart it actually sends.
+  const saveCart = (buildCallbacks: () => CartSaveCallbacks) => {
+    if (cartSaveInFlightRef.current) {
+      queuedCartSaveRef.current = buildCallbacks;
+      return;
+    }
+    const callbacks = buildCallbacks();
     const generation = cartSaveGenerationRef.current;
+    const save = Symbol("cart save");
 
     cartForm.patch(Routes.checkout_path(), {
       // checkout_payment comes back with the save because it is derived from the cart: which
@@ -950,7 +969,22 @@ const CheckoutIndexPage = () => {
       // The generation is captured when the save is issued, so this refuses exactly the saves that
       // were built from a cart payment has since moved past — and lets a post-checkout save through.
       onBefore: () => generation === cartSaveGenerationRef.current,
-      ...callbacks,
+      onStart: () => {
+        cartSaveInFlightRef.current = save;
+      },
+      onSuccess: callbacks.onSuccess,
+      onFinish: (visit) => {
+        if (cartSaveInFlightRef.current === save) cartSaveInFlightRef.current = null;
+        callbacks.onFinish(visit);
+        // A cancelled or interrupted save was displaced by payment or a navigation; the queued
+        // save must not start a visit over either.
+        const queued = queuedCartSaveRef.current;
+        if (visit.cancelled || visit.interrupted) queuedCartSaveRef.current = null;
+        else if (queued && !cartSaveInFlightRef.current) {
+          queuedCartSaveRef.current = null;
+          saveCartRef.current(queued);
+        }
+      },
     });
   };
   // Held in a ref so a recovery started by an earlier save calls the current render's save rather
@@ -963,9 +997,9 @@ const CheckoutIndexPage = () => {
   const currentPaymentLaneCartKeyRef = React.useRef("");
 
   const debouncedSaveCartState = useDebouncedCallback(() => {
-    saveCartRef.current(
+    saveCartRef.current(() =>
       buildCartSaveRefreshCallbacks({
-        save: (callbacks) => saveCartRef.current(callbacks),
+        save: (callbacks) => saveCartRef.current(() => callbacks),
         currentCartKey: () => currentPaymentLaneCartKeyRef.current,
         // The one path that lifts the hold on Pay. The save that asked is the only place that knows
         // the configuration describes the cart the buyer is looking at — see checkoutPaymentRefresh.
@@ -1127,6 +1161,8 @@ const CheckoutIndexPage = () => {
             discoverUrl={discover_url}
             cart={cartForm.data.cart}
             updateCart={(updated) => cartForm.setData((prev) => ({ cart: { ...prev.cart, ...updated } }))}
+            defaultOfferCodes={default_offer_codes}
+            existingCustomerDefaultOfferCodeValid={existing_customer_default_offer_code_valid}
             recommendedProducts={props.recommended_products ?? null}
           />
         </CheckoutThemeProvider>

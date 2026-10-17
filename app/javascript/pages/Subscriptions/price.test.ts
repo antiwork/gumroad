@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  applySubscriptionSelection,
   initialSubscriptionUnitPrice,
   selectedSubscriptionTotal,
   subscriptionPWYWMinimumUnitPrice,
   withOncePerCartMinimum,
 } from "$app/pages/Subscriptions/price";
 import type { Discount } from "$app/parsers/checkout";
+
+import type { PriceSelection, Product } from "$app/components/Product/ConfigurationSelector";
 
 const oncePerCartDiscount: Discount = {
   type: "fixed",
@@ -70,5 +73,84 @@ describe("subscription pricing", () => {
 
     expect(unitPrice).toBe(900);
     expect(selectedSubscriptionTotal({ unitPrice, quantity: 1, discount: null, minimumPrice: 99 })).toBe(900);
+  });
+});
+
+describe("subscription discount eligibility on plan changes", () => {
+  const tier = (quantityLeft: number | null): Product["options"][number] => ({
+    id: "basic",
+    name: "Basic",
+    quantity_left: quantityLeft,
+    description: "",
+    price_difference_cents: 0,
+    recurrence_price_values: { monthly: { price_cents: 1_000, suggested_price_cents: null } },
+    is_pwyw: false,
+    duration_in_minutes: null,
+  });
+  const product = (quantityLeft: number | null): Product => ({
+    id: "membership",
+    permalink: "membership",
+    rental: null,
+    options: [tier(quantityLeft)],
+    currency_code: "usd",
+    price_cents: 0,
+    installment_plan: null,
+    is_tiered_membership: true,
+    is_legacy_subscription: false,
+    is_quantity_enabled: false,
+    is_multiseat_license: true,
+    quantity_remaining: null,
+    recurrences: { default: "monthly", enabled: [{ recurrence: "monthly", price_cents: 0, id: "monthly" }] },
+    pwyw: null,
+    ppp_details: null,
+    native_type: "membership",
+  });
+  const discount: Discount = {
+    type: "percent",
+    percents: 30,
+    product_ids: null,
+    expires_at: null,
+    minimum_quantity: null,
+    duration_in_billing_cycles: null,
+    minimum_amount_cents: null,
+  };
+  const selection = (quantity: number): PriceSelection => ({
+    rent: false,
+    optionId: "basic",
+    price: { value: null, error: false },
+    quantity,
+    recurrence: "monthly",
+    callStartTime: null,
+    payInInstallments: false,
+  });
+
+  it("keeps the code on a plan below its spend minimum", () => {
+    const { discountedPriceCents } = applySubscriptionSelection(
+      product(null),
+      { ...discount, minimum_amount_cents: 1_500 },
+      selection(1),
+    );
+
+    expect(discountedPriceCents).toBe(700);
+  });
+
+  it("keeps a seat-minimum code on the subscriber's sold-out tier", () => {
+    const { discountedTotalCents } = applySubscriptionSelection(
+      product(0),
+      { ...discount, minimum_quantity: 2 },
+      selection(2),
+    );
+
+    expect(discountedTotalCents).toBe(1_400);
+  });
+
+  it("drops a seat-minimum code when the plan has too few seats", () => {
+    const { discountedTotalCents } = applySubscriptionSelection(
+      product(null),
+      { ...discount, minimum_quantity: 2 },
+      selection(1),
+    );
+
+    expect(discountedTotalCents).toBe(1_000);
   });
 });

@@ -177,6 +177,7 @@ const buildState = (overrides: Partial<State> = {}): State => ({
   acknowledgedEmails: new Set(),
   requireEmailTypoAcknowledgment: false,
   checkoutPaymentStale: false,
+  discountQuotesPending: false,
   resumeSubmitAfterCheckoutPayment: false,
   validationFailedCount: 0,
   awaitingBuyerConfirmation: false,

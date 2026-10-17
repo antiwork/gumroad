@@ -21,18 +21,9 @@
 // would lift the hold onto a configuration for a cart the buyer has already changed, the exact
 // mismatch the hold exists to prevent.
 //
-// Saves also supersede each other, which is what keeps two recoveries from fighting. The cart PATCH
-// is a synchronous Inertia visit, and Inertia's sync request stream is interruptible with one slot:
-// starting a newer save interrupts the in-flight one. The interrupted save's `onSuccess` never runs
-// and its `onFinish` reports `interrupted`, so it neither adopts a stale configuration nor starts a
-// recovery for a hold the newer save now owns.
-//
-// Supersession alone is not enough, though, because saves are debounced: an edit made while a save
-// is in flight places its hold immediately but does not send its save until the debounce expires.
-// A response arriving inside that window has nothing to have interrupted it, so `interrupted` is
-// false even though the answer is for the previous cart. That is why every save also carries the
-// lane key of the cart it sent and re-reads the current one before adopting: the key, not the
-// visit's flags, is what says whether this answer still describes what the buyer is looking at.
+// Saves go out one at a time, so an answer can arrive after the buyer has edited the cart again,
+// with nothing having interrupted it. So every save carries the lane key of the cart it sent and
+// re-reads the current one before adopting: the key, not the visit's flags, decides.
 //
 // Adoption is the other half, and it belongs here rather than in a watcher on the page's props. A
 // response arriving is not by itself evidence that the configuration it carries describes the cart
@@ -181,10 +172,8 @@ export const buildCartSaveRefreshCallbacks = ({
       delivered = { checkoutPayment: page.props[CHECKOUT_PAYMENT_PROP] };
     },
     onFinish: (visit) => {
-      // A newer save took this one's place. It carries the buyer's latest cart and its response is
-      // what will lift the hold, so this save neither adopts its own answer — which describes the
-      // cart from before that newer edit — nor recovers on the newer save's behalf, which would
-      // race two saves and let this older one's answer be adopted for the newer one's cart.
+      // Payment or a navigation displaced this save, so its answer no longer speaks for the cart
+      // on screen: it neither adopts nor recovers.
       if (visit?.cancelled === true || visit?.interrupted === true) return;
 
       // The buyer edited the cart while this save was in flight and the newer save has not gone out

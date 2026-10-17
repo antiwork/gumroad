@@ -30,7 +30,7 @@ export const computeOfferDiscount = async (payload: ComputeDiscountRequestData):
       return cast<OfferCodeResponseData>(await response.json());
     }
   } catch {}
-  return { error_code: "invalid_offer", error_message: "Something went wrong.", valid: false };
+  return { error_code: "invalid_offer", error_message: "Something went wrong.", valid: false, request_failed: true };
 };
 
 export type OfferCodeResponseData =
@@ -45,6 +45,8 @@ export type OfferCodeResponseData =
         | "not_existing_customer"
         | "option_not_eligible";
       error_message: string;
+      // The request itself failed, so the code's eligibility is unknown.
+      request_failed?: true;
     }
   | { valid: true; products_data: Record<string, Discount>; notice?: string };
 

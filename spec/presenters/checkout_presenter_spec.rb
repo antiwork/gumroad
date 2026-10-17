@@ -42,6 +42,8 @@ describe CheckoutPresenter do
         address: { city: nil, street: nil, zip: nil },
         add_products: [],
         clear_cart: false,
+        default_offer_codes: [],
+        existing_customer_default_offer_code_valid: false,
         gift: nil,
         saved_credit_card: { expiration_date: "12/23", number: "**** **** **** 4242", type: "visa", requires_mandate: false },
         recaptcha_key: GlobalConfig.get("RECAPTCHA_MONEY_SITE_KEY"),
@@ -255,6 +257,8 @@ describe CheckoutPresenter do
         paypal_client_id: PAYPAL_PARTNER_CLIENT_ID,
         gift: nil,
         clear_cart: false,
+        default_offer_codes: [],
+        existing_customer_default_offer_code_valid: false,
         add_products: [{
           product: {
             permalink: product.unique_permalink,

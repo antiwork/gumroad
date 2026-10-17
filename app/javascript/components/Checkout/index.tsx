@@ -3,7 +3,7 @@ import * as React from "react";
 
 import { isWalletPaymentElementType } from "$app/data/card_payment_method_data";
 import type { SurchargesResponse } from "$app/data/customer_surcharge";
-import { computeOfferDiscount } from "$app/data/offer_code";
+import { computeOfferDiscount, type OfferCodeResponseData } from "$app/data/offer_code";
 import { recommendedProductsHeading } from "$app/data/recommended_products";
 import { CardProduct, COMMISSION_DEPOSIT_PROPORTION } from "$app/parsers/product";
 import { isOpenTuple } from "$app/utils/array";
@@ -75,12 +75,14 @@ import {
 } from "./buyerCurrencyDisplay";
 import {
   type CartState,
+  type DiscountCode,
   convertToUSD,
   hasFreeTrial,
   getDiscountedPrice,
   type CartItem as CartItemProps,
   findCartItem,
 } from "./cartState";
+import { CHECKOUT_PAYMENT_REFRESH_FAILED_MESSAGE } from "./checkoutPaymentRefresh";
 import {
   canDisplayBuyerCurrencyQuote,
   canUseStripePaymentElementClientConfirm,
@@ -252,87 +254,277 @@ const CurrencyRefusalNotice = ({ summaryCurrencyCode }: { summaryCurrencyCode: s
   );
 };
 
+const discountRequestProducts = (items: CartItemProps[]) =>
+  Object.fromEntries(
+    items.map((item, index) => [
+      index,
+      { permalink: item.product.permalink, quantity: item.quantity, variant_external_id: item.option_id ?? "" },
+    ]),
+  );
+
+const requestFailed = (discount: OfferCodeResponseData | undefined) =>
+  !!discount && !discount.valid && !!discount.request_failed;
+
+const discountQuoteKey = (items: CartItemProps[]) => JSON.stringify(discountRequestProducts(items));
+
+// A code kept without lines: a default the cart has not met yet, or one a reload found ineligible.
+const isDormant = ({ products }: DiscountCode) => Object.keys(products).length === 0;
+
 export const Checkout = ({
   discoverUrl,
   cart,
   updateCart,
+  defaultOfferCodes = [],
+  existingCustomerDefaultOfferCodeValid = false,
   recommendedProducts,
 }: {
   discoverUrl: string;
   cart: CartState;
   updateCart: (updated: Partial<CartState>) => void;
+  // The arriving product's defaults this buyer can redeem.
+  defaultOfferCodes?: string[];
+  existingCustomerDefaultOfferCodeValid?: boolean;
   recommendedProducts?: CardProduct[] | null;
 }) => {
-  const [state] = useState();
+  const [state, dispatch] = useState();
   const [newDiscountCode, setNewDiscountCode] = React.useState("");
   const [loadingDiscount, setLoadingDiscount] = React.useState(false);
+  const itemsKey = discountQuoteKey(cart.items);
+  // The quote inputs each code's lines were last answered for. The presenter quoted the initial cart.
+  const [quotedFor, setQuotedFor] = React.useState<Record<string, string>>(() =>
+    Object.fromEntries(cart.discountCodes.map(({ code }) => [code, itemsKey])),
+  );
+  const [failedFor, setFailedFor] = React.useState<Record<string, string>>({});
+  const [automaticArrivalPending, setAutomaticArrivalPending] = React.useState(false);
+  const [unquotedCodesWithLines, setUnquotedCodesWithLines] = React.useState<string[]>([]);
+  // Lines a quote just wrote change the totals, so Pay waits one more render: the parent's
+  // product update must reset surcharges before a pending submit is allowed to resume.
+  const [quotedLinesSettling, setQuotedLinesSettling] = React.useState(false);
+  React.useEffect(() => {
+    if (quotedLinesSettling) setQuotedLinesSettling(false);
+  }, [quotedLinesSettling]);
 
   const isGift = state.gift != null;
 
-  async function applyDiscount(code: string, fromUrl = false) {
+  // One updateCart per call: each writes from this render's `cart`, so parallel calls drop each
+  // other's codes. The solver keeps the later code on a tie, so pass `codes` lowest priority first.
+  // `automatic` defaults stay even where PPP or an unmet condition beats them, for later edits.
+  async function applyDiscount(
+    codes: string[],
+    {
+      fromUrl = false,
+      takeover = false,
+      refresh = false,
+      silent = false,
+      automatic = false,
+    }: { fromUrl?: boolean; takeover?: boolean; refresh?: boolean; silent?: boolean; automatic?: boolean },
+  ) {
     setLoadingDiscount(true);
-    const discount = await computeOfferDiscount({
-      code,
-      products: Object.fromEntries(
-        cart.items.map((item, index) => [
-          index,
-          { permalink: item.product.permalink, quantity: item.quantity, variant_external_id: item.option_id ?? "" },
-        ]),
-      ),
+    if (automatic) setAutomaticArrivalPending(true);
+    const products = discountRequestProducts(cart.items);
+    const others = cart.discountCodes.filter(({ code }) => !codes.includes(code));
+    const [discounts, refreshed] = await Promise.all([
+      Promise.all(codes.map((code) => computeOfferDiscount({ code, products }))),
+      Promise.all(refresh ? others.map(({ code }) => computeOfferDiscount({ code, products })) : []),
+    ]);
+    const applied = codes.flatMap((code, index) => {
+      const discount = discounts[index];
+      return discount?.valid ? [{ code, products: discount.products_data, fromUrl, notice: discount.notice }] : [];
     });
-    if (discount.valid) {
-      const entries = Object.entries(discount.products_data);
-      const pppDiscountGreaterCount = entries.reduce((acc, [permalink, discount]) => {
-        const item = cart.items.find(({ product }) => product.permalink === permalink);
-        const configuredDiscount = withConfiguredOncePerCartAmount(discount);
-        return item && computeSelectionDiscountedPrice(item.price, configuredDiscount, item.product, item.quantity).ppp
-          ? acc + 1
-          : acc;
-      }, 0);
-      if (pppDiscountGreaterCount === entries.length) {
+    // A line counts as lost to PPP only when PPP beats every code here that covers it.
+    const appliedPermalinks = [...new Set(applied.flatMap(({ products }) => Object.keys(products)))];
+    const pppDiscountGreaterCount = appliedPermalinks.filter((permalink) => {
+      const item = cart.items.find(({ product }) => product.permalink === permalink);
+      return (
+        !!item &&
+        applied.every(({ products }) => {
+          const discount = products[permalink];
+          return (
+            !discount ||
+            computeSelectionDiscountedPrice(
+              item.price,
+              withConfiguredOncePerCartAmount(discount),
+              item.product,
+              item.quantity,
+            ).ppp
+          );
+        })
+      );
+    }).length;
+    let group: DiscountCode[] = [];
+    if (codes.length > 0 && applied.length === 0) {
+      const invalid = discounts.find((discount) => !discount.valid);
+      if (invalid?.valid === false && !silent) showAlert(invalid.error_message, "error");
+    } else if (!automatic && applied.length > 0 && pppDiscountGreaterCount === appliedPermalinks.length) {
+      if (!silent)
         showAlert(
           "The offer code will not be applied because the purchasing power parity discount is greater than the offer code discount for all products.",
           "error",
         );
-      } else {
-        // One showAlert, because the toast is a single slot — a second call replaces the first
-        // before it paints. Both reasons can be true and each names a different set of lines.
-        const warnings = [
-          pppDiscountGreaterCount > 0
-            ? "The offer code will not be applied to some products for which the purchasing power parity discount is greater than the offer code discount."
-            : null,
-          discount.notice,
-        ].filter(Boolean);
-        if (warnings.length > 0) showAlert(warnings.join(" "), "warning");
-        updateCart({
-          discountCodes: [
-            { code, products: discount.products_data, fromUrl },
-            ...cart.discountCodes
-              .map((item) => ({
-                ...item,
-                products: Object.fromEntries(
-                  Object.entries(item.products).filter(([permalink]) => !(permalink in discount.products_data)),
-                ),
-              }))
-              .filter((item) => item.code !== code && Object.keys(item.products).length > 0),
-          ],
-        });
-      }
-      setNewDiscountCode("");
     } else {
-      showAlert(discount.error_message, "error");
+      // One showAlert, because the toast is a single slot — a second call replaces the first
+      // before it paints. Both reasons can be true and each names a different set of lines.
+      const warnings = [
+        ...new Set(
+          [
+            pppDiscountGreaterCount > 0 && !automatic
+              ? "The offer code will not be applied to some products for which the purchasing power parity discount is greater than the offer code discount."
+              : null,
+            ...applied.map(({ notice }) => notice),
+          ].filter(Boolean),
+        ),
+      ];
+      if (warnings.length > 0 && !silent) showAlert(warnings.join(" "), "warning");
+      group = applied.map(({ code, products, fromUrl }) => ({ code, products, fromUrl }));
     }
+    // A default with no lines yet keeps its place and is asked again once the quote inputs change.
+    if (automatic)
+      group = codes.map(
+        (code) =>
+          group.find((item) => item.code === code) ?? {
+            code,
+            products: cart.discountCodes.find((item) => item.code === code)?.products ?? {},
+            fromUrl,
+          },
+      );
+    if (applied.length > 0) setNewDiscountCode("");
+
+    const takenPermalinks = new Set(takeover && group.length > 0 ? appliedPermalinks : []);
+    const refreshedByCode = new Map(others.map(({ code }, index) => [code, refreshed[index]]));
+    const kept = cart.discountCodes
+      .filter((item) => !group.some(({ code }) => code === item.code))
+      .map((item) => {
+        const fresh = refreshedByCode.get(item.code);
+        const products = fresh?.valid ? fresh.products_data : item.products;
+        return {
+          ...item,
+          products: Object.fromEntries(
+            Object.entries(products).filter(([permalink]) => !takenPermalinks.has(permalink)),
+          ),
+        };
+      });
+    // A group code already in the cart keeps its tie order against the codes around it.
+    const position = takeover
+      ? 0
+      : Math.max(
+          cart.discountCodes.findIndex(({ code }) => codes.includes(code)),
+          0,
+        );
+    const discountCodes = [...kept.slice(0, position), ...group, ...kept.slice(position)].filter(
+      (item) =>
+        group.includes(item) ||
+        Object.keys(item.products).length > 0 ||
+        (takenPermalinks.size === 0 &&
+          cart.discountCodes.some((stored) => stored.code === item.code && isDormant(stored))),
+    );
+    if (group.length > 0 || refreshed.length > 0) updateCart({ discountCodes });
+    // Paired with the codes written above, which come from the same snapshot: a code another
+    // write filled meanwhile is dormant again here and gets asked again.
+    const failed = [
+      ...codes.filter((_, index) => requestFailed(discounts[index])),
+      ...others.filter((_, index) => refresh && requestFailed(refreshed[index])).map(({ code }) => code),
+    ];
+    const answered = [...codes, ...(refresh ? others.map(({ code }) => code) : [])].filter(
+      (code) => !failed.includes(code),
+    );
+    setQuotedFor({
+      ...Object.fromEntries(Object.entries(quotedFor).filter(([code]) => !failed.includes(code))),
+      ...Object.fromEntries(answered.map((code) => [code, itemsKey])),
+    });
+    // An arrival's failed code that kept its old lines is never re-asked, so its eligibility for
+    // the added product stays unknown until a reload.
+    const failedWithLines =
+      automatic || refresh
+        ? failed.filter((code) => discountCodes.some((item) => item.code === code && !isDormant(item)))
+        : [];
+    setUnquotedCodesWithLines((prev) => [...prev.filter((code) => !answered.includes(code)), ...failedWithLines]);
+    if (failedWithLines.length > 0) showAlert(CHECKOUT_PAYMENT_REFRESH_FAILED_MESSAGE, "error");
 
     setLoadingDiscount(false);
+    if (automatic) setAutomaticArrivalPending(false);
   }
+
+  const unresolvedCodes = cart.discountCodes
+    .filter((item) => isDormant(item) && quotedFor[item.code] !== itemsKey)
+    .map(({ code }) => code);
+  const discountQuotesPending =
+    automaticArrivalPending ||
+    quotedLinesSettling ||
+    unresolvedCodes.length > 0 ||
+    cart.discountCodes.some((item) => unquotedCodesWithLines.includes(item.code) && !isDormant(item));
+  React.useEffect(() => {
+    if (state.discountQuotesPending !== discountQuotesPending)
+      dispatch({ type: "set-discount-quotes-pending", pending: discountQuotesPending });
+  }, [discountQuotesPending, state.discountQuotesPending]);
+
+  const committed = React.useRef({ cart, itemsKey });
+  React.useEffect(() => {
+    committed.current = { cart, itemsKey };
+  });
+  const requoteInFlight = React.useRef<string | null>(null);
+  // An answer only counts for the inputs it was asked with: a later edit asks again. A failed
+  // request is retried once, then Pay stays closed, since the code's eligibility is unknown.
+  async function requoteDormantDiscounts(codes: string[], items: CartItemProps[], key: string) {
+    const flight = `${key}\n${codes.join("\n")}`;
+    requoteInFlight.current = flight;
+    const products = discountRequestProducts(items);
+    const discounts = await Promise.all(
+      codes.map(async (code) => {
+        const discount = await computeOfferDiscount({ code, products });
+        return requestFailed(discount) ? computeOfferDiscount({ code, products }) : discount;
+      }),
+    );
+    if (requoteInFlight.current === flight) requoteInFlight.current = null;
+    if (committed.current.itemsKey !== key) return;
+    const fresh = new Map(
+      codes.flatMap((code, index) => {
+        const discount = discounts[index];
+        return discount?.valid ? [[code, discount.products_data] as const] : [];
+      }),
+    );
+    const failed = codes.filter((_, index) => requestFailed(discounts[index]));
+    if (fresh.size > 0) {
+      updateCart({
+        discountCodes: committed.current.cart.discountCodes.map((item) => {
+          const products = fresh.get(item.code);
+          return products && isDormant(item) ? { ...item, products } : item;
+        }),
+      });
+      setQuotedLinesSettling(true);
+    }
+    setQuotedFor((prev) => ({
+      ...prev,
+      ...Object.fromEntries(codes.filter((code) => !failed.includes(code)).map((code) => [code, key])),
+    }));
+    if (failed.length > 0) {
+      setFailedFor((prev) => ({ ...prev, ...Object.fromEntries(failed.map((code) => [code, key])) }));
+      showAlert(CHECKOUT_PAYMENT_REFRESH_FAILED_MESSAGE, "error");
+    }
+  }
+  const requotableCodes = unresolvedCodes.filter((code) => failedFor[code] !== itemsKey).join("\n");
+  React.useEffect(() => {
+    if (loadingDiscount || !requotableCodes || requoteInFlight.current === `${itemsKey}\n${requotableCodes}`) return;
+    void requoteDormantDiscounts(requotableCodes.split("\n"), cart.items, itemsKey);
+  }, [loadingDiscount, itemsKey, requotableCodes]);
 
   const hasAddedProduct = !!new URL(useOriginalLocation()).searchParams.get("product");
   useRunOnce(() => {
     const url = new URL(window.location.href);
     const code = url.searchParams.get("code");
-    if (hasAddedProduct) cart.discountCodes.forEach(({ code }) => void applyDiscount(code));
+    // A default the product page picked was weighed on one quote, so all of the arriving product's
+    // defaults are weighed again per line. The server lists them most preferred first. A qualifying
+    // buyer's defaults are also weighed when the page sent no code, as it does once PPP beats its pick.
+    const isDefault = !!code && defaultOfferCodes.includes(code);
+    const implicitDefaults = !code && hasAddedProduct && existingCustomerDefaultOfferCodeValid;
+    if (code || (hasAddedProduct && cart.discountCodes.length > 0) || implicitDefaults)
+      void applyDiscount(isDefault || implicitDefaults ? [...defaultOfferCodes].reverse() : code ? [code] : [], {
+        fromUrl: true,
+        takeover: !isDefault && !implicitDefaults,
+        refresh: hasAddedProduct,
+        silent: implicitDefaults,
+        automatic: isDefault || implicitDefaults,
+      });
     if (code) {
-      void applyDiscount(code, true);
       url.searchParams.delete("code");
       window.history.replaceState(window.history.state, "", url.toString());
     }
@@ -727,7 +919,7 @@ export const Checkout = ({
                       className="flex! gap-2"
                       onSubmit={(e) => {
                         e.preventDefault();
-                        void applyDiscount(newDiscountCode);
+                        void applyDiscount([newDiscountCode], { takeover: true });
                       }}
                     >
                       <Input
@@ -1203,10 +1395,12 @@ const CartItemComponent = ({
               onClick={() => {
                 const newItems = cart.items.filter((i) => i !== item);
                 updateCart({
-                  discountCodes: cart.discountCodes.filter(({ products }) =>
-                    Object.keys(products).some((permalink) =>
-                      newItems.some((item) => item.product.permalink === permalink),
-                    ),
+                  discountCodes: cart.discountCodes.filter(
+                    (code) =>
+                      (newItems.length > 0 && isDormant(code)) ||
+                      Object.keys(code.products).some((permalink) =>
+                        newItems.some((item) => item.product.permalink === permalink),
+                      ),
                   ),
                   items: newItems.map(({ accepted_offer, ...rest }) => ({
                     ...rest,

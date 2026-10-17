@@ -420,6 +420,8 @@ export type State = {
   // tick, that "validate" is refused back to "input", and nothing ever re-submits — the buyer is
   // left on the checkout page with no feedback after the purchase they already confirmed.
   resumeSubmitAfterCheckoutPayment: boolean;
+  // True while the cart still waits on an automatic default's quote, which can lower the total.
+  discountQuotesPending: boolean;
   // Counts submits refused by client-side validation. A refused submit usually goes "input" →
   // "input" (Pay is clicked from "input" and the failure sets "input" again), so effects keyed
   // on the status type alone never see it — PaymentForm keys its scroll-to-first-error effect
@@ -529,6 +531,7 @@ type PublicAction =
   | { type: "update-checkout-payment"; checkoutPayment: CheckoutPaymentConfig }
   | { type: "refresh-expired-buyer-currency-quote"; beforeSubmit?: boolean }
   | { type: "set-awaiting-buyer-confirmation"; awaiting: boolean }
+  | { type: "set-discount-quotes-pending"; pending: boolean }
   | { type: "cancel" };
 
 type Action =
@@ -948,7 +951,13 @@ export function isSubmitDisabled(state: State) {
   // checkoutPaymentStale: a cart edit is still waiting on the server's answer for which element
   // this cart should be paying through. Same reasoning as an unloaded surcharge response — the
   // buyer must not be able to pay on a configuration computed for the previous cart.
-  return isProcessing(state) || state.surcharges.type !== "loaded" || state.checkoutPaymentStale || emailTypoBlocking;
+  return (
+    isProcessing(state) ||
+    state.surcharges.type !== "loaded" ||
+    state.checkoutPaymentStale ||
+    state.discountQuotesPending ||
+    emailTypoBlocking
+  );
 }
 
 export function isCardReadyToPay({
@@ -1293,7 +1302,7 @@ function validatePaymentMethodIndependentFields(state: State) {
 function resumeRefusedSubmitIfReady(state: State) {
   if (!state.resumeSubmitAfterCheckoutPayment) return;
   // Still waiting on the other half. Stay armed so the later arrival can finish the job.
-  if (state.checkoutPaymentStale || state.surcharges.type !== "loaded") return;
+  if (state.checkoutPaymentStale || state.surcharges.type !== "loaded" || state.discountQuotesPending) return;
   // Only resume a submit the buyer is still sitting in front of. Anything past "input" means the
   // pipeline already moved on under its own steam and does not need restarting.
   if (state.status.type !== "input") return;
@@ -1579,10 +1588,13 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
         state.availablePaymentMethods.push(action.paymentMethod);
       break;
     case "offer": {
-      // Never start a payment on a stale total: while surcharges are pending/loading (or
-      // errored), the on-screen totals and the buyer-currency quote token aren't the ones the
-      // charge would use. The submit button is disabled in this window, but other dispatch
-      // paths (wallets, offer pipeline, keyboard) must be refused here too.
+      // The authoritative stale-total gate: an unloaded quote or a pending automatic discount
+      // means the charge would not match what the buyer is shown. isSubmitDisabled cannot reach
+      // other dispatch paths, notably the native PayPal button inside PayPal's iframe.
+      if (state.discountQuotesPending) {
+        state.status = { type: "input", errors: state.status.type === "input" ? state.status.errors : new Set() };
+        return;
+      }
       if (state.surcharges.type !== "loaded") {
         // A failed fetch would otherwise be terminal: the refetch effect only fires on
         // "pending", so nothing retries an errored fetch and every submit path stays refused —
@@ -1608,7 +1620,7 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
       // Same stale-total refusal as "offer". The offer pipeline dispatches "validate" from the
       // "offering" status, so the refusal must cancel back to "input" (not bail silently) —
       // otherwise the checkout would be stranded in a processing state with the button disabled.
-      if (state.surcharges.type !== "loaded" || state.checkoutPaymentStale) {
+      if (state.surcharges.type !== "loaded" || state.checkoutPaymentStale || state.discountQuotesPending) {
         // Same error-recovery and error-preservation reasoning as the "offer" refusal above.
         // checkoutPaymentStale is refused for the same reason as unloaded surcharges: paying now
         // would pay through an element configured for the cart as it was before the edit. Accepting
@@ -1635,7 +1647,8 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
         // Not armed when the form is incomplete: the buyer has to fix the flagged fields and press
         // Pay again anyway, and an armed resume would fire a submit they did not ask for the moment
         // the configuration lands — re-running validation, failing again, and clearing nothing.
-        if (state.checkoutPaymentStale && refusedErrors.size === 0) state.resumeSubmitAfterCheckoutPayment = true;
+        if ((state.checkoutPaymentStale || state.discountQuotesPending) && refusedErrors.size === 0)
+          state.resumeSubmitAfterCheckoutPayment = true;
         if (refusedErrors.size) state.validationFailedCount += 1;
         state.status = {
           type: "input",
@@ -1679,6 +1692,10 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
       break;
     case "set-awaiting-buyer-confirmation":
       state.awaitingBuyerConfirmation = action.awaiting;
+      break;
+    case "set-discount-quotes-pending":
+      state.discountQuotesPending = action.pending;
+      resumeRefusedSubmitIfReady(state);
       break;
     case "cancel":
       // Cancelling clears a pending resume too: the buyer (or an error path) has backed out of the
@@ -1938,6 +1955,7 @@ export function createReducer(initial: {
       checkoutPaymentStale: false,
       awaitingBuyerConfirmation: false,
       resumeSubmitAfterCheckoutPayment: false,
+      discountQuotesPending: false,
       validationFailedCount: 0,
       willSaveCard: false,
       // Matches PaymentForm's own default (`useState(!!state.savedCreditCard)`), so the summary is

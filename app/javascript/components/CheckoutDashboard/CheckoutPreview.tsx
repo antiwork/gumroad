@@ -97,6 +97,7 @@ export const CheckoutPreview = ({
         recaptchaChallengeKey: null,
         checkoutPaymentStale: false,
         resumeSubmitAfterCheckoutPayment: false,
+        discountQuotesPending: false,
         validationFailedCount: 0,
         awaitingBuyerConfirmation: false,
       },
