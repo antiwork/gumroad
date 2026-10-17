@@ -4484,6 +4484,13 @@ describe User, :vcr do
       expect(user.minimum_payout_amount_cents).to eq(20_000)
     end
 
+    it "coerces a threshold stored as a string" do
+      # json_data stores whatever its writer was handed, and form-encoded settings
+      # requests hand it a string, so a stored threshold can be one.
+      user.payout_threshold_cents = "20000"
+      expect(user.minimum_payout_amount_cents).to eq(20_000)
+    end
+
     describe "when the user is in a cross-border payout country" do
       let(:user) { create(:user) }
       let!(:compliance_info) { create(:user_compliance_info_korea, user:) }
