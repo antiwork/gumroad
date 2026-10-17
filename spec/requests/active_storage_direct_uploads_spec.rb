@@ -39,4 +39,15 @@ describe "POST /rails/active_storage/direct_uploads" do
     expect(response).to have_http_status(:bad_request)
     expect(response.parsed_body["error"]).to eq("blob must include filename, byte_size and checksum")
   end
+
+  # `permit` drops a key whose value is not a permitted scalar, so a raw `present?` check would let
+  # this body through and `create_before_direct_upload!` would still raise for the dropped keyword.
+  it "answers 400 instead of 500 when a required blob key is not a scalar" do
+    expect do
+      post rails_direct_uploads_path, params: { blob: blob_params.merge(filename: ["cover.png"]) }, as: :json
+    end.not_to change { ActiveStorage::Blob.count }
+
+    expect(response).to have_http_status(:bad_request)
+    expect(response.parsed_body["error"]).to eq("blob must include filename, byte_size and checksum")
+  end
 end
