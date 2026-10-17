@@ -15549,10 +15549,24 @@ describe StripeMerchantAccountManager, :vcr do
       }
     end
 
-    it "records the request but does not email when the only new field is in eventually_due with a far-future deadline" do
+    it "creates no request and sends no email when the only field is in eventually_due with a far-future deadline" do
       expect do
         described_class.handle_stripe_event(stripe_event(eventually_due: ["individual.id_number"]))
       end.not_to have_enqueued_mail(ContactingCreatorMailer, :more_kyc_needed)
+      expect(user.user_compliance_info_requests.requested.count).to eq(0)
+    end
+
+    it "closes an open request that Stripe now lists only under eventually_due" do
+      request = create(:user_compliance_info_request, user:, field_needed: UserComplianceInfoFields::Individual::TAX_ID)
+
+      described_class.handle_stripe_event(stripe_event(eventually_due: ["individual.id_number"]))
+
+      expect(request.reload.state).to eq("provided")
+    end
+
+    it "records the request when the eventually_due field has a near-term deadline" do
+      described_class.handle_stripe_event(stripe_event(eventually_due: ["individual.id_number"], deadline: 7.days.from_now.to_i))
+
       expect(user.user_compliance_info_requests.requested.count).to eq(1)
     end
 

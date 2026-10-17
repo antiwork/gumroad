@@ -3220,6 +3220,9 @@ module StripeMerchantAccountManager
     # $500k in payments, but Stripe shows that field under future_requirements["eventually_due"] for all US accounts.
     stripe_fields_needed = [requirements["currently_due"], requirements["eventually_due"], requirements["past_due"],
                             future_requirements["currently_due"], future_requirements["past_due"], alternative_fields_due].compact.reduce([], :+).uniq
+    # Open request rows drive the settings banner and the "payouts may be blocked" reminders, so a
+    # field Stripe lists only under eventually_due (no deadline within the grace period) gets no row.
+    stripe_fields_needed -= soft_future_stripe_fields(requirements, future_requirements, alternative_fields_due, requirements_due_at)
     stripe_fields_needed.map! do |stripe_field_needed|
       # Example identity-related missing field for individual account: `individual.dob.day`
       # Example identity-related missing field for business account: `person_IRWHQ2ZRlwIh1j.dob.day`
@@ -3537,6 +3540,15 @@ module StripeMerchantAccountManager
   end
 
   SOFT_FUTURE_REQUIREMENT_GRACE_PERIOD = 30.days
+
+  def self.soft_future_stripe_fields(requirements, future_requirements, alternative_fields_due, requirements_due_at)
+    return [] unless requirements_due_at.blank? || requirements_due_at > SOFT_FUTURE_REQUIREMENT_GRACE_PERIOD.from_now
+
+    actionable = [requirements["currently_due"], requirements["past_due"],
+                  future_requirements["currently_due"], future_requirements["past_due"], alternative_fields_due].compact.reduce([], :+)
+    (requirements["eventually_due"] || []) - actionable
+  end
+  private_class_method :soft_future_stripe_fields
 
   private_class_method
   def self.requirements_only_soft_future?(requirements, new_requests, all_fields_needed, requirements_due_at)
