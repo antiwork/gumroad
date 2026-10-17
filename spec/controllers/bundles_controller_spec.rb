@@ -79,7 +79,7 @@ describe BundlesController, inertia: true do
         end.to_not change { Link.count }
 
         expect(response).to redirect_to(products_path)
-        expect(flash[:alert]).to eq("This bundle link is no longer valid. Create a new bundle from your products page.")
+        expect(flash[:alert]).to eq("This bundle link is no longer valid. Use New product to create a bundle.")
       end
     end
 
@@ -90,7 +90,7 @@ describe BundlesController, inertia: true do
         end.to_not change { Link.count }
 
         expect(response).to redirect_to(products_path)
-        expect(flash[:alert]).to eq("This bundle link is no longer valid. Create a new bundle from your products page.")
+        expect(flash[:alert]).to eq("This bundle link is no longer valid. Use New product to create a bundle.")
       end
     end
   end

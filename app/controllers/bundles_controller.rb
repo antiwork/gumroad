@@ -32,7 +32,7 @@ class BundlesController < Sellers::BaseController
     if bundle.save
       redirect_to edit_bundle_product_path(bundle.external_id)
     else
-      redirect_to products_path, alert: "This bundle link is no longer valid. Create a new bundle from your products page."
+      redirect_to products_path, alert: "This bundle link is no longer valid. Use New product to create a bundle."
     end
   end
 
