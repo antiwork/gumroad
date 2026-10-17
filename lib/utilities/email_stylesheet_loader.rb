@@ -70,11 +70,7 @@ module EmailStylesheetLoader
     end
 
     def fetch(uri)
-      timeout = fetch_timeout
-      return if timeout <= 0
-
-      css = nil
-      Timeout.timeout(timeout) do
+      bounded_fetch(uri) do |read_response|
         SsrfFilter.get(
           uri,
           headers: { "Accept" => "text/css" },
@@ -82,18 +78,30 @@ module EmailStylesheetLoader
           request_proc: method(:check_port),
           # A proxy taken from the environment would resolve the host itself and ignore the address
           # SsrfFilter validated.
-          http_options: { open_timeout: OPEN_TIMEOUT_SECONDS, read_timeout: READ_TIMEOUT_SECONDS, proxy_from_env: false }
-        ) do |http_response|
-          raise ResponseTooLarge if http_response["content-length"].to_i > MAX_BYTES
-
-          body = +""
-          http_response.read_body do |chunk|
-            body << chunk
-            raise ResponseTooLarge if body.bytesize > MAX_BYTES
-          end
-          css = body if http_response.is_a?(Net::HTTPSuccess)
-        end
+          http_options: { open_timeout: OPEN_TIMEOUT_SECONDS, read_timeout: READ_TIMEOUT_SECONDS, proxy_from_env: false },
+          &read_response
+        )
       end
+    end
+
+    # Shared by both transports, so the development asset host skips address filtering but none of
+    # the time or size limits.
+    def bounded_fetch(uri)
+      timeout = fetch_timeout
+      return if timeout <= 0
+
+      css = nil
+      read_response = lambda do |http_response|
+        raise ResponseTooLarge if http_response["content-length"].to_i > MAX_BYTES
+
+        body = +""
+        http_response.read_body do |chunk|
+          body << chunk
+          raise ResponseTooLarge if body.bytesize > MAX_BYTES
+        end
+        css = body if http_response.is_a?(Net::HTTPSuccess)
+      end
+      Timeout.timeout(timeout) { yield read_response }
       css&.force_encoding(Encoding::UTF_8)&.scrub
     # The remote server is seller-controlled and can make Net::HTTP or SsrfFilter raise nearly
     # anything (e.g. ArgumentError from the resolver on a host-less redirect); none of it may fail
@@ -127,13 +135,13 @@ module EmailStylesheetLoader
       end
     end
 
+    # Single request, no redirects followed.
     def fetch_development_asset(uri)
-      response = Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https", open_timeout: OPEN_TIMEOUT_SECONDS, read_timeout: READ_TIMEOUT_SECONDS) do |http|
-        http.get(uri.request_uri, "Accept" => "text/css")
+      bounded_fetch(uri) do |read_response|
+        Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https", open_timeout: OPEN_TIMEOUT_SECONDS, read_timeout: READ_TIMEOUT_SECONDS) do |http|
+          http.request(Net::HTTP::Get.new(uri, "Accept" => "text/css"), &read_response)
+        end
       end
-      response.body.dup.force_encoding(Encoding::UTF_8).scrub if response.is_a?(Net::HTTPSuccess)
-    rescue StandardError
-      nil
     end
 
     def origin(uri) = [uri.scheme, uri.host&.downcase, uri.port]

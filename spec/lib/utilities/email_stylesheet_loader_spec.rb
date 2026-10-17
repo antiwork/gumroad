@@ -79,6 +79,37 @@ describe EmailStylesheetLoader, :skip_ssrf_stub do
         expect(described_class.load("http://assets.example.org:6379/x.css")).to eq("")
         expect(other_port).not_to have_been_requested
       end
+
+      it "keeps the built email CSS but drops a response larger than the limit, declared or streamed" do
+        built = File.read(Dir[Rails.root.join("public", ViteRuby.config.public_output_dir, "assets", "entrypoints", "email-*.css")].first)
+        stub_request(:get, "http://assets.example.org:3000/vite-dev/entrypoints/email.css").to_return(status: 200, body: built)
+        stub_request(:get, "http://assets.example.org:3000/big.css").to_return(status: 200, body: "a" * (EmailStylesheetLoader::MAX_BYTES + 1))
+        stub_request(:get, "http://assets.example.org:3000/declared.css").to_return(status: 200, body: "body { margin: 0; }", headers: { "Content-Length" => (EmailStylesheetLoader::MAX_BYTES + 1).to_s })
+
+        expect(described_class.load("/vite-dev/entrypoints/email.css")).to eq(built)
+        expect(described_class.load("/big.css")).to eq("")
+        expect(described_class.load("/declared.css")).to eq("")
+      end
+
+      it "drops a response that outlasts the whole-fetch deadline" do
+        stub_const("EmailStylesheetLoader::FETCH_TIMEOUT_SECONDS", 0.1)
+        stub_request(:get, "http://assets.example.org:3000/slow.css").to_return(->(_request) { sleep 2; { status: 200, body: "body { margin: 0; }" } })
+
+        expect(described_class.load("/slow.css")).to eq("")
+      end
+
+      it "shares the email's deadline across its local stylesheets" do
+        stub_const("EmailStylesheetLoader::FETCH_TIMEOUT_SECONDS", 0.2)
+        stub_const("EmailStylesheetLoader::DOCUMENT_TIMEOUT_SECONDS", 0.3)
+        slow = (1..3).map do |n|
+          stub_request(:get, "http://assets.example.org:3000/#{n}.css").to_return(->(_request) { sleep 2; { status: 200, body: "body { margin: 0; }" } })
+        end
+        links = (1..3).map { %(<link rel="stylesheet" href="/#{_1}.css">) }.join
+
+        expect(Premailer::Rails::CSSHelper.css_for_doc(Nokogiri::HTML("<html><head>#{links}</head><body></body></html>"))).to eq("\n\n")
+        expect(slow.first).to have_been_requested
+        expect(slow.last).not_to have_been_requested
+      end
     end
 
     it "sends the asset host through SsrfFilter outside development" do
