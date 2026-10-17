@@ -32,7 +32,18 @@ class GlobalAffiliates::ProductEligibilityController < Sellers::BaseController
     # surface (ProductPresenter::PublicApiProps), so it must not be exposed
     # there; resolving it locally keeps that boundary clean.
     def fetch_and_parse_product_data
-      response = fetch_product_json(validate_gumroad_uri(params[:url]))
+      product = development_product(params[:url]) || product_from_public_json(params[:url])
+
+      {
+        "name" => product.name,
+        "formatted_price" => product.price_formatted_verbose,
+        "recommendable" => product.recommendable?,
+        "short_url" => product.long_url,
+      }
+    end
+
+    def product_from_public_json(url)
+      response = fetch_product_json(validate_gumroad_uri(url))
       raise InvalidUrl unless response.is_a?(Net::HTTPOK)
 
       data = JSON.parse(response.body.to_s)
@@ -41,15 +52,36 @@ class GlobalAffiliates::ProductEligibilityController < Sellers::BaseController
       id = data["id"]
       raise InvalidUrl if id.blank?
 
-      product = Link.find_by_external_id(id)
-      raise InvalidUrl if product.nil?
+      Link.find_by_external_id(id) || raise(InvalidUrl)
+    end
 
-      {
-        "name" => product.name,
-        "formatted_price" => product.price_formatted_verbose,
-        "recommendable" => product.recommendable?,
-        "short_url" => product.long_url,
-      }
+    # Development origins resolve to loopback, which SsrfFilter refuses. Resolve product URLs on them
+    # in-process with LinksController#show's lookup instead; nothing is fetched.
+    def development_product(url)
+      return unless Rails.env.development?
+
+      uri = URI(url.to_s)
+      host = uri.host.to_s.downcase
+      return unless uri.scheme == PROTOCOL && uri.userinfo.nil? && host.present?
+
+      root = URI("#{PROTOCOL}://#{ROOT_DOMAIN}")
+      short = URI("#{PROTOCOL}://#{SHORT_DOMAIN}")
+      if host == short.host && uri.port == short.port
+        permalink = uri.path[%r{\A/([^/]+)\z}, 1]
+      elsif uri.port == root.port && [root.host, URI("#{PROTOCOL}://#{DOMAIN}").host].include?(host)
+        permalink = uri.path[%r{\A/l/([^/]+)\z}, 1]
+      elsif uri.port == root.port && host.end_with?(".#{root.host}")
+        seller = Subdomain.find_seller_by_hostname(host) || raise(InvalidUrl)
+        permalink = uri.path[%r{\A/l/([^/]+)\z}, 1]
+      else
+        return
+      end
+      raise InvalidUrl if permalink.blank?
+
+      product = Link.fetch_leniently(permalink, user: seller)
+      raise InvalidUrl if product.nil? || product.banned? || product.user.deleted?
+
+      product
     end
 
     # Scheme, host and port all have to be ours, checked on the same stdlib URI that SsrfFilter

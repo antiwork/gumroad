@@ -403,6 +403,78 @@ describe GlobalAffiliates::ProductEligibilityController do
       end
     end
 
+    context "in development, with the app's own localhost URLs" do
+      let(:product_seller) { create(:user, username: "productseller") }
+
+      before do
+        allow(Rails).to receive(:env).and_return(ActiveSupport::StringInquirer.new("development"))
+        stub_const("ROOT_DOMAIN", "localhost:3000")
+        stub_const("DOMAIN", "localhost:3000")
+        stub_const("SHORT_DOMAIN", "s.localhost:3000")
+        allow(SsrfFilter).to receive(:get).and_call_original
+      end
+
+      it "resolves a seller-subdomain custom permalink to that seller's product without fetching" do
+        create(:product, user: create(:user, username: "otherseller"), custom_permalink: "shared")
+        product = create(:product, user: product_seller, custom_permalink: "shared")
+
+        get :show, format: :json, params: { url: "http://productseller.localhost:3000/l/shared" }
+
+        expect(response.parsed_body["success"]).to be(true)
+        expect(response.parsed_body["product"]).to include("name" => product.name, "short_url" => "http://productseller.localhost:3000/l/shared")
+        expect(SsrfFilter).not_to have_received(:get)
+        expect(Resolv).not_to have_received(:getaddresses)
+      end
+
+      it "resolves a short-domain URL without fetching" do
+        product = create(:product, user: product_seller)
+
+        get :show, format: :json, params: { url: "http://s.localhost:3000/#{product.unique_permalink}" }
+
+        expect(response.parsed_body["product"]["name"]).to eq(product.name)
+        expect(SsrfFilter).not_to have_received(:get)
+      end
+
+      ["http://localhost:3000/settings", "http://localhost:3000/l/missing", "http://nosuchseller.localhost:3000/l/shared"].each do |local_url|
+        it "returns an error for #{local_url} without fetching" do
+          get :show, format: :json, params: { url: local_url }
+
+          expect_invalid_url_error
+          expect(SsrfFilter).not_to have_received(:get)
+        end
+      end
+
+      it "does not resolve a URL on another port locally" do
+        expect(Link).not_to receive(:fetch_leniently)
+
+        get :show, format: :json, params: { url: "http://productseller.localhost:4000/l/shared" }
+
+        expect_invalid_url_error
+      end
+    end
+
+    %w[production test].each do |environment|
+      context "in #{environment}, with a URL on our configured origin that resolves to loopback" do
+        let(:product) { create(:product, user: create(:user, username: "loopbackseller")) }
+
+        before do
+          allow(Rails).to receive(:env).and_return(ActiveSupport::StringInquirer.new(environment))
+          allow(Resolv).to receive(:getaddresses).and_return(["127.0.0.1"])
+          stub_request(:get, "#{product.long_url}.json").to_return(product_json_response(product))
+        end
+
+        it "refuses it instead of resolving it locally" do
+          expect(Link).not_to receive(:fetch_leniently)
+
+          get :show, format: :json, params: { url: product.long_url }
+
+          expect_invalid_url_error
+          expect(Resolv).to have_received(:getaddresses).with(URI(product.long_url).hostname)
+          expect(a_request(:get, "#{product.long_url}.json")).not_to have_been_made
+        end
+      end
+    end
+
     context "with non-ASCII characters in URL" do
       let(:url) { "https://gumroad.com/discover.json?a=123\u201D" }
 
