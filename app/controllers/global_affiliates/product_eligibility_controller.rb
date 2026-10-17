@@ -9,7 +9,6 @@ class GlobalAffiliates::ProductEligibilityController < Sellers::BaseController
   # web defaults so a pasted http:// URL still resolves.
   WEB_PORTS = [80, 443]
   GUMROAD_PORTS = (WEB_PORTS + [ROOT_DOMAIN, SHORT_DOMAIN, DOMAIN].map { |domain| Addressable::URI.parse("#{PROTOCOL}://#{domain}").inferred_port }).uniq.freeze
-  REDIRECT_STATUS_RANGE = (300..399)
   # Matches HTTParty's own budget. We follow the hops ourselves so each one can be checked first.
   MAX_REDIRECTS = 5
   FETCH_TIMEOUT_SECONDS = 5
@@ -19,7 +18,7 @@ class GlobalAffiliates::ProductEligibilityController < Sellers::BaseController
 
     product_data = fetch_and_parse_product_data
     render json: { success: true, product: product_data }
-  rescue InvalidUrl, JSON::ParserError, HTTParty::Error, *INTERNET_EXCEPTIONS
+  rescue InvalidUrl, URI::Error, JSON::ParserError, Errno::ETIMEDOUT, *INTERNET_EXCEPTIONS
     render json: { success: false, error: "Please provide a valid Gumroad product URL" }
   end
 
@@ -34,9 +33,9 @@ class GlobalAffiliates::ProductEligibilityController < Sellers::BaseController
     # there; resolving it locally keeps that boundary clean.
     def fetch_and_parse_product_data
       response = fetch_product_json(validate_gumroad_uri(params[:url]))
-      raise InvalidUrl unless response.ok?
+      raise InvalidUrl unless response.is_a?(Net::HTTPOK)
 
-      data = response.parsed_response
+      data = JSON.parse(response.body.to_s)
       raise InvalidUrl unless data.is_a?(Hash) && data["api_version"] == ProductPresenter::PublicApiProps::API_VERSION && data["permalink"].present?
 
       id = data["id"]
@@ -53,32 +52,37 @@ class GlobalAffiliates::ProductEligibilityController < Sellers::BaseController
       }
     end
 
-    # Scheme, host and port all have to be ours. The registrable-domain check alone let any port
-    # through, and the fetch follows redirects — including the one an affiliate's stored
-    # destination_url produces, which can name any host.
+    # Scheme, host and port all have to be ours, checked on the same stdlib URI that SsrfFilter
+    # connects with so the two cannot parse the host differently. Redirects can name any host
+    # (an affiliate's destination_url does), so every hop comes back through here.
     def validate_gumroad_uri(url)
-      uri = Addressable::URI.parse(url)
-      raise InvalidUrl unless %w[http https].include?(uri&.scheme) && GUMROAD_DOMAINS.include?(uri.domain) && GUMROAD_PORTS.include?(uri.inferred_port)
+      uri = URI(url.to_s)
+      raise InvalidUrl unless %w[http https].include?(uri.scheme) && uri.userinfo.nil? && uri.hostname.present? &&
+                              GUMROAD_DOMAINS.include?(PublicSuffix.domain(uri.hostname, ignore_private: true)) &&
+                              GUMROAD_PORTS.include?(uri.port)
 
       uri
     end
 
+    # SsrfFilter refuses private and reserved addresses and connects to the address it checked, so a
+    # second DNS answer cannot redirect the socket. It never follows a redirect itself.
     def fetch_product_json(uri)
       uri.path = "#{uri.path}.json"
       redirects = 0
 
       loop do
-        response = HTTParty.get(uri.to_s, timeout: FETCH_TIMEOUT_SECONDS, follow_redirects: false)
-        return response unless REDIRECT_STATUS_RANGE.include?(response.code)
+        response = SsrfFilter.get(uri, max_redirects: 0, allow_unfollowed_redirects: true,
+                                       http_options: { open_timeout: FETCH_TIMEOUT_SECONDS, read_timeout: FETCH_TIMEOUT_SECONDS })
+        return response unless response.is_a?(Net::HTTPRedirection)
 
         # The budget counts hops, not the first request.
         redirects += 1
         raise InvalidUrl if redirects > MAX_REDIRECTS
 
-        location = response.response["location"].to_s
+        location = response["location"]
         raise InvalidUrl if location.blank?
 
-        uri = validate_gumroad_uri(Addressable::URI.join(uri, location).to_s)
+        uri = validate_gumroad_uri(uri.merge(location))
       end
     end
 end
