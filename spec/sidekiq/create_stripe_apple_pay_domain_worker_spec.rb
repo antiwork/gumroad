@@ -17,24 +17,38 @@ describe CreateStripeApplePayDomainWorker, :vcr do
   end
 
   describe "when the retries are exhausted" do
-    it "notifies with the seller and domain that never got registered" do
-      expect(ErrorNotifier).to receive(:notify).with(
-        /user 1234.*sampleusername\.gumroad\.dev.*wallet/m
-      )
+    let(:unsupported_claims) { /stripe_apple_pay_domains|wallet|Stripe error|Re-running|registers the domain/i }
+
+    it "notifies with the user and enqueued domain without asserting a cause or recovery" do
+      message = nil
+      allow(ErrorNotifier).to receive(:notify) { |notified| message = notified }
 
       described_class.sidekiq_retries_exhausted_block.call(
-        { "args" => [1234, "sampleusername.gumroad.dev"] },
-        StandardError.new("Stripe is down")
+        { "args" => [1234, "seller.example.com"] },
+        StandardError.new("synthetic failure")
       )
+
+      expect(message).to eq(
+        "CreateStripeApplePayDomainWorker exhausted Sidekiq retries for user 1234 (domain seller.example.com). " \
+        "Inspect the dead job for the error and the registration state before retrying."
+      )
+      expect(message).not_to match(unsupported_claims)
     end
 
-    it "still notifies when the enqueued job carried no domain" do
-      expect(ErrorNotifier).to receive(:notify).with(/user 1234.*unknown/m)
+    it "reports the domain as unknown when the enqueued job carried none" do
+      message = nil
+      allow(ErrorNotifier).to receive(:notify) { |notified| message = notified }
 
       described_class.sidekiq_retries_exhausted_block.call(
         { "args" => [1234] },
-        StandardError.new("Stripe is down")
+        StandardError.new("synthetic failure")
       )
+
+      expect(message).to eq(
+        "CreateStripeApplePayDomainWorker exhausted Sidekiq retries for user 1234 (domain unknown). " \
+        "Inspect the dead job for the error and the registration state before retrying."
+      )
+      expect(message).not_to match(unsupported_claims)
     end
   end
 end
