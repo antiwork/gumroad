@@ -4,13 +4,21 @@ class GlobalAffiliates::ProductEligibilityController < Sellers::BaseController
   class InvalidUrl < StandardError; end
 
   GUMROAD_DOMAINS = [ROOT_DOMAIN, SHORT_DOMAIN, DOMAIN].map { |domain| Addressable::URI.parse("#{PROTOCOL}://#{domain}").domain } # Strip port (in test and development environment) and subdomains
+  # The domain list drops the port, so test.gumroad.com:9000 would otherwise pass and we would open a
+  # connection to whatever port the caller names. Allow only the ports our own domains use, plus the
+  # web defaults so a pasted http:// URL still resolves.
+  GUMROAD_PORTS = ([80, 443] + [ROOT_DOMAIN, SHORT_DOMAIN, DOMAIN].map { |domain| Addressable::URI.parse("#{PROTOCOL}://#{domain}").inferred_port }).uniq.freeze
+  UNREACHABLE_URL_ERRORS = [
+    SocketError, Errno::ECONNREFUSED, Errno::EHOSTUNREACH, Errno::ENETUNREACH, Errno::ETIMEDOUT,
+    Timeout::Error, HTTParty::Error, JSON::ParserError,
+  ].freeze
 
   def show
     authorize [:products, :affiliated], :index?
 
     product_data = fetch_and_parse_product_data
     render json: { success: true, product: product_data }
-  rescue InvalidUrl, URI::InvalidURIError, Addressable::URI::InvalidURIError
+  rescue InvalidUrl, URI::InvalidURIError, Addressable::URI::InvalidURIError, *UNREACHABLE_URL_ERRORS
     render json: { success: false, error: "Please provide a valid Gumroad product URL" }
   end
 
@@ -25,7 +33,7 @@ class GlobalAffiliates::ProductEligibilityController < Sellers::BaseController
     # there; resolving it locally keeps that boundary clean.
     def fetch_and_parse_product_data
       uri = Addressable::URI.parse(params[:url])
-      raise InvalidUrl unless GUMROAD_DOMAINS.include?(uri&.domain)
+      raise InvalidUrl unless GUMROAD_DOMAINS.include?(uri&.domain) && GUMROAD_PORTS.include?(uri.inferred_port)
       uri.path = uri.path + ".json"
 
       response = HTTParty.get(uri.to_s)

@@ -116,6 +116,53 @@ describe GlobalAffiliates::ProductEligibilityController do
       end
     end
 
+    context "when the URL names a port our domains do not serve" do
+      let(:url) { "#{PROTOCOL}://#{DOMAIN.sub(/:\d+\z/, "")}:9000/zzprobe" }
+
+      it "returns an error without opening a connection" do
+        expect(HTTParty).not_to receive(:get)
+
+        get :show, format: :json, params: { url: }
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be(false)
+        expect(response.parsed_body["error"]).to eq("Please provide a valid Gumroad product URL")
+      end
+    end
+
+    context "when the Gumroad host refuses the connection" do
+      let(:url) { "#{PROTOCOL}://#{DOMAIN}/l/refused" }
+
+      before do
+        stub_request(:get, "#{url}.json").to_raise(Errno::ECONNREFUSED)
+      end
+
+      it "returns an error instead of raising" do
+        get :show, format: :json, params: { url: }
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be(false)
+        expect(response.parsed_body["error"]).to eq("Please provide a valid Gumroad product URL")
+      end
+    end
+
+    context "with an unparseable response body" do
+      let(:url) { "#{PROTOCOL}://#{DOMAIN}/l/not-json" }
+
+      before do
+        stub_request(:get, "#{url}.json")
+          .to_return(status: 200, body: "<html>not json</html>", headers: { "Content-Type" => "application/json" })
+      end
+
+      it "returns an error instead of raising" do
+        get :show, format: :json, params: { url: }
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be(false)
+        expect(response.parsed_body["error"]).to eq("Please provide a valid Gumroad product URL")
+      end
+    end
+
     context "with non-ASCII characters in URL" do
       let(:url) { "https://gumroad.com/discover.json?a=123\u201D" }
 
