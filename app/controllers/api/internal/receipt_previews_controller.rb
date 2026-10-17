@@ -9,8 +9,8 @@ class Api::Internal::ReceiptPreviewsController < Api::Internal::BaseController
   def show
     e404 if @product.nil? || @product.user != current_seller
 
-    @product.custom_receipt_text = params[:custom_receipt_text]
-    @product.custom_view_content_button_text = params[:custom_view_content_button_text]
+    @product.custom_receipt_text = scalar_param(:custom_receipt_text)
+    @product.custom_view_content_button_text = scalar_param(:custom_view_content_button_text)
     purchase_preview = build_purchase_preview
 
     unless purchase_preview.valid?
@@ -44,6 +44,14 @@ class Api::Internal::ReceiptPreviewsController < Api::Internal::BaseController
   end
 
   private
+    # The preview takes unsaved form values straight off the query string, where only the
+    # string the form sends is meaningful. `?custom_receipt_text[]=x` would otherwise reach
+    # the receipt template as an Array and raise in simple_format.
+    def scalar_param(key)
+      value = params[key]
+      value.is_a?(String) ? value : nil
+    end
+
     def build_purchase_preview
       price_cents = @product.price_cents || 0
 

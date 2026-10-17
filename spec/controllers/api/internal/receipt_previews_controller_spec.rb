@@ -61,5 +61,19 @@ describe Api::Internal::ReceiptPreviewsController do
 
       expect(response).to be_successful
     end
+
+    it "renders the custom receipt text and button label sent as strings" do
+      get :show, params: { product_id: product.unique_permalink, custom_receipt_text: "Thanks for your order!", custom_view_content_button_text: "Open it" }
+
+      expect(response).to be_successful
+      expect(response.parsed_body["html"]).to include("Thanks for your order!")
+    end
+
+    it "treats a non-scalar custom receipt text as absent instead of raising" do
+      get :show, params: { product_id: product.unique_permalink, custom_receipt_text: ["x"], custom_view_content_button_text: { "a" => "b" } }
+
+      expect(response).to be_successful
+      expect(response.parsed_body["html"]).to include("Sample product")
+    end
   end
 end
