@@ -10,13 +10,8 @@ class SentPostEmail < ApplicationRecord
     self.email = email.downcase
   end
 
-  # No index leads with email, so this skip-scans (post_id, email). Its work grows with the number of
-  # distinct post_ids, not with this address's rows, and the session max_execution_time bounds it.
-  # Without the hint the optimizer reads the whole index instead.
   def self.ids_for_email(email)
-    optimizer_hints("SKIP_SCAN(sent_post_emails index_sent_post_emails_on_post_id_and_email)")
-      .where(email:)
-      .pluck(:id)
+    where(email:).pluck(:id)
   end
 
   # A locking read, so a retry inside a transaction sees rows committed after its snapshot. A plain read
