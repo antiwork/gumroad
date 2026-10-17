@@ -219,6 +219,31 @@ describe GlobalAffiliates::ProductEligibilityController do
       end
     end
 
+    context "when the URL needs the full redirect budget" do
+      let(:product) { create(:product) }
+      let(:url) { "#{PROTOCOL}://#{DOMAIN}/l/hop0" }
+      # MAX_REDIRECTS hops: hop0 -> hop1 -> ... -> the product JSON.
+      let(:redirect_urls) { (1...described_class::MAX_REDIRECTS).map { |hop| "#{PROTOCOL}://#{DOMAIN}/l/hop#{hop}.json" } }
+      let(:product_url) { "#{PROTOCOL}://#{DOMAIN}/l/product.json" }
+
+      before do
+        stub_request(:get, "#{url}.json").to_return(status: 302, headers: { "Location" => redirect_urls.first })
+        redirect_urls.each_with_index do |redirect_url, index|
+          stub_request(:get, redirect_url)
+            .to_return(status: 302, headers: { "Location" => redirect_urls[index + 1] || product_url })
+        end
+        stub_request(:get, product_url)
+          .to_return(status: 200, body: { api_version: ProductPresenter::PublicApiProps::API_VERSION, id: product.external_id, permalink: product.general_permalink }.to_json, headers: { "Content-Type" => "application/json" })
+      end
+
+      it "follows every hop and resolves the product" do
+        get :show, format: :json, params: { url: }
+
+        expect(response.parsed_body["success"]).to be(true)
+        expect(response.parsed_body["product"]["name"]).to eq(product.name)
+      end
+    end
+
     context "with non-ASCII characters in URL" do
       let(:url) { "https://gumroad.com/discover.json?a=123\u201D" }
 

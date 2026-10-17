@@ -7,8 +7,10 @@ class GlobalAffiliates::ProductEligibilityController < Sellers::BaseController
   # The domain list drops the port, so test.gumroad.com:9000 would otherwise pass and we would open a
   # connection to whatever port the caller names. Allow only the ports our own domains use, plus the
   # web defaults so a pasted http:// URL still resolves.
-  GUMROAD_PORTS = ([80, 443] + [ROOT_DOMAIN, SHORT_DOMAIN, DOMAIN].map { |domain| Addressable::URI.parse("#{PROTOCOL}://#{domain}").inferred_port }).uniq.freeze
-  # HTTParty's own redirect budget. We follow the hops ourselves so each one can be checked first.
+  WEB_PORTS = [80, 443]
+  GUMROAD_PORTS = (WEB_PORTS + [ROOT_DOMAIN, SHORT_DOMAIN, DOMAIN].map { |domain| Addressable::URI.parse("#{PROTOCOL}://#{domain}").inferred_port }).uniq.freeze
+  REDIRECT_STATUS_RANGE = (300..399)
+  # Matches HTTParty's own budget. We follow the hops ourselves so each one can be checked first.
   MAX_REDIRECTS = 5
   FETCH_TIMEOUT_SECONDS = 5
 
@@ -31,7 +33,7 @@ class GlobalAffiliates::ProductEligibilityController < Sellers::BaseController
     # surface (ProductPresenter::PublicApiProps), so it must not be exposed
     # there; resolving it locally keeps that boundary clean.
     def fetch_and_parse_product_data
-      response = fetch_product_json(validate_gumroad_url(params[:url]))
+      response = fetch_product_json(validate_gumroad_uri(params[:url]))
       raise InvalidUrl unless response.ok?
 
       data = response.parsed_response
@@ -54,7 +56,7 @@ class GlobalAffiliates::ProductEligibilityController < Sellers::BaseController
     # Scheme, host and port all have to be ours. The registrable-domain check alone let any port
     # through, and the fetch follows redirects — including the one an affiliate's stored
     # destination_url produces, which can name any host.
-    def validate_gumroad_url(url)
+    def validate_gumroad_uri(url)
       uri = Addressable::URI.parse(url)
       raise InvalidUrl unless %w[http https].include?(uri&.scheme) && GUMROAD_DOMAINS.include?(uri.domain) && GUMROAD_PORTS.include?(uri.inferred_port)
 
@@ -63,17 +65,20 @@ class GlobalAffiliates::ProductEligibilityController < Sellers::BaseController
 
     def fetch_product_json(uri)
       uri.path = "#{uri.path}.json"
+      redirects = 0
 
-      MAX_REDIRECTS.times do
+      loop do
         response = HTTParty.get(uri.to_s, timeout: FETCH_TIMEOUT_SECONDS, follow_redirects: false)
-        return response unless response.code.between?(300, 399)
+        return response unless REDIRECT_STATUS_RANGE.include?(response.code)
+
+        # The budget counts hops, not the first request.
+        redirects += 1
+        raise InvalidUrl if redirects > MAX_REDIRECTS
 
         location = response.response["location"].to_s
         raise InvalidUrl if location.blank?
 
-        uri = validate_gumroad_url(Addressable::URI.join(uri, location).to_s)
+        uri = validate_gumroad_uri(Addressable::URI.join(uri, location).to_s)
       end
-
-      raise InvalidUrl
     end
 end
