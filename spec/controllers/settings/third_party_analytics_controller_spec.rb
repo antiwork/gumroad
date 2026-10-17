@@ -107,6 +107,24 @@ describe Settings::ThirdPartyAnalyticsController, type: :controller, inertia: tr
       end
     end
 
+    context "when the Facebook Pixel ID has surrounding whitespace" do
+      it "strips it before saving" do
+        put :update, params: { user: { facebook_pixel_id: "  1258008389687474 " } }
+
+        expect(flash[:notice]).to eq("Changes saved!")
+        expect(seller.reload.facebook_pixel_id).to eq("1258008389687474")
+      end
+    end
+
+    context "when the Facebook Pixel ID is not numeric" do
+      it "returns an error and doesn't persist it" do
+        put :update, params: { user: { facebook_pixel_id: "pixel-123" } }
+
+        expect(flash[:alert]).to eq("Please enter a valid Facebook Pixel ID")
+        expect(seller.reload.facebook_pixel_id).to be_nil
+      end
+    end
+
     context "when updating throws an error" do
       it "returns an error response" do
         allow_any_instance_of(User).to receive(:update).and_raise(StandardError)

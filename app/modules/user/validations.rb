@@ -6,6 +6,7 @@ module User::Validations
   MAXIMUM_AVATAR_FILE_SIZE = 10.megabytes
   GA_REGEX = %r{G-[a-zA-Z0-9]+} # Regex for Google Analytics 4 Measurement ID.
   TIKTOK_PIXEL_REGEX = /\A[A-Z0-9]+\z/ # TikTok Pixel IDs are alphanumeric uppercase strings.
+  FACEBOOK_PIXEL_REGEX = /\A[1-9][0-9]{0,25}\z/ # Matches the ID check in Meta's fbevents.js.
 
   private
     def google_analytics_id_valid
@@ -18,6 +19,12 @@ module User::Validations
       return if tiktok_pixel_id.blank? || tiktok_pixel_id.match(TIKTOK_PIXEL_REGEX)
 
       errors.add(:base, "Please enter a valid TikTok Pixel ID")
+    end
+
+    def facebook_pixel_id_valid
+      return if facebook_pixel_id.blank? || facebook_pixel_id.match(FACEBOOK_PIXEL_REGEX)
+
+      errors.add(:base, "Please enter a valid Facebook Pixel ID")
     end
 
     def email_almost_unique
