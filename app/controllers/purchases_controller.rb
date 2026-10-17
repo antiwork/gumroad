@@ -4,6 +4,8 @@ class PurchasesController < ApplicationController
   include CurrencyHelper, PreorderHelper, RecommendationType, ValidateRecaptcha, ProcessRefund
   include Order::ResponseHelpers
   SEARCH_RESULTS_PER_PAGE = 100
+  # ES rejects from + size past index.max_result_window, and a negative from outright.
+  MAX_RESULT_WINDOW = 10_000
 
   PARAM_TO_ATTRIBUTE_MAPPINGS = {
     friend: :friend_actions,
@@ -187,7 +189,9 @@ class PurchasesController < ApplicationController
     authorize [:audience, Purchase], :index?
 
     per_page = SEARCH_RESULTS_PER_PAGE
-    page = (params[:page] || 1).to_i
+    # A malformed or zero page would send ES a negative offset (400) and a page past the last
+    # window an out-of-range one, so clamp into the legal window instead of failing the request.
+    page = params[:page].to_i.clamp(1, MAX_RESULT_WINDOW / per_page)
     offset = (page - 1) * per_page
     query = params[:query].to_s.strip
 
@@ -197,7 +201,7 @@ class PurchasesController < ApplicationController
       state: Purchase::ALL_SUCCESS_STATES,
       exclude_non_original_subscription_purchases: true,
       exclude_commission_completion_purchases: true,
-      from: (page - 1) * per_page,
+      from: offset,
       size: per_page,
       sort: [:_score, { created_at: :desc }, { id: :desc }]
     }

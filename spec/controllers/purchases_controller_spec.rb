@@ -505,6 +505,22 @@ describe PurchasesController, :vcr do
         expect(response.parsed_body[0]["id"]).to eq purchases[0].external_id
       end
 
+      it "clamps a non-numeric page to the first Elasticsearch offset" do
+        expect(PurchaseSearchService).to receive(:search).with(hash_including(from: 0)).and_call_original
+
+        get :search, params: { page: "zzz" }
+
+        expect(response).to have_http_status(:ok)
+      end
+
+      it "clamps a page past the last Elasticsearch window" do
+        expect(PurchaseSearchService).to receive(:search).with(hash_including(from: 9_900)).and_call_original
+
+        get :search, params: { page: 10_000 }
+
+        expect(response).to have_http_status(:ok)
+      end
+
       it "does not return the recurring purchase" do
         product = create(:membership_product, user: seller, subscription_duration: :monthly)
         user = create(:user, email: "subuser@example.com", credit_card: create(:credit_card))
