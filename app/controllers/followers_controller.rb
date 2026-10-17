@@ -33,8 +33,11 @@ class FollowersController < ApplicationController
 
     pagination, paginated_followers = pagy_countless(
       searched_followers,
-      page: params[:page],
-      limit: FOLLOWERS_PER_PAGE
+      page: [string_param(:page).to_i, 1].max,
+      limit: FOLLOWERS_PER_PAGE,
+      # Countless accepts only :empty_page here (no :last_page), and a stale or hand-edited page
+      # link must not 500.
+      overflow: :empty_page
     )
 
     render inertia: "Followers/Index", props: {
@@ -168,6 +171,13 @@ class FollowersController < ApplicationController
   end
 
   private
+    # A page number is a scalar in the URLs the page builds. An array- or hash-shaped param is not
+    # one to honour, and reaches Integer-only code if passed on.
+    def string_param(name)
+      value = params[name]
+      value.is_a?(String) ? value : ""
+    end
+
     # True when this follow submission had to pass a CAPTCHA and didn't.
     #
     # Both public entry points check it, because a challenge on only one of them

@@ -17,7 +17,7 @@ class AffiliatesController < Sellers::BaseController
   def index
     authorize DirectAffiliate
 
-    page = params[:page]&.to_i
+    page = string_param(:page).presence&.to_i
     query = params[:query]
     sort_params = extract_sort_params
 
@@ -130,6 +130,13 @@ class AffiliatesController < Sellers::BaseController
   end
 
   private
+    # A page number is a scalar in the URLs the page builds. An array- or hash-shaped param is not
+    # one to honour, and reaches Integer-only code if passed on.
+    def string_param(name)
+      value = params[name]
+      value.is_a?(String) ? value : ""
+    end
+
     def set_default_page_title
       set_meta_tag(title: "Affiliates")
     end

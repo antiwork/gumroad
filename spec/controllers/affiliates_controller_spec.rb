@@ -29,6 +29,25 @@ describe AffiliatesController, type: :controller, inertia: true do
         expect(inertia.props[:affiliates]).to be_present
       end
 
+      context "when the requested page is past the last page" do
+        before { create(:direct_affiliate, seller:, affiliate_user:) }
+
+        it "renders the last page" do
+          get :index, params: { page: "2" }
+
+          expect(response).to be_successful
+          expect(inertia.component).to eq("Affiliates/Index")
+          expect(inertia.props[:affiliates]).to be_present
+        end
+
+        it "falls back to the first page when the page param is not a scalar" do
+          get :index, params: { page: { a: "b" } }
+
+          expect(response).to be_successful
+          expect(inertia.props[:affiliates]).to be_present
+        end
+      end
+
       context "when creator does not have any affiliates" do
         it "redirects to the onboarding page" do
           get :index

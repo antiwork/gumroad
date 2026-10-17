@@ -57,6 +57,42 @@ describe FollowersController, inertia: true do
         expect(inertia.props[:has_more]).to be(false)
       end
 
+      it "returns an empty page instead of raising when the requested page is past the last one" do
+        create_list(:active_follower, 5, user: seller)
+
+        get :index, params: { page: "2" }
+
+        expect(response).to be_successful
+        expect(inertia.props[:page]).to eq(2)
+        expect(inertia.props[:followers]).to eq([])
+        expect(inertia.props[:has_more]).to be(false)
+      end
+
+      it "falls back to the first page when the page param is not a page number" do
+        create_list(:active_follower, 5, user: seller)
+
+        get :index, params: { page: "-1" }
+
+        expect(response).to be_successful
+        expect(inertia.props[:page]).to eq(1)
+        expect(inertia.props[:followers].length).to eq(5)
+
+        get :index, params: { page: "abc" }
+
+        expect(response).to be_successful
+        expect(inertia.props[:page]).to eq(1)
+      end
+
+      it "falls back to the first page when the page param is not a scalar" do
+        create_list(:active_follower, 5, user: seller)
+
+        get :index, params: { page: { a: "b" } }
+
+        expect(response).to be_successful
+        expect(inertia.props[:page]).to eq(1)
+        expect(inertia.props[:followers].length).to eq(5)
+      end
+
       it "combines search and pagination" do
         create_list(:follower, 25, user: seller) do |follower, index|
           follower.update!(email: "test#{index}@example.com", confirmed_at: Time.current)

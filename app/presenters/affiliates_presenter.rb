@@ -18,7 +18,7 @@ class AffiliatesPresenter
   end
 
   def index_props
-    pagination, direct_affiliates = pagy(fetch_direct_affiliates, page:, limit: PER_PAGE)
+    pagination, direct_affiliates = pagy(fetch_direct_affiliates, page: [page.to_i, 1].max, limit: PER_PAGE, overflow: :last_page)
 
     affiliates = direct_affiliates.map(&:as_json)
     affiliate_requests = should_get_affiliate_requests ? fetch_affiliate_requests : []
