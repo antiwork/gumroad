@@ -10,6 +10,12 @@ class Api::Internal::ProductPublicFilesController < Api::Internal::BaseControlle
   def create
     authorize Link
 
+    # attach() hands the raw string to ActiveStorage::Blob.find_signed!, which raises
+    # InvalidSignature for a tampered or expired id — verify first so the request is a 400.
+    unless params[:signed_blob_id].is_a?(String) && ActiveStorage::Blob.find_signed(params[:signed_blob_id])
+      return render(json: { success: false, error: "Invalid signed_blob_id." }, status: :bad_request)
+    end
+
     public_file = @product.public_files.build
     public_file.seller = current_seller
     public_file.file.attach(params[:signed_blob_id])

@@ -60,6 +60,30 @@ describe Api::Internal::ProductPublicFilesController do
       expect(response.parsed_body).to eq({ "success" => false, "error" => "Error message" })
     end
 
+    ["invalid-signature", 123, 1.5, true, ["value"], { value: "value" }].each do |signed_blob_id|
+      it "returns an error for the malformed signed blob ID #{signed_blob_id.inspect}" do
+        params[:signed_blob_id] = signed_blob_id
+
+        expect do
+          post :create, params:, format: :json
+        end.to_not change { PublicFile.count }
+
+        expect(response).to have_http_status(:bad_request)
+        expect(response.parsed_body).to eq({ "success" => false, "error" => "Invalid signed_blob_id." })
+      end
+    end
+
+    it "returns an error for an expired signed blob ID" do
+      params[:signed_blob_id] = blob.signed_id(expires_in: -1.minute)
+
+      expect do
+        post :create, params:, format: :json
+      end.to_not change { PublicFile.count }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ "success" => false, "error" => "Invalid signed_blob_id." })
+    end
+
     it "returns 404 if product does not exist" do
       params[:product_id] = "nonexistent"
 

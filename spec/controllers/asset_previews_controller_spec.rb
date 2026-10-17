@@ -110,6 +110,42 @@ describe AssetPreviewsController do
         post(:create, params: { link_id: product.unique_permalink, asset_preview: { url: s3_url }, format: :json })
       end.to_not change { AssetPreview.count }
     end
+
+    ["invalid-signature", 123, 1.5, true].each do |signed_blob_id|
+      it "doesn't add a preview for the malformed signed blob ID #{signed_blob_id.inspect}" do
+        expect do
+          post(:create, params: { link_id: product.unique_permalink, asset_preview: { signed_blob_id: }, format: :json })
+        end.to_not change { AssetPreview.count }
+
+        expect(response).to have_http_status(:bad_request)
+        expect(response.parsed_body).to eq({ "success" => false, "error" => "Invalid signed_blob_id." })
+      end
+    end
+
+    # Strong parameters drop an array or hash for this scalar key before the controller sees it.
+    [["value"], { value: "value" }].each do |signed_blob_id|
+      it "doesn't add a preview for the filtered signed blob ID #{signed_blob_id.inspect}" do
+        expect do
+          post(:create, params: { link_id: product.unique_permalink, asset_preview: { signed_blob_id: }, format: :json })
+        end.to_not change { AssetPreview.count }
+
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body["success"]).to eq(false)
+      end
+    end
+
+    it "doesn't add a preview for an expired signed blob ID" do
+      expired_signed_id = ActiveStorage::Blob.create_and_upload!(
+        io: fixture_file_upload("kFDzu.png", "image/png"), filename: "kFDzu.png"
+      ).signed_id(expires_in: -1.minute)
+
+      expect do
+        post(:create, params: { link_id: product.unique_permalink, asset_preview: { signed_blob_id: expired_signed_id }, format: :json })
+      end.to_not change { AssetPreview.count }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ "success" => false, "error" => "Invalid signed_blob_id." })
+    end
   end
 
   describe "DELETE destroy" do
