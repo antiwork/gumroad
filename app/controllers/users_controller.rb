@@ -290,16 +290,6 @@ class UsersController < ApplicationController
       description = ERB::Util.h(profile_meta_description(user))
       store_hostnames_json = ERB::Util.json_escape(profile_store_hostnames(user).to_json)
       nonce = SecureHeaders.content_security_policy_script_nonce(request)
-      # Share-card chain (PageMeta::User): subscribe-preview, then uploaded
-      # avatar, then generic banner. avatar_url always returns a value — only
-      # advertise it when the seller uploaded one. Resolve the preview once
-      # (rescues to nil internally). This <head> is hand-built, so the generic
-      # fallback must be an absolute URL: a relative path would resolve against
-      # the seller's custom domain, which does not serve Gumroad's assets.
-      preview_url = user.subscribe_preview_url.presence
-      avatar_url = user.avatar_url if user.avatar.attached?
-      share_image = preview_url || avatar_url || ActionController::Base.helpers.image_url("opengraph_image.png")
-      escaped_share_image = ERB::Util.h(share_image)
       # This <head> is hand-built (bypasses PageMeta::Favicon). user.avatar_url
       # always resolves — to the default avatar when none is uploaded — so
       # this always emits a seller-scoped icon.
@@ -308,27 +298,18 @@ class UsersController < ApplicationController
         <link rel="shortcut icon" href="#{favicon_url}">
         <link rel="apple-touch-icon" href="#{favicon_url}">
       HTML
-      alt = if preview_url
-        title
-      elsif avatar_url
-        "#{title}'s profile picture"
+      # Share-card chain (PageMeta::ShareCard): subscribe-preview, then uploaded
+      # avatar, then this wrapper's own generic banner. This <head> is
+      # hand-built, so the banner fallback must be an absolute URL: a relative
+      # path would resolve against the seller's custom domain, which does not
+      # serve Gumroad's assets.
+      share_card = PageMeta::ShareCard.for(user)
+      share_image_tags = if share_card
+        share_card.to_html
       else
-        "Gumroad"
+        banner_url = ERB::Util.h(ActionController::Base.helpers.image_url("opengraph_image.png"))
+        %(<meta property="og:image" content="#{banner_url}">\n<meta property="og:image:alt" content="Gumroad">)
       end
-      share_image_tags = [%(<meta property="og:image" content="#{escaped_share_image}">),
-                          %(<meta property="og:image:alt" content="#{alt}">)]
-      if preview_url
-        # Dimensions + type mirror PageMeta::User: they let Facebook's crawler
-        # render the card on the FIRST share after a scrape instead of an
-        # imageless preview while it processes the image asynchronously.
-        share_image_tags << %(<meta property="og:image:type" content="image/png">)
-        share_image_tags << %(<meta property="og:image:width" content="#{SubscribePreviewGeneratorService::OUTPUT_WIDTH}">)
-        share_image_tags << %(<meta property="og:image:height" content="#{SubscribePreviewGeneratorService::OUTPUT_HEIGHT}">)
-        share_image_tags << %(<meta property="twitter:card" content="summary_large_image">)
-        share_image_tags << %(<meta property="twitter:image" content="#{escaped_share_image}">)
-        share_image_tags << %(<meta property="twitter:image:alt" content="#{alt}">)
-      end
-      share_image_tags = share_image_tags.join("\n    ")
       fb_verification_content = facebook_domain_verification_content(user)
       fb_verification_tag = if fb_verification_content
         %(<meta name="facebook-domain-verification" content="#{ERB::Util.h(fb_verification_content)}">)

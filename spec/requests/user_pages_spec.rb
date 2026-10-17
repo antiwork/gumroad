@@ -117,6 +117,78 @@ describe "Public serving of seller pages", type: :request do
     end
   end
 
+  describe "share card meta tags" do
+    let!(:page) do
+      create(:user_page, pageable: seller, slug: "vault", title: "Free Art Teacher Vault",
+                         custom_html: "<section><h1>Vault</h1></section>")
+    end
+
+    def attach_subscribe_preview(user)
+      user.subscribe_preview.attach(
+        io: File.open(Rails.root.join("spec", "support", "fixtures", "subscribe_preview.png")),
+        filename: "subscribe_preview.png",
+        content_type: "image/png"
+      )
+    end
+
+    def attach_avatar(user)
+      user.avatar.attach(
+        io: File.open(Rails.root.join("spec", "support", "fixtures", "smilie.png")),
+        filename: "smilie.png",
+        content_type: "image/png"
+      )
+    end
+
+    # The reported bug: a shared /<slug> link unfurled to a blank card because
+    # the head carried og:title and og:url but no image at all (gp#3690).
+    it "serves the seller's subscribe-preview card on og:image and twitter:image" do
+      attach_subscribe_preview(seller)
+
+      get "http://seller.example.com/vault"
+
+      expect(seller.subscribe_preview_url).to be_present
+      expect(response.body).to include(%(<meta property="og:image" content="#{ERB::Util.h(seller.subscribe_preview_url)}">))
+      expect(response.body).to include(%(<meta property="og:image:alt" content="Jane Doe">))
+      expect(response.body).to include(%(<meta property="og:image:type" content="image/png">))
+      expect(response.body).to include(%(<meta property="og:image:width" content="#{SubscribePreviewGeneratorService::OUTPUT_WIDTH}">))
+      expect(response.body).to include(%(<meta property="og:image:height" content="#{SubscribePreviewGeneratorService::OUTPUT_HEIGHT}">))
+      expect(response.body).to include(%(<meta property="twitter:card" content="summary_large_image">))
+      expect(response.body).to include(%(<meta property="twitter:image" content="#{ERB::Util.h(seller.subscribe_preview_url)}">))
+    end
+
+    # Both page variants build their head through UserPagesController#page_meta_head.
+    it "serves the same card on a rich text page" do
+      create(:user_page, pageable: seller, slug: "about", title: "About", content: "<p>Hi</p>")
+      attach_subscribe_preview(seller)
+
+      get "http://#{seller.subdomain}/about"
+
+      expect(response.body).to include(%(<meta property="og:image" content="#{ERB::Util.h(seller.subscribe_preview_url)}">))
+    end
+
+    it "falls back to an uploaded avatar with no twitter card" do
+      attach_avatar(seller)
+
+      get "http://seller.example.com/vault"
+
+      expect(seller.subscribe_preview_url).to be_nil
+      expect(response.body).to include(%(<meta property="og:image" content="#{ERB::Util.h(seller.avatar_url)}">))
+      expect(response.body).to include(%(<meta property="og:image:alt" content="Jane Doe's profile picture">))
+      expect(response.body).not_to include(%(property="twitter:image"))
+      expect(response.body).not_to include(%(property="twitter:card"))
+      expect(response.body).not_to include(%(property="og:image:width"))
+    end
+
+    # With neither asset, omitting the tag lets scrapers use their own fallback
+    # rather than advertising Gumroad's generic banner as this seller's card.
+    it "omits og:image when the seller has neither a preview nor an avatar" do
+      get "http://seller.example.com/vault"
+
+      expect(response.body).not_to include(%(<meta property="og:image"))
+      expect(response.body).not_to include("opengraph_image")
+    end
+  end
+
   describe "route precedence" do
     it "does not shadow existing storefront routes" do
       # /posts is a real route on the seller subdomain — the pages catch-all

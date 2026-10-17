@@ -28,30 +28,15 @@ module PageMeta::User
       set_meta_tag(name: "description", content: description)
       set_meta_tag(property: "og:description", content: description)
 
-      if user.subscribe_preview_url.present?
-        set_meta_tag(property: "og:image", content: user.subscribe_preview_url)
-        # Dimensions + type let Facebook's crawler render the card on the FIRST
-        # share after a scrape; without them it processes the image async and the
-        # first preview goes out imageless (which sellers report as "blank circle").
-        set_meta_tag(property: "og:image:type", content: "image/png")
-        set_meta_tag(property: "og:image:width", content: SubscribePreviewGeneratorService::OUTPUT_WIDTH.to_s)
-        set_meta_tag(property: "og:image:height", content: SubscribePreviewGeneratorService::OUTPUT_HEIGHT.to_s)
-        set_meta_tag(property: "og:image:alt", content: user.name_or_username)
-        set_meta_tag(property: "twitter:card", content: "summary_large_image")
-        set_meta_tag(property: "twitter:image", content: user.subscribe_preview_url)
-        set_meta_tag(property: "twitter:image:alt", content: user.name_or_username)
-      else
-        if user.name.present?
-          set_meta_tag(property: "og:title", content: user.name)
-        end
-        # avatar_url always returns something — it falls back to Gumroad's default
-        # avatar — so a presence check here would advertise that placeholder as the
-        # seller's share image. Only a real upload is worth announcing; with neither
-        # a card nor an avatar, omitting the tag lets scrapers use their own fallback.
-        if user.avatar.attached?
-          set_meta_tag(property: "og:image", content: user.avatar_url)
-          set_meta_tag(property: "og:image:alt", content: "#{user.name_or_username}'s profile picture")
-        end
+      card = PageMeta::ShareCard.for(user)
+      if card
+        # The chain and the tag list live in PageMeta::ShareCard, shared with the
+        # two hand-built <head>s so the three surfaces cannot drift (gp#1548).
+        card.attributes.each { |property, content| set_meta_tag(property:, content:) }
+      elsif user.name.present?
+        # No share image to announce, so the card title carries the seller's
+        # name instead of the "Subscribe to ..." phrasing set above.
+        set_meta_tag(property: "og:title", content: user.name)
       end
 
       if user.seller_profile.custom_styles.present?

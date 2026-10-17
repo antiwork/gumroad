@@ -91,7 +91,16 @@ class UserPagesController < ApplicationController
         <meta property="og:title" content="#{title}">
         <meta property="og:type" content="website">
         <meta property="og:url" content="#{canonical}">
+        #{page_share_image_tags}
       HTML
+    end
+
+    # The seller's share card, the same chain the profile root serves one level
+    # up (PageMeta::ShareCard): without it a shared /<slug> link rendered a blank
+    # placeholder card (gp#3690).
+    def page_share_image_tags
+      card = PageMeta::ShareCard.for(@user)
+      card ? card.to_html : ""
     end
 
     # Sanitized rich text renders directly — it can't carry scripts, so it
