@@ -25,14 +25,7 @@ class CreateStripeApplePayDomainWorker
     domain ||= Subdomain.from_username(user.username)
     return if domain.blank?
 
-    # A row outlives the account that wrote it: a deleted account's is never removed, and a renamed
-    # one is still queued for deletion when a later signup takes the freed username. Hand it over so
-    # that pending delete finds no row instead of taking the host's wallet buttons with it.
-    existing = StripeApplePayDomain.find_by(domain:)
-    if existing
-      existing.update!(user_id:) if existing.user_id != user_id
-      return
-    end
+    return if claim_existing_registration(user_id, domain)
 
     response = Stripe::ApplePayDomain.create(domain_name: domain)
     return unless response
@@ -43,6 +36,19 @@ class CreateStripeApplePayDomainWorker
       stripe_id: response.id
     )
   rescue ActiveRecord::RecordNotUnique
-    # Two accounts on the same host registered at once; the row the other worker wrote covers both.
+    # A concurrent create inserted first. Claim its row, or retry if a delete has removed it since.
+    raise unless claim_existing_registration(user_id, domain)
   end
+
+  private
+    # The row lock serializes with a delete queued or running for the username's previous holder.
+    # Commits before returning false: two creates holding an empty lookup's gap lock across the
+    # Stripe call would deadlock on their inserts.
+    def claim_existing_registration(user_id, domain)
+      StripeApplePayDomain.transaction do
+        existing = StripeApplePayDomain.lock.find_by(domain:)
+        existing.update!(user_id:) if existing && existing.user_id != user_id
+        existing.present?
+      end
+    end
 end
