@@ -66,13 +66,14 @@ class GlobalAffiliates::ProductEligibilityController < Sellers::BaseController
 
       root = URI("#{PROTOCOL}://#{ROOT_DOMAIN}")
       short = URI("#{PROTOCOL}://#{SHORT_DOMAIN}")
+      product_path = %r{\A/l/([^/]+)(?:/[^/]+)?\z} # /l/:id and /l/:id/:code; the offer code doesn't change eligibility
       if host == short.host && uri.port == short.port
         permalink = uri.path[%r{\A/([^/]+)\z}, 1]
       elsif uri.port == root.port && [root.host, URI("#{PROTOCOL}://#{DOMAIN}").host].include?(host)
-        permalink = uri.path[%r{\A/l/([^/]+)\z}, 1]
+        permalink = uri.path[product_path, 1]
       elsif uri.port == root.port && host.end_with?(".#{root.host}")
         seller = Subdomain.find_seller_by_hostname(host) || raise(InvalidUrl)
-        permalink = uri.path[%r{\A/l/([^/]+)\z}, 1]
+        permalink = uri.path[product_path, 1]
       else
         return
       end

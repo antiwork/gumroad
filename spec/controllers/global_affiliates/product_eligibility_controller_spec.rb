@@ -435,6 +435,43 @@ describe GlobalAffiliates::ProductEligibilityController do
         expect(SsrfFilter).not_to have_received(:get)
       end
 
+      it "resolves a root-domain /l/ URL without fetching" do
+        product = create(:product, user: product_seller)
+
+        get :show, format: :json, params: { url: "http://localhost:3000/l/#{product.unique_permalink}" }
+
+        expect(response.parsed_body["product"]["name"]).to eq(product.name)
+        expect(SsrfFilter).not_to have_received(:get)
+      end
+
+      it "resolves a product URL that carries an offer code" do
+        product = create(:product, user: product_seller, custom_permalink: "shared")
+
+        get :show, format: :json, params: { url: "http://productseller.localhost:3000/l/shared/SAVE10" }
+
+        expect(response.parsed_body["product"]["name"]).to eq(product.name)
+        expect(SsrfFilter).not_to have_received(:get)
+      end
+
+      it "refuses a banned product, like the product page" do
+        create(:product, user: product_seller, custom_permalink: "shared").update_columns(banned_at: Time.current)
+
+        get :show, format: :json, params: { url: "http://productseller.localhost:3000/l/shared" }
+
+        expect_invalid_url_error
+        expect(SsrfFilter).not_to have_received(:get)
+      end
+
+      it "refuses a product whose seller is deleted, like the product page" do
+        product = create(:product, user: product_seller)
+        product_seller.update_columns(deleted_at: Time.current)
+
+        get :show, format: :json, params: { url: "http://localhost:3000/l/#{product.unique_permalink}" }
+
+        expect_invalid_url_error
+        expect(SsrfFilter).not_to have_received(:get)
+      end
+
       ["http://localhost:3000/settings", "http://localhost:3000/l/missing", "http://nosuchseller.localhost:3000/l/shared"].each do |local_url|
         it "returns an error for #{local_url} without fetching" do
           get :show, format: :json, params: { url: local_url }
