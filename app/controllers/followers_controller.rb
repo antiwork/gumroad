@@ -33,7 +33,7 @@ class FollowersController < ApplicationController
 
     pagination, paginated_followers = pagy_countless(
       searched_followers,
-      page: params[:page],
+      page: [params[:page].to_i, 1].max,
       limit: FOLLOWERS_PER_PAGE
     )
 

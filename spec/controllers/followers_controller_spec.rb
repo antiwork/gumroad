@@ -57,6 +57,18 @@ describe FollowersController, inertia: true do
         expect(inertia.props[:has_more]).to be(false)
       end
 
+      it "falls back to the first page when the page parameter cannot be read" do
+        create_list(:follower, 3, user: seller, confirmed_at: Time.current)
+
+        get :index, params: { page: "-1" }
+        expect(response).to be_successful
+        expect(inertia.props[:page]).to eq(1)
+
+        get :index, params: { page: "abc" }
+        expect(response).to be_successful
+        expect(inertia.props[:page]).to eq(1)
+      end
+
       it "combines search and pagination" do
         create_list(:follower, 25, user: seller) do |follower, index|
           follower.update!(email: "test#{index}@example.com", confirmed_at: Time.current)

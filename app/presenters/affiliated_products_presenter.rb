@@ -11,7 +11,7 @@ class AffiliatedProductsPresenter
   def initialize(user, query: nil, page: nil, sort: nil, can_remove_affiliations: false)
     @user = user
     @query = query.presence
-    @page = page
+    @page = [page.to_i, 1].max
     @sort = sort
     @can_remove_affiliations = can_remove_affiliations
   end

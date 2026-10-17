@@ -49,6 +49,11 @@ describe AffiliatesPresenter do
       })
     end
 
+    it "falls back to the first page when the page parameter cannot be read" do
+      expect(described_class.new(pundit_user, page: "-1").index_props[:pagination][:page]).to eq(1)
+      expect(described_class.new(pundit_user, page: "abc").index_props[:pagination][:page]).to eq(1)
+    end
+
     it "loads every affiliate's products without a query per affiliate" do
       # Requests run with the query cache on, which serves each row's identical seller product count.
       index_queries = -> { ActiveRecord::Base.cache { count_queries { described_class.new(pundit_user).index_props } } }

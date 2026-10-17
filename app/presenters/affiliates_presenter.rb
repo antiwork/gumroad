@@ -12,7 +12,7 @@ class AffiliatesPresenter
     @pundit_user = pundit_user
     @seller = pundit_user.seller
     @query = query.presence
-    @page = page
+    @page = [page.to_i, 1].max
     @sort = sort
     @should_get_affiliate_requests = should_get_affiliate_requests
   end

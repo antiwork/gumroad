@@ -280,6 +280,14 @@ describe AffiliatedProductsPresenter do
         expect(pagination[:pages]).to eq(2)
       end
 
+      it "falls back to the first page when the page parameter cannot be read" do
+        props = described_class.new(affiliate_user, page: "-1").affiliated_products_page_props
+        expect(props[:pagination][:page]).to eq(1)
+
+        props = described_class.new(affiliate_user, page: "abc").affiliated_products_page_props
+        expect(props[:pagination][:page]).to eq(1)
+      end
+
       it "returns the last page if out of range" do
         props = described_class.new(affiliate_user, page: 3).affiliated_products_page_props
         pagination = props[:pagination]
