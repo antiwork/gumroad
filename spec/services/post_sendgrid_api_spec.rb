@@ -27,6 +27,30 @@ describe PostSendgridApi, :freeze_time do
     end
   end
 
+  describe "Seller stylesheets", :skip_ssrf_stub do
+    let(:internal_stylesheet) { "http://10.0.0.5:81/probe.css" }
+
+    before do
+      allow(Resolv).to receive(:getaddresses).and_call_original
+      allow(Resolv).to receive(:getaddresses).with("cdn.example.com").and_return(["93.184.216.34"])
+      stub_request(:get, "https://cdn.example.com/seller.css").to_return(status: 200, body: ".seller-note { color: #0a7d3e; }")
+      stub_request(:get, internal_stylesheet).to_return(status: 200, body: ".seller-note { border: 1px solid #c0ffee; }")
+      @post.update!(message: %(<p class="seller-note">post body</p><link rel="stylesheet" href="https://cdn.example.com/seller.css"><link rel="stylesheet" href="#{internal_stylesheet}">))
+      send_default_email
+    end
+
+    it "inlines a public stylesheet but never requests an internal one" do
+      note = html_doc(sent_email_content).at_css(".seller-note")
+      expect(note["style"]).to include("color: #0a7d3e")
+      expect(note["style"]).not_to include("#c0ffee")
+      expect(a_request(:get, internal_stylesheet)).not_to have_been_made
+    end
+
+    it "still inlines the email's own stylesheet" do
+      expect(html_doc(sent_email_content).at_css(".email > .footer")["style"]).to include("margin: 32px auto 16px")
+    end
+  end
+
   describe "Seller's design settings" do
     before do
       @post.seller.seller_profile.update!(highlight_color: "#009a49", font: "Roboto Mono", background_color: "#000000")

@@ -24,6 +24,21 @@ describe Api::Internal::ReceiptPreviewsController do
       expect(json["html"]).to include("Sample product")
     end
 
+    it "inlines the email stylesheet but never requests one on an internal address", :skip_ssrf_stub do
+      internal_stylesheet = stub_request(:get, "http://10.0.0.5:81/probe.css").to_return(status: 200, body: ".footer { border-color: #c0ffee; }")
+      allow(ViteRuby.instance.manifest).to receive(:resolve_entries).and_wrap_original do |original, *names, **options|
+        original.call(*names, **options).tap { _1[:stylesheets] += ["http://10.0.0.5:81/probe.css"] if names == ["email"] }
+      end
+
+      get :show, params: { product_id: product.unique_permalink }
+
+      expect(response).to be_successful
+      footer_style = Nokogiri::HTML(response.parsed_body["html"]).at_css(".email > .footer")["style"]
+      expect(footer_style).to include("max-width: 448px")
+      expect(footer_style).not_to include("#c0ffee")
+      expect(internal_stylesheet).not_to have_been_requested
+    end
+
     it "uses the free-product subject for a free product" do
       get :show, params: { product_id: free_product.unique_permalink }
 

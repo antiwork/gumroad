@@ -1787,6 +1787,21 @@ describe PurchasesController, :vcr do
           expect(response.body).to match("Generate invoice")
         end
 
+        it "inlines the email stylesheet but never requests one on an internal address", :skip_ssrf_stub do
+          internal_stylesheet = stub_request(:get, "http://10.0.0.5:81/probe.css").to_return(status: 200, body: ".footer { border-color: #c0ffee; }")
+          allow(ViteRuby.instance.manifest).to receive(:resolve_entries).and_wrap_original do |original, *names, **options|
+            original.call(*names, **options).tap { _1[:stylesheets] += ["http://10.0.0.5:81/probe.css"] if names == ["email"] }
+          end
+
+          get :receipt, params: { id: purchase.external_id, email: "test@example.com" }
+
+          expect(response).to be_successful
+          footer_style = Nokogiri::HTML(response.body).at_css(".email > .footer")["style"]
+          expect(footer_style).to include("max-width: 448px")
+          expect(footer_style).not_to include("#c0ffee")
+          expect(internal_stylesheet).not_to have_been_requested
+        end
+
         it "redirects back to confirm_receipt_email when incorrect email is provided" do
           get :receipt, params: { id: purchase.external_id, email: "wrong@example.com" }
           expect(response).to redirect_to(confirm_receipt_email_purchase_path(purchase.external_id))

@@ -1,0 +1,140 @@
+# frozen_string_literal: true
+
+# Premailer strategy for every <link rel="stylesheet"> in an email. Post bodies are seller HTML, so
+# any href can land here; one that cannot be loaded safely is dropped instead of raising.
+module EmailStylesheetLoader
+  extend self
+
+  DEFAULT_PORTS = { "http" => 80, "https" => 443 }.freeze
+  MAX_REDIRECTS = 3
+  OPEN_TIMEOUT_SECONDS = 3
+  READ_TIMEOUT_SECONDS = 5
+  # Bounds the whole fetch, every hop included: read_timeout applies per read, so a server trickling
+  # headers or body bytes would otherwise hold the render open.
+  FETCH_TIMEOUT_SECONDS = 10
+  # Shared by every remote stylesheet in one email, so render time does not grow with each <link>.
+  DOCUMENT_TIMEOUT_SECONDS = 15
+  MAX_BYTES = 1.megabyte
+  CACHE_SIZE = 16.megabytes
+  CACHE_TTL = 10.minutes
+  DEADLINE_KEY = :email_stylesheet_loader_deadline
+
+  class DisallowedPort < SsrfFilter::Error; end
+  class ResponseTooLarge < StandardError; end
+
+  # Replaces CSSHelper's production cache, an unbounded process-lifetime Hash keyed by seller hrefs.
+  # A dropped stylesheet ("") is not kept, so a transient failure is retried on the next render.
+  class Cache
+    def initialize
+      @store = ActiveSupport::Cache::MemoryStore.new(size: CACHE_SIZE, expires_in: CACHE_TTL)
+    end
+
+    def [](url) = @store.read(url)
+
+    def []=(url, css)
+      @store.write(url, css) unless css.empty?
+    end
+  end
+
+  # Prepended to CSSHelper's singleton: css_for_doc is the only place that sees a whole email.
+  module DocumentDeadline
+    def css_for_doc(doc)
+      Thread.current[DEADLINE_KEY] = Process.clock_gettime(Process::CLOCK_MONOTONIC) + DOCUMENT_TIMEOUT_SECONDS
+      super
+    ensure
+      Thread.current[DEADLINE_KEY] = nil
+    end
+  end
+
+  def load(url)
+    css = public_file(url)
+    return css if css
+
+    uri = Premailer::Rails::CSSLoaders::NetworkLoader.uri_for_url(url)
+    return "" if uri.nil?
+
+    (development_asset_host?(uri) ? fetch_development_asset(uri) : fetch(uri)) || ""
+  rescue URI::Error
+    ""
+  end
+
+  private
+    # The gem's FileSystemLoader joins the href's path onto public/ without resolving "..", so a
+    # seller href could otherwise read any file on the host.
+    def public_file(url)
+      # FileSystemLoader raises TypeError on an href with no path, such as mailto:.
+      return if URI(url).path.blank?
+
+      path = File.expand_path(Premailer::Rails::CSSLoaders::FileSystemLoader.file_name(url))
+      File.read(path) if path.start_with?("#{Rails.public_path}/") && File.file?(path)
+    end
+
+    def fetch(uri)
+      timeout = fetch_timeout
+      return if timeout <= 0
+
+      css = nil
+      Timeout.timeout(timeout) do
+        SsrfFilter.get(
+          uri,
+          headers: { "Accept" => "text/css" },
+          max_redirects: MAX_REDIRECTS,
+          request_proc: method(:check_port),
+          # A proxy taken from the environment would resolve the host itself and ignore the address
+          # SsrfFilter validated.
+          http_options: { open_timeout: OPEN_TIMEOUT_SECONDS, read_timeout: READ_TIMEOUT_SECONDS, proxy_from_env: false }
+        ) do |http_response|
+          raise ResponseTooLarge if http_response["content-length"].to_i > MAX_BYTES
+
+          body = +""
+          http_response.read_body do |chunk|
+            body << chunk
+            raise ResponseTooLarge if body.bytesize > MAX_BYTES
+          end
+          css = body if http_response.is_a?(Net::HTTPSuccess)
+        end
+      end
+      css&.force_encoding(Encoding::UTF_8)&.scrub
+    # The remote server is seller-controlled and can make Net::HTTP or SsrfFilter raise nearly
+    # anything (e.g. ArgumentError from the resolver on a host-less redirect); none of it may fail
+    # the email.
+    rescue StandardError => e
+      Rails.logger.info("[EmailStylesheetLoader] dropped stylesheet from #{uri.host}: #{e.class}")
+      nil
+    end
+
+    def fetch_timeout
+      deadline = Thread.current[DEADLINE_KEY]
+      return FETCH_TIMEOUT_SECONDS if deadline.nil?
+
+      [FETCH_TIMEOUT_SECONDS, deadline - Process.clock_gettime(Process::CLOCK_MONOTONIC)].min
+    end
+
+    # SsrfFilter re-checks the scheme and resolved address on every redirect hop, but never the
+    # port. It calls this for each hop too, before connecting.
+    def check_port(request)
+      raise DisallowedPort, request.uri.to_s unless DEFAULT_PORTS[request.uri.scheme] == request.uri.port
+    end
+
+    # In development the email's own CSS comes from the Vite dev server behind the local asset hosts,
+    # which SsrfFilter refuses as loopback. Mailer views and ApplicationController.renderer use
+    # different ones.
+    def development_asset_host?(uri)
+      return false unless Rails.env.development?
+
+      [Rails.configuration.action_controller.asset_host, Rails.configuration.action_mailer.asset_host].any? do |asset_host|
+        asset_host.is_a?(String) && origin(uri) == origin(URI(asset_host))
+      end
+    end
+
+    def fetch_development_asset(uri)
+      response = Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https", open_timeout: OPEN_TIMEOUT_SECONDS, read_timeout: READ_TIMEOUT_SECONDS) do |http|
+        http.get(uri.request_uri, "Accept" => "text/css")
+      end
+      response.body.dup.force_encoding(Encoding::UTF_8).scrub if response.is_a?(Net::HTTPSuccess)
+    rescue StandardError
+      nil
+    end
+
+    def origin(uri) = [uri.scheme, uri.host&.downcase, uri.port]
+end
