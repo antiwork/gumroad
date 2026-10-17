@@ -38,3 +38,32 @@ describe CreateStripeApplePayDomainWorker, :vcr do
     end
   end
 end
+
+# No HTTP: the domain index is the case under test, and the registered host is stubbed out.
+describe CreateStripeApplePayDomainWorker do
+  before do
+    @user = create(:user, username: "sampleusername")
+    allow(Subdomain).to receive(:from_username).and_return("sampleusername.gumroad.dev")
+    allow(Rails.env).to receive(:test?).and_return(false)
+  end
+
+  it "leaves an existing registration alone when the host belongs to a released username" do
+    StripeApplePayDomain.create!(
+      user: create(:user, username: "reusedseller"),
+      domain: "sampleusername.gumroad.dev",
+      stripe_id: "apwc_existing"
+    )
+    expect(Stripe::ApplePayDomain).not_to receive(:create)
+
+    expect { described_class.new.perform(@user.id) }.not_to raise_error
+    expect(StripeApplePayDomain.where(domain: "sampleusername.gumroad.dev").pluck(:user_id))
+      .to eq([User.find_by(username: "reusedseller").id])
+  end
+
+  it "treats a row inserted by a concurrent worker as already registered" do
+    allow(Stripe::ApplePayDomain).to receive(:create).and_return(double(id: "apwc_race"))
+    allow(StripeApplePayDomain).to receive(:create).and_raise(ActiveRecord::RecordNotUnique)
+
+    expect { described_class.new.perform(@user.id) }.not_to raise_error
+  end
+end

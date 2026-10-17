@@ -24,15 +24,20 @@ class CreateStripeApplePayDomainWorker
     user = User.find(user_id)
     domain ||= Subdomain.from_username(user.username)
 
-    if domain && StripeApplePayDomain.find_by(user_id:, domain:).blank?
-      response = Stripe::ApplePayDomain.create(domain_name: domain)
-      if response
-        StripeApplePayDomain.create(
-          user_id:,
-          domain:,
-          stripe_id: response.id
-        )
-      end
-    end
+    # The unique index is on domain alone, and a deleted account leaves its row behind, so a later
+    # signup that reuses that username still has the host registered: a per-user lookup would insert
+    # into a taken domain.
+    return if domain.blank? || StripeApplePayDomain.exists?(domain:)
+
+    response = Stripe::ApplePayDomain.create(domain_name: domain)
+    return unless response
+
+    StripeApplePayDomain.create(
+      user_id:,
+      domain:,
+      stripe_id: response.id
+    )
+  rescue ActiveRecord::RecordNotUnique
+    # Two accounts on the same host registered at once; the row the other worker wrote covers both.
   end
 end
