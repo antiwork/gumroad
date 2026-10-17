@@ -1,18 +1,13 @@
 # frozen_string_literal: true
 
-# Registers a seller's own subdomain as a payment method domain, which Stripe requires before the
-# wallet buttons (Apple Pay, Google Pay, Link) can render on their Gumroad pages. It is enqueued from
-# User#after_save when the username changes — effectively once, at signup or first rename — and
-# nothing re-runs it for that seller, so a failure here is permanent rather than transient.
+# Registers a seller's own subdomain with Stripe, which wallet buttons (Apple Pay, Google Pay, Link)
+# need before they render on that seller's pages.
 class CreateStripeApplePayDomainWorker
   include Sidekiq::Job
   sidekiq_options retry: 3, queue: :low
 
-  # Exhausting the retries is the outcome nobody sees: the seller keeps a working storefront, just
-  # without wallet buttons on it, and no stripe_apple_pay_domains row records why. Notify so a
-  # permanently wallet-less account arrives as a support ticket rather than as an unexplained
-  # checkout difference. (sentry-sidekiq is not in the bundle, so a job exception does not reach
-  # Sentry on its own.)
+  # sentry-sidekiq is not in the bundle, so an exhausted job is otherwise silent while the seller
+  # quietly loses wallet buttons.
   sidekiq_retries_exhausted do |msg, _exception|
     user_id, domain = msg["args"]
     ErrorNotifier.notify(
