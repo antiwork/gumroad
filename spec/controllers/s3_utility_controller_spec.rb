@@ -75,6 +75,18 @@ describe S3UtilityController do
       end.to raise_error(ActionController::RoutingError)
     end
 
+    it "404s when the key parameter is not a string" do
+      expect do
+        get :cdn_url_for_blob, params: { key: { "a" => "b" } }
+      end.to raise_error(ActionController::RoutingError)
+    end
+
+    it "404s when the key parameter is an array" do
+      expect do
+        get :cdn_url_for_blob, params: { key: ["x"] }
+      end.to raise_error(ActionController::RoutingError)
+    end
+
     it "returns the blob cdn url in JSON format" do
       blob = ActiveStorage::Blob.create_and_upload!(io: fixture_file_upload("smilie.png"), filename: "smilie.png")
 

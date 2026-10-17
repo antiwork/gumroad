@@ -23,7 +23,8 @@ class S3UtilityController < Sellers::BaseController
   end
 
   def cdn_url_for_blob
-    blob = ActiveStorage::Blob.find_by_key(params[:key])
+    key = params[:key]
+    blob = key.is_a?(String) ? ActiveStorage::Blob.find_by_key(key) : nil
     blob || e404
     respond_to do |format|
       format.html { redirect_to cdn_url_for(blob.url), allow_other_host: true }
