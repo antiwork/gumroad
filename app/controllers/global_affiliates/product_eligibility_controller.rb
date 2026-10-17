@@ -36,7 +36,7 @@ class GlobalAffiliates::ProductEligibilityController < Sellers::BaseController
       raise InvalidUrl unless GUMROAD_DOMAINS.include?(uri&.domain) && GUMROAD_PORTS.include?(uri.inferred_port)
       uri.path = uri.path + ".json"
 
-      response = HTTParty.get(uri.to_s)
+      response = HTTParty.get(uri.to_s, timeout: 5)
       raise InvalidUrl unless response.ok?
 
       data = response.to_hash
