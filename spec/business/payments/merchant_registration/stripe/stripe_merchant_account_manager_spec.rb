@@ -15564,6 +15564,15 @@ describe StripeMerchantAccountManager, :vcr do
       expect(request.reload.state).to eq("provided")
     end
 
+    it "creates no request and closes an open one when the eventually_due field has no deadline" do
+      request = create(:user_compliance_info_request, user:, field_needed: UserComplianceInfoFields::Individual::TAX_ID)
+
+      described_class.handle_stripe_event(stripe_event(eventually_due: ["individual.id_number"], deadline: nil))
+
+      expect(request.reload.state).to eq("provided")
+      expect(user.user_compliance_info_requests.requested.count).to eq(0)
+    end
+
     it "records the request when the eventually_due field has a near-term deadline" do
       described_class.handle_stripe_event(stripe_event(eventually_due: ["individual.id_number"], deadline: 7.days.from_now.to_i))
 
