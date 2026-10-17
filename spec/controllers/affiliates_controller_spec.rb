@@ -29,6 +29,29 @@ describe AffiliatesController, type: :controller, inertia: true do
         expect(inertia.props[:affiliates]).to be_present
       end
 
+      context "when the requested page is below the first page" do
+        before do
+          create(:direct_affiliate, seller:, affiliate_user:)
+          create(:affiliate_request, seller:)
+        end
+
+        it "renders the first page, keeping the pending affiliate requests it shows" do
+          get :index, params: { page: "-1" }
+
+          expect(response).to be_successful
+          expect(inertia.props[:pagination][:page]).to eq(1)
+          expect(inertia.props[:affiliate_requests]).to be_present
+        end
+
+        it "falls back to the first page for a page that is not a number" do
+          get :index, params: { page: "abc" }
+
+          expect(response).to be_successful
+          expect(inertia.props[:pagination][:page]).to eq(1)
+          expect(inertia.props[:affiliate_requests]).to be_present
+        end
+      end
+
       context "when the requested page is past the last page" do
         before { create(:direct_affiliate, seller:, affiliate_user:) }
 

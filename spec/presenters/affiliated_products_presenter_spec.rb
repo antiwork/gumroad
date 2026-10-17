@@ -613,6 +613,18 @@ describe AffiliatedProductsPresenter do
 
   # Kept out of the `:vcr` block above: nothing here needs a purchase, so these
   # examples do not have to sit behind that block's Stripe cassettes.
+  describe "#affiliated_products_page_props page parameter" do
+    it "falls back to the first page when the page parameter cannot be read" do
+      user = create(:affiliate_user)
+
+      props = described_class.new(user, page: "-1").affiliated_products_page_props
+      expect(props[:pagination][:page]).to eq(1)
+
+      props = described_class.new(user, page: "abc").affiliated_products_page_props
+      expect(props[:pagination][:page]).to eq(1)
+    end
+  end
+
   describe "#affiliated_products_page_props removal keys" do
     let(:affiliate_user) { create(:affiliate_user) }
     let(:creator) { create(:user, username: "removalcreator") }

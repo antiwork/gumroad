@@ -17,7 +17,7 @@ class AffiliatesController < Sellers::BaseController
   def index
     authorize DirectAffiliate
 
-    page = string_param(:page).presence&.to_i
+    page = [string_param(:page).to_i, 1].max
     query = params[:query]
     sort_params = extract_sort_params
 
@@ -26,11 +26,11 @@ class AffiliatesController < Sellers::BaseController
       page:,
       query:,
       sort: sort_params,
-      should_get_affiliate_requests: page.nil? || page == 1
+      should_get_affiliate_requests: page == 1
     )
     affiliates_data = presenter.index_props
 
-    if affiliates_data[:affiliates].empty? && affiliates_data[:affiliate_requests].empty? && (page.nil? || page == 1) && query.blank? &&
+    if affiliates_data[:affiliates].empty? && affiliates_data[:affiliate_requests].empty? && page == 1 && query.blank? &&
         !current_seller.self_service_affiliate_products.enabled.exists?
       return redirect_to onboarding_affiliates_path
     end
