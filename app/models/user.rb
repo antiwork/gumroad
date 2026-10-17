@@ -376,7 +376,7 @@ class User < ApplicationRecord
   validate :facebook_meta_tag_is_valid
   validates :payment_address, email_format: true, allow_blank: true
 
-  before_validation { self.facebook_pixel_id = facebook_pixel_id.strip if facebook_pixel_id.present? }
+  before_validation { self.facebook_pixel_id = facebook_pixel_id.strip if will_save_change_to_facebook_pixel_id? && facebook_pixel_id.present? }
   before_validation { self.tiktok_pixel_id = tiktok_pixel_id.strip if tiktok_pixel_id.present? }
 
   before_save :append_http

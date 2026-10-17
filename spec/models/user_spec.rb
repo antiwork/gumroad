@@ -1635,6 +1635,35 @@ describe User, :vcr do
       end
     end
 
+    describe "facebook_pixel_id" do
+      [
+        { id: nil, valid: true },
+        { id: "1258008389687474", valid: true },
+        { id: "1", valid: true },
+        { id: "0", valid: false },
+        { id: "pixel-123", valid: false },
+        { id: "125800838968747412345678901", valid: false },
+      ].each do |data|
+        it "expects #{data[:id]} to be #{data[:valid] ? 'valid' : 'invalid'}" do
+          user = build(:user, facebook_pixel_id: data[:id])
+          expect(user.valid?).to eq(data[:valid])
+        end
+      end
+
+      # The strip must not run on a save that did not touch the id: doing so marks a legacy
+      # whitespace-padded value as changed, and the new validation then rejects an unrelated
+      # save (payout preferences, display name, ...) for an account that never touched it.
+      it "does not block an unrelated save for a legacy whitespace-padded, invalid id" do
+        user = create(:user)
+        user.update_columns(facebook_pixel_id: " pixel-123 ")
+        user.reload
+
+        user.name = "New Name"
+        expect(user.save).to eq(true), user.errors.full_messages.inspect
+        expect(user.reload.facebook_pixel_id).to eq(" pixel-123 ")
+      end
+    end
+
     describe "name" do
       it "is valid if it's blank" do
         @user.name = nil
