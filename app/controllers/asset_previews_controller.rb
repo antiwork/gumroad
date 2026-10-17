@@ -13,13 +13,15 @@ class AssetPreviewsController < ApplicationController
 
     if permitted_params[:signed_blob_id].present?
       signed_blob_id = permitted_params[:signed_blob_id]
-      # attach() hands the raw string to ActiveStorage::Blob.find_signed!, which raises
-      # InvalidSignature for a tampered or expired id — verify first so the request is a 400.
-      unless signed_blob_id.is_a?(String) && ActiveStorage::Blob.find_signed(signed_blob_id)
+      # attach() resolves the raw string with ActiveStorage::Blob.find_signed!, which raises
+      # InvalidSignature for a tampered or expired id — resolve here so the request is a 400 and
+      # the verified blob is what gets attached.
+      blob = signed_blob_id.is_a?(String) ? ActiveStorage::Blob.find_signed(signed_blob_id) : nil
+      unless blob
         return render(json: { success: false, error: "Invalid signed_blob_id." }, status: :bad_request)
       end
 
-      asset_preview.file.attach(signed_blob_id)
+      asset_preview.file.attach(blob)
     else
       asset_preview.url = permitted_params[:url]
     end
