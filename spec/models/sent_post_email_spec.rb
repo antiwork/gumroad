@@ -29,17 +29,25 @@ describe SentPostEmail do
       expect(described_class.ids_for_email("buyer@example.com")).to match_array([first_row.id, second_row.id])
     end
 
-    it "reads the (post_id, email) index with a skip scan" do
-      create(:sent_post_email, email: "buyer@example.com")
+    # A skip scan of (post_id, email) seeks once per distinct post_id, and a scan reads every row, so on
+    # production's table either runs past max_execution_time. Only the address's own entries may be read.
+    it "reads only the address's entries in the email index" do
+      subject_rows = create_list(:sent_post_email, 2, email: "buyer@example.com")
+      described_class.insert_all!((1..50).map { { post_id: _1, email: "recipient#{_1}@example.com" } })
+      handler_reads = -> { described_class.connection.select_rows("SHOW SESSION STATUS LIKE 'Handler_read%'").sum { _2.to_i } }
       sql = nil
       capture = ->(*, payload) { sql = payload[:sql] if payload[:sql].include?("sent_post_emails") }
-      ActiveSupport::Notifications.subscribed(capture, "sql.active_record") do
+
+      reads_before = handler_reads.call
+      ids = ActiveSupport::Notifications.subscribed(capture, "sql.active_record") do
         described_class.ids_for_email("buyer@example.com")
       end
+      reads = handler_reads.call - reads_before
 
+      expect(ids).to match_array(subject_rows.map(&:id))
       plan = described_class.connection.select_all("EXPLAIN #{sql}").first
-      expect(plan["key"]).to eq("index_sent_post_emails_on_post_id_and_email")
-      expect(plan["Extra"]).to include("Using index for skip scan")
+      expect(plan.values_at("type", "key")).to eq(["ref", "index_sent_post_emails_on_email"])
+      expect(reads).to be <= subject_rows.size + 1
     end
   end
 
