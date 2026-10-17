@@ -40,6 +40,14 @@ describe AffiliatesController, type: :controller, inertia: true do
           expect(inertia.props[:affiliates]).to be_present
         end
 
+        it "keeps the pending affiliate requests the first page shows" do
+          create(:affiliate_request, seller:)
+
+          get :index, params: { page: "2" }
+
+          expect(inertia.props[:affiliate_requests]).to be_present
+        end
+
         it "falls back to the first page when the page param is not a scalar" do
           get :index, params: { page: { a: "b" } }
 

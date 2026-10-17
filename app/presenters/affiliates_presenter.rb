@@ -21,7 +21,10 @@ class AffiliatesPresenter
     pagination, direct_affiliates = pagy(fetch_direct_affiliates, page: [page.to_i, 1].max, limit: PER_PAGE, overflow: :last_page)
 
     affiliates = direct_affiliates.map(&:as_json)
-    affiliate_requests = should_get_affiliate_requests ? fetch_affiliate_requests : []
+    # An out-of-range page resolves to the last page — page 1 for a seller with one page — where the
+    # client renders the requests table, so the caller's flag (read off the requested page) is not
+    # enough on its own.
+    affiliate_requests = (should_get_affiliate_requests || (pagination.overflow? && pagination.page == 1)) ? fetch_affiliate_requests : []
 
     {
       affiliate_requests:,

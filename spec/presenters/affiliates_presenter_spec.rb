@@ -67,6 +67,12 @@ describe AffiliatesPresenter do
         expect(props[:affiliates]).to be_present
         expect(props[:pagination]).to eq({ page: 1, pages: 1 })
       end
+
+      it "includes the pending affiliate requests the first page shows" do
+        props = described_class.new(pundit_user, page: "2", should_get_affiliate_requests: false).index_props
+
+        expect(props[:affiliate_requests]).to eq([affiliate_request.as_json(pundit_user:)])
+      end
     end
 
     context "when the page is not a page number" do
