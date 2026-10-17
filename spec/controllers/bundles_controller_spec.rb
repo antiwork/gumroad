@@ -71,5 +71,27 @@ describe BundlesController, inertia: true do
       expect(bundle_product2.variant).to eq(versioned_product.alive_variants.first)
       expect(bundle_product2.quantity).to eq(1)
     end
+
+    context "when the link carries a bundle type the marketing email never sends" do
+      it "creates nothing and redirects to the products page with an alert" do
+        expect do
+          get :create_from_email, params: { type: "classic", price: 500 }
+        end.to_not change { Link.count }
+
+        expect(response).to redirect_to(products_path)
+        expect(flash[:alert]).to eq("This bundle link is no longer valid. Create a new bundle from your products page.")
+      end
+    end
+
+    context "when the link carries a price below the currency minimum" do
+      it "creates nothing and redirects to the products page with an alert" do
+        expect do
+          get :create_from_email, params: { type: Product::BundlesMarketing::YEAR_BUNDLE, price: 50 }
+        end.to_not change { Link.count }
+
+        expect(response).to redirect_to(products_path)
+        expect(flash[:alert]).to eq("This bundle link is no longer valid. Create a new bundle from your products page.")
+      end
+    end
   end
 end
