@@ -19,6 +19,8 @@ class Api::V2::DirectUploadsController < Api::V2::BaseController
   before_action :authorize_upload_scope!
 
   def create
+    return error_400("blob must be an object") unless params[:blob].is_a?(ActionController::Parameters)
+
     blob_args = direct_upload_blob_args
     missing_blob_arg = REQUIRED_BLOB_ARGS.find { |key| !blob_args.key?(key) }
     return error_400("#{missing_blob_arg} is required") if missing_blob_arg.present?

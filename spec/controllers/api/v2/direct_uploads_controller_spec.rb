@@ -69,6 +69,15 @@ describe Api::V2::DirectUploadsController do
         end
       end
 
+      it "returns a structured error when blob is not an object" do
+        expect do
+          post @action, params: @params.merge(blob: "{'filename': 'cover.png'}")
+        end.not_to change { ActiveStorage::Blob.count }
+
+        expect(response).to have_http_status(:bad_request)
+        expect(response.parsed_body["error"]).to eq("blob must be an object")
+      end
+
       it "ignores client-supplied metadata" do
         post @action, params: @params.deep_merge(blob: { metadata: { analyzed: true, width: 500, height: 500, duration: 120 } })
 
