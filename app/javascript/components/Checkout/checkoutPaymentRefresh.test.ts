@@ -24,10 +24,11 @@ describe("buildCartSaveRefreshCallbacks", () => {
     const onUnrecoverable = vi.fn();
     const callbacks = buildCartSaveRefreshCallbacks({ onDelivered, save, onUnrecoverable, currentCartKey: sameCart });
 
-    callbacks.onSuccess({ props: { cart: {}, checkout_payment: CONFIG } });
+    const cart = { discountCodes: [{ code: "SHOP5", products: {}, fromUrl: true }] };
+    callbacks.onSuccess({ props: { cart, checkout_payment: CONFIG } });
     callbacks.onFinish({});
 
-    expect(onDelivered).toHaveBeenCalledWith(CONFIG);
+    expect(onDelivered).toHaveBeenCalledWith(CONFIG, cart);
     expect(save).not.toHaveBeenCalled();
     expect(onUnrecoverable).not.toHaveBeenCalled();
   });
@@ -179,7 +180,7 @@ describe("buildCartSaveRefreshCallbacks", () => {
     });
     callbacks.onFinish({});
 
-    expect(onDelivered).toHaveBeenCalledWith({ integration: "payment_element" });
+    expect(onDelivered).toHaveBeenCalledWith({ integration: "payment_element" }, undefined);
     expect(save).not.toHaveBeenCalled();
     expect(onUnrecoverable).not.toHaveBeenCalled();
   });
@@ -249,7 +250,7 @@ describe("buildCartSaveRefreshCallbacks", () => {
 
     callbacks.onFinish({});
 
-    expect(onDelivered).toHaveBeenCalledWith(CONFIG);
+    expect(onDelivered).toHaveBeenCalledWith(CONFIG, undefined);
     expect(onUnrecoverable).not.toHaveBeenCalled();
   });
 
@@ -372,7 +373,7 @@ describe("buildCartSaveRefreshCallbacks", () => {
     currentKey = CART_A;
     callbacks.onFinish({});
 
-    expect(onDelivered).toHaveBeenCalledWith(CONFIG);
+    expect(onDelivered).toHaveBeenCalledWith(CONFIG, undefined);
   });
 
   it("recovers against the cart as it stands when the recovery goes out", () => {

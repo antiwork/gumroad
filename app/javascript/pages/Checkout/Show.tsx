@@ -1,4 +1,5 @@
 import { Head, router, useForm, usePage } from "@inertiajs/react";
+import { isEqual } from "lodash-es";
 import * as React from "react";
 import { flushSync } from "react-dom";
 
@@ -149,10 +150,12 @@ const buildCustomFieldValues = (
 // into it on every keystroke, and invalidating the payment configuration on that would disable Pay
 // while someone types their address. These are the fields Checkout::StripePaymentPresenter reads to
 // choose the lane: which seller each item belongs to, the price, whether it recurs or pays in
-// installments, preorder/free-trial status, the native type, and the listed currency.
+// installments, preorder/free-trial status, the native type, and the listed currency. The cart's codes
+// count too: a save answers with the codes weighed for its lines, so Pay waits for that answer.
 const paymentLaneCartKeyFor = (cart: CartState) =>
-  cart.items
-    .map((item) =>
+  [
+    cart.discountCodes.map(({ code }) => code).join(","),
+    ...cart.items.map((item) =>
       [
         item.product.creator.id,
         item.product.permalink,
@@ -166,8 +169,8 @@ const paymentLaneCartKeyFor = (cart: CartState) =>
         item.product.native_type,
         item.product.currency_code,
       ].join(":"),
-    )
-    .join("|");
+    ),
+  ].join("|");
 
 const CheckoutIndexPage = () => {
   const {
@@ -256,6 +259,11 @@ const CheckoutIndexPage = () => {
     checkoutPayment: checkout_payment,
   });
   const [state, dispatch] = reducer;
+  // The page's codes were quoted for the saved cart, before this visit added its products, so the
+  // cart waits for the first save's answer like any other edit.
+  useRunOnce(() => {
+    if (add_products.length > 0) dispatch({ type: "invalidate-checkout-payment" });
+  });
   const configuredDirectListedCurrency = getConfiguredDirectListedCurrency(state);
   const selectableDirectListedCurrency = getSelectableDirectListedCurrency(state);
   // Recurring UPI mounts and charges the server-selected INR lane regardless of any quote
@@ -990,20 +998,32 @@ const CheckoutIndexPage = () => {
   // The lane key of the cart as it stands right now, for saves to compare their answer against.
   // A ref for the same reason as the save above: a debounce or a recovery reads it outside the
   // render that scheduled it.
-  const currentPaymentLaneCartKeyRef = React.useRef("");
+  const currentCartRef = React.useRef(cartForm.data.cart);
+  currentCartRef.current = cartForm.data.cart;
+  // A configuration whose save also changed the cart's codes. It is adopted once the reducer has
+  // the repriced products: lifting the hold first would let an armed submit resume on the old totals.
+  const deliveredForRepricedCartRef = React.useRef<CheckoutPaymentConfig | null>(null);
 
   const debouncedSaveCartState = useDebouncedCallback(() => {
     saveCartRef.current(() =>
       buildCartSaveRefreshCallbacks({
         save: (callbacks) => saveCartRef.current(() => callbacks),
-        currentCartKey: () => currentPaymentLaneCartKeyRef.current,
+        currentCartKey: () => paymentLaneCartKeyFor(currentCartRef.current),
         // The one path that lifts the hold on Pay. The save that asked is the only place that knows
         // the configuration describes the cart the buyer is looking at — see checkoutPaymentRefresh.
-        onDelivered: (checkoutPayment) =>
-          dispatch({
-            type: "update-checkout-payment",
-            checkoutPayment: cast<CheckoutPaymentConfig>(checkoutPayment),
-          }),
+        onDelivered: (checkoutPayment, savedCart) => {
+          const config = cast<CheckoutPaymentConfig>(checkoutPayment);
+          const discountCodes = cast<CartState | undefined>(savedCart)?.discountCodes;
+          if (!discountCodes || isEqual(discountCodes, currentCartRef.current.discountCodes)) {
+            dispatch({ type: "update-checkout-payment", checkoutPayment: config });
+            return;
+          }
+          deliveredForRepricedCartRef.current = config;
+          // A claim that never meets its echo would wave through a later edit back to this key.
+          const repricedKey = paymentLaneCartKeyFor({ ...currentCartRef.current, discountCodes });
+          if (repricedKey !== paymentLaneCartKeyFor(currentCartRef.current)) laneInvalidation.claim(repricedKey);
+          cartForm.setData((prev) => ({ cart: { ...prev.cart, discountCodes } }));
+        },
         onUnrecoverable: (message) => showAlert(message, "error"),
       }),
     );
@@ -1025,6 +1045,9 @@ const CheckoutIndexPage = () => {
     if (state.status.type === "input") {
       dispatch({ type: "update-products", products: getProducts(cartForm.data.cart) });
     }
+    const delivered = deliveredForRepricedCartRef.current;
+    deliveredForRepricedCartRef.current = null;
+    if (delivered) dispatch({ type: "update-checkout-payment", checkoutPayment: delivered });
   }, [cartForm.data.cart]);
   // The cart changed in a way that can move it to a different payment lane, so the configuration
   // on screen was computed for the previous cart. Mark it stale (Pay stays disabled) until the
@@ -1037,7 +1060,6 @@ const CheckoutIndexPage = () => {
   // choose the lane: which seller each item belongs to, the price, whether it recurs or pays in
   // installments, preorder/free-trial status, the native type, and the listed currency.
   const paymentLaneCartKey = paymentLaneCartKeyFor(cartForm.data.cart);
-  currentPaymentLaneCartKeyRef.current = paymentLaneCartKey;
   useOnChange(() => {
     // Skip the invalidation when acceptOffer already made it for this exact cart. Accepting an
     // offer changes the cart, so this passive effect fires for that change too — but acceptOffer

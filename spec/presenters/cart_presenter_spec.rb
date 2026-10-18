@@ -167,6 +167,83 @@ describe CartPresenter do
       end
     end
 
+    context "when the buyer can redeem a product's defaults" do
+      let(:seller) { create(:user) }
+      let(:product) { create(:product, user: seller, price_cents: 1000) }
+      let(:owned_product) { create(:product, user: seller, price_cents: 2000) }
+      let(:cart) { create(:cart, user:, discount_codes: [{ code: "URL10", fromUrl: true }, { code: "shop30", fromUrl: false }]) }
+
+      before do
+        seller.offer_codes.create!(code: "URL10", amount_percentage: 10, products: [product])
+        seller.offer_codes.create!(code: "SHOP30", amount_percentage: 30, universal: true, products: [], auto_apply: true)
+        renewal = seller.offer_codes.create!(code: "RENEW20", amount_percentage: 20, products: [product],
+                                             existing_customers_only: true, ownership_products: [owned_product])
+        product.update!(default_offer_code: renewal)
+        create(:purchase, purchaser: user, link: owned_product, seller:, price_cents: 0)
+        create(:cart_product, cart:, product:)
+      end
+
+      it "quotes the defaults after the cart's own codes, the existing-customer default last" do
+        codes = presenter.cart_props[:discountCodes]
+
+        expect(codes.map { _1[:code] }).to eq(%w[URL10 shop30 RENEW20])
+        expect(codes.map { _1[:fromUrl] }).to eq([true, false, true])
+        expect(codes.map { _1[:automatic] }).to eq([nil, nil, true])
+        expect(codes.map { _1[:products].keys }).to all(eq([product.unique_permalink]))
+      end
+
+      it "lists every sale before every existing-customer default, whichever product comes first" do
+        other_product = create(:product, user: seller, price_cents: 1000)
+        renewal = product.default_offer_code
+        renewal.update!(products: [product, other_product])
+        other_product.update!(default_offer_code: renewal)
+        seller.offer_codes.find_by!(code: "SHOP30").excluded_products << other_product
+        cart.update!(discount_codes: [])
+        cart.cart_products.sole.destroy!
+        create(:cart_product, cart:, product: other_product)
+        create(:cart_product, cart:, product:)
+
+        expect(presenter.cart_props[:discountCodes].map { _1[:code] }).to eq(%w[SHOP30 RENEW20])
+      end
+
+      it "keeps a removable entry for a code the buyer typed that no line uses" do
+        cart.update!(discount_codes: [{ code: "shop30", fromUrl: false }])
+        seller.offer_codes.find_by!(code: "SHOP30").update!(minimum_quantity: 2)
+
+        expect(presenter.cart_props[:discountCodes].map { _1.slice(:code, :automatic) }).to eq([{ code: "shop30" }, { code: "RENEW20", automatic: true }])
+      end
+
+      it "leaves out the existing-customer default for a buyer who cannot redeem it" do
+        Purchase.where(link: owned_product).destroy_all
+
+        expect(presenter.cart_props[:discountCodes].map { _1[:code] }).to eq(%w[URL10 shop30])
+      end
+    end
+
+    context "when two sellers use one code name for a sale and an existing-customer default" do
+      let(:cart) { create(:cart, user:) }
+      let(:sale_seller) { create(:user) }
+      let(:loyalty_seller) { create(:user) }
+      let(:sale_product) { create(:product, user: sale_seller, price_cents: 1000) }
+      let(:loyalty_product) { create(:product, user: loyalty_seller, price_cents: 1000) }
+
+      before do
+        sale_seller.offer_codes.create!(code: "SHARED20", amount_percentage: 20, universal: true, products: [], auto_apply: true)
+        owned = create(:product, user: loyalty_seller, price_cents: 2000)
+        shared = loyalty_seller.offer_codes.create!(code: "SHARED20", amount_percentage: 20, products: [loyalty_product],
+                                                    existing_customers_only: true, ownership_products: [owned])
+        loyalty_product.update!(default_offer_code: shared)
+        loyalty_seller.offer_codes.create!(code: "SALE20", amount_percentage: 20, universal: true, products: [], auto_apply: true)
+        create(:purchase, purchaser: user, link: owned, seller: loyalty_seller, price_cents: 0)
+        create(:cart_product, cart:, product: sale_product)
+        create(:cart_product, cart:, product: loyalty_product)
+      end
+
+      it "lists the shared name after the sales, so the existing-customer default keeps its tie" do
+        expect(presenter.cart_props[:discountCodes].map { _1[:code] }).to eq(%w[SALE20 SHARED20])
+      end
+    end
+
     context "with many cart items" do
       let(:cart) { create(:cart, user:) }
       let(:seller) { create(:user) }

@@ -17,6 +17,15 @@ describe OfferCodeDiscountComputingService do
     }
   end
 
+  it "leaves out a product whose currency no longer matches a fixed code" do
+    fixed = create(:offer_code, user: seller, products: [product, product2], amount_cents: 500, amount_percentage: nil, currency_type: "usd")
+    product2.update!(price_currency_type: "eur", price_range: "20")
+
+    result = OfferCodeDiscountComputingService.new(fixed.code, products_data).process
+
+    expect(result[:products_data].keys).to eq([product.unique_permalink])
+  end
+
   it "reads quantities from each entry, not from the caller's choice of hash key" do
     index_keyed = {
       "0" => { quantity: "3", permalink: product.unique_permalink },

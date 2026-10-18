@@ -469,6 +469,49 @@ it("drops the queued cart save when the save in flight is interrupted", async ()
   expect(mocks.savedCarts).toHaveLength(1);
 });
 
+it("resumes an armed Pay only after the totals reflect the codes a save quoted", async () => {
+  mocks.props.checkout_payment = config(false);
+  const events: string[] = [];
+  mocks.surcharges.mockImplementation(() => {
+    events.push("quote");
+    return Promise.resolve(quote("2999-01-01T00:00:00Z"));
+  });
+  mocks.order.mockImplementation(() => {
+    events.push("order");
+    return new Promise(() => {});
+  });
+  render(<CheckoutPage />);
+  await act(() => vi.advanceTimersByTimeAsync(1000));
+  const initial = cast<CartSaveVisit>(mocks.saveVisits[0]);
+  act(() => {
+    initial.onStart?.();
+    initial.onSuccess({ props: { checkout_payment: config(false) } });
+    initial.onFinish({});
+  });
+
+  fireEvent.click(screen.getByRole("button", { name: "Quantity 2" }));
+  await act(() => vi.advanceTimersByTimeAsync(400));
+  fireEvent.click(screen.getByRole("button", { name: "Pay" }));
+  await act(() => vi.advanceTimersByTimeAsync(1000));
+  expect(mocks.order).not.toHaveBeenCalled();
+
+  const save = cast<CartSaveVisit>(mocks.saveVisits.at(-1));
+  events.length = 0;
+  act(() => {
+    save.onStart?.();
+    save.onSuccess({
+      props: {
+        checkout_payment: config(false),
+        cart: { discountCodes: [{ code: "SHOP5", products: {}, fromUrl: true }] },
+      },
+    });
+    save.onFinish({});
+  });
+  await act(() => vi.advanceTimersByTimeAsync(400));
+
+  expect(events).toEqual(["quote", "order"]);
+});
+
 it("does not let a queued save's answer lift the hold for a cart it did not send", async () => {
   mocks.props.checkout_payment = config(false);
   mocks.surcharges.mockResolvedValue(quote("2999-01-01T00:00:00Z"));

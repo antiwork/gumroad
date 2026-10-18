@@ -24,6 +24,7 @@ class CartPresenter
           :installment_plan,
           :variant_categories_alive,
           :alive_variants,
+          :default_offer_code,
           { available_upsell: :seller },
         ] }
       ).load
@@ -40,14 +41,13 @@ class CartPresenter
       email: cart.email.presence,
       returnUrl: cart.return_url.presence || "",
       rejectPppDiscount: cart.reject_ppp_discount,
-      discountCodes: cart.discount_codes.map do |discount_code|
+      discountCodes: discount_codes_with_defaults(cart_products).filter_map do |discount_code|
         result = OfferCodeDiscountComputingService.new(OfferCode.normalize_code(discount_code["code"]), discount_products, buyer: logged_in_user).process
+        products = result[:error_code].present? ? {} : result[:products_data].transform_values { _1[:discount] }
+        # A default that covers no line yet is left out; the save after the edit that qualifies it asks again.
+        next if discount_code["automatic"] && products.empty?
 
-        {
-          code: discount_code["code"],
-          fromUrl: discount_code["fromUrl"],
-          products: result[:error_code].present? ? {} : result[:products_data].transform_values { _1[:discount] },
-        }
+        { code: discount_code["code"], fromUrl: discount_code["fromUrl"], products:, **(discount_code["automatic"] ? { automatic: true } : {}) }
       end,
       items: cart_products.map do |cart_product|
         value = {
@@ -72,6 +72,24 @@ class CartPresenter
   end
 
   private
+    # Every cart save answers with these, so each line is weighed against its product's defaults on the
+    # cart as it stands; the quote above drops the ones this buyer cannot redeem. The checkout keeps the
+    # later code on a tie, so the defaults go last, and a name any product uses for an existing-customer
+    # default goes after every sale: sellers can share a code name, and the cart quotes it once.
+    def discount_codes_with_defaults(cart_products)
+      offer_codes = cart_products.flat_map { BestOfferCodeService.new(product: _1.product, buyer: logged_in_user).default_offer_codes }
+      existing_customer_names = offer_codes.filter_map { OfferCode.normalize_code(_1.code) if _1.existing_customers_only? }
+      defaults = offer_codes.filter_map { _1.code.presence }.uniq { OfferCode.normalize_code(_1) }
+        .partition { !existing_customer_names.include?(OfferCode.normalize_code(_1)) }.flatten
+      stored = cart.discount_codes.index_by { OfferCode.normalize_code(_1["code"]) }
+
+      # A code the buyer typed stays theirs to remove, even when it is also a default.
+      stored.except(*defaults.map { OfferCode.normalize_code(_1) }).values + defaults.map do |code|
+        typed = stored[OfferCode.normalize_code(code)]
+        typed && !typed["fromUrl"] ? typed : (typed || { "code" => code, "fromUrl" => true }).merge("automatic" => true)
+      end
+    end
+
     def checkout_product(cart_product)
       params = {
         recommended_by: cart_product.recommended_by,

@@ -56,7 +56,6 @@ import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
 import { Select } from "$app/components/ui/Select";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
-import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { useRunOnce } from "$app/components/useRunOnce";
 import { WithTooltip } from "$app/components/WithTooltip";
 
@@ -329,11 +328,9 @@ export const Checkout = ({
     setLoadingDiscount(false);
   }
 
-  const hasAddedProduct = !!new URL(useOriginalLocation()).searchParams.get("product");
   useRunOnce(() => {
     const url = new URL(window.location.href);
     const code = url.searchParams.get("code");
-    if (hasAddedProduct) cart.discountCodes.forEach(({ code }) => void applyDiscount(code));
     if (code) {
       void applyDiscount(code, true);
       url.searchParams.delete("code");
@@ -710,20 +707,26 @@ export const Checkout = ({
                             </Pill>
                           </WithTooltip>
                         ) : null}
-                        {visibleDiscounts.map((code) => (
-                          <Pill
-                            size="small"
-                            className="cursor-pointer"
-                            onClick={() =>
-                              updateCart({ discountCodes: cart.discountCodes.filter((item) => item !== code) })
-                            }
-                            key={code.code}
-                            aria-label="Discount code"
-                          >
-                            {code.code}
-                            <X className="ml-2 size-5" />
-                          </Pill>
-                        ))}
+                        {visibleDiscounts.map((code) =>
+                          code.automatic ? (
+                            <Pill size="small" key={code.code} aria-label="Discount code">
+                              {code.code}
+                            </Pill>
+                          ) : (
+                            <Pill
+                              size="small"
+                              className="cursor-pointer"
+                              onClick={() =>
+                                updateCart({ discountCodes: cart.discountCodes.filter((item) => item !== code) })
+                              }
+                              key={code.code}
+                              aria-label="Discount code"
+                            >
+                              {code.code}
+                              <X className="ml-2 size-5" />
+                            </Pill>
+                          ),
+                        )}
                       </h4>
                       {discount > 0 ? (
                         <div>

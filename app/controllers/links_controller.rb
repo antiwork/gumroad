@@ -165,7 +165,8 @@ class LinksController < ApplicationController
           product: @product,
           url_code: params[:offer_code] || params[:code],
           quantity: (params[:quantity] || 1).to_i,
-          buyer: logged_in_user
+          buyer: logged_in_user,
+          comparison_price_cents: cart_item[:price]
         ).result
         code = discount_result&.dig(:code) if discount_result&.dig(:valid)
         redirect_params = params.permit!.except(:code, :offer_code)

@@ -148,7 +148,8 @@ export const buildCartSaveRefreshCallbacks = ({
 }: {
   save: (callbacks: CartSaveCallbacks) => void;
   currentCartKey: () => string;
-  onDelivered: (checkoutPayment: unknown) => void;
+  // `cart` is the saved cart as the server quoted it, with its discount codes weighed for the lines sent.
+  onDelivered: (checkoutPayment: unknown, cart: unknown) => void;
   onUnrecoverable: (message: string) => void;
   recoveriesLeft?: number;
 }): CartSaveCallbacks => {
@@ -157,7 +158,7 @@ export const buildCartSaveRefreshCallbacks = ({
   // Read off the response rather than inferred from which callback fired: Inertia calls onError
   // only for a valid Inertia response carrying a props.errors payload, so "onError did not run"
   // does not mean a configuration arrived.
-  let delivered: { checkoutPayment: unknown } | null = null;
+  let delivered: { checkoutPayment: unknown; cart: unknown } | null = null;
 
   return {
     onSuccess: (page) => {
@@ -169,7 +170,7 @@ export const buildCartSaveRefreshCallbacks = ({
       // the buyer's cart is only known at onFinish: Inertia reports displacement there. Adopting in
       // onSuccess would let a save the buyer's next edit has already overtaken lift the hold that
       // edit just re-took.
-      delivered = { checkoutPayment: page.props[CHECKOUT_PAYMENT_PROP] };
+      delivered = { checkoutPayment: page.props[CHECKOUT_PAYMENT_PROP], cart: page.props.cart };
     },
     onFinish: (visit) => {
       // Payment or a navigation displaced this save, so its answer no longer speaks for the cart
@@ -184,7 +185,7 @@ export const buildCartSaveRefreshCallbacks = ({
       if (currentCartKey() !== sentCartKey) return;
 
       if (delivered) {
-        onDelivered(delivered.checkoutPayment);
+        onDelivered(delivered.checkoutPayment, delivered.cart);
         return;
       }
 
