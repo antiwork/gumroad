@@ -11,6 +11,7 @@ class Settings::MainController < Settings::BaseController
   end
 
   def update
+    feature_announcements_result = nil
     current_seller.with_lock do
       current_seller.assign_attributes(user_params)
 
@@ -23,6 +24,7 @@ class Settings::MainController < Settings::BaseController
       end
 
       current_seller.save!
+      feature_announcements_result = update_feature_announcements
     end
 
     if params[:user][:email] == current_seller.email
@@ -39,7 +41,12 @@ class Settings::MainController < Settings::BaseController
     current_seller.update_purchasing_power_parity_excluded_products!(params[:user][:purchasing_power_parity_excluded_product_ids])
     current_seller.update_product_level_support_emails!(params[:user][:product_level_support_emails])
 
-    redirect_to settings_main_path, status: :see_other, notice: "Your account has been updated!"
+    notice = if feature_announcements_result == :stale
+      "Your account has been updated, but Feature announcements changed elsewhere, so that setting was not saved."
+    else
+      "Your account has been updated!"
+    end
+    redirect_to settings_main_path, status: :see_other, notice:
   rescue ActiveRecord::RecordInvalid => e
     error_message = e.record.errors.full_messages.to_sentence.presence ||
       "Something broke. We're looking into what happened. Sorry about this!"
@@ -98,6 +105,18 @@ class Settings::MainController < Settings::BaseController
       permitted_params << :username if policy([:settings, :main, current_seller]).update_username?
 
       params.require(:user).permit(permitted_params)
+    end
+
+    # The form sends the version it rendered, so a tab opened before an unsubscribe link was
+    # used can't switch the emails back on. Clients that don't send the field change nothing.
+    def update_feature_announcements
+      return unless params[:user].key?(:feature_announcements_subscribed)
+
+      FeatureAnnouncementSubscription.update_from_settings!(
+        current_seller,
+        subscribed: ActiveModel::Type::Boolean.new.cast(params[:user][:feature_announcements_subscribed]) || false,
+        rendered_version: Integer(params[:user][:feature_announcements_version].to_s, exception: false) || -1
+      )
     end
 
     def seller_refund_policy_params
