@@ -34,7 +34,10 @@ class BlockedUsernameValidator < ActiveModel::EachValidator
     "santander" => %w[santander.com santander.co.uk], "binance" => %w[binance.com], "coinbase" => %w[coinbase.com],
     "bt" => %w[bt.com bt.co.uk], "btinternet" => %w[bt.com bt.co.uk], "btbroadband" => %w[bt.com bt.co.uk],
     "ee" => %w[ee.co.uk bt.com], "eebroadband" => %w[ee.co.uk bt.com],
-    "vodafone" => %w[vodafone.com vodafone.co.uk], "virginmedia" => %w[virginmedia.com],
+    "vodafone" => %w[vodafone.com vodafone.co.uk],
+    # Virgin Media issues virginmedia.com addresses to its residential customers, so that domain
+    # proves nothing about representing the company: no automatic exemption for anyone.
+    "virginmedia" => [],
     "talktalk" => %w[talktalk.co.uk talktalkgroup.com], "att" => %w[att.com], "verizon" => %w[verizon.com],
     "tmobile" => %w[t-mobile.com], "comcast" => %w[comcast.com], "xfinity" => %w[comcast.com xfinity.com],
 
@@ -80,9 +83,15 @@ class BlockedUsernameValidator < ActiveModel::EachValidator
     end
 
     private
-      # An unconfirmed address is a claim, not proof, so it grants no brand exemption.
+      # An unconfirmed address is a claim, not proof, and neither is a pending change: Devise moves a
+      # replacement address into `unconfirmed_email` only AFTER validation, so one request that sets
+      # `email` and `username` together would otherwise be judged on an address the account has not
+      # proved. The persisted address is the one that was confirmed, so it is what counts.
       def proven_email(record)
-        record.try(:confirmed?) ? record.try(:email) : nil
+        return nil unless record.try(:confirmed?)
+        return record.try(:email_in_database) if record.try(:persisted?) && record.try(:will_save_change_to_email?)
+
+        record.try(:email)
       end
 
       # Returns the allowed email domains when the username is a brand name (or a brand with an

@@ -10,7 +10,7 @@ describe BlockedUsernameValidator do
       end
     end
 
-    %w[apple paypal paypalsupport nikeofficial bt btbroadband eebroadband amazon123 theapple].each do |name|
+    %w[apple paypal paypalsupport nikeofficial bt btbroadband eebroadband amazon123 theapple virginmedia virginmediasupport].each do |name|
       it "blocks the brand username #{name} without a brand email" do
         expect(described_class.blocked?(name, email: "someone@gmail.com")).to be(true)
         expect(described_class.blocked?(name)).to be(true)
@@ -51,6 +51,13 @@ describe BlockedUsernameValidator do
     it "treats a record that cannot confirm an address as unproven" do
       expect(described_class.blocked_for?("paypal", Struct.new(:email).new("x@paypal.com"))).to be(true)
     end
+
+    it "ignores a pending email change on a confirmed record" do
+      user = create(:user, email: "someone@gmail.com")
+      user.username = "paypal"
+      user.email = "x@paypal.com"
+      expect(described_class.blocked_for?("paypal", user)).to be(true)
+    end
   end
 
   describe "on User" do
@@ -72,6 +79,20 @@ describe BlockedUsernameValidator do
       user = build(:unconfirmed_user, username: "paypalsupport", email: "x@paypal.com")
       expect(user).not_to be_valid
       expect(user.errors[:username].first).to include("support@gumroad.com")
+    end
+
+    it "rejects a brand username saved in the same update as an unconfirmed brand-domain email" do
+      user = create(:user, email: "someone@gmail.com")
+      user.update(username: "paypal", email: "x@paypal.com")
+
+      expect(user.errors[:username].first).to include("support@gumroad.com")
+      user.reload
+      expect(user.username).not_to eq("paypal")
+      expect(user.email).to eq("someone@gmail.com")
+    end
+
+    it "rejects the Virgin Media brand name even on a confirmed virginmedia.com address" do
+      expect(build(:user, username: "virginmediasupport", email: "jane@virginmedia.com")).not_to be_valid
     end
 
     it "does not re-validate an existing blocked username when other fields change" do
