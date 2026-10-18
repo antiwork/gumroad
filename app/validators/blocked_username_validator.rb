@@ -73,7 +73,18 @@ class BlockedUsernameValidator < ActiveModel::EachValidator
       !email_on_domains?(email, domains)
     end
 
+    # The brand exemption needs an address the account has PROVED it owns. Signup stores whatever
+    # string was typed, so an unconfirmed brand-domain address must not grant the brand name.
+    def blocked_for?(username, record)
+      blocked?(username, email: proven_email(record))
+    end
+
     private
+      # An unconfirmed address is a claim, not proof, so it grants no brand exemption.
+      def proven_email(record)
+        record.try(:confirmed?) ? record.try(:email) : nil
+      end
+
       # Returns the allowed email domains when the username is a brand name (or a brand with an
       # affix), nil when it is not a brand.
       def brand_domains(name)
@@ -97,7 +108,7 @@ class BlockedUsernameValidator < ActiveModel::EachValidator
   end
 
   def validate_each(record, attribute, value)
-    return unless self.class.blocked?(value, email: record.try(:email))
+    return unless self.class.blocked_for?(value, record)
 
     record.errors.add(attribute, options[:message] || BLOCKED_MESSAGE)
   end

@@ -11,7 +11,7 @@ class GenerateUsernameJob
     username = UsernameGeneratorService.new(user).username
     return if username.nil?
     # Leave the account on its default username rather than fail the save and retry.
-    return if BlockedUsernameValidator.blocked?(username, email: user.email)
+    return if BlockedUsernameValidator.blocked_for?(username, user)
 
     user.with_lock do
       break if user.read_attribute(:username).present?

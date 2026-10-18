@@ -34,6 +34,25 @@ describe BlockedUsernameValidator do
     end
   end
 
+  describe ".blocked_for?" do
+    it "ignores an unconfirmed address, so the brand name stays blocked" do
+      expect(described_class.blocked_for?("paypal", build(:unconfirmed_user, email: "x@paypal.com"))).to be(true)
+      expect(described_class.blocked_for?("nikeofficial", build(:unconfirmed_user, email: "jane@nike.com"))).to be(true)
+    end
+
+    it "honours a confirmed address" do
+      expect(described_class.blocked_for?("paypal", build(:user, email: "x@paypal.com"))).to be(false)
+    end
+
+    it "blocks gambling names even for a confirmed brand address" do
+      expect(described_class.blocked_for?("sunwin789", build(:user, email: "x@paypal.com"))).to be(true)
+    end
+
+    it "treats a record that cannot confirm an address as unproven" do
+      expect(described_class.blocked_for?("paypal", Struct.new(:email).new("x@paypal.com"))).to be(true)
+    end
+  end
+
   describe "on User" do
     it "rejects a blocked username with a message that says who to email" do
       user = build(:user, username: "go88tv")
@@ -45,8 +64,14 @@ describe BlockedUsernameValidator do
       expect(build(:user, username: "paypalsupport", email: "x@gmail.com")).not_to be_valid
     end
 
-    it "accepts a brand username for a brand email" do
+    it "accepts a brand username for a confirmed brand email" do
       expect(build(:user, username: "paypal", email: "x@paypal.com")).to be_valid
+    end
+
+    it "rejects a brand username when the brand email is not confirmed" do
+      user = build(:unconfirmed_user, username: "paypalsupport", email: "x@paypal.com")
+      expect(user).not_to be_valid
+      expect(user.errors[:username].first).to include("support@gumroad.com")
     end
 
     it "does not re-validate an existing blocked username when other fields change" do
