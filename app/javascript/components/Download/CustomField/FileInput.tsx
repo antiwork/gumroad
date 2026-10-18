@@ -6,7 +6,7 @@ import FileUtils from "$app/utils/file";
 import { asyncVoid } from "$app/utils/promise";
 import { request } from "$app/utils/request";
 
-import { buttonVariants } from "$app/components/Button";
+import { Button } from "$app/components/Button";
 import { usePurchaseCustomFields, usePurchaseInfo } from "$app/components/DownloadPage/WithContent";
 import { FileKindIcon } from "$app/components/FileRowContent";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -21,6 +21,7 @@ export const FileInput = ({ customFieldId }: { customFieldId: string }) => {
   const purchaseInfo = usePurchaseInfo();
   const purchaseCustomFields = usePurchaseCustomFields();
   const [isUploading, setIsUploading] = React.useState(false);
+  const inputRef = React.useRef<HTMLInputElement>(null);
 
   const [files, setFiles] = React.useState<{ name: string; size: number; extension: string }[]>(() => {
     const purchaseCustomField = purchaseCustomFields.find(
@@ -83,11 +84,22 @@ export const FileInput = ({ customFieldId }: { customFieldId: string }) => {
   });
 
   const fileUpload = (
-    <label className={buttonVariants({ size: "default", color: "primary" })}>
-      <input type="file" className="sr-only" onChange={handleFileChange} disabled={isUploading} multiple />
-      <ArrowUp pack="filled" className="size-5" />
-      Upload files
-    </label>
+    <>
+      <input
+        ref={inputRef}
+        type="file"
+        className="sr-only"
+        tabIndex={-1}
+        aria-label="Upload files"
+        onChange={handleFileChange}
+        disabled={isUploading}
+        multiple
+      />
+      <Button color="primary" className="select-none" disabled={isUploading} onClick={() => inputRef.current?.click()}>
+        <ArrowUp pack="filled" className="size-5" />
+        Upload files
+      </Button>
+    </>
   );
 
   return files.length ? (
