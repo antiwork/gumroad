@@ -19,6 +19,13 @@ describe GenerateUsernameJob do
         described_class.new.perform(user.id)
         expect(user.reload.username).to eq("foo")
       end
+
+      it "leaves the default username when the generated one is blocked" do
+        user = create(:user, username: nil)
+        expect_any_instance_of(UsernameGeneratorService).to receive(:username).and_return("go88tv")
+        described_class.new.perform(user.id)
+        expect(user.reload.read_attribute(:username)).to be_nil
+      end
     end
   end
 end

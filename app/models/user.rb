@@ -334,6 +334,7 @@ class User < ApplicationRecord
   validates :username, uniqueness: { case_sensitive: true },
                        length: { minimum: 3, maximum: 20 },
                        exclusion: { in: DENYLIST },
+                       blocked_username: true,
                        # Username format ensures -
                        # 1. Username contains only lower case letters and numbers.
                        # 2. Username contains at least one letter.
