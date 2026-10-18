@@ -448,6 +448,30 @@ describe PostResendApi, :freeze_time do
     end
   end
 
+  describe "From header" do
+    it "quotes a display name that contains RFC 5322 specials instead of failing at the ESP" do
+      @seller.update!(name: "Smith, John")
+      send_default_email
+
+      expect(sent_email[:from]).to eq(
+        "\"Smith, John\" <#{@seller.username}@#{CREATOR_CONTACTING_CUSTOMERS_MAIL_DOMAIN}>"
+      )
+    end
+
+    it "quotes a display name containing angle brackets" do
+      @seller.update!(name: "Bobby <b>Tables</b>")
+      send_default_email
+
+      expect(sent_email[:from]).to start_with("\"Bobby <b>Tables</b>\" <")
+    end
+
+    it "leaves a plain display name unquoted" do
+      send_default_email
+
+      expect(sent_email[:from]).to start_with("#{@seller.name} <")
+    end
+  end
+
   describe "Resend API routing" do
     before do
       allow(Rails.application.config.action_mailer).to receive(:perform_deliveries).and_return(true)

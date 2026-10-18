@@ -389,7 +389,7 @@ class ProductPresenter
       # The sender line receipt emails actually go out with (CustomerMailer#receipt builds the
       # same name + noreply@customers address), so the Receipt tab's email-style preview
       # chrome can show an honest From value.
-      receipt_email_from: "#{from_email_address_name(product.user.name.to_s)} <noreply@#{CUSTOMERS_MAIL_DOMAIN}>",
+      receipt_email_from: from_email_address_with_header(product.user.name.to_s, "noreply@#{CUSTOMERS_MAIL_DOMAIN}"),
       price_checker_enabled: Feature.active?(:price_checker, product.user),
       custom_html_pages_enabled: Feature.active?(:custom_html_pages, product.user),
       auto_marketing_enabled: Marketing::Eligibility.enabled_for?(product.user),

@@ -87,7 +87,7 @@ class PostResendApi
       )
 
       email = {
-        from: "#{from_email_address_name(@post.seller.name)} <#{creators_from_email_address(@post.seller.username)}>",
+        from: from_email_address_with_header(@post.seller.name, creators_from_email_address(@post.seller.username)),
         reply_to: @post.reply_to_email,
         to: [recipient[:email]],
         subject: @post.subject,

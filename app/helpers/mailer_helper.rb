@@ -18,6 +18,15 @@ module MailerHelper
     "#{username.presence || "creators"}@#{CREATOR_CONTACTING_CUSTOMERS_MAIL_DOMAIN}"
   end
 
+  # Builds a complete `Name <address>` From value that survives RFC 5322 parsing.
+  # Interpolating the name raw only works while it is a plain atom: a `<`, `>`,
+  # `"`, `,` or `;` makes the ESP read the rest as the address (or reject the
+  # request outright). ActionMailer's own quoting adds `"` only when the name
+  # needs it, so ordinary names come out byte-identical to the old interpolation.
+  def from_email_address_with_header(name, email_address)
+    ActionMailer::Base.email_address_with_name(email_address, from_email_address_name(name))
+  end
+
   def from_email_address_name(name)
     # SendGrid bounces emails where the creator's name contains
     # at least one letter with accents and at least one symbol.
