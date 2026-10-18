@@ -1097,6 +1097,16 @@ class Link < ApplicationRecord
       raise LinkInvalid, message
     end
 
+    # Checkout reads an empty coverage list as "no shipping restriction" and offers every
+    # country, so a product that excludes everything it ships to would show a normal checkout
+    # where every purchase then fails. Refuse that state rather than persisting it.
+    covered = shipping_destinations.alive.flat_map { |shipping_destination| shipping_destination.country_or_countries.keys }.uniq
+    if country_codes.present? && covered.present? && (covered - country_codes).empty?
+      message = "The product needs to be shippable to at least one destination."
+      errors.add(:base, message)
+      raise LinkInvalid, message
+    end
+
     shipping_exclusions.where.not(country_code: country_codes).delete_all
     (country_codes - shipping_exclusions.pluck(:country_code)).each do |country_code|
       ShippingExclusion.create!(link_id: id, country_code:)
@@ -1933,7 +1943,8 @@ class Link < ApplicationRecord
 
     def enforce_shipping_destinations_presence!
       return unless is_physical
-      return if shipping_destinations.alive.present?
+      # Not just destinations: a destination the product excludes still leaves nothing to ship to.
+      return if shippable_country_codes.present?
 
       errors.add(:base, "The product needs to be shippable to at least one destination.")
       raise LinkInvalid, "The product needs to be shippable to at least one destination."

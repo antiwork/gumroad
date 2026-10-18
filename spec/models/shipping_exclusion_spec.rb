@@ -6,18 +6,18 @@ describe ShippingExclusion do
   let(:product) { create(:physical_product) }
 
   # `:physical_product` ships to ELSEWHERE by default (every country), so replace rather than add.
-  def set_destinations(*country_codes)
-    product.shipping_destinations.alive.each(&:destroy)
+  def set_destinations(*country_codes, on: product)
+    on.shipping_destinations.alive.each(&:destroy)
     country_codes.each do |country_code|
-      product.shipping_destinations << ShippingDestination.new(
+      on.shipping_destinations << ShippingDestination.new(
         country_code:,
         one_item_rate_cents: 0,
         multiple_items_rate_cents: 0,
         is_virtual_country: ShippingDestination::Destinations::VIRTUAL_COUNTRY_CODES.include?(country_code)
       )
     end
-    product.save!
-    product.reload
+    on.save!
+    on.reload
   end
 
   describe "validation" do
@@ -61,6 +61,37 @@ describe ShippingExclusion do
       expect do
         product.save_shipping_exclusions!(["ELSEWHERE"])
       end.to raise_error(Link::LinkInvalid, /cannot be excluded from shipping/)
+    end
+
+    it "refuses to exclude every country the product ships to" do
+      set_destinations("US")
+
+      expect do
+        product.save_shipping_exclusions!(["US"])
+      end.to raise_error(Link::LinkInvalid, /shippable to at least one destination/)
+
+      expect(product.reload.shipping_excluded_country_codes).to eq([])
+    end
+
+    it "allows excluding a country while another one remains shippable" do
+      set_destinations("US", "CA")
+
+      product.save_shipping_exclusions!(["CA"])
+
+      expect(product.reload.shippable_country_codes).to eq(["US"])
+    end
+  end
+
+  describe "#publish!" do
+    it "refuses to publish a draft whose only destination is excluded" do
+      draft = create(:physical_product)
+      set_destinations("US", on: draft)
+      draft.shipping_exclusions.create!(country_code: "US")
+      draft.update!(draft: true)
+
+      expect do
+        draft.reload.publish!
+      end.to raise_error(Link::LinkInvalid, /shippable to at least one destination/)
     end
   end
 
