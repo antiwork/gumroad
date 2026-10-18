@@ -151,6 +151,16 @@ describe ProductPresenter::PublicApiProps do
 
         expect(props[:reviews].map { |review| review[:message] }).not_to include(nil)
       end
+
+      it "does not issue queries per review" do
+        product.update!(display_product_reviews: true)
+        two_reviews = count_queries { described_class.new(product: Link.find(product.id)).props }
+
+        3.times { create(:product_review, link: product, purchase: create(:purchase, link: product), rating: 4, message: "Solid") }
+        five_reviews = count_queries { described_class.new(product: Link.find(product.id)).props }
+
+        expect(five_reviews).to eq(two_reviews)
+      end
     end
 
     context "pay-what-you-want product" do

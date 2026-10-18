@@ -127,18 +127,15 @@ class ProductPresenter::PublicApiProps
       end + product.file_info_for_product_page.map { |k, v| { name: k.to_s, value: v } }
     end
 
-    # A small, stable slice of the reviews the product page already shows, so a
-    # seller building a storefront elsewhere can render real review text instead
-    # of pasting it by hand. Same creator toggle as `ratings`: nil when the
-    # seller hides reviews. Names follow the buyer's Anonymous choice, and
-    # nothing purchase-specific (ids, emails) leaves the server.
+    # Public sample of the reviews the product page shows, so a storefront built
+    # elsewhere can render real review text instead of pasting it by hand.
     def public_reviews_props
       return nil unless product.display_product_reviews?
 
       product.product_reviews
         .alive
         .visible_on_product_page
-        .includes(:response, purchase: :purchaser)
+        .includes(:response, approved_video: :video_file, purchase: { purchaser: { avatar_attachment: :blob } })
         .order(rating: :desc, created_at: :desc, id: :desc)
         .limit(PUBLIC_REVIEW_LIMIT)
         .map do |review|
