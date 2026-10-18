@@ -389,6 +389,48 @@ describe FeatureAnnouncementMailer do
       expect(delivery.state).to eq("delivered")
     end
 
+    it "retries a 4xx refusal through the delivery job and sends once" do
+      attempts = 0
+      allow_any_instance_of(Mail::TestMailer).to receive(:deliver!).and_wrap_original do |original, *args|
+        attempts += 1
+        raise Net::SMTPServerBusy.new(Net::SMTP::Response.parse("451 4.3.0 Try again later")) if attempts == 1
+
+        original.call(*args)
+      end
+
+      perform_enqueued_jobs { announcement.deliver_later }
+
+      expect(attempts).to eq(2)
+      expect(ActionMailer::Base.deliveries.size).to eq(1)
+      expect(delivery.state).to eq("delivered")
+    end
+
+    it "rechecks consent when it retries a 4xx refusal" do
+      allow_any_instance_of(Mail::TestMailer).to receive(:deliver!).and_raise(Net::SMTPServerBusy.new(Net::SMTP::Response.parse("421 4.7.0 Throttled")))
+      announcement.deliver_later
+      perform_enqueued_jobs
+      expect(enqueued_jobs.size).to eq(1)
+      expect(delivery).to be_nil
+
+      allow_any_instance_of(Mail::TestMailer).to receive(:deliver!).and_call_original
+      FeatureAnnouncementSubscription.unsubscribe!(user, source: "unsubscribe_link")
+      perform_enqueued_jobs
+
+      expect(ActionMailer::Base.deliveries).to be_empty
+      expect(delivery.attributes.slice("state", "reason")).to eq("state" => "skipped", "reason" => "not_subscribed")
+    end
+
+    it "keeps a failed row when the mailer's rescue swallows an authentication error" do
+      allow_any_instance_of(Mail::TestMailer).to receive(:deliver!).and_raise(Net::SMTPAuthenticationError.new(Net::SMTP::Response.parse("535 5.7.8 Authentication failed")))
+      expect(ErrorNotifier).to receive(:notify).with(instance_of(Net::SMTPAuthenticationError), context: { feature_announcement_delivery_id: kind_of(Integer) })
+
+      expect { perform_enqueued_jobs { announcement.deliver_later } }.not_to raise_error
+
+      expect(ActionMailer::Base.deliveries).to be_empty
+      expect(delivery.attributes.slice("state", "reason")).to eq("state" => "failed", "reason" => "Net::SMTPAuthenticationError")
+      expect(FeatureAnnouncementDelivery.quarantined).to be_empty
+    end
+
     it "records a provider rejection without retrying" do
       allow_any_instance_of(Mail::TestMailer).to receive(:deliver!).and_raise(Net::SMTPFatalError.new(Net::SMTP::Response.parse("550 rejected")))
 

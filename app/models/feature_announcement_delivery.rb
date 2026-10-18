@@ -4,7 +4,7 @@
 # committed before the provider handoff. `claimed` and `unknown` rows are quarantined and never
 # resent automatically, which bounds each recipient to one attempt but is not exactly-once.
 class FeatureAnnouncementDelivery < ApplicationRecord
-  STATES = %w[claimed delivered skipped rejected unknown].freeze
+  STATES = %w[claimed delivered skipped rejected failed unknown].freeze
   QUARANTINED_STATES = %w[claimed unknown].freeze
   LOCK_WAIT_SECONDS = 5
   # Caps the whole SMTP exchange, which runs while the gate holds row locks. Net::SMTP has no
@@ -12,8 +12,12 @@ class FeatureAnnouncementDelivery < ApplicationRecord
   HANDOFF_TIMEOUT_SECONDS = 30
   ONE_CLICK = "List-Unsubscribe=One-Click"
 
-  NOT_HANDED_OFF_ERRORS = [Net::OpenTimeout, Net::SMTPAuthenticationError].freeze
+  # The provider did not accept the message (a 4xx is a definite refusal), so the claim is
+  # released and MailDeliveryJob's retry_on retries it.
+  RETRYABLE_ERRORS = [Net::OpenTimeout, Net::SMTPServerBusy].freeze
   REJECTED_ERRORS = [Net::SMTPFatalError, Net::SMTPSyntaxError].freeze
+  # Also not accepted, but RescueSmtpErrors swallows it, so no retry would come: keep a row.
+  FAILED_ERRORS = [Net::SMTPAuthenticationError].freeze
 
   class AmbientTransactionError < StandardError; end
   class UnsafeMailSettingsError < StandardError; end
@@ -80,11 +84,15 @@ class FeatureAnnouncementDelivery < ApplicationRecord
       end
     end
   rescue StandardError => e
-    if !handing_off || NOT_HANDED_OFF_ERRORS.any? { e.is_a?(_1) }
+    if !handing_off || RETRYABLE_ERRORS.any? { e.is_a?(_1) }
       self.class.where(id:, state: "claimed").delete_all
       raise
     elsif REJECTED_ERRORS.any? { e.is_a?(_1) }
       self.class.where(id:).update_all(state: "rejected", reason: e.class.name.first(64), updated_at: Time.current)
+      raise
+    elsif FAILED_ERRORS.any? { e.is_a?(_1) }
+      self.class.where(id:).update_all(state: "failed", reason: e.class.name.first(64), updated_at: Time.current)
+      ErrorNotifier.notify(e, context: { feature_announcement_delivery_id: id })
       raise
     else
       # Raising would let MailDeliveryJob retry, and the provider may already have the message.
