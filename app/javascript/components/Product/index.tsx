@@ -759,6 +759,7 @@ export const Product = ({
             purchase={purchase}
             discountCode={discountCode ?? null}
             pricePending={!!quote && quote.state !== "ready"}
+            priceLoading={quote?.state === "loading"}
             selection={selection}
             label={ctaLabel}
             showInstallmentPlanNotes

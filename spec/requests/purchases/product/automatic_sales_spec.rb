@@ -299,6 +299,29 @@ describe "Automatic sales on product pages", type: :system, js: true do
         expect(page).to have_text("Total US$24", normalize_ws: true)
       end
 
+      it "waits without a false failure while the buyer clears the quantity and types a new one" do
+        quoted_quantities = Concurrent::Array.new
+        subscriber = ActiveSupport::Notifications.subscribe("process_action.action_controller") do |*, payload|
+          quoted_quantities << payload[:params]["quantity"] if payload[:action] == "selection_discounts"
+        end
+
+        login_as buyer
+        visit product.long_url
+        expect(page).to have_selector("[itemprop='price']", text: "$10 $5", exact_text: true, normalize_ws: true)
+        quantity = find_field("Quantity")
+        quantity.send_keys(:backspace)
+        within(find(:article)) { expect(page).to have_no_link("I want this!") }
+        expect(page).to have_no_selector("[role='alert']")
+
+        quantity.send_keys("3")
+        expect(page).to have_selector("[itemprop='price']", text: "$10 $8", exact_text: true, normalize_ws: true)
+        expect(cta_code).to eq("RENEW20")
+        expect(page).to have_no_selector("[role='alert']")
+        expect(quoted_quantities).to eq(["3"])
+      ensure
+        ActiveSupport::Notifications.unsubscribe(subscriber) if subscriber
+      end
+
       it "offers no checkout link while a re-quote fails, and recovers when the buyer tries again" do
         failing = Concurrent::AtomicBoolean.new(true)
         allow_any_instance_of(OfferCodesController).to receive(:selection_discounts).and_wrap_original do |original, *args|

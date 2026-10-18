@@ -311,6 +311,25 @@ describe("useSelectionDiscounts", () => {
     expect(requests).toHaveLength(0);
   });
 
+  it("waits quietly, without asking, while the quantity is cleared, then quotes the quantity the buyer types", async () => {
+    const { result, rerender } = renderQuotes(quoteFor(1, code("RENEW20", 20)));
+
+    rerender({ selection: selectionFor({ quantity: 0 }) });
+    await settle();
+    expect(result.current.quote.state).toBe("incomplete");
+    expect(result.current.discountCode).toBeNull();
+    expect(requests).toHaveLength(0);
+
+    rerender({ selection: selectionFor({ quantity: 3 }) });
+    await settle();
+    expect(result.current.quote.state).toBe("loading");
+    expect(requests.map(({ params }) => params.quantity)).toEqual([3]);
+    await answer(0, quoteFor(3, code("BULK50", 50)));
+
+    expect(result.current.quote.state).toBe("ready");
+    expect(result.current.discountCode).toEqual(code("BULK50", 50));
+  });
+
   it("never asks, nor holds the buy button, when there is no code to weigh", async () => {
     const { result, rerender } = renderQuotes({ ...quoteFor(1, null), options: {} });
 
@@ -323,7 +342,7 @@ describe("useSelectionDiscounts", () => {
 });
 
 describe("product page while the selection's discount is being quoted", () => {
-  const renderPage = (quote: { state: "ready" | "loading" | "failed"; retry: () => void }) =>
+  const renderPage = (quote: { state: "ready" | "loading" | "failed" | "incomplete"; retry: () => void }) =>
     render(
       <Product
         product={product()}
@@ -334,6 +353,16 @@ describe("product page while the selection's discount is being quoted", () => {
         disableAnalytics
       />,
     );
+
+  it("gives the buy button no checkout link, and no alert or spinner, while the selection is incomplete", () => {
+    renderPage({ state: "incomplete", retry: vi.fn() });
+
+    const button = screen.getByText("Subscribe").closest("a");
+    expect(button?.hasAttribute("href")).toBe(false);
+    expect(button?.getAttribute("aria-busy")).toBe("false");
+    expect(screen.queryByRole("progressbar")).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
 
   it("gives the buy button no checkout link while the quote loads", () => {
     renderPage({ state: "loading", retry: vi.fn() });
@@ -350,6 +379,7 @@ describe("product page while the selection's discount is being quoted", () => {
 
     expect(screen.getByRole("alert").textContent).toContain("We couldn't check the discount for this selection.");
     expect(screen.getByText("Subscribe").closest("a")?.hasAttribute("href")).toBe(false);
+    expect(screen.queryByRole("progressbar")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(retry).toHaveBeenCalledTimes(1);
 

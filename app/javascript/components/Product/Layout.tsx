@@ -110,6 +110,7 @@ export const Layout = (
         purchase={purchase}
         discountCode={discountCode}
         pricePending={quote.state !== "ready"}
+        priceLoading={quote.state === "loading"}
         ctaLabel={ctaLabel}
         selection={selection}
         setSelection={setSelection}
@@ -143,6 +144,7 @@ const CtaBar = ({
   purchase,
   discountCode,
   pricePending,
+  priceLoading,
   ctaButtonRef,
   configurationSelectorRef,
   ctaLabel,
@@ -154,6 +156,7 @@ const CtaBar = ({
   purchase: Purchase | null;
   discountCode?: ProductDiscount | null;
   pricePending: boolean;
+  priceLoading: boolean;
   ctaButtonRef: React.RefObject<HTMLAnchorElement>;
   configurationSelectorRef: React.RefObject<ConfigurationSelectorHandle>;
   ctaLabel?: string | undefined;
@@ -278,6 +281,7 @@ const CtaBar = ({
             purchase={purchase}
             discountCode={discountCode ?? null}
             pricePending={pricePending}
+            priceLoading={priceLoading}
             selection={selection}
             label={ctaLabel}
             setSelection={setSelection}

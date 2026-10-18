@@ -23,7 +23,9 @@ export type SelectionDiscounts = {
 
 type Inputs = Pick<SelectionDiscounts, "quantity" | "recurrence" | "option_id" | "price_cents">;
 
-export type SelectionQuote = { state: "ready" | "loading" | "failed"; retry: () => void };
+// "incomplete" is a selection the server cannot quote yet, such as a cleared quantity: nothing is asked
+// and the buy buttons wait quietly until the buyer finishes it.
+export type SelectionQuote = { state: "ready" | "loading" | "failed" | "incomplete"; retry: () => void };
 
 const PWYW_QUOTE_DELAY_MS = 300;
 
@@ -72,8 +74,9 @@ export const useSelectionDiscounts = ({
   const key = inputsKey(inputs);
   const answer = answers[key];
   const missing = quotable && !answer;
+  const incomplete = !Number.isInteger(inputs.quantity) || inputs.quantity < 1;
   React.useEffect(() => {
-    if (!missing) return;
+    if (!missing || incomplete) return;
     let request: ReturnType<typeof getSelectionDiscounts> | null = null;
     const timeout = setTimeout(
       () => {
@@ -94,10 +97,10 @@ export const useSelectionDiscounts = ({
       clearTimeout(timeout);
       request?.cancel();
     };
-  }, [key, missing, attempt]);
+  }, [key, missing, incomplete, attempt]);
 
   const quote: SelectionQuote = {
-    state: !missing ? "ready" : failedKey === key ? "failed" : "loading",
+    state: !missing ? "ready" : incomplete ? "incomplete" : failedKey === key ? "failed" : "loading",
     retry: () => setAttempt((count) => count + 1),
   };
   if (!quotable) return { discountCode, saleLabel, selectionDiscountCode: undefined, quote };

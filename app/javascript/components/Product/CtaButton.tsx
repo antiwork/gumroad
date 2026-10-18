@@ -28,8 +28,10 @@ type Props = {
   selection: PriceSelection;
   label: string | undefined;
   showInstallmentPlanNotes?: boolean;
-  // The discount for this selection is still being quoted: there is no checkout link to follow yet.
+  // The discount for this selection is not quoted yet: there is no checkout link to follow.
   pricePending?: boolean;
+  // A quote for it is on its way, as opposed to failed or waiting for the buyer.
+  priceLoading?: boolean;
   onClick?: React.MouseEventHandler<HTMLAnchorElement>;
 };
 
@@ -110,6 +112,7 @@ export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
       onClick,
       showInstallmentPlanNotes = false,
       pricePending = false,
+      priceLoading = false,
     },
     ref,
   ) => {
@@ -172,7 +175,7 @@ export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
     const buttonCommonProps = {
       target: "_top",
       disabled: pricePending,
-      "aria-busy": pricePending,
+      "aria-busy": priceLoading,
       onClick: (evt: React.MouseEvent<HTMLAnchorElement>) => {
         if (pricePending) {
           evt.preventDefault();
@@ -199,7 +202,7 @@ export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
           className={compactOnMobile}
           {...buttonCommonProps}
         >
-          {pricePending ? <LoadingSpinner /> : null}
+          {priceLoading ? <LoadingSpinner /> : null}
           {needsOptionChoice(product, selection)
             ? INCOMPLETE_PURCHASE_CTA_LABEL
             : (label ??
