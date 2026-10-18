@@ -17,6 +17,7 @@ class UsersController < ApplicationController
   around_action :use_primary_for_landing_iframe, only: %i[landing_iframe_content landing_version landing_products]
   before_action :set_as_modal, only: %i[show]
   before_action :set_user_and_custom_domain_config, only: %i[show edit coffee subscribe subscribe_preview landing_iframe_content landing_version landing_products]
+  before_action :set_noindex_header_for_unproven_storefront, only: %i[show coffee subscribe subscribe_preview landing_iframe_content]
   before_action :set_page_attributes, only: %i[show]
   before_action :set_user_for_action, only: %i[email_unsubscribe]
   before_action :check_if_needs_redirect, only: %i[show]
@@ -227,6 +228,17 @@ class UsersController < ApplicationController
   end
 
   private
+    # Spam accounts create storefronts in bulk (gambling and fake login pages) and Google flags the
+    # whole domain for them. Keep a storefront out of search results until a human has marked the
+    # seller compliant or the seller has made a real (non-free) sale. Buyers who have the link are
+    # unaffected, and the header is dropped as soon as either condition is met.
+    def set_noindex_header_for_unproven_storefront
+      return if @user.compliant?
+      return if @user.sales.successful.non_free.exists?
+
+      set_noindex_header
+    end
+
     # The profile is authored entirely through the seller's agent + CLI, so the
     # custom HTML never carries a buy affordance — there's no checkout bridge or
     # ?wanted=true fall-through like the product landing page has. Store links
