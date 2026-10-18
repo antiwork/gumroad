@@ -155,6 +155,31 @@ class UpdatePayoutMethod
     raise
   end
 
+  # Validates and directory-checks the submitted bank account without saving it, so a caller can
+  # stage it somewhere other than the active payout method. Returns [bank_account, nil] or [nil, error].
+  def prepare_bank_account_candidate
+    return [nil, { error: :bank_account_error, data: "Bank account details are missing." }] unless bank_account_params_present? && params[:bank_account][:account_number].present?
+
+    prepare_replacement_bank_account
+  end
+
+  # Same for a debit card: the CreditCard is created and the CardBankAccount validated but not saved.
+  # Callers that do not keep it must hand it to discard_card_candidate!.
+  def prepare_card_candidate
+    credit_card, error = prepare_credit_card
+    return [nil, error] if error
+
+    bank_account = CardBankAccount.new(user:, credit_card:)
+    return [bank_account, nil] if bank_account.valid?
+
+    discard_prepared_credit_card!(credit_card)
+    [nil, bank_account_error_for(bank_account)]
+  end
+
+  def discard_card_candidate!(bank_account)
+    discard_prepared_credit_card!(bank_account.credit_card)
+  end
+
   private
     def bank_account_params_present?
       params[:bank_account].present? &&

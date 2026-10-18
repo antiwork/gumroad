@@ -47,6 +47,7 @@ class UpdateUserCountry
       @user.forfeit_unpaid_balance!(:country_change)
       @user.stripe_account.try(:delete_charge_processor_account!)
       @user.active_bank_account.try(:mark_deleted!)
+      StripePayoutRailSetup.abandon_open_for!(@user, :country_changed)
       @user.user_compliance_info_requests.requested.find_each(&:mark_provided!)
 
       @user.alive_user_compliance_info.mark_deleted(validate: false)

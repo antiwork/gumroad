@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_16_170001) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_16_170003) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -2670,6 +2670,26 @@ create_table "ping_deliveries", charset: "utf8mb4", collation: "utf8mb4_unicode_
     t.datetime "updated_at", null: false
     t.index ["domain"], name: "index_stripe_apple_pay_domains_on_domain", unique: true
     t.index ["user_id"], name: "index_stripe_apple_pay_domains_on_user_id"
+  end
+
+  create_table "stripe_payout_rail_setups", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.integer "bank_account_id", null: false
+    t.bigint "merchant_account_id"
+    t.string "state", default: "pending", null: false
+    t.string "attempt_token"
+    t.datetime "attempt_started_at"
+    t.integer "attempt_count", default: 0, null: false
+    t.datetime "prepared_at"
+    t.datetime "failed_at"
+    t.string "failure_code"
+    t.datetime "activated_at"
+    t.bigint "activated_by_id"
+    t.string "consent_reference"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["merchant_account_id"], name: "index_stripe_payout_rail_setups_on_merchant_account_id"
+    t.index ["user_id", "state"], name: "index_stripe_payout_rail_setups_on_user_id_and_state"
   end
 
   create_table "subscription_events", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|

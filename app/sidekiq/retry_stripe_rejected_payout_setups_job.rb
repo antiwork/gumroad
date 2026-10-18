@@ -13,6 +13,7 @@ class RetryStripeRejectedPayoutSetupsJob
   BATCH_SIZE = 1_000
 
   def perform
+    enqueue_awaiting_card_links
     candidate_notes.find_in_batches(batch_size: BATCH_SIZE) do |batch|
       ReplicaLagWatcher.watch
       batch.filter_map { |note| note.commentable_id if self.class.due_for_processing?(note) }
@@ -38,6 +39,15 @@ class RetryStripeRejectedPayoutSetupsJob
   end
 
   private
+    # A card setup waiting to be linked has no payout note, so it is found by state once its own
+    # link job's retries are over or were never enqueued. The job re-checks eligibility and fences
+    # itself, so a duplicate enqueue is harmless.
+    def enqueue_awaiting_card_links
+      StripePayoutRailSetup.where(state: StripePayoutRailSetup::AWAITING_CARD_LINK)
+                           .where("updated_at <= ?", StripePayoutRailSetups::Provision::ATTEMPT_LEASE.ago)
+                           .find_each { |setup| LinkStagedRailCardJob.perform_async(setup.id) }
+    end
+
     def candidate_notes
       Comment.alive
              .with_type_payout_note

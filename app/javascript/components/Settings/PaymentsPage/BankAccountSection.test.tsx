@@ -7,6 +7,7 @@ import type { User } from "$app/types/payments";
 
 import BankAccountSection from "$app/components/Settings/PaymentsPage/BankAccountSection";
 import type { BankAccount, BankAccountDetails } from "$app/components/Settings/PaymentsPage/BankAccountSection";
+import type { PayoutRailSetup } from "$app/components/Settings/PaymentsPage/StripeConnectSection";
 
 afterEach(cleanup);
 
@@ -390,5 +391,78 @@ describe("BankAccountSection Korean bank code", () => {
     expect(
       screen.getByText("Your bank's SWIFT/BIC code, 8 or 11 uppercase characters (e.g. NACFKRSE or NACFKRSEXXX)."),
     ).toBeTruthy();
+  });
+});
+
+describe("BankAccountSection beside a stored Stripe Connect link", () => {
+  const renderBesideConnect = (payoutRailSetup?: PayoutRailSetup) =>
+    render(
+      <BankAccountSection
+        bankAccountDetails={bankAccountDetails}
+        bankAccount={null}
+        updateBankAccount={() => {}}
+        hasConnectedStripe
+        payoutRailSetup={payoutRailSetup}
+        user={makeUser("US")}
+        isFormDisabled={false}
+        feeInfo={{ summary: "", items: [] }}
+        showNewBankAccount
+        setShowNewBankAccount={() => {}}
+        errorFieldNames={new Set()}
+      />,
+    );
+
+  it("keeps the existing warning while the payout rail setup rollout is closed", () => {
+    renderBesideConnect();
+
+    expect(
+      screen.getByText(
+        "You cannot change your payout method to bank account because you have a stripe account connected.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("says a bank account can be submitted, without claiming the current payout method changes", () => {
+    renderBesideConnect({ submitted_payout_type: null, refused_payout_type: null, support_required: false });
+
+    expect(
+      screen.getByText(
+        "You can submit a bank account here. Your current payout method stays as it is until we switch your payouts to the new bank account.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText(/You cannot change your payout method/u)).toBeNull();
+  });
+
+  it("acknowledges an instrument the seller already submitted", () => {
+    renderBesideConnect({ submitted_payout_type: "debit card", refused_payout_type: null, support_required: false });
+
+    expect(
+      screen.getByText(
+        "We've received the debit card you submitted. Your current payout method stays as it is until we switch your payouts to it.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("asks the seller to contact support while setup is blocked, without inviting another submission", () => {
+    renderBesideConnect({ submitted_payout_type: null, refused_payout_type: null, support_required: true });
+
+    expect(
+      screen.getByText(
+        "We can't set up a new bank account or debit card for your account yet, so your current payout method stays as it is. Please contact support.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText(/You can submit/u)).toBeNull();
+    expect(screen.queryByText(/couldn't set up the/u)).toBeNull();
+  });
+
+  it("says a refused instrument was not set up, without implying it will be switched on", () => {
+    renderBesideConnect({ submitted_payout_type: null, refused_payout_type: "debit card", support_required: false });
+
+    expect(
+      screen.getByText(
+        "We couldn't set up the debit card you submitted, so your current payout method stays as it is. You can submit a bank account here.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText(/switch your payouts/u)).toBeNull();
   });
 });

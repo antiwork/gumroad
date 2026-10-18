@@ -47,12 +47,16 @@ class RetryStripeRejectedPayoutSetupForSellerJob
       return
     end
 
+    # A pending rail setup only prepares an account beside PayPal, so the seller still being paid
+    # through PayPal is no reason to stop retrying its uncertain preparation. Its own note goes first,
+    # so an older note of another context neither blocks it nor gets resolved by its success.
+    rail_setup_note = pending_rail_setup_note(user)
     if user.current_payout_processor == PayoutProcessorType::PAYPAL
-      abandon_stale_notes!(user, reason: ABANDONED_REASON_SWITCHED_OFF_STRIPE, note_content: SWITCHED_OFF_STRIPE_NOTE)
-      return
+      abandon_stale_notes!(user, reason: ABANDONED_REASON_SWITCHED_OFF_STRIPE, note_content: SWITCHED_OFF_STRIPE_NOTE, except: rail_setup_note)
+      return if rail_setup_note.nil?
     end
 
-    note = oldest_outstanding_note(user)
+    note = rail_setup_note || oldest_outstanding_note(user)
     return if note.nil?
 
     # Retrying any of these three re-sends the identical saved value, so the weekly sweep can only
@@ -131,14 +135,27 @@ class RetryStripeRejectedPayoutSetupForSellerJob
           )
     end
 
+    def pending_rail_setup_note(user)
+      setup = StripePayoutRailSetup.open_for(user)
+      return unless setup&.pending?
+
+      payout_setup_failure_notes(user)
+        .order(created_at: :asc)
+        .find { |candidate| candidate.json_data["abandoned_at"].blank? && rail_setup_note?(candidate, setup) }
+    end
+
+    def rail_setup_note?(note, setup)
+      no_verdict_note?(note) && note.json_data[StripeMerchantAccountManager::RAIL_SETUP_ID_NOTE_KEY].to_s == setup.id.to_s
+    end
+
     def oldest_outstanding_note(user)
       payout_setup_failure_notes(user)
         .order(created_at: :asc)
         .find { |candidate| candidate.json_data["abandoned_at"].blank? }
     end
 
-    def abandon_stale_notes!(user, reason:, note_content:)
-      notes = payout_setup_failure_notes(user).select { |note| note.json_data["abandoned_at"].blank? }
+    def abandon_stale_notes!(user, reason:, note_content:, except: nil)
+      notes = payout_setup_failure_notes(user).select { |note| note.json_data["abandoned_at"].blank? && note != except }
       return if notes.empty?
 
       # Marking a note abandoned is terminal: every later run skips abandoned notes. So the
@@ -328,6 +345,11 @@ class RetryStripeRejectedPayoutSetupForSellerJob
           true
         end
       else
+        # A rail setup may only be prepared again here; creating a live account would activate it.
+        # Only its own note may do that, since success resolves the note.
+        rail_setup = StripePayoutRailSetup.open_for(user)
+        return rail_setup.pending? && rail_setup_note?(note, rail_setup) && StripePayoutRailSetups::Provision.new(rail_setup).process.success if rail_setup
+
         return false unless user.native_payouts_supported?
         return false if StripeMerchantAccountManager::NEW_ACCOUNT_CREATION_BLOCKED_COUNTRIES
           .include?(user.alive_user_compliance_info&.legal_entity_country_code)

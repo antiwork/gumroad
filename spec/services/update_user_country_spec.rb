@@ -12,6 +12,18 @@ describe UpdateUserCountry do
   end
 
   describe "#process" do
+    it "abandons an open payout rail setup prepared for the old legal entity" do
+      setup = create(:stripe_payout_rail_setup, :prepared, user: @user)
+
+      UpdateUserCountry.new(new_country_code: "GB", user: @user).process
+
+      setup.reload
+      expect(setup.state).to eq(StripePayoutRailSetup::FAILED)
+      expect(setup.failure_code).to eq("country_changed")
+      expect(setup.merchant_account).not_to be_alive
+      expect(StripeMerchantAccountManager.blocks_new_managed_account?(@user.reload)).to be(false)
+    end
+
     UpdateUserCountry::PAYOUT_IN_FLIGHT_STATES.each do |in_flight_state|
       context "when the user has a payout still in the #{in_flight_state} state" do
         before do

@@ -3,6 +3,32 @@
 require "spec_helper"
 
 describe BankAccount do
+  describe "creation callbacks" do
+    let(:user) { create(:user) }
+    let!(:bank_account_request) { create(:user_compliance_info_request, user:, field_needed: UserComplianceInfoFields::BANK_ACCOUNT) }
+
+    it "syncs a new active bank account and completes its compliance request" do
+      create(:ach_account, user:)
+
+      expect(HandleNewBankAccountWorker.jobs.size).to eq(1)
+      expect(bank_account_request.reload.state).to eq("provided")
+    end
+
+    it "runs the same callbacks for an ordinary bank account created already deleted" do
+      create(:ach_account, user:, deleted_at: Time.current)
+
+      expect(HandleNewBankAccountWorker.jobs.size).to eq(1)
+      expect(bank_account_request.reload.state).to eq("provided")
+    end
+
+    it "leaves a payout rail setup candidate untouched" do
+      create(:ach_account, user:, deleted_at: Time.current, staged_rail_candidate: true)
+
+      expect(HandleNewBankAccountWorker.jobs.size).to eq(0)
+      expect(bank_account_request.reload.state).to eq("requested")
+    end
+  end
+
   describe "routing_number" do
     let(:australian_bank_account) { build(:australian_bank_account) }
 

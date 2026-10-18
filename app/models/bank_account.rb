@@ -19,9 +19,12 @@ class BankAccount < ApplicationRecord
   validates_presence_of :user, :account_number, :account_number_last_four, :account_holder_full_name,
                         message: "We could not save your bank account information."
 
-  after_create_commit :handle_stripe_bank_account
-  after_create_commit :handle_compliance_info_request
-  after_create :update_user_products_search_index
+  # Set only by StripePayoutRailSetups::Stage: its candidate must stay inert until activation.
+  attr_accessor :staged_rail_candidate
+
+  after_create_commit :handle_stripe_bank_account, unless: :staged_rail_candidate
+  after_create_commit :handle_compliance_info_request, unless: :staged_rail_candidate
+  after_create :update_user_products_search_index, unless: :staged_rail_candidate
   after_update_commit :enqueue_user_products_recommendability_refresh, if: :active_status_changed?
 
   # This state machine can be expanded once we implement a complex verification process.

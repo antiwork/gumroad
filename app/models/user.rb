@@ -144,6 +144,7 @@ class User < ApplicationRecord
   has_one :active_watched_user, -> { alive }, class_name: "WatchedUser"
   has_many :workflows, foreign_key: :seller_id
   has_many :merchant_accounts
+  has_many :stripe_payout_rail_setups
   has_many :shipping_destinations
   has_many :tos_agreements
   has_many :product_files, through: :links
@@ -1248,6 +1249,9 @@ class User < ApplicationRecord
     end
 
     transaction do
+      # First, as the other Connect-removal paths do: it takes the seller lock Activate and Provision
+      # take, and the creator's setup must not outlive the Connect row it was staged beside.
+      StripePayoutRailSetup.abandon_open_for!(self, :connect_removed)
       self.notification_endpoint = nil
       self.payment_address = ""
       self.invalidated_paypal_payout_address = nil
@@ -1408,14 +1412,16 @@ class User < ApplicationRecord
 
   def seasoned_for_instant_payouts?(account)
     cutoff = MIN_ACCOUNT_AGE_FOR_INSTANT_PAYOUTS.ago
-    return true if account.created_at <= cutoff
+    started_at = account.instant_payout_seasoning_started_at
+    return true if started_at.present? && started_at <= cutoff
 
     # A predecessor has to have actually carried money: a rejected Stripe::Account.create leaves a
     # row that was mark_deleted! the same second with both charge-processor timestamps still NULL
     # (StripeMerchantAccountManager.cleanup_failed_merchant_account). Counting those would season a
     # minutes-old account off an attempt that never processed anything.
     merchant_accounts.stripe.any? do |predecessor|
-      predecessor.created_at <= cutoff &&
+      predecessor_started_at = predecessor.instant_payout_seasoning_started_at
+      predecessor_started_at.present? && predecessor_started_at <= cutoff &&
         predecessor.is_a_stripe_connect_account? == account.is_a_stripe_connect_account? &&
         !predecessor.stripe_rejected? &&
         (predecessor.charge_processor_deleted? || predecessor.charge_processor_alive?)

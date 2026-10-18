@@ -1652,6 +1652,7 @@ export default function PaymentsPage() {
                 bankAccount={form.data.bank_account}
                 updateBankAccount={updateBankAccount}
                 hasConnectedStripe={props.stripe_connect.has_connected_stripe}
+                payoutRailSetup={props.stripe_connect.payout_rail_setup}
                 user={props.user}
                 isFormDisabled={props.is_form_disabled}
                 feeInfo={props.fee_info.merchant_account_fee_info}
@@ -1663,6 +1664,7 @@ export default function PaymentsPage() {
               <DebitCardSection
                 isFormDisabled={props.is_form_disabled}
                 hasConnectedStripe={props.stripe_connect.has_connected_stripe}
+                payoutRailSetup={props.stripe_connect.payout_rail_setup}
                 feeInfo={props.fee_info.merchant_account_fee_info}
                 savedCard={props.bank_account_details.card}
                 setDebitCard={setDebitCard}

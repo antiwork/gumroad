@@ -150,6 +150,32 @@ describe User::SocialApple do
         expect(team.map { _1.reload.deleted? }).to eq([true, true])
       end
 
+      context "when the creator prepared a payout rail setup beside their Connect row" do
+        include_context "with Stripe API stubs"
+
+        it "ends the setup and retires its account", :aggregate_failures do
+          unconfirmed_user = create(:unconfirmed_user, email: "apple-rail@example.com", payment_address: "paypal-payouts@example.com")
+          create(:merchant_account_stripe_connect, user: unconfirmed_user)
+          create(:user_compliance_info, user: unconfirmed_user)
+          create(:tos_agreement, user: unconfirmed_user)
+          Feature.activate_user(User::FeatureStatus::PAYOUT_RAIL_BESIDE_INACTIVE_CONNECT_FEATURE, unconfirmed_user)
+          params = ActionController::Parameters.new(
+            bank_account: { type: AchAccount.name, account_number: "000123456789", account_number_confirmation: "000123456789", routing_number: "110000000", account_holder_full_name: "Signup Holder" }
+          )
+          setup = StripePayoutRailSetups::Stage.new(seller: unconfirmed_user, params:).process.setup
+          expect(StripePayoutRailSetups::Provision.new(setup).process.success).to be(true)
+          data = apple_data.merge("uid" => "001234.apple-rail", "info" => { "email" => "apple-rail@example.com", "email_verified" => true })
+
+          expect(User.find_or_create_for_apple_oauth(data)).to eq(unconfirmed_user)
+
+          setup.reload
+          expect(setup.state).to eq(StripePayoutRailSetup::FAILED)
+          expect(setup.failure_code).to eq("connect_removed")
+          expect(setup.merchant_account.reload).not_to be_alive
+          expect(setup.bank_account.reload).to be_deleted
+        end
+      end
+
       it "does not apply a confirmed account's pending email change", :aggregate_failures do
         confirmed_user = create(:user, email: "apple-pending@example.com")
         confirmed_user.update!(email: "owner-pending@example.com")

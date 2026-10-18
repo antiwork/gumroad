@@ -1024,6 +1024,64 @@ describe SettingsPresenter do
                                                                      }))
       end
 
+      describe "payout rail setup notice" do
+        let!(:stripe_connect_account) { create(:merchant_account_stripe_connect, user: seller) }
+
+        it "is absent while the rollout gate is closed" do
+          expect(presenter.payments_props[:stripe_connect]).not_to have_key(:payout_rail_setup)
+        end
+
+        it "tells the page a bank account or card can be submitted once the gate is open" do
+          Feature.activate_user(User::FeatureStatus::PAYOUT_RAIL_BESIDE_INACTIVE_CONNECT_FEATURE, seller)
+
+          expect(presenter.payments_props[:stripe_connect][:payout_rail_setup]).to eq(submitted_payout_type: nil, refused_payout_type: nil, support_required: false)
+        end
+
+        it "names the instrument the seller already submitted" do
+          Feature.activate_user(User::FeatureStatus::PAYOUT_RAIL_BESIDE_INACTIVE_CONNECT_FEATURE, seller)
+          create(:stripe_payout_rail_setup, :prepared, user: seller)
+
+          expect(presenter.payments_props[:stripe_connect][:payout_rail_setup]).to eq(submitted_payout_type: "bank account", refused_payout_type: nil, support_required: false)
+        end
+
+        it "names an instrument Stripe refused, so the page does not imply it will be switched on" do
+          Feature.activate_user(User::FeatureStatus::PAYOUT_RAIL_BESIDE_INACTIVE_CONNECT_FEATURE, seller)
+          card = create(:card_bank_account, user: seller, credit_card: create(:us_debit_stripe_credit_card), deleted_at: Time.current)
+          create(:stripe_payout_rail_setup, user: seller, bank_account: card, state: StripePayoutRailSetup::FAILED, failure_code: "invalid_card_type")
+
+          expect(presenter.payments_props[:stripe_connect][:payout_rail_setup]).to eq(submitted_payout_type: nil, refused_payout_type: "debit card", support_required: false)
+        end
+
+        it "asks the seller to contact support while an older managed account blocks setup, without blaming the instrument" do
+          Feature.activate_user(User::FeatureStatus::PAYOUT_RAIL_BESIDE_INACTIVE_CONNECT_FEATURE, seller)
+          legacy_account = travel_to(1.day.ago) { create(:merchant_account, user: seller, charge_processor_alive_at: nil, charge_processor_merchant_id: "acct_synthetic_legacy_unlive") }
+          create(:stripe_payout_rail_setup, user: seller, state: StripePayoutRailSetup::FAILED, failure_code: StripePayoutRailSetups::Provision::FOREIGN_BLOCKER_FAILURE_CODE)
+
+          expect(presenter.payments_props[:stripe_connect][:payout_rail_setup]).to eq(submitted_payout_type: nil, refused_payout_type: nil, support_required: true)
+
+          # Once support has repaired the older account, the page offers a submission again.
+          legacy_account.delete_charge_processor_account!
+          expect(described_class.new(pundit_user:).payments_props[:stripe_connect][:payout_rail_setup]).to eq(submitted_payout_type: nil, refused_payout_type: nil, support_required: false)
+        end
+
+        it "does not report a setup that ended for an internal reason, or one followed by a newer submission" do
+          Feature.activate_user(User::FeatureStatus::PAYOUT_RAIL_BESIDE_INACTIVE_CONNECT_FEATURE, seller)
+          create(:stripe_payout_rail_setup, user: seller, state: StripePayoutRailSetup::FAILED, failure_code: StripePayoutRailSetups::Cancel::FAILURE_CODE)
+          expect(presenter.payments_props[:stripe_connect][:payout_rail_setup]).to eq(submitted_payout_type: nil, refused_payout_type: nil, support_required: false)
+
+          create(:stripe_payout_rail_setup, user: seller, state: StripePayoutRailSetup::FAILED, failure_code: "account_number_invalid")
+          create(:stripe_payout_rail_setup, :prepared, user: seller)
+          expect(described_class.new(pundit_user:).payments_props[:stripe_connect][:payout_rail_setup]).to eq(submitted_payout_type: "bank account", refused_payout_type: nil, support_required: false)
+        end
+
+        it "is absent once Connect routes card sales" do
+          Feature.activate_user(User::FeatureStatus::PAYOUT_RAIL_BESIDE_INACTIVE_CONNECT_FEATURE, seller)
+          seller.update!(check_merchant_account_is_linked: true)
+
+          expect(presenter.payments_props[:stripe_connect]).not_to have_key(:payout_rail_setup)
+        end
+      end
+
       it "returns correct props when seller has a Stripe Connect account" do
         stripe_connect_account = create(:merchant_account_stripe_connect, user: seller)
 

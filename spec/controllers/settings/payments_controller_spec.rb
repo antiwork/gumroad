@@ -777,6 +777,518 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
 
             expect(session[:inertia_errors][:base]).to eq(["You cannot change your payout method to bank account because you have a stripe account connected."])
           end
+
+          context "when the payout rail setup rollout is open for the seller" do
+            include_context "with Stripe API stubs"
+
+            let(:staged_notice) { "We've received your bank account. Your current payout method has not been changed. Payouts to it start once we switch them on for your account." }
+
+            before do
+              Feature.activate_user(User::FeatureStatus::PAYOUT_RAIL_BESIDE_INACTIVE_CONNECT_FEATURE, user)
+            end
+
+            def expect_current_payout_method_kept(payout_weekday:, active_bank_account: nil, payout_processor: PayoutProcessorType::PAYPAL)
+              user.reload
+              expect(user.payment_address).to eq("old-paypal@example.com")
+              expect(user.invalidated_paypal_payout_address).to eq("older-paypal@example.com")
+              expect(user.active_bank_account).to eq(active_bank_account)
+              expect(user.stripe_account).to be_nil
+              expect(user.merchant_account(StripeChargeProcessor.charge_processor_id)).to be_nil
+              expect(user.current_payout_processor).to eq(payout_processor)
+              expect(user.payout_weekday).to eq(payout_weekday)
+              expect(user.check_merchant_account_is_linked).to be(false)
+              expect(user.has_stripe_account_connected?).to be(false)
+              expect(user.stripe_connect_account).to eq(connect_account)
+              expect(HandleNewBankAccountWorker.jobs.size).to eq(0)
+            end
+
+            { "form" => {}, "JSON" => { as: :json } }.each do |request_type, request_options|
+              it "stages the new bank account for activation and keeps the current payout method (#{request_type} request)" do
+                payout_weekday = user.payout_weekday
+
+                put :update, params: all_params.merge(bank_account: bank_account_params), **request_options
+
+                expect(response).to redirect_to(settings_payments_path)
+                expect(response).to have_http_status :see_other
+                expect(flash[:notice]).to eq(staged_notice)
+                setup = user.stripe_payout_rail_setups.sole
+                expect(setup).to be_prepared
+                expect(setup.bank_account).to be_deleted
+                expect(setup.bank_account.account_number_last_four).to eq("6789")
+                expect(setup.bank_account.stripe_connect_account_id).to eq(setup.merchant_account.charge_processor_merchant_id)
+                expect(setup.merchant_account.charge_processor_alive?).to be(false)
+                expect(user.reload.alive_user_compliance_info.first_name).to eq("barnabas")
+                expect_current_payout_method_kept(payout_weekday:)
+              end
+            end
+
+            it "sets up the address owner's own bank the ordinary way once an unproven-account adoption revoked the creator's staged one" do
+              put :update, params: all_params.merge(bank_account: bank_account_params)
+              setup = user.stripe_payout_rail_setups.sole
+              expect(setup).to be_prepared
+              creator_account = setup.merchant_account
+              user.revoke_unproven_access!
+              owner_bank = bank_account_params.merge(account_number: "000111222333", account_number_confirmation: "000111222333")
+
+              put :update, params: all_params.merge(bank_account: owner_bank)
+
+              expect(response).to redirect_to(settings_payments_path)
+              expect(user.stripe_payout_rail_setups.count).to eq(1)
+              user.reload
+              expect(user.stripe_account).to be_present
+              expect(user.stripe_account).not_to eq(creator_account)
+              expect(user.stripe_account.charge_processor_alive?).to be(true)
+              expect(user.active_bank_account.account_number_last_four).to eq("2333")
+              expect(user.active_bank_account).not_to eq(setup.bank_account)
+              expect(setup.reload.state).to eq(StripePayoutRailSetup::FAILED)
+              expect(setup.bank_account.reload).to be_deleted
+              expect(creator_account.reload).not_to be_alive
+            end
+
+            it "keeps an existing bank row active while the new one is staged" do
+              existing_bank_account = create(:ach_account, user:)
+              HandleNewBankAccountWorker.jobs.clear
+              payout_weekday = user.payout_weekday
+              payout_processor = user.current_payout_processor
+
+              put :update, params: all_params.merge(bank_account: bank_account_params)
+
+              expect(flash[:notice]).to eq(staged_notice)
+              expect(user.reload.bank_accounts.alive).to eq([existing_bank_account])
+              expect(user.stripe_payout_rail_setups.sole).to be_prepared
+              expect_current_payout_method_kept(payout_weekday:, active_bank_account: existing_bank_account, payout_processor:)
+            end
+
+            it "stages a new debit card for activation and keeps the current payout method" do
+              payout_weekday = user.payout_weekday
+              # Unit control at the card tokenization boundary (no Stripe customer is created).
+              chargeable = double("chargeable")
+              allow(ChargeProcessor).to receive(:get_chargeable_for_params).and_return(chargeable)
+              allow(CreditCard).to receive(:create).with(chargeable).and_return(create(:us_debit_stripe_credit_card))
+
+              put :update, params: { card: { stripe_token: "tok_synthetic" } }
+
+              expect(flash[:notice]).to eq("We've received your debit card. Your current payout method has not been changed. Payouts to it start once we switch them on for your account.")
+              setup = user.stripe_payout_rail_setups.sole
+              expect(setup).to be_card
+              expect(setup).to be_prepared
+              expect(setup.bank_account).to be_deleted
+              expect(setup.bank_account.stripe_connect_account_id).to eq(setup.merchant_account.charge_processor_merchant_id)
+              expect(setup.merchant_account.charge_processor_alive?).to be(false)
+              expect_current_payout_method_kept(payout_weekday:)
+            end
+
+            it "reports a debit card Stripe refuses while linking it, instead of saying it was received" do
+              payout_weekday = user.payout_weekday
+              # Unit control at the card tokenization boundary (no Stripe customer is created).
+              chargeable = double("chargeable")
+              allow(ChargeProcessor).to receive(:get_chargeable_for_params).and_return(chargeable)
+              allow(CreditCard).to receive(:create).with(chargeable).and_return(create(:us_debit_stripe_credit_card))
+              # SDK double: Stripe refuses the card when it is attached to the prepared account.
+              allow(Stripe::Account).to receive(:update).and_raise(
+                Stripe::InvalidRequestError.new("This card doesn't appear to be a debit card.", "external_account", code: "invalid_card_type")
+              )
+
+              put :update, params: { card: { stripe_token: "tok_synthetic" } }
+
+              expect(flash[:notice]).to be_nil
+              expect(session[:inertia_errors][:base]).to eq(["This card doesn't appear to be a debit card. Your current payout method has not been changed."])
+              setup = user.stripe_payout_rail_setups.sole
+              expect(setup.state).to eq(StripePayoutRailSetup::FAILED)
+              expect(setup.failure_code).to eq("invalid_card_type")
+              expect(setup.merchant_account.reload).not_to be_alive
+              expect_current_payout_method_kept(payout_weekday:)
+            end
+
+            it "still rejects a debit card sent along with a bank account" do
+              expect(ChargeProcessor).not_to receive(:get_chargeable_for_params)
+
+              expect_new_payout_method_rejected("debit card") do
+                put :update, params: all_params.merge(card: { stripe_token: "tok_synthetic" }, bank_account: bank_account_params)
+              end
+              expect(user.stripe_payout_rail_setups).to be_empty
+            end
+
+            context "when the stored payout threshold is below the current minimum" do
+              let(:stored_threshold) { user.minimum_payout_threshold_cents - 100 }
+
+              before { user.update_attribute(:payout_threshold_cents, stored_threshold) }
+
+              it "stages the bank account from the form's raised threshold without saving that threshold" do
+                payout_weekday = user.payout_weekday
+
+                put :update, params: all_params.merge(bank_account: bank_account_params, payout_threshold_cents: user.minimum_payout_threshold_cents,
+                                                      payout_frequency: user.payout_frequency, payouts_paused_by_user: "false")
+
+                expect(flash[:notice]).to eq(staged_notice)
+                expect(user.stripe_payout_rail_setups.sole).to be_prepared
+                expect(user.reload.payout_threshold_cents).to eq(stored_threshold)
+                expect_current_payout_method_kept(payout_weekday:)
+              end
+
+              it "still refuses a threshold the seller actually changed, and saves nothing" do
+                expect do
+                  put :update, params: all_params.merge(bank_account: bank_account_params, payout_threshold_cents: user.minimum_payout_threshold_cents + 5_000)
+                end.to not_change { user.bank_accounts.count }.and not_change { user.reload.alive_user_compliance_info.id }
+
+                expect(session[:inertia_errors][:base]).to eq(["Save changes to your payout schedule on their own before adding a bank account. Nothing was saved."])
+                expect(user.stripe_payout_rail_setups).to be_empty
+                expect(user.reload.payout_threshold_cents).to eq(stored_threshold)
+              end
+            end
+
+            it "refuses a payout schedule change sent with the new bank account and writes nothing" do
+              payout_weekday = user.payout_weekday
+
+              expect do
+                put :update, params: all_params.merge(bank_account: bank_account_params, payout_frequency: User::PayoutSchedule::MONTHLY, payout_threshold_cents: 20_000)
+              end.to not_change { user.bank_accounts.count }.and not_change { user.tos_agreements.count }.and not_change { user.reload.alive_user_compliance_info.id }
+
+              expect(session[:inertia_errors][:base]).to eq(["Save changes to your payout schedule on their own before adding a bank account. Nothing was saved."])
+              user.reload
+              expect(user.payout_frequency).to eq(User::PayoutSchedule::WEEKLY)
+              expect(user.payout_threshold_cents).not_to eq(20_000)
+              expect(user.stripe_payout_rail_setups).to be_empty
+              expect_current_payout_method_kept(payout_weekday:)
+            end
+
+            context "when the seller is a US company whose representative lives in French Polynesia" do
+              before do
+                user.alive_user_compliance_info.dup_and_save! do |info|
+                  info.is_business = true
+                  info.business_name = "Synthetic Studio, LLC"
+                  info.business_country = "United States"
+                  info.country = "French Polynesia"
+                end
+                Feature.activate_user(:merchant_migration, user)
+                expect(user.reload.has_stripe_account_connected?).to be(false)
+              end
+
+              it "refuses a new bank account sent with a representative country that would make Connect the card route" do
+                payout_weekday = user.payout_weekday
+
+                expect do
+                  put :update, params: all_params.merge(user: params.merge(is_business: "on", country: "FR", business_country: "US"), bank_account: bank_account_params)
+                end.to not_change { user.bank_accounts.count }.and not_change { user.tos_agreements.count }.and not_change { user.reload.alive_user_compliance_info.id }
+
+                expect(session[:inertia_errors][:base]).to eq(["Save changes to your country or account type on their own before adding a bank account. Nothing was saved."])
+                user.reload
+                expect(user.alive_user_compliance_info.country).to eq("French Polynesia")
+                expect(user.merchant_account(StripeChargeProcessor.charge_processor_id)).to be_nil
+                expect(user.stripe_payout_rail_setups).to be_empty
+                expect_current_payout_method_kept(payout_weekday:)
+              end
+            end
+
+            context "when the seller is an individual living in French Polynesia" do
+              before do
+                user.alive_user_compliance_info.dup_and_save! do |info|
+                  info.is_business = false
+                  info.country = "French Polynesia"
+                end
+                Feature.activate_user(:merchant_migration, user)
+                expect(user.reload.has_stripe_account_connected?).to be(false)
+              end
+
+              # The compliance save writes `country` whenever the raw is_business param is present and
+              # truthy in Ruby, so these form strings move the residence even though they read as "no".
+              [["off", "FR"], ["false", "FR"], ["0", "FR"], ["", "FR"], ["off", "ZZ"]].each do |is_business, country|
+                it "refuses a new bank account sent as form data with is_business=#{is_business.inspect} and country #{country}" do
+                  payout_weekday = user.payout_weekday
+
+                  expect do
+                    put :update, params: all_params.merge(user: params.merge(is_business:, country:), bank_account: bank_account_params)
+                  end.to not_change { user.bank_accounts.count }.and not_change { user.tos_agreements.count }.and not_change { user.reload.alive_user_compliance_info.id }
+
+                  expect(session[:inertia_errors][:base]).to eq(["Save changes to your country or account type on their own before adding a bank account. Nothing was saved."])
+                  user.reload
+                  expect(user.alive_user_compliance_info.country).to eq("French Polynesia")
+                  expect(user.has_stripe_account_connected?).to be(false)
+                  expect(user.stripe_payout_rail_setups).to be_empty
+                  expect_current_payout_method_kept(payout_weekday:)
+                end
+              end
+
+              it "stages the bank account when a JSON false is_business means the country is not written" do
+                payout_weekday = user.payout_weekday
+
+                put :update, params: all_params.merge(user: params.merge(is_business: false, country: "FR"), bank_account: bank_account_params), as: :json
+
+                # Staged, not refused as a routing change. Preparation itself then stops because French
+                # Polynesia has no native payouts, which is the ordinary country rule.
+                expect(session[:inertia_errors][:base]).to eq(["Bank payouts are not supported in your country yet. Please use PayPal instead. Your current payout method has not been changed."])
+                user.reload
+                expect(user.stripe_payout_rail_setups.sole.bank_account.account_number_last_four).to eq("6789")
+                expect(user.alive_user_compliance_info.country).to eq("French Polynesia")
+                expect(user.has_stripe_account_connected?).to be(false)
+                expect_current_payout_method_kept(payout_weekday:)
+              end
+            end
+
+            it "still rejects a new bank account sent along with a PayPal address" do
+              expect_new_payout_method_rejected("bank account") do
+                put :update, params: all_params.merge(bank_account: bank_account_params, payment_address: "new-paypal@example.com")
+              end
+              expect(user.stripe_payout_rail_setups).to be_empty
+            end
+
+            it "keeps the connected-account rejection when Connect is routing charges" do
+              user.update!(check_merchant_account_is_linked: true)
+
+              expect do
+                put :update, params: all_params.merge(bank_account: bank_account_params)
+              end.to not_change { user.bank_accounts.count }.and not_change { StripePayoutRailSetup.count }
+
+              expect(session[:inertia_errors][:base]).to eq(["You cannot change your payout method to bank account because you have a stripe account connected."])
+            end
+
+            it "provisions nothing on compliance-only and holder-name-only saves" do
+              expect(StripeMerchantAccountManager).not_to receive(:create_account)
+              existing_bank_account = create(:ach_account, user:)
+
+              put :update, params: all_params
+              put :update, params: { bank_account: { type: AchAccount.name, account_holder_full_name: "Synthetic Holder" } }
+
+              expect(existing_bank_account.reload.account_holder_full_name).to eq("Synthetic Holder")
+              expect(user.reload.stripe_payout_rail_setups).to be_empty
+              expect(user.merchant_accounts.stripe.reject(&:is_a_stripe_connect_account?)).to be_empty
+            end
+
+            it "provisions nothing on a PayPal save" do
+              expect(StripeMerchantAccountManager).not_to receive(:create_account)
+              user.alive_user_compliance_info.dup_and_save { |new_compliance_info| new_compliance_info.country = "Brazil" }
+
+              put :update, params: { payment_address: "new-paypal@example.com" }
+
+              expect(user.reload.payment_address).to eq("new-paypal@example.com")
+              expect(user.stripe_payout_rail_setups).to be_empty
+              expect(user.merchant_accounts.stripe.reject(&:is_a_stripe_connect_account?)).to be_empty
+            end
+
+            it "leaves a prepared setup untouched by an unrelated save" do
+              create(:tos_agreement, user:)
+              setup = StripePayoutRailSetups::Stage.new(seller: user, params: ActionController::Parameters.new(bank_account: bank_account_params)).process.setup
+              StripePayoutRailSetups::Provision.new(setup).process
+              expect(setup.reload).to be_prepared
+              payout_weekday = user.reload.payout_weekday
+              expect(StripeMerchantAccountManager).not_to receive(:create_account)
+
+              put :update, params: all_params.merge(payout_threshold_cents: 20_000)
+
+              expect(flash[:notice]).to eq("Thanks! You're all set.")
+              expect(setup.reload).to be_prepared
+              expect(setup.merchant_account.reload.charge_processor_alive?).to be(false)
+              expect_current_payout_method_kept(payout_weekday:)
+            end
+
+            it "refuses a second bank account while the first one is prepared" do
+              put :update, params: all_params.merge(bank_account: bank_account_params)
+
+              expect do
+                put :update, params: all_params.merge(bank_account: bank_account_params.merge(account_number: "000111222333", account_number_confirmation: "000111222333"))
+              end.to not_change { user.bank_accounts.count }
+
+              expect(session[:inertia_errors][:base]).to eq(["We're still setting up the payout method you submitted earlier. Your current payout method has not been changed."])
+              expect(user.stripe_payout_rail_setups.sole).to be_prepared
+            end
+
+            it "keeps the current payout method when Stripe refuses the bank account" do
+              payout_weekday = user.payout_weekday
+              allow(Stripe::Account).to receive(:create).and_raise(
+                Stripe::InvalidRequestError.new("Invalid account number", "external_account[account_number]", code: "account_number_invalid")
+              )
+
+              put :update, params: all_params.merge(bank_account: bank_account_params)
+
+              expect(response).to redirect_to(settings_payments_path)
+              expect(session[:inertia_errors][:base].sole).to end_with("Your current payout method has not been changed.")
+              expect(user.stripe_payout_rail_setups.sole.state).to eq(StripePayoutRailSetup::FAILED)
+              expect(user.merchant_accounts.alive.stripe.reject(&:is_a_stripe_connect_account?)).to be_empty
+              expect_current_payout_method_kept(payout_weekday:)
+            end
+
+            {
+              "postal code" => Stripe::InvalidRequestError.new("The postal code you entered is not valid.", "individual[address][postal_code]", code: "postal_code_invalid"),
+              "bank details" => Stripe::InvalidRequestError.new("We couldn't find the bank for that routing number.", "external_account[routing_number]", code: "routing_number_invalid"),
+            }.each do |detail, refusal|
+              it "asks for corrected #{detail} without promising a weekly re-check that a refused setup never gets" do
+                allow(Stripe::Account).to receive(:create).and_raise(refusal)
+
+                put :update, params: all_params.merge(bank_account: bank_account_params)
+
+                message = session[:inertia_errors][:base].sole
+                expect(message).not_to include("once a week")
+                expect(message).to include("submit your bank account again")
+                expect(message).to end_with("Your current payout method has not been changed.")
+                expect(user.stripe_payout_rail_setups.sole.state).to eq(StripePayoutRailSetup::FAILED)
+                expect(user.comments.alive.with_type_payout_note).to be_empty
+              end
+            end
+
+            {
+              "Tax ID" => "individual[id_number]",
+              "phone number" => "individual[phone]",
+              "date of birth" => "individual[dob]",
+              "first name" => "individual[first_name]",
+            }.each do |label, param|
+              it "keeps a refused #{label} from telling the seller they have lost their payout method" do
+                payout_weekday = user.payout_weekday
+                allow(Stripe::Account).to receive(:create).and_raise(Stripe::InvalidRequestError.new("Invalid value.", param))
+
+                put :update, params: all_params.merge(bank_account: bank_account_params)
+
+                message = session[:inertia_errors][:base].sole
+                expect(message).to start_with("Our payment partner couldn't accept the #{label} you entered.")
+                expect(message).not_to include("no payout method")
+                expect(message).not_to include("publishing")
+                expect(message).to end_with("Your current payout method has not been changed.")
+                expect(user.stripe_payout_rail_setups.sole.state).to eq(StripePayoutRailSetup::FAILED)
+                expect(user.reload.can_publish_products?).to be(true)
+                expect(user.has_payout_information?).to be(true)
+                expect_current_payout_method_kept(payout_weekday:)
+              end
+            end
+
+            context "when an older not-live managed account already holds a Stripe id" do
+              let!(:legacy_account) do
+                travel_to(1.day.ago) { create(:merchant_account, user:, charge_processor_alive_at: nil, country: "US", charge_processor_merchant_id: "acct_synthetic_legacy_unlive") }
+              end
+              let!(:legacy_note) { user.add_payout_note(content: "#{StripeMerchantAccountManager::NO_VERDICT_FAILURE_NOTE_PREFIX}: synthetic older attempt", seller_visible: false) }
+
+              it "ends the new setup with a support-repair failure instead of reporting it as still setting up" do
+                payout_weekday = user.payout_weekday
+                expect(user.stripe_account).to be_nil
+                expect(Stripe::Account).not_to receive(:create)
+
+                put :update, params: all_params.merge(bank_account: bank_account_params)
+
+                expect(flash[:notice]).to be_nil
+                expect(session[:inertia_errors][:base]).to eq(["We can't set up bank account payouts for your account yet. Please contact support. Your current payout method has not been changed."])
+                setup = user.stripe_payout_rail_setups.sole
+                expect(setup.state).to eq(StripePayoutRailSetup::FAILED)
+                expect(setup.failure_code).to eq("existing_managed_account")
+                expect(setup.merchant_account).to be_nil
+                expect(setup.bank_account.reload).to be_deleted
+                expect(legacy_account.reload).to be_alive
+                expect(legacy_account.charge_processor_merchant_id).to eq("acct_synthetic_legacy_unlive")
+                expect(legacy_account.charge_processor_alive?).to be(false)
+                expect(legacy_note.reload).to be_alive
+                expect(legacy_note.json_data["abandoned_at"]).to be_nil
+                expect(user.comments.alive.with_type_payout_note.map(&:content)).to include("Payout rail setup ##{setup.id} stopped: managed account ##{legacy_account.id} predates it and blocks a new one; it needs a support repair.")
+                expect_current_payout_method_kept(payout_weekday:)
+
+                RetryStripeRejectedPayoutSetupForSellerJob.new.perform(user.id)
+                RetryStripeRejectedPayoutSetupsJob.new.perform
+                LinkStagedRailCardJob.drain
+                expect(user.reload.stripe_account).to be_nil
+                expect(setup.reload.state).to eq(StripePayoutRailSetup::FAILED)
+                expect(legacy_account.reload.charge_processor_alive?).to be(false)
+              end
+            end
+
+            it "keeps an uncertain outcome pending so the next save can adopt the same account" do
+              payout_weekday = user.payout_weekday
+              allow(Stripe::Account).to receive(:create).and_raise(Stripe::APIConnectionError.new("Connection reset"))
+
+              put :update, params: all_params.merge(bank_account: bank_account_params)
+
+              expect(session[:inertia_errors][:base].sole).to eq(
+                "#{StripeMerchantAccountManager.no_verdict_seller_message(Stripe::APIConnectionError.new)} Your current payout method has not been changed."
+              )
+              setup = user.stripe_payout_rail_setups.sole
+              expect(setup).to be_pending
+              expect(setup.attempt_started_at).to be_nil
+              expect_current_payout_method_kept(payout_weekday:)
+            end
+
+            it "resumes the same bank account after an uncertain outcome, with the same candidate and idempotency key" do
+              payout_weekday = user.payout_weekday
+              keys = []
+              # Unit control: the first create loses its response; the replay with the same key returns the account.
+              allow(Stripe::Account).to receive(:create) do |create_params, opts = {}|
+                keys << opts[:idempotency_key]
+                raise Stripe::APIConnectionError.new("Connection reset") if keys.one?
+
+                Stripe::Account.construct_from(
+                  id: "acct_mock_resumed", object: "account", country: create_params[:country], default_currency: "usd", charges_enabled: true,
+                  external_accounts: { object: "list", data: [{ id: "ba_mock_resumed", object: "bank_account", fingerprint: "fp_mock_resumed" }] },
+                  metadata: {}
+                )
+              end
+
+              put :update, params: all_params.merge(bank_account: bank_account_params)
+              setup = user.stripe_payout_rail_setups.sole
+              candidate = setup.bank_account
+              expect(setup).to be_pending
+
+              expect do
+                put :update, params: all_params.merge(bank_account: bank_account_params)
+              end.not_to change { user.bank_accounts.count }
+
+              expect(flash[:notice]).to eq(staged_notice)
+              expect(setup.reload).to be_prepared
+              expect(setup.bank_account).to eq(candidate)
+              expect(keys.size).to eq(2)
+              expect(keys.uniq.size).to eq(1)
+              expect_current_payout_method_kept(payout_weekday:)
+            end
+
+            it "refuses a different bank account after an uncertain outcome instead of adopting the earlier attempt" do
+              allow(Stripe::Account).to receive(:create).and_raise(Stripe::APIConnectionError.new("Connection reset"))
+              put :update, params: all_params.merge(bank_account: bank_account_params)
+              setup = user.stripe_payout_rail_setups.sole
+              candidate = setup.bank_account
+
+              expect do
+                put :update, params: all_params.merge(bank_account: bank_account_params.merge(account_number: "000111222333", account_number_confirmation: "000111222333"))
+              end.to not_change { user.bank_accounts.count }.and not_change { StripePayoutRailSetup.count }
+
+              expect(session[:inertia_errors][:base]).to eq(["We're still setting up the payout method you submitted earlier, so we can't use a different one yet. Your current payout method has not been changed. Please contact support."])
+              expect(setup.reload).to be_pending
+              expect(setup.bank_account).to eq(candidate)
+              expect(candidate.account_number.decrypt(GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))).to eq("000123456789")
+            end
+
+            it "stages a corrected bank account after a request whose tax ID was refused" do
+              payout_weekday = user.payout_weekday
+              too_long_tax_id = "1" * (UpdateUserComplianceInfo::MAX_ENCRYPTED_FIELD_LENGTH + 1)
+
+              expect do
+                put :update, params: all_params.merge(user: params.merge(individual_tax_id: too_long_tax_id), bank_account: bank_account_params)
+              end.to not_change { user.bank_accounts.count }
+
+              expect(session[:inertia_errors][:base]).to eq(["Individual tax id is too long"])
+              expect(user.stripe_payout_rail_setups).to be_empty
+              expect_current_payout_method_kept(payout_weekday:)
+
+              corrected = bank_account_params.merge(account_number: "000111222333", account_number_confirmation: "000111222333")
+              put :update, params: all_params.merge(bank_account: corrected)
+
+              expect(flash[:notice]).to eq(staged_notice)
+              setup = user.stripe_payout_rail_setups.sole
+              expect(setup).to be_prepared
+              expect(setup.bank_account.account_number_last_four).to eq("2333")
+              expect(setup.merchant_account.charge_processor_alive?).to be(false)
+              expect_current_payout_method_kept(payout_weekday:)
+            end
+          end
+        end
+
+        describe "user has an open payout rail setup but no Connect row any more" do
+          let!(:rail_setup) { create(:stripe_payout_rail_setup, user:) }
+          let!(:bank_account) { create(:ach_account, user:) }
+
+          it "ends the setup, which can no longer finish, and creates the ordinary managed account" do
+            expect(StripeMerchantAccountManager).to receive(:create_account).with(user, passphrase: GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))
+
+            put :update, params: all_params
+
+            expect(flash[:notice]).to eq("Thanks! You're all set.")
+            rail_setup.reload
+            expect(rail_setup.state).to eq(StripePayoutRailSetup::FAILED)
+            expect(rail_setup.failure_code).to eq("connect_removed")
+            expect(user.reload.active_bank_account).to eq(bank_account)
+          end
         end
 
         describe "user has only a stale hollow merchant account" do

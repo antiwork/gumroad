@@ -90,6 +90,8 @@ module Onetime
                   .where(charge_processor_id: StripeChargeProcessor.charge_processor_id)
                   .where(charge_processor_alive_at: nil, charge_processor_deleted_at: nil, deleted_at: nil)
                   .where("created_at < ?", MIN_AGE.ago)
+                  # A rail setup's prepared account is not alive on purpose until it is activated.
+                  .where.not(id: StripePayoutRailSetup.open.where.not(merchant_account_id: nil).select(:merchant_account_id))
         scope = scope.where(id: merchant_account_ids) if merchant_account_ids.present?
         scope
       end

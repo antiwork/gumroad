@@ -80,6 +80,7 @@ module StripeMerchantAccountManager
   # Stored on the note so a later retry replays the same Account.create. A fresh key on the
   # retry would open a second account when the first response was lost.
   ACCOUNT_CREATION_IDEMPOTENCY_KEY = "stripe_account_idempotency_key"
+  RAIL_SETUP_ID_NOTE_KEY = "rail_setup_id"
   # The create this key belongs to. Recovery searches around this time, not the note's first save.
   ACCOUNT_CREATION_ATTEMPTED_AT = "stripe_account_create_attempted_at"
   # Stripe drops the stored result after this. A later retry has to find the account itself.
@@ -211,7 +212,9 @@ module StripeMerchantAccountManager
   # existing account permanently skips self-serve retries.
   STALE_HOLLOW_ACCOUNT_AGE = 10.minutes
 
-  def self.create_account(user, passphrase:, from_admin: false, notify: true)
+  # rail_setup provisions a StripePayoutRailSetup's account with its candidate bank and leaves it
+  # without charge_processor_alive_at; only StripePayoutRailSetups::Activate makes it live.
+  def self.create_account(user, passphrase:, from_admin: false, notify: true, rail_setup: nil)
     tos_agreement = nil
     user_compliance_info = nil
     bank_account = nil
@@ -222,6 +225,14 @@ module StripeMerchantAccountManager
     ApplicationRecord.connected_to(role: :writing) do
       user.with_lock do
         raise MerchantRegistrationUserNotReadyError.new(user.id, "is not supported yet") unless user.native_payouts_supported?
+        # An open setup owns the seller's managed provisioning; a live account created beside it
+        # would take card sales and payouts before the setup was activated. Once a seller beside a
+        # Connect row has used setups, only a new setup and Activate may put a managed account there.
+        open_rail_setup = StripePayoutRailSetup.open_for(user)
+        if open_rail_setup&.id != rail_setup&.id || (rail_setup && !open_rail_setup.pending?) ||
+           (rail_setup.nil? && user.stripe_connect_account.present? && user.stripe_payout_rail_setups.exists?)
+          raise MerchantRegistrationRailSetupOpenError.new(user.id, StripeChargeProcessor.charge_processor_id)
+        end
 
         discard_stale_hollow_managed_accounts!(user)
         user_has_a_merchant_account = if from_admin
@@ -234,7 +245,7 @@ module StripeMerchantAccountManager
 
         tos_agreement = user.tos_agreements.last
         user_compliance_info = user.alive_user_compliance_info
-        bank_account = user.active_bank_account
+        bank_account = rail_setup ? open_rail_setup.bank_account : user.active_bank_account
 
         country_code = user_compliance_info.legal_entity_country_code
         raise MerchantRegistrationUserNotReadyError.new(user.id, "does not have a legal entity country") if country_code.blank?
@@ -258,18 +269,22 @@ module StripeMerchantAccountManager
         }
         account_params.deep_merge!(account_hash(user, tos_agreement, user_compliance_info, passphrase:))
         account_params.deep_merge!(bank_account_hash(bank_account, passphrase:)) if bank_account && !bank_account.is_a?(CardBankAccount)
+        # Names the setup on the account, so recovery after a lost response adopts only this setup's.
+        account_params.deep_merge!(metadata: { rail_setup_id: rail_setup.id.to_s }) if rail_setup
 
-        merchant_account = MerchantAccount.create!(
+        merchant_account = MerchantAccount.new(
           user:,
           country: country_code,
           currency:,
           charge_processor_id: StripeChargeProcessor.charge_processor_id
         )
-        idempotency_key = account_creation_idempotency_key(user)
-        raise Stripe::APIError.new("Uncertain Stripe account creation could not be reconciled") unless persist_account_creation_attempt!(user, idempotency_key)
+        merchant_account.rail_setup_id = rail_setup.id.to_s if rail_setup
+        merchant_account.save!
+        idempotency_key = account_creation_idempotency_key(user, rail_setup_id: rail_setup&.id)
+        raise Stripe::APIError.new("Uncertain Stripe account creation could not be reconciled") unless persist_account_creation_attempt!(user, idempotency_key, rail_setup_id: rail_setup&.id)
       end
 
-      stripe_account, recovered_account = create_or_recover_stripe_account(user, account_params, idempotency_key)
+      stripe_account, recovered_account = create_or_recover_stripe_account(user, account_params, idempotency_key, rail_setup_id: rail_setup&.id)
       recovered_external_account = nil
       if recovered_account && bank_account && !bank_account.is_a?(CardBankAccount)
         stripe_account, recovered_external_account = align_recovered_account_bank(bank_account, stripe_account, passphrase:)
@@ -293,8 +308,14 @@ module StripeMerchantAccountManager
       # Rescue StandardError, not Stripe::StripeError: the sync also writes locally, and a deadlock
       # or lock-wait timeout there must not escape and abort creation before the account is marked
       # alive.
+      # A prepared account gets no later sync before it goes live, so record what this one sent;
+      # Activate refuses a guardian that differs. Only when nothing changed while Stripe was written.
+      guardian_before_sync = StripePayoutRailSetup.guardian_fingerprint(user) if rail_setup
       begin
         StripeGuardianManager.sync(user, stripe_account, passphrase:)
+        if rail_setup && guardian_before_sync == StripePayoutRailSetup.guardian_fingerprint(user)
+          merchant_account.update!(rail_guardian_fingerprint: guardian_before_sync || "none")
+        end
       rescue => e
         ErrorNotifier.notify(e)
       end
@@ -307,8 +328,10 @@ module StripeMerchantAccountManager
         Stripe::Account.update_person(stripe_account.id, stripe_person.id, { full_name_aliases: [""] }) if stripe_person.present?
       end
 
-      merchant_account.charge_processor_alive_at = Time.current
-      merchant_account.save!
+      unless rail_setup
+        merchant_account.charge_processor_alive_at = Time.current
+        merchant_account.save!
+      end
 
       # Non-Card bank accounts are saved at account creation time.
       #
@@ -325,21 +348,32 @@ module StripeMerchantAccountManager
         ErrorNotifier.notify(e)
       end
 
-      clear_stale_postal_code_failure_notes(user)
-      clear_stale_bank_sync_failure_notes(user)
-      clear_stale_payout_setup_rejection_notes(user)
-      clear_stale_no_verdict_failure_notes(user)
+      # A setup's not-live account is not the seller's payout setup, so the ordinary context's notes
+      # stay; the setup resolves only its own.
+      unless rail_setup
+        clear_stale_postal_code_failure_notes(user)
+        clear_stale_bank_sync_failure_notes(user)
+        clear_stale_payout_setup_rejection_notes(user)
+      end
+      clear_stale_no_verdict_failure_notes(user, rail_setup_id: rail_setup&.id)
+
+      # Must stay last: anything that raises before it sends this row to the cleanup below.
+      merchant_account.update!(rail_setup_completed_id: rail_setup.id.to_s) if rail_setup
 
       merchant_account
     end
   rescue => e
+    # Refused before this call recorded an attempt, so the cleanup below could only discard another
+    # attempt's note — for a setup, an overlapping attempt that may still be waiting on Stripe.
+    raise if e.is_a?(MerchantRegistrationRailSetupOpenError) || (rail_setup && merchant_account.nil?)
+
     ApplicationRecord.connected_to(role: :writing) do
       deleted_created_account = false
       if merchant_account.present? && merchant_account.charge_processor_alive_at.nil?
         # A confirmed create followed by a later failure deletes that Stripe account. Replaying
         # its idempotency key would return the deleted account, so the key has to be dropped.
         deleted_created_account = cleanup_failed_merchant_account(merchant_account)
-        clear_account_creation_idempotency_key(user) if deleted_created_account
+        clear_account_creation_idempotency_key(user, rail_setup_id: rail_setup&.id) if deleted_created_account
         # Bank-account, tax-ID, phone-number, JP address/kanji, and postal-code rejections are
         # expected seller-input errors — Stripe's message shows inline on the settings page and the
         # seller can just fix it (bank/postal-code rejections also get a payout-note breadcrumb
@@ -358,9 +392,10 @@ module StripeMerchantAccountManager
       record_no_verdict_failure_note(
         user,
         e,
-        idempotency_key: deleted_created_account ? nil : (defined?(idempotency_key) ? idempotency_key : nil)
+        idempotency_key: deleted_created_account ? nil : (defined?(idempotency_key) ? idempotency_key : nil),
+        rail_setup_id: rail_setup&.id
       ) if no_verdict_stripe_error?(e)
-      discard_pending_account_creation_note(user) unless no_verdict_stripe_error?(e)
+      discard_pending_account_creation_note(user, rail_setup_id: rail_setup&.id) unless no_verdict_stripe_error?(e)
       raise
     end
   end
@@ -402,14 +437,20 @@ module StripeMerchantAccountManager
   #
   # nil for the rejections that are already handled specifically, so a caller can fall through to
   # the postal-code and bank-directory branches without ordering the checks by hand.
-  def self.payout_setup_rejection_seller_message(error, user)
+  #
+  # current_method_kept: true for a refusal that left the seller's existing payout method in place.
+  def self.payout_setup_rejection_seller_message(error, user, current_method_kept: false)
     return unless undiagnosed_stripe_rejection?(error)
 
     field = PAYOUT_SETUP_REJECTED_FIELD_LABELS[stripe_rejected_field(error)]
     [
       field ? "Our payment partner couldn't accept the #{field} you entered." : "Our payment partner couldn't accept the details you entered.",
       us_individual_phone_rule_note(error, user),
-      "Please correct it here and save again — until it goes through you have no payout method, which also stops you publishing new products.",
+      if current_method_kept
+        "Please correct it here and save again."
+      else
+        "Please correct it here and save again — until it goes through you have no payout method, which also stops you publishing new products."
+      end,
     ].compact.join(" ")
   end
 
@@ -1836,7 +1877,8 @@ module StripeMerchantAccountManager
       "Please try saving again in a few minutes. We'll also retry it for you automatically."
   end
 
-  def self.bank_directory_miss_seller_message(error, bank_account)
+  # recheck: false for a caller whose refusal the weekly retry does not pick up.
+  def self.bank_directory_miss_seller_message(error, bank_account, recheck: true)
     return unless error.is_a?(Stripe::InvalidRequestError)
     return unless bank_details_directory_miss?(error)
 
@@ -1845,9 +1887,13 @@ module StripeMerchantAccountManager
     [
       "Our payment partner couldn't match your bank details against its records.",
       detail,
-      "Please double-check them and save again. If you're sure they're correct (for example, a " \
-        "newly opened account or a recently added branch), you don't need to do anything — we'll " \
-        "re-check once a week for up to #{weeks} weeks and only reach out if it still doesn't verify.",
+      if recheck
+        "Please double-check them and save again. If you're sure they're correct (for example, a " \
+          "newly opened account or a recently added branch), you don't need to do anything — we'll " \
+          "re-check once a week for up to #{weeks} weeks and only reach out if it still doesn't verify."
+      else
+        "Please double-check them and submit your bank account again."
+      end,
     ].compact.join(" ")
   end
 
@@ -2113,10 +2159,10 @@ module StripeMerchantAccountManager
   # payout note would read as a rejection on the Payouts page. One outstanding note per seller, so
   # repeated saves during the same outage don't reset the weekly retry's bookkeeping.
   private_class_method
-  def self.record_no_verdict_failure_note(user, error, idempotency_key: nil)
+  def self.record_no_verdict_failure_note(user, error, idempotency_key: nil, rail_setup_id: nil)
     return if user.blank?
 
-    note = oldest_outstanding_no_verdict_note(user)
+    note = oldest_outstanding_no_verdict_note(user, rail_setup_id:)
     if note
       note.content = no_verdict_note_content(error)
       note.json_data["no_verdict"] = true
@@ -2142,7 +2188,8 @@ module StripeMerchantAccountManager
         "request_id" => error.try(:request_id),
         "retry_scheduled" => true,
         ACCOUNT_CREATION_IDEMPOTENCY_KEY => idempotency_key,
-        ACCOUNT_CREATION_ATTEMPTED_AT => (Time.current.iso8601 if idempotency_key.present?)
+        ACCOUNT_CREATION_ATTEMPTED_AT => (Time.current.iso8601 if idempotency_key.present?),
+        RAIL_SETUP_ID_NOTE_KEY => rail_setup_id&.to_s
       }.compact
     )
     RetryStripeRejectedPayoutSetupForSellerJob.perform_in(NO_VERDICT_FIRST_RETRY_DELAY, user.id)
@@ -2159,8 +2206,8 @@ module StripeMerchantAccountManager
   # Reused from the outstanding note so a retry replays the same Account.create. A fresh key
   # would open a second account when the first response was lost.
   private_class_method
-  def self.account_creation_idempotency_key(user)
-    stored = recovery_note(user)&.json_data&.[](ACCOUNT_CREATION_IDEMPOTENCY_KEY)
+  def self.account_creation_idempotency_key(user, rail_setup_id: nil)
+    stored = recovery_note(user, rail_setup_id:)&.json_data&.[](ACCOUNT_CREATION_IDEMPOTENCY_KEY)
     return stored if stored.present?
 
     SecureRandom.uuid
@@ -2169,13 +2216,13 @@ module StripeMerchantAccountManager
   # The key belongs to one Account.create. Once that account is deleted, replaying the key
   # returns the deleted account instead of opening a new one.
   private_class_method
-  def self.clear_account_creation_idempotency_key(user)
+  def self.clear_account_creation_idempotency_key(user, rail_setup_id: nil)
     notes = user.comments
       .with_type_payout_note
       .alive
       .where(author_id: GUMROAD_ADMIN_ID)
       .where("content LIKE ?", "#{NO_VERDICT_FAILURE_NOTE_PREFIX}%")
-      .select { |note| note.json_data[ACCOUNT_CREATION_IDEMPOTENCY_KEY].present? }
+      .select { |note| no_verdict_note_in_scope?(note, rail_setup_id) && note.json_data[ACCOUNT_CREATION_IDEMPOTENCY_KEY].present? }
     return if notes.empty?
 
     notes.each do |note|
@@ -2189,46 +2236,46 @@ module StripeMerchantAccountManager
   end
 
   private_class_method
-  def self.create_or_recover_stripe_account(user, account_params, idempotency_key)
-    recovered = recover_uncertain_stripe_account(user, country: account_params[:country])
+  def self.create_or_recover_stripe_account(user, account_params, idempotency_key, rail_setup_id: nil)
+    recovered = recover_uncertain_stripe_account(user, country: account_params[:country], rail_setup_id:)
     return [recovered, true] if recovered.is_a?(Stripe::Account)
     raise Stripe::APIError.new("Uncertain Stripe account creation could not be reconciled") if recovered == :unreconciled
 
     # Stripe keeps a key for at least 24 hours, including a cached 500. After a complete search
     # finds no account, a new key is the only way the next create is a new request.
     key = idempotency_key
-    if recovered != :replay && stale_stored_account_creation_key?(user)
+    if recovered != :replay && stale_stored_account_creation_key?(user, rail_setup_id:)
       key = SecureRandom.uuid
-      raise Stripe::APIError.new("Uncertain Stripe account creation could not be reconciled") unless remember_account_creation_idempotency_key(user, key)
+      raise Stripe::APIError.new("Uncertain Stripe account creation could not be reconciled") unless remember_account_creation_idempotency_key(user, key, rail_setup_id:)
     end
     [Stripe::Account.create(force_utf8_encoding(account_params), { idempotency_key: key }), false]
   rescue Stripe::IdempotencyError
     # The stored key was used with different parameters, so Stripe will not replay it. Adopt the
     # account if the first request created one; do not open a second one to get past the error.
-    recovered = list_matching_uncertain_account(user, country: account_params[:country])
+    recovered = list_matching_uncertain_account(user, country: account_params[:country], rail_setup_id:)
     return [recovered, true] if recovered.is_a?(Stripe::Account)
     raise Stripe::APIError.new("Uncertain Stripe account creation could not be reconciled") if recovered == :unreconciled
 
     replacement_key = SecureRandom.uuid
-    raise Stripe::APIError.new("Uncertain Stripe account creation could not be reconciled") unless remember_account_creation_idempotency_key(user, replacement_key)
+    raise Stripe::APIError.new("Uncertain Stripe account creation could not be reconciled") unless remember_account_creation_idempotency_key(user, replacement_key, rail_setup_id:)
     [Stripe::Account.create(force_utf8_encoding(account_params), { idempotency_key: replacement_key }), false]
   end
 
   private_class_method
-  def self.recover_uncertain_stripe_account(user, country: nil)
-    note = recovery_note(user)
+  def self.recover_uncertain_stripe_account(user, country: nil, rail_setup_id: nil)
+    note = recovery_note(user, rail_setup_id:)
     return nil if note.nil?
 
     stored_key = note.json_data[ACCOUNT_CREATION_IDEMPOTENCY_KEY]
     attempted_at = account_creation_attempted_at(note)
     return :replay if attempted_at > STRIPE_IDEMPOTENCY_RETENTION.ago && stored_key.present?
 
-    list_matching_uncertain_account(user, note:, country:)
+    list_matching_uncertain_account(user, note:, country:, rail_setup_id:)
   end
 
   private_class_method
-  def self.list_matching_uncertain_account(user, note: nil, country: nil)
-    note ||= oldest_outstanding_no_verdict_note(user)
+  def self.list_matching_uncertain_account(user, note: nil, country: nil, rail_setup_id: nil)
+    note ||= oldest_outstanding_no_verdict_note(user, rail_setup_id:)
     return nil if note.nil?
 
     attempted_at = account_creation_attempted_at(note)
@@ -2245,7 +2292,7 @@ module StripeMerchantAccountManager
         starting_after: starting_after
       }.compact)
       data = page.respond_to?(:data) ? Array(page.data) : Array(page)
-      matches.concat(data.select { |account| uncertain_account_match?(account, user) })
+      matches.concat(data.select { |account| uncertain_account_match?(account, user, rail_setup_id:) })
       has_more = page.respond_to?(:has_more) && page.has_more && data.any?
       incomplete = has_more
       break unless has_more
@@ -2305,14 +2352,16 @@ module StripeMerchantAccountManager
   end
 
   private_class_method
-  def self.uncertain_account_match?(account, user)
+  def self.uncertain_account_match?(account, user, rail_setup_id: nil)
     return false if account["id"].blank? || account["deleted"]
     return false if account["type"].present? && account["type"] != "custom"
 
     linked_user_id = MerchantAccount.alive.stripe.find_by(charge_processor_merchant_id: account["id"])&.user_id
     return false if linked_user_id.present? && linked_user_id != user.id
 
-    account["metadata"].to_h.with_indifferent_access["user_id"].to_s == user.external_id.to_s
+    metadata = account["metadata"].to_h.with_indifferent_access
+    # A setup recovers only the account it opened; an ordinary create never adopts a setup's.
+    metadata["user_id"].to_s == user.external_id.to_s && metadata[:rail_setup_id].to_s == rail_setup_id.to_s
   end
 
   private_class_method
@@ -2386,18 +2435,18 @@ module StripeMerchantAccountManager
   end
 
   private_class_method
-  def self.stale_stored_account_creation_key?(user)
-    note = recovery_note(user)
+  def self.stale_stored_account_creation_key?(user, rail_setup_id: nil)
+    note = recovery_note(user, rail_setup_id:)
     return false if note.nil? || note.json_data[ACCOUNT_CREATION_IDEMPOTENCY_KEY].blank?
 
     account_creation_attempted_at(note) <= STRIPE_IDEMPOTENCY_RETENTION.ago
   end
 
   private_class_method
-  def self.persist_account_creation_attempt!(user, key)
+  def self.persist_account_creation_attempt!(user, key, rail_setup_id: nil)
     return false if key.blank?
 
-    note = oldest_outstanding_no_verdict_note(user)
+    note = oldest_outstanding_no_verdict_note(user, rail_setup_id:)
     if note
       note.json_data[ACCOUNT_CREATION_IDEMPOTENCY_KEY] ||= key
       assign_account_creation_attempt_time(note) if note.json_data[ACCOUNT_CREATION_ATTEMPTED_AT].blank?
@@ -2405,7 +2454,7 @@ module StripeMerchantAccountManager
       return true
     end
 
-    source = abandoned_keyed_no_verdict_note(user)
+    source = abandoned_keyed_no_verdict_note(user, rail_setup_id:)
     attempted_at = source && source.json_data[ACCOUNT_CREATION_IDEMPOTENCY_KEY] == key ? account_creation_attempted_at(source).iso8601 : Time.current.iso8601
     user.add_payout_note(
       content: "#{NO_VERDICT_FAILURE_NOTE_PREFIX}: awaiting Stripe account creation",
@@ -2414,8 +2463,9 @@ module StripeMerchantAccountManager
         "no_verdict" => true,
         "pending_create" => true,
         ACCOUNT_CREATION_IDEMPOTENCY_KEY => key,
-        ACCOUNT_CREATION_ATTEMPTED_AT => attempted_at
-      }
+        ACCOUNT_CREATION_ATTEMPTED_AT => attempted_at,
+        RAIL_SETUP_ID_NOTE_KEY => rail_setup_id&.to_s
+      }.compact
     )
     true
   rescue => e
@@ -2425,8 +2475,8 @@ module StripeMerchantAccountManager
   end
 
   private_class_method
-  def self.discard_pending_account_creation_note(user)
-    note = oldest_outstanding_no_verdict_note(user)
+  def self.discard_pending_account_creation_note(user, rail_setup_id: nil)
+    note = oldest_outstanding_no_verdict_note(user, rail_setup_id:)
     return if note.nil? || note.json_data["pending_create"] != true
 
     note.mark_deleted!
@@ -2436,8 +2486,8 @@ module StripeMerchantAccountManager
   end
 
   private_class_method
-  def self.remember_account_creation_idempotency_key(user, key)
-    note = oldest_outstanding_no_verdict_note(user)
+  def self.remember_account_creation_idempotency_key(user, key, rail_setup_id: nil)
+    note = oldest_outstanding_no_verdict_note(user, rail_setup_id:)
     return false if note.nil?
 
     note.json_data[ACCOUNT_CREATION_IDEMPOTENCY_KEY] = key
@@ -2451,51 +2501,59 @@ module StripeMerchantAccountManager
   end
 
   private_class_method
-  def self.recovery_note(user)
-    outstanding = oldest_outstanding_no_verdict_note(user)
+  def self.recovery_note(user, rail_setup_id: nil)
+    outstanding = oldest_outstanding_no_verdict_note(user, rail_setup_id:)
     return outstanding if outstanding&.json_data&.[](ACCOUNT_CREATION_IDEMPOTENCY_KEY).present?
 
     # An abandoned note still names the create whose response was lost. Use it only when no
     # current attempt has a key, so a newer replacement key is not overridden.
-    return abandoned_keyed_no_verdict_note(user) if outstanding.nil?
+    return abandoned_keyed_no_verdict_note(user, rail_setup_id:) if outstanding.nil?
 
     outstanding
   end
 
   private_class_method
-  def self.abandoned_keyed_no_verdict_note(user)
+  def self.abandoned_keyed_no_verdict_note(user, rail_setup_id: nil)
     user.comments
       .with_type_payout_note
       .alive
       .where(author_id: GUMROAD_ADMIN_ID)
       .where("content LIKE ?", "#{NO_VERDICT_FAILURE_NOTE_PREFIX}%")
-      .select { |note| note.json_data["abandoned_at"].present? && note.json_data[ACCOUNT_CREATION_IDEMPOTENCY_KEY].present? }
+      .select { |note| no_verdict_note_in_scope?(note, rail_setup_id) && note.json_data["abandoned_at"].present? && note.json_data[ACCOUNT_CREATION_IDEMPOTENCY_KEY].present? }
       .max_by { |note| account_creation_attempted_at(note) }
   end
 
   private_class_method
-  def self.oldest_outstanding_no_verdict_note(user)
-    outstanding_no_verdict_failure_notes(user).min_by(&:created_at)
+  def self.oldest_outstanding_no_verdict_note(user, rail_setup_id: nil)
+    outstanding_no_verdict_failure_notes(user, rail_setup_id:).min_by(&:created_at)
   end
 
   private_class_method
-  def self.outstanding_no_verdict_failure_notes(user)
+  def self.outstanding_no_verdict_failure_notes(user, rail_setup_id: nil)
     user.comments
         .with_type_payout_note
         .alive
         .where(author_id: GUMROAD_ADMIN_ID)
         .where("content LIKE ?", "#{NO_VERDICT_FAILURE_NOTE_PREFIX}%")
-        .select { |note| note.json_data["abandoned_at"].blank? }
+        .select { |note| no_verdict_note_in_scope?(note, rail_setup_id) && note.json_data["abandoned_at"].blank? }
+  end
+
+  # Account-creation journal notes belong to one context: a rail setup's carry its id, so a later
+  # setup (or the ordinary create) never replays another setup's key or adopts its account.
+  private_class_method
+  def self.no_verdict_note_in_scope?(note, rail_setup_id)
+    note.json_data[RAIL_SETUP_ID_NOTE_KEY].to_s == rail_setup_id.to_s
   end
 
   private_class_method
-  def self.clear_stale_no_verdict_failure_notes(user)
-    user.comments
-        .with_type_payout_note
-        .alive
-        .where(author_id: GUMROAD_ADMIN_ID)
-        .where("content LIKE ?", "#{NO_VERDICT_FAILURE_NOTE_PREFIX}%")
-        .update_all(deleted_at: Time.current)
+  def self.clear_stale_no_verdict_failure_notes(user, rail_setup_id: nil)
+    notes = user.comments
+                .with_type_payout_note
+                .alive
+                .where(author_id: GUMROAD_ADMIN_ID)
+                .where("content LIKE ?", "#{NO_VERDICT_FAILURE_NOTE_PREFIX}%")
+                .select { |note| no_verdict_note_in_scope?(note, rail_setup_id) }
+    Comment.where(id: notes.map(&:id)).update_all(deleted_at: Time.current)
   rescue => e
     Rails.logger.error "Failed to clear stale no-verdict payout-setup notes for user #{user&.id}: #{e.class}: #{e.message}"
     ErrorNotifier.notify(e)
@@ -2561,6 +2619,7 @@ module StripeMerchantAccountManager
     user.stripe_connect_account.delete_charge_processor_account!
     user.check_merchant_account_is_linked = false
     user.save!
+    StripePayoutRailSetup.abandon_open_for!(user, :connect_removed)
 
     # We deleted creator's gumroad-controlled Stripe account when they connected their own Stripe account.
     # Ref: User::OmniauthCallbacksController#stripe_connect.
@@ -3061,6 +3120,7 @@ module StripeMerchantAccountManager
     merchant_account.delete_charge_processor_account!
 
     user = merchant_account.user
+    StripePayoutRailSetup.abandon_open_for!(user, :connect_removed) if merchant_account.is_a_stripe_connect_account?
 
     if user.merchant_migration_enabled?
       MerchantRegistrationMailer.account_deauthorized_to_user(
@@ -3092,6 +3152,8 @@ module StripeMerchantAccountManager
     stripe_account = stripe_event["data"]["object"]
     stripe_previous_attributes = stripe_event["data"]["previous_attributes"] || {}
     raise "Stripe Event #{stripe_event_id} does not contain an 'account' object." if stripe_account["object"] != "account"
+    StripePayoutRailSetups::LinkStagedCard.enqueue_if_ready(stripe_account)
+    StripePayoutRailSetup.record_provider_requirements!(stripe_account)
     merchant_account = MerchantAccount.where(charge_processor_id: StripeChargeProcessor.charge_processor_id,
                                              charge_processor_merchant_id: stripe_account["id"]).alive.charge_processor_alive.last
     refresh_payment_method_availability(merchant_account)
@@ -3537,6 +3599,14 @@ module StripeMerchantAccountManager
 
       update_bank_account(bank_account.user, passphrase: GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"), holder_name_only:)
     end
+  end
+
+  # Attaches a StripePayoutRailSetup's debit card to that setup's own prepared account once Stripe
+  # has enabled charges on it. The card stays a deleted local row and the account stays unlive.
+  def self.link_staged_rail_card!(card_bank_account, stripe_account, passphrase:)
+    attributes = bank_account_hash(card_bank_account, stripe_account:, passphrase:)
+    Stripe::Account.update(stripe_account.id, force_utf8_encoding(attributes))
+    save_stripe_bank_account_info(card_bank_account, Stripe::Account.retrieve(stripe_account.id))
   end
 
   SOFT_FUTURE_REQUIREMENT_GRACE_PERIOD = 30.days

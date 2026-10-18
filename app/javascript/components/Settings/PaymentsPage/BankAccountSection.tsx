@@ -6,6 +6,10 @@ import { COUNTRY_ACCOUNT_NUMBER_HINTS, COUNTRY_IBAN_PLACEHOLDERS } from "$app/ut
 
 import { Button } from "$app/components/Button";
 import { FeeInfoDetails, type FeeInfo } from "$app/components/FeeInfo";
+import {
+  PayoutRailSetupNotice,
+  type PayoutRailSetup,
+} from "$app/components/Settings/PaymentsPage/StripeConnectSection";
 import { Alert } from "$app/components/ui/Alert";
 import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
@@ -775,6 +779,7 @@ const BankAccountSection = ({
   bankAccount,
   updateBankAccount,
   hasConnectedStripe,
+  payoutRailSetup,
   user,
   isFormDisabled,
   feeInfo,
@@ -786,6 +791,7 @@ const BankAccountSection = ({
   bankAccount: Partial<BankAccount> | null;
   updateBankAccount: (newBankAccount: Partial<BankAccount>) => void;
   hasConnectedStripe: boolean;
+  payoutRailSetup?: PayoutRailSetup | undefined;
   user: User;
   isFormDisabled: boolean;
   feeInfo: FeeInfo;
@@ -2650,9 +2656,13 @@ const BankAccountSection = ({
 
       {hasConnectedStripe ? (
         <section>
-          <Alert variant="warning">
-            You cannot change your payout method to bank account because you have a stripe account connected.
-          </Alert>
+          {payoutRailSetup ? (
+            <PayoutRailSetupNotice payoutRailSetup={payoutRailSetup} payoutType="bank account" />
+          ) : (
+            <Alert variant="warning">
+              You cannot change your payout method to bank account because you have a stripe account connected.
+            </Alert>
+          )}
         </section>
       ) : null}
     </>

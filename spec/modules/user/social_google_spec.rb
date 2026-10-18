@@ -155,6 +155,82 @@ describe User::SocialGoogle do
         expect(User.find_or_create_for_stripe_connect_account(stripe_connect_data)).to be_nil
       end
 
+      context "when the creator staged a payout rail setup beside their Connect row" do
+        include_context "with Stripe API stubs"
+
+        let(:created_user) { create(:unconfirmed_user, email: @data_copy2["info"]["email"], password: password_set_at_signup, payment_address: "paypal-payouts@example.com") }
+        let(:key_field) { StripeMerchantAccountManager::ACCOUNT_CREATION_IDEMPOTENCY_KEY }
+
+        before do
+          create(:merchant_account_stripe_connect, user: created_user)
+          create(:user_compliance_info, user: created_user)
+          create(:tos_agreement, user: created_user)
+          Feature.activate_user(User::FeatureStatus::PAYOUT_RAIL_BESIDE_INACTIVE_CONNECT_FEATURE, created_user)
+        end
+
+        def stage_creator_bank
+          params = ActionController::Parameters.new(
+            bank_account: { type: AchAccount.name, account_number: "000123456789", account_number_confirmation: "000123456789", routing_number: "110000000", account_holder_full_name: "Signup Holder" }
+          )
+          StripePayoutRailSetups::Stage.new(seller: created_user, params:).process.setup
+        end
+
+        def expect_ended_by_adoption(setup)
+          setup.reload
+          expect(setup.state).to eq(StripePayoutRailSetup::FAILED)
+          expect(setup.failure_code).to eq("connect_removed")
+          expect(setup.bank_account.reload).to be_deleted
+          expect(StripePayoutRailSetups::Provision.new(setup).process.error).to eq(:not_eligible)
+        end
+
+        it "ends a setup whose preparation got no verdict, keeps its receipt, and lets its queued retry do nothing", :aggregate_failures do
+          allow(Stripe::Account).to receive(:create).and_raise(Stripe::APIConnectionError.new("Connection reset"))
+          setup = stage_creator_bank
+          StripePayoutRailSetups::Provision.new(setup).process
+          expect(setup.reload).to be_pending
+          receipt = created_user.comments.alive.with_type_payout_note.select { _1.json_data[StripeMerchantAccountManager::RAIL_SETUP_ID_NOTE_KEY] == setup.id.to_s }.sole
+          key = receipt.json_data[key_field]
+          expect(key).to be_present
+          expect(RetryStripeRejectedPayoutSetupForSellerJob.jobs.size).to eq(1)
+
+          expect(User.find_or_create_for_google_oauth2(@data_copy2)).to eq(created_user)
+
+          expect_ended_by_adoption(setup)
+          receipt.reload
+          expect(receipt).to be_alive
+          expect(receipt.json_data[key_field]).to eq(key)
+          expect(receipt.json_data[StripeMerchantAccountManager::ACCOUNT_CREATION_ATTEMPTED_AT]).to be_present
+          expect(receipt.json_data["abandoned_at"]).to be_present
+
+          RetryStripeRejectedPayoutSetupForSellerJob.drain
+
+          expect(Stripe::Account).to have_received(:create).once
+          expect(setup.reload.state).to eq(StripePayoutRailSetup::FAILED)
+          expect(created_user.reload.stripe_account).to be_nil
+          expect(created_user.merchant_accounts.alive).to be_empty
+        end
+
+        it "ends a prepared setup and retires its account, so the creator's bank can never be activated", :aggregate_failures do
+          setup = stage_creator_bank
+          expect(StripePayoutRailSetups::Provision.new(setup).process.success).to be(true)
+          prepared_account = setup.reload.merchant_account
+          provider_id = prepared_account.charge_processor_merchant_id
+
+          expect(User.find_or_create_for_google_oauth2(@data_copy2)).to eq(created_user)
+
+          expect_ended_by_adoption(setup)
+          prepared_account.reload
+          expect(prepared_account).not_to be_alive
+          expect(prepared_account.charge_processor_merchant_id).to eq(provider_id)
+          expect(prepared_account.retired_by_adoption_at).to be_present
+          result = StripePayoutRailSetups::Activate.new(setup:, activated_by: create(:user, is_team_member: true), consent_reference: "support-thread-synthetic-11").process
+          expect(result.success).to be(false)
+          created_user.reload
+          expect(created_user.stripe_account).to be_nil
+          expect(created_user.active_bank_account).to be_nil
+        end
+      end
+
       it "does not let a later Stripe disconnect reactivate a payout account the creator set up", :aggregate_failures do
         created_user = create(:unconfirmed_user, email: @data_copy2["info"]["email"], password: password_set_at_signup)
         retired_account = create(:merchant_account, user: created_user)

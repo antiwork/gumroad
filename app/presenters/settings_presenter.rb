@@ -779,13 +779,36 @@ class SettingsPresenter
     end
 
     def stripe_connect
-      {
+      props = {
         has_connected_stripe: seller.stripe_connect_account.present?,
         stripe_connect_account_id: seller.stripe_connect_account&.charge_processor_merchant_id,
         stripe_connect_routing_active: seller.has_stripe_account_connected?,
         stripe_disconnect_allowed: seller.stripe_disconnect_allowed?,
         supported_countries_help_text: "This feature is available in <a href='https://stripe.com/en-in/global'>all countries where Stripe operates</a>, except India, Indonesia, Malaysia, Mexico, Philippines, and Thailand.",
       }
+      # Only present while the rail-setup rollout is open for the seller, so the default page is unchanged.
+      props[:payout_rail_setup] = payout_rail_setup_props if payout_rail_setup_available?
+      props
+    end
+
+    def payout_rail_setup_available?
+      seller.stripe_connect_account.present? && seller.stripe_account.blank? && !seller.has_stripe_account_connected? &&
+        seller.payout_rail_beside_inactive_connect_enabled?
+    end
+
+    def payout_rail_setup_props
+      open_setup = StripePayoutRailSetup.open_for(seller)
+      # A setup Stripe refused is reported so the page never implies it will still be switched on.
+      refused_setup = StripePayoutRailSetup.refused_for(seller) unless open_setup
+      {
+        submitted_payout_type: open_setup && rail_payout_type(open_setup),
+        refused_payout_type: refused_setup && rail_payout_type(refused_setup),
+        support_required: open_setup.nil? && StripePayoutRailSetup.support_required_for(seller),
+      }
+    end
+
+    def rail_payout_type(setup)
+      setup.card? ? "debit card" : "bank account"
     end
 
     def states

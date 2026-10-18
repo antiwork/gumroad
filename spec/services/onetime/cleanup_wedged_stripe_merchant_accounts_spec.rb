@@ -78,6 +78,17 @@ describe Onetime::CleanupWedgedStripeMerchantAccounts do
       expect(MerchantAccount.find(merchant_account.id).alive?).to be(true)
     end
 
+    it "leaves the account of an open payout rail setup alone" do
+      setup = create(:stripe_payout_rail_setup, :prepared, user: create(:user))
+      setup.merchant_account.update!(created_at: 8.days.ago)
+
+      result = described_class.process(dry_run: false)
+
+      expect(setup.merchant_account.reload).to be_alive
+      expect(Stripe::Account).not_to have_received(:delete)
+      expect(result[:scanned]).to eq(0)
+    end
+
     it "ignores rows recent enough to be a live onboarding" do
       user = create(:user)
       recent = wedged_account(user:, created_at: 1.day.ago)

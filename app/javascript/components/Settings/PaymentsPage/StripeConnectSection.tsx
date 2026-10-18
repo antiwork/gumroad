@@ -21,7 +21,34 @@ export type StripeConnect = {
   stripe_connect_routing_active: boolean;
   stripe_disconnect_allowed: boolean;
   supported_countries_help_text: string;
+  payout_rail_setup?: PayoutRailSetup;
 };
+
+export type PayoutRailSetup = {
+  submitted_payout_type: "bank account" | "debit card" | null;
+  refused_payout_type: "bank account" | "debit card" | null;
+  support_required: boolean;
+};
+
+// Shown instead of the "cannot change" warning when a new bank account or card is accepted for review
+// beside a stored Connect link. The current payout method keeps being used until payouts are switched.
+export const PayoutRailSetupNotice = ({
+  payoutRailSetup,
+  payoutType,
+}: {
+  payoutRailSetup: PayoutRailSetup;
+  payoutType: "bank account" | "debit card";
+}) => (
+  <Alert variant="info">
+    {payoutRailSetup.submitted_payout_type
+      ? `We've received the ${payoutRailSetup.submitted_payout_type} you submitted. Your current payout method stays as it is until we switch your payouts to it.`
+      : payoutRailSetup.support_required
+        ? "We can't set up a new bank account or debit card for your account yet, so your current payout method stays as it is. Please contact support."
+        : payoutRailSetup.refused_payout_type
+          ? `We couldn't set up the ${payoutRailSetup.refused_payout_type} you submitted, so your current payout method stays as it is. You can submit a ${payoutType} here.`
+          : `You can submit a ${payoutType} here. Your current payout method stays as it is until we switch your payouts to the new ${payoutType}.`}
+  </Alert>
+);
 
 const StripeConnectSection = ({
   stripeConnect,

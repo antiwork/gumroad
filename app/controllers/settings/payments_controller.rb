@@ -7,6 +7,12 @@ class Settings::PaymentsController < Settings::BaseController
   FRENCH_OVERSEAS_DEPARTMENT_MESSAGE = "French overseas departments are not valid compliance countries. Select France instead."
   FRENCH_OVERSEAS_DEPARTMENT_SWITCH_MESSAGE = "Your personal address is in a French overseas department, which can't be the country of an individual account. Switch back to Business, set the Country of your personal address to France and save, then switch to Individual."
 
+  RAIL_SETUP_UNCHANGED_NOTE = "Your current payout method has not been changed."
+  RAIL_SETUP_CONFLICT_MESSAGES = {
+    routing_details_changed: "Save changes to your country or account type on their own before adding a %{payout_type}. Nothing was saved.",
+    payout_preferences_changed: "Save changes to your payout schedule on their own before adding a %{payout_type}. Nothing was saved.",
+  }.freeze
+
   MILITARY_ZIP_MESSAGE = "We can't accept military (APO/FPO/DPO) ZIP codes for payouts. Please enter a physical US street address and its ZIP code."
 
   before_action :authorize
@@ -148,7 +154,12 @@ class Settings::PaymentsController < Settings::BaseController
       end
       if new_stripe_payout_type && current_seller.stripe_account.blank? && current_seller.stripe_connect_account.present?
         # No managed Stripe account is created next to a Connect row, and saving this would stop the PayPal rail.
-        return redirect_with_error("We can't set up #{new_stripe_payout_type} payouts for your account yet. Your current payout method has not been changed. Please contact support.")
+        # A seller in the rail-setup rollout gets the bank staged for activation instead.
+        stage_payout_rail = StripePayoutRailSetups::Stage.applies_to?(current_seller, params)
+        return redirect_with_error("We can't set up #{new_stripe_payout_type} payouts for your account yet. Your current payout method has not been changed. Please contact support.") unless stage_payout_rail
+
+        conflict = StripePayoutRailSetups::Stage.conflicting_change(current_seller, params)
+        return redirect_with_error(RAIL_SETUP_CONFLICT_MESSAGES.fetch(conflict) % { payout_type: new_stripe_payout_type }) if conflict
       end
     end
 
@@ -156,16 +167,21 @@ class Settings::PaymentsController < Settings::BaseController
     # would create the account from that ZIP, it rolls back. Later saves send updates to Stripe and must not roll back.
     create_stripe_account = false
     military_zip_field = nil
+    rail_setup = nil
     with_transaction_if(current_seller.stripe_account.blank? && current_seller.stripe_connect_account.blank? && stored_military_zip_field(compliance_info).present?) do
       current_seller.tos_agreements.create!(ip: request.remote_ip)
 
-      return unless update_payout_method
+      # A staged rail is saved last, below: a setup created before a compliance or schedule error
+      # would hold a candidate this request never got to submit.
+      unless stage_payout_rail
+        return unless update_payout_method
 
-      # Log the audit note as soon as the payout method has actually changed —
-      # not only at the end of the action — so a later validation failure
-      # (compliance info, payout threshold) can't leave a completed payout
-      # method change without an attribution record.
-      log_payout_settings_update_by_non_owner if is_changing_payout_method
+        # Log the audit note as soon as the payout method has actually changed —
+        # not only at the end of the action — so a later validation failure
+        # (compliance info, payout threshold) can't leave a completed payout
+        # method change without an attribution record.
+        log_payout_settings_update_by_non_owner if is_changing_payout_method
+      end
 
       return unless update_user_compliance_info
 
@@ -176,6 +192,9 @@ class Settings::PaymentsController < Settings::BaseController
       end
 
       payout_preference_params = params.permit(:payouts_paused_by_user, :payout_threshold_cents, :payout_frequency, :disable_buyer_local_currency, :disable_buyer_currency_rounding)
+      # Stage.conflicting_change already proved these unchanged; saving the echo would store the
+      # page's raised minimum over a stored threshold below it.
+      payout_preference_params = payout_preference_params.except(*StripePayoutRailSetups::Stage::PAYOUT_PREFERENCE_PARAMS) if stage_payout_rail
       unless current_seller.update(payout_preference_params)
         return redirect_with_error(current_seller.errors.full_messages.first)
       end
@@ -187,7 +206,17 @@ class Settings::PaymentsController < Settings::BaseController
       # record a false audit entry.
       log_payout_settings_update_by_non_owner if payout_preference_params.to_h.any?
 
-      create_stripe_account = current_seller.active_bank_account && current_seller.native_payouts_supported? && current_seller.stripe_connect_account.blank? && !StripeMerchantAccountManager.blocks_new_managed_account?(current_seller)
+      if stage_payout_rail
+        rail_setup = stage_payout_rail_setup
+        return unless rail_setup
+
+        log_payout_settings_update_by_non_owner
+      end
+
+      # A setup can only finish beside its stored Connect row, so one left without it ends here rather
+      # than holding back the ordinary account below.
+      StripePayoutRailSetup.abandon_open_for!(current_seller, :connect_removed) if current_seller.stripe_connect_account.blank?
+      create_stripe_account = current_seller.active_bank_account && current_seller.native_payouts_supported? && current_seller.stripe_connect_account.blank? && !StripeMerchantAccountManager.blocks_new_managed_account?(current_seller) && StripePayoutRailSetup.open_for(current_seller).nil?
       if create_stripe_account
         military_zip_field = stored_military_zip_field(current_seller.fetch_or_build_user_compliance_info)
         raise ActiveRecord::Rollback if military_zip_field
@@ -201,27 +230,29 @@ class Settings::PaymentsController < Settings::BaseController
       begin
         StripeMerchantAccountManager.create_account(current_seller, passphrase: GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))
       rescue Stripe::StripeError, MerchantRegistrationUserNotReadyError => e
-        if e.is_a?(Stripe::InvalidRequestError) && e.code == "postal_code_invalid"
-          country = current_seller.fetch_or_build_user_compliance_info.legal_entity_country
-          weeks = RetryStripeRejectedPayoutSetupsJob::RETRY_WINDOW_WEEKS
-          return redirect_with_error("We couldn't verify the postal code you entered for #{country}. Please double-check it — but if you're sure it's correct (for example, a newly built address), you don't need to do anything. New postal codes can take a few days to a few weeks to reach our payment partner's records, so we'll automatically re-check yours once a week for up to #{weeks} weeks, and only reach out if we still can't verify it.")
-        end
-        if e.is_a?(MerchantRegistrationUserNotReadyError)
-          return redirect_with_error("Bank payouts are not supported in your country yet. Please use PayPal instead.")
-        end
-        # Stripe's own directory-miss wording names neither the value it refused nor which field it
-        # came from, and this is the path a first-time payout setup fails on.
-        directory_miss = StripeMerchantAccountManager.bank_directory_miss_seller_message(e, current_seller.active_bank_account)
-        return redirect_with_error(directory_miss) if directory_miss
-        # Everything else Stripe refuses at account-creation time used to fall through to its raw
-        # message, which quotes the value without naming the rule — or to nothing at all, leaving a
-        # "Thanks! You're all set." page with no payout rail behind it (gumroad-private#1777).
-        rejection_message = StripeMerchantAccountManager.payout_setup_rejection_seller_message(e, current_seller)
-        return redirect_with_error(rejection_message) if rejection_message
-        no_verdict_message = StripeMerchantAccountManager.no_verdict_seller_message(e)
-        return redirect_with_error(no_verdict_message) if no_verdict_message
-        return redirect_with_error(e.try(:message) || "Something went wrong.")
+        return redirect_with_error(payout_setup_error_message(e, current_seller.active_bank_account))
       end
+    end
+
+    if rail_setup
+      # Preparation must never be what turns the stored Connect row into the card route.
+      if current_seller.reload.has_stripe_account_connected?
+        rail_setup.abandon!(:connect_route_active)
+        return redirect_with_error("We can't set up #{new_stripe_payout_type} payouts for your account yet. #{RAIL_SETUP_UNCHANGED_NOTE} Please contact support.")
+      end
+
+      result = StripePayoutRailSetups::Provision.new(rail_setup).process
+      unless result.success
+        message = if result.error.in?(%i[not_eligible existing_managed_account])
+          "We can't set up #{new_stripe_payout_type} payouts for your account yet. Please contact support."
+        elsif result.exception.nil? || result.exception.is_a?(MerchantRegistrationUserAlreadyHasAccountError)
+          "We're still setting up the #{new_stripe_payout_type} you submitted."
+        else
+          payout_setup_error_message(result.exception, rail_setup.bank_account, rail_setup: true)
+        end
+        return redirect_with_error("#{message} #{RAIL_SETUP_UNCHANGED_NOTE}")
+      end
+      flash[:notice] = "We've received your #{new_stripe_payout_type}. #{RAIL_SETUP_UNCHANGED_NOTE} Payouts to it start once we switch them on for your account."
     end
 
     if flash[:notice].blank?
@@ -565,36 +596,77 @@ class Settings::PaymentsController < Settings::BaseController
       condition ? ActiveRecord::Base.transaction(&block) : yield
     end
 
+    def stage_payout_rail_setup
+      result = StripePayoutRailSetups::Stage.new(seller: current_seller, params:).process
+      return result.setup if result.success
+
+      message = case result.error
+                when :rail_setup_in_progress
+                  "We're still setting up the payout method you submitted earlier. #{RAIL_SETUP_UNCHANGED_NOTE}"
+                when :rail_setup_other_instrument
+                  "We're still setting up the payout method you submitted earlier, so we can't use a different one yet. #{RAIL_SETUP_UNCHANGED_NOTE} Please contact support."
+                else
+                  payout_method_error_message(result.error, result.data)
+      end
+      redirect_with_error(message, field: result.field)
+      nil
+    end
+
+    # rail_setup: true for a refused rail setup, which kept the seller's current payout method and
+    # which the weekly retry never re-checks.
+    def payout_setup_error_message(error, bank_account, rail_setup: false)
+      if error.is_a?(Stripe::InvalidRequestError) && error.code == "postal_code_invalid"
+        country = current_seller.fetch_or_build_user_compliance_info.legal_entity_country
+        return "We couldn't verify the postal code you entered for #{country}. Please double-check it and submit your #{bank_account.is_a?(CardBankAccount) ? "debit card" : "bank account"} again." if rail_setup
+
+        weeks = RetryStripeRejectedPayoutSetupsJob::RETRY_WINDOW_WEEKS
+        return "We couldn't verify the postal code you entered for #{country}. Please double-check it — but if you're sure it's correct (for example, a newly built address), you don't need to do anything. New postal codes can take a few days to a few weeks to reach our payment partner's records, so we'll automatically re-check yours once a week for up to #{weeks} weeks, and only reach out if we still can't verify it."
+      end
+      return "Bank payouts are not supported in your country yet. Please use PayPal instead." if error.is_a?(MerchantRegistrationUserNotReadyError)
+
+      # Stripe's own directory-miss wording names neither the value it refused nor which field it
+      # came from, and this is the path a first-time payout setup fails on.
+      StripeMerchantAccountManager.bank_directory_miss_seller_message(error, bank_account, recheck: !rail_setup) ||
+        # Everything else Stripe refuses at account-creation time used to fall through to its raw
+        # message, which quotes the value without naming the rule — or to nothing at all, leaving a
+        # "Thanks! You're all set." page with no payout rail behind it (gumroad-private#1777).
+        StripeMerchantAccountManager.payout_setup_rejection_seller_message(error, current_seller, current_method_kept: rail_setup) ||
+        StripeMerchantAccountManager.no_verdict_seller_message(error) ||
+        error.try(:message) || "Something went wrong."
+    end
+
     def update_payout_method
       result = UpdatePayoutMethod.new(user_params: params, seller: current_seller).process
 
       return true if result[:success]
 
-      error_message = case result[:error]
-                      when :check_card_information_prompt
-                        "Please check your card information, we couldn't verify it."
-                      when :credit_card_error
-                        strip_tags(result[:data])
-                      when :bank_account_error
-                        strip_tags(result[:data])
-                      when :account_number_does_not_match
-                        "The account numbers do not match."
-                      when :provide_valid_email_prompt
-                        "Please provide a valid email address."
-                      when :provide_ascii_only_email_prompt
-                        "Email address cannot contain non-ASCII characters"
-                      when :paypal_payouts_not_supported
-                        "PayPal payouts are not supported in your country."
-                      when :paypal_address_permanently_refused
-                        "PayPal won't accept payouts to that account. Please use a different PayPal account."
-                      when :paypal_switch_loses_bank_rail
-                        "Switching to PayPal permanently removes bank payouts for your account. Please confirm the change to continue."
-                      when :concurrent_payout_method_change
-                        "Another change was submitted at the same time. Please try again."
-      end
-
-      redirect_with_error(error_message, field: result[:field])
+      redirect_with_error(payout_method_error_message(result[:error], result[:data]), field: result[:field])
       false
+    end
+
+    def payout_method_error_message(error, data)
+      case error
+      when :check_card_information_prompt
+        "Please check your card information, we couldn't verify it."
+      when :credit_card_error
+        strip_tags(data)
+      when :bank_account_error
+        strip_tags(data)
+      when :account_number_does_not_match
+        "The account numbers do not match."
+      when :provide_valid_email_prompt
+        "Please provide a valid email address."
+      when :provide_ascii_only_email_prompt
+        "Email address cannot contain non-ASCII characters"
+      when :paypal_payouts_not_supported
+        "PayPal payouts are not supported in your country."
+      when :paypal_address_permanently_refused
+        "PayPal won't accept payouts to that account. Please use a different PayPal account."
+      when :paypal_switch_loses_bank_rail
+        "Switching to PayPal permanently removes bank payouts for your account. Please confirm the change to continue."
+      when :concurrent_payout_method_change
+        "Another change was submitted at the same time. Please try again."
+      end
     end
 
     def update_user_compliance_info

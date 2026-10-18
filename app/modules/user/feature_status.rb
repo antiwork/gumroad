@@ -6,9 +6,27 @@
 
 class User
   module FeatureStatus
+    # Per-seller rollout gates, closed unless explicitly opened for an actor. Opening one is an
+    # activation for that seller (routing or payout destination can change), not a deploy step.
+    LEGAL_ENTITY_COUNTRY_ROUTING_FEATURE = :stripe_connect_routing_by_legal_entity_country
+    PAYOUT_RAIL_BESIDE_INACTIVE_CONNECT_FEATURE = :stripe_payout_rail_beside_inactive_connect
+
     def merchant_migration_enabled?
       check_merchant_account_is_linked || (Feature.active?(:merchant_migration, self) &&
-          StripeMerchantAccountManager::COUNTRIES_SUPPORTED_BY_STRIPE_CONNECT.include?(::Compliance::Countries.find_by_name(alive_user_compliance_info&.country)&.alpha2))
+          StripeMerchantAccountManager::COUNTRIES_SUPPORTED_BY_STRIPE_CONNECT.include?(stripe_connect_routing_country_code))
+    end
+
+    # The representative's own country until the legal-entity gate is opened for this seller.
+    def stripe_connect_routing_country_code
+      if rollout_gate_open?(LEGAL_ENTITY_COUNTRY_ROUTING_FEATURE)
+        alive_user_compliance_info&.legal_entity_country_code
+      else
+        ::Compliance::Countries.find_by_name(alive_user_compliance_info&.country)&.alpha2
+      end
+    end
+
+    def payout_rail_beside_inactive_connect_enabled?
+      rollout_gate_open?(PAYOUT_RAIL_BESIDE_INACTIVE_CONNECT_FEATURE)
     end
 
     def paypal_connect_enabled?
@@ -160,5 +178,14 @@ class User
       is_today_gumroad_day = Time.now.in_time_zone(timezone_for_gumroad_day).to_date == $redis.get(RedisKey.gumroad_day_date)&.to_date
       is_today_gumroad_day || Feature.active?(:waive_gumroad_fee_on_new_sales, self)
     end
+
+    private
+      # RedisFailOpen re-raises when it has no cached value; an unreadable gate stays closed so a
+      # flag-store outage can never switch a seller onto the new rule.
+      def rollout_gate_open?(feature_name)
+        Feature.active?(feature_name, self)
+      rescue Redis::BaseError, RedisClient::Error
+        false
+      end
   end
 end

@@ -40,6 +40,16 @@ class MerchantAccount < ApplicationRecord
   # Set when a Google or Apple sign-in takes over a never-confirmed account, whose creator set this
   # account up. StripeMerchantAccountManager.disconnect must not reactivate it for the address owner.
   attr_json_data_accessor :retired_by_adoption_at
+  # For a rail setup's prepared account: StripePayoutRailSetup.guardian_fingerprint of the guardian
+  # details the provisioning sync sent, "none" when there was no guardian to send, absent when the
+  # sync did not complete.
+  attr_json_data_accessor :rail_guardian_fingerprint
+  # The StripePayoutRailSetup this row was created for, written before Stripe is called, so a row an
+  # interrupted attempt never recorded on the setup is still known to be that setup's.
+  attr_json_data_accessor :rail_setup_id
+  # The same setup id, written as create_account's last step. Until then the attempt creating the row
+  # may still delete it, so no other attempt may adopt it.
+  attr_json_data_accessor :rail_setup_completed_id
 
   validates :charge_processor_id, presence: true
   validates :charge_processor_merchant_id, presence: true, if: -> { user && charge_processor_alive? }
@@ -225,6 +235,15 @@ class MerchantAccount < ApplicationRecord
 
   def stripe_rejected?
     stripe_disabled_reason.to_s.start_with?("rejected.")
+  end
+
+  # Where instant-payout seasoning counts from. A payout rail setup's account is prepared long before
+  # Activate makes it live, so its clock starts at that activation; one never activated has none, even
+  # once retired with charge_processor_deleted_at.
+  def instant_payout_seasoning_started_at
+    return created_at if rail_setup_id.blank?
+
+    StripePayoutRailSetup.where(merchant_account_id: id).where.not(activated_at: nil).minimum(:activated_at)
   end
 
   STRIPE_DISABLED_REASON_DESCRIPTIONS = {

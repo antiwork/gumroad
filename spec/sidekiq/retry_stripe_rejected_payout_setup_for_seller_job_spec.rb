@@ -409,6 +409,84 @@ describe RetryStripeRejectedPayoutSetupForSellerJob do
     let(:no_verdict_prefix) { StripeMerchantAccountManager::NO_VERDICT_FAILURE_NOTE_PREFIX }
     let!(:note) { add_note(no_verdict_prefix) }
 
+    context "when a payout rail setup owns the seller's managed provisioning" do
+      include_context "with Stripe API stubs"
+
+      let!(:connect_account) { create(:merchant_account_stripe_connect, user:) }
+      let(:setup) do
+        params = ActionController::Parameters.new(
+          bank_account: {
+            type: AchAccount.name,
+            account_number: "000123456789",
+            account_number_confirmation: "000123456789",
+            routing_number: "110000000",
+            account_holder_full_name: "Synthetic Holder",
+          }
+        )
+        StripePayoutRailSetups::Stage.new(seller: user, params:).process.setup
+      end
+
+      before do
+        create(:tos_agreement, user:)
+        Feature.activate_user(User::FeatureStatus::PAYOUT_RAIL_BESIDE_INACTIVE_CONNECT_FEATURE, user)
+      end
+
+      it "prepares a pending setup again without opening a live account" do
+        # The setup's own uncertain preparation; only that note may run it again.
+        note.json_data[StripeMerchantAccountManager::RAIL_SETUP_ID_NOTE_KEY] = setup.id.to_s
+        note.save!
+        expect(setup).to be_pending
+
+        described_class.new.perform(user.id)
+
+        expect(setup.reload).to be_prepared
+        expect(setup.merchant_account.charge_processor_alive?).to be(false)
+        user.reload
+        expect(user.stripe_account).to be_nil
+        expect(user.active_bank_account).to be_nil
+        expect(user.merchant_account(StripeChargeProcessor.charge_processor_id)).to be_nil
+      end
+
+      it "does not prepare a pending setup from another context's note, nor resolve that note" do
+        expect(setup).to be_pending
+        expect(note.json_data[StripeMerchantAccountManager::RAIL_SETUP_ID_NOTE_KEY]).to be_nil
+
+        described_class.new.perform(user.id)
+
+        expect(Stripe::Account).not_to have_received(:create)
+        expect(setup.reload).to be_pending
+        note.reload
+        expect(note).to be_alive
+        expect(note.json_data["abandoned_at"]).to be_blank
+        expect(note.json_data["retry_count"]).to eq(1)
+      end
+
+      it "prepares a pending setup from its own note ahead of an older note of another context, which stays outstanding" do
+        own_note = travel(1.minute) { add_note(no_verdict_prefix, json: { StripeMerchantAccountManager::RAIL_SETUP_ID_NOTE_KEY => setup.id.to_s }) }
+
+        described_class.new.perform(user.id)
+
+        expect(setup.reload).to be_prepared
+        expect(own_note.reload).not_to be_alive
+        note.reload
+        expect(note).to be_alive
+        expect(note.json_data["abandoned_at"]).to be_blank
+        expect(note.json_data["retry_count"]).to be_nil
+      end
+
+      it "creates nothing for a setup that is already prepared" do
+        StripePayoutRailSetups::Provision.new(setup).process
+        expect(setup.reload).to be_prepared
+        expect(StripeMerchantAccountManager).not_to receive(:create_account)
+
+        described_class.new.perform(user.id)
+
+        expect(setup.reload).to be_prepared
+        expect(user.reload.stripe_account).to be_nil
+        expect(user.merchant_accounts.stripe.reject(&:is_a_stripe_connect_account?)).to eq([setup.merchant_account])
+      end
+    end
+
     it "re-attempts account creation quietly and resolves on success" do
       expect(StripeMerchantAccountManager).to receive(:create_account).with(user, hash_including(notify: false))
 
@@ -871,5 +949,188 @@ describe RetryStripeRejectedPayoutSetupForSellerJob do
     expect(StripeMerchantAccountManager).not_to receive(:update_bank_account)
 
     described_class.new.perform(user.id)
+  end
+
+  describe "after Stripe refuses a payout rail setup" do
+    include_context "with Stripe API stubs"
+
+    let!(:connect_account) { create(:merchant_account_stripe_connect, user:) }
+
+    before do
+      create(:tos_agreement, user:)
+      Feature.activate_user(User::FeatureStatus::PAYOUT_RAIL_BESIDE_INACTIVE_CONNECT_FEATURE, user)
+    end
+
+    def stage!
+      params = ActionController::Parameters.new(
+        bank_account: {
+          type: AchAccount.name,
+          account_number: "000123456789",
+          account_number_confirmation: "000123456789",
+          routing_number: "110000000",
+          account_holder_full_name: "Synthetic Holder",
+        }
+      )
+      StripePayoutRailSetups::Stage.new(seller: user, params:).process.setup
+    end
+
+    # Unit control: Stripe answers the rail attempts with `outcomes` in order, then accepts any later create.
+    def stub_account_creates(*outcomes)
+      allow(Stripe::Account).to receive(:create) do |params, _opts = {}|
+        outcome = outcomes.shift
+        raise outcome if outcome
+
+        Stripe::Account.construct_from(
+          id: "acct_mock_ordinary_retry", object: "account", country: params[:country], default_currency: "usd", charges_enabled: true,
+          external_accounts: { object: "list", data: [{ id: "ba_mock_ordinary_retry", object: "bank_account", fingerprint: "fp_mock_ordinary_retry" }] },
+          metadata: {}
+        )
+      end
+    end
+
+    def account_number_refusal
+      Stripe::InvalidRequestError.new("The account number is invalid.", "bank_account[account_number]", code: "account_number_invalid")
+    end
+
+    # The weekly job re-checks this refusal; a format rejection like account_number_invalid it abandons.
+    def postal_code_refusal
+      Stripe::InvalidRequestError.new("The postal code you entered is not valid.", "individual[address][postal_code]", code: "postal_code_invalid")
+    end
+
+    def expect_current_payout_method_kept(active_bank_account:, payout_weekday:)
+      user.reload
+      expect(user.stripe_account).to be_nil
+      expect(user.merchant_accounts.alive.stripe.reject(&:is_a_stripe_connect_account?)).to be_empty
+      expect(user.merchant_account(StripeChargeProcessor.charge_processor_id)).to be_nil
+      expect(StripePayoutProcessor.destination_merchant_account(user, [])).to be_nil
+      expect(user.active_bank_account).to eq(active_bank_account)
+      expect(user.payment_address).to be_nil
+      expect(user.payout_weekday).to eq(payout_weekday)
+      expect(user.stripe_connect_account).to eq(connect_account)
+      expect(user.has_stripe_account_connected?).to be(false)
+    end
+
+    it "opens no account beside Connect for a seller whose existing bank stays their payout method" do
+      bank_account = create(:ach_account, user:)
+      payout_weekday = user.payout_weekday
+      stub_account_creates(postal_code_refusal)
+      setup = stage!
+
+      expect(StripePayoutRailSetups::Provision.new(setup).process.success).to be(false)
+      expect(setup.reload.state).to eq(StripePayoutRailSetup::FAILED)
+
+      described_class.new.perform(user.id)
+
+      expect_current_payout_method_kept(active_bank_account: bank_account, payout_weekday:)
+    end
+
+    context "when the seller is paid through PayPal" do
+      let(:user) { create(:user, payment_address: "seller-payouts@example.com") }
+
+      it "runs the retry queued by an uncertain preparation and keeps PayPal as the payout method" do
+        keys = []
+        attempts = 0
+        # Unit control: the first create loses its response; the replay with the same key returns the account.
+        allow(Stripe::Account).to receive(:create) do |params, opts = {}|
+          keys << opts[:idempotency_key]
+          attempts += 1
+          raise Stripe::APIConnectionError.new("Connection reset") if attempts == 1
+
+          Stripe::Account.construct_from(
+            id: "acct_mock_swept_retry", object: "account", country: params[:country], default_currency: "usd", charges_enabled: true,
+            external_accounts: { object: "list", data: [{ id: "ba_mock_swept_retry", object: "bank_account", fingerprint: "fp_mock_swept" }] },
+            metadata: {}
+          )
+        end
+        payout_weekday = user.payout_weekday
+        setup = stage!
+        candidate = setup.bank_account
+        StripePayoutRailSetups::Provision.new(setup).process
+        expect(setup.reload).to be_pending
+        expect(user.reload.current_payout_processor).to eq(PayoutProcessorType::PAYPAL)
+
+        # The no-verdict note schedules the first retry itself; the weekly sweep picks up later ones.
+        expect(described_class.jobs.map { _1["args"] }).to eq([[user.id]])
+        described_class.drain
+
+        setup.reload
+        expect(setup).to be_prepared
+        expect(setup.bank_account).to eq(candidate)
+        expect(setup.merchant_account.charge_processor_merchant_id).to eq("acct_mock_swept_retry")
+        expect(setup.merchant_account.charge_processor_alive?).to be(false)
+        expect(keys.size).to eq(2)
+        expect(keys.uniq.size).to eq(1)
+        user.reload
+        expect(user.stripe_account).to be_nil
+        expect(user.payment_address).to eq("seller-payouts@example.com")
+        expect(user.current_payout_processor).to eq(PayoutProcessorType::PAYPAL)
+        expect(PaypalPayoutProcessor.is_user_payable(user, 100_00)).to be(true)
+        expect(user.payout_weekday).to eq(payout_weekday)
+        expect(user.comments.alive.with_type_payout_note.map(&:content)).not_to include(described_class::SWITCHED_OFF_STRIPE_NOTE)
+      end
+
+      it "makes no provider call for a pending setup once the rollout gate is closed, and keeps the recovery note" do
+        stub_account_creates(Stripe::APIConnectionError.new("Connection reset"))
+        setup = stage!
+        StripePayoutRailSetups::Provision.new(setup).process
+        recovery_note = user.comments.alive.with_type_payout_note.find { _1.content.start_with?(StripeMerchantAccountManager::NO_VERDICT_FAILURE_NOTE_PREFIX) }
+        Feature.deactivate_user(User::FeatureStatus::PAYOUT_RAIL_BESIDE_INACTIVE_CONNECT_FEATURE, user)
+        expect(Stripe::Account).not_to receive(:create)
+
+        described_class.drain
+
+        expect(setup.reload).to be_pending
+        expect(setup.attempt_count).to eq(1)
+        expect(recovery_note.reload).to be_alive
+        expect(recovery_note.json_data[StripeMerchantAccountManager::ACCOUNT_CREATION_IDEMPOTENCY_KEY]).to be_present
+        expect(user.reload.stripe_account).to be_nil
+        expect(user.payment_address).to eq("seller-payouts@example.com")
+      end
+
+      it "still stops retrying an older ordinary note for a PayPal seller with a pending setup" do
+        postal_note = add_note(postal_prefix)
+        setup = stage!
+        expect(StripeMerchantAccountManager).not_to receive(:create_account)
+
+        described_class.new.perform(user.id)
+
+        expect(postal_note.reload.json_data["abandoned_reason"]).to eq(described_class::ABANDONED_REASON_SWITCHED_OFF_STRIPE)
+        expect(setup.reload).to be_pending
+      end
+
+      it "still stops retrying for a PayPal seller whose setup is no longer pending" do
+        stub_account_creates(Stripe::APIConnectionError.new("Connection reset"), account_number_refusal)
+        setup = stage!
+        StripePayoutRailSetups::Provision.new(setup).process
+        StripePayoutRailSetups::Provision.new(setup).process
+        expect(setup.reload.state).to eq(StripePayoutRailSetup::FAILED)
+        expect(StripeMerchantAccountManager).not_to receive(:create_account)
+
+        described_class.new.perform(user.id)
+
+        # The refused setup already retired its own recovery note, keeping the key as the record.
+        recovery_note = user.comments.alive.with_type_payout_note.select { _1.content.start_with?(StripeMerchantAccountManager::NO_VERDICT_FAILURE_NOTE_PREFIX) }.sole
+        expect(recovery_note.json_data["abandoned_reason"]).to eq("rail_setup_ended")
+        expect(recovery_note.json_data[StripeMerchantAccountManager::ACCOUNT_CREATION_IDEMPOTENCY_KEY]).to be_present
+        expect(user.reload.stripe_account).to be_nil
+        expect(user.payment_address).to eq("seller-payouts@example.com")
+      end
+    end
+
+    it "opens no account beside Connect when an earlier attempt left a no-verdict note" do
+      payout_weekday = user.payout_weekday
+      stub_account_creates(Stripe::APIConnectionError.new("Connection reset"), account_number_refusal)
+      setup = stage!
+
+      StripePayoutRailSetups::Provision.new(setup).process
+      expect(setup.reload).to be_pending
+      StripePayoutRailSetups::Provision.new(setup).process
+      expect(setup.reload.state).to eq(StripePayoutRailSetup::FAILED)
+      expect(user.comments.alive.with_type_payout_note.map(&:content)).to include(a_string_starting_with(StripeMerchantAccountManager::NO_VERDICT_FAILURE_NOTE_PREFIX))
+
+      described_class.new.perform(user.id)
+
+      expect_current_payout_method_kept(active_bank_account: nil, payout_weekday:)
+    end
   end
 end
