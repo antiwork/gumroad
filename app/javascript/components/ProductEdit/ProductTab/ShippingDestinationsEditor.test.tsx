@@ -65,7 +65,10 @@ describe("ShippingDestinationsEditor exclusions", () => {
       />,
     );
 
-    fireEvent.click(screen.getAllByRole("button", { name: "Remove excluded country" })[1]);
+    const removeButtons = screen.getAllByRole("button", { name: "Remove excluded country" });
+    const secondRemoveButton = removeButtons[1];
+    if (!secondRemoveButton) throw new Error("expected two remove-exclusion buttons");
+    fireEvent.click(secondRemoveButton);
 
     expect(onExcludedCountryCodesChange).toHaveBeenCalledWith(["US"]);
   });
@@ -80,11 +83,11 @@ describe("ShippingDestinationsEditor exclusions", () => {
       />,
     );
 
-    const canadaOptions = screen.getAllByRole("option", { name: "Canada" }) as HTMLOptionElement[];
-    const disabled = canadaOptions.filter((option) => option.disabled);
+    const canadaOptions = screen.getAllByRole("option", { name: "Canada" });
+    const disabledOptions = canadaOptions.filter((option) => option.hasAttribute("disabled"));
 
-    expect(disabled).toHaveLength(1);
-    expect(disabled[0].selected).toBe(false);
+    expect(disabledOptions).toHaveLength(1);
+    expect(disabledOptions[0]).toHaveProperty("selected", false);
   });
 
   it("hides the exclusion card when the product has no destinations", () => {
