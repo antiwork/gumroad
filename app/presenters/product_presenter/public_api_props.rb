@@ -22,6 +22,11 @@ class ProductPresenter::PublicApiProps
   # Bump when the public shape changes in a backwards-incompatible way.
   API_VERSION = 1
 
+  # How many reviews the public payload carries. A storefront or widget only
+  # needs a handful of testimonials; the full list stays behind the paginated
+  # product-page endpoint.
+  PUBLIC_REVIEW_LIMIT = 5
+
   def initialize(product:, seller_custom_domain_url: nil)
     @product = product
     @seller = product.user
@@ -64,6 +69,7 @@ class ProductPresenter::PublicApiProps
 
       # Reviews / social proof (respect creator toggles)
       ratings: product.display_product_reviews? ? product.rating_stats : nil,
+      reviews: public_reviews_props,
       sales_count: ProductPresenter.cached_sales_count(product),
 
       # Variants / options / inventory
@@ -119,6 +125,27 @@ class ProductPresenter::PublicApiProps
       product.custom_attributes.filter_map do |attr|
         { name: attr["name"], value: attr["value"] } if attr["name"].present? || attr["value"].present?
       end + product.file_info_for_product_page.map { |k, v| { name: k.to_s, value: v } }
+    end
+
+    # A small, stable slice of the reviews the product page already shows, so a
+    # seller building a storefront elsewhere can render real review text instead
+    # of pasting it by hand. Same creator toggle as `ratings`: nil when the
+    # seller hides reviews. Names follow the buyer's Anonymous choice, and
+    # nothing purchase-specific (ids, emails) leaves the server.
+    def public_reviews_props
+      return nil unless product.display_product_reviews?
+
+      product.product_reviews
+        .alive
+        .visible_on_product_page
+        .includes(:response, purchase: :purchaser)
+        .order(rating: :desc, created_at: :desc, id: :desc)
+        .limit(PUBLIC_REVIEW_LIMIT)
+        .map do |review|
+          ProductReviewPresenter.new(review)
+            .product_review_props
+            .slice(:id, :rating, :message, :rater, :created_at, :response)
+        end
     end
 
     def refund_policy_props

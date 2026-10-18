@@ -96,6 +96,63 @@ describe ProductPresenter::PublicApiProps do
       end
     end
 
+    describe "reviews respect the display_product_reviews toggle" do
+      let(:reviews) do
+        [
+          create(:product_review, link: product, purchase: create(:purchase, link: product), rating: 5, message: "Best purchase of the year"),
+          create(:product_review, link: product, purchase: create(:purchase, link: product), rating: 2, message: "Not for me"),
+        ]
+      end
+
+      before { reviews }
+
+      it "is nil when the seller hides reviews" do
+        product.update!(display_product_reviews: false)
+        expect(props[:reviews]).to be_nil
+      end
+
+      it "exposes the review text, rating, rater and date when reviews are shown" do
+        product.update!(display_product_reviews: true)
+
+        expect(props[:reviews].size).to eq(2)
+        expect(props[:reviews].first).to include(rating: 5, message: "Best purchase of the year")
+        expect(props[:reviews].first[:rater]).to include(:name, :avatar_url)
+        expect(props[:reviews].first[:created_at]).to be_present
+        expect(props[:reviews].map { |review| review[:rating] }).to eq([5, 2])
+      end
+
+      it "never exposes purchase identifiers" do
+        product.update!(display_product_reviews: true)
+
+        props[:reviews].each do |review|
+          expect(review).not_to have_key(:purchase_id)
+          expect(review[:rater]).not_to have_key(:email)
+        end
+      end
+
+      it "keeps a buyer who chose Anonymous anonymous" do
+        product.update!(display_product_reviews: true)
+        reviews.first.update!(anonymous: true)
+
+        expect(props[:reviews].first[:rater][:name]).to eq("Anonymous")
+      end
+
+      it "caps the list and keeps it in product-page order" do
+        product.update!(display_product_reviews: true)
+        4.times { create(:product_review, link: product, purchase: create(:purchase, link: product), rating: 4, message: "Solid") }
+
+        expect(props[:reviews].size).to eq(described_class::PUBLIC_REVIEW_LIMIT)
+        expect(props[:reviews].first[:rating]).to eq(5)
+      end
+
+      it "omits message-less reviews the product page does not show" do
+        product.update!(display_product_reviews: true)
+        reviews.first.update!(message: nil, has_message: false)
+
+        expect(props[:reviews].map { |review| review[:message] }).not_to include(nil)
+      end
+    end
+
     context "pay-what-you-want product" do
       let(:product) { create(:product, user: seller, customizable_price: true, price_cents: 500, suggested_price_cents: 800) }
 

@@ -68,6 +68,12 @@ export const GetPublicProductPage = () => (
             "Average rating, review count, and a five-item percentages array ordered from 1 star through 5 stars; null when the creator hides reviews",
         },
         {
+          name: "reviews",
+          type: "array",
+          description:
+            "Up to five of the reviews the product page shows (id, rating, message, rater name/avatar, created_at, seller response), best-rated first; null when the creator hides reviews. Never includes purchase or buyer identifiers",
+        },
+        {
           name: "sales_count",
           type: "number",
           description: "Number of sales; null unless the creator opts to show the sales count",
@@ -117,6 +123,16 @@ export const GetPublicProductPage = () => (
   "covers": [],
   "attributes": [{ "name": "Format", "value": "PSD" }],
   "ratings": { "count": 12, "average": 4.5, "percentages": [0, 0, 8, 34, 58] },
+  "reviews": [
+    {
+      "id": "rev_abc123",
+      "rating": 5,
+      "message": "Exactly what I needed.",
+      "rater": { "name": "Alex", "avatar_url": "https://public-files.gumroad.com/user/xyz/avatar" },
+      "created_at": "2024-01-15T12:00:00Z",
+      "response": { "message": "Thanks Alex!" }
+    }
+  ],
   "sales_count": null,
   "options": [],
   "quantity_remaining": null,
