@@ -4,11 +4,14 @@ import * as React from "react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { searchProductOfferCodes } from "$app/data/offer_code";
+import { cast } from "$app/utils/cast";
 
 import { CurrentSellerProvider, type CurrentSeller } from "$app/components/CurrentSeller";
 import { DomainSettingsProvider } from "$app/components/DomainSettings";
 import { ProductTab } from "$app/components/ProductEdit/ProductTab";
 import { ProductEditContext, type OfferCode, type Product } from "$app/components/ProductEdit/state";
+
+type ProductEditContextValue = NonNullable<React.ContextType<typeof ProductEditContext>>;
 
 vi.mock("react-router-dom", () => ({
   Link: ({ to, children }: { to: string; children?: React.ReactNode }) => <a href={to}>{children}</a>,
@@ -153,6 +156,7 @@ const renderProductTab = (
   product: Product,
   currentSeller: CurrentSeller = seller,
   updateProduct: (update: Partial<Product> | ((product: Product) => void)) => void = vi.fn(),
+  contextOverrides: Partial<ProductEditContextValue> = {},
 ) =>
   render(
     <DomainSettingsProvider
@@ -218,6 +222,7 @@ const renderProductTab = (
             filesById: new Map(),
             aiGenerated: false,
             customAttributeNameSuggestions: [],
+            ...contextOverrides,
           }}
         >
           <ProductTab />
@@ -320,5 +325,49 @@ describe("ProductTab first published date", () => {
     renderProductTab(baseProduct);
 
     expect(screen.queryByText(/^First published /u)).toBeNull();
+  });
+});
+
+describe("ProductTab shipping exclusions", () => {
+  const physicalProduct: Product = {
+    ...baseProduct,
+    native_type: "physical",
+    shipping_destinations: [{ country_code: "ELSEWHERE", one_item_rate_cents: 0, multiple_items_rate_cents: 0 }],
+  };
+  const physicalContext = {
+    isPhysical: true,
+    availableCountries: [
+      { code: "ELSEWHERE", name: "Elsewhere" },
+      { code: "US", name: "United States" },
+    ],
+  };
+
+  it("shows empty exclusion controls for an editor payload that predates the exclusion list", () => {
+    // Leaving the key out of state is what lets an untouched save keep the server's list.
+    const { shipping_excluded_country_codes: _omitted, ...payloadWithoutExclusions } = physicalProduct;
+    const updateProduct = vi.fn<(update: Partial<Product> | ((product: Product) => void)) => void>();
+    renderProductTab(cast<Product>(payloadWithoutExclusions), seller, updateProduct, physicalContext);
+
+    expect(screen.getByText("Do not ship to")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Remove excluded country" })).toBeNull();
+    expect(updateProduct.mock.calls.some(([update]) => "shipping_excluded_country_codes" in update)).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "Add excluded country" }));
+
+    expect(updateProduct).toHaveBeenCalledWith({ shipping_excluded_country_codes: ["US"] });
+  });
+
+  it("passes a loaded exclusion list through to the editor", () => {
+    const updateProduct = vi.fn();
+    renderProductTab(
+      { ...physicalProduct, shipping_excluded_country_codes: ["US"] },
+      seller,
+      updateProduct,
+      physicalContext,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove excluded country" }));
+
+    expect(updateProduct).toHaveBeenCalledWith({ shipping_excluded_country_codes: [] });
   });
 });

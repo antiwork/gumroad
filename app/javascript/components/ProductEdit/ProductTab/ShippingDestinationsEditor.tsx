@@ -14,12 +14,14 @@ import { WithTooltip } from "$app/components/WithTooltip";
 export const ShippingDestinationsEditor = ({
   shippingDestinations,
   onChange,
-  excludedCountryCodes,
+  excludedCountryCodes = [],
   onExcludedCountryCodesChange,
 }: {
   shippingDestinations: ShippingDestination[];
   onChange: (shippingDestinations: ShippingDestination[]) => void;
-  excludedCountryCodes: string[];
+  // Editor payloads rendered before exclusions existed omit the list. Defaulting here, not in the
+  // product state, keeps an untouched save from sending an empty list over the saved one.
+  excludedCountryCodes?: string[];
   onExcludedCountryCodesChange: (excludedCountryCodes: string[]) => void;
 }) => {
   const { availableCountries } = useProductEditContext();
