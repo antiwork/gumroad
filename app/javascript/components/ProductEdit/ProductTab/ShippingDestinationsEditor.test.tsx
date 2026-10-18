@@ -90,6 +90,38 @@ describe("ShippingDestinationsEditor exclusions", () => {
     expect(disabledOptions[0]).toHaveProperty("selected", false);
   });
 
+  it("changes the country of one exclusion row in place", () => {
+    const onExcludedCountryCodesChange = vi.fn();
+    render(
+      <ShippingDestinationsEditor
+        shippingDestinations={[destination]}
+        onChange={vi.fn()}
+        excludedCountryCodes={["US", "CA"]}
+        onExcludedCountryCodesChange={onExcludedCountryCodesChange}
+      />,
+    );
+
+    const [firstSelect] = screen.getAllByLabelText("Excluded country");
+    if (!firstSelect) throw new Error("expected an exclusion select");
+    fireEvent.change(firstSelect, { target: { value: "DE" } });
+
+    expect(onExcludedCountryCodesChange).toHaveBeenCalledWith(["DE", "CA"]);
+  });
+
+  it("stops offering to add once every country is excluded", () => {
+    render(
+      <ShippingDestinationsEditor
+        shippingDestinations={[destination]}
+        onChange={vi.fn()}
+        excludedCountryCodes={["US", "DE", "CA"]}
+        onExcludedCountryCodesChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getAllByRole("button", { name: "Remove excluded country" })).toHaveLength(3);
+    expect(screen.queryByRole("button", { name: "Add excluded country" })).toBeNull();
+  });
+
   it("hides the exclusion card when the product has no destinations", () => {
     render(
       <ShippingDestinationsEditor

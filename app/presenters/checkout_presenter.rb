@@ -435,6 +435,7 @@ class CheckoutPresenter
 
     def product_common(product, recommended_by:)
       buyer_currency_display = buyer_currency_display_props(product:, price_cents: product.price_cents, ip:)
+      shippable_country_codes = product.shippable_country_codes
 
       {
         permalink: product.unique_permalink,
@@ -465,7 +466,10 @@ class CheckoutPresenter
           recurrence: product.installment_plan.recurrence,
         } : nil,
         is_multiseat_license: product.multiseat_license_enabled?,
-        shippable_country_codes: product.shippable_country_codes,
+        shippable_country_codes:,
+        # A digital product can require a shipping address and also sends an empty list, so the
+        # client cannot tell "ships nowhere" from "no country restriction" without this.
+        ships_nowhere: product.is_physical && shippable_country_codes.empty?,
       }
     end
 

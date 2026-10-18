@@ -160,4 +160,22 @@ describe("Product Page - Shipping Scenarios", type: :system, js: true, shipping:
       expect(purchase.shipping_cents).to eq(500)
     end
   end
+
+  context "when the seller excludes every country the product ships to" do
+    let(:product) { create(:product, require_shipping: true, is_physical: true, price_cents: 500) }
+
+    before do
+      product.shipping_destinations << build(:shipping_destination, country_code: "US", one_item_rate_cents: 500)
+      product.shipping_exclusions.create!(country_code: "US")
+    end
+
+    it "shows the product as unavailable instead of offering every country" do
+      visit product.long_url
+      add_to_cart(product)
+
+      expect(page).to have_text("#{product.name} can't be shipped to any country right now.")
+      expect(page).not_to have_select("Country")
+      expect(page).to have_button("Pay", disabled: true)
+    end
+  end
 end

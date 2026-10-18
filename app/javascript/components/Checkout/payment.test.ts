@@ -252,6 +252,60 @@ const state = (overrides: Partial<State> = {}): State => ({
   ...overrides,
 });
 
+describe("a physical product that ships nowhere", () => {
+  const unshippable = product({
+    permalink: "poster",
+    name: "Poster",
+    requireShipping: true,
+    nativeType: "physical",
+    shippableCountryCodes: [],
+    shipsNowhere: true,
+  });
+  const shippable = product({
+    permalink: "shirt",
+    name: "Shirt",
+    requireShipping: true,
+    nativeType: "physical",
+    shippableCountryCodes: ["US", "CA"],
+  });
+  const digital = product({ permalink: "ebook", name: "Ebook", shippableCountryCodes: [] });
+  // Digital products that collect a shipping address send the same empty list, meaning any country.
+  const digitalWithAddress = product({
+    permalink: "zine",
+    name: "Zine",
+    requireShipping: true,
+    shippableCountryCodes: [],
+  });
+
+  it.each([
+    ["on its own", [unshippable]],
+    ["next to a shippable physical product", [shippable, unshippable]],
+    ["next to a digital product", [digital, unshippable]],
+  ])("refuses every submit path %s", (_, products) => {
+    const checkout = state({ products });
+
+    expect(isSubmitDisabled(checkout)).toBe(true);
+    for (const type of ["offer", "validate"] as const) {
+      expect(reduceCheckoutState(checkout, { type }).status).toEqual({
+        type: "input",
+        errors: new Set(["shippingUnavailable"]),
+      });
+    }
+  });
+
+  it.each([
+    ["a physical product with coverage", [shippable]],
+    ["a digital product", [digital]],
+    ["a digital product that collects a shipping address", [digitalWithAddress]],
+    ["a mixed cart whose physical product ships somewhere", [shippable, digital]],
+  ])("leaves %s purchasable", (_, products) => {
+    const checkout = state({ products });
+
+    expect(isSubmitDisabled(checkout)).toBe(false);
+    expect(reduceCheckoutState(checkout, { type: "validate" }).status.type).toBe("validating");
+  });
+});
+
 describe("pay label while a confirmation holds the submit open", () => {
   const charging = state({ status: { type: "finished", paymentMethod: { type: "saved" } } as const });
 

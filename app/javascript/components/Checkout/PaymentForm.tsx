@@ -53,6 +53,7 @@ import {
   getStripePaymentElementMountCurrency,
   getChargeTodayPrice,
   getTotalPrice,
+  getUnshippableProducts,
   hasShipping,
   isCardReadyToPay,
   isProcessing,
@@ -110,6 +111,7 @@ const CountryInput = () => {
       ),
     [state.products],
   );
+  const unshippableProducts = getUnshippableProducts(state);
 
   React.useEffect(() => {
     if (!shippingCountryCodes.has(state.country)) {
@@ -117,6 +119,22 @@ const CountryInput = () => {
       if (!result.done) dispatch({ type: "set-value", country: result.value });
     }
   }, [state.country, shippingCountryCodes]);
+
+  if (unshippableProducts.length > 0) {
+    return (
+      <Fieldset state="danger">
+        <FieldsetTitle>
+          <Label>Country</Label>
+        </FieldsetTitle>
+        <Alert variant="danger">
+          {unshippableProducts.map((product) => product.name).join(", ")} can't be shipped to any country right now.
+          {unshippableProducts.length < state.products.length
+            ? ` Remove ${unshippableProducts.length === 1 ? "it" : "them"} from your cart to buy the rest.`
+            : null}
+        </Alert>
+      </Fieldset>
+    );
+  }
 
   return (
     <Fieldset>

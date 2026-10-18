@@ -231,6 +231,8 @@ export type Product = {
   forceNewSubscription?: boolean;
   recommended_by?: string | null;
   shippableCountryCodes: string[];
+  // Set by the server for a physical product whose seller excluded every country it covers.
+  shipsNowhere?: boolean;
 };
 
 export type Gift =
@@ -948,7 +950,13 @@ export function isSubmitDisabled(state: State) {
   // checkoutPaymentStale: a cart edit is still waiting on the server's answer for which element
   // this cart should be paying through. Same reasoning as an unloaded surcharge response — the
   // buyer must not be able to pay on a configuration computed for the previous cart.
-  return isProcessing(state) || state.surcharges.type !== "loaded" || state.checkoutPaymentStale || emailTypoBlocking;
+  return (
+    isProcessing(state) ||
+    state.surcharges.type !== "loaded" ||
+    state.checkoutPaymentStale ||
+    emailTypoBlocking ||
+    getUnshippableProducts(state).length > 0
+  );
 }
 
 export function isCardReadyToPay({
@@ -1130,6 +1138,10 @@ export function getCustomFieldKey(
 
 export const hasShipping = (state: State) => state.products.some((item) => item.requireShipping);
 
+// Not requireShipping plus an empty list: a digital product can require a shipping address and
+// sends an empty list too, meaning any country.
+export const getUnshippableProducts = (state: State) => state.products.filter((item) => item.shipsNowhere === true);
+
 // UPI on digital carts: the Payment Element collects full billing details. Duplicated from
 // paymentElementBillingDetailsCollection to avoid a cycle with card_payment_method_data.ts.
 // Hide Country/ZIP (the element collects them) but keep Full name — the pane's name field
@@ -1272,6 +1284,9 @@ function validatePaymentMethodIndependentFields(state: State) {
   )
     errors.add("fullName");
   if (state.gift?.type === "normal" && !isValidEmail(state.gift.email)) errors.add("gift");
+  // Every submit path (Pay, PayPal, wallets, the offer pipeline) passes through here, so this is
+  // what stops a charge from starting; the disabled button alone does not cover PayPal's own button.
+  if (getUnshippableProducts(state).length > 0) errors.add("shippingUnavailable");
   return errors;
 }
 

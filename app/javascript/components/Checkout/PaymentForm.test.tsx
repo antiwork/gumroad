@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import type { Stripe, StripeElements } from "@stripe/stripe-js";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -1088,5 +1088,87 @@ describe("PaymentForm before the first quote", () => {
     renderForm(paid(state({ surcharges: { type: "pending" } })));
     expect(screen.getByText("Pay with")).toBeTruthy();
     expect(screen.getByLabelText("Full name")).toBeTruthy();
+  });
+});
+
+describe("PaymentForm shipping country", () => {
+  beforeEach(cleanup);
+  afterEach(cleanup);
+
+  const countries = { US: "United States", CA: "Canada", DE: "Germany" };
+  const [baseProduct] = state().products;
+  if (!baseProduct) throw new Error("expected a base product");
+  const product = (overrides: Partial<typeof baseProduct>) => ({
+    ...baseProduct,
+    customFields: [],
+    price: 1000,
+    requirePayment: true,
+    ...overrides,
+  });
+  const physical = (name: string, shippableCountryCodes: string[], shipsNowhere = false) =>
+    product({
+      permalink: name.toLowerCase(),
+      name,
+      requireShipping: true,
+      nativeType: "physical",
+      shippableCountryCodes,
+      shipsNowhere,
+    });
+  const countryOptions = () =>
+    Array.from(within(screen.getByLabelText("Country")).getAllByRole("option")).map((option) => option.textContent);
+  const payButton = () => screen.getByRole("button", { name: "Pay" });
+
+  it("offers only the countries a physical product ships to", () => {
+    renderPaymentForm(state({ countries, products: [physical("Shirt", ["US", "CA"])] }));
+
+    expect(countryOptions()).toEqual(["United States", "Canada"]);
+    expect(payButton().hasAttribute("disabled")).toBe(false);
+  });
+
+  it("shows a physical product that ships nowhere as unavailable, with no country to pick", () => {
+    renderPaymentForm(state({ countries, products: [physical("Poster", [], true)] }));
+
+    expect(screen.getByText("Poster can't be shipped to any country right now.")).toBeTruthy();
+    expect(screen.queryByLabelText("Country")).toBeNull();
+    expect(screen.queryByRole("option", { name: "United States" })).toBeNull();
+    expect(payButton().hasAttribute("disabled")).toBe(true);
+  });
+
+  it("names the unshippable product in a mixed cart and keeps Pay disabled", () => {
+    renderPaymentForm(
+      state({
+        countries,
+        products: [
+          physical("Shirt", ["US"]),
+          physical("Poster", [], true),
+          product({ permalink: "ebook", name: "Ebook" }),
+        ],
+      }),
+    );
+
+    expect(
+      screen.getByText("Poster can't be shipped to any country right now. Remove it from your cart to buy the rest."),
+    ).toBeTruthy();
+    expect(payButton().hasAttribute("disabled")).toBe(true);
+  });
+
+  it("lets a digital product that collects a shipping address ship to any country", () => {
+    renderPaymentForm(
+      state({
+        countries,
+        products: [product({ permalink: "zine", name: "Zine", requireShipping: true, shippableCountryCodes: [] })],
+      }),
+    );
+
+    expect(screen.queryByText(/can't be shipped/u)).toBeNull();
+    expect(countryOptions()).toEqual(["United States", "Canada", "Germany"]);
+    expect(payButton().hasAttribute("disabled")).toBe(false);
+  });
+
+  it("keeps a digital cart's billing country choices", () => {
+    renderPaymentForm(state({ countries, products: [product({ permalink: "ebook", name: "Ebook" })] }));
+
+    expect(countryOptions()).toEqual(["United States", "Canada", "Germany"]);
+    expect(payButton().hasAttribute("disabled")).toBe(false);
   });
 });

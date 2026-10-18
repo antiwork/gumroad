@@ -3,9 +3,9 @@
 # A country a physical product must not ship to even when a catch-all destination
 # (ELSEWHERE, or a virtual region such as NORTH AMERICA) would otherwise include it.
 class ShippingExclusion < ApplicationRecord
-  belongs_to :link
+  belongs_to :product, class_name: "Link"
 
-  validates_uniqueness_of :country_code, scope: :link_id
+  validates_uniqueness_of :country_code, scope: :product_id
   validate :country_code_must_be_excludable
 
   after_commit :invalidate_product_cache
@@ -27,6 +27,6 @@ class ShippingExclusion < ApplicationRecord
     end
 
     def invalidate_product_cache
-      link.invalidate_cache if link.present?
+      product.invalidate_cache if product.present?
     end
 end

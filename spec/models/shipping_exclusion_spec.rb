@@ -123,6 +123,13 @@ describe ShippingExclusion do
       expect(product.reload.shippable_country_codes).to eq(["DE"])
     end
 
+    it "is empty when every covered country is excluded" do
+      set_destinations("US")
+      product.shipping_exclusions.create!(country_code: "US")
+
+      expect(product.reload.shippable_country_codes).to eq([])
+    end
+
     it "is empty for a digital product" do
       expect(create(:product).shippable_country_codes).to eq([])
     end
