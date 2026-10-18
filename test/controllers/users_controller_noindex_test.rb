@@ -7,11 +7,11 @@ class UsersControllerNoindexTest < ActionController::TestCase
 
   setup do
     @seller = create_user(username: "noindexseller")
-    @request.host = "#{@seller.username}.test.gumroad.com"
+    @request.host = "#{@seller.username}.example.com"
   end
 
   def get_profile
-    with_const(:ROOT_DOMAIN, "test.gumroad.com") do
+    with_const(:ROOT_DOMAIN, "example.com") do
       get :show, params: { username: @seller.username }
     end
   end

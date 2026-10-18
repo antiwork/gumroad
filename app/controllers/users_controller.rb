@@ -228,17 +228,6 @@ class UsersController < ApplicationController
   end
 
   private
-    # Spam accounts create storefronts in bulk (gambling and fake login pages) and Google flags the
-    # whole domain for them. Keep a storefront out of search results until a human has marked the
-    # seller compliant or the seller has made a real (non-free) sale. Buyers who have the link are
-    # unaffected, and the header is dropped as soon as either condition is met.
-    def set_noindex_header_for_unproven_storefront
-      return if @user.compliant?
-      return if @user.sales.successful.non_free.exists?
-
-      set_noindex_header
-    end
-
     # The profile is authored entirely through the seller's agent + CLI, so the
     # custom HTML never carries a buy affordance — there's no checkout bridge or
     # ?wanted=true fall-through like the product landing page has. Store links

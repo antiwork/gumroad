@@ -361,6 +361,16 @@ class ApplicationController < ActionController::Base
       headers["X-Robots-Tag"] = "noindex"
     end
 
+    # Spam accounts create storefronts in bulk and Google flags the whole domain for them, so a
+    # seller's storefront responses stay out of search results until a human marks them compliant
+    # or they make a real (non-free) sale. A buyer with the link is unaffected.
+    def set_noindex_header_for_unproven_storefront
+      return if @user.compliant?
+      return if @user.sales.successful.non_free.exists?
+
+      set_noindex_header
+    end
+
     def info_for_paper_trail
       {
         remote_ip: request.remote_ip,
