@@ -19,10 +19,13 @@ function UnsubscribeFeatureAnnouncementsPage({ unsubscribe_url, unsubscribed }: 
 
   return (
     <Layout heading="Unsubscribe from feature announcements?">
-      You will stop receiving emails about new Gumroad features. Other emails are not affected.{" "}
-      <Button color="primary" disabled={form.processing} onClick={() => form.post(unsubscribe_url)}>
-        Unsubscribe
-      </Button>
+      You will stop receiving emails about new Gumroad features. Other emails are not affected.
+      {/* Layout wraps children in a <p>, so a block span (not a div) puts the action on its own line. */}
+      <span className="mt-4 block">
+        <Button color="primary" disabled={form.processing} onClick={() => form.post(unsubscribe_url)}>
+          Unsubscribe
+        </Button>
+      </span>
     </Layout>
   );
 }
