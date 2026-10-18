@@ -1099,6 +1099,21 @@ describe ProductPresenter::ProductProps do
       expect(quote.(2)).to eq("" => "URL50")
     end
 
+    it "computes each code once per scope across options, and keeps a code scoped to one tier off the others" do
+      membership = create(:membership_product_with_preset_tiered_pricing, user: seller,
+                                                                          recurrence_price_values: Array.new(10) { |i| { "monthly" => { enabled: true, price: 10 * (i + 1) } } })
+      tiers = membership.alive_variants.in_order.to_a
+      seller.offer_codes.create!(code: "SHOP5", amount_cents: 500, currency_type: "usd", universal: true, products: [], auto_apply: true)
+      seller.offer_codes.create!(code: "TOP50", amount_percentage: 50, products: [membership], variants: [tiers.last])
+      allow(OfferCodeDiscountComputingService).to receive(:new).and_call_original
+
+      result = described_class.new(product: membership).selection_discounts(url_code: "TOP50", quantity: 1, recurrence: "monthly", buyer:)
+
+      expect(codes(result)).to eq(tiers[0..-2].to_h { [_1.external_id, "SHOP5"] }.merge(tiers.last.external_id => "TOP50"))
+      # SHOP5 once, TOP50 once for the tier it covers and once for the rest.
+      expect(OfferCodeDiscountComputingService).to have_received(:new).exactly(3).times
+    end
+
     it "quotes nothing when the product has no default and no code was given" do
       product = create(:product, user: seller)
 

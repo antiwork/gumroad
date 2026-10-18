@@ -2,9 +2,11 @@
 
 class BestOfferCodeService
   # comparison_price_cents is the unit price the buyer chose, else the one the card quotes; option is
-  # the picked variant or SKU, whose scope and stock apply.
-  def initialize(product:, url_code: nil, quantity: 1, buyer: nil, comparison_price_cents: nil, option: nil)
+  # the picked variant or SKU, whose scope and stock apply. evaluations is shared by callers weighing
+  # several options for one buyer and quantity; see evaluate_code.
+  def initialize(product:, url_code: nil, quantity: 1, buyer: nil, comparison_price_cents: nil, option: nil, evaluations: {})
     @product = product
+    @evaluations = evaluations
     @url_code = url_code.presence
     @quantity = quantity
     @buyer = buyer
@@ -90,12 +92,20 @@ class BestOfferCodeService
       offer_code = @product.find_offer_code(code: normalized_code)
       return { valid: false, error_code: :invalid_offer } unless offer_code
 
+      quantity = [@quantity, offer_code.minimum_quantity.to_i || 0].max
+      # The computing service reads the option only to check the code's scope, so options the code
+      # covers alike share one answer.
+      scope = @option ? offer_code.applicable_to_variant?(@product, @option.external_id) : :any
+      @evaluations[[code, quantity, @buyer&.id, scope]] ||= compute_code(code, normalized_code, quantity)
+    end
+
+    def compute_code(code, normalized_code, quantity)
       response = OfferCodeDiscountComputingService.new(
         normalized_code,
         {
           @product.unique_permalink => {
             permalink: @product.unique_permalink,
-            quantity: [@quantity, offer_code.minimum_quantity.to_i || 0].max,
+            quantity:,
             **(@option ? { variant_external_id: @option.external_id } : {}),
           }
         },

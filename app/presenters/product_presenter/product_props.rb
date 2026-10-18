@@ -104,6 +104,7 @@ class ProductPresenter::ProductProps
 
     records = product.option_records.index_by(&:external_id)
     all_options = product.options
+    evaluations = {}
     quotes = ->(rent) do
       (all_options.presence || [nil]).filter_map do |option|
         id = option&.dig(:id)
@@ -111,7 +112,7 @@ class ProductPresenter::ProductProps
         # A tier closed to new buyers cannot be picked, and cart_item prices another one in its place.
         next if id && item[:option]&.dig(:id) != id
 
-        result = BestOfferCodeService.new(product:, url_code:, quantity:, buyer:, comparison_price_cents: item[:price], option: records[id]).result
+        result = BestOfferCodeService.new(product:, url_code:, quantity:, buyer:, comparison_price_cents: item[:price], option: records[id], evaluations:).result
         [id.to_s, { discount_code: result, sale_label: sale_label(result) }]
       end.to_h
     end
