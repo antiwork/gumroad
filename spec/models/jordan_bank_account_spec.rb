@@ -127,9 +127,9 @@ describe JordanBankAccount do
       ba = create(:jordan_bank_account)
       ba.update_column(:bank_number, "IIBAJOAMX")
 
-      ba.reload.update!(bank_code: "IIBAJOA1200")
+      ba.reload.update!(bank_code: "IIBAJOAMXXX")
 
-      expect(ba.reload.bank_number).to eq("IIBAJOA1200")
+      expect(ba.reload.bank_number).to eq("IIBAJOAMXXX")
     end
   end
 end
