@@ -25,6 +25,7 @@ import { PriceTag } from "$app/components/Product/PriceTag";
 import { getBundleComparisonPriceCents } from "$app/components/Product/pricing";
 import { PurchaseButton } from "$app/components/Product/PurchaseButton";
 import { needsOptionChoice } from "$app/components/Product/purchaseReadiness";
+import { useSelectionDiscounts } from "$app/components/Product/selectionDiscounts";
 import type { PageProps as EditSectionsProps } from "$app/components/Profile/EditSections";
 import { Section, PageProps as SectionsProps } from "$app/components/Profile/Sections";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
@@ -48,14 +49,21 @@ export const Layout = (
   const {
     product,
     purchase,
-    discount_code: discountCode,
-    sale_label: saleLabel,
+    discount_code: initialDiscountCode,
+    sale_label: initialSaleLabel,
     cart,
     hasHero,
     wishlists,
     main_section_index,
   } = props;
   const [selection, setSelection] = useSelectionFromUrl(product);
+  const { discountCode, saleLabel, selectionDiscountCode, quote } = useSelectionDiscounts({
+    product,
+    discountCode: initialDiscountCode ?? null,
+    saleLabel: initialSaleLabel ?? null,
+    initial: props.selection_discounts,
+    selection,
+  });
   const ctaButtonRef = React.useRef<HTMLAnchorElement>(null);
   const ctaLabel = cart ? "Add to cart" : undefined;
 
@@ -67,8 +75,10 @@ export const Layout = (
       <Product
         product={product}
         purchase={purchase}
-        discountCode={discountCode ?? null}
-        saleLabel={saleLabel ?? null}
+        discountCode={discountCode}
+        saleLabel={saleLabel}
+        selectionDiscountCode={selectionDiscountCode}
+        quote={quote}
         ctaLabel={ctaLabel}
         selection={selection}
         setSelection={setSelection}
@@ -98,7 +108,8 @@ export const Layout = (
       <CtaBar
         product={product}
         purchase={purchase}
-        discountCode={discountCode ?? null}
+        discountCode={discountCode}
+        pricePending={quote.state !== "ready"}
         ctaLabel={ctaLabel}
         selection={selection}
         setSelection={setSelection}
@@ -131,6 +142,7 @@ const CtaBar = ({
   product,
   purchase,
   discountCode,
+  pricePending,
   ctaButtonRef,
   configurationSelectorRef,
   ctaLabel,
@@ -141,6 +153,7 @@ const CtaBar = ({
   product: Product;
   purchase: Purchase | null;
   discountCode?: ProductDiscount | null;
+  pricePending: boolean;
   ctaButtonRef: React.RefObject<HTMLAnchorElement>;
   configurationSelectorRef: React.RefObject<ConfigurationSelectorHandle>;
   ctaLabel?: string | undefined;
@@ -264,6 +277,7 @@ const CtaBar = ({
             product={product}
             purchase={purchase}
             discountCode={discountCode ?? null}
+            pricePending={pricePending}
             selection={selection}
             label={ctaLabel}
             setSelection={setSelection}

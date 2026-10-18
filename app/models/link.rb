@@ -1546,10 +1546,12 @@ class Link < ApplicationRecord
     not_purchasing_power_parity_disabled? && user.purchasing_power_parity_enabled?
   end
 
-  def cart_item(params)
+  # prebuilt_options lets a caller pricing several options pass the list it already built. It is
+  # positional because callers pass params as bare keywords.
+  def cart_item(params, prebuilt_options = nil)
     attrs = {}
     attrs[:rental] = !!params[:rent] && purchase_type != "buy_only"
-    attrs[:options] = options
+    attrs[:options] = prebuilt_options || options
     requested = attrs[:options].find { |o| o[:id] == params[:option] }
     # A closed tier reports quantity 0. Selecting it here makes checkout add a zero-quantity item.
     requested = nil if requested && Variant.find_by_external_id(requested[:id])&.closed_to_new_buyers?

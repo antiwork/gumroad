@@ -237,6 +237,7 @@ Rails.application.routes.draw do
     purchases_invoice_routes
 
     get "/offer_codes/compute_discount", to: "offer_codes#compute_discount"
+    get "/offer_codes/selection_discounts", to: "offer_codes#selection_discounts"
     get "/products/search", to: "links#search"
 
     if named_routes
@@ -920,6 +921,7 @@ Rails.application.routes.draw do
 
     resource :offer_codes, only: [] do
       get :compute_discount
+      get :selection_discounts
     end
 
     resources :bundles, only: [:show] do

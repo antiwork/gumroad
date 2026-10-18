@@ -282,6 +282,30 @@ describe BestOfferCodeService do
         end
       end
 
+      context "when the larger url_code has a minimum the selection does not meet" do
+        let(:default_offer_code) { create(:offer_code, products: [product], code: "AUTO20", amount_cents: nil, amount_percentage: 20, currency_type: product.price_currency_type) }
+
+        {
+          "quantity" => { minimum_quantity: 2 },
+          "spend" => { minimum_amount_cents: 1500 },
+        }.each do |kind, minimum|
+          context "on #{kind}" do
+            let(:url_offer_code) { create(:offer_code, products: [product], code: "URL50", amount_cents: nil, amount_percentage: 50, currency_type: product.price_currency_type, **minimum) }
+
+            it "keeps the default the selection does meet, until it meets the url_code's minimum" do
+              expect(described_class.new(product:, url_code:, quantity: 1).result).to include(valid: true, code: "AUTO20")
+              expect(described_class.new(product:, url_code:, quantity: 2).result).to include(valid: true, code: "URL50")
+            end
+
+            it "returns the url_code with its terms when the default does not apply either" do
+              default_offer_code.update!(minimum_quantity: 3)
+
+              expect(described_class.new(product:, url_code:, quantity: 1).result).to include(valid: true, code: "URL50")
+            end
+          end
+        end
+      end
+
       context "when comparing a once-per-cart fixed code with a percentage code" do
         let(:quantity) { 10 }
         let(:url_offer_code) do

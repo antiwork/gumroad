@@ -86,11 +86,37 @@ class ProductPresenter::ProductProps
       },
       discount_code: discount_code_result,
       sale_label: sale_label(discount_code_result),
+      selection_discounts: selection_discounts(url_code: discount_code, quantity:, recurrence: product.recurrences&.dig(:default), buyer: pundit_user&.user),
       purchase: purchase_props(product.purchase_info_for_product_page(pundit_user&.user, incoming_browser_guid(request), purchase_id:, purchase_email_digest:)),
       wishlists: pundit_user&.seller.present? ? (
         pundit_user.seller.wishlists.alive.includes(:alive_wishlist_products).map { |wishlist| WishlistPresenter.new(wishlist:).listing_props(product:) }
       ) : [],
     }
+  end
+
+  # The code each option would get at its own price for this selection, so every option row and the
+  # selected price show what checkout will charge. Rentals are weighed on their own price, in
+  # rent_options when the buyer can also buy. price_cents is the pay-what-you-want amount for option_id.
+  def selection_discounts(url_code:, quantity:, recurrence:, buyer:, option_id: nil, price_cents: nil)
+    quantity = [quantity.to_i, 1].max
+    inputs = { url_code: url_code.presence, quantity:, recurrence:, option_id:, price_cents: }
+    return inputs.merge(options: {}, rent_options: nil) if url_code.blank? && BestOfferCodeService.new(product:, buyer:).default_offer_codes.empty?
+
+    records = product.option_records.index_by(&:external_id)
+    all_options = product.options
+    quotes = ->(rent) do
+      (all_options.presence || [nil]).filter_map do |option|
+        id = option&.dig(:id)
+        item = product.cart_item({ option: id, rent:, recurrence:, quantity:, price: id == option_id ? price_cents : nil }, all_options)
+        # A tier closed to new buyers cannot be picked, and cart_item prices another one in its place.
+        next if id && item[:option]&.dig(:id) != id
+
+        result = BestOfferCodeService.new(product:, url_code:, quantity:, buyer:, comparison_price_cents: item[:price], option: records[id]).result
+        [id.to_s, { discount_code: result, sale_label: sale_label(result) }]
+      end.to_h
+    end
+    rental = product.rental
+    inputs.merge(options: quotes.(!!rental&.dig(:rent_only)), rent_options: rental && !rental[:rent_only] ? quotes.(true) : nil)
   end
 
   private

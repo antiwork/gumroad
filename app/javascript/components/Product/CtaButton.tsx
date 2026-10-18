@@ -8,6 +8,7 @@ import { assertResponseError } from "$app/utils/request";
 import { trackProductEvent } from "$app/utils/user_analytics";
 
 import { NavigationButton } from "$app/components/Button";
+import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { getNotForSaleMessage, Product, ProductDiscount, Purchase } from "$app/components/Product";
 import {
   applySelection,
@@ -27,6 +28,8 @@ type Props = {
   selection: PriceSelection;
   label: string | undefined;
   showInstallmentPlanNotes?: boolean;
+  // The discount for this selection is still being quoted: there is no checkout link to follow yet.
+  pricePending?: boolean;
   onClick?: React.MouseEventHandler<HTMLAnchorElement>;
 };
 
@@ -97,7 +100,19 @@ const PARAMETERS_NOT_INHERITED_FROM_URL = new Set([
 ]);
 
 export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
-  ({ product, purchase, discountCode, selection, label, onClick, showInstallmentPlanNotes = false }, ref) => {
+  (
+    {
+      product,
+      purchase,
+      discountCode,
+      selection,
+      label,
+      onClick,
+      showInstallmentPlanNotes = false,
+      pricePending = false,
+    },
+    ref,
+  ) => {
     const compactOnMobile = "max-lg:text-sm max-lg:px-2 max-lg:py-3 whitespace-nowrap shrink-0";
     const { searchParams } = new URL(useOriginalLocation());
 
@@ -156,7 +171,13 @@ export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
 
     const buttonCommonProps = {
       target: "_top",
+      disabled: pricePending,
+      "aria-busy": pricePending,
       onClick: (evt: React.MouseEvent<HTMLAnchorElement>) => {
+        if (pricePending) {
+          evt.preventDefault();
+          return;
+        }
         onClick?.(evt);
         if (evt.defaultPrevented) return;
         trackCtaClick({
@@ -173,11 +194,12 @@ export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
       <>
         <NavigationButton
           ref={ref}
-          href={url.toString()}
+          href={pricePending ? undefined : url.toString()}
           color="accent"
           className={compactOnMobile}
           {...buttonCommonProps}
         >
+          {pricePending ? <LoadingSpinner /> : null}
           {needsOptionChoice(product, selection)
             ? INCOMPLETE_PURCHASE_CTA_LABEL
             : (label ??
@@ -196,7 +218,7 @@ export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
           <>
             <NavigationButton
               color="black"
-              href={urlWithInstallments.toString()}
+              href={pricePending ? undefined : urlWithInstallments.toString()}
               className={compactOnMobile}
               {...buttonCommonProps}
             >

@@ -1,15 +1,15 @@
 # frozen_string_literal: true
 
 class BestOfferCodeService
-  # comparison_price_cents is the unit price the buyer already chose (the wanted redirect knows
-  # it), and every comparison uses it. Without it the defaults are weighed on the price the card
-  # quotes, and the URL code against the default on price_cents.
-  def initialize(product:, url_code: nil, quantity: 1, buyer: nil, comparison_price_cents: nil)
+  # comparison_price_cents is the unit price the buyer chose, else the one the card quotes; option is
+  # the picked variant or SKU, whose scope and stock apply.
+  def initialize(product:, url_code: nil, quantity: 1, buyer: nil, comparison_price_cents: nil, option: nil)
     @product = product
     @url_code = url_code.presence
     @quantity = quantity
     @buyer = buyer
     @comparison_price_cents = comparison_price_cents
+    @option = option
     @default_codes = default_offer_codes.filter_map { _1.code.presence }
   end
 
@@ -29,11 +29,12 @@ class BestOfferCodeService
     return url_code_result if !default_code_valid
     return default_code_result if !url_code_valid
 
-    price_cents = @comparison_price_cents || @product.price_cents
-    url_code_amount = amount_off_from_discount(url_code_result[:discount], price_cents, @quantity)
-    default_code_amount = amount_off_from_discount(default_code_result[:discount], price_cents, @quantity)
+    # A code this selection cannot meet takes nothing off, but a URL code with nothing to beat still
+    # shows its terms.
+    return url_code_result unless met_discount_conditions?(default_code_result[:discount])
+    return default_code_result unless met_discount_conditions?(url_code_result[:discount])
 
-    url_code_amount > default_code_amount ? url_code_result : default_code_result
+    comparison_amount(url_code_result[:discount]) > comparison_amount(default_code_result[:discount]) ? url_code_result : default_code_result
   end
 
   # The buyer's own existing-customer default goes first, then the effective default (the shop-wide
@@ -54,32 +55,30 @@ class BestOfferCodeService
     # Weighed on the chosen price, else the one the card quotes: a tiered membership's price_cents is 0.
     def best_default_code_result
       @default_codes.map { evaluate_code(_1) }.select { _1[:valid] }.reduce do |best, candidate|
-        default_comparison_amount(candidate[:discount]) > default_comparison_amount(best[:discount]) ? candidate : best
+        comparison_amount(candidate[:discount]) > comparison_amount(best[:discount]) ? candidate : best
       end
     end
 
     # evaluate_code lifts the quantity to the code's minimum and the preview skips the spend
-    # minimum, so a code the initial quote cannot meet still comes back valid. applySelection drops
-    # it at that quote, so it takes nothing off here.
-    def default_comparison_amount(discount)
-      price_cents = default_comparison_price_cents
-      return 0 unless met_discount_conditions?(discount, price_cents)
+    # minimum, so a code the quote cannot meet still comes back valid. applySelection drops it at
+    # that quote, so it takes nothing off here.
+    def comparison_amount(discount)
+      return 0 unless met_discount_conditions?(discount)
 
-      amount_off_from_discount(discount, price_cents, default_comparison_quantity)
+      amount_off_from_discount(discount, comparison_price_cents, comparison_quantity)
     end
 
     # Mirrors applySelection's gate, which checks both minimums at the stock-capped quantity.
-    def met_discount_conditions?(discount, price_cents)
-      quantity = default_comparison_quantity
-      quantity >= discount[:minimum_quantity].to_i && price_cents * quantity >= discount[:minimum_amount_cents].to_i
+    def met_discount_conditions?(discount)
+      comparison_quantity >= discount[:minimum_quantity].to_i && comparison_price_cents * comparison_quantity >= discount[:minimum_amount_cents].to_i
     end
 
-    def default_comparison_quantity
-      @default_comparison_quantity ||= [@quantity, @product.remaining_for_sale_count].compact.min
+    def comparison_quantity
+      @comparison_quantity ||= [@quantity, @product.remaining_for_sale_count, @option&.quantity_left].compact.min
     end
 
-    def default_comparison_price_cents
-      @default_comparison_price_cents ||= @comparison_price_cents || @product.display_price_cents(for_default_duration: true)
+    def comparison_price_cents
+      @comparison_price_cents ||= @product.display_price_cents(for_default_duration: true)
     end
 
     def evaluate_code(code)
@@ -96,7 +95,8 @@ class BestOfferCodeService
         {
           @product.unique_permalink => {
             permalink: @product.unique_permalink,
-            quantity: [@quantity, offer_code.minimum_quantity.to_i || 0].max
+            quantity: [@quantity, offer_code.minimum_quantity.to_i || 0].max,
+            **(@option ? { variant_external_id: @option.external_id } : {}),
           }
         },
         buyer: @buyer

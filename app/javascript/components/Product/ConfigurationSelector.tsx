@@ -736,6 +736,8 @@ export const ConfigurationSelector = React.forwardRef<
     setSelection?: React.Dispatch<React.SetStateAction<PriceSelection>> | undefined;
     discount: Discount | null;
     discountForSelection?: ((selection: PriceSelection) => Discount | null) | undefined;
+    // The code that prices each previewed choice, when choices get different ones.
+    rowDiscount?: ((selection: PriceSelection) => Discount | null) | undefined;
     hidePrices?: boolean;
     initialSelection?: PriceSelection;
     pwywMinimumPriceCents?: number;
@@ -748,6 +750,7 @@ export const ConfigurationSelector = React.forwardRef<
     setSelection,
     discount,
     discountForSelection,
+    rowDiscount,
     hidePrices,
     initialSelection,
     pwywMinimumPriceCents,
@@ -760,7 +763,8 @@ export const ConfigurationSelector = React.forwardRef<
     }));
   const previewDiscount = (previewSelection: PriceSelection) => {
     if (discountForSelection) return discountForSelection(previewSelection);
-    return applySelection(product, discount, previewSelection).applicableDiscount;
+    return applySelection(product, rowDiscount ? rowDiscount(previewSelection) : discount, previewSelection)
+      .applicableDiscount;
   };
 
   const selectedOption = product.options.find(({ id }) => id === selection.optionId) ?? null;

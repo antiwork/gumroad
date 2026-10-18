@@ -219,6 +219,135 @@ describe "Automatic sales on product pages", type: :system, js: true do
       expect(persisted_cart_holds?(products: [membership, product], codes: %w[RENEW20 SHOP5])).to be(true)
     end
 
+    it "advertises each tier at its own best code on the product page and charges that in the cart" do
+      membership = tiered_membership
+      make_default_for_existing_customers(membership)
+      seller.offer_codes.create!(code: "SHOP5", amount_cents: 500, currency_type: "usd", universal: true, products: [], auto_apply: true)
+      profile_product = show_on_profile(membership)
+
+      login_as buyer
+      visit short_link_path(profile_product)
+      within_section "More products", section_element: :section do
+        click_on "Target membership"
+      end
+      expect(page).to have_selector("[role='radio']", text: "$10 $5 a month First Tier", normalize_ws: true)
+      expect(page).to have_selector("[role='radio']", text: "$100 $80 a month Second Tier", normalize_ws: true)
+      choose "Second Tier"
+      within(find(:article)) do
+        expect(Rack::Utils.parse_query(URI.parse(find(:link, "Add to cart")[:href]).query)["code"]).to eq("RENEW20")
+      end
+      expect(page).to have_no_selector("[data-testid='sale-banner']")
+
+      click_on "Add to cart"
+      expect(page).to have_cart_item("Target membership")
+      expect(page).to have_text("Total US$80", normalize_ws: true)
+    end
+
+    context "when the best code depends on the quantity" do
+      let(:product) { create(:product, user: seller, name: "Quantity product", price_cents: 1000, quantity_enabled: true) }
+
+      before do
+        make_default_for_existing_customers(product)
+        seller.offer_codes.create!(code: "ONCE5", amount_cents: 500, currency_type: "usd", universal: true, products: [], auto_apply: true, once_per_cart: true)
+      end
+
+      def hold_selection_quotes(quantity)
+        held = Concurrent::Event.new
+        @release_selection_quotes = Concurrent::Event.new
+        release = @release_selection_quotes
+        allow_any_instance_of(OfferCodesController).to receive(:selection_discounts).and_wrap_original do |original, *args|
+          if original.receiver.params[:quantity] == quantity.to_s
+            held.set
+            release.wait(15)
+          end
+          original.call(*args)
+        end
+        held
+      end
+
+      after { @release_selection_quotes&.set }
+
+      def cta_code(label = "I want this!")
+        within(find(:article)) { Rack::Utils.parse_query(URI.parse(find(:link, label)[:href]).query)["code"] }
+      end
+
+      it "holds the buy button while the page re-quotes a new quantity, and drops an answer for an earlier quantity" do
+        login_as buyer
+        visit product.long_url
+        expect(page).to have_selector("[itemprop='price']", text: "$10 $5", exact_text: true, normalize_ws: true)
+        expect(cta_code).to eq("ONCE5")
+
+        held = hold_selection_quotes(2)
+        fill_in "Quantity", with: 2
+        expect(held.wait(10)).to be(true)
+        within(find(:article)) do
+          expect(page).to have_selector("a[aria-busy='true']:not([href])", text: "I want this!")
+          expect(page).to have_no_link("I want this!")
+        end
+        expect(page).to have_selector("[itemprop='price']", text: "$10", exact_text: true, normalize_ws: true)
+
+        fill_in "Quantity", with: 3
+        expect(page).to have_selector("[itemprop='price']", text: "$10 $8", exact_text: true, normalize_ws: true)
+        expect(cta_code).to eq("RENEW20")
+        @release_selection_quotes.set
+        expect(page).to have_no_selector("a[aria-busy='true']")
+        expect(cta_code).to eq("RENEW20")
+        expect(page).to have_selector("[itemprop='price']", text: "$10 $8", exact_text: true, normalize_ws: true)
+
+        click_on "I want this!"
+        expect(page).to have_cart_item("Quantity product")
+        expect(page).to have_text("Total US$24", normalize_ws: true)
+      end
+
+      it "offers no checkout link while a re-quote fails, and recovers when the buyer tries again" do
+        failing = Concurrent::AtomicBoolean.new(true)
+        allow_any_instance_of(OfferCodesController).to receive(:selection_discounts).and_wrap_original do |original, *args|
+          failing.true? ? original.receiver.head(:internal_server_error) : original.call(*args)
+        end
+
+        login_as buyer
+        visit product.long_url
+        expect(page).to have_selector("[itemprop='price']", text: "$10 $5", exact_text: true, normalize_ws: true)
+        fill_in "Quantity", with: 4
+        expect(page).to have_alert(text: "We couldn't check the discount for this selection.")
+        within(find(:article)) { expect(page).to have_no_link("I want this!") }
+        expect(page).to have_selector("[itemprop='price']", text: "$10", exact_text: true, normalize_ws: true)
+
+        failing.make_false
+        click_on "Try again"
+        expect(page).to have_no_alert(text: "We couldn't check the discount for this selection.")
+        expect(page).to have_selector("[itemprop='price']", text: "$10 $8", exact_text: true, normalize_ws: true)
+        expect(cta_code).to eq("RENEW20")
+
+        click_on "I want this!"
+        expect(page).to have_cart_item("Quantity product")
+        expect(page).to have_text("Total US$32", normalize_ws: true)
+      end
+    end
+
+    it "prices renting and buying at their own best code, and charges the bought price after switching back" do
+      product = create(:product, user: seller, name: "Rental product", price_cents: 10_000, purchase_type: :buy_and_rent, rental_price_cents: 1000)
+      make_default_for_existing_customers(product)
+      seller.offer_codes.create!(code: "SHOP5", amount_cents: 500, currency_type: "usd", universal: true, products: [], auto_apply: true)
+      cta_code = ->(label) { within(find(:article)) { Rack::Utils.parse_query(URI.parse(find(:link, label)[:href]).query)["code"] } }
+
+      login_as buyer
+      visit product.long_url
+      expect(page).to have_radio_button("Buy", text: /\$100\s+\$80/)
+      expect(page).to have_radio_button("Rent", text: /\$10\s+\$5/)
+      expect(cta_code.("I want this!")).to eq("RENEW20")
+
+      choose "Rent"
+      expect(cta_code.("Rent")).to eq("SHOP5")
+      expect(page).to have_radio_button("Rent", text: /\$10\s+\$5/)
+
+      choose "Buy"
+      expect(cta_code.("I want this!")).to eq("RENEW20")
+      click_on "I want this!"
+      expect(page).to have_cart_item("Rental product")
+      expect(page).to have_text("Total US$80", normalize_ws: true)
+    end
+
     # Holds the page's first cart save on the server until a later save has been written, and the
     # arrival's quotes until that first save has reached the server, so it is still in flight when
     # the codes are ready.
@@ -260,7 +389,7 @@ describe "Automatic sales on product pages", type: :system, js: true do
       expect(persisted_cart_holds?(products: [membership], codes: %w[RENEW20 SHOP5])).to be(true)
     end
 
-    it "weighs the existing-customer code when the product page leaves the code off because purchasing power parity beats the sale" do
+    it "advertises the existing-customer code on the option where it beats both purchasing power parity and the sale" do
       seller.update!(purchasing_power_parity_enabled: true)
       product = create(:product, user: seller, name: "Target product", price_cents: 1000)
       editions = create(:variant_category, link: product, title: "Edition")
@@ -281,7 +410,7 @@ describe "Automatic sales on product pages", type: :system, js: true do
       within find(:article) do
         query = Rack::Utils.parse_query(URI.parse(find(:link, "Add to cart")[:href]).query)
         expect(query["option"]).to eq(premium.external_id)
-        expect(query).not_to have_key("code")
+        expect(query["code"]).to eq("RENEW20")
       end
       click_on "Add to cart"
 
