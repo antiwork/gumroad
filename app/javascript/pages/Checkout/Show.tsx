@@ -37,6 +37,7 @@ import {
 import {
   type CartItem,
   type CartState,
+  type DiscountCode,
   cartItemsForRetry,
   convertToUSD,
   CrossSell,
@@ -171,6 +172,15 @@ const paymentLaneCartKeyFor = (cart: CartState) =>
       ].join(":"),
     ),
   ].join("|");
+
+// A save answers with every code re-weighed, but only the seller's defaults are the server's to
+// rewrite. A code the buyer brought keeps the terms they saw on the lines it already covered, so a
+// change to it is refused at payment with its own message; the save only extends it to new lines.
+const savedDiscountCodes = (current: DiscountCode[], saved: DiscountCode[]) =>
+  saved.map((code) => {
+    const held = code.automatic ? null : current.find((item) => item.code === code.code && !item.automatic);
+    return held ? { ...code, products: { ...code.products, ...held.products } } : code;
+  });
 
 const CheckoutIndexPage = () => {
   const {
@@ -1013,7 +1023,8 @@ const CheckoutIndexPage = () => {
         // the configuration describes the cart the buyer is looking at — see checkoutPaymentRefresh.
         onDelivered: (checkoutPayment, savedCart) => {
           const config = cast<CheckoutPaymentConfig>(checkoutPayment);
-          const discountCodes = cast<CartState | undefined>(savedCart)?.discountCodes;
+          const saved = cast<CartState | undefined>(savedCart)?.discountCodes;
+          const discountCodes = saved && savedDiscountCodes(currentCartRef.current.discountCodes, saved);
           if (!discountCodes || isEqual(discountCodes, currentCartRef.current.discountCodes)) {
             dispatch({ type: "update-checkout-payment", checkoutPayment: config });
             return;
