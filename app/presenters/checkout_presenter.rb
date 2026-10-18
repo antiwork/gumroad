@@ -465,7 +465,7 @@ class CheckoutPresenter
           recurrence: product.installment_plan.recurrence,
         } : nil,
         is_multiseat_license: product.multiseat_license_enabled?,
-        shippable_country_codes: product.is_physical ? product.shipping_destinations.alive.flat_map { |shipping_destination| shipping_destination.country_or_countries.keys } : [],
+        shippable_country_codes: product.shippable_country_codes,
       }
     end
 

@@ -14,11 +14,17 @@ import { WithTooltip } from "$app/components/WithTooltip";
 export const ShippingDestinationsEditor = ({
   shippingDestinations,
   onChange,
+  excludedCountryCodes,
+  onExcludedCountryCodesChange,
 }: {
   shippingDestinations: ShippingDestination[];
   onChange: (shippingDestinations: ShippingDestination[]) => void;
+  excludedCountryCodes: string[];
+  onExcludedCountryCodesChange: (excludedCountryCodes: string[]) => void;
 }) => {
   const { availableCountries } = useProductEditContext();
+
+  const excludableCountries = availableCountries.filter((country) => !EXCLUDED_ONLY_CODES.has(country.code));
 
   const addShippingDestination = () => {
     if (!availableCountries[0]) return;
@@ -30,6 +36,12 @@ export const ShippingDestinationsEditor = ({
         multiple_items_rate_cents: null,
       },
     ]);
+  };
+
+  const addExcludedCountry = () => {
+    const next = excludableCountries.find((country) => !excludedCountryCodes.includes(country.code));
+    if (!next) return;
+    onExcludedCountryCodesChange([...excludedCountryCodes, next.code]);
   };
 
   return (
@@ -70,11 +82,95 @@ export const ShippingDestinationsEditor = ({
           </Button>
         </Placeholder>
       )}
+      {shippingDestinations.length > 0 ? (
+        <Card>
+          <CardContent>
+            <h3>Do not ship to</h3>
+            <p>Buyers in these countries cannot buy this product, even where a destination above covers them.</p>
+          </CardContent>
+          {excludedCountryCodes.map((countryCode, index) => (
+            <ShippingExclusionRow
+              key={index}
+              countryCode={countryCode}
+              excludedCountryCodes={excludedCountryCodes}
+              countries={excludableCountries}
+              onChange={(updatedCountryCode) =>
+                onExcludedCountryCodesChange([
+                  ...excludedCountryCodes.slice(0, index),
+                  updatedCountryCode,
+                  ...excludedCountryCodes.slice(index + 1),
+                ])
+              }
+              onRemove={() => onExcludedCountryCodesChange(excludedCountryCodes.filter((_, i) => i !== index))}
+            />
+          ))}
+          {excludedCountryCodes.length < excludableCountries.length ? (
+            <CardContent>
+              <Button onClick={addExcludedCountry} className="grow basis-0">
+                <Plus className="size-5" />
+                Add excluded country
+              </Button>
+            </CardContent>
+          ) : null}
+        </Card>
+      ) : null}
     </section>
   );
 };
 
+const ShippingExclusionRow = ({
+  countryCode,
+  excludedCountryCodes,
+  countries,
+  onChange,
+  onRemove,
+}: {
+  countryCode: string;
+  excludedCountryCodes: string[];
+  countries: { code: string; name: string }[];
+  onChange: (countryCode: string) => void;
+  onRemove: () => void;
+}) => {
+  const uid = React.useId();
+
+  return (
+    <CardContent aria-label="Excluded shipping country">
+      <Fieldset className="grow basis-0">
+        <FieldsetTitle>
+          <Label htmlFor={`${uid}-excluded-country`}>Country</Label>
+        </FieldsetTitle>
+        <div className="flex gap-2">
+          <Select
+            id={`${uid}-excluded-country`}
+            aria-label="Excluded country"
+            className="flex-1"
+            value={countryCode}
+            onChange={(evt) => onChange(evt.target.value)}
+          >
+            {countries.map((country) => (
+              <option
+                key={country.code}
+                value={country.code}
+                disabled={country.code !== countryCode && excludedCountryCodes.includes(country.code)}
+              >
+                {country.name}
+              </option>
+            ))}
+          </Select>
+          <WithTooltip position="bottom" tip="Remove">
+            <Button color="danger" size="icon" outline onClick={onRemove} aria-label="Remove excluded country">
+              <Trash className="size-5" />
+            </Button>
+          </WithTooltip>
+        </div>
+      </Fieldset>
+    </CardContent>
+  );
+};
+
 const INSERT_DIVIDERS_AFTER_CODES = ["US", "NORTH AMERICA", "ELSEWHERE"];
+// Regions and ELSEWHERE describe coverage; an exclusion names one concrete country.
+const EXCLUDED_ONLY_CODES = new Set(["EUROPE", "ASIA", "NORTH AMERICA", "ELSEWHERE"]);
 
 const ShippingDestinationRow = ({
   shippingDestination,

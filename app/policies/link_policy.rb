@@ -162,6 +162,7 @@ class LinkPolicy < ApplicationPolicy
         :one_item_rate_cents,
         :multiple_items_rate_cents,
       ],
+      shipping_excluded_country_codes: [],
       section_ids: [],
       tags: [],
       rich_content:,

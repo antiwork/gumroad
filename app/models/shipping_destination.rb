@@ -61,6 +61,7 @@ class ShippingDestination < ApplicationRecord
   def self.for_product_and_country_code(product: nil, country_code: nil)
     return nil if country_code.nil? || product.nil?
     return nil unless product.is_physical
+    return nil if product.excludes_shipping_to?(country_code)
 
     virtual_countries = Destinations.virtual_countries_for_country_code(country_code)
 
