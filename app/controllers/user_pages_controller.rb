@@ -16,10 +16,15 @@
 class UserPagesController < ApplicationController
   include CustomDomainConfig
   include RendersCustomHtmlPages
+  include UnprovenStorefrontIndexability
 
   around_action :use_primary_for_landing_iframe, only: %i[landing_iframe_content landing_version]
   before_action :set_user_by_domain
   before_action :set_page
+  # Pages are a separate route on the same subdomain, so the profile's storefront noindex
+  # (UsersController) does not reach them — a spam account could keep a gambling or fake-login
+  # page indexed at /<slug> while its profile root was already being skipped.
+  before_action :set_noindex_header_for_unproven_storefront, only: %i[show landing_iframe_content]
 
   def show
     if @page.custom_html.present?

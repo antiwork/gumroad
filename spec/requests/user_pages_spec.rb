@@ -202,4 +202,66 @@ describe "Public serving of seller pages", type: :request do
       expect(response).to be_successful
     end
   end
+
+  describe "storefront indexability" do
+    let!(:page) { create(:user_page, pageable: seller, slug: "about", title: "About", content: "<p>Hello there</p>") }
+
+    it "keeps an unreviewed seller's page out of the index" do
+      get "http://#{seller.subdomain}/about"
+
+      expect(response).to be_successful
+      expect(response.headers["X-Robots-Tag"]).to eq("noindex")
+    end
+
+    it "keeps the page out of the index even when the seller has published a product" do
+      create(:product, user: seller)
+
+      get "http://#{seller.subdomain}/about"
+
+      expect(response.headers["X-Robots-Tag"]).to eq("noindex")
+    end
+
+    it "keeps the page out of the index when the seller's only sale was free" do
+      product = create(:product, user: seller, price_cents: 0)
+      create(:purchase, link: product, seller: seller, price_cents: 0)
+
+      get "http://#{seller.subdomain}/about"
+
+      expect(response.headers["X-Robots-Tag"]).to eq("noindex")
+    end
+
+    it "indexes the page once the seller has a paid sale" do
+      product = create(:product, user: seller, price_cents: 500)
+      create(:purchase, link: product, seller: seller)
+
+      get "http://#{seller.subdomain}/about"
+
+      expect(response.headers["X-Robots-Tag"]).to be_nil
+    end
+
+    it "indexes the page for a seller marked compliant" do
+      seller.mark_compliant!(author_name: "ContentModeration")
+
+      get "http://#{seller.subdomain}/about"
+
+      expect(response.headers["X-Robots-Tag"]).to be_nil
+    end
+
+    it "keeps the embedded document out of the index too" do
+      html_page = create(:user_page, pageable: seller, slug: "studio", title: "Studio",
+                                     custom_html: "<h1>Studio landing</h1>")
+
+      get "http://#{seller.subdomain}/#{html_page.slug}/landing/embed"
+
+      expect(response).to be_successful
+      expect(response.headers["X-Robots-Tag"]).to eq("noindex")
+    end
+
+    it "applies on the seller's own custom domain as well, matching the profile" do
+      get "http://seller.example.com/about"
+
+      expect(response).to be_successful
+      expect(response.headers["X-Robots-Tag"]).to eq("noindex")
+    end
+  end
 end
