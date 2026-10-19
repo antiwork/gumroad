@@ -330,6 +330,32 @@ describe("useSelectionDiscounts", () => {
     expect(result.current.discountCode).toEqual(code("BULK50", 50));
   });
 
+  it("with no option picked, shows the code every option shares once the answer for the new inputs lands", async () => {
+    const shop5 = code("SHOP5", 5);
+    const { result, rerender } = renderQuotes(quoteFor(1, shop5), selectionFor({ optionId: null }));
+    expect(result.current.discountCode).toBeNull();
+
+    rerender({ selection: selectionFor({ optionId: null, quantity: 2 }) });
+    await settle();
+    expect(result.current.quote.state).toBe("loading");
+    expect(result.current.discountCode).toBeNull();
+    await answer(0, quoteFor(2, shop5));
+
+    expect(result.current.discountCode).toEqual(shop5);
+  });
+
+  it("with no option picked, shows no code when the options get different ones", async () => {
+    const { result, rerender } = renderQuotes(quoteFor(1, code("RENEW20", 20)), selectionFor({ optionId: null }));
+
+    rerender({ selection: selectionFor({ optionId: null, quantity: 2 }) });
+    await settle();
+    await answer(0, quoteFor(2, code("RENEW20", 20)));
+
+    expect(result.current.quote.state).toBe("ready");
+    expect(result.current.discountCode).toBeNull();
+    expect(result.current.selectionDiscountCode?.("pro", false)).toEqual(code("RENEW20", 20));
+  });
+
   it("never asks, nor holds the buy button, when there is no code to weigh", async () => {
     const { result, rerender } = renderQuotes({ ...quoteFor(1, null), options: {} });
 

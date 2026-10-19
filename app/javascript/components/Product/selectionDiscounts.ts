@@ -107,13 +107,20 @@ export const useSelectionDiscounts = ({
 
   const entry = (optionId: string | null, rent: boolean) =>
     (rent && answer?.rent_options ? answer.rent_options : answer?.options)?.[optionId ?? ""];
-  // With options but none picked, the page shows the code quoted with the page, for the inputs it had.
+  // With options but none picked, the page shows the code quoted with the page for the inputs it had, or
+  // the one the current answer gives every option alike. Options that get different codes show none yet.
   const unpicked = product.options.length > 0 && selection.optionId === null;
-  const initialInputs = key === inputsKey(initial);
-  const selected = unpicked ? null : entry(selection.optionId, selection.rent);
+  const optionEntries = product.options.flatMap((option) => entry(option.id, selection.rent) ?? []);
+  const firstCode = optionEntries[0]?.discount_code;
+  const sharedCode = firstCode?.valid ? firstCode.code : null;
+  const shared = optionEntries.every(({ discount_code }) => discount_code?.valid && discount_code.code === sharedCode)
+    ? optionEntries[0]
+    : undefined;
+  const unpickedEntry = key === inputsKey(initial) ? { discount_code: discountCode, sale_label: saleLabel } : shared;
+  const selected = unpicked ? unpickedEntry : entry(selection.optionId, selection.rent);
   return {
-    discountCode: unpicked ? (initialInputs ? discountCode : null) : (selected?.discount_code ?? null),
-    saleLabel: unpicked ? (initialInputs ? saleLabel : null) : (selected?.sale_label ?? null),
+    discountCode: selected?.discount_code ?? null,
+    saleLabel: selected?.sale_label ?? null,
     selectionDiscountCode: (optionId: string | null, rent: boolean) => entry(optionId, rent)?.discount_code ?? null,
     quote,
   };
