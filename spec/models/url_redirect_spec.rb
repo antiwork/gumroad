@@ -182,6 +182,41 @@ describe UrlRedirect do
 
       expect(url_redirect.is_file_downloadable?(product_file)).to eq(true)
     end
+
+    context "when this buyer was granted the file" do
+      let(:product_file) { create(:streamable_video, stream_only: true, link: product) }
+
+      before { ProductFileDownloadGrant.create!(url_redirect:, product_file:) }
+
+      it "returns true for a file the seller made stream-only" do
+        expect(url_redirect.is_file_downloadable?(product_file)).to eq(true)
+      end
+
+      it "leaves a second stream-only file of the same product unreadable as a download" do
+        other_file = create(:streamable_video, stream_only: true, link: product)
+
+        expect(url_redirect.is_file_downloadable?(other_file)).to eq(false)
+      end
+
+      it "returns false for a rental" do
+        url_redirect.update!(is_rental: true)
+
+        expect(url_redirect.is_file_downloadable?(product_file)).to eq(false)
+      end
+
+      it "returns false once the grant is revoked" do
+        url_redirect.product_file_download_grants.destroy_all
+
+        expect(UrlRedirect.find(url_redirect.id).is_file_downloadable?(product_file)).to eq(false)
+      end
+    end
+
+    it "returns false for an external link even when granted" do
+      product_file = create(:external_link, link: product)
+      ProductFileDownloadGrant.create!(url_redirect:, product_file:)
+
+      expect(url_redirect.reload.is_file_downloadable?(product_file)).to eq(false)
+    end
   end
 
   describe "#entity_archive" do
