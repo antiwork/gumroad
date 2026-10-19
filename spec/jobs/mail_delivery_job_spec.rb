@@ -21,7 +21,7 @@ describe MailDeliveryJob do
       end
     end
 
-    [Net::ReadTimeout, Net::OpenTimeout, Net::SMTPServerBusy].each do |error_class|
+    [Net::ReadTimeout, Net::OpenTimeout, Net::SMTPServerBusy, EOFError].each do |error_class|
       context "when delivery raises #{error_class}" do
         before do
           allow(job).to receive(:perform).and_raise(build_error(error_class, "451 Internal server error. Please try again later."))
@@ -33,7 +33,7 @@ describe MailDeliveryJob do
         end
 
         it "re-raises once retry attempts are exhausted" do
-          job.exception_executions = { "[Net::OpenTimeout, Net::ReadTimeout, Net::SMTPServerBusy]" => 10 }
+          job.exception_executions = { "[Net::OpenTimeout, Net::ReadTimeout, Net::SMTPServerBusy, EOFError]" => 10 }
 
           expect(job).not_to receive(:retry_job)
           expect { job.perform_now }.to raise_error(error_class)

@@ -23,9 +23,13 @@ class MailDeliveryJob < ActionMailer::MailDeliveryJob
   # Net::SMTPServerBusy: the server replied with a 4xx status (e.g. "451
   # Internal server error ... please try again later"). By the SMTP spec, 4xx
   # responses are explicitly temporary — the client is expected to retry.
+  # EOFError: Net::SMTP#quit reads one last server reply while closing the
+  # connection, so a provider that has already hung up (the 4xx case above)
+  # raises EOFError there and it replaces the error that caused the close.
+  #
   # Permanent 5xx failures raise Net::SMTPFatalError instead, which is NOT
   # listed here on purpose: retrying those can never succeed (bad recipient,
   # policy rejection), so they should surface immediately.
-  retry_on Net::OpenTimeout, Net::ReadTimeout, Net::SMTPServerBusy,
+  retry_on Net::OpenTimeout, Net::ReadTimeout, Net::SMTPServerBusy, EOFError,
            wait: :polynomially_longer, attempts: 10
 end

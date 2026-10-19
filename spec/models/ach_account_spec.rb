@@ -289,4 +289,14 @@ describe AchAccount do
       expect(ach_account).to be_valid
     end
   end
+
+  describe "#mark_deleted!" do
+    it "soft-deletes an account whose provider was named by the directory after it was attached" do
+      ach_account = create(:ach_account)
+      create(:bank, routing_number: ach_account.routing_number, name: "GREEN DOT BANK")
+
+      expect { ach_account.mark_deleted! }.to_not raise_error
+      expect(ach_account.reload.deleted_at).to be_present
+    end
+  end
 end
