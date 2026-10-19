@@ -110,6 +110,8 @@ module StripePayoutRailSetups
         return false if stripe_account["deleted"]
         return false if stripe_account["requirements"]&.[]("disabled_reason").present?
         return false unless stripe_account["payouts_enabled"] == true
+        # Activation also makes this account the card route where Stripe takes direct charges in its country.
+        return false if setup.merchant_account.can_accept_charges? && stripe_account["charges_enabled"] != true
 
         stripe_account["country"].blank? || stripe_account["country"] == setup.merchant_account.country
       end
@@ -136,6 +138,7 @@ module StripePayoutRailSetups
         requirements = stripe_account["requirements"]
         {
           payouts_enabled: stripe_account["payouts_enabled"],
+          charges_enabled: stripe_account["charges_enabled"],
           disabled_reason: requirements&.[]("disabled_reason"),
           currently_due: Array(requirements&.[]("currently_due")),
           past_due: Array(requirements&.[]("past_due")),

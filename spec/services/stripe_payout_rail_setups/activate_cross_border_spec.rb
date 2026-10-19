@@ -31,7 +31,7 @@ describe StripePayoutRailSetups::Activate, "for a cross-border SEPA bank account
     linked = { id: "ba_synthetic_sepa", object: "bank_account", status: "new" }.merge(external_account)
     allow(Stripe::Account).to receive(:retrieve).with("acct_synthetic_sepa_rail") do
       Stripe::Account.construct_from(
-        id: "acct_synthetic_sepa_rail", country: "DK", payouts_enabled: true,
+        id: "acct_synthetic_sepa_rail", country: "DK", payouts_enabled: true, charges_enabled: true,
         metadata: { user_compliance_info_id: seller.alive_user_compliance_info.external_id },
         requirements: { disabled_reason: nil, currently_due: [], past_due: [] },
         external_accounts: { object: "list", data: [linked] }

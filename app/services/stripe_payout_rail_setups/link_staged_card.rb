@@ -26,8 +26,9 @@ module StripePayoutRailSetups
 
     # Returns :linked, :awaiting_charges, :not_awaiting, :not_eligible, :failed, :retry_later or
     # :attempt_in_progress.
-    # A retry repeats the whole link: Account.update with a new token replaces the account's external
-    # account, as the ordinary card linker relies on, so it does not add a second card.
+    # A retry repeats the whole link with the same idempotency keys, so within Stripe's 24 hours it
+    # replays the first token and update; after that a new token replaces the account's external
+    # account, as the ordinary card linker relies on, so it never adds a second card.
     def process
       return :not_eligible unless setup.provider_work_allowed?
 
@@ -47,8 +48,15 @@ module StripePayoutRailSetups
         return :awaiting_charges
       end
 
-      StripeMerchantAccountManager.link_staged_rail_card!(setup.bank_account, stripe_account, passphrase: GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))
-      linked = setup.finish_attempt!(token, from_state: StripePayoutRailSetup::AWAITING_CARD_LINK, state: StripePayoutRailSetup::PREPARED, prepared_at: Time.current)
+      # The Stripe write holds the seller lock that Activate, Cancel and abandonment take, and the setup row
+      # a newer attempt must update to reclaim the lease, so a worker that lost the attempt writes nothing.
+      linked = setup.user.with_lock do
+        current = StripePayoutRailSetup.lock.find(setup.id)
+        next false unless current.awaiting_card_link? && current.attempt_token == token
+
+        StripeMerchantAccountManager.link_staged_rail_card!(setup.bank_account, stripe_account, rail_setup: setup, passphrase: GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))
+        setup.finish_attempt!(token, from_state: StripePayoutRailSetup::AWAITING_CARD_LINK, state: StripePayoutRailSetup::PREPARED, prepared_at: Time.current)
+      end
       linked ? :linked : :not_awaiting
     rescue Stripe::StripeError => e
       if StripeMerchantAccountManager.no_verdict_stripe_error?(e)

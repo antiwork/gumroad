@@ -2873,13 +2873,13 @@ module StripeMerchantAccountManager
   end
 
   private_class_method
-  def self.bank_account_hash(bank_account, stripe_account: {}, passphrase:)
+  def self.bank_account_hash(bank_account, stripe_account: {}, passphrase:, card_token: nil)
     country_code = bank_account.user.alive_user_compliance_info.legal_entity_country_code
     cross_border_payouts_only = Country.new(country_code).supports_stripe_cross_border_payouts?
 
     bank_account_field =
       if bank_account.is_a?(CardBankAccount)
-        Stripe::Token.create({ customer: bank_account.credit_card.stripe_customer_id }, { stripe_account: stripe_account["id"] }).id
+        card_token || Stripe::Token.create({ customer: bank_account.credit_card.stripe_customer_id }, { stripe_account: stripe_account["id"] }).id
       else
         account_number_for_stripe =
           if bank_account.respond_to?(:stripe_account_number)
@@ -3603,9 +3603,16 @@ module StripeMerchantAccountManager
 
   # Attaches a StripePayoutRailSetup's debit card to that setup's own prepared account once Stripe
   # has enabled charges on it. The card stays a deleted local row and the account stays unlive.
-  def self.link_staged_rail_card!(card_bank_account, stripe_account, passphrase:)
-    attributes = bank_account_hash(card_bank_account, stripe_account:, passphrase:)
-    Stripe::Account.update(stripe_account.id, force_utf8_encoding(attributes))
+  # The keys belong to the setup and card, so a retry after a lost response replays the first token and
+  # link (Stripe keeps keys for 24 hours) instead of replacing the card again.
+  def self.link_staged_rail_card!(card_bank_account, stripe_account, rail_setup:, passphrase:)
+    key = "rail-setup-#{rail_setup.id}-card-#{card_bank_account.id}"
+    token = Stripe::Token.create({ customer: card_bank_account.credit_card.stripe_customer_id },
+                                 { stripe_account: stripe_account.id, idempotency_key: "#{key}-token" })
+    attributes = bank_account_hash(card_bank_account, stripe_account:, passphrase:, card_token: token.id)
+    # Only this link's key: Stripe merges metadata, and a replay has to send the same parameters.
+    attributes[:metadata] = { bank_account_id: card_bank_account.external_id }
+    Stripe::Account.update(stripe_account.id, force_utf8_encoding(attributes), { idempotency_key: "#{key}-link" })
     save_stripe_bank_account_info(card_bank_account, Stripe::Account.retrieve(stripe_account.id))
   end
 

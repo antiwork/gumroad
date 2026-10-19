@@ -122,7 +122,7 @@ describe StripePayoutRailSetups::Cancel do
       # SDK double for the provider readiness read at activation.
       allow(Stripe::Account).to receive(:retrieve).with(account_id) do
         Stripe::Account.construct_from(
-          id: account_id, country: "US", payouts_enabled: true, metadata: { user_compliance_info_id: compliance_revision },
+          id: account_id, country: "US", payouts_enabled: true, charges_enabled: true, metadata: { user_compliance_info_id: compliance_revision },
           requirements: { disabled_reason: nil, currently_due: [], past_due: [] },
           external_accounts: { object: "list", data: [{ id: setup.bank_account.stripe_bank_account_id, object: "bank_account", status: "new", currency: "usd", country: "US" }] }
         )

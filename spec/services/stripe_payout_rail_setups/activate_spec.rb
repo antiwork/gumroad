@@ -36,12 +36,12 @@ describe StripePayoutRailSetups::Activate do
   let!(:provisioned_metadata) { Stripe::Account.retrieve(setup.merchant_account.charge_processor_merchant_id)["metadata"].to_h.stringify_keys }
 
   # Unit control for the provider readiness read, shaped like Stripe's account and bank_account objects.
-  def stub_provider_account(payouts_enabled: true, disabled_reason: nil, country: "US", external_account: {}, metadata: provisioned_metadata, currently_due: [], past_due: [], during_read: nil)
+  def stub_provider_account(payouts_enabled: true, charges_enabled: true, disabled_reason: nil, country: "US", external_account: {}, metadata: provisioned_metadata, currently_due: [], past_due: [], during_read: nil)
     linked = { id: setup.bank_account.stripe_bank_account_id, object: "bank_account", status: "new", currency: "usd", country: "US" }.merge(external_account)
     allow(Stripe::Account).to receive(:retrieve).with(setup.merchant_account.charge_processor_merchant_id) do
       during_read&.call
       Stripe::Account.construct_from(
-        id: setup.merchant_account.charge_processor_merchant_id, country:, payouts_enabled:, metadata:,
+        id: setup.merchant_account.charge_processor_merchant_id, country:, payouts_enabled:, charges_enabled:, metadata:,
         requirements: { disabled_reason:, currently_due:, past_due: },
         external_accounts: { object: "list", data: [linked] }
       )
@@ -232,7 +232,7 @@ describe StripePayoutRailSetups::Activate do
 
     expect(result.error).to eq(:stripe_account_not_ready)
     expect(result.details).to eq(
-      payouts_enabled: false, disabled_reason: "requirements.past_due",
+      payouts_enabled: false, charges_enabled: true, disabled_reason: "requirements.past_due",
       currently_due: ["individual.verification.document"], past_due: ["individual.id_number"]
     )
     expect_nothing_switched_on

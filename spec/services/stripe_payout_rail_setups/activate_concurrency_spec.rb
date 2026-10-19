@@ -41,7 +41,7 @@ describe StripePayoutRailSetups::Activate, "racing abandonment" do
     # Unit control for the provider readiness read.
     allow(Stripe::Account).to receive(:retrieve).with(account_id) do
       Stripe::Account.construct_from(
-        id: account_id, country: "US", payouts_enabled: true, metadata: { user_compliance_info_id: compliance_revision },
+        id: account_id, country: "US", payouts_enabled: true, charges_enabled: true, metadata: { user_compliance_info_id: compliance_revision },
         requirements: { disabled_reason: nil },
         external_accounts: { object: "list", data: [{ id: candidate.stripe_bank_account_id, object: "bank_account", status: "new", currency: "usd", country: "US" }] }
       )

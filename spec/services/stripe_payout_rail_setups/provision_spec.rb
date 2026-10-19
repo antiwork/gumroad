@@ -491,7 +491,7 @@ describe StripePayoutRailSetups::Provision do
       expect(card).to be_deleted
       expect(card.stripe_connect_account_id).to eq(setup.merchant_account.charge_processor_merchant_id)
       expect(card.stripe_bank_account_id).to eq("card_mock_linked")
-      expect(Stripe::Token).to have_received(:create).with({ customer: credit_card.stripe_customer_id }, { stripe_account: setup.merchant_account.charge_processor_merchant_id })
+      expect(Stripe::Token).to have_received(:create).with({ customer: credit_card.stripe_customer_id }, { stripe_account: setup.merchant_account.charge_processor_merchant_id, idempotency_key: "rail-setup-#{setup.id}-card-#{card.id}-token" })
       expect(setup.merchant_account.reload.charge_processor_alive?).to be(false)
       expect_current_payout_method_untouched(payout_weekday:)
     end
@@ -790,7 +790,7 @@ describe StripePayoutRailSetups::Provision do
         # SDK double for the provider readiness read at activation.
         allow(Stripe::Account).to receive(:retrieve).with(finished.charge_processor_merchant_id) do
           Stripe::Account.construct_from(
-            id: finished.charge_processor_merchant_id, country: "US", payouts_enabled: true, metadata: { user_compliance_info_id: seller.alive_user_compliance_info.external_id },
+            id: finished.charge_processor_merchant_id, country: "US", payouts_enabled: true, charges_enabled: true, metadata: { user_compliance_info_id: seller.alive_user_compliance_info.external_id },
             requirements: { disabled_reason: nil, currently_due: [], past_due: [] },
             external_accounts: { object: "list", data: [{ id: "card_mock_linked", object: "card", currency: "usd", country: "US", available_payout_methods: %w[standard instant] }] }
           )
