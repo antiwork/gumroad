@@ -364,11 +364,12 @@ export const Checkout = ({
   // amount, the submitted quote token), so no amount shown from here can be charged.
   const summarySurcharges =
     state.surcharges.type === "loaded" ? state.surcharges.result : (state.buyerCurrencyRemint?.surcharges ?? null);
-  // No quote is requested until the buyer picks a country the cart ships to, so any amount shown
-  // here would be for a country they can't receive the order in. The Country select stays hidden
-  // while an unshippable item is in the cart, so removing it comes first.
-  const awaitingBuyerAction = state.country === "" && getShippingCountryCodes(state).size > 0;
+  // No quote is requested until the buyer picks a country the cart ships to, and an item that ships
+  // nowhere blocks paying with the country still set (only its quote is refused), so both cases show
+  // the instruction instead of amounts nobody can be charged.
   const unshippableProductCount = getUnshippableProducts(state).length;
+  const awaitingBuyerAction =
+    unshippableProductCount > 0 || (state.country === "" && getShippingCountryCodes(state).size > 0);
   // Only while a replacement is actually in flight. An errored fetch keeps the snapshot on screen
   // (it is the quote the buyer was returned to) but nothing is coming, so the summary must stop
   // saying it is working.

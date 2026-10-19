@@ -1415,3 +1415,29 @@ describe("Checkout layout while content loads", () => {
     expect(followsPaymentForm(view, "Recommended thing")).toBe(true);
   });
 });
+
+describe("Checkout summary when an item ships nowhere", () => {
+  it("asks for the unshippable item to be removed while the country is still set", () => {
+    const cart: CartState = { items: [cartItem(), cartItem()], discountCodes: [] };
+    const view = renderCheckout(
+      buildState({
+        products: [
+          stateProduct({ requireShipping: true, nativeType: "physical", shippableCountryCodes: ["US"] }),
+          stateProduct({
+            requireShipping: true,
+            nativeType: "physical",
+            shipsNowhere: true,
+            shippableCountryCodes: [],
+          }),
+        ],
+        country: "US",
+      }),
+      cart,
+    );
+
+    expect(view.getByText("Remove the item that can't be shipped to see your total.")).toBeTruthy();
+    // The quote on screen is for a cart that cannot be paid for, so no amounts may be shown.
+    expect(view.queryByText("Subtotal")).toBeNull();
+    expect(view.queryByText("Total")).toBeNull();
+  });
+});
