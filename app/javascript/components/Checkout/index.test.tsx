@@ -1534,6 +1534,30 @@ describe("Checkout renewal reminder notice", () => {
     expect(view.queryByText(/^If this purchase starts your free trial, /u)).not.toBeNull();
   });
 
+  it("groups the notice with the item details, above Edit and Remove", () => {
+    const tier: CartProduct["options"][number] = {
+      id: "studio",
+      name: "Studio",
+      quantity_left: null,
+      description: "",
+      price_difference_cents: 0,
+      recurrence_price_values: null,
+      is_pwyw: false,
+      duration_in_minutes: null,
+      upsell_offered_variant_id: null,
+    };
+    const view = renderCheckout(buildState(), membershipCart({ option_id: tier.id }, { options: [tier] }));
+
+    // Source order, not compareDocumentPosition: happy-dom does not report it reliably.
+    const nodes = Array.from(view.container.querySelectorAll("*"));
+    const tierLine = nodes.findIndex((node) => node.tagName === "SPAN" && node.textContent === "Tier: Studio");
+    const notice = nodes.findIndex((node) => node.tagName === "SPAN" && node.textContent === yearlyNotice);
+    const actions = nodes.findIndex((node) => node.tagName === "BUTTON" && node.textContent === "Remove");
+    expect(tierLine).toBeGreaterThan(-1);
+    expect(notice).toBeGreaterThan(tierLine);
+    expect(actions).toBeGreaterThan(notice);
+  });
+
   it("shows nothing for a gift", () => {
     const view = renderCheckout(
       buildState({ gift: { type: "normal", email: "giftee@example.com", note: "" } }),

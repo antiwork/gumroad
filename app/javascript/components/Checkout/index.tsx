@@ -1176,6 +1176,14 @@ const CartItemComponent = ({
               <strong>Time:</strong> {formatCallDate(new Date(item.call_start_time), { date: { hideYear: true } })}
             </span>
           ) : null}
+          {item.recurrence && !isGift && !isSingleChargeDuration(item.recurrence, item.product.duration_in_months)
+            ? (() => {
+                const notice = renewalReminderNotice(item.product.recurrences, item.recurrence, {
+                  freeTrial: !!hasFreeTrial(item, isGift),
+                });
+                return notice ? <span className="text-sm">{notice}</span> : null;
+              })()
+            : null}
           <CartItemActions>
             {(item.product.rental && !item.product.rental.rent_only) ||
             item.product.is_quantity_enabled ||
@@ -1235,14 +1243,6 @@ const CartItemComponent = ({
               Remove
             </Button>
           </CartItemActions>
-          {item.recurrence && !isGift && !isSingleChargeDuration(item.recurrence, item.product.duration_in_months)
-            ? (() => {
-                const notice = renewalReminderNotice(item.product.recurrences, item.recurrence, {
-                  freeTrial: !!hasFreeTrial(item, isGift),
-                });
-                return notice ? <span className="text-sm">{notice}</span> : null;
-              })()
-            : null}
         </CartItemFooter>
       </CartItemMain>
       {/* Cap this column at half the row so a long price string (e.g.
