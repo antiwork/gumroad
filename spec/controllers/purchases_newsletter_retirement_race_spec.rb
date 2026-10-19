@@ -33,6 +33,7 @@ describe PurchasesController, "seller changes while the old Gumroad newsletter r
     sellers = [@newsletter, @other_seller].compact
     Purchase.where(seller_id: sellers.map(&:id)).delete_all
     Link.where(user_id: sellers.map(&:id)).delete_all
+    AudienceMember.where(seller_id: sellers.map(&:id)).delete_all # delete_all skips the callbacks that remove these
     [@buyer, *sellers].each(&:destroy!)
   end
 

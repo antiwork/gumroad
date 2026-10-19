@@ -25,6 +25,7 @@ describe "Confirming a follow while the old Gumroad newsletter retires", type: :
     FeatureAnnouncementNewsletterCutover.where(seller_id: @newsletter.id).delete_all
     FeatureAnnouncementSubscription.where(user_id: @reader.id).delete_all
     Follower.where(followed_id: @newsletter.id).delete_all
+    AudienceMember.where(seller_id: @newsletter.id).delete_all # delete_all skips the follower callbacks that remove these
     [@reader, @newsletter].each(&:destroy!)
   end
 

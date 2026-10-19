@@ -19,6 +19,7 @@ describe Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements, "against a
     FeatureAnnouncementNewsletterCutover.where(seller_id: @newsletter.id).delete_all
     FeatureAnnouncementSubscription.where(user_id: [@reader.id, *@extra_users&.map(&:id)]).delete_all
     Follower.where(followed_id: @newsletter.id).delete_all
+    AudienceMember.where(seller_id: @newsletter.id).delete_all # delete_all skips the follower callbacks that remove these
     [@reader, @newsletter, *@extra_users].each(&:destroy!)
   end
 

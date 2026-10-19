@@ -175,6 +175,83 @@ describe Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements do
     end
   end
 
+  describe "an address-mapped follow whose account already chose but is kept out of A" do
+    # The old announcement setting off, or a buyer opt-out, each with an existing opt-in and opt-out.
+    let!(:setting_off_in) { create(:user, email: "setting-off-in@example.com").tap { _1.update!(announcement_notification_enabled: false) } }
+    let!(:setting_off_out) { create(:user, email: "setting-off-out@example.com").tap { _1.update!(announcement_notification_enabled: false) } }
+    let!(:vetoed_in) { create(:user, email: "vetoed-in@example.com") }
+    let!(:vetoed_out) { create(:user, email: "vetoed-out@example.com") }
+    let(:choosers) { [setting_off_in, setting_off_out, vetoed_in, vetoed_out] }
+
+    before do
+      [setting_off_in, vetoed_in].each { FeatureAnnouncementSubscription.create!(user_id: _1.id, subscribed: true, source: "settings") }
+      [setting_off_out, vetoed_out].each { FeatureAnnouncementSubscription.unsubscribe!(_1, source: "unsubscribe_link") }
+      product = create(:product, user: newsletter)
+      [vetoed_in, vetoed_out].each { create(:purchase, link: product, email: _1.email, can_contact: false) }
+      choosers.each { follow(email: _1.email) }
+    end
+
+    def choices = FeatureAnnouncementSubscription.where(user_id: choosers.map(&:id)).order(:user_id).pluck(:subscribed, :source, :version, :created_at, :updated_at)
+
+    def follow_of(user) = Follower.find_by(followed_id: newsletter.id, email: user.email)
+
+    it "links each to its account, leaving the choice, its timestamps and the counts as they were" do
+      before_choices = choices
+      before_stamps = choosers.map { follow_of(_1).updated_at }
+      described_class.prepare!(cutoff_at:)
+      expect(cutover.counts).to include("announcements_off" => 2, "buyer_opted_out" => 3, "eligible" => 2)
+
+      apply!
+
+      expect(choosers.map { follow_of(_1).follower_user_id }).to eq(choosers.map(&:id))
+      expect(choices).to eq(before_choices)
+      expect(cutover.attributes.slice("eligible_count", "migrated_count")).to eq("eligible_count" => 2, "migrated_count" => 2)
+      expect(choosers.map { follow_of(_1).updated_at }).to eq(before_stamps)
+    end
+
+    it "lets the old cancel link reach each account after its email changes, and an opt-in becomes an opt-out" do
+      described_class.prepare!(cutoff_at:)
+      apply!
+      follows = choosers.index_with { follow_of(_1) }
+      opt_out_rows = FeatureAnnouncementSubscription.where(user_id: [setting_off_out.id, vetoed_out.id]).order(:user_id).map(&:attributes)
+      choosers.each { _1.update_columns(email: "moved-#{_1.id}@example.com") }
+
+      follows.each_value(&:mark_deleted!)
+
+      expect(preference(setting_off_in)).to eq([[false, "newsletter_opt_out"]])
+      expect(preference(vetoed_in)).to eq([[false, "newsletter_opt_out"]])
+      expect(FeatureAnnouncementSubscription.where(user_id: [setting_off_out.id, vetoed_out.id]).order(:user_id).map(&:attributes)).to eq(opt_out_rows)
+    end
+
+    it "changes nothing when applied again" do
+      described_class.prepare!(cutoff_at:)
+      apply!
+      described_class.prepare!(cutoff_at:)
+
+      expect { apply! }.not_to change { [choices, choosers.map { follow_of(_1).attributes }, FeatureAnnouncementSubscription.count] }
+      expect(cutover.migrated_count).to eq(2)
+    end
+
+    it "links none whose cohort has no decision, whose address is shared or unconfirmed, and never moves an existing link" do
+      follow_of(setting_off_in).update_columns(source: Follower::From::CSV_IMPORT)
+      create(:user).update_columns(email: setting_off_out.email) # a second confirmed account at the address
+      vetoed_in.update_columns(confirmed_at: nil)
+      other_account = create(:user, email: "someone-else@example.com")
+      follow_of(vetoed_out).update_columns(follower_user_id: other_account.id)
+      suspended_chooser = create(:user, email: "suspended-chooser@example.com", user_risk_state: "suspended_for_tos_violation")
+      late_chooser = create(:user, email: "late-chooser@example.com").tap { _1.update!(announcement_notification_enabled: false) }
+      [suspended_chooser, late_chooser].each { FeatureAnnouncementSubscription.create!(user_id: _1.id, subscribed: true, source: "settings") }
+      follow(email: suspended_chooser.email)
+      follow(email: late_chooser.email, confirmed_at: 10.minutes.ago)
+      described_class.prepare!(cutoff_at:)
+
+      apply!
+
+      expect(choosers.map { follow_of(_1).follower_user_id }).to eq([nil, nil, nil, other_account.id])
+      expect([follow_of(suspended_chooser), follow_of(late_chooser)].map(&:follower_user_id)).to eq([nil, nil])
+    end
+  end
+
   describe "the measured baseline and mapping by address" do
     let!(:email_only) { create(:user, email: "email-only@example.com") }
     let!(:quiet) { create(:user, email: "quiet@example.com").tap { _1.update!(announcement_notification_enabled: false) } }

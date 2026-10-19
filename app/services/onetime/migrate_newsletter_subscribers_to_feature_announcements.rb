@@ -263,10 +263,13 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
         next :changed_since_read unless unchanged
 
         identity = resolve_identity(current, linked, confirmed)
-        outcome = classify(current, cutover.cutoff_at, identity:, **current_context(seller, current, identity))
+        context = current_context(seller, current, identity)
+        outcome = classify(current, cutover.cutoff_at, identity:, **context)
         # Recording the link keeps every old-newsletter opt-out path pointed at this account, even after its
         # email changes. An account that already chose has its choice left exactly as it is.
-        current.update_columns(follower_user_id: identity.id) if %i[eligible existing_preference].include?(outcome) && current.follower_user_id.nil?
+        if current.follower_user_id.nil? && (outcome == :eligible || chose_already?(current, cutover.cutoff_at, identity, context[:preferences]))
+          current.update_columns(follower_user_id: identity.id)
+        end
         next outcome unless outcome == :eligible
 
         FeatureAnnouncementSubscription.create!(user_id: identity.id, subscribed: true, source: "newsletter_migration")
@@ -333,6 +336,13 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
       return :unverified_source unless VERIFIED_SOURCES.key?(source_label(follower))
 
       :eligible
+    end
+
+    # Decided apart from classify: the old announcement setting and a buyer opt-out keep an account out of A,
+    # but its existing choice still needs the link, so a later old-newsletter opt-out reaches it.
+    def chose_already?(follower, cutoff_at, identity, preferences)
+      identity.is_a?(User) && preferences.key?(identity.id) && follower.deleted_at.nil? && follower.confirmed_at.present? &&
+        follower.confirmed_at <= cutoff_at && follower.created_at <= cutoff_at && identity.account_active? && identity.confirmed?
     end
 
     def source_label(follower) = follower.source.presence || NO_SOURCE

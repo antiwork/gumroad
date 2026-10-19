@@ -122,6 +122,9 @@ class SendWorkflowInstallmentWorker
         Rails.logger.error("[#{self.class.name}] installment_id=#{installment_id} got an unusable recipient combination (purchase=#{purchase_id.inspect} follower=#{follower_id.inspect} affiliate=#{affiliate_user_id.inspect} subscription=#{subscription_id.inspect}); nothing sent")
       end
     end
+  rescue FeatureAnnouncementNewsletterCutover::Retired
+    # The newsletter retired after the check above; the handoff was refused, and retrying would only refuse again.
+    Rails.logger.info("[#{self.class.name}] installment_id=#{installment_id} stopped at the provider handoff: newsletter retired")
   end
 
   private

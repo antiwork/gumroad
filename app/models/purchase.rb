@@ -413,6 +413,7 @@ class Purchase < ApplicationRecord
   after_save :attach_unclaimed_bundle_product_purchases, if: :saved_change_to_purchaser_id?
   # Inside the save, so lifting a buyer opt-out is ordered against retiring that seller's newsletter.
   after_save :fence_lifted_buyer_opt_out, if: :lifted_buyer_opt_out?
+  after_save :mirror_buyer_opt_out, if: :new_buyer_opt_out?
 
   after_commit :enqueue_update_sales_related_products_infos_job, if: -> (purchase) {
     purchase.purchase_state_previously_changed? && purchase.purchase_state == "successful"
@@ -6458,6 +6459,16 @@ class Purchase < ApplicationRecord
 
     def fence_lifted_buyer_opt_out
       FeatureAnnouncementNewsletterCutover.fence_buyer_resubscribe(seller_id_before_last_save, email_before_last_save)
+    end
+
+    # Only a saved row turning off is a new opt-out: one created off (the column defaults to on) inherited it.
+    # The reason isn't checked, since "inherited" can outlive the seller turning that row on and off again.
+    def new_buyer_opt_out?
+      !previously_new_record? && saved_change_to_can_contact?(from: true, to: false)
+    end
+
+    def mirror_buyer_opt_out
+      FeatureAnnouncementNewsletterCutover.mirror_buyer_opt_out(seller_id, email)
     end
 
     def toggle_off_can_contact_if_buyer_has_unsubscribed
