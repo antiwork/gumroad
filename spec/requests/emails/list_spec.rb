@@ -4,6 +4,15 @@ require "spec_helper"
 require "shared_examples/authorize_called"
 
 describe("Email List", :js, :sidekiq_inline, :elasticsearch_wait_for_refresh, type: :system) do
+  # wait_for_ajax only counts requests made through `request`; the cart count uses fetch directly.
+  def wait_for_finished_requests(*paths)
+    Timeout.timeout(Capybara.default_max_wait_time) do
+      sleep 0.05 until page.evaluate_script(<<~JS)
+        #{paths.to_json}.every((path) => performance.getEntriesByType("resource").some((entry) => entry.name.includes(path)))
+      JS
+    end
+  end
+
   describe "emails" do
     let(:seller) { create(:named_seller, timezone: "UTC") }
     let(:buyer) { create(:user) }
@@ -97,6 +106,9 @@ describe("Email List", :js, :sidekiq_inline, :elasticsearch_wait_for_refresh, ty
           new_window = window_opened_by { click_on "View post" }
           within_window new_window do
             expect(page).to have_text("Email 3 (sent)")
+            # These run in the seller's session. One still in flight would take the buyer's `login_as` below,
+            # which applies to whichever request reaches the app next.
+            wait_for_finished_requests("/cart_items_count", "/increment_post_views")
           end
 
           click_on "Close"
