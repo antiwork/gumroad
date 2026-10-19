@@ -143,16 +143,31 @@ describe("Product Page - Shipping Scenarios", type: :system, js: true, shipping:
   context "when the buyer's country is not in the seller's shipping destinations" do
     let(:product) { create(:product, require_shipping: true, is_physical: true, price_cents: 500) }
     let(:buyer) { create(:buyer_user, country: "Canada") }
+    let(:unavailable_product) { create(:product, user: product.user, name: "Unavailable print", require_shipping: true, is_physical: true, price_cents: 500) }
 
     before do
       product.shipping_destinations << build(:shipping_destination, country_code: "US", one_item_rate_cents: 500)
+      unavailable_product.shipping_destinations << build(:shipping_destination, country_code: "US", one_item_rate_cents: 500)
+      unavailable_product.shipping_exclusions.create!(country_code: "US")
     end
 
-    it "asks the buyer to choose a country the product ships to, then allows purchase" do
+    it "asks the buyer to remove the unavailable item and choose a country the product ships to, then allows purchase" do
       login_as buyer
+      visit unavailable_product.long_url
+      add_to_cart(unavailable_product)
       visit product.long_url
       add_to_cart(product)
 
+      expect(page).to have_text("Unavailable print can't be shipped to any country right now. Remove it from your cart to buy the rest.")
+      expect(page).not_to have_select("Country")
+      expect(page).to have_button("Pay", disabled: true)
+      expect(page).to have_text("Remove the item that can't be shipped to see your total.")
+      expect(page).not_to have_selector("[aria-busy='true']")
+      expect(page).not_to have_selector("h4", exact_text: "Total")
+
+      within_cart_item(unavailable_product.name) { click_on "Remove" }
+
+      expect(page).not_to have_text("Remove the item that can't be shipped to see your total.")
       expect(page).to have_select("Country", selected: "Choose a country")
       expect(page).to have_text("This order can't be shipped to your country (Canada). Choose the country you're shipping to.")
       expect(page).to have_button("Pay", disabled: true)

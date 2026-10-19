@@ -365,14 +365,15 @@ export const Checkout = ({
   const summarySurcharges =
     state.surcharges.type === "loaded" ? state.surcharges.result : (state.buyerCurrencyRemint?.surcharges ?? null);
   // No quote is requested until the buyer picks a country the cart ships to, so any amount shown
-  // here would be for a country they can't receive the order in.
-  const awaitingCountryChoice =
-    state.country === "" && getUnshippableProducts(state).length === 0 && getShippingCountryCodes(state).size > 0;
+  // here would be for a country they can't receive the order in. The Country select stays hidden
+  // while an unshippable item is in the cart, so removing it comes first.
+  const awaitingBuyerAction = state.country === "" && getShippingCountryCodes(state).size > 0;
+  const unshippableProductCount = getUnshippableProducts(state).length;
   // Only while a replacement is actually in flight. An errored fetch keeps the snapshot on screen
   // (it is the quote the buyer was returned to) but nothing is coming, so the summary must stop
   // saying it is working.
   const quoteInFlight =
-    !awaitingCountryChoice && (state.surcharges.type === "pending" || state.surcharges.type === "loading");
+    !awaitingBuyerAction && (state.surcharges.type === "pending" || state.surcharges.type === "loading");
   const isRequoting = quoteInFlight && summarySurcharges !== null;
   // The first quote fills the Subtotal and Total rows. Holding their space while it loads keeps the
   // payment form below from jumping when it lands, which on phones is mid-tap on the email field.
@@ -626,8 +627,12 @@ export const Checkout = ({
                   data-checkout-price-rows="true"
                   aria-busy={isRequoting || awaitingFirstQuote}
                 >
-                  {awaitingCountryChoice ? (
-                    <p className="text-sm sm:text-base">Choose a delivery country to see shipping and your total.</p>
+                  {awaitingBuyerAction ? (
+                    <p className="text-sm sm:text-base">
+                      {unshippableProductCount > 0
+                        ? `Remove ${unshippableProductCount === 1 ? "the item" : "the items"} that can't be shipped to see your total.`
+                        : "Choose a delivery country to see shipping and your total."}
+                    </p>
                   ) : summarySurcharges ? (
                     <>
                       <CartPriceItem
@@ -752,7 +757,7 @@ export const Checkout = ({
                     </form>
                   ) : null}
                 </div>
-                {awaitingCountryChoice ? null : total != null ? (
+                {awaitingBuyerAction ? null : total != null ? (
                   <>
                     <footer className="grid gap-4 border-t border-border p-4 sm:px-5" aria-busy={isRequoting}>
                       <CartPriceItem
