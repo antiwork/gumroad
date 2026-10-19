@@ -148,7 +148,12 @@ const CountryInput = () => {
         )}
       </Select>
       {unshippableCountryName ? (
-        <FieldsetDescription id={`${uid}country-unshippable`}>
+        // Muted text is below 4.5:1 and this is the only explanation of why the country was cleared.
+        // Conditional because classNames merges, so it would also override the danger color.
+        <FieldsetDescription
+          id={`${uid}country-unshippable`}
+          className={errors.has("country") ? undefined : "text-inherit"}
+        >
           This order can't be shipped to your country ({unshippableCountryName}). Choose the country you're shipping to.
         </FieldsetDescription>
       ) : null}
