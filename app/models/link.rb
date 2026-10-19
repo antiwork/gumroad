@@ -899,7 +899,8 @@ class Link < ApplicationRecord
     return nil unless is_recurring_billing
 
     enabled_prices = prices.alive.is_buy.select { |price| BasePrice::Recurrence.number_of_months_in_recurrence(price.recurrence) }
-    enabled = enabled_prices.sort_by { |price| BasePrice::Recurrence.number_of_months_in_recurrence(price.recurrence) }.map { |price| { recurrence: price.recurrence, price_cents: price.price_cents, id: price.external_id, renewal_reminder_days: BasePrice::Recurrence.renewal_reminder_lead_days(price.recurrence) } }
+    reminders_on = Feature.active?(:membership_renewal_reminders, user)
+    enabled = enabled_prices.sort_by { |price| BasePrice::Recurrence.number_of_months_in_recurrence(price.recurrence) }.map { |price| { recurrence: price.recurrence, price_cents: price.price_cents, id: price.external_id, renewal_reminder_days: reminders_on ? BasePrice::Recurrence.renewal_reminder_lead_days(price.recurrence) : [] } }
     default = default_price_recurrence&.recurrence || enabled.first&.fetch(:recurrence, nil)
     return nil if default.nil?
 

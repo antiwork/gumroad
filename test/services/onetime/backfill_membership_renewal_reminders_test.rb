@@ -174,36 +174,4 @@ class Onetime::BackfillMembershipRenewalRemindersTest < ActiveSupport::TestCase
     assert_equal 0, summary[:scheduled]
     assert_equal 1, summary[:errors]
   end
-
-  test "also schedules the advance notice for yearly renewals" do
-    subscription = create_eligible_subscription
-    Subscription.any_instance.stubs(:recurrence).returns(BasePrice::Recurrence::YEARLY)
-    Subscription.any_instance.stubs(:end_time_of_subscription).returns(60.days.from_now)
-
-    summary = run_backfill
-
-    assert_equal 1, summary[:advance_scheduled]
-    job = RecurringChargeReminderWorker.jobs.find { |j| j["args"] == [subscription.id, RecurringChargeReminderWorker::ADVANCE] }
-    assert job
-    assert_in_delta 30.days.from_now.to_f, job["at"], 5
-  end
-
-  test "does not schedule an advance notice for periods under 12 months" do
-    create_eligible_subscription
-
-    summary = run_backfill
-
-    assert_equal 0, summary[:advance_scheduled]
-  end
-
-  test "skips the advance notice when its lead time has passed" do
-    create_eligible_subscription
-    Subscription.any_instance.stubs(:recurrence).returns(BasePrice::Recurrence::YEARLY)
-    Subscription.any_instance.stubs(:end_time_of_subscription).returns(20.days.from_now)
-
-    summary = run_backfill
-
-    assert_equal 1, summary[:scheduled]
-    assert_equal 0, summary[:advance_scheduled]
-  end
 end

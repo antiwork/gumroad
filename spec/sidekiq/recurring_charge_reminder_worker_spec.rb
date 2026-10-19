@@ -79,6 +79,30 @@ describe RecurringChargeReminderWorker, :vcr do
       end.to have_enqueued_mail(CustomerLowPriorityMailer, :subscription_renewal_reminder).with(@subscription.id).once
     end
 
+    it "skips a job scheduled for an earlier renewal date" do
+      travel_to @subscription.end_time_of_subscription - 44.days
+
+      expect do
+        described_class.new.perform(@subscription.id, described_class::ADVANCE)
+      end.not_to have_enqueued_mail(CustomerLowPriorityMailer, :subscription_renewal_reminder)
+
+      travel_to @subscription.end_time_of_subscription - 29.days
+      expect do
+        described_class.new.perform(@subscription.id, described_class::ADVANCE)
+      end.to have_enqueued_mail(CustomerLowPriorityMailer, :subscription_renewal_reminder).once
+    end
+
+    it "releases the claim when the enqueue fails so a retry can send" do
+      allow(CustomerLowPriorityMailer).to receive(:subscription_renewal_reminder).and_raise(RuntimeError, "redis down")
+
+      expect { described_class.new.perform(@subscription.id, described_class::ADVANCE) }.to raise_error(RuntimeError)
+      allow(CustomerLowPriorityMailer).to receive(:subscription_renewal_reminder).and_call_original
+
+      expect do
+        described_class.new.perform(@subscription.id, described_class::ADVANCE)
+      end.to have_enqueued_mail(CustomerLowPriorityMailer, :subscription_renewal_reminder).once
+    end
+
     it "skips the advance notice once the final reminder is due" do
       travel_to @subscription.end_time_of_subscription - 6.days
 
