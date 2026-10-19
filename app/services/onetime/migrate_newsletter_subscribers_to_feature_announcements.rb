@@ -21,6 +21,7 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
   # Reviewed decisions for any other cohort (outcome => decision reference); retire! refuses until all are covered.
   RETIREMENT_RESOLUTIONS = {}.freeze
   BATCH_SIZE = 1_000
+  OPT_OUT_EMAILS_PER_QUERY = 100
   RUN_LOCK_TIMEOUT_SECONDS = 0
 
   class SourceUnverified < StandardError; end
@@ -205,7 +206,7 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
       a = { total: 0, linked: 0, email_mapped: 0, existing_opt_in: 0, existing_opt_out: 0, by_source: Hash.new(0) }
       followers.where(followed_id: seller.id).in_batches(of: @batch_size) do |batch|
         rows = batch.to_a
-        context = batch_context(seller, rows)
+        context = batch_context(seller, rows.reject { initial_outcome(_1, cutoff_at) })
         rows.each do |follower|
           identity = resolve_identity(follower, context[:users][follower.follower_user_id], context[:confirmed_by_email][normalize(follower.email)])
           outcome = classify(follower, cutoff_at, identity:, **context)
@@ -328,13 +329,27 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
         users:,
         confirmed_by_email:,
         preferences: FeatureAnnouncementSubscription.where(user_id: user_ids).pluck(:user_id, :subscribed).to_h,
-        opted_out_emails: Purchase.where(seller_id: seller.id, email: emails, can_contact: false).distinct.pluck(:email).map { normalize(_1) }.to_set,
+        opted_out_emails: opted_out_emails(seller, emails),
       }
     end
 
-    def classify(follower, cutoff_at, identity:, preferences:, opted_out_emails:, **)
+    def opted_out_emails(seller, emails)
+      emails.each_slice(OPT_OUT_EMAILS_PER_QUERY).flat_map do |batch|
+        Purchase.where(seller_id: seller.id, email: batch, can_contact: false).distinct.pluck(:email)
+      end.map { normalize(_1) }.to_set
+    end
+
+    def initial_outcome(follower, cutoff_at)
       return :follower_inactive unless follower.deleted_at.nil? && follower.confirmed_at.present?
       return :after_cutoff if follower.confirmed_at > cutoff_at || follower.created_at > cutoff_at
+
+      nil
+    end
+
+    def classify(follower, cutoff_at, identity:, preferences:, opted_out_emails:, **)
+      outcome = initial_outcome(follower, cutoff_at)
+      return outcome if outcome
+
       return identity if identity.is_a?(Symbol)
       return :inactive_account unless identity.account_active?
       return :unconfirmed_account unless identity.confirmed?
