@@ -1134,6 +1134,17 @@ describe("PaymentForm shipping country", () => {
     expect(payButton().hasAttribute("disabled")).toBe(true);
   });
 
+  it("says a physical product can't ship before asking for the shipping address", () => {
+    renderPaymentForm(state({ countries, products: [physical("Poster", [], true)] }));
+
+    const [alert, ...duplicates] = screen.getAllByText("Poster can't be shipped to any country right now.");
+    if (!alert) throw new Error("expected the unavailable alert");
+    expect(duplicates).toHaveLength(0);
+    const fullName = screen.getByLabelText("Full name");
+    expect(alert.compareDocumentPosition(fullName) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByLabelText("Street address")).toBeTruthy();
+  });
+
   it("names the unshippable product in a mixed cart and keeps Pay disabled", () => {
     renderPaymentForm(
       state({

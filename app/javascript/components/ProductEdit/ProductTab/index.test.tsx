@@ -354,7 +354,7 @@ describe("ProductTab shipping exclusions", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Add excluded country" }));
 
-    expect(updateProduct).toHaveBeenCalledWith({ shipping_excluded_country_codes: ["US"] });
+    expect(updateProduct).toHaveBeenCalledWith({ shipping_excluded_country_codes: [""] });
   });
 
   it("passes a loaded exclusion list through to the editor", () => {

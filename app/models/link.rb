@@ -1102,7 +1102,7 @@ class Link < ApplicationRecord
     # where every purchase then fails. Refuse that state rather than persisting it.
     covered = shipping_destinations.alive.flat_map { |shipping_destination| shipping_destination.country_or_countries.keys }.uniq
     if country_codes.present? && covered.present? && (covered - country_codes).empty?
-      message = "The product needs to be shippable to at least one destination."
+      message = "You've excluded every country this product ships to. Remove an excluded country or add a shipping destination."
       errors.add(:base, message)
       raise LinkInvalid, message
     end

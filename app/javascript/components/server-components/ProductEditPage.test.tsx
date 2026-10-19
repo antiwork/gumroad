@@ -13,6 +13,7 @@ import {
 import { confirmRemovedVariantPageDeletions } from "$app/data/product_save_contract";
 
 import { CancellationDiscountSelector } from "$app/components/ProductEdit/ProductTab/CancellationDiscountSelector";
+import { ShippingDestinationsEditor } from "$app/components/ProductEdit/ProductTab/ShippingDestinationsEditor";
 import { type FileEntry, ProductEditContext, type Product, type Version } from "$app/components/ProductEdit/state";
 import { type ImageUploadSettings, useImageUploadSettings } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -20,12 +21,17 @@ import { ProductEditPage, type ProductEditPageProps } from "$app/components/serv
 
 type ProductEditContextValue = NonNullable<React.ContextType<typeof ProductEditContext>>;
 
-const contextCapture: { current: ProductEditContextValue | null; showCancellationDiscount: boolean; renders: number } =
-  {
-    current: null,
-    showCancellationDiscount: false,
-    renders: 0,
-  };
+const contextCapture: {
+  current: ProductEditContextValue | null;
+  showCancellationDiscount: boolean;
+  showShippingEditor: boolean;
+  renders: number;
+} = {
+  current: null,
+  showCancellationDiscount: false,
+  showShippingEditor: false,
+  renders: 0,
+};
 const saveProductMock = vi.hoisted(() => vi.fn());
 const applyRichContentPageSaveResponseSpy = vi.hoisted(() => vi.fn());
 const imageSettingsCapture: { current: ImageUploadSettings | null } = { current: null };
@@ -49,6 +55,18 @@ vi.mock("react-router-dom", async (importOriginal) => ({
       <ProductEditContext.Consumer>
         {(value) => {
           contextCapture.current = value;
+          // Wired the way ProductTab wires it, so the editor's own controls drive the page state.
+          if (contextCapture.showShippingEditor && value)
+            return (
+              <ShippingDestinationsEditor
+                shippingDestinations={value.product.shipping_destinations}
+                onChange={(shipping_destinations) => value.updateProduct({ shipping_destinations })}
+                excludedCountryCodes={value.product.shipping_excluded_country_codes}
+                onExcludedCountryCodesChange={(shipping_excluded_country_codes) =>
+                  value.updateProduct({ shipping_excluded_country_codes })
+                }
+              />
+            );
           if (contextCapture.showCancellationDiscount) {
             contextCapture.renders += 1;
             const MAX_EDITOR_RENDERS = 20;
@@ -80,6 +98,7 @@ vi.mock("$app/components/server-components/Alert", () => ({ showAlert: vi.fn() }
 beforeEach(() => {
   contextCapture.current = null;
   contextCapture.showCancellationDiscount = false;
+  contextCapture.showShippingEditor = false;
   contextCapture.renders = 0;
   saveProductMock.mockReset();
   imageUploads.pending.length = 0;
@@ -748,6 +767,81 @@ const buildTieredProps = (product: Product): ProductEditPageProps => ({
   successful_sales_count: 0,
   ai_generated: false,
   custom_attribute_name_suggestions: [],
+});
+
+describe("shipping exclusion rows without a country", () => {
+  const physicalProps = (shipping_excluded_country_codes: string[]): ProductEditPageProps => ({
+    ...buildTieredProps({
+      ...buildTieredProduct([]),
+      native_type: "physical",
+      variants: [],
+      require_shipping: true,
+      shipping_destinations: [{ country_code: "ELSEWHERE", one_item_rate_cents: 0, multiple_items_rate_cents: 0 }],
+      shipping_excluded_country_codes,
+    }),
+    is_tiered_membership: false,
+    is_physical: true,
+  });
+  const save = async () => {
+    let saved: boolean | undefined;
+    await act(async () => {
+      saved = await contextCapture.current?.save();
+    });
+    return saved;
+  };
+
+  it("refuses to save until the seller chooses a country", async () => {
+    saveProductMock.mockResolvedValue({});
+    render(<ProductEditPage {...physicalProps(["US", ""])} />);
+
+    expect(await save()).toBe(false);
+    expect(saveProductMock).not.toHaveBeenCalled();
+    expect(showAlert).toHaveBeenCalledWith("Choose a country to exclude, or remove the empty row.", "error");
+
+    act(() => contextCapture.current?.updateProduct({ shipping_excluded_country_codes: ["US", "DE"] }));
+
+    expect(await save()).toBe(true);
+    expect(saveProductMock.mock.lastCall?.[2]).toMatchObject({ shipping_excluded_country_codes: ["US", "DE"] });
+  });
+
+  it("saves once the last destination is removed, which also hides the unchosen row", async () => {
+    contextCapture.showShippingEditor = true;
+    saveProductMock.mockResolvedValue({});
+    render(
+      <ProductEditPage
+        {...physicalProps(["US"])}
+        available_countries={[
+          { code: "ELSEWHERE", name: "Elsewhere" },
+          { code: "US", name: "United States" },
+          { code: "DE", name: "Germany" },
+        ]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Add excluded country" }));
+    expect(await save()).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove shipping destination" }));
+    expect(screen.queryByText("Do not ship to")).toBeNull();
+
+    expect(await save()).toBe(true);
+    expect(saveProductMock.mock.lastCall?.[2]).toMatchObject({
+      shipping_destinations: [],
+      shipping_excluded_country_codes: ["US", ""],
+    });
+  });
+
+  it("saves once the empty row is removed", async () => {
+    saveProductMock.mockResolvedValue({});
+    render(<ProductEditPage {...physicalProps([""])} />);
+
+    expect(await save()).toBe(false);
+
+    act(() => contextCapture.current?.updateProduct({ shipping_excluded_country_codes: [] }));
+
+    expect(await save()).toBe(true);
+    expect(saveProductMock.mock.lastCall?.[2]).toMatchObject({ shipping_excluded_country_codes: [] });
+  });
 });
 
 describe("cancellation discount editing", () => {

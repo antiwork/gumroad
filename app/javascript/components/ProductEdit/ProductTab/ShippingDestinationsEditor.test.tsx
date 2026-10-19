@@ -32,7 +32,7 @@ afterEach(() => {
 const destination = { country_code: "ELSEWHERE", one_item_rate_cents: 0, multiple_items_rate_cents: 0 };
 
 describe("ShippingDestinationsEditor exclusions", () => {
-  it("offers only concrete countries and adds the first unused one", () => {
+  it("offers only concrete countries and adds a row with no country chosen", () => {
     const onExcludedCountryCodesChange = vi.fn();
     render(
       <ShippingDestinationsEditor
@@ -50,6 +50,30 @@ describe("ShippingDestinationsEditor exclusions", () => {
     expect(excludedCountrySelect.queryByRole("option", { name: "Elsewhere" })).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Add excluded country" }));
+
+    expect(onExcludedCountryCodesChange).toHaveBeenCalledWith(["US", ""]);
+  });
+
+  it("asks the seller to choose a country for a new row and allows only one such row", () => {
+    const onExcludedCountryCodesChange = vi.fn();
+    render(
+      <ShippingDestinationsEditor
+        shippingDestinations={[destination]}
+        onChange={vi.fn()}
+        excludedCountryCodes={["US", ""]}
+        onExcludedCountryCodesChange={onExcludedCountryCodesChange}
+      />,
+    );
+
+    const [, newRowSelect] = screen.getAllByLabelText<HTMLSelectElement>("Excluded country");
+    if (!newRowSelect) throw new Error("expected a select for the new row");
+    expect(newRowSelect.value).toBe("");
+    const placeholder = within(newRowSelect).getByRole<HTMLOptionElement>("option", { name: "Choose a country" });
+    expect(placeholder.selected).toBe(true);
+    expect(placeholder.disabled).toBe(true);
+    expect(screen.getByRole("button", { name: "Add excluded country" }).hasAttribute("disabled")).toBe(true);
+
+    fireEvent.change(newRowSelect, { target: { value: "DE" } });
 
     expect(onExcludedCountryCodesChange).toHaveBeenCalledWith(["US", "DE"]);
   });

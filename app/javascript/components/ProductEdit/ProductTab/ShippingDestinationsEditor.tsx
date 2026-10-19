@@ -21,7 +21,7 @@ export const ShippingDestinationsEditor = ({
   onChange: (shippingDestinations: ShippingDestination[]) => void;
   // Editor payloads rendered before exclusions existed omit the list. Defaulting here, not in the
   // product state, keeps an untouched save from sending an empty list over the saved one.
-  excludedCountryCodes?: string[];
+  excludedCountryCodes?: string[] | undefined;
   onExcludedCountryCodesChange: (excludedCountryCodes: string[]) => void;
 }) => {
   const { availableCountries } = useProductEditContext();
@@ -40,11 +40,8 @@ export const ShippingDestinationsEditor = ({
     ]);
   };
 
-  const addExcludedCountry = () => {
-    const next = excludableCountries.find((country) => !excludedCountryCodes.includes(country.code));
-    if (!next) return;
-    onExcludedCountryCodesChange([...excludedCountryCodes, next.code]);
-  };
+  // Unlike a destination, a preselected exclusion would block buyers on Save without the seller choosing it.
+  const addExcludedCountry = () => onExcludedCountryCodesChange([...excludedCountryCodes, ""]);
 
   return (
     <section className="grid gap-8 border-t border-border p-4 md:p-8">
@@ -108,7 +105,11 @@ export const ShippingDestinationsEditor = ({
           ))}
           {excludedCountryCodes.length < excludableCountries.length ? (
             <CardContent>
-              <Button onClick={addExcludedCountry} className="grow basis-0">
+              <Button
+                onClick={addExcludedCountry}
+                className="grow basis-0"
+                disabled={excludedCountryCodes.includes("")}
+              >
                 <Plus className="size-5" />
                 Add excluded country
               </Button>
@@ -149,6 +150,11 @@ const ShippingExclusionRow = ({
             value={countryCode}
             onChange={(evt) => onChange(evt.target.value)}
           >
+            {countryCode === "" ? (
+              <option value="" disabled>
+                Choose a country
+              </option>
+            ) : null}
             {countries.map((country) => (
               <option
                 key={country.code}

@@ -3363,7 +3363,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
     ), as: :json
 
     assert_response :unprocessable_entity
-    assert_equal "The product needs to be shippable to at least one destination.", response.parsed_body["error_message"]
+    assert_equal "You've excluded every country this product ships to. Remove an excluded country or add a shipping destination.", response.parsed_body["error_message"]
     @product.reload
     assert_not_equal "Renamed", @product.name
     assert_equal [Product::Shipping::ELSEWHERE], @product.shipping_destinations.alive.map(&:country_code)

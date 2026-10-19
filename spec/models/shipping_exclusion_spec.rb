@@ -68,7 +68,7 @@ describe ShippingExclusion do
 
       expect do
         product.save_shipping_exclusions!(["US"])
-      end.to raise_error(Link::LinkInvalid, /shippable to at least one destination/)
+      end.to raise_error(Link::LinkInvalid, "You've excluded every country this product ships to. Remove an excluded country or add a shipping destination.")
 
       expect(product.reload.shipping_excluded_country_codes).to eq([])
     end

@@ -120,21 +120,8 @@ const CountryInput = () => {
     }
   }, [state.country, shippingCountryCodes]);
 
-  if (unshippableProducts.length > 0) {
-    return (
-      <Fieldset state="danger">
-        <FieldsetTitle>
-          <Label>Country</Label>
-        </FieldsetTitle>
-        <Alert variant="danger">
-          {unshippableProducts.map((product) => product.name).join(", ")} can't be shipped to any country right now.
-          {unshippableProducts.length < state.products.length
-            ? ` Remove ${unshippableProducts.length === 1 ? "it" : "them"} from your cart to buy the rest.`
-            : null}
-        </Alert>
-      </Fieldset>
-    );
-  }
+  // UnshippableProductsAlert explains this at the top of the shipping card.
+  if (unshippableProducts.length > 0) return null;
 
   return (
     <Fieldset>
@@ -162,6 +149,21 @@ const CountryInput = () => {
         )}
       </Select>
     </Fieldset>
+  );
+};
+
+const UnshippableProductsAlert = () => {
+  const [state] = useState();
+  const unshippableProducts = getUnshippableProducts(state);
+  if (unshippableProducts.length === 0) return null;
+
+  return (
+    <Alert variant="danger">
+      {unshippableProducts.map((product) => product.name).join(", ")} can't be shipped to any country right now.
+      {unshippableProducts.length < state.products.length
+        ? ` Remove ${unshippableProducts.length === 1 ? "it" : "them"} from your cart to buy the rest.`
+        : null}
+    </Alert>
   );
 };
 
@@ -540,6 +542,7 @@ const CustomerDetails = ({ className }: { className?: string }) => {
           <div className={className}>
             <div className="flex grow flex-col gap-4">
               <h4 className="text-base sm:text-lg">Shipping information</h4>
+              <UnshippableProductsAlert />
               <Fieldset state={errors.has("fullName") ? "danger" : undefined}>
                 <FieldsetTitle>
                   <Label htmlFor={`${uid}fullName`}>Full name</Label>

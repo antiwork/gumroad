@@ -176,6 +176,15 @@ describe("Product Page - Shipping Scenarios", type: :system, js: true, shipping:
       expect(page).to have_text("#{product.name} can't be shipped to any country right now.")
       expect(page).not_to have_select("Country")
       expect(page).to have_button("Pay", disabled: true)
+
+      alert_precedes_address = page.evaluate_script(<<~JS)
+        (() => {
+          const alert = [...document.querySelectorAll("[role=alert]")].find((element) => element.textContent.includes("can't be shipped"));
+          const fullName = document.getElementById([...document.querySelectorAll("label")].find((label) => label.textContent === "Full name")?.htmlFor);
+          return Boolean(alert && fullName && alert.compareDocumentPosition(fullName) & Node.DOCUMENT_POSITION_FOLLOWING);
+        })()
+      JS
+      expect(alert_precedes_address).to be(true)
     end
   end
 end
