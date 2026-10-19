@@ -52,6 +52,7 @@ import {
   getStripePaymentElementAmount,
   getStripePaymentElementMountCurrency,
   getChargeTodayPrice,
+  getShippingCountryCodes,
   getTotalPrice,
   getUnshippableProducts,
   hasShipping,
@@ -82,7 +83,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { Checkbox } from "$app/components/ui/Checkbox";
-import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 import { LinkButton } from "$app/components/ui/LinkButton";
@@ -104,32 +105,25 @@ import { Product } from "./cartState";
 const CountryInput = () => {
   const [state, dispatch] = useState();
   const uid = React.useId();
-  const shippingCountryCodes = React.useMemo(
-    () =>
-      new Set<string>(
-        state.products.filter((product) => product.requireShipping).flatMap((product) => product.shippableCountryCodes),
-      ),
-    [state.products],
-  );
+  const errors = getErrors(state);
+  const shippingCountryCodes = React.useMemo(() => getShippingCountryCodes(state), [state.products]);
   const unshippableProducts = getUnshippableProducts(state);
-
-  React.useEffect(() => {
-    if (!shippingCountryCodes.has(state.country)) {
-      const result = shippingCountryCodes.values().next();
-      if (!result.done) dispatch({ type: "set-value", country: result.value });
-    }
-  }, [state.country, shippingCountryCodes]);
 
   // UnshippableProductsAlert explains this at the top of the shipping card.
   if (unshippableProducts.length > 0) return null;
 
+  const unshippableCountryName =
+    state.country === "" && state.unshippableCountry ? state.countries[state.unshippableCountry] : undefined;
+
   return (
-    <Fieldset>
+    <Fieldset state={errors.has("country") ? "danger" : undefined}>
       <FieldsetTitle>
         <Label htmlFor={`${uid}country`}>Country</Label>
       </FieldsetTitle>
       <Select
         id={`${uid}country`}
+        aria-invalid={errors.has("country")}
+        aria-describedby={unshippableCountryName ? `${uid}country-unshippable` : undefined}
         value={state.country}
         onChange={(e) =>
           dispatch({
@@ -140,6 +134,11 @@ const CountryInput = () => {
         }
         disabled={isProcessing(state)}
       >
+        {state.country === "" ? (
+          <option value="" disabled>
+            Choose a country
+          </option>
+        ) : null}
         {(shippingCountryCodes.size > 0 ? [...shippingCountryCodes] : Object.keys(state.countries)).map(
           (countryCode) => (
             <option key={state.countries[countryCode]} value={countryCode}>
@@ -148,6 +147,11 @@ const CountryInput = () => {
           ),
         )}
       </Select>
+      {unshippableCountryName ? (
+        <FieldsetDescription id={`${uid}country-unshippable`}>
+          This order can't be shipped to {unshippableCountryName}. Choose the country you're shipping to.
+        </FieldsetDescription>
+      ) : null}
     </Fieldset>
   );
 };

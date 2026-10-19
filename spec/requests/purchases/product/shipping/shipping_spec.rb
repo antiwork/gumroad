@@ -148,11 +148,16 @@ describe("Product Page - Shipping Scenarios", type: :system, js: true, shipping:
       product.shipping_destinations << build(:shipping_destination, country_code: "US", one_item_rate_cents: 500)
     end
 
-    it "allows purchase" do
+    it "asks the buyer to choose a country the product ships to, then allows purchase" do
       login_as buyer
       visit product.long_url
       add_to_cart(product)
-      check_out(product, logged_in_user: buyer)
+
+      expect(page).to have_select("Country", selected: "Choose a country")
+      expect(page).to have_text("This order can't be shipped to Canada. Choose the country you're shipping to.")
+      expect(page).to have_button("Pay", disabled: true)
+
+      check_out(product, logged_in_user: buyer, country: "United States")
 
       purchase = Purchase.last
       expect(purchase.country).to eq("United States")

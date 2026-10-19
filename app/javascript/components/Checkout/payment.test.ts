@@ -252,6 +252,59 @@ const state = (overrides: Partial<State> = {}): State => ({
   ...overrides,
 });
 
+describe("a shipping country the physical cart doesn't cover", () => {
+  const physical = (shippableCountryCodes: string[]) =>
+    product({ permalink: "lamp", name: "Lamp", requireShipping: true, nativeType: "physical", shippableCountryCodes });
+  const digitalWithAddress = product({
+    permalink: "zine",
+    name: "Zine",
+    requireShipping: true,
+    shippableCountryCodes: [],
+  });
+  const arrive = (products: Product[], country = "US") =>
+    reduceCheckoutState(state({ country, products: [] }), { type: "update-products", products });
+
+  it("leaves the country unchosen, remembering the one it can't ship to, until the buyer picks one", () => {
+    const checkout = arrive([physical(["CA", "DE"])]);
+
+    expect(checkout.country).toBe("");
+    expect(checkout.unshippableCountry).toBe("US");
+    expect(isSubmitDisabled(checkout)).toBe(true);
+    for (const type of ["offer", "validate"] as const) {
+      expect(reduceCheckoutState(checkout, { type }).status.type).toBe("input");
+    }
+    expect(reduceCheckoutState({ ...checkout, surcharges: state().surcharges }, { type: "validate" }).status).toEqual({
+      type: "input",
+      errors: new Set(["country"]),
+    });
+
+    const chosen = reduceCheckoutState(checkout, { type: "set-value", country: "CA" });
+    expect(chosen.country).toBe("CA");
+    expect(chosen.unshippableCountry).toBeNull();
+    expect(chosen.surcharges.type).toBe("pending");
+  });
+
+  it.each([
+    ["an eligible starting country", [physical(["US", "CA"])]],
+    ["a digital product that collects an address", [digitalWithAddress]],
+    ["a physical product that ships nowhere", [product({ ...physical([]), shipsNowhere: true })]],
+  ])("keeps the starting country for %s", (_, products) => {
+    expect(arrive(products).country).toBe("US");
+  });
+
+  it("brings back the buyer's own country once the cart can ship there, and never picks another", () => {
+    const unchosen = arrive([physical(["CA", "DE"])]);
+
+    expect(reduceCheckoutState(unchosen, { type: "update-products", products: [physical(["CA", "FR"])] }).country).toBe(
+      "",
+    );
+    expect(reduceCheckoutState(unchosen, { type: "update-products", products: [physical(["US"])] }).country).toBe("US");
+    expect(reduceCheckoutState(unchosen, { type: "update-products", products: [digitalWithAddress] }).country).toBe(
+      "US",
+    );
+  });
+});
+
 describe("a physical product that ships nowhere", () => {
   const unshippable = product({
     permalink: "poster",

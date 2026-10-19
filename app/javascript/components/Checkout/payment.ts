@@ -363,6 +363,9 @@ export type State = {
   // A currency the buyer chose that the server then came back without. The summary names it, so a
   // total that reverts to another currency says why instead of changing under the buyer.
   unavailableBuyerCurrency: string | null;
+  // The buyer's country, set aside because the physical items can't ship there. The country is
+  // left blank until the buyer picks one, and comes back only if the cart can ship there again.
+  unshippableCountry?: string | null;
   countries: Record<string, string>;
   usStates: string[];
   caProvinces: string[];
@@ -1138,6 +1141,36 @@ export function getCustomFieldKey(
 
 export const hasShipping = (state: State) => state.products.some((item) => item.requireShipping);
 
+// Empty when nothing in the cart restricts the country, which is also the case for digital
+// products that collect an address.
+export const getShippingCountryCodes = (state: State) =>
+  new Set(state.products.filter((item) => item.requireShipping).flatMap((item) => item.shippableCountryCodes));
+
+// Never substitutes another country: a quote or charge for a country the buyer didn't choose would
+// ship to the wrong place without saying so.
+function reconcileShippingCountry(state: State) {
+  const codes = getShippingCountryCodes(state);
+  let country: string;
+  if (state.country === "") {
+    const previous = state.unshippableCountry;
+    if (!previous || (codes.size > 0 && !codes.has(previous))) return;
+    country = previous;
+    state.unshippableCountry = null;
+  } else if (codes.size > 0 && !codes.has(state.country)) {
+    state.unshippableCountry = state.country;
+    country = "";
+  } else {
+    if (state.unshippableCountry) state.unshippableCountry = null;
+    return;
+  }
+  state.country = country;
+  // Same invalidation as a country edit in "set-value".
+  if (state.surcharges.type === "loading") state.surcharges.abort();
+  state.surcharges = { type: "pending" };
+  if (state.status.type !== "input" && state.status.type !== "finished" && state.paymentMethod === "card")
+    state.status = { type: "input", errors: new Set() };
+}
+
 // Not requireShipping plus an empty list: a digital product can require a shipping address and
 // sends an empty list too, meaning any country.
 export const getUnshippableProducts = (state: State) => state.products.filter((item) => item.shipsNowhere === true);
@@ -1287,6 +1320,7 @@ function validatePaymentMethodIndependentFields(state: State) {
   // Every submit path (Pay, PayPal, wallets, the offer pipeline) passes through here, so this is
   // what stops a charge from starting; the disabled button alone does not cover PayPal's own button.
   if (getUnshippableProducts(state).length > 0) errors.add("shippingUnavailable");
+  if (hasShipping(state) && !state.country) errors.add("country");
   return errors;
 }
 
@@ -1391,6 +1425,13 @@ function refreshExpiredLocalCurrencyToken(state: State) {
 
 // Exported so checkout state transitions can be unit-tested without rendering the checkout.
 export const reduceCheckoutState = produce((state: State, action: Action) => {
+  applyCheckoutAction(state, action);
+  // After every action, because products and country both change from several places
+  // (cart edits, wallet sheets, PayPal), not only from the Country field.
+  reconcileShippingCountry(state);
+});
+
+function applyCheckoutAction(state: State, action: Action) {
   if (
     state.status.type !== "finished" &&
     ["offer", "validate", "start-payment", "set-payment-method", "set-recaptcha-response"].includes(action.type) &&
@@ -1884,7 +1925,7 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
       state.surcharges = { type: "error" };
       break;
   }
-});
+}
 
 export function createReducer(initial: {
   countries: Record<string, string>;
@@ -1919,7 +1960,7 @@ export function createReducer(initial: {
         }
       }
     }
-    return {
+    const initialState: State = {
       fullName: "",
       ...initial,
       recaptchaScoreBased: initial.recaptchaScoreBased ?? false,
@@ -1967,6 +2008,8 @@ export function createReducer(initial: {
       acknowledgedEmails: loadAcknowledgedEmails(),
       requireEmailTypoAcknowledgment: initial.requireEmailTypoAcknowledgment,
     };
+    reconcileShippingCountry(initialState);
+    return initialState;
   });
   const [state, dispatch] = reducer;
   useRunOnce(() => {
@@ -1991,6 +2034,8 @@ export function createReducer(initial: {
   const updateSurcharges = useDebouncedCallback(
     asyncVoid(async () => {
       if (!state.products.length) return;
+      // A shipping quote needs the country the buyer still has to choose.
+      if (hasShipping(state) && !state.country) return;
       const requestId = ++surchargesRequestId.current;
       const abort = new AbortController();
       dispatch({

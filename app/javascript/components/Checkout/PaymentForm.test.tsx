@@ -1176,6 +1176,31 @@ describe("PaymentForm shipping country", () => {
     expect(payButton().hasAttribute("disabled")).toBe(false);
   });
 
+  it("asks the buyer to choose a country the physical product ships to, instead of picking one", () => {
+    const lamp = physical("Lamp", ["CA", "DE"]);
+    const initial = reduceCheckoutState(state({ countries, products: [] }), {
+      type: "update-products",
+      products: [lamp],
+    });
+    const harness: CheckoutHarness = { dispatch: vi.fn(), actions: [] };
+    render(<StatefulPaymentForm initial={initial} harness={harness} />);
+
+    const select = screen.getByLabelText<HTMLSelectElement>("Country");
+    expect(select.value).toBe("");
+    expect(within(select).getByRole<HTMLOptionElement>("option", { name: "Choose a country" }).disabled).toBe(true);
+    const explanation = screen.getByText(
+      "This order can't be shipped to United States. Choose the country you're shipping to.",
+    );
+    expect(select.getAttribute("aria-describedby")).toBe(explanation.id);
+    expect(payButton().hasAttribute("disabled")).toBe(true);
+
+    fireEvent.change(select, { target: { value: "CA" } });
+
+    expect(harness.actions).toContainEqual(expect.objectContaining({ type: "set-value", country: "CA" }));
+    expect(screen.getByLabelText<HTMLSelectElement>("Country").value).toBe("CA");
+    expect(screen.queryByText(/can't be shipped to United States/u)).toBeNull();
+  });
+
   it("keeps a digital cart's billing country choices", () => {
     renderPaymentForm(state({ countries, products: [product({ permalink: "ebook", name: "Ebook" })] }));
 
