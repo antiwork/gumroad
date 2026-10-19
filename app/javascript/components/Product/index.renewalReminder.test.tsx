@@ -139,7 +139,7 @@ describe("product page renewal reminder notice", () => {
     );
 
     expect(notice()).toBe(
-      "We'll email you a reminder 2 days before your free trial ends, and 30 days and 7 days before each renewal after that.",
+      "If this purchase starts your free trial, we'll email you a reminder 2 days before it ends. We'll also email you 30 days and 7 days before each renewal after your first payment.",
     );
   });
 

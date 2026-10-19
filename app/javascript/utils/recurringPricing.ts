@@ -78,7 +78,8 @@ export const formatRecurrenceWithDuration = (recurrenceId: RecurrenceId, product
 const formatDays = (days: number) => `${days} ${days === 1 ? "day" : "days"}`;
 
 // Lead times come from BasePrice::Recurrence via `recurrences.enabled[].renewal_reminder_days`. A free trial's
-// first charge gets only the trial-ending email (`free_trial_reminder_days`); renewal reminders start after it.
+// first charge gets only the trial-ending email (`free_trial_reminder_days`). The trial is conditional because a
+// line that restarts a lapsed membership is charged at once with no trial, and the cart can't tell before checkout.
 export const renewalReminderNotice = (
   recurrences: {
     enabled: { recurrence: RecurrenceId; renewal_reminder_days?: number[] }[];
@@ -94,5 +95,5 @@ export const renewalReminderNotice = (
 
   const trialDays = recurrences.free_trial_reminder_days;
   if (!trialDays) return null;
-  return `We'll email you a reminder ${formatDays(trialDays)} before your free trial ends, and ${leadTimes} before each renewal after that.`;
+  return `If this purchase starts your free trial, we'll email you a reminder ${formatDays(trialDays)} before it ends. We'll also email you ${leadTimes} before each renewal after your first payment.`;
 };

@@ -1513,10 +1513,25 @@ describe("Checkout renewal reminder notice", () => {
 
     expect(
       view.queryByText(
-        "We'll email you a reminder 2 days before your free trial ends, and 30 days and 7 days before each renewal after that.",
+        "If this purchase starts your free trial, we'll email you a reminder 2 days before it ends. We'll also email you 30 days and 7 days before each renewal after your first payment.",
       ),
     ).not.toBeNull();
     expect(view.queryByText(yearlyNotice)).toBeNull();
+  });
+
+  // The cart cannot tell before checkout whether a trial line restarts a lapsed membership, which is
+  // charged at once with no new trial, so the trial email is promised only for a purchase that starts one.
+  it("does not promise the trial-ending email unconditionally, since a restarted membership gets no trial", () => {
+    const view = renderCheckout(
+      buildState(),
+      membershipCart(
+        {},
+        { free_trial: { duration: { amount: 1, unit: "week" } }, recurrences: recurrences(reminderDays, 2) },
+      ),
+    );
+
+    expect(view.queryByText(/^We'll email you a reminder 2 days before your free trial ends/u)).toBeNull();
+    expect(view.queryByText(/^If this purchase starts your free trial, /u)).not.toBeNull();
   });
 
   it("shows nothing for a gift", () => {
