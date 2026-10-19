@@ -698,6 +698,8 @@ export const Product = ({
                     ) : null}
                     {discountCode.discount.expires_at ? (
                       <DiscountExpirationCountdown
+                        // The countdown reads its deadline on mount, and another selection can show another code.
+                        key={`${discountCode.code}:${discountCode.discount.expires_at}`}
                         expiresAt={new Date(discountCode.discount.expires_at)}
                         showEndDate={showSaleLabel}
                         onExpiration={() => setExpiredCodes((codes) => [...codes, discountCode.code])}

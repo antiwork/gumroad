@@ -449,6 +449,32 @@ describe("product page when the shown code expires", () => {
     expect(screen.getByText("Sorry, the discount code you wish to use is inactive.")).toBeTruthy();
     expect(selectorProps.at(-1)?.rowDiscount?.(selectionFor({ optionId: "pro", rent: true }))).toBeNull();
   });
+
+  it("counts down to the code now shown when the selection switches to another expiring code", async () => {
+    vi.useFakeTimers();
+    try {
+      const later = code("LATER30", 30, new Date(Date.now() + 60_000).toISOString());
+      const soon = code("SOON20", 20, new Date(Date.now() + 5_000).toISOString());
+      const page = (discountCode: ProductDiscount) => (
+        <Product
+          product={product()}
+          purchase={null}
+          discountCode={discountCode}
+          selectionDiscountCode={() => discountCode}
+          selection={selectionFor()}
+          disableAnalytics
+        />
+      );
+      const { rerender } = render(page(later));
+      rerender(page(soon));
+
+      await act(() => vi.advanceTimersByTimeAsync(6_000));
+
+      expect(screen.getByText("Sorry, the discount code you wish to use is inactive.")).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe("product page discount copy for the picked option", () => {
