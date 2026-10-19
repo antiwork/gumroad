@@ -411,6 +411,18 @@ export const Product = ({
     const rowCode = selectionDiscountCode(rowSelection.optionId, rowSelection.rent);
     return rowCode?.valid && !isExpired(rowCode) ? withConfiguredOncePerCartAmount(rowCode.discount) : null;
   };
+  // When another visible option gets a different code, the code's copy names the picked option it covers.
+  const discountScope =
+    selectedOption &&
+    selectionDiscountCode &&
+    product.options.some(
+      (option) =>
+        option.id !== selectedOption.id &&
+        !(product.hide_sold_out_variants && option.quantity_left === 0) &&
+        !sameCode(selectionDiscountCode(option.id, selection.rent), discountCode ?? null),
+    )
+      ? ` ${selectedOption.name}`
+      : "";
   // With no option picked, each visible option shows its own price, so any discounted one earns the label.
   const showSaleLabel =
     !!saleLabel &&
@@ -445,13 +457,17 @@ export const Product = ({
         className={classNames(
           "flex items-center gap-2 border-b border-border bg-accent-with-text px-6 py-3 font-bold text-accent-foreground",
           product.covers.length === 0 && "lg:rounded-tr-[calc(var(--radius)_-_var(--border-width))]",
+          // A long option name moves to its own line instead of squeezing the label mid-word.
+          discountScope && "flex-wrap",
         )}
       >
         <DiscountIcon pack="filled" className="size-5 shrink-0" aria-hidden="true" />
         <span className="min-w-0 wrap-break-word" data-testid="sale-label">
           {saleLabel}
         </span>
-        <span className="ml-auto shrink-0">{formatDiscountAmount(discount, buyerLocalContextFor(product))} off</span>
+        <span className={classNames("ml-auto", discountScope ? "min-w-0 text-right wrap-break-word" : "shrink-0")}>
+          {formatDiscountAmount(discount, buyerLocalContextFor(product))} off{discountScope}
+        </span>
       </div>
     ) : null;
   const priceTag = showPrice ? (
@@ -654,9 +670,9 @@ export const Product = ({
                         <div>Applies when you buy {discountCode.discount.minimum_quantity} or more.</div>
                       ) : null
                     ) : discountCode.discount.minimum_quantity ? (
-                      `Get ${formatDiscountAmount(discountCode.discount, buyerLocalContextFor(product))} off when you buy ${discountCode.discount.minimum_quantity} or more (Code ${discountCode.code.toUpperCase()})`
+                      `Get ${formatDiscountAmount(discountCode.discount, buyerLocalContextFor(product))} off${discountScope} when you buy ${discountCode.discount.minimum_quantity} or more (Code ${discountCode.code.toUpperCase()})`
                     ) : (
-                      `${formatDiscountAmount(discountCode.discount, buyerLocalContextFor(product))} off will be applied at checkout (Code ${discountCode.code.toUpperCase()})`
+                      `${formatDiscountAmount(discountCode.discount, buyerLocalContextFor(product))} off${discountScope} will be applied at checkout (Code ${discountCode.code.toUpperCase()})`
                     )}
                     {discountCode.discount.duration_in_billing_cycles && product.is_recurring_billing ? (
                       <div>This discount will only apply to the first payment of your subscription.</div>

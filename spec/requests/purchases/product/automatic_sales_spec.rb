@@ -306,7 +306,10 @@ describe "Automatic sales on product pages", type: :system, js: true do
       end
       expect(page).to have_selector("[role='radio']", text: "$10 $5 a month First Tier", normalize_ws: true)
       expect(page).to have_selector("[role='radio']", text: "$100 $80 a month Second Tier", normalize_ws: true)
+      choose "First Tier"
+      expect(page).to have_selector("[data-testid='sale-banner']", text: "$5 off First Tier")
       choose "Second Tier"
+      expect(page).to have_selector("[role='status']", text: "20% off Second Tier will be applied at checkout (Code RENEW20)")
       within(find(:article)) do
         expect(Rack::Utils.parse_query(URI.parse(find(:link, "Add to cart")[:href]).query)["code"]).to eq("RENEW20")
       end

@@ -450,3 +450,82 @@ describe("product page when the shown code expires", () => {
     expect(selectorProps.at(-1)?.rowDiscount?.(selectionFor({ optionId: "pro", rent: true }))).toBeNull();
   });
 });
+
+describe("product page discount copy for the picked option", () => {
+  const shop5: ProductDiscount = {
+    valid: true,
+    code: "SHOP5",
+    discount: { ...percentOff(0), type: "fixed", cents: 500 },
+  };
+  const renew20 = code("RENEW20", 20);
+  const codes: Record<string, ProductDiscount> = { basic: shop5, pro: renew20 };
+  const page = (optionId: string | null, overrides: Partial<React.ComponentProps<typeof Product>> = {}) => (
+    <Product
+      product={product({ options: [tier("First Tier", 1_000), tier("Second Tier", 10_000)] })}
+      purchase={null}
+      discountCode={optionId ? (codes[optionId === "First Tier" ? "basic" : "pro"] ?? null) : null}
+      selectionDiscountCode={(id) => codes[id === "First Tier" ? "basic" : "pro"] ?? null}
+      selection={selectionFor({ optionId })}
+      disableAnalytics
+      {...overrides}
+    />
+  );
+  const checkoutCode = () =>
+    new URL(screen.getByText("Subscribe").closest("a")?.getAttribute("href") ?? "").searchParams.get("code");
+  const rowCode = (optionId: string) => selectorProps.at(-1)?.rowDiscount?.(selectionFor({ optionId }));
+
+  it("names the picked tier in the loyalty code's terms when another tier gets a different code", () => {
+    render(page("Second Tier"));
+
+    expect(screen.getByRole("status").textContent).toBe(
+      "20% off Second Tier will be applied at checkout (Code RENEW20)",
+    );
+    expect(checkoutCode()).toBe("RENEW20");
+    expect(rowCode("First Tier")).toMatchObject({ type: "fixed", cents: 500 });
+    expect(rowCode("Second Tier")).toMatchObject({ type: "percent", percents: 20 });
+  });
+
+  it("names the picked tier in the sale banner, keeps the seller's label, and follows reselection", () => {
+    const { rerender } = render(page("First Tier", { saleLabel: "Spring sale" }));
+
+    expect(screen.getByTestId("sale-label").textContent).toBe("Spring sale");
+    expect(screen.getByTestId("sale-banner").textContent).toBe("Spring sale$5 off First Tier");
+    expect(checkoutCode()).toBe("SHOP5");
+
+    rerender(page("Second Tier", { saleLabel: null }));
+    expect(screen.queryByTestId("sale-banner")).toBeNull();
+    expect(screen.getByRole("status").textContent).toBe(
+      "20% off Second Tier will be applied at checkout (Code RENEW20)",
+    );
+    expect(checkoutCode()).toBe("RENEW20");
+  });
+
+  it("keeps the product-wide terms when every tier gets the same code", () => {
+    const half = code("HALF", 50);
+    render(page("Second Tier", { selectionDiscountCode: () => half, discountCode: half }));
+
+    expect(screen.getByRole("status").textContent).toBe("50% off will be applied at checkout (Code HALF)");
+    expect(checkoutCode()).toBe("HALF");
+  });
+
+  it("names no option on a product without options", () => {
+    render(
+      <Product
+        product={product({
+          options: [],
+          is_tiered_membership: false,
+          is_recurring_billing: false,
+          recurrences: null,
+          price_cents: 1_000,
+        })}
+        purchase={null}
+        discountCode={renew20}
+        selectionDiscountCode={() => renew20}
+        selection={selectionFor({ optionId: null, recurrence: null })}
+        disableAnalytics
+      />,
+    );
+
+    expect(screen.getByRole("status").textContent).toBe("20% off will be applied at checkout (Code RENEW20)");
+  });
+});
