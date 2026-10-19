@@ -14,7 +14,15 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
   # Source labels describe how a row was added; none includes or excludes a cohort by its name alone.
   NO_SOURCE = "(none)"
   # Reviewed decisions to carry a source cohort over (label => decision reference). apply! refuses while empty.
-  VERIFIED_SOURCES = {}.freeze
+  VERIFIED_SOURCES = {
+    "embed_form" => "gumroad-private#3664: exclude signup-added follows (2026-10-19)",
+    NO_SOURCE => "gumroad-private#3664: exclude signup-added follows (2026-10-19)",
+    "manual-by-sahil" => "gumroad-private#3664: exclude signup-added follows (2026-10-19)",
+    "csv_import" => "gumroad-private#3664: exclude signup-added follows (2026-10-19)",
+    "profile_page" => "gumroad-private#3664: exclude signup-added follows (2026-10-19)",
+    "follow_page" => "gumroad-private#3664: exclude signup-added follows (2026-10-19)",
+    "product_page" => "gumroad-private#3664: exclude signup-added follows (2026-10-19)"
+  }.freeze
   BASELINE_OUTCOMES = %i[eligible unverified_source existing_preference].freeze
   # Outcomes where retiring the old newsletter takes no mail anyone still wants.
   RESOLVED_OUTCOMES = %i[follower_inactive existing_preference buyer_opted_out].freeze

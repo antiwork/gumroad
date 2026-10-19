@@ -20,7 +20,7 @@ describe Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements do
 
   def apply! = described_class.apply!(confirmed_eligible_count: cutover.eligible_count)
 
-  # Synthetic stand-in for reviewed provenance; production starts with none verified.
+  # Synthetic provenance keeps these cases independent of the reviewed production policy.
   def verify_sources(sources) = stub_const("#{described_class}::VERIFIED_SOURCES", sources.index_with { "synthetic test evidence" }.freeze)
 
   # Each person outside the carried-over cohort leaves the old newsletter themselves.
@@ -549,5 +549,37 @@ describe Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements do
     Follower.find_by(followed_id: newsletter.id, email: "embed@example.com").mark_deleted!
 
     expect(preference(embed)).to be_empty
+  end
+end
+
+describe Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements, "reviewed source policy" do
+  it "copies the approved newsletter sources and excludes signup and unknown sources" do
+    newsletter = create(:user, username: "gumroad")
+    newsletter.update_columns(external_id: described_class::NEWSLETTER_SELLER_EXTERNAL_ID)
+    sources = ["embed_form", nil, "manual-by-sahil", "csv_import", "profile_page", "follow_page", "product_page"]
+    approved = sources.map.with_index do |source, index|
+      account = create(:user, email: "approved-#{index}@example.com")
+      create(:follower, user: newsletter, email: account.email, follower_user_id: account.id,
+                        source:, confirmed_at: 2.hours.ago, created_at: 2.hours.ago)
+      account
+    end
+    excluded = ["welcome-greeter", "unknown-source"].map.with_index do |source, index|
+      account = create(:user, email: "excluded-#{index}@example.com")
+      create(:follower, user: newsletter, email: account.email, follower_user_id: account.id,
+                        source:, confirmed_at: 2.hours.ago, created_at: 2.hours.ago)
+      account
+    end
+    cutoff_at = 1.hour.ago
+
+    report = described_class.preflight(cutoff_at:)
+    expect(report[:counts]).to eq(eligible: approved.size, unverified_source: excluded.size)
+    plan = described_class.prepare!(cutoff_at:)
+    described_class.apply!(confirmed_eligible_count: approved.size)
+
+    expect(FeatureAnnouncementSubscription.where(source: "newsletter_migration", subscribed: true).pluck(:user_id))
+      .to match_array(approved.map(&:id))
+    expect(FeatureAnnouncementSubscription.where(user_id: excluded.map(&:id))).to be_empty
+    expect(plan.reload.attributes.slice("state", "eligible_count", "migrated_count"))
+      .to eq("state" => "migrated", "eligible_count" => approved.size, "migrated_count" => approved.size)
   end
 end
