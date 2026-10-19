@@ -149,6 +149,11 @@ class FollowersController < ApplicationController
 
     # Redirect to the followed user's profile
     redirect_to @follower.user.profile_url, notice: "Thanks for the follow!", allow_other_host: true
+  rescue ActiveRecord::RecordInvalid
+    # The newsletter can retire while this confirmation waits on its cutover row.
+    raise unless @follower.errors.added?(:base, Follower::RETIRED_NEWSLETTER_MESSAGE)
+
+    redirect_to @follower.user.profile_url, alert: Follower::RETIRED_NEWSLETTER_MESSAGE, allow_other_host: true
   end
 
   def destroy

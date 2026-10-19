@@ -161,6 +161,29 @@ describe("Email List", :js, :sidekiq_inline, :elasticsearch_wait_for_refresh, ty
         end
       end
 
+      it "says a newsletter email stopped at retirement, how many people got it, and offers no resend" do
+        installment1.update!(customer_count: 120)
+        create(:blast, post: installment1, requested_at: 2.days.ago, started_at: 2.days.ago, first_email_delivered_at: 2.days.ago,
+                       last_email_delivered_at: 2.days.ago, completed_at: nil, delivery_count: 120,
+                       expired_at: 1.day.ago, expiry_reason: PostEmailBlast::EXPIRY_NEWSLETTER_RETIRED)
+
+        visit "#{emails_path}/published"
+
+        within_table "Published" do
+          expect(page).to have_table_row({ "Subject" => "Email 1 (sent)", "Emailed" => "120", "Status" => "Stopped" })
+          find(:table_row, { "Subject" => "Email 1 (sent)" }).click
+        end
+
+        within_modal "Email 1 (sent)" do
+          expect(page).to have_text("Status Stopped", normalize_ws: true)
+          expect(page).to have_text("This newsletter was retired, so we stopped sending this email. 120 people got it.")
+          expect(page).not_to have_text("Not sent")
+          expect(page).not_to have_text("reached anyone")
+          expect(page).not_to have_button("Send now")
+          expect(page).not_to have_button("Send to the rest")
+        end
+      end
+
       it "does not blame the daily limit when the send was lost before any email went out" do
         create(:blast, post: installment1, requested_at: 20.days.ago, started_at: nil, completed_at: nil, first_email_delivered_at: nil, delivery_count: 0, expired_at: 1.hour.ago, expiry_reason: PostEmailBlast::EXPIRY_ABANDONED)
 

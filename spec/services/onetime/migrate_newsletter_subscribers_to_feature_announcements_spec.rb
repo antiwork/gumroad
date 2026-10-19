@@ -295,6 +295,16 @@ describe Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements do
       expect(cutover.state).to eq("rolled_back")
     end
 
+    it "refuses to run inside an outer transaction, whose snapshot and commits it can't control" do
+      leave_unresolved_followers!
+
+      ApplicationRecord.transaction do
+        expect { described_class.retire! }.to raise_error(described_class::AmbientTransaction)
+        expect { described_class.prepare!(cutoff_at: Time.current) }.to raise_error(described_class::AmbientTransaction)
+      end
+      expect(cutover.state).to eq("migrated")
+    end
+
     it "carries over follows made after the first cutoff by replacing the migrated plan" do
       described_class.prepare!(cutoff_at: Time.current)
       apply!

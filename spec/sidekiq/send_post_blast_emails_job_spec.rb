@@ -111,7 +111,7 @@ describe SendPostBlastEmailsJob, :freeze_time do
 
         expect_sent_count 0
         expect(blast.reload.attributes.slice("expiry_reason", "started_at")).to eq("expiry_reason" => "newsletter_retired", "started_at" => nil)
-        expect(blast.delivery_status).to eq("expired")
+        expect(blast.delivery_status).to eq("stopped")
       end
 
       it "stops an inline send at the next provider handoff once the newsletter retires mid-send" do
@@ -121,13 +121,21 @@ describe SendPostBlastEmailsJob, :freeze_time do
         allow(job).to receive(:recipients_slice_size).and_return(1)
         allow(job).to receive(:send_provider_slice).and_wrap_original do |method, **args|
           method.call(**args)
+          blast.update_columns(first_email_delivered_at: Time.current, delivery_count: 1) # the provider's delivery event
           FeatureAnnouncementNewsletterCutover.update_all(state: "retired")
         end
+        Feature.activate(:auto_resume_stalled_post_blasts)
 
         job.perform(blast.id)
 
         expect_sent_count 1
-        expect(blast.reload.completed_at).to be_nil
+        expect(blast.reload.attributes.slice("expiry_reason", "completed_at", "delivery_count"))
+          .to eq("expiry_reason" => "newsletter_retired", "completed_at" => nil, "delivery_count" => 1)
+        expect(blast.delivery_status).to eq("stopped")
+        expect(blast.remaining_recipient_count).to be_nil
+        expect(AlertOnStalledPostEmailBlastsJob.auto_resume_eligible?(blast)).to be(false)
+      ensure
+        Feature.deactivate(:auto_resume_stalled_post_blasts)
       end
 
       it "still sends product posts to customers" do

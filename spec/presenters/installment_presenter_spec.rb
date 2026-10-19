@@ -284,6 +284,19 @@ describe InstallmentPresenter do
         )
       end
 
+      it "is stopped with the delivered count, and promises no retry, once a retired newsletter ended the send" do
+        create(:blast, post: installment, requested_at: 2.days.ago, started_at: 2.days.ago, first_email_delivered_at: 2.days.ago,
+                       last_email_delivered_at: 2.days.ago, completed_at: nil, delivery_count: 6_798,
+                       expired_at: 1.day.ago, expiry_reason: PostEmailBlast::EXPIRY_NEWSLETTER_RETIRED)
+        Feature.activate(:auto_resume_stalled_post_blasts)
+
+        expect(described_class.new(seller:, installment:).props[:delivery]).to eq(
+          { status: "stopped", delivered_count: 6_798, remaining_count: nil, scheduled_for: nil, retrying: false }
+        )
+      ensure
+        Feature.deactivate(:auto_resume_stalled_post_blasts)
+      end
+
       it "promises a retry only while the monitor will resume the blast" do
         blast = create(:blast, post: installment, requested_at: 2.days.ago, started_at: 2.days.ago, first_email_delivered_at: 2.days.ago,
                                last_email_delivered_at: 2.days.ago, completed_at: nil, delivery_count: 6_798)

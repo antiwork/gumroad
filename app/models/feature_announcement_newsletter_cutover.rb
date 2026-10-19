@@ -21,4 +21,13 @@ class FeatureAnnouncementNewsletterCutover < ApplicationRecord
   def self.retired_for?(seller_id)
     ApplicationRecord.connected_to(role: :writing) { uncached { where(seller_id:, state: "retired").exists? } }
   end
+
+  # For a save that would make a follow active. The share lock waits out a retire! holding the row
+  # FOR UPDATE and reads its committed state, and holds retire! back until this save commits.
+  # Sellers without a cutover row take no lock, so other creators' follows never queue here.
+  def self.retired_for_follow?(seller_id)
+    ApplicationRecord.connected_to(role: :writing) do
+      uncached { where(seller_id:).exists? && where(seller_id:).lock("FOR SHARE").pick(:state) == "retired" }
+    end
+  end
 end

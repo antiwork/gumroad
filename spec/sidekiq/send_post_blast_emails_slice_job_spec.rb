@@ -673,20 +673,29 @@ describe SendPostBlastEmailsSliceJob, :freeze_time do
       expect($redis.sismember(RedisKey.blast_done_slices(blast.id, partition_key), 0)).to be(false)
     end
 
-    it "stops a running chunk at the next provider handoff" do
+    it "ends a running chunk at the next provider handoff, keeping what was delivered and clearing what it owed" do
       blast = create(:blast, :just_requested, post: post_with_audience)
       activate_partition(blast)
+      $redis.set(RedisKey.blast_pending_recipients(blast.id), 3)
       job = described_class.new
       allow(job).to receive(:recipients_slice_size).and_return(1)
       allow(job).to receive(:send_provider_slice).and_wrap_original do |method, **args|
         method.call(**args)
-        retire_newsletter unless FeatureAnnouncementNewsletterCutover.exists?
+        next if FeatureAnnouncementNewsletterCutover.exists?
+
+        blast.update_columns(first_email_delivered_at: Time.current, delivery_count: 1) # the provider's delivery event
+        retire_newsletter
       end
 
       job.perform(blast.id, partition_key, 0, 1, audience_ids)
 
       expect_sent_count 1
-      expect(blast.reload.completed_at).to be_nil
+      expect(blast.reload.attributes.slice("expiry_reason", "completed_at", "delivery_count"))
+        .to eq("expiry_reason" => "newsletter_retired", "completed_at" => nil, "delivery_count" => 1)
+      expect(blast.expired_at).to be_present
+      expect(blast.first_email_delivered_at).to be_present
+      expect(blast.delivery_status).to eq("stopped")
+      expect($redis.exists?(RedisKey.blast_pending_recipients(blast.id), RedisKey.blast_active_slice_partition(blast.id))).to be(false)
       expect($redis.sismember(RedisKey.blast_done_slices(blast.id, partition_key), 0)).to be(false)
     end
 

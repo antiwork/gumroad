@@ -146,7 +146,7 @@ class Follower < ApplicationRecord
     end
 
     def newsletter_not_retired
-      errors.add(:base, RETIRED_NEWSLETTER_MESSAGE) if newsletter_retired?
+      errors.add(:base, RETIRED_NEWSLETTER_MESSAGE) if FeatureAnnouncementNewsletterCutover.retired_for_follow?(followed_id)
     end
 
     def left_newsletter?

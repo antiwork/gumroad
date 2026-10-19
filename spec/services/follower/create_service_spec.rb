@@ -7,6 +7,17 @@ describe Follower::CreateService do
   let(:active_follower) { create(:active_follower, user:) }
   let(:deleted_follower) { create(:deleted_follower, user:) }
 
+  it "returns the retired-newsletter error, not an exception, when retirement commits after its first check" do
+    deleted_follower
+    FeatureAnnouncementNewsletterCutover.create!(seller: user, state: "retired", cutoff_at: 1.day.ago, retired_at: Time.current)
+    allow(FeatureAnnouncementNewsletterCutover).to receive(:retired_for?).and_return(false) # read just before the commit
+
+    result = described_class.perform(followed_user: user, follower_email: deleted_follower.email)
+
+    expect(result.errors.full_messages).to eq([Follower::RETIRED_NEWSLETTER_MESSAGE])
+    expect(deleted_follower.reload.deleted_at).to be_present
+  end
+
   it "keeps dependent confirmation reads on primary" do
     service = described_class.new(followed_user: user, follower_email: follower.email)
     expect(service).to receive(:confirm_follower) do

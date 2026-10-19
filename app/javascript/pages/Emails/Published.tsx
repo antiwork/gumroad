@@ -76,6 +76,7 @@ export default function EmailsPublished() {
       incomplete: "Incomplete",
       expired: "Not sent",
       abandoned: "Not sent",
+      stopped: "Stopped",
     }[installment.delivery.status];
   };
   // On mobile every row is a card, so a finished send keeps the lines it has today and only an
@@ -115,6 +116,8 @@ export default function EmailsPublished() {
         return "This email never got a turn under your daily limit for large emails, so we stopped trying before it went out late.";
       case "abandoned":
         return "A problem on our side stopped this email before it reached anyone.";
+      case "stopped":
+        return `This newsletter was retired, so we stopped sending this email. ${people(delivery.delivered_count)} got it.`;
       case "incomplete": {
         // Emailed shows the post's total, which can differ from this send's own count after a
         // resend; repeat the count only when it adds something.

@@ -70,14 +70,17 @@ module PostBlastSending
   end
 
   # Checked before every provider call, so chunks queued or mid-send when the newsletter retires stop at
-  # the next handoff. A slice already accepted by the provider is not recalled, and a blast that already
-  # delivered can't be expired, so it stays incomplete. Callers must not record a stopped send as done.
+  # the next handoff; a slice the provider already accepted is not recalled. The stop is terminal even
+  # after delivery began, and the blast's Redis state goes with it, so the stalled-blast monitor and the
+  # seller's page don't treat it as owed. Callers must not record a stopped send as done.
   def stop_for_retired_newsletter?
     return false unless @post.audience_type? || @post.follower_type?
     return false unless FeatureAnnouncementNewsletterCutover.retired_for?(@post.seller_id)
 
     Rails.logger.warn("[#{self.class.name}] blast_id=#{@blast.id} stopped: newsletter retired for seller #{@post.seller_id}")
-    PostEmailBlast.expire(@blast.id, reason: PostEmailBlast::EXPIRY_NEWSLETTER_RETIRED)
+    PostEmailBlast.stop_for_retired_newsletter(@blast.id)
+    clear_blast_state
+    SellerLargeBlastQuota.release(seller_id: @post.seller_id, blast_id: @blast.id, kind: "post_blast")
     @stopped_for_retired_newsletter = true
   end
 

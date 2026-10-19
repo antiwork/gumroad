@@ -27,6 +27,7 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
   class PlanMismatch < StandardError; end
   class AlreadyRunning < StandardError; end
   class CoverageIncomplete < StandardError; end
+  class AmbientTransaction < StandardError; end
 
   def self.preflight(cutoff_at:, batch_size: BATCH_SIZE) = new(batch_size:).preflight(cutoff_at)
   def self.prepare!(cutoff_at:, batch_size: BATCH_SIZE) = new(batch_size:).prepare!(cutoff_at)
@@ -110,7 +111,7 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
         scan_started_at = Time.current.change(usec: 0)
         counts = outcome_counts(seller, cutover.cutoff_at, Follower.all)
         coverage = nil
-        transition!(from: %w[migrated], to: "retired", retired_at: Time.current) do |locked|
+        transition!(seller, from: %w[migrated], to: "retired", retired_at: Time.current) do |locked|
           # followers.updated_at has whole seconds; rows changed while the scan ran are classified again.
           coverage = retirement_coverage(counts, outcome_counts(seller, cutover.cutoff_at, Follower.where("updated_at >= ?", scan_started_at)))
           locked.retirement_coverage = coverage
@@ -151,9 +152,11 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
       seller
     end
 
-    def transition!(from:, to:, **attributes)
+    # The FOR UPDATE must be the transaction's first read: under REPEATABLE READ the first plain read
+    # fixes the snapshot, and the block's recheck has to see follows confirmed while it waited.
+    def transition!(seller, from:, to:, **attributes)
       FeatureAnnouncementNewsletterCutover.transaction do
-        cutover = FeatureAnnouncementNewsletterCutover.lock.find_by!(seller_id: verified_seller!.id)
+        cutover = FeatureAnnouncementNewsletterCutover.lock.find_by!(seller_id: seller.id)
         raise InvalidTransition, "Cutover is #{cutover.state}, not #{from.join(" or ")}" unless from.include?(cutover.state)
 
         yield cutover if block_given?
@@ -194,7 +197,10 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
       counts.sort.to_h
     end
 
+    # An outer transaction would hold its old snapshot and swallow the per-row commits, so refuse one.
     def with_run_lock(seller)
+      raise AmbientTransaction, "Run the newsletter cutover outside a transaction" if ApplicationRecord.connection.current_transaction.joinable?
+
       name = "feature_announcement_newsletter_cutover_#{seller.id}"
       connection = ApplicationRecord.connection
       acquired = connection.select_value(ApplicationRecord.sanitize_sql_array(["SELECT GET_LOCK(?, ?)", name, RUN_LOCK_TIMEOUT_SECONDS])).to_i == 1

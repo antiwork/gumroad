@@ -13,7 +13,8 @@ class PostEmailBlast < ApplicationRecord
   # delivery_count:
   #   Number of emails that were delivered. Not final until the blast is complete.
   # expired_at:
-  #   Time we gave up on a blast that never sent anything (slot never freed, or send job lost).
+  #   Time we gave up on a blast that never sent anything (slot never freed, or send job lost), or
+  #   stopped one whose newsletter retired, which may already have delivered.
   # expiry_reason:
   #   Why it expired. Nil reads as quota, for rows from before reasons were recorded.
 
@@ -69,6 +70,13 @@ class PostEmailBlast < ApplicationRecord
     expirable.where(id: ids).update_all(expired_at: now, expiry_reason: reason, updated_at: now)
   end
 
+  # Ends a blast whose newsletter retired mid-send. Unlike `expire`, it applies after delivery
+  # started; the delivery columns keep what was already sent.
+  def self.stop_for_retired_newsletter(id)
+    now = Time.current
+    where(id:, completed_at: nil, expired_at: nil).update_all(expired_at: now, expiry_reason: EXPIRY_NEWSLETTER_RETIRED, updated_at: now)
+  end
+
   def to_non_openers?
     recipient_filter == RECIPIENT_FILTER_UNOPENED
   end
@@ -77,6 +85,8 @@ class PostEmailBlast < ApplicationRecord
   # reached the ESP and only the completion stamp is missing (SendPostBlastEmailsJob.fully_delivered?).
   def delivery_status
     return "sent" if completed_at.present?
+    # Ahead of the pending count: a chunk mid-call when the newsletter retired can still settle into it.
+    return "stopped" if expired_at.present? && expiry_reason == EXPIRY_NEWSLETTER_RETIRED
     return "sent" if remaining_recipient_count&.<=(0)
     return (expiry_reason == EXPIRY_ABANDONED ? "abandoned" : "expired") if expired_at.present?
     return "waiting" if quota_deferred_until&.future?

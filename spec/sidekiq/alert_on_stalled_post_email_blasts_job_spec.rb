@@ -672,4 +672,31 @@ describe AlertOnStalledPostEmailBlastsJob do
       end
     end
   end
+
+  describe "a blast stopped because its newsletter retired" do
+    it "is neither resumed nor reported after it already delivered" do
+      seller = create(:user)
+      audience_post = create(:audience_post, :published, seller:)
+      create(:active_follower, user: seller)
+      blast = stalled_blast(post: audience_post, delivery_count: 1)
+      $redis.set(RedisKey.blast_pending_recipients(blast.id), 12)
+      $redis.set(RedisKey.blast_active_slice_partition(blast.id), "partition")
+      FeatureAnnouncementNewsletterCutover.create!(seller:, state: "retired", cutoff_at: 1.day.ago, retired_at: Time.current)
+      stub_sidekiq
+
+      SendPostBlastEmailsSliceJob.new.perform(blast.id, "partition", 0, 1, AudienceMember.where(seller_id: seller.id).ids)
+
+      expect(blast.reload.delivery_status).to eq("stopped")
+      [true, false].each do |live|
+        live ? Feature.activate(:auto_resume_stalled_post_blasts) : Feature.deactivate(:auto_resume_stalled_post_blasts)
+        expect(described_class.auto_resume_eligible?(blast)).to be(false)
+        described_class.new.perform
+      end
+      expect(SendPostBlastEmailsJob).not_to have_received(:perform_async)
+      expect(InternalNotificationWorker).not_to have_received(:perform_async)
+    ensure
+      Feature.deactivate(:auto_resume_stalled_post_blasts)
+      $redis.del(RedisKey.blast_pending_recipients(blast.id), RedisKey.blast_active_slice_partition(blast.id)) if blast
+    end
+  end
 end

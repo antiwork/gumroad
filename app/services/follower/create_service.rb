@@ -47,6 +47,11 @@ class Follower::CreateService
     ApplicationRecord.connected_to(role: :writing) { confirm_follower }
 
     @follower
+  rescue ActiveRecord::RecordInvalid => e
+    # The check above can predate a retirement that commits before this follow is revived or confirmed.
+    raise unless e.record.is_a?(Follower) && e.record.errors.added?(:base, RETIRED_NEWSLETTER_MESSAGE)
+
+    e.record
   end
 
   private
