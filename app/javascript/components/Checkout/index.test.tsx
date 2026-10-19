@@ -1418,12 +1418,16 @@ describe("Checkout layout while content loads", () => {
 
 describe("Checkout summary when an item ships nowhere", () => {
   it("asks for the unshippable item to be removed while the country is still set", () => {
-    const cart: CartState = { items: [cartItem(), cartItem()], discountCodes: [] };
+    const cart: CartState = {
+      items: [cartItem(), cartItem({ product: cartProduct({ id: "lantern", permalink: "lantern", name: "Lantern" }) })],
+      discountCodes: [],
+    };
     const view = renderCheckout(
       buildState({
         products: [
           stateProduct({ requireShipping: true, nativeType: "physical", shippableCountryCodes: ["US"] }),
           stateProduct({
+            permalink: "lantern",
             requireShipping: true,
             nativeType: "physical",
             shipsNowhere: true,

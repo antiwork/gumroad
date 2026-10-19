@@ -207,6 +207,9 @@ describe("Product Page - Shipping Scenarios", type: :system, js: true, shipping:
       expect(page).to have_text("#{product.name} can't be shipped to any country right now.")
       expect(page).not_to have_select("Country")
       expect(page).to have_button("Pay", disabled: true)
+      expect(page).to have_text("Remove the item that can't be shipped to see your total.")
+      expect(page).not_to have_selector("[aria-busy='true']")
+      expect(page).not_to have_selector("h4", exact_text: "Total")
 
       alert_precedes_address = page.evaluate_script(<<~JS)
         (() => {
