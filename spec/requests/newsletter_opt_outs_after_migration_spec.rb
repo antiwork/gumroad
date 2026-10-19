@@ -11,6 +11,8 @@ describe "Old Gumroad newsletter opt-outs after the Feature announcements migrat
                       confirmed_at: 2.hours.ago, created_at: 2.hours.ago)
   end
   let(:other_seller) { create(:user) }
+  # Older than the mapped reader, so a lookup by address finds it first once it moves there.
+  let!(:older_account) { create(:user) }
   # Followed with the address only; the migration maps it to the one confirmed account there.
   let!(:mapped_reader) { create(:user, email: "mapped-reader@example.com") }
   let!(:mapped_follow) do
@@ -44,6 +46,36 @@ describe "Old Gumroad newsletter opt-outs after the Feature announcements migrat
                                                        "identifier" => "[999999999, #{post.id}]", "installment_id" => post.id }])
 
       expect(mapped_preference).to eq([[false, "newsletter_opt_out"]])
+    end
+
+    describe "after the old address is submitted to the follow form again" do
+      before { newsletter.update_columns(user_risk_state: "compliant") } # a reviewed seller takes follows without a CAPTCHA
+
+      def refollow(email) = post(follow_user_path, params: { email:, seller_id: newsletter.external_id })
+
+      it "keeps the account link after the account's email changed, so the old cancel link still opts it out" do
+        old_address = mapped_reader.email
+        mapped_reader.update_columns(email: "mapped-reader-moved@example.com")
+
+        refollow(old_address)
+        expect(mapped_follow.reload.follower_user_id).to eq(mapped_reader.id)
+        get cancel_follow_path(mapped_follow.external_id)
+
+        expect(mapped_preference).to eq([[false, "newsletter_opt_out"]])
+      end
+
+      it "keeps the account link when an older unconfirmed account now holds the address, so a spam report opts out the right one" do
+        older_account.update_columns(email: mapped_reader.email, confirmed_at: nil)
+        newsletter_post = create(:audience_post, :published, seller: newsletter)
+
+        refollow(mapped_reader.email)
+        expect(mapped_follow.reload.follower_user_id).to eq(mapped_reader.id)
+        HandleSendgridEventJob.new.perform("_json" => [{ "event" => "spamreport", "type" => "spamreport", "email" => mapped_reader.email,
+                                                         "identifier" => "[999999999, #{newsletter_post.id}]", "installment_id" => newsletter_post.id }])
+
+        expect(mapped_preference).to eq([[false, "newsletter_opt_out"]])
+        expect(FeatureAnnouncementSubscription.where(user_id: older_account.id)).to be_empty
+      end
     end
 
     it "opts out through the buyer unsubscribe link" do

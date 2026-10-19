@@ -65,7 +65,18 @@ class Follower::CreateService
       @follower.mark_undeleted!
 
       # some users start following and then create an account so look for [email, followed_id] index and update the follower_user_id
-      @follower.update(follower_attributes)
+      ApplicationRecord.transaction do
+        # Re-read under lock: the newsletter migration may have bound this row since it was loaded.
+        @follower.lock!
+        @follower.update(follower_attributes.except(*kept_newsletter_link))
+      end
+    end
+
+    # A newsletter moving to Feature announcements keeps each follow's account link, so the old newsletter's
+    # opt-outs still reach the account that was carried over, whatever address a later form submits.
+    def kept_newsletter_link
+      keep = @follower.follower_user_id.present? && FeatureAnnouncementNewsletterCutover.tracks_opt_outs_for?(@follower.followed_id)
+      keep ? [:follower_user_id] : []
     end
 
     def create_new_follower

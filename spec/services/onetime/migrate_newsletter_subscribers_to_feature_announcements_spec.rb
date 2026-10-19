@@ -158,6 +158,18 @@ describe Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements do
       expect(Follower.find_by(followed_id: newsletter.id, email: "shared@example.com").follower_user_id).to be_nil
     end
 
+    it "keeps a binding made after a follow form loaded the row, whatever account that form would link" do
+      stale = Follower.find_by(followed_id: newsletter.id, email: "email-only@example.com")
+      described_class.prepare!(cutoff_at:)
+      apply!
+      form = Follower::CreateService.new(followed_user: newsletter, follower_email: stale.email, follower_attributes: { follower_user_id: quiet.id })
+      allow(form).to receive(:followers).and_return(double(find_by: stale))
+
+      form.perform
+
+      expect(stale.reload.follower_user_id).to eq(email_only.id)
+    end
+
     it "opts out the bound account after it changes its email, even through a record loaded before the bind" do
       stale = Follower.find_by(followed_id: newsletter.id, email: "email-only@example.com")
       described_class.prepare!(cutoff_at:)
