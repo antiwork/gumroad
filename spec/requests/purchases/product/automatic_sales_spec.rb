@@ -66,6 +66,80 @@ describe "Automatic sales on product pages", type: :system, js: true do
     expect(Purchase.last.price_cents).to eq(1400)
   end
 
+  describe "pay-what-you-want amounts" do
+    let(:seller) { create(:compliant_user) }
+
+    def quoted_price_cents
+      quoted = Concurrent::Array.new
+      subscriber = ActiveSupport::Notifications.subscribe("process_action.action_controller") do |*, payload|
+        quoted << payload[:params]["price_cents"] if payload[:action] == "selection_discounts"
+      end
+      yield
+      quoted.to_a
+    ensure
+      ActiveSupport::Notifications.unsubscribe(subscriber)
+    end
+
+    it "opens a link with a decimal amount ready to buy at that amount" do
+      product = create(:product, user: seller, name: "Pay what you want", price_cents: 500, customizable_price: true)
+      seller.offer_codes.create!(code: "SHOP3", amount_cents: 300, currency_type: "usd", universal: true, products: [], auto_apply: true)
+
+      quoted = quoted_price_cents do
+        visit "#{product.long_url}?price=19.99"
+        expect(page).to have_field("Name a fair price", with: "19.99")
+        within(find(:article)) { expect(page).to have_link("I want this!") }
+      end
+      expect(page).to have_no_selector("[role='alert']")
+      expect(quoted).to eq(["1999"])
+
+      click_on "I want this!"
+      expect(page).to have_cart_item("Pay what you want")
+      expect(page).to have_text("Total US$19.99", normalize_ws: true)
+    end
+
+    context "when the quote for a typed amount is slow" do
+      let(:product) { create(:product, user: seller, name: "Pay what you want", price_cents: 1000, customizable_price: true) }
+      let(:release) { Concurrent::Event.new }
+
+      before do
+        seller.offer_codes.create!(code: "HALF", amount_percentage: 50, universal: true, products: [], auto_apply: true)
+        held = release
+        allow_any_instance_of(OfferCodesController).to receive(:selection_discounts).and_wrap_original do |original, *args|
+          held.wait(15) if original.receiver.params[:price_cents].present?
+          original.call(*args)
+        end
+      end
+
+      after { release.set }
+
+      def blur_amount(amount)
+        visit product.long_url
+        fill_in "Name a fair price", with: amount
+        find(:label, "Name a fair price:").click
+        within(find(:article)) { expect(page).to have_selector("a[aria-busy='true']:not([href])") }
+        find_field("Name a fair price")
+      end
+
+      it "does not flag an amount above the sale's minimum while its quote loads, nor after it lands" do
+        field = blur_amount("6")
+        expect(field["aria-invalid"]).to eq("false")
+
+        release.set
+        within(find(:article)) { expect(page).to have_link("I want this!") }
+        expect(field["aria-invalid"]).to eq("false")
+      end
+
+      it "flags an amount below the sale's minimum once its quote lands" do
+        field = blur_amount("4")
+        expect(field["aria-invalid"]).to eq("false")
+
+        release.set
+        expect(page).to have_selector("input[aria-invalid='true']")
+        expect(field["aria-invalid"]).to eq("true")
+      end
+    end
+  end
+
   it "keeps a qualifying buyer on the card's sale price when their existing-customer code takes less off" do
     seller = create(:compliant_user)
     product = create(:product, user: seller, price_cents: 1000)
@@ -409,6 +483,12 @@ describe "Automatic sales on product pages", type: :system, js: true do
       expect(page).to have_cart_item("Target membership")
       expect(page).to have_text("Total US$80", normalize_ws: true)
       wait_until_true(sleep_interval: 0.2) { saves_written.value >= 2 }
+      # The save that answers with the sale may be followed by one that stores it, so wait for the full set.
+      wait_until_true(sleep_interval: 0.2) { persisted_cart_holds?(products: [membership], codes: %w[RENEW20 SHOP5]) }
+
+      visit checkout_path
+      expect(page).to have_cart_item("Target membership")
+      expect(page).to have_text("Total US$80", normalize_ws: true)
       expect(persisted_cart_holds?(products: [membership], codes: %w[RENEW20 SHOP5])).to be(true)
     end
 

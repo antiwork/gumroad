@@ -23,12 +23,14 @@ import { classNames } from "$app/utils/classNames";
 import {
   BuyerLocalCurrencyContext,
   CurrencyCode,
+  findCurrencyByCode,
   formatBuyerLocalOrSetPrice,
   formatPriceCentsWithCurrencySymbol,
 } from "$app/utils/currency";
 import { formatDate } from "$app/utils/date";
 import { formatOrderOfMagnitude } from "$app/utils/formatOrderOfMagnitude";
 import { variantLabel } from "$app/utils/labels";
+import { priceUnitToCents } from "$app/utils/price";
 import { isSingleChargeDuration, renewalReminderNotice } from "$app/utils/recurringPricing";
 import { assertResponseError } from "$app/utils/request";
 import { startTrackingForSeller, trackBuyerCurrencyDisplayView, trackProductEvent } from "$app/utils/user_analytics";
@@ -265,7 +267,8 @@ export const useSelectionFromUrl = (product: Product) => {
       price: {
         value:
           parsedPrice >= 0
-            ? parsedPrice * 100
+            ? // Whole cents, scaled like the server's checkout link: 19.99 * 100 is 1998.9999999999998.
+              priceUnitToCents(parsedPrice, findCurrencyByCode(product.currency_code).isSingleUnit)
             : searchParams.has("price")
               ? null
               : (product.pwyw?.default_price_cents ?? null),
@@ -705,6 +708,7 @@ export const Product = ({
             setSelection={setSelection}
             discount={discountCode?.valid ? withConfiguredOncePerCartAmount(discountCode.discount) : null}
             rowDiscount={selectionDiscountCode ? rowDiscount : undefined}
+            discountPending={!!quote && quote.state !== "ready"}
             ref={configurationSelectorRef}
           />
           {product.ppp_details && pppDiscounted ? (
