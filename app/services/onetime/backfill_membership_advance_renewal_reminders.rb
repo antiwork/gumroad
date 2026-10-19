@@ -43,7 +43,10 @@ module Onetime
           end
         rescue => e
           counts[:errors] += 1
-          Rails.logger.warn("[BackfillMembershipAdvanceRenewalReminders] skipped subscription #{subscription.id}: #{e.class}: #{e.message}")
+          Rails.logger.warn("[BackfillMembershipAdvanceRenewalReminders] failed on subscription #{subscription.id}: #{e.class}: #{e.message}")
+          # Do not advance past a row we failed on: leaving the cursor at the previous id makes the
+          # next run retry this subscription instead of silently skipping its advance notice.
+          break unless @dry_run
         end
 
         advance!(subscription.id) unless @dry_run

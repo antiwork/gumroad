@@ -70,6 +70,31 @@ class Onetime::BackfillMembershipAdvanceRenewalRemindersTest < ActiveSupport::Te
     assert_equal 0, run_backfill[:scheduled]
   end
 
+  test "stops at a row whose scheduling raises so the next run retries it" do
+    first = create_subscription_for_backfill
+    second = create_subscription_for_backfill
+
+    calls = 0
+    RecurringChargeReminderWorker.stub(:perform_at, lambda { |*_args|
+      calls += 1
+      raise "enqueue failed" if calls == 2
+    }) do
+      summary = run_backfill
+
+      assert_equal 1, summary[:errors]
+      assert_equal 1, summary[:scheduled]
+      assert_equal first.id.to_s, $redis.get(CURSOR_KEY)
+    end
+
+    # The failed subscription is still ahead of the cursor, so a later run retries it.
+    assert_operator $redis.get(CURSOR_KEY).to_i, :<, second.id
+    scheduled_ids = []
+    RecurringChargeReminderWorker.stub(:perform_at, ->(at, id, kind) { scheduled_ids << [id, kind] }) do
+      run_backfill
+    end
+    assert_includes scheduled_ids.map(&:first), [first.id, second.id].max
+  end
+
   test "a dry run schedules nothing and a rerun after a finished run is a no-op" do
     create_subscription_for_backfill
 
