@@ -5,15 +5,17 @@ require "test_helper"
 class Onetime::BackfillMembershipAdvanceRenewalRemindersTest < ActiveSupport::TestCase
   CURSOR_KEY = Onetime::BackfillMembershipAdvanceRenewalReminders::CURSOR_KEY
   RUNNING_KEY = Onetime::BackfillMembershipAdvanceRenewalReminders::RUNNING_KEY
+  ATTEMPTS_KEY = Onetime::BackfillMembershipAdvanceRenewalReminders::ATTEMPTS_KEY
+  FAILED_IDS_KEY = Onetime::BackfillMembershipAdvanceRenewalReminders::FAILED_IDS_KEY
 
   setup do
-    $redis.del(CURSOR_KEY, RUNNING_KEY)
+    $redis.del(CURSOR_KEY, RUNNING_KEY, ATTEMPTS_KEY, FAILED_IDS_KEY)
     Feature.activate(:membership_renewal_reminders)
   end
 
   teardown do
     Feature.deactivate(:membership_renewal_reminders)
-    $redis.del(CURSOR_KEY, RUNNING_KEY)
+    $redis.del(CURSOR_KEY, RUNNING_KEY, ATTEMPTS_KEY, FAILED_IDS_KEY)
     RecurringChargeReminderWorker.clear
   end
 
@@ -93,6 +95,30 @@ class Onetime::BackfillMembershipAdvanceRenewalRemindersTest < ActiveSupport::Te
       run_backfill
     end
     assert_includes scheduled_ids.map(&:first), [first.id, second.id].max
+  end
+
+  test "a row that keeps failing is stepped over instead of stalling every subscription after it" do
+    bad = create_subscription_for_backfill
+    good = create_subscription_for_backfill
+    scheduled_ids = []
+
+    RecurringChargeReminderWorker.stub(:perform_at, lambda { |_at, id, kind|
+      raise "bad row" if id == bad.id
+
+      scheduled_ids << id
+    }) do
+      # The production cap is 3; hard-coded so mutating the constant cannot spin this loop.
+      3.times do |attempt|
+        summary = run_backfill
+        assert_equal 1, summary[:errors]
+        # Every run before the last attempt stops before the failing row.
+        assert_operator $redis.get(CURSOR_KEY).to_i, :<, bad.id if attempt < 2
+      end
+
+      assert_includes $redis.smembers(FAILED_IDS_KEY).map(&:to_i), bad.id
+      assert_operator $redis.get(CURSOR_KEY).to_i, :>=, bad.id
+      assert_includes scheduled_ids, good.id
+    end
   end
 
   test "a dry run schedules nothing and a rerun after a finished run is a no-op" do

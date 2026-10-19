@@ -9,6 +9,12 @@ module Onetime
     CURSOR_KEY = "onetime:backfill_membership_advance_renewal_reminders:cursor"
     RUNNING_KEY = "onetime:backfill_membership_advance_renewal_reminders:running"
     RUNNING_TTL = 2.minutes
+    # A row that raises is retried on the next run instead of being skipped, but a row that fails
+    # every time must not block every subscription ahead of it — after this many attempts it is
+    # recorded as failed and stepped over.
+    MAX_ATTEMPTS_PER_ROW = 3
+    FAILED_IDS_KEY = "onetime:backfill_membership_advance_renewal_reminders:failed_ids"
+    ATTEMPTS_KEY = "onetime:backfill_membership_advance_renewal_reminders:attempts"
 
     def self.process(deployed_at:, dry_run: false, batch_size: BATCH_SIZE, limit: nil)
       new(deployed_at:, dry_run:, batch_size:, limit:).process
@@ -44,9 +50,19 @@ module Onetime
         rescue => e
           counts[:errors] += 1
           Rails.logger.warn("[BackfillMembershipAdvanceRenewalReminders] failed on subscription #{subscription.id}: #{e.class}: #{e.message}")
+          next if @dry_run
+
           # Do not advance past a row we failed on: leaving the cursor at the previous id makes the
-          # next run retry this subscription instead of silently skipping its advance notice.
-          break unless @dry_run
+          # next run retry this subscription instead of silently skipping its advance notice. A row
+          # that fails on every attempt is recorded and stepped over, so one bad subscription cannot
+          # stall the notices for every subscription with a higher id.
+          attempts = $redis.hincrby(ATTEMPTS_KEY, subscription.id.to_s, 1)
+          break if attempts < MAX_ATTEMPTS_PER_ROW
+
+          $redis.sadd(FAILED_IDS_KEY, subscription.id)
+          Rails.logger.error("[BackfillMembershipAdvanceRenewalReminders] gave up on subscription #{subscription.id} after #{attempts} attempts: #{e.class}: #{e.message}")
+          advance!(subscription.id)
+          next
         end
 
         advance!(subscription.id) unless @dry_run
@@ -78,6 +94,7 @@ module Onetime
         $redis.multi do |tx|
           tx.set(CURSOR_KEY, id)
           tx.expire(RUNNING_KEY, RUNNING_TTL.to_i)
+          tx.hdel(ATTEMPTS_KEY, id.to_s)
         end
       end
   end
