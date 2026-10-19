@@ -97,7 +97,12 @@ describe SendPostBlastEmailsJob, :freeze_time do
     end
 
     describe "after the seller's newsletter moved to Feature announcements" do
-      before { FeatureAnnouncementNewsletterCutover.create!(seller: @seller, state: "retired", cutoff_at: 1.day.ago, retired_at: Time.current) }
+      # The audience subscribed before the newsletter retired.
+      before do
+        basic_post_with_audience
+        create(:active_follower, user: @seller)
+        FeatureAnnouncementNewsletterCutover.create!(seller: @seller, state: "retired", cutoff_at: 1.day.ago, retired_at: Time.current)
+      end
 
       it "skips audience posts and records why the blast expired" do
         blast = create(:blast, :just_requested, post: basic_post_with_audience)
@@ -107,6 +112,22 @@ describe SendPostBlastEmailsJob, :freeze_time do
         expect_sent_count 0
         expect(blast.reload.attributes.slice("expiry_reason", "started_at")).to eq("expiry_reason" => "newsletter_retired", "started_at" => nil)
         expect(blast.delivery_status).to eq("expired")
+      end
+
+      it "stops an inline send at the next provider handoff once the newsletter retires mid-send" do
+        FeatureAnnouncementNewsletterCutover.update_all(state: "migrated")
+        blast = create(:blast, :just_requested, post: basic_post_with_audience)
+        job = described_class.new
+        allow(job).to receive(:recipients_slice_size).and_return(1)
+        allow(job).to receive(:send_provider_slice).and_wrap_original do |method, **args|
+          method.call(**args)
+          FeatureAnnouncementNewsletterCutover.update_all(state: "retired")
+        end
+
+        job.perform(blast.id)
+
+        expect_sent_count 1
+        expect(blast.reload.completed_at).to be_nil
       end
 
       it "still sends product posts to customers" do

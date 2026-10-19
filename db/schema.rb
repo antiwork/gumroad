@@ -1052,11 +1052,13 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_16_170004) do
     t.string "state", limit: 16, null: false
     t.datetime "cutoff_at", null: false
     t.json "counts"
+    t.json "verified_sources"
     t.integer "eligible_count", default: 0, null: false
     t.integer "migrated_count", default: 0, null: false
     t.bigint "cursor_follower_id", default: 0, null: false
     t.string "error"
     t.datetime "retired_at"
+    t.json "retirement_coverage"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["seller_id"], name: "index_feature_announcement_newsletter_cutovers_on_seller_id", unique: true

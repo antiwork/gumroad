@@ -17,7 +17,8 @@ class FeatureAnnouncementNewsletterCutover < ApplicationRecord
     where(seller_id:, state: TRACKING_STATES).exists?
   end
 
+  # Primary and uncached: senders run on workers whose plain reads can go to a lagging replica.
   def self.retired_for?(seller_id)
-    where(seller_id:, state: "retired").exists?
+    ApplicationRecord.connected_to(role: :writing) { uncached { where(seller_id:, state: "retired").exists? } }
   end
 end

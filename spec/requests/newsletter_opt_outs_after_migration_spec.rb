@@ -14,6 +14,7 @@ describe "Old Gumroad newsletter opt-outs after the Feature announcements migrat
 
   before do
     host! DOMAIN
+    stub_const("#{migration}::VERIFIED_SOURCES", { Follower::From::EMBED_FORM => "synthetic test evidence" }.freeze)
     migration.prepare!(cutoff_at: 1.hour.ago)
     migration.apply!(confirmed_eligible_count: 1)
   end

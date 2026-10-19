@@ -18,6 +18,8 @@ class SendPostBlastEmailsSliceJob
       finalize_partition_if_complete(partition_key, total_chunks)
       return
     end
+    # After the completion check, so a chunk sent before retirement can still finish its blast.
+    return if stop_for_retired_newsletter?
     return reschedule_behind_claim(blast_id, partition_key, chunk_index, total_chunks, member_ids) unless claim_chunk(partition_key, chunk_index)
 
     begin
@@ -31,7 +33,7 @@ class SendPostBlastEmailsSliceJob
       @blast.to_non_openers? ? remove_members_already_sent_in_this_blast : remove_already_emailed_members
 
       send_members(@members)
-      mark_chunk_completed(partition_key, chunk_index, total_chunks)
+      mark_chunk_completed(partition_key, chunk_index, total_chunks) unless @stopped_for_retired_newsletter
     ensure
       release_chunk_claim(partition_key, chunk_index)
     end

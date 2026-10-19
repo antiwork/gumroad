@@ -4,14 +4,21 @@
 # newsletter (gumroad-private#3664). Run in order: preflight → prepare! → apply!(confirmed_eligible_count:)
 # → retire!. Nothing runs on its own; apply! needs the eligible count from the stored plan.
 #
-# Only a follow the person made and confirmed themselves, linked to an account whose confirmed email is
-# the followed address, is carried over. Every other row is counted and left alone, and an existing
-# preference row (including an opt-out) is never overwritten.
+# Only a follow the person made and confirmed themselves, from a source in VERIFIED_SOURCES, linked to an
+# account whose confirmed email is the followed address, is carried over. Every other row is counted and
+# left alone, and an existing preference row (including an opt-out) is never overwritten.
 class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
   NEWSLETTER_SELLER_EXTERNAL_ID = "6282492303727"
   NEWSLETTER_SELLER_USERNAME = "gumroad"
   # CSV imports, rows with no source and any later source record who was added, not who asked.
   EXPRESS_SOURCES = [Follower::From::EMBED_FORM, Follower::From::FOLLOW_PAGE, Follower::From::PROFILE_PAGE].freeze
+  # Candidates only: what a source value means today doesn't prove how this newsletter's old rows were made.
+  # Each entry maps an EXPRESS_SOURCES value to the reviewed evidence of its history; apply! refuses while empty.
+  VERIFIED_SOURCES = {}.freeze
+  # Outcomes where retiring the old newsletter takes no mail anyone still wants.
+  RESOLVED_OUTCOMES = %i[follower_inactive existing_preference buyer_opted_out].freeze
+  # Reviewed decisions for any other cohort (outcome => decision reference); retire! refuses until all are covered.
+  RETIREMENT_RESOLUTIONS = {}.freeze
   BATCH_SIZE = 1_000
   RUN_LOCK_TIMEOUT_SECONDS = 0
 
@@ -19,6 +26,7 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
   class InvalidTransition < StandardError; end
   class PlanMismatch < StandardError; end
   class AlreadyRunning < StandardError; end
+  class CoverageIncomplete < StandardError; end
 
   def self.preflight(cutoff_at:, batch_size: BATCH_SIZE) = new(batch_size:).preflight(cutoff_at)
   def self.prepare!(cutoff_at:, batch_size: BATCH_SIZE) = new(batch_size:).prepare!(cutoff_at)
@@ -30,17 +38,12 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
     @batch_size = batch_size
   end
 
-  # Read-only: every follower of the newsletter seller, counted by outcome. Counts are not permission.
+  # Read-only: every follower of the newsletter seller, counted by outcome. Counts are not permission;
+  # `unverified_source` rows would be eligible if their source were in VERIFIED_SOURCES.
   def preflight(cutoff_at)
     on_primary do
       seller = verified_seller!
-      counts = Hash.new(0)
-      Follower.where(followed_id: seller.id).in_batches(of: @batch_size) do |batch|
-        followers = batch.to_a
-        context = batch_context(seller, followers)
-        followers.each { counts[classify(_1, cutoff_at, **context.merge(user: context[:users][_1.follower_user_id]))] += 1 }
-      end
-      { seller_id: seller.id, cutoff_at:, counts: counts.sort.to_h }
+      { seller_id: seller.id, cutoff_at:, verified_sources: verified_sources!, counts: outcome_counts(seller, cutoff_at, Follower.all) }
     end
   end
 
@@ -51,13 +54,14 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
       with_run_lock(verified_seller!) do
         report = preflight(cutoff_at)
         cutover = FeatureAnnouncementNewsletterCutover.find_or_initialize_by(seller_id: report[:seller_id])
-        if cutover.persisted? && !%w[prepared failed rolled_back].include?(cutover.state)
-          raise InvalidTransition, "Cutover is #{cutover.state}; only a prepared, failed or rolled back plan can be replaced"
+        if cutover.persisted? && !%w[prepared failed migrated rolled_back].include?(cutover.state)
+          raise InvalidTransition, "Cutover is #{cutover.state}; only a prepared, failed, migrated or rolled back plan can be replaced"
         end
 
-        # A replaced failed plan keeps its migrated_count: those rows exist, and a rerun skips them.
+        # A replaced failed or migrated plan keeps its migrated_count: those rows exist, and a rerun skips them.
+        # Replacing a migrated plan with a later cutoff is how follows made after the first cutoff are carried over.
         cutover.update!(state: "prepared", cutoff_at:, counts: report[:counts], eligible_count: report[:counts].fetch(:eligible, 0),
-                        cursor_follower_id: 0, error: nil)
+                        verified_sources: report[:verified_sources], cursor_follower_id: 0, error: nil, retirement_coverage: nil)
         cutover
       end
     end
@@ -71,6 +75,8 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
       with_run_lock(seller) do
         cutover = FeatureAnnouncementNewsletterCutover.find_by!(seller_id: seller.id)
         raise InvalidTransition, "Cutover is #{cutover.state}" unless FeatureAnnouncementNewsletterCutover::APPLICABLE_STATES.include?(cutover.state)
+        raise SourceUnverified, "No follower source has verified provenance (VERIFIED_SOURCES is empty)" if verified_sources!.empty?
+        raise SourceUnverified, "Plan was prepared with other verified sources; prepare it again" unless cutover.verified_sources == VERIFIED_SOURCES
         raise PlanMismatch, "Plan has #{cutover.eligible_count} eligible, not #{confirmed_eligible_count}" unless cutover.eligible_count == confirmed_eligible_count
 
         cutover.update!(state: "migrating", error: nil)
@@ -92,10 +98,29 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
   end
 
   # Turns off the old newsletter: new follows of the seller are refused and its audience and follower
-  # posts stop sending. Existing follower rows are left as they are.
+  # posts stop sending. Existing follower rows are left as they are. Refused, with the coverage recorded,
+  # while any follower falls outside RESOLVED_OUTCOMES and RETIREMENT_RESOLUTIONS.
   def retire!
     on_primary do
-      with_run_lock(verified_seller!) { transition!(from: %w[migrated], to: "retired", retired_at: Time.current) }
+      seller = verified_seller!
+      with_run_lock(seller) do
+        cutover = FeatureAnnouncementNewsletterCutover.find_by!(seller_id: seller.id)
+        raise InvalidTransition, "Cutover is #{cutover.state}, not migrated" unless cutover.state == "migrated"
+
+        scan_started_at = Time.current.change(usec: 0)
+        counts = outcome_counts(seller, cutover.cutoff_at, Follower.all)
+        coverage = nil
+        transition!(from: %w[migrated], to: "retired", retired_at: Time.current) do |locked|
+          # followers.updated_at has whole seconds; rows changed while the scan ran are classified again.
+          coverage = retirement_coverage(counts, outcome_counts(seller, cutover.cutoff_at, Follower.where("updated_at >= ?", scan_started_at)))
+          locked.retirement_coverage = coverage
+          raise CoverageIncomplete, "Retirement would drop unresolved subscribers: #{coverage[:unresolved]}" if coverage[:unresolved].any?
+        end
+      rescue CoverageIncomplete
+        # Kept after the refusal rolls back, so the plan shows which cohorts still block retirement.
+        cutover.update_columns(retirement_coverage: coverage, updated_at: Time.current) if coverage
+        raise
+      end
     end
   end
 
@@ -131,9 +156,42 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
         cutover = FeatureAnnouncementNewsletterCutover.lock.find_by!(seller_id: verified_seller!.id)
         raise InvalidTransition, "Cutover is #{cutover.state}, not #{from.join(" or ")}" unless from.include?(cutover.state)
 
+        yield cutover if block_given?
         cutover.update!(state: to, **attributes)
         cutover
       end
+    end
+
+    # A row changed during the scan is counted in both passes, so unresolved counts are lower bounds per outcome.
+    def retirement_coverage(counts, changed)
+      resolutions = retirement_resolutions!
+      unresolved = counts.merge(changed) { |_, full, recheck| [full, recheck].max }
+        .reject { |outcome, _| RESOLVED_OUTCOMES.include?(outcome) || resolutions.key?(outcome) }
+      { checked_at: Time.current, counts:, changed_during_scan: changed, resolutions:, unresolved: }
+    end
+
+    def verified_sources!
+      invalid = VERIFIED_SOURCES.reject { |source, evidence| EXPRESS_SOURCES.include?(source) && evidence.present? }
+      raise SourceUnverified, "Only express sources with recorded evidence can be verified: #{invalid.keys}" if invalid.any?
+
+      VERIFIED_SOURCES
+    end
+
+    def retirement_resolutions!
+      invalid = RETIREMENT_RESOLUTIONS.select { |outcome, decision| outcome == :eligible || decision.blank? }
+      raise CoverageIncomplete, "Eligible subscribers must be migrated, and every resolution needs a decision: #{invalid.keys}" if invalid.any?
+
+      RETIREMENT_RESOLUTIONS
+    end
+
+    def outcome_counts(seller, cutoff_at, followers)
+      counts = Hash.new(0)
+      followers.where(followed_id: seller.id).in_batches(of: @batch_size) do |batch|
+        rows = batch.to_a
+        context = batch_context(seller, rows)
+        rows.each { counts[classify(_1, cutoff_at, **context.merge(user: context[:users][_1.follower_user_id]))] += 1 }
+      end
+      counts.sort.to_h
     end
 
     def with_run_lock(seller)
@@ -153,7 +211,7 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
     # follow is still this seller's and linked to the locked account. A concurrent preference write is
     # caught by the unique key, and a buyer opt-out ends in Follower.unsubscribe, which waits on our lock.
     def migrate(seller, cutover, follower)
-      return :skipped unless follower.follower_user_id && EXPRESS_SOURCES.include?(follower.source)
+      return :skipped unless follower.follower_user_id && VERIFIED_SOURCES.key?(follower.source)
 
       ApplicationRecord.transaction do
         user = User.lock("FOR SHARE").find_by(id: follower.follower_user_id)
@@ -204,6 +262,7 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
       return :ambiguous_address if shared_emails.include?(normalize(follower.email))
       return :buyer_opted_out if opted_out_emails.include?(normalize(follower.email))
       return :existing_preference if preference_user_ids.include?(user.id)
+      return :unverified_source unless VERIFIED_SOURCES.key?(follower.source)
 
       :eligible
     end

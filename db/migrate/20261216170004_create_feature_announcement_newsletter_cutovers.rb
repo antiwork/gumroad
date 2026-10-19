@@ -9,11 +9,13 @@ class CreateFeatureAnnouncementNewsletterCutovers < ActiveRecord::Migration[8.1]
       t.string :state, limit: 16, null: false
       t.datetime :cutoff_at, null: false
       t.json :counts
+      t.json :verified_sources
       t.integer :eligible_count, null: false, default: 0
       t.integer :migrated_count, null: false, default: 0
       t.bigint :cursor_follower_id, null: false, default: 0
       t.string :error
       t.datetime :retired_at
+      t.json :retirement_coverage
       t.timestamps
 
       t.index :seller_id, unique: true

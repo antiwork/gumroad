@@ -30,10 +30,7 @@ class SendPostBlastEmailsJob
     Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} post_id=#{@post.id}")
     return unless @post.alive? && @post.published? && @post.send_emails? && @blast.completed_at.nil? && @blast.expired_at.nil?
     # A retired newsletter now sends through Feature announcements; product and customer posts are unaffected.
-    if (@post.audience_type? || @post.follower_type?) && FeatureAnnouncementNewsletterCutover.retired_for?(@post.seller_id)
-      Rails.logger.warn("[#{self.class.name}] blast_id=#{@blast.id} skipped: newsletter retired for seller #{@post.seller_id}")
-      return PostEmailBlast.expire(@blast.id, reason: PostEmailBlast::EXPIRY_NEWSLETTER_RETIRED)
-    end
+    return if stop_for_retired_newsletter?
 
     # Captured before the stamp: a first-run crash and a late resume both arrive without a snapshot.
     @resume_without_snapshot = @blast.started_at.present?
@@ -127,7 +124,7 @@ class SendPostBlastEmailsJob
     def send_inline
       start_pending_recipients
       send_members(@members)
-      mark_blast_as_completed
+      mark_blast_as_completed unless @stopped_for_retired_newsletter
     end
 
     def split_blast?

@@ -657,4 +657,50 @@ describe SendPostBlastEmailsSliceJob, :freeze_time do
       expect(blast.reload.completed_at).to be_blank
     end
   end
+
+  describe "after the seller's newsletter moved to Feature announcements" do
+    def retire_newsletter = FeatureAnnouncementNewsletterCutover.create!(seller: @seller, state: "retired", cutoff_at: 1.day.ago, retired_at: Time.current)
+
+    it "sends nothing from a chunk queued before retirement and leaves it unfinished" do
+      blast = create(:blast, :just_requested, post: post_with_audience)
+      activate_partition(blast)
+      retire_newsletter
+
+      described_class.new.perform(blast.id, partition_key, 0, 1, audience_ids)
+
+      expect_sent_count 0
+      expect(blast.reload.attributes.slice("expiry_reason", "completed_at")).to eq("expiry_reason" => "newsletter_retired", "completed_at" => nil)
+      expect($redis.sismember(RedisKey.blast_done_slices(blast.id, partition_key), 0)).to be(false)
+    end
+
+    it "stops a running chunk at the next provider handoff" do
+      blast = create(:blast, :just_requested, post: post_with_audience)
+      activate_partition(blast)
+      job = described_class.new
+      allow(job).to receive(:recipients_slice_size).and_return(1)
+      allow(job).to receive(:send_provider_slice).and_wrap_original do |method, **args|
+        method.call(**args)
+        retire_newsletter unless FeatureAnnouncementNewsletterCutover.exists?
+      end
+
+      job.perform(blast.id, partition_key, 0, 1, audience_ids)
+
+      expect_sent_count 1
+      expect(blast.reload.completed_at).to be_nil
+      expect($redis.sismember(RedisKey.blast_done_slices(blast.id, partition_key), 0)).to be(false)
+    end
+
+    it "still sends a product post chunk to customers" do
+      product = create(:product, user: @seller)
+      create(:purchase, link: product, email: "customer@example.com")
+      blast = create(:blast, :just_requested, post: create(:product_post, :published, link: product, bought_products: [product.unique_permalink]))
+      activate_partition(blast)
+      retire_newsletter
+
+      described_class.new.perform(blast.id, partition_key, 0, 1, audience_ids)
+
+      expect(PostSendgridApi.mails.keys).to eq(["customer@example.com"])
+      expect(blast.reload.completed_at).to be_present
+    end
+  end
 end

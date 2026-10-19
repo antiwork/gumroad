@@ -141,6 +141,9 @@ class FollowersController < ApplicationController
 
   def confirm
     e404 unless @follower.user.account_active?
+    if @follower.newsletter_retired?
+      return redirect_to @follower.user.profile_url, alert: Follower::RETIRED_NEWSLETTER_MESSAGE, allow_other_host: true
+    end
 
     @follower.confirm!
 

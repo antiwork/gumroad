@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class Follower::CreateService
-  RETIRED_NEWSLETTER_MESSAGE = "Gumroad's newsletter is now Feature announcements. Turn them on in Settings, under Notifications."
+  RETIRED_NEWSLETTER_MESSAGE = Follower::RETIRED_NEWSLETTER_MESSAGE
 
   delegate :followers, to: :followed_user
 

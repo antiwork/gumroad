@@ -7,6 +7,7 @@ describe Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements, "against a
   self.use_transactional_tests = false
 
   before do
+    stub_const("#{described_class}::VERIFIED_SOURCES", { Follower::From::EMBED_FORM => "synthetic test evidence" }.freeze)
     @newsletter = create(:user, username: "gumroad").tap { _1.update_columns(external_id: described_class::NEWSLETTER_SELLER_EXTERNAL_ID) }
     @reader = create(:user, email: "concurrent-reader@example.com")
     @follower = create(:follower, user: @newsletter, email: @reader.email, follower_user_id: @reader.id,

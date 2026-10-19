@@ -20,6 +20,15 @@ describe Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements do
 
   def apply! = described_class.apply!(confirmed_eligible_count: cutover.eligible_count)
 
+  # Synthetic stand-in for reviewed provenance; production starts with none verified.
+  def verify_sources(sources) = stub_const("#{described_class}::VERIFIED_SOURCES", sources.index_with { "synthetic test evidence" }.freeze)
+
+  # Each person outside the carried-over cohort leaves the old newsletter themselves.
+  def leave_unresolved_followers!
+    emails = %w[imported sourceless old-address unconfirmed suspended late guest].map { "#{_1}@example.com" }
+    Follower.where(followed_id: newsletter.id, email: emails).find_each(&:mark_deleted!)
+  end
+
   let!(:embed) { create(:user, email: "embed@example.com") }
   let!(:follow_page) { create(:user, email: "follow-page@example.com") }
   let!(:imported) { create(:user, email: "imported@example.com") }
@@ -33,6 +42,7 @@ describe Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements do
   let!(:late) { create(:user, email: "late@example.com") }
 
   before do
+    verify_sources([Follower::From::EMBED_FORM, Follower::From::FOLLOW_PAGE])
     follow(email: "embed@example.com", account: embed)
     follow(email: "follow-page@example.com", account: follow_page, source: Follower::From::FOLLOW_PAGE)
     follow(email: "imported@example.com", account: imported, source: Follower::From::CSV_IMPORT)
@@ -59,6 +69,47 @@ describe Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements do
     )
     expect(FeatureAnnouncementSubscription.where(source: "newsletter_migration")).to be_empty
     expect(FeatureAnnouncementNewsletterCutover.count).to eq(0)
+  end
+
+  describe "source provenance" do
+    it "treats express sources as unverified candidates and writes nothing while none is verified" do
+      verify_sources([])
+
+      expect(described_class.preflight(cutoff_at:)[:counts]).to include(unverified_source: 2).and(satisfy { !_1.key?(:eligible) })
+      described_class.prepare!(cutoff_at:)
+      expect(cutover.attributes.slice("eligible_count", "verified_sources")).to eq("eligible_count" => 0, "verified_sources" => {})
+
+      expect { described_class.apply!(confirmed_eligible_count: 0) }.to raise_error(described_class::SourceUnverified)
+      expect(cutover.state).to eq("prepared")
+      expect(FeatureAnnouncementSubscription.where(source: "newsletter_migration")).to be_empty
+    end
+
+    it "carries over only the verified subset and records it on the plan" do
+      verify_sources([Follower::From::EMBED_FORM])
+      described_class.prepare!(cutoff_at:)
+      expect(cutover.counts).to include("eligible" => 1, "unverified_source" => 1)
+      expect(cutover.verified_sources).to eq("embed_form" => "synthetic test evidence")
+
+      apply!
+
+      expect(preference(embed)).to eq([[true, "newsletter_migration"]])
+      expect(preference(follow_page)).to be_empty
+      expect(cutover.migrated_count).to eq(1)
+    end
+
+    it "refuses to apply a plan prepared under different verified sources" do
+      described_class.prepare!(cutoff_at:)
+      verify_sources([Follower::From::EMBED_FORM])
+
+      expect { apply! }.to raise_error(described_class::SourceUnverified, /prepare it again/)
+      expect(FeatureAnnouncementSubscription.where(source: "newsletter_migration")).to be_empty
+    end
+
+    it "won't verify a source that only records who was added" do
+      verify_sources([Follower::From::CSV_IMPORT])
+
+      expect { described_class.preflight(cutoff_at:) }.to raise_error(described_class::SourceUnverified)
+    end
   end
 
   it "carries over only exact, self-made, confirmed follows and never overwrites a preference" do
@@ -180,7 +231,46 @@ describe Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements do
       expect(preference(embed)).to eq([[true, "newsletter_migration"]])
     end
 
+    it "refuses to retire while earlier subscribers it couldn't carry over would lose the newsletter" do
+      audience_post = create(:audience_post, :published, seller: newsletter)
+
+      expect { described_class.retire! }.to raise_error(described_class::CoverageIncomplete)
+
+      expect(cutover.state).to eq("migrated")
+      expect(cutover.retirement_coverage["unresolved"]).to eq(
+        "after_cutoff" => 1, "conflicting_address" => 1, "guest" => 1, "inactive_account" => 1, "unconfirmed_account" => 1, "unproven_source" => 2
+      )
+      SendPostBlastEmailsJob.new.perform(create(:blast, :just_requested, post: audience_post).id)
+      expect(PostSendgridApi.mails.keys).to include("guest@example.com", "imported@example.com")
+    end
+
+    it "retires with a reviewed decision recorded for every remaining cohort" do
+      stub_const("#{described_class}::RETIREMENT_RESOLUTIONS",
+                 %i[after_cutoff conflicting_address guest inactive_account unconfirmed_account unproven_source].index_with { "synthetic decision" })
+
+      described_class.retire!
+
+      expect(cutover.state).to eq("retired")
+      expect(cutover.retirement_coverage).to include("unresolved" => {}, "resolutions" => include("guest" => "synthetic decision"))
+    end
+
+    it "rechecks follows that change while the retirement scan runs" do
+      leave_unresolved_followers!
+      allow_any_instance_of(described_class).to receive(:outcome_counts).and_wrap_original do |original, *args|
+        original.call(*args).tap do
+          Follower.find_by(followed_id: newsletter.id, email: "guest@example.com").update!(deleted_at: nil, confirmed_at: Time.current) if args.last == Follower.all
+        end
+      end
+
+      expect { described_class.retire! }.to raise_error(described_class::CoverageIncomplete)
+
+      expect(cutover.state).to eq("migrated")
+      expect(cutover.retirement_coverage["changed_during_scan"]).to include("after_cutoff" => 1)
+    end
+
     it "retires the old newsletter without touching migrated preferences or follower rows" do
+      leave_unresolved_followers!
+
       expect { described_class.retire! }.not_to change { Follower.where(followed_id: newsletter.id).pluck(:id, :deleted_at, :confirmed_at) }
       expect(cutover.state).to eq("retired")
       expect(preference(embed)).to eq([[true, "newsletter_migration"]])
@@ -205,7 +295,16 @@ describe Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements do
       expect(cutover.state).to eq("rolled_back")
     end
 
+    it "carries over follows made after the first cutoff by replacing the migrated plan" do
+      described_class.prepare!(cutoff_at: Time.current)
+      apply!
+
+      expect(preference(late)).to eq([[true, "newsletter_migration"]])
+      expect(cutover.attributes.slice("state", "eligible_count", "migrated_count")).to eq("state" => "migrated", "eligible_count" => 1, "migrated_count" => 3)
+    end
+
     it "can't roll back a retired newsletter" do
+      leave_unresolved_followers!
       described_class.retire!
 
       expect { described_class.rollback! }.to raise_error(described_class::InvalidTransition)
