@@ -96,6 +96,31 @@ describe SendPostBlastEmailsJob, :freeze_time do
       expect_sent_count 0
     end
 
+    describe "after the seller's newsletter moved to Feature announcements" do
+      before { FeatureAnnouncementNewsletterCutover.create!(seller: @seller, state: "retired", cutoff_at: 1.day.ago, retired_at: Time.current) }
+
+      it "skips audience posts and records why the blast expired" do
+        blast = create(:blast, :just_requested, post: basic_post_with_audience)
+
+        described_class.new.perform(blast.id)
+
+        expect_sent_count 0
+        expect(blast.reload.attributes.slice("expiry_reason", "started_at")).to eq("expiry_reason" => "newsletter_retired", "started_at" => nil)
+        expect(blast.delivery_status).to eq("expired")
+      end
+
+      it "still sends product posts to customers" do
+        product = create(:product, user: @seller)
+        create(:purchase, link: product, email: "customer@example.com")
+        post = create(:product_post, :published, link: product, bought_products: [product.unique_permalink])
+
+        described_class.new.perform(create(:blast, :just_requested, post:).id)
+
+        expect_sent_count 1
+        expect_sent_email "customer@example.com"
+      end
+    end
+
     it "records how many recipients it still owes, and clears the count when it finishes" do
       blast = create(:blast, :just_requested, post: basic_post_with_audience)
       pending_key = RedisKey.blast_pending_recipients(blast.id)

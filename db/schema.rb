@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_16_170003) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_16_170004) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -1045,6 +1045,21 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_16_170003) do
     t.index ["campaign", "email"], name: "index_feature_announcement_deliveries_on_campaign_and_email", unique: true
     t.index ["campaign", "state"], name: "index_feature_announcement_deliveries_on_campaign_and_state"
     t.index ["campaign", "user_id"], name: "index_feature_announcement_deliveries_on_campaign_and_user_id", unique: true
+  end
+
+  create_table "feature_announcement_newsletter_cutovers", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "seller_id", null: false
+    t.string "state", limit: 16, null: false
+    t.datetime "cutoff_at", null: false
+    t.json "counts"
+    t.integer "eligible_count", default: 0, null: false
+    t.integer "migrated_count", default: 0, null: false
+    t.bigint "cursor_follower_id", default: 0, null: false
+    t.string "error"
+    t.datetime "retired_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["seller_id"], name: "index_feature_announcement_newsletter_cutovers_on_seller_id", unique: true
   end
 
   create_table "feature_announcement_subscriptions", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|

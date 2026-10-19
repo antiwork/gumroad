@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class Follower::CreateService
+  RETIRED_NEWSLETTER_MESSAGE = "Gumroad's newsletter is now Feature announcements. Turn them on in Settings, under Notifications."
+
   delegate :followers, to: :followed_user
 
   def self.perform(**args)
@@ -31,6 +33,8 @@ class Follower::CreateService
     # account may no longer transact, it should not be able to make us send mail
     # on its behalf either.
     return unless followed_user.account_active?
+    # A retired newsletter takes no new or revived subscribers; callers show the error to the visitor.
+    return retired_newsletter_follower if FeatureAnnouncementNewsletterCutover.retired_for?(followed_user.id)
 
     @follower = followers.find_by(email: follower_email)
 
@@ -47,6 +51,10 @@ class Follower::CreateService
 
   private
     attr_reader :followed_user, :follower_email, :follower_attributes, :logged_in_user
+
+    def retired_newsletter_follower
+      Follower.new(user: followed_user, email: follower_email).tap { _1.errors.add(:base, RETIRED_NEWSLETTER_MESSAGE) }
+    end
 
     def reactivate_follower
       @follower.mark_undeleted!

@@ -4,7 +4,7 @@
 # No row means not subscribed; an opt-out stays as a `subscribed: false` tombstone so a later
 # insert can't resubscribe anyone. `version` lets Settings detect a form rendered before a write.
 class FeatureAnnouncementSubscription < ApplicationRecord
-  SOURCES = %w[settings unsubscribe_link newsletter_migration].freeze
+  SOURCES = %w[settings unsubscribe_link newsletter_migration newsletter_opt_out].freeze
   UNSUBSCRIBE_TOKEN_SCOPE = "feature_announcements_unsubscribe"
   LOCK_WAIT_SECONDS = 10
 

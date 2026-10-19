@@ -31,6 +31,7 @@ class PostEmailBlast < ApplicationRecord
 
   EXPIRY_QUOTA = "quota"
   EXPIRY_ABANDONED = "abandoned"
+  EXPIRY_NEWSLETTER_RETIRED = "newsletter_retired"
 
   scope :to_non_openers, -> { where(recipient_filter: RECIPIENT_FILTER_UNOPENED) }
 

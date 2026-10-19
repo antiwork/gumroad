@@ -1,52 +1,118 @@
 # frozen_string_literal: true
 
-# Subscribes followers of Gumroad's own newsletter to feature announcements (gumroad-private#3664).
-# Writes stay disabled until the newsletter's history is audited; dry-run counts are not permission.
-# Only an account-linked follow at the account's confirmed email qualifies, and no existing row is overwritten.
+# Carries subscribers of Gumroad's own newsletter into Feature announcements, then retires the old
+# newsletter (gumroad-private#3664). Run in order: preflight → prepare! → apply!(confirmed_eligible_count:)
+# → retire!. Nothing runs on its own; apply! needs the eligible count from the stored plan.
+#
+# Only a follow the person made and confirmed themselves, linked to an account whose confirmed email is
+# the followed address, is carried over. Every other row is counted and left alone, and an existing
+# preference row (including an opt-out) is never overwritten.
 class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
   NEWSLETTER_SELLER_EXTERNAL_ID = "6282492303727"
   NEWSLETTER_SELLER_USERNAME = "gumroad"
-  WRITES_ENABLED = false
+  # CSV imports, rows with no source and any later source record who was added, not who asked.
+  EXPRESS_SOURCES = [Follower::From::EMBED_FORM, Follower::From::FOLLOW_PAGE, Follower::From::PROFILE_PAGE].freeze
   BATCH_SIZE = 1_000
+  RUN_LOCK_TIMEOUT_SECONDS = 0
 
   class SourceUnverified < StandardError; end
-  class WritesDisabled < StandardError; end
+  class InvalidTransition < StandardError; end
+  class PlanMismatch < StandardError; end
+  class AlreadyRunning < StandardError; end
 
-  def self.process(cutoff_at:, dry_run: true, batch_size: BATCH_SIZE)
-    new(cutoff_at:, dry_run:, batch_size:).process
-  end
+  def self.preflight(cutoff_at:, batch_size: BATCH_SIZE) = new(batch_size:).preflight(cutoff_at)
+  def self.prepare!(cutoff_at:, batch_size: BATCH_SIZE) = new(batch_size:).prepare!(cutoff_at)
+  def self.apply!(confirmed_eligible_count:, batch_size: BATCH_SIZE) = new(batch_size:).apply!(confirmed_eligible_count)
+  def self.retire! = new.retire!
+  def self.rollback!(batch_size: BATCH_SIZE) = new(batch_size:).rollback!
 
-  def initialize(cutoff_at:, dry_run:, batch_size:)
-    raise ArgumentError, "cutoff_at is required" unless cutoff_at.is_a?(Time) || cutoff_at.is_a?(ActiveSupport::TimeWithZone)
-
-    @cutoff_at = cutoff_at
-    @dry_run = dry_run
+  def initialize(batch_size: BATCH_SIZE)
     @batch_size = batch_size
-    @counts = Hash.new(0)
   end
 
-  def process
-    raise WritesDisabled, "Newsletter migration writes are disabled until the source is audited" if !@dry_run && !WRITES_ENABLED
+  # Read-only: every follower of the newsletter seller, counted by outcome. Counts are not permission.
+  def preflight(cutoff_at)
+    on_primary do
+      seller = verified_seller!
+      counts = Hash.new(0)
+      Follower.where(followed_id: seller.id).in_batches(of: @batch_size) do |batch|
+        followers = batch.to_a
+        context = batch_context(seller, followers)
+        followers.each { counts[classify(_1, cutoff_at, **context.merge(user: context[:users][_1.follower_user_id]))] += 1 }
+      end
+      { seller_id: seller.id, cutoff_at:, counts: counts.sort.to_h }
+    end
+  end
 
-    seller = verified_seller!
-    cohort(seller).in_batches(of: @batch_size) do |batch|
-      followers = batch.to_a
-      users = User.where(id: followers.filter_map(&:follower_user_id)).index_by(&:id)
-      shared_emails = User.where(email: followers.map(&:email)).group(:email).having("COUNT(*) > 1").count.keys.map(&:downcase).to_set
-      preferences = FeatureAnnouncementSubscription.where(user_id: users.keys).pluck(:user_id).to_set
+  def prepare!(cutoff_at)
+    raise ArgumentError, "cutoff_at must be in the past" unless cutoff_at.is_a?(Time) && cutoff_at <= Time.current
 
-      followers.each do |follower|
-        outcome = classify(follower, users[follower.follower_user_id], shared_emails, preferences)
-        outcome = apply(seller, follower) if outcome == :eligible && !@dry_run
-        @counts[outcome] += 1
+    report = preflight(cutoff_at)
+    on_primary do
+      cutover = FeatureAnnouncementNewsletterCutover.find_or_initialize_by(seller_id: report[:seller_id])
+      if cutover.persisted? && !%w[prepared failed rolled_back].include?(cutover.state)
+        raise InvalidTransition, "Cutover is #{cutover.state}; only a prepared, failed or rolled back plan can be replaced"
+      end
+
+      cutover.update!(state: "prepared", cutoff_at:, counts: report[:counts], eligible_count: report[:counts].fetch(:eligible, 0),
+                      migrated_count: 0, cursor_follower_id: 0, error: nil)
+      cutover
+    end
+  end
+
+  # Resumable: a failed or interrupted run continues from its cursor, and rerunning is a no-op for
+  # followers already carried over because insert_all never overwrites.
+  def apply!(confirmed_eligible_count)
+    on_primary do
+      seller = verified_seller!
+      with_run_lock(seller) do
+        cutover = FeatureAnnouncementNewsletterCutover.find_by!(seller_id: seller.id)
+        raise InvalidTransition, "Cutover is #{cutover.state}" unless FeatureAnnouncementNewsletterCutover::APPLICABLE_STATES.include?(cutover.state)
+        raise PlanMismatch, "Plan has #{cutover.eligible_count} eligible, not #{confirmed_eligible_count}" unless cutover.eligible_count == confirmed_eligible_count
+
+        cutover.update!(state: "migrating", error: nil)
+        begin
+          Follower.where(followed_id: seller.id).where("id > ?", cutover.cursor_follower_id).in_batches(of: @batch_size) do |batch|
+            ReplicaLagWatcher.watch
+            followers = batch.to_a
+            migrated = followers.count { migrate(seller, _1, cutover.cutoff_at) == :migrated }
+            cutover.update_columns(cursor_follower_id: followers.map(&:id).max, migrated_count: cutover.migrated_count + migrated, updated_at: Time.current)
+          end
+          cutover.update!(state: "migrated")
+        rescue StandardError => e
+          cutover.update_columns(state: "failed", error: "#{e.class}: #{e.message}".first(255), updated_at: Time.current)
+          raise
+        end
+        cutover
       end
     end
+  end
 
-    Rails.logger.info("[MigrateNewsletterSubscribersToFeatureAnnouncements] dry_run=#{@dry_run} cutoff_at=#{@cutoff_at.iso8601} counts=#{@counts}")
-    { dry_run: @dry_run, cutoff_at: @cutoff_at, counts: @counts.dup }
+  # Turns off the old newsletter: new follows of the seller are refused and its audience and follower
+  # posts stop sending. Existing follower rows are left as they are.
+  def retire!
+    transition!(from: %w[migrated], to: "retired", retired_at: Time.current)
+  end
+
+  # Removes only rows this migration wrote and nobody has changed since (still version 1, subscribed).
+  def rollback!
+    on_primary do
+      seller = verified_seller!
+      with_run_lock(seller) do
+        cutover = FeatureAnnouncementNewsletterCutover.find_by!(seller_id: seller.id)
+        raise InvalidTransition, "A retired newsletter can't be rolled back" if cutover.state == "retired"
+
+        FeatureAnnouncementSubscription.where(source: "newsletter_migration", subscribed: true, version: 1)
+          .in_batches(of: @batch_size) { _1.delete_all }
+        cutover.update!(state: "rolled_back", migrated_count: 0, cursor_follower_id: 0)
+        cutover
+      end
+    end
   end
 
   private
+    def on_primary(&) = ApplicationRecord.connected_to(role: :writing, &)
+
     def verified_seller!
       seller = User.find_by(external_id: NEWSLETTER_SELLER_EXTERNAL_ID)
       unless seller&.read_attribute(:username) == NEWSLETTER_SELLER_USERNAME && seller.account_active?
@@ -55,35 +121,47 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
       seller
     end
 
-    def cohort(seller)
-      Follower.active.where(followed_id: seller.id).where("followers.confirmed_at <= ? AND followers.created_at <= ?", @cutoff_at, @cutoff_at)
+    def transition!(from:, to:, **attributes)
+      on_primary do
+        seller = verified_seller!
+        FeatureAnnouncementNewsletterCutover.transaction do
+          cutover = FeatureAnnouncementNewsletterCutover.lock.find_by!(seller_id: seller.id)
+          raise InvalidTransition, "Cutover is #{cutover.state}, not #{from.join(" or ")}" unless from.include?(cutover.state)
+
+          cutover.update!(state: to, **attributes)
+          cutover
+        end
+      end
     end
 
-    def classify(follower, user, shared_emails, preferences)
-      return :guest if follower.follower_user_id.nil?
-      return :unmatched_account if user.nil?
-      return :inactive_account unless user.account_active?
-      return :unconfirmed_account unless user.confirmed?
-      return :conflicting_address unless same_address?(user.email, follower.email)
-      return :ambiguous_address if shared_emails.include?(follower.email.to_s.strip.downcase)
-      return :existing_preference if preferences.include?(user.id)
+    def with_run_lock(seller)
+      name = "feature_announcement_newsletter_cutover_#{seller.id}"
+      connection = ApplicationRecord.connection
+      acquired = connection.select_value(ApplicationRecord.sanitize_sql_array(["SELECT GET_LOCK(?, ?)", name, RUN_LOCK_TIMEOUT_SECONDS])).to_i == 1
+      raise AlreadyRunning, "Another newsletter migration run holds #{name}" unless acquired
 
-      :eligible
+      begin
+        yield
+      ensure
+        connection.select_value(ApplicationRecord.sanitize_sql_array(["SELECT RELEASE_LOCK(?)", name]))
+      end
     end
 
-    # Rechecks the follower and account under lock, so an opt-out or email change made after
-    # the batch was read wins. Lock order matches FeatureAnnouncementDelivery: user first.
-    def apply(seller, follower)
-      ReplicaLagWatcher.watch
+    # Rechecks the follower, account, address, buyer opt-out and preference under share locks, so a
+    # concurrent opt-out either commits first (skipped) or waits and then writes its tombstone.
+    # Lock order matches FeatureAnnouncementDelivery and Settings: user, then follower.
+    def migrate(seller, follower, cutoff_at)
+      return :skipped unless follower.follower_user_id && EXPRESS_SOURCES.include?(follower.source)
+
       ApplicationRecord.transaction do
         user = User.lock("FOR SHARE").find_by(id: follower.follower_user_id)
         current = Follower.lock("FOR SHARE").find_by(id: follower.id)
-        still_eligible = user&.account_active? && user.confirmed? && current &&
-          cohort(seller).where(id: current.id).exists? && same_address?(user.email, current.email)
-        next :changed_since_read unless still_eligible
+        next :skipped if current.nil?
+
+        outcome = classify(current, cutoff_at, user:, **batch_context(seller, [current]).except(:users))
+        next outcome unless outcome == :eligible
 
         now = Time.current
-        # insert_all skips a row whose user_id already exists, whatever it holds.
         FeatureAnnouncementSubscription.insert_all(
           [{ user_id: user.id, subscribed: true, version: 1, source: "newsletter_migration", created_at: now, updated_at: now }]
         )
@@ -91,7 +169,32 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
       end
     end
 
-    def same_address?(account_email, follower_email)
-      account_email.present? && account_email.strip.casecmp?(follower_email.to_s.strip)
+    def batch_context(seller, followers)
+      emails = followers.map { normalize(_1.email) }.uniq
+      users = User.where(id: followers.filter_map(&:follower_user_id)).index_by(&:id)
+      {
+        users:,
+        shared_emails: User.where(email: emails).group(:email).having("COUNT(*) > 1").count.keys.map { normalize(_1) }.to_set,
+        preference_user_ids: FeatureAnnouncementSubscription.where(user_id: users.keys).pluck(:user_id).to_set,
+        opted_out_emails: Purchase.where(seller_id: seller.id, email: emails, can_contact: false).distinct.pluck(:email).map { normalize(_1) }.to_set,
+      }
     end
+
+    def classify(follower, cutoff_at, user:, shared_emails:, preference_user_ids:, opted_out_emails:, **)
+      return :follower_inactive unless follower.deleted_at.nil? && follower.confirmed_at.present?
+      return :after_cutoff if follower.confirmed_at > cutoff_at || follower.created_at > cutoff_at
+      return :unproven_source unless EXPRESS_SOURCES.include?(follower.source)
+      return :guest if follower.follower_user_id.nil?
+      return :unmatched_account if user.nil?
+      return :inactive_account unless user.account_active?
+      return :unconfirmed_account unless user.confirmed?
+      return :conflicting_address unless user.email.present? && normalize(user.email) == normalize(follower.email)
+      return :ambiguous_address if shared_emails.include?(normalize(follower.email))
+      return :buyer_opted_out if opted_out_emails.include?(normalize(follower.email))
+      return :existing_preference if preference_user_ids.include?(user.id)
+
+      :eligible
+    end
+
+    def normalize(email) = email.to_s.strip.downcase
 end

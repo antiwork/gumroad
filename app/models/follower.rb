@@ -22,6 +22,11 @@ class Follower < ApplicationRecord
   validate :follower_user_id_exists, unless: :being_marked_as_deleted?
   validate :double_follow_validation, on: :create
 
+  # Inside the save transaction, not after commit: a migrated newsletter subscriber who leaves the old
+  # newsletter (cancel link, spam report, buyer unsubscribe, seller removal) is opted out of Feature
+  # announcements in the same commit, so no window exists where the old opt-out is lost.
+  after_save :record_feature_announcements_opt_out, if: :left_newsletter?
+
   scope :confirmed, -> { where.not(confirmed_at: nil) }
   scope :active, -> { alive.confirmed }
   scope :created_after,   ->(start_at) { where("followers.created_at > ?", start_at) if start_at.present? }
@@ -126,5 +131,16 @@ class Follower < ApplicationRecord
       if confirmed_at.present? && deleted_at.present?
         errors.add(:base, "Can't be both confirmed and deleted")
       end
+    end
+
+    def left_newsletter?
+      follower_user_id.present? &&
+        ((saved_change_to_deleted_at? && deleted_at.present?) || (saved_change_to_confirmed_at? && confirmed_at.nil?)) &&
+        FeatureAnnouncementNewsletterCutover.tracks_opt_outs_for?(followed_id)
+    end
+
+    def record_feature_announcements_opt_out
+      user = User.find_by(id: follower_user_id)
+      FeatureAnnouncementSubscription.unsubscribe!(user, source: "newsletter_opt_out") if user
     end
 end

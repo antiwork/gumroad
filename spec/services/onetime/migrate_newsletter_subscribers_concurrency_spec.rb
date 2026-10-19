@@ -1,0 +1,79 @@
+# frozen_string_literal: true
+
+require "spec_helper"
+require "timeout"
+
+describe Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements, "against a concurrent old-newsletter opt-out" do
+  self.use_transactional_tests = false
+
+  before do
+    @newsletter = create(:user, username: "gumroad").tap { _1.update_columns(external_id: described_class::NEWSLETTER_SELLER_EXTERNAL_ID) }
+    @reader = create(:user, email: "concurrent-reader@example.com")
+    @follower = create(:follower, user: @newsletter, email: @reader.email, follower_user_id: @reader.id,
+                                  source: Follower::From::EMBED_FORM, confirmed_at: 2.hours.ago, created_at: 2.hours.ago)
+    described_class.prepare!(cutoff_at: 1.hour.ago)
+  end
+
+  after do
+    FeatureAnnouncementNewsletterCutover.where(seller_id: @newsletter.id).delete_all
+    FeatureAnnouncementSubscription.where(user_id: @reader.id).delete_all
+    Follower.where(followed_id: @newsletter.id).delete_all
+    [@reader, @newsletter].each(&:destroy!)
+  end
+
+  def preference = FeatureAnnouncementSubscription.where(user_id: @reader.id).pluck(:subscribed, :source)
+
+  def in_thread(&block) = Thread.new { ActiveRecord::Base.connection_pool.with_connection(&block) }
+
+  # information_schema.innodb_trx is refreshed at most every 0.1s, so poll slower than that.
+  def wait_for_lock_wait(connection)
+    Timeout.timeout(10) do
+      sleep 0.25 until connection.select_value("SELECT COUNT(*) FROM information_schema.innodb_trx WHERE trx_state = 'LOCK WAIT'").to_i > 0
+    end
+  end
+
+  it "skips a follower whose opt-out commits while the migration waits for its row" do
+    locked = Queue.new
+    holder = in_thread do |connection|
+      connection.transaction do
+        Follower.find(@follower.id).mark_deleted!
+        locked << true
+        wait_for_lock_wait(connection)
+      end
+    end
+    Timeout.timeout(10) { locked.pop }
+
+    described_class.apply!(confirmed_eligible_count: 1)
+    holder.value
+
+    expect(preference).to eq([[false, "newsletter_opt_out"]])
+    expect(FeatureAnnouncementNewsletterCutover.find_by!(seller_id: @newsletter.id).migrated_count).to eq(0)
+  end
+
+  it "makes an opt-out that arrives mid-migration wait, then win" do
+    inserting = Queue.new
+    release = Queue.new
+    allow(FeatureAnnouncementSubscription).to receive(:insert_all).and_wrap_original do |original, *args|
+      inserting << true
+      release.pop
+      original.call(*args)
+    end
+
+    migration = in_thread { described_class.apply!(confirmed_eligible_count: 1) }
+    Timeout.timeout(10) { inserting.pop }
+    opt_out = in_thread { Follower.find(@follower.id).mark_deleted! }
+    wait_for_lock_wait(ActiveRecord::Base.connection)
+    expect(opt_out).to be_alive
+
+    release << true
+    migration.value
+    opt_out.value
+
+    expect(preference).to eq([[false, "newsletter_opt_out"]])
+    expect(Follower.find(@follower.id).deleted_at).to be_present
+  ensure
+    release << true
+    migration&.join(10)
+    opt_out&.join(10)
+  end
+end

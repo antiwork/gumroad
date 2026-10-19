@@ -406,6 +406,17 @@ describe FollowersController, inertia: true do
         expect(flash[:warning]).to include("Email invalid")
       end
 
+      it "takes no new subscriber once the seller's newsletter moved to Feature announcements" do
+        FeatureAnnouncementNewsletterCutover.create!(seller:, state: "retired", cutoff_at: 1.day.ago, retired_at: Time.current)
+
+        post :from_embed_form, params: { email: "follower@example.com", seller_id: seller.external_id }
+        expect(flash[:warning]).to eq(Follower::CreateService::RETIRED_NEWSLETTER_MESSAGE)
+
+        post :from_embed_form, params: { email: "follower@example.com", seller_id: seller.external_id }, format: :json
+        expect(response.parsed_body).to eq("success" => false, "message" => Follower::CreateService::RETIRED_NEWSLETTER_MESSAGE)
+        expect(Follower.where(followed_id: seller.id)).to be_empty
+      end
+
       context "when a user is already following the creator using the same email" do
         let(:following_user) { create(:user, email: "follower@example.com") }
         let!(:following_relationship) { create(:active_follower, user: seller, email: following_user.email, follower_user_id: following_user.id, source: Follower::From::PROFILE_PAGE) }
