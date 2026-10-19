@@ -89,7 +89,15 @@ class FeatureAnnouncementNewsletterCutover < ApplicationRecord
       uncached do
         next if email.blank? || !covers?(seller_id)
 
-        follower = Follower.where(followed_id: seller_id, email:).lock("FOR SHARE").first
+        normalized_email = email.to_s.strip.downcase
+        follower = nil
+        [email, normalized_email].uniq.each do |address|
+          candidate = Follower.where(followed_id: seller_id, email: address).lock("FOR SHARE").first
+          next unless candidate && candidate.email.to_s.strip.downcase == normalized_email
+
+          follower = candidate
+          break
+        end
         # A visible tracking row needs no lock, so the common path never waits on retire!. Otherwise the barrier
         # either holds prepare! back (no row, so the copy then reads this opt-out) or finds a row this snapshot missed.
         next unless tracks_opt_outs_for?(seller_id) || TRACKING_STATES.include?(locked_state(seller_id))

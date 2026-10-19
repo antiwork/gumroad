@@ -234,7 +234,7 @@ describe Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements do
       other.update_columns(email: "cafe@example.com")
       third.update_columns(email: "càfe@example.com")
       buyer.update_columns(email: "café@example.com")
-      follow(email: buyer.email)
+      follower = follow(email: buyer.email)
       purchase = raw_purchase(" #{buyer.email} ", can_contact: true)
       FeatureAnnouncementSubscription.create!(user_id: other.id, subscribed: true, source: "settings")
       other_choice = FeatureAnnouncementSubscription.find_by!(user_id: other.id).attributes
@@ -244,11 +244,35 @@ describe Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements do
       described_class.prepare!(cutoff_at:)
       apply!
       expect(preference(buyer)).to eq([[true, "newsletter_migration"]])
+      follower.delete
+      follow(email: other.email, account: other)
 
       purchase.unsubscribe_buyer
 
       expect(preference(buyer)).to eq([[false, "newsletter_opt_out"]])
       expect(FeatureAnnouncementSubscription.find_by!(user_id: other.id).attributes).to eq(other_choice)
+    end
+
+    it "keeps a padded purchase opt-out bound after its migrated account changes email" do
+      buyer = create(:user, email: "bound-old@example.com")
+      follower = follow(email: buyer.email)
+      purchase = raw_purchase(" #{buyer.email} ", can_contact: true)
+      other_choice = FeatureAnnouncementSubscription.find_by!(user_id: opted_out.id).attributes
+      described_class.prepare!(cutoff_at:)
+      apply!
+      expect(preference(buyer)).to eq([[true, "newsletter_migration"]])
+      buyer.update!(email: "bound-new@example.com")
+      buyer.confirm
+      expect(buyer.reload.email).to eq("bound-new@example.com")
+      expect(follower.reload.follower_user_id).to eq(buyer.id)
+      expect(follower.email).to eq("bound-old@example.com")
+      expect(purchase.reload.email).to eq(" bound-old@example.com ")
+      expect(preference(buyer)).to eq([[true, "newsletter_migration"]])
+
+      purchase.unsubscribe_buyer
+
+      expect(preference(buyer)).to eq([[false, "newsletter_opt_out"]])
+      expect(FeatureAnnouncementSubscription.find_by!(user_id: opted_out.id).attributes).to eq(other_choice)
     end
 
     it "keeps the follower count separate from distinct eligible account identities" do
