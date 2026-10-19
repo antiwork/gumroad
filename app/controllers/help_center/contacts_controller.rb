@@ -72,6 +72,10 @@ class HelpCenter::ContactsController < HelpCenter::BaseController
       uploads = (raw.respond_to?(:values) ? raw.values : Array(raw)).grep(ActionDispatch::Http::UploadedFile)
       return [[], nil] if uploads.empty?
       return [[], "Please attach at most #{MAX_ATTACHMENTS} images."] if uploads.size > MAX_ATTACHMENTS
+      # Reject on the size of the spooled upload before reading any of it: read
+      # first would pull the whole body into memory only to reject it.
+      return [[], "Each image must be smaller than #{MAX_ATTACHMENT_BYTES / 1.megabyte} MB."] if uploads.any? { |upload| upload.size > MAX_ATTACHMENT_BYTES }
+      return [[], "Attachments must total less than #{MAX_TOTAL_ATTACHMENT_BYTES / 1.megabyte} MB."] if uploads.sum(&:size) > MAX_TOTAL_ATTACHMENT_BYTES
 
       files = []
       uploads.each do |upload|
@@ -81,9 +85,6 @@ class HelpCenter::ContactsController < HelpCenter::BaseController
 
         files << { filename: upload.original_filename.to_s, mime_type:, content: }
       end
-
-      return [[], "Each image must be smaller than #{MAX_ATTACHMENT_BYTES / 1.megabyte} MB."] if files.any? { |file| file[:content].bytesize > MAX_ATTACHMENT_BYTES }
-      return [[], "Attachments must total less than #{MAX_TOTAL_ATTACHMENT_BYTES / 1.megabyte} MB."] if files.sum { |file| file[:content].bytesize } > MAX_TOTAL_ATTACHMENT_BYTES
 
       # Sidekiq serializes job arguments as JSON, which cannot carry raw binary —
       # base64 keeps the bytes intact through the queue and the mailer decodes them.

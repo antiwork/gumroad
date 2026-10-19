@@ -23,13 +23,15 @@ const MAX_TOTAL_ATTACHMENT_BYTES = 6 * 1024 * 1024;
 const ACCEPTED_ATTACHMENT_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
 
 // The message is kept in localStorage so closing the modal or navigating away
-// from the Help Center cannot throw away text the user already wrote.
-const DRAFT_STORAGE_KEY = "gumroad:help-center:contact-draft";
+// from the Help Center cannot throw away text the user already wrote. The key is
+// scoped to the signed-in account so a shared browser never hands one person's
+// unpublished support message to the next.
+const draftStorageKey = (userId: string | null) => `gumroad:help-center:contact-draft:${userId ?? "anonymous"}`;
 
-const readDraft = () => {
+const readDraft = (key: string) => {
   if (typeof window === "undefined") return "";
   try {
-    return window.localStorage.getItem(DRAFT_STORAGE_KEY) ?? "";
+    return window.localStorage.getItem(key) ?? "";
   } catch {
     // Storage can be unavailable (private mode, blocked cookies) — a lost draft
     // is not worth failing the form over.
@@ -37,10 +39,10 @@ const readDraft = () => {
   }
 };
 
-const writeDraft = (message: string) => {
+const writeDraft = (key: string, message: string) => {
   try {
-    if (message) window.localStorage.setItem(DRAFT_STORAGE_KEY, message);
-    else window.localStorage.removeItem(DRAFT_STORAGE_KEY);
+    if (message) window.localStorage.setItem(key, message);
+    else window.localStorage.removeItem(key);
   } catch {
     // Ignore: see readDraft.
   }
@@ -65,9 +67,10 @@ export const ContactSupportModal = ({
 }) => {
   const loggedInUser = useLoggedInUser();
   const uid = React.useId();
+  const draftKey = draftStorageKey(loggedInUser?.id ?? null);
   const [email, setEmail] = React.useState(loggedInUser?.email ?? "");
   const [category, setCategory] = React.useState("");
-  const [message, setMessage] = React.useState(readDraft);
+  const [message, setMessage] = React.useState(() => readDraft(draftKey));
   const [files, setFiles] = React.useState<File[]>([]);
   // Honeypot field: invisible to humans, bots tend to fill it. The server
   // silently drops submissions where it is present.
@@ -76,7 +79,7 @@ export const ContactSupportModal = ({
   const [submitted, setSubmitted] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
-  React.useEffect(() => writeDraft(message), [message]);
+  React.useEffect(() => writeDraft(draftKey, message), [draftKey, message]);
 
   const addFiles = (incoming: File[]) => {
     setError(null);
@@ -140,7 +143,7 @@ export const ContactSupportModal = ({
         setSubmitted(true);
         setMessage("");
         setFiles([]);
-        writeDraft("");
+        writeDraft(draftKey, "");
       } else {
         setError(json.error);
       }
