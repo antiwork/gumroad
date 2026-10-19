@@ -47,21 +47,24 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
   def prepare!(cutoff_at)
     raise ArgumentError, "cutoff_at must be in the past" unless cutoff_at.is_a?(Time) && cutoff_at <= Time.current
 
-    report = preflight(cutoff_at)
     on_primary do
-      cutover = FeatureAnnouncementNewsletterCutover.find_or_initialize_by(seller_id: report[:seller_id])
-      if cutover.persisted? && !%w[prepared failed rolled_back].include?(cutover.state)
-        raise InvalidTransition, "Cutover is #{cutover.state}; only a prepared, failed or rolled back plan can be replaced"
-      end
+      with_run_lock(verified_seller!) do
+        report = preflight(cutoff_at)
+        cutover = FeatureAnnouncementNewsletterCutover.find_or_initialize_by(seller_id: report[:seller_id])
+        if cutover.persisted? && !%w[prepared failed rolled_back].include?(cutover.state)
+          raise InvalidTransition, "Cutover is #{cutover.state}; only a prepared, failed or rolled back plan can be replaced"
+        end
 
-      cutover.update!(state: "prepared", cutoff_at:, counts: report[:counts], eligible_count: report[:counts].fetch(:eligible, 0),
-                      migrated_count: 0, cursor_follower_id: 0, error: nil)
-      cutover
+        # A replaced failed plan keeps its migrated_count: those rows exist, and a rerun skips them.
+        cutover.update!(state: "prepared", cutoff_at:, counts: report[:counts], eligible_count: report[:counts].fetch(:eligible, 0),
+                        cursor_follower_id: 0, error: nil)
+        cutover
+      end
     end
   end
 
-  # Resumable: a failed or interrupted run continues from its cursor, and rerunning is a no-op for
-  # followers already carried over because insert_all never overwrites.
+  # Resumable: each carried-over row and its count commit together, so a failed or interrupted run
+  # continues from its cursor with an exact migrated_count, and a rerun never writes a row twice.
   def apply!(confirmed_eligible_count)
     on_primary do
       seller = verified_seller!
@@ -75,10 +78,10 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
           Follower.where(followed_id: seller.id).where("id > ?", cutover.cursor_follower_id).in_batches(of: @batch_size) do |batch|
             ReplicaLagWatcher.watch
             followers = batch.to_a
-            migrated = followers.count { migrate(seller, _1, cutover.cutoff_at) == :migrated }
-            cutover.update_columns(cursor_follower_id: followers.map(&:id).max, migrated_count: cutover.migrated_count + migrated, updated_at: Time.current)
+            followers.each { migrate(seller, cutover, _1) }
+            cutover.update_columns(cursor_follower_id: followers.map(&:id).max, updated_at: Time.current)
           end
-          cutover.update!(state: "migrated")
+          cutover.reload.update!(state: "migrated")
         rescue StandardError => e
           cutover.update_columns(state: "failed", error: "#{e.class}: #{e.message}".first(255), updated_at: Time.current)
           raise
@@ -91,7 +94,9 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
   # Turns off the old newsletter: new follows of the seller are refused and its audience and follower
   # posts stop sending. Existing follower rows are left as they are.
   def retire!
-    transition!(from: %w[migrated], to: "retired", retired_at: Time.current)
+    on_primary do
+      with_run_lock(verified_seller!) { transition!(from: %w[migrated], to: "retired", retired_at: Time.current) }
+    end
   end
 
   # Removes only rows this migration wrote and nobody has changed since (still version 1, subscribed).
@@ -122,15 +127,12 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
     end
 
     def transition!(from:, to:, **attributes)
-      on_primary do
-        seller = verified_seller!
-        FeatureAnnouncementNewsletterCutover.transaction do
-          cutover = FeatureAnnouncementNewsletterCutover.lock.find_by!(seller_id: seller.id)
-          raise InvalidTransition, "Cutover is #{cutover.state}, not #{from.join(" or ")}" unless from.include?(cutover.state)
+      FeatureAnnouncementNewsletterCutover.transaction do
+        cutover = FeatureAnnouncementNewsletterCutover.lock.find_by!(seller_id: verified_seller!.id)
+        raise InvalidTransition, "Cutover is #{cutover.state}, not #{from.join(" or ")}" unless from.include?(cutover.state)
 
-          cutover.update!(state: to, **attributes)
-          cutover
-        end
+        cutover.update!(state: to, **attributes)
+        cutover
       end
     end
 
@@ -147,26 +149,36 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
       end
     end
 
-    # Rechecks the follower, account, address, buyer opt-out and preference under share locks, so a
-    # concurrent opt-out either commits first (skipped) or waits and then writes its tombstone.
-    # Lock order matches FeatureAnnouncementDelivery and Settings: user, then follower.
-    def migrate(seller, follower, cutoff_at)
+    # Rechecks under share locks, user then follower (the order the gate and Settings use), that the
+    # follow is still this seller's and linked to the locked account. A concurrent preference write is
+    # caught by the unique key, and a buyer opt-out ends in Follower.unsubscribe, which waits on our lock.
+    def migrate(seller, cutover, follower)
       return :skipped unless follower.follower_user_id && EXPRESS_SOURCES.include?(follower.source)
 
       ApplicationRecord.transaction do
         user = User.lock("FOR SHARE").find_by(id: follower.follower_user_id)
         current = Follower.lock("FOR SHARE").find_by(id: follower.id)
-        next :skipped if current.nil?
+        next :changed_since_read unless user && current&.followed_id == seller.id && current.follower_user_id == user.id
 
-        outcome = classify(current, cutoff_at, user:, **batch_context(seller, [current]).except(:users))
+        outcome = classify(current, cutover.cutoff_at, user:, **current_context(seller, current, user))
         next outcome unless outcome == :eligible
 
-        now = Time.current
-        FeatureAnnouncementSubscription.insert_all(
-          [{ user_id: user.id, subscribed: true, version: 1, source: "newsletter_migration", created_at: now, updated_at: now }]
-        )
+        FeatureAnnouncementSubscription.create!(user_id: user.id, subscribed: true, source: "newsletter_migration")
+        FeatureAnnouncementNewsletterCutover.where(id: cutover.id)
+          .update_all(["migrated_count = migrated_count + 1, cursor_follower_id = GREATEST(cursor_follower_id, ?), updated_at = ?", current.id, Time.current])
         :migrated
       end
+    rescue ActiveRecord::RecordNotUnique
+      :existing_preference
+    end
+
+    def current_context(seller, follower, user)
+      email = normalize(follower.email)
+      {
+        shared_emails: User.where(email:).count > 1 ? Set[email] : Set.new,
+        preference_user_ids: FeatureAnnouncementSubscription.where(user_id: user.id).exists? ? Set[user.id] : Set.new,
+        opted_out_emails: Purchase.where(seller_id: seller.id, email:, can_contact: false).exists? ? Set[email] : Set.new,
+      }
     end
 
     def batch_context(seller, followers)

@@ -27,6 +27,9 @@ class SendWorkflowInstallmentWorker
 
     with_primary_database(primary_pinned) do
       return if installment.seller&.suspended?
+      # Follower and audience workflows of a retired newsletter stop here, including already scheduled
+      # jobs; product and customer workflows of the same seller still send.
+      return if (installment.follower_type? || installment.audience_type?) && FeatureAnnouncementNewsletterCutover.retired_for?(installment.seller_id)
       return unless installment.workflow.alive?
       return unless installment.alive?
       return unless installment.published?

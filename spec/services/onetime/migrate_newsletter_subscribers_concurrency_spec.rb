@@ -53,10 +53,10 @@ describe Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements, "against a
   it "makes an opt-out that arrives mid-migration wait, then win" do
     inserting = Queue.new
     release = Queue.new
-    allow(FeatureAnnouncementSubscription).to receive(:insert_all).and_wrap_original do |original, *args|
+    allow(FeatureAnnouncementSubscription).to receive(:create!).and_wrap_original do |original, **attributes|
       inserting << true
       release.pop
-      original.call(*args)
+      original.call(**attributes)
     end
 
     migration = in_thread { described_class.apply!(confirmed_eligible_count: 1) }
@@ -75,5 +75,45 @@ describe Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements, "against a
     release << true
     migration&.join(10)
     opt_out&.join(10)
+  end
+
+  it "refuses every other cutover change while a run is in progress, then lets the run finish" do
+    inserting = Queue.new
+    release = Queue.new
+    allow(FeatureAnnouncementSubscription).to receive(:create!).and_wrap_original do |original, **attributes|
+      inserting << true
+      release.pop
+      original.call(**attributes)
+    end
+
+    migration = in_thread { described_class.apply!(confirmed_eligible_count: 1) }
+    Timeout.timeout(10) { inserting.pop }
+
+    expect { described_class.prepare!(cutoff_at: 1.hour.ago) }.to raise_error(described_class::AlreadyRunning)
+    expect { described_class.retire! }.to raise_error(described_class::AlreadyRunning)
+    expect { described_class.rollback! }.to raise_error(described_class::AlreadyRunning)
+
+    release << true
+    migration.value
+
+    expect(FeatureAnnouncementNewsletterCutover.find_by!(seller_id: @newsletter.id).attributes.slice("state", "migrated_count", "cursor_follower_id"))
+      .to eq("state" => "migrated", "migrated_count" => 1, "cursor_follower_id" => @follower.id)
+    expect(preference).to eq([[true, "newsletter_migration"]])
+  ensure
+    release << true
+    migration&.join(10)
+  end
+
+  it "doesn't count a row whose unique key a committed opt-out took first" do
+    allow(FeatureAnnouncementSubscription).to receive(:create!).and_wrap_original do |original, **attributes|
+      in_thread { FeatureAnnouncementSubscription.unsubscribe!(User.find(@reader.id), source: "unsubscribe_link") }.value
+      original.call(**attributes)
+    end
+
+    described_class.apply!(confirmed_eligible_count: 1)
+
+    expect(preference).to eq([[false, "unsubscribe_link"]])
+    expect(FeatureAnnouncementNewsletterCutover.find_by!(seller_id: @newsletter.id).attributes.slice("state", "migrated_count"))
+      .to eq("state" => "migrated", "migrated_count" => 0)
   end
 end

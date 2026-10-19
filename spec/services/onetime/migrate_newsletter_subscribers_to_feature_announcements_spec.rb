@@ -94,25 +94,70 @@ describe Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements do
     expect(cutover.migrated_count).to eq(1)
   end
 
-  it "resumes a failed run from its cursor without writing anyone twice" do
+  it "keeps an exact count when a run fails mid-batch after committing a row, and resumes" do
     described_class.prepare!(cutoff_at:)
     calls = 0
-    allow(FeatureAnnouncementSubscription).to receive(:insert_all).and_wrap_original do |original, *args|
+    allow(FeatureAnnouncementSubscription).to receive(:create!).and_wrap_original do |original, **attributes|
       calls += 1
       raise ActiveRecord::Deadlocked, "simulated" if calls == 2
 
-      original.call(*args)
+      original.call(**attributes)
     end
 
-    expect { described_class.apply!(confirmed_eligible_count: 2, batch_size: 1) }.to raise_error(ActiveRecord::Deadlocked)
-    expect(cutover.attributes.slice("state", "migrated_count")).to eq("state" => "failed", "migrated_count" => 1)
+    expect { apply! }.to raise_error(ActiveRecord::Deadlocked)
+    expect(cutover.attributes.slice("state", "migrated_count", "cursor_follower_id"))
+      .to eq("state" => "failed", "migrated_count" => 1, "cursor_follower_id" => Follower.find_by(email: "embed@example.com", followed_id: newsletter.id).id)
     expect(cutover.error).to include("simulated")
     expect { described_class.retire! }.to raise_error(described_class::InvalidTransition)
 
-    described_class.apply!(confirmed_eligible_count: 2, batch_size: 1)
+    apply!
 
     expect(cutover.attributes.slice("state", "migrated_count")).to eq("state" => "migrated", "migrated_count" => 2)
     expect(FeatureAnnouncementSubscription.where(source: "newsletter_migration").pluck(:user_id)).to contain_exactly(embed.id, follow_page.id)
+    expect(preference(opted_out)).to eq([[false, "unsubscribe_link"]])
+  end
+
+  describe "rechecking each candidate when it is locked" do
+    def during_apply(email)
+      allow_any_instance_of(described_class).to receive(:migrate).and_wrap_original do |original, seller, plan, follower|
+        yield Follower.find(follower.id) if follower.email == email
+        original.call(seller, plan, follower)
+      end
+    end
+
+    before { described_class.prepare!(cutoff_at:) }
+
+    it "refuses a follow that moved to another seller since the batch was read" do
+      other_seller = create(:user)
+      during_apply("embed@example.com") { _1.update_columns(followed_id: other_seller.id) }
+
+      apply!
+
+      expect(preference(embed)).to be_empty
+      expect(Follower.find_by(email: "embed@example.com", followed_id: other_seller.id)).to be_present
+      expect(cutover.migrated_count).to eq(1)
+    end
+
+    it "refuses a follow whose account link changed since the batch was read" do
+      during_apply("embed@example.com") { _1.update_columns(follower_user_id: follow_page.id) }
+
+      apply!
+
+      expect(preference(embed)).to be_empty
+      expect(preference(follow_page)).to eq([[true, "newsletter_migration"]])
+      expect(cutover.migrated_count).to eq(1)
+    end
+
+    it "honors an old-newsletter unsubscribe made while the migration runs" do
+      during_apply("embed@example.com") { get_cancelled(_1) }
+
+      apply!
+
+      expect(preference(embed)).to eq([[false, "newsletter_opt_out"]])
+      expect(cutover.migrated_count).to eq(1)
+    end
+
+    def get_cancelled(follower) = Follower.unsubscribe(follower.followed_id, follower.email)
   end
 
   describe "after the migration" do
@@ -150,11 +195,12 @@ describe Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements do
 
     it "rolls back only rows the migration wrote that nobody has changed" do
       FeatureAnnouncementSubscription.unsubscribe!(follow_page, source: "unsubscribe_link")
+      FeatureAnnouncementSubscription.update_from_settings!(follow_page, subscribed: true, rendered_version: 2)
 
       described_class.rollback!
 
       expect(preference(embed)).to be_empty
-      expect(preference(follow_page)).to eq([[false, "unsubscribe_link"]])
+      expect(preference(follow_page)).to eq([[true, "settings"]])
       expect(preference(opted_out)).to eq([[false, "unsubscribe_link"]])
       expect(cutover.state).to eq("rolled_back")
     end
