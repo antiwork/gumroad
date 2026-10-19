@@ -90,6 +90,7 @@ const ContactSupportForm = ({ open, onClose, referrerPath }: ContactSupportModal
   const [category, setCategory] = React.useState("");
   const [message, setMessage] = React.useState(() => readDraft(draftKey));
   const [files, setFiles] = React.useState<File[]>([]);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
   // Honeypot field: invisible to humans, bots tend to fill it. The server
   // silently drops submissions where it is present.
   const [website, setWebsite] = React.useState("");
@@ -238,10 +239,15 @@ const ContactSupportForm = ({ open, onClose, referrerPath }: ContactSupportModal
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor={`${uid}-attachments`}>Screenshots (optional)</Label>
-            <Input
+            {/* The native control would keep saying "No file chosen" after the reset below, so it stays hidden and
+                the list is the only record of what will be sent. */}
+            <input
+              ref={fileInputRef}
               id={`${uid}-attachments`}
               type="file"
               multiple
+              className="sr-only"
+              tabIndex={-1}
               disabled={submitting}
               accept={ACCEPTED_ATTACHMENT_TYPES.join(",")}
               onChange={(e) => {
@@ -250,7 +256,15 @@ const ContactSupportForm = ({ open, onClose, referrerPath }: ContactSupportModal
                 e.target.value = "";
               }}
             />
-            <p className="text-sm text-muted">
+            <Button
+              className="self-start"
+              disabled={submitting}
+              aria-describedby={`${uid}-attachments-hint`}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              Add screenshots
+            </Button>
+            <p id={`${uid}-attachments-hint`} className="text-sm text-muted">
               Up to {MAX_ATTACHMENTS} images, {formatBytes(MAX_ATTACHMENT_BYTES)} each. You can also paste a screenshot
               into the message.
             </p>
@@ -258,12 +272,15 @@ const ContactSupportForm = ({ open, onClose, referrerPath }: ContactSupportModal
               <ul className="flex flex-col gap-1">
                 {files.map((file, index) => (
                   <li key={`${file.name}-${index}`} className="flex items-center justify-between gap-2 text-sm">
-                    <span className="truncate">
-                      {file.name} ({formatBytes(file.size)})
+                    {/* w-0 keeps a long name from widening the dialog past a phone screen; flex-1 then fills the row. */}
+                    <span className="flex w-0 flex-1 gap-1">
+                      <span className="truncate">{file.name}</span>{" "}
+                      <span className="shrink-0">({formatBytes(file.size)})</span>
                     </span>
                     <Button
                       type="button"
                       size="sm"
+                      className="shrink-0 whitespace-nowrap"
                       disabled={submitting}
                       onClick={() => setFiles(files.filter((_, i) => i !== index))}
                     >

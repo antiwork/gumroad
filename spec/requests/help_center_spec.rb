@@ -36,12 +36,14 @@ describe "Help Center", type: :system, js: true do
       select "Technical issue", from: "What do you need help with?"
       fill_in "Message", with: "The checkout button does nothing when I click it."
 
-      attach_file "Screenshots (optional)", file_fixture("smilie.png")
-      expect(page).to have_text("smilie.png (", count: 1)
+      attach_file(file_fixture("smilie.png")) { click_on "Add screenshots" }
+      expect(page).to have_text("smilie.png", count: 1)
+      # The native file input takes no visible space, so its "No file chosen" never contradicts the list.
+      expect(evaluate_script("document.querySelector('[role=dialog] input[type=file]').getBoundingClientRect().width")).to be <= 1
       click_on "Remove"
       expect(page).not_to have_text("smilie.png")
-      attach_file "Screenshots (optional)", file_fixture("smilie.png")
-      expect(page).to have_text("smilie.png (", count: 1)
+      attach_file(file_fixture("smilie.png")) { click_on "Add screenshots" }
+      expect(page).to have_text("smilie.png", count: 1)
 
       click_on "Send message"
       expect(page).to have_text("Message sent!")
@@ -55,6 +57,49 @@ describe "Help Center", type: :system, js: true do
       attachment = ActionMailer::Base.deliveries.last.attachments.sole
       expect(attachment.filename).to eq("smilie.png")
       expect(attachment.body.decoded).to eq(file_fixture("smilie.png").binread)
+    end
+
+    it "keeps each attached screenshot on one readable row on a phone" do
+      names = [
+        "Screenshot 2026-10-19 at 09.41.07 checkout keeps spinning after pay.png",
+        "Screenshot 2026-10-19 at 09.42.31 card declined message twice.png",
+        "Screenshot 2026-10-19 at 09.44.58 receipt email never arrived.png",
+      ]
+      dir = Dir.mktmpdir
+      paths = names.map { |name| File.join(dir, name).tap { FileUtils.cp(file_fixture("smilie.png"), _1) } }
+
+      visit "/help"
+      page.driver.browser.execute_cdp("Emulation.setDeviceMetricsOverride", width: 375, height: 812, deviceScaleFactor: 1, mobile: true)
+      expect(page.evaluate_script("window.innerWidth")).to eq(375)
+      click_on "Contact support"
+      attach_file "Screenshots (optional)", paths, make_visible: true
+      expect(page).to have_css("[role=dialog] li", count: 3)
+
+      rows = evaluate_script(<<~'JS')
+        [...document.querySelectorAll("[role=dialog] li")].map((row) => {
+          const button = [...row.querySelectorAll("button")].find((b) => b.textContent.trim() === "Remove");
+          const label = document.createRange();
+          label.selectNodeContents(button);
+          const sizeNode = [...row.querySelectorAll("*")].flatMap((el) => [...el.childNodes])
+            .find((node) => node.nodeType === Node.TEXT_NODE && /^[\d.]+ (KB|MB)$/.test(node.textContent));
+          const size = document.createRange();
+          size.selectNodeContents(sizeNode);
+          const sizeRect = size.getBoundingClientRect();
+          const clip = sizeNode.parentElement.closest("li, [class*=truncate]");
+          return {
+            labelLines: new Set([...label.getClientRects()].map((r) => Math.round(r.top))).size,
+            labelFits: button.scrollWidth <= button.clientWidth,
+            buttonInsideRow: button.getBoundingClientRect().right <= row.getBoundingClientRect().right + 0.5,
+            rowInsideViewport: row.getBoundingClientRect().left >= 0 && row.getBoundingClientRect().right <= innerWidth,
+            sizeVisible: sizeRect.width > 0 && sizeRect.right <= clip.getBoundingClientRect().right + 0.5 &&
+              sizeRect.right <= button.getBoundingClientRect().left,
+          };
+        })
+      JS
+      expect(rows).to eq([{ "labelLines" => 1, "labelFits" => true, "buttonInsideRow" => true, "rowInsideViewport" => true, "sizeVisible" => true }] * 3)
+    ensure
+      page.driver.browser.execute_cdp("Emulation.clearDeviceMetricsOverride")
+      FileUtils.rm_rf(dir) if dir
     end
 
     it "keeps an unsent message across a reload and forgets it once sent" do

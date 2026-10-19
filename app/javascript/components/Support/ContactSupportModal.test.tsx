@@ -43,7 +43,8 @@ const attach = (...files: File[]) =>
   fireEvent.change(screen.getByLabelText("Screenshots (optional)"), { target: { files } });
 const image = (name: string, bytes: number[] | number = [0x89, 0x50, 0x4e, 0x47], type = "image/png") =>
   new File([typeof bytes === "number" ? new Uint8Array(bytes) : Uint8Array.from(bytes)], name, { type });
-const listed = (name: string) => screen.queryAllByText(new RegExp(`^${name.replace(".", "\\.")} \\(`, "u"));
+const listed = (name: string) =>
+  screen.queryAllByRole("listitem").filter((row) => row.textContent.startsWith(`${name} (`));
 
 const fillValidForm = () => {
   fireEvent.change(emailField(), { target: { value: "buyer@example.com" } });
@@ -59,6 +60,7 @@ const editableControls = () => [
   screen.getByLabelText<HTMLSelectElement>("What do you need help with?"),
   messageField(),
   screen.getByLabelText<HTMLInputElement>("Screenshots (optional)"),
+  screen.getByRole<HTMLButtonElement>("button", { name: "Add screenshots" }),
   ...screen.getAllByRole<HTMLButtonElement>("button", { name: "Remove" }),
 ];
 
@@ -199,6 +201,28 @@ describe("ContactSupportModal", () => {
   });
 
   describe("screenshots", () => {
+    it("opens the browser's file picker from the Add screenshots button", () => {
+      renderModal();
+      const openPicker = vi.spyOn(screen.getByLabelText<HTMLInputElement>("Screenshots (optional)"), "click");
+
+      fireEvent.click(screen.getByRole("button", { name: "Add screenshots" }));
+
+      expect(openPicker).toHaveBeenCalledOnce();
+    });
+
+    it("leaves the attached list as the only record of chosen screenshots", () => {
+      renderModal();
+
+      attach(image("checkout.png"));
+
+      // The native input's own "No file chosen" text resets with the input, so it stays out of view and out of the tab order.
+      const input = screen.getByLabelText<HTMLInputElement>("Screenshots (optional)");
+      expect(input.classList.contains("sr-only")).toBe(true);
+      expect(input.tabIndex).toBe(-1);
+      expect(screen.getByRole("button", { name: "Add screenshots", description: /Up to 3 images/u })).not.toBeNull();
+      expect(listed("checkout.png")).toHaveLength(1);
+    });
+
     it("lists a chosen screenshot so the user can see it will be sent", () => {
       renderModal();
 
@@ -301,7 +325,7 @@ describe("ContactSupportModal", () => {
 
       send();
       await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
-      expect(editableControls().map((control) => control.disabled)).toEqual([true, true, true, true, true]);
+      expect(editableControls().map((control) => control.disabled)).toEqual([true, true, true, true, true, true]);
       fireEvent.click(screen.getByRole("button", { name: "Remove" }));
       expect(listed("checkout.png")).toHaveLength(1);
 
@@ -331,7 +355,7 @@ describe("ContactSupportModal", () => {
       respond(jsonResponse({ success: false, error: "Please select a category." }, 422));
 
       await waitFor(() => expect(screen.getByRole("alert").textContent).toBe("Please select a category."));
-      expect(editableControls().map((control) => control.disabled)).toEqual([false, false, false, false, false]);
+      expect(editableControls().map((control) => control.disabled)).toEqual([false, false, false, false, false, false]);
       expect(messageField().value).toBe("Checkout does nothing when I click it.");
       expect(listed("checkout.png")).toHaveLength(1);
     });
