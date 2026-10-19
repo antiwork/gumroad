@@ -295,10 +295,10 @@ export default function MainPage() {
                       disabled={isFormDisabled}
                     />
                   </TableCell>
-                  <TableCell></TableCell>
+                  <EmailOnlyCell />
                 </TableRow>
                 <TableRow>
-                  <TableHead scope="row">Feature announcements</TableHead>
+                  <TableHead scope="row">Gumroad feature announcements</TableHead>
                   <TableCell>
                     <Switch
                       checked={featureAnnouncements.subscribed}
@@ -306,10 +306,10 @@ export default function MainPage() {
                         setFeatureAnnouncements({ ...featureAnnouncements, subscribed: e.target.checked })
                       }
                       disabled={isFormDisabled}
-                      aria-label="Feature announcements"
+                      aria-label="Gumroad feature announcements"
                     />
                   </TableCell>
-                  <TableCell></TableCell>
+                  <EmailOnlyCell />
                 </TableRow>
                 <TableRow>
                   <TableHead scope="row">Comments</TableHead>
@@ -320,7 +320,7 @@ export default function MainPage() {
                       disabled={isFormDisabled}
                     />
                   </TableCell>
-                  <TableCell></TableCell>
+                  <EmailOnlyCell />
                 </TableRow>
                 <TableRow>
                   <TableHead scope="row">Reviews</TableHead>
@@ -332,7 +332,7 @@ export default function MainPage() {
                       aria-label="Reviews"
                     />
                   </TableCell>
-                  <TableCell></TableCell>
+                  <EmailOnlyCell />
                 </TableRow>
               </TableBody>
             </Table>
@@ -622,6 +622,9 @@ export default function MainPage() {
     </Layout>
   );
 }
+
+// Keeps the Mobile column aligned on wide screens; a phone card drops it rather than show an empty Mobile section.
+const EmailOnlyCell = () => <TableCell className="hidden lg:table-cell" />;
 
 const InvalidateActiveSessionsSection = () => {
   const [isConfirmationDialogOpen, setIsConfirmationDialogOpen] = React.useState(false);

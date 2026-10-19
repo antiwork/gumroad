@@ -71,6 +71,56 @@ describe Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements do
     expect(FeatureAnnouncementNewsletterCutover.count).to eq(0)
   end
 
+  describe "bounded context reads" do
+    it "counts inactive and late follows without reading their accounts or purchases" do
+      waiting = create(:user, email: "waiting@example.com")
+      follow(email: waiting.email, account: waiting, confirmed_at: nil)
+      omitted_ids = [left_newsletter.id, late.id, waiting.id]
+      omitted_emails = [left_newsletter.email, late.email, waiting.email]
+      [User, Purchase].each do |model|
+        allow(model).to receive(:where).and_wrap_original do |original, *args, **kwargs|
+          filters = args.first || kwargs
+          if filters.is_a?(Hash)
+            expect(filters[:id] & omitted_ids).to be_empty if model == User && filters[:id].is_a?(Array)
+            expect(filters[:email] & omitted_emails).to be_empty if filters[:email].is_a?(Array)
+          end
+          original.call(*args, **kwargs)
+        end
+      end
+
+      expect(described_class.preflight(cutoff_at:)[:counts]).to eq(
+        after_cutoff: 1, buyer_opted_out: 1, conflicting_address: 1, eligible: 2, existing_preference: 1, follower_inactive: 2,
+        guest: 1, inactive_account: 1, unconfirmed_account: 1, unverified_source: 2
+      )
+    end
+
+    it "bounds purchase email lookups and keeps opt-outs across every query" do
+      accounts = Array.new(105) do |index|
+        create(:user, email: "bounded-#{index}@example.com").tap { follow(email: _1.email, account: _1) }
+      end
+      accounts.values_at(0, 99, 104).each do |account|
+        create(:purchase, link: create(:product, user: newsletter), email: account.email, can_contact: false)
+          .update_columns(email: account.email.upcase)
+      end
+      lookups = []
+      allow(Purchase).to receive(:where).and_wrap_original do |original, *args, **kwargs|
+        filters = args.first || kwargs
+        lookups << filters[:email] if filters.is_a?(Hash) && filters[:email].is_a?(Array)
+        original.call(*args, **kwargs)
+      end
+
+      report = described_class.preflight(cutoff_at:)
+
+      expect(lookups.size).to eq(2)
+      expect(lookups.map(&:size)).to all(be <= 100)
+      expected = %w[embed follow-page imported sourceless old-address unconfirmed suspended opted-out buyer guest]
+        .map { "#{_1}@example.com" } + accounts.map(&:email)
+      expect(lookups.flatten).to match_array(expected)
+      expect(report[:counts]).to include(buyer_opted_out: 4, eligible: 104)
+      expect(FeatureAnnouncementSubscription.where(source: "newsletter_migration")).to be_empty
+    end
+  end
+
   describe "source provenance" do
     it "keeps every mapped follow a candidate and writes nothing while no source cohort is verified" do
       verify_sources([])

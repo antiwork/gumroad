@@ -156,7 +156,7 @@ export type PurchasingPowerParityDetails = { country: string; factor: number; mi
 
 export type Recurrences = {
   default: RecurrenceId;
-  enabled: { recurrence: RecurrenceId; price_cents: number; id: string }[];
+  enabled: { recurrence: RecurrenceId; price_cents: number; id: string; renewal_reminder_days?: number[] }[];
 };
 
 export type Product = {
