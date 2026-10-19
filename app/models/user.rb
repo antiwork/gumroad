@@ -1687,7 +1687,7 @@ class User < ApplicationRecord
     end
 
     def fence_newsletter_cutover
-      FeatureAnnouncementNewsletterCutover.fence_account_change(id, [email_before_last_save, email])
+      FeatureAnnouncementNewsletterCutover.fence_account_change([email_before_last_save, email])
     end
 
     # Cache-key version suffix abandons old URLs without a backfill.

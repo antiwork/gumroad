@@ -29,6 +29,7 @@ describe "Old Gumroad newsletter sends reaching the provider while it retires" d
     sellers = [@newsletter, @other_seller]
     FeatureAnnouncementNewsletterCutover.where(seller_id: @newsletter.id).delete_all
     posts = Installment.where(seller_id: sellers.map(&:id))
+    installment_ids = posts.ids
     SentPostEmail.where(post_id: posts.select(:id)).delete_all
     EmailInfo.where(installment_id: posts.select(:id)).delete_all
     PostEmailBlast.where(post_id: posts.select(:id)).delete_all
@@ -39,6 +40,7 @@ describe "Old Gumroad newsletter sends reaching the provider while it retires" d
     Follower.where(followed_id: sellers.map(&:id)).delete_all
     AudienceMember.where(seller_id: sellers.map(&:id)).delete_all
     sellers.each(&:destroy!)
+    delete_leftovers(user_ids: sellers.map(&:id), link_ids: Link.where(user_id: sellers.map(&:id)).ids, installment_ids:)
   end
 
   def cutover = FeatureAnnouncementNewsletterCutover.find_by!(seller_id: @newsletter.id)
@@ -189,6 +191,7 @@ describe "Old Gumroad newsletter sends reaching the provider while it retires" d
     ensure
       finish(retirement)
       Purchase.where(link_id: product&.id).delete_all
+      Price.where(link_id: product&.id).delete_all
       Link.where(id: product&.id).delete_all
     end
   end

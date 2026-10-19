@@ -27,6 +27,7 @@ describe "Account changes while the old Gumroad newsletter retires", type: :requ
     Follower.where(followed_id: @newsletter.id).delete_all
     AudienceMember.where(seller_id: @newsletter.id).delete_all # delete_all skips the follower callbacks that remove these
     [*@users, @newsletter].each { _1.reload.destroy! }
+    delete_leftovers(user_ids: [*@users, @newsletter].map(&:id))
   end
 
   def account(email, **attributes) = create(:user, email:, **attributes).tap { @users << _1 }

@@ -29,6 +29,7 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
   class AlreadyRunning < StandardError; end
   class CoverageIncomplete < StandardError; end
   class AmbientTransaction < StandardError; end
+  class UnsupportedIsolation < StandardError; end
 
   def self.preflight(cutoff_at:, welcome_greeter_sources: nil, batch_size: BATCH_SIZE) = new(batch_size:).preflight(cutoff_at, welcome_greeter_sources:)
   def self.prepare!(cutoff_at:, batch_size: BATCH_SIZE) = new(batch_size:).prepare!(cutoff_at)
@@ -228,9 +229,13 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
       { a:, welcome_greeter_sources:, b: { total: a[:total] - excluded.values.sum, excluded: } }
     end
 
-    # An outer transaction would hold its old snapshot and swallow the per-row commits, so refuse one.
+    # An outer transaction would hold its old snapshot and swallow the per-row commits, so refuse one. Writers
+    # order against the cutover through gap locks (FeatureAnnouncementNewsletterCutover.locked_state), which
+    # only REPEATABLE READ takes.
     def with_run_lock(seller)
       raise AmbientTransaction, "Run the newsletter cutover outside a transaction" if ApplicationRecord.connection.current_transaction.joinable?
+      isolation = ApplicationRecord.connection.select_rows("SELECT @@SESSION.transaction_isolation, @@GLOBAL.transaction_isolation").first
+      raise UnsupportedIsolation, "The newsletter cutover needs REPEATABLE READ, not #{isolation.uniq.join("/")}" unless isolation.all?("REPEATABLE-READ")
 
       name = "feature_announcement_newsletter_cutover_#{seller.id}"
       connection = ApplicationRecord.connection

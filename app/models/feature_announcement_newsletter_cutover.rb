@@ -21,6 +21,23 @@ class FeatureAnnouncementNewsletterCutover < ApplicationRecord
     where(seller_id:, state: TRACKING_STATES).exists?
   end
 
+  def self.official_seller_id
+    User.where(external_id: Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements::NEWSLETTER_SELLER_EXTERNAL_ID).pick(:id)
+  end
+
+  # Gumroad's own newsletter seller, whose writers order against its cutover even before the row exists, and
+  # any seller that already has a row.
+  def self.covers?(seller_id)
+    seller_id.present? && (seller_id == official_seller_id || where(seller_id:).exists?)
+  end
+
+  # The row's current state, nil without one, read FOR SHARE inside the caller's transaction. With no row the
+  # read holds a gap lock on the seller_id index under REPEATABLE READ (which the cutover checks for), so
+  # prepare! can't create it until the caller commits; with a row, retire! waits the same way.
+  def self.locked_state(seller_id)
+    ApplicationRecord.connected_to(role: :writing) { uncached { where(seller_id:).lock("FOR SHARE").pick(:state) } }
+  end
+
   # Primary and uncached: senders run on workers whose plain reads can go to a lagging replica.
   def self.retired_for?(seller_id)
     ApplicationRecord.connected_to(role: :writing) { uncached { where(seller_id:, state: "retired").exists? } }
@@ -42,21 +59,19 @@ class FeatureAnnouncementNewsletterCutover < ApplicationRecord
     confirmed.first if confirmed.one?
   end
 
-  # For a save that lifts a buyer opt-out retire! may already have counted as resolved. Locks the follow (the
-  # migration's order), share-locks the cutover row so retire! orders against this commit, then stamps the
-  # follow after that lock so retire!'s recheck of rows changed since its scan includes it.
+  # For a save that lifts a buyer opt-out the copy or retire! may have counted. Locks the follow (the migration's
+  # order; a current read, and with no follow none can be added at the address until this commits), then the
+  # cutover barrier, then stamps the follow after it so retire!'s recheck of rows changed since its scan sees it.
   def self.fence_buyer_resubscribe(seller_id, email)
     ApplicationRecord.connected_to(role: :writing) do
       uncached do
-        next if email.blank? || !where(seller_id:).exists?
+        next if email.blank? || !covers?(seller_id)
 
-        follower_id = Follower.where(followed_id: seller_id, email:).pick(:id)
+        follower_id = Follower.where(followed_id: seller_id, email:).lock.pick(:id)
         next unless follower_id
 
-        follower = Follower.lock.find(follower_id)
-
-        where(seller_id:).lock("FOR SHARE").pick(:state)
-        follower.update_columns(updated_at: Time.current)
+        locked_state(seller_id)
+        Follower.where(id: follower_id).update_all(updated_at: Time.current)
       end
     end
   end
@@ -67,30 +82,35 @@ class FeatureAnnouncementNewsletterCutover < ApplicationRecord
   def self.mirror_buyer_opt_out(seller_id, email)
     ApplicationRecord.connected_to(role: :writing) do
       uncached do
-        next if email.blank? || !tracks_opt_outs_for?(seller_id)
+        next if email.blank? || !covers?(seller_id)
 
-        follower = Follower.find_by(followed_id: seller_id, email:)
+        follower = Follower.where(followed_id: seller_id, email:).lock("FOR SHARE").first
+        # The copy locks the cutover row after writing a preference, so the common path checks without locking.
+        # Without a row the barrier holds prepare! back instead, and the copy then reads this opt-out.
+        next unless tracks_opt_outs_for?(seller_id) || TRACKING_STATES.include?(locked_state(seller_id))
+
         user = follower ? subscriber_for(follower) : only_confirmed_account(email)
         FeatureAnnouncementSubscription.unsubscribe!(user, source: "newsletter_opt_out") if user
       end
     end
   end
 
-  # For an account write that can change how retire! classifies the follows mapped to it (linked, or at its
-  # old or new address). Runs inside the user's save, so the order is user, then follows, then the cutover
-  # row; the stamp after the share lock puts them in retire!'s recheck. Retired is final, so it's skipped.
-  def self.fence_account_change(user_id, emails)
+  # For an account write that can change how the copy or retire! classifies follows at its old or new address.
+  # A linked follow elsewhere is a conflicting address whatever the account's state, so the addresses are enough.
+  # Runs inside the user's save: the user, then those follows (a current read, so none can be added there before
+  # this commits), then the cutover barrier, then a stamp retire!'s recheck sees. Retired is final, so skipped.
+  def self.fence_account_change(emails)
     ApplicationRecord.connected_to(role: :writing) do
       uncached do
         seller_ids = where.not(state: "retired").pluck(:seller_id)
+        official_id = official_seller_id
+        seller_ids |= [official_id] if official_id && !where(seller_id: official_id, state: "retired").exists?
         next if seller_ids.empty?
 
-        follower_ids = Follower.where(followed_id: seller_ids, follower_user_id: user_id).pluck(:id) |
-          Follower.where(followed_id: seller_ids, email: emails.compact_blank.uniq).pluck(:id)
+        follower_ids = Follower.where(followed_id: seller_ids, email: emails.compact_blank.uniq).lock.pluck(:id)
         next if follower_ids.empty?
 
-        Follower.where(id: follower_ids).order(:id).lock.pluck(:id)
-        where(seller_id: seller_ids).order(:id).lock("FOR SHARE").pluck(:state)
+        where(seller_id: seller_ids).order(:seller_id).lock("FOR SHARE").pluck(:state)
         Follower.where(id: follower_ids).update_all(updated_at: Time.current)
       end
     end
@@ -100,17 +120,17 @@ class FeatureAnnouncementNewsletterCutover < ApplicationRecord
   # Nil for everything else, so other creators and the seller's customer posts take no lock.
   def self.handoff_admission_for(post)
     return unless post.audience_type? || post.follower_type?
-    return unless ApplicationRecord.connected_to(role: :writing) { uncached { where(seller_id: post.seller_id).exists? } }
+    return unless ApplicationRecord.connected_to(role: :writing) { uncached { covers?(post.seller_id) } }
 
     ->(&handoff) { admit_newsletter_handoff(post.seller_id, &handoff) }
   end
 
-  # Holds the cutover row FOR SHARE across the provider call only: retire! waits for an admitted handoff,
-  # and a handoff after it commits raises Retired before anything reaches the provider.
+  # Holds the cutover barrier across the provider call only: prepare! and retire! wait for an admitted handoff,
+  # and a handoff after retirement commits raises Retired before anything reaches the provider.
   def self.admit_newsletter_handoff(seller_id)
     ApplicationRecord.connected_to(role: :writing) do
       transaction do
-        state = with_lock_wait(HANDOFF_LOCK_WAIT_SECONDS) { uncached { where(seller_id:).lock("FOR SHARE").pick(:state) } }
+        state = with_lock_wait(HANDOFF_LOCK_WAIT_SECONDS) { locked_state(seller_id) }
         raise Retired, "The newsletter of seller #{seller_id} is retired" if state == "retired"
 
         yield
@@ -127,12 +147,10 @@ class FeatureAnnouncementNewsletterCutover < ApplicationRecord
   end
   private_class_method :with_lock_wait
 
-  # For a save that would make a follow active. The share lock waits out a retire! holding the row
-  # FOR UPDATE and reads its committed state, and holds retire! back until this save commits.
-  # Sellers without a cutover row take no lock, so other creators' follows never queue here.
+  # For a save that would make a follow active. The barrier waits out a retire! holding the row FOR UPDATE and
+  # reads its committed state, and holds prepare! and retire! back until this save commits. Other creators'
+  # follows take no lock.
   def self.retired_for_follow?(seller_id)
-    ApplicationRecord.connected_to(role: :writing) do
-      uncached { where(seller_id:).exists? && where(seller_id:).lock("FOR SHARE").pick(:state) == "retired" }
-    end
+    ApplicationRecord.connected_to(role: :writing) { uncached { covers?(seller_id) && locked_state(seller_id) == "retired" } }
   end
 end

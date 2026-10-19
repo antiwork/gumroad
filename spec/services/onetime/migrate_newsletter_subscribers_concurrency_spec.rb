@@ -21,6 +21,7 @@ describe Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements, "against a
     Follower.where(followed_id: @newsletter.id).delete_all
     AudienceMember.where(seller_id: @newsletter.id).delete_all # delete_all skips the follower callbacks that remove these
     [@reader, @newsletter, *@extra_users].each(&:destroy!)
+    delete_leftovers(user_ids: [@reader, @newsletter, *@extra_users].map(&:id))
   end
 
   # Without the lock under test, the helper times out waiting; joining it must not hide the assertion that failed.

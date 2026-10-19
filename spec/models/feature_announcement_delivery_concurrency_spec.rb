@@ -18,6 +18,7 @@ describe FeatureAnnouncementDelivery, "ordering the handoff against concurrent w
     FeatureAnnouncementDelivery.where(user_id: @user.id).delete_all
     FeatureAnnouncementSubscription.where(user_id: @user.id).delete_all
     @user.destroy!
+    delete_leftovers(user_ids: [@user.id])
   end
 
   def announcement

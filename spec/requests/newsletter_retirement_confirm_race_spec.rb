@@ -27,6 +27,7 @@ describe "Confirming a follow while the old Gumroad newsletter retires", type: :
     Follower.where(followed_id: @newsletter.id).delete_all
     AudienceMember.where(seller_id: @newsletter.id).delete_all # delete_all skips the follower callbacks that remove these
     [@reader, @newsletter].each(&:destroy!)
+    delete_leftovers(user_ids: [@reader, @newsletter].map(&:id))
   end
 
   def cutover = FeatureAnnouncementNewsletterCutover.find_by!(seller_id: @newsletter.id)

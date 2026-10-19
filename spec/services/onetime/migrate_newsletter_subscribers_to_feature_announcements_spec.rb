@@ -517,6 +517,17 @@ describe Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements do
       expect(cutover.state).to eq("migrated")
     end
 
+    it "refuses to run under an isolation level without gap locks, which order writers against the cutover" do
+      connection = ApplicationRecord.connection
+      connection.execute("SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED")
+
+      expect { described_class.prepare!(cutoff_at: Time.current) }.to raise_error(described_class::UnsupportedIsolation, /READ-COMMITTED/)
+      expect { described_class.retire! }.to raise_error(described_class::UnsupportedIsolation)
+      expect(cutover.state).to eq("migrated")
+    ensure
+      connection&.execute("SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ")
+    end
+
     it "carries over follows made after the first cutoff by replacing the migrated plan" do
       described_class.prepare!(cutoff_at: Time.current)
       apply!
