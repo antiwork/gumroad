@@ -9,13 +9,14 @@ class PostResendApi
 
   def self.process(**args) = new(**args).send_emails
 
-  def initialize(post:, recipients:, cache: {}, blast: nil, preview: false, after_provider_delivery: nil)
+  def initialize(post:, recipients:, cache: {}, blast: nil, preview: false, after_provider_delivery: nil, handoff_admission: nil)
     @post = post
     @recipients = recipients
     @cache = cache
     @blast = blast
     @preview = preview
     @after_provider_delivery = after_provider_delivery
+    @handoff_admission = handoff_admission
 
     @cache[@post] ||= {}
   end
@@ -27,28 +28,31 @@ class PostResendApi
     fetch_rendered_template
 
     emails = build_emails
-    if Rails.application.config.action_mailer.perform_deliveries != false && !Rails.env.test?
-      Resend.api_key = GlobalConfig.get("RESEND_CREATORS_API_KEY")
-      duration = Benchmark.realtime do
-        response = TransientDeliveryRetry.call(context: "PostResendApi post_id=#{@post.id}") do
-          if emails.size == 1
-            Resend::Emails.send(emails.first)
-          else
-            Resend::Batch.send(emails)
+    # Only the provider call runs inside the admission; the records below commit apart from it.
+    admit_handoff do
+      if Rails.application.config.action_mailer.perform_deliveries != false && !Rails.env.test?
+        Resend.api_key = GlobalConfig.get("RESEND_CREATORS_API_KEY")
+        duration = Benchmark.realtime do
+          response = TransientDeliveryRetry.call(context: "PostResendApi post_id=#{@post.id}") do
+            if emails.size == 1
+              Resend::Emails.send(emails.first)
+            else
+              Resend::Batch.send(emails)
+            end
+          end
+          unless response.success?
+            raise ResendApiResponseError.new(response.body)
           end
         end
-        unless response.success?
-          raise ResendApiResponseError.new(response.body)
-        end
-      end
 
-      Rails.logger.info(
-        "[#{self.class.name}] Sent post #{@post.id} to #{@recipients.size} recipients" \
-        " (duration: #{duration.round(3)}s)")
-    else
-      Rails.logger.info(
-        "[#{self.class.name}] Would have sent post #{@post.id} to #{@recipients.size} recipients" \
-        " (perform_deliveries = false)")
+        Rails.logger.info(
+          "[#{self.class.name}] Sent post #{@post.id} to #{@recipients.size} recipients" \
+          " (duration: #{duration.round(3)}s)")
+      else
+        Rails.logger.info(
+          "[#{self.class.name}] Would have sent post #{@post.id} to #{@recipients.size} recipients" \
+          " (perform_deliveries = false)")
+      end
     end
 
     @after_provider_delivery&.call
@@ -70,6 +74,8 @@ class PostResendApi
   end
 
   private
+    def admit_handoff(&) = @handoff_admission ? @handoff_admission.call(&) : yield
+
     def build_emails
       @recipients.map do |recipient|
         email = build_email_for_recipient(recipient)

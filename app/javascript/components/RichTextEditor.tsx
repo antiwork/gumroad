@@ -21,9 +21,10 @@ import {
 import { Content, createDocument, Editor, getSchema, isList, JSONContent } from "@tiptap/core";
 import Placeholder from "@tiptap/extension-placeholder";
 import Underline from "@tiptap/extension-underline";
+import { GapCursor } from "@tiptap/pm/gapcursor";
 import { redoDepth, undoDepth } from "@tiptap/pm/history";
-import { DOMSerializer, Schema } from "@tiptap/pm/model";
-import { EditorState, Selection } from "@tiptap/pm/state";
+import { DOMSerializer, Node as ProseMirrorNode, Schema } from "@tiptap/pm/model";
+import { EditorState, NodeSelection, Selection, TextSelection } from "@tiptap/pm/state";
 import { EditorView } from "@tiptap/pm/view";
 import { EditorContent, Extensions, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -55,6 +56,30 @@ export const getInsertAtFromSelection = ({ $head, anchor, empty, from }: Selecti
   // content before the caret to avoid an empty row before the inserted content
   if (anchor > 0 && ((empty && $head.parent.content.size === 0) || $head.parentOffset === 0)) insertAt -= 1;
   return insertAt;
+};
+
+// Where the selection goes after inserting a node at `afterInserted`: a caret at the start of
+// the next text block, else the next node, else a gap cursor at the end of the document. Leaving
+// the selection ON the inserted node (the default for an atom node) makes the next insert land at
+// the same position, so consecutive picks stack in reverse order.
+export const selectionAfterInsertedNode = (doc: ProseMirrorNode, afterInserted: number): Selection => {
+  const next = doc.nodeAt(afterInserted);
+  if (next?.isTextblock) return TextSelection.create(doc, afterInserted + 1);
+  if (next) return NodeSelection.create(doc, afterInserted);
+  return new GapCursor(doc.resolve(afterInserted));
+};
+
+// Where the node carrying `uid` ends. A block inserted into the middle of a text block splits it,
+// so the position the block was inserted at is not the position it landed at, and neither is the
+// transaction mapping.
+export const endOfNodeWithUid = (doc: ProseMirrorNode, uid: string): number | null => {
+  let end: number | null = null;
+  doc.descendants((node, pos) => {
+    if (end !== null) return false;
+    if (node.attrs.uid === uid) end = pos + node.nodeSize;
+    return end === null;
+  });
+  return end;
 };
 
 export type ImageUploadSettings = {

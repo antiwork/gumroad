@@ -245,6 +245,51 @@ describe("Main Settings Scenario", type: :system, js: true) do
     expect(user.reload.disable_reviews_email).to eq(false)
   end
 
+  describe "feature announcements" do
+    it "starts off, and saves the choice without touching personalized product announcements" do
+      state = -> { FeatureAnnouncementSubscription.state_for(user) }
+      visit settings_main_path
+      expect(page).to have_unchecked_field("Feature announcements")
+
+      check "Feature announcements"
+      click_on "Update settings"
+      wait_until_true(sleep_interval: 0.1) { state.call == { subscribed: true, version: 1 } }
+      expect(page).to have_alert(text: "Your account has been updated!")
+      expect(user.reload.announcement_notification_enabled).to be(true)
+
+      refresh
+      uncheck "Feature announcements", checked: true
+      click_on "Update settings"
+      wait_until_true(sleep_interval: 0.1) { state.call == { subscribed: false, version: 2 } }
+
+      # Saving again without a reload uses the version the redirect brought back.
+      check "Feature announcements", unchecked: true
+      click_on "Update settings"
+      wait_until_true(sleep_interval: 0.1) { state.call == { subscribed: true, version: 3 } }
+      expect(page).to have_checked_field("Feature announcements")
+    end
+
+    it "does not undo an unsubscribe made after the page loaded" do
+      FeatureAnnouncementSubscription.update_from_settings!(user, subscribed: true, rendered_version: 0)
+      visit settings_main_path
+      expect(page).to have_checked_field("Feature announcements")
+
+      FeatureAnnouncementSubscription.unsubscribe!(user, source: "unsubscribe_link")
+      uncheck "Reviews", checked: true
+      click_on "Update settings"
+
+      expect(page).to have_alert(text: "Your account has been updated, but Feature announcements changed elsewhere, so that setting was not saved.")
+      expect(page).to have_unchecked_field("Feature announcements")
+      expect(FeatureAnnouncementSubscription.state_for(user)).to eq(subscribed: false, version: 2)
+      expect(user.reload.disable_reviews_email).to be(true)
+
+      check "Reviews", unchecked: true
+      click_on "Update settings"
+      wait_until_true(sleep_interval: 0.1) { !user.reload.disable_reviews_email }
+      expect(FeatureAnnouncementSubscription.state_for(user)).to eq(subscribed: false, version: 2)
+    end
+  end
+
   it "allows the user to toggle showing NSFW products" do
     visit settings_main_path
 

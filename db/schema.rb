@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_16_170003) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_17_000002) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -1032,6 +1032,46 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_16_170003) do
     t.index ["refund_id"], name: "index_failed_refund_exceptions_on_refund_id", unique: true
     t.index ["state", "due_at"], name: "idx_failed_refund_exceptions_on_state_due_at"
     t.index ["state", "notification_sent_at"], name: "idx_failed_refund_exceptions_pending_notification"
+  end
+
+  create_table "feature_announcement_deliveries", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.string "campaign", limit: 64, null: false
+    t.bigint "user_id", null: false
+    t.string "email", null: false
+    t.string "state", limit: 16, null: false
+    t.string "reason", limit: 64
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["campaign", "email"], name: "index_feature_announcement_deliveries_on_campaign_and_email", unique: true
+    t.index ["campaign", "state"], name: "index_feature_announcement_deliveries_on_campaign_and_state"
+    t.index ["campaign", "user_id"], name: "index_feature_announcement_deliveries_on_campaign_and_user_id", unique: true
+  end
+
+  create_table "feature_announcement_newsletter_cutovers", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "seller_id", null: false
+    t.string "state", limit: 16, null: false
+    t.datetime "cutoff_at", null: false
+    t.json "counts"
+    t.json "verified_sources"
+    t.integer "eligible_count", default: 0, null: false
+    t.integer "migrated_count", default: 0, null: false
+    t.bigint "cursor_follower_id", default: 0, null: false
+    t.string "error"
+    t.datetime "retired_at"
+    t.json "retirement_coverage"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["seller_id"], name: "index_feature_announcement_newsletter_cutovers_on_seller_id", unique: true
+  end
+
+  create_table "feature_announcement_subscriptions", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.boolean "subscribed", null: false
+    t.integer "version", default: 1, null: false
+    t.string "source", limit: 32, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["user_id"], name: "index_feature_announcement_subscriptions_on_user_id", unique: true
   end
 
   create_table "followers", id: :integer, charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|

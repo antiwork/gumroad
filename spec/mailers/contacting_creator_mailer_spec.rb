@@ -3066,9 +3066,11 @@ describe ContactingCreatorMailer do
       end
 
       it "reads the review and its associations from the primary, so a worker's replica lag cannot hide the purchase" do
+        # Created first: saving its new seller also enters the writing role, in the newsletter cutover's account fence.
+        review_id = review.id
         expect(ApplicationRecord).to receive(:connected_to).with(role: :writing).and_call_original
 
-        mail = ContactingCreatorMailer.review_submitted(review.id)
+        mail = ContactingCreatorMailer.review_submitted(review_id)
 
         expect(mail.to).to eq([review.link.user.email])
       end

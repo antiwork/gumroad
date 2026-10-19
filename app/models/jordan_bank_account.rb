@@ -3,8 +3,8 @@
 class JordanBankAccount < BankAccount
   BANK_ACCOUNT_TYPE = "JO"
 
-  # Valid syntax does not guarantee that Stripe's directory can resolve the BIC.
-  BANK_CODE_FORMAT_REGEX = /\A[A-Z]{4}JO[A-Z0-9]{2}(?:[A-Z0-9]{3})?\z/
+  # Stripe's JO directory resolves the 8-character BIC or its XXX-padded form, not a branch-number suffix.
+  BANK_CODE_FORMAT_REGEX = /\A[A-Z]{4}JO[A-Z0-9]{2}(?:XXX)?\z/
   private_constant :BANK_CODE_FORMAT_REGEX
 
   alias_attribute :bank_code, :bank_number
@@ -45,7 +45,7 @@ class JordanBankAccount < BankAccount
   private
     def validate_bank_code
       return if BANK_CODE_FORMAT_REGEX.match?(bank_code)
-      errors.add :base, "Enter your bank's SWIFT/BIC code in capitals: 8 characters, or 11 including the branch code (for example IIBAJOAM)."
+      errors.add :base, "Enter your bank's SWIFT/BIC code in capitals: 8 characters (for example IIBAJOAM), without the branch number."
     end
 
     def validate_account_number

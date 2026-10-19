@@ -62,10 +62,31 @@ module PostBlastSending
     members.each_slice(recipients_slice_size) do |members_slice|
       members_slice.group_by { PostEmailApi.provider_for(post: @post, email: _1.email) }.each do |provider, provider_members|
         provider_members.each_slice(PostEmailApi.max_recipients_for(provider)) do |provider_members_slice|
+          return if @stopped_for_retired_newsletter || stop_for_retired_newsletter?
           send_provider_slice(provider: provider, members: provider_members_slice, cache: cache)
         end
       end
     end
+  end
+
+  # Checked before every provider slice, so chunks queued or mid-send when the newsletter retires stop at
+  # the next one; the handoff itself is admitted against retire! (send_provider_slice), and a slice the
+  # provider already accepted is not recalled. The stop is terminal even after delivery began, and the
+  # blast's Redis state goes with it, so the stalled-blast monitor and the seller's page don't treat it as
+  # owed. Callers must not record a stopped send as done.
+  def stop_for_retired_newsletter?
+    return false unless @post.audience_type? || @post.follower_type?
+    return false unless FeatureAnnouncementNewsletterCutover.retired_for?(@post.seller_id)
+
+    stop_for_retired_newsletter!
+  end
+
+  def stop_for_retired_newsletter!
+    Rails.logger.warn("[#{self.class.name}] blast_id=#{@blast.id} stopped: newsletter retired for seller #{@post.seller_id}")
+    PostEmailBlast.stop_for_retired_newsletter(@blast.id)
+    clear_blast_state
+    SellerLargeBlastQuota.release(seller_id: @post.seller_id, blast_id: @blast.id, kind: "post_blast")
+    @stopped_for_retired_newsletter = true
   end
 
   # The provider slice — not the mixed slice — is the retry unit: an ESP that has already
@@ -91,7 +112,12 @@ module PostBlastSending
     end
 
     recipients = prepare_recipients(kept)
-    deliver_provider_slice(provider: provider, recipients: recipients, cache: cache)
+    begin
+      deliver_provider_slice(provider: provider, recipients: recipients, cache: cache)
+    rescue FeatureAnnouncementNewsletterCutover::Retired
+      stop_for_retired_newsletter!
+      return
+    end
     if @blast.to_non_openers?
       mark_members_sent_in_this_blast(kept)
     else
@@ -101,11 +127,14 @@ module PostBlastSending
   end
 
   def deliver_provider_slice(provider:, recipients:, cache:)
+    args = { post: @post, recipients:, cache:, blast: @blast }
+    admission = FeatureAnnouncementNewsletterCutover.handoff_admission_for(@post)
+    args[:handoff_admission] = admission if admission
     case provider
     when MailerInfo::EMAIL_PROVIDER_RESEND
-      PostResendApi.process(post: @post, recipients: recipients, cache: cache, blast: @blast)
+      PostResendApi.process(**args)
     when MailerInfo::EMAIL_PROVIDER_SENDGRID
-      PostSendgridApi.process(post: @post, recipients: recipients, cache: cache, blast: @blast)
+      PostSendgridApi.process(**args)
     else
       raise ArgumentError, "Unknown email provider: #{provider}"
     end
@@ -347,13 +376,17 @@ module PostBlastSending
   def settle_pending_recipients(skipped, owed)
     emails = skipped.map(&:email)
     key = RedisKey.blast_skipped_emails(@blast.id)
-    $redis.multi do |tx|
+    pending_key = RedisKey.blast_pending_recipients(@blast.id)
+    results = $redis.multi do |tx|
       unless emails.empty?
         tx.sadd(key, emails)
         tx.expire(key, PENDING_RECIPIENTS_TTL.to_i)
       end
-      tx.decrby(RedisKey.blast_pending_recipients(@blast.id), owed)
+      tx.decrby(pending_key, owed)
+      tx.ttl(pending_key)
     end
+    # A stop or completion that cleared the key mid-call leaves DECRBY to recreate it with no expiry.
+    $redis.expire(pending_key, PENDING_RECIPIENTS_TTL.to_i) if results.last == -1
   end
 
   # Only after the provider accepted, so a row here always has an email behind it. A transient

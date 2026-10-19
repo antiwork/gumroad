@@ -107,6 +107,21 @@ RSpec.describe Follower do
       deleted_follower.confirm!
       expect(deleted_follower.deleted_at).to eq(nil)
     end
+
+    it "refuses to confirm or revive a follow of a retired newsletter, but still lets one leave" do
+      seller = create(:user)
+      unconfirmed = create(:follower, user: seller)
+      cancelled = create(:deleted_follower, user: seller)
+      active = create(:active_follower, user: seller)
+      FeatureAnnouncementNewsletterCutover.create!(seller:, state: "retired", cutoff_at: 1.day.ago, retired_at: Time.current)
+
+      expect { unconfirmed.confirm! }.to raise_error(ActiveRecord::RecordInvalid, "Validation failed: #{Follower::RETIRED_NEWSLETTER_MESSAGE}")
+      expect { cancelled.mark_undeleted! }.to raise_error(ActiveRecord::RecordInvalid)
+      expect(unconfirmed.reload.confirmed_at).to be_nil
+      expect(cancelled.reload.deleted_at).to be_present
+      active.mark_deleted!
+      expect(active.reload.deleted_at).to be_present
+    end
   end
 
   describe "#confirmed?" do

@@ -4,6 +4,15 @@ require "spec_helper"
 require "shared_examples/authorize_called"
 
 describe("Email List", :js, :sidekiq_inline, :elasticsearch_wait_for_refresh, type: :system) do
+  # wait_for_ajax only counts requests made through `request`; the cart count uses fetch directly.
+  def wait_for_finished_requests(*paths)
+    Timeout.timeout(Capybara.default_max_wait_time) do
+      sleep 0.05 until page.evaluate_script(<<~JS)
+        #{paths.to_json}.every((path) => performance.getEntriesByType("resource").some((entry) => entry.name.includes(path)))
+      JS
+    end
+  end
+
   describe "emails" do
     let(:seller) { create(:named_seller, timezone: "UTC") }
     let(:buyer) { create(:user) }
@@ -97,6 +106,9 @@ describe("Email List", :js, :sidekiq_inline, :elasticsearch_wait_for_refresh, ty
           new_window = window_opened_by { click_on "View post" }
           within_window new_window do
             expect(page).to have_text("Email 3 (sent)")
+            # These run in the seller's session. One still in flight would take the buyer's `login_as` below,
+            # which applies to whichever request reaches the app next.
+            wait_for_finished_requests("/cart_items_count", "/increment_post_views")
           end
 
           click_on "Close"
@@ -158,6 +170,29 @@ describe("Email List", :js, :sidekiq_inline, :elasticsearch_wait_for_refresh, ty
           expect(page).not_to have_text("Not sent.")
           expect(page).not_to have_button("Resend to non-openers")
           expect(page).to have_button("Send now")
+        end
+      end
+
+      it "says a newsletter email stopped at retirement, how many people got it, and offers no resend" do
+        installment1.update!(customer_count: 120)
+        create(:blast, post: installment1, requested_at: 2.days.ago, started_at: 2.days.ago, first_email_delivered_at: 2.days.ago,
+                       last_email_delivered_at: 2.days.ago, completed_at: nil, delivery_count: 120,
+                       expired_at: 1.day.ago, expiry_reason: PostEmailBlast::EXPIRY_NEWSLETTER_RETIRED)
+
+        visit "#{emails_path}/published"
+
+        within_table "Published" do
+          expect(page).to have_table_row({ "Subject" => "Email 1 (sent)", "Emailed" => "120", "Status" => "Stopped" })
+          find(:table_row, { "Subject" => "Email 1 (sent)" }).click
+        end
+
+        within_modal "Email 1 (sent)" do
+          expect(page).to have_text("Status Stopped", normalize_ws: true)
+          expect(page).to have_text("This newsletter was retired, so we stopped sending this email. 120 people got it.")
+          expect(page).not_to have_text("Not sent")
+          expect(page).not_to have_text("reached anyone")
+          expect(page).not_to have_button("Send now")
+          expect(page).not_to have_button("Send to the rest")
         end
       end
 

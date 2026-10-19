@@ -838,7 +838,11 @@ class GdprDataErasureService
         ip_address: nil,
         browser_guid: nil,
       }
+      opted_out = Purchase.where(id: purchase_ids, can_contact: false).distinct.pluck(:seller_id, :email)
       Purchase.where(id: purchase_ids).update_all(pii)
+      # update_all skips Purchase's own fence: each old address loses these opt-outs, which the newsletter
+      # cutover may have counted.
+      opted_out.each { |seller_id, email| FeatureAnnouncementNewsletterCutover.fence_buyer_resubscribe(seller_id, email) }
       @counts[:versions] += GdprVersionRedactor.redact!(item_type: "Purchase", item_ids: purchase_ids, attributes: pii.keys)
     end
 

@@ -65,6 +65,27 @@ RSpec.describe PostEmailBlast do
     end
   end
 
+  describe "#delivery_status once a retired newsletter stopped it", :freeze_time do
+    let(:post) { create(:audience_post) }
+
+    it "is stopped after delivery began, keeps the delivered count, and isn't offered as never sent" do
+      blast = create(:blast, post:, requested_at: 1.day.ago, first_email_delivered_at: 1.day.ago, delivery_count: 12, completed_at: nil)
+      expect(PostEmailBlast.expire(blast.id, reason: PostEmailBlast::EXPIRY_NEWSLETTER_RETIRED)).to eq(0)
+
+      expect(PostEmailBlast.stop_for_retired_newsletter(blast.id)).to eq(1)
+      # A chunk that was mid-call settles into the cleared pending count afterwards.
+      $redis.set(RedisKey.blast_pending_recipients(blast.id), -3)
+
+      blast.reload
+      expect(blast.delivery_status).to eq("stopped")
+      expect(blast.ended_unsent?).to be(false)
+      expect(blast.attributes.slice("delivery_count", "completed_at")).to eq("delivery_count" => 12, "completed_at" => nil)
+      expect(PostEmailBlast.stop_for_retired_newsletter(blast.id)).to eq(0)
+    ensure
+      $redis.del(RedisKey.blast_pending_recipients(blast.id)) if blast
+    end
+  end
+
   describe "#delivery_status once expired", :freeze_time do
     let(:post) { create(:installment) }
 

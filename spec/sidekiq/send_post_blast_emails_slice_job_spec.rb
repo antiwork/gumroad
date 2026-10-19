@@ -657,4 +657,72 @@ describe SendPostBlastEmailsSliceJob, :freeze_time do
       expect(blast.reload.completed_at).to be_blank
     end
   end
+
+  describe "after the seller's newsletter moved to Feature announcements" do
+    def retire_newsletter = FeatureAnnouncementNewsletterCutover.create!(seller: @seller, state: "retired", cutoff_at: 1.day.ago, retired_at: Time.current)
+
+    it "sends nothing from a chunk queued before retirement and leaves it unfinished" do
+      blast = create(:blast, :just_requested, post: post_with_audience)
+      activate_partition(blast)
+      retire_newsletter
+
+      described_class.new.perform(blast.id, partition_key, 0, 1, audience_ids)
+
+      expect_sent_count 0
+      expect(blast.reload.attributes.slice("expiry_reason", "completed_at")).to eq("expiry_reason" => "newsletter_retired", "completed_at" => nil)
+      expect($redis.sismember(RedisKey.blast_done_slices(blast.id, partition_key), 0)).to be(false)
+    end
+
+    it "ends a running chunk at the next provider handoff, keeping what was delivered and clearing what it owed" do
+      blast = create(:blast, :just_requested, post: post_with_audience)
+      activate_partition(blast)
+      $redis.set(RedisKey.blast_pending_recipients(blast.id), 3)
+      job = described_class.new
+      allow(job).to receive(:recipients_slice_size).and_return(1)
+      allow(job).to receive(:send_provider_slice).and_wrap_original do |method, **args|
+        method.call(**args)
+        next if FeatureAnnouncementNewsletterCutover.exists?
+
+        blast.update_columns(first_email_delivered_at: Time.current, delivery_count: 1) # the provider's delivery event
+        retire_newsletter
+      end
+
+      job.perform(blast.id, partition_key, 0, 1, audience_ids)
+
+      expect_sent_count 1
+      expect(blast.reload.attributes.slice("expiry_reason", "completed_at", "delivery_count"))
+        .to eq("expiry_reason" => "newsletter_retired", "completed_at" => nil, "delivery_count" => 1)
+      expect(blast.expired_at).to be_present
+      expect(blast.first_email_delivered_at).to be_present
+      expect(blast.delivery_status).to eq("stopped")
+      expect($redis.exists?(RedisKey.blast_pending_recipients(blast.id), RedisKey.blast_active_slice_partition(blast.id))).to be(false)
+      expect($redis.sismember(RedisKey.blast_done_slices(blast.id, partition_key), 0)).to be(false)
+    end
+
+    it "gives the pending count back its expiry when a chunk settles into a key the stop already cleared" do
+      blast = create(:blast, :just_requested, post: post_with_audience)
+      key = RedisKey.blast_pending_recipients(blast.id)
+      job = described_class.new.tap { _1.instance_variable_set(:@blast, blast) }
+
+      job.send(:settle_pending_recipients, [], 1)
+
+      expect($redis.get(key)).to eq("-1")
+      expect($redis.ttl(key)).to be_between(1, PostBlastSending::PENDING_RECIPIENTS_TTL.to_i)
+    ensure
+      $redis.del(key) if key
+    end
+
+    it "still sends a product post chunk to customers" do
+      product = create(:product, user: @seller)
+      create(:purchase, link: product, email: "customer@example.com")
+      blast = create(:blast, :just_requested, post: create(:product_post, :published, link: product, bought_products: [product.unique_permalink]))
+      activate_partition(blast)
+      retire_newsletter
+
+      described_class.new.perform(blast.id, partition_key, 0, 1, audience_ids)
+
+      expect(PostSendgridApi.mails.keys).to eq(["customer@example.com"])
+      expect(blast.reload.completed_at).to be_present
+    end
+  end
 end

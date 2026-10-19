@@ -11,5 +11,9 @@
     <br>
     Submitted from: <%= @referrer_path %>
   <% end %>
+  <% if @attachment_filenames.present? %>
+    <br>
+    Attachments: <%= @attachment_filenames.size %> (<%= @attachment_filenames.join(", ") %>)
+  <% end %>
 </p>
 <p style="white-space: pre-wrap;"><%= @message %></p>

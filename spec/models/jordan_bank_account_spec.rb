@@ -45,15 +45,17 @@ describe JordanBankAccount do
     it "rejects a 9-character bank code" do
       ba = build(:jordan_bank_account, bank_code: "IIBAJOAMX")
       expect(ba).not_to be_valid
-      expect(ba.errors[:base]).to include("Enter your bank's SWIFT/BIC code in capitals: 8 characters, or 11 including the branch code (for example IIBAJOAM).")
+      expect(ba.errors[:base]).to include("Enter your bank's SWIFT/BIC code in capitals: 8 characters (for example IIBAJOAM), without the branch number.")
     end
 
     it "rejects a 10-character bank code" do
       expect(build(:jordan_bank_account, bank_code: "IIBAJOAMXX")).not_to be_valid
     end
 
-    it "accepts an 11-character branch-suffixed code, which only the directory can resolve" do
-      expect(build(:jordan_bank_account, bank_code: "IIBAJOAM200")).to be_valid
+    it "rejects an 11-character code with a branch-number suffix" do
+      ba = build(:jordan_bank_account, bank_code: "IIBAJOAM200")
+      expect(ba).not_to be_valid
+      expect(ba.errors[:base]).to include("Enter your bank's SWIFT/BIC code in capitals: 8 characters (for example IIBAJOAM), without the branch number.")
     end
 
     it "rejects a bank code in lowercase" do
@@ -85,7 +87,7 @@ describe JordanBankAccount do
         ba = build(:jordan_bank_account, bank_code:)
 
         expect(ba.save).to be(false)
-        expect(ba.errors[:base]).to include("Enter your bank's SWIFT/BIC code in capitals: 8 characters, or 11 including the branch code (for example IIBAJOAM).")
+        expect(ba.errors[:base]).to include("Enter your bank's SWIFT/BIC code in capitals: 8 characters (for example IIBAJOAM), without the branch number.")
       end
     end
 
@@ -125,9 +127,9 @@ describe JordanBankAccount do
       ba = create(:jordan_bank_account)
       ba.update_column(:bank_number, "IIBAJOAMX")
 
-      ba.reload.update!(bank_code: "IIBAJOA1200")
+      ba.reload.update!(bank_code: "IIBAJOAMXXX")
 
-      expect(ba.reload.bank_number).to eq("IIBAJOA1200")
+      expect(ba.reload.bank_number).to eq("IIBAJOAMXXX")
     end
   end
 end

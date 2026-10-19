@@ -27,6 +27,13 @@ describe SendWorkflowInstallmentWorker do
       SendWorkflowInstallmentWorker.new.perform(@installment.id, @installment_rule.version, @purchase.id, nil, nil)
     end
 
+    it "still sends a retired newsletter seller's product workflow to its customers" do
+      FeatureAnnouncementNewsletterCutover.create!(seller: @product.user, state: "retired", cutoff_at: 1.day.ago, retired_at: Time.current)
+      expect(PostSendgridApi).to receive(:process).with(post: @installment, recipients: [{ email: @purchase.email, purchase: @purchase }], cache: {})
+
+      SendWorkflowInstallmentWorker.new.perform(@installment.id, @installment_rule.version, @purchase.id, nil, nil)
+    end
+
     it "does not call mailer if different version" do
       expect(PostSendgridApi).not_to receive(:process)
       expect do
@@ -216,6 +223,13 @@ describe SendWorkflowInstallmentWorker do
       @installment = create(:follower_installment, seller: @user, workflow: @workflow, published_at: Time.current)
       @installment_rule = create(:installment_rule, installment: @installment, delayed_delivery_time: 1.day)
       @follower = create(:active_follower, followed_id: @user.id, email: "some@email.com")
+    end
+
+    it "sends nothing once the seller's newsletter moved to Feature announcements" do
+      FeatureAnnouncementNewsletterCutover.create!(seller: @user, state: "retired", cutoff_at: 1.day.ago, retired_at: Time.current)
+      expect(PostSendgridApi).not_to receive(:process)
+
+      SendWorkflowInstallmentWorker.new.perform(@installment.id, @installment_rule.version, nil, @follower.id, nil)
     end
 
     it "calls follower mailer if same version" do

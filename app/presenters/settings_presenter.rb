@@ -74,6 +74,7 @@ class SettingsPresenter
         enable_free_downloads_email: seller.enable_free_downloads_email,
         enable_free_downloads_push_notification: seller.enable_free_downloads_push_notification,
         announcement_notification_enabled: seller.announcement_notification_enabled,
+        feature_announcements: FeatureAnnouncementSubscription.state_for(seller),
         disable_comments_email: seller.disable_comments_email,
         disable_reviews_email: seller.disable_reviews_email,
         disable_review_reminders: seller.disable_review_reminders?,

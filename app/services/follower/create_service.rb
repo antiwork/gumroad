@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class Follower::CreateService
+  RETIRED_NEWSLETTER_MESSAGE = Follower::RETIRED_NEWSLETTER_MESSAGE
+
   delegate :followers, to: :followed_user
 
   def self.perform(**args)
@@ -31,6 +33,8 @@ class Follower::CreateService
     # account may no longer transact, it should not be able to make us send mail
     # on its behalf either.
     return unless followed_user.account_active?
+    # A retired newsletter takes no new or revived subscribers; callers show the error to the visitor.
+    return retired_newsletter_follower if FeatureAnnouncementNewsletterCutover.retired_for?(followed_user.id)
 
     @follower = followers.find_by(email: follower_email)
 
@@ -43,16 +47,36 @@ class Follower::CreateService
     ApplicationRecord.connected_to(role: :writing) { confirm_follower }
 
     @follower
+  rescue ActiveRecord::RecordInvalid => e
+    # The check above can predate a retirement that commits before this follow is revived or confirmed.
+    raise unless e.record.is_a?(Follower) && e.record.errors.added?(:base, RETIRED_NEWSLETTER_MESSAGE)
+
+    e.record
   end
 
   private
     attr_reader :followed_user, :follower_email, :follower_attributes, :logged_in_user
 
+    def retired_newsletter_follower
+      Follower.new(user: followed_user, email: follower_email).tap { _1.errors.add(:base, RETIRED_NEWSLETTER_MESSAGE) }
+    end
+
     def reactivate_follower
       @follower.mark_undeleted!
 
       # some users start following and then create an account so look for [email, followed_id] index and update the follower_user_id
-      @follower.update(follower_attributes)
+      ApplicationRecord.transaction do
+        # Re-read under lock: the newsletter migration may have bound this row since it was loaded.
+        @follower.lock!
+        @follower.update(follower_attributes.except(*kept_newsletter_link))
+      end
+    end
+
+    # A newsletter moving to Feature announcements keeps each follow's account link, so the old newsletter's
+    # opt-outs still reach the account that was carried over, whatever address a later form submits.
+    def kept_newsletter_link
+      keep = @follower.follower_user_id.present? && FeatureAnnouncementNewsletterCutover.tracks_opt_outs_for?(@follower.followed_id)
+      keep ? [:follower_user_id] : []
     end
 
     def create_new_follower
@@ -79,6 +103,17 @@ class Follower::CreateService
       if @follower.imported_from_csv? || active_session_with_verified_email?
         @follower.confirm!
       else
+        request_confirmation
+      end
+    end
+
+    # Ordered against retiring the newsletter like the follow itself, so no request is queued once it has retired.
+    def request_confirmation
+      ApplicationRecord.transaction do
+        if FeatureAnnouncementNewsletterCutover.retired_for_follow?(@follower.followed_id)
+          @follower.errors.add(:base, RETIRED_NEWSLETTER_MESSAGE)
+          raise ActiveRecord::RecordInvalid, @follower
+        end
         @follower.send_confirmation_email
       end
     end

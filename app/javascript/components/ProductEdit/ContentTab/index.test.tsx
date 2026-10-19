@@ -700,6 +700,113 @@ it("uploads a snapshot copy of a small picked file and resets the toolbar input"
   expect(valueWrites).toEqual([""]);
 });
 
+const pickedVideos = (names: string[]) => names.map((name) => new File(["x"], name, { type: "video/mp4" }));
+
+const fileEmbedGroupOrder = () => {
+  const groups: string[][] = [];
+  getMountedEditor().state.doc.forEach((node) => {
+    if (node.type.name !== "fileEmbedGroup") return;
+    const ids: string[] = [];
+    node.forEach((child) => ids.push(String(child.attrs.id)));
+    groups.push(ids);
+  });
+  return groups;
+};
+
+it("keeps the page order when the seller uploads files in several batches", async () => {
+  const { product, input } = await renderToolbarPicker();
+
+  for (const batch of [
+    ["a1.mp4", "a2.mp4", "a3.mp4"],
+    ["b1.mp4", "b2.mp4", "b3.mp4"],
+  ]) {
+    attachToolbarFiles(input, pickedVideos(batch));
+    await act(async () => {
+      fireEvent.change(input);
+    });
+  }
+
+  // product.files is appended in pick order, so the page must list the batches in that order.
+  expect(fileEmbedGroupOrder().flat()).toEqual(product.files.map((file) => file.id));
+});
+
+const docShape = () => {
+  const parts: string[] = [];
+  getMountedEditor().state.doc.forEach((node) => {
+    if (node.type.name === "fileEmbedGroup") {
+      const ids: string[] = [];
+      node.forEach((child) => ids.push(String(child.attrs.id)));
+      parts.push(`group(${ids.length})`);
+    } else if (node.type.name === "fileEmbed") parts.push("file");
+    else parts.push(node.type.name);
+  });
+  return parts;
+};
+
+const pickedEmbedIds = () => {
+  const ids: string[] = [];
+  getMountedEditor().state.doc.forEach((node) => {
+    if (node.type.name === "fileEmbedGroup") node.forEach((child) => ids.push(String(child.attrs.id)));
+    else if (node.type.name === "fileEmbed") ids.push(String(node.attrs.id));
+  });
+  return ids;
+};
+
+it("keeps the page order when the batches are picked with the caret inside the text", async () => {
+  const { product, input } = await renderToolbarPicker();
+  // A block inserted inside a paragraph splits it, so the group does not land at the caret position.
+  getMountedEditor().commands.setTextSelection(2);
+
+  for (const batch of [
+    ["a1.mp4", "a2.mp4", "a3.mp4"],
+    ["b1.mp4", "b2.mp4", "b3.mp4"],
+  ]) {
+    attachToolbarFiles(input, pickedVideos(batch));
+    await act(async () => {
+      fireEvent.change(input);
+    });
+  }
+
+  expect(fileEmbedGroupOrder()).toEqual([
+    product.files.slice(0, 3).map((file) => file.id),
+    product.files.slice(3).map((file) => file.id),
+  ]);
+});
+
+it("keeps a file picked after a batch below that batch when the caret is inside the text", async () => {
+  const { product, input } = await renderToolbarPicker();
+  getMountedEditor().commands.setTextSelection(2);
+
+  attachToolbarFiles(input, pickedVideos(["a1.mp4", "a2.mp4", "a3.mp4"]));
+  await act(async () => {
+    fireEvent.change(input);
+  });
+  attachToolbarFile(input, new File(["x"], "b.mp4", { type: "video/mp4" }));
+  await act(async () => {
+    fireEvent.change(input);
+  });
+
+  expect(docShape()).toEqual(["paragraph", "group(3)", "file", "paragraph"]);
+  expect(pickedEmbedIds()).toEqual(product.files.map((file) => file.id));
+});
+
+it("keeps the page order when the seller uploads one file at a time", async () => {
+  const { product, input } = await renderToolbarPicker();
+
+  for (const name of ["a.mp4", "b.mp4", "c.mp4"]) {
+    attachToolbarFile(input, new File(["x"], name, { type: "video/mp4" }));
+    await act(async () => {
+      fireEvent.change(input);
+    });
+  }
+
+  const embedded: string[] = [];
+  getMountedEditor().state.doc.forEach((node) => {
+    if (node.type.name === "fileEmbed") embedded.push(String(node.attrs.id));
+  });
+  expect(embedded).toEqual(product.files.map((file) => file.id));
+});
+
 it("does not reset an over-budget pick until Evaporate completes", async () => {
   const { input } = await renderToolbarPicker();
   const picked = new File(["x"], "huge.mp4", { type: "video/mp4" });
