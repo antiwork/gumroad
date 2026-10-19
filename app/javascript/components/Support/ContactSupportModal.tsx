@@ -240,13 +240,14 @@ const ContactSupportForm = ({ open, onClose, referrerPath }: ContactSupportModal
           <div className="flex flex-col gap-2">
             <Label htmlFor={`${uid}-attachments`}>Screenshots (optional)</Label>
             {/* The native control would keep saying "No file chosen" after the reset below, so it stays hidden and
-                the list is the only record of what will be sent. */}
-            <input
+                the list is the only record of what will be sent. Input's own w-full, padding and border outrank
+                sr-only, so they are replaced here; otherwise the hidden box widens the dialog. */}
+            <Input
               ref={fileInputRef}
               id={`${uid}-attachments`}
               type="file"
               multiple
-              className="sr-only"
+              className="sr-only w-px border-0 p-0"
               tabIndex={-1}
               disabled={submitting}
               accept={ACCEPTED_ATTACHMENT_TYPES.join(",")}
