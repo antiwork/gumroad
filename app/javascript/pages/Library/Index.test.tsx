@@ -66,7 +66,7 @@ const defaultProps = (): {
     id: string;
     label: string;
     download_url: string | null;
-    zip_unavailable_reason: "too_large" | "failed" | null;
+    zip_unavailable_reason: "too_large" | "failed" | "granted_files" | null;
   }[];
   archived_count: number;
   unarchived_count: number;
@@ -344,6 +344,18 @@ describe("LibraryPage", () => {
 
     expect(screen.getByText(/We could not prepare a ZIP file for/u)).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Preparing ZIP/u })).toBeNull();
+  });
+
+  it("explains a ZIP withheld because some files download individually", () => {
+    const props = defaultProps();
+    props.bundle_downloads = [
+      { id: "b1", label: "Bundle One", download_url: null, zip_unavailable_reason: "granted_files" },
+    ];
+    renderPage(props);
+
+    expect(screen.getByText(/can't go in one ZIP file/u)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Preparing ZIP/u })).toBeNull();
+    expect(screen.queryByRole("link", { name: /Download all/u })).toBeNull();
   });
 });
 

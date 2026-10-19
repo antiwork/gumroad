@@ -192,7 +192,7 @@ type Props = {
     id: string;
     label: string;
     download_url: string | null;
-    zip_unavailable_reason: "too_large" | "failed" | null;
+    zip_unavailable_reason: "too_large" | "failed" | "granted_files" | null;
   }[];
   archived_count: number;
   unarchived_count: number;
@@ -392,6 +392,11 @@ export default function LibraryPage() {
               ) : bundleDownload.zip_unavailable_reason === "failed" ? (
                 <>
                   We could not prepare a ZIP file for <strong>{bundleDownload.label}</strong>. Download the products
+                  below individually.
+                </>
+              ) : bundleDownload.zip_unavailable_reason === "granted_files" ? (
+                <>
+                  Some files in <strong>{bundleDownload.label}</strong> can't go in one ZIP file. Download the products
                   below individually.
                 </>
               ) : (

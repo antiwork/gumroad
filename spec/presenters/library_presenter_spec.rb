@@ -813,6 +813,47 @@ describe LibraryPresenter do
         end
       end
 
+      # The shared bundle ZIP leaves out stream-only files, including one support granted to this buyer.
+      context "when this buyer was granted a stream-only member file" do
+        let(:member) { purchase1.product_purchases.first }
+        let(:granted_file) { create(:readable_document, link: member.link, stream_only: true) }
+        let(:ready_download) { { id: purchase1.link.external_id, label: "Bundle", download_url: url_redirect_download_archive_path(purchase1.url_redirect.token), zip_unavailable_reason: nil } }
+
+        before do
+          granted_file
+          library_props(bundle_ids: [purchase1.link.external_id])
+          archive = purchase1.link.product_files_archives.alive.entity_archives.sole
+          archive.mark_in_progress!
+          archive.mark_ready!
+        end
+
+        it "withholds the bundle ZIP and says why" do
+          ProductFileDownloadGrant.create!(url_redirect: member.url_redirect, product_file: granted_file)
+
+          expect(library_props(bundle_ids: [purchase1.link.external_id])[:bundle_downloads]).to eq(
+            [{ id: purchase1.link.external_id, label: "Bundle", download_url: nil, zip_unavailable_reason: "granted_files" }]
+          )
+        end
+
+        it "keeps the ZIP when the stream-only file was not granted" do
+          expect(library_props(bundle_ids: [purchase1.link.external_id])[:bundle_downloads]).to eq([ready_download])
+        end
+
+        it "keeps the ZIP for another buyer of the same bundle" do
+          other_member = purchase2.product_purchases.first
+          ProductFileDownloadGrant.create!(url_redirect: other_member.url_redirect, product_file: create(:readable_document, link: other_member.link, stream_only: true))
+
+          expect(library_props(bundle_ids: [purchase1.link.external_id])[:bundle_downloads]).to eq([ready_download])
+        end
+
+        it "keeps the ZIP once the granted file is deleted" do
+          ProductFileDownloadGrant.create!(url_redirect: member.url_redirect, product_file: granted_file)
+          granted_file.mark_deleted!
+
+          expect(library_props(bundle_ids: [purchase1.link.external_id])[:bundle_downloads]).to eq([ready_download])
+        end
+      end
+
       context "when every member purchase is excluded from the library" do
         it "renders the bundle itself so the buyer keeps a row for the purchase" do
           purchase1.product_purchases.each { _1.update!(is_deleted_by_buyer: true) }

@@ -226,6 +226,10 @@ class LibraryPresenter
         files = redirect.bundle_archive_product_files
         next if files.empty?
 
+        if redirect.bundle_archive_omits_granted_files?
+          next { id: link.external_id, label: link.name, download_url: nil, zip_unavailable_reason: "granted_files" }
+        end
+
         archive = redirect.bundle_archive
         zip_unavailable_reason = nil
         if archive.blank?

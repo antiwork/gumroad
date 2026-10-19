@@ -80,11 +80,15 @@ describe Api::Internal::Admin::UrlRedirectsController do
 
       expect(AdminApiAuditLog.last).to have_attributes(
         action: "url_redirects.grant_download",
+        actor_user_id: admin_user.id,
         target_type: "UrlRedirect",
         target_id: url_redirect.id,
         target_external_id: url_redirect.external_id,
+        route: "/internal/admin/url_redirects/[REDACTED]/grant_download",
+        params_snapshot: { "id" => "[REDACTED]", "product_file_id" => product_file.external_id },
         response_status: 200
       )
+      expect(AdminApiAuditLog.last.attributes.to_json).not_to include(url_redirect.token)
     end
 
     it "rejects the legacy shared token" do
@@ -161,9 +165,14 @@ describe Api::Internal::Admin::UrlRedirectsController do
 
       expect(AdminApiAuditLog.last).to have_attributes(
         action: "url_redirects.revoke_download",
+        actor_user_id: admin_user.id,
         target_type: "UrlRedirect",
-        target_id: url_redirect.id
+        target_id: url_redirect.id,
+        target_external_id: url_redirect.external_id,
+        route: "/internal/admin/url_redirects/[REDACTED]/revoke_download",
+        params_snapshot: { "id" => "[REDACTED]", "product_file_id" => product_file.external_id }
       )
+      expect(AdminApiAuditLog.last.attributes.to_json).not_to include(url_redirect.token)
     end
 
     it "is a no-op when no grant exists" do

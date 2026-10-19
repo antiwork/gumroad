@@ -189,16 +189,25 @@ class UrlRedirect < ApplicationRecord
   def bundle_archive_product_files
     return ProductFile.none unless purchase&.is_bundle_purchase?
 
-    member_redirects = purchase.product_purchases.visible_in_library.includes(:url_redirect).filter_map(&:url_redirect)
-    return ProductFile.none if member_redirects.any? { _1.with_product_files.has_stampable_pdfs? }
+    return ProductFile.none if bundle_member_redirects.any? { _1.with_product_files.has_stampable_pdfs? }
 
-    file_ids = ([self] + member_redirects).flat_map do |url_redirect|
+    file_ids = ([self] + bundle_member_redirects).flat_map do |url_redirect|
       next [] unless url_redirect.with_product_files.is_downloadable?
 
       url_redirect.alive_product_files.filter_map { _1.id if _1.archivable? }
     end.uniq
 
     ProductFile.where(id: file_ids).in_order
+  end
+
+  # The bundle ZIP is shared, so it leaves out stream-only files even when this buyer was granted one.
+  def bundle_archive_omits_granted_files?
+    return false unless purchase&.is_bundle_purchase?
+
+    ([self] + bundle_member_redirects).any? do |url_redirect|
+      url_redirect.with_product_files.is_downloadable? &&
+        url_redirect.alive_product_files.any? { !_1.archivable? && url_redirect.is_file_downloadable?(_1) }
+    end
   end
 
   def matching_bundle_archives(bundle_files)
@@ -434,10 +443,9 @@ class UrlRedirect < ApplicationRecord
     return false if product_file.external_link?
     # Checked before the grant: a rental's window is the product, and downloading would outlast it.
     return false if product_file.streamable? && is_rental
-    return true if download_granted_for?(product_file)
-    return false if product_file.stream_only?
+    return true unless product_file.stream_only?
 
-    true
+    download_granted_for?(product_file)
   end
 
   # True only for the file this buyer was granted, so one buyer's download never reopens the
@@ -573,17 +581,13 @@ class UrlRedirect < ApplicationRecord
       self.token ||= self.class.generate_new_token
     end
 
-    # One query per redirect however many files the download page maps, and no query when the
-    # association was preloaded.
+    def bundle_member_redirects
+      @bundle_member_redirects ||= purchase.product_purchases.visible_in_library.includes(:url_redirect).filter_map(&:url_redirect)
+    end
+
+    # One query per redirect however many stream-only files the download page maps.
     def granted_product_file_ids
-      @granted_product_file_ids ||= begin
-        ids = if association(:product_file_download_grants).loaded?
-          product_file_download_grants.map(&:product_file_id)
-        else
-          product_file_download_grants.pluck(:product_file_id)
-        end
-        ids.to_set
-      end
+      @granted_product_file_ids ||= product_file_download_grants.pluck(:product_file_id).to_set
     end
 
     # Only when no alive row exists: queued rows stay the worker's and failed keeps its no-retry

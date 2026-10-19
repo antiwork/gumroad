@@ -274,6 +274,8 @@ class UrlRedirectPresenter
         duration: file.duration,
         id: file.external_id,
         download_url:,
+        # The shared folder ZIP skips stream_only files, including ones this buyer was granted.
+        archivable: file.archivable?,
         # The original, not the thumbnail: texture buyers judge texel detail at 1:1.
         view_url: file.browser_renderable_image? ? download_url : nil,
         stream_url: file.streamable? ? url_redirect_stream_page_for_product_file_path(url_redirect.token, file.external_id) : nil,

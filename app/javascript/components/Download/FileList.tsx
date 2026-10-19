@@ -70,6 +70,8 @@ export type FileItem = {
   duration: number | null;
   content_length: number | null;
   download_url: string | null;
+  // False when the shared folder ZIP leaves the file out, such as a file downloadable only through a grant.
+  archivable?: boolean;
   // Set for images a browser can draw; it opens the original file, not the thumbnail.
   view_url?: string | null;
   latest_media_location: LatestMediaLocation | null;

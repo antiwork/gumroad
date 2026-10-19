@@ -1900,6 +1900,40 @@ describe UrlRedirectsController, inertia: true do
 
         expect(response).to redirect_to(url_redirect_expired_page_path(@token))
       end
+
+      it "refuses after a chargeback" do
+        url_redirect.purchase.update!(chargeback_date: Time.current)
+
+        expect do
+          get :download_product_files, format: :json, params: { product_file_ids: [stream_only_file.external_id], id: @token }
+        end.to raise_error(ActionController::RoutingError)
+      end
+
+      it "refuses once the file is deleted" do
+        stream_only_file.mark_deleted!
+
+        expect do
+          get :download_product_files, format: :json, params: { product_file_ids: [stream_only_file.external_id], id: @token }
+        end.to raise_error(ActionController::RoutingError)
+      end
+
+      # Save to Dropbox asks for a folder's files in one request.
+      it "serves the granted file alongside a normal one" do
+        normal_file = create(:readable_document, link: @product)
+        allow_any_instance_of(UrlRedirect).to receive(:signed_location_for_file).with(normal_file).and_return("https://example.com/normal.pdf")
+
+        get :download_product_files, format: :json, params: { product_file_ids: [normal_file.external_id, stream_only_file.external_id], id: @token }
+
+        expect(response.parsed_body["files"].map { _1["url"] }).to contain_exactly("https://example.com/normal.pdf", "https://example.com/granted.mp4")
+      end
+
+      it "refuses a request that adds a stream-only file this buyer was not granted" do
+        ungranted_file = create(:streamable_video, link: @product, stream_only: true)
+
+        expect do
+          get :download_product_files, format: :json, params: { product_file_ids: [stream_only_file.external_id, ungranted_file.external_id], id: @token }
+        end.to raise_error(ActionController::RoutingError)
+      end
     end
 
     it "redirects to the first product file if the format is HTML" do
