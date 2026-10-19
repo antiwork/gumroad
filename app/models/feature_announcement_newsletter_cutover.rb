@@ -12,6 +12,9 @@ class FeatureAnnouncementNewsletterCutover < ApplicationRecord
 
   # Raised at a provider handoff of an old-newsletter post once the newsletter is retired.
   class Retired < StandardError; end
+  # Raised when a handoff gives up waiting for the barrier, so the caller knows the provider was never called.
+  # A LockWaitTimeout, so retries and existing rescues treat it as before.
+  class AdmissionTimeout < ActiveRecord::LockWaitTimeout; end
 
   belongs_to :seller, class_name: "User"
 
@@ -130,7 +133,11 @@ class FeatureAnnouncementNewsletterCutover < ApplicationRecord
   def self.admit_newsletter_handoff(seller_id)
     ApplicationRecord.connected_to(role: :writing) do
       transaction do
-        state = with_lock_wait(HANDOFF_LOCK_WAIT_SECONDS) { locked_state(seller_id) }
+        state = begin
+          with_lock_wait(HANDOFF_LOCK_WAIT_SECONDS) { locked_state(seller_id) }
+        rescue ActiveRecord::LockWaitTimeout => e
+          raise AdmissionTimeout, e.message
+        end
         raise Retired, "The newsletter of seller #{seller_id} is retired" if state == "retired"
 
         yield

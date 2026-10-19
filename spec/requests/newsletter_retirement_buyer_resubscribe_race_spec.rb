@@ -32,11 +32,11 @@ describe "Resubscribing as a buyer while the old Gumroad newsletter retires", ty
     Follower.where(followed_id: @newsletter.id).delete_all
     sellers = [@newsletter, @other_seller].compact
     Purchase.where(seller_id: sellers.map(&:id)).delete_all
-    link_ids = Link.where(user_id: sellers.map(&:id)).ids
-    Link.where(id: link_ids).delete_all
+    product_ids = Link.where(user_id: sellers.map(&:id)).ids
+    Link.where(id: product_ids).delete_all
     AudienceMember.where(seller_id: sellers.map(&:id)).delete_all # delete_all skips the callbacks that remove these
     [@buyer, *sellers].each(&:destroy!)
-    delete_leftovers(user_ids: [@buyer, *sellers].map(&:id), link_ids:)
+    delete_leftovers(user_ids: [@buyer, *sellers].map(&:id), product_ids:)
   end
 
   def cutover = FeatureAnnouncementNewsletterCutover.find_by!(seller_id: @newsletter.id)

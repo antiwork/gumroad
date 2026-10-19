@@ -36,11 +36,11 @@ describe "Old Gumroad newsletter sends that began before its cutover row existed
     Workflow.where(seller_id: sellers.map(&:id)).delete_all
     Follower.where(followed_id: sellers.map(&:id)).delete_all
     Purchase.where(seller_id: sellers.map(&:id)).delete_all
-    link_ids = Link.where(user_id: sellers.map(&:id)).ids
-    Link.where(id: link_ids).delete_all
+    product_ids = Link.where(user_id: sellers.map(&:id)).ids
+    Link.where(id: product_ids).delete_all
     AudienceMember.where(seller_id: sellers.map(&:id)).delete_all
     sellers.each(&:destroy!)
-    delete_leftovers(user_ids: sellers.map(&:id), link_ids:, installment_ids:)
+    delete_leftovers(user_ids: sellers.map(&:id), product_ids:, installment_ids:)
   end
 
   def cutover = FeatureAnnouncementNewsletterCutover.find_by(seller_id: @newsletter.id)

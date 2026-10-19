@@ -40,7 +40,7 @@ describe "Old Gumroad newsletter sends reaching the provider while it retires" d
     Follower.where(followed_id: sellers.map(&:id)).delete_all
     AudienceMember.where(seller_id: sellers.map(&:id)).delete_all
     sellers.each(&:destroy!)
-    delete_leftovers(user_ids: sellers.map(&:id), link_ids: Link.where(user_id: sellers.map(&:id)).ids, installment_ids:)
+    delete_leftovers(user_ids: sellers.map(&:id), product_ids: Link.where(user_id: sellers.map(&:id)).ids, installment_ids:)
   end
 
   def cutover = FeatureAnnouncementNewsletterCutover.find_by!(seller_id: @newsletter.id)
@@ -240,6 +240,122 @@ describe "Old Gumroad newsletter sends reaching the provider while it retires" d
       expect(sent_to(post)).to eq([@reader.email])
     ensure
       finish(sending, retirement)
+    end
+
+    describe "whose claim is committed before the handoff" do
+      before { stub_const("FeatureAnnouncementNewsletterCutover::HANDOFF_LOCK_WAIT_SECONDS", 1) }
+
+      # Holds the cutover row on another connection past the handoff's wait, as a retire! that then fails would.
+      def hold_cutover_row(release)
+        held = Queue.new
+        holder = in_thread do
+          FeatureAnnouncementNewsletterCutover.transaction do
+            FeatureAnnouncementNewsletterCutover.where(seller_id: @newsletter.id).lock.pluck(:id)
+            held << true
+            Timeout.timeout(10) { release.pop }
+            raise ActiveRecord::Rollback
+          end
+        end
+        Timeout.timeout(10) { held.pop }
+        holder
+      end
+
+      # Each admitted handoff is one provider call; `inside` runs in its place, still under the barrier, and gets
+      # the call's number.
+      def track_provider_calls(inside: ->(handoff, _number) { handoff.call })
+        calls = []
+        allow(FeatureAnnouncementNewsletterCutover).to receive(:admit_newsletter_handoff).and_wrap_original do |original, *args, &handoff|
+          original.call(*args) do
+            calls << true
+            inside.call(handoff, calls.size)
+          end
+        end
+        calls
+      end
+
+      it "gives the claim back when the handoff times out while a retirement that doesn't happen holds the row, so the retry sends once" do
+        post = workflow_post
+        calls = track_provider_calls
+        release = Queue.new
+        holder = hold_cutover_row(release)
+
+        expect { send_workflow(post) }.to raise_error(ActiveRecord::LockWaitTimeout)
+        expect(calls).to be_empty
+        expect(sent_to(post)).to be_empty
+
+        release << true
+        holder.join(10)
+        send_workflow(post)
+        send_workflow(post)
+
+        expect(calls.size).to eq(1)
+        expect(sent_to(post)).to eq([@reader.email])
+        expect(cutover.state).to eq("migrated")
+      ensure
+        release&.push(true)
+        finish(holder)
+      end
+
+      it "gives the claim back when the handoff times out while retire! holds the row, so the retry is refused" do
+        post = workflow_post
+        calls = track_provider_calls
+        release = Queue.new
+        retirement = hold_retirement(release)
+
+        expect { send_workflow(post) }.to raise_error(ActiveRecord::LockWaitTimeout)
+        release << true
+        retirement.value
+        send_workflow(post)
+
+        expect(calls).to be_empty
+        expect(sent_to(post)).to be_empty
+        expect(cutover.state).to eq("retired")
+      ensure
+        finish(retirement)
+      end
+
+      it "keeps the claim when a lock wait times out after the provider took the email" do
+        post = workflow_post
+        calls = track_provider_calls(inside: lambda do |handoff, number|
+          handoff.call
+          raise ActiveRecord::LockWaitTimeout, "after the provider call" if number == 1
+        end)
+
+        expect { send_workflow(post) }.to raise_error(ActiveRecord::LockWaitTimeout)
+        send_workflow(post)
+
+        expect(calls.size).to eq(1)
+        expect(sent_to(post)).to eq([@reader.email])
+      end
+
+      it "keeps the claim when the provider's answer is lost" do
+        post = workflow_post
+        calls = track_provider_calls(inside: ->(handoff, number) { number == 1 ? raise(Net::ReadTimeout) : handoff.call })
+
+        expect { send_workflow(post) }.to raise_error(Net::ReadTimeout)
+        send_workflow(post)
+
+        expect(calls.size).to eq(1)
+        expect(sent_to(post)).to eq([@reader.email])
+      end
+
+      it "keeps the claim when the records written after the provider call time out" do
+        post = workflow_post
+        calls = track_provider_calls
+        [PostSendgridApi, PostResendApi].each do |api|
+          allow_any_instance_of(api).to receive(:create_email_info_records).and_wrap_original do |original, *args|
+            raise ActiveRecord::LockWaitTimeout if calls.one?
+
+            original.call(*args)
+          end
+        end
+
+        expect { send_workflow(post) }.to raise_error(ActiveRecord::LockWaitTimeout)
+        send_workflow(post)
+
+        expect(calls.size).to eq(1)
+        expect(sent_to(post)).to eq([@reader.email])
+      end
     end
   end
 end

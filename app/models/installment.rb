@@ -1229,8 +1229,9 @@ class Installment < ApplicationRecord
       args[:handoff_admission] = admission if admission
       PostEmailApi.process(**args)
       Rails.cache.write(cache_key, cache)
-    rescue FeatureAnnouncementNewsletterCutover::Retired
-      # Refused before the provider saw it, so the claim SentPostEmail.ensure_uniqueness committed isn't a send.
+    rescue FeatureAnnouncementNewsletterCutover::Retired, FeatureAnnouncementNewsletterCutover::AdmissionTimeout
+      # Refused or timed out before the provider saw it, so the claim SentPostEmail.ensure_uniqueness committed
+      # isn't a send.
       SentPostEmail.where(post_id: id, email: recipient[:email]).delete_all
       raise
     end

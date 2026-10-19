@@ -28,11 +28,11 @@ describe "Old Gumroad newsletter writers already in a transaction when the cutov
     Follower.where(followed_id: @newsletter.id).delete_all
     Purchase.where(seller_id: seller_ids).delete_all
     Purchase.where(purchaser_id: @users.map(&:id)).delete_all
-    link_ids = Link.where(user_id: seller_ids).ids
-    Link.where(id: link_ids).delete_all
+    product_ids = Link.where(user_id: seller_ids).ids
+    Link.where(id: product_ids).delete_all
     AudienceMember.where(seller_id: seller_ids).delete_all # delete_all skips the callbacks that remove these
     [*@users, @newsletter].each { User.find_by(id: _1.id)&.destroy! }
-    delete_leftovers(user_ids: seller_ids, link_ids:)
+    delete_leftovers(user_ids: seller_ids, product_ids:)
   end
 
   def account(email, **attributes) = create(:user, email:, **attributes).tap { @users << _1 }

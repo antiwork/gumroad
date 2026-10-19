@@ -29,11 +29,11 @@ describe Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements, "lock orde
     FeatureAnnouncementSubscription.where(user_id: @reader.id).delete_all
     Follower.where(followed_id: @newsletter.id).delete_all
     Purchase.where(seller_id: @newsletter.id).delete_all
-    link_ids = Link.where(user_id: @newsletter.id).ids
-    Link.where(id: link_ids).delete_all
+    product_ids = Link.where(user_id: @newsletter.id).ids
+    Link.where(id: product_ids).delete_all
     AudienceMember.where(seller_id: @newsletter.id).delete_all # delete_all skips the callbacks that remove these
     [@reader, @newsletter].each(&:destroy!)
-    delete_leftovers(user_ids:, link_ids:)
+    delete_leftovers(user_ids:, product_ids:)
   end
 
   def cutover = FeatureAnnouncementNewsletterCutover.find_by!(seller_id: @newsletter.id)
