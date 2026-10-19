@@ -149,7 +149,7 @@ const CountryInput = () => {
       </Select>
       {unshippableCountryName ? (
         <FieldsetDescription id={`${uid}country-unshippable`}>
-          This order can't be shipped to {unshippableCountryName}. Choose the country you're shipping to.
+          This order can't be shipped to your country ({unshippableCountryName}). Choose the country you're shipping to.
         </FieldsetDescription>
       ) : null}
     </Fieldset>

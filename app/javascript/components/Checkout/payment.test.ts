@@ -282,14 +282,11 @@ describe("a shipping country the physical cart doesn't cover", () => {
     expect(chosen.country).toBe("CA");
     expect(chosen.unshippableCountry).toBeNull();
     expect(chosen.surcharges.type).toBe("pending");
-  });
 
-  it.each([
-    ["an eligible starting country", [physical(["US", "CA"])]],
-    ["a digital product that collects an address", [digitalWithAddress]],
-    ["a physical product that ships nowhere", [product({ ...physical([]), shipsNowhere: true })]],
-  ])("keeps the starting country for %s", (_, products) => {
-    expect(arrive(products).country).toBe("US");
+    // Only a country the physical items can't reach is cleared.
+    expect(arrive([physical(["US", "CA"])]).country).toBe("US");
+    expect(arrive([digitalWithAddress]).country).toBe("US");
+    expect(arrive([product({ ...physical([]), shipsNowhere: true })]).country).toBe("US");
   });
 
   it("brings back the buyer's own country once the cart can ship there, and never picks another", () => {

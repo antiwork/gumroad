@@ -1189,7 +1189,7 @@ describe("PaymentForm shipping country", () => {
     expect(select.value).toBe("");
     expect(within(select).getByRole<HTMLOptionElement>("option", { name: "Choose a country" }).disabled).toBe(true);
     const explanation = screen.getByText(
-      "This order can't be shipped to United States. Choose the country you're shipping to.",
+      "This order can't be shipped to your country (United States). Choose the country you're shipping to.",
     );
     expect(select.getAttribute("aria-describedby")).toBe(explanation.id);
     expect(payButton().hasAttribute("disabled")).toBe(true);
@@ -1198,7 +1198,7 @@ describe("PaymentForm shipping country", () => {
 
     expect(harness.actions).toContainEqual(expect.objectContaining({ type: "set-value", country: "CA" }));
     expect(screen.getByLabelText<HTMLSelectElement>("Country").value).toBe("CA");
-    expect(screen.queryByText(/can't be shipped to United States/u)).toBeNull();
+    expect(screen.queryByText(/can't be shipped to your country/u)).toBeNull();
   });
 
   it("keeps a digital cart's billing country choices", () => {

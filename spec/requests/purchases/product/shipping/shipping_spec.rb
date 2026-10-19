@@ -154,7 +154,7 @@ describe("Product Page - Shipping Scenarios", type: :system, js: true, shipping:
       add_to_cart(product)
 
       expect(page).to have_select("Country", selected: "Choose a country")
-      expect(page).to have_text("This order can't be shipped to Canada. Choose the country you're shipping to.")
+      expect(page).to have_text("This order can't be shipped to your country (Canada). Choose the country you're shipping to.")
       expect(page).to have_button("Pay", disabled: true)
 
       check_out(product, logged_in_user: buyer, country: "United States")
