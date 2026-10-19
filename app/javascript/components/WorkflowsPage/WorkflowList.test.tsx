@@ -1,7 +1,4 @@
 // @vitest-environment happy-dom
-//
-// The workflow list renders every alive workflow at once, so the only way to reach a specific one
-// on a long list is the search field; it filters client-side on the workflow name.
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -129,7 +126,7 @@ describe("WorkflowList search", () => {
     expect(screen.queryByText("Automate emails with ease.")).toBeNull();
   });
 
-  it("hides the search field when the seller has no workflows", () => {
+  it("only offers search once the seller has workflows", () => {
     render(
       <LoggedInUserProvider value={loggedInUser}>
         <WorkflowList workflows={[]} />
@@ -138,5 +135,9 @@ describe("WorkflowList search", () => {
 
     expect(screen.queryByRole("button", { name: "Toggle Search" })).toBeNull();
     expect(screen.getByText("Automate emails with ease.")).toBeTruthy();
+
+    cleanup();
+    renderList();
+    expect(screen.getByRole("button", { name: "Toggle Search" })).toBeTruthy();
   });
 });
