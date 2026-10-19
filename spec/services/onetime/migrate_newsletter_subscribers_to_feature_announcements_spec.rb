@@ -760,13 +760,43 @@ describe Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements do
 
   describe "rechecking each candidate when it is locked" do
     def during_apply(email)
-      allow_any_instance_of(described_class).to receive(:migrate).and_wrap_original do |original, seller, plan, follower|
+      allow_any_instance_of(described_class).to receive(:migrate).and_wrap_original do |original, seller, plan, follower, **kwargs|
         yield Follower.find(follower.id) if follower.email == email
-        original.call(seller, plan, follower)
+        original.call(seller, plan, follower, **kwargs)
       end
     end
 
     before { described_class.prepare!(cutoff_at:) }
+
+    {
+      "deleted" => -> { { deleted_at: Time.current } },
+      "unconfirmed" => -> { { confirmed_at: nil } },
+      "confirmed after the cutoff" => -> { { confirmed_at: cutoff_at + 1.second } },
+      "created after the cutoff" => -> { { created_at: cutoff_at + 1.second } }
+    }.each do |change, attributes|
+      it "avoids later preference and purchase reads when the locked follow becomes #{change}" do
+        reads = []
+        callback = ->(*, payload) { reads << payload[:sql] if payload[:sql].match?(/\ASELECT .*FROM `(?:feature_announcement_subscriptions|purchases)`/) }
+        invalidation = instance_exec(&attributes)
+        allow_any_instance_of(described_class).to receive(:migrate).and_wrap_original do |original, seller, plan, follower, **kwargs|
+          next original.call(seller, plan, follower, **kwargs) unless follower.email == embed.email
+
+          Follower.find(follower.id).update_columns(invalidation)
+          ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+            original.call(seller, plan, follower, **kwargs)
+          end
+        end
+
+        apply!
+
+        expect(reads).to be_empty
+        expect(preference(embed)).to be_empty
+        expect(preference(follow_page)).to eq([[true, "newsletter_migration"]])
+        expect(cutover.attributes.slice("state", "migrated_count", "cursor_follower_id"))
+          .to eq("state" => "migrated", "migrated_count" => 1,
+                 "cursor_follower_id" => Follower.where(followed_id: newsletter.id).maximum(:id))
+      end
+    end
 
     it "refuses a follow that moved to another seller since the batch was read" do
       other_seller = create(:user)

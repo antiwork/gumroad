@@ -306,6 +306,8 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
         current = Follower.lock(follower.follower_user_id ? "FOR SHARE" : "FOR UPDATE").find_by(id: follower.id)
         unchanged = current && current.followed_id == seller.id && current.follower_user_id == follower.follower_user_id && normalize(current.email) == email
         next :changed_since_read unless unchanged
+        outcome = initial_outcome(current, cutover.cutoff_at)
+        next outcome if outcome
 
         identity = resolve_identity(current, linked, confirmed)
         context = current_context(seller, current, identity, purchase_aliases:)
