@@ -1,5 +1,4 @@
 import type { Discount } from "$app/parsers/checkout";
-import { discountAppliesToOption } from "$app/utils/offer-code";
 
 import {
   applySelection,
@@ -19,21 +18,24 @@ type SubscriptionPrice = {
 const oncePerCartAmount = (discount: Discount | null) =>
   discount?.type === "fixed" && discount.once_per_cart ? (discount.once_per_cart_amount_cents ?? discount.cents) : null;
 
-// Plan changes keep the subscription's code without rechecking its spend minimum or the tier's stock, so only
-// scope and seat count gate it here. Option previews keep the code's served cents, not the configured amount.
-export const subscriptionDiscountForSelection = (
+// The server resolves each option's plan-change discount. The seat count is picked on this page, so only its
+// minimum is checked here, and not against the tier's stock: a subscriber keeps the seats they have.
+export const planChangeDiscount = (
+  optionDiscounts: Record<string, Discount | null>,
+  discount: Discount | null,
+  selection: PriceSelection,
+) => {
+  const selected = selection.optionId === null ? discount : (optionDiscounts[selection.optionId] ?? null);
+  return hasMetDiscountConditions(selected, selection.quantity) ? selected : null;
+};
+
+export const applyPlanChangeSelection = (
   product: Product,
+  optionDiscounts: Record<string, Discount | null>,
   discount: Discount | null,
   selection: PriceSelection,
 ) =>
-  discount &&
-  discountAppliesToOption(discount, product, selection.optionId) &&
-  hasMetDiscountConditions(discount, selection.quantity)
-    ? discount
-    : null;
-
-export const applySubscriptionSelection = (product: Product, discount: Discount | null, selection: PriceSelection) =>
-  applySelection(product, subscriptionDiscountForSelection(product, discount, selection), selection, {
+  applySelection(product, planChangeDiscount(optionDiscounts, discount, selection), selection, {
     discountConditionsVerified: true,
   });
 

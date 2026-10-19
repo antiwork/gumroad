@@ -3,7 +3,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { subscriptionDiscountForSelection } from "$app/pages/Subscriptions/price";
+import { planChangeDiscount } from "$app/pages/Subscriptions/price";
 import type { Discount } from "$app/parsers/checkout";
 
 import {
@@ -75,7 +75,7 @@ describe("subscription option previews", () => {
         selection={selection}
         discount={renewalDiscount}
         discountForSelection={(previewSelection) =>
-          subscriptionDiscountForSelection(product, renewalDiscount, previewSelection)
+          planChangeDiscount({ Basic: renewalDiscount, Premium: renewalDiscount }, renewalDiscount, previewSelection)
         }
         pwywMinimumPriceCents={700}
       />,

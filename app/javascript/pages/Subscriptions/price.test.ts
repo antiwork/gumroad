@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  applySubscriptionSelection,
+  applyPlanChangeSelection,
   initialSubscriptionUnitPrice,
   selectedSubscriptionTotal,
   subscriptionPWYWMinimumUnitPrice,
@@ -124,20 +124,18 @@ describe("subscription discount eligibility on plan changes", () => {
     payInInstallments: false,
   });
 
-  it("keeps the code on a plan below its spend minimum", () => {
-    const { discountedPriceCents } = applySubscriptionSelection(
-      product(null),
-      { ...discount, minimum_amount_cents: 1_500 },
-      selection(1),
-    );
+  it("drops the code on an option the server left out of its scope", () => {
+    const { discountedPriceCents } = applyPlanChangeSelection(product(null), { basic: null }, discount, selection(1));
 
-    expect(discountedPriceCents).toBe(700);
+    expect(discountedPriceCents).toBe(1_000);
   });
 
   it("keeps a seat-minimum code on the subscriber's sold-out tier", () => {
-    const { discountedTotalCents } = applySubscriptionSelection(
+    const seatMinimum = { ...discount, minimum_quantity: 2 };
+    const { discountedTotalCents } = applyPlanChangeSelection(
       product(0),
-      { ...discount, minimum_quantity: 2 },
+      { basic: seatMinimum },
+      seatMinimum,
       selection(2),
     );
 
@@ -145,9 +143,11 @@ describe("subscription discount eligibility on plan changes", () => {
   });
 
   it("drops a seat-minimum code when the plan has too few seats", () => {
-    const { discountedTotalCents } = applySubscriptionSelection(
+    const seatMinimum = { ...discount, minimum_quantity: 2 };
+    const { discountedTotalCents } = applyPlanChangeSelection(
       product(null),
-      { ...discount, minimum_quantity: 2 },
+      { basic: seatMinimum },
+      seatMinimum,
       selection(1),
     );
 

@@ -1062,12 +1062,27 @@ describe CheckoutPresenter do
                                                  price_cents: @original_price_cents, merchant_account: @merchant_account)
       end
 
+      it "resolves each tier's plan-change discount without the code's spend minimum",
+         vcr: { cassette_name: "CheckoutPresenter/_subscription_manager_props/tiered_membership_product/returns_subscription_data_object_for_the_subscription_manage_page" } do
+        tier1 = @product.tier_category.variants.first
+        tier2 = @product.tier_category.variants.second
+        @purchase.update!(offer_code: create(:offer_code, products: [@product], variants: [tier1], minimum_amount_cents: 50_00))
+        @subscription.reload
+
+        subscription = described_class.new(logged_in_user: nil, ip: "127.0.0.1").subscription_manager_props(subscription: @subscription)[:subscription]
+
+        expect(subscription[:discount]).not_to have_key(:minimum_amount_cents)
+        expect(subscription[:option_discounts][tier1.external_id]).to eq(subscription[:discount])
+        expect(subscription[:option_discounts]).to include(tier2.external_id => nil)
+      end
+
       it "returns subscription data object for the subscription manage page" do
         @purchase.update!(offer_code: create(:offer_code, products: [@product]))
         @subscription.reload
         tier1 = @product.tier_category.variants.first
         tier2 = @product.tier_category.variants.second
 
+        discount = { type: "fixed", cents: 100, product_ids: [@product.external_id], expires_at: nil, minimum_quantity: nil, duration_in_billing_cycles: nil }
         result = described_class.new(logged_in_user: nil, ip: "127.0.0.1").subscription_manager_props(subscription: @subscription)
         expect(result).to eq({
                                product: {
@@ -1135,15 +1150,8 @@ describe CheckoutPresenter do
                                  prorated_discount_price_cents: @subscription.prorated_discount_price_cents,
                                  alive: false,
                                  pending_cancellation: true,
-                                 discount: {
-                                   type: "fixed",
-                                   cents: 100,
-                                   product_ids: [@product.external_id],
-                                   expires_at: nil,
-                                   minimum_quantity: nil,
-                                   duration_in_billing_cycles: nil,
-                                   minimum_amount_cents: nil,
-                                 },
+                                 discount:,
+                                 option_discounts: { tier1.external_id => discount, tier2.external_id => discount },
                                  end_time_of_subscription: @subscription.end_time_of_subscription.iso8601,
                                  successful_purchases_count: 1,
                                  remaining_charges_count: nil,
