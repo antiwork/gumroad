@@ -388,6 +388,25 @@ describe UpdatePayoutMethod do
       end
     end
 
+    describe "switching to card payouts when the existing bank account's provider is no longer supported", :vcr do
+      let(:user) { create(:named_user) }
+      let!(:existing_bank_account) { create(:ach_account, user:) }
+      let(:credit_card) { create(:credit_card, chargeable: create(:cc_token_chargeable, card: CardParamsSpecHelper.success_debit_visa)) }
+      let(:params) { ActionController::Parameters.new(card: { token: "tok_123" }) }
+      subject(:service) { described_class.new(user_params: params, seller: user) }
+
+      before do
+        create(:bank, routing_number: existing_bank_account.routing_number, name: "GREEN DOT BANK")
+        allow(service).to receive(:prepare_credit_card).and_return([credit_card, nil])
+      end
+
+      it "replaces the payout method instead of raising" do
+        expect(service.process).to eq(success: true)
+        expect(existing_bank_account.reload.deleted_at).to be_present
+        expect(user.active_bank_account).to be_a(CardBankAccount)
+      end
+    end
+
     describe "saving a PayPal address when the bank rail cannot be re-created" do
       let(:user) { create(:named_user) }
       let(:params) { ActionController::Parameters.new(payment_address: "paypal@example.com") }
