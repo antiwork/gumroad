@@ -134,7 +134,10 @@ describe Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements do
       follow(email: imported_chooser.email, source: Follower::From::CSV_IMPORT) # a cohort with no decision
     end
 
-    def choices = FeatureAnnouncementSubscription.where(user_id: [chose_in.id, chose_out.id]).order(:user_id).pluck(:subscribed, :source, :version)
+    def choices
+      FeatureAnnouncementSubscription.where(user_id: [chose_in.id, chose_out.id]).order(:user_id).pluck(:subscribed, :source, :version, :created_at, :updated_at)
+    end
+
     def link(user) = Follower.find_by(followed_id: newsletter.id, email: user.email).follower_user_id
 
     it "links each to its account and leaves the choice exactly as it is, without counting it as carried over" do
@@ -147,6 +150,19 @@ describe Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements do
       expect(choices).to eq(before_choices)
       expect(cutover.attributes.slice("eligible_count", "migrated_count")).to eq("eligible_count" => 2, "migrated_count" => 2)
       expect(link(imported_chooser)).to be_nil
+    end
+
+    it "lets the old cancel link reach an account that had opted out after its email changes, leaving the row as it was" do
+      described_class.prepare!(cutoff_at:)
+      apply!
+      before_choices = choices
+      follow = Follower.find_by(followed_id: newsletter.id, email: chose_out.email)
+      chose_out.update_columns(email: "chose-out-moved@example.com")
+
+      expect(FeatureAnnouncementNewsletterCutover.subscriber_for(follow)).to eq(chose_out)
+      follow.mark_deleted!
+
+      expect(choices).to eq(before_choices)
     end
 
     it "changes nothing when applied again" do

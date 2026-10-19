@@ -36,11 +36,9 @@ class FeatureAnnouncementNewsletterCutover < ApplicationRecord
     end
   end
 
-  # For a purchase whose buyer resubscribes to a newsletter seller: that lifts the buyer opt-out retire! may
-  # already have counted as resolved. Locks the follow first (the migration's order), then share-locks the
-  # cutover row so retire! orders against this commit, then stamps the follow so retire!'s recheck of rows
-  # changed since its scan began includes it. The stamp comes after the share lock, so it is never older
-  # than a scan this commit was not waited out by. Sellers without a cutover row take no lock.
+  # For a save that lifts a buyer opt-out retire! may already have counted as resolved. Locks the follow (the
+  # migration's order), share-locks the cutover row so retire! orders against this commit, then stamps the
+  # follow after that lock so retire!'s recheck of rows changed since its scan includes it.
   def self.fence_buyer_resubscribe(seller_id, email)
     ApplicationRecord.connected_to(role: :writing) do
       uncached do

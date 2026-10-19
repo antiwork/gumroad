@@ -176,15 +176,45 @@ describe Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements, "against a
     @extra_users = [owner]
     follow = create(:follower, user: @newsletter, email: owner.email, source: Follower::From::EMBED_FORM, confirmed_at: 2.hours.ago, created_at: 2.hours.ago)
     described_class.prepare!(cutoff_at: 1.hour.ago)
+    winner = nil
     allow(FeatureAnnouncementSubscription).to receive(:create!).and_wrap_original do |original, **attributes|
-      in_thread { FeatureAnnouncementSubscription.unsubscribe!(User.find(owner.id), source: "unsubscribe_link") }.value if attributes[:user_id] == owner.id
+      if attributes[:user_id] == owner.id
+        in_thread { FeatureAnnouncementSubscription.unsubscribe!(User.find(owner.id), source: "unsubscribe_link") }.value
+        winner = in_thread { FeatureAnnouncementSubscription.find_by!(user_id: owner.id).attributes }.value
+      end
       original.call(**attributes)
     end
 
     described_class.apply!(confirmed_eligible_count: 2)
 
-    expect(FeatureAnnouncementSubscription.where(user_id: owner.id).pluck(:subscribed, :source)).to eq([[false, "unsubscribe_link"]])
+    expect(FeatureAnnouncementSubscription.find_by!(user_id: owner.id).attributes).to eq(winner)
+    expect(winner.slice("subscribed", "source", "version")).to eq("subscribed" => false, "source" => "unsubscribe_link", "version" => 1)
     expect(follow.reload.follower_user_id).to eq(owner.id)
     expect(FeatureAnnouncementNewsletterCutover.find_by!(seller_id: @newsletter.id).migrated_count).to eq(1)
+  end
+
+  it "keeps a Settings opt-in committed during the copy exactly as it was, and its account still reachable after an email change" do
+    owner = create(:user, email: "race-settings@example.com")
+    @extra_users = [owner]
+    follow = create(:follower, user: @newsletter, email: owner.email, source: Follower::From::EMBED_FORM, confirmed_at: 2.hours.ago, created_at: 2.hours.ago)
+    described_class.prepare!(cutoff_at: 1.hour.ago)
+    winner = nil
+    allow(FeatureAnnouncementSubscription).to receive(:create!).and_wrap_original do |original, **attributes|
+      if attributes[:user_id] == owner.id
+        in_thread do
+          FeatureAnnouncementSubscription.insert({ user_id: owner.id, subscribed: true, version: 1, source: "settings", created_at: 1.minute.ago, updated_at: 1.minute.ago })
+        end.value
+        winner = in_thread { FeatureAnnouncementSubscription.find_by!(user_id: owner.id).attributes }.value
+      end
+      original.call(**attributes)
+    end
+
+    described_class.apply!(confirmed_eligible_count: 2)
+
+    expect(FeatureAnnouncementSubscription.find_by!(user_id: owner.id).attributes).to eq(winner)
+    expect(FeatureAnnouncementNewsletterCutover.find_by!(seller_id: @newsletter.id).migrated_count).to eq(1)
+    owner.update_columns(email: "race-settings-moved@example.com")
+    Follower.find(follow.id).mark_deleted!
+    expect(FeatureAnnouncementSubscription.where(user_id: owner.id).pluck(:subscribed, :source)).to eq([[false, "newsletter_opt_out"]])
   end
 end

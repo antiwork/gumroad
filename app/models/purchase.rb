@@ -411,9 +411,8 @@ class Purchase < ApplicationRecord
   # A single-row claim writes purchaser on this row only. Member rows are what the library
   # and the app list, and they still have the nil purchaser copied at creation.
   after_save :attach_unclaimed_bundle_product_purchases, if: :saved_change_to_purchaser_id?
-  # Inside the save, so a resubscribe that lifts a buyer opt-out is ordered against retiring that seller's newsletter.
-  after_save -> { FeatureAnnouncementNewsletterCutover.fence_buyer_resubscribe(seller_id, email) },
-             if: -> { saved_change_to_can_contact?(from: false, to: true) }
+  # Inside the save, so lifting a buyer opt-out is ordered against retiring that seller's newsletter.
+  after_save :fence_lifted_buyer_opt_out, if: :lifted_buyer_opt_out?
 
   after_commit :enqueue_update_sales_related_products_infos_job, if: -> (purchase) {
     purchase.purchase_state_previously_changed? && purchase.purchase_state == "successful"
@@ -6450,6 +6449,15 @@ class Purchase < ApplicationRecord
         purchase.can_contact_reason = reason
         purchase.save(validate: false)
       end
+    end
+
+    # An opted-out row stops counting for its old seller and address when it resubscribes or moves away.
+    def lifted_buyer_opt_out?
+      can_contact_before_last_save == false && (can_contact || saved_change_to_email? || saved_change_to_seller_id?)
+    end
+
+    def fence_lifted_buyer_opt_out
+      FeatureAnnouncementNewsletterCutover.fence_buyer_resubscribe(seller_id_before_last_save, email_before_last_save)
     end
 
     def toggle_off_can_contact_if_buyer_has_unsubscribed
