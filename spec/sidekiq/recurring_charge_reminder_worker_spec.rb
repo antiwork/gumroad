@@ -64,4 +64,35 @@ describe RecurringChargeReminderWorker, :vcr do
       described_class.new.perform(@subscription.id)
     end.not_to have_enqueued_mail(CustomerLowPriorityMailer, :subscription_renewal_reminder).with(@subscription.id)
   end
+
+  describe "advance notice for renewals of 12+ months" do
+    before do
+      allow_any_instance_of(Subscription).to receive(:recurrence).and_return("yearly")
+      travel_to @subscription.end_time_of_subscription - 29.days
+    end
+
+    after { $redis.scan_each(match: "renewal_advance_reminder:#{@subscription.id}:*") { |k| $redis.del(k) } }
+
+    it "sends the advance notice once" do
+      expect do
+        2.times { described_class.new.perform(@subscription.id, described_class::ADVANCE) }
+      end.to have_enqueued_mail(CustomerLowPriorityMailer, :subscription_renewal_reminder).with(@subscription.id).once
+    end
+
+    it "skips the advance notice once the final reminder is due" do
+      travel_to @subscription.end_time_of_subscription - 6.days
+
+      expect do
+        described_class.new.perform(@subscription.id, described_class::ADVANCE)
+      end.not_to have_enqueued_mail(CustomerLowPriorityMailer, :subscription_renewal_reminder)
+    end
+
+    it "keeps the existing guards" do
+      @subscription.update!(failed_at: 1.day.ago)
+
+      expect do
+        described_class.new.perform(@subscription.id, described_class::ADVANCE)
+      end.not_to have_enqueued_mail(CustomerLowPriorityMailer, :subscription_renewal_reminder)
+    end
+  end
 end

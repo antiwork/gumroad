@@ -125,6 +125,29 @@ describe "PurchaseSubscription", :vcr do
               end
             end
 
+            %w[yearly every_two_years].each do |recurrence|
+              it "also schedules an advance notice 30 days out if the billing period is #{recurrence}" do
+                freeze_time do
+                  @subscription.last_payment_option.update!(price: @product.prices.find_by(recurrence:))
+
+                  @purchase.update_balance_and_mark_successful!
+
+                  advance_at = @subscription.reload.end_time_of_subscription - 30.days
+                  expect(RecurringChargeReminderWorker).to have_enqueued_sidekiq_job(@subscription.id, RecurringChargeReminderWorker::ADVANCE).at(advance_at)
+                end
+              end
+            end
+
+            it "schedules no advance notice if the billing period is quarterly" do
+              freeze_time do
+                @subscription.last_payment_option.update!(price: @product.prices.find_by(recurrence: "quarterly"))
+
+                @purchase.update_balance_and_mark_successful!
+
+                expect(RecurringChargeReminderWorker.jobs.map { _1["args"] }).to eq([[@subscription.id]])
+              end
+            end
+
             it "schedules a renewal reminder if the billing period is every two years" do
               freeze_time do
                 payment_option = @subscription.last_payment_option

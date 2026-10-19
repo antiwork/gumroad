@@ -74,3 +74,13 @@ export const formatRecurrenceWithDuration = (recurrenceId: RecurrenceId, product
   }
   return `${baseFormattedLabel} x ${(productDuration / numberOfMonths).toFixed(0)}`;
 };
+
+// Lead times come from BasePrice::Recurrence via `recurrences.enabled[].renewal_reminder_days`.
+export const renewalReminderNotice = (
+  recurrences: { enabled: { recurrence: RecurrenceId; renewal_reminder_days?: number[] }[] } | null,
+  recurrence: RecurrenceId | null,
+): string | null => {
+  const days = recurrences?.enabled.find((price) => price.recurrence === recurrence)?.renewal_reminder_days;
+  if (!days || days.length === 0) return null;
+  return `We'll email you a reminder ${days.map((d) => `${d} ${d === 1 ? "day" : "days"}`).join(" and ")} before each renewal.`;
+};

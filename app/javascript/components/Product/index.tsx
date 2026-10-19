@@ -29,6 +29,7 @@ import {
 import { formatDate } from "$app/utils/date";
 import { formatOrderOfMagnitude } from "$app/utils/formatOrderOfMagnitude";
 import { variantLabel } from "$app/utils/labels";
+import { isSingleChargeDuration, renewalReminderNotice } from "$app/utils/recurringPricing";
 import { assertResponseError } from "$app/utils/request";
 import { startTrackingForSeller, trackBuyerCurrencyDisplayView, trackProductEvent } from "$app/utils/user_analytics";
 
@@ -328,6 +329,10 @@ export const Product = ({
   }, [initialDiscountCode]);
 
   const discount = discountCode?.valid ? discountCode.discount : null;
+  const renewalNotice =
+    selection.recurrence && !isSingleChargeDuration(selection.recurrence, product.duration_in_months ?? null)
+      ? renewalReminderNotice(product.recurrences, selection.recurrence)
+      : null;
   const selectionAttributes = applySelection(product, discount, selection);
   let { basePriceCents } = selectionAttributes;
   const { priceCents, discountedPriceCents, pppDiscounted, maxQuantity, selectedOption } = selectionAttributes;
@@ -711,6 +716,11 @@ export const Product = ({
               This membership will automatically end after{" "}
               {product.duration_in_months === 1 ? "one month" : `${product.duration_in_months} months`}
             </Alert>
+          ) : null}
+          {renewalNotice ? (
+            <p className="text-sm" role="note">
+              {renewalNotice}
+            </p>
           ) : null}
           <PurchaseButton
             ref={ctaButtonRef}

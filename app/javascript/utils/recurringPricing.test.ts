@@ -1,6 +1,10 @@
 import { describe, it, expect } from "vitest";
 
-import { formatRecurrenceWithDuration, isSingleChargeDuration } from "$app/utils/recurringPricing";
+import {
+  formatRecurrenceWithDuration,
+  isSingleChargeDuration,
+  renewalReminderNotice,
+} from "$app/utils/recurringPricing";
 
 describe("isSingleChargeDuration", () => {
   it("returns true when the membership duration equals a single recurrence period", () => {
@@ -32,5 +36,27 @@ describe("formatRecurrenceWithDuration", () => {
   it("renders one-time wording when the fixed duration is a single period", () => {
     expect(formatRecurrenceWithDuration("yearly", 12)).toBe("once");
     expect(formatRecurrenceWithDuration("monthly", 1)).toBe("once");
+  });
+});
+
+describe("renewalReminderNotice", () => {
+  const recurrences = {
+    enabled: [
+      { recurrence: "monthly" as const, renewal_reminder_days: [1] },
+      { recurrence: "yearly" as const, renewal_reminder_days: [30, 7] },
+    ],
+  };
+
+  it("lists each reminder lead time for the selected recurrence", () => {
+    expect(renewalReminderNotice(recurrences, "monthly")).toBe("We'll email you a reminder 1 day before each renewal.");
+    expect(renewalReminderNotice(recurrences, "yearly")).toBe(
+      "We'll email you a reminder 30 days and 7 days before each renewal.",
+    );
+  });
+
+  it("returns null without a recurrence or lead times", () => {
+    expect(renewalReminderNotice(null, "yearly")).toBeNull();
+    expect(renewalReminderNotice(recurrences, null)).toBeNull();
+    expect(renewalReminderNotice({ enabled: [{ recurrence: "yearly" }] }, "yearly")).toBeNull();
   });
 });

@@ -221,6 +221,17 @@ describe CustomerLowPriorityMailer do
         expect(mail.reply_to).to eq [purchase.link.user.email]
       end
 
+      it "states the renewal date for a yearly membership" do
+        purchase = create(:membership_purchase)
+        subscription = purchase.subscription
+        allow(Subscription).to receive(:find).with(subscription.id).and_return(subscription)
+        allow(subscription).to receive(:recurrence).and_return(BasePrice::Recurrence::YEARLY)
+
+        mail = CustomerLowPriorityMailer.subscription_renewal_reminder(subscription.id)
+
+        expect(mail.body.encoded).to include subscription.end_time_of_subscription.strftime("%B %e, %Y")
+      end
+
       it "shows the upcoming renewal price instead of the original signup price" do
         purchase = create(:membership_purchase)
         subscription = purchase.subscription

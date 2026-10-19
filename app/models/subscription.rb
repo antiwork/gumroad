@@ -1098,6 +1098,19 @@ class Subscription < ApplicationRecord
   def schedule_renewal_reminder
     return unless send_renewal_reminders?
     RecurringChargeReminderWorker.perform_at(send_renewal_reminder_at, id)
+    schedule_advance_renewal_reminder
+  end
+
+  def schedule_advance_renewal_reminder
+    remind_at = advance_renewal_reminder_at
+    return if remind_at.nil? || remind_at <= Time.current
+
+    RecurringChargeReminderWorker.perform_at(remind_at, id, RecurringChargeReminderWorker::ADVANCE)
+  end
+
+  def advance_renewal_reminder_at
+    lead = BasePrice::Recurrence.renewal_advance_reminder_email_days(recurrence)
+    end_time_of_subscription - lead if lead
   end
 
   def send_renewal_reminders?

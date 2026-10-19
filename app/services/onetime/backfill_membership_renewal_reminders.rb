@@ -31,7 +31,7 @@ module Onetime
 
     def process
       claim! unless @dry_run
-      counts = { considered: 0, eligible: 0, scheduled: 0, skipped: 0, errors: 0, due_immediately: 0 }
+      counts = { considered: 0, eligible: 0, scheduled: 0, skipped: 0, errors: 0, due_immediately: 0, advance_scheduled: 0 }
       start_after = $redis.get(CURSOR_KEY).to_i
 
       Subscription.where(cancelled_at: nil).where("id > ?", start_after).find_each(batch_size: @batch_size) do |subscription|
@@ -77,6 +77,16 @@ module Onetime
 
         RecurringChargeReminderWorker.perform_at(remind_at, subscription.id)
         counts[:scheduled] += 1
+        schedule_advance(subscription, counts)
+      end
+
+      # A notice already past its lead time is skipped; the final reminder still covers the renewal.
+      def schedule_advance(subscription, counts)
+        advance_at = subscription.advance_renewal_reminder_at
+        return if advance_at.nil? || advance_at <= Time.current
+
+        RecurringChargeReminderWorker.perform_at(advance_at, subscription.id, RecurringChargeReminderWorker::ADVANCE)
+        counts[:advance_scheduled] += 1
       end
 
       # RecurringChargeReminderWorker#perform's guards, plus the purchase cutoff it can't see.
