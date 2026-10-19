@@ -57,8 +57,9 @@ class FeatureAnnouncementNewsletterCutover < ApplicationRecord
   end
 
   def self.only_confirmed_account(email)
-    email = email.to_s.strip
-    confirmed = email.empty? ? [] : User.where(email:).where.not(confirmed_at: nil).limit(2).to_a
+    email = email.to_s.strip.downcase
+    # SQL collation can match different full addresses; apply the cap after the exact match.
+    confirmed = email.empty? ? [] : User.where(email:).where.not(confirmed_at: nil).to_a.select { _1.email.to_s.strip.downcase == email }.take(2)
     confirmed.first if confirmed.one?
   end
 
@@ -70,11 +71,12 @@ class FeatureAnnouncementNewsletterCutover < ApplicationRecord
       uncached do
         next if email.blank? || !covers?(seller_id)
 
-        follower_id = Follower.where(followed_id: seller_id, email:).lock.pick(:id)
-        next unless follower_id
+        emails = [email, email.to_s.strip.downcase].uniq
+        follower_ids = Follower.where(followed_id: seller_id, email: emails).order(:id).lock.pluck(:id)
+        next if follower_ids.empty?
 
         locked_state(seller_id)
-        Follower.where(id: follower_id).update_all(updated_at: Time.current)
+        Follower.where(id: follower_ids).update_all(updated_at: Time.current)
       end
     end
   end

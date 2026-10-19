@@ -172,6 +172,85 @@ describe Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements do
       expect(service.preflight(cutoff_at)[:counts]).to include(eligible: 1, buyer_opted_out: 2)
     end
 
+    it "does not retain raw aliases during preflight" do
+      raw_purchase(" #{embed.email} ", can_contact: true)
+      context = nil
+      service = described_class.new
+      allow(service).to receive(:purchase_context).and_wrap_original do |original, *args, **kwargs|
+        original.call(*args, **kwargs).tap { context = _1 }
+      end
+
+      expect(service.preflight(cutoff_at)[:counts]).to include(eligible: 2, buyer_opted_out: 1)
+      expect(context[:aliases]).to be_blank
+      expect(context[:opted_out_emails]).to eq(Set[buyer_opted_out.email])
+    end
+
+    it "retires after preflight and copy preserve a stored email opt-out" do
+      raw_purchase(" #{embed.email} ")
+      leave_unresolved_followers!
+      expect(described_class.preflight(cutoff_at:)[:counts]).to include(eligible: 1, buyer_opted_out: 2)
+      described_class.prepare!(cutoff_at:)
+
+      apply!
+
+      expect(preference(embed)).to be_empty
+      expect(cutover.migrated_count).to eq(1)
+      freeze_time do
+        Follower.where(followed_id: newsletter.id).update_all(updated_at: Time.current)
+        described_class.retire!
+      end
+      expect(cutover.state).to eq("retired")
+      expect(cutover.retirement_coverage["counts"]).to include("buyer_opted_out" => 2)
+      expect(cutover.retirement_coverage["changed_during_scan"]).to include("buyer_opted_out" => 2)
+    end
+
+    it "preserves collation-equivalent full addresses in both retirement scans" do
+      raw_purchase("café@example.com")
+      raw_purchase("cafe@example.com")
+      collapsed = Purchase.where(seller_id: newsletter.id, email: "cafe@example.com", can_contact: false).distinct.pluck(:email)
+      expect(collapsed.size).to eq(1)
+      email = (["café@example.com", "cafe@example.com"] - collapsed).sole
+      buyer = create(:user, email:)
+      follow(email:, account: buyer)
+      leave_unresolved_followers!
+      described_class.prepare!(cutoff_at:)
+      apply!
+
+      freeze_time do
+        Follower.where(followed_id: newsletter.id).update_all(updated_at: Time.current)
+        described_class.retire!
+      end
+
+      expect(cutover.state).to eq("retired")
+      expect(cutover.retirement_coverage["counts"]).to include("buyer_opted_out" => 2)
+      expect(cutover.retirement_coverage["changed_during_scan"]).to include("buyer_opted_out" => 2)
+      expect(preference(buyer)).to be_empty
+    end
+
+    it "mirrors a padded purchase opt-out only to its migrated full-email account" do
+      other = create(:user, email: "other@example.com")
+      third = create(:user, email: "third@example.com")
+      buyer = create(:user, email: "buyer@example.net")
+      other.update_columns(email: "cafe@example.com")
+      third.update_columns(email: "càfe@example.com")
+      buyer.update_columns(email: "café@example.com")
+      follow(email: buyer.email)
+      purchase = raw_purchase(" #{buyer.email} ", can_contact: true)
+      FeatureAnnouncementSubscription.create!(user_id: other.id, subscribed: true, source: "settings")
+      other_choice = FeatureAnnouncementSubscription.find_by!(user_id: other.id).attributes
+      candidates = User.where(email: buyer.email).where.not(confirmed_at: nil)
+      expect(candidates.ids).to match_array([buyer.id, other.id, third.id])
+      expect(candidates.limit(2).ids).not_to include(buyer.id)
+      described_class.prepare!(cutoff_at:)
+      apply!
+      expect(preference(buyer)).to eq([[true, "newsletter_migration"]])
+
+      purchase.unsubscribe_buyer
+
+      expect(preference(buyer)).to eq([[false, "newsletter_opt_out"]])
+      expect(FeatureAnnouncementSubscription.find_by!(user_id: other.id).attributes).to eq(other_choice)
+    end
+
     it "keeps the follower count separate from distinct eligible account identities" do
       duplicate = follow(email: "duplicate@example.com", account: embed)
       duplicate.update_columns(email: " #{embed.email}")
@@ -753,8 +832,8 @@ describe Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements do
 
     it "rechecks follows that change while the retirement scan runs" do
       leave_unresolved_followers!
-      allow_any_instance_of(described_class).to receive(:outcome_counts).and_wrap_original do |original, *args|
-        original.call(*args).tap do
+      allow_any_instance_of(described_class).to receive(:outcome_counts).and_wrap_original do |original, *args, **kwargs|
+        original.call(*args, **kwargs).tap do
           Follower.find_by(followed_id: newsletter.id, email: "guest@example.com").update!(deleted_at: nil, confirmed_at: Time.current) if args.last == Follower.all
         end
       end

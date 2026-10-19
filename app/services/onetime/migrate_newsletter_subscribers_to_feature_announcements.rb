@@ -113,7 +113,7 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
 
         cutover.update!(state: "migrating", error: nil)
         begin
-          context = ApplicationRecord.transaction { purchase_context(seller, deadline:) }
+          context = ApplicationRecord.transaction { purchase_context(seller, deadline:, include_aliases: true) }
           next cutover if context.nil?
 
           Follower.where(followed_id: seller.id).where("id > ?", cutover.cursor_follower_id).in_batches(of: @batch_size) do |batch|
@@ -148,15 +148,17 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
         cutover = FeatureAnnouncementNewsletterCutover.find_by!(seller_id: seller.id)
         raise InvalidTransition, "Cutover is #{cutover.state}, not migrated" unless cutover.state == "migrated"
 
+        purchase_aliases = ApplicationRecord.transaction { purchase_context(seller, include_aliases: true)[:aliases] }
         scan_started_at = Time.current.change(usec: 0)
         # Waits out confirmations already holding the cutover row. One stamped before scan_started_at commits
         # before the scan reads; a later one is stamped at or after it, so the recheck below sees it.
         FeatureAnnouncementNewsletterCutover.transaction { FeatureAnnouncementNewsletterCutover.lock.find_by!(seller_id: seller.id) }
-        counts = outcome_counts(seller, cutover.cutoff_at, Follower.all)
+        counts = outcome_counts(seller, cutover.cutoff_at, Follower.all, purchase_aliases:)
         coverage = nil
         transition!(seller, from: %w[migrated], to: "retired", retired_at: Time.current) do |locked|
           # followers.updated_at has whole seconds; rows changed while the scan ran are classified again.
-          coverage = retirement_coverage(counts, outcome_counts(seller, cutover.cutoff_at, Follower.where("updated_at >= ?", scan_started_at)))
+          changed = outcome_counts(seller, cutover.cutoff_at, Follower.where("updated_at >= ?", scan_started_at), purchase_aliases:)
+          coverage = retirement_coverage(counts, changed)
           locked.retirement_coverage = coverage
           raise CoverageIncomplete, "Retirement would drop unresolved subscribers: #{coverage[:unresolved]}" if coverage[:unresolved].any?
         end
@@ -230,17 +232,21 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
       RETIREMENT_RESOLUTIONS
     end
 
-    def outcome_counts(seller, cutoff_at, followers) = tally(seller, cutoff_at, followers)[:counts]
+    def outcome_counts(seller, cutoff_at, followers, purchase_aliases: nil) = tally(seller, cutoff_at, followers, purchase_aliases:)[:counts]
 
-    def tally(seller, cutoff_at, followers, purchase_context: nil, eligible_account_ids: nil)
+    def tally(seller, cutoff_at, followers, purchase_context: nil, purchase_aliases: nil, eligible_account_ids: nil)
       counts = Hash.new(0)
       a = { total: 0, linked: 0, email_mapped: 0, existing_opt_in: 0, existing_opt_out: 0, by_source: Hash.new(0) }
       followers.where(followed_id: seller.id).in_batches(of: @batch_size) do |batch|
         rows = batch.to_a
-        context = batch_context(seller, rows.reject { initial_outcome(_1, cutoff_at) }, purchase_context:)
+        context = batch_context(seller, rows.reject { initial_outcome(_1, cutoff_at) }, purchase_context:, purchase_aliases:)
         rows.each do |follower|
           identity = resolve_identity(follower, context[:users][follower.follower_user_id], context[:confirmed_by_email][normalize(follower.email)])
           outcome = classify(follower, cutoff_at, identity:, **context)
+          # Noncanonical follows can miss a resubscribe fence and its timestamp recheck.
+          if purchase_aliases && outcome == :buyer_opted_out && follower.email != normalize(follower.email)
+            outcome = :noncanonical_address
+          end
           counts[outcome] += 1
           eligible_account_ids&.add(identity.id) if outcome == :eligible
           next unless BASELINE_OUTCOMES.include?(outcome)
@@ -362,14 +368,14 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
 
     # Keep raw aliases for current per-row checks, including purchases whose contact flag later changes.
     # Normalize every full value in Ruby: SQL DISTINCT can collapse different addresses under its collation.
-    def purchase_context(seller, deadline: nil)
-      context = { aliases: Hash.new { |hash, email| hash[email] = Set.new }, opted_out_emails: Set.new }
+    def purchase_context(seller, deadline: nil, include_aliases: false)
+      context = { aliases: include_aliases ? Hash.new { |hash, email| hash[email] = Set.new } : nil, opted_out_emails: Set.new }
       Purchase.where(seller_id: seller.id).force_index(:index_purchases_on_seller_id).in_batches(of: @batch_size) do |batch|
         batch.force_index(:PRIMARY).pluck(:email, :can_contact).each do |raw_email, can_contact|
           next if raw_email.nil?
 
           email = normalize(raw_email)
-          context[:aliases][email].add(raw_email)
+          context[:aliases][email].add(raw_email) if include_aliases
           context[:opted_out_emails].add(email) if can_contact == false
         end
         return nil if deadline_reached?(deadline)
@@ -381,7 +387,7 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
 
     def deadline_reached?(deadline) = deadline && monotonic_time >= deadline
 
-    def batch_context(seller, followers, purchase_context: nil)
+    def batch_context(seller, followers, purchase_context: nil, purchase_aliases: nil)
       emails = followers.map { normalize(_1.email) }.uniq
       users = User.where(id: followers.filter_map(&:follower_user_id)).index_by(&:id)
       confirmed_by_email = User.where(email: emails).where.not(confirmed_at: nil).to_a.group_by { normalize(_1.email) }
@@ -390,13 +396,18 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
         users:,
         confirmed_by_email:,
         preferences: FeatureAnnouncementSubscription.where(user_id: user_ids).pluck(:user_id, :subscribed).to_h,
-        opted_out_emails: purchase_context ? purchase_context[:opted_out_emails] : opted_out_emails(seller, emails),
+        opted_out_emails: purchase_context ? purchase_context[:opted_out_emails] : opted_out_emails(seller, emails, purchase_aliases:),
       }
     end
 
-    def opted_out_emails(seller, emails)
-      emails.each_slice(OPT_OUT_EMAILS_PER_QUERY).flat_map do |batch|
-        Purchase.where(seller_id: seller.id, email: batch, can_contact: false).distinct.pluck(:email)
+    def opted_out_emails(seller, emails, purchase_aliases: nil)
+      addresses = emails.flat_map { |email| [email, *purchase_aliases&.fetch(email, [])] }.uniq
+      Purchase.uncached do
+        addresses.each_slice(OPT_OUT_EMAILS_PER_QUERY).flat_map do |batch|
+          scope = Purchase.where(seller_id: seller.id, email: batch, can_contact: false).distinct
+          # The binary field preserves full values; the text field keeps their encoding for Ruby normalization.
+          purchase_aliases ? scope.pluck(:email, Arel.sql("BINARY email")).map(&:first) : scope.pluck(:email)
+        end
       end.map { normalize(_1) }.to_set
     end
 

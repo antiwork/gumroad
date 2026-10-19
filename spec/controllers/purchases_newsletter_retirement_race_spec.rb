@@ -74,8 +74,8 @@ describe PurchasesController, "seller changes while the old Gumroad newsletter r
     it "refuses retirement when #{name} commits while retire!'s scan runs" do
       scanned = Queue.new
       changed = Queue.new
-      allow_any_instance_of(migration).to receive(:outcome_counts).and_wrap_original do |original, *args|
-        original.call(*args).tap do
+      allow_any_instance_of(migration).to receive(:outcome_counts).and_wrap_original do |original, *args, **kwargs|
+        original.call(*args, **kwargs).tap do
           next unless args.last == Follower.all
 
           scanned << true
