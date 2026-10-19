@@ -230,7 +230,7 @@ describe Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements do
     it "mirrors a padded purchase opt-out only to its migrated full-email account" do
       other = create(:user, email: "other@example.com")
       third = create(:user, email: "third@example.com")
-      buyer = create(:user, email: "buyer@example.net")
+      buyer = create(:user, email: "collation-buyer@example.com")
       other.update_columns(email: "cafe@example.com")
       third.update_columns(email: "càfe@example.com")
       buyer.update_columns(email: "café@example.com")
