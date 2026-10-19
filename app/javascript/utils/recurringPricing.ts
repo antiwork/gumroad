@@ -75,12 +75,24 @@ export const formatRecurrenceWithDuration = (recurrenceId: RecurrenceId, product
   return `${baseFormattedLabel} x ${(productDuration / numberOfMonths).toFixed(0)}`;
 };
 
-// Lead times come from BasePrice::Recurrence via `recurrences.enabled[].renewal_reminder_days`.
+const formatDays = (days: number) => `${days} ${days === 1 ? "day" : "days"}`;
+
+// Lead times come from BasePrice::Recurrence via `recurrences.enabled[].renewal_reminder_days`. A free trial's
+// first charge gets only the trial-ending email (`free_trial_reminder_days`); renewal reminders start after it.
 export const renewalReminderNotice = (
-  recurrences: { enabled: { recurrence: RecurrenceId; renewal_reminder_days?: number[] }[] } | null,
+  recurrences: {
+    enabled: { recurrence: RecurrenceId; renewal_reminder_days?: number[] }[];
+    free_trial_reminder_days?: number | null;
+  } | null,
   recurrence: RecurrenceId | null,
+  { freeTrial = false }: { freeTrial?: boolean } = {},
 ): string | null => {
   const days = recurrences?.enabled.find((price) => price.recurrence === recurrence)?.renewal_reminder_days;
   if (!days || days.length === 0) return null;
-  return `We'll email you a reminder ${days.map((d) => `${d} ${d === 1 ? "day" : "days"}`).join(" and ")} before each renewal.`;
+  const leadTimes = days.map(formatDays).join(" and ");
+  if (!freeTrial) return `We'll email you a reminder ${leadTimes} before each renewal.`;
+
+  const trialDays = recurrences.free_trial_reminder_days;
+  if (!trialDays) return null;
+  return `We'll email you a reminder ${formatDays(trialDays)} before your free trial ends, and ${leadTimes} before each renewal after that.`;
 };

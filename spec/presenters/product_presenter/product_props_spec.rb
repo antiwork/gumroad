@@ -122,7 +122,8 @@ describe ProductPresenter::ProductProps do
               rental: nil,
               recurrences: {
                 default: "monthly",
-                enabled: [{ id: product.prices.alive.first.external_id, recurrence: "monthly", price_cents: 0, renewal_reminder_days: [] }]
+                enabled: [{ id: product.prices.alive.first.external_id, recurrence: "monthly", price_cents: 0, renewal_reminder_days: [] }],
+                free_trial_reminder_days: nil
               },
               rental_price_cents: nil,
               sales_count: nil,

@@ -138,6 +138,17 @@ describe "PurchaseSubscription", :vcr do
               end
             end
 
+            it "schedules no advance notice once its time has passed" do
+              freeze_time do
+                @subscription.last_payment_option.update!(price: @product.prices.find_by(recurrence: "yearly"))
+                allow_any_instance_of(Subscription).to receive(:end_time_of_subscription).and_return(20.days.from_now)
+
+                @purchase.update_balance_and_mark_successful!
+
+                expect(RecurringChargeReminderWorker.jobs.map { _1["args"] }).to eq([[@subscription.id]])
+              end
+            end
+
             it "schedules no advance notice if the billing period is quarterly" do
               freeze_time do
                 @subscription.last_payment_option.update!(price: @product.prices.find_by(recurrence: "quarterly"))

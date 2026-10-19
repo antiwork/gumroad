@@ -537,5 +537,21 @@ describe Link do
 
       expect(product.recurrences[:enabled].map { _1[:renewal_reminder_days] }).to all(eq([]))
     end
+
+    it "gives the trial-ending lead time for a free-trial product" do
+      Feature.activate_user(:membership_renewal_reminders, product.user)
+      product.update!(free_trial_enabled: true, free_trial_duration_amount: 1, free_trial_duration_unit: :week)
+
+      expect(product.recurrences[:free_trial_reminder_days]).to eq(2)
+    end
+
+    it "gives no trial-ending lead time without a free trial or with renewal reminders off" do
+      Feature.activate_user(:membership_renewal_reminders, product.user)
+      expect(product.recurrences[:free_trial_reminder_days]).to be_nil
+
+      product.update!(free_trial_enabled: true, free_trial_duration_amount: 1, free_trial_duration_unit: :week)
+      Feature.deactivate_user(:membership_renewal_reminders, product.user)
+      expect(product.recurrences[:free_trial_reminder_days]).to be_nil
+    end
   end
 end

@@ -1445,3 +1445,101 @@ describe("Checkout summary when an item ships nowhere", () => {
     expect(view.queryByText("Total")).toBeNull();
   });
 });
+
+describe("Checkout renewal reminder notice", () => {
+  const recurrences = (
+    renewalReminderDays: { monthly: number[]; yearly: number[] },
+    freeTrialReminderDays: number | null = null,
+  ) => ({
+    default: "yearly" as const,
+    enabled: [
+      {
+        recurrence: "monthly" as const,
+        price_cents: 1_000,
+        id: "monthly",
+        renewal_reminder_days: renewalReminderDays.monthly,
+      },
+      {
+        recurrence: "yearly" as const,
+        price_cents: 10_000,
+        id: "yearly",
+        renewal_reminder_days: renewalReminderDays.yearly,
+      },
+    ],
+    free_trial_reminder_days: freeTrialReminderDays,
+  });
+  const reminderDays = { monthly: [1], yearly: [30, 7] };
+  const membershipCart = (item: Partial<CartItem> = {}, product: Partial<CartProduct> = {}): CartState => ({
+    items: [
+      cartItem({
+        price: 10_000,
+        recurrence: "yearly",
+        product: cartProduct({
+          native_type: "membership",
+          price_cents: 10_000,
+          recurrences: recurrences(reminderDays),
+          ...product,
+        }),
+        ...item,
+      }),
+    ],
+    discountCodes: [],
+  });
+  const yearlyNotice = "We'll email you a reminder 30 days and 7 days before each renewal.";
+
+  it("states the lead times of the item's recurrence and follows a recurrence change", () => {
+    const view = renderCheckout(buildState(), membershipCart());
+
+    expect(view.queryByText(yearlyNotice)).not.toBeNull();
+
+    view.rerender(
+      <StateContext.Provider value={[buildState(), vi.fn()]}>
+        <Checkout discoverUrl="#" cart={membershipCart({ price: 1_000, recurrence: "monthly" })} updateCart={vi.fn()} />
+      </StateContext.Provider>,
+    );
+
+    expect(view.queryByText(yearlyNotice)).toBeNull();
+    expect(view.queryByText("We'll email you a reminder 1 day before each renewal.")).not.toBeNull();
+  });
+
+  it("names the trial-ending email when the item starts with a free trial", () => {
+    const view = renderCheckout(
+      buildState(),
+      membershipCart(
+        {},
+        { free_trial: { duration: { amount: 1, unit: "week" } }, recurrences: recurrences(reminderDays, 2) },
+      ),
+    );
+
+    expect(
+      view.queryByText(
+        "We'll email you a reminder 2 days before your free trial ends, and 30 days and 7 days before each renewal after that.",
+      ),
+    ).not.toBeNull();
+    expect(view.queryByText(yearlyNotice)).toBeNull();
+  });
+
+  it("shows nothing for a gift", () => {
+    const view = renderCheckout(
+      buildState({ gift: { type: "normal", email: "giftee@example.com", note: "" } }),
+      membershipCart(),
+    );
+
+    expect(view.queryByText(/before each renewal/u)).toBeNull();
+  });
+
+  it("shows nothing for a fixed-length membership that charges only once", () => {
+    const view = renderCheckout(buildState(), membershipCart({}, { duration_in_months: 12 }));
+
+    expect(view.queryByText(/before each renewal/u)).toBeNull();
+  });
+
+  it("shows nothing when renewal reminders are off for the seller", () => {
+    const view = renderCheckout(
+      buildState(),
+      membershipCart({}, { recurrences: recurrences({ monthly: [], yearly: [] }, 2) }),
+    );
+
+    expect(view.queryByText(/before each renewal|free trial ends/u)).toBeNull();
+  });
+});

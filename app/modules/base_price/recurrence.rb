@@ -37,7 +37,7 @@ module BasePrice::Recurrence
     EVERY_TWO_YEARS => 7.days
   }.freeze
 
-  # Extra notice for renewals of 12+ months (UK DMCC Act s.258), on top of the final reminder above.
+  # Additional notice for 12+ month renewals (DMCC Act 2024 s.259(6)-(8)), on top of the final reminder above.
   LONG_RENEWAL_THRESHOLD_IN_MONTHS = 12
   LONG_RENEWAL_ADVANCE_REMINDER_EMAIL_DAYS = 30.days
 

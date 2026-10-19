@@ -1,11 +1,18 @@
 # frozen_string_literal: true
 
 class RecurringChargeReminderWorker
+  class EmailNotEnqueuedError < StandardError; end
+
   include Sidekiq::Job
-  sidekiq_options retry: 3, queue: :default
+  # The lock digest covers all args, so it serializes copies of one advance job without blocking the final reminder.
+  sidekiq_options retry: 3,
+                  queue: :default,
+                  lock: :while_executing,
+                  lock_timeout: 2,
+                  unique_across_queues: true,
+                  on_conflict: { server: :raise }
 
   ADVANCE = "advance"
-  ADVANCE_SENT_TTL = 60.days
 
   def perform(subscription_id, kind = nil)
     subscription = Subscription.find(subscription_id)
@@ -14,18 +21,9 @@ class RecurringChargeReminderWorker
               subscription.charges_completed? ||
               (subscription.renewal_disabled_due_to_indian_card_mandate? && subscription.india_card_mandate_reliability_enabled?) ||
               !subscription.send_renewal_reminders?
-    return if kind == ADVANCE && !advance_due?(subscription)
 
     if kind == ADVANCE
-      key = advance_key(subscription)
-      return unless $redis.set(key, 1, nx: true, ex: ADVANCE_SENT_TTL.to_i)
-
-      begin
-        CustomerLowPriorityMailer.subscription_renewal_reminder(subscription_id).deliver_later(queue: "low")
-      rescue
-        $redis.del(key)
-        raise
-      end
+      send_advance_notice(subscription) if advance_due?(subscription)
     else
       CustomerLowPriorityMailer.subscription_renewal_reminder(subscription_id).deliver_later(queue: "low")
     end
@@ -42,7 +40,17 @@ class RecurringChargeReminderWorker
       renews_at - lead <= now && renews_at - BasePrice::Recurrence.renewal_reminder_email_days(subscription.recurrence) > now
     end
 
-    def advance_key(subscription)
-      "renewal_advance_reminder:#{subscription.id}:#{subscription.end_time_of_subscription.to_i}"
+    def send_advance_notice(subscription)
+      # A cold replica can still be missing the previous run's marker.
+      ApplicationRecord.connected_to(role: :writing) do
+        digest = SentEmailInfo.mailer_key_digest("CustomerLowPriorityMailer", "subscription_renewal_reminder", subscription.id, ADVANCE, subscription.end_time_of_subscription.to_i)
+        return if SentEmailInfo.key_exists?(digest)
+
+        # A failed enqueue must remain retryable; a crash before the marker can duplicate one notice.
+        enqueued = CustomerLowPriorityMailer.subscription_renewal_reminder(subscription.id).deliver_later(queue: "low")
+        raise EmailNotEnqueuedError, "Advance renewal reminder was not enqueued" unless enqueued
+
+        SentEmailInfo.set_key!(digest)
+      end
     end
 end

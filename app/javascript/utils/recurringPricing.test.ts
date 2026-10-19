@@ -54,9 +54,24 @@ describe("renewalReminderNotice", () => {
     );
   });
 
+  it("names the trial-ending email separately from the later renewal reminders", () => {
+    const withTrial = { ...recurrences, free_trial_reminder_days: 2 };
+
+    expect(renewalReminderNotice(withTrial, "yearly", { freeTrial: true })).toBe(
+      "We'll email you a reminder 2 days before your free trial ends, and 30 days and 7 days before each renewal after that.",
+    );
+    expect(renewalReminderNotice(withTrial, "yearly", { freeTrial: false })).toBe(
+      "We'll email you a reminder 30 days and 7 days before each renewal.",
+    );
+    expect(renewalReminderNotice(recurrences, "yearly", { freeTrial: true })).toBeNull();
+  });
+
   it("returns null without a recurrence or lead times", () => {
     expect(renewalReminderNotice(null, "yearly")).toBeNull();
     expect(renewalReminderNotice(recurrences, null)).toBeNull();
     expect(renewalReminderNotice({ enabled: [{ recurrence: "yearly" }] }, "yearly")).toBeNull();
+    expect(
+      renewalReminderNotice({ enabled: [{ recurrence: "yearly", renewal_reminder_days: [] }] }, "yearly"),
+    ).toBeNull();
   });
 });

@@ -905,7 +905,9 @@ class Link < ApplicationRecord
     default = default_price_recurrence&.recurrence || enabled.first&.fetch(:recurrence, nil)
     return nil if default.nil?
 
-    { default:, enabled: }
+    # A trial's first charge gets only the trial-ending email; renewal reminders start after it.
+    free_trial_reminder_days = Subscription::FREE_TRIAL_EXPIRING_REMINDER_EMAIL.in_days.to_i if reminders_on && free_trial_enabled?
+    { default:, enabled:, free_trial_reminder_days: }
   end
 
   def rental

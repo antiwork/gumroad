@@ -1237,7 +1237,9 @@ const CartItemComponent = ({
           </CartItemActions>
           {item.recurrence && !isGift && !isSingleChargeDuration(item.recurrence, item.product.duration_in_months)
             ? (() => {
-                const notice = renewalReminderNotice(item.product.recurrences, item.recurrence);
+                const notice = renewalReminderNotice(item.product.recurrences, item.recurrence, {
+                  freeTrial: !!hasFreeTrial(item, isGift),
+                });
                 return notice ? <span className="text-sm">{notice}</span> : null;
               })()
             : null}

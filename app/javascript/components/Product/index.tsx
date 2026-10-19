@@ -331,7 +331,7 @@ export const Product = ({
   const discount = discountCode?.valid ? discountCode.discount : null;
   const renewalNotice =
     selection.recurrence && !isSingleChargeDuration(selection.recurrence, product.duration_in_months ?? null)
-      ? renewalReminderNotice(product.recurrences, selection.recurrence)
+      ? renewalReminderNotice(product.recurrences, selection.recurrence, { freeTrial: !!product.free_trial })
       : null;
   const selectionAttributes = applySelection(product, discount, selection);
   let { basePriceCents } = selectionAttributes;
