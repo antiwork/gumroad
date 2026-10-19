@@ -150,13 +150,12 @@ class Follower < ApplicationRecord
     end
 
     def left_newsletter?
-      follower_user_id.present? &&
-        ((saved_change_to_deleted_at? && deleted_at.present?) || (saved_change_to_confirmed_at? && confirmed_at.nil?)) &&
+      ((saved_change_to_deleted_at? && deleted_at.present?) || (saved_change_to_confirmed_at? && confirmed_at.nil?)) &&
         FeatureAnnouncementNewsletterCutover.tracks_opt_outs_for?(followed_id)
     end
 
     def record_feature_announcements_opt_out
-      user = User.find_by(id: follower_user_id)
+      user = FeatureAnnouncementNewsletterCutover.subscriber_for(self)
       FeatureAnnouncementSubscription.unsubscribe!(user, source: "newsletter_opt_out") if user
     end
 end

@@ -65,17 +65,17 @@ describe Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements do
 
     expect(report[:counts]).to eq(
       after_cutoff: 1, buyer_opted_out: 1, conflicting_address: 1, eligible: 2, existing_preference: 1, follower_inactive: 1,
-      guest: 1, inactive_account: 1, unconfirmed_account: 1, unproven_source: 2
+      guest: 1, inactive_account: 1, unconfirmed_account: 1, unverified_source: 2
     )
     expect(FeatureAnnouncementSubscription.where(source: "newsletter_migration")).to be_empty
     expect(FeatureAnnouncementNewsletterCutover.count).to eq(0)
   end
 
   describe "source provenance" do
-    it "treats express sources as unverified candidates and writes nothing while none is verified" do
+    it "keeps every mapped follow a candidate and writes nothing while no source cohort is verified" do
       verify_sources([])
 
-      expect(described_class.preflight(cutoff_at:)[:counts]).to include(unverified_source: 2).and(satisfy { !_1.key?(:eligible) })
+      expect(described_class.preflight(cutoff_at:)[:counts]).to include(unverified_source: 4).and(satisfy { !_1.key?(:eligible) })
       described_class.prepare!(cutoff_at:)
       expect(cutover.attributes.slice("eligible_count", "verified_sources")).to eq("eligible_count" => 0, "verified_sources" => {})
 
@@ -87,7 +87,7 @@ describe Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements do
     it "carries over only the verified subset and records it on the plan" do
       verify_sources([Follower::From::EMBED_FORM])
       described_class.prepare!(cutoff_at:)
-      expect(cutover.counts).to include("eligible" => 1, "unverified_source" => 1)
+      expect(cutover.counts).to include("eligible" => 1, "unverified_source" => 3)
       expect(cutover.verified_sources).to eq("embed_form" => "synthetic test evidence")
 
       apply!
@@ -105,14 +105,72 @@ describe Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements do
       expect(FeatureAnnouncementSubscription.where(source: "newsletter_migration")).to be_empty
     end
 
-    it "won't verify a source that only records who was added" do
-      verify_sources([Follower::From::CSV_IMPORT])
+    it "treats imports and unsourced rows as cohorts like any other, each needing a recorded decision" do
+      verify_sources([Follower::From::CSV_IMPORT, described_class::NO_SOURCE])
+      described_class.prepare!(cutoff_at:)
 
+      apply!
+
+      expect(preference(imported)).to eq([[true, "newsletter_migration"]])
+      expect(preference(sourceless)).to eq([[true, "newsletter_migration"]])
+      expect(preference(embed)).to be_empty
+
+      stub_const("#{described_class}::VERIFIED_SOURCES", { Follower::From::EMBED_FORM => " " }.freeze)
       expect { described_class.preflight(cutoff_at:) }.to raise_error(described_class::SourceUnverified)
     end
   end
 
-  it "carries over only exact, self-made, confirmed follows and never overwrites a preference" do
+  describe "the measured baseline and mapping by address" do
+    let!(:email_only) { create(:user, email: "email-only@example.com") }
+    let!(:quiet) { create(:user, email: "quiet@example.com").tap { _1.update!(announcement_notification_enabled: false) } }
+    let!(:shared) { create(:user, email: "shared@example.com") }
+
+    before do
+      create(:user).update_columns(email: "shared@example.com") # a second confirmed account at the same address
+      create(:user).update_columns(email: "nobody-confirmed@example.com", confirmed_at: nil)
+      follow(email: "email-only@example.com")
+      follow(email: "quiet@example.com", account: quiet)
+      follow(email: "shared@example.com")
+      follow(email: "nobody-confirmed@example.com")
+    end
+
+    it "reports A and, once its labels are declared, B, apart from what can actually be applied" do
+      report = described_class.preflight(cutoff_at:, welcome_greeter_sources: [Follower::From::CSV_IMPORT])
+
+      expect(report[:counts]).to include(eligible: 3, unverified_source: 2, existing_preference: 1, announcements_off: 1, ambiguous_address: 1, guest: 2)
+      expect(report[:baseline][:a]).to eq(
+        total: 6, linked: 5, email_mapped: 1, existing_opt_in: 0, existing_opt_out: 1,
+        by_source: { "(none)" => 1, "csv_import" => 1, "embed_form" => 3, "follow_page" => 1 }
+      )
+      expect(report[:baseline][:b]).to eq(total: 5, excluded: { "csv_import" => 1 })
+      expect(described_class.preflight(cutoff_at:)[:baseline]).to include(b: nil)
+    end
+
+    it "carries over a follow without a link to the only confirmed account at its address, and binds it" do
+      described_class.prepare!(cutoff_at:)
+
+      apply!
+
+      expect(preference(email_only)).to eq([[true, "newsletter_migration"]])
+      expect(Follower.find_by(followed_id: newsletter.id, email: "email-only@example.com").follower_user_id).to eq(email_only.id)
+      expect(FeatureAnnouncementSubscription.where(user_id: User.where(email: "shared@example.com").ids)).to be_empty
+      expect(preference(quiet)).to be_empty
+      expect(Follower.find_by(followed_id: newsletter.id, email: "shared@example.com").follower_user_id).to be_nil
+    end
+
+    it "opts out the bound account after it changes its email, even through a record loaded before the bind" do
+      stale = Follower.find_by(followed_id: newsletter.id, email: "email-only@example.com")
+      described_class.prepare!(cutoff_at:)
+      apply!
+      email_only.update_columns(email: "email-only-new@example.com")
+
+      stale.mark_deleted!
+
+      expect(preference(email_only)).to eq([[false, "newsletter_opt_out"]])
+    end
+  end
+
+  it "carries over only verified cohorts of mapped, confirmed follows and never overwrites a preference" do
     described_class.prepare!(cutoff_at:)
     expect { described_class.apply!(confirmed_eligible_count: 3) }.to raise_error(described_class::PlanMismatch)
     expect(FeatureAnnouncementSubscription.where(source: "newsletter_migration")).to be_empty
@@ -199,6 +257,16 @@ describe Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements do
       expect(cutover.migrated_count).to eq(1)
     end
 
+    it "honors the old announcement setting turned off just before the copy" do
+      during_apply("embed@example.com") { User.find(embed.id).update!(announcement_notification_enabled: false) }
+
+      apply!
+
+      expect(preference(embed)).to be_empty
+      expect(embed.reload.announcement_notification_enabled).to be(false)
+      expect(cutover.migrated_count).to eq(1)
+    end
+
     it "honors an old-newsletter unsubscribe made while the migration runs" do
       during_apply("embed@example.com") { get_cancelled(_1) }
 
@@ -238,7 +306,7 @@ describe Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements do
 
       expect(cutover.state).to eq("migrated")
       expect(cutover.retirement_coverage["unresolved"]).to eq(
-        "after_cutoff" => 1, "conflicting_address" => 1, "guest" => 1, "inactive_account" => 1, "unconfirmed_account" => 1, "unproven_source" => 2
+        "after_cutoff" => 1, "conflicting_address" => 1, "guest" => 1, "inactive_account" => 1, "unconfirmed_account" => 1, "unverified_source" => 2
       )
       SendPostBlastEmailsJob.new.perform(create(:blast, :just_requested, post: audience_post).id)
       expect(PostSendgridApi.mails.keys).to include("guest@example.com", "imported@example.com")
@@ -246,7 +314,7 @@ describe Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements do
 
     it "retires with a reviewed decision recorded for every remaining cohort" do
       stub_const("#{described_class}::RETIREMENT_RESOLUTIONS",
-                 %i[after_cutoff conflicting_address guest inactive_account unconfirmed_account unproven_source].index_with { "synthetic decision" })
+                 %i[after_cutoff conflicting_address guest inactive_account unconfirmed_account unverified_source].index_with { "synthetic decision" })
 
       described_class.retire!
 

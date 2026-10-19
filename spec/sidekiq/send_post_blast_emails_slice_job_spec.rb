@@ -699,6 +699,19 @@ describe SendPostBlastEmailsSliceJob, :freeze_time do
       expect($redis.sismember(RedisKey.blast_done_slices(blast.id, partition_key), 0)).to be(false)
     end
 
+    it "gives the pending count back its expiry when a chunk settles into a key the stop already cleared" do
+      blast = create(:blast, :just_requested, post: post_with_audience)
+      key = RedisKey.blast_pending_recipients(blast.id)
+      job = described_class.new.tap { _1.instance_variable_set(:@blast, blast) }
+
+      job.send(:settle_pending_recipients, [], 1)
+
+      expect($redis.get(key)).to eq("-1")
+      expect($redis.ttl(key)).to be_between(1, PostBlastSending::PENDING_RECIPIENTS_TTL.to_i)
+    ensure
+      $redis.del(key) if key
+    end
+
     it "still sends a product post chunk to customers" do
       product = create(:product, user: @seller)
       create(:purchase, link: product, email: "customer@example.com")

@@ -60,8 +60,33 @@ describe "Confirming a follow while the old Gumroad newsletter retires", type: :
     expect { migration.retire! }.to raise_error(migration::CoverageIncomplete)
 
     expect(cutover.state).to eq("migrated")
-    expect(cutover.retirement_coverage["changed_during_scan"]).to include("after_cutoff" => 1)
+    expect(cutover.retirement_coverage["unresolved"]).to include("after_cutoff" => 1)
     expect(Follower.find(@pending.id).confirmed_at).to be_present
+    confirmation.value
+  ensure
+    finish(confirmation)
+  end
+
+  # followers.updated_at keeps whole seconds, so a confirmation stamped in the second before retire! starts
+  # falls outside the recheck's `updated_at >= scan_started_at`; only the barrier before the scan catches it.
+  it "catches a confirmation stamped in the second before retire! began that commits after the scan starts" do
+    confirmed = Queue.new
+    confirmation = in_thread do |connection|
+      connection.transaction do
+        follower = Follower.find(@pending.id)
+        follower.confirmed_at = Time.current.change(usec: 0)
+        follower.updated_at = Time.current.change(usec: 0) - 1.second
+        follower.save!
+        confirmed << true
+        wait_for_lock_wait(connection)
+      end
+    end
+    Timeout.timeout(10) { confirmed.pop }
+
+    expect { migration.retire! }.to raise_error(migration::CoverageIncomplete)
+
+    expect(cutover.state).to eq("migrated")
+    expect(cutover.retirement_coverage["counts"]).to include("after_cutoff" => 1)
     confirmation.value
   ensure
     finish(confirmation)

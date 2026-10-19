@@ -17,9 +17,16 @@ describe Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements, "against a
 
   after do
     FeatureAnnouncementNewsletterCutover.where(seller_id: @newsletter.id).delete_all
-    FeatureAnnouncementSubscription.where(user_id: @reader.id).delete_all
+    FeatureAnnouncementSubscription.where(user_id: [@reader.id, *@extra_users&.map(&:id)]).delete_all
     Follower.where(followed_id: @newsletter.id).delete_all
-    [@reader, @newsletter].each(&:destroy!)
+    [@reader, @newsletter, *@extra_users].each(&:destroy!)
+  end
+
+  # Without the lock under test, the helper times out waiting; joining it must not hide the assertion that failed.
+  def finish(thread)
+    thread&.join(10)
+  rescue Timeout::Error
+    nil
   end
 
   def preference = FeatureAnnouncementSubscription.where(user_id: @reader.id).pluck(:subscribed, :source)
@@ -116,5 +123,51 @@ describe Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements, "against a
     expect(preference).to eq([[false, "unsubscribe_link"]])
     expect(FeatureAnnouncementNewsletterCutover.find_by!(seller_id: @newsletter.id).attributes.slice("state", "migrated_count"))
       .to eq("state" => "migrated", "migrated_count" => 0)
+  end
+
+  it "honors the old announcement setting turned off by a write the migration waits on" do
+    locked = Queue.new
+    holder = in_thread do |connection|
+      connection.transaction do
+        User.find(@reader.id).update!(announcement_notification_enabled: false)
+        locked << true
+        wait_for_lock_wait(connection)
+      end
+    end
+    Timeout.timeout(10) { locked.pop }
+
+    described_class.apply!(confirmed_eligible_count: 1)
+
+    expect(preference).to be_empty
+    expect(FeatureAnnouncementNewsletterCutover.find_by!(seller_id: @newsletter.id).migrated_count).to eq(0)
+    holder.value
+  ensure
+    finish(holder)
+  end
+
+  it "doesn't map an address by email once a second account there is confirmed while the migration waits" do
+    owner = create(:user, email: "race-address@example.com")
+    other = create(:user).tap { _1.update_columns(email: "race-address@example.com", confirmed_at: nil) }
+    @extra_users = [owner, other]
+    follow = create(:follower, user: @newsletter, email: owner.email, source: Follower::From::EMBED_FORM, confirmed_at: 2.hours.ago, created_at: 2.hours.ago)
+    described_class.prepare!(cutoff_at: 1.hour.ago)
+    locked = Queue.new
+    holder = in_thread do |connection|
+      connection.transaction do
+        User.where(id: other.id).update_all(confirmed_at: Time.current)
+        locked << true
+        wait_for_lock_wait(connection)
+      end
+    end
+    Timeout.timeout(10) { locked.pop }
+
+    described_class.apply!(confirmed_eligible_count: 2)
+
+    expect(FeatureAnnouncementSubscription.where(user_id: [owner.id, other.id])).to be_empty
+    expect(follow.reload.follower_user_id).to be_nil
+    expect(preference).to eq([[true, "newsletter_migration"]])
+    holder.value
+  ensure
+    finish(holder)
   end
 end

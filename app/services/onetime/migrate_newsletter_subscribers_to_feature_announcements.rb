@@ -4,17 +4,18 @@
 # newsletter (gumroad-private#3664). Run in order: preflight → prepare! → apply!(confirmed_eligible_count:)
 # → retire!. Nothing runs on its own; apply! needs the eligible count from the stored plan.
 #
-# Only a follow the person made and confirmed themselves, from a source in VERIFIED_SOURCES, linked to an
-# account whose confirmed email is the followed address, is carried over. Every other row is counted and
-# left alone, and an existing preference row (including an opt-out) is never overwritten.
+# The baseline (A) is an active, confirmed follow at the cutoff, mapped to one active confirmed account
+# (its recorded link, or the only confirmed account at that address) whose old announcement setting is on,
+# with no buyer opt-out. Only A rows whose source cohort has a reviewed decision in VERIFIED_SOURCES and no
+# existing preference are carried over; an existing preference row (including an opt-out) is never touched.
 class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
   NEWSLETTER_SELLER_EXTERNAL_ID = "6282492303727"
   NEWSLETTER_SELLER_USERNAME = "gumroad"
-  # CSV imports, rows with no source and any later source record who was added, not who asked.
-  EXPRESS_SOURCES = [Follower::From::EMBED_FORM, Follower::From::FOLLOW_PAGE, Follower::From::PROFILE_PAGE].freeze
-  # Candidates only: what a source value means today doesn't prove how this newsletter's old rows were made.
-  # Each entry maps an EXPRESS_SOURCES value to the reviewed evidence of its history; apply! refuses while empty.
+  # Source labels describe how a row was added; none includes or excludes a cohort by its name alone.
+  NO_SOURCE = "(none)"
+  # Reviewed decisions to carry a source cohort over (label => decision reference). apply! refuses while empty.
   VERIFIED_SOURCES = {}.freeze
+  BASELINE_OUTCOMES = %i[eligible unverified_source existing_preference].freeze
   # Outcomes where retiring the old newsletter takes no mail anyone still wants.
   RESOLVED_OUTCOMES = %i[follower_inactive existing_preference buyer_opted_out].freeze
   # Reviewed decisions for any other cohort (outcome => decision reference); retire! refuses until all are covered.
@@ -29,7 +30,7 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
   class CoverageIncomplete < StandardError; end
   class AmbientTransaction < StandardError; end
 
-  def self.preflight(cutoff_at:, batch_size: BATCH_SIZE) = new(batch_size:).preflight(cutoff_at)
+  def self.preflight(cutoff_at:, welcome_greeter_sources: nil, batch_size: BATCH_SIZE) = new(batch_size:).preflight(cutoff_at, welcome_greeter_sources:)
   def self.prepare!(cutoff_at:, batch_size: BATCH_SIZE) = new(batch_size:).prepare!(cutoff_at)
   def self.apply!(confirmed_eligible_count:, batch_size: BATCH_SIZE) = new(batch_size:).apply!(confirmed_eligible_count)
   def self.retire! = new.retire!
@@ -39,12 +40,18 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
     @batch_size = batch_size
   end
 
-  # Read-only: every follower of the newsletter seller, counted by outcome. Counts are not permission;
-  # `unverified_source` rows would be eligible if their source were in VERIFIED_SOURCES.
-  def preflight(cutoff_at)
+  # Read-only: every follower of the newsletter seller, counted by outcome in one transaction, so every
+  # batch reads the same snapshot. `baseline[:a]` is A; `baseline[:b]` is A without the declared
+  # welcome-greeter source labels. Neither is permission: only `counts[:eligible]` can be applied.
+  def preflight(cutoff_at, welcome_greeter_sources: nil)
     on_primary do
-      seller = verified_seller!
-      { seller_id: seller.id, cutoff_at:, verified_sources: verified_sources!, counts: outcome_counts(seller, cutoff_at, Follower.all) }
+      ApplicationRecord.transaction do
+        seller = verified_seller!
+        read_at = Time.current
+        tally = tally(seller, cutoff_at, Follower.all)
+        { seller_id: seller.id, cutoff_at:, read_at:, verified_sources: verified_sources!, counts: tally[:counts],
+          baseline: baseline(tally[:a], welcome_greeter_sources) }
+      end
     end
   end
 
@@ -109,6 +116,9 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
         raise InvalidTransition, "Cutover is #{cutover.state}, not migrated" unless cutover.state == "migrated"
 
         scan_started_at = Time.current.change(usec: 0)
+        # Waits out confirmations already holding the cutover row. One stamped before scan_started_at commits
+        # before the scan reads; a later one is stamped at or after it, so the recheck below sees it.
+        FeatureAnnouncementNewsletterCutover.transaction { FeatureAnnouncementNewsletterCutover.lock.find_by!(seller_id: seller.id) }
         counts = outcome_counts(seller, cutover.cutoff_at, Follower.all)
         coverage = nil
         transition!(seller, from: %w[migrated], to: "retired", retired_at: Time.current) do |locked|
@@ -174,8 +184,8 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
     end
 
     def verified_sources!
-      invalid = VERIFIED_SOURCES.reject { |source, evidence| EXPRESS_SOURCES.include?(source) && evidence.present? }
-      raise SourceUnverified, "Only express sources with recorded evidence can be verified: #{invalid.keys}" if invalid.any?
+      invalid = VERIFIED_SOURCES.reject { |label, decision| label.is_a?(String) && label.present? && decision.present? }
+      raise SourceUnverified, "Every verified source needs a label and a recorded decision: #{invalid.keys}" if invalid.any?
 
       VERIFIED_SOURCES
     end
@@ -187,14 +197,35 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
       RETIREMENT_RESOLUTIONS
     end
 
-    def outcome_counts(seller, cutoff_at, followers)
+    def outcome_counts(seller, cutoff_at, followers) = tally(seller, cutoff_at, followers)[:counts]
+
+    def tally(seller, cutoff_at, followers)
       counts = Hash.new(0)
+      a = { total: 0, linked: 0, email_mapped: 0, existing_opt_in: 0, existing_opt_out: 0, by_source: Hash.new(0) }
       followers.where(followed_id: seller.id).in_batches(of: @batch_size) do |batch|
         rows = batch.to_a
         context = batch_context(seller, rows)
-        rows.each { counts[classify(_1, cutoff_at, **context.merge(user: context[:users][_1.follower_user_id]))] += 1 }
+        rows.each do |follower|
+          identity = resolve_identity(follower, context[:users][follower.follower_user_id], context[:confirmed_by_email][normalize(follower.email)])
+          outcome = classify(follower, cutoff_at, identity:, **context)
+          counts[outcome] += 1
+          next unless BASELINE_OUTCOMES.include?(outcome)
+
+          a[:total] += 1
+          a[follower.follower_user_id ? :linked : :email_mapped] += 1
+          a[:by_source][source_label(follower)] += 1
+          preference = context[:preferences][identity.id]
+          a[preference ? :existing_opt_in : :existing_opt_out] += 1 unless preference.nil?
+        end
       end
-      counts.sort.to_h
+      { counts: counts.sort.to_h, a: a.merge(by_source: a[:by_source].sort.to_h) }
+    end
+
+    def baseline(a, welcome_greeter_sources)
+      return { a:, b: nil, b_note: "welcome-greeter source labels not declared" } if welcome_greeter_sources.nil?
+
+      excluded = a[:by_source].slice(*welcome_greeter_sources)
+      { a:, welcome_greeter_sources:, b: { total: a[:total] - excluded.values.sum, excluded: } }
     end
 
     # An outer transaction would hold its old snapshot and swallow the per-row commits, so refuse one.
@@ -213,21 +244,30 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
       end
     end
 
-    # Rechecks under share locks, user then follower (the order the gate and Settings use), that the
-    # follow is still this seller's and linked to the locked account. A concurrent preference write is
-    # caught by the unique key, and a buyer opt-out ends in Follower.unsubscribe, which waits on our lock.
+    # Locks users before the follower (the order the gate and Settings use), then rechecks everything: the
+    # follow is still this seller's with the same link and address, and the address still has one confirmed
+    # account. Locking every confirmed account at the address keeps another from being confirmed there until
+    # this commits. A concurrent preference write is caught by the unique key, and a buyer opt-out ends in
+    # Follower.unsubscribe, which waits on the follower lock.
     def migrate(seller, cutover, follower)
-      return :skipped unless follower.follower_user_id && VERIFIED_SOURCES.key?(follower.source)
+      return :skipped unless VERIFIED_SOURCES.key?(source_label(follower))
 
+      email = normalize(follower.email)
       ApplicationRecord.transaction do
-        user = User.lock("FOR SHARE").find_by(id: follower.follower_user_id)
-        current = Follower.lock("FOR SHARE").find_by(id: follower.id)
-        next :changed_since_read unless user && current&.followed_id == seller.id && current.follower_user_id == user.id
+        linked = follower.follower_user_id && User.lock("FOR SHARE").find_by(id: follower.follower_user_id)
+        confirmed = User.where(email:).where.not(confirmed_at: nil).lock("FOR SHARE").to_a
+        # An email-mapped follow is bound to its account below, so take the row for writing now.
+        current = Follower.lock(follower.follower_user_id ? "FOR SHARE" : "FOR UPDATE").find_by(id: follower.id)
+        unchanged = current && current.followed_id == seller.id && current.follower_user_id == follower.follower_user_id && normalize(current.email) == email
+        next :changed_since_read unless unchanged
 
-        outcome = classify(current, cutover.cutoff_at, user:, **current_context(seller, current, user))
+        identity = resolve_identity(current, linked, confirmed)
+        outcome = classify(current, cutover.cutoff_at, identity:, **current_context(seller, current, identity))
         next outcome unless outcome == :eligible
 
-        FeatureAnnouncementSubscription.create!(user_id: user.id, subscribed: true, source: "newsletter_migration")
+        FeatureAnnouncementSubscription.create!(user_id: identity.id, subscribed: true, source: "newsletter_migration")
+        # Recording the link keeps every old-newsletter opt-out path pointed at this account, even after its email changes.
+        current.update_columns(follower_user_id: identity.id) if current.follower_user_id.nil?
         FeatureAnnouncementNewsletterCutover.where(id: cutover.id)
           .update_all(["migrated_count = migrated_count + 1, cursor_follower_id = GREATEST(cursor_follower_id, ?), updated_at = ?", current.id, Time.current])
         :migrated
@@ -236,11 +276,28 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
       :existing_preference
     end
 
-    def current_context(seller, follower, user)
+    # The account a follow maps to, or why it maps to none. A recorded link is never reassigned.
+    def resolve_identity(follower, linked, confirmed)
+      confirmed ||= []
+      if follower.follower_user_id
+        return :unmatched_account if linked.nil?
+        return :conflicting_address unless linked.email.present? && normalize(linked.email) == normalize(follower.email)
+        return :ambiguous_address if confirmed.any? { _1.id != linked.id }
+
+        linked
+      else
+        return :guest if confirmed.empty?
+        return :ambiguous_address if confirmed.many?
+
+        confirmed.first
+      end
+    end
+
+    def current_context(seller, follower, identity)
       email = normalize(follower.email)
+      preference = identity.is_a?(User) ? FeatureAnnouncementSubscription.where(user_id: identity.id).pick(:subscribed) : nil
       {
-        shared_emails: User.where(email:).count > 1 ? Set[email] : Set.new,
-        preference_user_ids: FeatureAnnouncementSubscription.where(user_id: user.id).exists? ? Set[user.id] : Set.new,
+        preferences: preference.nil? ? {} : { identity.id => preference },
         opted_out_emails: Purchase.where(seller_id: seller.id, email:, can_contact: false).exists? ? Set[email] : Set.new,
       }
     end
@@ -248,30 +305,32 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
     def batch_context(seller, followers)
       emails = followers.map { normalize(_1.email) }.uniq
       users = User.where(id: followers.filter_map(&:follower_user_id)).index_by(&:id)
+      confirmed_by_email = User.where(email: emails).where.not(confirmed_at: nil).to_a.group_by { normalize(_1.email) }
+      user_ids = users.keys | confirmed_by_email.values.flatten.map(&:id)
       {
         users:,
-        shared_emails: User.where(email: emails).group(:email).having("COUNT(*) > 1").count.keys.map { normalize(_1) }.to_set,
-        preference_user_ids: FeatureAnnouncementSubscription.where(user_id: users.keys).pluck(:user_id).to_set,
+        confirmed_by_email:,
+        preferences: FeatureAnnouncementSubscription.where(user_id: user_ids).pluck(:user_id, :subscribed).to_h,
         opted_out_emails: Purchase.where(seller_id: seller.id, email: emails, can_contact: false).distinct.pluck(:email).map { normalize(_1) }.to_set,
       }
     end
 
-    def classify(follower, cutoff_at, user:, shared_emails:, preference_user_ids:, opted_out_emails:, **)
+    def classify(follower, cutoff_at, identity:, preferences:, opted_out_emails:, **)
       return :follower_inactive unless follower.deleted_at.nil? && follower.confirmed_at.present?
       return :after_cutoff if follower.confirmed_at > cutoff_at || follower.created_at > cutoff_at
-      return :unproven_source unless EXPRESS_SOURCES.include?(follower.source)
-      return :guest if follower.follower_user_id.nil?
-      return :unmatched_account if user.nil?
-      return :inactive_account unless user.account_active?
-      return :unconfirmed_account unless user.confirmed?
-      return :conflicting_address unless user.email.present? && normalize(user.email) == normalize(follower.email)
-      return :ambiguous_address if shared_emails.include?(normalize(follower.email))
+      return identity if identity.is_a?(Symbol)
+      return :inactive_account unless identity.account_active?
+      return :unconfirmed_account unless identity.confirmed?
+      # Read from the locked row when applying, so turning it off before the copy is honored.
+      return :announcements_off unless identity.announcement_notification_enabled
       return :buyer_opted_out if opted_out_emails.include?(normalize(follower.email))
-      return :existing_preference if preference_user_ids.include?(user.id)
-      return :unverified_source unless VERIFIED_SOURCES.key?(follower.source)
+      return :existing_preference if preferences.key?(identity.id)
+      return :unverified_source unless VERIFIED_SOURCES.key?(source_label(follower))
 
       :eligible
     end
+
+    def source_label(follower) = follower.source.presence || NO_SOURCE
 
     def normalize(email) = email.to_s.strip.downcase
 end

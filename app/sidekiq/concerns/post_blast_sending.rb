@@ -363,13 +363,17 @@ module PostBlastSending
   def settle_pending_recipients(skipped, owed)
     emails = skipped.map(&:email)
     key = RedisKey.blast_skipped_emails(@blast.id)
-    $redis.multi do |tx|
+    pending_key = RedisKey.blast_pending_recipients(@blast.id)
+    results = $redis.multi do |tx|
       unless emails.empty?
         tx.sadd(key, emails)
         tx.expire(key, PENDING_RECIPIENTS_TTL.to_i)
       end
-      tx.decrby(RedisKey.blast_pending_recipients(@blast.id), owed)
+      tx.decrby(pending_key, owed)
+      tx.ttl(pending_key)
     end
+    # A stop or completion that cleared the key mid-call leaves DECRBY to recreate it with no expiry.
+    $redis.expire(pending_key, PENDING_RECIPIENTS_TTL.to_i) if results.last == -1
   end
 
   # Only after the provider accepted, so a row here always has an email behind it. A transient
