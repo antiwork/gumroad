@@ -60,5 +60,46 @@ describe SupportContactMailer do
       expect(ids.uniq.size).to eq(3)
       expect(ids).to all(be_present)
     end
+
+    context "with image attachments" do
+      let(:png_bytes) { Base64.decode64("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==") }
+
+      def build_with_attachments(filenames)
+        described_class.contact_form(
+          email: "buyer@example.com",
+          category: "technical issue",
+          message: "The checkout button does nothing.",
+          attachments: filenames.map { |filename| { filename:, mime_type: "image/png", content: Base64.strict_encode64(png_bytes) } }
+        )
+      end
+
+      it "attaches the decoded bytes with the image's MIME type" do
+        mail = build_with_attachments(["checkout.png"])
+
+        expect(mail.attachments.size).to eq(1)
+        attachment = mail.attachments.first
+        expect(attachment.filename).to eq("checkout.png")
+        expect(attachment.content_type).to start_with("image/png")
+        expect(attachment.body.decoded).to eq(png_bytes)
+      end
+
+      it "counts the attachments in the body so support sees them even without opening the files" do
+        mail = build_with_attachments(["checkout.png", "console.png"])
+        body = mail.html_part ? mail.html_part.decoded : mail.body.decoded
+
+        expect(body).to include("Attachments: 2")
+        expect(body).to include("checkout.png", "console.png")
+      end
+
+      it "rebuilds a hostile upload name instead of trusting it" do
+        mail = build_with_attachments(['"../../evil.exe".png'])
+
+        expect(mail.attachments.first.filename).to eq("evil_exe_.png")
+      end
+
+      it "keeps the email attachment-free when nothing was uploaded" do
+        expect(build.attachments).to be_empty
+      end
+    end
   end
 end
