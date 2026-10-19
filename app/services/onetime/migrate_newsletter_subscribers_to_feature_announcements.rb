@@ -252,6 +252,7 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
     def migrate(seller, cutover, follower)
       return :skipped unless VERIFIED_SOURCES.key?(source_label(follower))
 
+      conflicts ||= 0
       email = normalize(follower.email)
       ApplicationRecord.transaction do
         linked = follower.follower_user_id && User.lock("FOR SHARE").find_by(id: follower.follower_user_id)
@@ -263,16 +264,20 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
 
         identity = resolve_identity(current, linked, confirmed)
         outcome = classify(current, cutover.cutoff_at, identity:, **current_context(seller, current, identity))
+        # Recording the link keeps every old-newsletter opt-out path pointed at this account, even after its
+        # email changes. An account that already chose has its choice left exactly as it is.
+        current.update_columns(follower_user_id: identity.id) if %i[eligible existing_preference].include?(outcome) && current.follower_user_id.nil?
         next outcome unless outcome == :eligible
 
         FeatureAnnouncementSubscription.create!(user_id: identity.id, subscribed: true, source: "newsletter_migration")
-        # Recording the link keeps every old-newsletter opt-out path pointed at this account, even after its email changes.
-        current.update_columns(follower_user_id: identity.id) if current.follower_user_id.nil?
         FeatureAnnouncementNewsletterCutover.where(id: cutover.id)
           .update_all(["migrated_count = migrated_count + 1, cursor_follower_id = GREATEST(cursor_follower_id, ?), updated_at = ?", current.id, Time.current])
         :migrated
       end
     rescue ActiveRecord::RecordNotUnique
+      # A preference written since the check took the unique key and rolled the link back with this row; the
+      # second pass sees it as existing and records only the link.
+      retry if (conflicts += 1) == 1
       :existing_preference
     end
 

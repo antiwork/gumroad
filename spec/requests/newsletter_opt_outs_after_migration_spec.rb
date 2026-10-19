@@ -11,6 +11,12 @@ describe "Old Gumroad newsletter opt-outs after the Feature announcements migrat
                       confirmed_at: 2.hours.ago, created_at: 2.hours.ago)
   end
   let(:other_seller) { create(:user) }
+  # Followed with the address only, and had already turned Feature announcements on in Settings.
+  let!(:chosen_reader) { create(:user, email: "chosen-reader@example.com") }
+  let!(:chosen_follow) do
+    FeatureAnnouncementSubscription.create!(user_id: chosen_reader.id, subscribed: true, source: "settings")
+    create(:follower, user: newsletter, email: chosen_reader.email, source: Follower::From::EMBED_FORM, confirmed_at: 2.hours.ago, created_at: 2.hours.ago)
+  end
   # Older than the mapped reader, so a lookup by address finds it first once it moves there.
   let!(:older_account) { create(:user) }
   # Followed with the address only; the migration maps it to the one confirmed account there.
@@ -28,6 +34,39 @@ describe "Old Gumroad newsletter opt-outs after the Feature announcements migrat
 
   def preference = FeatureAnnouncementSubscription.where(user_id: reader.id).pluck(:subscribed, :source)
   def mapped_preference = FeatureAnnouncementSubscription.where(user_id: mapped_reader.id).pluck(:subscribed, :source)
+
+  describe "for a mapped recipient who had already opted in, after changing their email" do
+    let(:old_address) { "chosen-reader@example.com" }
+
+    before { chosen_reader.update_columns(email: "chosen-reader-moved@example.com") }
+
+    def chosen_preference = FeatureAnnouncementSubscription.where(user_id: chosen_reader.id).pluck(:subscribed, :source)
+
+    it "opts out through the old cancel link" do
+      expect(chosen_preference).to eq([[true, "settings"]])
+
+      get cancel_follow_path(chosen_follow.external_id)
+
+      expect(chosen_preference).to eq([[false, "newsletter_opt_out"]])
+    end
+
+    it "opts out through a spam report" do
+      newsletter_post = create(:audience_post, :published, seller: newsletter)
+
+      HandleSendgridEventJob.new.perform("_json" => [{ "event" => "spamreport", "type" => "spamreport", "email" => old_address,
+                                                       "identifier" => "[999999999, #{newsletter_post.id}]", "installment_id" => newsletter_post.id }])
+
+      expect(chosen_preference).to eq([[false, "newsletter_opt_out"]])
+    end
+
+    it "opts out through the buyer unsubscribe link" do
+      purchase = create(:purchase, link: create(:product, user: newsletter), email: old_address)
+
+      get unsubscribe_purchase_path(purchase.secure_external_id(scope: "unsubscribe"))
+
+      expect(chosen_preference).to eq([[false, "newsletter_opt_out"]])
+    end
+  end
 
   describe "for a recipient the migration mapped by address" do
     it "opts out through the old cancel link" do

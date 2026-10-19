@@ -120,6 +120,45 @@ describe Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements do
     end
   end
 
+  describe "an address-mapped follow whose account already chose" do
+    let!(:chose_in) { create(:user, email: "chose-in@example.com") }
+    let!(:chose_out) { create(:user, email: "chose-out@example.com") }
+    let!(:imported_chooser) { create(:user, email: "imported-chooser@example.com") }
+
+    before do
+      FeatureAnnouncementSubscription.create!(user_id: chose_in.id, subscribed: true, source: "settings")
+      FeatureAnnouncementSubscription.unsubscribe!(chose_out, source: "unsubscribe_link")
+      FeatureAnnouncementSubscription.unsubscribe!(imported_chooser, source: "unsubscribe_link")
+      follow(email: chose_in.email)
+      follow(email: chose_out.email)
+      follow(email: imported_chooser.email, source: Follower::From::CSV_IMPORT) # a cohort with no decision
+    end
+
+    def choices = FeatureAnnouncementSubscription.where(user_id: [chose_in.id, chose_out.id]).order(:user_id).pluck(:subscribed, :source, :version)
+    def link(user) = Follower.find_by(followed_id: newsletter.id, email: user.email).follower_user_id
+
+    it "links each to its account and leaves the choice exactly as it is, without counting it as carried over" do
+      before_choices = choices
+      described_class.prepare!(cutoff_at:)
+
+      apply!
+
+      expect([link(chose_in), link(chose_out)]).to eq([chose_in.id, chose_out.id])
+      expect(choices).to eq(before_choices)
+      expect(cutover.attributes.slice("eligible_count", "migrated_count")).to eq("eligible_count" => 2, "migrated_count" => 2)
+      expect(link(imported_chooser)).to be_nil
+    end
+
+    it "changes nothing when applied again" do
+      described_class.prepare!(cutoff_at:)
+      apply!
+      described_class.prepare!(cutoff_at:)
+
+      expect { apply! }.not_to change { [choices, link(chose_in), link(chose_out), FeatureAnnouncementSubscription.count] }
+      expect(cutover.migrated_count).to eq(2)
+    end
+  end
+
   describe "the measured baseline and mapping by address" do
     let!(:email_only) { create(:user, email: "email-only@example.com") }
     let!(:quiet) { create(:user, email: "quiet@example.com").tap { _1.update!(announcement_notification_enabled: false) } }

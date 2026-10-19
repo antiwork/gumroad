@@ -170,4 +170,21 @@ describe Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements, "against a
   ensure
     finish(holder)
   end
+
+  it "lets an opt-out committed during the copy win, and still links the address-mapped follow" do
+    owner = create(:user, email: "race-chooser@example.com")
+    @extra_users = [owner]
+    follow = create(:follower, user: @newsletter, email: owner.email, source: Follower::From::EMBED_FORM, confirmed_at: 2.hours.ago, created_at: 2.hours.ago)
+    described_class.prepare!(cutoff_at: 1.hour.ago)
+    allow(FeatureAnnouncementSubscription).to receive(:create!).and_wrap_original do |original, **attributes|
+      in_thread { FeatureAnnouncementSubscription.unsubscribe!(User.find(owner.id), source: "unsubscribe_link") }.value if attributes[:user_id] == owner.id
+      original.call(**attributes)
+    end
+
+    described_class.apply!(confirmed_eligible_count: 2)
+
+    expect(FeatureAnnouncementSubscription.where(user_id: owner.id).pluck(:subscribed, :source)).to eq([[false, "unsubscribe_link"]])
+    expect(follow.reload.follower_user_id).to eq(owner.id)
+    expect(FeatureAnnouncementNewsletterCutover.find_by!(seller_id: @newsletter.id).migrated_count).to eq(1)
+  end
 end

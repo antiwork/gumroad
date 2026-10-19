@@ -36,6 +36,27 @@ class FeatureAnnouncementNewsletterCutover < ApplicationRecord
     end
   end
 
+  # For a purchase whose buyer resubscribes to a newsletter seller: that lifts the buyer opt-out retire! may
+  # already have counted as resolved. Locks the follow first (the migration's order), then share-locks the
+  # cutover row so retire! orders against this commit, then stamps the follow so retire!'s recheck of rows
+  # changed since its scan began includes it. The stamp comes after the share lock, so it is never older
+  # than a scan this commit was not waited out by. Sellers without a cutover row take no lock.
+  def self.fence_buyer_resubscribe(seller_id, email)
+    ApplicationRecord.connected_to(role: :writing) do
+      uncached do
+        next if email.blank? || !where(seller_id:).exists?
+
+        follower_id = Follower.where(followed_id: seller_id, email:).pick(:id)
+        next unless follower_id
+
+        follower = Follower.lock.find(follower_id)
+
+        where(seller_id:).lock("FOR SHARE").pick(:state)
+        follower.update_columns(updated_at: Time.current)
+      end
+    end
+  end
+
   # For a save that would make a follow active. The share lock waits out a retire! holding the row
   # FOR UPDATE and reads its committed state, and holds retire! back until this save commits.
   # Sellers without a cutover row take no lock, so other creators' follows never queue here.
