@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "delegate"
 
 describe Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements do
   let(:cutoff_at) { 1.hour.ago }
@@ -94,7 +95,7 @@ describe Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements do
       )
     end
 
-    it "bounds purchase email lookups and keeps opt-outs across every query" do
+    it "bounds retirement purchase email lookups and keeps opt-outs across every query" do
       accounts = Array.new(105) do |index|
         create(:user, email: "bounded-#{index}@example.com").tap { follow(email: _1.email, account: _1) }
       end
@@ -109,7 +110,7 @@ describe Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements do
         original.call(*args, **kwargs)
       end
 
-      report = described_class.preflight(cutoff_at:)
+      report = described_class.new.send(:tally, newsletter, cutoff_at, Follower.all)
 
       expect(lookups.size).to eq(2)
       expect(lookups.map(&:size)).to all(be <= 100)
@@ -119,6 +120,240 @@ describe Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements do
       expect(report[:counts]).to include(buyer_opted_out: 4, eligible: 104)
       expect(FeatureAnnouncementSubscription.where(source: "newsletter_migration")).to be_empty
     end
+  end
+
+  describe "preflight purchase paging" do
+    let(:product) { create(:product, user: newsletter) }
+
+    def raw_purchase(email, can_contact: false, seller_product: product)
+      create(:purchase, link: seller_product, email: "stored@example.com")
+        .tap { _1.update_columns(email:, can_contact:) }
+    end
+
+    it "reads each seller purchase once across ID pages and preserves full normalized opt-outs" do
+      padded = create(:user, email: "padded@example.com")
+      collated = create(:user, email: "cafe@example.com")
+      allowed = create(:user, email: "allowed@example.com")
+      unknown = create(:user, email: "unknown-contact@example.com")
+      other_seller = create(:user, email: "other-seller@example.com")
+      prefix = "a" * 191
+      long_veto = create(:user, email: "#{prefix}one@example.com")
+      long_allowed = create(:user, email: "#{prefix}two@example.com")
+      [padded, collated, allowed, unknown, other_seller, long_veto, long_allowed].each { follow(email: _1.email, account: _1) }
+      raw_purchase(" PADDED@EXAMPLE.COM ")
+      raw_purchase("café@example.com")
+      raw_purchase(collated.email)
+      raw_purchase(nil)
+      raw_purchase(allowed.email, can_contact: true)
+      raw_purchase(unknown.email, can_contact: nil)
+      raw_purchase(long_veto.email)
+      raw_purchase(other_seller.email, seller_product: create(:product))
+      reads = []
+      callback = ->(*, payload) { reads << payload[:sql] if payload[:sql].match?(/\ASELECT .*FROM `(?:purchases|followers)`/) }
+
+      report = ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+        described_class.preflight(cutoff_at:, batch_size: 2, include_eligible_account_ids: true)
+      end
+
+      expect(report[:counts]).to include(buyer_opted_out: 4, eligible: 6)
+      expect(report[:eligible_account_ids]).to match_array([embed.id, follow_page.id, allowed.id, unknown.id, other_seller.id, long_allowed.id])
+      projections = reads.select { _1.include?("FROM `purchases`") && _1.include?("`email`") && _1.include?("`can_contact`") }
+      expect(projections.size).to eq(4)
+      expect(projections).to all(include("FORCE INDEX(`PRIMARY`)", "`purchases`.`id` IN ("))
+      expect(reads.grep(/FROM `followers`/)).to all(include("FORCE INDEX(`PRIMARY`)"))
+      expect(reads).to all(satisfy { !_1.include?("DISTINCT") && !_1.include?("`purchases`.`email` IN (") })
+    end
+
+    it "does not reuse the purchase snapshot when the same service preflights again" do
+      service = described_class.new
+      expect(service.preflight(cutoff_at)[:counts]).to include(eligible: 2)
+      raw_purchase(" #{embed.email} ")
+
+      expect(service.preflight(cutoff_at)[:counts]).to include(eligible: 1, buyer_opted_out: 2)
+    end
+
+    it "keeps the follower count separate from distinct eligible account identities" do
+      duplicate = follow(email: "duplicate@example.com", account: embed)
+      duplicate.update_columns(email: " #{embed.email}")
+
+      report = described_class.preflight(cutoff_at:, include_eligible_account_ids: true)
+
+      expect(report[:counts][:eligible]).to eq(3)
+      expect(report[:eligible_account_ids]).to eq([embed.id, follow_page.id].sort)
+      expect(report[:eligible_accounts]).to eq(count: 2, sha256: Digest::SHA256.hexdigest([embed.id, follow_page.id].sort.join(",")))
+      expect(described_class.preflight(cutoff_at:)).not_to have_key(:eligible_account_ids)
+      described_class.prepare!(cutoff_at:)
+      expect(cutover.eligible_count).to eq(3)
+      expect(cutover.counts).not_to have_key("eligible_account_ids")
+    end
+
+    [true, nil].each do |previous_flag|
+      it "rechecks a raw alias whose contact flag changes from #{previous_flag.inspect} after the read" do
+        purchase = raw_purchase(" #{embed.email} ", can_contact: previous_flag)
+        described_class.prepare!(cutoff_at:)
+        service = described_class.new
+        allow(service).to receive(:purchase_context).and_wrap_original do |original, *args, **kwargs|
+          context = original.call(*args, **kwargs)
+          purchase.update_columns(can_contact: false)
+          context
+        end
+
+        service.apply!(cutover.eligible_count)
+
+        expect(preference(embed)).to be_empty
+        expect(preference(follow_page)).to eq([[true, "newsletter_migration"]])
+        expect(cutover.migrated_count).to eq(1)
+      end
+    end
+
+    it "rechecks a raw alias whose buyer opts back in after the read" do
+      purchase = raw_purchase(" #{embed.email} ")
+      described_class.prepare!(cutoff_at:)
+      expect(cutover.eligible_count).to eq(1)
+      service = described_class.new
+      allow(service).to receive(:purchase_context).and_wrap_original do |original, *args, **kwargs|
+        context = original.call(*args, **kwargs)
+        purchase.update_columns(can_contact: true)
+        added = create(:purchase, link: product, email: " #{follow_page.email.upcase} ", can_contact: false)
+        expect(added.email).to eq(follow_page.email)
+        expect(preference(follow_page)).to be_empty
+        context
+      end
+
+      service.apply!(cutover.eligible_count)
+
+      expect(preference(embed)).to eq([[true, "newsletter_migration"]])
+      expect(preference(follow_page)).to be_empty
+      expect(cutover.migrated_count).to eq(1)
+    end
+
+    it "bounds the current veto queries when one address has more than one hundred raw aliases" do
+      101.times { |index| raw_purchase("#{' ' * (index + 1)}#{embed.email}", can_contact: index != 100) }
+      described_class.prepare!(cutoff_at:)
+      lookups = []
+      allow(Purchase).to receive(:where).and_wrap_original do |original, *args, **kwargs|
+        filters = args.first || kwargs
+        lookups << filters[:email] if filters.is_a?(Hash) && filters[:email].is_a?(Array)
+        original.call(*args, **kwargs)
+      end
+
+      apply!
+
+      alias_queries = lookups.select { _1.any? { |email| email.strip == embed.email } }
+      expect(alias_queries.map(&:size)).to eq([100, 2])
+      expect(alias_queries.flatten).to include(embed.email)
+      expect(preference(embed)).to be_empty
+      expect(cutover.migrated_count).to eq(1)
+    end
+
+    it "does not copy a purchase opt-out whose stored email needs normalization" do
+      raw_purchase(" #{embed.email.upcase} ")
+      described_class.prepare!(cutoff_at:)
+      expect(cutover.eligible_count).to eq(1)
+
+      apply!
+
+      expect(preference(embed)).to be_empty
+      expect(preference(follow_page)).to eq([[true, "newsletter_migration"]])
+      expect(cutover.migrated_count).to eq(1)
+    end
+  end
+
+  describe "a cooperative apply budget" do
+    it "refuses nonpositive, nonfinite and nonnumeric budgets before changing the plan" do
+      described_class.prepare!(cutoff_at:)
+      [0, -1, Float::INFINITY, Float::NAN, 10**1000, "1", true, Complex(1, 1)].each do |budget|
+        expect { described_class.apply!(confirmed_eligible_count: cutover.eligible_count, max_run_seconds: budget) }
+          .to raise_error(ArgumentError, /positive finite/)
+      end
+      expect(cutover.state).to eq("prepared")
+    end
+
+    it "discards an incomplete purchase context without copying and completes on a later call" do
+      purchase = create(:purchase, link: create(:product, user: newsletter), email: embed.email, can_contact: false)
+      purchase.update_columns(email: " #{embed.email} ")
+      described_class.prepare!(cutoff_at:)
+      service = described_class.new(batch_size: 1)
+      allow(service).to receive(:monotonic_time).and_return(0.0, 2.0)
+
+      result = service.apply!(cutover.eligible_count, max_run_seconds: 1)
+
+      expect(result.attributes.slice("state", "cursor_follower_id", "migrated_count"))
+        .to eq("state" => "migrating", "cursor_follower_id" => 0, "migrated_count" => 0)
+      expect(preference(embed)).to be_empty
+      expect(preference(follow_page)).to be_empty
+      service.apply!(cutover.eligible_count)
+      expect(cutover.state).to eq("migrated")
+      expect(preference(embed)).to be_empty
+      expect(preference(follow_page)).to eq([[true, "newsletter_migration"]])
+    end
+
+    it "records a skipped row at the stop and releases the run lock before the next call" do
+      first = Follower.find_by!(followed_id: newsletter.id, email: embed.email)
+      first.mark_deleted!
+      described_class.prepare!(cutoff_at:)
+      service = described_class.new
+      allow(service).to receive(:monotonic_time).and_return(0.0, 0.0, 2.0)
+
+      result = service.apply!(cutover.eligible_count, max_run_seconds: 1)
+
+      expect(result.attributes.slice("state", "cursor_follower_id", "migrated_count"))
+        .to eq("state" => "migrating", "cursor_follower_id" => first.id, "migrated_count" => 0)
+      connection = ApplicationRecord.connection
+      name = connection.quote("feature_announcement_newsletter_cutover_#{newsletter.id}")
+      expect(connection.select_value("SELECT IS_USED_LOCK(#{name})")).to be_nil
+      service.apply!(cutover.eligible_count)
+      expect(cutover.state).to eq("migrated")
+      expect(cutover.migrated_count).to eq(1)
+    end
+
+    it "resumes after a committed row without duplicates and preserves a new preference" do
+      first = Follower.find_by!(followed_id: newsletter.id, email: embed.email)
+      described_class.prepare!(cutoff_at:)
+      service = described_class.new
+      allow(service).to receive(:monotonic_time).and_return(0.0, 0.0, 2.0)
+      scope = Follower.where(followed_id: newsletter.id).where("id > ?", cutover.cursor_follower_id)
+      allow(Follower).to receive(:where).and_call_original
+      allow(Follower).to receive(:where).with(followed_id: newsletter.id).and_return(scope)
+      allow(scope).to receive(:where).and_call_original
+      allow(scope).to receive(:where).with("id > ?", cutover.cursor_follower_id).and_return(scope)
+      allow(scope).to receive(:in_batches).and_wrap_original do |original, **options, &block|
+        original.call(**options) do |batch|
+          # A relation clone copies singleton stubs, so decorate only the unordered read.
+          unordered = SimpleDelegator.new(batch)
+          allow(unordered).to receive(:to_a).and_return(batch.to_a.sort_by(&:id).reverse)
+          block.call(unordered)
+        end
+      end
+
+      result = service.apply!(cutover.eligible_count, max_run_seconds: 1)
+
+      expect(result.attributes.slice("state", "cursor_follower_id", "migrated_count"))
+        .to eq("state" => "migrating", "cursor_follower_id" => first.id, "migrated_count" => 1)
+      FeatureAnnouncementSubscription.unsubscribe!(follow_page, source: "settings")
+      before_choice = FeatureAnnouncementSubscription.find_by!(user_id: follow_page.id).attributes
+      allow(Follower).to receive(:where).with(followed_id: newsletter.id).and_call_original
+      service.apply!(cutover.eligible_count)
+      expect(cutover.state).to eq("migrated")
+      expect(cutover.migrated_count).to eq(1)
+      expect(preference(embed)).to eq([[true, "newsletter_migration"]])
+      expect(FeatureAnnouncementSubscription.find_by!(user_id: follow_page.id).attributes).to eq(before_choice)
+    end
+  end
+
+  it "does not map an unlinked follow to a different full address under SQL collation" do
+    account = create(:user, email: "cafe@example.com")
+    follower = follow(email: "café@example.com")
+    expect(follower.reload.email).to eq("café@example.com")
+    expect(User.where(email: follower.email).where.not(confirmed_at: nil).ids).to eq([account.id])
+    expect(described_class.preflight(cutoff_at:)[:counts]).to include(eligible: 2, guest: 2)
+    described_class.prepare!(cutoff_at:)
+
+    apply!
+
+    expect(preference(account)).to be_empty
+    expect(follower.reload.follower_user_id).to be_nil
+    expect(cutover.migrated_count).to eq(2)
   end
 
   describe "source provenance" do

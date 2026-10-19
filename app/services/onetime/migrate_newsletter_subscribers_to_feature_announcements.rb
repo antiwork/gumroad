@@ -40,9 +40,12 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
   class AmbientTransaction < StandardError; end
   class UnsupportedIsolation < StandardError; end
 
-  def self.preflight(cutoff_at:, welcome_greeter_sources: nil, batch_size: BATCH_SIZE) = new(batch_size:).preflight(cutoff_at, welcome_greeter_sources:)
+  def self.preflight(cutoff_at:, welcome_greeter_sources: nil, batch_size: BATCH_SIZE, include_eligible_account_ids: false)
+    new(batch_size:).preflight(cutoff_at, welcome_greeter_sources:, include_eligible_account_ids:)
+  end
+
   def self.prepare!(cutoff_at:, batch_size: BATCH_SIZE) = new(batch_size:).prepare!(cutoff_at)
-  def self.apply!(confirmed_eligible_count:, batch_size: BATCH_SIZE) = new(batch_size:).apply!(confirmed_eligible_count)
+  def self.apply!(confirmed_eligible_count:, batch_size: BATCH_SIZE, max_run_seconds: nil) = new(batch_size:).apply!(confirmed_eligible_count, max_run_seconds:)
   def self.retire! = new.retire!
   def self.rollback!(batch_size: BATCH_SIZE) = new(batch_size:).rollback!
 
@@ -53,14 +56,20 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
   # Read-only: every follower of the newsletter seller, counted by outcome in one transaction, so every
   # batch reads the same snapshot. `baseline[:a]` is A; `baseline[:b]` is A without the declared
   # welcome-greeter source labels. Neither is permission: only `counts[:eligible]` can be applied.
-  def preflight(cutoff_at, welcome_greeter_sources: nil)
+  # Raw account IDs are opt-in for private reconciliation. The stored plan still confirms follower rows.
+  def preflight(cutoff_at, welcome_greeter_sources: nil, include_eligible_account_ids: false)
     on_primary do
       ApplicationRecord.transaction do
         seller = verified_seller!
         read_at = Time.current
-        tally = tally(seller, cutoff_at, Follower.all)
-        { seller_id: seller.id, cutoff_at:, read_at:, verified_sources: verified_sources!, counts: tally[:counts],
-          baseline: baseline(tally[:a], welcome_greeter_sources) }
+        eligible_account_ids = Set.new
+        tally = tally(seller, cutoff_at, Follower.force_index(:PRIMARY), purchase_context: purchase_context(seller), eligible_account_ids:)
+        ids = eligible_account_ids.to_a.sort
+        report = { seller_id: seller.id, cutoff_at:, read_at:, verified_sources: verified_sources!, counts: tally[:counts],
+                   baseline: baseline(tally[:a], welcome_greeter_sources),
+                   eligible_accounts: { count: ids.size, sha256: Digest::SHA256.hexdigest(ids.join(",")) } }
+        report[:eligible_account_ids] = ids if include_eligible_account_ids
+        report
       end
     end
   end
@@ -87,7 +96,12 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
 
   # Resumable: each carried-over row and its count commit together, so a failed or interrupted run
   # continues from its cursor with an exact migrated_count, and a rerun never writes a row twice.
-  def apply!(confirmed_eligible_count)
+  # The optional budget stops after completed work; SQL and lock waits need their own limits.
+  def apply!(confirmed_eligible_count, max_run_seconds: nil)
+    unless max_run_seconds.nil? || (max_run_seconds.is_a?(Numeric) && max_run_seconds.real? && max_run_seconds.to_f.finite? && max_run_seconds.positive?)
+      raise ArgumentError, "max_run_seconds must be a positive finite number"
+    end
+    deadline = monotonic_time + max_run_seconds.to_f if max_run_seconds
     on_primary do
       seller = verified_seller!
       with_run_lock(seller) do
@@ -99,10 +113,19 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
 
         cutover.update!(state: "migrating", error: nil)
         begin
+          context = ApplicationRecord.transaction { purchase_context(seller, deadline:) }
+          next cutover if context.nil?
+
           Follower.where(followed_id: seller.id).where("id > ?", cutover.cursor_follower_id).in_batches(of: @batch_size) do |batch|
             ReplicaLagWatcher.watch
-            followers = batch.to_a
-            followers.each { migrate(seller, cutover, _1) }
+            followers = batch.order(:id).to_a
+            followers.each do |follower|
+              migrate(seller, cutover, follower, purchase_aliases: context[:aliases])
+              if deadline_reached?(deadline)
+                cutover.update_columns(cursor_follower_id: follower.id, updated_at: Time.current)
+                return cutover.reload
+              end
+            end
             cutover.update_columns(cursor_follower_id: followers.map(&:id).max, updated_at: Time.current)
           end
           cutover.reload.update!(state: "migrated")
@@ -209,16 +232,17 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
 
     def outcome_counts(seller, cutoff_at, followers) = tally(seller, cutoff_at, followers)[:counts]
 
-    def tally(seller, cutoff_at, followers)
+    def tally(seller, cutoff_at, followers, purchase_context: nil, eligible_account_ids: nil)
       counts = Hash.new(0)
       a = { total: 0, linked: 0, email_mapped: 0, existing_opt_in: 0, existing_opt_out: 0, by_source: Hash.new(0) }
       followers.where(followed_id: seller.id).in_batches(of: @batch_size) do |batch|
         rows = batch.to_a
-        context = batch_context(seller, rows.reject { initial_outcome(_1, cutoff_at) })
+        context = batch_context(seller, rows.reject { initial_outcome(_1, cutoff_at) }, purchase_context:)
         rows.each do |follower|
           identity = resolve_identity(follower, context[:users][follower.follower_user_id], context[:confirmed_by_email][normalize(follower.email)])
           outcome = classify(follower, cutoff_at, identity:, **context)
           counts[outcome] += 1
+          eligible_account_ids&.add(identity.id) if outcome == :eligible
           next unless BASELINE_OUTCOMES.include?(outcome)
 
           a[:total] += 1
@@ -264,7 +288,7 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
     # this commits. A copy then locks the cutover row before the preference, as every writer does. A concurrent
     # preference write is caught by the unique key, and a buyer opt-out ends in Follower.unsubscribe, which
     # waits on the follower lock.
-    def migrate(seller, cutover, follower)
+    def migrate(seller, cutover, follower, purchase_aliases: nil)
       return :skipped unless VERIFIED_SOURCES.key?(source_label(follower))
 
       conflicts ||= 0
@@ -278,7 +302,7 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
         next :changed_since_read unless unchanged
 
         identity = resolve_identity(current, linked, confirmed)
-        context = current_context(seller, current, identity)
+        context = current_context(seller, current, identity, purchase_aliases:)
         outcome = classify(current, cutover.cutoff_at, identity:, **context)
         # Recording the link keeps every old-newsletter opt-out path pointed at this account, even after its
         # email changes. An account that already chose has its choice left exactly as it is.
@@ -312,6 +336,8 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
 
         linked
       else
+        # SQL collation can match a different full address.
+        confirmed = confirmed.select { normalize(_1.email) == normalize(follower.email) }
         return :guest if confirmed.empty?
         return :ambiguous_address if confirmed.many?
 
@@ -319,16 +345,43 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
       end
     end
 
-    def current_context(seller, follower, identity)
+    def current_context(seller, follower, identity, purchase_aliases: nil)
       email = normalize(follower.email)
       preference = identity.is_a?(User) ? FeatureAnnouncementSubscription.where(user_id: identity.id).pick(:subscribed) : nil
+      aliases = purchase_aliases ? (purchase_aliases.fetch(email, Set.new).to_a | [email]) : [email]
+      opted_out = Purchase.uncached do
+        aliases.each_slice(OPT_OUT_EMAILS_PER_QUERY).any? do |batch|
+          Purchase.where(seller_id: seller.id, email: batch, can_contact: false).exists?
+        end
+      end
       {
         preferences: preference.nil? ? {} : { identity.id => preference },
-        opted_out_emails: Purchase.where(seller_id: seller.id, email:, can_contact: false).exists? ? Set[email] : Set.new,
+        opted_out_emails: opted_out ? Set[email] : Set.new,
       }
     end
 
-    def batch_context(seller, followers)
+    # Keep raw aliases for current per-row checks, including purchases whose contact flag later changes.
+    # Normalize every full value in Ruby: SQL DISTINCT can collapse different addresses under its collation.
+    def purchase_context(seller, deadline: nil)
+      context = { aliases: Hash.new { |hash, email| hash[email] = Set.new }, opted_out_emails: Set.new }
+      Purchase.where(seller_id: seller.id).force_index(:index_purchases_on_seller_id).in_batches(of: @batch_size) do |batch|
+        batch.force_index(:PRIMARY).pluck(:email, :can_contact).each do |raw_email, can_contact|
+          next if raw_email.nil?
+
+          email = normalize(raw_email)
+          context[:aliases][email].add(raw_email)
+          context[:opted_out_emails].add(email) if can_contact == false
+        end
+        return nil if deadline_reached?(deadline)
+      end
+      context
+    end
+
+    def monotonic_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+
+    def deadline_reached?(deadline) = deadline && monotonic_time >= deadline
+
+    def batch_context(seller, followers, purchase_context: nil)
       emails = followers.map { normalize(_1.email) }.uniq
       users = User.where(id: followers.filter_map(&:follower_user_id)).index_by(&:id)
       confirmed_by_email = User.where(email: emails).where.not(confirmed_at: nil).to_a.group_by { normalize(_1.email) }
@@ -337,7 +390,7 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
         users:,
         confirmed_by_email:,
         preferences: FeatureAnnouncementSubscription.where(user_id: user_ids).pluck(:user_id, :subscribed).to_h,
-        opted_out_emails: opted_out_emails(seller, emails),
+        opted_out_emails: purchase_context ? purchase_context[:opted_out_emails] : opted_out_emails(seller, emails),
       }
     end
 
