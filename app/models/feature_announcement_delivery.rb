@@ -64,16 +64,16 @@ class FeatureAnnouncementDelivery < ApplicationRecord
   end
 
   # Account status, address and consent are read under share locks, so a writer either commits
-  # before the check or waits for the handoff. The audience criteria are read just before, unlocked.
+  # before the check or waits for the handoff. The audience is read after those waits, uncached and as
+  # this transaction's first plain read, so a product, sale or payout change made meanwhile counts.
   def send_if_eligible(message, &block)
     handing_off = false
-    reason = "not_in_audience" unless (audience_user = User.find_by(id: user_id)) && in_audience?(audience_user)
     with_bounded_lock_wait do
       transaction do
         lock!
         user = User.lock("FOR SHARE").find_by(id: user_id)
         subscription = FeatureAnnouncementSubscription.lock("FOR SHARE").find_by(user_id:)
-        reason = ineligibility_reason(message, user, subscription) || reason
+        reason = ineligibility_reason(message, user, subscription) || ("not_in_audience" unless self.class.uncached { in_audience?(user) })
         if reason
           update!(state: "skipped", reason:)
         else

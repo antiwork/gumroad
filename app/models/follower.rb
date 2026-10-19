@@ -23,7 +23,7 @@ class Follower < ApplicationRecord
   validate :not_confirmed_and_deleted
   validate :follower_user_id_exists, unless: :being_marked_as_deleted?
   validate :double_follow_validation, on: :create
-  validate :newsletter_not_retired, if: :becoming_active?
+  validate :newsletter_not_retired, if: -> { new_record? || becoming_active? }
 
   # Inside the save transaction, not after commit: a migrated newsletter subscriber who leaves the old
   # newsletter (cancel link, spam report, buyer unsubscribe, seller removal) is opted out of Feature
@@ -149,8 +149,10 @@ class Follower < ApplicationRecord
       errors.add(:base, RETIRED_NEWSLETTER_MESSAGE) if FeatureAnnouncementNewsletterCutover.retired_for_follow?(followed_id)
     end
 
+    # Only a follow that was active and confirmed before this save left the newsletter; cancelling a request
+    # nobody confirmed isn't an opt-out. mark_deleted! clears confirmed_at in the same save.
     def left_newsletter?
-      ((saved_change_to_deleted_at? && deleted_at.present?) || (saved_change_to_confirmed_at? && confirmed_at.nil?)) &&
+      deleted_at_before_last_save.nil? && confirmed_at_before_last_save.present? && (deleted_at.present? || confirmed_at.nil?) &&
         FeatureAnnouncementNewsletterCutover.tracks_opt_outs_for?(followed_id)
     end
 

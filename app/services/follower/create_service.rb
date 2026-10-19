@@ -103,6 +103,17 @@ class Follower::CreateService
       if @follower.imported_from_csv? || active_session_with_verified_email?
         @follower.confirm!
       else
+        request_confirmation
+      end
+    end
+
+    # Ordered against retiring the newsletter like the follow itself, so no request is queued once it has retired.
+    def request_confirmation
+      ApplicationRecord.transaction do
+        if FeatureAnnouncementNewsletterCutover.retired_for_follow?(@follower.followed_id)
+          @follower.errors.add(:base, RETIRED_NEWSLETTER_MESSAGE)
+          raise ActiveRecord::RecordInvalid, @follower
+        end
         @follower.send_confirmation_email
       end
     end
