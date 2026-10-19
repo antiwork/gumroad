@@ -1,10 +1,8 @@
 # frozen_string_literal: true
 
 class RenameShippingExclusionsLinkIdToProductId < ActiveRecord::Migration[8.1]
-  # The first CreateShippingExclusions made an int link_id. A database that ran it keeps that column,
-  # because CreateShippingExclusions now skips an existing table; every other database already has
-  # product_id and skips this. Renumbered from 20261216170003 with the create. down is a no-op on
-  # purpose: product_id is what the create makes, and reverting would break the model.
+  # Only the first CreateShippingExclusions made an int link_id. down is a no-op because reverting
+  # would rename a table created with product_id, or narrow ids that grew past int after the upgrade.
   def up
     return unless column_exists?(:shipping_exclusions, :link_id)
 

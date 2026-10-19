@@ -1,10 +1,9 @@
 # frozen_string_literal: true
 
 class CreateShippingExclusions < ActiveRecord::Migration[8.1]
-  # Renumbered from 20261216170002 after main took that version, so databases that ran it already
-  # have this table and up leaves it alone. Main now records 20261216170002 everywhere, so down
-  # cannot tell which migration made the table and keeps it (and its rows) whenever that version is
-  # recorded. A rollback that leaves an unused table costs nothing; one that drops it loses data.
+  # Renumbered after main took the superseded version, so up skips a table an older run created and
+  # down cannot tell who created it: down keeps the table and its rows whenever that version is
+  # recorded, which is every database on main, leaving schema in place instead of losing data.
   SUPERSEDED_VERSION = "20261216170002"
 
   def up
