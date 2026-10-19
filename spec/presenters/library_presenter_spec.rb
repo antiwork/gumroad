@@ -839,9 +839,11 @@ describe LibraryPresenter do
           expect(library_props(bundle_ids: [purchase1.link.external_id])[:bundle_downloads]).to eq([ready_download])
         end
 
-        it "keeps the ZIP for another buyer of the same bundle" do
-          other_member = purchase2.product_purchases.first
-          ProductFileDownloadGrant.create!(url_redirect: other_member.url_redirect, product_file: create(:readable_document, link: other_member.link, stream_only: true))
+        it "keeps the ZIP when another buyer of the same bundle was granted the file" do
+          other_purchase = create(:purchase, purchaser: create(:user), link: purchase1.link)
+          other_purchase.create_artifacts_and_send_receipt!
+          other_member = other_purchase.product_purchases.find_by!(link: member.link)
+          ProductFileDownloadGrant.create!(url_redirect: other_member.url_redirect, product_file: granted_file)
 
           expect(library_props(bundle_ids: [purchase1.link.external_id])[:bundle_downloads]).to eq([ready_download])
         end
