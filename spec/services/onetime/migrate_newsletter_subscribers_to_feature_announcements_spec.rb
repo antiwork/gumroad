@@ -99,10 +99,16 @@ describe Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements do
       accounts = Array.new(105) do |index|
         create(:user, email: "bounded-#{index}@example.com").tap { follow(email: _1.email, account: _1) }
       end
-      accounts.values_at(0, 99, 104).each do |account|
+      vetoed = accounts.values_at(0, 99, 104)
+      vetoed.each do |account|
         create(:purchase, link: create(:product, user: newsletter), email: account.email, can_contact: false)
           .update_columns(email: account.email.upcase)
       end
+      leave_unresolved_followers!
+      described_class.prepare!(cutoff_at:)
+      apply!
+      # Old timestamps leave the recheck pass empty, so every lookup below comes from the full scan.
+      Follower.where(followed_id: newsletter.id).update_all(updated_at: 1.hour.ago)
       lookups = []
       allow(Purchase).to receive(:where).and_wrap_original do |original, *args, **kwargs|
         filters = args.first || kwargs
@@ -110,15 +116,15 @@ describe Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements do
         original.call(*args, **kwargs)
       end
 
-      report = described_class.new.send(:tally, newsletter, cutoff_at, Follower.all)
+      described_class.retire!
 
       expect(lookups.size).to eq(2)
       expect(lookups.map(&:size)).to all(be <= 100)
-      expected = %w[embed follow-page imported sourceless old-address unconfirmed suspended opted-out buyer guest]
-        .map { "#{_1}@example.com" } + accounts.map(&:email)
+      expected = %w[embed follow-page opted-out buyer].map { "#{_1}@example.com" } + accounts.map(&:email) + vetoed.map { _1.email.upcase }
       expect(lookups.flatten).to match_array(expected)
-      expect(report[:counts]).to include(buyer_opted_out: 4, eligible: 104)
-      expect(FeatureAnnouncementSubscription.where(source: "newsletter_migration")).to be_empty
+      expect(cutover.state).to eq("retired")
+      expect(cutover.retirement_coverage["counts"]).to include("buyer_opted_out" => 4)
+      expect(vetoed.flat_map { preference(_1) }).to be_empty
     end
   end
 
@@ -359,6 +365,130 @@ describe Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements do
       expect(preference(embed)).to be_empty
       expect(preference(follow_page)).to eq([[true, "newsletter_migration"]])
       expect(cutover.migrated_count).to eq(1)
+    end
+  end
+
+  describe "stored addresses that differ from their normalized form" do
+    let(:product) { create(:product, user: newsletter) }
+
+    def opt_out(email) = create(:purchase, link: product, email: "stored@example.com").tap { _1.update_columns(email:, can_contact: false) }
+
+    def account_following(email, stored: email)
+      create(:user, email:).tap { follow(email:, account: _1).update_columns(email: stored) }
+    end
+
+    def copy!
+      leave_unresolved_followers!
+      described_class.prepare!(cutoff_at:)
+      apply!
+      # Old timestamps leave retire!'s recheck pass empty unless a fence stamps a row.
+      Follower.where(followed_id: newsletter.id).update_all(updated_at: 1.hour.ago)
+    end
+
+    def lift_after_full_scan(purchase)
+      calls = 0
+      allow_any_instance_of(described_class).to receive(:outcome_counts).and_wrap_original do |original, *args, **kwargs|
+        original.call(*args, **kwargs).tap { purchase.update!(can_contact: true) if (calls += 1) == 1 }
+      end
+    end
+
+    it "retires case-only and trailing-space follows of opted-out buyers, which the resubscribe fence still matches" do
+      mixed = account_following("mixed-case@example.com", stored: "Mixed-Case@Example.com")
+      trailing = account_following("trailing@example.com", stored: "trailing@example.com ")
+      purchases = [mixed, trailing].map { opt_out(_1.email) }
+      counts = described_class.preflight(cutoff_at:)[:counts]
+      expect(counts).to include(buyer_opted_out: 3)
+      expect(counts).not_to have_key(:noncanonical_address)
+      copy!
+
+      described_class.retire!
+
+      expect(cutover.state).to eq("retired")
+      expect(cutover.retirement_coverage["counts"]).to include("buyer_opted_out" => 3)
+      expect(preference(mixed) + preference(trailing)).to be_empty
+      expect(purchases.map { _1.reload.can_contact }).to eq([false, false])
+    end
+
+    it "catches a case-only follow's resubscribe during the scan through the fence's stamp" do
+      mixed = account_following("mixed-case@example.com", stored: "Mixed-Case@Example.com")
+      purchase = opt_out(mixed.email)
+      copy!
+      lift_after_full_scan(purchase)
+
+      expect { described_class.retire! }.to raise_error(described_class::CoverageIncomplete)
+
+      expect(cutover.retirement_coverage).to include("changed_during_scan" => { "eligible" => 1 }, "unresolved" => { "eligible" => 1 })
+    end
+
+    it "retires a noncanonical follow of an opted-out buyer whose account already chose, leaving the choice" do
+      chooser = account_following("chooser@example.com", stored: " chooser@example.com")
+      FeatureAnnouncementSubscription.create!(user_id: chooser.id, subscribed: true, source: "settings")
+      choice = FeatureAnnouncementSubscription.find_by!(user_id: chooser.id).attributes
+      opt_out(chooser.email)
+      expect(described_class.preflight(cutoff_at:)[:counts]).not_to have_key(:noncanonical_address)
+      copy!
+
+      described_class.retire!
+
+      expect(cutover.state).to eq("retired")
+      expect(FeatureAnnouncementSubscription.find_by!(user_id: chooser.id).attributes).to eq(choice)
+    end
+
+    it "keeps refusing a leading-space follow with no choice, whose resubscribe the fence can't see" do
+      padded = account_following("padded@example.com", stored: " padded@example.com")
+      purchase = opt_out(padded.email)
+      expect(described_class.preflight(cutoff_at:)[:counts]).to include(noncanonical_address: 1)
+      copy!
+      expect { described_class.retire! }.to raise_error(described_class::CoverageIncomplete)
+      expect(cutover.retirement_coverage["unresolved"]).to eq("noncanonical_address" => 1)
+      lift_after_full_scan(purchase)
+
+      expect { described_class.retire! }.to raise_error(described_class::CoverageIncomplete)
+      expect(cutover.retirement_coverage).to include("changed_during_scan" => {}, "unresolved" => { "noncanonical_address" => 1 })
+      expect { described_class.retire! }.to raise_error(described_class::CoverageIncomplete)
+      expect(cutover.retirement_coverage["unresolved"]).to eq("eligible" => 1)
+      expect(cutover.state).to eq("migrated")
+    end
+
+    it "maps a linked follow to the account at its full address when a collation-equal one is confirmed too" do
+      linked = create(:user, email: "linked-cafe@example.com")
+      follow(email: linked.email, account: linked)
+      unlinked = create(:user, email: "unlinked-noel@example.com")
+      follow(email: unlinked.email)
+      # update_columns stands in for older pairs that the address-uniqueness validation would refuse today.
+      near = %w[linked-café@example.com unlinked-noël@example.com].map { |email| create(:user).tap { _1.update_columns(email:) } }
+      elsewhere = follow(email: linked.email, account: linked, seller: create(:user))
+      elsewhere_before = elsewhere.reload.attributes
+      expect(User.where(email: linked.email).where.not(confirmed_at: nil).ids).to contain_exactly(linked.id, near.first.id)
+      expect(described_class.preflight(cutoff_at:)[:counts]).to include(eligible: 4)
+      copy!
+
+      expect(preference(linked)).to eq([[true, "newsletter_migration"]])
+      expect(preference(unlinked)).to eq([[true, "newsletter_migration"]])
+      expect(near.flat_map { preference(_1) }).to be_empty
+      expect(cutover.migrated_count).to eq(cutover.eligible_count)
+      described_class.retire!
+      expect(cutover.state).to eq("retired")
+      expect(elsewhere.reload.attributes).to eq(elsewhere_before)
+    end
+
+    it "vetoes the copy only for opt-outs at the follow's full address" do
+      cafe = create(:user, email: "veto-cafe@example.com")
+      follow(email: cafe.email, account: cafe)
+      raw = create(:user, email: "veto-raw@example.com")
+      follow(email: raw.email, account: raw)
+      opt_out("veto-café@example.com") # a guest buyer at an accent-distinct address
+      opt_out(" VETO-RAW@EXAMPLE.COM ")
+      create(:purchase, link: create(:product), email: cafe.email, can_contact: false) # another creator's buyer
+      expect(described_class.preflight(cutoff_at:)[:counts]).to include(buyer_opted_out: 2, eligible: 3)
+      copy!
+
+      expect(preference(cafe)).to eq([[true, "newsletter_migration"]])
+      expect(preference(raw)).to be_empty
+      expect(cutover.migrated_count).to eq(cutover.eligible_count)
+      described_class.retire!
+      expect(cutover.state).to eq("retired")
+      expect(cutover.retirement_coverage["counts"]).to include("buyer_opted_out" => 2)
     end
   end
 

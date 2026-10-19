@@ -240,13 +240,17 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
       followers.where(followed_id: seller.id).in_batches(of: @batch_size) do |batch|
         rows = batch.to_a
         context = batch_context(seller, rows.reject { initial_outcome(_1, cutoff_at) }, purchase_context:, purchase_aliases:)
-        rows.each do |follower|
+        classified = rows.map do |follower|
           identity = resolve_identity(follower, context[:users][follower.follower_user_id], context[:confirmed_by_email][normalize(follower.email)])
-          outcome = classify(follower, cutoff_at, identity:, **context)
-          # Noncanonical follows can miss a resubscribe fence and its timestamp recheck.
-          if purchase_aliases && outcome == :buyer_opted_out && follower.email != normalize(follower.email)
-            outcome = :noncanonical_address
-          end
+          [follower, identity, classify(follower, cutoff_at, identity:, **context)]
+        end
+        # Only a vetoed follow with no choice turns eligible when the veto lifts, and only one the
+        # fence's normalized address misses goes unstamped, so retire!'s recheck can't see that change.
+        unfenced = unfenced_follower_ids(classified.filter_map do |follower, identity, outcome|
+          follower if outcome == :buyer_opted_out && !context[:preferences].key?(identity.id) && follower.email != normalize(follower.email)
+        end)
+        classified.each do |follower, identity, outcome|
+          outcome = :noncanonical_address if unfenced.include?(follower.id)
           counts[outcome] += 1
           eligible_account_ids&.add(identity.id) if outcome == :eligible
           next unless BASELINE_OUTCOMES.include?(outcome)
@@ -336,7 +340,8 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
 
     # The account a follow maps to, or why it maps to none. A recorded link is never reassigned.
     def resolve_identity(follower, linked, confirmed)
-      confirmed ||= []
+      # SQL collation can match a different full address.
+      confirmed = (confirmed || []).select { normalize(_1.email) == normalize(follower.email) }
       if follower.follower_user_id
         return :unmatched_account if linked.nil?
         return :conflicting_address unless linked.email.present? && normalize(linked.email) == normalize(follower.email)
@@ -344,8 +349,6 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
 
         linked
       else
-        # SQL collation can match a different full address.
-        confirmed = confirmed.select { normalize(_1.email) == normalize(follower.email) }
         return :guest if confirmed.empty?
         return :ambiguous_address if confirmed.many?
 
@@ -356,12 +359,8 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
     def current_context(seller, follower, identity, purchase_aliases: nil)
       email = normalize(follower.email)
       preference = identity.is_a?(User) ? FeatureAnnouncementSubscription.where(user_id: identity.id).pick(:subscribed) : nil
-      aliases = purchase_aliases ? (purchase_aliases.fetch(email, Set.new).to_a | [email]) : [email]
-      opted_out = Purchase.uncached do
-        aliases.each_slice(OPT_OUT_EMAILS_PER_QUERY).any? do |batch|
-          Purchase.where(seller_id: seller.id, email: batch, can_contact: false).exists?
-        end
-      end
+      # The same full-address rule as preflight and retire!: SQL collation also matches accent-distinct buyers.
+      opted_out = opted_out_emails(seller, [email], purchase_aliases:).include?(email)
       {
         preferences: preference.nil? ? {} : { identity.id => preference },
         opted_out_emails: opted_out ? Set[email] : Set.new,
@@ -408,9 +407,20 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
         addresses.each_slice(OPT_OUT_EMAILS_PER_QUERY).flat_map do |batch|
           scope = Purchase.where(seller_id: seller.id, email: batch, can_contact: false).distinct
           # The binary field preserves full values; the text field keeps their encoding for Ruby normalization.
-          purchase_aliases ? scope.pluck(:email, Arel.sql("BINARY email")).map(&:first) : scope.pluck(:email)
+          scope.pluck(:email, Arel.sql("BINARY email")).map(&:first)
         end
       end.map { normalize(_1) }.to_set
+    end
+
+    # The follows among these that the column's collation doesn't equate with their normalized address, the
+    # one form fence_buyer_resubscribe always queries.
+    def unfenced_follower_ids(followers)
+      Follower.uncached do
+        followers.each_slice(OPT_OUT_EMAILS_PER_QUERY).flat_map do |batch|
+          fenced = batch.map { Follower.where(id: _1.id, email: normalize(_1.email)) }.reduce(:or).pluck(:id)
+          batch.map(&:id) - fenced
+        end
+      end.to_set
     end
 
     def initial_outcome(follower, cutoff_at)
