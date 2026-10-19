@@ -3,7 +3,9 @@
 require "spec_helper"
 
 describe Onetime::PlanFeatureAnnouncementReplacement do
-  let(:send_at) { Time.utc(2026, 10, 19, 13) }
+  # Sidekiq only schedules a job when its timestamp is in the future; a fixed
+  # calendar time would silently enqueue immediately once it has passed.
+  let(:send_at) { 1.hour.from_now.change(usec: 0) }
   let(:ledger_key) { "gp3664:ledger" }
   let(:content) { FeatureAnnouncementMailer::CAMPAIGNS.fetch("piracy_reports") }
   # The queued jobs were built separately, so their markup differs from the mailer's.
