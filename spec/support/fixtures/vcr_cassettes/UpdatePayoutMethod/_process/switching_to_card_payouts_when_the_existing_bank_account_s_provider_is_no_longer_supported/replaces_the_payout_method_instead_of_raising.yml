@@ -1,0 +1,407 @@
+---
+http_interactions:
+- request:
+    method: get
+    uri: https://api.stripe.com/v1/tokens/tok_visa_debit
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/12.5.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - "<STRIPE_CLIENT_USER_AGENT>"
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Mon, 19 Oct 2026 17:30:29 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '937'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET, HEAD, PUT, PATCH, POST, DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy:
+      - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
+        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=FdTr0B7LCwq_7IgLv9OQs6hnSKWHbhmw4-ivLIYi3s9WijdRQ8qjCA40uchh0-bcnD-C0jYHZH4lo7Oy;
+        report-to csp
+      Report-To:
+      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=FdTr0B7LCwq_7IgLv9OQs6hnSKWHbhmw4-ivLIYi3s9WijdRQ8qjCA40uchh0-bcnD-C0jYHZH4lo7Oy&t=1"}],"include_subdomains":true}'
+      Reporting-Endpoints:
+      - csp="https://q.stripe.com/csp-report-v2?q=FdTr0B7LCwq_7IgLv9OQs6hnSKWHbhmw4-ivLIYi3s9WijdRQ8qjCA40uchh0-bcnD-C0jYHZH4lo7Oy&t=1"
+      Request-Id:
+      - req_BoFeOiPYxpMy1e
+      Stripe-Notice:
+      - You are using an outdated API version (2023-10-16). We recommend upgrading
+        to the latest API version, 2026-09-30.endive. See https://docs.stripe.com/upgrades
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Priority-Routing-Enabled:
+      - 'true'
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      X-Wc:
+      - 3c3
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "id": "tok_1USKOGIBOqvOFDrf3rHNa11U",
+          "object": "token",
+          "card": {
+            "id": "card_1USKOGIBOqvOFDrfW0ov3huB",
+            "object": "card",
+            "address_city": null,
+            "address_country": null,
+            "address_line1": null,
+            "address_line1_check": null,
+            "address_line2": null,
+            "address_state": null,
+            "address_zip": null,
+            "address_zip_check": null,
+            "brand": "Visa",
+            "country": "US",
+            "currency": "usd",
+            "cvc_check": "unchecked",
+            "dynamic_last4": null,
+            "email": null,
+            "exp_month": 10,
+            "exp_year": 2027,
+            "fingerprint": "ZKA785EqNIB6mi55",
+            "funding": "debit",
+            "last4": "5556",
+            "metadata": {},
+            "name": null,
+            "networks": {
+              "preferred": null
+            },
+            "phone": null,
+            "regulated_status": "unregulated",
+            "tokenization_method": null,
+            "wallet": null
+          },
+          "client_ip": null,
+          "created": 1792431028,
+          "livemode": false,
+          "type": "card",
+          "used": false
+        }
+  recorded_at: Mon, 19 Oct 2026 17:30:29 GMT
+- request:
+    method: get
+    uri: https://api.stripe.com/v1/tokens/tok_1USKOGIBOqvOFDrf3rHNa11U
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/12.5.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_BoFeOiPYxpMy1e","request_duration_ms":344}}'
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - "<STRIPE_CLIENT_USER_AGENT>"
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Mon, 19 Oct 2026 17:30:29 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '937'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET, HEAD, PUT, PATCH, POST, DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy:
+      - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
+        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=22iUU6Xf9hI1Q-sa1_eoD5MK-Kh4IyCwqxXbOsxAXIxm7HX8aIK-po0jh1KyY3QW4kc0f6AQjkwwCxNj;
+        report-to csp
+      Report-To:
+      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=22iUU6Xf9hI1Q-sa1_eoD5MK-Kh4IyCwqxXbOsxAXIxm7HX8aIK-po0jh1KyY3QW4kc0f6AQjkwwCxNj&t=1"}],"include_subdomains":true}'
+      Reporting-Endpoints:
+      - csp="https://q.stripe.com/csp-report-v2?q=22iUU6Xf9hI1Q-sa1_eoD5MK-Kh4IyCwqxXbOsxAXIxm7HX8aIK-po0jh1KyY3QW4kc0f6AQjkwwCxNj&t=1"
+      Request-Id:
+      - req_QjYAFCkWpq8QjO
+      Stripe-Notice:
+      - You are using an outdated API version (2023-10-16). We recommend upgrading
+        to the latest API version, 2026-09-30.endive. See https://docs.stripe.com/upgrades
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Priority-Routing-Enabled:
+      - 'true'
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      X-Wc:
+      - 3c3
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "id": "tok_1USKOGIBOqvOFDrf3rHNa11U",
+          "object": "token",
+          "card": {
+            "id": "card_1USKOGIBOqvOFDrfW0ov3huB",
+            "object": "card",
+            "address_city": null,
+            "address_country": null,
+            "address_line1": null,
+            "address_line1_check": null,
+            "address_line2": null,
+            "address_state": null,
+            "address_zip": null,
+            "address_zip_check": null,
+            "brand": "Visa",
+            "country": "US",
+            "currency": "usd",
+            "cvc_check": "unchecked",
+            "dynamic_last4": null,
+            "email": null,
+            "exp_month": 10,
+            "exp_year": 2027,
+            "fingerprint": "ZKA785EqNIB6mi55",
+            "funding": "debit",
+            "last4": "5556",
+            "metadata": {},
+            "name": null,
+            "networks": {
+              "preferred": null
+            },
+            "phone": null,
+            "regulated_status": "unregulated",
+            "tokenization_method": null,
+            "wallet": null
+          },
+          "client_ip": null,
+          "created": 1792431028,
+          "livemode": false,
+          "type": "card",
+          "used": false
+        }
+  recorded_at: Mon, 19 Oct 2026 17:30:29 GMT
+- request:
+    method: post
+    uri: https://api.stripe.com/v1/customers
+    body:
+      encoding: UTF-8
+      string: description=&card=tok_1USKOGIBOqvOFDrf3rHNa11U&expand[0]=sources
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/12.5.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_QjYAFCkWpq8QjO","request_duration_ms":198}}'
+      Idempotency-Key:
+      - 70a55133-2181-4bbe-bb16-15db1b133124
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - "<STRIPE_CLIENT_USER_AGENT>"
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Mon, 19 Oct 2026 17:30:29 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '1713'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET, HEAD, PUT, PATCH, POST, DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy:
+      - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
+        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=22iUU6Xf9hI1Q-sa1_eoD5MK-Kh4IyCwqxXbOsxAXIxm7HX8aIK-po0jh1KyY3QW4kc0f6AQjkwwCxNj;
+        report-to csp
+      Idempotency-Key:
+      - 70a55133-2181-4bbe-bb16-15db1b133124
+      Original-Request:
+      - req_EJl5V26wd58HVT
+      Report-To:
+      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=22iUU6Xf9hI1Q-sa1_eoD5MK-Kh4IyCwqxXbOsxAXIxm7HX8aIK-po0jh1KyY3QW4kc0f6AQjkwwCxNj&t=1"}],"include_subdomains":true}'
+      Reporting-Endpoints:
+      - csp="https://q.stripe.com/csp-report-v2?q=22iUU6Xf9hI1Q-sa1_eoD5MK-Kh4IyCwqxXbOsxAXIxm7HX8aIK-po0jh1KyY3QW4kc0f6AQjkwwCxNj&t=1"
+      Request-Id:
+      - req_EJl5V26wd58HVT
+      Stripe-Notice:
+      - '2 notices for this request: (1) Legacy card and sources integrations are
+        deprecated. Migrate to PaymentMethods and PaymentIntents to maintain support
+        and access modern payment features. Consult the PaymentIntents transitioning
+        guides: https://docs.stripe.com/payments/payment-intents/migration and PaymentMethods
+        transitioning guide https://docs.stripe.com/payments/payment-methods/transitioning#compatibility
+        to update your integrations. (2) You are using an outdated API version (2023-10-16).
+        We recommend upgrading to the latest API version, 2026-09-30.endive. See https://docs.stripe.com/upgrades'
+      Stripe-Should-Retry:
+      - 'false'
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Priority-Routing-Enabled:
+      - 'true'
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      X-Wc:
+      - 3c3
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "id": "cus_VTGw6LQ3RWG3bD",
+          "object": "customer",
+          "address": null,
+          "balance": 0,
+          "created": 1792431029,
+          "currency": null,
+          "customer_account": null,
+          "default_source": "card_1USKOGIBOqvOFDrfW0ov3huB",
+          "delinquent": false,
+          "description": null,
+          "discount": null,
+          "email": null,
+          "invoice_prefix": "8QT8N2ZX",
+          "invoice_settings": {
+            "custom_fields": null,
+            "default_payment_method": null,
+            "footer": null,
+            "rendering_options": null
+          },
+          "livemode": false,
+          "metadata": {},
+          "name": null,
+          "next_invoice_sequence": 1,
+          "phone": null,
+          "preferred_locales": [],
+          "shipping": null,
+          "sources": {
+            "object": "list",
+            "data": [
+              {
+                "id": "card_1USKOGIBOqvOFDrfW0ov3huB",
+                "object": "card",
+                "address_city": null,
+                "address_country": null,
+                "address_line1": null,
+                "address_line1_check": null,
+                "address_line2": null,
+                "address_state": null,
+                "address_zip": null,
+                "address_zip_check": null,
+                "allow_redisplay": "unspecified",
+                "brand": "Visa",
+                "country": "US",
+                "customer": "cus_VTGw6LQ3RWG3bD",
+                "cvc_check": "pass",
+                "dynamic_last4": null,
+                "email": null,
+                "exp_month": 10,
+                "exp_year": 2027,
+                "fingerprint": "ZKA785EqNIB6mi55",
+                "funding": "debit",
+                "last4": "5556",
+                "metadata": {},
+                "name": null,
+                "phone": null,
+                "regulated_status": "unregulated",
+                "tokenization_method": null,
+                "wallet": null
+              }
+            ],
+            "has_more": false,
+            "total_count": 1,
+            "url": "/v1/customers/cus_VTGw6LQ3RWG3bD/sources"
+          },
+          "tax_exempt": "none",
+          "test_clock": null
+        }
+  recorded_at: Mon, 19 Oct 2026 17:30:29 GMT
+recorded_with: VCR 6.2.0
