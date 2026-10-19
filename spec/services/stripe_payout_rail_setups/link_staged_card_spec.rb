@@ -3,8 +3,8 @@
 require "spec_helper"
 
 # SDK double for Stripe's idempotent requests: a key seen in the last 24 hours with the same parameters
-# replays the stored response without applying anything; with other parameters Stripe refuses it. An
-# older or missing key applies. Account.update with a token replaces the account's external account.
+# replays the stored response, a 500 included, without applying anything; with other parameters Stripe
+# refuses it. An older or missing key applies. Account.update with a token replaces the external account.
 RSpec.shared_context "with an idempotent Stripe card-link double" do
   let(:stripe_double) { { tokens: {}, updates: {}, token_keys: [], update_keys: [], applied: [], external: nil, charges_enabled: false } }
 
@@ -25,8 +25,14 @@ RSpec.shared_context "with an idempotent Stripe card-link double" do
       prior = key && stripe_double[:updates][key]
       if prior && prior[:at] > 24.hours.ago
         raise Stripe::IdempotencyError.new("Keys for idempotent requests can only be used with the same parameters.") if prior[:params] != params
+        raise prior[:error] if prior[:error]
 
         next prior[:response]
+      end
+      if stripe_double.delete(:fail_next_update)
+        error = Stripe::APIError.new("An unknown error occurred", http_status: 500)
+        stripe_double[:updates][key] = { params:, error:, at: Time.current } if key
+        raise error
       end
       stripe_double[:applied] << { account_id:, token: params[:bank_account] }
       stripe_double[:external] = "card_synthetic_#{stripe_double[:applied].size}"
@@ -114,6 +120,31 @@ describe StripePayoutRailSetups::LinkStagedCard do
       expect(seller.reload.stripe_account).to eq(setup.merchant_account)
       expect(seller.active_bank_account).to eq(live_card)
     end
+  end
+
+  # Not a regression: the weekly sweep picks up awaiting card links on 49d35694 too. It shows that a
+  # setup Stripe answered with a 500 waits, fail-closed, rather than being stranded.
+  it "keeps a link Stripe answered with a 500 waiting while Stripe replays it, and the weekly sweep links it after Stripe forgets the key" do
+    stripe_double[:charges_enabled] = true
+    stripe_double[:fail_next_update] = true
+    setup = stage_card!
+    expect(StripePayoutRailSetups::Provision.new(setup).process.success).to be(true)
+    expect(setup.reload).to be_awaiting_card_link
+
+    expect { LinkStagedRailCardJob.new.perform(setup.id) }.to raise_error(LinkStagedRailCardJob::RetryLater)
+    expect(setup.reload).to be_awaiting_card_link
+    expect(stripe_double[:applied]).to be_empty
+    LinkStagedRailCardJob.jobs.clear
+
+    travel(25.hours)
+    RetryStripeRejectedPayoutSetupsJob.new.perform
+    expect(LinkStagedRailCardJob.jobs.map { _1["args"] }).to eq([[setup.id]])
+    LinkStagedRailCardJob.drain
+
+    expect(setup.reload).to be_prepared
+    expect(stripe_double[:applied].size).to eq(1)
+    expect(setup.bank_account.reload.stripe_bank_account_id).to eq(stripe_double[:external])
+    expect(setup.merchant_account.reload.charge_processor_alive?).to be(false)
   end
 
   it "replays the same token and link after a lost response, so the retry records the card Stripe holds" do
@@ -221,15 +252,19 @@ describe StripePayoutRailSetups::LinkStagedCard, "while an old attempt is writin
     false
   end
 
+  def hold_the_stripe_write
+    stripe_double[:during_update] = lambda do
+      @held << true
+      @proceed.pop(timeout: 30)
+    end
+  end
+
   it "makes a newer attempt that reclaims the expired lease wait for the write, then find the card linked" do
     setup = awaiting_card_setup
     stripe_double[:charges_enabled] = true
-    stripe_double[:during_update] = lambda do
-      @held << true
-      @proceed.pop
-    end
+    hold_the_stripe_write
     old = in_thread { described_class.new(StripePayoutRailSetup.find(setup.id)).process }
-    @held.pop
+    expect(@held.pop(timeout: 15)).to be(true)
     travel(StripePayoutRailSetups::Provision::ATTEMPT_LEASE + 1.minute)
 
     newer = in_thread { described_class.new(StripePayoutRailSetup.find(setup.id)).process }
@@ -243,6 +278,48 @@ describe StripePayoutRailSetups::LinkStagedCard, "while an old attempt is writin
     final = StripePayoutRailSetup.find(setup.id)
     expect(final).to be_prepared
     expect(BankAccount.find(final.bank_account_id).stripe_bank_account_id).to eq(stripe_double[:external])
+    expect(User.find(seller.id).stripe_account).to be_nil
+  end
+
+  it "lets an unrelated seller write finish and keeps it while the card is written to Stripe, and refuses activation meanwhile" do
+    setup = awaiting_card_setup
+    stripe_double[:charges_enabled] = true
+    hold_the_stripe_write
+    link = in_thread { described_class.new(StripePayoutRailSetup.find(setup.id)).process }
+    expect(@held.pop(timeout: 15)).to be(true)
+
+    seller_write = in_thread { User.find(seller.id).with_lock { User.find(seller.id).update!(payment_address: "seller-new-paypal@example.com") } }
+    expect(seller_write.join(5)).to eq(seller_write)
+    expect(activate(setup).error).to eq(:rail_setup_not_prepared)
+    @proceed << true
+
+    expect(link.value).to eq(:linked)
+    expect(stripe_double[:applied].size).to eq(1)
+    expect(StripePayoutRailSetup.find(setup.id)).to be_prepared
+    user = User.find(seller.id)
+    expect(user.payment_address).to eq("seller-new-paypal@example.com")
+    expect(user.stripe_account).to be_nil
+  end
+
+  it "makes a staff cancel wait for the card write, then end the setup and retire its account" do
+    setup = awaiting_card_setup
+    stripe_double[:charges_enabled] = true
+    hold_the_stripe_write
+    link = in_thread { described_class.new(StripePayoutRailSetup.find(setup.id)).process }
+    expect(@held.pop(timeout: 15)).to be(true)
+
+    cancel = in_thread do
+      StripePayoutRailSetups::Cancel.new(setup: StripePayoutRailSetup.find(setup.id), cancelled_by: User.find(team_member.id), reason_reference: "support-thread-synthetic-13").process
+    end
+    expect(lock_waiting?(cancel)).to be(true)
+    @proceed << true
+
+    expect(link.value).to eq(:linked)
+    expect(cancel.value.success).to be(true)
+    expect(stripe_double[:applied].size).to eq(1)
+    final = StripePayoutRailSetup.find(setup.id)
+    expect(final.state).to eq(StripePayoutRailSetup::FAILED)
+    expect(MerchantAccount.find(final.merchant_account_id)).not_to be_alive
     expect(User.find(seller.id).stripe_account).to be_nil
   end
 end

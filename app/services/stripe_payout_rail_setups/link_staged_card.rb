@@ -26,9 +26,8 @@ module StripePayoutRailSetups
 
     # Returns :linked, :awaiting_charges, :not_awaiting, :not_eligible, :failed, :retry_later or
     # :attempt_in_progress.
-    # A retry repeats the whole link with the same idempotency keys, so within Stripe's 24 hours it
-    # replays the first token and update; after that a new token replaces the account's external
-    # account, as the ordinary card linker relies on, so it never adds a second card.
+    # A retry repeats the link under the same idempotency keys. Once Stripe has dropped them, a new token
+    # replaces the account's external account, as the ordinary card linker relies on, never adding one.
     def process
       return :not_eligible unless setup.provider_work_allowed?
 
@@ -48,9 +47,9 @@ module StripePayoutRailSetups
         return :awaiting_charges
       end
 
-      # The Stripe write holds the seller lock that Activate, Cancel and abandonment take, and the setup row
-      # a newer attempt must update to reclaim the lease, so a worker that lost the attempt writes nothing.
-      linked = setup.user.with_lock do
+      # Every competing transition (a lease reclaim, Activate, Cancel, abandonment) updates this setup row,
+      # so holding it fences out a worker that lost the attempt. Not the seller row: Stripe can take minutes.
+      linked = StripePayoutRailSetup.transaction do
         current = StripePayoutRailSetup.lock.find(setup.id)
         next false unless current.awaiting_card_link? && current.attempt_token == token
 

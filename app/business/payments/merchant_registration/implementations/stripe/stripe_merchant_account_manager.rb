@@ -3603,8 +3603,9 @@ module StripeMerchantAccountManager
 
   # Attaches a StripePayoutRailSetup's debit card to that setup's own prepared account once Stripe
   # has enabled charges on it. The card stays a deleted local row and the account stays unlive.
-  # The keys belong to the setup and card, so a retry after a lost response replays the first token and
-  # link (Stripe keeps keys for 24 hours) instead of replacing the card again.
+  # Keyed to the setup and card, never the attempt: a request Stripe may still be running must share its
+  # key with every retry, or it could land after a newer link. Stripe replays the first result (a 500
+  # too) for 24 hours; the weekly payout-setup sweep picks up a setup still waiting after that.
   def self.link_staged_rail_card!(card_bank_account, stripe_account, rail_setup:, passphrase:)
     key = "rail-setup-#{rail_setup.id}-card-#{card_bank_account.id}"
     token = Stripe::Token.create({ customer: card_bank_account.credit_card.stripe_customer_id },
