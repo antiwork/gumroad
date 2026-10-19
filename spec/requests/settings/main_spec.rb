@@ -249,37 +249,37 @@ describe("Main Settings Scenario", type: :system, js: true) do
     it "starts off, and saves the choice without touching personalized product announcements" do
       state = -> { FeatureAnnouncementSubscription.state_for(user) }
       visit settings_main_path
-      expect(page).to have_unchecked_field("Feature announcements")
+      expect(page).to have_unchecked_field("Gumroad feature announcements")
 
-      check "Feature announcements"
+      check "Gumroad feature announcements"
       click_on "Update settings"
       wait_until_true(sleep_interval: 0.1) { state.call == { subscribed: true, version: 1 } }
       expect(page).to have_alert(text: "Your account has been updated!")
       expect(user.reload.announcement_notification_enabled).to be(true)
 
       refresh
-      uncheck "Feature announcements", checked: true
+      uncheck "Gumroad feature announcements", checked: true
       click_on "Update settings"
       wait_until_true(sleep_interval: 0.1) { state.call == { subscribed: false, version: 2 } }
 
       # Saving again without a reload uses the version the redirect brought back.
-      check "Feature announcements", unchecked: true
+      check "Gumroad feature announcements", unchecked: true
       click_on "Update settings"
       wait_until_true(sleep_interval: 0.1) { state.call == { subscribed: true, version: 3 } }
-      expect(page).to have_checked_field("Feature announcements")
+      expect(page).to have_checked_field("Gumroad feature announcements")
     end
 
     it "does not undo an unsubscribe made after the page loaded" do
       FeatureAnnouncementSubscription.update_from_settings!(user, subscribed: true, rendered_version: 0)
       visit settings_main_path
-      expect(page).to have_checked_field("Feature announcements")
+      expect(page).to have_checked_field("Gumroad feature announcements")
 
       FeatureAnnouncementSubscription.unsubscribe!(user, source: "unsubscribe_link")
       uncheck "Reviews", checked: true
       click_on "Update settings"
 
       expect(page).to have_alert(text: "Your account has been updated, but Feature announcements changed elsewhere, so that setting was not saved.")
-      expect(page).to have_unchecked_field("Feature announcements")
+      expect(page).to have_unchecked_field("Gumroad feature announcements")
       expect(FeatureAnnouncementSubscription.state_for(user)).to eq(subscribed: false, version: 2)
       expect(user.reload.disable_reviews_email).to be(true)
 
@@ -287,6 +287,35 @@ describe("Main Settings Scenario", type: :system, js: true) do
       click_on "Update settings"
       wait_until_true(sleep_interval: 0.1) { !user.reload.disable_reviews_email }
       expect(FeatureAnnouncementSubscription.state_for(user)).to eq(subscribed: false, version: 2)
+    end
+  end
+
+  describe "notifications table" do
+    def notification_row(name) = find("th", exact_text: name).find(:xpath, "..")
+
+    it "keeps the email-only rows' empty cell under the Mobile column on a wide screen" do
+      visit settings_main_path
+
+      mobile_column_x = find("th", exact_text: "Mobile").rect.x
+      ["Personalized product announcements", "Gumroad feature announcements", "Comments", "Reviews"].each do |name|
+        expect(notification_row(name).all("td").last.rect.x).to eq(mobile_column_x)
+      end
+    end
+
+    it "shows a Mobile section only on the cards that have a mobile toggle", :mobile_view do
+      visit settings_main_path
+
+      within(notification_row("Purchases")) do
+        expect(page).to have_text("Mobile")
+        expect(page).to have_field(type: "checkbox", count: 2)
+      end
+      ["Personalized product announcements", "Gumroad feature announcements", "Comments", "Reviews"].each do |name|
+        within(notification_row(name)) do
+          expect(page).to have_text("Email")
+          expect(page).to have_no_text("Mobile")
+          expect(page).to have_field(type: "checkbox", count: 1)
+        end
+      end
     end
   end
 
