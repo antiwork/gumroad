@@ -700,6 +700,53 @@ it("uploads a snapshot copy of a small picked file and resets the toolbar input"
   expect(valueWrites).toEqual([""]);
 });
 
+const pickedVideos = (names: string[]) => names.map((name) => new File(["x"], name, { type: "video/mp4" }));
+
+const fileEmbedGroupOrder = () => {
+  const groups: string[][] = [];
+  getMountedEditor().state.doc.forEach((node) => {
+    if (node.type.name !== "fileEmbedGroup") return;
+    const ids: string[] = [];
+    node.forEach((child) => ids.push(String(child.attrs.id)));
+    groups.push(ids);
+  });
+  return groups;
+};
+
+it("keeps the page order when the seller uploads files in several batches", async () => {
+  const { product, input } = await renderToolbarPicker();
+
+  for (const batch of [
+    ["a1.mp4", "a2.mp4", "a3.mp4"],
+    ["b1.mp4", "b2.mp4", "b3.mp4"],
+  ]) {
+    attachToolbarFiles(input, pickedVideos(batch));
+    await act(async () => {
+      fireEvent.change(input);
+    });
+  }
+
+  // product.files is appended in pick order, so the page must list the batches in that order.
+  expect(fileEmbedGroupOrder().flat()).toEqual(product.files.map((file) => file.id));
+});
+
+it("keeps the page order when the seller uploads one file at a time", async () => {
+  const { product, input } = await renderToolbarPicker();
+
+  for (const name of ["a.mp4", "b.mp4", "c.mp4"]) {
+    attachToolbarFile(input, new File(["x"], name, { type: "video/mp4" }));
+    await act(async () => {
+      fireEvent.change(input);
+    });
+  }
+
+  const embedded: string[] = [];
+  getMountedEditor().state.doc.forEach((node) => {
+    if (node.type.name === "fileEmbed") embedded.push(String(node.attrs.id));
+  });
+  expect(embedded).toEqual(product.files.map((file) => file.id));
+});
+
 it("does not reset an over-budget pick until Evaporate completes", async () => {
   const { input } = await renderToolbarPicker();
   const picked = new File(["x"], "huge.mp4", { type: "video/mp4" });

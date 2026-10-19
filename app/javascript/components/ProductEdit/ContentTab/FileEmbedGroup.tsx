@@ -1,7 +1,6 @@
 import { Check, ChevronDown, ChevronRight, Cog, Dropbox as DropboxIcon, Folder, Pencil } from "@boxicons/react";
 import { Node as TiptapNode } from "@tiptap/core";
 import { Node as ProseMirrorNode } from "@tiptap/pm/model";
-import { NodeSelection } from "@tiptap/pm/state";
 import { NodeViewContent, NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
 import * as React from "react";
 
@@ -15,6 +14,7 @@ import { assertResponseError } from "$app/utils/request";
 import { Button, NavigationButton } from "$app/components/Button";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { selectionAfterInsertedNode } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 import { NodeActionsMenu, NodeActionsWrapper } from "$app/components/TiptapExtensions/NodeActionsMenu";
 import { Input } from "$app/components/ui/Input";
@@ -332,10 +332,9 @@ export const FileEmbedGroup = TiptapNode.create<{ getConfig: () => FileGroupConf
           const uid = GuidGenerator.generate();
           const node = this.type.create({ uid }, content);
           this.storage.lastCreatedUid = uid;
-          const insertAt = Math.min(Math.max(pos - 1, 0), transaction.doc.content.size);
+          const insertAt = Math.min(Math.max(pos, 0), transaction.doc.content.size);
           transaction.insert(insertAt, node);
-          if (transaction.doc.nodeAt(insertAt))
-            transaction.setSelection(NodeSelection.create(transaction.doc, insertAt));
+          transaction.setSelection(selectionAfterInsertedNode(transaction.doc, insertAt + node.nodeSize));
           dispatch?.(transaction);
           return true;
         },
