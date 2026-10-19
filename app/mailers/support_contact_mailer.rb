@@ -16,6 +16,8 @@ class SupportContactMailer < ApplicationMailer
     "image/webp" => "webp",
   }.freeze
 
+  MAX_HEADER_TEXT_LENGTH = 20
+
   # The sender is always noreply@gumroad.com, so Gmail threads on subject alone;
   # a fixed subject merged unrelated submissions into one conversation. The
   # submitter plus a per-submission token keep each message separate.
@@ -67,7 +69,7 @@ class SupportContactMailer < ApplicationMailer
 
         arg.to_h do |key, value|
           value = value.size if key == :attachments
-          value = value.first(20) if value.is_a?(String)
+          value = value.first(MAX_HEADER_TEXT_LENGTH) if value.is_a?(String)
           [key, value]
         end
       end
