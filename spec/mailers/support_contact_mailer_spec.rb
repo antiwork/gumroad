@@ -100,6 +100,56 @@ describe SupportContactMailer do
       it "keeps the email attachment-free when nothing was uploaded" do
         expect(build.attachments).to be_empty
       end
+
+      it "names repeated uploads apart instead of sending several files with one name" do
+        mail = build_with_attachments(["image.png", "image.png", "image.png"])
+
+        expect(mail.attachments.map(&:filename)).to eq(["image.png", "image-2.png", "image-3.png"])
+        body = mail.html_part ? mail.html_part.decoded : mail.body.decoded
+        expect(body).to include("image.png, image-2.png, image-3.png")
+      end
+
+      it "drops whatever extension the upload name claims" do
+        mail = build_with_attachments(["archive.gz", "notes.txt.zip"])
+
+        expect(mail.attachments.map(&:filename)).to eq(["archive.png", "notes_txt.png"])
+      end
+    end
+
+    context "with the largest submission the form accepts" do
+      let(:screenshots) { Array.new(2) { "\x89PNG\r\n\x1A\n".b + Random.bytes(HelpCenter::ContactsController::MAX_ATTACHMENT_BYTES - 8) } }
+      let(:encoded) { screenshots.map { Base64.strict_encode64(_1) } }
+
+      def deliver_with(email_provider)
+        options = MailerInfo::DeliveryMethod.options(domain: :gumroad, email_provider:)
+        allow(MailerInfo).to receive(:random_delivery_method_options).and_return(options)
+
+        described_class.contact_form(
+          email: "buyer@example.com",
+          category: "technical issue",
+          message: "a" * HelpCenter::ContactsController::MAX_MESSAGE_LENGTH,
+          attachments: encoded.map { { filename: "image.png", mime_type: "image/png", content: _1 } }
+        ).message
+      end
+
+      it "keeps the SendGrid header inside the provider's custom-args limit" do
+        mail = deliver_with(MailerInfo::EMAIL_PROVIDER_SENDGRID)
+        header = mail.header[MailerInfo::SENDGRID_X_SMTPAPI_HEADER].value
+
+        expect(header.bytesize).to be < 10_000
+        expect(header).not_to include(encoded.first.first(64))
+        expect(JSON.parse(header).dig("unique_args", "mailer_args")).to include("attachments")
+        expect(mail.attachments.map { _1.body.decoded }).to eq(screenshots)
+      end
+
+      it "keeps the image bytes out of the encrypted Resend header" do
+        mail = deliver_with(MailerInfo::EMAIL_PROVIDER_RESEND)
+        mailer_args = MailerInfo.decrypt(mail.header[MailerInfo.header_name(:mailer_args)].value)
+
+        expect(mailer_args.bytesize).to be < 1_000
+        expect(mailer_args).not_to include(encoded.first.first(64))
+        expect(mail.attachments.map { _1.body.decoded }).to eq(screenshots)
+      end
     end
   end
 end

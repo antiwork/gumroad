@@ -7,6 +7,8 @@
 class SupportContactMailer < ApplicationMailer
   layout "layouts/email"
 
+  self.delivery_job = SupportContactMailDeliveryJob
+
   ATTACHMENT_EXTENSIONS = {
     "image/png" => "png",
     "image/jpeg" => "jpg",
@@ -47,8 +49,28 @@ class SupportContactMailer < ApplicationMailer
     # the extension of the verified type — never the supplied path or extension.
     def attachment_filename(attachment, index)
       extension = ATTACHMENT_EXTENSIONS.fetch(attachment[:mime_type], "png")
-      stem = File.basename(attachment[:filename].to_s).sub(/\.[^.\z]*\z/, "").gsub(/[^A-Za-z0-9_-]/, "_").first(60)
+      stem = File.basename(attachment[:filename].to_s, ".*").gsub(/[^A-Za-z0-9_-]/, "_").first(60)
       stem = "screenshot-#{index + 1}" if stem.blank?
-      "#{stem}.#{extension}"
+      # Browsers name every pasted screenshot image.png.
+      filename = "#{stem}.#{extension}"
+      copy = 1
+      filename = "#{stem}-#{copy += 1}.#{extension}" while @attachment_filenames.include?(filename)
+      filename
+    end
+
+    # MailerInfo copies the mailer args into provider headers but only trims
+    # top-level strings. Everything here is a keyword, so without this the
+    # message and the screenshots' base64 end up in X-SMTPAPI / X-GUM-Mailer-Args.
+    def set_custom_headers(mailer_action, mailer_args)
+      header_args = mailer_args.map do |arg|
+        next arg unless arg.is_a?(Hash)
+
+        arg.to_h do |key, value|
+          value = value.size if key == :attachments
+          value = value.first(20) if value.is_a?(String)
+          [key, value]
+        end
+      end
+      super(mailer_action, header_args)
     end
 end

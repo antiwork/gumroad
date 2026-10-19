@@ -178,6 +178,71 @@ describe "Help Center contact form", type: :request do
       expect(response).to have_http_status(:unprocessable_entity)
       expect(response.parsed_body["error"]).to include("total")
     end
+
+    def png_of_size(bytes)
+      "\x89PNG\r\n\x1A\n".b + Random.bytes(bytes - 8)
+    end
+
+    it "rejects an image one byte over 3 MB without reading it" do
+      expect_any_instance_of(ActionDispatch::Http::UploadedFile).not_to receive(:read)
+
+      post help_center_contact_path, params: valid_params.merge(attachments: [image_upload(bytes: png_of_size(3.megabytes + 1))])
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body["error"]).to eq("Each image must be smaller than 3 MB.")
+    end
+
+    it "rejects images that together pass 6 MB without reading any of them" do
+      expect_any_instance_of(ActionDispatch::Http::UploadedFile).not_to receive(:read)
+
+      uploads = Array.new(3) { image_upload(bytes: png_of_size(2.megabytes + 1)) }
+      post help_center_contact_path, params: valid_params.merge(attachments: uploads)
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body["error"]).to eq("Attachments must total less than 6 MB.")
+    end
+
+    it "types every supported image by its bytes, whatever the browser declared" do
+      images = {
+        "image/jpeg" => "\xFF\xD8\xFF\xE0".b + Random.bytes(32),
+        "image/gif" => "GIF89a".b + Random.bytes(32),
+        "image/webp" => "RIFF\x00\x00\x00\x00WEBPVP8 ".b + Random.bytes(32),
+      }
+      uploads = images.values.map { image_upload(bytes: _1, filename: "notes.txt", content_type: "text/plain") }
+
+      post help_center_contact_path, params: valid_params.merge(attachments: uploads)
+
+      expect(response).to have_http_status(:ok)
+      delivery_args = ActiveJob::Base.queue_adapter.enqueued_jobs.last[:args].last.fetch("args").last
+      expect(delivery_args["attachments"].map { _1["mime_type"] }).to eq(images.keys)
+      expect(delivery_args["attachments"].map { Base64.strict_decode64(_1["content"]) }).to eq(images.values)
+    end
+
+    it "delivers every screenshot byte through the queued job without logging the bytes" do
+      screenshots = Array.new(2) { png_of_size(HelpCenter::ContactsController::MAX_ATTACHMENT_BYTES) }
+      log = StringIO.new
+      original_logger = ActiveJob::Base.logger
+      ActiveJob::Base.logger = ActiveSupport::Logger.new(log, level: :info)
+
+      post help_center_contact_path, params: valid_params.merge(attachments: screenshots.map { image_upload(bytes: _1, filename: "image.png") })
+      expect(response).to have_http_status(:ok)
+
+      # Sidekiq stores the serialized job as JSON, so run exactly what would come back out of Redis.
+      job = ActiveJob::Base.queue_adapter.enqueued_jobs.select { _1["arguments"].first == "SupportContactMailer" }.sole
+      wire = JSON.parse(JSON.generate(job.select { |key, _| key.is_a?(String) }))
+      expect { ActiveJob::Base.execute(wire) }.to change { ActionMailer::Base.deliveries.size }.by(1)
+
+      mail = ActionMailer::Base.deliveries.last
+      expect(mail.attachments.map(&:filename)).to eq(["image.png", "image-2.png"])
+      expect(mail.attachments.map { _1.body.decoded }).to eq(screenshots)
+      expect(mail.header.fields.sum { _1.to_s.bytesize }).to be < 20_000
+
+      expect(log.string).to include("Enqueued", "Performing")
+      expect(log.string).not_to include(Base64.strict_encode64(screenshots.first).first(64))
+      expect(log.string.bytesize).to be < 20_000
+    ensure
+      ActiveJob::Base.logger = original_logger
+    end
   end
 
   describe "rate limiting" do

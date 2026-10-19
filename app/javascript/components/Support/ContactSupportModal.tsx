@@ -22,16 +22,17 @@ const MAX_ATTACHMENT_BYTES = 3 * 1024 * 1024;
 const MAX_TOTAL_ATTACHMENT_BYTES = 6 * 1024 * 1024;
 const ACCEPTED_ATTACHMENT_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
 
-// The message is kept in localStorage so closing the modal or navigating away
-// from the Help Center cannot throw away text the user already wrote. The key is
-// scoped to the signed-in account so a shared browser never hands one person's
-// unpublished support message to the next.
-const draftStorageKey = (userId: string | null) => `gumroad:help-center:contact-draft:${userId ?? "anonymous"}`;
+// The message text (not the screenshots) is kept in sessionStorage so closing the
+// modal, navigating or reloading the tab cannot throw it away. sessionStorage
+// ends with the tab, so a shared browser never shows it to the next visitor, and
+// the key keeps signed-in accounts and anonymous visitors apart within a tab.
+const DRAFT_KEY_PREFIX = "gumroad:help-center:contact-draft:";
+const draftStorageKey = (userId: string | null) => `${DRAFT_KEY_PREFIX}${userId ?? "anonymous"}`;
 
 const readDraft = (key: string) => {
   if (typeof window === "undefined") return "";
   try {
-    return window.localStorage.getItem(key) ?? "";
+    return window.sessionStorage.getItem(key) ?? "";
   } catch {
     // Storage can be unavailable (private mode, blocked cookies) — a lost draft
     // is not worth failing the form over.
@@ -41,8 +42,19 @@ const readDraft = (key: string) => {
 
 const writeDraft = (key: string, message: string) => {
   try {
-    if (message) window.localStorage.setItem(key, message);
-    else window.localStorage.removeItem(key);
+    if (message) window.sessionStorage.setItem(key, message);
+    else window.sessionStorage.removeItem(key);
+  } catch {
+    // Ignore: see readDraft.
+  }
+};
+
+// Drafts used to live in localStorage, where the anonymous one outlived the
+// visitor who wrote it.
+const discardLocalStorageDrafts = () => {
+  try {
+    const keys = Array.from({ length: window.localStorage.length }, (_, index) => window.localStorage.key(index));
+    for (const key of keys) if (key?.startsWith(DRAFT_KEY_PREFIX)) window.localStorage.removeItem(key);
   } catch {
     // Ignore: see readDraft.
   }
@@ -56,15 +68,21 @@ const formatBytes = (bytes: number) =>
 // Center is the first mount) — render <ContactSupportModal> with your own
 // trigger and pass the page's path as `referrerPath` so support can see where
 // the user came from.
-export const ContactSupportModal = ({
-  open,
-  onClose,
-  referrerPath,
-}: {
+type ContactSupportModalProps = {
   open: boolean;
   onClose: () => void;
   referrerPath?: string;
-}) => {
+};
+
+export const ContactSupportModal = (props: ContactSupportModalProps) => {
+  const loggedInUser = useLoggedInUser();
+  React.useEffect(discardLocalStorageDrafts, []);
+  // Remount on an account change, so nothing typed or attached under one
+  // identity is shown to, or saved under the draft key of, the next one.
+  return <ContactSupportForm key={loggedInUser?.id ?? "anonymous"} {...props} />;
+};
+
+const ContactSupportForm = ({ open, onClose, referrerPath }: ContactSupportModalProps) => {
   const loggedInUser = useLoggedInUser();
   const uid = React.useId();
   const draftKey = draftStorageKey(loggedInUser?.id ?? null);
@@ -105,12 +123,11 @@ export const ContactSupportModal = ({
   };
 
   // A screenshot pasted into the textarea arrives as a clipboard file, not as
-  // text — pick it up as an attachment instead of silently dropping it.
+  // text — pick it up as an attachment instead of silently dropping it. The paste
+  // itself goes ahead, so any text copied alongside the image still lands.
   const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const pasted = Array.from(e.clipboardData.files).filter((file) => file.type.startsWith("image/"));
-    if (pasted.length === 0) return;
-    e.preventDefault();
-    addFiles(pasted);
+    if (pasted.length > 0) addFiles(pasted);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
