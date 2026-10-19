@@ -1861,6 +1861,47 @@ describe UrlRedirectsController, inertia: true do
       expect(response.parsed_body["files"]).to eq(@product.product_files.map { { "url" => "https://example.com/#{_1.display_name}.pdf", "filename" => _1.s3_filename } })
     end
 
+    context "when this buyer was granted the download for a stream-only file" do
+      let(:stream_only_file) { create(:streamable_video, link: @product, stream_only: true) }
+      let(:url_redirect) { UrlRedirect.find_by(token: @token) }
+
+      before do
+        ProductFileDownloadGrant.create!(url_redirect:, product_file: stream_only_file)
+        allow_any_instance_of(UrlRedirect).to receive(:signed_location_for_file).with(stream_only_file).and_return("https://example.com/granted.mp4")
+      end
+
+      it "serves the download" do
+        get :download_product_files, format: :json, params: { product_file_ids: [stream_only_file.external_id], id: @token }
+
+        expect(response).to have_http_status(:success)
+        expect(response.parsed_body["files"].sole["url"]).to eq("https://example.com/granted.mp4")
+      end
+
+      it "refuses a second buyer of the same product" do
+        other_token = create(:url_redirect, purchase: create(:purchase, link: @product)).token
+
+        expect do
+          get :download_product_files, format: :json, params: { product_file_ids: [stream_only_file.external_id], id: other_token }
+        end.to raise_error(ActionController::RoutingError)
+      end
+
+      it "refuses after the purchase is refunded" do
+        url_redirect.purchase.update!(stripe_refunded: true)
+
+        expect do
+          get :download_product_files, format: :json, params: { product_file_ids: [stream_only_file.external_id], id: @token }
+        end.to raise_error(ActionController::RoutingError)
+      end
+
+      it "refuses after access is revoked" do
+        url_redirect.purchase.update!(is_access_revoked: true)
+
+        get :download_product_files, format: :json, params: { product_file_ids: [stream_only_file.external_id], id: @token }
+
+        expect(response).to redirect_to(url_redirect_expired_page_path(@token))
+      end
+    end
+
     it "redirects to the first product file if the format is HTML" do
       file = create(:product_file, link: @product)
       expect_any_instance_of(UrlRedirect).to receive(:signed_location_for_file).with(file).and_return("https://example.com/file.srt")

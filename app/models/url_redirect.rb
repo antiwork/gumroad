@@ -16,6 +16,7 @@ class UrlRedirect < ApplicationRecord
   belongs_to :imported_customer, optional: true
   has_many :stamped_pdfs
   has_many :alive_stamped_pdfs, -> { alive }, class_name: "StampedPdf"
+  has_many :product_file_download_grants, dependent: :delete_all
 
   delegate :rental_expired?, to: :purchase, allow_nil: true
 
@@ -431,10 +432,20 @@ class UrlRedirect < ApplicationRecord
 
   def is_file_downloadable?(product_file)
     return false if product_file.external_link?
-    return false if product_file.stream_only?
+    # Checked before the grant: a rental's window is the product, and downloading would outlast it.
     return false if product_file.streamable? && is_rental
+    return true if download_granted_for?(product_file)
+    return false if product_file.stream_only?
 
     true
+  end
+
+  # True only for the file this buyer was granted, so one buyer's download never reopens the
+  # seller's per-file flag for anyone else.
+  def download_granted_for?(product_file)
+    return false if product_file.id.blank?
+
+    granted_product_file_ids.include?(product_file.id)
   end
 
   def mark_rental_as_viewed!
@@ -560,6 +571,19 @@ class UrlRedirect < ApplicationRecord
   private
     def set_token
       self.token ||= self.class.generate_new_token
+    end
+
+    # One query per redirect however many files the download page maps, and no query when the
+    # association was preloaded.
+    def granted_product_file_ids
+      @granted_product_file_ids ||= begin
+        ids = if association(:product_file_download_grants).loaded?
+          product_file_download_grants.map(&:product_file_id)
+        else
+          product_file_download_grants.pluck(:product_file_id)
+        end
+        ids.to_set
+      end
     end
 
     # Only when no alive row exists: queued rows stay the worker's and failed keeps its no-retry

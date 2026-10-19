@@ -512,6 +512,14 @@ Rails.application.routes.draw do
               get "files/:file_id/download_url", action: :file_download, as: :file_download
             end
           end
+
+          # Per-buyer download grants for a file whose seller-facing download flag is off.
+          resources :url_redirects, only: [:show] do
+            member do
+              post :grant_download
+              delete :revoke_download
+            end
+          end
         end
 
         namespace :grmc do

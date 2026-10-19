@@ -37,6 +37,10 @@ module BasePrice::Recurrence
     EVERY_TWO_YEARS => 7.days
   }.freeze
 
+  # Extra notice for renewals of 12+ months (UK DMCC Act s.258), on top of the final reminder above.
+  LONG_RENEWAL_THRESHOLD_IN_MONTHS = 12
+  LONG_RENEWAL_ADVANCE_REMINDER_EMAIL_DAYS = 30.days
+
   PERMITTED_PARAMS = ALLOWED_RECURRENCES.inject({}) do |c, recurrence|
     # TODO: :product_edit_react cleanup
     c.merge!(recurrence.to_sym => [:enabled, :price, :price_cents, :suggested_price, :suggested_price_cents])
@@ -60,6 +64,17 @@ module BasePrice::Recurrence
 
   def self.renewal_reminder_email_days(recurrence)
     RECURRENCE_TO_RENEWAL_REMINDER_EMAIL_DAYS[recurrence]
+  end
+
+  def self.renewal_advance_reminder_email_days(recurrence)
+    return unless number_of_months_in_recurrence(recurrence).to_i >= LONG_RENEWAL_THRESHOLD_IN_MONTHS
+
+    LONG_RENEWAL_ADVANCE_REMINDER_EMAIL_DAYS
+  end
+
+  # Days before a renewal on which the buyer is emailed, earliest first.
+  def self.renewal_reminder_lead_days(recurrence)
+    [renewal_advance_reminder_email_days(recurrence), renewal_reminder_email_days(recurrence)].compact.map { _1.in_days.to_i }
   end
 
   def self.seconds_in_recurrence(recurrence)

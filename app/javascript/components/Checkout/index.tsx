@@ -16,6 +16,7 @@ import {
   isSingleChargeDuration,
   recurrenceNames,
   recurrenceDurationLabels,
+  renewalReminderNotice,
 } from "$app/utils/recurringPricing";
 
 import { Button, NavigationButton } from "$app/components/Button";
@@ -1234,6 +1235,12 @@ const CartItemComponent = ({
               Remove
             </Button>
           </CartItemActions>
+          {item.recurrence && !isGift && !isSingleChargeDuration(item.recurrence, item.product.duration_in_months)
+            ? (() => {
+                const notice = renewalReminderNotice(item.product.recurrences, item.recurrence);
+                return notice ? <span className="text-sm">{notice}</span> : null;
+              })()
+            : null}
         </CartItemFooter>
       </CartItemMain>
       {/* Cap this column at half the row so a long price string (e.g.
