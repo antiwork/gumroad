@@ -252,8 +252,9 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
     # Locks users before the follower (the order the gate and Settings use), then rechecks everything: the
     # follow is still this seller's with the same link and address, and the address still has one confirmed
     # account. Locking every confirmed account at the address keeps another from being confirmed there until
-    # this commits. A concurrent preference write is caught by the unique key, and a buyer opt-out ends in
-    # Follower.unsubscribe, which waits on the follower lock.
+    # this commits. A copy then locks the cutover row before the preference, as every writer does. A concurrent
+    # preference write is caught by the unique key, and a buyer opt-out ends in Follower.unsubscribe, which
+    # waits on the follower lock.
     def migrate(seller, cutover, follower)
       return :skipped unless VERIFIED_SOURCES.key?(source_label(follower))
 
@@ -277,6 +278,9 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
         end
         next outcome unless outcome == :eligible
 
+        # The cutover row before the preference, the order an opt-out uses when it locks the row first, so the
+        # two queue on the row instead of each holding what the other waits for.
+        FeatureAnnouncementNewsletterCutover.where(id: cutover.id).lock.pick(:id)
         FeatureAnnouncementSubscription.create!(user_id: identity.id, subscribed: true, source: "newsletter_migration")
         FeatureAnnouncementNewsletterCutover.where(id: cutover.id)
           .update_all(["migrated_count = migrated_count + 1, cursor_follower_id = GREATEST(cursor_follower_id, ?), updated_at = ?", current.id, Time.current])

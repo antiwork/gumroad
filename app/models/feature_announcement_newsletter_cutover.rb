@@ -85,8 +85,8 @@ class FeatureAnnouncementNewsletterCutover < ApplicationRecord
         next if email.blank? || !covers?(seller_id)
 
         follower = Follower.where(followed_id: seller_id, email:).lock("FOR SHARE").first
-        # The copy locks the cutover row after writing a preference, so the common path checks without locking.
-        # Without a row the barrier holds prepare! back instead, and the copy then reads this opt-out.
+        # A visible tracking row needs no lock, so the common path never waits on retire!. Otherwise the barrier
+        # either holds prepare! back (no row, so the copy then reads this opt-out) or finds a row this snapshot missed.
         next unless tracks_opt_outs_for?(seller_id) || TRACKING_STATES.include?(locked_state(seller_id))
 
         user = follower ? subscriber_for(follower) : only_confirmed_account(email)
