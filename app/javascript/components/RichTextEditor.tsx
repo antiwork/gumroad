@@ -69,6 +69,19 @@ export const selectionAfterInsertedNode = (doc: ProseMirrorNode, afterInserted: 
   return new GapCursor(doc.resolve(afterInserted));
 };
 
+// Where the node carrying `uid` ends. A block inserted into the middle of a text block splits it,
+// so the position the block was inserted at is not the position it landed at, and neither is the
+// transaction mapping.
+export const endOfNodeWithUid = (doc: ProseMirrorNode, uid: string): number | null => {
+  let end: number | null = null;
+  doc.descendants((node, pos) => {
+    if (end !== null) return false;
+    if (node.attrs.uid === uid) end = pos + node.nodeSize;
+    return end === null;
+  });
+  return end;
+};
+
 export type ImageUploadSettings = {
   allowedExtensions: string[];
   onUpload: (file: File, src?: string) => Promise<string> | undefined;

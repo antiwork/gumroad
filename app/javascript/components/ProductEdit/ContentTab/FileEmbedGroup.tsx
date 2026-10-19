@@ -14,7 +14,7 @@ import { assertResponseError } from "$app/utils/request";
 import { Button, NavigationButton } from "$app/components/Button";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
-import { selectionAfterInsertedNode } from "$app/components/RichTextEditor";
+import { endOfNodeWithUid, selectionAfterInsertedNode } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 import { NodeActionsMenu, NodeActionsWrapper } from "$app/components/TiptapExtensions/NodeActionsMenu";
 import { Input } from "$app/components/ui/Input";
@@ -334,7 +334,9 @@ export const FileEmbedGroup = TiptapNode.create<{ getConfig: () => FileGroupConf
           this.storage.lastCreatedUid = uid;
           const insertAt = Math.min(Math.max(pos, 0), transaction.doc.content.size);
           transaction.insert(insertAt, node);
-          transaction.setSelection(selectionAfterInsertedNode(transaction.doc, insertAt + node.nodeSize));
+          // A block inserted inside a text block splits it, so the group can land after `insertAt`.
+          const insertedEnd = endOfNodeWithUid(transaction.doc, uid) ?? insertAt + node.nodeSize;
+          transaction.setSelection(selectionAfterInsertedNode(transaction.doc, insertedEnd));
           dispatch?.(transaction);
           return true;
         },
