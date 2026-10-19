@@ -3286,6 +3286,100 @@ class LinksControllerUpdateTest < ActionController::TestCase
     assert_equal "Sorry, shipping destinations have to be unique.", response.parsed_body["error_message"]
   end
 
+  # The editor posts JSON with the whole product, destinations included.
+  def shipping_exclusion_update_params(**params)
+    {
+      id: @product.unique_permalink,
+      shipping_destinations: [{ country_code: Product::Shipping::ELSEWHERE, one_item_rate_cents: 0, multiple_items_rate_cents: 0 }],
+      **params,
+    }
+  end
+
+  test "PUT update saves the excluded countries the editor sends" do
+    make_product_shippable!
+
+    post :update, params: shipping_exclusion_update_params(shipping_excluded_country_codes: ["US", "CA"]), as: :json
+
+    assert_response :success
+    assert_equal ["CA", "US"], @product.reload.shipping_excluded_country_codes
+  end
+
+  test "PUT update clears the excluded countries when the editor sends an empty list" do
+    make_product_shippable!
+    @product.save_shipping_exclusions!(["US", "CA"])
+
+    post :update, params: shipping_exclusion_update_params(shipping_excluded_country_codes: []), as: :json
+
+    assert_response :success
+    assert_equal [], @product.reload.shipping_excluded_country_codes
+  end
+
+  test "PUT update keeps the excluded countries when the payload leaves them out" do
+    make_product_shippable!
+    @product.save_shipping_exclusions!(["US"])
+
+    post :update, params: shipping_exclusion_update_params(name: "Renamed"), as: :json
+
+    assert_response :success
+    assert_equal "Renamed", @product.reload.name
+    assert_equal ["US"], @product.shipping_excluded_country_codes
+  end
+
+  test "PUT update drops blank and duplicate excluded countries" do
+    make_product_shippable!
+
+    post :update, params: shipping_exclusion_update_params(shipping_excluded_country_codes: ["US", "", " CA ", "US"]), as: :json
+
+    assert_response :success
+    assert_equal ["CA", "US"], @product.reload.shipping_excluded_country_codes
+  end
+
+  test "PUT update refuses a region or unknown excluded country and rolls back the whole save" do
+    make_product_shippable!
+    @product.save_shipping_exclusions!(["US"])
+    original_name = @product.name
+
+    post :update, params: shipping_exclusion_update_params(
+      name: "Renamed",
+      shipping_destinations: [{ country_code: "DE", one_item_rate_cents: 500, multiple_items_rate_cents: 100 }],
+      shipping_excluded_country_codes: ["ELSEWHERE", "XX"],
+    ), as: :json
+
+    assert_response :unprocessable_entity
+    assert_equal "Sorry, ELSEWHERE and XX cannot be excluded from shipping.", response.parsed_body["error_message"]
+    @product.reload
+    assert_equal original_name, @product.name
+    assert_equal [Product::Shipping::ELSEWHERE], @product.shipping_destinations.alive.map(&:country_code)
+    assert_equal ["US"], @product.shipping_excluded_country_codes
+  end
+
+  test "PUT update refuses excluding every country the product ships to" do
+    make_product_shippable!
+
+    post :update, params: shipping_exclusion_update_params(
+      name: "Renamed",
+      shipping_destinations: [{ country_code: "US", one_item_rate_cents: 500, multiple_items_rate_cents: 100 }],
+      shipping_excluded_country_codes: ["US"],
+    ), as: :json
+
+    assert_response :unprocessable_entity
+    assert_equal "You've excluded every country this product ships to. Remove an excluded country or add a shipping destination.", response.parsed_body["error_message"]
+    @product.reload
+    assert_not_equal "Renamed", @product.name
+    assert_equal [Product::Shipping::ELSEWHERE], @product.shipping_destinations.alive.map(&:country_code)
+    assert_equal [], @product.shipping_excluded_country_codes
+  end
+
+  test "PUT update ignores excluded countries for a digital product" do
+    assert_not @product.is_physical
+
+    post :update, params: { id: @product.unique_permalink, name: "Renamed", shipping_excluded_country_codes: ["US"] }, as: :json
+
+    assert_response :success
+    assert_equal "Renamed", @product.reload.name
+    assert_equal [], @product.shipping_excluded_country_codes
+  end
+
   # --- Tags and Categories ----------------------------------------------------
 
   test "PUT update adds tags when there are none" do

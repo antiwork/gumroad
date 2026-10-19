@@ -55,6 +55,7 @@ export type Product = {
   exchange_rate: number;
   rental: Rental | null;
   shippable_country_codes: string[];
+  ships_nowhere?: boolean;
   ppp_details: PurchasingPowerParityDetails | null;
   upsell: Upsell | null;
   cross_sells: CrossSell[];

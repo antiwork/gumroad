@@ -168,6 +168,7 @@ class Link < ApplicationRecord
   has_many :workflows
   has_many :dropbox_files
   has_many :shipping_destinations
+  has_many :shipping_exclusions, foreign_key: :product_id
   has_many :product_affiliates
   has_many :affiliates, through: :product_affiliates
   has_many :direct_affiliates, -> { direct_affiliates }, through: :product_affiliates, source: :affiliate
@@ -1085,6 +1086,54 @@ class Link < ApplicationRecord
     end
   end
 
+  # Full replacement of the exception list, like `save_shipping_destinations!`: the editor sends
+  # the whole list, so anything absent is dropped.
+  def save_shipping_exclusions!(country_codes)
+    country_codes = Array(country_codes).map { _1.to_s.strip }.reject(&:blank?).uniq
+    unexcludable = country_codes - ShippingExclusion.excludable_country_codes
+
+    if unexcludable.present?
+      message = "Sorry, #{unexcludable.to_sentence} cannot be excluded from shipping."
+      errors.add(:base, message)
+      raise LinkInvalid, message
+    end
+
+    # Checkout reads an empty coverage list as "no shipping restriction" and offers every
+    # country, so a product that excludes everything it ships to would show a normal checkout
+    # where every purchase then fails. Refuse that state rather than persisting it.
+    covered = shipping_destinations.alive.flat_map { |shipping_destination| shipping_destination.country_or_countries.keys }.uniq
+    if country_codes.present? && covered.present? && (covered - country_codes).empty?
+      message = "You've excluded every country this product ships to. Remove an excluded country or add a shipping destination."
+      errors.add(:base, message)
+      raise LinkInvalid, message
+    end
+
+    shipping_exclusions.where.not(country_code: country_codes).delete_all
+    (country_codes - shipping_exclusions.pluck(:country_code)).each do |country_code|
+      shipping_exclusions.create!(country_code:)
+    end
+    shipping_exclusions.reset
+  end
+
+  def shipping_excluded_country_codes
+    shipping_exclusions.order(:country_code).pluck(:country_code)
+  end
+
+  def excludes_shipping_to?(country_code)
+    return false if country_code.blank?
+
+    shipping_exclusions.exists?(country_code:)
+  end
+
+  # Country codes a physical product can actually ship to: the union of its destinations,
+  # minus its exclusions. Digital products have no shipping surface.
+  def shippable_country_codes
+    return [] unless is_physical
+
+    included = shipping_destinations.alive.flat_map { |shipping_destination| shipping_destination.country_or_countries.keys }
+    included.uniq - shipping_excluded_country_codes
+  end
+
   def save_default_sku!(sku_id, custom_sku)
     sku = skus.find_by_external_id(sku_id)
     sku.update!(custom_sku:) unless sku.nil?
@@ -1895,7 +1944,8 @@ class Link < ApplicationRecord
 
     def enforce_shipping_destinations_presence!
       return unless is_physical
-      return if shipping_destinations.alive.present?
+      # Not just destinations: a destination the product excludes still leaves nothing to ship to.
+      return if shippable_country_codes.present?
 
       errors.add(:base, "The product needs to be shippable to at least one destination.")
       raise LinkInvalid, "The product needs to be shippable to at least one destination."

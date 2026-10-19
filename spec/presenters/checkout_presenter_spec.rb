@@ -276,6 +276,7 @@ describe CheckoutPresenter do
             options: [options.first.merge({ upsell_offered_variant_id: options.second[:id] }), options.second.merge({ upsell_offered_variant_id: nil })],
             require_shipping: false,
             shippable_country_codes: [],
+            ships_nowhere: false,
             custom_fields: [],
             supports_paypal: nil,
             paypal_card_funding_disabled: false,
@@ -626,6 +627,58 @@ describe CheckoutPresenter do
       ensure
         Feature.deactivate_user(:buyer_local_currency, seller) if seller
         Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller) if seller
+      end
+    end
+
+    describe "shippable country codes" do
+      def checkout_product_props(product)
+        @instance.checkout_product(product, product.cart_item({}), {})[:product]
+      end
+
+      def shippable_country_codes(product)
+        checkout_product_props(product)[:shippable_country_codes]
+      end
+
+      it "leaves out a country the physical product excludes" do
+        product = create(:physical_product)
+        product.shipping_exclusions.create!(country_code: "US")
+
+        expect(shippable_country_codes(product)).to include("CA", "DE")
+        expect(shippable_country_codes(product)).not_to include("US")
+        expect(checkout_product_props(product)[:ships_nowhere]).to be(false)
+      end
+
+      it "is empty when the physical product excludes every country it covers" do
+        product = create(:physical_product)
+        product.shipping_destinations.alive.each(&:destroy)
+        product.shipping_destinations << ShippingDestination.new(country_code: "US", one_item_rate_cents: 0, multiple_items_rate_cents: 0)
+        product.shipping_exclusions.create!(country_code: "US")
+
+        expect(shippable_country_codes(product.reload)).to eq([])
+        expect(checkout_product_props(product)[:ships_nowhere]).to be(true)
+      end
+
+      it "flags a product by its physical flag, not its native type" do
+        product = create(:product, is_physical: true, require_shipping: true)
+        product.shipping_destinations << ShippingDestination.new(country_code: "US", one_item_rate_cents: 0, multiple_items_rate_cents: 0)
+        product.shipping_exclusions.create!(country_code: "US")
+
+        expect(product.native_type).to eq(Link::NATIVE_TYPE_DIGITAL)
+        expect(checkout_product_props(product.reload)[:ships_nowhere]).to be(true)
+      end
+
+      it "stays empty and unflagged for a digital product" do
+        props = checkout_product_props(create(:product))
+
+        expect(props[:shippable_country_codes]).to eq([])
+        expect(props[:ships_nowhere]).to be(false)
+      end
+
+      it "does not flag a digital product that collects a shipping address" do
+        props = checkout_product_props(create(:product, require_shipping: true))
+
+        expect(props[:shippable_country_codes]).to eq([])
+        expect(props[:ships_nowhere]).to be(false)
       end
     end
 
@@ -1032,6 +1085,7 @@ describe CheckoutPresenter do
                                  },
                                  require_shipping: false,
                                  shippable_country_codes: [],
+                                 ships_nowhere: false,
                                  custom_fields: [],
                                  currency_code: "usd",
                                  permalink: @product.unique_permalink,

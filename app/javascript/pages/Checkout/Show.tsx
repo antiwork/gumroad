@@ -477,6 +477,7 @@ const CheckoutIndexPage = () => {
         forceNewSubscription: item.force_new_subscription,
         recommended_by: item.recommended_by,
         shippableCountryCodes: item.product.shippable_country_codes,
+        shipsNowhere: item.product.ships_nowhere ?? false,
         nativeType: item.product.native_type,
         canGift: item.product.can_gift,
       };

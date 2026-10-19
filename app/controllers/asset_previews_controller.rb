@@ -40,9 +40,16 @@ class AssetPreviewsController < ApplicationController
 
   def destroy
     asset_preview = @product.asset_previews.where(guid: params[:id]).first
+    # A stale editor can DELETE a preview that is not in this product; authorizing nil
+    # raises Pundit::NotDefinedError, so "nothing to delete" is a plain failed delete.
+    unless asset_preview
+      skip_authorization
+      return render(json: { success: false })
+    end
+
     authorize asset_preview
 
-    if asset_preview&.mark_deleted!
+    if asset_preview.mark_deleted!
       render(json: { success: true, asset_previews: @product.display_asset_previews, active_preview_id: @product.main_preview && @product.main_preview.guid })
     else
       render(json: { success: false })

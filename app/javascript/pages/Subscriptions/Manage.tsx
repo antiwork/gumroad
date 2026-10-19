@@ -67,6 +67,7 @@ type Props = {
     installment_plan: { number_of_installments: number } | null;
     exchange_rate: number;
     shippable_country_codes: string[];
+    ships_nowhere?: boolean;
   };
   subscription: {
     id: string;
@@ -293,6 +294,7 @@ export default function SubscriptionsManage() {
     subscription_id: subscription.id,
     recommended_by: null,
     shippableCountryCodes: product.shippable_country_codes,
+    shipsNowhere: product.ships_nowhere ?? false,
     hasTippingEnabled: false,
     hasFreeTrial: false,
     isPreorder: false,

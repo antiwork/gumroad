@@ -285,6 +285,7 @@ class ProductPresenter
             multiple_items_rate_cents: shipping_destination.multiple_items_rate_cents,
           }
         end,
+        shipping_excluded_country_codes: product.shipping_excluded_country_codes,
         section_ids: profile_sections.filter_map { |section| section.external_id if section.shown_products.include?(product.id) },
         taxonomy_id: product.taxonomy_id&.to_s,
         tags: product.tags.pluck(:name),

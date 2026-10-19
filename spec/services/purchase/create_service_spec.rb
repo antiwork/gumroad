@@ -2607,6 +2607,22 @@ describe Purchase::CreateService, :vcr do
         expect(error).to eq "The creator cannot ship the product to the country you have selected."
       end
 
+      it "returns an error message and fails purchase if the seller excludes the buyer's country" do
+        product.shipping_destinations.destroy_all
+        product.shipping_destinations << ShippingDestination.new(
+          country_code: ShippingDestination::Destinations::ELSEWHERE,
+          one_item_rate_cents: 10_00,
+          multiple_items_rate_cents: 5_00
+        )
+        product.shipping_exclusions.create!(country_code: "US")
+        shipping_params[:purchase][:country] = "US"
+
+        purchase, error = Purchase::CreateService.new(product:, params: shipping_params).perform
+
+        expect(purchase.failed?).to be true
+        expect(error).to eq "The creator cannot ship the product to the country you have selected."
+      end
+
       it "returns an error message if the shipping address is in a sanctioned region of a country we sell to" do
         shipping_params[:purchase][:country] = "UA"
         shipping_params[:purchase][:state] = "43" # Crimea

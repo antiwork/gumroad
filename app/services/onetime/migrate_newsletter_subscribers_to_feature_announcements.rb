@@ -14,13 +14,22 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
   # Source labels describe how a row was added; none includes or excludes a cohort by its name alone.
   NO_SOURCE = "(none)"
   # Reviewed decisions to carry a source cohort over (label => decision reference). apply! refuses while empty.
-  VERIFIED_SOURCES = {}.freeze
+  VERIFIED_SOURCES = {
+    "embed_form" => "gumroad-private#3664: exclude signup-added follows (2026-10-19)",
+    NO_SOURCE => "gumroad-private#3664: exclude signup-added follows (2026-10-19)",
+    "manual-by-sahil" => "gumroad-private#3664: exclude signup-added follows (2026-10-19)",
+    "csv_import" => "gumroad-private#3664: exclude signup-added follows (2026-10-19)",
+    "profile_page" => "gumroad-private#3664: exclude signup-added follows (2026-10-19)",
+    "follow_page" => "gumroad-private#3664: exclude signup-added follows (2026-10-19)",
+    "product_page" => "gumroad-private#3664: exclude signup-added follows (2026-10-19)"
+  }.freeze
   BASELINE_OUTCOMES = %i[eligible unverified_source existing_preference].freeze
   # Outcomes where retiring the old newsletter takes no mail anyone still wants.
   RESOLVED_OUTCOMES = %i[follower_inactive existing_preference buyer_opted_out].freeze
   # Reviewed decisions for any other cohort (outcome => decision reference); retire! refuses until all are covered.
   RETIREMENT_RESOLUTIONS = {}.freeze
   BATCH_SIZE = 1_000
+  OPT_OUT_EMAILS_PER_QUERY = 100
   RUN_LOCK_TIMEOUT_SECONDS = 0
 
   class SourceUnverified < StandardError; end
@@ -205,7 +214,7 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
       a = { total: 0, linked: 0, email_mapped: 0, existing_opt_in: 0, existing_opt_out: 0, by_source: Hash.new(0) }
       followers.where(followed_id: seller.id).in_batches(of: @batch_size) do |batch|
         rows = batch.to_a
-        context = batch_context(seller, rows)
+        context = batch_context(seller, rows.reject { initial_outcome(_1, cutoff_at) })
         rows.each do |follower|
           identity = resolve_identity(follower, context[:users][follower.follower_user_id], context[:confirmed_by_email][normalize(follower.email)])
           outcome = classify(follower, cutoff_at, identity:, **context)
@@ -328,13 +337,27 @@ class Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements
         users:,
         confirmed_by_email:,
         preferences: FeatureAnnouncementSubscription.where(user_id: user_ids).pluck(:user_id, :subscribed).to_h,
-        opted_out_emails: Purchase.where(seller_id: seller.id, email: emails, can_contact: false).distinct.pluck(:email).map { normalize(_1) }.to_set,
+        opted_out_emails: opted_out_emails(seller, emails),
       }
     end
 
-    def classify(follower, cutoff_at, identity:, preferences:, opted_out_emails:, **)
+    def opted_out_emails(seller, emails)
+      emails.each_slice(OPT_OUT_EMAILS_PER_QUERY).flat_map do |batch|
+        Purchase.where(seller_id: seller.id, email: batch, can_contact: false).distinct.pluck(:email)
+      end.map { normalize(_1) }.to_set
+    end
+
+    def initial_outcome(follower, cutoff_at)
       return :follower_inactive unless follower.deleted_at.nil? && follower.confirmed_at.present?
       return :after_cutoff if follower.confirmed_at > cutoff_at || follower.created_at > cutoff_at
+
+      nil
+    end
+
+    def classify(follower, cutoff_at, identity:, preferences:, opted_out_emails:, **)
+      outcome = initial_outcome(follower, cutoff_at)
+      return outcome if outcome
+
       return identity if identity.is_a?(Symbol)
       return :inactive_account unless identity.account_active?
       return :unconfirmed_account unless identity.confirmed?
