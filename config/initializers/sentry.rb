@@ -22,6 +22,27 @@ Sentry.init do |config|
   # both, so drop every event for those URLs.
   retired_gumhead_request = ->(event) { event.request&.url.to_s.include?("/v2/gumhead/") }
 
+  # A failed job's arguments ride on its event. A Help Center contact delivery
+  # holds the message and up to 6 MB of base64 screenshots: stored in Sentry, or
+  # past the SDK size limit, where the event is dropped silently. Matched on the
+  # mailer name so contact jobs queued under MailDeliveryJob are covered too.
+  redact_support_contact_job = lambda do |event|
+    return unless event.tags.key?(:job_id)
+
+    arguments = event.extra[:arguments]
+    return unless arguments.is_a?(Array) && arguments.first == "SupportContactMailer"
+
+    event.extra[:arguments] = arguments.map do |argument|
+      next argument unless argument.is_a?(Hash) && argument[:args].is_a?(Array)
+
+      argument.merge(args: argument[:args].map do |kwargs|
+        next kwargs unless kwargs.is_a?(Hash)
+
+        kwargs.merge(message: kwargs[:message].to_s.length, attachments: Array(kwargs[:attachments]).size)
+      end)
+    end
+  end
+
   # Drop errors raised by ad-hoc `bin/rails runner` scripts piped in over STDIN
   # (their backtraces contain "stdin:<line>" frames). These are one-off console
   # commands typed by an operator — the person running the script sees the error
@@ -36,7 +57,10 @@ Sentry.init do |config|
       exception.respond_to?(:backtrace) &&
       exception.backtrace&.any? { |frame| frame.start_with?("stdin:") }
 
-    stdin_runner_error || retired_gumhead_request.call(event) ? nil : event
+    return nil if stdin_runner_error || retired_gumhead_request.call(event)
+
+    redact_support_contact_job.call(event)
+    event
   end
 
   config.before_send_transaction = lambda do |event, _hint|

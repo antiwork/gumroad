@@ -139,6 +139,8 @@ const ContactSupportForm = ({ open, onClose, referrerPath }: ContactSupportModal
       return;
     }
 
+    // The fields stay locked until this settles: success clears the draft, which
+    // would also drop anything typed in the meantime.
     setSubmitting(true);
     try {
       const data = new FormData();
@@ -196,6 +198,7 @@ const ContactSupportForm = ({ open, onClose, referrerPath }: ContactSupportModal
               id={`${uid}-email`}
               type="email"
               required
+              disabled={submitting}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com"
@@ -203,7 +206,13 @@ const ContactSupportForm = ({ open, onClose, referrerPath }: ContactSupportModal
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor={`${uid}-category`}>What do you need help with?</Label>
-            <Select id={`${uid}-category`} required value={category} onChange={(e) => setCategory(e.target.value)}>
+            <Select
+              id={`${uid}-category`}
+              required
+              disabled={submitting}
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+            >
               <option value="" disabled>
                 Select a category
               </option>
@@ -219,6 +228,7 @@ const ContactSupportForm = ({ open, onClose, referrerPath }: ContactSupportModal
             <Textarea
               id={`${uid}-message`}
               required
+              disabled={submitting}
               rows={6}
               value={message}
               onChange={(e) => setMessage(e.target.value)}
@@ -232,6 +242,7 @@ const ContactSupportForm = ({ open, onClose, referrerPath }: ContactSupportModal
               id={`${uid}-attachments`}
               type="file"
               multiple
+              disabled={submitting}
               accept={ACCEPTED_ATTACHMENT_TYPES.join(",")}
               onChange={(e) => {
                 addFiles(Array.from(e.target.files ?? []));
@@ -250,7 +261,12 @@ const ContactSupportForm = ({ open, onClose, referrerPath }: ContactSupportModal
                     <span className="truncate">
                       {file.name} ({formatBytes(file.size)})
                     </span>
-                    <Button type="button" size="sm" onClick={() => setFiles(files.filter((_, i) => i !== index))}>
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={submitting}
+                      onClick={() => setFiles(files.filter((_, i) => i !== index))}
+                    >
                       Remove
                     </Button>
                   </li>

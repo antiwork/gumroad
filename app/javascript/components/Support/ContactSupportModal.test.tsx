@@ -54,6 +54,25 @@ const send = () => fireEvent.click(screen.getByRole("button", { name: "Send mess
 
 const jsonResponse = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
 
+const editableControls = () => [
+  emailField(),
+  screen.getByLabelText<HTMLSelectElement>("What do you need help with?"),
+  messageField(),
+  screen.getByLabelText<HTMLInputElement>("Screenshots (optional)"),
+  ...screen.getAllByRole<HTMLButtonElement>("button", { name: "Remove" }),
+];
+
+const sentFields = async (body: BodyInit | null | undefined) => {
+  if (!(body instanceof FormData)) throw new Error("expected a multipart body");
+  const files = await Promise.all(
+    body.getAll("attachments[]").map(async (file) => {
+      if (!(file instanceof File)) throw new Error("expected a file part");
+      return [file.name, [...new Uint8Array(await file.arrayBuffer())]];
+    }),
+  );
+  return { email: body.get("email"), category: body.get("category"), message: body.get("message"), files };
+};
+
 describe("ContactSupportModal", () => {
   let fetchMock: ReturnType<typeof vi.fn<typeof fetch>>;
 
@@ -262,6 +281,61 @@ describe("ContactSupportModal", () => {
   });
 
   describe("sending", () => {
+    // Holds the request open so the test can look at the form mid-send.
+    const deferSend = () => {
+      let respond: (response: Response) => void = () => {};
+      fetchMock.mockImplementation(
+        () =>
+          new Promise<Response>((resolve) => {
+            respond = resolve;
+          }),
+      );
+      return (response: Response) => respond(response);
+    };
+
+    it("locks every field while sending, then clears exactly the draft that was sent", async () => {
+      const respond = deferSend();
+      render(<WithTrigger />);
+      fillValidForm();
+      attach(image("checkout.png", [0x89, 0x50, 0x4e, 0x47, 9]));
+
+      send();
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+      expect(editableControls().map((control) => control.disabled)).toEqual([true, true, true, true, true]);
+      fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+      expect(listed("checkout.png")).toHaveLength(1);
+
+      expect(await sentFields(fetchMock.mock.calls[0]?.[1]?.body)).toEqual({
+        email: "buyer@example.com",
+        category: "technical issue",
+        message: "Checkout does nothing when I click it.",
+        files: [["checkout.png", [0x89, 0x50, 0x4e, 0x47, 9]]],
+      });
+
+      respond(jsonResponse({ success: true }));
+      await waitFor(() => expect(screen.getByText(/Message sent!/u)).not.toBeNull());
+      expect(window.sessionStorage.getItem(draftKey(null))).toBeNull();
+      closeAndReopen();
+      expect(messageField().value).toBe("");
+      expect(listed("checkout.png")).toHaveLength(0);
+    });
+
+    it("unlocks the fields with everything intact when the server refuses the message", async () => {
+      const respond = deferSend();
+      renderModal();
+      fillValidForm();
+      attach(image("checkout.png"));
+
+      send();
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+      respond(jsonResponse({ success: false, error: "Please select a category." }, 422));
+
+      await waitFor(() => expect(screen.getByRole("alert").textContent).toBe("Please select a category."));
+      expect(editableControls().map((control) => control.disabled)).toEqual([false, false, false, false, false]);
+      expect(messageField().value).toBe("Checkout does nothing when I click it.");
+      expect(listed("checkout.png")).toHaveLength(1);
+    });
+
     it("posts the message with every screenshot byte", async () => {
       renderModal();
       fillValidForm();
