@@ -46,7 +46,8 @@ const writeDraft = (message: string) => {
   }
 };
 
-const formatBytes = (bytes: number) => (bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : `${Math.ceil(bytes / 1024)} KB`);
+const formatBytes = (bytes: number) =>
+  bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : `${Math.ceil(bytes / 1024)} KB`;
 
 // Contact form that submits into the Gumroad support pipeline. It lives in a
 // modal so any page can offer a "Contact support" affordance later (the Help
