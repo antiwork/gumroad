@@ -168,7 +168,7 @@ class Link < ApplicationRecord
   has_many :workflows
   has_many :dropbox_files
   has_many :shipping_destinations
-  has_many :shipping_exclusions
+  has_many :shipping_exclusions, foreign_key: :product_id
   has_many :product_affiliates
   has_many :affiliates, through: :product_affiliates
   has_many :direct_affiliates, -> { direct_affiliates }, through: :product_affiliates, source: :affiliate
@@ -1109,7 +1109,7 @@ class Link < ApplicationRecord
 
     shipping_exclusions.where.not(country_code: country_codes).delete_all
     (country_codes - shipping_exclusions.pluck(:country_code)).each do |country_code|
-      ShippingExclusion.create!(link_id: id, country_code:)
+      ShippingExclusion.create!(product_id: id, country_code:)
     end
     shipping_exclusions.reset
   end
@@ -1121,7 +1121,7 @@ class Link < ApplicationRecord
   def excludes_shipping_to?(country_code)
     return false if country_code.blank?
 
-    ShippingExclusion.exists?(link_id: id, country_code:)
+    ShippingExclusion.exists?(product_id: id, country_code:)
   end
 
   # Country codes a physical product can actually ship to: the union of its destinations,

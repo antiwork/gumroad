@@ -2558,11 +2558,11 @@ create_table "ping_deliveries", charset: "utf8mb4", collation: "utf8mb4_unicode_
   end
 
   create_table "shipping_exclusions", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
-    t.integer "link_id", null: false
+    t.bigint "product_id", null: false
     t.string "country_code", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.index ["link_id", "country_code"], name: "index_shipping_exclusions_on_link_id_and_country_code", unique: true
+    t.index ["product_id", "country_code"], name: "index_shipping_exclusions_on_product_id_and_country_code", unique: true
   end
 
   create_table "signup_events", charset: "latin1", force: :cascade do |t|
