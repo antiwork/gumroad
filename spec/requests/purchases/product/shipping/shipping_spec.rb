@@ -156,6 +156,14 @@ describe("Product Page - Shipping Scenarios", type: :system, js: true, shipping:
       expect(page).to have_select("Country", selected: "Choose a country")
       expect(page).to have_text("This order can't be shipped to your country (Canada). Choose the country you're shipping to.")
       expect(page).to have_button("Pay", disabled: true)
+      expect(page).to have_text("Choose a delivery country to see shipping and your total.")
+      expect(page).not_to have_selector("[aria-busy='true']")
+      expect(page).not_to have_selector("h4", exact_text: "Total")
+
+      select "United States", from: "Country"
+      expect(page).to have_text("Shipping rate US$5", normalize_ws: true)
+      expect(page).to have_text("Total US$10", normalize_ws: true)
+      expect(page).not_to have_text("Choose a delivery country to see shipping and your total.")
 
       check_out(product, logged_in_user: buyer, country: "United States")
 

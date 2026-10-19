@@ -92,8 +92,10 @@ import {
   getConfiguredDirectListedCurrency,
   getFutureInstallmentsTotal,
   getSelectableDirectListedCurrency,
+  getShippingCountryCodes,
   getTotalPriceFromProducts,
   getTotalPriceFromSurcharges,
+  getUnshippableProducts,
   isProcessing,
   isTippingEnabled,
   useState,
@@ -362,10 +364,15 @@ export const Checkout = ({
   // amount, the submitted quote token), so no amount shown from here can be charged.
   const summarySurcharges =
     state.surcharges.type === "loaded" ? state.surcharges.result : (state.buyerCurrencyRemint?.surcharges ?? null);
+  // No quote is requested until the buyer picks a country the cart ships to, so any amount shown
+  // here would be for a country they can't receive the order in.
+  const awaitingCountryChoice =
+    state.country === "" && getUnshippableProducts(state).length === 0 && getShippingCountryCodes(state).size > 0;
   // Only while a replacement is actually in flight. An errored fetch keeps the snapshot on screen
   // (it is the quote the buyer was returned to) but nothing is coming, so the summary must stop
   // saying it is working.
-  const quoteInFlight = state.surcharges.type === "pending" || state.surcharges.type === "loading";
+  const quoteInFlight =
+    !awaitingCountryChoice && (state.surcharges.type === "pending" || state.surcharges.type === "loading");
   const isRequoting = quoteInFlight && summarySurcharges !== null;
   // The first quote fills the Subtotal and Total rows. Holding their space while it loads keeps the
   // payment form below from jumping when it lands, which on phones is mid-tap on the email field.
@@ -619,7 +626,9 @@ export const Checkout = ({
                   data-checkout-price-rows="true"
                   aria-busy={isRequoting || awaitingFirstQuote}
                 >
-                  {summarySurcharges ? (
+                  {awaitingCountryChoice ? (
+                    <p className="text-sm sm:text-base">Choose a delivery country to see shipping and your total.</p>
+                  ) : summarySurcharges ? (
                     <>
                       <CartPriceItem
                         title="Subtotal"
@@ -743,7 +752,7 @@ export const Checkout = ({
                     </form>
                   ) : null}
                 </div>
-                {total != null ? (
+                {awaitingCountryChoice ? null : total != null ? (
                   <>
                     <footer className="grid gap-4 border-t border-border p-4 sm:px-5" aria-busy={isRequoting}>
                       <CartPriceItem
