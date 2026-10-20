@@ -45,6 +45,7 @@ describe Checkout::DiscountsPresenter do
                      minimum_amount_cents: 1000,
                      once_per_cart: false,
                      existing_customers_only: false,
+                     new_customers_only: false,
                      auto_apply: false,
                      sale_label: nil,
                      ownership_products: [],
@@ -87,6 +88,7 @@ describe Checkout::DiscountsPresenter do
                      minimum_amount_cents: nil,
                      once_per_cart: false,
                      existing_customers_only: false,
+                     new_customers_only: false,
                      auto_apply: false,
                      sale_label: nil,
                      ownership_products: [],
@@ -120,6 +122,7 @@ describe Checkout::DiscountsPresenter do
                      minimum_amount_cents: nil,
                      once_per_cart: false,
                      existing_customers_only: false,
+                     new_customers_only: false,
                      auto_apply: false,
                      sale_label: nil,
                      ownership_products: [],
@@ -189,6 +192,7 @@ describe Checkout::DiscountsPresenter do
             minimum_amount_cents: 1000,
             once_per_cart: false,
             existing_customers_only: false,
+            new_customers_only: false,
             auto_apply: false,
             sale_label: nil,
             ownership_products: [],
@@ -266,6 +270,20 @@ describe Checkout::DiscountsPresenter do
                                                          { "months" => 0, "amount_percentage" => 0 },
                                                          { "months" => 12, "amount_percentage" => 50 },
                                                        ])
+      end
+
+      it "exposes the new-customers-only flag" do
+        offer_code = create(:offer_code,
+                            user: seller,
+                            products: [product1],
+                            new_customers_only: true,
+                            amount_cents: nil,
+                            amount_percentage: 20,
+                            currency_type: nil)
+
+        props = presenter.offer_code_props(offer_code)
+        expect(props[:new_customers_only]).to eq(true)
+        expect(props[:existing_customers_only]).to eq(false)
       end
     end
 

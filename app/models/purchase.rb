@@ -2580,7 +2580,9 @@ class Purchase < ApplicationRecord
                                                 pre_discount_displayed_price_cents: verified_pre_discount_displayed_price_cents,
                                                 duration_in_months: link.is_recurring_billing? ? offer_code.duration_in_months : nil)
       else
-        @offer_code_invalid_for_buyer = true
+        @offer_code_rejection_message = offer_code.new_customers_only? ?
+          "Sorry, this discount code is only for new customers." :
+          "Sorry, this discount code is only for existing customers."
         reject_existing_customer_offer_code
         self.offer_code = nil
       end
@@ -4625,9 +4627,9 @@ class Purchase < ApplicationRecord
     end
 
     def resolved_offer_code_discount_for_buyer
-      if offer_code.existing_customers_only? || offer_code.tiered?
+      if offer_code.existing_customers_only? || offer_code.new_customers_only? || offer_code.tiered?
         evaluated_discount = offer_code.evaluate_for_buyer(offer_code_buyer, product: link)
-        return nil if offer_code.existing_customers_only? && evaluated_discount.blank?
+        return nil if (offer_code.existing_customers_only? || offer_code.new_customers_only?) && evaluated_discount.blank?
         return nil if offer_code.tiered? && evaluated_discount.nil?
         return evaluated_discount if offer_code.tiered? && evaluated_discount.present?
       end
@@ -5702,7 +5704,7 @@ class Purchase < ApplicationRecord
 
     def validate_offer_code
       return if errors.present?
-      return reject_existing_customer_offer_code if @offer_code_invalid_for_buyer
+      return reject_existing_customer_offer_code if @offer_code_rejection_message
       # accept the offer code that was used when the buyer preordered/subscribed
       return if is_preorder_charge? || is_recurring_subscription_charge || is_gift_receiver_purchase || (is_installment_payment && !is_original_subscription_purchase)
       return if discount_code.blank?
@@ -5779,7 +5781,7 @@ class Purchase < ApplicationRecord
 
     def reject_existing_customer_offer_code
       self.error_code = PurchaseErrorCode::OFFER_CODE_INVALID
-      errors.add(:base, "Sorry, this discount code is only for existing customers.")
+      errors.add(:base, @offer_code_rejection_message)
     end
 
     def validate_subscription

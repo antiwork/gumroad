@@ -49,6 +49,7 @@ class OfferCode < ApplicationRecord
   validate :validate_cancellation_discount_product_type
   validate :validate_not_used_as_default_discount
   validate :validate_existing_customer_settings
+  validate :validate_new_customer_settings
   validate :validate_ownership_duration_tiers
   validate :validate_excluded_products
   validate :validate_default_discount_remains_applicable
@@ -407,7 +408,7 @@ class OfferCode < ApplicationRecord
   end
 
   def discount_for_display(buyer: nil, product: nil, fallback_purchase: nil)
-    return nil if existing_customers_only? && buyer.nil?
+    return nil if (existing_customers_only? || new_customers_only?) && buyer.nil?
     return evaluate_for_buyer(buyer, product:, fallback_purchase:) if buyer.present? || (tiered? && fallback_purchase.present?)
 
     configured_discount_for_display
@@ -441,6 +442,8 @@ class OfferCode < ApplicationRecord
   end
 
   def evaluate_for_buyer(buyer, product: nil, fallback_purchase: nil)
+    return nil if new_customers_only? && !new_customer?(buyer)
+
     reference = ownership_reference_products(product)
     months = ownership_months_for(buyer, reference) if existing_customers_only? || tiered?
     return nil if existing_customers_only? && months.nil?
@@ -492,6 +495,32 @@ class OfferCode < ApplicationRecord
       .order(:created_at)
       .pick(:created_at)
     months_since(oldest)
+  end
+
+  # New means this seller has no prior successful purchase from the buyer, matched by account id or
+  # confirmed account email like the ownership lookup, but across the whole store. An unidentified
+  # buyer counts as existing: a code we cannot clear for someone is one we refuse, so the price
+  # checkout quotes and the price it charges cannot disagree.
+  def new_customer?(buyer)
+    return false if buyer.nil?
+
+    buyer_condition = if buyer.email.present? && buyer.confirmed?
+      ["purchases.purchaser_id = ? OR purchases.email = ?", buyer.id, buyer.email]
+    else
+      ["purchases.purchaser_id = ?", buyer.id]
+    end
+
+    !Purchase
+      .all_success_states
+      .not_is_additional_contribution
+      .not_recurring_charge
+      .not_is_gift_sender_purchase
+      .not_fully_refunded
+      .not_chargedback_or_chargedback_reversed
+      .not_is_access_revoked
+      .where(seller_id: user_id)
+      .where(*buyer_condition)
+      .exists?
   end
 
   def months_since(timestamp)
@@ -767,6 +796,16 @@ class OfferCode < ApplicationRecord
       if ownership_products.empty?
         errors.add(:base, "Pick at least one product the customer must already own.")
       end
+    end
+
+    # New-customers-only is the inverse of the existing-customer gate, so both cannot be on at once,
+    # and duration tiers key off how long the buyer has owned something.
+    def validate_new_customer_settings
+      return if deleted_at.present?
+      return unless new_customers_only?
+
+      errors.add(:base, "A discount code can't be limited to new customers and existing customers at the same time.") if existing_customers_only?
+      errors.add(:base, "Tiering by ownership duration requires the buyer to already own the product.") if tiered?
     end
 
     def validate_excluded_products

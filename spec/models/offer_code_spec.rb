@@ -1802,6 +1802,49 @@ describe OfferCode do
     end
   end
 
+  describe "new customer discount validations" do
+    it "rejects a code limited to both new and existing customers" do
+      offer_code = OfferCode.new(
+        code: "welcome",
+        user: @product.user,
+        products: [@product],
+        ownership_products: [@product],
+        amount_percentage: 50,
+        existing_customers_only: true,
+        new_customers_only: true,
+      )
+
+      expect(offer_code).not_to be_valid
+      expect(offer_code.errors.full_messages).to include("A discount code can't be limited to new customers and existing customers at the same time.")
+    end
+
+    it "rejects a new-customers-only code combined with ownership duration tiers" do
+      offer_code = OfferCode.new(
+        code: "welcome",
+        user: @product.user,
+        products: [@product],
+        amount_percentage: 0,
+        ownership_duration_tiers: [{ "months" => 0, "amount_percentage" => 10 }],
+        new_customers_only: true,
+      )
+
+      expect(offer_code).not_to be_valid
+      expect(offer_code.errors.full_messages).to include("Tiering by ownership duration requires the buyer to already own the product.")
+    end
+
+    it "is valid when new_customers_only is on with no ownership configuration" do
+      offer_code = OfferCode.new(
+        code: "welcome",
+        user: @product.user,
+        products: [@product],
+        amount_percentage: 50,
+        new_customers_only: true,
+      )
+
+      expect(offer_code).to be_valid
+    end
+  end
+
   describe "existing customer discount validations" do
     it "requires at least one ownership product when existing_customers_only is on" do
       offer_code = OfferCode.new(
@@ -2113,6 +2156,66 @@ describe OfferCode do
 
         expect(multi_code.evaluate_for_buyer(buyer, product: @product)).to include(type: "percent", percents: 0)
         expect(multi_code.evaluate_for_buyer(buyer, product: other_product)).to include(type: "percent", percents: 50)
+      end
+    end
+
+    context "with a new-customers-only code" do
+      let(:new_customers_code) do
+        create(:offer_code, :for_new_customers, user: seller, products: [@product], amount_cents: nil, amount_percentage: 30, currency_type: nil)
+      end
+
+      it "returns the standard discount for a buyer with no purchase history" do
+        expect(new_customers_code.evaluate_for_buyer(buyer)).to include(type: "percent", percents: 30)
+      end
+
+      it "returns nil for a buyer who already bought another of the seller's products" do
+        other_product = create(:product, user: seller, price_cents: 5_00)
+        create(:purchase, purchaser: buyer, link: other_product, seller:, price_cents: other_product.price_cents)
+
+        expect(new_customers_code.evaluate_for_buyer(buyer)).to be_nil
+      end
+
+      it "returns nil when the buyer's prior purchase was a guest checkout under their email" do
+        other_product = create(:product, user: seller, price_cents: 5_00)
+        create(:purchase, purchaser: nil, email: buyer.email, link: other_product, seller:, price_cents: other_product.price_cents)
+
+        expect(new_customers_code.evaluate_for_buyer(buyer)).to be_nil
+      end
+
+      it "returns nil for an unidentified buyer, and for unauthenticated display" do
+        expect(new_customers_code.evaluate_for_buyer(nil)).to be_nil
+        expect(new_customers_code.discount_for_display).to be_nil
+      end
+
+      it "ignores another seller's purchases" do
+        other_seller = create(:user)
+        other_product = create(:product, user: other_seller, price_cents: 5_00)
+        create(:purchase, purchaser: buyer, link: other_product, seller: other_seller, price_cents: other_product.price_cents)
+
+        expect(new_customers_code.evaluate_for_buyer(buyer)).to include(type: "percent", percents: 30)
+      end
+
+      it "treats a refunded prior purchase as no purchase at all" do
+        other_product = create(:product, user: seller, price_cents: 5_00)
+        create(:purchase, purchaser: buyer, link: other_product, seller:, price_cents: other_product.price_cents, stripe_refunded: true)
+
+        expect(new_customers_code.evaluate_for_buyer(buyer)).to include(type: "percent", percents: 30)
+      end
+
+      it "still matches an account-linked purchase when the buyer's email is unconfirmed" do
+        unconfirmed_buyer = create(:unconfirmed_user)
+        other_product = create(:product, user: seller, price_cents: 5_00)
+        create(:purchase, purchaser: unconfirmed_buyer, link: other_product, seller:, price_cents: other_product.price_cents)
+
+        expect(new_customers_code.evaluate_for_buyer(unconfirmed_buyer)).to be_nil
+      end
+
+      it "ignores a guest purchase matching an unconfirmed account email" do
+        unconfirmed_buyer = create(:unconfirmed_user)
+        other_product = create(:product, user: seller, price_cents: 5_00)
+        create(:purchase, purchaser: nil, email: unconfirmed_buyer.email, link: other_product, seller:, price_cents: other_product.price_cents)
+
+        expect(new_customers_code.evaluate_for_buyer(unconfirmed_buyer)).to include(type: "percent", percents: 30)
       end
     end
   end

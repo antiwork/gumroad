@@ -8,6 +8,7 @@ class OfferCodesController < ApplicationController
     inactive: "Sorry, the discount code you wish to use is inactive.",
     unmet_minimum_purchase_quantity: "Sorry, the discount code you wish to use has an unmet minimum quantity.",
     not_existing_customer: "Sorry, this discount code is only for existing customers.",
+    not_new_customer: "Sorry, this discount code is only for new customers.",
     option_not_eligible: "This code does not apply to the selected option.",
   }.freeze
 
@@ -16,6 +17,7 @@ class OfferCodesController < ApplicationController
     sold_out: "The discount code was applied to some products. The rest exceed its remaining usage limit.",
     unmet_minimum_purchase_quantity: "The discount code was applied to some products. The rest do not meet its minimum quantity.",
     not_existing_customer: "The discount code was applied to some products. The rest are only discounted for existing customers.",
+    not_new_customer: "The discount code was applied to some products. The rest are only discounted for new customers.",
     option_not_eligible: "The code applies to some items. The selected options for the other items are not eligible.",
   }.freeze
 

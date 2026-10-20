@@ -98,6 +98,7 @@ export type OfferCode = {
   minimum_amount_cents: number | null;
   once_per_cart: boolean;
   existing_customers_only: boolean;
+  new_customers_only: boolean;
   auto_apply: boolean;
   sale_label: string | null;
   ownership_products: Product[];
@@ -778,6 +779,7 @@ const DiscountsPage = ({
             minimumAmount: offerCode.minimum_amount_cents,
             oncePerCart: offerCode.once_per_cart,
             existingCustomersOnly: offerCode.existing_customers_only,
+            newCustomersOnly: offerCode.new_customers_only,
             autoApply: offerCode.auto_apply,
             saleLabel: offerCode.sale_label,
             ownershipProductIds: offerCode.ownership_products.map(({ id }) => id),
@@ -831,6 +833,7 @@ const DiscountsPage = ({
             minimumAmount: offerCode.minimum_amount_cents,
             oncePerCart: offerCode.once_per_cart,
             existingCustomersOnly: offerCode.existing_customers_only,
+            newCustomersOnly: offerCode.new_customers_only,
             autoApply: offerCode.auto_apply,
             saleLabel: offerCode.sale_label,
             ownershipProductIds: offerCode.ownership_products.map(({ id }) => id),
@@ -1019,6 +1022,7 @@ const Form = ({
   const [durationInBillingCycles, setDurationInMonths] = React.useState(offerCode?.duration_in_billing_cycles ?? null);
 
   const [existingCustomersOnly, setExistingCustomersOnly] = React.useState(!!offerCode?.existing_customers_only);
+  const [newCustomersOnly, setNewCustomersOnly] = React.useState(!!offerCode?.new_customers_only);
   const [autoApply, setAutoApply] = React.useState(!!offerCode?.auto_apply);
   const [saleLabel, setSaleLabel] = React.useState(offerCode?.sale_label ?? "");
   const [ownershipProductIds, setOwnershipProductIds] = React.useState<{ value: string[]; error?: boolean }>({
@@ -1163,6 +1167,7 @@ const Form = ({
       minimum_amount_cents: hasMinimumAmount ? minimumAmount.value : null,
       once_per_cart: discount.type === "cents" && !useTieredDiscounts && oncePerCart,
       existing_customers_only: existingCustomersOnly,
+      new_customers_only: newCustomersOnly,
       auto_apply: universal && autoApply,
       sale_label: universal && autoApply && saleLabel.trim() ? saleLabel.trim() : null,
       ownership_products: existingCustomersOnly ? ownershipProducts : [],
@@ -1487,7 +1492,10 @@ const Form = ({
               <DetailsToggle chevronPosition="none" className="mb-0">
                 <Switch
                   checked={existingCustomersOnly}
-                  onChange={(evt) => setExistingCustomersOnly(evt.target.checked)}
+                  onChange={(evt) => {
+                    setExistingCustomersOnly(evt.target.checked);
+                    if (evt.target.checked) setNewCustomersOnly(false);
+                  }}
                   label="Limit to existing customers"
                 />
               </DetailsToggle>
@@ -1513,11 +1521,36 @@ const Form = ({
                 </Fieldset>
               </Dropdown>
             </Details>
+            <Details open={newCustomersOnly}>
+              <DetailsToggle chevronPosition="none" className="mb-0">
+                <Switch
+                  checked={newCustomersOnly}
+                  onChange={(evt) => {
+                    setNewCustomersOnly(evt.target.checked);
+                    if (evt.target.checked) {
+                      setExistingCustomersOnly(false);
+                      setUseTieredDiscounts(false);
+                    }
+                  }}
+                  label="Limit to new customers"
+                />
+              </DetailsToggle>
+              <Dropdown>
+                <Fieldset>
+                  <FieldsetDescription>
+                    Only buyers with no previous purchase from your store can use this code.
+                  </FieldsetDescription>
+                </Fieldset>
+              </Dropdown>
+            </Details>
             <Details open={useTieredDiscounts}>
               <DetailsToggle chevronPosition="none" className="mb-0">
                 <Switch
                   checked={useTieredDiscounts}
-                  onChange={(evt) => setUseTieredDiscounts(evt.target.checked)}
+                  onChange={(evt) => {
+                    setUseTieredDiscounts(evt.target.checked);
+                    if (evt.target.checked) setNewCustomersOnly(false);
+                  }}
                   label="Tier discount by ownership duration"
                 />
               </DetailsToggle>

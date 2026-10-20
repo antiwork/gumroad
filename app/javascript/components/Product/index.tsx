@@ -205,7 +205,8 @@ export type ProductDiscount =
         | "invalid_offer"
         | "inactive"
         | "unmet_minimum_purchase_quantity"
-        | "not_existing_customer";
+        | "not_existing_customer"
+        | "not_new_customer";
     }
   | { valid: true; code: string; discount: Discount }
   | null;
@@ -716,7 +717,9 @@ export const Product = ({
                     ? "Sorry, the discount code you wish to use is invalid."
                     : discountCode.error_code === "not_existing_customer"
                       ? "Sorry, this discount code is only for existing customers."
-                      : "Sorry, the discount code you wish to use is inactive."}
+                      : discountCode.error_code === "not_new_customer"
+                        ? "Sorry, this discount code is only for new customers."
+                        : "Sorry, the discount code you wish to use is inactive."}
               </Alert>
             )
           ) : null}

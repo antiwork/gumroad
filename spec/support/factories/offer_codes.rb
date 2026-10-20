@@ -25,6 +25,10 @@ FactoryBot.define do
       products { [] }
     end
 
+    trait :for_new_customers do
+      new_customers_only { true }
+    end
+
     trait :for_existing_customers do
       existing_customers_only { true }
       ownership_products { products }

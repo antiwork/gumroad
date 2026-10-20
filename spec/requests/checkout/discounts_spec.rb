@@ -688,6 +688,45 @@ describe("Checkout discounts page", type: :system, js: true) do
                                                                         { "months" => 12, "amount_percentage" => 25 },
                                                                       ])
       end
+
+      it "creates a discount limited to new customers" do
+        visit checkout_discounts_path
+        click_on "New discount"
+
+        fill_in "Name", with: "Welcome offer"
+        find(:label, "Products").click
+        select_combo_box_option "Product 1", from: "Products"
+
+        check "Limit to new customers"
+        click_on "Add discount"
+        expect(page).to have_alert(text: "Successfully created discount!")
+
+        offer_code = OfferCode.where(name: "Welcome offer").last
+        expect(offer_code.new_customers_only?).to eq(true)
+        expect(offer_code.existing_customers_only?).to eq(false)
+      end
+
+      it "keeps the two customer-history limits mutually exclusive and rehydrates the new-customers toggle" do
+        create(:offer_code,
+               user: seller,
+               products: [product1],
+               new_customers_only: true,
+               amount_cents: nil,
+               amount_percentage: 20,
+               currency_type: nil,
+               code: "welcome",
+               name: "Welcome offer")
+
+        visit checkout_discounts_path
+        within(find(:table_row, { "Discount" => "Welcome offer" })) { click_on "Edit" }
+
+        expect(page).to have_checked_field("Limit to new customers")
+        expect(page).to have_unchecked_field("Limit to existing customers")
+
+        check "Limit to existing customers"
+        expect(page).to have_unchecked_field("Limit to new customers")
+        expect(page).to have_checked_field("Limit to existing customers")
+      end
     end
   end
 
