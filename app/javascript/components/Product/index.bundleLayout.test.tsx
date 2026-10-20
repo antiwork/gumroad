@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { trackUserProductAction } from "$app/data/user_action_event";
 
-import { LONG_TITLE_LENGTH, Product, type Product as ProductData } from "$app/components/Product";
+import { LONG_TITLE_LENGTH, Product, type Product as ProductData, type Purchase } from "$app/components/Product";
 import type { PriceSelection } from "$app/components/Product/ConfigurationSelector";
 import { Layout } from "$app/components/Product/Layout";
 
@@ -428,5 +428,111 @@ describe("product page bundle mobile layout", () => {
     // Price wrapper precedes the CTA wrapper, so a column puts the price on top.
     expect(inner?.firstElementChild?.getAttribute("itemprop")).toBe("offers");
     expect(inner?.lastElementChild).toBe(ctaWrap);
+  });
+});
+
+describe("product page reading order below lg", () => {
+  const receipt: Purchase = {
+    id: "purchase",
+    email_digest: "",
+    created_at: "2020-01-01",
+    review: null,
+    review_account_name: null,
+    should_show_receipt: true,
+    was_paid: true,
+    is_gift_receiver_purchase: false,
+    content_url: "https://example.com/d/content",
+    show_view_content_button_on_product_page: true,
+    total_price_including_tax_and_shipping: "$10",
+    subscription_has_lapsed: false,
+    membership: null,
+  };
+
+  const renderArticle = (p: ProductData, purchase: Purchase | null) => {
+    const { container } = render(<Product product={p} purchase={purchase} selection={selection} disableAnalytics />);
+    const article = container.querySelector("article");
+    if (!article) throw new Error("expected the product article");
+    return article;
+  };
+
+  // The stacked template's areas top to bottom, next to the article's areas in DOM (= focus) order.
+  const areaOrder = (article: HTMLElement) => {
+    const template = article.className.split(" ").find((name) => name.startsWith("[grid-template-areas:"));
+    const inDom = [...article.children].flatMap((child) => /\[grid-area:(\w+)\]/u.exec(child.className)?.[1] ?? []);
+    const drawn = [...(template?.matchAll(/'(\w+)'/gu) ?? [])].flatMap((match) => match[1] ?? []);
+    return { drawn: drawn.filter((area) => inDom.includes(area)), inDom };
+  };
+
+  // happy-dom's compareDocumentPosition does not follow source order, so compare document positions.
+  const position = (element: Element) => [...document.querySelectorAll("*")].indexOf(element);
+  const sellerLink = () => screen.getByRole("link", { name: product.seller?.name ?? "" });
+
+  it("draws and focuses the purchase controls before the details for a new buyer", () => {
+    const { drawn, inDom } = areaOrder(renderArticle(product, null));
+
+    expect(inDom).toEqual(drawn);
+    expect(inDom.indexOf("controls")).toBeLessThan(inDom.indexOf("details"));
+    expect(position(screen.getByRole("link", { name: "I want this!" }))).toBeLessThan(position(sellerLink()));
+  });
+
+  it("keeps the new-buyer order when the visitor's purchase has no receipt to show", () => {
+    const { drawn, inDom } = areaOrder(renderArticle(product, { ...receipt, should_show_receipt: false }));
+
+    expect(inDom).toEqual(drawn);
+    expect(inDom.indexOf("controls")).toBeLessThan(inDom.indexOf("details"));
+    expect(position(screen.getByRole("link", { name: "Purchase again" }))).toBeLessThan(position(sellerLink()));
+  });
+
+  it.each([
+    ["View content", { ...receipt }, () => screen.getByRole("link", { name: "View content" })],
+    [
+      "the license key",
+      { ...receipt, license_key: "LICENSE-KEY-1234" },
+      () => screen.getByRole("button", { name: "Copy" }),
+    ],
+    [
+      "Manage membership",
+      {
+        ...receipt,
+        membership: { tier_name: "Standard", tier_description: null, manage_url: "https://example.com/manage" },
+      },
+      () => screen.getByRole("link", { name: "Manage membership" }),
+    ],
+    [
+      "Restart membership",
+      {
+        ...receipt,
+        subscription_has_lapsed: true,
+        membership: { tier_name: "Standard", tier_description: null, manage_url: "https://example.com/manage" },
+      },
+      () => screen.getByRole("link", { name: "Restart membership" }),
+    ],
+  ] as const)("keeps %s ahead of Purchase again for a returning buyer", (_, purchase, access) => {
+    const { drawn, inDom } = areaOrder(renderArticle({ ...product, bundle_products: [] }, purchase));
+
+    expect(inDom).toEqual(drawn);
+    expect(inDom.indexOf("details")).toBeLessThan(inDom.indexOf("controls"));
+    expect(position(access())).toBeLessThan(position(screen.getByRole("link", { name: "Purchase again" })));
+  });
+
+  it("keeps a bundle owner's access card and bundle contents ahead of Purchase again", () => {
+    const { drawn, inDom } = areaOrder(renderArticle(product, receipt));
+    const purchaseAgain = position(screen.getByRole("link", { name: "Purchase again" }));
+
+    expect(inDom).toEqual(drawn);
+    expect(screen.getByRole("heading", { name: "You've purchased this bundle" })).toBeTruthy();
+    expect(position(screen.getByRole("link", { name: "View content" }))).toBeLessThan(purchaseAgain);
+    expect(position(screen.getByRole("link", { name: product.bundle_products[0]?.name ?? "" }))).toBeLessThan(
+      purchaseAgain,
+    );
+  });
+
+  it("uses the same desktop grid for new and returning buyers", () => {
+    const desktopClasses = (article: HTMLElement) =>
+      article.className.split(" ").filter((name) => name.startsWith("lg:"));
+    const newBuyer = desktopClasses(renderArticle(product, null));
+    cleanup();
+
+    expect(desktopClasses(renderArticle(product, receipt))).toEqual(newBuyer);
   });
 });
