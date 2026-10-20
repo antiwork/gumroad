@@ -5,8 +5,8 @@ import { classNames } from "$app/utils/classNames";
 
 import { LinkButton } from "$app/components/ui/LinkButton";
 
-// On mobile, the product description sits above the purchase controls in a single-column layout,
-// so a long description buries the price and CTA far down the page. We collapse tall descriptions
+// On mobile, a returning buyer's description sits above the purchase controls in a single-column layout
+// (new buyers get the controls first), so a long description buries the CTA. We collapse tall descriptions
 // behind a "Read more" toggle there. The collapse is purely CSS (max-height + overflow), so the
 // full description HTML always stays in the DOM for SSR/SEO; desktop (lg and up) is never clamped
 // because its two-column layout keeps the purchase sidebar visible alongside the description.

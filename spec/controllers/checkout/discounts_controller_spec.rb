@@ -593,6 +593,47 @@ describe Checkout::DiscountsController do
                                                                      ])
       end
     end
+    context "when limited to new customers" do
+      let(:subject_product) { create(:product, user: seller, price_cents: 2_00) }
+
+      it "creates a new-customers-only offer code" do
+        expect do
+          post :create, params: {
+            name: "Welcome offer",
+            code: "welcome",
+            amount_percentage: 25,
+            currency_type: nil,
+            universal: false,
+            selected_product_ids: [subject_product.external_id],
+            new_customers_only: true,
+          }, as: :json
+        end.to change { seller.offer_codes.count }.by(1)
+
+        expect(response.parsed_body["success"]).to eq(true)
+        offer_code = seller.offer_codes.last
+        expect(offer_code.new_customers_only?).to eq(true)
+        expect(offer_code.existing_customers_only?).to eq(false)
+      end
+
+      it "returns the validation error when the code is limited to both new and existing customers" do
+        expect do
+          post :create, params: {
+            name: "Contradictory",
+            code: "contradictory",
+            amount_percentage: 25,
+            currency_type: nil,
+            universal: false,
+            selected_product_ids: [subject_product.external_id],
+            existing_customers_only: true,
+            new_customers_only: true,
+            ownership_product_ids: [subject_product.external_id],
+          }, as: :json
+        end.not_to change { seller.offer_codes.count }
+
+        expect(response.parsed_body["success"]).to eq(false)
+        expect(response.parsed_body["error_message"]).to eq("A discount code can't be limited to new customers and existing customers at the same time.")
+      end
+    end
   end
 
   describe "PUT update" do

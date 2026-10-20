@@ -46,7 +46,7 @@ import {
   CartItemTitle,
 } from "$app/components/CartItemList";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
-import { useDomains } from "$app/components/DomainSettings";
+import { useAppDomain, useDomains } from "$app/components/DomainSettings";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
 import { PaginationProps } from "$app/components/Pagination";
@@ -205,7 +205,8 @@ export type ProductDiscount =
         | "invalid_offer"
         | "inactive"
         | "unmet_minimum_purchase_quantity"
-        | "not_existing_customer";
+        | "not_existing_customer"
+        | "not_new_customer";
     }
   | { valid: true; code: string; discount: Discount }
   | null;
@@ -355,6 +356,9 @@ export const Product = ({
 
   const addThirdPartyAnalytics = useAddThirdPartyAnalytics();
 
+  const loggedInUser = useLoggedInUser();
+  const appDomain = useAppDomain();
+
   const { searchParams } = new URL(useOriginalLocation());
   useRunOnce(() => {
     if (disableAnalytics) return;
@@ -493,10 +497,129 @@ export const Product = ({
     />
   ) : null;
 
+  // A returning buyer's access card lives in the details, so it stays ahead of "Purchase again" for them.
+  const showsExistingPurchase = !!purchase?.should_show_receipt;
+  const details = (
+    <div className="[grid-area:details] lg:border-r">
+      {sellerByline || hasRatings ? (
+        <section className="grid grid-cols-1 gap-[1px] border-t border-border p-0 sm:grid-cols-[minmax(0,1fr)_auto]">
+          {sellerByline ? (
+            <div
+              className={classNames(
+                "flex min-w-0 flex-wrap items-center gap-2 px-6 py-4 outline outline-offset-0 outline-border",
+                !hasRatings && "sm:col-span-full",
+              )}
+            >
+              {product.collaborating_user ? (
+                <>
+                  {sellerByline} with{" "}
+                  <AuthorByline
+                    name={product.collaborating_user.name}
+                    profileUrl={product.collaborating_user.profile_url}
+                    avatarUrl={product.collaborating_user.avatar_url}
+                  />
+                </>
+              ) : (
+                sellerByline
+              )}
+            </div>
+          ) : null}
+          {product.ratings != null && hasRatings ? (
+            <div
+              className={classNames(
+                "flex items-center px-6 py-4 outline outline-offset-0 outline-border",
+                !sellerByline && "sm:col-span-full",
+              )}
+            >
+              <RatingsSummary ratings={product.ratings} />
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+      {purchase !== null ? (
+        <ExistingPurchaseCard
+          purchase={purchase}
+          permalink={product.permalink}
+          isPreorder={product.preorder !== null}
+          isBundle={isBundle}
+          customViewContentButtonText={product.custom_view_content_button_text}
+        />
+      ) : null}
+      {isBundle ? (
+        <section className="grid gap-4 border-t border-border p-6">
+          <h2>This bundle contains...</h2>
+          <CartItemList>
+            {product.bundle_products.map((bundleProduct) => {
+              const price =
+                bundleProduct.currency_code === product.currency_code
+                  ? formatBuyerLocalOrSetPrice(bundleProduct.price, {
+                      currencyCode: product.currency_code,
+                      buyerCurrency: product.buyer_currency,
+                      buyerLocalCurrencyRate: product.buyer_local_currency_rate,
+                      buyerLocalCurrencySubunitToUnit: product.buyer_local_currency_subunit_to_unit,
+                    })
+                  : formatPriceCentsWithCurrencySymbol(bundleProduct.currency_code, bundleProduct.price, {
+                      symbolFormat: "long",
+                    });
+              return (
+                <CartItem key={bundleProduct.id} isBundleItem>
+                  <CartItemMedia className="h-16 w-16 shrink-0 sm:h-28 sm:w-28">
+                    <Thumbnail url={bundleProduct.thumbnail_url} nativeType={bundleProduct.native_type} />
+                  </CartItemMedia>
+                  {/* Checkout's floor: without it a wide price squeezes this to one letter/line. */}
+                  <CartItemMain className="min-h-16 min-w-2/5 sm:h-28">
+                    <CartItemTitle asChild>
+                      <a href={bundleProduct.url}>
+                        <h4 className="font-bold wrap-break-word">{bundleProduct.name}</h4>
+                      </a>
+                    </CartItemTitle>
+                    {bundleProduct.ratings ? (
+                      <div className="line-clamp-1 flex shrink-0 items-center gap-1" aria-label="Rating">
+                        <Star pack="filled" className="size-5" />
+                        {`${bundleProduct.ratings.average.toFixed(1)} (${bundleProduct.ratings.count})`}
+                      </div>
+                    ) : null}
+                    <span className="sr-only">Qty: {bundleProduct.quantity}</span>
+                    {bundleProduct.variant ? (
+                      <CartItemFooter>
+                        <span className="line-clamp-1">
+                          <strong>{variantLabel(bundleProduct.native_type)}:</strong> {bundleProduct.variant}
+                        </span>
+                      </CartItemFooter>
+                    ) : null}
+                  </CartItemMain>
+                  <CartItemEnd className="max-w-1/2 shrink-0 flex-row items-start gap-4 p-4 text-right">
+                    <span className="current-price whitespace-nowrap" aria-label="Price">
+                      {comparisonPriceCents !== null && discountedPriceCents < comparisonPriceCents ? (
+                        <s>{price}</s>
+                      ) : (
+                        price
+                      )}
+                    </span>
+                  </CartItemEnd>
+                </CartItem>
+              );
+            })}
+          </CartItemList>
+        </section>
+      ) : null}
+      <section className="border-t border-border p-6">
+        <CollapsibleDescription>
+          <LazyDescription html={product.description_html} publicFiles={product.public_files} />
+        </CollapsibleDescription>
+      </section>
+    </div>
+  );
+
   return (
     <article
       className={classNames(
-        "relative grid rounded border border-border bg-background [grid-template-areas:'covers'_'title'_'price'_'details'_'controls'] lg:grid-cols-[2fr_1fr]",
+        // The article's DOM order is the stacked order so focus follows what the narrow layout draws;
+        // the named areas below put both back in the desktop columns.
+        "relative grid rounded border border-border bg-background lg:grid-cols-[2fr_1fr]",
+        showsExistingPurchase
+          ? "[grid-template-areas:'covers'_'title'_'price'_'details'_'controls']"
+          : "[grid-template-areas:'covers'_'title'_'price'_'controls'_'details']",
         // The title spans two rows, so a tall title stretches the controls' row instead of the price row.
         // In one shared row, the controls would start below the title and leave a gap under the price.
         saleBanner || priceTag
@@ -531,115 +654,7 @@ export const Product = ({
           {priceTag ? <div className="px-6 py-4 lg:pt-6 lg:pb-0">{priceTag}</div> : null}
         </section>
       ) : null}
-      <div className="[grid-area:details] lg:border-r">
-        {sellerByline || hasRatings ? (
-          <section className="grid grid-cols-1 gap-[1px] border-t border-border p-0 sm:grid-cols-[minmax(0,1fr)_auto]">
-            {sellerByline ? (
-              <div
-                className={classNames(
-                  "flex min-w-0 flex-wrap items-center gap-2 px-6 py-4 outline outline-offset-0 outline-border",
-                  !hasRatings && "sm:col-span-full",
-                )}
-              >
-                {product.collaborating_user ? (
-                  <>
-                    {sellerByline} with{" "}
-                    <AuthorByline
-                      name={product.collaborating_user.name}
-                      profileUrl={product.collaborating_user.profile_url}
-                      avatarUrl={product.collaborating_user.avatar_url}
-                    />
-                  </>
-                ) : (
-                  sellerByline
-                )}
-              </div>
-            ) : null}
-            {product.ratings != null && hasRatings ? (
-              <div
-                className={classNames(
-                  "flex items-center px-6 py-4 outline outline-offset-0 outline-border",
-                  !sellerByline && "sm:col-span-full",
-                )}
-              >
-                <RatingsSummary ratings={product.ratings} />
-              </div>
-            ) : null}
-          </section>
-        ) : null}
-        {purchase !== null ? (
-          <ExistingPurchaseCard
-            purchase={purchase}
-            permalink={product.permalink}
-            isPreorder={product.preorder !== null}
-            isBundle={isBundle}
-            customViewContentButtonText={product.custom_view_content_button_text}
-          />
-        ) : null}
-        {isBundle ? (
-          <section className="grid gap-4 border-t border-border p-6">
-            <h2>This bundle contains...</h2>
-            <CartItemList>
-              {product.bundle_products.map((bundleProduct) => {
-                const price =
-                  bundleProduct.currency_code === product.currency_code
-                    ? formatBuyerLocalOrSetPrice(bundleProduct.price, {
-                        currencyCode: product.currency_code,
-                        buyerCurrency: product.buyer_currency,
-                        buyerLocalCurrencyRate: product.buyer_local_currency_rate,
-                        buyerLocalCurrencySubunitToUnit: product.buyer_local_currency_subunit_to_unit,
-                      })
-                    : formatPriceCentsWithCurrencySymbol(bundleProduct.currency_code, bundleProduct.price, {
-                        symbolFormat: "long",
-                      });
-                return (
-                  <CartItem key={bundleProduct.id} isBundleItem>
-                    <CartItemMedia className="h-16 w-16 shrink-0 sm:h-28 sm:w-28">
-                      <Thumbnail url={bundleProduct.thumbnail_url} nativeType={bundleProduct.native_type} />
-                    </CartItemMedia>
-                    {/* Checkout's floor: without it a wide price squeezes this to one letter/line. */}
-                    <CartItemMain className="min-h-16 min-w-2/5 sm:h-28">
-                      <CartItemTitle asChild>
-                        <a href={bundleProduct.url}>
-                          <h4 className="font-bold wrap-break-word">{bundleProduct.name}</h4>
-                        </a>
-                      </CartItemTitle>
-                      {bundleProduct.ratings ? (
-                        <div className="line-clamp-1 flex shrink-0 items-center gap-1" aria-label="Rating">
-                          <Star pack="filled" className="size-5" />
-                          {`${bundleProduct.ratings.average.toFixed(1)} (${bundleProduct.ratings.count})`}
-                        </div>
-                      ) : null}
-                      <span className="sr-only">Qty: {bundleProduct.quantity}</span>
-                      {bundleProduct.variant ? (
-                        <CartItemFooter>
-                          <span className="line-clamp-1">
-                            <strong>{variantLabel(bundleProduct.native_type)}:</strong> {bundleProduct.variant}
-                          </span>
-                        </CartItemFooter>
-                      ) : null}
-                    </CartItemMain>
-                    <CartItemEnd className="max-w-1/2 shrink-0 flex-row items-start gap-4 p-4 text-right">
-                      <span className="current-price whitespace-nowrap" aria-label="Price">
-                        {comparisonPriceCents !== null && discountedPriceCents < comparisonPriceCents ? (
-                          <s>{price}</s>
-                        ) : (
-                          price
-                        )}
-                      </span>
-                    </CartItemEnd>
-                  </CartItem>
-                );
-              })}
-            </CartItemList>
-          </section>
-        ) : null}
-        <section className="border-t border-border p-6">
-          <CollapsibleDescription>
-            <LazyDescription html={product.description_html} publicFiles={product.public_files} />
-          </CollapsibleDescription>
-        </section>
-      </div>
+      {showsExistingPurchase ? details : null}
       <section className="[grid-area:controls]">
         <section className="grid gap-4 border-t p-6 lg:border-t-0">
           {notForSaleMessage ? (
@@ -710,13 +725,27 @@ export const Product = ({
               ) : null
             ) : (
               <Alert role="status" variant="danger">
-                {discountCode.error_code === "sold_out"
-                  ? "Sorry, the discount code you wish to use has reached its usage limit."
-                  : discountCode.error_code === "invalid_offer"
-                    ? "Sorry, the discount code you wish to use is invalid."
-                    : discountCode.error_code === "not_existing_customer"
-                      ? "Sorry, this discount code is only for existing customers."
-                      : "Sorry, the discount code you wish to use is inactive."}
+                {discountCode.error_code === "sold_out" ? (
+                  "Sorry, the discount code you wish to use has reached its usage limit."
+                ) : discountCode.error_code === "invalid_offer" ? (
+                  "Sorry, the discount code you wish to use is invalid."
+                ) : discountCode.error_code === "not_existing_customer" ? (
+                  "Sorry, this discount code is only for existing customers."
+                ) : discountCode.error_code === "not_new_customer" ? (
+                  // An unidentified visitor may be a first-time buyer, so only someone we matched against a
+                  // purchase reads the flat refusal; everyone else is told how to find out.
+                  loggedInUser ? (
+                    "Sorry, this discount code is only for new customers."
+                  ) : (
+                    <>
+                      Sorry, this discount code is only for new customers.{" "}
+                      <a href={Routes.login_url({ host: appDomain, next: product.long_url })}>Log in</a> to check if you
+                      qualify.
+                    </>
+                  )
+                ) : (
+                  "Sorry, the discount code you wish to use is inactive."
+                )}
               </Alert>
             )
           ) : null}
@@ -850,6 +879,7 @@ export const Product = ({
           />
         ) : null}
       </section>
+      {showsExistingPurchase ? null : details}
     </article>
   );
 };

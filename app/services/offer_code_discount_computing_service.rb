@@ -281,6 +281,10 @@ class OfferCodeDiscountComputingService
         @product_level_ineligibilities[:not_existing_customer] = true
       end
 
+      if resolved_discount.nil? && offer_code.new_customers_only?
+        @product_level_ineligibilities[:not_new_customer] = true
+      end
+
       unless meets_minimum_purchase_quantity?(offer_code, purchase_quantity)
         @product_level_ineligibilities[:unmet_minimum_purchase_quantity] = true
       end
@@ -301,6 +305,7 @@ class OfferCodeDiscountComputingService
 
     PRODUCT_LEVEL_INELIGIBILITIES_BY_DISPLAY_PRIORITY = [
       :not_existing_customer,
+      :not_new_customer,
       :unmet_minimum_purchase_quantity,
       :insufficient_times_of_use,
       :sold_out,

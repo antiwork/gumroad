@@ -65,6 +65,7 @@ export type OfferCodeResponseData =
         | "inactive"
         | "unmet_minimum_purchase_quantity"
         | "not_existing_customer"
+        | "not_new_customer"
         | "option_not_eligible";
       error_message: string;
     }
@@ -110,6 +111,7 @@ export type DiscountPayload = {
   minimumAmount: number | null;
   oncePerCart: boolean;
   existingCustomersOnly: boolean;
+  newCustomersOnly: boolean;
   autoApply: boolean;
   saleLabel: string | null;
   ownershipProductIds: string[];
@@ -149,6 +151,7 @@ export const buildDiscountPayload = (payload: DiscountPayload) => ({
   minimum_amount_cents: payload.minimumAmount,
   once_per_cart: payload.discount.type === "cents" && payload.oncePerCart,
   existing_customers_only: payload.existingCustomersOnly,
+  new_customers_only: payload.newCustomersOnly,
   auto_apply: payload.autoApply,
   sale_label: payload.autoApply ? payload.saleLabel : null,
   ownership_product_ids: payload.existingCustomersOnly ? payload.ownershipProductIds : [],
