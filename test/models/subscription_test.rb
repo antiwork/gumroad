@@ -2473,6 +2473,10 @@ class SubscriptionTest < ActiveSupport::TestCase
     subscription = purchase.subscription
     error = assert_raises(ActiveRecord::RecordInvalid) { subscription.cancel!(by_seller: false) }
     assert_equal "Validation failed: Installment plans cannot be cancelled by the customer", error.message
+
+    subscription.reload
+    assert_nil subscription.cancelled_at
+    assert_nil subscription.user_requested_cancellation_at
   end
 
   test "#cancel! installment plans can be cancelled by the seller" do
@@ -2481,6 +2485,38 @@ class SubscriptionTest < ActiveSupport::TestCase
     assert_changes -> { subscription.reload.cancelled_at }, from: nil do
       subscription.cancel!(by_seller: true)
     end
+  end
+
+  test "#cancel! installment plans can be cancelled by an admin on the buyer's behalf" do
+    subscription = create_installment_plan_purchase.subscription
+
+    subscription.cancel!(by_seller: false, by_admin: true)
+
+    subscription.reload
+    assert subscription.cancelled_at.present?
+    assert subscription.cancelled_by_admin?
+    assert subscription.cancelled_by_buyer?
+    assert_enqueued_email(CustomerLowPriorityMailer, :subscription_cancelled, args: [subscription.id])
+  end
+
+  test "#cancel! installment plans reactivated after an admin cancel still refuse a buyer cancel" do
+    subscription = create_installment_plan_purchase.subscription
+    subscription.cancel!(by_seller: false, by_admin: true)
+    subscription.resubscribe!
+
+    assert_raises(ActiveRecord::RecordInvalid) { subscription.cancel!(by_seller: false) }
+    assert_nil subscription.reload.cancelled_at
+  end
+
+  # cancel_effective_immediately! never writes the admin flag, so only resubscribe!'s reset keeps a
+  # stale one from exempting a later chargeback cancel.
+  test "#cancel_effective_immediately! by_buyer on an installment plan reactivated after an admin cancel is refused" do
+    subscription = create_installment_plan_purchase.subscription
+    subscription.cancel!(by_seller: false, by_admin: true)
+    subscription.resubscribe!
+
+    assert_raises(ActiveRecord::RecordInvalid) { subscription.cancel_effective_immediately!(by_buyer: true) }
+    assert_nil subscription.reload.cancelled_at
   end
 
   # --- #deactivate! ----------------------------------------------------------
