@@ -1611,7 +1611,7 @@ describe Api::Internal::Admin::PurchasesController do
     context "when the model rejects the cancel" do
       let(:subscription) { instance_double(Subscription, deactivated?: false, cancelled_at: nil) }
       let(:invalid_record) do
-        Subscription.new.tap { _1.errors.add(:base, "Subscription must have at least one PaymentOption") }
+        build(:subscription).tap { _1.errors.add(:base, "Subscription must have at least one PaymentOption") }
       end
 
       before do
