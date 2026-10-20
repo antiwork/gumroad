@@ -263,6 +263,77 @@ describe LibraryPresenter do
       it "echoes the flag back to the page so the tab stays selected" do
         expect(library_props(subscriptions_only: true)[:search][:subscriptions_only]).to be(true)
       end
+
+      it "keeps a membership the buyer cancelled that is still inside its paid period" do
+        purchase.subscription.update!(cancelled_at: 1.week.from_now)
+
+        expect(results(subscriptions_only: true).map { _1[:purchase][:id] }).to eq([purchase.external_id])
+      end
+
+      it "drops a membership whose last payment failed" do
+        purchase.subscription.update!(failed_at: 1.day.ago)
+
+        expect(results(subscriptions_only: true)).to be_empty
+      end
+
+      it "drops a fixed-length membership that has ended" do
+        purchase.subscription.update!(ended_at: 1.day.ago)
+
+        expect(results(subscriptions_only: true)).to be_empty
+      end
+
+      it "keeps a membership whose signup charge was refunded while its subscription is still alive" do
+        purchase.update!(stripe_refunded: true)
+
+        expect(results(subscriptions_only: true).map { _1[:purchase][:id] }).to eq([purchase.external_id])
+      end
+
+      it "never lists a membership the buyer removed from the library" do
+        purchase.update!(is_deleted_by_buyer: true)
+
+        expect(results(subscriptions_only: true)).to be_empty
+        expect(results(subscriptions_only: true, show_archived_only: true)).to be_empty
+      end
+
+      it "lists an archived membership only in the archive view, without archived one-off purchases" do
+        purchase.update!(is_archived: true)
+        one_off_purchase.update!(is_archived: true)
+
+        expect(results(subscriptions_only: true)).to be_empty
+        expect(results(subscriptions_only: true, show_archived_only: true).map { _1[:purchase][:id] }).to eq([purchase.external_id])
+      end
+
+      it "counts only active memberships for the archive banner and empty states, leaving the Purchases counts alone" do
+        create(:purchase, purchaser: buyer, is_archived: true)
+        create(:membership_purchase, purchaser: buyer, is_archived: true).tap { _1.create_url_redirect! }
+
+        subscriptions_props = library_props(subscriptions_only: true)
+        expect(subscriptions_props[:archived_count]).to eq(1)
+        expect(subscriptions_props[:unarchived_count]).to eq(1)
+
+        purchases_props = library_props
+        expect(purchases_props[:archived_count]).to eq(2)
+        expect(purchases_props[:unarchived_count]).to eq(2)
+      end
+
+      it "reports zero counts when every membership has ended, even though one-off purchases remain" do
+        purchase.subscription.update!(ended_at: 1.day.ago)
+
+        props = library_props(subscriptions_only: true)
+        expect(props[:archived_count]).to eq(0)
+        expect(props[:unarchived_count]).to eq(0)
+      end
+
+      it "does not list or count another buyer's memberships" do
+        other_buyer = create(:user)
+        create(:membership_purchase, link: product, purchaser: other_buyer).tap { _1.create_url_redirect! }
+
+        props = library_props(subscriptions_only: true)
+        expect(props[:results].map { _1[:purchase][:id] }).to eq([purchase.external_id])
+        expect(props[:unarchived_count]).to eq(1)
+        expect(described_class.new(other_buyer).library_props(subscriptions_only: true)[:results].map { _1[:purchase][:id] })
+          .not_to include(purchase.external_id)
+      end
     end
 
     context "when a user has purchased a subscription multiple times" do
@@ -618,6 +689,15 @@ describe LibraryPresenter do
         matches = results(bundle_ids: [purchase1.link.external_id])
 
         expect(matches.map { _1[:purchase][:id] }).to match_array(purchase1.product_purchases.map(&:external_id))
+      end
+
+      it "ignores bundle filters on the Subscriptions tab, where no membership can be a bundle member" do
+        props = library_props(subscriptions_only: true, bundle_ids: [purchase1.link.external_id])
+
+        expect(props[:results].map { _1[:purchase][:id] }).to eq([purchase.external_id])
+        expect(props[:bundles]).to eq([])
+        expect(props[:bundle_downloads]).to eq([])
+        expect(props[:search][:bundles]).to eq([])
       end
 
       it "prepares and returns a combined ZIP for the selected bundle purchase" do

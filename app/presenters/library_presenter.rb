@@ -15,15 +15,19 @@ class LibraryPresenter
 
   def library_props(page: nil, sort: nil, query: nil, creator_ids: [], bundle_ids: [], show_archived_only: false, subscriptions_only: false)
     sort = sort == "purchase_date" ? "purchase_date" : "recently_updated"
+    # A membership can't be a bundle member, so a bundle filter (even a stale URL) would only empty this tab.
+    bundle_ids = [] if subscriptions_only
 
     base = logged_in_user.purchases.visible_in_library
     denied_ids = no_access_membership_purchase_ids(base)
     visible = base.where.not(id: denied_ids)
     replaced_ids = replaced_bundle_purchase_ids(base)
     cards = visible.where.not(id: replaced_ids)
-    # The Subscriptions tab is a narrow view of the same card set: a buyer's memberships are
-    # mixed in with one-off purchases and nothing on the card says which is which.
-    cards = cards.has_active_subscription if subscriptions_only
+    counted = visible
+    if subscriptions_only
+      cards = cards.has_active_subscription
+      counted = visible.has_active_subscription
+    end
 
     pagination, page_purchases = paged_purchases(filtered(cards, query:, creator_ids:, bundle_ids:, show_archived_only:), sort:, page:)
 
@@ -31,10 +35,10 @@ class LibraryPresenter
       results: build_cards(page_purchases),
       pagination:,
       creators: creators_for_tab(cards, show_archived_only:),
-      bundles: bundle_filter_options(base, replaced_ids),
+      bundles: subscriptions_only ? [] : bundle_filter_options(base, replaced_ids),
       bundle_downloads: bundle_downloads(base, bundle_ids),
-      archived_count: visible.is_archived.count,
-      unarchived_count: visible.not_is_archived.count,
+      archived_count: counted.is_archived.count,
+      unarchived_count: counted.not_is_archived.count,
       search: {
         sort:,
         query: query.to_s,

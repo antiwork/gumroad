@@ -358,6 +358,88 @@ describe("LibraryPage", () => {
   });
 });
 
+describe("Subscriptions tab", () => {
+  const subscriptionsProps = () => {
+    const props = defaultProps();
+    props.search.subscriptions_only = true;
+    props.bundles = [];
+    return props;
+  };
+
+  const emptyPagination = { page: 1, pages: 1, from: 0, to: 0, count: 0 };
+
+  it("shows a single subscriptions empty state when the buyer has no active subscriptions", () => {
+    const props = subscriptionsProps();
+    props.results = [];
+    props.pagination = emptyPagination;
+    props.archived_count = 0;
+    props.unarchived_count = 0;
+    renderPage(props);
+
+    expect(screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent)).toEqual([
+      "You don't have any active subscriptions.",
+    ]);
+    expect(screen.queryByText(/haven't bought anything/u)).toBeNull();
+    expect(screen.queryByText(/renew/iu)).toBeNull();
+  });
+
+  it("says every subscription is archived instead of claiming there are none", () => {
+    const props = subscriptionsProps();
+    props.results = [];
+    props.pagination = emptyPagination;
+    props.archived_count = 2;
+    props.unarchived_count = 0;
+    renderPage(props);
+
+    expect(screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent)).toEqual([
+      "You've archived all your subscriptions.",
+    ]);
+    expect(screen.getByRole("button", { name: "See archive" })).toBeTruthy();
+  });
+
+  it("keeps a search with no matches distinct from having no subscriptions", () => {
+    const props = subscriptionsProps();
+    props.results = [];
+    props.pagination = emptyPagination;
+    props.archived_count = 0;
+    props.unarchived_count = 3;
+    props.search.query = "nothing matches";
+    renderPage(props);
+
+    expect(screen.getByText("No products found")).toBeTruthy();
+    expect(screen.queryByText(/active (subscriptions|memberships)/u)).toBeNull();
+    expect(screen.queryAllByRole("heading", { level: 2 })).toEqual([]);
+  });
+
+  it("counts archived subscriptions, not archived purchases, in the archive banner", () => {
+    const props = subscriptionsProps();
+    props.archived_count = 1;
+    renderPage(props);
+
+    expect(screen.getByRole("status").textContent).toContain("You have 1 archived subscription.");
+  });
+
+  it("returns to the Subscriptions tab after unarchiving its last archived subscription", async () => {
+    const props = subscriptionsProps();
+    const archived = result("p1", "Alpha");
+    archived.purchase.is_archived = true;
+    props.results = [archived];
+    props.pagination = { page: 1, pages: 1, from: 1, to: 1, count: 1 };
+    props.archived_count = 1;
+    props.unarchived_count = 2;
+    props.search.show_archived_only = true;
+    renderPage(props);
+
+    fireEvent.click(screen.getByRole("button", { name: "Open product action menu" }));
+    await act(async () => {
+      fireEvent.click(screen.getByText("Unarchive"));
+      await Promise.resolve();
+    });
+
+    expect(lastGetParams()).toEqual({ sort: "recently_updated", subscriptions_only: "true" });
+  });
+});
+
 describe("removal copy", () => {
   it("offers removal rather than permanent deletion, and says the card can come back", () => {
     renderPage();

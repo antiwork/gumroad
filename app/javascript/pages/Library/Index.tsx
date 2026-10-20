@@ -275,8 +275,10 @@ export default function LibraryPage() {
   const isDesktop = useIsAboveBreakpoint("lg");
   const [mobileFiltersExpanded, setMobileFiltersExpanded] = React.useState(false);
   const [showingAllCreators, setShowingAllCreators] = React.useState(false);
+  // On the Subscriptions tab the server counts only active subscriptions, so these follow the tab.
   const isLibraryEmpty = archivedCount + unarchivedCount === 0;
   const showArchivedNotice = !isLibraryEmpty && !search.show_archived_only && unarchivedCount === 0;
+  const archivedNoun = search.subscriptions_only ? "subscription" : "purchase";
   const hasParams =
     activeSearch.show_archived_only ||
     activeSearch.query !== "" ||
@@ -353,17 +355,29 @@ export default function LibraryPage() {
         {isLibraryEmpty || showArchivedNotice ? (
           <Placeholder>
             {isLibraryEmpty ? (
-              <>
-                <PlaceholderImage src={placeholder} />
-                <h2 className="library-header">You haven't bought anything... yet!</h2>
-                Once you do, it'll show up here so you can download, watch, read, or listen to all your purchases.
-                <Button asChild color="accent">
-                  <a href={discoverUrl}>Discover products</a>
-                </Button>
-              </>
+              search.subscriptions_only ? (
+                <>
+                  <PlaceholderImage src={placeholder} />
+                  <h2 className="library-header">You don't have any active subscriptions.</h2>
+                  Subscriptions you buy will show up here.
+                </>
+              ) : (
+                <>
+                  <PlaceholderImage src={placeholder} />
+                  <h2 className="library-header">You haven't bought anything... yet!</h2>
+                  Once you do, it'll show up here so you can download, watch, read, or listen to all your purchases.
+                  <Button asChild color="accent">
+                    <a href={discoverUrl}>Discover products</a>
+                  </Button>
+                </>
+              )
             ) : (
               <>
-                <h2 className="library-header">You've archived all your products.</h2>
+                <h2 className="library-header">
+                  {search.subscriptions_only
+                    ? "You've archived all your subscriptions."
+                    : "You've archived all your products."}
+                </h2>
                 <Button
                   color="accent"
                   onClick={(e) => {
@@ -379,7 +393,8 @@ export default function LibraryPage() {
         ) : null}
         {archivedCount > 0 && !activeSearch.show_archived_only && !showArchivedNotice ? (
           <Alert role="status" variant="info" className="mb-5">
-            You have {archivedCount} archived purchase{archivedCount === 1 ? "" : "s"}.{" "}
+            You have {archivedCount} archived {archivedNoun}
+            {archivedCount === 1 ? "" : "s"}.{" "}
             <LinkButton onClick={() => navigate({ show_archived_only: true })}>Click here to view</LinkButton>
           </Alert>
         ) : null}
@@ -544,32 +559,24 @@ export default function LibraryPage() {
               ) : null}
             </UICard>
           ) : null}
-          {activeSearch.subscriptions_only && results.length === 0 && !isLibraryEmpty ? (
-            <Placeholder>
-              <PlaceholderImage src={placeholder} />
-              <h2 className="library-header">You don't have any active memberships.</h2>
-              Memberships you buy show up here, so you can see what renews and when.
-            </Placeholder>
-          ) : (
-            <ProductCardGrid>
-              {results.map((result) => (
-                <Card
-                  key={result.purchase.id}
-                  result={result}
-                  onArchive={refreshAfterArchiveChange}
-                  onDelete={(confirm = true) => (confirm ? setDeleting(result) : deletePurchase(result))}
+          <ProductCardGrid>
+            {results.map((result) => (
+              <Card
+                key={result.purchase.id}
+                result={result}
+                onArchive={refreshAfterArchiveChange}
+                onDelete={(confirm = true) => (confirm ? setDeleting(result) : deletePurchase(result))}
+              />
+            ))}
+            {pagination.pages > 1 ? (
+              <div className="col-[1/-1]">
+                <Pagination
+                  pagination={{ pages: pagination.pages, page: pagination.page }}
+                  onChangePage={(page) => navigate({ page })}
                 />
-              ))}
-              {pagination.pages > 1 ? (
-                <div className="col-[1/-1]">
-                  <Pagination
-                    pagination={{ pages: pagination.pages, page: pagination.page }}
-                    onChangePage={(page) => navigate({ page })}
-                  />
-                </div>
-              ) : null}
-            </ProductCardGrid>
-          )}
+              </div>
+            ) : null}
+          </ProductCardGrid>
         </div>
         <DeleteProductModal
           deleting={deleting}

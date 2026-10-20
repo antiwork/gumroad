@@ -209,6 +209,50 @@ describe("Library Scenario", type: :system, js: true) do
     expect(page).to have_product_card(purchase.link)
   end
 
+  it "lists only active subscriptions on the Subscriptions tab and keeps archiving on that tab" do
+    active_purchase = create(:membership_purchase, link: create(:membership_product, name: "Monthly membership"), purchaser: @user)
+    active_purchase.create_url_redirect!
+    ended_purchase = create(:membership_purchase, link: create(:membership_product, name: "Ended membership"), purchaser: @user)
+    ended_purchase.create_url_redirect!
+    ended_purchase.subscription.update!(ended_at: 1.day.ago)
+    one_off_purchase = create(:purchase, purchaser: @user, link: create(:product, name: "One-off product"))
+    Link.import(refresh: true, force: true)
+
+    visit "/library"
+    expect(page).to have_product_card(one_off_purchase.link)
+    click_on "Subscriptions"
+
+    expect(page).to have_selector("[role='tab'][aria-selected='true']", text: "Subscriptions")
+    expect(page).to have_product_card(active_purchase.link)
+    expect(page).to_not have_product_card(one_off_purchase.link)
+    expect(page).to_not have_product_card(ended_purchase.link)
+
+    find_product_card(active_purchase.link).hover
+    within find_product_card(active_purchase.link) do
+      find_and_click('[aria-label="Open product action menu"]')
+    end
+    click_on "Archive"
+
+    # The one-off purchase stays unarchived, but this tab only counts subscriptions.
+    expect(page).to have_text("You've archived all your subscriptions.")
+    expect(page).to_not have_text("You don't have any active subscriptions.")
+    click_on "See archive"
+
+    expect(page).to have_selector("[role='tab'][aria-selected='true']", text: "Subscriptions")
+    expect(page).to have_product_card(active_purchase.link)
+    expect(page).to_not have_product_card(one_off_purchase.link)
+
+    find_product_card(active_purchase.link).hover
+    within find_product_card(active_purchase.link) do
+      find_and_click('[aria-label="Open product action menu"]')
+    end
+    click_on "Unarchive"
+
+    expect(page).to have_current_path("/library?sort=recently_updated&subscriptions_only=true")
+    expect(page).to have_product_card(active_purchase.link)
+    expect(page).to_not have_product_card(one_off_purchase.link)
+  end
+
   it "manages archived purchases banner and interactions" do
     product1 = create(:product, name: "Product 1")
     product2 = create(:product, name: "Product 2")
