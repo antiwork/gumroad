@@ -496,7 +496,7 @@ export const Product = ({
   return (
     <article
       className={classNames(
-        "relative grid rounded border border-border bg-background [grid-template-areas:'covers'_'title'_'price'_'details'_'controls'] lg:grid-cols-[2fr_1fr]",
+        "relative grid rounded border border-border bg-background [grid-template-areas:'covers'_'title'_'price'_'controls'_'details'] lg:grid-cols-[2fr_1fr]",
         // The title spans two rows, so a tall title stretches the controls' row instead of the price row.
         // In one shared row, the controls would start below the title and leave a gap under the price.
         saleBanner || priceTag
