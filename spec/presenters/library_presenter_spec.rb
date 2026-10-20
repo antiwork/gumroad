@@ -476,6 +476,7 @@ describe LibraryPresenter do
             variants: "Untitled",
             subscription: {
               status_label: "Renews on #{buyer_date(purchase.subscription.end_time_of_subscription)}",
+              manage_label: "Manage membership",
               manage_url: "/subscriptions/#{purchase.subscription.external_id}/manage",
             },
           )
@@ -688,6 +689,7 @@ describe LibraryPresenter do
             download_url: nil,
             subscription: {
               status_label: "Installment plan · 1 payment remaining · Final payment on #{buyer_date(plan.subscription.end_time_of_subscription)}",
+              manage_label: "Manage installment plan",
               manage_url: "/subscriptions/#{plan.subscription.external_id}/manage",
             },
           ))
@@ -719,7 +721,7 @@ describe LibraryPresenter do
           renewal(plan.subscription, is_installment_payment: true, email: buyer.email)
 
           expect(plan.subscription.reload.charges_completed?).to be(true)
-          expect(plan_card).to include(purchase: include(subscription: { status_label: "Installment plan · No payments remaining", manage_url: nil }))
+          expect(plan_card).to include(purchase: include(subscription: { status_label: "Installment plan · No payments remaining", manage_label: "Manage installment plan", manage_url: nil }))
         end
 
         it "counts a payment as paid again once its chargeback is reversed" do

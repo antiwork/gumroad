@@ -399,7 +399,11 @@ describe("Subscriptions tab", () => {
 
   const subscriptionResult = (id: string, name: string, status_label: string): Result => {
     const card = result(id, name);
-    card.purchase.subscription = { status_label, manage_url: `/subscriptions/${id}/manage` };
+    card.purchase.subscription = {
+      status_label,
+      manage_label: "Manage membership",
+      manage_url: `/subscriptions/${id}/manage`,
+    };
     return card;
   };
 
@@ -413,8 +417,12 @@ describe("Subscriptions tab", () => {
 
     expect(screen.getByText("Renews on Nov 20, 2026")).toBeTruthy();
     expect(screen.getByText("Installment plan · 1 of 3 paid · Next payment on Nov 20, 2026")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Manage Alpha" }).getAttribute("href")).toBe("/subscriptions/p1/manage");
-    expect(screen.getByRole("link", { name: "Manage Beta" }).getAttribute("href")).toBe("/subscriptions/p2/manage");
+    expect(screen.getByRole("link", { name: "Manage membership for Alpha" }).getAttribute("href")).toBe(
+      "/subscriptions/p1/manage",
+    );
+    expect(screen.getByRole("link", { name: "Manage membership for Beta" }).getAttribute("href")).toBe(
+      "/subscriptions/p2/manage",
+    );
     expect(screen.queryByRole("button", { name: "Open product action menu" })).toBeNull();
   });
 
@@ -426,19 +434,25 @@ describe("Subscriptions tab", () => {
     renderPage(props);
 
     expect(screen.queryByRole("link", { name: "Alpha" })).toBeNull();
-    expect(screen.getByRole("link", { name: "Manage Alpha" }).getAttribute("href")).toBe("/subscriptions/p1/manage");
+    expect(screen.getByRole("link", { name: "Manage membership for Alpha" }).getAttribute("href")).toBe(
+      "/subscriptions/p1/manage",
+    );
   });
 
   it("offers no Manage link or Library menu for a subscription that can no longer be managed", () => {
     const props = subscriptionsProps();
     const card = subscriptionResult("p1", "Alpha", "Installment plan · Paid in full");
-    card.purchase.subscription = { status_label: "Installment plan · Paid in full", manage_url: null };
+    card.purchase.subscription = {
+      status_label: "Installment plan · Paid in full",
+      manage_label: "Manage installment plan",
+      manage_url: null,
+    };
     props.results = [card];
     renderPage(props);
 
     expect(screen.getByText("Installment plan · Paid in full")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Alpha" }).getAttribute("href")).toBe("https://example.com/d/p1");
-    expect(screen.queryByText("Manage")).toBeNull();
+    expect(screen.queryByText(/^Manage /u)).toBeNull();
     expect(screen.queryByRole("button", { name: "Open product action menu" })).toBeNull();
     // No empty, bordered action cell beside the creator byline.
     expect(screen.getByText("Alpha creator").closest("footer")?.children).toHaveLength(1);
@@ -448,7 +462,7 @@ describe("Subscriptions tab", () => {
     renderPage();
 
     expect(screen.getAllByRole("button", { name: "Open product action menu" })).toHaveLength(2);
-    expect(screen.queryByRole("link", { name: /^Manage /u })).toBeNull();
+    expect(screen.queryByRole("link", { name: /^Manage (membership|installment plan) for /u })).toBeNull();
   });
 });
 

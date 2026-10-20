@@ -11,7 +11,7 @@ import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 import { SellerAnalyticsProps, trackSellerPurchaseEvent } from "$app/utils/user_analytics";
 
-import { Button, NavigationButton } from "$app/components/Button";
+import { Button } from "$app/components/Button";
 import { useDiscoverUrl } from "$app/components/DomainSettings";
 import { Layout } from "$app/components/Library/Layout";
 import { Modal } from "$app/components/Modal";
@@ -54,7 +54,7 @@ export type Result = {
     is_archived: boolean;
     download_url: string | null;
     variants: string | null;
-    subscription?: { status_label: string; manage_url: string | null };
+    subscription?: { status_label: string; manage_label: string; manage_url: string | null };
   };
 };
 
@@ -98,7 +98,23 @@ export const Card = ({
         ) : (
           <h3 itemProp="name">{name}</h3>
         )}
-        {purchase.subscription ? <p className="text-sm text-muted">{purchase.subscription.status_label}</p> : null}
+        {purchase.subscription ? (
+          // Archive and Remove only tidy the Library; this card stays here while it bills, so the
+          // useful action is managing the subscription itself, when it can still be managed. It
+          // sits under the status it acts on, which leaves the footer to the creator byline.
+          <div className="flex flex-col gap-1 text-sm">
+            <p className="text-muted">{purchase.subscription.status_label}</p>
+            {purchase.subscription.manage_url ? (
+              <a
+                href={purchase.subscription.manage_url}
+                className="relative self-start"
+                aria-label={`${purchase.subscription.manage_label} for ${name}`}
+              >
+                {purchase.subscription.manage_label}
+              </a>
+            ) : null}
+          </div>
+        ) : null}
       </ProductCardHeader>
       <ProductCardFooter>
         <div className="flex-1 p-4">
@@ -110,22 +126,7 @@ export const Card = ({
             />
           ) : null}
         </div>
-        {purchase.subscription ? (
-          // Archive and Remove only tidy the Library; this card stays here while it bills, so the
-          // useful action is managing the subscription itself, when it can still be managed.
-          purchase.subscription.manage_url ? (
-            <div className="p-4">
-              <NavigationButton
-                href={purchase.subscription.manage_url}
-                size="sm"
-                className="relative"
-                aria-label={`Manage ${name}`}
-              >
-                Manage
-              </NavigationButton>
-            </div>
-          ) : null
-        ) : (
+        {purchase.subscription ? null : (
           <div className="p-4">
             <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
               <PopoverTrigger aria-label="Open product action menu" className="relative">

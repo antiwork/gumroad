@@ -250,7 +250,7 @@ describe("Library Scenario", type: :system, js: true) do
         expect(page).to have_text("Installment plan · 1 of 3 paid · Next payment on #{buyer_date(installment.subscription.end_time_of_subscription)}")
       end
 
-      click_on "Manage Removed membership"
+      click_on "Manage membership for Removed membership"
 
       expect(page).to have_current_path("/subscriptions/#{removed.subscription.external_id}/manage")
       expect(page).to have_selector("h2", text: "Removed membership")
@@ -270,11 +270,11 @@ describe("Library Scenario", type: :system, js: true) do
       within(find_product_card(completed.link)) do
         expect(page).to have_text("Installment plan · Paid in full")
         expect(page).to have_link("Completed course", href: completed.url_redirect.download_page_url)
-        expect(page).to_not have_text("Manage")
+        expect(page).to_not have_link(/^Manage /)
         expect(page).to_not have_selector("[aria-label='Open product action menu']")
       end
 
-      click_on "Manage Unfinished course"
+      click_on "Manage installment plan for Unfinished course"
 
       expect(page).to have_current_path("/subscriptions/#{unfinished.subscription.external_id}/manage")
       expect(page).to have_selector("h2", text: "Unfinished course")
@@ -297,7 +297,7 @@ describe("Library Scenario", type: :system, js: true) do
 
       visit "/library?subscriptions_only=true"
       within(find_product_card(product)) { expect(page).to have_text("Renews on #{buyer_date(guest.subscription.end_time_of_subscription)}") }
-      click_on "Manage Guest membership"
+      click_on "Manage membership for Guest membership"
 
       # No account owns this subscription yet, so the manage page asks for the emailed link instead of opening.
       expect(page).to have_current_path("/subscriptions/#{guest.subscription.external_id}/magic_link/new")
@@ -317,7 +317,7 @@ describe("Library Scenario", type: :system, js: true) do
         expect(page).to have_text("Renews on #{buyer_date(paid.subscription.end_time_of_subscription)}")
         expect(page).to_not have_selector("a[href*='/d/']")
       end
-      click_on "Manage Transferred membership - Untitled"
+      click_on "Manage membership for Transferred membership - Untitled"
 
       expect(page).to have_current_path("/subscriptions/#{paid.subscription.external_id}/manage")
       expect(page).to have_selector("h2", text: "Transferred membership")
@@ -341,7 +341,7 @@ describe("Library Scenario", type: :system, js: true) do
         expect(page).to have_text("Installment plan · 1 payment remaining · Final payment on #{buyer_date(plan.subscription.reload.end_time_of_subscription)}")
         expect(page).to_not have_selector("a[href*='/d/']")
       end
-      click_on "Manage Disputed course"
+      click_on "Manage installment plan for Disputed course"
 
       expect(page).to have_current_path("/subscriptions/#{plan.subscription.external_id}/manage")
     end

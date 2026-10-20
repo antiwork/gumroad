@@ -299,6 +299,7 @@ class LibraryPresenter
       manageable = !(subscription.is_installment_plan? && facts.charges_completed?)
       {
         status_label: subscription_status_label(subscription, facts),
+        manage_label: subscription.is_installment_plan? ? "Manage installment plan" : "Manage membership",
         manage_url: manageable ? manage_subscription_path(subscription.external_id) : nil,
       }
     end
