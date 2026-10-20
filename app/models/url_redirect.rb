@@ -201,12 +201,12 @@ class UrlRedirect < ApplicationRecord
   end
 
   # The bundle ZIP is shared, so it leaves out stream-only files even when this buyer was granted one.
+  # No `is_downloadable?` gate here: a member whose files are all stream-only still holds the grant.
   def bundle_archive_omits_granted_files?
     return false unless purchase&.is_bundle_purchase?
 
     ([self] + bundle_member_redirects).any? do |url_redirect|
-      url_redirect.with_product_files.is_downloadable? &&
-        url_redirect.alive_product_files.any? { !_1.archivable? && url_redirect.is_file_downloadable?(_1) }
+      url_redirect.alive_product_files.any? { !_1.archivable? && url_redirect.is_file_downloadable?(_1) }
     end
   end
 

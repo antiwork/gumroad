@@ -226,10 +226,6 @@ class LibraryPresenter
         files = redirect.bundle_archive_product_files
         next if files.empty?
 
-        if redirect.bundle_archive_omits_granted_files?
-          next { id: link.external_id, label: link.name, download_url: nil, zip_unavailable_reason: "granted_files" }
-        end
-
         archive = redirect.bundle_archive
         zip_unavailable_reason = nil
         if archive.blank?
@@ -246,6 +242,8 @@ class LibraryPresenter
           label: link.name,
           download_url: archive.present? ? url_redirect_download_archive_path(redirect.token) : nil,
           zip_unavailable_reason:,
+          # The ZIP stays on offer because it is the only Library route to the bundle's own files.
+          omits_granted_files: redirect.bundle_archive_omits_granted_files?,
         }
       end
     end
