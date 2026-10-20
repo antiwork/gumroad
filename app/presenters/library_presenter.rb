@@ -13,7 +13,7 @@ class LibraryPresenter
     @logged_in_user = logged_in_user
   end
 
-  def library_props(page: nil, sort: nil, query: nil, creator_ids: [], bundle_ids: [], show_archived_only: false)
+  def library_props(page: nil, sort: nil, query: nil, creator_ids: [], bundle_ids: [], show_archived_only: false, subscriptions_only: false)
     sort = sort == "purchase_date" ? "purchase_date" : "recently_updated"
 
     base = logged_in_user.purchases.visible_in_library
@@ -21,6 +21,9 @@ class LibraryPresenter
     visible = base.where.not(id: denied_ids)
     replaced_ids = replaced_bundle_purchase_ids(base)
     cards = visible.where.not(id: replaced_ids)
+    # The Subscriptions tab is a narrow view of the same card set: a buyer's memberships are
+    # mixed in with one-off purchases and nothing on the card says which is which.
+    cards = cards.has_active_subscription if subscriptions_only
 
     pagination, page_purchases = paged_purchases(filtered(cards, query:, creator_ids:, bundle_ids:, show_archived_only:), sort:, page:)
 
@@ -38,6 +41,7 @@ class LibraryPresenter
         creators: creator_ids,
         bundles: bundle_ids,
         show_archived_only:,
+        subscriptions_only:,
       },
     }
   end

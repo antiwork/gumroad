@@ -55,6 +55,7 @@ const defaultSearch = (): SearchParams => ({
   creators: [],
   bundles: [],
   show_archived_only: false,
+  subscriptions_only: false,
 });
 
 const defaultProps = (): {
@@ -283,6 +284,16 @@ describe("LibraryPage", () => {
     fireEvent.click(archivedLabel.querySelector("input") ?? archivedLabel);
 
     expect(lastGetParams()).toEqual({ sort: "recently_updated", bundles: "b1", show_archived_only: "true" });
+  });
+
+  it("carries the subscriptions filter through a later filter change", () => {
+    const props = defaultProps();
+    props.search.subscriptions_only = true;
+    renderPage(props);
+
+    fireEvent.change(screen.getByLabelText("Sort by"), { target: { value: "purchase_date" } });
+
+    expect(lastGetParams()).toEqual({ sort: "purchase_date", subscriptions_only: "true" });
   });
 
   it("emits the page param on pagination and resets it when filters change", () => {

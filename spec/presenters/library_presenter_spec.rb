@@ -58,7 +58,8 @@ describe LibraryPresenter do
         query: "",
         creators: [],
         bundles: [],
-        show_archived_only: false
+        show_archived_only: false,
+        subscriptions_only: false
       )
     end
 
@@ -241,6 +242,26 @@ describe LibraryPresenter do
         expect(library_props[:creators]).to eq([{ id: creator.external_id, name: "Testy", count: 1 }])
         expect(library_props(show_archived_only: true)[:creators])
           .to eq([{ id: archived_purchase.link.user.external_id, name: archived_purchase.link.user.username, count: 1 }])
+      end
+    end
+
+    describe "subscriptions filter" do
+      let!(:one_off_purchase) do
+        create(:purchase, purchaser: buyer, link: create(:product, name: "One-off product")).tap { _1.create_url_redirect! }
+      end
+
+      it "keeps only the memberships and leaves the one-off purchases out" do
+        expect(results(subscriptions_only: true).map { _1[:product][:name] }).to eq(["hello"])
+      end
+
+      it "drops a membership whose subscription has already ended" do
+        purchase.subscription.update!(cancelled_at: 1.day.ago)
+
+        expect(results(subscriptions_only: true)).to be_empty
+      end
+
+      it "echoes the flag back to the page so the tab stays selected" do
+        expect(library_props(subscriptions_only: true)[:search][:subscriptions_only]).to be(true)
       end
     end
 

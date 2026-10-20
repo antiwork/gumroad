@@ -27,6 +27,7 @@ class LibraryController < Sellers::BaseController
       creator_ids: string_param(:creators).split(","),
       bundle_ids: string_param(:bundles).split(","),
       show_archived_only: params[:show_archived_only] == "true",
+      subscriptions_only: params[:subscriptions_only] == "true",
     ).merge(
       purchase_analytics: purchase_analytics_props,
       receipt_purchases: presenter.receipt_purchases(tracked_purchase_external_ids),

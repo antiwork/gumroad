@@ -181,6 +181,7 @@ export type SearchParams = {
   creators: string[];
   bundles: string[];
   show_archived_only: boolean;
+  subscriptions_only: boolean;
 };
 
 type Props = {
@@ -246,6 +247,7 @@ export default function LibraryPage() {
     if (next.creators.length > 0) data.creators = next.creators.join(",");
     if (next.bundles.length > 0) data.bundles = next.bundles.join(",");
     if (next.show_archived_only) data.show_archived_only = "true";
+    if (next.subscriptions_only) data.subscriptions_only = "true";
     if (page !== undefined && page > 1) data.page = page.toString();
     inFlightNavigations.current += 1;
     router.get(Routes.library_path(), data, {
@@ -346,7 +348,7 @@ export default function LibraryPage() {
     !showArchivedNotice && (hasParams || archivedCount > 0 || archivedCount + unarchivedCount > 9);
 
   return (
-    <Layout selectedTab="purchases">
+    <Layout selectedTab={activeSearch.subscriptions_only ? "subscriptions" : "purchases"}>
       <section className="space-y-4 p-4 md:p-8">
         {isLibraryEmpty || showArchivedNotice ? (
           <Placeholder>
@@ -542,24 +544,32 @@ export default function LibraryPage() {
               ) : null}
             </UICard>
           ) : null}
-          <ProductCardGrid>
-            {results.map((result) => (
-              <Card
-                key={result.purchase.id}
-                result={result}
-                onArchive={refreshAfterArchiveChange}
-                onDelete={(confirm = true) => (confirm ? setDeleting(result) : deletePurchase(result))}
-              />
-            ))}
-            {pagination.pages > 1 ? (
-              <div className="col-[1/-1]">
-                <Pagination
-                  pagination={{ pages: pagination.pages, page: pagination.page }}
-                  onChangePage={(page) => navigate({ page })}
+          {activeSearch.subscriptions_only && results.length === 0 && !isLibraryEmpty ? (
+            <Placeholder>
+              <PlaceholderImage src={placeholder} />
+              <h2 className="library-header">You don't have any active memberships.</h2>
+              Memberships you buy show up here, so you can see what renews and when.
+            </Placeholder>
+          ) : (
+            <ProductCardGrid>
+              {results.map((result) => (
+                <Card
+                  key={result.purchase.id}
+                  result={result}
+                  onArchive={refreshAfterArchiveChange}
+                  onDelete={(confirm = true) => (confirm ? setDeleting(result) : deletePurchase(result))}
                 />
-              </div>
-            ) : null}
-          </ProductCardGrid>
+              ))}
+              {pagination.pages > 1 ? (
+                <div className="col-[1/-1]">
+                  <Pagination
+                    pagination={{ pages: pagination.pages, page: pagination.page }}
+                    onChangePage={(page) => navigate({ page })}
+                  />
+                </div>
+              ) : null}
+            </ProductCardGrid>
+          )}
         </div>
         <DeleteProductModal
           deleting={deleting}
