@@ -1492,9 +1492,9 @@ const Form = ({
               <DetailsToggle chevronPosition="none" className="mb-0">
                 <Switch
                   checked={existingCustomersOnly}
+                  disabled={newCustomersOnly}
                   onChange={(evt) => {
                     setExistingCustomersOnly(evt.target.checked);
-                    if (evt.target.checked) setNewCustomersOnly(false);
                   }}
                   label="Limit to existing customers"
                 />
@@ -1521,35 +1521,32 @@ const Form = ({
                 </Fieldset>
               </Dropdown>
             </Details>
+            {newCustomersOnly ? <p className="text-sm">Can't be combined with 'Limit to new customers'.</p> : null}
             <Details open={newCustomersOnly}>
               <DetailsToggle chevronPosition="none" className="mb-0">
                 <Switch
                   checked={newCustomersOnly}
+                  disabled={existingCustomersOnly || useTieredDiscounts}
                   onChange={(evt) => {
                     setNewCustomersOnly(evt.target.checked);
-                    if (evt.target.checked) {
-                      setExistingCustomersOnly(false);
-                      setUseTieredDiscounts(false);
-                    }
                   }}
                   label="Limit to new customers"
                 />
               </DetailsToggle>
-              <Dropdown>
-                <Fieldset>
-                  <FieldsetDescription>
-                    Only buyers with no previous purchase from your store can use this code.
-                  </FieldsetDescription>
-                </Fieldset>
-              </Dropdown>
+              <p className="text-sm">Only buyers with no previous purchase from your store can use this code.</p>
             </Details>
+            {existingCustomersOnly || useTieredDiscounts ? (
+              <p className="text-sm">
+                Can't be combined with 'Limit to existing customers' or 'Tier discount by ownership duration'.
+              </p>
+            ) : null}
             <Details open={useTieredDiscounts}>
               <DetailsToggle chevronPosition="none" className="mb-0">
                 <Switch
                   checked={useTieredDiscounts}
+                  disabled={newCustomersOnly}
                   onChange={(evt) => {
                     setUseTieredDiscounts(evt.target.checked);
-                    if (evt.target.checked) setNewCustomersOnly(false);
                   }}
                   label="Tier discount by ownership duration"
                 />
@@ -1632,6 +1629,7 @@ const Form = ({
                 </Fieldset>
               </Dropdown>
             </Details>
+            {newCustomersOnly ? <p className="text-sm">Can't be combined with 'Limit to new customers'.</p> : null}
             <Details open={hasMinimumAmount}>
               <DetailsToggle chevronPosition="none" className="mb-0">
                 <Switch

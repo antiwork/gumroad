@@ -706,7 +706,7 @@ describe("Checkout discounts page", type: :system, js: true) do
         expect(offer_code.existing_customers_only?).to eq(false)
       end
 
-      it "keeps the two customer-history limits mutually exclusive and rehydrates the new-customers toggle" do
+      it "disables the customer-history limits that cannot be combined and rehydrates the new-customers toggle" do
         create(:offer_code,
                user: seller,
                products: [product1],
@@ -722,10 +722,16 @@ describe("Checkout discounts page", type: :system, js: true) do
 
         expect(page).to have_checked_field("Limit to new customers")
         expect(page).to have_unchecked_field("Limit to existing customers")
+        expect(page).to have_text("Can't be combined with 'Limit to new customers'.")
+        expect(page).to have_field("Limit to existing customers", disabled: true)
+        expect(page).to have_field("Tier discount by ownership duration", disabled: true)
+
+        uncheck "Limit to new customers"
+        expect(page).to have_field("Limit to existing customers", disabled: false)
 
         check "Limit to existing customers"
-        expect(page).to have_unchecked_field("Limit to new customers")
         expect(page).to have_checked_field("Limit to existing customers")
+        expect(page).to have_field("Limit to new customers", disabled: true)
       end
     end
   end

@@ -44,7 +44,9 @@ describe("New-customer-only offer codes from product page", type: :system, js: t
   it "rejects the code for a visitor who is not signed in" do
     visit "#{product.long_url}/welcome20"
 
-    expect(page).to have_selector("[role='status']", text: "Sorry, this discount code is only for new customers.")
+    expect(page).to have_selector("[role='status']",
+                                  text: "Sorry, this discount code is only for new customers. Log in to check if you qualify.")
+    expect(page).to have_selector("[role='status'] a", text: "Log in")
     expect_full_price
   end
 end
