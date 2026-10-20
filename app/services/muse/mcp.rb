@@ -140,10 +140,10 @@ module Muse
       def resolve_era!(body)
         meta = body["_meta"]
         declared = meta.is_a?(Hash) ? meta[VERSION_META_KEY].presence : nil
-        header = @protocol_version_header.presence
-        return if declared.nil? && header.nil?
+        return if declared.nil?
 
-        if declared.nil? || header.nil? || declared.to_s != header.to_s
+        header = @protocol_version_header.presence
+        if header.nil? || declared.to_s != header.to_s
           raise Error.new(
             "#{VERSION_HEADER} and _meta #{VERSION_META_KEY} must agree",
             code: HEADER_MISMATCH,
