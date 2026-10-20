@@ -240,3 +240,49 @@ describe Purchase, "offer-code capacity" do
     expect(purchase.send(:offer_amount_off, product.price_cents)).to eq(100)
   end
 end
+
+describe Purchase, "new-customers-only codes on a later charge" do
+  let(:seller) { create(:named_seller) }
+  let(:buyer) { create(:user) }
+  let(:product) { create(:product, user: seller, price_cents: 1_000) }
+  let(:offer_code) do
+    create(:offer_code, products: [product], new_customers_only: true, amount_cents: nil, amount_percentage: 20)
+  end
+  let(:subscription) { create(:subscription, link: product, user: buyer) }
+
+  before do
+    create(:purchase, link: product, seller:, purchaser: buyer, subscription:, offer_code:,
+                      is_original_subscription_purchase: true, purchase_state: "not_charged",
+                      price_cents: product.price_cents)
+  end
+
+  it "keeps the discount on the buyer's renewal instead of refusing the code that priced their plan" do
+    renewal = build(:purchase, link: product, seller:, purchaser: buyer, subscription:,
+                               is_original_subscription_purchase: false, offer_code:)
+
+    expect(renewal.send(:resolved_offer_code_discount_for_buyer)).to eq({ type: "percent", percents: 20 })
+  end
+
+  it "keeps the discount on a later installment of the same plan" do
+    installment = build(:purchase, link: product, seller:, purchaser: buyer, offer_code:,
+                                   is_installment_payment: true, is_original_subscription_purchase: false)
+
+    expect(installment.send(:resolved_offer_code_discount_for_buyer)).to eq({ type: "percent", percents: 20 })
+  end
+
+  it "still refuses the code when the same buyer starts something new" do
+    other_product = create(:product, user: seller, price_cents: 1_000)
+    new_purchase = build(:purchase, link: other_product, seller:, purchaser: buyer, offer_code:)
+
+    expect(new_purchase.send(:resolved_offer_code_discount_for_buyer)).to be_nil
+  end
+
+  it "still refuses the code on a first installment" do
+    plan_product = create(:product, user: seller, price_cents: 1_000)
+    first_installment = build(:purchase, link: plan_product, seller:, purchaser: buyer,
+                                         is_installment_payment: true, is_original_subscription_purchase: true,
+                                         offer_code:)
+
+    expect(first_installment.send(:resolved_offer_code_discount_for_buyer)).to be_nil
+  end
+end

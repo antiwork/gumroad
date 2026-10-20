@@ -4628,7 +4628,9 @@ class Purchase < ApplicationRecord
 
     def resolved_offer_code_discount_for_buyer
       if offer_code.existing_customers_only? || offer_code.new_customers_only? || offer_code.tiered?
-        evaluated_discount = offer_code.evaluate_for_buyer(offer_code_buyer, product: link)
+        evaluated_discount = offer_code.evaluate_for_buyer(
+          offer_code_buyer, product: link, continues_purchase: continues_earlier_purchase?
+        )
         return nil if (offer_code.existing_customers_only? || offer_code.new_customers_only?) && evaluated_discount.blank?
         return nil if offer_code.tiered? && evaluated_discount.nil?
         return evaluated_discount if offer_code.tiered? && evaluated_discount.present?
@@ -4637,6 +4639,14 @@ class Purchase < ApplicationRecord
       offer_code.is_percent? ?
         { type: "percent", percents: offer_code.amount } :
         { type: "fixed", cents: offer_code.amount }
+    end
+
+    # A renewal, a later installment or an upgrade pays for a plan the buyer already started, so the
+    # new-customer gate must not decide it a second time: they own something by then, and rejecting
+    # the code here would drop a discount they were already granted.
+    def continues_earlier_purchase?
+      is_recurring_subscription_charge || is_upgrade_purchase? ||
+        (is_installment_payment? && !is_original_subscription_purchase?)
     end
 
     def offer_code_buyer

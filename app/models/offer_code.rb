@@ -441,8 +441,11 @@ class OfferCode < ApplicationRecord
     end.sort_by { it["months"] }
   end
 
-  def evaluate_for_buyer(buyer, product: nil, fallback_purchase: nil)
-    return nil if new_customers_only? && !new_customer?(buyer)
+  # `continues_purchase` marks a charge that pays for a plan the buyer already started (a renewal, a
+  # later installment, an upgrade): the new-customer gate settled that plan already and must not
+  # settle it again, or the buyer loses the discount they were granted when they started.
+  def evaluate_for_buyer(buyer, product: nil, fallback_purchase: nil, continues_purchase: false)
+    return nil if new_customers_only? && !continues_purchase && !new_customer?(buyer)
 
     reference = ownership_reference_products(product)
     months = ownership_months_for(buyer, reference) if existing_customers_only? || tiered?
