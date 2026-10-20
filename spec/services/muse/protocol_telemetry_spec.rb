@@ -21,6 +21,30 @@ describe Muse::ProtocolTelemetry do
 
       expect { described_class.record(connector: "muse", declared_version: nil, method: "tools/list") }.not_to raise_error
     end
+
+    it "restores the retention on a later write" do
+      described_class.record(connector: "muse", declared_version: nil, method: "tools/list")
+      $redis.persist(RedisKey.mcp_protocol_requests(Date.current))
+
+      described_class.record(connector: "muse", declared_version: nil, method: "tools/list")
+
+      expect($redis.ttl(RedisKey.mcp_protocol_requests(Date.current))).to be_within(5).of(described_class::RETENTION.to_i)
+    end
+
+    it "keeps a day's field set bounded" do
+      stub_const("Muse::ProtocolTelemetry::MAX_FIELDS", 2)
+      described_class.record(connector: "muse", declared_version: "2025-03-26", method: "tools/list")
+      described_class.record(connector: "muse", declared_version: "2025-06-18", method: "tools/list")
+      described_class.record(connector: "muse", declared_version: "2026-07-28", method: "tools/list")
+      described_class.record(connector: "muse", declared_version: "2025-03-26", method: "tools/list")
+
+      expect(described_class.mix).to eq(
+        "muse" => {
+          "2025-03-26" => { "tools/list" => 2 },
+          "2025-06-18" => { "tools/list" => 1 },
+        }
+      )
+    end
   end
 
   describe ".mix" do

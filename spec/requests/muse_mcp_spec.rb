@@ -1382,8 +1382,8 @@ describe "Muse MCP" do
       expect($redis.hgetall(RedisKey.mcp_protocol_requests(Date.current)).keys).to eq(["muse|undeclared|tools/list"])
     end
 
-    it "buckets a declaration and a method it cannot shape-check" do
-      post_mcp_on("muse", { jsonrpc: "2.0", id: 1, method: "Tools/List" })
+    it "buckets a declaration and a method it does not serve" do
+      post_mcp_on("muse", { jsonrpc: "2.0", id: 1, method: "prompts/list" })
       post_mcp_on("muse", declaring("not-a-version"), headers: declare("not-a-version"))
 
       expect(Muse::ProtocolTelemetry.mix["muse"]).to eq(

@@ -6,14 +6,17 @@ module Muse
   # `Muse::ProtocolTelemetry.mix` without a table or a metrics vendor.
   module ProtocolTelemetry
     CONNECTORS = %w[muse claude chatgpt].freeze
+    # The methods this endpoint dispatches. A caller can send any string, so an unknown method
+    # shares one bucket instead of adding a field of its own.
+    METHODS = %w[initialize notifications/cancelled notifications/initialized ping server/discover tools/call tools/list].freeze
     UNDECLARED = "undeclared"
     OTHER = "other"
     RETENTION = 90.days
     SEPARATOR = "|"
-    # A declaration and a method are client-supplied, so only shape-valid values get a counter of
-    # their own; everything else shares one bucket rather than growing the hash without bound.
+    # A declared revision is client-supplied too: a version-shaped value is kept as sent, and a
+    # day's counter set is capped so no caller can grow the hash without bound.
     VERSION = /\A\d{4}-\d{2}-\d{2}\z/
-    METHOD = %r{\A[a-z][a-z0-9_-]*(?:/[a-z][a-z0-9_-]*)*\z}
+    MAX_FIELDS = 200
 
     class << self
       # Best-effort: telemetry is never the reason a connector request fails.
@@ -22,8 +25,12 @@ module Muse
         return unless CONNECTORS.include?(connector)
 
         key = RedisKey.mcp_protocol_requests(Date.current)
-        count = $redis.hincrby(key, field(connector, declared_version, method), 1)
-        $redis.expire(key, RETENTION.to_i) if count == 1
+        field = field(connector, declared_version, method)
+        count = $redis.hincrby(key, field, 1)
+        # Every write carries the retention, so a day that ever lost its expiry gets it back.
+        $redis.expire(key, RETENTION.to_i)
+        # Past the cap a new field is dropped; the counters already there keep counting.
+        $redis.hdel(key, field) if count == 1 && $redis.hlen(key) > MAX_FIELDS
       rescue StandardError => e
         Rails.logger.warn("mcp_protocol_telemetry_failed #{e.class}: #{e.message}")
       end
@@ -52,7 +59,7 @@ module Muse
 
         def method_bucket(value)
           value = value.to_s
-          METHOD.match?(value) && value.length <= 64 ? value : OTHER
+          METHODS.include?(value) ? value : OTHER
         end
     end
   end
