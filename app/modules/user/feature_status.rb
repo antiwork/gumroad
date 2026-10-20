@@ -8,7 +8,15 @@ class User
   module FeatureStatus
     def merchant_migration_enabled?
       check_merchant_account_is_linked || (Feature.active?(:merchant_migration, self) &&
-          StripeMerchantAccountManager::COUNTRIES_SUPPORTED_BY_STRIPE_CONNECT.include?(::Compliance::Countries.find_by_name(alive_user_compliance_info&.country)&.alpha2))
+          StripeMerchantAccountManager::COUNTRIES_SUPPORTED_BY_STRIPE_CONNECT.include?(merchant_migration_country_code))
+    end
+
+    def merchant_migration_country_code
+      if Feature.active?(:stripe_connect_routing_by_legal_entity_country, self)
+        alive_user_compliance_info&.legal_entity_country_code
+      else
+        ::Compliance::Countries.find_by_name(alive_user_compliance_info&.country)&.alpha2
+      end
     end
 
     def paypal_connect_enabled?
