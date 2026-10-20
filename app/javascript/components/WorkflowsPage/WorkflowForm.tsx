@@ -14,6 +14,7 @@ import {
 import { Button } from "$app/components/Button";
 import { NumberInput } from "$app/components/NumberInput";
 import { TagInput } from "$app/components/TagInput";
+import { Alert } from "$app/components/ui/Alert";
 import { Checkbox } from "$app/components/ui/Checkbox";
 import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { FormSection } from "$app/components/ui/FormSection";
@@ -130,7 +131,8 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
       fromCountry: workflow.bought_from ?? "",
     };
   });
-  const form = useForm({});
+  const form = useForm<{ base?: string }>({});
+  const baseError = form.errors.base;
   const [invalidFields, setInvalidFields] = React.useState<Set<keyof WorkflowFormState>>(() => new Set());
   const nameInputRef = React.useRef<HTMLInputElement>(null);
   const paidMoreThanInputRef = React.useRef<HTMLInputElement>(null);
@@ -262,7 +264,7 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
 
     if (workflow) {
       form.patch(Routes.workflow_path(workflow.external_id), {
-        only: ["workflow", "flash"],
+        only: ["workflow", "flash", "errors"],
       });
     } else {
       form.post(Routes.workflows_path());
@@ -325,6 +327,7 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
       }
     >
       <form className="space-y-4">
+        {baseError ? <Alert variant="danger">{baseError}</Alert> : null}
         <FormSection
           header={<>Workflows allow you to send scheduled emails to a subset of your audience based on a trigger.</>}
         >

@@ -37,7 +37,7 @@ class WorkflowsController < Sellers::BaseController
     if success
       redirect_to workflow_emails_path(service.workflow.external_id), notice: FLASH_CHANGES_SAVED, status: :see_other
     else
-      redirect_to new_workflow_path, inertia: { errors: errors }
+      redirect_to new_workflow_path, inertia: { errors: { base: [errors] } }, alert: errors
     end
   end
 

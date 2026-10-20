@@ -84,6 +84,7 @@ describe WorkflowsController, type: :controller, inertia: true do
 
         expect(response).to redirect_to(new_workflow_path)
         expect(response.status).to eq(302)
+        expect(flash[:alert]).to eq("Name can't be blank")
       end
 
       it "handles validation errors from the service" do
