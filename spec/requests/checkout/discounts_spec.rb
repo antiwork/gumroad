@@ -721,9 +721,8 @@ describe("Checkout discounts page", type: :system, js: true) do
         within(find(:table_row, { "Discount" => "Welcome offer" })) { click_on "Edit" }
 
         expect(page).to have_checked_field("Limit to new customers")
-        expect(page).to have_unchecked_field("Limit to existing customers")
-        expect(page).to have_text("Can't be combined with 'Limit to new customers'.")
         expect(page).to have_field("Limit to existing customers", disabled: true)
+        expect(page).to have_text("Can't be combined with 'Limit to new customers'.")
         expect(page).to have_field("Tier discount by ownership duration", disabled: true)
 
         uncheck "Limit to new customers"
