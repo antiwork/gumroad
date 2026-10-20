@@ -526,7 +526,7 @@ class LinksController < ApplicationController
 
         omit_unspecified_product_scalars!
 
-        rental_price_cents_before_save = @product.rental_price_cents if @product.rentable?
+        rental_price_cents_before_save = @product.rental_price_cents if @product.buy_and_rent?
 
         @product.assign_attributes(product_permitted_params.except(
           :products,
@@ -561,9 +561,10 @@ class LinksController < ApplicationController
           :preserved_rich_content_ids,
           :rich_content_provenance_version
         ))
-        # Prices are stored per currency and the editor has no rental price field, so a
-        # currency change would leave the rental price behind and drop the rental offer.
-        if @product.price_currency_type_changed? && rental_price_cents_before_save.present? && @product.rental_price_cents.nil?
+        # Prices are stored per currency and the editor has no rental price field, so carry the
+        # current rental price into the new currency, as API v2 does. A rent-only product's
+        # rental price is the submitted price_cents.
+        if @product.price_currency_type_changed? && rental_price_cents_before_save.present?
           @product.rental_price_cents = rental_price_cents_before_save
         end
         if product_permitted_params.key?(:description)

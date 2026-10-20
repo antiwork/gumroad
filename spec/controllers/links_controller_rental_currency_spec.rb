@@ -40,4 +40,13 @@ describe LinksController, type: :controller do
     expect(product.default_price_cents).to eq(8_900)
     expect(product.rental).to eq(price_cents: 4_900, rent_only: false)
   end
+
+  it "carries the current rental price over an older rental price in the new currency" do
+    create(:price, link: product, currency: "eur", is_rental: true, price_cents: 3_000)
+
+    post :update, params: editor_save_params(price_currency_type: "eur", price_cents: 8_900), as: :json
+
+    expect(response).to be_successful
+    expect(product.reload.rental).to eq(price_cents: 4_900, rent_only: false)
+  end
 end
