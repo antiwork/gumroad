@@ -425,14 +425,35 @@ class LinkTest < ActiveSupport::TestCase
     assert_equal "buy_and_rent", product.purchase_type
   end
 
-  test "purchase_type= defaults to buy_only for an invalid value" do
-    product.purchase_type = "buy"
-    assert_equal "buy_only", product.purchase_type
+  test "purchase_type= defaults to buy_only for an invalid value on a new product" do
+    new_product = build_product
+    new_product.purchase_type = "buy"
+    assert_equal "buy_only", new_product.purchase_type
   end
 
   test "purchase_type= does not raise for an invalid value" do
     assert_nothing_raised { product.purchase_type = "invalid" }
     assert_equal "buy_only", product.purchase_type
+  end
+
+  test "purchase_type= keeps a persisted product's mode and rental price for an invalid value" do
+    rental_product = create_product(purchase_type: :buy_and_rent, price_cents: 500, rental_price_cents: 100)
+    rental_price = rental_product.prices.is_rental.first
+
+    rental_product.purchase_type = "buy"
+    rental_product.save!
+
+    assert_equal "buy_and_rent", rental_product.reload.purchase_type
+    assert_not rental_price.reload.deleted?
+  end
+
+  test "purchase_type= keeps rent_only for an invalid value" do
+    rental_only_product = create_product(purchase_type: :rent_only, rental_price_cents: 100)
+
+    rental_only_product.purchase_type = "invalid"
+    rental_only_product.save!
+
+    assert_equal "rent_only", rental_only_product.reload.purchase_type
   end
 
   # --- delete_unused_prices --------------------------------------------------
