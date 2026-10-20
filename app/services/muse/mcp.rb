@@ -4,7 +4,22 @@ module Muse
   # JSON-RPC MCP surface for Meta Muse (and any other MCP client).
   # Tools are a slim, agent-oriented view of the public v2 API — same auth, same records.
   class Mcp
-    PROTOCOL_VERSION = "2025-03-26"
+    LEGACY_PROTOCOL_VERSION = "2025-03-26"
+    # A client on this revision declares its version per request and never handshakes.
+    MODERN_PROTOCOL_VERSION = "2026-07-28"
+    SUPPORTED_VERSIONS = [LEGACY_PROTOCOL_VERSION, MODERN_PROTOCOL_VERSION].freeze
+    VERSION_HEADER = "MCP-Protocol-Version"
+    METHOD_HEADER = "Mcp-Method"
+    NAME_HEADER = "Mcp-Name"
+    VERSION_META_KEY = "io.modelcontextprotocol/protocolVersion"
+    SERVER_INFO_META_KEY = "io.modelcontextprotocol/serverInfo"
+    # Reserved for the modern transport; the legacy -32000..-32019 sub-range is not extended.
+    HEADER_MISMATCH = -32020
+    UNSUPPORTED_PROTOCOL_VERSION = -32022
+    TRANSPORT_ERROR_CODES = [HEADER_MISMATCH, UNSUPPORTED_PROTOCOL_VERSION].freeze
+    # A caller only ever sees their own store, so no result of ours is shareable between callers.
+    TOOLS_LIST_CACHE = { ttlMs: 0, cacheScope: "private" }.freeze
+    INSTRUCTIONS = "Use these tools for a connected creator's own store: products, sales, and payouts. Confirm with the person before publishing or unpublishing. Buyers still check out on the product URL. This server does not take payment."
     SERVER_INFO = { name: "gumroad", title: "Gumroad", version: "1.0.0" }.freeze
 
     class Error < StandardError
@@ -19,10 +34,18 @@ module Muse
 
     class ToolError < StandardError; end
 
-    def initialize(user:, token:)
+    def initialize(user:, token:, protocol_version_header: nil, method_header: nil, name_header: nil)
       @user = user
       @token = token
+      @protocol_version_header = protocol_version_header
+      @method_header = method_header
+      @name_header = name_header
+      @era = :legacy
     end
+
+    # The era the request resolved to, for callers that must pick a transport-level status.
+    # A batch stays modern once any message in it declared that revision.
+    attr_reader :era
 
     def handle(body)
       if body.is_a?(Array)
@@ -86,6 +109,9 @@ module Muse
         return rpc_error(nil, "Invalid Request", code: -32600) unless body.is_a?(Hash)
 
         id = valid_id?(body["id"]) ? body["id"] : nil
+        # A version error is a transport error and is answered even for a notification: the
+        # caller cannot act on a request whose era was never established.
+        resolve_era!(body)
         return rpc_error(id, "Invalid Request", code: -32600) unless body["jsonrpc"] == "2.0"
         # We issue no server requests; unsolicited client replies need no dispatch or response.
         return nil if client_response?(body)
@@ -97,19 +123,106 @@ module Muse
         method = body["method"]
         params = body.fetch("params", {})
         raise Error.new("params must be an object", code: -32602) unless params.is_a?(Hash)
+        validate_modern_transport!(method, params)
 
-        result = case method
-                 when "initialize" then initialize_result
-                 when "notifications/initialized", "notifications/cancelled" then nil
-                 when "ping" then {}
-                 when "tools/list" then { tools: tools }
-                 when "tools/call" then call_tool(params)
-                 else
-                   raise Error.new("Method not found: #{method}", code: -32601)
-        end
-        notification ? nil : { jsonrpc: "2.0", id:, result: }
+        result = dispatch(method, params)
+        notification ? nil : envelope(id, result)
       rescue Error => e
+        # A transport error is the caller's only signal that nothing was dispatched.
+        return rpc_error(id, e.message, code: e.code, data: e.data) if TRANSPORT_ERROR_CODES.include?(e.code)
+
         notification ? nil : rpc_error(id, e.message, code: e.code, data: e.data)
+      end
+
+      # Era is per request: an undeclared request is legacy and keeps its exact current path.
+      def resolve_era!(body)
+        meta = body["_meta"]
+        declared = meta.is_a?(Hash) ? meta[VERSION_META_KEY].presence : nil
+        header = @protocol_version_header.presence
+        return if declared.nil? && header.nil?
+
+        if declared.nil? || header.nil? || declared.to_s != header.to_s
+          raise Error.new(
+            "#{VERSION_HEADER} and _meta #{VERSION_META_KEY} must agree",
+            code: HEADER_MISMATCH,
+            data: { header: header, declared: declared }
+          )
+        end
+
+        supported = supported_versions
+        unless supported.include?(declared.to_s)
+          raise Error.new(
+            "Unsupported protocol version: #{declared}",
+            code: UNSUPPORTED_PROTOCOL_VERSION,
+            data: { supported: supported, requested: declared }
+          )
+        end
+
+        @era = :modern if declared.to_s == MODERN_PROTOCOL_VERSION
+      end
+
+      # The modern lane ships behind a flag: with it off, 2026-07-28 is not supported yet.
+      def supported_versions
+        return SUPPORTED_VERSIONS if Feature.active?(:mcp_protocol_2026_07_28)
+
+        [LEGACY_PROTOCOL_VERSION]
+      end
+
+      def validate_modern_transport!(method, params)
+        return unless era == :modern
+
+        if @method_header.presence != method
+          raise Error.new(
+            "#{METHOD_HEADER} must repeat the request method",
+            code: HEADER_MISMATCH,
+            data: { header: @method_header, method: method }
+          )
+        end
+        return unless method == "tools/call"
+
+        name = params["name"]
+        if @name_header.presence != name
+          raise Error.new(
+            "#{NAME_HEADER} must repeat the tool name",
+            code: HEADER_MISMATCH,
+            data: { header: @name_header, name: name }
+          )
+        end
+      end
+
+      # This revision removed the handshake and ping: a modern client starts at server/discover.
+      def dispatch(method, params)
+        if era == :modern
+          case method
+          when "server/discover" then discover_result
+          when "tools/list" then { tools: tools, **TOOLS_LIST_CACHE }
+          when "tools/call" then call_tool(params)
+          else raise Error.new("Method not found: #{method}", code: -32601)
+          end
+        else
+          case method
+          when "initialize" then initialize_result
+          when "notifications/initialized", "notifications/cancelled" then nil
+          when "ping" then {}
+          when "tools/list" then { tools: tools }
+          when "tools/call" then call_tool(params)
+          else raise Error.new("Method not found: #{method}", code: -32601)
+          end
+        end
+      end
+
+      def envelope(id, result)
+        result = result.merge(resultType: "complete") if era == :modern && result.is_a?(Hash)
+        { jsonrpc: "2.0", id:, result: }
+      end
+
+      def discover_result
+        {
+          supportedVersions: supported_versions,
+          capabilities: { tools: { listChanged: false } },
+          _meta: { SERVER_INFO_META_KEY => SERVER_INFO },
+          instructions: INSTRUCTIONS
+        }
       end
 
       def valid_id?(id)
@@ -127,10 +240,10 @@ module Muse
 
       def initialize_result
         {
-          protocolVersion: PROTOCOL_VERSION,
+          protocolVersion: LEGACY_PROTOCOL_VERSION,
           capabilities: { tools: { listChanged: false } },
           serverInfo: SERVER_INFO,
-          instructions: "Use these tools for a connected creator's own store: products, sales, and payouts. Confirm with the person before publishing or unpublishing. Buyers still check out on the product URL. This server does not take payment."
+          instructions: INSTRUCTIONS
         }
       end
 
