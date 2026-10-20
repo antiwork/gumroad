@@ -370,6 +370,18 @@ describe("product page bundle mobile layout", () => {
     expect(cta.className.split(" ")).toEqual(expect.arrayContaining(["whitespace-nowrap", "shrink-0"]));
   });
 
+  it("keeps the purchase controls ahead of the details block in document order", () => {
+    const { container } = render(<Product product={product} purchase={null} selection={selection} disableAnalytics />);
+
+    const cta = screen.getByRole("link", { name: "I want this!" });
+    const details = container.querySelector('[class*="grid-area:details"]');
+    if (!details) throw new Error("expected a details block");
+
+    // The stacked layout draws the controls above the details, so the DOM has to match: otherwise
+    // Tab reaches the bundle links and Read more first and jumps back up to the buy button.
+    expect(cta.compareDocumentPosition(details) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+  });
+
   it("stacks the sticky CTA bar price above the CTA on narrow screens", () => {
     class FakeIntersectionObserver {
       observe() {}
