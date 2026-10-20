@@ -1972,6 +1972,9 @@ class Subscription < ApplicationRecord
     def installment_plans_cannot_be_cancelled_by_buyer
       return unless is_installment_plan?
       return unless cancelled_at_changed?(from: nil)
+      # An admin cancel runs on the buyer's behalf (support request), not from the buyer's
+      # manage page, so it stays allowed; buyers still cannot cancel plans themselves.
+      return if cancelled_by_admin?
 
       errors.add(:base, "Installment plans cannot be cancelled by the customer") if cancelled_by_buyer?
     end

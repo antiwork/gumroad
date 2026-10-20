@@ -1579,27 +1579,25 @@ describe Api::Internal::Admin::PurchasesController do
       end
     end
 
-    context "when the model rejects a buyer-initiated cancel" do
+    context "when the purchase has an installment plan subscription" do
       let(:product) { create(:product, :with_installment_plan, user: admin_user, price_cents: 10_00) }
       let(:subscription) { create(:subscription, link: product, user: create(:user), is_installment_plan: true) }
       let(:purchase) do
         build(:purchase, link: product, subscription:, is_original_subscription_purchase: true, price_cents: 0).tap(&:save!)
       end
 
-      it "returns the model's message instead of an empty 422 and leaves the subscription untouched" do
-        expect { post :cancel_subscription, params: params }.not_to have_enqueued_mail
+      it "cancels it without by_seller and records the admin as the canceller" do
+        expect { post :cancel_subscription, params: params }
+          .to have_enqueued_mail(CustomerLowPriorityMailer, :subscription_cancelled).with(subscription.id)
 
-        expect(response).to have_http_status(:unprocessable_entity)
-        expect(response.parsed_body).to eq({ success: false, message: "Installment plans cannot be cancelled by the customer" }.as_json)
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body).to include("success" => true, "cancelled_by_admin" => true)
         subscription.reload
-        expect(subscription.cancelled_at).to be_nil
-        expect(subscription.user_requested_cancellation_at).to be_nil
-        expect(subscription.cancelled_by_buyer?).to be(false)
-        expect(subscription.cancelled_by_admin?).to be(false)
-        expect(PostToPingEndpointsWorker.jobs.size).to eq(0)
+        expect(subscription.cancelled_at).to be_present
+        expect(subscription.cancelled_by_admin?).to be(true)
       end
 
-      it "cancels the same installment plan when by_seller is true" do
+      it "cancels with seller-initiated semantics when by_seller is true" do
         expect { post :cancel_subscription, params: params.merge(by_seller: "true") }
           .to have_enqueued_mail(CustomerLowPriorityMailer, :subscription_cancelled_by_seller).with(subscription.id)
 
@@ -1607,6 +1605,27 @@ describe Api::Internal::Admin::PurchasesController do
         expect(response.parsed_body).to include("success" => true, "cancelled_by_admin" => true, "cancelled_by_seller" => true)
         expect(subscription.reload.cancelled_at).to be_present
         expect(subscription.cancelled_by_buyer?).to be(false)
+      end
+    end
+
+    context "when the model rejects the cancel" do
+      let(:subscription) { instance_double(Subscription, deactivated?: false, cancelled_at: nil) }
+      let(:invalid_record) do
+        Subscription.new.tap { _1.errors.add(:base, "Subscription must have at least one PaymentOption") }
+      end
+
+      before do
+        allow(Purchase).to receive(:find_by_external_id_numeric).with(purchase.external_id_numeric).and_return(purchase)
+        allow(purchase).to receive(:subscription).and_return(subscription)
+        allow(subscription).to receive(:cancel!).and_raise(ActiveRecord::RecordInvalid.new(invalid_record))
+        allow(subscription).to receive(:errors).and_return(invalid_record.errors)
+      end
+
+      it "returns the model's message instead of an empty 422" do
+        expect { post :cancel_subscription, params: params }.not_to have_enqueued_mail
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body).to eq({ success: false, message: "Subscription must have at least one PaymentOption" }.as_json)
       end
     end
 
