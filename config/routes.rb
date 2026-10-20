@@ -547,7 +547,7 @@ Rails.application.routes.draw do
       get "/#{client}/v1/oauth2/authorize(.:format)" => "oauth/authorizations#new"
       post "/#{client}/v1/oauth2/token(.:format)" => "oauth/tokens#create"
       post "/#{client}/v1/oauth2/register" => "api/v2/muse#register"
-      match "/#{client}/v1/mcp" => "api/v2/muse#mcp", via: [:get, :post]
+      match "/#{client}/v1/mcp" => "api/v2/muse#mcp", via: [:get, :post], defaults: { client: }
     end
     get "/.well-known/mcp.json" => "api/v2/muse#mcp_discovery"
     get "/.well-known/openai-apps-challenge" => "api/v2/muse#openai_apps_challenge"

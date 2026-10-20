@@ -54,6 +54,7 @@ class Api::V2::MuseController < Api::V2::BaseController
     mcp = Muse::Mcp.new(
       user: current_resource_owner,
       token: doorkeeper_token,
+      connector: params[:client],
       protocol_version_header: request.headers[Muse::Mcp::VERSION_HEADER],
       method_header: request.headers[Muse::Mcp::METHOD_HEADER],
       name_header: request.headers[Muse::Mcp::NAME_HEADER]

@@ -34,9 +34,10 @@ module Muse
 
     class ToolError < StandardError; end
 
-    def initialize(user:, token:, protocol_version_header: nil, method_header: nil, name_header: nil)
+    def initialize(user:, token:, connector: nil, protocol_version_header: nil, method_header: nil, name_header: nil)
       @user = user
       @token = token
+      @connector = connector
       @protocol_version_header = protocol_version_header
       @method_header = method_header
       @name_header = name_header
@@ -48,6 +49,7 @@ module Muse
     attr_reader :era
 
     def handle(body)
+      @protocol_counts = Hash.new(0)
       if body.is_a?(Array)
         return rpc_error(nil, "Invalid Request", code: -32600) if body.empty?
 
@@ -55,6 +57,8 @@ module Muse
       end
 
       handle_message(body)
+    ensure
+      ProtocolTelemetry.record(@connector, @protocol_counts)
     end
 
     def self.discovery(base_url)
@@ -140,6 +144,9 @@ module Muse
       def resolve_era!(body)
         meta = body["_meta"]
         declared = meta.is_a?(Hash) ? meta[VERSION_META_KEY].presence : nil
+        # Counted before the checks below, so a client that has already moved to a revision we do
+        # not serve yet still shows up in the mix.
+        @protocol_counts[ProtocolTelemetry.bucket(declared, body["method"])] += 1
         return if declared.nil?
 
         header = @protocol_version_header.presence

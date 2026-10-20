@@ -291,6 +291,86 @@ describe RichContent do
     end
   end
 
+  describe "license key backfill" do
+    let(:product) { create(:product, is_licensed: true) }
+    let(:variant) { create(:variant, variant_category: create(:variant_category, link: product)) }
+    let(:license_page) { plain_page("License") + [{ "type" => "licenseKey" }] }
+
+    def plain_page(text)
+      [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => text }] }]
+    end
+
+    before { CreateLicensesForExistingCustomersWorker.jobs.clear }
+
+    it "queues the backfill when a version's page gains a license key block" do
+      page = create(:rich_content, entity: variant, description: plain_page("Pro"))
+
+      page.update!(description: license_page)
+
+      expect(CreateLicensesForExistingCustomersWorker).to have_enqueued_sidekiq_job(product.id)
+    end
+
+    it "queues the backfill when a product-level page gains a license key block" do
+      page = create(:rich_content, entity: product, description: plain_page("Body"))
+
+      page.update!(description: license_page)
+
+      expect(CreateLicensesForExistingCustomersWorker).to have_enqueued_sidekiq_job(product.id)
+    end
+
+    it "does not queue it when the page already offered a license key block" do
+      page = create(:rich_content, entity: variant, description: license_page)
+
+      expect { page.update!(title: "Renamed") }
+        .not_to change { CreateLicensesForExistingCustomersWorker.jobs.size }
+      expect { page.update!(description: license_page + plain_page("More")) }
+        .not_to change { CreateLicensesForExistingCustomersWorker.jobs.size }
+    end
+
+    it "queues the backfill when a page with a license key block moves to another version" do
+      other_variant = create(:variant, variant_category: variant.variant_category, name: "Elite")
+      page = create(:rich_content, entity: other_variant, description: license_page)
+      CreateLicensesForExistingCustomersWorker.jobs.clear
+
+      page.update!(entity: variant)
+
+      expect(CreateLicensesForExistingCustomersWorker).to have_enqueued_sidekiq_job(product.id)
+    end
+
+    it "queues the backfill when a deleted page with a license key block is restored" do
+      page = create(:rich_content, entity: variant, description: license_page)
+      page.mark_deleted!
+      CreateLicensesForExistingCustomersWorker.jobs.clear
+
+      page.mark_undeleted!
+
+      expect(CreateLicensesForExistingCustomersWorker).to have_enqueued_sidekiq_job(product.id)
+    end
+
+    it "does not queue it when the page has no license key block" do
+      page = create(:rich_content, entity: variant, description: plain_page("Pro"))
+
+      expect { page.update!(description: plain_page("Pro and more")) }
+        .not_to change { CreateLicensesForExistingCustomersWorker.jobs.size }
+    end
+
+    it "does not queue it when the product is not licensed" do
+      product.update!(is_licensed: false)
+      page = create(:rich_content, entity: variant, description: plain_page("Pro"))
+
+      expect { page.update!(description: license_page) }
+        .not_to change { CreateLicensesForExistingCustomersWorker.jobs.size }
+    end
+
+    it "does not queue it when the page is deleted" do
+      page = create(:rich_content, entity: variant, description: plain_page("Pro"))
+      page.mark_deleted!
+
+      expect { page.update!(description: license_page) }
+        .not_to change { CreateLicensesForExistingCustomersWorker.jobs.size }
+    end
+  end
+
   describe "link href scheme validation" do
     let(:product) { create(:product) }
 

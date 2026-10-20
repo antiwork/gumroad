@@ -116,6 +116,11 @@ class RichContent < ApplicationRecord
   validate :embedded_files_belong_to_product, if: :will_save_change_to_description?
   validate :link_hrefs_use_permitted_schemes, if: :will_save_change_to_description?
 
+  # Link queues the backfill on the product's is_licensed false -> true transition, which a version
+  # that gains the block after its siblings never sees — the product is already licensed. Queue it
+  # from the page instead. The worker is idempotent and skips content without a block.
+  after_commit :enqueue_license_backfill, on: %i[create update]
+
   def embedded_product_file_ids_in_order
     embedded_product_file_ids_in(description)
   end
@@ -250,11 +255,41 @@ class RichContent < ApplicationRecord
     select_custom_field_nodes(description).uniq
   end
 
-  def has_license_key?
+  # The same walk as #has_license_key?, for a value the callback below reads from before the save.
+  def self.has_license_key_in?(nodes)
+    return false unless nodes.is_a?(Array)
+
     contains_license_key_node = ->(node) do
       node["type"] == LICENSE_KEY_NODE_TYPE || (node["type"].in?(COMMON_CONTAINER_NODE_TYPES) && node["content"].to_s.include?(LICENSE_KEY_NODE_TYPE) && node["content"].any? { |child_node| contains_license_key_node.(child_node) })
     end
-    description.any? { |node| contains_license_key_node.(node) }
+    nodes.any? { |node| contains_license_key_node.(node) }
+  end
+
+  def has_license_key?
+    self.class.has_license_key_in?(description)
+  end
+
+  def enqueue_license_backfill
+    return unless starts_offering_license_key?
+
+    product = owning_product
+    return unless product&.is_licensed?
+
+    CreateLicensesForExistingCustomersWorker.perform_in(5.seconds, product.id)
+  end
+
+  # The save that starts this page offering a license key to its product's existing buyers: creating
+  # it with the block, or adding the block to it. The stored row is compared with the submitted one
+  # so that re-saving an unchanged page does not re-queue the backfill.
+  def starts_offering_license_key?
+    return false unless deleted_at.nil? && self.class.has_license_key_in?(description)
+
+    was_offering = attribute_before_last_save("deleted_at").nil? &&
+      attribute_before_last_save("entity_type") == entity_type &&
+      attribute_before_last_save("entity_id") == entity_id &&
+      self.class.has_license_key_in?(attribute_before_last_save("description"))
+
+    !was_offering
   end
 
   def has_posts?

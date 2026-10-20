@@ -1323,4 +1323,175 @@ describe "Muse MCP" do
       expect(response.parsed_body["error"]["data"]["supported"]).to eq(["2025-03-26"])
     end
   end
+
+  describe "revision telemetry" do
+    before do
+      @token = create("doorkeeper/access_token", application: @app, resource_owner_id: @seller.id, scopes: "view_sales")
+      Feature.deactivate(:mcp_protocol_2026_07_28)
+    end
+
+    def post_mcp_on(client, payload, headers: {})
+      post "/#{client}/v1/mcp", params: payload.to_json, headers: {
+        "CONTENT_TYPE" => "application/json",
+        "HOST" => DOMAIN,
+        "Authorization" => "Bearer #{@token.token}"
+      }.merge(headers)
+    end
+
+    def declaring(version, method: "tools/list")
+      {
+        jsonrpc: "2.0",
+        id: 1,
+        method:,
+        _meta: { Muse::Mcp::VERSION_META_KEY => version },
+      }
+    end
+
+    def declare(version)
+      { Muse::Mcp::VERSION_HEADER => version }
+    end
+
+    def counter_key = RedisKey.mcp_protocol_requests(Date.current)
+
+    # The commands touching the day's counters while the block runs, from whichever client sends
+    # them. `fail_after:` drops the connection on every such command after that many.
+    def counter_commands(fail_after: nil)
+      commands = []
+      watching = true
+      allow_any_instance_of(Redis::Client).to receive(:call_v).and_wrap_original do |original, command, &block|
+        if watching && command.include?(counter_key)
+          commands << command.first.to_s.downcase
+          raise RedisClient::ConnectionError, "connection lost" if fail_after && commands.size > fail_after
+        end
+        original.call(command, &block)
+      end
+      yield
+      watching = false
+      commands
+    end
+
+    it "counts an undeclared caller apart from one that declares a revision, on every connector path" do
+      %w[muse claude chatgpt].each do |client|
+        post_mcp_on(client, { jsonrpc: "2.0", id: 1, method: "tools/list" })
+        post_mcp_on(client, declaring(Muse::Mcp::LEGACY_PROTOCOL_VERSION), headers: declare(Muse::Mcp::LEGACY_PROTOCOL_VERSION))
+        post_mcp_on(client, declaring(Muse::Mcp::MODERN_PROTOCOL_VERSION), headers: declare(Muse::Mcp::MODERN_PROTOCOL_VERSION))
+      end
+
+      mix = Muse::ProtocolTelemetry.mix
+      expect(mix.keys).to contain_exactly("muse", "claude", "chatgpt")
+      expect(mix.values).to all(eq(
+        "undeclared" => { "tools/list" => 1 },
+        "2025-03-26" => { "tools/list" => 1 },
+        "2026-07-28" => { "tools/list" => 1 }
+      ))
+    end
+
+    it "counts each message of a batch" do
+      post_mcp_on("muse", [
+                    { jsonrpc: "2.0", id: 1, method: "tools/list" },
+                    { jsonrpc: "2.0", id: 2, method: "tools/list" },
+                  ])
+
+      expect(Muse::ProtocolTelemetry.mix["muse"]).to eq("undeclared" => { "tools/list" => 2 })
+    end
+
+    it "counts no caller identity" do
+      post_mcp_on("muse", { jsonrpc: "2.0", id: 1, method: "tools/list" })
+
+      expect($redis.hgetall(RedisKey.mcp_protocol_requests(Date.current)).keys).to eq(["muse|undeclared|tools/list"])
+    end
+
+    it "names only an exact known revision and buckets every other declaration and method" do
+      ["2025-06-18", "2099-01-01", " 2026-07-28", "2026-07-28 ", "not-a-version"].each do |version|
+        post_mcp_on("muse", declaring(version), headers: declare(version))
+      end
+      post_mcp_on("muse", { jsonrpc: "2.0", id: 1, method: "prompts/list" })
+
+      expect(Muse::ProtocolTelemetry.mix["muse"]).to eq(
+        "2025-06-18" => { "tools/list" => 1 },
+        "other" => { "tools/list" => 4 },
+        "undeclared" => { "other" => 1 }
+      )
+    end
+
+    it "stores no client-supplied value and keeps every count, however many distinct values a batch sends" do
+      adversarial = Array.new(1000) do |index|
+        { jsonrpc: "2.0", id: index, method: "tools/call/#{index}", _meta: { Muse::Mcp::VERSION_META_KEY => (Date.new(2100, 1, 1) + index).iso8601 } }
+      end
+      known = [
+        { jsonrpc: "2.0", id: 1000, method: "tools/list" },
+        declaring(Muse::Mcp::LEGACY_PROTOCOL_VERSION).merge(id: 1001),
+      ]
+
+      post_mcp_on("muse", adversarial + known, headers: declare(Muse::Mcp::LEGACY_PROTOCOL_VERSION))
+
+      expect($redis.hgetall(counter_key)).to eq(
+        "muse|other|other" => "1000",
+        "muse|undeclared|tools/list" => "1",
+        "muse|2025-03-26|tools/list" => "1"
+      )
+    end
+
+    it "writes a batch's counters and their retention in one command" do
+      commands = counter_commands do
+        post_mcp_on("muse", Array.new(3) { |index| { jsonrpc: "2.0", id: index, method: "tools/list" } })
+      end
+
+      expect(commands).to eq(["eval"])
+      expect(Muse::ProtocolTelemetry.mix["muse"]).to eq("undeclared" => { "tools/list" => 3 })
+      expect($redis.ttl(counter_key)).to be_within(5).of(Muse::ProtocolTelemetry::RETENTION.to_i)
+    end
+
+    it "never leaves a counted day without its retention when the connection drops after the first write" do
+      counter_commands(fail_after: 1) { post_mcp_on("muse", { jsonrpc: "2.0", id: 1, method: "tools/list" }) }
+
+      expect(response).to be_successful
+      expect($redis.hgetall(counter_key)).to eq("muse|undeclared|tools/list" => "1")
+      expect($redis.ttl(counter_key)).to be_within(5).of(Muse::ProtocolTelemetry::RETENTION.to_i)
+    end
+
+    it "restores the retention of a day that already has counts but lost its expiry" do
+      $redis.hset(counter_key, "muse|undeclared|tools/list", 1)
+
+      post_mcp_on("muse", { jsonrpc: "2.0", id: 1, method: "tools/list" })
+
+      expect($redis.hgetall(counter_key)).to eq("muse|undeclared|tools/list" => "2")
+      expect($redis.ttl(counter_key)).to be_within(5).of(Muse::ProtocolTelemetry::RETENTION.to_i)
+    end
+
+    it "serves the same response when the counter cannot be written, with one class-only warning" do
+      warnings = []
+      allow(Rails.logger).to receive(:warn).and_wrap_original do |original, *args, &block|
+        warnings << args.first
+        original.call(*args, &block)
+      end
+      batch = Array.new(2) { |index| { jsonrpc: "2.0", id: index, method: "tools/list" } }
+
+      counter_commands(fail_after: 0) { post_mcp_on("muse", batch) }
+      failed = response
+
+      expect(failed).to be_successful
+      expect(warnings.grep(/mcp_protocol_telemetry/)).to eq(["mcp_protocol_telemetry_failed Redis::ConnectionError"])
+      post_mcp_on("muse", batch)
+      expect(failed.body).to eq(response.body)
+    end
+
+    it "counts the connector from the route, whatever the request claims" do
+      post "/muse/v1/mcp?client=claude", params: { jsonrpc: "2.0", id: 1, method: "tools/list", client: "chatgpt" }.to_json, headers: {
+        "CONTENT_TYPE" => "application/json",
+        "HOST" => DOMAIN,
+        "Authorization" => "Bearer #{@token.token}"
+      }
+
+      expect(Muse::ProtocolTelemetry.mix.keys).to eq(["muse"])
+    end
+
+    it "counts no unauthenticated request" do
+      post "/muse/v1/mcp", params: { jsonrpc: "2.0", id: 1, method: "tools/list" }.to_json,
+                           headers: { "CONTENT_TYPE" => "application/json", "HOST" => DOMAIN }
+
+      expect(response).to have_http_status(:unauthorized)
+      expect($redis.hgetall(RedisKey.mcp_protocol_requests(Date.current))).to be_empty
+    end
+  end
 end
