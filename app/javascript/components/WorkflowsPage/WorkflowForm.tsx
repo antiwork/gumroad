@@ -1,4 +1,4 @@
-import { Link, useForm } from "@inertiajs/react";
+import { Link, useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
 
 import {
@@ -10,6 +10,7 @@ import {
   ProductOption,
   VariantOption,
 } from "$app/types/workflow";
+import { cast } from "$app/utils/cast";
 
 import { Button } from "$app/components/Button";
 import { NumberInput } from "$app/components/NumberInput";
@@ -131,8 +132,13 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
       fromCountry: workflow.bought_from ?? "",
     };
   });
-  const form = useForm<{ base?: string }>({});
-  const baseError = form.errors.base;
+  const form = useForm({});
+  // The controller answers a failed save with a redirect carrying `inertia: { errors: { base: [...] } }`,
+  // i.e. flashed validation errors surfaced as a page prop. `useForm` only populates `form.errors`
+  // from a 422 JSON response, so a redirect leaves it empty — read the page prop instead. `base` is
+  // an array from this controller, but other flash paths send a bare string, so accept both.
+  const baseErrors = cast<{ base?: string | string[] } | undefined>(usePage().props.errors)?.base;
+  const baseError = Array.isArray(baseErrors) ? baseErrors[0] : baseErrors;
   const [invalidFields, setInvalidFields] = React.useState<Set<keyof WorkflowFormState>>(() => new Set());
   const nameInputRef = React.useRef<HTMLInputElement>(null);
   const paidMoreThanInputRef = React.useRef<HTMLInputElement>(null);
