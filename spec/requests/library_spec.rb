@@ -337,6 +337,77 @@ describe("Library Scenario", type: :system, js: true) do
     end
   end
 
+  describe "tab strip overflow" do
+    # Which edges carry a mark, whether a tap on each mark reaches what is under it, and which tabs
+    # are fully inside the strip.
+    def strip_state
+      page.evaluate_script(<<~JS)
+        (() => {
+          const list = document.querySelector('header [role="tablist"]');
+          const listRect = list.getBoundingClientRect();
+          return {
+            marks: Array.from(list.parentElement.querySelectorAll(":scope > svg")).map((mark) => {
+              const rect = mark.getBoundingClientRect();
+              const tapped = document.elementFromPoint((rect.left + rect.right) / 2, (rect.top + rect.bottom) / 2);
+              const side = rect.left >= listRect.right ? "end" : rect.right <= listRect.left ? "start" : "over the tabs";
+              return { side, onScreen: rect.width > 0 && rect.left >= 0 && rect.right <= innerWidth, tapsThrough: !mark.contains(tapped) };
+            }),
+            shown: Array.from(list.querySelectorAll('[role="tab"]'))
+              .filter((tab) => {
+                const rect = tab.getBoundingClientRect();
+                return rect.left >= listRect.left - 1 && rect.right <= listRect.right + 1;
+              })
+              .map((tab) => tab.textContent),
+          };
+        })()
+      JS
+    end
+
+    def expect_edge_marks(*sides)
+      page.document.synchronize do
+        marks = strip_state["marks"]
+        raise Capybara::ExpectationNotMet, "edge marks #{marks.inspect}, expected #{sides.inspect}" unless marks.map { _1["side"] } == sides
+      end
+      expect(strip_state["marks"]).to all(include("onScreen" => true, "tapsThrough" => true))
+    end
+
+    it "marks the edge that still has tabs past it as a phone scrolls through to Following and Reviews", :mobile_view do
+      # The headless mobile driver has no device emulation, only an 800px window.
+      page.current_window.resize_to(375, 812)
+      visit library_path(subscriptions_only: true)
+
+      expect(strip_state["shown"]).to eq(["Purchases", "Subscriptions", "Saved"])
+      expect_edge_marks("end")
+
+      find("[role=tab]", text: "Saved").send_keys(:tab, :tab)
+      expect(page.active_element.text).to eq("Reviews")
+      expect(strip_state["shown"]).to include("Reviews")
+      expect_edge_marks("start")
+
+      page.active_element.send_keys(:enter)
+      expect(page).to have_current_path(reviews_path)
+      expect(page).to have_selector("[role='tab'][aria-selected='true']", text: "Reviews")
+      expect_edge_marks("start")
+
+      click_on "Following"
+      expect(page).to have_current_path(wishlists_following_index_path)
+      expect(page).to have_selector("[role='tab'][aria-selected='true']", text: "Following")
+      expect_edge_marks("start", "end")
+    end
+
+    it "shows no marks when every tab fits and adds one when the window narrows" do
+      visit library_path(subscriptions_only: true)
+
+      expect(strip_state["shown"]).to eq(["Purchases", "Subscriptions", "Saved", "Following", "Reviews"])
+      expect_edge_marks
+
+      page.driver.browser.execute_cdp("Emulation.setDeviceMetricsOverride", width: 375, height: 812, deviceScaleFactor: 1, mobile: false)
+      expect_edge_marks("end")
+    ensure
+      page.driver.browser.execute_cdp("Emulation.clearDeviceMetricsOverride")
+    end
+  end
+
   it "manages archived purchases banner and interactions" do
     product1 = create(:product, name: "Product 1")
     product2 = create(:product, name: "Product 2")
