@@ -23,4 +23,6 @@ type DiscountConditions = {
   duration_in_billing_cycles: 1 | null;
   minimum_amount_cents: number | null;
   option_ids_by_product?: Record<string, string[]>;
+  // Display only: checkout decides whether the buyer is new to the store.
+  new_customers_only?: true;
 };

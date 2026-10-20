@@ -1082,7 +1082,9 @@ const Form = ({
     useTieredDiscounts ? "Tier discount by ownership duration" : null,
     universal && autoApply ? "Apply automatically on product pages" : null,
   ].filter((label): label is string => label !== null);
-  const newCustomersOnlyReason = "Can't be combined with Limit to new customers.";
+  const newCustomersOnlyReason = "Turn off “Limit to new customers” to use this setting.";
+  // A reason is the seller's next step, so it reads as body text: text-muted measures about 3.9:1 here.
+  const reasonClassName = "text-foreground";
 
   const handleSubmit = () => {
     const isNameInvalid = name.value === "";
@@ -1350,7 +1352,10 @@ const Form = ({
                 aria-describedby={`${uid}autoApplyDescription`}
                 label="Apply automatically on product pages"
               />
-              <FieldsetDescription id={`${uid}autoApplyDescription`}>
+              <FieldsetDescription
+                id={`${uid}autoApplyDescription`}
+                className={newCustomersOnly ? reasonClassName : undefined}
+              >
                 {newCustomersOnly
                   ? newCustomersOnlyReason
                   : "Buyers see the discounted price on your product pages without a link or code. Use the validity period below to schedule the sale. A discount set on a single product still takes priority."}
@@ -1537,7 +1542,9 @@ const Form = ({
               </Dropdown>
             </Details>
             {newCustomersOnly ? (
-              <FieldsetDescription id={`${uid}existingCustomersReason`}>{newCustomersOnlyReason}</FieldsetDescription>
+              <FieldsetDescription id={`${uid}existingCustomersReason`} className={reasonClassName}>
+                {newCustomersOnlyReason}
+              </FieldsetDescription>
             ) : null}
             <Fieldset>
               <Switch
@@ -1547,9 +1554,13 @@ const Form = ({
                 aria-describedby={`${uid}newCustomersDescription`}
                 label="Limit to new customers"
               />
-              <FieldsetDescription id={`${uid}newCustomersDescription`}>
+              <FieldsetDescription
+                id={`${uid}newCustomersDescription`}
+                className={newCustomersConflicts.length > 0 ? reasonClassName : undefined}
+              >
                 {newCustomersConflicts.length > 0
-                  ? `Can't be combined with ${newCustomersConflicts.join(" or ")}.`
+                  ? // Every conflicting setting has to go, so they are joined with "and", not "or".
+                    `To use this setting, turn off ${new Intl.ListFormat("en", { type: "conjunction" }).format(newCustomersConflicts.map((label) => `“${label}”`))}.`
                   : "Only buyers who haven't purchased from your store before can use this code. Buyers are recognized by their Gumroad account or the email they check out with."}
               </FieldsetDescription>
             </Fieldset>
@@ -1642,7 +1653,9 @@ const Form = ({
               </Dropdown>
             </Details>
             {newCustomersOnly ? (
-              <FieldsetDescription id={`${uid}tiersReason`}>{newCustomersOnlyReason}</FieldsetDescription>
+              <FieldsetDescription id={`${uid}tiersReason`} className={reasonClassName}>
+                {newCustomersOnlyReason}
+              </FieldsetDescription>
             ) : null}
             <Details open={hasMinimumAmount}>
               <DetailsToggle chevronPosition="none" className="mb-0">

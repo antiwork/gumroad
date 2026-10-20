@@ -48,6 +48,8 @@ type LineItemPaymentErrorFull = {
   // Present only when a guest was refused by the free-download block that the seller's own
   // sign-in lifts.
   owner_sign_in_remedy?: boolean;
+  // Present only when a new-customers-only code was refused for this order's account or email.
+  new_customer_offer_code_refused?: boolean;
 };
 export type ErrorLineItemResult = LineItemPaymentErrorFull | LineItemPaymentErrorShort;
 

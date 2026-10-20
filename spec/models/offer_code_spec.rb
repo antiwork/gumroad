@@ -1308,6 +1308,20 @@ describe OfferCode do
         )
       end
     end
+
+    context "when the discount is limited to new customers" do
+      let(:offer_code) { create(:offer_code, :for_new_customers, products: [product], amount_cents: 100) }
+
+      it "marks the condition so the product page can state it" do
+        expect(offer_code.discount).to include(type: "fixed", cents: 100, new_customers_only: true)
+      end
+
+      it "leaves the marker out of every other discount" do
+        offer_code.update!(new_customers_only: false)
+
+        expect(offer_code.discount).not_to have_key(:new_customers_only)
+      end
+    end
   end
 
   describe "#is_amount_valid?" do

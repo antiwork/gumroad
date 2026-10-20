@@ -4470,6 +4470,12 @@ class Purchase < ApplicationRecord
     calculated_price > 0 ? calculated_price : price_cents
   end
 
+  # Set by the checkout validation on this instance only, so the order response can offer the buyer a
+  # way back to their cart; nothing about the refusal is persisted.
+  def new_customer_offer_code_refused?
+    @new_customer_offer_code_refused == true
+  end
+
   private
     # For presentment charges the processor-issued amount is in buyer currency, but the
     # "issued amount" booked to balances must stay the canonical seller/accounting amount;
@@ -5803,7 +5809,9 @@ class Purchase < ApplicationRecord
 
     def reject_returning_customer_offer_code
       self.error_code = PurchaseErrorCode::OFFER_CODE_INVALID
-      errors.add(:base, "Sorry, this discount code is only for new customers. Remove it to complete your purchase.")
+      # Says which identity matched rather than that the person bought before: a shared or reused email matches too.
+      errors.add(:base, "This code is only for new customers of this store. The account or email used for this order has a previous purchase.")
+      @new_customer_offer_code_refused = true
       # Like the existing-customer rejection: the failed row records no discount it was refused.
       self.offer_code = nil
       self.purchase_offer_code_discount = nil

@@ -398,6 +398,8 @@ class OfferCode < ApplicationRecord
     )
     json[:excluded_product_ids] = excluded_products.map(&:external_id) if universal? && excluded_products.present?
     json[:option_ids_by_product] = option_ids_by_product if variants.any?
+    # Display only, so the product page can state the condition; checkout still decides eligibility.
+    json[:new_customers_only] = true if new_customers_only?
     if is_cents? && once_per_cart?
       json[:once_per_cart] = true
       json[:once_per_cart_id] = external_id
@@ -803,9 +805,11 @@ class OfferCode < ApplicationRecord
       return unless persisted? && new_customers_only_changed?
 
       # A product default applies itself at checkout, where the buyer cannot remove it.
-      if Link.visible.where(default_offer_code_id: id).exists?
-        errors.add(:base, "This discount code is the default discount for one or more products. Please remove it from those products before limiting it to new customers.")
-      end
+      blocked = Link.visible.where(default_offer_code_id: id)
+      names = blocked.order(:id).limit(NAMED_DEFAULT_DISCOUNT_PRODUCTS).pluck(:name)
+      return if names.empty?
+
+      errors.add(:base, "This code is applied automatically on #{to_product_sentence(names, blocked.count)}. Turn off “Automatically apply discount code” in #{names.one? ? "that product’s editor" : "those products’ editors"} (under Pricing, or Tiers for memberships), then try again.")
     end
 
     def validate_excluded_products

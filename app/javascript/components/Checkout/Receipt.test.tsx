@@ -32,10 +32,10 @@ const failedResult = (overrides: Partial<Extract<ErrorLineItemResult, { error_co
     ...overrides,
   }) satisfies ErrorLineItemResult;
 
-const renderEntry = (result: ErrorLineItemResult) =>
+const renderEntry = (result: ErrorLineItemResult, { cartRetained = false }: { cartRetained?: boolean } = {}) =>
   render(
     <DomainSettingsProvider value={domains}>
-      <LineItemResultEntry name="Free download" result={result} />
+      <LineItemResultEntry name="Free download" result={result} cartRetained={cartRetained} />
     </DomainSettingsProvider>,
   );
 
@@ -44,6 +44,7 @@ describe("LineItemResultEntry for a failed line item", () => {
     vi.stubGlobal("Routes", {
       login_url: ({ host, next }: { host: string; next: string }) =>
         `https://${host}/login?next=${encodeURIComponent(next)}`,
+      checkout_url: ({ host }: { host: string }) => `https://${host}/checkout`,
     });
     window.history.replaceState({}, "", "/checkout?cart=1");
   });
@@ -91,5 +92,36 @@ describe("LineItemResultEntry for a failed line item", () => {
 
     expect(screen.getByText("The transaction could not complete.")).toBeTruthy();
     expect(screen.queryByRole("link", { name: "sign in to Gumroad" })).toBeNull();
+  });
+
+  describe("refused new-customer code", () => {
+    const refusal =
+      "This code is only for new customers of this store. The account or email used for this order has a previous purchase.";
+    const refused = () =>
+      failedResult({ error_message: refusal, error_code: "offer_code_invalid", new_customer_offer_code_refused: true });
+
+    it("sends the buyer back to the cart they kept, where the code can be removed", () => {
+      renderEntry(refused(), { cartRetained: true });
+
+      expect(screen.getByText(refusal)).toBeTruthy();
+      expect(screen.getByText("Go back to checkout to continue without this code.")).toBeTruthy();
+      expect(screen.getByRole<HTMLAnchorElement>("link", { name: "Back to checkout" }).getAttribute("href")).toBe(
+        "https://app.example.com/checkout",
+      );
+    });
+
+    it("explains the refusal without a way back when the order went through for other items", () => {
+      renderEntry(refused(), { cartRetained: false });
+
+      expect(screen.getByText(refusal)).toBeTruthy();
+      expect(screen.queryByText(/Go back to checkout/u)).toBeNull();
+      expect(screen.queryByRole("link", { name: "Back to checkout" })).toBeNull();
+    });
+
+    it("leaves every other failure without the way back", () => {
+      renderEntry(failedResult({ error_code: "offer_code_invalid" }), { cartRetained: true });
+
+      expect(screen.queryByRole("link", { name: "Back to checkout" })).toBeNull();
+    });
   });
 });

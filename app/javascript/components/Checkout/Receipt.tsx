@@ -44,11 +44,19 @@ export const LineItem = ({
   </>
 );
 
-export const LineItemResultEntry = ({ name, result }: { name: string; result: LineItemResult }) =>
+export const LineItemResultEntry = ({
+  name,
+  result,
+  cartRetained = false,
+}: {
+  name: string;
+  result: LineItemResult;
+  cartRetained?: boolean;
+}) =>
   result.success ? (
     <SuccessfulLineItemResultEntry name={name} result={result} />
   ) : (
-    <FailedLineItemResultEntry name={name} result={result} />
+    <FailedLineItemResultEntry name={name} result={result} cartRetained={cartRetained} />
   );
 
 const OwnerSignInRemedy = () => {
@@ -66,8 +74,19 @@ const OwnerSignInRemedy = () => {
   );
 };
 
-const FailedLineItemResultEntry = ({ name, result }: { name: string; result: ErrorLineItemResult }) => {
+const FailedLineItemResultEntry = ({
+  name,
+  result,
+  cartRetained,
+}: {
+  name: string;
+  result: ErrorLineItemResult;
+  cartRetained: boolean;
+}) => {
+  const { appDomain } = useDomains();
   const message = result.error_message ?? "Sorry, something went wrong.";
+  const backToCheckout =
+    cartRetained && "new_customer_offer_code_refused" in result && !!result.new_customer_offer_code_refused;
   return (
     <CardContent asChild details>
       <section className="space-y-3">
@@ -81,7 +100,11 @@ const FailedLineItemResultEntry = ({ name, result }: { name: string; result: Err
         <Alert variant="warning">
           <div dangerouslySetInnerHTML={{ __html: message }} />
           {"owner_sign_in_remedy" in result && result.owner_sign_in_remedy ? <OwnerSignInRemedy /> : null}
+          {backToCheckout ? <p>Go back to checkout to continue without this code.</p> : null}
         </Alert>
+        {backToCheckout ? (
+          <NavigationButton href={Routes.checkout_url({ host: appDomain })}>Back to checkout</NavigationButton>
+        ) : null}
       </section>
     </CardContent>
   );
@@ -304,6 +327,9 @@ export const Receipt = ({
   const user = useLoggedInUser();
   const [state] = useState();
   if (state.status.type !== "finished") return null;
+  // Order::CreateService keeps the cart only when nothing in the order went through; otherwise there is
+  // no cart to go back to.
+  const cartRetained = results.every(({ result }) => !result.success);
   return (
     <Card className="mx-auto my-8 max-w-2xl">
       <CardContent asChild>
@@ -336,7 +362,7 @@ export const Receipt = ({
         </header>
       </CardContent>
       {results.map(({ result, item }, key) => (
-        <LineItemResultEntry key={key} result={result} name={item.product.name} />
+        <LineItemResultEntry key={key} result={result} name={item.product.name} cartRetained={cartRetained} />
       ))}
       {!user && canBuyerSignUp ? (
         <CardContent details>

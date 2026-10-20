@@ -246,7 +246,7 @@ describe Purchase, "new-customer offer codes" do
   let(:membership) { membership_purchase.link }
   let(:subscription) { membership_purchase.subscription }
   let(:offer_code) { create(:offer_code, :for_new_customers, user: membership.user, products: [membership], amount_cents: nil, amount_percentage: 100) }
-  let(:rejection) { "Sorry, this discount code is only for new customers. Remove it to complete your purchase." }
+  let(:rejection) { "This code is only for new customers of this store. The account or email used for this order has a previous purchase." }
 
   before { membership_purchase.update!(offer_code:) }
 
@@ -328,7 +328,7 @@ describe Purchase, "new-customers-only codes on a later charge" do
     create(:offer_code, products: [product], new_customers_only: true, amount_cents: nil, amount_percentage: 20)
   end
   let(:subscription) { create(:subscription, link: product, user: buyer) }
-  let(:rejection) { "Sorry, this discount code is only for new customers. Remove it to complete your purchase." }
+  let(:rejection) { "This code is only for new customers of this store. The account or email used for this order has a previous purchase." }
 
   before do
     create(:purchase, link: product, seller:, purchaser: buyer, subscription:, offer_code:,

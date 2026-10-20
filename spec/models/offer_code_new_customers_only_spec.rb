@@ -21,14 +21,25 @@ describe OfferCode, "limited to new customers" do
       expect(code.errors.full_messages).to include("A discount limited to new customers cannot be applied automatically.")
     end
 
-    it "rejects limiting a product's default discount to new customers" do
+    it "rejects limiting a product's default discount to new customers, naming the product setting to turn off" do
+      product.update!(name: "Pro Course")
       code = create(:offer_code, user: seller, products: [product], code: "launch")
       product.update!(default_offer_code: code)
 
       code.new_customers_only = true
 
       expect(code).not_to be_valid
-      expect(code.errors.full_messages).to include("This discount code is the default discount for one or more products. Please remove it from those products before limiting it to new customers.")
+      expect(code.errors.full_messages).to include("This code is applied automatically on “Pro Course”. Turn off “Automatically apply discount code” in that product’s editor (under Pricing, or Tiers for memberships), then try again.")
+    end
+
+    it "names a bounded list of the products that apply the code automatically" do
+      code = create(:universal_offer_code, user: seller, code: "launch", amount_cents: nil, amount_percentage: 10, currency_type: nil)
+      %w[Alpha Bravo Charlie Delta].each { create(:product, user: seller, name: _1, price_cents: 1000, default_offer_code: code) }
+
+      code.new_customers_only = true
+
+      expect(code).not_to be_valid
+      expect(code.errors.full_messages).to include("This code is applied automatically on “Alpha”, “Bravo”, “Charlie”, and 1 other. Turn off “Automatically apply discount code” in those products’ editors (under Pricing, or Tiers for memberships), then try again.")
     end
 
     it "allows unrelated edits of a code that is already limited to new customers" do

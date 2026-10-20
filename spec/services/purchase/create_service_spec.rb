@@ -4132,7 +4132,7 @@ describe Purchase::CreateService, :vcr do
 
       purchase, error = Purchase::CreateService.new(product:, params: free_params, buyer:).perform
 
-      expect(error).to eq "Sorry, this discount code is only for new customers. Remove it to complete your purchase."
+      expect(error).to eq "This code is only for new customers of this store. The account or email used for this order has a previous purchase."
       expect(purchase.purchase_state).to eq "failed"
       expect(purchase.error_code).to eq "offer_code_invalid"
       expect(purchase.offer_code).to be_nil
@@ -4160,7 +4160,7 @@ describe Purchase::CreateService, :vcr do
 
         purchase, error = Purchase::CreateService.new(product:, params: free_params).perform
 
-        expect(error).to eq "Sorry, this discount code is only for new customers. Remove it to complete your purchase."
+        expect(error).to eq "This code is only for new customers of this store. The account or email used for this order has a previous purchase."
         expect(purchase.purchase_state).to eq "failed"
         expect(purchase.error_code).to eq "offer_code_invalid"
       end
@@ -4185,7 +4185,7 @@ describe Purchase::CreateService, :vcr do
 
       _purchase, error = Purchase::CreateService.new(product:, params: free_params, buyer: signed_in_buyer).perform
 
-      expect(error).to eq "Sorry, this discount code is only for new customers. Remove it to complete your purchase."
+      expect(error).to eq "This code is only for new customers of this store. The account or email used for this order has a previous purchase."
     end
 
     it "rejects a signed-in buyer whose checkout email already bought from the seller as a guest" do
@@ -4197,7 +4197,7 @@ describe Purchase::CreateService, :vcr do
 
       _purchase, error = Purchase::CreateService.new(product:, params: free_params, buyer: signed_in_buyer).perform
 
-      expect(error).to eq "Sorry, this discount code is only for new customers. Remove it to complete your purchase."
+      expect(error).to eq "This code is only for new customers of this store. The account or email used for this order has a previous purchase."
     end
 
     it "allows purchases with offer codes in different currencies" do

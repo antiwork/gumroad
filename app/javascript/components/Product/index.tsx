@@ -683,9 +683,18 @@ export const Product = ({
                       ) : null
                     ) : discountCode.discount.minimum_quantity ? (
                       `Get ${formatDiscountAmount(discountCode.discount, buyerLocalContextFor(product))} off${discountScope} when you buy ${discountCode.discount.minimum_quantity} or more (Code ${discountCode.code.toUpperCase()})`
+                    ) : discountCode.discount.new_customers_only ? (
+                      `${formatDiscountAmount(discountCode.discount, buyerLocalContextFor(product))} off${discountScope} for new customers of this store (Code ${discountCode.code.toUpperCase()})`
                     ) : (
                       `${formatDiscountAmount(discountCode.discount, buyerLocalContextFor(product))} off${discountScope} will be applied at checkout (Code ${discountCode.code.toUpperCase()})`
                     )}
+                    {/* Shown before checkout knows who the buyer is, so the price above is conditional. */}
+                    {discountCode.discount.new_customers_only ? (
+                      <div>
+                        {discountCode.discount.minimum_quantity ? "For new customers of this store. " : null}
+                        We check previous purchases at checkout.
+                      </div>
+                    ) : null}
                     {discountCode.discount.duration_in_billing_cycles && product.is_recurring_billing ? (
                       <div>This discount will only apply to the first payment of your subscription.</div>
                     ) : null}
