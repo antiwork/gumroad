@@ -267,6 +267,15 @@ describe Purchase::Risk do
       expect(bad_purchase.errors.full_messages).to eq [Purchase::Risk::BLOCKED_IDENTIFIER_ERROR]
     end
 
+    it "logs a hashed identifier when a browser_guid block refuses the purchase" do
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: "abc123", expires_in: 1.hour)
+      bad_purchase = build(:purchase, link: @product, browser_guid: "abc123")
+
+      expect(Rails.logger).to receive(:warn).with(/risk_block object_type=browser_guid sha=#{Digest::SHA256.hexdigest("abc123")[0, 12]}/)
+      expect(Rails.logger).not_to receive(:warn).with(/abc123/)
+      bad_purchase.send(:check_for_fraud)
+    end
+
     it "does not return errors if only the seller's account_created_ip has been blocked" do
       PlatformBlock.add!(object_type: PlatformBlock::TYPES[:ip_address], object_value: "123.121.11.1", expires_in: 1.hour)
       purchase = build(:purchase, link: @product, seller: @user)
