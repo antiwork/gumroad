@@ -134,9 +134,10 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
   });
   const form = useForm({});
   // The controller answers a failed save with a redirect carrying `inertia: { errors: { base: [...] } }`,
-  // i.e. flashed validation errors surfaced as a page prop. `useForm` only populates `form.errors`
-  // from a 422 JSON response, so a redirect leaves it empty — read the page prop instead. `base` is
-  // an array from this controller, but other flash paths send a bare string, so accept both.
+  // i.e. the message arrives as a *page prop* on the re-rendered form, not as a 422 JSON body. Reading
+  // the prop spells that out rather than depending on `useForm` syncing the flashed errors into
+  // `form.errors`. `base` is an array from this controller, but other flash paths send a bare string,
+  // so accept both.
   const baseErrors = cast<{ base?: string | string[] } | undefined>(usePage().props.errors)?.base;
   const baseError = Array.isArray(baseErrors) ? baseErrors[0] : baseErrors;
   const [invalidFields, setInvalidFields] = React.useState<Set<keyof WorkflowFormState>>(() => new Set());
