@@ -135,13 +135,15 @@ module Muse
       end
 
       # Era is per request: an undeclared request is legacy and keeps its exact current path.
+      # `_meta` is the declaration and the header is checked against it. A legacy client sends no
+      # `_meta`, so a header alone stays legacy rather than becoming an era error.
       def resolve_era!(body)
         meta = body["_meta"]
         declared = meta.is_a?(Hash) ? meta[VERSION_META_KEY].presence : nil
-        header = @protocol_version_header.presence
-        return if declared.nil? && header.nil?
+        return if declared.nil?
 
-        if declared.nil? || header.nil? || declared.to_s != header.to_s
+        header = @protocol_version_header.presence
+        if header.nil? || declared.to_s != header.to_s
           raise Error.new(
             "#{VERSION_HEADER} and _meta #{VERSION_META_KEY} must agree",
             code: HEADER_MISMATCH,
@@ -181,7 +183,7 @@ module Muse
         return unless method == "tools/call"
 
         name = params["name"]
-        if @name_header.presence != name
+        if @name_header.blank? || @name_header != name
           raise Error.new(
             "#{NAME_HEADER} must repeat the tool name",
             code: HEADER_MISMATCH,

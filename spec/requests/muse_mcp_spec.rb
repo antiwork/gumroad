@@ -1184,6 +1184,15 @@ describe "Muse MCP" do
         expect(response.body).to eq(legacy_initialize_body)
       end
 
+      it "keeps the legacy initialize bytes on #{client} when only the version header is declared" do
+        post "/#{client}/v1/mcp",
+             params: { jsonrpc: "2.0", id: 1, method: "initialize" }.to_json,
+             headers: undeclared_headers.merge(Muse::Mcp::VERSION_HEADER => Muse::Mcp::LEGACY_PROTOCOL_VERSION)
+
+        expect(response).to be_successful
+        expect(response.body).to eq(legacy_initialize_body)
+      end
+
       it "keeps the legacy tools/list bytes on #{client} while the revision is served" do
         post "/#{client}/v1/mcp", params: { jsonrpc: "2.0", id: 1, method: "tools/list" }.to_json, headers: undeclared_headers
 
@@ -1196,6 +1205,15 @@ describe "Muse MCP" do
       post "/muse/v1/mcp",
            params: declared_request("initialize", version: Muse::Mcp::LEGACY_PROTOCOL_VERSION).to_json,
            headers: undeclared_headers.merge(Muse::Mcp::VERSION_HEADER => Muse::Mcp::LEGACY_PROTOCOL_VERSION)
+
+      expect(response).to be_successful
+      expect(response.body).to eq(legacy_initialize_body)
+    end
+
+    it "treats a revision declared only in the header as undeclared" do
+      post "/muse/v1/mcp",
+           params: { jsonrpc: "2.0", id: 1, method: "initialize" }.to_json,
+           headers: undeclared_headers.merge(Muse::Mcp::VERSION_HEADER => Muse::Mcp::MODERN_PROTOCOL_VERSION)
 
       expect(response).to be_successful
       expect(response.body).to eq(legacy_initialize_body)
@@ -1279,6 +1297,13 @@ describe "Muse MCP" do
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body["error"]).to include("code" => -32020)
       expect(response.parsed_body["error"]["data"]).to include("header" => "list_payouts", "name" => "list_sales")
+    end
+
+    it "rejects a modern tool call with no name header and no name" do
+      post_declared(declared_request("tools/call", arguments: {}), headers: { Muse::Mcp::NAME_HEADER => nil })
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body["error"]).to include("code" => -32020)
     end
 
     it "answers a revision it does not serve with the ones it does" do
