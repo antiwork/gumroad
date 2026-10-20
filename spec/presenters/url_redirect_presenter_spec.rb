@@ -120,7 +120,7 @@ describe UrlRedirectPresenter do
       file = create(:readable_document, link: product, stream_only: true)
       url_redirect = create(:url_redirect, purchase: create(:purchase, link: product))
       other_redirect = create(:url_redirect, purchase: create(:purchase, link: product))
-      ProductFileDownloadGrant.create!(url_redirect:, product_file: file)
+      create(:product_file_download_grant, url_redirect:, product_file: file)
 
       granted_item = described_class.new(url_redirect:, logged_in_user: nil).download_attributes[:content_items].sole
       other_item = described_class.new(url_redirect: other_redirect, logged_in_user: nil).download_attributes[:content_items].sole

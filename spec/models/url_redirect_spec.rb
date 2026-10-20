@@ -199,7 +199,7 @@ describe UrlRedirect do
     context "when this buyer was granted the file" do
       let(:product_file) { create(:streamable_video, stream_only: true, link: product) }
 
-      before { ProductFileDownloadGrant.create!(url_redirect:, product_file:) }
+      before { create(:product_file_download_grant, url_redirect:, product_file:) }
 
       it "returns true for a file the seller made stream-only" do
         expect(url_redirect.is_file_downloadable?(product_file)).to eq(true)
@@ -233,7 +233,7 @@ describe UrlRedirect do
 
     it "returns false for an external link even when granted" do
       product_file = create(:external_link, link: product)
-      ProductFileDownloadGrant.create!(url_redirect:, product_file:)
+      create(:product_file_download_grant, url_redirect:, product_file:)
 
       expect(url_redirect.reload.is_file_downloadable?(product_file)).to eq(false)
     end

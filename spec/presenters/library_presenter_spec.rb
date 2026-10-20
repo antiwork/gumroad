@@ -828,7 +828,7 @@ describe LibraryPresenter do
         end
 
         it "withholds the bundle ZIP and says why" do
-          ProductFileDownloadGrant.create!(url_redirect: member.url_redirect, product_file: granted_file)
+          create(:product_file_download_grant, url_redirect: member.url_redirect, product_file: granted_file)
 
           expect(library_props(bundle_ids: [purchase1.link.external_id])[:bundle_downloads]).to eq(
             [{ id: purchase1.link.external_id, label: "Bundle", download_url: nil, zip_unavailable_reason: "granted_files" }]
@@ -843,13 +843,13 @@ describe LibraryPresenter do
           other_purchase = create(:purchase, purchaser: create(:user), link: purchase1.link)
           other_purchase.create_artifacts_and_send_receipt!
           other_member = other_purchase.product_purchases.find_by!(link: member.link)
-          ProductFileDownloadGrant.create!(url_redirect: other_member.url_redirect, product_file: granted_file)
+          create(:product_file_download_grant, url_redirect: other_member.url_redirect, product_file: granted_file)
 
           expect(library_props(bundle_ids: [purchase1.link.external_id])[:bundle_downloads]).to eq([ready_download])
         end
 
         it "keeps the ZIP once the granted file is deleted" do
-          ProductFileDownloadGrant.create!(url_redirect: member.url_redirect, product_file: granted_file)
+          create(:product_file_download_grant, url_redirect: member.url_redirect, product_file: granted_file)
           granted_file.mark_deleted!
 
           expect(library_props(bundle_ids: [purchase1.link.external_id])[:bundle_downloads]).to eq([ready_download])

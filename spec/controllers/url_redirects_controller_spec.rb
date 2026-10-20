@@ -1866,7 +1866,7 @@ describe UrlRedirectsController, inertia: true do
       let(:url_redirect) { UrlRedirect.find_by(token: @token) }
 
       before do
-        ProductFileDownloadGrant.create!(url_redirect:, product_file: stream_only_file)
+        create(:product_file_download_grant, url_redirect:, product_file: stream_only_file)
         allow_any_instance_of(UrlRedirect).to receive(:signed_location_for_file).with(stream_only_file).and_return("https://example.com/granted.mp4")
       end
 

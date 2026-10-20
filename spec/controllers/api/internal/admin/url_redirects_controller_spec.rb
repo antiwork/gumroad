@@ -148,7 +148,7 @@ describe Api::Internal::Admin::UrlRedirectsController do
 
     before { request.headers["Authorization"] = "Bearer #{AdminApiToken.mint!(actor_user_id: admin_user.id)}" }
 
-    let!(:grant) { ProductFileDownloadGrant.create!(url_redirect:, product_file:) }
+    let!(:grant) { create(:product_file_download_grant, url_redirect:, product_file:) }
 
     it "puts the buyer back on the reader" do
       expect do

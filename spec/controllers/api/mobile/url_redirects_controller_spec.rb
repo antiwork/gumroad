@@ -500,7 +500,7 @@ describe Api::Mobile::UrlRedirectsController do
 
       before do
         granted_file.update!(stream_only: true)
-        ProductFileDownloadGrant.create!(url_redirect: granted_url_redirect, product_file: granted_file)
+        create(:product_file_download_grant, url_redirect: granted_url_redirect, product_file: granted_file)
         allow_any_instance_of(Aws::S3::Object).to receive(:content_length).and_return(100)
       end
 
