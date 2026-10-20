@@ -118,6 +118,16 @@ class User
       merchant_migration_enabled? && stripe_connect_account.present?
     end
 
+    # Per-seller rollout: a stored Connect link that does not route card sales stops blocking a
+    # Gumroad-managed payout account, so the seller can add a bank account or debit card.
+    MANAGED_ACCOUNT_BESIDE_INACTIVE_CONNECT_FEATURE = :managed_stripe_account_beside_inactive_connect
+
+    def stripe_connect_blocks_managed_account?
+      return false if stripe_connect_account.blank?
+
+      has_stripe_account_connected? || Feature.inactive?(MANAGED_ACCOUNT_BESIDE_INACTIVE_CONNECT_FEATURE, self)
+    end
+
     def has_paypal_account_connected?
       paypal_connect_account.present?
     end

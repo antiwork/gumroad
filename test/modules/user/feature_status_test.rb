@@ -118,6 +118,41 @@ class User::FeatureStatusTest < ActiveSupport::TestCase
     assert_equal false, creator.has_stripe_account_connected?
   end
 
+  # --- #stripe_connect_blocks_managed_account? --------------------------------
+
+  test "#stripe_connect_blocks_managed_account? is false without a Connect row" do
+    creator = create_user
+    create_user_compliance_info(user: creator)
+
+    assert_equal false, creator.stripe_connect_blocks_managed_account?
+  end
+
+  test "#stripe_connect_blocks_managed_account? is true for a Connect row that routes charges, with or without the flag" do
+    creator = create_user(check_merchant_account_is_linked: true)
+    create_user_compliance_info(user: creator)
+    create_merchant_account_stripe_connect(user: creator)
+
+    assert_equal true, creator.reload.stripe_connect_blocks_managed_account?
+
+    Feature.activate_user(User::FeatureStatus::MANAGED_ACCOUNT_BESIDE_INACTIVE_CONNECT_FEATURE, creator)
+    assert_equal true, creator.stripe_connect_blocks_managed_account?
+  end
+
+  test "#stripe_connect_blocks_managed_account? is false for a Connect row that does not route charges once the flag is on for the seller" do
+    creator = create_user
+    create_user_compliance_info(user: creator)
+    create_merchant_account_stripe_connect(user: creator)
+
+    assert_equal false, creator.reload.has_stripe_account_connected?
+    assert_equal true, creator.stripe_connect_blocks_managed_account?
+
+    Feature.activate_user(User::FeatureStatus::MANAGED_ACCOUNT_BESIDE_INACTIVE_CONNECT_FEATURE, create_user)
+    assert_equal true, creator.stripe_connect_blocks_managed_account?
+
+    Feature.activate_user(User::FeatureStatus::MANAGED_ACCOUNT_BESIDE_INACTIVE_CONNECT_FEATURE, creator)
+    assert_equal false, creator.stripe_connect_blocks_managed_account?
+  end
+
   # --- #has_paypal_account_connected? -----------------------------------------
 
   test "#has_paypal_account_connected? reflects whether a PayPal account is connected" do

@@ -777,6 +777,49 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
 
             expect(session[:inertia_errors][:base]).to eq(["You cannot change your payout method to bank account because you have a stripe account connected."])
           end
+
+          describe "and the managed account rollout is on for the seller" do
+            before do
+              Feature.activate_user(User::FeatureStatus::MANAGED_ACCOUNT_BESIDE_INACTIVE_CONNECT_FEATURE, user)
+            end
+
+            it "saves a new bank account and creates a Gumroad-managed account beside the Connect row" do
+              expect(StripeMerchantAccountManager).to receive(:create_account).with(user, passphrase: GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD")).and_call_original
+
+              put :update, params: all_params.merge(bank_account: bank_account_params)
+
+              expect_save_success_flash_message
+              user.reload
+              expect(user.active_bank_account).to be_an_instance_of(AchAccount)
+              expect(user.payment_address).to eq("")
+              expect(user.stripe_account).to be_present
+              expect(user.stripe_connect_account).to eq(connect_account)
+              expect(user.has_stripe_account_connected?).to be(false)
+              expect(user.current_payout_processor).to eq(PayoutProcessorType::STRIPE)
+              expect(HandleNewBankAccountWorker.jobs.size).to eq(1)
+            end
+
+            it "keeps the connected-account rejection when Connect is routing charges" do
+              user.update!(check_merchant_account_is_linked: true)
+              expect(StripeMerchantAccountManager).not_to receive(:create_account)
+
+              expect do
+                put :update, params: all_params.merge(bank_account: bank_account_params)
+              end.to not_change { user.bank_accounts.count }
+
+              expect(session[:inertia_errors][:base]).to eq(["You cannot change your payout method to bank account because you have a stripe account connected."])
+            end
+
+            it "still rejects a new bank account when the rollout is on only for a different seller" do
+              Feature.deactivate_user(User::FeatureStatus::MANAGED_ACCOUNT_BESIDE_INACTIVE_CONNECT_FEATURE, user)
+              Feature.activate_user(User::FeatureStatus::MANAGED_ACCOUNT_BESIDE_INACTIVE_CONNECT_FEATURE, create(:user))
+              expect(StripeMerchantAccountManager).not_to receive(:create_account)
+
+              expect_new_payout_method_rejected("bank account") do
+                put :update, params: all_params.merge(bank_account: bank_account_params)
+              end
+            end
+          end
         end
 
         describe "user has only a stale hollow merchant account" do

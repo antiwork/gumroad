@@ -774,7 +774,7 @@ const BankAccountSection = ({
   bankAccountDetails,
   bankAccount,
   updateBankAccount,
-  hasConnectedStripe,
+  isBlockedByStripeConnect,
   user,
   isFormDisabled,
   feeInfo,
@@ -785,7 +785,7 @@ const BankAccountSection = ({
   bankAccountDetails: BankAccountDetails;
   bankAccount: Partial<BankAccount> | null;
   updateBankAccount: (newBankAccount: Partial<BankAccount>) => void;
-  hasConnectedStripe: boolean;
+  isBlockedByStripeConnect: boolean;
   user: User;
   isFormDisabled: boolean;
   feeInfo: FeeInfo;
@@ -2648,7 +2648,7 @@ const BankAccountSection = ({
         </div>
       </section>
 
-      {hasConnectedStripe ? (
+      {isBlockedByStripeConnect ? (
         <section>
           <Alert variant="warning">
             You cannot change your payout method to bank account because you have a stripe account connected.
