@@ -4,7 +4,7 @@ import * as React from "react";
 import { type SaveActionName } from "$app/types/workflow";
 
 import { Button } from "$app/components/Button";
-import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { Popover, PopoverAnchor, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Fieldset } from "$app/components/ui/Fieldset";
 import { Switch } from "$app/components/ui/Switch";
 
@@ -47,9 +47,11 @@ export const PublishButton = ({
       </PopoverAnchor>
       <PopoverContent sideOffset={4}>
         <Fieldset>
-          <Button color="accent" onClick={() => onClick("save_and_publish")} disabled={isDisabled}>
-            Publish now
-          </Button>
+          <PopoverClose asChild>
+            <Button color="accent" onClick={() => onClick("save_and_publish")} disabled={isDisabled}>
+              Publish now
+            </Button>
+          </PopoverClose>
           <Switch
             checked={sendToPastCustomers.enabled}
             onChange={(e) => sendToPastCustomers.toggle(e.target.checked)}

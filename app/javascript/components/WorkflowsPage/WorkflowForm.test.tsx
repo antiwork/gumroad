@@ -1,9 +1,7 @@
 // @vitest-environment happy-dom
 //
-// A failed save is answered with `redirect_to ..., inertia: { errors: { base: [...] } }`, so the
-// message arrives as a *page prop* on the re-rendered form — not as a 422 JSON body. `useForm`
-// only fills `form.errors` from a 422, so reading it there renders nothing and the form silently
-// re-enables (the bug these tests pin). The form must read the flashed page prop.
+// Pins how the form renders the page's `errors` prop. The real redirect is covered by
+// spec/requests/workflows_spec.rb.
 import { cleanup, render, screen } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

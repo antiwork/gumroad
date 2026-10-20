@@ -391,6 +391,16 @@ describe Workflow::ManageService do
         expect(installment2.reload.published_at).to be_nil
       end
 
+      it "returns the earnings error and saves nothing when publishing while the seller is not eligible to send emails" do
+        params[:save_action_name] = Workflow::SAVE_AND_PUBLISH_ACTION
+        allow_any_instance_of(User).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE - 1)
+
+        expect do
+          expect(described_class.new(seller:, params:, product:, workflow:).process).to eq([false, "You cannot publish a workflow until you have made at least $100 in total earnings and received a payout"])
+        end.not_to change { workflow.reload.name }
+        expect(workflow.published_at).to be_nil
+      end
+
       it "updates the workflow and unpublishes it if the save action is 'save_and_unpublish'" do
         stripe_connect_account = create(:merchant_account_stripe_connect, user: seller)
         create(:purchase, seller:, link: product, merchant_account: stripe_connect_account)
