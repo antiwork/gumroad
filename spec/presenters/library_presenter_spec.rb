@@ -470,7 +470,7 @@ describe LibraryPresenter do
           expect(purchase.subscription.reload.user).to eq(buyer)
           card = results(subscriptions_only: true).sole
           expect(card[:purchase]).to eq(
-            id: purchase.subscription.external_id,
+            id: "subscription:#{purchase.subscription.external_id}",
             is_archived: false,
             download_url: nil,
             variants: "Untitled",
@@ -492,6 +492,52 @@ describe LibraryPresenter do
           holder_library = described_class.new(holder)
           expect(holder_library.library_props(subscriptions_only: true)[:results]).to be_empty
           expect(holder_library.library_props[:results].map { _1[:purchase][:id] }).to include(purchase.external_id)
+        end
+
+        it "keeps the payer's billing card when a converted gift's receiver row is transferred to the payer after the payer leg moved away" do
+          giftee = create(:user, email: "giftee@example.com")
+          holder = create(:user, email: "payer-leg-holder@example.com")
+          gift_product = create(:membership_product, name: "Gifted membership", user: creator)
+          subscription = create(:subscription, link: gift_product, user: giftee)
+          gift = create(:gift, link: gift_product, giftee_email: giftee.email, gifter_email: buyer.email)
+          gifter = create(:membership_purchase, link: gift_product, subscription:, purchaser: buyer, email: buyer.email, is_gift_sender_purchase: true, gift_given: gift)
+          receiver = create(:membership_purchase, :gift_receiver, link: gift_product, subscription:, purchaser: giftee, email: giftee.email).tap(&:create_url_redirect!)
+          gift.update!(giftee_purchase: receiver)
+
+          convert(gift)
+          buyer.transfer_purchases!(new_email: holder.email)
+          giftee.transfer_purchases!(new_email: buyer.email)
+          gifter.reload.update!(is_archived: true)
+
+          expect([gifter.purchaser, receiver.reload.purchaser, subscription.reload.user]).to eq([holder, buyer, buyer])
+          cards = results(subscriptions_only: true).select { _1[:product][:name] == "Gifted membership" }
+          expect(cards.sole[:purchase]).to include(
+            id: "subscription:#{subscription.external_id}",
+            is_archived: false,
+            download_url: nil,
+            subscription: include(manage_url: "/subscriptions/#{subscription.external_id}/manage"),
+          )
+          holder_library = described_class.new(holder)
+          expect(holder_library.library_props(subscriptions_only: true)[:results]).to be_empty
+          expect(holder_library.library_props(show_archived_only: true)[:results].map { _1[:purchase][:id] }).to eq([gifter.external_id])
+        end
+
+        it "keys a billing card apart from a held card whose purchase shares its subscription's database id" do
+          holder = create(:user, email: "new-holder@example.com")
+          shared_id = [Purchase.maximum(:id).to_i, Subscription.maximum(:id).to_i].max + 1_000
+          moved_product = create(:membership_product, name: "Moved membership", user: creator)
+          moved_subscription = create(:subscription, id: shared_id, link: moved_product, user: buyer)
+          create(:membership_purchase, link: moved_product, purchaser: buyer, email: buyer.email, subscription: moved_subscription)
+          held_product = create(:membership_product, name: "Held membership", user: creator)
+          held = create(:membership_purchase, id: shared_id, link: held_product, purchaser: buyer, subscription: create(:subscription, link: held_product, user: buyer))
+          buyer.transfer_purchases!(new_email: holder.email)
+          expect(moved_subscription.external_id).to eq(held.external_id)
+
+          keys = results(subscriptions_only: true).map { _1[:purchase][:id] }
+
+          expect(keys).to eq(keys.uniq)
+          expect(keys).to include(held.external_id, "subscription:#{moved_subscription.external_id}")
+          expect(results.map { _1[:purchase][:id] }).to include(held.external_id)
         end
 
         it "lists a converted gift only for the account-backed payer, keeping the recipient's Library access" do

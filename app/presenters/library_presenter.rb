@@ -157,7 +157,8 @@ class LibraryPresenter
             native_type: product.native_type,
           },
           purchase: {
-            id: held_elsewhere ? purchase.subscription.external_id : purchase.external_id,
+            # Subscription and Purchase external ids share one encoding, so the bare id could equal a held card's.
+            id: held_elsewhere ? "subscription:#{purchase.subscription.external_id}" : purchase.external_id,
             is_archived: !held_elsewhere && purchase.is_archived,
             download_url: held_elsewhere ? nil : library_download_location(purchase, replacement_redirects),
             variants: purchase.variant_attributes&.map(&:name)&.join(", "),
@@ -173,13 +174,16 @@ class LibraryPresenter
       held = logged_in_user.purchases.for_library
         .has_active_subscription
         .where(subscriptions: { user_id: [logged_in_user.id, nil] })
+      held_ids = one_card_per_subscription(held)
       # User#transfer_purchases! moves purchases to another account but leaves Subscription#user, so
       # this account can still be billed for (and manage) a subscription whose purchase it no longer holds.
+      # Only a held row that survived the filters may veto: a converted gift's receiver row moved here
+      # must not hide the payer leg.
       billed_elsewhere = Purchase.for_library
         .has_active_subscription
         .where(subscriptions: { user_id: logged_in_user.id })
-        .where.not(subscription_id: held.select(:subscription_id))
-      Purchase.where(id: one_card_per_subscription(held) + one_card_per_subscription(billed_elsewhere))
+        .where.not(subscription_id: Purchase.where(id: held_ids).select(:subscription_id))
+      Purchase.where(id: held_ids + one_card_per_subscription(billed_elsewhere))
     end
 
     def one_card_per_subscription(scope)
