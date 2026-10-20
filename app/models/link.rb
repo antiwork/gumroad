@@ -304,10 +304,14 @@ class Link < ApplicationRecord
   enum :subscription_duration, %i[monthly yearly quarterly biannually every_two_years]
   enum :purchase_type, %i[buy_only rent_only buy_and_rent] # Indicates whether this product can be bought or rented or both.
 
+  # Enum assignment raises on an unknown value. Keep the product's current mode instead of
+  # coercing to buy_only: the coercion converts the product and delete_unused_prices then
+  # drops its rental price, silently and with no editor control to undo it.
   def purchase_type=(value)
+    current = purchase_type
     super(value)
   rescue ArgumentError
-    super(:buy_only)
+    super(current || :buy_only)
   end
 
   def price_currency_type=(value)

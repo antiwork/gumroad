@@ -1135,4 +1135,363 @@ describe "Muse MCP" do
       expect(Nokogiri::HTML(response.body).at_css("input[name='resource']")["value"]).to eq(claude_resource)
     end
   end
+
+  context "with a client on the 2026-07-28 revision" do
+    before do
+      @token = create("doorkeeper/access_token", application: @app, resource_owner_id: @seller.id, scopes: "view_sales")
+      Feature.activate(:mcp_protocol_2026_07_28)
+    end
+
+    def declared_request(method, version: Muse::Mcp::MODERN_PROTOCOL_VERSION, **params)
+      request = { jsonrpc: "2.0", id: 1, method: method, _meta: { Muse::Mcp::VERSION_META_KEY => version } }
+      request[:params] = params if params.any?
+      request
+    end
+
+    def post_declared(payload, headers: {}, declared: Muse::Mcp::MODERN_PROTOCOL_VERSION)
+      post "/muse/v1/mcp", params: payload.to_json, headers: {
+        "CONTENT_TYPE" => "application/json",
+        "HOST" => DOMAIN,
+        "Authorization" => "Bearer #{@token.token}",
+        Muse::Mcp::VERSION_HEADER => declared,
+        Muse::Mcp::METHOD_HEADER => payload[:method].to_s
+      }.merge(headers).compact
+    end
+
+    def undeclared_headers
+      { "CONTENT_TYPE" => "application/json", "HOST" => DOMAIN, "Authorization" => "Bearer #{@token.token}" }
+    end
+
+    # Bytes captured from the pre-change head on /muse, /claude and /chatgpt; an undeclared
+    # client must keep getting exactly these.
+    def legacy_initialize_body
+      <<~'JSON'.chomp
+        {"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-03-26","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"gumroad","title":"Gumroad","version":"1.0.0"},"instructions":"Use these tools for a connected creator's own store: products, sales, and payouts. Confirm with the person before publishing or unpublishing. Buyers still check out on the product URL. This server does not take payment."}}
+      JSON
+    end
+
+    def legacy_tools_body
+      <<~'JSON'.chomp
+        {"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"get_account","title":"Get account","description":"The connected creator's public profile: name, username, storefront URL, currency.","inputSchema":{"type":"object","properties":{},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":false,"destructiveHint":false}},{"name":"list_products","title":"List products","description":"List the creator's products (newest first). Returns id, name, price, published state, and URL.","inputSchema":{"type":"object","properties":{"limit":{"type":"integer","description":"Max products to return (1-50, default 25)."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":false,"destructiveHint":false}},{"name":"get_product","title":"Get product","description":"Fetch one product by id or permalink.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":true,"openWorldHint":false,"destructiveHint":false}},{"name":"create_draft_product","title":"Create draft product","description":"Create a draft digital product. It is not for sale until publish_product runs. Confirm the name and price with the creator first.","inputSchema":{"type":"object","properties":{"name":{"type":"string","description":"Product name."},"price_cents":{"type":"integer","description":"Price in minor units (cents for USD). Use 0 for a free product."},"description":{"type":"string","description":"HTML or plain-text description."}},"additionalProperties":false,"required":["name","price_cents"]},"annotations":{"readOnlyHint":false,"openWorldHint":false,"destructiveHint":false}},{"name":"publish_product","title":"Publish product","description":"Make a draft product purchasable. Confirm with the creator first.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":false,"openWorldHint":false,"destructiveHint":true}},{"name":"unpublish_product","title":"Unpublish product","description":"Take a product off sale without deleting it.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":false,"openWorldHint":false,"destructiveHint":true}},{"name":"list_sales","title":"List sales","description":"Recent successful sales. Includes buyer email, product, amount, and time.","inputSchema":{"type":"object","properties":{"limit":{"type":"integer","description":"Max sales to return (1-50, default 25)."},"email":{"type":"string","description":"Filter by buyer email."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":false,"destructiveHint":false}},{"name":"list_payouts","title":"List payouts","description":"Recent payouts to the creator's bank or PayPal.","inputSchema":{"type":"object","properties":{"limit":{"type":"integer","description":"Max payouts to return (1-50, default 10)."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":false,"destructiveHint":false}}]}}
+      JSON
+    end
+
+    %w[muse claude chatgpt].each do |client|
+      it "keeps the legacy initialize bytes on #{client} while the revision is served" do
+        post "/#{client}/v1/mcp", params: { jsonrpc: "2.0", id: 1, method: "initialize" }.to_json, headers: undeclared_headers
+
+        expect(response).to be_successful
+        expect(response.body).to eq(legacy_initialize_body)
+      end
+
+      it "keeps the legacy initialize bytes on #{client} when only the version header is declared" do
+        post "/#{client}/v1/mcp",
+             params: { jsonrpc: "2.0", id: 1, method: "initialize" }.to_json,
+             headers: undeclared_headers.merge(Muse::Mcp::VERSION_HEADER => Muse::Mcp::LEGACY_PROTOCOL_VERSION)
+
+        expect(response).to be_successful
+        expect(response.body).to eq(legacy_initialize_body)
+      end
+
+      it "keeps the legacy tools/list bytes on #{client} while the revision is served" do
+        post "/#{client}/v1/mcp", params: { jsonrpc: "2.0", id: 1, method: "tools/list" }.to_json, headers: undeclared_headers
+
+        expect(response).to be_successful
+        expect(response.body).to eq(legacy_tools_body)
+      end
+    end
+
+    it "keeps the legacy bytes when the client declares the legacy revision explicitly" do
+      post "/muse/v1/mcp",
+           params: declared_request("initialize", version: Muse::Mcp::LEGACY_PROTOCOL_VERSION).to_json,
+           headers: undeclared_headers.merge(Muse::Mcp::VERSION_HEADER => Muse::Mcp::LEGACY_PROTOCOL_VERSION)
+
+      expect(response).to be_successful
+      expect(response.body).to eq(legacy_initialize_body)
+    end
+
+    it "treats a revision declared only in the header as undeclared" do
+      post "/muse/v1/mcp",
+           params: { jsonrpc: "2.0", id: 1, method: "initialize" }.to_json,
+           headers: undeclared_headers.merge(Muse::Mcp::VERSION_HEADER => Muse::Mcp::MODERN_PROTOCOL_VERSION)
+
+      expect(response).to be_successful
+      expect(response.body).to eq(legacy_initialize_body)
+    end
+
+    it "serves server/discover" do
+      post_declared(declared_request("server/discover"))
+
+      expect(response).to be_successful
+      result = response.parsed_body["result"]
+      expect(result["supportedVersions"]).to eq(["2025-03-26", "2026-07-28"])
+      expect(result["resultType"]).to eq("complete")
+      expect(result["capabilities"]).to eq({ "tools" => { "listChanged" => false } })
+      expect(result["_meta"]).to eq("io.modelcontextprotocol/serverInfo" => { "name" => "gumroad", "title" => "Gumroad", "version" => "1.0.0" })
+      expect(result["instructions"]).to include("check out on the product URL")
+    end
+
+    it "adds the modern envelope to tools/list without changing the tools" do
+      post_declared(declared_request("tools/list"))
+
+      result = response.parsed_body["result"]
+      expect(result["resultType"]).to eq("complete")
+      expect(result["ttlMs"]).to eq(0)
+      expect(result["cacheScope"]).to eq("private")
+      expect(result["tools"].map { _1["name"] }).to include("get_account", "list_sales")
+      expect(result["tools"].first.keys).to contain_exactly("name", "title", "description", "inputSchema", "annotations")
+    end
+
+    it "serves a tool call that repeats its name in the header" do
+      create(:purchase, seller: @seller, link: @product, email: "modern@example.com", price_cents: 1900)
+
+      post_declared(declared_request("tools/call", name: "list_sales", arguments: {}), headers: { Muse::Mcp::NAME_HEADER => "list_sales" })
+
+      expect(response).to be_successful
+      result = response.parsed_body["result"]
+      expect(result["resultType"]).to eq("complete")
+      expect(result["structuredContent"]["sales"].map { _1["email"] }).to eq(["modern@example.com"])
+    end
+
+    it "tells a modern client that the removed handshake and ping do not exist" do
+      %w[initialize ping].each do |method|
+        post_declared(declared_request(method))
+
+        expect(response).to have_http_status(:not_found)
+        expect(response.parsed_body["error"]).to include("code" => -32601, "message" => "Method not found: #{method}")
+      end
+    end
+
+    it "accepts a modern notification without a response body" do
+      post_declared(declared_request("notifications/initialized").except(:id))
+
+      expect(response).to have_http_status(:accepted)
+      expect(response.body).to be_empty
+    end
+
+    it "rejects a version the header and _meta disagree about" do
+      post_declared(declared_request("server/discover"), declared: Muse::Mcp::LEGACY_PROTOCOL_VERSION)
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body["error"]).to include("code" => -32020)
+      expect(response.parsed_body["error"]["data"]).to include("header" => "2025-03-26", "declared" => "2026-07-28")
+    end
+
+    it "rejects a version declared only in _meta" do
+      post_declared(declared_request("server/discover"), headers: { Muse::Mcp::VERSION_HEADER => nil })
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body["error"]).to include("code" => -32020)
+    end
+
+    it "rejects a modern request without the method header" do
+      post_declared(declared_request("server/discover"), headers: { Muse::Mcp::METHOD_HEADER => nil })
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body["error"]).to include("code" => -32020)
+    end
+
+    it "rejects a modern tool call whose name header does not match" do
+      post_declared(declared_request("tools/call", name: "list_sales", arguments: {}), headers: { Muse::Mcp::NAME_HEADER => "list_payouts" })
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body["error"]).to include("code" => -32020)
+      expect(response.parsed_body["error"]["data"]).to include("header" => "list_payouts", "name" => "list_sales")
+    end
+
+    it "rejects a modern tool call with no name header and no name" do
+      post_declared(declared_request("tools/call", arguments: {}), headers: { Muse::Mcp::NAME_HEADER => nil })
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body["error"]).to include("code" => -32020)
+    end
+
+    it "answers a revision it does not serve with the ones it does" do
+      post_declared(declared_request("server/discover", version: "2025-11-25"), declared: "2025-11-25")
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body["error"]).to include("code" => -32022, "data" => { "supported" => ["2025-03-26", "2026-07-28"], "requested" => "2025-11-25" })
+    end
+
+    it "keeps the revision unsupported until the flag is on" do
+      Feature.deactivate(:mcp_protocol_2026_07_28)
+
+      post_declared(declared_request("server/discover"))
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body["error"]["code"]).to eq(-32022)
+      expect(response.parsed_body["error"]["data"]["supported"]).to eq(["2025-03-26"])
+    end
+  end
+
+  describe "revision telemetry" do
+    before do
+      @token = create("doorkeeper/access_token", application: @app, resource_owner_id: @seller.id, scopes: "view_sales")
+      Feature.deactivate(:mcp_protocol_2026_07_28)
+    end
+
+    def post_mcp_on(client, payload, headers: {})
+      post "/#{client}/v1/mcp", params: payload.to_json, headers: {
+        "CONTENT_TYPE" => "application/json",
+        "HOST" => DOMAIN,
+        "Authorization" => "Bearer #{@token.token}"
+      }.merge(headers)
+    end
+
+    def declaring(version, method: "tools/list")
+      {
+        jsonrpc: "2.0",
+        id: 1,
+        method:,
+        _meta: { Muse::Mcp::VERSION_META_KEY => version },
+      }
+    end
+
+    def declare(version)
+      { Muse::Mcp::VERSION_HEADER => version }
+    end
+
+    def counter_key = RedisKey.mcp_protocol_requests(Date.current)
+
+    # The commands touching the day's counters while the block runs, from whichever client sends
+    # them. `fail_after:` drops the connection on every such command after that many.
+    def counter_commands(fail_after: nil)
+      commands = []
+      watching = true
+      allow_any_instance_of(Redis::Client).to receive(:call_v).and_wrap_original do |original, command, &block|
+        if watching && command.include?(counter_key)
+          commands << command.first.to_s.downcase
+          raise RedisClient::ConnectionError, "connection lost" if fail_after && commands.size > fail_after
+        end
+        original.call(command, &block)
+      end
+      yield
+      watching = false
+      commands
+    end
+
+    it "counts an undeclared caller apart from one that declares a revision, on every connector path" do
+      %w[muse claude chatgpt].each do |client|
+        post_mcp_on(client, { jsonrpc: "2.0", id: 1, method: "tools/list" })
+        post_mcp_on(client, declaring(Muse::Mcp::LEGACY_PROTOCOL_VERSION), headers: declare(Muse::Mcp::LEGACY_PROTOCOL_VERSION))
+        post_mcp_on(client, declaring(Muse::Mcp::MODERN_PROTOCOL_VERSION), headers: declare(Muse::Mcp::MODERN_PROTOCOL_VERSION))
+      end
+
+      mix = Muse::ProtocolTelemetry.mix
+      expect(mix.keys).to contain_exactly("muse", "claude", "chatgpt")
+      expect(mix.values).to all(eq(
+        "undeclared" => { "tools/list" => 1 },
+        "2025-03-26" => { "tools/list" => 1 },
+        "2026-07-28" => { "tools/list" => 1 }
+      ))
+    end
+
+    it "counts each message of a batch" do
+      post_mcp_on("muse", [
+                    { jsonrpc: "2.0", id: 1, method: "tools/list" },
+                    { jsonrpc: "2.0", id: 2, method: "tools/list" },
+                  ])
+
+      expect(Muse::ProtocolTelemetry.mix["muse"]).to eq("undeclared" => { "tools/list" => 2 })
+    end
+
+    it "counts no caller identity" do
+      post_mcp_on("muse", { jsonrpc: "2.0", id: 1, method: "tools/list" })
+
+      expect($redis.hgetall(RedisKey.mcp_protocol_requests(Date.current)).keys).to eq(["muse|undeclared|tools/list"])
+    end
+
+    it "names only an exact known revision and buckets every other declaration and method" do
+      ["2025-06-18", "2099-01-01", " 2026-07-28", "2026-07-28 ", "not-a-version"].each do |version|
+        post_mcp_on("muse", declaring(version), headers: declare(version))
+      end
+      post_mcp_on("muse", { jsonrpc: "2.0", id: 1, method: "prompts/list" })
+
+      expect(Muse::ProtocolTelemetry.mix["muse"]).to eq(
+        "2025-06-18" => { "tools/list" => 1 },
+        "other" => { "tools/list" => 4 },
+        "undeclared" => { "other" => 1 }
+      )
+    end
+
+    it "stores no client-supplied value and keeps every count, however many distinct values a batch sends" do
+      adversarial = Array.new(1000) do |index|
+        { jsonrpc: "2.0", id: index, method: "tools/call/#{index}", _meta: { Muse::Mcp::VERSION_META_KEY => (Date.new(2100, 1, 1) + index).iso8601 } }
+      end
+      known = [
+        { jsonrpc: "2.0", id: 1000, method: "tools/list" },
+        declaring(Muse::Mcp::LEGACY_PROTOCOL_VERSION).merge(id: 1001),
+      ]
+
+      post_mcp_on("muse", adversarial + known, headers: declare(Muse::Mcp::LEGACY_PROTOCOL_VERSION))
+
+      expect($redis.hgetall(counter_key)).to eq(
+        "muse|other|other" => "1000",
+        "muse|undeclared|tools/list" => "1",
+        "muse|2025-03-26|tools/list" => "1"
+      )
+    end
+
+    it "writes a batch's counters and their retention in one command" do
+      commands = counter_commands do
+        post_mcp_on("muse", Array.new(3) { |index| { jsonrpc: "2.0", id: index, method: "tools/list" } })
+      end
+
+      expect(commands).to eq(["eval"])
+      expect(Muse::ProtocolTelemetry.mix["muse"]).to eq("undeclared" => { "tools/list" => 3 })
+      expect($redis.ttl(counter_key)).to be_within(5).of(Muse::ProtocolTelemetry::RETENTION.to_i)
+    end
+
+    it "never leaves a counted day without its retention when the connection drops after the first write" do
+      counter_commands(fail_after: 1) { post_mcp_on("muse", { jsonrpc: "2.0", id: 1, method: "tools/list" }) }
+
+      expect(response).to be_successful
+      expect($redis.hgetall(counter_key)).to eq("muse|undeclared|tools/list" => "1")
+      expect($redis.ttl(counter_key)).to be_within(5).of(Muse::ProtocolTelemetry::RETENTION.to_i)
+    end
+
+    it "restores the retention of a day that already has counts but lost its expiry" do
+      $redis.hset(counter_key, "muse|undeclared|tools/list", 1)
+
+      post_mcp_on("muse", { jsonrpc: "2.0", id: 1, method: "tools/list" })
+
+      expect($redis.hgetall(counter_key)).to eq("muse|undeclared|tools/list" => "2")
+      expect($redis.ttl(counter_key)).to be_within(5).of(Muse::ProtocolTelemetry::RETENTION.to_i)
+    end
+
+    it "serves the same response when the counter cannot be written, with one class-only warning" do
+      warnings = []
+      allow(Rails.logger).to receive(:warn).and_wrap_original do |original, *args, &block|
+        warnings << args.first
+        original.call(*args, &block)
+      end
+      batch = Array.new(2) { |index| { jsonrpc: "2.0", id: index, method: "tools/list" } }
+
+      counter_commands(fail_after: 0) { post_mcp_on("muse", batch) }
+      failed = response
+
+      expect(failed).to be_successful
+      expect(warnings.grep(/mcp_protocol_telemetry/)).to eq(["mcp_protocol_telemetry_failed Redis::ConnectionError"])
+      post_mcp_on("muse", batch)
+      expect(failed.body).to eq(response.body)
+    end
+
+    it "counts the connector from the route, whatever the request claims" do
+      post "/muse/v1/mcp?client=claude", params: { jsonrpc: "2.0", id: 1, method: "tools/list", client: "chatgpt" }.to_json, headers: {
+        "CONTENT_TYPE" => "application/json",
+        "HOST" => DOMAIN,
+        "Authorization" => "Bearer #{@token.token}"
+      }
+
+      expect(Muse::ProtocolTelemetry.mix.keys).to eq(["muse"])
+    end
+
+    it "counts no unauthenticated request" do
+      post "/muse/v1/mcp", params: { jsonrpc: "2.0", id: 1, method: "tools/list" }.to_json,
+                           headers: { "CONTENT_TYPE" => "application/json", "HOST" => DOMAIN }
+
+      expect(response).to have_http_status(:unauthorized)
+      expect($redis.hgetall(RedisKey.mcp_protocol_requests(Date.current))).to be_empty
+    end
+  end
 end
