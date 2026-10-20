@@ -781,6 +781,58 @@ describe LibraryPresenter do
           count
         end
 
+        def charged_back_plan(name)
+          plan = create(:installment_plan_purchase, purchaser: buyer, link: create(:product, :with_installment_plan, name:, user: creator))
+          plan.update!(chargeback_date: Time.current)
+          renewal(plan.subscription, is_installment_payment: true)
+          plan
+        end
+
+        def queries_for(**params)
+          count = 0
+          counter = ->(*, payload) { count += 1 unless payload[:cached] || %w[SCHEMA TRANSACTION].include?(payload[:name]) }
+          ActiveSupport::Notifications.subscribed(counter, "sql.active_record") { results(subscriptions_only: true, **params) }
+          count
+        end
+
+        it "checks charged-back plans for a dispute pause in a fixed number of queries, before search narrows the page" do
+          plans = Array.new(3) { charged_back_plan("Charged-back plan #{_1}") }
+          three_plans = queries_for(query: "hello")
+          plans += Array.new(10) { charged_back_plan("Charged-back plan #{_1 + 3}") }
+
+          expect(results(subscriptions_only: true, query: "hello").map { _1[:purchase][:id] }).to eq([purchase.external_id])
+          expect(queries_for(query: "hello") - three_plans).to be <= 2
+          expect(results(subscriptions_only: true).map { _1[:purchase][:id] })
+            .to match_array([purchase.external_id] + plans.map { "subscription:#{_1.subscription.external_id}" })
+        end
+
+        it "pauses exactly the plans Subscription#all_charges_disputed? pauses" do
+          disputed = ->(charge) { charge.update!(chargeback_date: Time.current) }
+          all_disputed = charged_back_plan("All disputed").tap { disputed.(_1.subscription.purchases.last) }
+          partly_disputed = charged_back_plan("Partly disputed")
+          reversed = charged_back_plan("Reversed").tap { _1.subscription.purchases.each { |charge| charge.update!(chargeback_date: Time.current, chargeback_reversed: true) } }
+          refunded = create(:installment_plan_purchase, purchaser: buyer, link: create(:product, :with_installment_plan, name: "Refunded", user: creator)).tap { _1.update!(stripe_refunded: true) }
+          no_success = create(:installment_plan_purchase, purchaser: buyer, link: create(:product, :with_installment_plan, name: "No success", user: creator)).tap { _1.update_columns(purchase_state: "failed") }
+          failed_after = charged_back_plan("Failed after disputes").tap do
+            disputed.(_1.subscription.purchases.last)
+            renewal(_1.subscription, is_installment_payment: true, purchase_state: "failed")
+          end
+          test_plan = charged_back_plan("Test plan").tap do
+            _1.subscription.update!(is_test_subscription: true)
+            _1.subscription.purchases.each { |charge| charge.update!(purchase_state: "test_successful", chargeback_date: Time.current) }
+          end
+          test_plan_live_charges = charged_back_plan("Test plan, live charges").tap do
+            _1.subscription.update!(is_test_subscription: true)
+            disputed.(_1.subscription.purchases.last)
+          end
+          membership = owned_membership("Disputed membership").tap { disputed.(_1) }
+          subscriptions = [all_disputed, partly_disputed, reversed, refunded, no_success, failed_after, test_plan, test_plan_live_charges, membership].map { _1.subscription.reload }
+
+          expect(described_class.new(buyer).send(:paused_installment_plan_ids, subscriptions.map(&:id)))
+            .to match_array(subscriptions.filter_map { _1.id if _1.all_charges_disputed? })
+          expect(subscriptions.select(&:all_charges_disputed?)).to contain_exactly(all_disputed.subscription, failed_after.subscription, test_plan.subscription)
+        end
+
         it "keeps the Subscriptions tab at a fixed number of queries as cards are added" do
           mixed_subscriptions(1)
           seven_more = queries_for_subscriptions_tab

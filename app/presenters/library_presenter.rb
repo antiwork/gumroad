@@ -244,8 +244,24 @@ class LibraryPresenter
       owned = charges.where(subscriptions: { user_id: logged_in_user.id }).where.not(subscription_id: listed)
       claimed = charges.where(subscriptions: { user_id: nil }, purchaser_id: logged_in_user.id).where.not(subscription_id: listed)
       ids = one_card_per_subscription(owned) + one_card_per_subscription(claimed)
-      paused = Subscription.where(id: Purchase.where(id: ids).select(:subscription_id)).filter_map { _1.id if _1.all_charges_disputed? }
+      paused = paused_installment_plan_ids(Purchase.where(id: ids).select(:subscription_id))
       Purchase.where(id: ids).where.not(subscription_id: paused).ids
+    end
+
+    # Subscription#all_charges_disputed? (which pauses RecurringChargeWorker) for every candidate plan in
+    # three queries: each of the plan's successful charges (test_successful on a test subscription) has
+    # a chargeback that wasn't reversed. The label facts spec pins it to the model method.
+    def paused_installment_plan_ids(subscription_ids)
+      plans = Subscription.where(id: subscription_ids).select(&:is_installment_plan?)
+      return [] if plans.empty?
+
+      charges = Purchase.where(subscription_id: plans.map(&:id), purchase_state: %w[successful test_successful])
+      totals = charges.group(:subscription_id, :purchase_state).count
+      standing = totals.merge(charges.not_chargedback_or_chargedback_reversed.group(:subscription_id, :purchase_state).count) { |_, total, kept| total - kept }
+      plans.filter_map do |plan|
+        key = [plan.id, plan.is_test_subscription? ? "test_successful" : "successful"]
+        plan.id if totals.fetch(key, 0).positive? && standing.fetch(key) == totals.fetch(key)
+      end
     end
 
     def one_card_per_subscription(scope)
