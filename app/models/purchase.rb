@@ -4641,11 +4641,12 @@ class Purchase < ApplicationRecord
         { type: "fixed", cents: offer_code.amount }
     end
 
-    # A renewal, a later installment or an upgrade pays for a plan the buyer already started, so the
-    # new-customer gate must not decide it a second time: they own something by then, and rejecting
-    # the code here would drop a discount they were already granted.
+    # A renewal, a later installment, an upgrade or the release charge of a preorder pays for
+    # something the buyer already committed to, so the new-customer gate must not decide it a
+    # second time: they own something by then, and rejecting the code here would drop a discount
+    # they were already granted. `validate_offer_code` exempts these charges for the same reason.
     def continues_earlier_purchase?
-      is_recurring_subscription_charge || is_upgrade_purchase? ||
+      is_preorder_charge? || is_recurring_subscription_charge || is_upgrade_purchase? ||
         (is_installment_payment? && !is_original_subscription_purchase?)
     end
 

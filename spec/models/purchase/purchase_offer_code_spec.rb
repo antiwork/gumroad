@@ -270,6 +270,25 @@ describe Purchase, "new-customers-only codes on a later charge" do
     expect(installment.send(:resolved_offer_code_discount_for_buyer)).to eq({ type: "percent", percents: 20 })
   end
 
+  it "keeps the discount on the release charge of a preorder the buyer already authorized" do
+    preorder = create(:preorder, preorder_link: create(:preorder_link, link: product), purchaser: buyer)
+    create(:purchase, link: product, seller:, purchaser: buyer, preorder:, is_preorder_authorization: true,
+                      purchase_state: "preorder_authorization_successful", price_cents: 1_000)
+    charge = build(:purchase, link: product, seller:, purchaser: buyer, offer_code:, preorder:)
+
+    expect(charge.send(:continues_earlier_purchase?)).to be(true)
+    expect(charge.send(:resolved_offer_code_discount_for_buyer)).to eq({ type: "percent", percents: 20 })
+  end
+
+  it "still decides the gate on the preorder authorization itself" do
+    preorder = create(:preorder, preorder_link: create(:preorder_link, link: product), purchaser: buyer)
+    authorization = build(:purchase, link: product, seller:, purchaser: buyer, offer_code:, preorder:,
+                                     is_preorder_authorization: true)
+
+    expect(authorization.send(:continues_earlier_purchase?)).to be(false)
+    expect(authorization.send(:resolved_offer_code_discount_for_buyer)).to be_nil
+  end
+
   it "still refuses the code when the same buyer starts something new" do
     other_product = create(:product, user: seller, price_cents: 1_000)
     new_purchase = build(:purchase, link: other_product, seller:, purchaser: buyer, offer_code:)
