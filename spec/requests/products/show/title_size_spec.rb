@@ -2,8 +2,8 @@
 
 require "spec_helper"
 
-# The repo's :mobile_chrome driver names a device ("iPhone 8") that current Chrome builds reject, so
-# this spec registers its own phone-width driver. The title steps down below the sm breakpoint (640px).
+# Its own driver gives the same 375x800 phone viewport natively and in Docker, where the shared mobile
+# driver has no emulation. The title steps down below the sm breakpoint (640px).
 Capybara.register_driver :title_size_phone_chrome do |app|
   options = Selenium::WebDriver::Chrome::Options.new
   docker_browser_args.each { |arg| options.args << arg } if ENV["IN_DOCKER"] == "true"
