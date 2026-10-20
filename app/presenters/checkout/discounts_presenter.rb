@@ -43,6 +43,7 @@ class Checkout::DiscountsPresenter
       minimum_amount_cents: offer_code.minimum_amount_cents,
       once_per_cart: offer_code.is_cents? && offer_code.once_per_cart?,
       existing_customers_only: offer_code.existing_customers_only?,
+      new_customers_only: offer_code.new_customers_only?,
       auto_apply: offer_code.auto_apply?,
       sale_label: offer_code.sale_label,
       ownership_products: offer_code.ownership_products.map { product_props_for(_1) },

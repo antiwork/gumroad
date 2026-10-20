@@ -118,7 +118,7 @@ class Checkout::DiscountsController < Sellers::BaseController
       params.permit(
         :name, :code, :universal, :max_purchase_count, :amount_cents, :amount_percentage,
         :currency_type, :valid_at, :expires_at, :minimum_quantity, :duration_in_billing_cycles,
-        :minimum_amount_cents, :existing_customers_only, :once_per_cart, :auto_apply, :sale_label,
+        :minimum_amount_cents, :existing_customers_only, :new_customers_only, :once_per_cart, :auto_apply, :sale_label,
         selected_product_ids: [], selected_option_ids: [], ownership_product_ids: [], excluded_product_ids: [],
         ownership_duration_tiers: [[:months, :amount_percentage]]
       )

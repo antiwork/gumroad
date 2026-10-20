@@ -5,6 +5,7 @@ import { cast } from "$app/utils/cast";
 
 import { PoweredByFooter } from "$app/components/PoweredByFooter";
 import { Product, useSelectionFromUrl, Props as ProductProps } from "$app/components/Product";
+import { useSelectionDiscounts } from "$app/components/Product/selectionDiscounts";
 import { useElementDimensions } from "$app/components/useElementDimensions";
 import { useRunOnce } from "$app/components/useRunOnce";
 
@@ -22,6 +23,13 @@ function IframeProductShowPage() {
   }, [dimensions]);
 
   const [selection, setSelection] = useSelectionFromUrl(props.product);
+  const { discountCode, selectionDiscountCode, quote } = useSelectionDiscounts({
+    product: props.product,
+    discountCode: props.discount_code,
+    saleLabel: null,
+    initial: props.selection_discounts,
+    selection,
+  });
 
   return (
     <div>
@@ -29,7 +37,9 @@ function IframeProductShowPage() {
         <section>
           <Product
             {...props}
-            discountCode={props.discount_code}
+            discountCode={discountCode}
+            selectionDiscountCode={selectionDiscountCode}
+            quote={quote}
             selection={selection}
             setSelection={setSelection}
             ctaLabel="Add to cart"

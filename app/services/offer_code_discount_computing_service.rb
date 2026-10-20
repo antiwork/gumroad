@@ -192,8 +192,9 @@ class OfferCodeDiscountComputingService
     end
 
     def find_applicable_offer_code_for(link)
+      # A fixed code left in a currency the product no longer uses would take the wrong amount off.
       offer_codes_by_user_id[link.user_id]
-        &.find { |offer_code| offer_code.applicable?(link) }
+        &.find { |offer_code| offer_code.applicable?(link) && offer_code.is_currency_valid?(link) }
     end
 
     def once_per_cart?(offer_code)
@@ -280,6 +281,10 @@ class OfferCodeDiscountComputingService
         @product_level_ineligibilities[:not_existing_customer] = true
       end
 
+      if resolved_discount.nil? && offer_code.new_customers_only?
+        @product_level_ineligibilities[:not_new_customer] = true
+      end
+
       unless meets_minimum_purchase_quantity?(offer_code, purchase_quantity)
         @product_level_ineligibilities[:unmet_minimum_purchase_quantity] = true
       end
@@ -300,6 +305,7 @@ class OfferCodeDiscountComputingService
 
     PRODUCT_LEVEL_INELIGIBILITIES_BY_DISPLAY_PRIORITY = [
       :not_existing_customer,
+      :not_new_customer,
       :unmet_minimum_purchase_quantity,
       :insufficient_times_of_use,
       :sold_out,

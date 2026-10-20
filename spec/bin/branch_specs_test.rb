@@ -382,6 +382,20 @@ check(
   expect_reason: "lib/tasks/taxonomy.rake but no specs were selected for it (mapping gap)",
 )
 
+# Library page: the renderer component dir maps like the page dir. A component
+# without a co-located vitest file contributed nothing and escalated the whole
+# suite (Library/Layout.tsx, main red 2026-10-20), which pushed the merge and
+# every later main push into run-all-specs territory it cannot use.
+check(
+  "Library component without a co-located test maps to library_spec, not a mapping gap",
+  base_files: {
+    "spec/requests/library_spec.rb" => SPEC_STUB,
+    "app/javascript/components/Library/Layout.tsx" => "old",
+  },
+  head_files: { "app/javascript/components/Library/Layout.tsx" => "new" },
+  expect_specs: %w[spec/requests/library_spec.rb],
+)
+
 # help_center article partial -> help_center request specs
 check(
   "help_center article partial maps to help_center request specs",

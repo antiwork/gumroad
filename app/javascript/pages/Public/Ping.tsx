@@ -29,6 +29,7 @@ const PING_PARAMETERS: PingParameter[] = [
   { name: "subscription_id", description: "The id of the subscription, if the purchase is part of a subscription" },
   { name: "ip_country", description: "If present, the country of the buyer's IP address" },
   { name: "price", description: "The price paid, in USD cents" },
+  { name: "currency", description: "The currency the product is listed in. Price and the other amount fields are always USD cents, whatever this value is" },
   { name: "recurrence", description: "If present, the recurrence of the payment option chosen by the buyer such as 'monthly', 'yearly', etc" },
   { name: "variants", description: <>If present, a dictionary <Code>{"{'size' : 'large', 'color' : 'red'}"}</Code></> },
   { name: "offer_code", description: "If present" },

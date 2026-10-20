@@ -282,6 +282,30 @@ describe BestOfferCodeService do
         end
       end
 
+      context "when the larger url_code has a minimum the selection does not meet" do
+        let(:default_offer_code) { create(:offer_code, products: [product], code: "AUTO20", amount_cents: nil, amount_percentage: 20, currency_type: product.price_currency_type) }
+
+        {
+          "quantity" => { minimum_quantity: 2 },
+          "spend" => { minimum_amount_cents: 1500 },
+        }.each do |kind, minimum|
+          context "on #{kind}" do
+            let(:url_offer_code) { create(:offer_code, products: [product], code: "URL50", amount_cents: nil, amount_percentage: 50, currency_type: product.price_currency_type, **minimum) }
+
+            it "keeps the default the selection does meet, until it meets the url_code's minimum" do
+              expect(described_class.new(product:, url_code:, quantity: 1).result).to include(valid: true, code: "AUTO20")
+              expect(described_class.new(product:, url_code:, quantity: 2).result).to include(valid: true, code: "URL50")
+            end
+
+            it "returns the url_code with its terms when the default does not apply either" do
+              default_offer_code.update!(minimum_quantity: 3)
+
+              expect(described_class.new(product:, url_code:, quantity: 1).result).to include(valid: true, code: "URL50")
+            end
+          end
+        end
+      end
+
       context "when comparing a once-per-cart fixed code with a percentage code" do
         let(:quantity) { 10 }
         let(:url_offer_code) do
@@ -495,10 +519,199 @@ describe BestOfferCodeService do
         expect(described_class.new(product:, buyer:).result).to include(valid: true, code: "SHOP30")
       end
 
-      it "keeps the existing-customer default for a buyer who qualifies" do
+      it "keeps a larger existing-customer default for a buyer who qualifies" do
         create(:purchase, purchaser: buyer, link: product, seller:, price_cents: product.price_cents)
 
         expect(described_class.new(product:, buyer:).result).to include(valid: true, code: "RENEW50")
+      end
+
+      [[10, "SHOP30", "the larger shop-wide sale"], [30, "RENEW30", "their default on a tie"]].each do |percentage, winner, outcome|
+        context "when a qualifying buyer's default takes #{percentage}% off" do
+          let(:own) do
+            create(:offer_code, user: seller, products: [product], ownership_products: [product], existing_customers_only: true,
+                                code: "RENEW#{percentage}", amount_cents: nil, amount_percentage: percentage, currency_type: nil)
+          end
+
+          it "gives them #{outcome}" do
+            create(:purchase, purchaser: buyer, link: product, seller:, price_cents: product.price_cents)
+
+            expect(described_class.new(product:, buyer:).result).to include(valid: true, code: winner)
+          end
+        end
+      end
+
+      [[{ minimum_quantity: 2 }, "quantity"], [{ minimum_amount_cents: 20_00 }, "spend"]].each do |minimum, kind|
+        context "when a larger sale has a #{kind} minimum" do
+          let(:auto_code) do
+            seller.offer_codes.create!(code: "SHOP50", amount_percentage: 50, universal: true, products: [], auto_apply: true, **minimum)
+          end
+          let(:own) do
+            create(:offer_code, user: seller, products: [product], ownership_products: [product], existing_customers_only: true,
+                                code: "RENEW20", amount_cents: nil, amount_percentage: 20, currency_type: nil)
+          end
+
+          it "keeps a qualifying buyer's default until the order meets the sale's minimum" do
+            create(:purchase, purchaser: buyer, link: product, seller:, price_cents: product.price_cents)
+
+            expect(described_class.new(product:, buyer:).result).to include(valid: true, code: "RENEW20")
+            expect(described_class.new(product:, buyer:, quantity: 2).result).to include(valid: true, code: "SHOP50")
+          end
+        end
+      end
+
+      context "when fewer units remain than the buyer asks for" do
+        let(:own) do
+          create(:offer_code, user: seller, products: [product], ownership_products: [product], existing_customers_only: true,
+                              code: "RENEW20", amount_cents: nil, amount_percentage: 20, currency_type: nil)
+        end
+
+        before { create(:purchase, purchaser: buyer, link: product, seller:, price_cents: product.price_cents) }
+
+        context "and the sale's quantity minimum needs more than remain" do
+          let(:auto_code) do
+            seller.offer_codes.create!(code: "SHOP50", amount_percentage: 50, universal: true, products: [], auto_apply: true, minimum_quantity: 2)
+          end
+
+          it "keeps a qualifying buyer's default until enough units remain" do
+            product.update!(max_purchase_count: 2)
+
+            expect(described_class.new(product:, buyer:, quantity: 3).result).to include(valid: true, code: "RENEW20")
+
+            product.update!(max_purchase_count: 4)
+
+            expect(described_class.new(product:, buyer:, quantity: 3).result).to include(valid: true, code: "SHOP50")
+          end
+        end
+
+        context "and the sale takes a fixed amount once per cart" do
+          let(:auto_code) do
+            seller.offer_codes.create!(code: "SHOP5", amount_cents: 5_00, currency_type: "usd", universal: true, products: [], auto_apply: true,
+                                       once_per_cart: true)
+          end
+
+          it "weighs a percent default on the units that remain" do
+            product.update!(max_purchase_count: 2)
+
+            expect(described_class.new(product:, buyer:, quantity: 3).result).to include(valid: true, code: "SHOP5")
+
+            product.update!(max_purchase_count: 4)
+
+            expect(described_class.new(product:, buyer:, quantity: 3).result).to include(valid: true, code: "RENEW20")
+          end
+        end
+      end
+
+      context "when a fixed default no longer matches the product currency" do
+        let(:own) do
+          create(:offer_code, user: seller, products: [product], ownership_products: [product], existing_customers_only: true,
+                              code: "RENEW5", amount_cents: 500, currency_type: "usd")
+        end
+
+        it "gives a qualifying buyer the shop-wide sale" do
+          create(:purchase, purchaser: buyer, link: product, seller:, price_cents: product.price_cents)
+          product.update!(price_currency_type: "eur", price_range: "10")
+
+          result = described_class.new(product:, buyer:).result
+
+          expect(result).to include(valid: true, code: "SHOP30")
+          expect(result[:discount]).to include(type: "percent", percents: 30)
+        end
+
+        it "gives a qualifying buyer no code when no sale runs" do
+          create(:purchase, purchaser: buyer, link: product, seller:, price_cents: product.price_cents)
+          auto_code.update!(auto_apply: false)
+          product.update!(price_currency_type: "eur", price_range: "10")
+
+          expect(described_class.new(product: product.reload, buyer:).result).to be_nil
+          expect(described_class.new(product: product.reload, buyer:).default_offer_codes).to be_empty
+        end
+      end
+
+      context "when a fixed sale takes more than the price" do
+        let(:auto_code) { seller.offer_codes.create!(code: "SHOP20", amount_cents: 20_00, currency_type: "usd", universal: true, products: [], auto_apply: true) }
+        let(:own) do
+          create(:offer_code, user: seller, products: [product], ownership_products: [product], existing_customers_only: true,
+                              code: "RENEW100", amount_cents: nil, amount_percentage: 100, currency_type: nil)
+        end
+
+        it "keeps a qualifying buyer's default, which also takes the whole price" do
+          create(:purchase, purchaser: buyer, link: product, seller:, price_cents: product.price_cents)
+
+          expect(described_class.new(product:, buyer:).result).to include(valid: true, code: "RENEW100")
+        end
+      end
+    end
+
+    context "with an existing-customers-only default on a membership priced only by its tiers" do
+      let(:product) do
+        create(:membership_product_with_preset_tiered_pricing, user: seller,
+                                                               recurrence_price_values: [{ monthly: { enabled: true, price: 10 } }, { monthly: { enabled: true, price: 20 } }])
+      end
+      let(:owned) { create(:product, user: seller, price_cents: 10_00) }
+      let(:buyer) { create(:user) }
+
+      before do
+        auto_code
+        create(:purchase, purchaser: buyer, link: owned, seller:, price_cents: owned.price_cents)
+      end
+
+      it "weighs a percent default on the lowest tier, so only a larger one beats the sale" do
+        own = create(:offer_code, user: seller, products: [product], ownership_products: [owned], existing_customers_only: true,
+                                  code: "RENEW", amount_cents: nil, amount_percentage: 10, currency_type: nil)
+        product.update!(default_offer_code: own)
+
+        expect(described_class.new(product:, buyer:).result).to include(valid: true, code: "SHOP30")
+        expect(product.price_cents).to eq(0)
+        expect(product.display_price_cents(for_default_duration: true)).to eq(10_00)
+
+        own.update!(amount_percentage: 50)
+
+        expect(described_class.new(product:, buyer:).result).to include(valid: true, code: "RENEW")
+      end
+
+      it "weighs a fixed default against the sale's share of the lowest tier, so only a larger one beats it" do
+        own = create(:offer_code, user: seller, products: [product], ownership_products: [owned], existing_customers_only: true,
+                                  code: "RENEW", amount_cents: 2_00, currency_type: "usd")
+        product.update!(default_offer_code: own)
+
+        expect(described_class.new(product:, buyer:).result).to include(valid: true, code: "SHOP30")
+        expect(product.price_cents).to eq(0)
+        expect(product.display_price_cents(for_default_duration: true)).to eq(10_00)
+
+        own.update!(amount_cents: 5_00)
+
+        expect(described_class.new(product:, buyer:).result).to include(valid: true, code: "RENEW")
+      end
+
+      it "weighs a once-per-cart fixed default on the lowest tier, so only a larger one beats the sale" do
+        own = create(:offer_code, user: seller, products: [product], ownership_products: [owned], existing_customers_only: true,
+                                  code: "RENEW", amount_cents: 5_00, currency_type: "usd", once_per_cart: true)
+        product.update!(default_offer_code: own)
+
+        expect(described_class.new(product:, buyer:).result).to include(valid: true, code: "RENEW")
+
+        own.update!(amount_cents: 2_00)
+
+        expect(described_class.new(product:, buyer:).result).to include(valid: true, code: "SHOP30")
+      end
+
+      context "when the sale takes a fixed amount once per cart" do
+        let(:auto_code) do
+          seller.offer_codes.create!(code: "SHOP5", amount_cents: 5_00, currency_type: "usd", universal: true, products: [], auto_apply: true,
+                                     once_per_cart: true)
+        end
+
+        it "weighs the sale on the lowest tier, so only a larger default beats it" do
+          own = create(:offer_code, user: seller, products: [product], ownership_products: [owned], existing_customers_only: true,
+                                    code: "RENEW", amount_cents: nil, amount_percentage: 10, currency_type: nil)
+          product.update!(default_offer_code: own)
+
+          expect(described_class.new(product:, buyer:).result).to include(valid: true, code: "SHOP5")
+
+          own.update!(amount_percentage: 60)
+
+          expect(described_class.new(product:, buyer:).result).to include(valid: true, code: "RENEW")
+        end
       end
     end
 

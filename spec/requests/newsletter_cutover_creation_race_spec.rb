@@ -74,8 +74,8 @@ describe "Old Gumroad newsletter writers already in a transaction when the cutov
   # The real cutover, pausing after retire!'s full scan until resumed.
   def run_cutover(resume)
     scanned = Queue.new
-    allow_any_instance_of(migration).to receive(:outcome_counts).and_wrap_original do |original, *args|
-      original.call(*args).tap do
+    allow_any_instance_of(migration).to receive(:outcome_counts).and_wrap_original do |original, *args, **kwargs|
+      original.call(*args, **kwargs).tap do
         next unless args.last == Follower.all
 
         scanned << true
@@ -235,8 +235,8 @@ describe "Old Gumroad newsletter writers already in a transaction when the cutov
       migration.apply!(confirmed_eligible_count: 0)
       scanned = Queue.new
       resume = Queue.new
-      allow_any_instance_of(migration).to receive(:outcome_counts).and_wrap_original do |original, *args|
-        original.call(*args).tap do
+      allow_any_instance_of(migration).to receive(:outcome_counts).and_wrap_original do |original, *args, **kwargs|
+        original.call(*args, **kwargs).tap do
           next unless args.last == Follower.all
 
           scanned << true

@@ -20,7 +20,7 @@ type Props = Omit<React.ComponentPropsWithoutRef<typeof CtaButton>, "onClick"> &
 
 export const PurchaseButton = React.forwardRef<HTMLAnchorElement, Props>(
   ({ setSelection, configurationSelectorRef, ...props }, ref) => {
-    const { product, purchase, selection, discountCode } = props;
+    const { product, purchase, selection, discountCode, pricePending } = props;
     const loggedInUser = useLoggedInUser();
     const [checkoutUrlForModal, setCheckoutUrlForModal] = React.useState<string | null>(null);
     const { isPWYW, discountedPriceCents } = applySelection(
@@ -30,6 +30,7 @@ export const PurchaseButton = React.forwardRef<HTMLAnchorElement, Props>(
     );
 
     const validate = () => {
+      if (pricePending) return false;
       if (needsOptionChoice(product, selection)) {
         configurationSelectorRef?.current?.scrollIntoView({ block: "nearest" });
         configurationSelectorRef?.current?.focusRequiredInput();

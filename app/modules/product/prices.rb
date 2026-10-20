@@ -214,7 +214,8 @@ module Product::Prices
   # The default offer code taken off a base price, which is what a buyer would be charged
   # buying one of this product right now. A surface showing a lower number quotes a price
   # checkout will not honour, so every code the default one-product checkout rejects is left on
-  # the shelf: existing-customers-only (a first-time visitor does not get it), a quantity
+  # the shelf: existing-customers-only (a first-time visitor does not get it),
+  # new-customers-only (the page has no buyer to match a purchase against), a quantity
   # minimum above one (the native page shows the quantity-1 price undiscounted for those, per
   # ProductPresenter::ProductProps#discounted_price_cents), a spend minimum this product alone
   # cannot meet (Purchase::CreateService raises below it), and a spent use cap. Erring the
@@ -225,7 +226,7 @@ module Product::Prices
   # checked against that option instead of the lowest-priced one.
   def discounted_price_cents(base_price_cents, option: nil)
     offer_code = effective_default_offer_code
-    return base_price_cents if offer_code.blank? || offer_code.deleted? || offer_code.inactive? || offer_code.existing_customers_only?
+    return base_price_cents if offer_code.blank? || offer_code.deleted? || offer_code.inactive? || offer_code.existing_customers_only? || offer_code.new_customers_only?
     # A fixed-cents code stops matching after a product currency change; checkout's
     # find_offer_code refuses that pair, so the quote must too.
     return base_price_cents unless offer_code.is_currency_valid?(self)

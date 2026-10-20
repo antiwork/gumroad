@@ -183,6 +183,7 @@ describe ProductPresenter do
           },
           discount_code: nil,
           sale_label: nil,
+          selection_discounts: { url_code: nil, quantity: 1, recurrence: nil, option_id: nil, price_cents: nil, options: {}, rent_options: nil },
           purchase: {
             content_url: nil,
             id: purchase.external_id,

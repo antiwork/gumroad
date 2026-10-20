@@ -247,7 +247,8 @@ class CheckoutPresenter
     if tier.present? && !options.any? { |option| option[:id] == tier.external_id }
       options << tier.to_option(subscription_attrs: tier_attrs, subscribed: !subscription.deactivated?)
     end
-    discount = subscription_discount_for_next_charge(subscription, buyer: logged_in_user)
+    # A plan change keeps the subscription's code without rechecking its spend minimum.
+    discount = subscription_discount_for_next_charge(subscription, buyer: logged_in_user)&.except(:minimum_amount_cents)
     subscription_price = subscription.current_subscription_price_cents(authenticated_offer_code_buyer: logged_in_user)
     pre_discount_price = if subscription.is_installment_plan
       subscription_price
@@ -302,6 +303,7 @@ class CheckoutPresenter
         alive: subscription.alive?(include_pending_cancellation: false),
         pending_cancellation: subscription.pending_cancellation?,
         discount:,
+        option_discounts: plan_change_option_discounts(discount, product, options),
         end_time_of_subscription: subscription.end_time_of_subscription.iso8601,
         successful_purchases_count: subscription.purchases.successful.count,
         # Charges still owed for fixed-length subscriptions (installment plans, fixed-duration
@@ -509,6 +511,15 @@ class CheckoutPresenter
     def purchased_variant_ids_for(product)
       @_purchased_variant_ids_by_product ||= {}
       @_purchased_variant_ids_by_product[product.id] ||= logged_in_user.purchases.where(link_id: product.id).includes(:variant_attributes).map { |purchase| purchase.variant_attributes.first&.id }.to_set
+    end
+
+    # The discount each option keeps on a plan change: the subscription's code on the options in its
+    # scope. Only the seat minimum is left to the page, because the buyer picks the seat count there.
+    def plan_change_option_discounts(discount, product, options)
+      return {} if discount.nil?
+
+      option_ids = discount.dig(:option_ids_by_product, product.external_id)
+      options.to_h { |option| [option[:id], (discount if option_ids.nil? || option_ids.include?(option[:id]))] }
     end
 
     def subscription_discount_for_next_charge(subscription, buyer: logged_in_user)

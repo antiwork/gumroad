@@ -240,7 +240,7 @@ describe "Sentry configuration" do
 
       expect { ActiveJob::Base.execute(wire(job_data)) }.not_to raise_error
 
-      expect(enqueued_job_data["exception_executions"]).to eq("[Net::OpenTimeout, Net::ReadTimeout, Net::SMTPServerBusy]" => 1)
+      expect(enqueued_job_data["exception_executions"]).to eq("[Net::OpenTimeout, Net::ReadTimeout, Net::SMTPServerBusy, EOFError]" => 1)
       expect(sentry_events).to be_empty
     end
   end

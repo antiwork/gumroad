@@ -82,6 +82,8 @@ describe SubscriptionsController do
 
         expect(response).to redirect_to(manage_subscription_path(subscription.external_id))
         expect(flash[:alert]).to include("Installment plans cannot be cancelled by the customer")
+        expect(subscription.reload.cancelled_at).to be_nil
+        expect(subscription.user_requested_cancellation_at).to be_nil
       end
 
       context "when the encrypted cookie is not present" do
