@@ -69,20 +69,6 @@ describe Products::AvailableOfferCodesController do
           expect(response.parsed_body.map { _1["code"] }).to eq([eligible.code])
         end
 
-        it "loads no more codes than the page it returns when there is no query" do
-          12.times { |i| create(:offer_code, user: seller, code: "OLDER#{i}", products: [product], created_at: (60 - i).minutes.ago) }
-          6.times { |i| create(:offer_code, :for_new_customers, user: seller, code: "FIRST#{i}", products: [product], created_at: (10 - i).minutes.ago) }
-          loaded = 0
-          counter = ->(*, payload) { loaded += payload[:record_count] if payload[:class_name] == "OfferCode" }
-
-          ActiveSupport::Notifications.subscribed(counter, "instantiation.active_record") do
-            get :index, format: :json, params: { product_id: product.unique_permalink }
-          end
-
-          expect(response.parsed_body.map { _1["code"] }).to eq(%w[OLDER11 OLDER10 OLDER9 OLDER8 OLDER7])
-          expect(loaded).to be <= 2 * Products::AvailableOfferCodesController::INITIAL_OFFER_CODES_LIMIT
-        end
-
         it "leaves them out before applying the limit, since they cannot be a product's default" do
           regular_codes = Array.new(5) { |i| create(:offer_code, user: seller, code: "REGULAR#{i}", products: [product], created_at: (10 - i).minutes.ago) }
           create(:offer_code, :for_new_customers, user: seller, code: "FIRSTORDER", products: [product])

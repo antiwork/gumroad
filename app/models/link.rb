@@ -1242,7 +1242,7 @@ class Link < ApplicationRecord
   # Public: Find all alive offer codes associated with product and user in order of created at.
   #
   # Returns list of offer codes.
-  # Pass exclude_new_customers_only to drop those codes in SQL, before the search and limit apply.
+  # Pass exclude_new_customers_only to drop those codes before the search and limit apply.
   def product_and_universal_offer_codes(query = nil, limit = nil, reverse = false, exclude_new_customers_only: false)
     product_codes = offer_codes.alive
     universal_codes = universal_offer_codes
@@ -1254,11 +1254,6 @@ class Link < ApplicationRecord
     if query.present?
       product_codes = product_codes.search_by_name(query, reverse:)
       universal_codes = universal_codes.search_by_name(query, reverse:)
-    elsif limit
-      # The newest or oldest `limit` of the merged list are among each relation's own first `limit`.
-      direction = reverse ? :desc : :asc
-      product_codes = product_codes.order(created_at: direction, id: direction).limit(limit)
-      universal_codes = universal_codes.order(created_at: direction, id: direction).limit(limit)
     end
 
     combined_codes = (product_codes + universal_codes).sort_by(&:created_at)
