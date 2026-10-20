@@ -19,6 +19,22 @@ describe("Workflows", js: true, type: :system) do
     have_selector("[role=listitem] h4", text: name, exact_text: true)
   end
 
+  # Each gap between the form's inline alert and the form edges (top, left, right) or the first
+  # section's border (below), minus that section's own padding: 0 means the alert sits on the same insets.
+  def inline_alert_gaps_beyond_section_padding
+    page.evaluate_script(<<~JS)
+      (() => {
+        const form = document.querySelector("form");
+        const alert = form.querySelector("[role=alert]").getBoundingClientRect();
+        const section = form.querySelector("section");
+        const padding = parseFloat(getComputedStyle(section).paddingLeft);
+        const edges = form.getBoundingClientRect();
+        const gaps = [alert.top - edges.top, alert.left - edges.left, edges.right - alert.right, section.getBoundingClientRect().top - alert.bottom];
+        return gaps.map((gap) => Math.round(gap - padding));
+      })()
+    JS
+  end
+
   let(:seller) { create(:named_seller) }
 
   before do
@@ -768,6 +784,7 @@ describe("Workflows", js: true, type: :system) do
       click_on "Save and continue"
 
       within("form") { expect(page).to have_alert(text: "You must have at least one completed payout to create an abandoned cart workflow") }
+      expect(inline_alert_gaps_beyond_section_padding).to eq([0, 0, 0, 0])
       expect(page).to have_field("Name", with: "Abandoned cart workflow")
       expect(seller.workflows.count).to eq(0)
 
@@ -1331,6 +1348,7 @@ describe("Workflows", js: true, type: :system) do
       end
       within("form") { expect(page).to have_alert(text: "You cannot publish a workflow until you have made at least $100 in total earnings and received a payout") }
       expect(page).not_to have_button("Publish now")
+      expect(inline_alert_gaps_beyond_section_padding).to eq([0, 0, 0, 0])
       expect(page).to have_field("Name", with: "My workflow (edited)")
       expect(workflow.reload.published_at).to be_nil
       expect(workflow.name).to eq("Product workflow")

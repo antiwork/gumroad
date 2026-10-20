@@ -333,7 +333,13 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
       }
     >
       <form className="space-y-4">
-        {baseError ? <Alert variant="danger">{baseError}</Alert> : null}
+        {/* FormSection's insets keep the banner off the header and page edges; mb-0 cancels the form's
+            space-y gap so the space below matches the other three sides. */}
+        {baseError ? (
+          <div className="mb-0 p-4! md:p-8!">
+            <Alert variant="danger">{baseError}</Alert>
+          </div>
+        ) : null}
         <FormSection
           header={<>Workflows allow you to send scheduled emails to a subset of your audience based on a trigger.</>}
         >
