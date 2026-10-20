@@ -209,48 +209,66 @@ describe("Library Scenario", type: :system, js: true) do
     expect(page).to have_product_card(purchase.link)
   end
 
-  it "lists only active subscriptions on the Subscriptions tab and keeps archiving on that tab" do
-    active_purchase = create(:membership_purchase, link: create(:membership_product, name: "Monthly membership"), purchaser: @user)
-    active_purchase.create_url_redirect!
-    ended_purchase = create(:membership_purchase, link: create(:membership_product, name: "Ended membership"), purchaser: @user)
-    ended_purchase.create_url_redirect!
-    ended_purchase.subscription.update!(ended_at: 1.day.ago)
-    one_off_purchase = create(:purchase, purchaser: @user, link: create(:product, name: "One-off product"))
-    Link.import(refresh: true, force: true)
-
-    visit "/library"
-    expect(page).to have_product_card(one_off_purchase.link)
-    click_on "Subscriptions"
-
-    expect(page).to have_selector("[role='tab'][aria-selected='true']", text: "Subscriptions")
-    expect(page).to have_product_card(active_purchase.link)
-    expect(page).to_not have_product_card(one_off_purchase.link)
-    expect(page).to_not have_product_card(ended_purchase.link)
-
-    find_product_card(active_purchase.link).hover
-    within find_product_card(active_purchase.link) do
-      find_and_click('[aria-label="Open product action menu"]')
+  describe "Subscriptions tab" do
+    # Checkout makes the purchaser the subscription's owner; the membership_purchase factory doesn't.
+    def owned_membership(name, **attributes)
+      product = create(:membership_product, name:)
+      create(:membership_purchase, link: product, purchaser: @user, subscription: create(:subscription, link: product, user: @user), **attributes)
+        .tap(&:create_url_redirect!)
     end
-    click_on "Archive"
 
-    # The one-off purchase stays unarchived, but this tab only counts subscriptions.
-    expect(page).to have_text("You've archived all your subscriptions.")
-    expect(page).to_not have_text("You don't have any active subscriptions.")
-    click_on "See archive"
-
-    expect(page).to have_selector("[role='tab'][aria-selected='true']", text: "Subscriptions")
-    expect(page).to have_product_card(active_purchase.link)
-    expect(page).to_not have_product_card(one_off_purchase.link)
-
-    find_product_card(active_purchase.link).hover
-    within find_product_card(active_purchase.link) do
-      find_and_click('[aria-label="Open product action menu"]')
+    def buyer_date(time)
+      time.in_time_zone(@user.timezone).to_fs(:formatted_date_abbrev_month)
     end
-    click_on "Unarchive"
 
-    expect(page).to have_current_path("/library?sort=recently_updated&subscriptions_only=true")
-    expect(page).to have_product_card(active_purchase.link)
-    expect(page).to_not have_product_card(one_off_purchase.link)
+    it "lists every ongoing subscription, including archived and removed ones, with its status and a Manage link" do
+      active = owned_membership("Monthly membership")
+      archived = owned_membership("Archived membership", is_archived: true)
+      removed = owned_membership("Removed membership", is_deleted_by_buyer: true)
+      ended = owned_membership("Ended membership").tap { _1.subscription.update!(ended_at: 1.day.ago) }
+      installment = create(:installment_plan_purchase, purchaser: @user, link: create(:product, :with_installment_plan, name: "Course installments")).tap(&:create_url_redirect!)
+      one_off = create(:purchase, purchaser: @user, link: create(:product, name: "One-off product"))
+      Link.import(refresh: true, force: true)
+
+      visit "/library"
+      expect(page).to have_product_card(active.link)
+      expect(page).to have_product_card(one_off.link)
+      expect(page).to_not have_product_card(archived.link)
+      expect(page).to_not have_product_card(removed.link)
+
+      click_on "Subscriptions"
+
+      expect(page).to have_selector("[role='tab'][aria-selected='true']", text: "Subscriptions")
+      expect(page).to have_product_card(count: 4)
+      [active, archived, removed, installment].each { expect(page).to have_product_card(_1.link) }
+      expect(page).to_not have_product_card(one_off.link)
+      expect(page).to_not have_product_card(ended.link)
+      expect(page).to_not have_text("archived purchase")
+      expect(page).to_not have_selector("[aria-label='Open product action menu']")
+      within(find_product_card(active.link)) { expect(page).to have_text("Renews on #{buyer_date(active.subscription.end_time_of_subscription)}") }
+      within(find_product_card(installment.link)) do
+        expect(page).to have_text("Installment plan · 1 of 3 paid · Next payment on #{buyer_date(installment.subscription.end_time_of_subscription)}")
+      end
+
+      click_on "Manage Removed membership"
+
+      expect(page).to have_current_path("/subscriptions/#{removed.subscription.external_id}/manage")
+      expect(page).to have_selector("h2", text: "Removed membership")
+      expect(page).to have_button("Cancel membership")
+    end
+
+    it "keeps every subscription listed when an old URL carries archive or bundle filters" do
+      active = owned_membership("Monthly membership")
+      archived = owned_membership("Archived membership", is_archived: true)
+      Link.import(refresh: true, force: true)
+
+      visit "/library?subscriptions_only=true&show_archived_only=true&bundles=stale-bundle"
+
+      expect(page).to have_product_card(count: 2)
+      [active, archived].each { expect(page).to have_product_card(_1.link) }
+      expect(page).to_not have_text("Download everything included in")
+      expect(page).to_not have_text("No products found")
+    end
   end
 
   it "manages archived purchases banner and interactions" do

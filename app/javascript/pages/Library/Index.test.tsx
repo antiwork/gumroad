@@ -383,20 +383,6 @@ describe("Subscriptions tab", () => {
     expect(screen.queryByText(/renew/iu)).toBeNull();
   });
 
-  it("says every subscription is archived instead of claiming there are none", () => {
-    const props = subscriptionsProps();
-    props.results = [];
-    props.pagination = emptyPagination;
-    props.archived_count = 2;
-    props.unarchived_count = 0;
-    renderPage(props);
-
-    expect(screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent)).toEqual([
-      "You've archived all your subscriptions.",
-    ]);
-    expect(screen.getByRole("button", { name: "See archive" })).toBeTruthy();
-  });
-
   it("keeps a search with no matches distinct from having no subscriptions", () => {
     const props = subscriptionsProps();
     props.results = [];
@@ -411,32 +397,43 @@ describe("Subscriptions tab", () => {
     expect(screen.queryAllByRole("heading", { level: 2 })).toEqual([]);
   });
 
-  it("counts archived subscriptions, not archived purchases, in the archive banner", () => {
+  const subscriptionResult = (id: string, name: string, status_label: string): Result => {
+    const card = result(id, name);
+    card.purchase.subscription = { status_label, manage_url: `/subscriptions/${id}/manage` };
+    return card;
+  };
+
+  it("shows each subscription's status and a Manage link instead of the Library archive and remove menu", () => {
     const props = subscriptionsProps();
-    props.archived_count = 1;
+    props.results = [
+      subscriptionResult("p1", "Alpha", "Renews on Nov 20, 2026"),
+      subscriptionResult("p2", "Beta", "Installment plan · 1 of 3 paid · Next payment on Nov 20, 2026"),
+    ];
     renderPage(props);
 
-    expect(screen.getByRole("status").textContent).toContain("You have 1 archived subscription.");
+    expect(screen.getByText("Renews on Nov 20, 2026")).toBeTruthy();
+    expect(screen.getByText("Installment plan · 1 of 3 paid · Next payment on Nov 20, 2026")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Manage Alpha" }).getAttribute("href")).toBe("/subscriptions/p1/manage");
+    expect(screen.getByRole("link", { name: "Manage Beta" }).getAttribute("href")).toBe("/subscriptions/p2/manage");
+    expect(screen.queryByRole("button", { name: "Open product action menu" })).toBeNull();
   });
 
-  it("returns to the Subscriptions tab after unarchiving its last archived subscription", async () => {
+  it("keeps Manage reachable for a subscription card without a download page", () => {
     const props = subscriptionsProps();
-    const archived = result("p1", "Alpha");
-    archived.purchase.is_archived = true;
-    props.results = [archived];
-    props.pagination = { page: 1, pages: 1, from: 1, to: 1, count: 1 };
-    props.archived_count = 1;
-    props.unarchived_count = 2;
-    props.search.show_archived_only = true;
+    const card = subscriptionResult("p1", "Alpha", "Cancelled, access until Nov 20, 2026");
+    card.purchase.download_url = null;
+    props.results = [card];
     renderPage(props);
 
-    fireEvent.click(screen.getByRole("button", { name: "Open product action menu" }));
-    await act(async () => {
-      fireEvent.click(screen.getByText("Unarchive"));
-      await Promise.resolve();
-    });
+    expect(screen.queryByRole("link", { name: "Alpha" })).toBeNull();
+    expect(screen.getByRole("link", { name: "Manage Alpha" }).getAttribute("href")).toBe("/subscriptions/p1/manage");
+  });
 
-    expect(lastGetParams()).toEqual({ sort: "recently_updated", subscriptions_only: "true" });
+  it("keeps the archive and remove menu on Purchases cards", () => {
+    renderPage();
+
+    expect(screen.getAllByRole("button", { name: "Open product action menu" })).toHaveLength(2);
+    expect(screen.queryByRole("link", { name: /^Manage /u })).toBeNull();
   });
 });
 

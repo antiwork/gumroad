@@ -11,7 +11,7 @@ import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 import { SellerAnalyticsProps, trackSellerPurchaseEvent } from "$app/utils/user_analytics";
 
-import { Button } from "$app/components/Button";
+import { Button, NavigationButton } from "$app/components/Button";
 import { useDiscoverUrl } from "$app/components/DomainSettings";
 import { Layout } from "$app/components/Library/Layout";
 import { Modal } from "$app/components/Modal";
@@ -54,6 +54,7 @@ export type Result = {
     is_archived: boolean;
     download_url: string | null;
     variants: string | null;
+    subscription?: { status_label: string; manage_url: string };
   };
 };
 
@@ -97,6 +98,7 @@ export const Card = ({
         ) : (
           <h3 itemProp="name">{name}</h3>
         )}
+        {purchase.subscription ? <p className="text-sm text-muted">{purchase.subscription.status_label}</p> : null}
       </ProductCardHeader>
       <ProductCardFooter>
         <div className="flex-1 p-4">
@@ -109,23 +111,36 @@ export const Card = ({
           ) : null}
         </div>
         <div className="p-4">
-          <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
-            <PopoverTrigger aria-label="Open product action menu" className="relative">
-              <DotsHorizontalRounded className="size-5" />
-            </PopoverTrigger>
-            <PopoverContent className="border-0 p-0 shadow-none" usePortal>
-              <Menu>
-                <MenuItem onClick={toggleArchived}>
-                  <Archive className="size-5" />
-                  {purchase.is_archived ? "Unarchive" : "Archive"}
-                </MenuItem>
-                <MenuItem variant="danger" onClick={() => onDelete()}>
-                  <Trash className="size-5" />
-                  Remove from library
-                </MenuItem>
-              </Menu>
-            </PopoverContent>
-          </Popover>
+          {purchase.subscription ? (
+            // Archive and Remove only tidy the Library; this card stays here while it bills, so the
+            // useful action is managing the subscription itself.
+            <NavigationButton
+              href={purchase.subscription.manage_url}
+              size="sm"
+              className="relative"
+              aria-label={`Manage ${name}`}
+            >
+              Manage
+            </NavigationButton>
+          ) : (
+            <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
+              <PopoverTrigger aria-label="Open product action menu" className="relative">
+                <DotsHorizontalRounded className="size-5" />
+              </PopoverTrigger>
+              <PopoverContent className="border-0 p-0 shadow-none" usePortal>
+                <Menu>
+                  <MenuItem onClick={toggleArchived}>
+                    <Archive className="size-5" />
+                    {purchase.is_archived ? "Unarchive" : "Archive"}
+                  </MenuItem>
+                  <MenuItem variant="danger" onClick={() => onDelete()}>
+                    <Trash className="size-5" />
+                    Remove from library
+                  </MenuItem>
+                </Menu>
+              </PopoverContent>
+            </Popover>
+          )}
         </div>
       </ProductCardFooter>
     </ProductCard>
@@ -275,10 +290,9 @@ export default function LibraryPage() {
   const isDesktop = useIsAboveBreakpoint("lg");
   const [mobileFiltersExpanded, setMobileFiltersExpanded] = React.useState(false);
   const [showingAllCreators, setShowingAllCreators] = React.useState(false);
-  // On the Subscriptions tab the server counts only active subscriptions, so these follow the tab.
+  // On the Subscriptions tab the server counts every ongoing subscription as unarchived.
   const isLibraryEmpty = archivedCount + unarchivedCount === 0;
   const showArchivedNotice = !isLibraryEmpty && !search.show_archived_only && unarchivedCount === 0;
-  const archivedNoun = search.subscriptions_only ? "subscription" : "purchase";
   const hasParams =
     activeSearch.show_archived_only ||
     activeSearch.query !== "" ||
@@ -373,11 +387,7 @@ export default function LibraryPage() {
               )
             ) : (
               <>
-                <h2 className="library-header">
-                  {search.subscriptions_only
-                    ? "You've archived all your subscriptions."
-                    : "You've archived all your products."}
-                </h2>
+                <h2 className="library-header">You've archived all your products.</h2>
                 <Button
                   color="accent"
                   onClick={(e) => {
@@ -393,8 +403,7 @@ export default function LibraryPage() {
         ) : null}
         {archivedCount > 0 && !activeSearch.show_archived_only && !showArchivedNotice ? (
           <Alert role="status" variant="info" className="mb-5">
-            You have {archivedCount} archived {archivedNoun}
-            {archivedCount === 1 ? "" : "s"}.{" "}
+            You have {archivedCount} archived purchase{archivedCount === 1 ? "" : "s"}.{" "}
             <LinkButton onClick={() => navigate({ show_archived_only: true })}>Click here to view</LinkButton>
           </Alert>
         ) : null}

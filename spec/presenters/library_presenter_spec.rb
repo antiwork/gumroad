@@ -250,6 +250,32 @@ describe LibraryPresenter do
         create(:purchase, purchaser: buyer, link: create(:product, name: "One-off product")).tap { _1.create_url_redirect! }
       end
 
+      # Checkout makes the purchaser the subscription's owner (Purchase::BaseService#create_subscription);
+      # the membership_purchase factory leaves it on a generated user.
+      before { purchase.subscription.update!(user: buyer) }
+
+      def subscription_ids(**params)
+        results(subscriptions_only: true, **params).map { _1[:purchase][:id] }
+      end
+
+      def status_label(card_purchase = purchase)
+        results(subscriptions_only: true).find { _1[:purchase][:id] == card_purchase.external_id }.dig(:purchase, :subscription, :status_label)
+      end
+
+      def buyer_date(time)
+        time.in_time_zone(buyer.timezone).to_fs(:formatted_date_abbrev_month)
+      end
+
+      def owned_membership(name, **attributes)
+        product = create(:membership_product, name:, user: creator)
+        create(:membership_purchase, link: product, purchaser: buyer, subscription: create(:subscription, link: product, user: buyer), **attributes)
+          .tap(&:create_url_redirect!)
+      end
+
+      def renewal(subscription, **attributes)
+        create(:membership_purchase, link: subscription.link, subscription:, purchaser: buyer, is_original_subscription_purchase: false, **attributes)
+      end
+
       it "keeps only the memberships and leaves the one-off purchases out" do
         expect(results(subscriptions_only: true).map { _1[:product][:name] }).to eq(["hello"])
       end
@@ -267,7 +293,7 @@ describe LibraryPresenter do
       it "keeps a membership the buyer cancelled that is still inside its paid period" do
         purchase.subscription.update!(cancelled_at: 1.week.from_now)
 
-        expect(results(subscriptions_only: true).map { _1[:purchase][:id] }).to eq([purchase.external_id])
+        expect(subscription_ids).to eq([purchase.external_id])
       end
 
       it "drops a membership whose last payment failed" do
@@ -285,31 +311,33 @@ describe LibraryPresenter do
       it "keeps a membership whose signup charge was refunded while its subscription is still alive" do
         purchase.update!(stripe_refunded: true)
 
-        expect(results(subscriptions_only: true).map { _1[:purchase][:id] }).to eq([purchase.external_id])
+        expect(subscription_ids).to eq([purchase.external_id])
       end
 
-      it "never lists a membership the buyer removed from the library" do
+      it "lists a membership the buyer removed from the library, since removing it does not stop billing" do
         purchase.update!(is_deleted_by_buyer: true)
 
-        expect(results(subscriptions_only: true)).to be_empty
-        expect(results(subscriptions_only: true, show_archived_only: true)).to be_empty
+        expect(subscription_ids).to eq([purchase.external_id])
+        expect(results.map { _1[:purchase][:id] }).not_to include(purchase.external_id)
       end
 
-      it "lists an archived membership only in the archive view, without archived one-off purchases" do
+      it "lists archived memberships with the rest and ignores a stale archive filter" do
         purchase.update!(is_archived: true)
         one_off_purchase.update!(is_archived: true)
 
-        expect(results(subscriptions_only: true)).to be_empty
-        expect(results(subscriptions_only: true, show_archived_only: true).map { _1[:purchase][:id] }).to eq([purchase.external_id])
+        expect(subscription_ids).to eq([purchase.external_id])
+        props = library_props(subscriptions_only: true, show_archived_only: true)
+        expect(props[:results].map { _1[:purchase][:id] }).to eq([purchase.external_id])
+        expect(props[:search][:show_archived_only]).to be(false)
       end
 
-      it "counts only active memberships for the archive banner and empty states, leaving the Purchases counts alone" do
+      it "counts every ongoing membership as unarchived on this tab, leaving the Purchases counts alone" do
         create(:purchase, purchaser: buyer, is_archived: true)
-        create(:membership_purchase, purchaser: buyer, is_archived: true).tap { _1.create_url_redirect! }
+        owned_membership("Archived membership", is_archived: true)
 
         subscriptions_props = library_props(subscriptions_only: true)
-        expect(subscriptions_props[:archived_count]).to eq(1)
-        expect(subscriptions_props[:unarchived_count]).to eq(1)
+        expect(subscriptions_props[:archived_count]).to eq(0)
+        expect(subscriptions_props[:unarchived_count]).to eq(2)
 
         purchases_props = library_props
         expect(purchases_props[:archived_count]).to eq(2)
@@ -326,13 +354,121 @@ describe LibraryPresenter do
 
       it "does not list or count another buyer's memberships" do
         other_buyer = create(:user)
-        create(:membership_purchase, link: product, purchaser: other_buyer).tap { _1.create_url_redirect! }
+        create(:membership_purchase, link: product, purchaser: other_buyer).tap { _1.subscription.update!(user: other_buyer) }.create_url_redirect!
 
         props = library_props(subscriptions_only: true)
         expect(props[:results].map { _1[:purchase][:id] }).to eq([purchase.external_id])
         expect(props[:unarchived_count]).to eq(1)
         expect(described_class.new(other_buyer).library_props(subscriptions_only: true)[:results].map { _1[:purchase][:id] })
           .not_to include(purchase.external_id)
+      end
+
+      it "leaves out a subscription that another account now owns, even though this buyer still holds the purchase" do
+        purchase.subscription.update!(user: create(:user))
+
+        expect(results(subscriptions_only: true)).to be_empty
+        expect(results.map { _1[:purchase][:id] }).to include(purchase.external_id)
+      end
+
+      it "lists a claimed guest subscription that no account owns yet" do
+        purchase.subscription.update!(user: nil)
+
+        expect(subscription_ids).to eq([purchase.external_id])
+      end
+
+      it "shows a gifted membership to its recipient and never to the gift sender" do
+        gift_product = create(:membership_product, name: "Gifted membership", user: creator)
+        gift_subscription = create(:subscription, link: gift_product, user: buyer)
+        sender = create(:user)
+        sender_purchase = create(:membership_purchase, link: gift_product, subscription: gift_subscription, purchaser: sender, is_gift_sender_purchase: true)
+        receiver_purchase = create(:purchase, :gift_receiver, link: gift_product, purchaser: buyer, subscription: gift_subscription, is_original_subscription_purchase: false)
+          .tap(&:create_url_redirect!)
+        create(:gift, link: gift_product, gifter_purchase: sender_purchase, giftee_purchase: receiver_purchase, gifter_email: sender.email, giftee_email: buyer.email)
+
+        expect(subscription_ids).to include(receiver_purchase.external_id)
+        expect(status_label(receiver_purchase)).to eq("Gift, paid through #{buyer_date(gift_subscription.reload.end_time_of_subscription)}")
+        expect(described_class.new(sender).library_props(subscriptions_only: true)[:results]).to be_empty
+      end
+
+      it "lists one card per subscription when a plan change left a second original purchase" do
+        newer_original = create(:membership_purchase, link: product, purchaser: buyer, subscription: purchase.subscription).tap(&:create_url_redirect!)
+
+        expect(subscription_ids).to eq([newer_original.external_id])
+        expect(library_props(subscriptions_only: true)[:unarchived_count]).to eq(1)
+        expect(results.map { _1[:purchase][:id] }).to include(purchase.external_id, newer_original.external_id)
+      end
+
+      it "searches and pages the whole list, including removed memberships" do
+        purchase.update!(is_deleted_by_buyer: true)
+        15.times { |i| owned_membership(format("Membership %02d", i + 1)) }
+
+        expect(library_props(subscriptions_only: true)[:pagination]).to include(count: 16, pages: 2)
+        expect(results(subscriptions_only: true, page: "2").size).to eq(1)
+        expect(subscription_ids(query: "hello")).to eq([purchase.external_id])
+      end
+
+      it "links each card to the subscription's own manage page" do
+        expect(results(subscriptions_only: true).sole.dig(:purchase, :subscription, :manage_url))
+          .to eq("/subscriptions/#{purchase.subscription.external_id}/manage")
+      end
+
+      it "adds no subscription details to Purchases cards" do
+        expect(results.map { _1[:purchase] }).to all(satisfy { !_1.key?(:subscription) })
+      end
+
+      describe "status labels" do
+        it "shows the renewal date of a renewing membership" do
+          expect(status_label).to eq("Renews on #{buyer_date(purchase.subscription.end_time_of_subscription)}")
+        end
+
+        it "shows when access ends instead of a renewal for a pending cancellation" do
+          purchase.subscription.update!(cancelled_at: 10.days.from_now)
+
+          expect(status_label).to eq("Cancelled, access until #{buyer_date(purchase.subscription.cancelled_at)}")
+        end
+
+        it "flags a failed renewal that is still being retried" do
+          renewal(purchase.subscription, purchase_state: "failed")
+
+          expect(status_label).to eq("Payment failed")
+        end
+
+        it "shows the first charge date during a free trial" do
+          trial_purchase = create(:free_trial_membership_purchase, purchaser: buyer, link: create(:membership_product, :with_free_trial_enabled, name: "Trial membership", user: creator))
+            .tap(&:create_url_redirect!)
+
+          expect(status_label(trial_purchase)).to eq("Free trial, first charge on #{buyer_date(trial_purchase.subscription.free_trial_ends_at)}")
+        end
+
+        it "shows an end date, never a renewal, once a fixed-length membership has collected every charge" do
+          purchase.subscription.update!(charge_occurrence_count: 1)
+
+          expect(status_label).to eq("Ends on #{buyer_date(purchase.subscription.end_time_of_subscription)}")
+        end
+
+        it "calls out the final charge of a fixed-length membership" do
+          purchase.subscription.update!(charge_occurrence_count: 2)
+
+          expect(status_label).to eq("Final charge on #{buyer_date(purchase.subscription.end_time_of_subscription)}")
+        end
+
+        it "shows installment progress and the next payment date" do
+          installment = create(:installment_plan_purchase, purchaser: buyer, link: create(:product, :with_installment_plan, name: "Course", user: creator))
+            .tap(&:create_url_redirect!)
+
+          expect(status_label(installment)).to eq("Installment plan · 1 of 3 paid · Next payment on #{buyer_date(installment.subscription.end_time_of_subscription)}")
+        end
+
+        it "calls out the final installment and then shows the plan as paid in full" do
+          installment = create(:installment_plan_purchase, purchaser: buyer, link: create(:product, :with_installment_plan, name: "Course", user: creator))
+            .tap(&:create_url_redirect!)
+          renewal(installment.subscription, is_installment_payment: true)
+
+          expect(status_label(installment)).to eq("Installment plan · 2 of 3 paid · Final payment on #{buyer_date(installment.subscription.end_time_of_subscription)}")
+
+          renewal(installment.subscription, is_installment_payment: true)
+          expect(status_label(installment)).to eq("Installment plan · Paid in full")
+        end
       end
     end
 
@@ -692,6 +828,7 @@ describe LibraryPresenter do
       end
 
       it "ignores bundle filters on the Subscriptions tab, where no membership can be a bundle member" do
+        purchase.subscription.update!(user: buyer)
         props = library_props(subscriptions_only: true, bundle_ids: [purchase1.link.external_id])
 
         expect(props[:results].map { _1[:purchase][:id] }).to eq([purchase.external_id])

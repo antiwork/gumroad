@@ -15,30 +15,36 @@ class LibraryPresenter
 
   def library_props(page: nil, sort: nil, query: nil, creator_ids: [], bundle_ids: [], show_archived_only: false, subscriptions_only: false)
     sort = sort == "purchase_date" ? "purchase_date" : "recently_updated"
-    # A membership can't be a bundle member, so a bundle filter (even a stale URL) would only empty this tab.
-    bundle_ids = [] if subscriptions_only
-
-    base = logged_in_user.purchases.visible_in_library
-    denied_ids = no_access_membership_purchase_ids(base)
-    visible = base.where.not(id: denied_ids)
-    replaced_ids = replaced_bundle_purchase_ids(base)
-    cards = visible.where.not(id: replaced_ids)
-    counted = visible
     if subscriptions_only
-      cards = cards.has_active_subscription
-      counted = visible.has_active_subscription
+      # A membership can't be a bundle member, and archiving or removing a card only tidies the
+      # Library without stopping billing, so neither filter applies (even from a stale URL).
+      bundle_ids = []
+      show_archived_only = false
     end
 
-    pagination, page_purchases = paged_purchases(filtered(cards, query:, creator_ids:, bundle_ids:, show_archived_only:), sort:, page:)
+    base = logged_in_user.purchases.visible_in_library
+    replaced_ids = replaced_bundle_purchase_ids(base)
+    if subscriptions_only
+      cards = ongoing_subscription_purchases
+      archived_count = 0
+      unarchived_count = cards.count
+    else
+      visible = base.where.not(id: no_access_membership_purchase_ids(base))
+      cards = visible.where.not(id: replaced_ids)
+      archived_count = visible.is_archived.count
+      unarchived_count = visible.not_is_archived.count
+    end
+
+    pagination, page_purchases = paged_purchases(filtered(cards, query:, creator_ids:, bundle_ids:, show_archived_only:, subscriptions_only:), sort:, page:)
 
     {
-      results: build_cards(page_purchases),
+      results: build_cards(page_purchases, subscriptions_only:),
       pagination:,
-      creators: creators_for_tab(cards, show_archived_only:),
+      creators: creators_for_tab(cards, show_archived_only:, subscriptions_only:),
       bundles: subscriptions_only ? [] : bundle_filter_options(base, replaced_ids),
       bundle_downloads: bundle_downloads(base, bundle_ids),
-      archived_count: counted.is_archived.count,
-      unarchived_count: counted.not_is_archived.count,
+      archived_count:,
+      unarchived_count:,
       search: {
         sort:,
         query: query.to_s,
@@ -73,8 +79,8 @@ class LibraryPresenter
   end
 
   private
-    def filtered(cards, query:, creator_ids:, bundle_ids:, show_archived_only:)
-      scope = show_archived_only ? cards.is_archived : cards.not_is_archived
+    def filtered(cards, query:, creator_ids:, bundle_ids:, show_archived_only:, subscriptions_only:)
+      scope = archive_partition(cards, show_archived_only:, subscriptions_only:)
 
       # Filtering by links.user_id (not a users join keyed on external_id) keeps MySQL's plan
       # anchored on the cheap purchaser_id index; joining users on external_id sometimes made it
@@ -129,7 +135,7 @@ class LibraryPresenter
       [pagination, page_ids.map { records[_1] }]
     end
 
-    def build_cards(purchases)
+    def build_cards(purchases, subscriptions_only: false)
       replacement_redirects = replacement_redirects_for(purchases)
       product_seller_data = {}
 
@@ -152,9 +158,72 @@ class LibraryPresenter
             is_archived: purchase.is_archived,
             download_url: library_download_location(purchase, replacement_redirects),
             variants: purchase.variant_attributes&.map(&:name)&.join(", "),
-          }
+          }.merge(subscriptions_only ? { subscription: subscription_details(purchase.subscription) } : {})
         }
       end
+    end
+
+    # Archived and removed cards stay listed: those actions never stop billing. A subscription
+    # owned by another account (gift conversion, reassignment) stays out; an unowned one is a guest
+    # checkout this buyer claimed, and its manage link falls back to the emailed magic link.
+    def ongoing_subscription_purchases
+      owned = logged_in_user.purchases.for_library
+        .has_active_subscription
+        .where(subscriptions: { user_id: [logged_in_user.id, nil] })
+      owned = owned.where.not(id: no_access_membership_purchase_ids(owned))
+      owned.where(id: owned.unscope(:select).group(:subscription_id).select("MAX(purchases.id)"))
+    end
+
+    def archive_partition(cards, show_archived_only:, subscriptions_only:)
+      return cards if subscriptions_only
+
+      show_archived_only ? cards.is_archived : cards.not_is_archived
+    end
+
+    def subscription_details(subscription)
+      {
+        status_label: subscription_status_label(subscription),
+        manage_url: manage_subscription_path(subscription.external_id),
+      }
+    end
+
+    # Never promises a charge the subscription won't make: completed fixed-length plans, pending
+    # cancellations and card-less gifts (whose receipt says they won't renew) show an end date.
+    def subscription_status_label(subscription)
+      kind = subscription.is_installment_plan? ? "Installment plan" : nil
+      label =
+        case subscription.status
+        when "pending_failure" then "Payment failed"
+        when "payment_method_update_required" then "Payment method update required"
+        when "pending_cancellation" then dated("Cancelled, access until", subscription.cancelled_at, fallback: "Cancelled")
+        else ongoing_subscription_label(subscription)
+        end
+      [kind, label].compact.join(" · ")
+    end
+
+    def ongoing_subscription_label(subscription)
+      next_charge_at = subscription.end_time_of_subscription
+      if subscription.charges_completed?
+        subscription.is_installment_plan? ? "Paid in full" : dated("Ends on", next_charge_at, fallback: "Ending")
+      elsif subscription.is_installment_plan?
+        paid = "#{subscription.charge_occurrence_count - subscription.remaining_charges_count} of #{subscription.charge_occurrence_count} paid"
+        next_payment = subscription.remaining_charges_count == 1 ? "Final payment on" : "Next payment on"
+        "#{paid} · #{dated(next_payment, next_charge_at, fallback: "Payment due")}"
+      elsif subscription.gift? && subscription.credit_card_id.blank?
+        dated("Gift, paid through", next_charge_at, fallback: "Gift")
+      elsif subscription.in_free_trial?
+        dated("Free trial, first charge on", subscription.free_trial_ends_at, fallback: "Free trial")
+      elsif subscription.remaining_charges_count == 1
+        dated("Final charge on", next_charge_at, fallback: "Renewal due")
+      else
+        dated("Renews on", next_charge_at, fallback: "Renewal due")
+      end
+    end
+
+    def dated(prefix, time, fallback:)
+      return fallback unless time&.future?
+
+      "#{prefix} #{time.in_time_zone(logged_in_user.timezone).to_fs(:formatted_date_abbrev_month)}"
     end
 
     # A purchase whose subscription row is missing stays visible: wrongly hiding a purchase is
@@ -187,8 +256,8 @@ class LibraryPresenter
     # Counts ignore the search query and creator/bundle selections (matching the
     # pre-pagination page, which derived them from the unfiltered result set), so a
     # buyer's other creators stay selectable while one is filtered.
-    def creators_for_tab(cards, show_archived_only:)
-      scope = show_archived_only ? cards.is_archived : cards.not_is_archived
+    def creators_for_tab(cards, show_archived_only:, subscriptions_only:)
+      scope = archive_partition(cards, show_archived_only:, subscriptions_only:)
       counts_by_user_id = scope.joins(:link).group("links.user_id").count
       User.where(id: counts_by_user_id.keys).map do |creator|
         {
