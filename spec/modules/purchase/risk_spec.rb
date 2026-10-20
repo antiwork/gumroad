@@ -271,8 +271,17 @@ describe Purchase::Risk do
       PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: "abc123", expires_in: 1.hour)
       bad_purchase = build(:purchase, link: @product, browser_guid: "abc123")
 
-      expect(Rails.logger).to receive(:warn).with(/risk_block object_type=browser_guid sha=#{Digest::SHA256.hexdigest("abc123")[0, 12]}/)
+      expect(Rails.logger).to receive(:warn).with(/risk_block object_type=browser_guid sha=#{Digest::SHA256.hexdigest("abc123")[0, 12]} seller_id=#{@product.user_id}/)
       expect(Rails.logger).not_to receive(:warn).with(/abc123/)
+      bad_purchase.send(:check_for_fraud)
+    end
+
+    it "logs a hashed identifier for each blocked ip_address that refuses the purchase" do
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:ip_address], object_value: "192.378.12.1", expires_in: 1.hour)
+      bad_purchase = build(:purchase, link: @product, ip_address: "192.378.12.1")
+
+      expect(Rails.logger).to receive(:warn).with(/risk_block object_type=ip_address sha=#{Digest::SHA256.hexdigest("192.378.12.1")[0, 12]} seller_id=#{@product.user_id}/)
+      expect(Rails.logger).not_to receive(:warn).with(/192\.378\.12\.1/)
       bad_purchase.send(:check_for_fraud)
     end
 

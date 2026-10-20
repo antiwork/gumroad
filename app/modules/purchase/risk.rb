@@ -14,6 +14,7 @@ module Purchase::Risk
   # payer can change themselves: we cannot see from here which identifiers are blocked, and every
   # self-service suggestion we have tried sent people around a loop that could not end
   # (gumroad-private#1480, gumroad-private#1755). Support is the only route that always works.
+  RISK_BLOCK_LOG_HASH_LENGTH = 12
   BLOCKED_IDENTIFIER_ERROR = "Your card was not charged. This payment could not be completed — please contact support@gumroad.com for help."
 
   def check_for_fraud
@@ -173,7 +174,7 @@ module Purchase::Risk
 
     # Hashed so a support lookup can match a value without raw identifiers landing in logs.
     def log_risk_block(object_type, value)
-      Rails.logger.warn("risk_block object_type=#{object_type} sha=#{Digest::SHA256.hexdigest(value.to_s)[0, 12]} seller_id=#{seller_id}")
+      Rails.logger.warn("risk_block object_type=#{object_type} sha=#{Digest::SHA256.hexdigest(value.to_s)[0, RISK_BLOCK_LOG_HASH_LENGTH]} seller_id=#{seller_id}")
     end
 
     def past_blocked_object(object)
