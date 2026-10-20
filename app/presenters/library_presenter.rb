@@ -164,14 +164,20 @@ class LibraryPresenter
     end
 
     # Archived and removed cards stay listed: those actions never stop billing. A subscription
-    # owned by another account (gift conversion, reassignment) stays out; an unowned one is a guest
+    # owned by another account (reassignment, gift conversion) stays out; an unowned one is a guest
     # checkout this buyer claimed, and its manage link falls back to the emailed magic link.
     def ongoing_subscription_purchases
       owned = logged_in_user.purchases.for_library
         .has_active_subscription
         .where(subscriptions: { user_id: [logged_in_user.id, nil] })
-      owned = owned.where.not(id: no_access_membership_purchase_ids(owned))
+      owned = owned.where.not(id: no_access_membership_purchase_ids(owned) + converted_gift_receiver_ids(owned))
       owned.where(id: owned.unscope(:select).group(:subscription_id).select("MAX(purchases.id)"))
+    end
+
+    # Gift::ConvertToNonGiftService leaves the recipient's receiver row for access but makes the
+    # subscription the payer's, owned by no account when the payer checked out as a guest.
+    def converted_gift_receiver_ids(owned)
+      owned.is_gift_receiver_purchase.includes(:subscription).reject { _1.subscription.gift? }.map(&:id)
     end
 
     def archive_partition(cards, show_archived_only:, subscriptions_only:)
@@ -181,9 +187,12 @@ class LibraryPresenter
     end
 
     def subscription_details(subscription)
+      # SubscriptionsController#manage 404s a paid-off installment plan, which stays active until
+      # its last period ends.
+      manageable = !(subscription.is_installment_plan? && subscription.charges_completed?)
       {
         status_label: subscription_status_label(subscription),
-        manage_url: manage_subscription_path(subscription.external_id),
+        manage_url: manageable ? manage_subscription_path(subscription.external_id) : nil,
       }
     end
 
@@ -195,10 +204,22 @@ class LibraryPresenter
         case subscription.status
         when "pending_failure" then "Payment failed"
         when "payment_method_update_required" then "Payment method update required"
-        when "pending_cancellation" then dated("Cancelled, access until", subscription.cancelled_at, fallback: "Cancelled")
+        when "pending_cancellation" then cancellation_label(subscription)
         else ongoing_subscription_label(subscription)
         end
       [kind, label].compact.join(" · ")
+    end
+
+    # Subscription#grant_access_to_product? ends a cancelled installment plan's access at once, and a
+    # membership's only when the product blocks access after cancellation.
+    def cancellation_label(subscription)
+      if subscription.is_installment_plan?
+        "Cancelled, no further payments"
+      elsif subscription.link.block_access_after_membership_cancellation
+        dated("Cancelled, access until", subscription.cancelled_at, fallback: "Cancelled")
+      else
+        dated("Cancelled, subscription ends on", subscription.cancelled_at, fallback: "Cancelled")
+      end
     end
 
     def ongoing_subscription_label(subscription)

@@ -54,7 +54,7 @@ export type Result = {
     is_archived: boolean;
     download_url: string | null;
     variants: string | null;
-    subscription?: { status_label: string; manage_url: string };
+    subscription?: { status_label: string; manage_url: string | null };
   };
 };
 
@@ -110,19 +110,23 @@ export const Card = ({
             />
           ) : null}
         </div>
-        <div className="p-4">
-          {purchase.subscription ? (
-            // Archive and Remove only tidy the Library; this card stays here while it bills, so the
-            // useful action is managing the subscription itself.
-            <NavigationButton
-              href={purchase.subscription.manage_url}
-              size="sm"
-              className="relative"
-              aria-label={`Manage ${name}`}
-            >
-              Manage
-            </NavigationButton>
-          ) : (
+        {purchase.subscription ? (
+          // Archive and Remove only tidy the Library; this card stays here while it bills, so the
+          // useful action is managing the subscription itself, when it can still be managed.
+          purchase.subscription.manage_url ? (
+            <div className="p-4">
+              <NavigationButton
+                href={purchase.subscription.manage_url}
+                size="sm"
+                className="relative"
+                aria-label={`Manage ${name}`}
+              >
+                Manage
+              </NavigationButton>
+            </div>
+          ) : null
+        ) : (
+          <div className="p-4">
             <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
               <PopoverTrigger aria-label="Open product action menu" className="relative">
                 <DotsHorizontalRounded className="size-5" />
@@ -140,8 +144,8 @@ export const Card = ({
                 </Menu>
               </PopoverContent>
             </Popover>
-          )}
-        </div>
+          </div>
+        )}
       </ProductCardFooter>
     </ProductCard>
   );

@@ -257,6 +257,52 @@ describe("Library Scenario", type: :system, js: true) do
       expect(page).to have_button("Cancel membership")
     end
 
+    it "keeps a paid-off installment plan listed without a Manage link, while an unfinished one opens its manage page" do
+      unfinished = create(:installment_plan_purchase, purchaser: @user, link: create(:product, :with_installment_plan, name: "Unfinished course")).tap(&:create_url_redirect!)
+      completed = create(:installment_plan_purchase, purchaser: @user, link: create(:product, :with_installment_plan, name: "Completed course")).tap(&:create_url_redirect!)
+      2.times do
+        create(:membership_purchase, link: completed.link, subscription: completed.subscription, purchaser: @user, is_original_subscription_purchase: false, is_installment_payment: true)
+      end
+      Link.import(refresh: true, force: true)
+
+      visit "/library?subscriptions_only=true"
+
+      within(find_product_card(completed.link)) do
+        expect(page).to have_text("Installment plan · Paid in full")
+        expect(page).to have_link("Completed course", href: completed.url_redirect.download_page_url)
+        expect(page).to_not have_text("Manage")
+        expect(page).to_not have_selector("[aria-label='Open product action menu']")
+      end
+
+      click_on "Manage Unfinished course"
+
+      expect(page).to have_current_path("/subscriptions/#{unfinished.subscription.external_id}/manage")
+      expect(page).to have_selector("h2", text: "Unfinished course")
+    end
+
+    it "lists a guest checkout once claimed with its purchase email, and sends Manage through the emailed sign-in link" do
+      product = create(:membership_product, name: "Guest membership")
+      guest = create(:membership_purchase, link: product, purchaser: nil, email: "guest-checkout@example.com", subscription: create(:subscription, link: product, user: nil))
+      guest.create_url_redirect!
+      Link.import(refresh: true, force: true)
+
+      visit "/library?subscriptions_only=true"
+      expect(page).to have_text("You don't have any active subscriptions.")
+
+      visit "/r/#{guest.url_redirect.token}/check_purchaser"
+      fill_in "Email address used to purchase this product:", with: "guest-checkout@example.com"
+      click_on "Change purchase"
+      expect(page).to_not have_current_path(%r{/check_purchaser})
+      expect(guest.reload.purchaser).to eq(@user)
+
+      visit "/library?subscriptions_only=true"
+      within(find_product_card(product)) { expect(page).to have_text("Renews on #{buyer_date(guest.subscription.end_time_of_subscription)}") }
+      click_on "Manage Guest membership"
+
+      # No account owns this subscription yet, so the manage page asks for the emailed link instead of opening.
+      expect(page).to have_current_path("/subscriptions/#{guest.subscription.external_id}/magic_link/new")
+    end
+
     it "keeps every subscription listed when an old URL carries archive or bundle filters" do
       active = owned_membership("Monthly membership")
       archived = owned_membership("Archived membership", is_archived: true)

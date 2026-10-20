@@ -262,6 +262,10 @@ describe LibraryPresenter do
         results(subscriptions_only: true).find { _1[:purchase][:id] == card_purchase.external_id }.dig(:purchase, :subscription, :status_label)
       end
 
+      def manage_url(card_purchase = purchase)
+        results(subscriptions_only: true).find { _1[:purchase][:id] == card_purchase.external_id }.dig(:purchase, :subscription, :manage_url)
+      end
+
       def buyer_date(time)
         time.in_time_zone(buyer.timezone).to_fs(:formatted_date_abbrev_month)
       end
@@ -416,19 +420,120 @@ describe LibraryPresenter do
         expect(results.map { _1[:purchase] }).to all(satisfy { !_1.key?(:subscription) })
       end
 
+      describe "supported ownership flows" do
+        def gifted_membership(payer:, payer_email: "payer@example.com", subscription_owner: buyer)
+          gift_product = create(:membership_product, name: "Gifted membership", user: creator)
+          subscription = create(:subscription, link: gift_product, user: subscription_owner)
+          gift = create(:gift, link: gift_product, giftee_email: buyer.email, gifter_email: payer_email)
+          gifter = create(:membership_purchase, link: gift_product, subscription:, purchaser: payer, email: payer_email, is_gift_sender_purchase: true, gift_given: gift)
+          receiver = create(:membership_purchase, :gift_receiver, link: gift_product, subscription:, purchaser: buyer, email: buyer.email).tap(&:create_url_redirect!)
+          gift.update!(giftee_purchase: receiver)
+          [gift, gifter, receiver]
+        end
+
+        def convert(gift)
+          Gift::ConvertToNonGiftService.new(gift:, gifter_signed_off: true, giftee_signed_off: true, reason: "spec").process!
+        end
+
+        it "lists a guest checkout once the buyer signs up and it is attached to their account" do
+          guest_product = create(:membership_product, name: "Guest membership", user: creator)
+          guest = create(:membership_purchase, link: guest_product, purchaser: nil, email: buyer.email, subscription: create(:subscription, link: guest_product, user: nil))
+            .tap(&:create_url_redirect!)
+          expect(subscription_ids).not_to include(guest.external_id)
+
+          guest.attach_to_user_and_card(buyer, nil, nil)
+
+          expect(guest.subscription.reload.user).to eq(buyer)
+          expect(subscription_ids).to include(guest.external_id)
+        end
+
+        it "moves a membership to the account it was reassigned to and off the previous one" do
+          previous_owner = create(:user, email: "previous-owner@example.com")
+          moved_product = create(:membership_product, name: "Moved membership", user: creator)
+          moved = create(:membership_purchase, link: moved_product, purchaser: previous_owner, email: previous_owner.email,
+                                               subscription: create(:subscription, link: moved_product, user: previous_owner)).tap(&:create_url_redirect!)
+
+          expect(Purchase::ReassignByEmailService.new(from_email: previous_owner.email, to_email: buyer.email).perform).to be_success
+
+          expect(moved.subscription.reload.user).to eq(buyer)
+          expect(subscription_ids).to include(moved.external_id)
+          expect(described_class.new(previous_owner).library_props(subscriptions_only: true)[:results]).to be_empty
+        end
+
+        it "lists a converted gift only for the account-backed payer, keeping the recipient's Library access" do
+          payer = create(:user, email: "payer@example.com")
+          gift, gifter, receiver = gifted_membership(payer:)
+          expect(subscription_ids).to include(receiver.external_id)
+
+          convert(gift)
+
+          expect(subscription_ids).not_to include(receiver.external_id)
+          expect(results.map { _1[:purchase][:id] }).to include(receiver.external_id)
+          payer_cards = described_class.new(payer).library_props(subscriptions_only: true)[:results]
+          expect(payer_cards.map { _1[:purchase][:id] }).to eq([gifter.external_id])
+          expect(payer_cards.sole.dig(:purchase, :subscription, :manage_url)).to eq("/subscriptions/#{gifter.subscription.external_id}/manage")
+        end
+
+        it "drops a gift converted to a guest payer from the recipient's tab, keeping their Library access" do
+          gift, _, receiver = gifted_membership(payer: nil)
+          expect(subscription_ids).to include(receiver.external_id)
+
+          convert(gift)
+
+          expect(receiver.subscription.reload.user).to be_nil
+          expect(subscription_ids).not_to include(receiver.external_id)
+          expect(results.map { _1[:purchase][:id] }).to include(receiver.external_id)
+        end
+
+        it "keeps a still-gifted membership on the tab of a recipient who had no account when it was given" do
+          _, _, receiver = gifted_membership(payer: create(:user), subscription_owner: nil)
+
+          expect(subscription_ids).to include(receiver.external_id)
+          expect(status_label(receiver)).to start_with("Gift, paid through ")
+        end
+      end
+
       describe "status labels" do
         it "shows the renewal date of a renewing membership" do
           expect(status_label).to eq("Renews on #{buyer_date(purchase.subscription.end_time_of_subscription)}")
         end
 
-        it "shows when access ends instead of a renewal for a pending cancellation" do
-          purchase.subscription.update!(cancelled_at: 10.days.from_now)
+        it "says the subscription ends, not access, after a cancellation on a product that keeps access" do
+          purchase.subscription.cancel!(by_seller: false)
 
-          expect(status_label).to eq("Cancelled, access until #{buyer_date(purchase.subscription.cancelled_at)}")
+          expect(purchase.subscription.reload.cancelled_at).to be_future
+          expect(status_label).to eq("Cancelled, subscription ends on #{buyer_date(purchase.subscription.cancelled_at)}")
+        end
+
+        it "says access ends after a cancellation on a product that blocks access once cancelled" do
+          product.update!(block_access_after_membership_cancellation: true)
+          purchase.subscription.cancel!(by_seller: false)
+
+          expect(status_label).to eq("Cancelled, access until #{buyer_date(purchase.subscription.reload.cancelled_at)}")
+        end
+
+        it "says a cancelled free trial ends without implying it was paid for" do
+          trial_purchase = create(:free_trial_membership_purchase, purchaser: buyer, link: create(:membership_product, :with_free_trial_enabled, name: "Trial membership", user: creator))
+            .tap(&:create_url_redirect!)
+          trial_purchase.subscription.cancel!(by_seller: false)
+
+          expect(trial_purchase.subscription.reload.cancelled_at).to eq(trial_purchase.subscription.free_trial_ends_at)
+          expect(status_label(trial_purchase)).to eq("Cancelled, subscription ends on #{buyer_date(trial_purchase.subscription.free_trial_ends_at)}")
+        end
+
+        it "says a seller-cancelled installment plan takes no further payments, since its access already ended" do
+          installment = create(:installment_plan_purchase, purchaser: buyer, link: create(:product, :with_installment_plan, name: "Course", user: creator))
+            .tap(&:create_url_redirect!)
+          installment.subscription.cancel!(by_seller: true)
+
+          expect(installment.subscription.reload).to be_pending_cancellation
+          expect(installment.subscription.grant_access_to_product?).to be(false)
+          expect(status_label(installment)).to eq("Installment plan · Cancelled, no further payments")
         end
 
         it "flags a failed renewal that is still being retried" do
-          renewal(purchase.subscription, purchase_state: "failed")
+          # Subscription#pending_failure? reads the newest purchase by created_at, so keep the order unambiguous.
+          travel(1.minute) { renewal(purchase.subscription, purchase_state: "failed") }
 
           expect(status_label).to eq("Payment failed")
         end
@@ -465,9 +570,12 @@ describe LibraryPresenter do
           renewal(installment.subscription, is_installment_payment: true)
 
           expect(status_label(installment)).to eq("Installment plan · 2 of 3 paid · Final payment on #{buyer_date(installment.subscription.end_time_of_subscription)}")
+          expect(manage_url(installment)).to eq("/subscriptions/#{installment.subscription.external_id}/manage")
 
           renewal(installment.subscription, is_installment_payment: true)
           expect(status_label(installment)).to eq("Installment plan · Paid in full")
+          # SubscriptionsController#manage 404s a paid-off installment plan.
+          expect(manage_url(installment)).to be_nil
         end
       end
     end

@@ -429,6 +429,21 @@ describe("Subscriptions tab", () => {
     expect(screen.getByRole("link", { name: "Manage Alpha" }).getAttribute("href")).toBe("/subscriptions/p1/manage");
   });
 
+  it("offers no Manage link or Library menu for a subscription that can no longer be managed", () => {
+    const props = subscriptionsProps();
+    const card = subscriptionResult("p1", "Alpha", "Installment plan · Paid in full");
+    card.purchase.subscription = { status_label: "Installment plan · Paid in full", manage_url: null };
+    props.results = [card];
+    renderPage(props);
+
+    expect(screen.getByText("Installment plan · Paid in full")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Alpha" }).getAttribute("href")).toBe("https://example.com/d/p1");
+    expect(screen.queryByText("Manage")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Open product action menu" })).toBeNull();
+    // No empty, bordered action cell beside the creator byline.
+    expect(screen.getByText("Alpha creator").closest("footer")?.children).toHaveLength(1);
+  });
+
   it("keeps the archive and remove menu on Purchases cards", () => {
     renderPage();
 
