@@ -41,6 +41,46 @@ class User::FeatureStatusTest < ActiveSupport::TestCase
     assert_equal true, creator.merchant_migration_enabled?
   end
 
+  test "#merchant_migration_enabled? routes a business by its legal entity country once the flag is on for the seller" do
+    creator = create_user
+    create_user_compliance_info(user: creator, is_business: true, country: "French Polynesia", business_country: "United States")
+    create_merchant_account_stripe_connect(user: creator)
+    Feature.activate_user(:merchant_migration, creator)
+
+    assert_equal false, creator.merchant_migration_enabled?
+    assert_equal false, creator.has_stripe_account_connected?
+
+    Feature.activate_user(User::FeatureStatus::LEGAL_ENTITY_COUNTRY_ROUTING_FEATURE, creator)
+    assert_equal true, creator.merchant_migration_enabled?
+    assert_equal true, creator.has_stripe_account_connected?
+  end
+
+  test "#merchant_migration_enabled? stops routing a business whose legal entity country is unsupported once the flag is on" do
+    creator = create_user
+    create_user_compliance_info(user: creator, is_business: true, country: "France", business_country: "India")
+    Feature.activate_user(:merchant_migration, creator)
+
+    assert_equal true, creator.merchant_migration_enabled?
+
+    Feature.activate_user(User::FeatureStatus::LEGAL_ENTITY_COUNTRY_ROUTING_FEATURE, creator)
+    assert_equal false, creator.merchant_migration_enabled?
+  end
+
+  test "#merchant_migration_enabled? keeps the residence rule for an individual with the flag on and for a business without it" do
+    individual = create_user
+    create_user_compliance_info(user: individual, country: "French Polynesia")
+    Feature.activate_user(:merchant_migration, individual)
+    Feature.activate_user(User::FeatureStatus::LEGAL_ENTITY_COUNTRY_ROUTING_FEATURE, individual)
+
+    assert_equal false, individual.merchant_migration_enabled?
+
+    business = create_user
+    create_user_compliance_info(user: business, is_business: true, country: "French Polynesia", business_country: "United States")
+    Feature.activate_user(:merchant_migration, business)
+
+    assert_equal false, business.merchant_migration_enabled?
+  end
+
   # --- #charge_paypal_payout_fee? ---------------------------------------------
 
   test "#charge_paypal_payout_fee? is true when the feature is on, the user is not from Brazil or India, and the fee applies" do

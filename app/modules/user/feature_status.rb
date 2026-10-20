@@ -6,9 +6,24 @@
 
 class User
   module FeatureStatus
+    # Per-seller rollout: a business routes Connect by its legal entity's country, the same country
+    # its Stripe account is opened in. Turning it on for a seller can move their card sales.
+    LEGAL_ENTITY_COUNTRY_ROUTING_FEATURE = :stripe_connect_routing_by_legal_entity_country
+
     def merchant_migration_enabled?
       check_merchant_account_is_linked || (Feature.active?(:merchant_migration, self) &&
-          StripeMerchantAccountManager::COUNTRIES_SUPPORTED_BY_STRIPE_CONNECT.include?(::Compliance::Countries.find_by_name(alive_user_compliance_info&.country)&.alpha2))
+          StripeMerchantAccountManager::COUNTRIES_SUPPORTED_BY_STRIPE_CONNECT.include?(stripe_connect_routing_country_code))
+    end
+
+    def stripe_connect_routing_country_code
+      compliance_info = alive_user_compliance_info
+      return if compliance_info.nil?
+
+      if Feature.active?(LEGAL_ENTITY_COUNTRY_ROUTING_FEATURE, self)
+        compliance_info.legal_entity_country_code
+      else
+        compliance_info.country_code
+      end
     end
 
     def paypal_connect_enabled?
