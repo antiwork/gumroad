@@ -5,8 +5,10 @@ import * as React from "react";
 import { confirmLineItem } from "$app/data/purchase";
 import { updateSubscription } from "$app/data/subscription";
 import {
+  applyPlanChangeSelection,
   initialSubscriptionUnitPrice,
   selectedSubscriptionTotal,
+  planChangeDiscount,
   subscriptionPWYWMinimumUnitPrice,
   withOncePerCartMinimum,
 } from "$app/pages/Subscriptions/price";
@@ -36,7 +38,6 @@ import {
   PriceSelection,
   ConfigurationSelector,
   Product as ConfigurationSelectorProduct,
-  applySelection,
 } from "$app/components/Product/ConfigurationSelector";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
@@ -80,6 +81,7 @@ type Props = {
     pending_cancellation: boolean;
     prorated_discount_price_cents: number;
     discount: Discount | null;
+    option_discounts: Record<string, Discount | null>;
     end_time_of_subscription: string;
     successful_purchases_count: number;
     remaining_charges_count: number | null;
@@ -131,6 +133,7 @@ export default function SubscriptionsManage() {
   const isResubscribing =
     !subscription.alive && !subscription.pending_cancellation && !subscription.is_installment_plan;
   const pricingDiscount = subscription.is_installment_plan ? null : subscription.discount;
+  const optionDiscounts = subscription.is_installment_plan ? {} : subscription.option_discounts;
   const initialSelection = {
     recurrence: subscription.recurrence,
     rent: false,
@@ -176,8 +179,9 @@ export default function SubscriptionsManage() {
     ppp_details: null,
   };
 
-  const { isPWYW, priceCents, discountedPriceCents, discountedTotalCents } = applySelection(
+  const { isPWYW, priceCents, discountedPriceCents, discountedTotalCents } = applyPlanChangeSelection(
     configurationSelectorProduct,
+    optionDiscounts,
     pricingDiscount,
     selection,
   );
@@ -489,6 +493,9 @@ export default function SubscriptionsManage() {
             setSelection={setSelection}
             initialSelection={initialSelection}
             discount={pricingDiscount}
+            discountForSelection={(previewSelection) =>
+              planChangeDiscount(optionDiscounts, pricingDiscount, previewSelection)
+            }
             pwywMinimumPriceCents={subscriptionPWYWMinimumUnitPrice(priceCents, discountedPriceCents, pricingDiscount)}
           />
         </CardContent>

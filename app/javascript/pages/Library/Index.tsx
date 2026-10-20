@@ -54,6 +54,7 @@ export type Result = {
     is_archived: boolean;
     download_url: string | null;
     variants: string | null;
+    subscription?: { status_label: string; manage_label: string; manage_url: string | null };
   };
 };
 
@@ -97,6 +98,25 @@ export const Card = ({
         ) : (
           <h3 itemProp="name">{name}</h3>
         )}
+        {purchase.subscription ? (
+          // Archive and Remove only tidy the Library; this card stays here while it bills, so the
+          // useful action is managing the subscription itself, when it can still be managed. It
+          // sits under the status it acts on, which leaves the footer to the creator byline.
+          <div className="flex flex-col gap-1 text-sm">
+            <p className="text-muted">{purchase.subscription.status_label}</p>
+            {purchase.subscription.manage_url ? (
+              // The rest of the card is the download link, so the padding/negative-margin pair makes this
+              // target 24px tall without moving its text.
+              <a
+                href={purchase.subscription.manage_url}
+                className="relative -my-0.5 self-start py-0.5"
+                aria-label={`${purchase.subscription.manage_label} for ${name}`}
+              >
+                {purchase.subscription.manage_label}
+              </a>
+            ) : null}
+          </div>
+        ) : null}
       </ProductCardHeader>
       <ProductCardFooter>
         <div className="flex-1 p-4">
@@ -108,25 +128,27 @@ export const Card = ({
             />
           ) : null}
         </div>
-        <div className="p-4">
-          <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
-            <PopoverTrigger aria-label="Open product action menu" className="relative">
-              <DotsHorizontalRounded className="size-5" />
-            </PopoverTrigger>
-            <PopoverContent className="border-0 p-0 shadow-none" usePortal>
-              <Menu>
-                <MenuItem onClick={toggleArchived}>
-                  <Archive className="size-5" />
-                  {purchase.is_archived ? "Unarchive" : "Archive"}
-                </MenuItem>
-                <MenuItem variant="danger" onClick={() => onDelete()}>
-                  <Trash className="size-5" />
-                  Remove from library
-                </MenuItem>
-              </Menu>
-            </PopoverContent>
-          </Popover>
-        </div>
+        {purchase.subscription ? null : (
+          <div className="p-4">
+            <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
+              <PopoverTrigger aria-label="Open product action menu" className="relative">
+                <DotsHorizontalRounded className="size-5" />
+              </PopoverTrigger>
+              <PopoverContent className="border-0 p-0 shadow-none" usePortal>
+                <Menu>
+                  <MenuItem onClick={toggleArchived}>
+                    <Archive className="size-5" />
+                    {purchase.is_archived ? "Unarchive" : "Archive"}
+                  </MenuItem>
+                  <MenuItem variant="danger" onClick={() => onDelete()}>
+                    <Trash className="size-5" />
+                    Remove from library
+                  </MenuItem>
+                </Menu>
+              </PopoverContent>
+            </Popover>
+          </div>
+        )}
       </ProductCardFooter>
     </ProductCard>
   );
@@ -181,6 +203,7 @@ export type SearchParams = {
   creators: string[];
   bundles: string[];
   show_archived_only: boolean;
+  subscriptions_only: boolean;
 };
 
 type Props = {
@@ -193,6 +216,7 @@ type Props = {
     label: string;
     download_url: string | null;
     zip_unavailable_reason: "too_large" | "failed" | null;
+    omits_granted_files: boolean;
   }[];
   archived_count: number;
   unarchived_count: number;
@@ -246,6 +270,7 @@ export default function LibraryPage() {
     if (next.creators.length > 0) data.creators = next.creators.join(",");
     if (next.bundles.length > 0) data.bundles = next.bundles.join(",");
     if (next.show_archived_only) data.show_archived_only = "true";
+    if (next.subscriptions_only) data.subscriptions_only = "true";
     if (page !== undefined && page > 1) data.page = page.toString();
     inFlightNavigations.current += 1;
     router.get(Routes.library_path(), data, {
@@ -273,6 +298,7 @@ export default function LibraryPage() {
   const isDesktop = useIsAboveBreakpoint("lg");
   const [mobileFiltersExpanded, setMobileFiltersExpanded] = React.useState(false);
   const [showingAllCreators, setShowingAllCreators] = React.useState(false);
+  // On the Subscriptions tab the server counts every ongoing subscription as unarchived.
   const isLibraryEmpty = archivedCount + unarchivedCount === 0;
   const showArchivedNotice = !isLibraryEmpty && !search.show_archived_only && unarchivedCount === 0;
   const hasParams =
@@ -346,19 +372,27 @@ export default function LibraryPage() {
     !showArchivedNotice && (hasParams || archivedCount > 0 || archivedCount + unarchivedCount > 9);
 
   return (
-    <Layout selectedTab="purchases">
+    <Layout selectedTab={activeSearch.subscriptions_only ? "subscriptions" : "purchases"}>
       <section className="space-y-4 p-4 md:p-8">
         {isLibraryEmpty || showArchivedNotice ? (
           <Placeholder>
             {isLibraryEmpty ? (
-              <>
-                <PlaceholderImage src={placeholder} />
-                <h2 className="library-header">You haven't bought anything... yet!</h2>
-                Once you do, it'll show up here so you can download, watch, read, or listen to all your purchases.
-                <Button asChild color="accent">
-                  <a href={discoverUrl}>Discover products</a>
-                </Button>
-              </>
+              search.subscriptions_only ? (
+                <>
+                  <PlaceholderImage src={placeholder} />
+                  <h2 className="library-header">You don't have any active subscriptions.</h2>
+                  Subscriptions you buy will show up here.
+                </>
+              ) : (
+                <>
+                  <PlaceholderImage src={placeholder} />
+                  <h2 className="library-header">You haven't bought anything... yet!</h2>
+                  Once you do, it'll show up here so you can download, watch, read, or listen to all your purchases.
+                  <Button asChild color="accent">
+                    <a href={discoverUrl}>Discover products</a>
+                  </Button>
+                </>
+              )
             ) : (
               <>
                 <h2 className="library-header">You've archived all your products.</h2>
@@ -393,6 +427,11 @@ export default function LibraryPage() {
                 <>
                   We could not prepare a ZIP file for <strong>{bundleDownload.label}</strong>. Download the products
                   below individually.
+                </>
+              ) : bundleDownload.omits_granted_files ? (
+                <>
+                  Download <strong>{bundleDownload.label}</strong> as one ZIP file. Some files are only available from
+                  the products below.
                 </>
               ) : (
                 <>

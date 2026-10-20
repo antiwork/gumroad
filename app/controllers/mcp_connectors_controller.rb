@@ -19,9 +19,15 @@ class McpConnectorsController < ApplicationController
     }
   }.freeze
 
-  before_action :set_client
+  HELP_ARTICLE_PATH = "355-connect-ai-assistants-to-gumroad"
+  SETUP_GUIDE_URL = "https://gumroad.com/help/article/#{HELP_ARTICLE_PATH}"
+
+  before_action :set_client, except: :index
   before_action :set_body_class
   before_action :set_meta_data
+
+  def index
+  end
 
   def show
   end
@@ -38,9 +44,15 @@ class McpConnectorsController < ApplicationController
     end
 
     def set_meta_data
-      page_url = "#{PROTOCOL}://#{DOMAIN}/#{@client_key}"
-      title = "Gumroad MCP for #{@client[:label]} | Sell digital products"
-      description = @client[:pending_review] ? "The Gumroad connector is submitted for review and is not yet available in Muse. Read the MCP endpoint and OAuth details." : "Connect #{@client[:label]} to Gumroad with MCP. Create digital product drafts, publish products, check sales, and track payouts from your AI chat."
+      if action_name == "index"
+        title = "Gumroad MCP | Sell digital products from your AI assistant"
+        description = "Connect your Gumroad store to an AI assistant with Model Context Protocol. List sales, draft products, publish them, and check payouts from your chat."
+        page_url = "#{PROTOCOL}://#{DOMAIN}/mcp"
+      else
+        page_url = "#{PROTOCOL}://#{DOMAIN}/#{@client_key}"
+        title = "Gumroad MCP for #{@client[:label]} | Sell digital products"
+        description = @client[:pending_review] ? "The Gumroad connector is submitted for review and is not yet available in Muse. Read the MCP endpoint and OAuth details." : "Connect #{@client[:label]} to Gumroad with MCP. Create digital product drafts, publish products, check sales, and track payouts from your AI chat."
+      end
 
       set_meta_tag(title:)
       set_meta_tag(name: "description", content: description)

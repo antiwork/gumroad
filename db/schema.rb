@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_17_000002) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_19_000000) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -1567,6 +1567,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_17_000002) do
     t.integer "minimum_amount_cents"
     t.bigint "flags", default: 0, null: false
     t.boolean "existing_customers_only", default: false, null: false
+    t.boolean "new_customers_only", default: false, null: false
     t.json "ownership_duration_tiers"
     t.boolean "auto_apply", default: false, null: false
     t.string "sale_label"
@@ -1850,6 +1851,14 @@ create_table "ping_deliveries", charset: "utf8mb4", collation: "utf8mb4_unicode_
     t.bigint "total_usd_cents", default: 0
     t.index ["expired"], name: "index_product_cached_values_on_expired"
     t.index ["product_id"], name: "index_product_cached_values_on_product_id"
+  end
+
+  create_table "product_file_download_grants", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "url_redirect_id", null: false
+    t.bigint "product_file_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["url_redirect_id", "product_file_id"], name: "index_product_file_download_grants_on_redirect_and_file", unique: true
   end
 
   create_table "product_files", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|

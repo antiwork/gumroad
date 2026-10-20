@@ -51,11 +51,18 @@ class Api::V2::MuseController < Api::V2::BaseController
       return head :method_not_allowed
     end
 
-    result = Muse::Mcp.new(user: current_resource_owner, token: doorkeeper_token).handle(@rpc_body)
+    mcp = Muse::Mcp.new(
+      user: current_resource_owner,
+      token: doorkeeper_token,
+      connector: params[:client],
+      protocol_version_header: request.headers[Muse::Mcp::VERSION_HEADER],
+      method_header: request.headers[Muse::Mcp::METHOD_HEADER],
+      name_header: request.headers[Muse::Mcp::NAME_HEADER]
+    )
+    result = mcp.handle(@rpc_body)
     return head :accepted if result.nil?
 
-    status = result.is_a?(Hash) && result[:error] ? rpc_http_status(result[:error][:code]) : :ok
-    render json: result, status:
+    render json: result, status: rpc_http_status(result, era: mcp.era)
   end
 
   private
@@ -80,9 +87,13 @@ class Api::V2::MuseController < Api::V2::BaseController
       render json: { jsonrpc: "2.0", id: nil, error: { code: -32700, message: "Parse error" } }, status: :bad_request
     end
 
-    def rpc_http_status(code)
-      case code
-      when -32700, -32600 then :bad_request
+    def rpc_http_status(result, era:)
+      return :ok unless result.is_a?(Hash) && result[:error]
+
+      case result[:error][:code]
+      when -32700, -32600, Muse::Mcp::HEADER_MISMATCH, Muse::Mcp::UNSUPPORTED_PROTOCOL_VERSION then :bad_request
+      # Only a modern client is told at the transport level that the method does not exist.
+      when -32601 then era == :modern ? :not_found : :ok
       # Method and parameter errors need a successful transport to reach the RPC caller.
       else :ok
       end

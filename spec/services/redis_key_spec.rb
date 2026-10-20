@@ -39,4 +39,10 @@ describe RedisKey do
       expect(described_class.team_invitation_burst_reported(123)).to eq("team_invitation_burst_reported:123")
     end
   end
+
+  describe ".mcp_protocol_requests" do
+    it "returns a key per day" do
+      expect(described_class.mcp_protocol_requests(Date.new(2026, 10, 20))).to eq("mcp:protocol_requests:2026-10-20")
+    end
+  end
 end

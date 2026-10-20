@@ -5439,6 +5439,7 @@ class LinksControllerShowTest < ActionController::TestCase
   end
 
   test "GET show uses the URL code in checkout redirect when URL code has better discount than default code" do
+    product.update!(price_cents: 10_00)
     product.update!(default_offer_code: create_offer_code(products: [product], code: "DEFAULT10", amount_cents: 200, currency_type: product.price_currency_type))
     url_offer_code = create_offer_code(products: [product], code: "URL10", amount_cents: 400, currency_type: product.price_currency_type)
 
@@ -5450,9 +5451,23 @@ class LinksControllerShowTest < ActionController::TestCase
   end
 
   test "GET show uses the default code in checkout redirect when default code has better discount than URL code" do
+    product.update!(price_cents: 10_00)
     default_offer_code = create_offer_code(products: [product], code: "DEFAULT10", amount_cents: 400, currency_type: product.price_currency_type)
     product.update!(default_offer_code:)
     url_offer_code = create_offer_code(products: [product], code: "URL10", amount_cents: 200, currency_type: product.price_currency_type)
+
+    get :show, params: { id: product.to_param, wanted: "true", code: url_offer_code.code }
+
+    assert_response :redirect
+    query_params = Rack::Utils.parse_query(URI.parse(response.location).query)
+    assert_equal default_offer_code.code, query_params["code"]
+  end
+
+  test "GET show keeps the default code in checkout redirect when both codes take off the whole price" do
+    product.update!(price_cents: 1_00)
+    default_offer_code = create_offer_code(products: [product], code: "DEFAULT10", amount_cents: 200, currency_type: product.price_currency_type)
+    product.update!(default_offer_code:)
+    url_offer_code = create_offer_code(products: [product], code: "URL10", amount_cents: 400, currency_type: product.price_currency_type)
 
     get :show, params: { id: product.to_param, wanted: "true", code: url_offer_code.code }
 

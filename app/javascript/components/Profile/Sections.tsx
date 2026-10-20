@@ -21,6 +21,7 @@ import { Product, Props as ProductProps } from "$app/components/Product";
 import { CardGrid, useSearchReducer } from "$app/components/Product/CardGrid";
 import { CoffeeProduct } from "$app/components/Product/CoffeeProduct";
 import { PriceSelection } from "$app/components/Product/ConfigurationSelector";
+import { useSelectionDiscounts } from "$app/components/Product/selectionDiscounts";
 import { FollowForm } from "$app/components/Profile/FollowForm";
 import { CardContent } from "$app/components/ui/Card";
 import { Input } from "$app/components/ui/Input";
@@ -159,13 +160,22 @@ export const FeaturedProductView = ({ props }: { props: ProductProps }) => {
     callStartTime: null,
     payInInstallments: false,
   });
+  const { discountCode, saleLabel, selectionDiscountCode, quote } = useSelectionDiscounts({
+    product: props.product,
+    discountCode: props.discount_code,
+    saleLabel: props.sale_label ?? null,
+    initial: props.selection_discounts,
+    selection,
+  });
   return props.product.native_type === "coffee" ? (
     <CoffeeProduct {...props} />
   ) : (
     <Product
       {...props}
-      discountCode={props.discount_code}
-      saleLabel={props.sale_label ?? null}
+      discountCode={discountCode}
+      saleLabel={saleLabel}
+      selectionDiscountCode={selectionDiscountCode}
+      quote={quote}
       selection={selection}
       setSelection={setSelection}
       scaleLongTitle={false}

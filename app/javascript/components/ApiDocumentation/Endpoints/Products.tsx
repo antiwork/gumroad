@@ -46,7 +46,7 @@ const CreateProductResponseFields = () => (
         name: "warning",
         type: "string",
         description:
-          "Explains why the product was saved as a draft instead of being published (for example, an unconfirmed email address; publish it later with POST /v2/products/:id/enable), or that a post-publish step failed. Check the product's published field for its actual state.",
+          "Explains why the product was saved as a draft instead of being published (for example, an unconfirmed email address; publish it later with PUT /v2/products/:id/enable), or that a post-publish step failed. Check the product's published field for its actual state.",
         condition: "present when publishing did not fully succeed",
       },
     ])}
@@ -429,7 +429,7 @@ export const CreateProduct = () => (
         Create a new product. The product is published immediately unless you pass <code>draft=true</code> or{" "}
         <code>published=false</code>. If publishing is blocked (for example, your email address is not confirmed or no
         payout method is set up), the product is saved as a draft and the response includes a <code>warning</code>{" "}
-        explaining why; publish it later with <code>POST /v2/products/:id/enable</code>. Requires the{" "}
+        explaining why; publish it later with <code>PUT /v2/products/:id/enable</code>. Requires the{" "}
         <code>edit_products</code> or <code>account</code> scope.
       </>
     }

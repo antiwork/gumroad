@@ -82,4 +82,10 @@ describe CreateLicensesForExistingCustomersWorker do
       expect(@product.licenses.map(&:purchase_id)).not_to include(free_purchase.id)
     end
   end
+
+  describe "job options" do
+    it "runs one backfill per product at a time so overlapping jobs cannot mint two keys for one purchase" do
+      expect(described_class.get_sidekiq_options["lock"]).to eq(:until_executed)
+    end
+  end
 end

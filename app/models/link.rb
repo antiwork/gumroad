@@ -304,10 +304,14 @@ class Link < ApplicationRecord
   enum :subscription_duration, %i[monthly yearly quarterly biannually every_two_years]
   enum :purchase_type, %i[buy_only rent_only buy_and_rent] # Indicates whether this product can be bought or rented or both.
 
+  # Enum assignment raises on an unknown value. Keep the product's current mode instead of
+  # coercing to buy_only: the coercion converts the product and delete_unused_prices then
+  # drops its rental price, silently and with no editor control to undo it.
   def purchase_type=(value)
+    current = purchase_type
     super(value)
   rescue ArgumentError
-    super(:buy_only)
+    super(current || :buy_only)
   end
 
   def price_currency_type=(value)
@@ -1197,9 +1201,10 @@ class Link < ApplicationRecord
 
     # In-memory checks only: scope detachment (default_offer_code_detached?) costs a query per
     # product on card pages, and OfferCode#repair_detached_default_discounts clears those defaults.
-    # An existing-customers-only default cannot price the page for an unknown buyer, so the sale
-    # takes over here; BestOfferCodeService still tries it first for a buyer who qualifies.
-    redeemable = !explicit.deleted? && explicit.code.present? && !explicit.inactive? && !explicit.existing_customers_only? &&
+    # An existing-customers-only or new-customers-only default cannot price the page for an unknown
+    # buyer, so the sale takes over here; BestOfferCodeService still weighs it against the sale for a
+    # buyer who qualifies.
+    redeemable = !explicit.deleted? && explicit.code.present? && !explicit.inactive? && !explicit.existing_customers_only? && !explicit.new_customers_only? &&
                  explicit.is_currency_valid?(self) && default_offer_code_uses_left?(explicit)
     redeemable ? explicit : auto_code
   end
@@ -1548,10 +1553,12 @@ class Link < ApplicationRecord
     not_purchasing_power_parity_disabled? && user.purchasing_power_parity_enabled?
   end
 
-  def cart_item(params)
+  # prebuilt_options lets a caller pricing several options pass the list it already built. It is
+  # positional because callers pass params as bare keywords.
+  def cart_item(params, prebuilt_options = nil)
     attrs = {}
     attrs[:rental] = !!params[:rent] && purchase_type != "buy_only"
-    attrs[:options] = options
+    attrs[:options] = prebuilt_options || options
     requested = attrs[:options].find { |o| o[:id] == params[:option] }
     # A closed tier reports quantity 0. Selecting it here makes checkout add a zero-quantity item.
     requested = nil if requested && Variant.find_by_external_id(requested[:id])&.closed_to_new_buyers?

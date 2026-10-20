@@ -4090,6 +4090,76 @@ describe Purchase::CreateService, :vcr do
       expect(purchase.purchase_offer_code_discount).to be_nil
     end
 
+    it "applies a new-customers-only discount for an authenticated buyer with no purchase history" do
+      offer_code = create(:offer_code,
+                          products: [product],
+                          new_customers_only: true,
+                          amount_cents: nil,
+                          amount_percentage: 100)
+      free_params = base_params.deep_dup
+
+      free_params[:purchase].merge!(
+        email: buyer.email,
+        discount_code: offer_code.code,
+        perceived_price_cents: 0,
+      )
+
+      purchase, _ = Purchase::CreateService.new(product:, params: free_params, buyer:).perform
+
+      expect(purchase).to be_successful
+      expect(purchase.price_cents).to eq 0
+      expect(purchase.offer_code).to eq offer_code
+      expect(purchase.purchase_offer_code_discount.offer_code_amount).to eq 100
+      expect(purchase.purchase_offer_code_discount.offer_code_is_percent).to eq true
+    end
+
+    it "rejects a new-customers-only discount for an authenticated buyer who has already purchased" do
+      prior_product = create(:product, user:, price_cents: 100)
+      create(:purchase, purchaser: buyer, link: prior_product, seller: user, purchase_state: "not_charged",
+                        price_cents: prior_product.price_cents)
+      offer_code = create(:offer_code,
+                          products: [product],
+                          new_customers_only: true,
+                          amount_cents: nil,
+                          amount_percentage: 100)
+      free_params = base_params.deep_dup
+
+      free_params[:purchase].merge!(
+        email: buyer.email,
+        discount_code: offer_code.code,
+        perceived_price_cents: 0,
+      )
+
+      purchase, error = Purchase::CreateService.new(product:, params: free_params, buyer:).perform
+
+      expect(error).to eq "Sorry, this discount code is only for new customers."
+      expect(purchase.purchase_state).to eq "failed"
+      expect(purchase.error_code).to eq "offer_code_invalid"
+      expect(purchase.offer_code).to be_nil
+      expect(purchase.purchase_offer_code_discount).to be_nil
+    end
+
+    it "rejects a new-customers-only discount for an unidentified guest" do
+      offer_code = create(:offer_code,
+                          products: [product],
+                          new_customers_only: true,
+                          amount_cents: nil,
+                          amount_percentage: 100)
+      free_params = base_params.deep_dup
+
+      free_params[:purchase].merge!(
+        discount_code: offer_code.code,
+        perceived_price_cents: 0,
+      )
+
+      purchase, error = Purchase::CreateService.new(product:, params: free_params).perform
+
+      expect(error).to eq "Sorry, this discount code is only for new customers."
+      expect(purchase.purchase_state).to eq "failed"
+      expect(purchase.error_code).to eq "offer_code_invalid"
+      expect(purchase.offer_code).to be_nil
+    end
+
     it "allows purchases with offer codes in different currencies" do
       %i[eur gbp aud inr cad hkd sgd twd nzd].each do |currency|
         product.update!(price_currency_type: currency, price_cents: 15_000)

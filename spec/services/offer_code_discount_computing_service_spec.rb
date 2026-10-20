@@ -17,6 +17,15 @@ describe OfferCodeDiscountComputingService do
     }
   end
 
+  it "leaves out a product whose currency no longer matches a fixed code" do
+    fixed = create(:offer_code, user: seller, products: [product, product2], amount_cents: 500, amount_percentage: nil, currency_type: "usd")
+    product2.update!(price_currency_type: "eur", price_range: "20")
+
+    result = OfferCodeDiscountComputingService.new(fixed.code, products_data).process
+
+    expect(result[:products_data].keys).to eq([product.unique_permalink])
+  end
+
   it "reads quantities from each entry, not from the caller's choice of hash key" do
     index_keyed = {
       "0" => { quantity: "3", permalink: product.unique_permalink },
@@ -922,6 +931,45 @@ describe OfferCodeDiscountComputingService do
 
       expect(result[:error_code]).to be_nil
       expect(result[:products_data][product.unique_permalink][:discount]).to include(type: "percent", percents: 30)
+    end
+  end
+
+  describe "new-customers-only offer codes" do
+    let(:buyer) { create(:user) }
+    let(:new_customers_code) do
+      create(:offer_code,
+             user: seller,
+             products: [product],
+             new_customers_only: true,
+             amount_cents: nil,
+             amount_percentage: 25,
+             currency_type: nil)
+    end
+    let(:single_product_data) do
+      { product.unique_permalink => { quantity: "1", permalink: product.unique_permalink } }
+    end
+
+    it "applies the discount for a buyer with no purchase history" do
+      result = OfferCodeDiscountComputingService.new(new_customers_code.code, single_product_data, buyer:).process
+
+      expect(result[:error_code]).to be_nil
+      expect(result[:products_data][product.unique_permalink][:discount]).to include(type: "percent", percents: 25)
+    end
+
+    it "rejects redemption with :not_new_customer when the buyer already bought from the seller" do
+      other_product = create(:product, user: seller, price_cents: 5_00)
+      create(:purchase, purchaser: buyer, link: other_product, seller:, price_cents: 0)
+
+      result = OfferCodeDiscountComputingService.new(new_customers_code.code, single_product_data, buyer:).process
+
+      expect(result[:error_code]).to eq(:not_new_customer)
+      expect(result[:products_data]).to be_empty
+    end
+
+    it "rejects redemption with :not_new_customer when the buyer is unidentified" do
+      result = OfferCodeDiscountComputingService.new(new_customers_code.code, single_product_data, buyer: nil).process
+
+      expect(result[:error_code]).to eq(:not_new_customer)
     end
   end
 

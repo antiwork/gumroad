@@ -2,7 +2,10 @@
 
 class CreateLicensesForExistingCustomersWorker
   include Sidekiq::Job
-  sidekiq_options retry: 5, queue: :default
+
+  # One backfill per product at a time: a save that adds license-key blocks to several pages queues
+  # one job per page, and overlapping runs would mint a second key for a purchase that already has one.
+  sidekiq_options retry: 5, queue: :default, lock: :until_executed
 
   def perform(product_id)
     product = Link.find(product_id)

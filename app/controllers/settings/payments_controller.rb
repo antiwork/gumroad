@@ -146,8 +146,8 @@ class Settings::PaymentsController < Settings::BaseController
       elsif params.dig(:bank_account, :account_number).present?
         "bank account"
       end
-      if new_stripe_payout_type && current_seller.stripe_account.blank? && current_seller.stripe_connect_account.present?
-        # No managed Stripe account is created next to a Connect row, and saving this would stop the PayPal rail.
+      if new_stripe_payout_type && current_seller.stripe_account.blank? && current_seller.stripe_connect_blocks_managed_account?
+        # No managed Stripe account is created next to this Connect row, and saving this would stop the PayPal rail.
         return redirect_with_error("We can't set up #{new_stripe_payout_type} payouts for your account yet. Your current payout method has not been changed. Please contact support.")
       end
     end
@@ -156,7 +156,7 @@ class Settings::PaymentsController < Settings::BaseController
     # would create the account from that ZIP, it rolls back. Later saves send updates to Stripe and must not roll back.
     create_stripe_account = false
     military_zip_field = nil
-    with_transaction_if(current_seller.stripe_account.blank? && current_seller.stripe_connect_account.blank? && stored_military_zip_field(compliance_info).present?) do
+    with_transaction_if(current_seller.stripe_account.blank? && !current_seller.stripe_connect_blocks_managed_account? && stored_military_zip_field(compliance_info).present?) do
       current_seller.tos_agreements.create!(ip: request.remote_ip)
 
       return unless update_payout_method
@@ -187,7 +187,7 @@ class Settings::PaymentsController < Settings::BaseController
       # record a false audit entry.
       log_payout_settings_update_by_non_owner if payout_preference_params.to_h.any?
 
-      create_stripe_account = current_seller.active_bank_account && current_seller.native_payouts_supported? && current_seller.stripe_connect_account.blank? && !StripeMerchantAccountManager.blocks_new_managed_account?(current_seller)
+      create_stripe_account = current_seller.active_bank_account && current_seller.native_payouts_supported? && !current_seller.stripe_connect_blocks_managed_account? && !StripeMerchantAccountManager.blocks_new_managed_account?(current_seller)
       if create_stripe_account
         military_zip_field = stored_military_zip_field(current_seller.fetch_or_build_user_compliance_info)
         raise ActiveRecord::Rollback if military_zip_field

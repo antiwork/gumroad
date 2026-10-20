@@ -695,6 +695,7 @@ describe SettingsPresenter do
           has_connected_stripe: false,
           stripe_connect_account_id: nil,
           stripe_connect_routing_active: false,
+          blocks_managed_account: false,
           stripe_disconnect_allowed: true,
           supported_countries_help_text: "This feature is available in <a href='https://stripe.com/en-in/global'>all countries where Stripe operates</a>, except India, Indonesia, Malaysia, Mexico, Philippines, and Thailand.",
         },
@@ -1033,10 +1034,22 @@ describe SettingsPresenter do
                                                                          has_connected_stripe: true,
                                                                          stripe_connect_account_id: stripe_connect_account.charge_processor_merchant_id,
                                                                          stripe_connect_routing_active: false,
+                                                                         blocks_managed_account: true,
                                                                          stripe_disconnect_allowed: true,
                                                                          supported_countries_help_text: "This feature is available in <a href='https://stripe.com/en-in/global'>all countries where Stripe operates</a>, except India, Indonesia, Malaysia, Mexico, Philippines, and Thailand.",
                                                                        },
                                                                      }))
+      end
+
+      it "stops a non-routing Stripe Connect account from blocking a managed account once the rollout is on for the seller" do
+        create(:merchant_account_stripe_connect, user: seller)
+        Feature.activate_user(User::FeatureStatus::MANAGED_ACCOUNT_BESIDE_INACTIVE_CONNECT_FEATURE, seller)
+
+        expect(presenter.payments_props[:stripe_connect]).to include(
+          has_connected_stripe: true,
+          stripe_connect_routing_active: false,
+          blocks_managed_account: false,
+        )
       end
 
       it "includes Stripe verification requests if applicable" do

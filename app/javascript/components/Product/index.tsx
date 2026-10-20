@@ -23,12 +23,14 @@ import { classNames } from "$app/utils/classNames";
 import {
   BuyerLocalCurrencyContext,
   CurrencyCode,
+  findCurrencyByCode,
   formatBuyerLocalOrSetPrice,
   formatPriceCentsWithCurrencySymbol,
 } from "$app/utils/currency";
 import { formatDate } from "$app/utils/date";
 import { formatOrderOfMagnitude } from "$app/utils/formatOrderOfMagnitude";
 import { variantLabel } from "$app/utils/labels";
+import { priceUnitToCents } from "$app/utils/price";
 import { isSingleChargeDuration, renewalReminderNotice } from "$app/utils/recurringPricing";
 import { assertResponseError } from "$app/utils/request";
 import { startTrackingForSeller, trackBuyerCurrencyDisplayView, trackProductEvent } from "$app/utils/user_analytics";
@@ -44,7 +46,7 @@ import {
   CartItemTitle,
 } from "$app/components/CartItemList";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
-import { useDomains } from "$app/components/DomainSettings";
+import { useAppDomain, useDomains } from "$app/components/DomainSettings";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
 import { PaginationProps } from "$app/components/Pagination";
@@ -72,6 +74,7 @@ import { getBundleComparisonPriceCents, getStandalonePrice } from "$app/componen
 import { PurchaseButton } from "$app/components/Product/PurchaseButton";
 import { initialOptionId } from "$app/components/Product/purchaseReadiness";
 import { Ribbon } from "$app/components/Product/Ribbon";
+import type { SelectionDiscounts, SelectionQuote } from "$app/components/Product/selectionDiscounts";
 import { ShareSection } from "$app/components/Product/ShareSection";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
 import { InstallmentPlan } from "$app/components/ProductEdit/state";
@@ -202,7 +205,8 @@ export type ProductDiscount =
         | "invalid_offer"
         | "inactive"
         | "unmet_minimum_purchase_quantity"
-        | "not_existing_customer";
+        | "not_existing_customer"
+        | "not_new_customer";
     }
   | { valid: true; code: string; discount: Discount }
   | null;
@@ -264,7 +268,8 @@ export const useSelectionFromUrl = (product: Product) => {
       price: {
         value:
           parsedPrice >= 0
-            ? parsedPrice * 100
+            ? // Whole cents, scaled like the server's checkout link: 19.99 * 100 is 1998.9999999999998.
+              priceUnitToCents(parsedPrice, findCurrencyByCode(product.currency_code).isSingleUnit)
             : searchParams.has("price")
               ? null
               : (product.pwyw?.default_price_cents ?? null),
@@ -281,6 +286,7 @@ export type Props = {
   purchase: Purchase | null;
   discount_code: ProductDiscount | null;
   sale_label?: string | null;
+  selection_discounts?: SelectionDiscounts | null;
   wishlists: WishlistForProduct[];
 };
 
@@ -292,6 +298,8 @@ export const Product = ({
   purchase,
   discountCode: initialDiscountCode,
   saleLabel,
+  selectionDiscountCode,
+  quote,
   ctaLabel,
   selection,
   setSelection,
@@ -307,6 +315,10 @@ export const Product = ({
   discountCode?: ProductDiscount | null;
   // The seller's sale label; only sent when the displayed discount is their auto-applied code.
   saleLabel?: string | null | undefined;
+  // The server's code for each option and for renting, when they get different ones; see useSelectionDiscounts.
+  selectionDiscountCode?: ((optionId: string | null, rent: boolean) => ProductDiscount | null) | undefined;
+  // Whether the codes above were quoted for the current selection; the buy buttons wait until they are.
+  quote?: SelectionQuote | undefined;
   ctaLabel?: string | undefined;
   selection: PriceSelection;
   setSelection?: React.Dispatch<React.SetStateAction<PriceSelection>>;
@@ -322,11 +334,12 @@ export const Product = ({
   scaleLongTitle?: boolean;
 }) => {
   const notForSaleMessage = getNotForSaleMessage(product);
-  const [discountCode, setDiscountCode] = React.useState(initialDiscountCode);
-
-  React.useEffect(() => {
-    setDiscountCode(initialDiscountCode);
-  }, [initialDiscountCode]);
+  // Kept by code, so another option's quote for an expired code cannot bring it back.
+  const [expiredCodes, setExpiredCodes] = React.useState<string[]>([]);
+  const isExpired = (code: ProductDiscount | null | undefined) => !!code?.valid && expiredCodes.includes(code.code);
+  const discountCode: ProductDiscount | null | undefined = isExpired(initialDiscountCode)
+    ? { valid: false, error_code: "inactive" }
+    : initialDiscountCode;
 
   const discount = discountCode?.valid ? discountCode.discount : null;
   const renewalNotice =
@@ -342,6 +355,9 @@ export const Product = ({
   }, [maxQuantity, selection.quantity]);
 
   const addThirdPartyAnalytics = useAddThirdPartyAnalytics();
+
+  const loggedInUser = useLoggedInUser();
+  const appDomain = useAppDomain();
 
   const { searchParams } = new URL(useOriginalLocation());
   useRunOnce(() => {
@@ -391,16 +407,41 @@ export const Product = ({
   // applySelection already drops a code whose minimum quantity or amount this selection misses.
   const codeDiscounts = (attributes: typeof selectionAttributes) =>
     !attributes.pppDiscounted && attributes.discountedPriceCents < attributes.priceCents;
+  const sameCode = (left: ProductDiscount | null, right: ProductDiscount | null) =>
+    !!left?.valid && !!right?.valid && left.code === right.code;
+  // The code that prices a choice the buyer could make, such as another option row or the rent tab.
+  const rowDiscount = (rowSelection: PriceSelection) => {
+    if (!selectionDiscountCode || (rowSelection.optionId === null && product.options.length > 0)) return discount;
+    const rowCode = selectionDiscountCode(rowSelection.optionId, rowSelection.rent);
+    return rowCode?.valid && !isExpired(rowCode) ? withConfiguredOncePerCartAmount(rowCode.discount) : null;
+  };
+  // When another visible option gets a different code, the code's copy names the picked option it covers.
+  const discountScope =
+    selectedOption &&
+    selectionDiscountCode &&
+    product.options.some(
+      (option) =>
+        option.id !== selectedOption.id &&
+        !(product.hide_sold_out_variants && option.quantity_left === 0) &&
+        !sameCode(selectionDiscountCode(option.id, selection.rent), discountCode ?? null),
+    )
+      ? ` ${selectedOption.name}`
+      : "";
   // With no option picked, each visible option shows its own price, so any discounted one earns the label.
   const showSaleLabel =
     !!saleLabel &&
-    discountCode === initialDiscountCode &&
     !!discountCode?.valid &&
     (product.options.length > 0 && selectedOption === null
       ? product.options.some(
           (option) =>
             !(product.hide_sold_out_variants && option.quantity_left === 0) &&
-            codeDiscounts(applySelection(product, discount, { ...selection, optionId: option.id })),
+            (!selectionDiscountCode || sameCode(selectionDiscountCode(option.id, selection.rent), discountCode)) &&
+            codeDiscounts(
+              applySelection(product, rowDiscount({ ...selection, optionId: option.id }), {
+                ...selection,
+                optionId: option.id,
+              }),
+            ),
         )
       : codeDiscounts(selectionAttributes));
 
@@ -420,13 +461,17 @@ export const Product = ({
         className={classNames(
           "flex items-center gap-2 border-b border-border bg-accent-with-text px-6 py-3 font-bold text-accent-foreground",
           product.covers.length === 0 && "lg:rounded-tr-[calc(var(--radius)_-_var(--border-width))]",
+          // A long option name moves to its own line instead of squeezing the label mid-word.
+          discountScope && "flex-wrap",
         )}
       >
         <DiscountIcon pack="filled" className="size-5 shrink-0" aria-hidden="true" />
         <span className="min-w-0 wrap-break-word" data-testid="sale-label">
           {saleLabel}
         </span>
-        <span className="ml-auto shrink-0">{formatDiscountAmount(discount, buyerLocalContextFor(product))} off</span>
+        <span className={classNames("ml-auto", discountScope ? "min-w-0 text-right wrap-break-word" : "shrink-0")}>
+          {formatDiscountAmount(discount, buyerLocalContextFor(product))} off{discountScope}
+        </span>
       </div>
     ) : null;
   const priceTag = showPrice ? (
@@ -452,10 +497,129 @@ export const Product = ({
     />
   ) : null;
 
+  // A returning buyer's access card lives in the details, so it stays ahead of "Purchase again" for them.
+  const showsExistingPurchase = !!purchase?.should_show_receipt;
+  const details = (
+    <div className="[grid-area:details] lg:border-r">
+      {sellerByline || hasRatings ? (
+        <section className="grid grid-cols-1 gap-[1px] border-t border-border p-0 sm:grid-cols-[minmax(0,1fr)_auto]">
+          {sellerByline ? (
+            <div
+              className={classNames(
+                "flex min-w-0 flex-wrap items-center gap-2 px-6 py-4 outline outline-offset-0 outline-border",
+                !hasRatings && "sm:col-span-full",
+              )}
+            >
+              {product.collaborating_user ? (
+                <>
+                  {sellerByline} with{" "}
+                  <AuthorByline
+                    name={product.collaborating_user.name}
+                    profileUrl={product.collaborating_user.profile_url}
+                    avatarUrl={product.collaborating_user.avatar_url}
+                  />
+                </>
+              ) : (
+                sellerByline
+              )}
+            </div>
+          ) : null}
+          {product.ratings != null && hasRatings ? (
+            <div
+              className={classNames(
+                "flex items-center px-6 py-4 outline outline-offset-0 outline-border",
+                !sellerByline && "sm:col-span-full",
+              )}
+            >
+              <RatingsSummary ratings={product.ratings} />
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+      {purchase !== null ? (
+        <ExistingPurchaseCard
+          purchase={purchase}
+          permalink={product.permalink}
+          isPreorder={product.preorder !== null}
+          isBundle={isBundle}
+          customViewContentButtonText={product.custom_view_content_button_text}
+        />
+      ) : null}
+      {isBundle ? (
+        <section className="grid gap-4 border-t border-border p-6">
+          <h2>This bundle contains...</h2>
+          <CartItemList>
+            {product.bundle_products.map((bundleProduct) => {
+              const price =
+                bundleProduct.currency_code === product.currency_code
+                  ? formatBuyerLocalOrSetPrice(bundleProduct.price, {
+                      currencyCode: product.currency_code,
+                      buyerCurrency: product.buyer_currency,
+                      buyerLocalCurrencyRate: product.buyer_local_currency_rate,
+                      buyerLocalCurrencySubunitToUnit: product.buyer_local_currency_subunit_to_unit,
+                    })
+                  : formatPriceCentsWithCurrencySymbol(bundleProduct.currency_code, bundleProduct.price, {
+                      symbolFormat: "long",
+                    });
+              return (
+                <CartItem key={bundleProduct.id} isBundleItem>
+                  <CartItemMedia className="h-16 w-16 shrink-0 sm:h-28 sm:w-28">
+                    <Thumbnail url={bundleProduct.thumbnail_url} nativeType={bundleProduct.native_type} />
+                  </CartItemMedia>
+                  {/* Checkout's floor: without it a wide price squeezes this to one letter/line. */}
+                  <CartItemMain className="min-h-16 min-w-2/5 sm:h-28">
+                    <CartItemTitle asChild>
+                      <a href={bundleProduct.url}>
+                        <h4 className="font-bold wrap-break-word">{bundleProduct.name}</h4>
+                      </a>
+                    </CartItemTitle>
+                    {bundleProduct.ratings ? (
+                      <div className="line-clamp-1 flex shrink-0 items-center gap-1" aria-label="Rating">
+                        <Star pack="filled" className="size-5" />
+                        {`${bundleProduct.ratings.average.toFixed(1)} (${bundleProduct.ratings.count})`}
+                      </div>
+                    ) : null}
+                    <span className="sr-only">Qty: {bundleProduct.quantity}</span>
+                    {bundleProduct.variant ? (
+                      <CartItemFooter>
+                        <span className="line-clamp-1">
+                          <strong>{variantLabel(bundleProduct.native_type)}:</strong> {bundleProduct.variant}
+                        </span>
+                      </CartItemFooter>
+                    ) : null}
+                  </CartItemMain>
+                  <CartItemEnd className="max-w-1/2 shrink-0 flex-row items-start gap-4 p-4 text-right">
+                    <span className="current-price whitespace-nowrap" aria-label="Price">
+                      {comparisonPriceCents !== null && discountedPriceCents < comparisonPriceCents ? (
+                        <s>{price}</s>
+                      ) : (
+                        price
+                      )}
+                    </span>
+                  </CartItemEnd>
+                </CartItem>
+              );
+            })}
+          </CartItemList>
+        </section>
+      ) : null}
+      <section className="border-t border-border p-6">
+        <CollapsibleDescription>
+          <LazyDescription html={product.description_html} publicFiles={product.public_files} />
+        </CollapsibleDescription>
+      </section>
+    </div>
+  );
+
   return (
     <article
       className={classNames(
-        "relative grid rounded border border-border bg-background [grid-template-areas:'covers'_'title'_'price'_'details'_'controls'] lg:grid-cols-[2fr_1fr]",
+        // The article's DOM order is the stacked order so focus follows what the narrow layout draws;
+        // the named areas below put both back in the desktop columns.
+        "relative grid rounded border border-border bg-background lg:grid-cols-[2fr_1fr]",
+        showsExistingPurchase
+          ? "[grid-template-areas:'covers'_'title'_'price'_'details'_'controls']"
+          : "[grid-template-areas:'covers'_'title'_'price'_'controls'_'details']",
         // The title spans two rows, so a tall title stretches the controls' row instead of the price row.
         // In one shared row, the controls would start below the title and leave a gap under the price.
         saleBanner || priceTag
@@ -490,115 +654,7 @@ export const Product = ({
           {priceTag ? <div className="px-6 py-4 lg:pt-6 lg:pb-0">{priceTag}</div> : null}
         </section>
       ) : null}
-      <div className="[grid-area:details] lg:border-r">
-        {sellerByline || hasRatings ? (
-          <section className="grid grid-cols-1 gap-[1px] border-t border-border p-0 sm:grid-cols-[minmax(0,1fr)_auto]">
-            {sellerByline ? (
-              <div
-                className={classNames(
-                  "flex min-w-0 flex-wrap items-center gap-2 px-6 py-4 outline outline-offset-0 outline-border",
-                  !hasRatings && "sm:col-span-full",
-                )}
-              >
-                {product.collaborating_user ? (
-                  <>
-                    {sellerByline} with{" "}
-                    <AuthorByline
-                      name={product.collaborating_user.name}
-                      profileUrl={product.collaborating_user.profile_url}
-                      avatarUrl={product.collaborating_user.avatar_url}
-                    />
-                  </>
-                ) : (
-                  sellerByline
-                )}
-              </div>
-            ) : null}
-            {product.ratings != null && hasRatings ? (
-              <div
-                className={classNames(
-                  "flex items-center px-6 py-4 outline outline-offset-0 outline-border",
-                  !sellerByline && "sm:col-span-full",
-                )}
-              >
-                <RatingsSummary ratings={product.ratings} />
-              </div>
-            ) : null}
-          </section>
-        ) : null}
-        {purchase !== null ? (
-          <ExistingPurchaseCard
-            purchase={purchase}
-            permalink={product.permalink}
-            isPreorder={product.preorder !== null}
-            isBundle={isBundle}
-            customViewContentButtonText={product.custom_view_content_button_text}
-          />
-        ) : null}
-        {isBundle ? (
-          <section className="grid gap-4 border-t border-border p-6">
-            <h2>This bundle contains...</h2>
-            <CartItemList>
-              {product.bundle_products.map((bundleProduct) => {
-                const price =
-                  bundleProduct.currency_code === product.currency_code
-                    ? formatBuyerLocalOrSetPrice(bundleProduct.price, {
-                        currencyCode: product.currency_code,
-                        buyerCurrency: product.buyer_currency,
-                        buyerLocalCurrencyRate: product.buyer_local_currency_rate,
-                        buyerLocalCurrencySubunitToUnit: product.buyer_local_currency_subunit_to_unit,
-                      })
-                    : formatPriceCentsWithCurrencySymbol(bundleProduct.currency_code, bundleProduct.price, {
-                        symbolFormat: "long",
-                      });
-                return (
-                  <CartItem key={bundleProduct.id} isBundleItem>
-                    <CartItemMedia className="h-16 w-16 shrink-0 sm:h-28 sm:w-28">
-                      <Thumbnail url={bundleProduct.thumbnail_url} nativeType={bundleProduct.native_type} />
-                    </CartItemMedia>
-                    {/* Checkout's floor: without it a wide price squeezes this to one letter/line. */}
-                    <CartItemMain className="min-h-16 min-w-2/5 sm:h-28">
-                      <CartItemTitle asChild>
-                        <a href={bundleProduct.url}>
-                          <h4 className="font-bold wrap-break-word">{bundleProduct.name}</h4>
-                        </a>
-                      </CartItemTitle>
-                      {bundleProduct.ratings ? (
-                        <div className="line-clamp-1 flex shrink-0 items-center gap-1" aria-label="Rating">
-                          <Star pack="filled" className="size-5" />
-                          {`${bundleProduct.ratings.average.toFixed(1)} (${bundleProduct.ratings.count})`}
-                        </div>
-                      ) : null}
-                      <span className="sr-only">Qty: {bundleProduct.quantity}</span>
-                      {bundleProduct.variant ? (
-                        <CartItemFooter>
-                          <span className="line-clamp-1">
-                            <strong>{variantLabel(bundleProduct.native_type)}:</strong> {bundleProduct.variant}
-                          </span>
-                        </CartItemFooter>
-                      ) : null}
-                    </CartItemMain>
-                    <CartItemEnd className="max-w-1/2 shrink-0 flex-row items-start gap-4 p-4 text-right">
-                      <span className="current-price whitespace-nowrap" aria-label="Price">
-                        {comparisonPriceCents !== null && discountedPriceCents < comparisonPriceCents ? (
-                          <s>{price}</s>
-                        ) : (
-                          price
-                        )}
-                      </span>
-                    </CartItemEnd>
-                  </CartItem>
-                );
-              })}
-            </CartItemList>
-          </section>
-        ) : null}
-        <section className="border-t border-border p-6">
-          <CollapsibleDescription>
-            <LazyDescription html={product.description_html} publicFiles={product.public_files} />
-          </CollapsibleDescription>
-        </section>
-      </div>
+      {showsExistingPurchase ? details : null}
       <section className="[grid-area:controls]">
         <section className="grid gap-4 border-t p-6 lg:border-t-0">
           {notForSaleMessage ? (
@@ -629,9 +685,9 @@ export const Product = ({
                         <div>Applies when you buy {discountCode.discount.minimum_quantity} or more.</div>
                       ) : null
                     ) : discountCode.discount.minimum_quantity ? (
-                      `Get ${formatDiscountAmount(discountCode.discount, buyerLocalContextFor(product))} off when you buy ${discountCode.discount.minimum_quantity} or more (Code ${discountCode.code.toUpperCase()})`
+                      `Get ${formatDiscountAmount(discountCode.discount, buyerLocalContextFor(product))} off${discountScope} when you buy ${discountCode.discount.minimum_quantity} or more (Code ${discountCode.code.toUpperCase()})`
                     ) : (
-                      `${formatDiscountAmount(discountCode.discount, buyerLocalContextFor(product))} off will be applied at checkout (Code ${discountCode.code.toUpperCase()})`
+                      `${formatDiscountAmount(discountCode.discount, buyerLocalContextFor(product))} off${discountScope} will be applied at checkout (Code ${discountCode.code.toUpperCase()})`
                     )}
                     {discountCode.discount.duration_in_billing_cycles && product.is_recurring_billing ? (
                       <div>This discount will only apply to the first payment of your subscription.</div>
@@ -657,9 +713,11 @@ export const Product = ({
                     ) : null}
                     {discountCode.discount.expires_at ? (
                       <DiscountExpirationCountdown
+                        // The countdown reads its deadline on mount, and another selection can show another code.
+                        key={`${discountCode.code}:${discountCode.discount.expires_at}`}
                         expiresAt={new Date(discountCode.discount.expires_at)}
                         showEndDate={showSaleLabel}
-                        onExpiration={() => setDiscountCode({ valid: false, error_code: "inactive" })}
+                        onExpiration={() => setExpiredCodes((codes) => [...codes, discountCode.code])}
                       />
                     ) : null}
                   </div>
@@ -667,13 +725,27 @@ export const Product = ({
               ) : null
             ) : (
               <Alert role="status" variant="danger">
-                {discountCode.error_code === "sold_out"
-                  ? "Sorry, the discount code you wish to use has reached its usage limit."
-                  : discountCode.error_code === "invalid_offer"
-                    ? "Sorry, the discount code you wish to use is invalid."
-                    : discountCode.error_code === "not_existing_customer"
-                      ? "Sorry, this discount code is only for existing customers."
-                      : "Sorry, the discount code you wish to use is inactive."}
+                {discountCode.error_code === "sold_out" ? (
+                  "Sorry, the discount code you wish to use has reached its usage limit."
+                ) : discountCode.error_code === "invalid_offer" ? (
+                  "Sorry, the discount code you wish to use is invalid."
+                ) : discountCode.error_code === "not_existing_customer" ? (
+                  "Sorry, this discount code is only for existing customers."
+                ) : discountCode.error_code === "not_new_customer" ? (
+                  // An unidentified visitor may be a first-time buyer, so only someone we matched against a
+                  // purchase reads the flat refusal; everyone else is told how to find out.
+                  loggedInUser ? (
+                    "Sorry, this discount code is only for new customers."
+                  ) : (
+                    <>
+                      Sorry, this discount code is only for new customers.{" "}
+                      <a href={Routes.login_url({ host: appDomain, next: product.long_url })}>Log in</a> to check if you
+                      qualify.
+                    </>
+                  )
+                ) : (
+                  "Sorry, the discount code you wish to use is inactive."
+                )}
               </Alert>
             )
           ) : null}
@@ -682,6 +754,8 @@ export const Product = ({
             selection={selection}
             setSelection={setSelection}
             discount={discountCode?.valid ? withConfiguredOncePerCartAmount(discountCode.discount) : null}
+            rowDiscount={selectionDiscountCode ? rowDiscount : undefined}
+            discountPending={!!quote && quote.state !== "ready"}
             ref={configurationSelectorRef}
           />
           {product.ppp_details && pppDiscounted ? (
@@ -722,11 +796,21 @@ export const Product = ({
               {renewalNotice}
             </p>
           ) : null}
+          {quote?.state === "failed" ? (
+            <Alert role="alert" variant="danger">
+              <div className="flex flex-col gap-4">
+                We couldn't check the discount for this selection.
+                <Button onClick={quote.retry}>Try again</Button>
+              </div>
+            </Alert>
+          ) : null}
           <PurchaseButton
             ref={ctaButtonRef}
             product={product}
             purchase={purchase}
             discountCode={discountCode ?? null}
+            pricePending={!!quote && quote.state !== "ready"}
+            priceLoading={quote?.state === "loading"}
             selection={selection}
             label={ctaLabel}
             showInstallmentPlanNotes
@@ -795,6 +879,7 @@ export const Product = ({
           />
         ) : null}
       </section>
+      {showsExistingPurchase ? null : details}
     </article>
   );
 };

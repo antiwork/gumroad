@@ -794,7 +794,7 @@ class Api::V2::LinksController < Api::V2::BaseController
       if @product.reload.published?
         "Published, but a post-publish step failed and has been reported."
       else
-        "Saved as a draft: publishing failed. Retry with POST /v2/products/#{@product.external_id}/enable."
+        "Saved as a draft: publishing failed. Retry with PUT /v2/products/#{@product.external_id}/enable."
       end
     end
 

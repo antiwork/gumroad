@@ -8,7 +8,10 @@ class Api::Internal::Admin::BaseController < Api::Internal::BaseController
   ADMIN_AUDIT_ACTION_REDACTED_PARAM_KEYS = {
     "purchases.reassign" => %w[from to],
     # The counter-notice carries the counter-notifier's name and address; the report keeps it.
-    "piracy_reports.counter_notice" => %w[body]
+    "piracy_reports.counter_notice" => %w[body],
+    # The id is the buyer's access token; target_external_id already names the redirect.
+    "url_redirects.grant_download" => %w[id],
+    "url_redirects.revoke_download" => %w[id]
   }.freeze
   # Some params match the redaction pattern above but are the very thing the
   # audit row exists to record. For SendGrid suppression removal the email
@@ -175,7 +178,7 @@ class Api::Internal::Admin::BaseController < Api::Internal::BaseController
         target_type: admin_audit_target_type(target),
         target_id: target&.id,
         target_external_id: admin_audit_target_external_id(target),
-        route: request.path,
+        route: admin_audit_route,
         http_method: request.request_method,
         params_snapshot: admin_audit_params_snapshot(action),
         request_id: request.request_id,
@@ -189,6 +192,10 @@ class Api::Internal::Admin::BaseController < Api::Internal::BaseController
       rescue => e
         handle_admin_audit_log_failure(e, attributes)
       end
+    end
+
+    def admin_audit_route
+      request.path
     end
 
     def admin_audit_target_type(target)

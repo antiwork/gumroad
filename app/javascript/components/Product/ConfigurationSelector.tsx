@@ -737,6 +737,10 @@ export const ConfigurationSelector = React.forwardRef<
     setSelection?: React.Dispatch<React.SetStateAction<PriceSelection>> | undefined;
     discount: Discount | null;
     discountForSelection?: ((selection: PriceSelection) => Discount | null) | undefined;
+    // The code that prices each previewed choice, when choices get different ones.
+    rowDiscount?: ((selection: PriceSelection) => Discount | null) | undefined;
+    // The discount for this selection is still being quoted, so its minimum price is not known yet.
+    discountPending?: boolean | undefined;
     hidePrices?: boolean;
     initialSelection?: PriceSelection;
     pwywMinimumPriceCents?: number;
@@ -749,6 +753,8 @@ export const ConfigurationSelector = React.forwardRef<
     setSelection,
     discount,
     discountForSelection,
+    rowDiscount,
+    discountPending = false,
     hidePrices,
     initialSelection,
     pwywMinimumPriceCents,
@@ -761,7 +767,8 @@ export const ConfigurationSelector = React.forwardRef<
     }));
   const previewDiscount = (previewSelection: PriceSelection) => {
     if (discountForSelection) return discountForSelection(previewSelection);
-    return applySelection(product, discount, previewSelection).applicableDiscount;
+    return applySelection(product, rowDiscount ? rowDiscount(previewSelection) : discount, previewSelection)
+      .applicableDiscount;
   };
 
   const selectedOption = product.options.find(({ id }) => id === selection.optionId) ?? null;
@@ -822,16 +829,26 @@ export const ConfigurationSelector = React.forwardRef<
     if (product.native_type === "call") warmCalendar();
   }, [product.native_type]);
   const buyerCurrencyCode = currencyCodeList.find((code) => code === product.buyer_currency) ?? null;
+  const checkPrice = () =>
+    update(({ price }) => ({
+      price: { ...price, error: (price.value ?? 0) < (pwywMinimumPriceCents ?? discountedPriceCents) },
+    }));
+  // A blur while the discount is being quoted checks the amount once the quote gives the real minimum.
+  const [checkPriceWhenQuoted, setCheckPriceWhenQuoted] = React.useState(false);
+  React.useEffect(() => {
+    if (!checkPriceWhenQuoted || discountPending) return;
+    setCheckPriceWhenQuoted(false);
+    checkPrice();
+  }, [checkPriceWhenQuoted, discountPending]);
   const pwywInput = (
     <PWYWInput
       currencyCode={product.currency_code}
       cents={usePreexistingPrice ? initialSelection.price.value : selection.price.value}
-      onChange={(newPriceCents) => update({ price: { value: newPriceCents, error: false } })}
-      onBlur={() =>
-        update(({ price }) => ({
-          price: { ...price, error: (price.value ?? 0) < (pwywMinimumPriceCents ?? discountedPriceCents) },
-        }))
-      }
+      onChange={(newPriceCents) => {
+        setCheckPriceWhenQuoted(false);
+        update({ price: { value: newPriceCents, error: false } });
+      }}
+      onBlur={() => (discountPending ? setCheckPriceWhenQuoted(true) : checkPrice())}
       suggestedPriceCents={suggestedPriceCents}
       hasError={selection.price.error}
       hideLabel={product.native_type === "coffee"}

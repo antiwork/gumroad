@@ -8,6 +8,7 @@ import { formatStatNumber } from "$app/utils/formatStatNumber";
 import { Button } from "$app/components/Button";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
+import { Search } from "$app/components/Search";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
@@ -38,21 +39,41 @@ const WorkflowList = ({ workflows }: WorkflowListProps) => {
     name: string;
     state: "delete-confirmation" | "deleting";
   } | null>(null);
+  const [query, setQuery] = React.useState("");
+  const trimmedQuery = query.trim();
+  const matchingWorkflows = trimmedQuery
+    ? workflows.filter((workflow) => workflow.name.toLowerCase().includes(trimmedQuery.toLowerCase()))
+    : workflows;
+  const headerActions =
+    workflows.length > 0 ? (
+      <>
+        <Search value={query} onSearch={setQuery} placeholder="Search workflows" />
+        {newWorkflowButton}
+      </>
+    ) : (
+      newWorkflowButton
+    );
 
   return (
-    <Layout title="Workflows" actions={newWorkflowButton}>
+    <Layout title="Workflows" actions={headerActions}>
       {workflows.length > 0 ? (
         <div className="space-y-8 p-4 md:p-8">
-          {workflows.map((workflow) => (
-            <WorkflowRow
-              key={workflow.external_id}
-              workflow={workflow}
-              canManageWorkflow={!!canManageWorkflow}
-              onDelete={() =>
-                setDeletingWorkflow({ id: workflow.external_id, name: workflow.name, state: "delete-confirmation" })
-              }
-            />
-          ))}
+          {matchingWorkflows.length > 0 ? (
+            matchingWorkflows.map((workflow) => (
+              <WorkflowRow
+                key={workflow.external_id}
+                workflow={workflow}
+                canManageWorkflow={!!canManageWorkflow}
+                onDelete={() =>
+                  setDeletingWorkflow({ id: workflow.external_id, name: workflow.name, state: "delete-confirmation" })
+                }
+              />
+            ))
+          ) : (
+            <Placeholder>
+              <h4>No workflows found for &quot;{trimmedQuery}&quot;</h4>
+            </Placeholder>
+          )}
           {deletingWorkflow ? (
             <Modal
               open

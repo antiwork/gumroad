@@ -8,6 +8,7 @@ class OfferCodesController < ApplicationController
     inactive: "Sorry, the discount code you wish to use is inactive.",
     unmet_minimum_purchase_quantity: "Sorry, the discount code you wish to use has an unmet minimum quantity.",
     not_existing_customer: "Sorry, this discount code is only for existing customers.",
+    not_new_customer: "Sorry, this discount code is only for new customers.",
     option_not_eligible: "This code does not apply to the selected option.",
   }.freeze
 
@@ -16,6 +17,7 @@ class OfferCodesController < ApplicationController
     sold_out: "The discount code was applied to some products. The rest exceed its remaining usage limit.",
     unmet_minimum_purchase_quantity: "The discount code was applied to some products. The rest do not meet its minimum quantity.",
     not_existing_customer: "The discount code was applied to some products. The rest are only discounted for existing customers.",
+    not_new_customer: "The discount code was applied to some products. The rest are only discounted for new customers.",
     option_not_eligible: "The code applies to some items. The selected options for the other items are not eligible.",
   }.freeze
 
@@ -36,4 +38,30 @@ class OfferCodesController < ApplicationController
 
     render json: response
   end
+
+  def selection_discounts
+    product = Link.visible.find_by(unique_permalink: scalar_param(:permalink))
+    return head :not_found if product.nil?
+
+    recurrence = scalar_param(:recurrence)
+    render json: ProductPresenter::ProductProps.new(product:).selection_discounts(
+      url_code: scalar_param(:code),
+      quantity: integer_param(:quantity),
+      recurrence: BasePrice::Recurrence::ALLOWED_RECURRENCES.include?(recurrence) ? recurrence : nil,
+      buyer: logged_in_user,
+      option_id: scalar_param(:option_id),
+      price_cents: integer_param(:price_cents),
+    )
+  end
+
+  private
+    # A repeated or nested query key arrives as an array or hash; the quote reads only plain values.
+    def scalar_param(key)
+      value = params[key]
+      value.presence if value.is_a?(String)
+    end
+
+    def integer_param(key)
+      scalar_param(key)&.then { _1.to_i if _1.match?(/\A\d+\z/) }
+    end
 end

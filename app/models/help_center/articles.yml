@@ -645,3 +645,8 @@
   title: "Reporting piracy of your products"
   description: "If a page on another site offers your product without your permission, we can send the site a takedown notice that you sign. This covers who can report, how to report, what each status means, what you sign, and what to do if someone disputes your notice."
   category_id: <%= HelpCenter::Category::START_SELLING.id %>
+- id: 355
+  slug: "355-connect-ai-assistants-to-gumroad"
+  title: "Connecting AI assistants to your Gumroad store"
+  description: "Gumroad runs an MCP server, so an AI assistant that supports MCP can read your products, sales, and payouts and create product drafts from your chat. This covers which assistants work today, how to connect Claude, the permissions you grant, and how to revoke access."
+  category_id: <%= HelpCenter::Category::ADVANCED.id %>

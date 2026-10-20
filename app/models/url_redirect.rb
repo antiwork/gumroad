@@ -16,6 +16,7 @@ class UrlRedirect < ApplicationRecord
   belongs_to :imported_customer, optional: true
   has_many :stamped_pdfs
   has_many :alive_stamped_pdfs, -> { alive }, class_name: "StampedPdf"
+  has_many :product_file_download_grants, dependent: :delete_all
 
   delegate :rental_expired?, to: :purchase, allow_nil: true
 
@@ -188,16 +189,25 @@ class UrlRedirect < ApplicationRecord
   def bundle_archive_product_files
     return ProductFile.none unless purchase&.is_bundle_purchase?
 
-    member_redirects = purchase.product_purchases.visible_in_library.includes(:url_redirect).filter_map(&:url_redirect)
-    return ProductFile.none if member_redirects.any? { _1.with_product_files.has_stampable_pdfs? }
+    return ProductFile.none if bundle_member_redirects.any? { _1.with_product_files.has_stampable_pdfs? }
 
-    file_ids = ([self] + member_redirects).flat_map do |url_redirect|
+    file_ids = ([self] + bundle_member_redirects).flat_map do |url_redirect|
       next [] unless url_redirect.with_product_files.is_downloadable?
 
       url_redirect.alive_product_files.filter_map { _1.id if _1.archivable? }
     end.uniq
 
     ProductFile.where(id: file_ids).in_order
+  end
+
+  # The bundle ZIP is shared, so it leaves out stream-only files even when this buyer was granted one.
+  # No `is_downloadable?` gate here: a member whose files are all stream-only still holds the grant.
+  def bundle_archive_omits_granted_files?
+    return false unless purchase&.is_bundle_purchase?
+
+    ([self] + bundle_member_redirects).any? do |url_redirect|
+      url_redirect.alive_product_files.any? { !_1.archivable? && url_redirect.is_file_downloadable?(_1) }
+    end
   end
 
   def matching_bundle_archives(bundle_files)
@@ -431,10 +441,19 @@ class UrlRedirect < ApplicationRecord
 
   def is_file_downloadable?(product_file)
     return false if product_file.external_link?
-    return false if product_file.stream_only?
+    # Checked before the grant: a rental's window is the product, and downloading would outlast it.
     return false if product_file.streamable? && is_rental
+    return true unless product_file.stream_only?
 
-    true
+    download_granted_for?(product_file)
+  end
+
+  # True only for the file this buyer was granted, so one buyer's download never reopens the
+  # seller's per-file flag for anyone else.
+  def download_granted_for?(product_file)
+    return false if product_file.id.blank?
+
+    granted_product_file_ids.include?(product_file.id)
   end
 
   def mark_rental_as_viewed!
@@ -560,6 +579,15 @@ class UrlRedirect < ApplicationRecord
   private
     def set_token
       self.token ||= self.class.generate_new_token
+    end
+
+    def bundle_member_redirects
+      @bundle_member_redirects ||= purchase.product_purchases.visible_in_library.includes(:url_redirect).filter_map(&:url_redirect)
+    end
+
+    # One query per redirect however many stream-only files the download page maps.
+    def granted_product_file_ids
+      @granted_product_file_ids ||= product_file_download_grants.pluck(:product_file_id).to_set
     end
 
     # Only when no alive row exists: queued rows stay the worker's and failed keeps its no-retry

@@ -58,7 +58,8 @@ describe LibraryPresenter do
         query: "",
         creators: [],
         bundles: [],
-        show_archived_only: false
+        show_archived_only: false,
+        subscriptions_only: false
       )
     end
 
@@ -241,6 +242,631 @@ describe LibraryPresenter do
         expect(library_props[:creators]).to eq([{ id: creator.external_id, name: "Testy", count: 1 }])
         expect(library_props(show_archived_only: true)[:creators])
           .to eq([{ id: archived_purchase.link.user.external_id, name: archived_purchase.link.user.username, count: 1 }])
+      end
+    end
+
+    describe "subscriptions filter" do
+      let!(:one_off_purchase) do
+        create(:purchase, purchaser: buyer, link: create(:product, name: "One-off product")).tap { _1.create_url_redirect! }
+      end
+
+      # Checkout makes the purchaser the subscription's owner (Purchase::BaseService#create_subscription);
+      # the membership_purchase factory leaves it on a generated user.
+      before { purchase.subscription.update!(user: buyer) }
+
+      def subscription_ids(**params)
+        results(subscriptions_only: true, **params).map { _1[:purchase][:id] }
+      end
+
+      def status_label(card_purchase = purchase)
+        results(subscriptions_only: true).find { _1[:purchase][:id] == card_purchase.external_id }.dig(:purchase, :subscription, :status_label)
+      end
+
+      def subscription_manage_location(card_purchase = purchase)
+        results(subscriptions_only: true).find { _1[:purchase][:id] == card_purchase.external_id }.dig(:purchase, :subscription, :manage_url)
+      end
+
+      def buyer_date(time)
+        time.in_time_zone(buyer.timezone).to_fs(:formatted_date_abbrev_month)
+      end
+
+      def owned_membership(name, **attributes)
+        product = create(:membership_product, name:, user: creator)
+        create(:membership_purchase, link: product, purchaser: buyer, subscription: create(:subscription, link: product, user: buyer), **attributes)
+          .tap(&:create_url_redirect!)
+      end
+
+      def renewal(subscription, **attributes)
+        create(:membership_purchase, link: subscription.link, subscription:, purchaser: buyer, is_original_subscription_purchase: false, **attributes)
+      end
+
+      it "keeps only the memberships and leaves the one-off purchases out" do
+        expect(results(subscriptions_only: true).map { _1[:product][:name] }).to eq(["hello"])
+      end
+
+      it "drops a membership whose subscription has already ended" do
+        purchase.subscription.update!(cancelled_at: 1.day.ago)
+
+        expect(results(subscriptions_only: true)).to be_empty
+      end
+
+      it "echoes the flag back to the page so the tab stays selected" do
+        expect(library_props(subscriptions_only: true)[:search][:subscriptions_only]).to be(true)
+      end
+
+      it "keeps a membership the buyer cancelled that is still inside its paid period" do
+        purchase.subscription.update!(cancelled_at: 1.week.from_now)
+
+        expect(subscription_ids).to eq([purchase.external_id])
+      end
+
+      it "drops a membership whose last payment failed" do
+        purchase.subscription.update!(failed_at: 1.day.ago)
+
+        expect(results(subscriptions_only: true)).to be_empty
+      end
+
+      it "drops a fixed-length membership that has ended" do
+        purchase.subscription.update!(ended_at: 1.day.ago)
+
+        expect(results(subscriptions_only: true)).to be_empty
+      end
+
+      it "keeps a membership whose signup charge was refunded while its subscription is still alive" do
+        purchase.update!(stripe_refunded: true)
+
+        expect(subscription_ids).to eq([purchase.external_id])
+      end
+
+      it "lists a membership the buyer removed from the library, since removing it does not stop billing" do
+        purchase.update!(is_deleted_by_buyer: true)
+
+        expect(subscription_ids).to eq([purchase.external_id])
+        expect(results.map { _1[:purchase][:id] }).not_to include(purchase.external_id)
+      end
+
+      it "lists archived memberships with the rest and ignores a stale archive filter" do
+        purchase.update!(is_archived: true)
+        one_off_purchase.update!(is_archived: true)
+
+        expect(subscription_ids).to eq([purchase.external_id])
+        props = library_props(subscriptions_only: true, show_archived_only: true)
+        expect(props[:results].map { _1[:purchase][:id] }).to eq([purchase.external_id])
+        expect(props[:search][:show_archived_only]).to be(false)
+      end
+
+      it "counts every ongoing membership as unarchived on this tab, leaving the Purchases counts alone" do
+        create(:purchase, purchaser: buyer, is_archived: true)
+        owned_membership("Archived membership", is_archived: true)
+
+        subscriptions_props = library_props(subscriptions_only: true)
+        expect(subscriptions_props[:archived_count]).to eq(0)
+        expect(subscriptions_props[:unarchived_count]).to eq(2)
+
+        purchases_props = library_props
+        expect(purchases_props[:archived_count]).to eq(2)
+        expect(purchases_props[:unarchived_count]).to eq(2)
+      end
+
+      it "reports zero counts when every membership has ended, even though one-off purchases remain" do
+        purchase.subscription.update!(ended_at: 1.day.ago)
+
+        props = library_props(subscriptions_only: true)
+        expect(props[:archived_count]).to eq(0)
+        expect(props[:unarchived_count]).to eq(0)
+      end
+
+      it "does not list or count another buyer's memberships" do
+        other_buyer = create(:user)
+        create(:membership_purchase, link: product, purchaser: other_buyer).tap { _1.subscription.update!(user: other_buyer) }.create_url_redirect!
+
+        props = library_props(subscriptions_only: true)
+        expect(props[:results].map { _1[:purchase][:id] }).to eq([purchase.external_id])
+        expect(props[:unarchived_count]).to eq(1)
+        expect(described_class.new(other_buyer).library_props(subscriptions_only: true)[:results].map { _1[:purchase][:id] })
+          .not_to include(purchase.external_id)
+      end
+
+      it "leaves out a subscription that another account now owns, even though this buyer still holds the purchase" do
+        purchase.subscription.update!(user: create(:user))
+
+        expect(results(subscriptions_only: true)).to be_empty
+        expect(results.map { _1[:purchase][:id] }).to include(purchase.external_id)
+      end
+
+      it "lists a claimed guest subscription that no account owns yet" do
+        purchase.subscription.update!(user: nil)
+
+        expect(subscription_ids).to eq([purchase.external_id])
+      end
+
+      it "shows a gifted membership to its recipient and never to the gift sender" do
+        gift_product = create(:membership_product, name: "Gifted membership", user: creator)
+        gift_subscription = create(:subscription, link: gift_product, user: buyer)
+        sender = create(:user)
+        sender_purchase = create(:membership_purchase, link: gift_product, subscription: gift_subscription, purchaser: sender, is_gift_sender_purchase: true)
+        receiver_purchase = create(:purchase, :gift_receiver, link: gift_product, purchaser: buyer, subscription: gift_subscription, is_original_subscription_purchase: false)
+          .tap(&:create_url_redirect!)
+        create(:gift, link: gift_product, gifter_purchase: sender_purchase, giftee_purchase: receiver_purchase, gifter_email: sender.email, giftee_email: buyer.email)
+
+        expect(subscription_ids).to include(receiver_purchase.external_id)
+        expect(status_label(receiver_purchase)).to eq("Gift · Paid through #{buyer_date(gift_subscription.reload.end_time_of_subscription)}")
+        expect(described_class.new(sender).library_props(subscriptions_only: true)[:results]).to be_empty
+      end
+
+      it "lists one card per subscription when a plan change left a second original purchase" do
+        newer_original = create(:membership_purchase, link: product, purchaser: buyer, subscription: purchase.subscription).tap(&:create_url_redirect!)
+
+        expect(subscription_ids).to eq([newer_original.external_id])
+        expect(library_props(subscriptions_only: true)[:unarchived_count]).to eq(1)
+        expect(results.map { _1[:purchase][:id] }).to include(purchase.external_id, newer_original.external_id)
+      end
+
+      it "searches and pages the whole list, including removed memberships" do
+        purchase.update!(is_deleted_by_buyer: true)
+        15.times { |i| owned_membership(format("Membership %02d", i + 1)) }
+
+        expect(library_props(subscriptions_only: true)[:pagination]).to include(count: 16, pages: 2)
+        expect(results(subscriptions_only: true, page: "2").size).to eq(1)
+        expect(subscription_ids(query: "hello")).to eq([purchase.external_id])
+      end
+
+      it "links each card to the subscription's own manage page" do
+        expect(results(subscriptions_only: true).sole.dig(:purchase, :subscription, :manage_url))
+          .to eq("/subscriptions/#{purchase.subscription.external_id}/manage")
+      end
+
+      it "adds no subscription details to Purchases cards" do
+        expect(results.map { _1[:purchase] }).to all(satisfy { !_1.key?(:subscription) })
+      end
+
+      describe "supported ownership flows" do
+        def gifted_membership(payer:, payer_email: "payer@example.com", subscription_owner: buyer)
+          gift_product = create(:membership_product, name: "Gifted membership", user: creator)
+          subscription = create(:subscription, link: gift_product, user: subscription_owner)
+          gift = create(:gift, link: gift_product, giftee_email: buyer.email, gifter_email: payer_email)
+          gifter = create(:membership_purchase, link: gift_product, subscription:, purchaser: payer, email: payer_email, is_gift_sender_purchase: true, gift_given: gift)
+          receiver = create(:membership_purchase, :gift_receiver, link: gift_product, subscription:, purchaser: buyer, email: buyer.email).tap(&:create_url_redirect!)
+          gift.update!(giftee_purchase: receiver)
+          [gift, gifter, receiver]
+        end
+
+        def convert(gift)
+          Gift::ConvertToNonGiftService.new(gift:, gifter_signed_off: true, giftee_signed_off: true, reason: "spec").process!
+        end
+
+        it "lists a guest checkout once the buyer signs up and it is attached to their account" do
+          guest_product = create(:membership_product, name: "Guest membership", user: creator)
+          guest = create(:membership_purchase, link: guest_product, purchaser: nil, email: buyer.email, subscription: create(:subscription, link: guest_product, user: nil))
+            .tap(&:create_url_redirect!)
+          expect(subscription_ids).not_to include(guest.external_id)
+
+          guest.attach_to_user_and_card(buyer, nil, nil)
+
+          expect(guest.subscription.reload.user).to eq(buyer)
+          expect(subscription_ids).to include(guest.external_id)
+        end
+
+        it "moves a membership to the account it was reassigned to and off the previous one" do
+          previous_owner = create(:user, email: "previous-owner@example.com")
+          moved_product = create(:membership_product, name: "Moved membership", user: creator)
+          moved = create(:membership_purchase, link: moved_product, purchaser: previous_owner, email: previous_owner.email,
+                                               subscription: create(:subscription, link: moved_product, user: previous_owner)).tap(&:create_url_redirect!)
+
+          expect(Purchase::ReassignByEmailService.new(from_email: previous_owner.email, to_email: buyer.email).perform).to be_success
+
+          expect(moved.subscription.reload.user).to eq(buyer)
+          expect(subscription_ids).to include(moved.external_id)
+          expect(described_class.new(previous_owner).library_props(subscriptions_only: true)[:results]).to be_empty
+        end
+
+        it "keeps listing a subscription this account still pays for after User#transfer_purchases! moves its purchase away" do
+          holder = create(:user, email: "new-holder@example.com")
+          purchase.update!(email: buyer.email)
+
+          buyer.transfer_purchases!(new_email: holder.email)
+
+          expect(purchase.reload.purchaser).to eq(holder)
+          expect(purchase.subscription.reload.user).to eq(buyer)
+          card = results(subscriptions_only: true).sole
+          expect(card[:purchase]).to eq(
+            id: "subscription:#{purchase.subscription.external_id}",
+            is_archived: false,
+            download_url: nil,
+            variants: "Untitled",
+            subscription: {
+              status_label: "Renews on #{buyer_date(purchase.subscription.end_time_of_subscription)}",
+              manage_label: "Manage membership",
+              manage_url: "/subscriptions/#{purchase.subscription.external_id}/manage",
+            },
+          )
+          expect(card.to_json).not_to include(purchase.external_id, purchase.url_redirect.token)
+          expect(results.map { _1[:purchase][:id] }).not_to include(purchase.external_id)
+        end
+
+        it "gives the new holder of a transferred purchase its access but not the payer's billing card" do
+          holder = create(:user, email: "new-holder@example.com")
+          purchase.update!(email: buyer.email)
+
+          buyer.transfer_purchases!(new_email: holder.email)
+
+          holder_library = described_class.new(holder)
+          expect(holder_library.library_props(subscriptions_only: true)[:results]).to be_empty
+          expect(holder_library.library_props[:results].map { _1[:purchase][:id] }).to include(purchase.external_id)
+        end
+
+        it "keeps the payer's billing card when a converted gift's receiver row is transferred to the payer after the payer leg moved away" do
+          giftee = create(:user, email: "giftee@example.com")
+          holder = create(:user, email: "payer-leg-holder@example.com")
+          gift_product = create(:membership_product, name: "Gifted membership", user: creator)
+          subscription = create(:subscription, link: gift_product, user: giftee)
+          gift = create(:gift, link: gift_product, giftee_email: giftee.email, gifter_email: buyer.email)
+          gifter = create(:membership_purchase, link: gift_product, subscription:, purchaser: buyer, email: buyer.email, is_gift_sender_purchase: true, gift_given: gift)
+          receiver = create(:membership_purchase, :gift_receiver, link: gift_product, subscription:, purchaser: giftee, email: giftee.email).tap(&:create_url_redirect!)
+          gift.update!(giftee_purchase: receiver)
+
+          convert(gift)
+          buyer.transfer_purchases!(new_email: holder.email)
+          giftee.transfer_purchases!(new_email: buyer.email)
+          gifter.reload.update!(is_archived: true)
+
+          expect([gifter.purchaser, receiver.reload.purchaser, subscription.reload.user]).to eq([holder, buyer, buyer])
+          cards = results(subscriptions_only: true).select { _1[:product][:name] == "Gifted membership" }
+          expect(cards.sole[:purchase]).to include(
+            id: "subscription:#{subscription.external_id}",
+            is_archived: false,
+            download_url: nil,
+            subscription: include(manage_url: "/subscriptions/#{subscription.external_id}/manage"),
+          )
+          holder_library = described_class.new(holder)
+          expect(holder_library.library_props(subscriptions_only: true)[:results]).to be_empty
+          expect(holder_library.library_props(show_archived_only: true)[:results].map { _1[:purchase][:id] }).to eq([gifter.external_id])
+        end
+
+        it "keys a billing card apart from a held card whose purchase shares its subscription's database id" do
+          holder = create(:user, email: "new-holder@example.com")
+          shared_id = [Purchase.maximum(:id).to_i, Subscription.maximum(:id).to_i].max + 1_000
+          moved_product = create(:membership_product, name: "Moved membership", user: creator)
+          moved_subscription = create(:subscription, id: shared_id, link: moved_product, user: buyer)
+          create(:membership_purchase, link: moved_product, purchaser: buyer, email: buyer.email, subscription: moved_subscription)
+          held_product = create(:membership_product, name: "Held membership", user: creator)
+          held = create(:membership_purchase, id: shared_id, link: held_product, purchaser: buyer, subscription: create(:subscription, link: held_product, user: buyer))
+          buyer.transfer_purchases!(new_email: holder.email)
+          expect(moved_subscription.external_id).to eq(held.external_id)
+
+          keys = results(subscriptions_only: true).map { _1[:purchase][:id] }
+
+          expect(keys).to eq(keys.uniq)
+          expect(keys).to include(held.external_id, "subscription:#{moved_subscription.external_id}")
+          expect(results.map { _1[:purchase][:id] }).to include(held.external_id)
+        end
+
+        it "lists a converted gift only for the account-backed payer, keeping the recipient's Library access" do
+          payer = create(:user, email: "payer@example.com")
+          gift, gifter, receiver = gifted_membership(payer:)
+          expect(subscription_ids).to include(receiver.external_id)
+
+          convert(gift)
+
+          expect(subscription_ids).not_to include(receiver.external_id)
+          expect(results.map { _1[:purchase][:id] }).to include(receiver.external_id)
+          payer_cards = described_class.new(payer).library_props(subscriptions_only: true)[:results]
+          expect(payer_cards.map { _1[:purchase][:id] }).to eq([gifter.external_id])
+          expect(payer_cards.sole.dig(:purchase, :subscription, :manage_url)).to eq("/subscriptions/#{gifter.subscription.external_id}/manage")
+        end
+
+        it "drops a gift converted to a guest payer from the recipient's tab, keeping their Library access" do
+          gift, _, receiver = gifted_membership(payer: nil)
+          expect(subscription_ids).to include(receiver.external_id)
+
+          convert(gift)
+
+          expect(receiver.subscription.reload.user).to be_nil
+          expect(subscription_ids).not_to include(receiver.external_id)
+          expect(results.map { _1[:purchase][:id] }).to include(receiver.external_id)
+        end
+
+        it "keeps a still-gifted membership on the tab of a recipient who had no account when it was given" do
+          _, _, receiver = gifted_membership(payer: create(:user), subscription_owner: nil)
+
+          expect(subscription_ids).to include(receiver.external_id)
+          expect(status_label(receiver)).to start_with("Gift · Paid through ")
+        end
+      end
+
+      describe "status labels" do
+        it "shows the renewal date of a renewing membership" do
+          expect(status_label).to eq("Renews on #{buyer_date(purchase.subscription.end_time_of_subscription)}")
+        end
+
+        it "says the subscription ends, not access, after a cancellation on a product that keeps access" do
+          purchase.subscription.cancel!(by_seller: false)
+
+          expect(purchase.subscription.reload.cancelled_at).to be_future
+          expect(status_label).to eq("Cancelled · Subscription ends on #{buyer_date(purchase.subscription.cancelled_at)}")
+        end
+
+        it "says access ends after a cancellation on a product that blocks access once cancelled" do
+          product.update!(block_access_after_membership_cancellation: true)
+          purchase.subscription.cancel!(by_seller: false)
+
+          expect(status_label).to eq("Cancelled · Access until #{buyer_date(purchase.subscription.reload.cancelled_at)}")
+        end
+
+        it "says a cancelled free trial ends without implying it was paid for" do
+          trial_purchase = create(:free_trial_membership_purchase, purchaser: buyer, link: create(:membership_product, :with_free_trial_enabled, name: "Trial membership", user: creator))
+            .tap(&:create_url_redirect!)
+          trial_purchase.subscription.cancel!(by_seller: false)
+
+          expect(trial_purchase.subscription.reload.cancelled_at).to eq(trial_purchase.subscription.free_trial_ends_at)
+          expect(status_label(trial_purchase)).to eq("Cancelled · Subscription ends on #{buyer_date(trial_purchase.subscription.free_trial_ends_at)}")
+        end
+
+        it "says a seller-cancelled installment plan takes no further payments, since its access already ended" do
+          installment = create(:installment_plan_purchase, purchaser: buyer, link: create(:product, :with_installment_plan, name: "Course", user: creator))
+            .tap(&:create_url_redirect!)
+          installment.subscription.cancel!(by_seller: true)
+
+          expect(installment.subscription.reload).to be_pending_cancellation
+          expect(installment.subscription.grant_access_to_product?).to be(false)
+          expect(status_label(installment)).to eq("Installment plan · Cancelled · No further payments")
+        end
+
+        it "flags a failed renewal that is still being retried" do
+          # Subscription#pending_failure? reads the newest purchase by created_at, so keep the order unambiguous.
+          travel(1.minute) { renewal(purchase.subscription, purchase_state: "failed") }
+
+          expect(status_label).to eq("Payment failed")
+        end
+
+        it "shows the first charge date during a free trial" do
+          trial_purchase = create(:free_trial_membership_purchase, purchaser: buyer, link: create(:membership_product, :with_free_trial_enabled, name: "Trial membership", user: creator))
+            .tap(&:create_url_redirect!)
+
+          expect(status_label(trial_purchase)).to eq("Free trial · First charge on #{buyer_date(trial_purchase.subscription.free_trial_ends_at)}")
+        end
+
+        it "shows an end date, never a renewal, once a fixed-length membership has collected every charge" do
+          purchase.subscription.update!(charge_occurrence_count: 1)
+
+          expect(status_label).to eq("Ends on #{buyer_date(purchase.subscription.end_time_of_subscription)}")
+        end
+
+        it "calls out the final charge of a fixed-length membership" do
+          purchase.subscription.update!(charge_occurrence_count: 2)
+
+          expect(status_label).to eq("Final charge on #{buyer_date(purchase.subscription.end_time_of_subscription)}")
+        end
+
+        it "shows installment progress and the next payment date" do
+          installment = create(:installment_plan_purchase, purchaser: buyer, link: create(:product, :with_installment_plan, name: "Course", user: creator))
+            .tap(&:create_url_redirect!)
+
+          expect(status_label(installment)).to eq("Installment plan · 1 of 3 paid · Next payment on #{buyer_date(installment.subscription.end_time_of_subscription)}")
+        end
+
+        it "calls out the final installment and then shows the plan as paid in full" do
+          installment = create(:installment_plan_purchase, purchaser: buyer, link: create(:product, :with_installment_plan, name: "Course", user: creator))
+            .tap(&:create_url_redirect!)
+          renewal(installment.subscription, is_installment_payment: true)
+
+          expect(status_label(installment)).to eq("Installment plan · 2 of 3 paid · Final payment on #{buyer_date(installment.subscription.end_time_of_subscription)}")
+          expect(subscription_manage_location(installment)).to eq("/subscriptions/#{installment.subscription.external_id}/manage")
+
+          renewal(installment.subscription, is_installment_payment: true)
+          expect(status_label(installment)).to eq("Installment plan · Paid in full")
+          # SubscriptionsController#manage 404s a paid-off installment plan.
+          expect(subscription_manage_location(installment)).to be_nil
+        end
+      end
+
+      describe "charged-back installments" do
+        let(:plan) do
+          create(:installment_plan_purchase, purchaser: buyer, email: buyer.email, stripe_transaction_id: "ch_plan_original",
+                                             link: create(:product, :with_installment_plan, name: "Course", user: creator)).tap(&:create_url_redirect!)
+        end
+        let!(:second_installment) { renewal(plan.subscription, is_installment_payment: true, email: buyer.email, stripe_transaction_id: "ch_plan_second") }
+
+        before do
+          allow(DisputeEvidence::GenerateReceiptImageService).to receive(:perform)
+            .and_return(File.read(Rails.root.join("spec", "support", "fixtures", "test-small.jpg")))
+        end
+
+        def dispute!(charge) = Purchase.handle_charge_event(build(:charge_event_dispute_formalized, charge_id: charge.stripe_transaction_id))
+
+        def plan_card(user = buyer)
+          described_class.new(user).library_props(subscriptions_only: true)[:results].find { _1[:product][:name] == "Course" }
+        end
+
+        it "keeps listing a plan the charge worker still bills after its original payment is charged back" do
+          dispute!(plan)
+
+          expect(plan.reload.chargedback_not_reversed?).to be(true)
+          expect(plan.subscription.reload.all_charges_disputed?).to be(false)
+          expect(plan_card).to include(purchase: include(
+            id: "subscription:#{plan.subscription.external_id}",
+            is_archived: false,
+            download_url: nil,
+            subscription: {
+              status_label: "Installment plan · 1 payment remaining · Final payment on #{buyer_date(plan.subscription.end_time_of_subscription)}",
+              manage_label: "Manage installment plan",
+              manage_url: "/subscriptions/#{plan.subscription.external_id}/manage",
+            },
+          ))
+          expect(plan_card.to_json).not_to include(plan.url_redirect.token)
+          expect(results.map { _1[:purchase][:id] }).not_to include(plan.external_id)
+        end
+
+        it "keeps the billing card with the payer, and gives the new holder none, after the purchases move away" do
+          dispute!(plan)
+          holder = create(:user, email: "plan-holder@example.com")
+
+          buyer.transfer_purchases!(new_email: holder.email)
+
+          expect(plan.reload.purchaser).to eq(holder)
+          expect(plan_card).to include(purchase: include(id: "subscription:#{plan.subscription.external_id}", download_url: nil))
+          expect(plan_card(holder)).to be_nil
+          expect(described_class.new(holder).library_props[:results]).to be_empty
+        end
+
+        it "lists a claimed guest checkout's plan from the buyer's own charge rows" do
+          plan.subscription.update!(user: nil)
+          dispute!(plan)
+
+          expect(plan_card).to include(purchase: include(id: "subscription:#{plan.subscription.external_id}", download_url: nil))
+        end
+
+        it "says no payments remain, not paid in full, once a plan with a charged-back payment has collected every installment" do
+          dispute!(plan)
+          renewal(plan.subscription, is_installment_payment: true, email: buyer.email)
+
+          expect(plan.subscription.reload.charges_completed?).to be(true)
+          expect(plan_card).to include(purchase: include(subscription: { status_label: "Installment plan · No payments remaining", manage_label: "Manage installment plan", manage_url: nil }))
+        end
+
+        it "counts a payment as paid again once its chargeback is reversed" do
+          dispute!(plan)
+          Purchase.handle_charge_event(build(:charge_event_dispute_won, charge_id: plan.stripe_transaction_id))
+
+          expect(plan.reload.chargeback_reversed?).to be(true)
+          expect(plan_card).to include(purchase: include(subscription: include(
+            status_label: "Installment plan · 2 of 3 paid · Final payment on #{buyer_date(plan.subscription.reload.end_time_of_subscription)}",
+          )))
+        end
+
+        it "describes the remaining payments when an installment was fully refunded" do
+          second_installment.update!(stripe_refunded: true)
+
+          expect(second_installment.reload.chargedback_not_reversed_or_refunded?).to be(true)
+          expect(plan_card).to include(purchase: include(subscription: include(
+            status_label: "Installment plan · 1 payment remaining · Final payment on #{buyer_date(plan.subscription.reload.end_time_of_subscription)}",
+          )))
+        end
+
+        it "leaves out a plan with every installment charged back, which the charge worker no longer bills" do
+          dispute!(plan)
+          dispute!(second_installment)
+
+          expect(plan.subscription.reload.all_charges_disputed?).to be(true)
+          expect(plan_card).to be_nil
+        end
+      end
+
+      describe "label facts" do
+        def mixed_subscriptions(group)
+          renewing = owned_membership("Renewing #{group}")
+          cancelled = owned_membership("Cancelled #{group}").tap { _1.subscription.cancel!(by_seller: false) }
+          installments = create(:installment_plan_purchase, purchaser: buyer, link: create(:product, :with_installment_plan, name: "Installments #{group}", user: creator))
+          paid_off = create(:installment_plan_purchase, purchaser: buyer, link: create(:product, :with_installment_plan, name: "Paid off #{group}", user: creator))
+          2.times { renewal(paid_off.subscription, is_installment_payment: true) }
+          trial = create(:free_trial_membership_purchase, purchaser: buyer, link: create(:membership_product, :with_free_trial_enabled, name: "Trial #{group}", user: creator))
+          trial.subscription.update!(user: buyer)
+          failing = owned_membership("Failing #{group}")
+          travel(1.minute) { renewal(failing.subscription, purchase_state: "failed") }
+          gift_subscription = gifted_subscription("Gift #{group}")
+          [renewing, cancelled, installments, paid_off, trial, failing].map(&:subscription) + [gift_subscription]
+        end
+
+        def gifted_subscription(name)
+          gift_product = create(:membership_product, name:, user: creator)
+          subscription = create(:subscription, link: gift_product, user: buyer)
+          gift = create(:gift, link: gift_product, giftee_email: buyer.email, gifter_email: "payer@example.com")
+          create(:membership_purchase, link: gift_product, subscription:, email: "payer@example.com", is_gift_sender_purchase: true, gift_given: gift)
+          gift.update!(giftee_purchase: create(:membership_purchase, :gift_receiver, link: gift_product, subscription:, purchaser: buyer, email: buyer.email))
+          subscription
+        end
+
+        def queries_for_subscriptions_tab
+          count = 0
+          counter = ->(*, payload) { count += 1 unless payload[:cached] || %w[SCHEMA TRANSACTION].include?(payload[:name]) }
+          ActiveSupport::Notifications.subscribed(counter, "sql.active_record") { results(subscriptions_only: true) }
+          count
+        end
+
+        def charged_back_plan(name)
+          plan = create(:installment_plan_purchase, purchaser: buyer, link: create(:product, :with_installment_plan, name:, user: creator))
+          plan.update!(chargeback_date: Time.current)
+          renewal(plan.subscription, is_installment_payment: true)
+          plan
+        end
+
+        def queries_for(**params)
+          count = 0
+          counter = ->(*, payload) { count += 1 unless payload[:cached] || %w[SCHEMA TRANSACTION].include?(payload[:name]) }
+          ActiveSupport::Notifications.subscribed(counter, "sql.active_record") { results(subscriptions_only: true, **params) }
+          count
+        end
+
+        it "checks charged-back plans for a dispute pause in a fixed number of queries, before search narrows the page" do
+          plans = Array.new(3) { charged_back_plan("Charged-back plan #{_1}") }
+          three_plans = queries_for(query: "hello")
+          plans += Array.new(10) { charged_back_plan("Charged-back plan #{_1 + 3}") }
+
+          expect(results(subscriptions_only: true, query: "hello").map { _1[:purchase][:id] }).to eq([purchase.external_id])
+          expect(queries_for(query: "hello") - three_plans).to be <= 2
+          expect(results(subscriptions_only: true).map { _1[:purchase][:id] })
+            .to match_array([purchase.external_id] + plans.map { "subscription:#{_1.subscription.external_id}" })
+        end
+
+        it "pauses exactly the plans Subscription#all_charges_disputed? pauses" do
+          disputed = ->(charge) { charge.update!(chargeback_date: Time.current) }
+          all_disputed = charged_back_plan("All disputed").tap { disputed.(_1.subscription.purchases.last) }
+          partly_disputed = charged_back_plan("Partly disputed")
+          reversed = charged_back_plan("Reversed").tap { _1.subscription.purchases.each { |charge| charge.update!(chargeback_date: Time.current, chargeback_reversed: true) } }
+          refunded = create(:installment_plan_purchase, purchaser: buyer, link: create(:product, :with_installment_plan, name: "Refunded", user: creator)).tap { _1.update!(stripe_refunded: true) }
+          no_success = create(:installment_plan_purchase, purchaser: buyer, link: create(:product, :with_installment_plan, name: "No success", user: creator)).tap { _1.update_columns(purchase_state: "failed") }
+          failed_after = charged_back_plan("Failed after disputes").tap do
+            disputed.(_1.subscription.purchases.last)
+            renewal(_1.subscription, is_installment_payment: true, purchase_state: "failed")
+          end
+          test_plan = charged_back_plan("Test plan").tap do
+            _1.subscription.update!(is_test_subscription: true)
+            _1.subscription.purchases.each { |charge| charge.update!(purchase_state: "test_successful", chargeback_date: Time.current) }
+          end
+          test_plan_live_charges = charged_back_plan("Test plan, live charges").tap do
+            _1.subscription.update!(is_test_subscription: true)
+            disputed.(_1.subscription.purchases.last)
+          end
+          membership = owned_membership("Disputed membership").tap { disputed.(_1) }
+          subscriptions = [all_disputed, partly_disputed, reversed, refunded, no_success, failed_after, test_plan, test_plan_live_charges, membership].map { _1.subscription.reload }
+
+          expect(described_class.new(buyer).send(:paused_installment_plan_ids, subscriptions.map(&:id)))
+            .to match_array(subscriptions.filter_map { _1.id if _1.all_charges_disputed? })
+          expect(subscriptions.select(&:all_charges_disputed?)).to contain_exactly(all_disputed.subscription, failed_after.subscription, test_plan.subscription)
+        end
+
+        it "keeps the Subscriptions tab at a fixed number of queries as cards are added" do
+          mixed_subscriptions(1)
+          seven_more = queries_for_subscriptions_tab
+          mixed_subscriptions(2)
+
+          expect(results(subscriptions_only: true).size).to eq(15)
+          expect(queries_for_subscriptions_tab - seven_more).to be <= 2
+        end
+
+        it "match the Subscription methods they stand in for across subscription states" do
+          subscriptions = mixed_subscriptions(1)
+          refunded = owned_membership("Refunded renewal").subscription
+          renewal(refunded, succeeded_at: 1.minute.from_now, stripe_refunded: true)
+          reversed = owned_membership("Reversed chargeback").subscription
+          renewal(reversed, succeeded_at: 1.minute.from_now, chargeback_date: Time.current, chargeback_reversed: true)
+          disputed = create(:installment_plan_purchase, purchaser: buyer, link: create(:product, :with_installment_plan, name: "Disputed original", user: creator))
+          disputed.update!(chargeback_date: Time.current)
+          renewal(disputed.subscription, is_installment_payment: true)
+          unsettled = owned_membership("Unsettled renewal").subscription
+          renewal(unsettled, succeeded_at: nil)
+          test_subscription = owned_membership("Test", purchase_state: "test_successful").subscription.tap { _1.update!(is_test_subscription: true) }
+          facts_class = described_class.const_get(:LabelFacts)
+
+          freeze_time do
+            (subscriptions + [refunded, reversed, disputed.subscription, unsettled, test_subscription]).each do |subscription|
+              subscription.reload
+              facts = facts_class.new(subscription, subscription.purchases.sort_by(&:id))
+              expect([facts.charges_completed?, facts.remaining_charges_count, facts.end_time_of_subscription])
+                .to eq([subscription.charges_completed?, subscription.remaining_charges_count, subscription.end_time_of_subscription]), subscription.link.name
+            end
+          end
+        end
       end
     end
 
@@ -599,10 +1225,20 @@ describe LibraryPresenter do
         expect(matches.map { _1[:purchase][:id] }).to match_array(purchase1.product_purchases.map(&:external_id))
       end
 
+      it "ignores bundle filters on the Subscriptions tab, where no membership can be a bundle member" do
+        purchase.subscription.update!(user: buyer)
+        props = library_props(subscriptions_only: true, bundle_ids: [purchase1.link.external_id])
+
+        expect(props[:results].map { _1[:purchase][:id] }).to eq([purchase.external_id])
+        expect(props[:bundles]).to eq([])
+        expect(props[:bundle_downloads]).to eq([])
+        expect(props[:search][:bundles]).to eq([])
+      end
+
       it "prepares and returns a combined ZIP for the selected bundle purchase" do
         props = library_props(bundle_ids: [purchase1.link.external_id])
 
-        expected_download = { id: purchase1.link.external_id, label: "Bundle", download_url: nil, zip_unavailable_reason: nil }
+        expected_download = { id: purchase1.link.external_id, label: "Bundle", download_url: nil, zip_unavailable_reason: nil, omits_granted_files: false }
         expect(props[:bundle_downloads]).to eq([expected_download])
         archive = purchase1.link.product_files_archives.alive.entity_archives.sole
         expect(archive.product_files.map(&:link_id).sort).to eq(purchase1.product_purchases.map(&:link_id).sort)
@@ -620,7 +1256,7 @@ describe LibraryPresenter do
 
         props = library_props(bundle_ids: [purchase1.link.external_id])
 
-        expect(props[:bundle_downloads]).to eq([{ id: purchase1.link.external_id, label: "Bundle", download_url: nil, zip_unavailable_reason: nil }])
+        expect(props[:bundle_downloads]).to eq([{ id: purchase1.link.external_id, label: "Bundle", download_url: nil, zip_unavailable_reason: nil, omits_granted_files: false }])
         archive = purchase1.link.product_files_archives.alive.entity_archives.sole
         expect(archive.product_files.map(&:id)).to include(own_file.id)
         expect(archive.product_files.map(&:link_id)).to include(*purchase1.product_purchases.map(&:link_id))
@@ -658,7 +1294,7 @@ describe LibraryPresenter do
 
         props = library_props(bundle_ids: [purchase1.link.external_id])
 
-        expected_download = { id: purchase1.link.external_id, label: "Bundle", download_url: nil, zip_unavailable_reason: nil }
+        expected_download = { id: purchase1.link.external_id, label: "Bundle", download_url: nil, zip_unavailable_reason: nil, omits_granted_files: false }
         expect(props[:bundle_downloads]).to eq([expected_download])
         archives = purchase1.link.product_files_archives.alive.entity_archives.order(:id)
         expect(archives.map(&:product_files_archive_state)).to contain_exactly("failed", "queueing")
@@ -674,7 +1310,7 @@ describe LibraryPresenter do
 
         props = library_props(bundle_ids: [purchase1.link.external_id])
 
-        expected_download = { id: purchase1.link.external_id, label: "Bundle", download_url: nil, zip_unavailable_reason: "failed" }
+        expected_download = { id: purchase1.link.external_id, label: "Bundle", download_url: nil, zip_unavailable_reason: "failed", omits_granted_files: false }
         expect(props[:bundle_downloads]).to eq([expected_download])
         archives = purchase1.link.product_files_archives.alive.entity_archives.order(:id)
         expect(archives.map(&:product_files_archive_state)).to eq(["failed", "failed"])
@@ -687,7 +1323,7 @@ describe LibraryPresenter do
 
         props = library_props(bundle_ids: [purchase1.link.external_id])
 
-        expected_download = { id: purchase1.link.external_id, label: "Bundle", download_url: nil, zip_unavailable_reason: "too_large" }
+        expected_download = { id: purchase1.link.external_id, label: "Bundle", download_url: nil, zip_unavailable_reason: "too_large", omits_granted_files: false }
         expect(props[:bundle_downloads]).to eq([expected_download])
         expect(purchase1.link.product_files_archives.alive.entity_archives.map(&:product_files_archive_state)).to eq(["too_large"])
       end
@@ -702,7 +1338,7 @@ describe LibraryPresenter do
 
         props = library_props(bundle_ids: [purchase1.link.external_id])
 
-        expected_download = { id: purchase1.link.external_id, label: "Bundle", download_url: nil, zip_unavailable_reason: "failed" }
+        expected_download = { id: purchase1.link.external_id, label: "Bundle", download_url: nil, zip_unavailable_reason: "failed", omits_granted_files: false }
         expect(props[:bundle_downloads]).to eq([expected_download])
       end
 
@@ -717,7 +1353,7 @@ describe LibraryPresenter do
 
         props = library_props(bundle_ids: [purchase1.link.external_id])
 
-        expected_download = { id: purchase1.link.external_id, label: "Bundle", download_url: nil, zip_unavailable_reason: nil }
+        expected_download = { id: purchase1.link.external_id, label: "Bundle", download_url: nil, zip_unavailable_reason: nil, omits_granted_files: false }
         expect(props[:bundle_downloads]).to eq([expected_download])
         archives = purchase1.link.product_files_archives.alive.entity_archives.order(:id)
         expect(archives.map(&:product_files_archive_state)).to eq(["failed", "failed", "queueing"])
@@ -738,7 +1374,7 @@ describe LibraryPresenter do
 
         props = library_props(bundle_ids: [purchase1.link.external_id])
 
-        expected_download = { id: purchase1.link.external_id, label: "Bundle", download_url: nil, zip_unavailable_reason: "failed" }
+        expected_download = { id: purchase1.link.external_id, label: "Bundle", download_url: nil, zip_unavailable_reason: "failed", omits_granted_files: false }
         expect(props[:bundle_downloads]).to eq([expected_download])
         archives = purchase1.link.product_files_archives.alive.entity_archives.order(:id)
         expect(archives.map(&:product_files_archive_state)).to eq(["failed", "failed", "failed"])
@@ -754,7 +1390,7 @@ describe LibraryPresenter do
 
         props = library_props(bundle_ids: [purchase1.link.external_id])
 
-        expected_download = { id: purchase1.link.external_id, label: "Bundle", download_url: nil, zip_unavailable_reason: nil }
+        expected_download = { id: purchase1.link.external_id, label: "Bundle", download_url: nil, zip_unavailable_reason: nil, omits_granted_files: false }
         expect(props[:bundle_downloads]).to eq([expected_download])
         archives = purchase1.link.product_files_archives.alive.entity_archives.order(:id)
         expect(archives.map(&:product_files_archive_state)).to eq(["ready", "queueing"])
@@ -769,7 +1405,7 @@ describe LibraryPresenter do
 
         props = library_props(bundle_ids: [purchase1.link.external_id])
 
-        expected_download = { id: purchase1.link.external_id, label: "Bundle", download_url: nil, zip_unavailable_reason: nil }
+        expected_download = { id: purchase1.link.external_id, label: "Bundle", download_url: nil, zip_unavailable_reason: nil, omits_granted_files: false }
         expect(props[:bundle_downloads]).to eq([expected_download])
         archives = purchase1.link.product_files_archives.alive.entity_archives.order(:id)
         expect(archives.map(&:product_files_archive_state)).to eq(["ready", "queueing"])
@@ -810,6 +1446,58 @@ describe LibraryPresenter do
 
           # Nothing filters to it, so it must not offer itself as a bundle filter option.
           expect(props[:bundles].map { _1[:id] }).to_not include(memberless_bundle.external_id)
+        end
+      end
+
+      # The shared bundle ZIP leaves out stream-only files, including one support granted to this buyer.
+      context "when this buyer was granted a stream-only member file" do
+        let(:member) { purchase1.product_purchases.first }
+        let(:granted_file) { create(:readable_document, link: member.link, stream_only: true) }
+        let(:ready_download) { { id: purchase1.link.external_id, label: "Bundle", download_url: url_redirect_download_archive_path(purchase1.url_redirect.token), zip_unavailable_reason: nil, omits_granted_files: false } }
+
+        before do
+          granted_file
+          library_props(bundle_ids: [purchase1.link.external_id])
+          archive = purchase1.link.product_files_archives.alive.entity_archives.sole
+          archive.mark_in_progress!
+          archive.mark_ready!
+        end
+
+        it "keeps the bundle ZIP and flags the file it leaves out" do
+          create(:product_file_download_grant, url_redirect: member.url_redirect, product_file: granted_file)
+
+          expect(library_props(bundle_ids: [purchase1.link.external_id])[:bundle_downloads]).to eq(
+            [ready_download.merge(omits_granted_files: true)]
+          )
+        end
+
+        it "flags the granted file when its member product has no other files" do
+          member.link.product_files.alive.where.not(id: granted_file.id).each(&:mark_deleted!)
+          create(:product_file_download_grant, url_redirect: member.url_redirect, product_file: granted_file)
+
+          expect(library_props(bundle_ids: [purchase1.link.external_id])[:bundle_downloads].sole).to include(
+            zip_unavailable_reason: nil, omits_granted_files: true
+          )
+        end
+
+        it "keeps the ZIP when the stream-only file was not granted" do
+          expect(library_props(bundle_ids: [purchase1.link.external_id])[:bundle_downloads]).to eq([ready_download])
+        end
+
+        it "keeps the ZIP when another buyer of the same bundle was granted the file" do
+          other_purchase = create(:purchase, purchaser: create(:user), link: purchase1.link)
+          other_purchase.create_artifacts_and_send_receipt!
+          other_member = other_purchase.product_purchases.find_by!(link: member.link)
+          create(:product_file_download_grant, url_redirect: other_member.url_redirect, product_file: granted_file)
+
+          expect(library_props(bundle_ids: [purchase1.link.external_id])[:bundle_downloads]).to eq([ready_download])
+        end
+
+        it "keeps the ZIP once the granted file is deleted" do
+          create(:product_file_download_grant, url_redirect: member.url_redirect, product_file: granted_file)
+          granted_file.mark_deleted!
+
+          expect(library_props(bundle_ids: [purchase1.link.external_id])[:bundle_downloads]).to eq([ready_download])
         end
       end
 

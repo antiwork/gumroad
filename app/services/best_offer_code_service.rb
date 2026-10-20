@@ -1,19 +1,25 @@
 # frozen_string_literal: true
 
 class BestOfferCodeService
-  def initialize(product:, url_code: nil, quantity: 1, buyer: nil)
+  # comparison_price_cents is the unit price the buyer chose, else the one the card quotes; option is
+  # the picked variant or SKU, whose scope and stock apply. evaluations is shared by callers weighing
+  # several options for one buyer and quantity; see evaluate_code.
+  def initialize(product:, url_code: nil, quantity: 1, buyer: nil, comparison_price_cents: nil, option: nil, evaluations: {})
     @product = product
+    @evaluations = evaluations
     @url_code = url_code.presence
     @quantity = quantity
     @buyer = buyer
-    @default_codes = default_codes
+    @comparison_price_cents = comparison_price_cents
+    @option = option
+    @default_codes = default_offer_codes.filter_map { _1.code.presence }
   end
 
   def result
     return nil if @url_code.blank? && @default_codes.empty?
 
     url_code_result = evaluate_code(@url_code)
-    default_code_result = @default_codes.lazy.map { evaluate_code(_1) }.find { _1[:valid] }
+    default_code_result = best_default_code_result
 
     url_code_valid = url_code_result&.dig(:valid) == true
     default_code_valid = default_code_result&.dig(:valid) == true
@@ -25,20 +31,57 @@ class BestOfferCodeService
     return url_code_result if !default_code_valid
     return default_code_result if !url_code_valid
 
-    url_code_amount = amount_off_from_discount(url_code_result[:discount])
-    default_code_amount = amount_off_from_discount(default_code_result[:discount])
+    # A code this selection cannot meet takes nothing off, but a URL code with nothing to beat still
+    # shows its terms.
+    return url_code_result unless met_discount_conditions?(default_code_result[:discount])
+    return default_code_result unless met_discount_conditions?(url_code_result[:discount])
 
-    url_code_amount > default_code_amount ? url_code_result : default_code_result
+    comparison_amount(url_code_result[:discount]) > comparison_amount(default_code_result[:discount]) ? url_code_result : default_code_result
+  end
+
+  # The buyer's own existing- or new-customer default goes first, then the effective default (the
+  # shop-wide sale, if one runs) — a gated code is not what effective_default_offer_code returns for
+  # an unknown buyer. evaluate_code does not check currency, so a fixed default left behind by a
+  # product currency change is skipped here, including when no sale replaces it.
+  def default_offer_codes
+    @default_offer_codes ||= begin
+      explicit = @product.default_offer_code
+      codes = [@product.effective_default_offer_code]
+      codes.unshift(explicit) if explicit&.existing_customers_only? || explicit&.new_customers_only?
+      codes.compact.uniq.select { _1.is_currency_valid?(@product) }
+    end
   end
 
   private
-    # The buyer's own existing-customer default goes first; when they do not qualify, the
-    # effective default (the shop-wide sale, if one runs) applies instead.
-    def default_codes
-      explicit = @product.default_offer_code
-      codes = [@product.effective_default_offer_code]
-      codes.unshift(explicit) if explicit&.existing_customers_only?
-      codes.compact.uniq.filter_map { _1.code.presence }
+    # A qualifying buyer keeps their existing-customer default only when it takes more off than the
+    # shop-wide sale, so it never prices them above the sale everyone else sees; a tie keeps it.
+    # Weighed on the chosen price, else the one the card quotes: a tiered membership's price_cents is 0.
+    def best_default_code_result
+      @default_codes.map { evaluate_code(_1) }.select { _1[:valid] }.reduce do |best, candidate|
+        comparison_amount(candidate[:discount]) > comparison_amount(best[:discount]) ? candidate : best
+      end
+    end
+
+    # evaluate_code lifts the quantity to the code's minimum and the preview skips the spend
+    # minimum, so a code the quote cannot meet still comes back valid. applySelection drops it at
+    # that quote, so it takes nothing off here.
+    def comparison_amount(discount)
+      return 0 unless met_discount_conditions?(discount)
+
+      amount_off_from_discount(discount, comparison_price_cents, comparison_quantity)
+    end
+
+    # Mirrors applySelection's gate, which checks both minimums at the stock-capped quantity.
+    def met_discount_conditions?(discount)
+      comparison_quantity >= discount[:minimum_quantity].to_i && comparison_price_cents * comparison_quantity >= discount[:minimum_amount_cents].to_i
+    end
+
+    def comparison_quantity
+      @comparison_quantity ||= [@quantity, @product.remaining_for_sale_count, @option&.quantity_left].compact.min
+    end
+
+    def comparison_price_cents
+      @comparison_price_cents ||= @product.display_price_cents(for_default_duration: true)
     end
 
     def evaluate_code(code)
@@ -50,12 +93,21 @@ class BestOfferCodeService
       offer_code = @product.find_offer_code(code: normalized_code)
       return { valid: false, error_code: :invalid_offer } unless offer_code
 
+      quantity = [@quantity, offer_code.minimum_quantity.to_i || 0].max
+      # The computing service reads the option only to check the code's scope, so options the code
+      # covers alike share one answer.
+      scope = @option ? offer_code.applicable_to_variant?(@product, @option.external_id) : :any
+      @evaluations[[code, quantity, @buyer&.id, scope]] ||= compute_code(code, normalized_code, quantity)
+    end
+
+    def compute_code(code, normalized_code, quantity)
       response = OfferCodeDiscountComputingService.new(
         normalized_code,
         {
           @product.unique_permalink => {
             permalink: @product.unique_permalink,
-            quantity: [@quantity, offer_code.minimum_quantity.to_i || 0].max
+            quantity:,
+            **(@option ? { variant_external_id: @option.external_id } : {}),
           }
         },
         buyer: @buyer
@@ -72,12 +124,16 @@ class BestOfferCodeService
       }
     end
 
-    def amount_off_from_discount(discount)
+    # A once-per-cart code's cents are allocated against price_cents, which is 0 on a tiered
+    # membership; the page takes the configured amount off the quoted total instead.
+    def amount_off_from_discount(discount, price_cents, quantity)
       return 0 unless discount
-      if discount[:type] == "fixed"
-        discount[:cents] * (discount[:once_per_cart] ? 1 : @quantity)
+      if discount[:type] == "fixed" && discount[:once_per_cart]
+        [discount[:once_per_cart_amount_cents] || discount[:cents], price_cents * quantity].min
+      elsif discount[:type] == "fixed"
+        [discount[:cents], price_cents].min * quantity
       else
-        (@product.price_cents * discount[:percents] / 100.0).round * @quantity
+        (price_cents * discount[:percents] / 100.0).round * quantity
       end
     end
 end

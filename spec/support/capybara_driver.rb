@@ -38,7 +38,7 @@ end
 
 Capybara.register_driver :mobile_chrome do |app|
   options = Selenium::WebDriver::Chrome::Options.new
-  options.add_emulation(device_name: "iPhone 8")
+  options.add_emulation(device_name: "iPhone SE")
   options.add_preference("intl.accept_languages", "en-US")
   options.logging_prefs = { driver: "DEBUG" }
   test_host_resolver_args.each { |arg| options.args << arg }

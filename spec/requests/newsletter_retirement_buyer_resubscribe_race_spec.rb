@@ -109,8 +109,8 @@ describe "Resubscribing as a buyer while the old Gumroad newsletter retires", ty
     it "catches a resubscribe committed while retire!'s scan runs#{" through the save without validations" if fallback}" do
       scanned = Queue.new
       resubscribed = Queue.new
-      allow_any_instance_of(migration).to receive(:outcome_counts).and_wrap_original do |original, *args|
-        original.call(*args).tap do
+      allow_any_instance_of(migration).to receive(:outcome_counts).and_wrap_original do |original, *args, **kwargs|
+        original.call(*args, **kwargs).tap do
           next unless args.last == Follower.all
 
           scanned << true
@@ -132,5 +132,73 @@ describe "Resubscribing as a buyer while the old Gumroad newsletter retires", ty
     ensure
       finish(retirement)
     end
+  end
+
+  %i[aliases full_scan].each do |stage|
+    it "rechecks a padded purchase resubscribed through validation fallback after #{stage}" do
+      @purchase.update_columns(email: " #{@buyer.email} ")
+      raw_follow = create(:follower, user: @newsletter, email: "raw-form@example.com", follower_user_id: @buyer.id,
+                                     source: Follower::From::EMBED_FORM, confirmed_at: 2.hours.ago, created_at: 2.hours.ago)
+      raw_follow.update_columns(email: @purchase.email, updated_at: 1.hour.ago)
+      original_timestamp = @follow.reload.updated_at
+      scanned = Queue.new
+      resubscribed = Queue.new
+      hook = stage == :aliases ? :purchase_context : :outcome_counts
+      allow_any_instance_of(migration).to receive(hook).and_wrap_original do |original, *args, **kwargs|
+        original.call(*args, **kwargs).tap do
+          next unless stage == :aliases || args.last == Follower.all
+
+          scanned << true
+          Timeout.timeout(10) { resubscribed.pop }
+        end
+      end
+      retirement = in_thread { migration.retire! }
+      Timeout.timeout(10) { scanned.pop }
+      allow_any_instance_of(Purchase).to receive(:valid?).and_return(false)
+
+      resubscribe(@purchase)
+      resubscribed << true
+
+      expect(@purchase.reload.can_contact).to be(true)
+      expect(@purchase.email).to eq(" #{@buyer.email} ")
+      expect(@follow.reload.updated_at).to be > original_timestamp
+      expect(raw_follow.reload.updated_at).to be > original_timestamp
+      expect { retirement.value }.to raise_error(migration::CoverageIncomplete)
+      expect(cutover.state).to eq("migrated")
+      expect(cutover.retirement_coverage["unresolved"]).to include("eligible" => 2)
+      expect(cutover.retirement_coverage["changed_during_scan"]).to include("eligible" => 2)
+    ensure
+      finish(retirement)
+    end
+  end
+
+  it "keeps an unmatched noncanonical follower unresolved after a buyer resubscribes" do
+    @purchase.update_columns(email: " #{@buyer.email} ")
+    @follow.update_columns(email: "  #{@buyer.email} ")
+    original_timestamp = @follow.reload.updated_at
+    scanned = Queue.new
+    resubscribed = Queue.new
+    allow_any_instance_of(migration).to receive(:outcome_counts).and_wrap_original do |original, *args, **kwargs|
+      original.call(*args, **kwargs).tap do
+        next unless args.last == Follower.all
+
+        scanned << true
+        Timeout.timeout(10) { resubscribed.pop }
+      end
+    end
+    retirement = in_thread { migration.retire! }
+    Timeout.timeout(10) { scanned.pop }
+    allow_any_instance_of(Purchase).to receive(:valid?).and_return(false)
+
+    resubscribe(@purchase)
+    resubscribed << true
+
+    expect(@purchase.reload.can_contact).to be(true)
+    expect(@follow.reload.updated_at).to eq(original_timestamp)
+    expect { retirement.value }.to raise_error(migration::CoverageIncomplete)
+    expect(cutover.state).to eq("migrated")
+    expect(cutover.retirement_coverage["unresolved"]).to include("noncanonical_address" => 1)
+  ensure
+    finish(retirement)
   end
 end

@@ -1578,6 +1578,53 @@ describe Api::Internal::Admin::PurchasesController do
         expect(response.parsed_body["termination_reason"]).to eq("fixed_subscription_period_ended")
       end
     end
+
+    context "when the model rejects a buyer-initiated cancel" do
+      let(:product) { create(:product, :with_installment_plan, user: admin_user, price_cents: 10_00) }
+      let(:subscription) { create(:subscription, link: product, user: create(:user), is_installment_plan: true) }
+      let(:purchase) do
+        build(:purchase, link: product, subscription:, is_original_subscription_purchase: true, price_cents: 0).tap(&:save!)
+      end
+
+      it "returns the model's message instead of an empty 422 and leaves the subscription untouched" do
+        expect { post :cancel_subscription, params: params }.not_to have_enqueued_mail
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body).to eq({ success: false, message: "Installment plans cannot be cancelled by the customer" }.as_json)
+        subscription.reload
+        expect(subscription.cancelled_at).to be_nil
+        expect(subscription.user_requested_cancellation_at).to be_nil
+        expect(subscription.cancelled_by_buyer?).to be(false)
+        expect(subscription.cancelled_by_admin?).to be(false)
+        expect(PostToPingEndpointsWorker.jobs.size).to eq(0)
+      end
+
+      it "cancels the same installment plan when by_seller is true" do
+        expect { post :cancel_subscription, params: params.merge(by_seller: "true") }
+          .to have_enqueued_mail(CustomerLowPriorityMailer, :subscription_cancelled_by_seller).with(subscription.id)
+
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body).to include("success" => true, "cancelled_by_admin" => true, "cancelled_by_seller" => true)
+        expect(subscription.reload.cancelled_at).to be_present
+        expect(subscription.cancelled_by_buyer?).to be(false)
+      end
+    end
+
+    context "when a buyer-initiated cancel targets a recurring membership" do
+      let(:purchase) { create(:membership_purchase, email: "buyer@example.com") }
+      let(:subscription) { purchase.subscription }
+
+      it "cancels it as the buyer and sends the buyer-initiated emails" do
+        expect { post :cancel_subscription, params: params }
+          .to have_enqueued_mail(CustomerLowPriorityMailer, :subscription_cancelled).with(subscription.id)
+          .and have_enqueued_mail(ContactingCreatorMailer, :subscription_cancelled_by_customer).with(subscription.id)
+
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body).to include("success" => true, "cancelled_by_admin" => true, "cancelled_by_seller" => false)
+        expect(subscription.reload.cancelled_at).to be_present
+        expect(subscription.cancelled_by_buyer?).to be(true)
+      end
+    end
   end
 
   describe "POST block_buyer" do

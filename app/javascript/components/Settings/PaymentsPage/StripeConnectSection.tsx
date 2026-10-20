@@ -19,6 +19,7 @@ export type StripeConnect = {
   has_connected_stripe: boolean;
   stripe_connect_account_id: string | null;
   stripe_connect_routing_active: boolean;
+  blocks_managed_account: boolean;
   stripe_disconnect_allowed: boolean;
   supported_countries_help_text: string;
 };

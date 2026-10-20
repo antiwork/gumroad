@@ -29,6 +29,43 @@ describe McpConnectorsController do
     expect(Nokogiri::HTML(response.body).at_css('a[href="/settings/authorized_applications"]')).to be_present
   end
 
+  it "links connector and setup pages to each other" do
+    get :show, params: { client: "claude" }
+    expect(Nokogiri::HTML(response.body).at_css("a[href=\"#{McpConnectorsController::SETUP_GUIDE_URL}\"]")).to be_present
+    expect(Nokogiri::HTML(response.body).at_css('a[href="/mcp"]')).to be_present
+    expect(Nokogiri::HTML(response.body).at_css('a[href="/muse"]')).to be_present
+  end
+
+  describe "index" do
+    it "lists every connector with its real availability" do
+      get :index
+
+      expect(response).to be_successful
+      expect(response.body).to include("Gumroad MCP for Claude", "Available now as a custom connector", "not yet listed in Claude’s connector directory")
+      expect(response.body).to include("Gumroad MCP for Muse", "not yet available in Muse")
+      expect(response.body).to include("ChatGPT", "Not available yet")
+      expect(response.body).not_to include("Connect your store")
+    end
+
+    it "links setup, connector, and revoke paths" do
+      get :index
+
+      html = Nokogiri::HTML(response.body)
+      expect(html.css('a[href="/claude"]')).to be_present
+      expect(html.css('a[href="/muse"]')).to be_present
+      expect(html.at_css("a[href=\"#{McpConnectorsController::SETUP_GUIDE_URL}\"]")).to be_present
+      expect(html.css('a[href="/settings/authorized_applications"]')).to be_present
+      expect(html.at_css('#connect a[href="/claude"]')&.text).to eq("Gumroad MCP for Claude connector page")
+    end
+
+    it "does not claim a Muse or ChatGPT connection path for creators" do
+      get :index
+
+      expect(Nokogiri::HTML(response.body).css('article a[href="/muse"]').map(&:text)).to eq(["Read the technical details"])
+      expect(response.body).not_to include("developer mode", "/chatgpt")
+    end
+  end
+
   before { allow(GithubStarsController).to receive(:cached_count).and_return(1234) }
 
   {
@@ -53,5 +90,23 @@ describe McpConnectorsController do
       expect(tags["meta-property-og-description"][:content]).to eq(description)
       expect(tags["meta-property-og-url"][:content]).to eq(page_url)
     end
+  end
+
+  it "sets title, description, and canonical for the index" do
+    get :index
+
+    title = "Gumroad MCP | Sell digital products from your AI assistant"
+    description = "Connect your Gumroad store to an AI assistant with Model Context Protocol. List sales, draft products, publish them, and check payouts from your chat."
+    page_url = "#{PROTOCOL}://#{DOMAIN}/mcp"
+    tags = controller.send(:meta_tags)
+
+    expect(assigns(:hide_layouts)).to be(true)
+    expect(controller.send(:page_title)).to eq(title)
+    expect(tags["title"][:inner_content]).to eq(title)
+    expect(tags["meta-name-description"][:content]).to eq(description)
+    expect(tags["canonical"][:href]).to eq(page_url)
+    expect(tags["meta-property-og-title"][:content]).to eq(title)
+    expect(tags["meta-property-og-description"][:content]).to eq(description)
+    expect(tags["meta-property-og-url"][:content]).to eq(page_url)
   end
 end

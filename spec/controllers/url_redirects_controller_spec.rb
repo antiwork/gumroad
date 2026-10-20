@@ -1861,6 +1861,81 @@ describe UrlRedirectsController, inertia: true do
       expect(response.parsed_body["files"]).to eq(@product.product_files.map { { "url" => "https://example.com/#{_1.display_name}.pdf", "filename" => _1.s3_filename } })
     end
 
+    context "when this buyer was granted the download for a stream-only file" do
+      let(:stream_only_file) { create(:streamable_video, link: @product, stream_only: true) }
+      let(:url_redirect) { UrlRedirect.find_by(token: @token) }
+
+      before do
+        create(:product_file_download_grant, url_redirect:, product_file: stream_only_file)
+        allow_any_instance_of(UrlRedirect).to receive(:signed_location_for_file).with(stream_only_file).and_return("https://example.com/granted.mp4")
+      end
+
+      it "serves the download" do
+        get :download_product_files, format: :json, params: { product_file_ids: [stream_only_file.external_id], id: @token }
+
+        expect(response).to have_http_status(:success)
+        expect(response.parsed_body["files"].sole["url"]).to eq("https://example.com/granted.mp4")
+      end
+
+      it "refuses a second buyer of the same product" do
+        other_token = create(:url_redirect, purchase: create(:purchase, link: @product)).token
+
+        expect do
+          get :download_product_files, format: :json, params: { product_file_ids: [stream_only_file.external_id], id: other_token }
+        end.to raise_error(ActionController::RoutingError)
+      end
+
+      it "refuses after the purchase is refunded" do
+        url_redirect.purchase.update!(stripe_refunded: true)
+
+        expect do
+          get :download_product_files, format: :json, params: { product_file_ids: [stream_only_file.external_id], id: @token }
+        end.to raise_error(ActionController::RoutingError)
+      end
+
+      it "refuses after access is revoked" do
+        url_redirect.purchase.update!(is_access_revoked: true)
+
+        get :download_product_files, format: :json, params: { product_file_ids: [stream_only_file.external_id], id: @token }
+
+        expect(response).to redirect_to(url_redirect_expired_page_path(@token))
+      end
+
+      it "refuses after a chargeback" do
+        url_redirect.purchase.update!(chargeback_date: Time.current)
+
+        expect do
+          get :download_product_files, format: :json, params: { product_file_ids: [stream_only_file.external_id], id: @token }
+        end.to raise_error(ActionController::RoutingError)
+      end
+
+      it "refuses once the file is deleted" do
+        stream_only_file.mark_deleted!
+
+        expect do
+          get :download_product_files, format: :json, params: { product_file_ids: [stream_only_file.external_id], id: @token }
+        end.to raise_error(ActionController::RoutingError)
+      end
+
+      # Save to Dropbox asks for a folder's files in one request.
+      it "serves the granted file alongside a normal one" do
+        normal_file = create(:readable_document, link: @product)
+        allow_any_instance_of(UrlRedirect).to receive(:signed_location_for_file).with(normal_file).and_return("https://example.com/normal.pdf")
+
+        get :download_product_files, format: :json, params: { product_file_ids: [normal_file.external_id, stream_only_file.external_id], id: @token }
+
+        expect(response.parsed_body["files"].map { _1["url"] }).to contain_exactly("https://example.com/normal.pdf", "https://example.com/granted.mp4")
+      end
+
+      it "refuses a request that adds a stream-only file this buyer was not granted" do
+        ungranted_file = create(:streamable_video, link: @product, stream_only: true)
+
+        expect do
+          get :download_product_files, format: :json, params: { product_file_ids: [stream_only_file.external_id, ungranted_file.external_id], id: @token }
+        end.to raise_error(ActionController::RoutingError)
+      end
+    end
+
     it "redirects to the first product file if the format is HTML" do
       file = create(:product_file, link: @product)
       expect_any_instance_of(UrlRedirect).to receive(:signed_location_for_file).with(file).and_return("https://example.com/file.srt")

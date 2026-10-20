@@ -1,10 +1,12 @@
 import { Discount } from "$app/parsers/checkout";
 import { cast } from "$app/utils/cast";
 import { CurrencyCode } from "$app/utils/currency";
+import type { RecurrenceId } from "$app/utils/recurringPricing";
 import { request, ResponseError, readJson } from "$app/utils/request";
 
 import { OfferCode, SortKey, Duration } from "$app/components/CheckoutDashboard/DiscountsPage";
 import { PaginationProps } from "$app/components/Pagination";
+import type { SelectionDiscounts } from "$app/components/Product/selectionDiscounts";
 import { Sort } from "$app/components/useSortingTableDriver";
 
 type Uid = string;
@@ -33,6 +35,26 @@ export const computeOfferDiscount = async (payload: ComputeDiscountRequestData):
   return { error_code: "invalid_offer", error_message: "Something went wrong.", valid: false };
 };
 
+export type SelectionDiscountsRequest = {
+  permalink: string;
+  code: string | null;
+  quantity: number;
+  recurrence: RecurrenceId | null;
+  option_id: string | null;
+  price_cents: number | null;
+};
+
+export const getSelectionDiscounts = (params: SelectionDiscountsRequest) => {
+  const abort = new AbortController();
+  const response = request({
+    method: "GET",
+    accept: "json",
+    url: Routes.selection_discounts_offer_codes_path(params),
+    abortSignal: abort.signal,
+  }).then((res) => readJson<SelectionDiscounts>(res));
+  return { response, cancel: () => abort.abort() };
+};
+
 export type OfferCodeResponseData =
   | {
       valid: false;
@@ -43,6 +65,7 @@ export type OfferCodeResponseData =
         | "inactive"
         | "unmet_minimum_purchase_quantity"
         | "not_existing_customer"
+        | "not_new_customer"
         | "option_not_eligible";
       error_message: string;
     }
@@ -88,6 +111,7 @@ export type DiscountPayload = {
   minimumAmount: number | null;
   oncePerCart: boolean;
   existingCustomersOnly: boolean;
+  newCustomersOnly: boolean;
   autoApply: boolean;
   saleLabel: string | null;
   ownershipProductIds: string[];
@@ -127,6 +151,7 @@ export const buildDiscountPayload = (payload: DiscountPayload) => ({
   minimum_amount_cents: payload.minimumAmount,
   once_per_cart: payload.discount.type === "cents" && payload.oncePerCart,
   existing_customers_only: payload.existingCustomersOnly,
+  new_customers_only: payload.newCustomersOnly,
   auto_apply: payload.autoApply,
   sale_label: payload.autoApply ? payload.saleLabel : null,
   ownership_product_ids: payload.existingCustomersOnly ? payload.ownershipProductIds : [],

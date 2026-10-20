@@ -158,4 +158,70 @@ describe OfferCodesController do
       expect(response.parsed_body).to eq({ "error_message" => "Sorry, the discount code you wish to use is invalid.", "error_code" => "invalid_offer", "valid" => false })
     end
   end
+
+  describe "#selection_discounts" do
+    let(:seller) { create(:compliant_user) }
+    let(:membership) do
+      create(:membership_product_with_preset_tiered_pricing, user: seller,
+                                                             recurrence_price_values: [
+                                                               { "monthly" => { enabled: true, price: 10 } },
+                                                               { "monthly" => { enabled: true, price: 100 } },
+                                                             ])
+    end
+
+    before do
+      owned_product = create(:product, user: seller)
+      renewal = seller.offer_codes.create!(code: "RENEW20", amount_percentage: 20, products: [membership],
+                                           existing_customers_only: true, ownership_products: [owned_product])
+      membership.update!(default_offer_code: renewal)
+      seller.offer_codes.create!(code: "SHOP5", amount_cents: 500, currency_type: "usd", universal: true, products: [], auto_apply: true)
+      @buyer = create(:user)
+      create(:purchase, purchaser: @buyer, link: owned_product, seller:, price_cents: 0)
+    end
+
+    it "answers each tier's code for the signed-in buyer at the requested inputs" do
+      sign_in @buyer
+      get :selection_discounts, params: { permalink: membership.unique_permalink, quantity: 2, recurrence: "monthly" }
+
+      expect(response).to have_http_status(:ok)
+      body = response.parsed_body
+      second_tier = membership.alive_variants.in_order.last.external_id
+      expect(body).to include("quantity" => 2, "recurrence" => "monthly", "url_code" => nil)
+      expect(body.dig("options", second_tier, "discount_code")).to include("valid" => true, "code" => "RENEW20")
+    end
+
+    it "answers the sale to a visitor who is not an existing customer" do
+      get :selection_discounts, params: { permalink: membership.unique_permalink, quantity: 1, recurrence: "monthly" }
+
+      expect(response.parsed_body["options"].values.map { _1.dig("discount_code", "code") }).to eq(%w[SHOP5 SHOP5])
+    end
+
+    it "answers the rental's code beside the purchase's" do
+      product = create(:product, user: seller, price_cents: 10_000, purchase_type: :buy_and_rent, rental_price_cents: 1000)
+      owned_product = create(:product, user: seller)
+      renewal = seller.offer_codes.create!(code: "LOYAL20", amount_percentage: 20, products: [product],
+                                           existing_customers_only: true, ownership_products: [owned_product])
+      product.update!(default_offer_code: renewal)
+      create(:purchase, purchaser: @buyer, link: owned_product, seller:, price_cents: 0)
+      sign_in @buyer
+
+      get :selection_discounts, params: { permalink: product.unique_permalink, quantity: 1 }
+
+      expect(response.parsed_body.dig("options", "", "discount_code", "code")).to eq("LOYAL20")
+      expect(response.parsed_body.dig("rent_options", "", "discount_code", "code")).to eq("SHOP5")
+    end
+
+    it "ignores inputs that are not plain values" do
+      get :selection_discounts, params: { permalink: membership.unique_permalink, code: ["A", "B"], quantity: { a: "1" }, price_cents: ["5"], recurrence: "weekly", option_id: { id: "x" } }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to include("url_code" => nil, "quantity" => 1, "recurrence" => nil, "option_id" => nil, "price_cents" => nil)
+    end
+
+    it "returns not found for an unknown product" do
+      get :selection_discounts, params: { permalink: "missing", quantity: 1 }
+
+      expect(response).to have_http_status(:not_found)
+    end
+  end
 end
