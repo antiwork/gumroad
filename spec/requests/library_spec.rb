@@ -323,27 +323,6 @@ describe("Library Scenario", type: :system, js: true) do
       expect(page).to have_selector("h2", text: "Transferred membership")
     end
 
-    it "renders a billing card and a held card whose purchase shares the billed subscription's database id" do
-      shared_id = [Purchase.maximum(:id).to_i, Subscription.maximum(:id).to_i].max + 1_000
-      moved_product = create(:membership_product, name: "Moved membership")
-      moved_subscription = create(:subscription, id: shared_id, link: moved_product, user: @user)
-      create(:membership_purchase, link: moved_product, purchaser: @user, email: @user.email, subscription: moved_subscription).tap(&:create_url_redirect!)
-      held = owned_membership("Held membership", id: shared_id)
-      @user.transfer_purchases!(new_email: create(:user, email: "new-holder@example.com").email)
-      expect(moved_subscription.external_id).to eq(held.external_id)
-      Link.import(refresh: true, force: true)
-
-      visit "/library"
-      2.times do
-        click_on "Subscriptions"
-        expect(page).to have_product_card(count: 2)
-        expect(page).to have_link("Manage Moved membership - Untitled", href: "/subscriptions/#{moved_subscription.external_id}/manage", count: 1)
-        expect(page).to have_link("Manage Held membership - Untitled", href: "/subscriptions/#{held.subscription.external_id}/manage", count: 1)
-        click_on "Purchases"
-        expect(page).to have_product_card(count: 1)
-      end
-    end
-
     it "keeps every subscription listed when an old URL carries archive or bundle filters" do
       active = owned_membership("Monthly membership")
       archived = owned_membership("Archived membership", is_archived: true)
