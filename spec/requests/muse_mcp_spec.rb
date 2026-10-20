@@ -1323,4 +1323,89 @@ describe "Muse MCP" do
       expect(response.parsed_body["error"]["data"]["supported"]).to eq(["2025-03-26"])
     end
   end
+
+  describe "revision telemetry" do
+    before do
+      @token = create("doorkeeper/access_token", application: @app, resource_owner_id: @seller.id, scopes: "view_sales")
+      Feature.deactivate(:mcp_protocol_2026_07_28)
+    end
+
+    def post_mcp_on(client, payload, headers: {})
+      post "/#{client}/v1/mcp", params: payload.to_json, headers: {
+        "CONTENT_TYPE" => "application/json",
+        "HOST" => DOMAIN,
+        "Authorization" => "Bearer #{@token.token}"
+      }.merge(headers)
+    end
+
+    def declaring(version, method: "tools/list")
+      {
+        jsonrpc: "2.0",
+        id: 1,
+        method:,
+        _meta: { Muse::Mcp::VERSION_META_KEY => version },
+      }
+    end
+
+    def declare(version)
+      { Muse::Mcp::VERSION_HEADER => version }
+    end
+
+    it "counts an undeclared caller apart from one that declares a revision, on every connector path" do
+      %w[muse claude chatgpt].each do |client|
+        post_mcp_on(client, { jsonrpc: "2.0", id: 1, method: "tools/list" })
+        post_mcp_on(client, declaring(Muse::Mcp::LEGACY_PROTOCOL_VERSION), headers: declare(Muse::Mcp::LEGACY_PROTOCOL_VERSION))
+        post_mcp_on(client, declaring(Muse::Mcp::MODERN_PROTOCOL_VERSION), headers: declare(Muse::Mcp::MODERN_PROTOCOL_VERSION))
+      end
+
+      mix = Muse::ProtocolTelemetry.mix
+      expect(mix.keys).to contain_exactly("muse", "claude", "chatgpt")
+      expect(mix.values).to all(eq(
+        "undeclared" => { "tools/list" => 1 },
+        "2025-03-26" => { "tools/list" => 1 },
+        "2026-07-28" => { "tools/list" => 1 }
+      ))
+    end
+
+    it "counts each message of a batch" do
+      post_mcp_on("muse", [
+                    { jsonrpc: "2.0", id: 1, method: "tools/list" },
+                    { jsonrpc: "2.0", id: 2, method: "tools/list" },
+                  ])
+
+      expect(Muse::ProtocolTelemetry.mix["muse"]).to eq("undeclared" => { "tools/list" => 2 })
+    end
+
+    it "counts no caller identity" do
+      post_mcp_on("muse", { jsonrpc: "2.0", id: 1, method: "tools/list" })
+
+      expect($redis.hgetall(RedisKey.mcp_protocol_requests(Date.current)).keys).to eq(["muse|undeclared|tools/list"])
+    end
+
+    it "buckets a declaration and a method it cannot shape-check" do
+      post_mcp_on("muse", { jsonrpc: "2.0", id: 1, method: "Tools/List" })
+      post_mcp_on("muse", declaring("not-a-version"), headers: declare("not-a-version"))
+
+      expect(Muse::ProtocolTelemetry.mix["muse"]).to eq(
+        "undeclared" => { "other" => 1 },
+        "other" => { "tools/list" => 1 }
+      )
+    end
+
+    it "serves the request when the counter cannot be written" do
+      allow($redis).to receive(:hincrby).and_raise(Redis::CannotConnectError, "no connection")
+
+      post_mcp_on("muse", { jsonrpc: "2.0", id: 1, method: "tools/list" })
+
+      expect(response).to be_successful
+    end
+
+    it "counts no unauthenticated request" do
+      post "/muse/v1/mcp", params: { jsonrpc: "2.0", id: 1, method: "tools/list" }.to_json,
+                           headers: { "CONTENT_TYPE" => "application/json", "HOST" => DOMAIN }
+
+      expect(response).to have_http_status(:unauthorized)
+      expect($redis.hgetall(RedisKey.mcp_protocol_requests(Date.current))).to be_empty
+    end
+  end
 end

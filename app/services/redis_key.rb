@@ -22,6 +22,7 @@ class RedisKey
     def force_product_id_timestamp = "force_product_id_timestamp"
     def api_v2_sales_deprecated_pagination_query_timeout = "api_v2_sales_deprecated_pagination_query_timeout"
     def api_v2_sales_page_key_query_timeout = "api_v2_sales_page_key_query_timeout"
+    def mcp_protocol_requests(date) = "mcp:protocol_requests:#{date.to_date.iso8601}"
     def free_purchases_watch_hours = "free_purchases_watch_hours"
     def max_allowed_free_purchases_of_same_product = "max_allowed_free_purchases_of_same_product"
     def auto_topup_negative_destination_balance_last_amount(merchant_account_id) = "auto_topup_negative_destination_balance:#{merchant_account_id}:last_amount_cents"
