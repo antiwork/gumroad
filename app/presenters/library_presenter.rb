@@ -140,6 +140,9 @@ class LibraryPresenter
       product_seller_data = {}
 
       purchases.map do |purchase|
+        # A subscription this account pays for whose purchase another account now holds: show the
+        # billing card without that account's purchase id, download link or archive state.
+        held_elsewhere = subscriptions_only && purchase.purchaser_id != logged_in_user.id
         product = purchase.link
         product_seller_data[product.user.id] ||= product.user.username && {
           name: product.user.name || product.user.username,
@@ -154,9 +157,9 @@ class LibraryPresenter
             native_type: product.native_type,
           },
           purchase: {
-            id: purchase.external_id,
-            is_archived: purchase.is_archived,
-            download_url: library_download_location(purchase, replacement_redirects),
+            id: held_elsewhere ? purchase.subscription.external_id : purchase.external_id,
+            is_archived: !held_elsewhere && purchase.is_archived,
+            download_url: held_elsewhere ? nil : library_download_location(purchase, replacement_redirects),
             variants: purchase.variant_attributes&.map(&:name)&.join(", "),
           }.merge(subscriptions_only ? { subscription: subscription_details(purchase.subscription) } : {})
         }
@@ -167,11 +170,21 @@ class LibraryPresenter
     # owned by another account (reassignment, gift conversion) stays out; an unowned one is a guest
     # checkout this buyer claimed, and its manage link falls back to the emailed magic link.
     def ongoing_subscription_purchases
-      owned = logged_in_user.purchases.for_library
+      held = logged_in_user.purchases.for_library
         .has_active_subscription
         .where(subscriptions: { user_id: [logged_in_user.id, nil] })
-      owned = owned.where.not(id: no_access_membership_purchase_ids(owned) + converted_gift_receiver_ids(owned))
-      owned.where(id: owned.unscope(:select).group(:subscription_id).select("MAX(purchases.id)"))
+      # User#transfer_purchases! moves purchases to another account but leaves Subscription#user, so
+      # this account can still be billed for (and manage) a subscription whose purchase it no longer holds.
+      billed_elsewhere = Purchase.for_library
+        .has_active_subscription
+        .where(subscriptions: { user_id: logged_in_user.id })
+        .where.not(subscription_id: held.select(:subscription_id))
+      Purchase.where(id: one_card_per_subscription(held) + one_card_per_subscription(billed_elsewhere))
+    end
+
+    def one_card_per_subscription(scope)
+      scope = scope.where.not(id: no_access_membership_purchase_ids(scope) + converted_gift_receiver_ids(scope))
+      scope.group(:subscription_id).pluck(Arel.sql("MAX(purchases.id)"))
     end
 
     # Gift::ConvertToNonGiftService leaves the recipient's receiver row for access but makes the

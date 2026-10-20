@@ -460,6 +460,40 @@ describe LibraryPresenter do
           expect(described_class.new(previous_owner).library_props(subscriptions_only: true)[:results]).to be_empty
         end
 
+        it "keeps listing a subscription this account still pays for after User#transfer_purchases! moves its purchase away" do
+          holder = create(:user, email: "new-holder@example.com")
+          purchase.update!(email: buyer.email)
+
+          buyer.transfer_purchases!(new_email: holder.email)
+
+          expect(purchase.reload.purchaser).to eq(holder)
+          expect(purchase.subscription.reload.user).to eq(buyer)
+          card = results(subscriptions_only: true).sole
+          expect(card[:purchase]).to eq(
+            id: purchase.subscription.external_id,
+            is_archived: false,
+            download_url: nil,
+            variants: "Untitled",
+            subscription: {
+              status_label: "Renews on #{buyer_date(purchase.subscription.end_time_of_subscription)}",
+              manage_url: "/subscriptions/#{purchase.subscription.external_id}/manage",
+            },
+          )
+          expect(card.to_json).not_to include(purchase.external_id, purchase.url_redirect.token)
+          expect(results.map { _1[:purchase][:id] }).not_to include(purchase.external_id)
+        end
+
+        it "gives the new holder of a transferred purchase its access but not the payer's billing card" do
+          holder = create(:user, email: "new-holder@example.com")
+          purchase.update!(email: buyer.email)
+
+          buyer.transfer_purchases!(new_email: holder.email)
+
+          holder_library = described_class.new(holder)
+          expect(holder_library.library_props(subscriptions_only: true)[:results]).to be_empty
+          expect(holder_library.library_props[:results].map { _1[:purchase][:id] }).to include(purchase.external_id)
+        end
+
         it "lists a converted gift only for the account-backed payer, keeping the recipient's Library access" do
           payer = create(:user, email: "payer@example.com")
           gift, gifter, receiver = gifted_membership(payer:)

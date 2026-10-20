@@ -303,6 +303,26 @@ describe("Library Scenario", type: :system, js: true) do
       expect(page).to have_current_path("/subscriptions/#{guest.subscription.external_id}/magic_link/new")
     end
 
+    it "keeps a subscription the buyer still pays for on the tab after its purchases move to another account" do
+      paid = owned_membership("Transferred membership")
+      paid.update!(email: @user.email)
+      @user.transfer_purchases!(new_email: create(:user, email: "new-holder@example.com").email)
+      Link.import(refresh: true, force: true)
+
+      visit "/library"
+      expect(page).to_not have_product_card(paid.link)
+
+      visit "/library?subscriptions_only=true"
+      within(find_product_card(paid.link)) do
+        expect(page).to have_text("Renews on #{buyer_date(paid.subscription.end_time_of_subscription)}")
+        expect(page).to_not have_selector("a[href*='/d/']")
+      end
+      click_on "Manage Transferred membership - Untitled"
+
+      expect(page).to have_current_path("/subscriptions/#{paid.subscription.external_id}/manage")
+      expect(page).to have_selector("h2", text: "Transferred membership")
+    end
+
     it "keeps every subscription listed when an old URL carries archive or bundle filters" do
       active = owned_membership("Monthly membership")
       archived = owned_membership("Archived membership", is_archived: true)
