@@ -105,9 +105,11 @@ export const Card = ({
           <div className="flex flex-col gap-1 text-sm">
             <p className="text-muted">{purchase.subscription.status_label}</p>
             {purchase.subscription.manage_url ? (
+              // The rest of the card is the download link, so the padding/negative-margin pair makes this
+              // target 24px tall without moving its text.
               <a
                 href={purchase.subscription.manage_url}
-                className="relative self-start"
+                className="relative -my-0.5 self-start py-0.5"
                 aria-label={`${purchase.subscription.manage_label} for ${name}`}
               >
                 {purchase.subscription.manage_label}

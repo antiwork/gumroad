@@ -270,7 +270,7 @@ describe("Library Scenario", type: :system, js: true) do
       within(find_product_card(completed.link)) do
         expect(page).to have_text("Installment plan · Paid in full")
         expect(page).to have_link("Completed course", href: completed.url_redirect.download_page_url)
-        expect(page).to_not have_link(/^Manage /)
+        expect(page).to have_no_link(text: /\AManage /)
         expect(page).to_not have_selector("[aria-label='Open product action menu']")
       end
 
@@ -278,6 +278,33 @@ describe("Library Scenario", type: :system, js: true) do
 
       expect(page).to have_current_path("/subscriptions/#{unfinished.subscription.external_id}/manage")
       expect(page).to have_selector("h2", text: "Unfinished course")
+    end
+
+    it "gives Manage a target at least 24px tall, so a click just above or below its text manages instead of downloading" do
+      min_target_size = 24 # WCAG 2.2 SC 2.5.8, CSS px
+      membership = owned_membership("Held membership")
+      Link.import(refresh: true, force: true)
+
+      [:above, :below].each do |side|
+        visit "/library?subscriptions_only=true"
+        within(find_product_card(membership.link)) { expect(page).to have_link("Held membership", href: membership.url_redirect.download_page_url) }
+        manage = find_link("Manage membership for Held membership")
+        page.scroll_to(manage, align: :center)
+        box = manage.evaluate_script("(({ left, top, width, height }) => ({ left, top, width, height }))(this.getBoundingClientRect())")
+        line_height = manage.evaluate_script("parseFloat(getComputedStyle(this).lineHeight)")
+        expect(box["height"]).to be >= min_target_size
+        expect(box["width"]).to be >= min_target_size
+
+        # Inside the 24px target but outside the text line, where the card's download link sits behind.
+        # Rounding away from the centre keeps the point at least 1px off the text despite subpixel layout.
+        offset = min_target_size / 2 - 1
+        expect(offset).to be > line_height / 2
+        center_y = box["top"] + box["height"] / 2
+        y = side == :above ? (center_y - offset).floor : (center_y + offset).ceil
+        page.driver.browser.action.move_to_location((box["left"] + box["width"] / 2).round, y).click.perform
+
+        expect(page).to have_current_path("/subscriptions/#{membership.subscription.external_id}/manage")
+      end
     end
 
     it "lists a guest checkout once claimed with its purchase email, and sends Manage through the emailed sign-in link" do
