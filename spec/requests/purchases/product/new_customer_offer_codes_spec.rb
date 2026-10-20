@@ -122,6 +122,56 @@ describe("New-customer-only offer codes from product page", type: :system, js: t
       expect(product.sales.successful.last).to have_attributes(email: "repeat.buyer@example.com", price_cents: 3000, offer_code: nil)
     end
 
+    context "when the seller's automatic sale is a legacy new-customers-only code" do
+      let(:legacy_seller) { create(:user) }
+      let(:course) { create(:product, user: legacy_seller, price_cents: 3000, name: "Pro Course") }
+      let(:legacy_earlier_product) { create(:product, user: legacy_seller, price_cents: 2000, name: "Starter Pack") }
+
+      before do
+        # Validations refuse auto_apply on a new-customers-only code, so the legacy row is written directly.
+        create(:universal_offer_code, user: legacy_seller, code: "WELCOME", amount_cents: nil, amount_percentage: 100, currency_type: nil, auto_apply: true)
+          .update_columns(new_customers_only: true)
+      end
+
+      # A cart saved while the code was automatic stores it like a link code: only the code and fromUrl.
+      def checkout_with_saved_legacy_code
+        visit course.long_url
+        within(find(:article)) { click_on "I want this!" }
+        expect(page).to have_field("Email address")
+        wait_until_true(sleep_interval: CheckoutPresenter::CART_SAVE_DEBOUNCE_DURATION_IN_SECONDS) { Cart.alive.where(user_id: nil).exists? }
+        Cart.alive.where(user_id: nil).sole.update!(discount_codes: [{ code: "WELCOME", fromUrl: true }])
+        visit checkout_path
+        expect(page).to have_text("Total US$0", normalize_ws: true)
+      end
+
+      it "doesn't apply it to a visitor" do
+        visit course.long_url
+
+        expect(page).to have_selector("[itemprop='price']", exact_text: "$30", visible: false)
+      end
+
+      it "lets a returning guest remove it from a saved cart and pay" do
+        create(:purchase, link: legacy_earlier_product, purchaser: nil, email: "repeat.buyer@example.com")
+        checkout_with_saved_legacy_code
+
+        check_out(course, email: "repeat.buyer@example.com", is_free: true, error: refusal)
+        click_on "Back to checkout"
+        find("[aria-label='Discount code']", text: "WELCOME").click
+        expect(page).not_to have_selector("[aria-label='Discount code']", text: "WELCOME")
+        expect(page).to have_text("Total US$30", normalize_ws: true)
+
+        check_out(course, email: "repeat.buyer@example.com")
+        expect(course.sales.successful.last).to have_attributes(email: "repeat.buyer@example.com", price_cents: 3000, offer_code: nil)
+      end
+
+      it "still gives a first-time guest the saved code" do
+        checkout_with_saved_legacy_code
+
+        check_out(course, email: "first.time@example.com", is_free: true)
+        expect(course.sales.successful.last).to have_attributes(email: "first.time@example.com", price_cents: 0, offer_code: OfferCode.find_by!(code: "WELCOME"))
+      end
+    end
+
     it "explains the refusal without a way back when other items in the order went through" do
       create(:purchase, link: earlier_product, purchaser: nil, email: "repeat.buyer@example.com")
       free_guide = create(:product, user: seller, price_cents: 0, name: "Free Guide")

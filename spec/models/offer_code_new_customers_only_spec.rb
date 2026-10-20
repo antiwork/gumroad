@@ -150,4 +150,43 @@ describe OfferCode, "limited to new customers" do
       expect(product.reload.effective_default_offer_code).to be_nil
     end
   end
+
+  describe "as the seller's automatic discount" do
+    # Validations refuse auto_apply on a new-customers-only code, so legacy rows are written directly.
+    def legacy_automatic(code, amount_percentage: 100)
+      create(:universal_offer_code, user: seller, code:, amount_cents: nil, amount_percentage:, currency_type: nil, auto_apply: true)
+        .tap { _1.update_columns(new_customers_only: true) }
+    end
+
+    before { Current.auto_apply_offer_codes = nil }
+
+    it "is never applied automatically, whether the seller's code is looked up or preloaded" do
+      legacy_automatic("welcome")
+
+      expect(User.find(seller.id).auto_apply_offer_code_for(product)).to be_nil
+      expect(User.includes(:auto_apply_offer_code).find(seller.id).auto_apply_offer_code_for(product)).to be_nil
+      expect(Link.find(product.id).effective_default_offer_code).to be_nil
+      expect(BestOfferCodeService.new(product: Link.find(product.id)).default_offer_codes).to be_empty
+    end
+
+    it "leaves an ordinary automatic code the seller also has to apply instead" do
+      legacy_automatic("welcome")
+      # A second automatic code is refused today; only legacy data can hold both.
+      ordinary = create(:universal_offer_code, user: seller, code: "sale", amount_cents: nil, amount_percentage: 10, currency_type: nil)
+      ordinary.update_columns(auto_apply: true)
+
+      expect(User.find(seller.id).auto_apply_offer_code_for(product)).to eq(ordinary)
+      expect(User.includes(:auto_apply_offer_code).find(seller.id).auto_apply_offer_code_for(product)).to eq(ordinary)
+      expect(Link.find(product.id).effective_default_offer_code).to eq(ordinary)
+    end
+
+    it "is not applied from an object loaded before it was limited to new customers" do
+      code = create(:universal_offer_code, user: seller, code: "welcome", amount_cents: nil, amount_percentage: 100, currency_type: nil, auto_apply: true)
+      loaded = User.includes(:auto_apply_offer_code).find(seller.id)
+      loaded.auto_apply_offer_code.new_customers_only = true
+
+      expect(loaded.auto_apply_offer_code_for(product)).to be_nil
+      expect(code.reload.auto_apply?).to be(true)
+    end
+  end
 end
