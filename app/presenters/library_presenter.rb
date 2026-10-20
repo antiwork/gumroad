@@ -18,6 +18,12 @@ class LibraryPresenter
       subscription.has_fixed_length? ? subscription.charge_occurrence_count - successful.size : 0
     end
 
+    # A standing chargeback or full refund still counts toward the installments charged, but the buyer
+    # didn't keep that payment, so labels must not call it paid.
+    def adjusted_payment_history?
+      successful.any?(&:chargedback_not_reversed_or_refunded?)
+    end
+
     def end_time_of_subscription
       last_purchase = successful.last || purchases.select(&:is_free_trial_purchase?).last
       return subscription.free_trial_ends_at if subscription.free_trial_ends_at.present? && last_purchase&.is_free_trial_purchase?
@@ -311,11 +317,18 @@ class LibraryPresenter
       next_charge_at = facts.end_time_of_subscription
       remaining = facts.remaining_charges_count
       if facts.charges_completed?
-        subscription.is_installment_plan? ? "Paid in full" : dated("Ends on", next_charge_at, fallback: "Ending")
+        return dated("Ends on", next_charge_at, fallback: "Ending") unless subscription.is_installment_plan?
+
+        facts.adjusted_payment_history? ? "No payments remaining" : "Paid in full"
       elsif subscription.is_installment_plan?
-        paid = "#{subscription.charge_occurrence_count - remaining} of #{subscription.charge_occurrence_count} paid"
+        progress =
+          if facts.adjusted_payment_history?
+            "#{remaining} #{"payment".pluralize(remaining)} remaining"
+          else
+            "#{subscription.charge_occurrence_count - remaining} of #{subscription.charge_occurrence_count} paid"
+          end
         next_payment = remaining == 1 ? "Final payment on" : "Next payment on"
-        "#{paid} · #{dated(next_payment, next_charge_at, fallback: "Payment due")}"
+        "#{progress} · #{dated(next_payment, next_charge_at, fallback: "Payment due")}"
       elsif subscription.gift? && subscription.credit_card_id.blank?
         dated("Gift, paid through", next_charge_at, fallback: "Gift")
       elsif subscription.in_free_trial?

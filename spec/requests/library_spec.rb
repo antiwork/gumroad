@@ -338,7 +338,7 @@ describe("Library Scenario", type: :system, js: true) do
       visit "/library?subscriptions_only=true"
       expect(page).to have_product_card(plan.link)
       within(find_product_card(plan.link)) do
-        expect(page).to have_text("Installment plan · 2 of 3 paid · Final payment on #{buyer_date(plan.subscription.reload.end_time_of_subscription)}")
+        expect(page).to have_text("Installment plan · 1 payment remaining · Final payment on #{buyer_date(plan.subscription.reload.end_time_of_subscription)}")
         expect(page).to_not have_selector("a[href*='/d/']")
       end
       click_on "Manage Disputed course"

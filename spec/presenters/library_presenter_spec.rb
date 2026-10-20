@@ -687,7 +687,7 @@ describe LibraryPresenter do
             is_archived: false,
             download_url: nil,
             subscription: {
-              status_label: "Installment plan · 2 of 3 paid · Final payment on #{buyer_date(plan.subscription.end_time_of_subscription)}",
+              status_label: "Installment plan · 1 payment remaining · Final payment on #{buyer_date(plan.subscription.end_time_of_subscription)}",
               manage_url: "/subscriptions/#{plan.subscription.external_id}/manage",
             },
           ))
@@ -712,6 +712,33 @@ describe LibraryPresenter do
           dispute!(plan)
 
           expect(plan_card).to include(purchase: include(id: "subscription:#{plan.subscription.external_id}", download_url: nil))
+        end
+
+        it "says no payments remain, not paid in full, once a plan with a charged-back payment has collected every installment" do
+          dispute!(plan)
+          renewal(plan.subscription, is_installment_payment: true, email: buyer.email)
+
+          expect(plan.subscription.reload.charges_completed?).to be(true)
+          expect(plan_card).to include(purchase: include(subscription: { status_label: "Installment plan · No payments remaining", manage_url: nil }))
+        end
+
+        it "counts a payment as paid again once its chargeback is reversed" do
+          dispute!(plan)
+          Purchase.handle_charge_event(build(:charge_event_dispute_won, charge_id: plan.stripe_transaction_id))
+
+          expect(plan.reload.chargeback_reversed?).to be(true)
+          expect(plan_card).to include(purchase: include(subscription: include(
+            status_label: "Installment plan · 2 of 3 paid · Final payment on #{buyer_date(plan.subscription.reload.end_time_of_subscription)}",
+          )))
+        end
+
+        it "describes the remaining payments when an installment was fully refunded" do
+          second_installment.update!(stripe_refunded: true)
+
+          expect(second_installment.reload.chargedback_not_reversed_or_refunded?).to be(true)
+          expect(plan_card).to include(purchase: include(subscription: include(
+            status_label: "Installment plan · 1 payment remaining · Final payment on #{buyer_date(plan.subscription.reload.end_time_of_subscription)}",
+          )))
         end
 
         it "leaves out a plan with every installment charged back, which the charge worker no longer bills" do
