@@ -19,6 +19,8 @@ module Muse
     TRANSPORT_ERROR_CODES = [HEADER_MISMATCH, UNSUPPORTED_PROTOCOL_VERSION].freeze
     # A caller only ever sees their own store, so no result of ours is shareable between callers.
     TOOLS_LIST_CACHE = { ttlMs: 0, cacheScope: "private" }.freeze
+    # Nothing in it is caller-specific, but its versions follow the flag, so it is never fresh.
+    DISCOVER_CACHE = { ttlMs: 0, cacheScope: "public" }.freeze
     INSTRUCTIONS = "Use these tools for a connected creator's own store: products, sales, and payouts. Confirm with the person before publishing or unpublishing. Buyers still check out on the product URL. This server does not take payment."
     SERVER_INFO = { name: "gumroad", title: "Gumroad", version: "1.0.0" }.freeze
 
@@ -139,15 +141,25 @@ module Muse
       end
 
       # Era is per request: an undeclared request is legacy and keeps its exact current path.
-      # `_meta` is the declaration and the header is checked against it. A legacy client sends no
-      # `_meta`, so a header alone stays legacy rather than becoming an era error.
+      # The 2026-07-28 schema declares the version in `params._meta`; a top-level `_meta`, which this
+      # endpoint read first, is still honoured. The header is checked against the declaration. A
+      # legacy client sends neither, so a header alone stays legacy rather than becoming an era error.
       def resolve_era!(body)
-        meta = body["_meta"]
-        declared = meta.is_a?(Hash) ? meta[VERSION_META_KEY].presence : nil
+        nested = declared_version(body["params"])
+        top_level = declared_version(body)
+        declared = nested || top_level
         # Counted before the checks below, so a client that has already moved to a revision we do
         # not serve yet still shows up in the mix.
         @protocol_counts[ProtocolTelemetry.bucket(declared, body["method"])] += 1
         return if declared.nil?
+
+        if nested && top_level && nested.to_s != top_level.to_s
+          raise Error.new(
+            "_meta #{VERSION_META_KEY} must not differ between params and the request",
+            code: HEADER_MISMATCH,
+            data: { declared: nested, top_level: top_level }
+          )
+        end
 
         header = @protocol_version_header.presence
         if header.nil? || declared.to_s != header.to_s
@@ -168,6 +180,11 @@ module Muse
         end
 
         @era = :modern if declared.to_s == MODERN_PROTOCOL_VERSION
+      end
+
+      def declared_version(container)
+        meta = container.is_a?(Hash) ? container["_meta"] : nil
+        meta.is_a?(Hash) ? meta[VERSION_META_KEY].presence : nil
       end
 
       # The modern lane ships behind a flag: with it off, 2026-07-28 is not supported yet.
@@ -230,7 +247,8 @@ module Muse
           supportedVersions: supported_versions,
           capabilities: { tools: { listChanged: false } },
           _meta: { SERVER_INFO_META_KEY => SERVER_INFO },
-          instructions: INSTRUCTIONS
+          instructions: INSTRUCTIONS,
+          **DISCOVER_CACHE
         }
       end
 

@@ -1324,6 +1324,153 @@ describe "Muse MCP" do
     end
   end
 
+  context "with a client declaring the 2026-07-28 revision in params._meta" do
+    before do
+      @token = create("doorkeeper/access_token", application: @app, resource_owner_id: @seller.id, scopes: "view_sales")
+      Feature.activate(:mcp_protocol_2026_07_28)
+    end
+
+    # The request shape the 2026-07-28 schema specifies: the declaration lives in params._meta.
+    def canonical_request(method, version: Muse::Mcp::MODERN_PROTOCOL_VERSION, **params)
+      meta = {
+        Muse::Mcp::VERSION_META_KEY => version,
+        "io.modelcontextprotocol/clientInfo" => { "name" => "spec-client", "version" => "1.0.0" },
+        "io.modelcontextprotocol/clientCapabilities" => {}
+      }
+      { jsonrpc: "2.0", id: 1, method:, params: params.merge(_meta: meta) }
+    end
+
+    def post_canonical(client, payload, headers: {}, declared: Muse::Mcp::MODERN_PROTOCOL_VERSION)
+      post "/#{client}/v1/mcp", params: payload.to_json, headers: {
+        "CONTENT_TYPE" => "application/json",
+        "HOST" => DOMAIN,
+        "Authorization" => "Bearer #{@token.token}",
+        Muse::Mcp::VERSION_HEADER => declared,
+        Muse::Mcp::METHOD_HEADER => payload[:method].to_s
+      }.merge(headers).compact
+    end
+
+    def get_account_call = canonical_request("tools/call", name: "get_account", arguments: {})
+
+    %w[muse claude chatgpt].each do |client|
+      it "serves server/discover with its cache fields on #{client}" do
+        post_canonical(client, canonical_request("server/discover"))
+
+        expect(response).to have_http_status(:ok)
+        result = response.parsed_body["result"]
+        expect(result).to include(
+          "supportedVersions" => ["2025-03-26", "2026-07-28"],
+          "capabilities" => { "tools" => { "listChanged" => false } },
+          "resultType" => "complete",
+          "ttlMs" => 0,
+          "cacheScope" => "public"
+        )
+        expect(result["_meta"]).to eq("io.modelcontextprotocol/serverInfo" => { "name" => "gumroad", "title" => "Gumroad", "version" => "1.0.0" })
+      end
+
+      it "serves tools/call get_account on the modern lane on #{client}" do
+        post_canonical(client, get_account_call, headers: { Muse::Mcp::NAME_HEADER => "get_account" })
+
+        expect(response).to have_http_status(:ok)
+        result = response.parsed_body["result"]
+        expect(result["resultType"]).to eq("complete")
+        expect(result["structuredContent"]).to include("id" => @seller.external_id, "username" => @seller.username)
+      end
+
+      it "answers tools/call with -32022 rather than the legacy lane while the flag is off on #{client}" do
+        Feature.deactivate(:mcp_protocol_2026_07_28)
+
+        post_canonical(client, get_account_call, headers: { Muse::Mcp::NAME_HEADER => "get_account" })
+
+        expect(response).to have_http_status(:bad_request)
+        expect(response.parsed_body).not_to have_key("result")
+        expect(response.parsed_body["error"]).to include(
+          "code" => -32022,
+          "data" => { "supported" => ["2025-03-26"], "requested" => "2026-07-28" }
+        )
+      end
+
+      it "counts the declaration under its revision on #{client}, with the flag off and on" do
+        post_canonical(client, canonical_request("server/discover"))
+        Feature.deactivate(:mcp_protocol_2026_07_28)
+        post_canonical(client, get_account_call, headers: { Muse::Mcp::NAME_HEADER => "get_account" })
+
+        expect(Muse::ProtocolTelemetry.mix[client]).to eq("2026-07-28" => { "server/discover" => 1, "tools/call" => 1 })
+      end
+    end
+
+    it "answers server/discover with -32022 while the flag is off" do
+      Feature.deactivate(:mcp_protocol_2026_07_28)
+
+      post_canonical("muse", canonical_request("server/discover"))
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body["error"]).to include("code" => -32022, "data" => { "supported" => ["2025-03-26"], "requested" => "2026-07-28" })
+    end
+
+    it "rejects a declaration the version header disagrees with" do
+      post_canonical("muse", canonical_request("server/discover"), declared: Muse::Mcp::LEGACY_PROTOCOL_VERSION)
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body["error"]).to include("code" => -32020)
+      expect(response.parsed_body["error"]["data"]).to include("header" => "2025-03-26", "declared" => "2026-07-28")
+    end
+
+    it "rejects a declaration with no version header" do
+      post_canonical("muse", canonical_request("server/discover"), headers: { Muse::Mcp::VERSION_HEADER => nil })
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body["error"]).to include("code" => -32020)
+    end
+
+    it "rejects a tool call whose name header does not match" do
+      post_canonical("muse", get_account_call, headers: { Muse::Mcp::NAME_HEADER => "list_sales" })
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body["error"]).to include("code" => -32020)
+      expect(response.parsed_body["error"]["data"]).to include("header" => "list_sales", "name" => "get_account")
+    end
+
+    it "answers a revision it does not serve with the ones it does" do
+      post_canonical("muse", canonical_request("server/discover", version: "2025-11-25"), declared: "2025-11-25")
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body["error"]).to include("code" => -32022, "data" => { "supported" => ["2025-03-26", "2026-07-28"], "requested" => "2025-11-25" })
+    end
+
+    it "serves a request that declares the same revision in params._meta and at the top level" do
+      post_canonical("muse", canonical_request("server/discover").merge(_meta: { Muse::Mcp::VERSION_META_KEY => Muse::Mcp::MODERN_PROTOCOL_VERSION }))
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["result"]["resultType"]).to eq("complete")
+    end
+
+    it "rejects a request whose params._meta and top-level _meta declare different revisions" do
+      payload = get_account_call.merge(_meta: { Muse::Mcp::VERSION_META_KEY => Muse::Mcp::LEGACY_PROTOCOL_VERSION })
+
+      post_canonical("muse", payload, headers: { Muse::Mcp::NAME_HEADER => "get_account" })
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).not_to have_key("result")
+      expect(response.parsed_body["error"]).to include("code" => -32020, "data" => { "declared" => "2026-07-28", "top_level" => "2025-03-26" })
+    end
+
+    it "keeps the legacy bytes when params._meta carries no usable declaration" do
+      headers = { "CONTENT_TYPE" => "application/json", "HOST" => DOMAIN, "Authorization" => "Bearer #{@token.token}" }
+      # The undeclared bytes are pinned to the golden fixture by the 2026-07-28 context above.
+      post "/muse/v1/mcp", params: { jsonrpc: "2.0", id: 1, method: "tools/list" }.to_json, headers: headers
+      undeclared = response.body
+
+      [{ _meta: "2026-07-28" }, { _meta: { Muse::Mcp::VERSION_META_KEY => "" } }, { _meta: { "progressToken" => 7 } }].each do |params|
+        post "/muse/v1/mcp", params: { jsonrpc: "2.0", id: 1, method: "tools/list", params: }.to_json, headers: headers
+
+        expect(response).to have_http_status(:ok)
+        expect(response.body).to eq(undeclared)
+      end
+      expect(Muse::ProtocolTelemetry.mix["muse"]).to eq("undeclared" => { "tools/list" => 4 })
+    end
+  end
+
   describe "revision telemetry" do
     before do
       @token = create("doorkeeper/access_token", application: @app, resource_owner_id: @seller.id, scopes: "view_sales")
