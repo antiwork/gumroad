@@ -322,11 +322,11 @@ class LibraryPresenter
     # membership's only when the product blocks access after cancellation.
     def cancellation_label(subscription)
       if subscription.is_installment_plan?
-        "Cancelled, no further payments"
+        "Cancelled · No further payments"
       elsif subscription.link.block_access_after_membership_cancellation
-        dated("Cancelled, access until", subscription.cancelled_at, fallback: "Cancelled")
+        dated("Cancelled · Access until", subscription.cancelled_at, fallback: "Cancelled")
       else
-        dated("Cancelled, subscription ends on", subscription.cancelled_at, fallback: "Cancelled")
+        dated("Cancelled · Subscription ends on", subscription.cancelled_at, fallback: "Cancelled")
       end
     end
 
@@ -347,9 +347,9 @@ class LibraryPresenter
         next_payment = remaining == 1 ? "Final payment on" : "Next payment on"
         "#{progress} · #{dated(next_payment, next_charge_at, fallback: "Payment due")}"
       elsif subscription.gift? && subscription.credit_card_id.blank?
-        dated("Gift, paid through", next_charge_at, fallback: "Gift")
+        dated("Gift · Paid through", next_charge_at, fallback: "Gift")
       elsif subscription.in_free_trial?
-        dated("Free trial, first charge on", subscription.free_trial_ends_at, fallback: "Free trial")
+        dated("Free trial · First charge on", subscription.free_trial_ends_at, fallback: "Free trial")
       elsif remaining == 1
         dated("Final charge on", next_charge_at, fallback: "Renewal due")
       else

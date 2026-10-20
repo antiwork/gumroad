@@ -390,7 +390,7 @@ describe LibraryPresenter do
         create(:gift, link: gift_product, gifter_purchase: sender_purchase, giftee_purchase: receiver_purchase, gifter_email: sender.email, giftee_email: buyer.email)
 
         expect(subscription_ids).to include(receiver_purchase.external_id)
-        expect(status_label(receiver_purchase)).to eq("Gift, paid through #{buyer_date(gift_subscription.reload.end_time_of_subscription)}")
+        expect(status_label(receiver_purchase)).to eq("Gift · Paid through #{buyer_date(gift_subscription.reload.end_time_of_subscription)}")
         expect(described_class.new(sender).library_props(subscriptions_only: true)[:results]).to be_empty
       end
 
@@ -570,7 +570,7 @@ describe LibraryPresenter do
           _, _, receiver = gifted_membership(payer: create(:user), subscription_owner: nil)
 
           expect(subscription_ids).to include(receiver.external_id)
-          expect(status_label(receiver)).to start_with("Gift, paid through ")
+          expect(status_label(receiver)).to start_with("Gift · Paid through ")
         end
       end
 
@@ -583,14 +583,14 @@ describe LibraryPresenter do
           purchase.subscription.cancel!(by_seller: false)
 
           expect(purchase.subscription.reload.cancelled_at).to be_future
-          expect(status_label).to eq("Cancelled, subscription ends on #{buyer_date(purchase.subscription.cancelled_at)}")
+          expect(status_label).to eq("Cancelled · Subscription ends on #{buyer_date(purchase.subscription.cancelled_at)}")
         end
 
         it "says access ends after a cancellation on a product that blocks access once cancelled" do
           product.update!(block_access_after_membership_cancellation: true)
           purchase.subscription.cancel!(by_seller: false)
 
-          expect(status_label).to eq("Cancelled, access until #{buyer_date(purchase.subscription.reload.cancelled_at)}")
+          expect(status_label).to eq("Cancelled · Access until #{buyer_date(purchase.subscription.reload.cancelled_at)}")
         end
 
         it "says a cancelled free trial ends without implying it was paid for" do
@@ -599,7 +599,7 @@ describe LibraryPresenter do
           trial_purchase.subscription.cancel!(by_seller: false)
 
           expect(trial_purchase.subscription.reload.cancelled_at).to eq(trial_purchase.subscription.free_trial_ends_at)
-          expect(status_label(trial_purchase)).to eq("Cancelled, subscription ends on #{buyer_date(trial_purchase.subscription.free_trial_ends_at)}")
+          expect(status_label(trial_purchase)).to eq("Cancelled · Subscription ends on #{buyer_date(trial_purchase.subscription.free_trial_ends_at)}")
         end
 
         it "says a seller-cancelled installment plan takes no further payments, since its access already ended" do
@@ -609,7 +609,7 @@ describe LibraryPresenter do
 
           expect(installment.subscription.reload).to be_pending_cancellation
           expect(installment.subscription.grant_access_to_product?).to be(false)
-          expect(status_label(installment)).to eq("Installment plan · Cancelled, no further payments")
+          expect(status_label(installment)).to eq("Installment plan · Cancelled · No further payments")
         end
 
         it "flags a failed renewal that is still being retried" do
@@ -623,7 +623,7 @@ describe LibraryPresenter do
           trial_purchase = create(:free_trial_membership_purchase, purchaser: buyer, link: create(:membership_product, :with_free_trial_enabled, name: "Trial membership", user: creator))
             .tap(&:create_url_redirect!)
 
-          expect(status_label(trial_purchase)).to eq("Free trial, first charge on #{buyer_date(trial_purchase.subscription.free_trial_ends_at)}")
+          expect(status_label(trial_purchase)).to eq("Free trial · First charge on #{buyer_date(trial_purchase.subscription.free_trial_ends_at)}")
         end
 
         it "shows an end date, never a renewal, once a fixed-length membership has collected every charge" do

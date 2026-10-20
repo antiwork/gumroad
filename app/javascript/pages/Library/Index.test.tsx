@@ -428,7 +428,7 @@ describe("Subscriptions tab", () => {
 
   it("keeps Manage reachable for a subscription card without a download page", () => {
     const props = subscriptionsProps();
-    const card = subscriptionResult("p1", "Alpha", "Cancelled, access until Nov 20, 2026");
+    const card = subscriptionResult("p1", "Alpha", "Cancelled · Access until Nov 20, 2026");
     card.purchase.download_url = null;
     props.results = [card];
     renderPage(props);
