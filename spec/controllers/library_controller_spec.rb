@@ -36,14 +36,15 @@ describe LibraryController, :vcr, type: :controller, inertia: true do
       end
 
       it "passes the filter params through to the presenter and echoes them back" do
-        get :index, params: { sort: "purchase_date", query: "Visible", creators: "abc,def", bundles: "ghi", show_archived_only: "true", page: "1" }
+        get :index, params: { sort: "purchase_date", query: "Visible", creators: "abc,def", bundles: "ghi", show_archived_only: "true", subscriptions_only: "true", page: "1" }
 
         expect(inertia.props[:search]).to eq(
           sort: "purchase_date",
           query: "Visible",
           creators: ["abc", "def"],
           bundles: ["ghi"],
-          show_archived_only: true
+          show_archived_only: true,
+          subscriptions_only: true
         )
       end
 
