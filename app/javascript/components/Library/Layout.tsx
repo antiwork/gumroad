@@ -8,7 +8,7 @@ export const Layout = ({
   selectedTab,
   children,
 }: {
-  selectedTab: "purchases" | "wishlists" | "following_wishlists" | "reviews";
+  selectedTab: "purchases" | "subscriptions" | "wishlists" | "following_wishlists" | "reviews";
   children: React.ReactNode;
 }) => (
   <div className="library">
@@ -16,6 +16,9 @@ export const Layout = ({
       <Tabs>
         <Tab isSelected={selectedTab === "purchases"} asChild>
           <Link href={Routes.library_path()}>Purchases</Link>
+        </Tab>
+        <Tab isSelected={selectedTab === "subscriptions"} asChild>
+          <Link href={Routes.library_path({ subscriptions_only: true })}>Subscriptions</Link>
         </Tab>
         <Tab isSelected={selectedTab === "wishlists"} asChild>
           <Link href={Routes.wishlists_path()}>Saved</Link>

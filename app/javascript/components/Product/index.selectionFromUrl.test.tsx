@@ -89,6 +89,15 @@ describe("useSelectionFromUrl price", () => {
     expect(priceFor(freeProduct(), "?price=5")).toEqual({ value: 500, error: false });
   });
 
+  it("reads a decimal ?price= as whole cents", () => {
+    expect(priceFor(freeProduct(), "?price=19.99")).toEqual({ value: 1999, error: false });
+    expect(priceFor(freeProduct(), "?price=4.35")).toEqual({ value: 435, error: false });
+  });
+
+  it("reads ?price= in whole units for a currency without cents, as the checkout link does", () => {
+    expect(priceFor(freeProduct({ currency_code: "jpy" }), "?price=1000")).toEqual({ value: 1000, error: false });
+  });
+
   it("keeps an explicit ?price=0", () => {
     expect(priceFor(freeProduct(), "?price=0")).toEqual({ value: 0, error: false });
   });

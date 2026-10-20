@@ -23,12 +23,15 @@ import { classNames } from "$app/utils/classNames";
 import {
   BuyerLocalCurrencyContext,
   CurrencyCode,
+  findCurrencyByCode,
   formatBuyerLocalOrSetPrice,
   formatPriceCentsWithCurrencySymbol,
 } from "$app/utils/currency";
 import { formatDate } from "$app/utils/date";
 import { formatOrderOfMagnitude } from "$app/utils/formatOrderOfMagnitude";
 import { variantLabel } from "$app/utils/labels";
+import { priceUnitToCents } from "$app/utils/price";
+import { isSingleChargeDuration, renewalReminderNotice } from "$app/utils/recurringPricing";
 import { assertResponseError } from "$app/utils/request";
 import { startTrackingForSeller, trackBuyerCurrencyDisplayView, trackProductEvent } from "$app/utils/user_analytics";
 
@@ -71,6 +74,7 @@ import { getBundleComparisonPriceCents, getStandalonePrice } from "$app/componen
 import { PurchaseButton } from "$app/components/Product/PurchaseButton";
 import { initialOptionId } from "$app/components/Product/purchaseReadiness";
 import { Ribbon } from "$app/components/Product/Ribbon";
+import type { SelectionDiscounts, SelectionQuote } from "$app/components/Product/selectionDiscounts";
 import { ShareSection } from "$app/components/Product/ShareSection";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
 import { InstallmentPlan } from "$app/components/ProductEdit/state";
@@ -263,7 +267,8 @@ export const useSelectionFromUrl = (product: Product) => {
       price: {
         value:
           parsedPrice >= 0
-            ? parsedPrice * 100
+            ? // Whole cents, scaled like the server's checkout link: 19.99 * 100 is 1998.9999999999998.
+              priceUnitToCents(parsedPrice, findCurrencyByCode(product.currency_code).isSingleUnit)
             : searchParams.has("price")
               ? null
               : (product.pwyw?.default_price_cents ?? null),
@@ -280,6 +285,7 @@ export type Props = {
   purchase: Purchase | null;
   discount_code: ProductDiscount | null;
   sale_label?: string | null;
+  selection_discounts?: SelectionDiscounts | null;
   wishlists: WishlistForProduct[];
 };
 
@@ -291,6 +297,8 @@ export const Product = ({
   purchase,
   discountCode: initialDiscountCode,
   saleLabel,
+  selectionDiscountCode,
+  quote,
   ctaLabel,
   selection,
   setSelection,
@@ -306,6 +314,10 @@ export const Product = ({
   discountCode?: ProductDiscount | null;
   // The seller's sale label; only sent when the displayed discount is their auto-applied code.
   saleLabel?: string | null | undefined;
+  // The server's code for each option and for renting, when they get different ones; see useSelectionDiscounts.
+  selectionDiscountCode?: ((optionId: string | null, rent: boolean) => ProductDiscount | null) | undefined;
+  // Whether the codes above were quoted for the current selection; the buy buttons wait until they are.
+  quote?: SelectionQuote | undefined;
   ctaLabel?: string | undefined;
   selection: PriceSelection;
   setSelection?: React.Dispatch<React.SetStateAction<PriceSelection>>;
@@ -321,13 +333,18 @@ export const Product = ({
   scaleLongTitle?: boolean;
 }) => {
   const notForSaleMessage = getNotForSaleMessage(product);
-  const [discountCode, setDiscountCode] = React.useState(initialDiscountCode);
-
-  React.useEffect(() => {
-    setDiscountCode(initialDiscountCode);
-  }, [initialDiscountCode]);
+  // Kept by code, so another option's quote for an expired code cannot bring it back.
+  const [expiredCodes, setExpiredCodes] = React.useState<string[]>([]);
+  const isExpired = (code: ProductDiscount | null | undefined) => !!code?.valid && expiredCodes.includes(code.code);
+  const discountCode: ProductDiscount | null | undefined = isExpired(initialDiscountCode)
+    ? { valid: false, error_code: "inactive" }
+    : initialDiscountCode;
 
   const discount = discountCode?.valid ? discountCode.discount : null;
+  const renewalNotice =
+    selection.recurrence && !isSingleChargeDuration(selection.recurrence, product.duration_in_months ?? null)
+      ? renewalReminderNotice(product.recurrences, selection.recurrence)
+      : null;
   const selectionAttributes = applySelection(product, discount, selection);
   let { basePriceCents } = selectionAttributes;
   const { priceCents, discountedPriceCents, pppDiscounted, maxQuantity, selectedOption } = selectionAttributes;
@@ -386,16 +403,41 @@ export const Product = ({
   // applySelection already drops a code whose minimum quantity or amount this selection misses.
   const codeDiscounts = (attributes: typeof selectionAttributes) =>
     !attributes.pppDiscounted && attributes.discountedPriceCents < attributes.priceCents;
+  const sameCode = (left: ProductDiscount | null, right: ProductDiscount | null) =>
+    !!left?.valid && !!right?.valid && left.code === right.code;
+  // The code that prices a choice the buyer could make, such as another option row or the rent tab.
+  const rowDiscount = (rowSelection: PriceSelection) => {
+    if (!selectionDiscountCode || (rowSelection.optionId === null && product.options.length > 0)) return discount;
+    const rowCode = selectionDiscountCode(rowSelection.optionId, rowSelection.rent);
+    return rowCode?.valid && !isExpired(rowCode) ? withConfiguredOncePerCartAmount(rowCode.discount) : null;
+  };
+  // When another visible option gets a different code, the code's copy names the picked option it covers.
+  const discountScope =
+    selectedOption &&
+    selectionDiscountCode &&
+    product.options.some(
+      (option) =>
+        option.id !== selectedOption.id &&
+        !(product.hide_sold_out_variants && option.quantity_left === 0) &&
+        !sameCode(selectionDiscountCode(option.id, selection.rent), discountCode ?? null),
+    )
+      ? ` ${selectedOption.name}`
+      : "";
   // With no option picked, each visible option shows its own price, so any discounted one earns the label.
   const showSaleLabel =
     !!saleLabel &&
-    discountCode === initialDiscountCode &&
     !!discountCode?.valid &&
     (product.options.length > 0 && selectedOption === null
       ? product.options.some(
           (option) =>
             !(product.hide_sold_out_variants && option.quantity_left === 0) &&
-            codeDiscounts(applySelection(product, discount, { ...selection, optionId: option.id })),
+            (!selectionDiscountCode || sameCode(selectionDiscountCode(option.id, selection.rent), discountCode)) &&
+            codeDiscounts(
+              applySelection(product, rowDiscount({ ...selection, optionId: option.id }), {
+                ...selection,
+                optionId: option.id,
+              }),
+            ),
         )
       : codeDiscounts(selectionAttributes));
 
@@ -415,13 +457,17 @@ export const Product = ({
         className={classNames(
           "flex items-center gap-2 border-b border-border bg-accent-with-text px-6 py-3 font-bold text-accent-foreground",
           product.covers.length === 0 && "lg:rounded-tr-[calc(var(--radius)_-_var(--border-width))]",
+          // A long option name moves to its own line instead of squeezing the label mid-word.
+          discountScope && "flex-wrap",
         )}
       >
         <DiscountIcon pack="filled" className="size-5 shrink-0" aria-hidden="true" />
         <span className="min-w-0 wrap-break-word" data-testid="sale-label">
           {saleLabel}
         </span>
-        <span className="ml-auto shrink-0">{formatDiscountAmount(discount, buyerLocalContextFor(product))} off</span>
+        <span className={classNames("ml-auto", discountScope ? "min-w-0 text-right wrap-break-word" : "shrink-0")}>
+          {formatDiscountAmount(discount, buyerLocalContextFor(product))} off{discountScope}
+        </span>
       </div>
     ) : null;
   const priceTag = showPrice ? (
@@ -624,9 +670,9 @@ export const Product = ({
                         <div>Applies when you buy {discountCode.discount.minimum_quantity} or more.</div>
                       ) : null
                     ) : discountCode.discount.minimum_quantity ? (
-                      `Get ${formatDiscountAmount(discountCode.discount, buyerLocalContextFor(product))} off when you buy ${discountCode.discount.minimum_quantity} or more (Code ${discountCode.code.toUpperCase()})`
+                      `Get ${formatDiscountAmount(discountCode.discount, buyerLocalContextFor(product))} off${discountScope} when you buy ${discountCode.discount.minimum_quantity} or more (Code ${discountCode.code.toUpperCase()})`
                     ) : (
-                      `${formatDiscountAmount(discountCode.discount, buyerLocalContextFor(product))} off will be applied at checkout (Code ${discountCode.code.toUpperCase()})`
+                      `${formatDiscountAmount(discountCode.discount, buyerLocalContextFor(product))} off${discountScope} will be applied at checkout (Code ${discountCode.code.toUpperCase()})`
                     )}
                     {discountCode.discount.duration_in_billing_cycles && product.is_recurring_billing ? (
                       <div>This discount will only apply to the first payment of your subscription.</div>
@@ -652,9 +698,11 @@ export const Product = ({
                     ) : null}
                     {discountCode.discount.expires_at ? (
                       <DiscountExpirationCountdown
+                        // The countdown reads its deadline on mount, and another selection can show another code.
+                        key={`${discountCode.code}:${discountCode.discount.expires_at}`}
                         expiresAt={new Date(discountCode.discount.expires_at)}
                         showEndDate={showSaleLabel}
-                        onExpiration={() => setDiscountCode({ valid: false, error_code: "inactive" })}
+                        onExpiration={() => setExpiredCodes((codes) => [...codes, discountCode.code])}
                       />
                     ) : null}
                   </div>
@@ -677,6 +725,8 @@ export const Product = ({
             selection={selection}
             setSelection={setSelection}
             discount={discountCode?.valid ? withConfiguredOncePerCartAmount(discountCode.discount) : null}
+            rowDiscount={selectionDiscountCode ? rowDiscount : undefined}
+            discountPending={!!quote && quote.state !== "ready"}
             ref={configurationSelectorRef}
           />
           {product.ppp_details && pppDiscounted ? (
@@ -712,11 +762,26 @@ export const Product = ({
               {product.duration_in_months === 1 ? "one month" : `${product.duration_in_months} months`}
             </Alert>
           ) : null}
+          {renewalNotice ? (
+            <p className="text-sm" role="note">
+              {renewalNotice}
+            </p>
+          ) : null}
+          {quote?.state === "failed" ? (
+            <Alert role="alert" variant="danger">
+              <div className="flex flex-col gap-4">
+                We couldn't check the discount for this selection.
+                <Button onClick={quote.retry}>Try again</Button>
+              </div>
+            </Alert>
+          ) : null}
           <PurchaseButton
             ref={ctaButtonRef}
             product={product}
             purchase={purchase}
             discountCode={discountCode ?? null}
+            pricePending={!!quote && quote.state !== "ready"}
+            priceLoading={quote?.state === "loading"}
             selection={selection}
             label={ctaLabel}
             showInstallmentPlanNotes

@@ -1578,6 +1578,22 @@ describe Api::Internal::Admin::PurchasesController do
         expect(response.parsed_body["termination_reason"]).to eq("fixed_subscription_period_ended")
       end
     end
+
+    context "when the model rejects a buyer-initiated cancel" do
+      let(:product) { create(:product, :with_installment_plan, user: admin_user, price_cents: 10_00) }
+      let(:subscription) { create(:subscription, link: product, user: create(:user), is_installment_plan: true) }
+      let(:purchase) do
+        build(:purchase, link: product, subscription:, is_original_subscription_purchase: true, price_cents: 0).tap(&:save!)
+      end
+
+      it "returns the model's message instead of an empty 422 and leaves the subscription untouched" do
+        post :cancel_subscription, params: params
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body).to eq({ success: false, message: "Installment plans cannot be cancelled by the customer" }.as_json)
+        expect(subscription.reload.cancelled_at).to be_nil
+      end
+    end
   end
 
   describe "POST block_buyer" do

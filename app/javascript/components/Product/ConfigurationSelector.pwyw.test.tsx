@@ -3,6 +3,8 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, describe, expect, it } from "vitest";
 
+import type { Discount } from "$app/parsers/checkout";
+
 import {
   ConfigurationSelector,
   type Option,
@@ -157,5 +159,62 @@ describe("free pay-what-you-want default", () => {
     fireEvent.click(screen.getByRole("radio", { name: /Paid/u }));
 
     expect(selections.at(-1)).toMatchObject({ optionId: "paid", price: { value: null, error: false } });
+  });
+});
+
+describe("PWYW minimum while the discount is being quoted", () => {
+  const product: Product = { ...pwywProduct, price_cents: 1000, pwyw: { suggested_price_cents: null } };
+  const sale: Discount = {
+    type: "percent",
+    percents: 50,
+    product_ids: null,
+    expires_at: null,
+    minimum_quantity: null,
+    duration_in_billing_cycles: null,
+    minimum_amount_cents: null,
+  };
+  const Harness = ({ discount, discountPending }: { discount: Discount | null; discountPending: boolean }) => {
+    const [selection, setSelection] = React.useState(initialSelection);
+    return (
+      <ConfigurationSelector
+        product={product}
+        selection={selection}
+        setSelection={setSelection}
+        discount={discount}
+        discountPending={discountPending}
+      />
+    );
+  };
+  const blurWith = (amount: string) => {
+    const input = screen.getByLabelText("Name a fair price:");
+    fireEvent.change(input, { target: { value: amount } });
+    fireEvent.blur(input);
+    return input;
+  };
+
+  it("checks an amount blurred while quoting against the quoted minimum once it lands", () => {
+    const { rerender } = render(<Harness discount={null} discountPending />);
+    const input = blurWith("6");
+    expect(input.getAttribute("aria-invalid")).toBe("false");
+
+    rerender(<Harness discount={sale} discountPending={false} />);
+
+    expect(input.getAttribute("aria-invalid")).toBe("false");
+  });
+
+  it("still flags an amount below the quoted minimum once the quote lands", () => {
+    const { rerender } = render(<Harness discount={null} discountPending />);
+    const input = blurWith("4");
+    expect(input.getAttribute("aria-invalid")).toBe("false");
+
+    rerender(<Harness discount={sale} discountPending={false} />);
+
+    expect(input.getAttribute("aria-invalid")).toBe("true");
+  });
+
+  it("checks the amount at once when nothing is being quoted", () => {
+    render(<Harness discount={null} discountPending={false} />);
+
+    expect(blurWith("6").getAttribute("aria-invalid")).toBe("true");
   });
 });

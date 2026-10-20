@@ -143,21 +143,82 @@ describe("Product Page - Shipping Scenarios", type: :system, js: true, shipping:
   context "when the buyer's country is not in the seller's shipping destinations" do
     let(:product) { create(:product, require_shipping: true, is_physical: true, price_cents: 500) }
     let(:buyer) { create(:buyer_user, country: "Canada") }
+    let(:unavailable_product) { create(:product, user: product.user, name: "Unavailable print", require_shipping: true, is_physical: true, price_cents: 500) }
 
     before do
       product.shipping_destinations << build(:shipping_destination, country_code: "US", one_item_rate_cents: 500)
+      unavailable_product.shipping_destinations << build(:shipping_destination, country_code: "US", one_item_rate_cents: 500)
+      unavailable_product.shipping_exclusions.create!(country_code: "US")
     end
 
-    it "allows purchase" do
+    it "asks the buyer to remove the unavailable item and choose a country the product ships to, then allows purchase" do
       login_as buyer
+      visit unavailable_product.long_url
+      add_to_cart(unavailable_product)
       visit product.long_url
       add_to_cart(product)
-      check_out(product, logged_in_user: buyer)
+
+      expect(page).to have_text("Unavailable print can't be shipped to any country right now. Remove it from your cart to buy the rest.")
+      expect(page).not_to have_select("Country")
+      expect(page).to have_button("Pay", disabled: true)
+      expect(page).to have_text("Remove the item that can't be shipped to see your total.")
+      expect(page).not_to have_selector("[aria-busy='true']")
+      expect(page).not_to have_selector("h4", exact_text: "Total")
+
+      within_cart_item(unavailable_product.name) { click_on "Remove" }
+
+      expect(page).not_to have_text("Remove the item that can't be shipped to see your total.")
+      expect(page).to have_select("Country", selected: "Choose a country")
+      expect(page).to have_text("This order can't be shipped to your country (Canada). Choose the country you're shipping to.")
+      country_label = find("label", exact_text: "Country")
+      explanation = find_by_id(find_field("Country")["aria-describedby"])
+      expect(explanation.style("color")).to eq(country_label.style("color"))
+      expect(page).to have_button("Pay", disabled: true)
+      expect(page).to have_text("Choose a delivery country to see shipping and your total.")
+      expect(page).not_to have_selector("[aria-busy='true']")
+      expect(page).not_to have_selector("h4", exact_text: "Total")
+
+      select "United States", from: "Country"
+      expect(page).to have_text("Shipping rate US$5", normalize_ws: true)
+      expect(page).to have_text("Total US$10", normalize_ws: true)
+      expect(page).not_to have_text("Choose a delivery country to see shipping and your total.")
+
+      check_out(product, logged_in_user: buyer, country: "United States")
 
       purchase = Purchase.last
       expect(purchase.country).to eq("United States")
       expect(purchase.price_cents).to eq(1000)
       expect(purchase.shipping_cents).to eq(500)
+    end
+  end
+
+  context "when the seller excludes every country the product ships to" do
+    let(:product) { create(:product, require_shipping: true, is_physical: true, price_cents: 500) }
+
+    before do
+      product.shipping_destinations << build(:shipping_destination, country_code: "US", one_item_rate_cents: 500)
+      product.shipping_exclusions.create!(country_code: "US")
+    end
+
+    it "shows the product as unavailable instead of offering every country" do
+      visit product.long_url
+      add_to_cart(product)
+
+      expect(page).to have_text("#{product.name} can't be shipped to any country right now.")
+      expect(page).not_to have_select("Country")
+      expect(page).to have_button("Pay", disabled: true)
+      expect(page).to have_text("Remove the item that can't be shipped to see your total.")
+      expect(page).not_to have_selector("[aria-busy='true']")
+      expect(page).not_to have_selector("h4", exact_text: "Total")
+
+      alert_precedes_address = page.evaluate_script(<<~JS)
+        (() => {
+          const alert = [...document.querySelectorAll("[role=alert]")].find((element) => element.textContent.includes("can't be shipped"));
+          const fullName = document.getElementById([...document.querySelectorAll("label")].find((label) => label.textContent === "Full name")?.htmlFor);
+          return Boolean(alert && fullName && alert.compareDocumentPosition(fullName) & Node.DOCUMENT_POSITION_FOLLOWING);
+        })()
+      JS
+      expect(alert_precedes_address).to be(true)
     end
   end
 end

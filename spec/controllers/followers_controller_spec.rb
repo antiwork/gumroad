@@ -376,6 +376,39 @@ describe FollowersController, inertia: true do
           get :confirm, params: { id: unconfirmed_follower.external_id }
         end.to raise_error(ActionController::RoutingError)
       end
+
+      describe "after the seller's newsletter moved to Feature announcements" do
+        let!(:follower_workflow) { create(:follower_workflow, seller:, published_at: 1.week.ago) }
+        # Each confirmation link was sent before the newsletter retired.
+        let!(:pending_follower) { unconfirmed_follower }
+        let!(:cancelled_follower) { create(:active_follower, user: seller).tap(&:mark_deleted!) }
+        let!(:active_follower) { create(:active_follower, user: seller) }
+
+        before do
+          create(:installment_rule, installment: create(:installment, workflow: follower_workflow), delayed_delivery_time: 1.day)
+          FeatureAnnouncementNewsletterCutover.create!(seller:, state: "retired", cutoff_at: 1.day.ago, retired_at: Time.current)
+        end
+
+        it "doesn't confirm or revive the follow, and says the newsletter moved" do
+          [pending_follower, cancelled_follower, active_follower].each do |follower|
+            expect { get :confirm, params: { id: follower.external_id } }.not_to change { follower.reload.attributes.slice("confirmed_at", "deleted_at") }
+
+            expect(response).to redirect_to(seller.profile_url)
+            expect(flash[:alert]).to eq(Follower::RETIRED_NEWSLETTER_MESSAGE)
+            expect(flash[:notice]).to be_nil
+          end
+          expect(SendWorkflowInstallmentWorker.jobs.size).to eq(0)
+        end
+
+        it "still confirms follows of other creators" do
+          other_follower = create(:follower, user: create(:user))
+
+          get :confirm, params: { id: other_follower.external_id }
+
+          expect(other_follower.reload.confirmed_at).to be_present
+          expect(flash[:notice]).to eq("Thanks for the follow!")
+        end
+      end
     end
 
     describe "POST from_embed_form" do
@@ -404,6 +437,17 @@ describe FollowersController, inertia: true do
         expect(response).to redirect_to(seller.profile_url)
         expect(flash[:warning]).to be_present
         expect(flash[:warning]).to include("Email invalid")
+      end
+
+      it "takes no new subscriber once the seller's newsletter moved to Feature announcements" do
+        FeatureAnnouncementNewsletterCutover.create!(seller:, state: "retired", cutoff_at: 1.day.ago, retired_at: Time.current)
+
+        post :from_embed_form, params: { email: "follower@example.com", seller_id: seller.external_id }
+        expect(flash[:warning]).to eq(Follower::CreateService::RETIRED_NEWSLETTER_MESSAGE)
+
+        post :from_embed_form, params: { email: "follower@example.com", seller_id: seller.external_id }, format: :json
+        expect(response.parsed_body).to eq("success" => false, "message" => Follower::CreateService::RETIRED_NEWSLETTER_MESSAGE)
+        expect(Follower.where(followed_id: seller.id)).to be_empty
       end
 
       context "when a user is already following the creator using the same email" do

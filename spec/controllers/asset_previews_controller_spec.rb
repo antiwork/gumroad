@@ -159,6 +159,13 @@ describe AssetPreviewsController do
       end.to change { product.asset_previews.alive.count }.from(1).to(0)
       expect(product.main_preview).to be(nil)
     end
+
+    it "returns a failed result when the preview does not belong to the product" do
+      delete(:destroy, params: { link_id: product.unique_permalink, id: SecureRandom.hex(16), format: :json })
+
+      expect(response).to be_successful
+      expect(response.parsed_body["success"]).to eq(false)
+    end
   end
 
   describe "as a collaborator on the product" do

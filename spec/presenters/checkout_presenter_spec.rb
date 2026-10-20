@@ -276,6 +276,7 @@ describe CheckoutPresenter do
             options: [options.first.merge({ upsell_offered_variant_id: options.second[:id] }), options.second.merge({ upsell_offered_variant_id: nil })],
             require_shipping: false,
             shippable_country_codes: [],
+            ships_nowhere: false,
             custom_fields: [],
             supports_paypal: nil,
             paypal_card_funding_disabled: false,
@@ -626,6 +627,58 @@ describe CheckoutPresenter do
       ensure
         Feature.deactivate_user(:buyer_local_currency, seller) if seller
         Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller) if seller
+      end
+    end
+
+    describe "shippable country codes" do
+      def checkout_product_props(product)
+        @instance.checkout_product(product, product.cart_item({}), {})[:product]
+      end
+
+      def shippable_country_codes(product)
+        checkout_product_props(product)[:shippable_country_codes]
+      end
+
+      it "leaves out a country the physical product excludes" do
+        product = create(:physical_product)
+        product.shipping_exclusions.create!(country_code: "US")
+
+        expect(shippable_country_codes(product)).to include("CA", "DE")
+        expect(shippable_country_codes(product)).not_to include("US")
+        expect(checkout_product_props(product)[:ships_nowhere]).to be(false)
+      end
+
+      it "is empty when the physical product excludes every country it covers" do
+        product = create(:physical_product)
+        product.shipping_destinations.alive.each(&:destroy)
+        product.shipping_destinations << ShippingDestination.new(country_code: "US", one_item_rate_cents: 0, multiple_items_rate_cents: 0)
+        product.shipping_exclusions.create!(country_code: "US")
+
+        expect(shippable_country_codes(product.reload)).to eq([])
+        expect(checkout_product_props(product)[:ships_nowhere]).to be(true)
+      end
+
+      it "flags a product by its physical flag, not its native type" do
+        product = create(:product, is_physical: true, require_shipping: true)
+        product.shipping_destinations << ShippingDestination.new(country_code: "US", one_item_rate_cents: 0, multiple_items_rate_cents: 0)
+        product.shipping_exclusions.create!(country_code: "US")
+
+        expect(product.native_type).to eq(Link::NATIVE_TYPE_DIGITAL)
+        expect(checkout_product_props(product.reload)[:ships_nowhere]).to be(true)
+      end
+
+      it "stays empty and unflagged for a digital product" do
+        props = checkout_product_props(create(:product))
+
+        expect(props[:shippable_country_codes]).to eq([])
+        expect(props[:ships_nowhere]).to be(false)
+      end
+
+      it "does not flag a digital product that collects a shipping address" do
+        props = checkout_product_props(create(:product, require_shipping: true))
+
+        expect(props[:shippable_country_codes]).to eq([])
+        expect(props[:ships_nowhere]).to be(false)
       end
     end
 
@@ -1009,12 +1062,27 @@ describe CheckoutPresenter do
                                                  price_cents: @original_price_cents, merchant_account: @merchant_account)
       end
 
+      it "resolves each tier's plan-change discount without the code's spend minimum",
+         vcr: { cassette_name: "CheckoutPresenter/_subscription_manager_props/tiered_membership_product/returns_subscription_data_object_for_the_subscription_manage_page" } do
+        tier1 = @product.tier_category.variants.first
+        tier2 = @product.tier_category.variants.second
+        @purchase.update!(offer_code: create(:offer_code, products: [@product], variants: [tier1], minimum_amount_cents: 50_00))
+        @subscription.reload
+
+        subscription = described_class.new(logged_in_user: nil, ip: "127.0.0.1").subscription_manager_props(subscription: @subscription)[:subscription]
+
+        expect(subscription[:discount]).not_to have_key(:minimum_amount_cents)
+        expect(subscription[:option_discounts][tier1.external_id]).to eq(subscription[:discount])
+        expect(subscription[:option_discounts]).to include(tier2.external_id => nil)
+      end
+
       it "returns subscription data object for the subscription manage page" do
         @purchase.update!(offer_code: create(:offer_code, products: [@product]))
         @subscription.reload
         tier1 = @product.tier_category.variants.first
         tier2 = @product.tier_category.variants.second
 
+        discount = { type: "fixed", cents: 100, product_ids: [@product.external_id], expires_at: nil, minimum_quantity: nil, duration_in_billing_cycles: nil }
         result = described_class.new(logged_in_user: nil, ip: "127.0.0.1").subscription_manager_props(subscription: @subscription)
         expect(result).to eq({
                                product: {
@@ -1032,6 +1100,7 @@ describe CheckoutPresenter do
                                  },
                                  require_shipping: false,
                                  shippable_country_codes: [],
+                                 ships_nowhere: false,
                                  custom_fields: [],
                                  currency_code: "usd",
                                  permalink: @product.unique_permalink,
@@ -1081,15 +1150,8 @@ describe CheckoutPresenter do
                                  prorated_discount_price_cents: @subscription.prorated_discount_price_cents,
                                  alive: false,
                                  pending_cancellation: true,
-                                 discount: {
-                                   type: "fixed",
-                                   cents: 100,
-                                   product_ids: [@product.external_id],
-                                   expires_at: nil,
-                                   minimum_quantity: nil,
-                                   duration_in_billing_cycles: nil,
-                                   minimum_amount_cents: nil,
-                                 },
+                                 discount:,
+                                 option_discounts: { tier1.external_id => discount, tier2.external_id => discount },
                                  end_time_of_subscription: @subscription.end_time_of_subscription.iso8601,
                                  successful_purchases_count: 1,
                                  remaining_charges_count: nil,

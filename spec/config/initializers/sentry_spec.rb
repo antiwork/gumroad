@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "sentry/test_helper"
 
 describe "Sentry configuration" do
   it "is not enabled in the test environment" do
@@ -121,6 +122,126 @@ describe "Sentry configuration" do
 
       expect(Sentry.configuration.before_send.call(error, nil)).to eq(error)
       expect(Sentry.configuration.before_send_transaction.call(transaction, nil)).to eq(transaction)
+    end
+  end
+
+  describe "failed Help Center contact deliveries" do
+    include Sentry::TestHelper
+
+    let(:support_text) { "Synthetic support text that must stay out of error reports." }
+    let(:screenshot) { "\x89PNG\r\n\x1A\n".b + Random.bytes(64) }
+    let(:contact_args) do
+      {
+        email: "buyer@example.com",
+        category: "technical issue",
+        message: support_text,
+        user_id: nil,
+        referrer_path: "/help",
+        attachments: [{ filename: "image.png", mime_type: "image/png", content: Base64.strict_encode64(screenshot) }],
+      }
+    end
+
+    before do
+      setup_sentry_test
+      # Synthetic failure in place of SMTP: delivery stays on the test transport.
+      allow_any_instance_of(Mail::TestMailer).to receive(:deliver!).and_raise(Net::ReadTimeout)
+    end
+
+    after { teardown_sentry_test }
+
+    def wire(job_data)
+      JSON.parse(JSON.generate(job_data.select { |key, _| key.is_a?(String) }))
+    end
+
+    def enqueued_job_data
+      ActiveJob::Base.queue_adapter.enqueued_jobs.last
+    end
+
+    # Replays each attempt the way Sidekiq would pull it back out of Redis,
+    # until MailDeliveryJob's retry_on gives up and re-raises.
+    def run_until_retries_give_up(job_data)
+      1.upto(20) do |attempt|
+        ActiveJob::Base.execute(wire(job_data))
+      rescue Net::ReadTimeout
+        return attempt
+      else
+        job_data = enqueued_job_data
+      end
+      raise "retry_on never gave up"
+    end
+
+    def enqueue_contact_job(**overrides)
+      SupportContactMailer.contact_form(**contact_args, **overrides).deliver_later
+      enqueued_job_data
+    end
+
+    def sent_envelope
+      envelope = sentry_transport.envelopes.sole
+      data, items = sentry_transport.serialize_envelope(envelope)
+      expect(items.map(&:type)).to eq(["event"])
+      data
+    end
+
+    it "reports the failure without the screenshots or the message" do
+      job_data = enqueue_contact_job
+      expect(job_data[:job]).to eq(SupportContactMailDeliveryJob)
+
+      expect(run_until_retries_give_up(job_data)).to eq(10)
+
+      event = sentry_events.sole
+      expect(event.exception.values.sole.type).to eq("Net::ReadTimeout")
+      expect(event.extra[:active_job]).to eq("SupportContactMailDeliveryJob")
+      expect(event.extra[:arguments].first(3)).to eq(["SupportContactMailer", "contact_form", "deliver_now"])
+      kwargs = event.extra[:arguments].last[:args].sole
+      expect(kwargs).to include(email: "buyer@example.com", category: "technical issue", referrer_path: "/help", attachments: 1, message: support_text.length)
+
+      data = sent_envelope
+      expect(data).not_to include(Base64.strict_encode64(screenshot).first(40))
+      expect(data).not_to include(support_text)
+    end
+
+    it "keeps the report deliverable at the largest submission the form accepts" do
+      screenshots = Array.new(2) { "\x89PNG\r\n\x1A\n".b + Random.bytes(HelpCenter::ContactsController::MAX_ATTACHMENT_BYTES - 8) }
+      job_data = enqueue_contact_job(
+        message: "a" * HelpCenter::ContactsController::MAX_MESSAGE_LENGTH,
+        attachments: screenshots.map { { filename: "image.png", mime_type: "image/png", content: Base64.strict_encode64(_1) } }
+      )
+
+      run_until_retries_give_up(job_data)
+
+      expect(JSON.generate(sentry_events.sole.extra).bytesize).to be < 1_000
+      expect(sent_envelope.bytesize).to be < Sentry::Envelope::Item::MAX_SERIALIZED_PAYLOAD_SIZE
+    end
+
+    it "also redacts contact jobs queued under the shared delivery job before this change" do
+      allow(SupportContactMailer).to receive(:delivery_job).and_return(MailDeliveryJob)
+      job_data = enqueue_contact_job
+      expect(job_data[:job]).to eq(MailDeliveryJob)
+
+      run_until_retries_give_up(job_data)
+
+      expect(sentry_events.sole.extra[:active_job]).to eq("MailDeliveryJob")
+      data = sent_envelope
+      expect(data).not_to include(Base64.strict_encode64(screenshot).first(40))
+      expect(data).not_to include(support_text)
+    end
+
+    it "leaves other mail jobs' arguments as the integration reported them" do
+      user = create(:user)
+      TwoFactorAuthenticationMailer.authentication_token(user.id).deliver_later
+
+      run_until_retries_give_up(enqueued_job_data)
+
+      expect(sentry_events.sole.extra[:arguments]).to eq(["TwoFactorAuthenticationMailer", "authentication_token", "deliver_now", { args: [user.id] }])
+    end
+
+    it "keeps retrying quietly before the last attempt" do
+      job_data = enqueue_contact_job
+
+      expect { ActiveJob::Base.execute(wire(job_data)) }.not_to raise_error
+
+      expect(enqueued_job_data["exception_executions"]).to eq("[Net::OpenTimeout, Net::ReadTimeout, Net::SMTPServerBusy, EOFError]" => 1)
+      expect(sentry_events).to be_empty
     end
   end
 end

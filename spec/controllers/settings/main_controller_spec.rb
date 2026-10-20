@@ -598,6 +598,65 @@ describe Settings::MainController, type: :controller, inertia: true do
         end
       end
     end
+
+    describe "feature announcements" do
+      def state
+        FeatureAnnouncementSubscription.state_for(seller)
+      end
+
+      it "subscribes from the form's rendered version" do
+        put :update, params: { user: user_params.merge(feature_announcements_subscribed: true, feature_announcements_version: 0) }
+
+        expect(flash[:notice]).to eq("Your account has been updated!")
+        expect(state).to eq(subscribed: true, version: 1)
+      end
+
+      it "does not let a form rendered before an unsubscribe link was used turn the emails back on" do
+        FeatureAnnouncementSubscription.update_from_settings!(seller, subscribed: true, rendered_version: 0)
+        FeatureAnnouncementSubscription.unsubscribe!(seller, source: "unsubscribe_link")
+
+        put :update, params: { user: user_params.merge(feature_announcements_subscribed: true, feature_announcements_version: 1, username: "freshname") }
+
+        expect(response).to redirect_to(settings_main_path)
+        expect(flash[:notice]).to eq("Your account has been updated, but Feature announcements changed elsewhere, so that setting was not saved.")
+        expect(state).to eq(subscribed: false, version: 2)
+        expect(seller.reload.username).to eq("freshname")
+      end
+
+      it "fails closed when the version is missing" do
+        put :update, params: { user: user_params.merge(feature_announcements_subscribed: true) }
+
+        expect(state).to eq(subscribed: false, version: 0)
+      end
+
+      it "changes nothing for clients that don't send the field" do
+        FeatureAnnouncementSubscription.unsubscribe!(seller, source: "unsubscribe_link")
+
+        put :update, params: { user: user_params.merge(username: "othername") }
+
+        expect(flash[:notice]).to eq("Your account has been updated!")
+        expect(state).to eq(subscribed: false, version: 1)
+      end
+
+      it "keeps it separate from the personalized product announcements preference" do
+        put :update, params: { user: user_params.merge(announcement_notification_enabled: false, feature_announcements_subscribed: true, feature_announcements_version: 0) }
+
+        expect(seller.reload.announcement_notification_enabled).to be(false)
+        expect(state[:subscribed]).to be(true)
+
+        put :update, params: { user: user_params.merge(announcement_notification_enabled: true, feature_announcements_subscribed: false, feature_announcements_version: 1) }
+
+        expect(seller.reload.announcement_notification_enabled).to be(true)
+        expect(state).to eq(subscribed: false, version: 2)
+      end
+
+      it "rolls the change back when the rest of the form fails to save" do
+        put :update, params: { user: user_params.merge(username: "ab", feature_announcements_subscribed: true, feature_announcements_version: 0) }
+
+        expect(flash[:alert]).to be_present
+        expect(state).to eq(subscribed: false, version: 0)
+      end
+    end
   end
 
   describe "POST resend_confirmation_email" do

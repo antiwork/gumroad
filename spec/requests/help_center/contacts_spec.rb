@@ -27,7 +27,8 @@ describe "Help Center contact form", type: :request do
         category: "payouts",
         message: "My payout hasn't arrived and it's been over a week now.",
         user_id: nil,
-        referrer_path: "/help/article/13-getting-paid"
+        referrer_path: "/help/article/13-getting-paid",
+        attachments: []
       )
 
       expect(response).to have_http_status(:ok)
@@ -106,6 +107,141 @@ describe "Help Center contact form", type: :request do
       end.to have_enqueued_mail(SupportContactMailer, :contact_form).with(
         hash_including(referrer_path: nil)
       )
+    end
+  end
+
+  describe "image attachments" do
+    # Smallest valid 1x1 PNG; MIME detection reads the magic bytes, so the test
+    # does not need a real screenshot.
+    let(:png_bytes) { Base64.decode64("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==") }
+    let(:upload_dir) { Rails.root.join("tmp", "contact-spec-#{SecureRandom.hex(4)}") }
+
+    after { FileUtils.rm_rf(upload_dir) }
+
+    def image_upload(bytes: nil, filename: "screenshot.png", content_type: "image/png")
+      FileUtils.mkdir_p(upload_dir)
+      path = upload_dir.join("#{SecureRandom.hex(4)}-#{filename}")
+      File.binwrite(path, bytes || png_bytes)
+      Rack::Test::UploadedFile.new(path.to_s, content_type, true, original_filename: filename)
+    end
+
+    it "forwards the image bytes to the mailer so support can open the screenshot" do
+      post help_center_contact_path, params: valid_params.merge(attachments: [image_upload])
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["success"]).to be(true)
+
+      # MailDeliveryJob wraps the mailer kwargs one level deep: [class, method, when, { args: [...] }].
+      delivery_args = ActiveJob::Base.queue_adapter.enqueued_jobs.last[:args].last.fetch("args").last
+      attachment = delivery_args["attachments"].first
+      expect(attachment["filename"]).to eq("screenshot.png")
+      expect(attachment["mime_type"]).to eq("image/png")
+      expect(Base64.strict_decode64(attachment["content"])).to eq(png_bytes)
+    end
+
+    it "rejects a file whose declared type is an image but whose bytes are not" do
+      expect do
+        post help_center_contact_path, params: valid_params.merge(attachments: [image_upload(bytes: "definitely not a png", filename: "fake.png")])
+      end.not_to have_enqueued_mail(SupportContactMailer, :contact_form)
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body["error"]).to include("PNG, JPG, GIF or WEBP")
+    end
+
+    it "rejects more than three images" do
+      expect do
+        post help_center_contact_path, params: valid_params.merge(attachments: Array.new(4) { image_upload })
+      end.not_to have_enqueued_mail(SupportContactMailer, :contact_form)
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body["error"]).to include("at most 3")
+    end
+
+    it "rejects an image over the per-file size cap" do
+      stub_const("HelpCenter::ContactsController::MAX_ATTACHMENT_BYTES", 10.bytes)
+
+      expect do
+        post help_center_contact_path, params: valid_params.merge(attachments: [image_upload])
+      end.not_to have_enqueued_mail(SupportContactMailer, :contact_form)
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body["error"]).to include("smaller than")
+    end
+
+    it "rejects attachments that exceed the total size cap" do
+      stub_const("HelpCenter::ContactsController::MAX_TOTAL_ATTACHMENT_BYTES", 10.bytes)
+
+      expect do
+        post help_center_contact_path, params: valid_params.merge(attachments: [image_upload])
+      end.not_to have_enqueued_mail(SupportContactMailer, :contact_form)
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body["error"]).to include("total")
+    end
+
+    def png_of_size(bytes)
+      "\x89PNG\r\n\x1A\n".b + Random.bytes(bytes - 8)
+    end
+
+    it "rejects an image one byte over 3 MB without reading it" do
+      expect_any_instance_of(ActionDispatch::Http::UploadedFile).not_to receive(:read)
+
+      post help_center_contact_path, params: valid_params.merge(attachments: [image_upload(bytes: png_of_size(3.megabytes + 1))])
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body["error"]).to eq("Each image must be smaller than 3 MB.")
+    end
+
+    it "rejects images that together pass 6 MB without reading any of them" do
+      expect_any_instance_of(ActionDispatch::Http::UploadedFile).not_to receive(:read)
+
+      uploads = Array.new(3) { image_upload(bytes: png_of_size(2.megabytes + 1)) }
+      post help_center_contact_path, params: valid_params.merge(attachments: uploads)
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body["error"]).to eq("Attachments must total less than 6 MB.")
+    end
+
+    it "types every supported image by its bytes, whatever the browser declared" do
+      images = {
+        "image/jpeg" => "\xFF\xD8\xFF\xE0".b + Random.bytes(32),
+        "image/gif" => "GIF89a".b + Random.bytes(32),
+        "image/webp" => "RIFF\x00\x00\x00\x00WEBPVP8 ".b + Random.bytes(32),
+      }
+      uploads = images.values.map { image_upload(bytes: _1, filename: "notes.txt", content_type: "text/plain") }
+
+      post help_center_contact_path, params: valid_params.merge(attachments: uploads)
+
+      expect(response).to have_http_status(:ok)
+      delivery_args = ActiveJob::Base.queue_adapter.enqueued_jobs.last[:args].last.fetch("args").last
+      expect(delivery_args["attachments"].map { _1["mime_type"] }).to eq(images.keys)
+      expect(delivery_args["attachments"].map { Base64.strict_decode64(_1["content"]) }).to eq(images.values)
+    end
+
+    it "delivers every screenshot byte through the queued job without logging the bytes" do
+      screenshots = Array.new(2) { png_of_size(HelpCenter::ContactsController::MAX_ATTACHMENT_BYTES) }
+      log = StringIO.new
+      original_logger = ActiveJob::Base.logger
+      ActiveJob::Base.logger = ActiveSupport::Logger.new(log, level: :info)
+
+      post help_center_contact_path, params: valid_params.merge(attachments: screenshots.map { image_upload(bytes: _1, filename: "image.png") })
+      expect(response).to have_http_status(:ok)
+
+      # Sidekiq stores the serialized job as JSON, so run exactly what would come back out of Redis.
+      job = ActiveJob::Base.queue_adapter.enqueued_jobs.select { _1["arguments"].first == "SupportContactMailer" }.sole
+      wire = JSON.parse(JSON.generate(job.select { |key, _| key.is_a?(String) }))
+      expect { ActiveJob::Base.execute(wire) }.to change { ActionMailer::Base.deliveries.size }.by(1)
+
+      mail = ActionMailer::Base.deliveries.last
+      expect(mail.attachments.map(&:filename)).to eq(["image.png", "image-2.png"])
+      expect(mail.attachments.map { _1.body.decoded }).to eq(screenshots)
+      expect(mail.header.fields.sum { _1.to_s.bytesize }).to be < 20_000
+
+      expect(log.string).to include("Enqueued", "Performing")
+      expect(log.string).not_to include(Base64.strict_encode64(screenshots.first).first(64))
+      expect(log.string.bytesize).to be < 20_000
+    ensure
+      ActiveJob::Base.logger = original_logger
     end
   end
 

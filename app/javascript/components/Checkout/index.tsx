@@ -16,6 +16,7 @@ import {
   isSingleChargeDuration,
   recurrenceNames,
   recurrenceDurationLabels,
+  renewalReminderNotice,
 } from "$app/utils/recurringPricing";
 
 import { Button, NavigationButton } from "$app/components/Button";
@@ -55,7 +56,6 @@ import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
 import { Select } from "$app/components/ui/Select";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
-import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { useRunOnce } from "$app/components/useRunOnce";
 import { WithTooltip } from "$app/components/WithTooltip";
 
@@ -92,8 +92,10 @@ import {
   getConfiguredDirectListedCurrency,
   getFutureInstallmentsTotal,
   getSelectableDirectListedCurrency,
+  getShippingCountryCodes,
   getTotalPriceFromProducts,
   getTotalPriceFromSurcharges,
+  getUnshippableProducts,
   isProcessing,
   isTippingEnabled,
   useState,
@@ -326,11 +328,9 @@ export const Checkout = ({
     setLoadingDiscount(false);
   }
 
-  const hasAddedProduct = !!new URL(useOriginalLocation()).searchParams.get("product");
   useRunOnce(() => {
     const url = new URL(window.location.href);
     const code = url.searchParams.get("code");
-    if (hasAddedProduct) cart.discountCodes.forEach(({ code }) => void applyDiscount(code));
     if (code) {
       void applyDiscount(code, true);
       url.searchParams.delete("code");
@@ -362,10 +362,17 @@ export const Checkout = ({
   // amount, the submitted quote token), so no amount shown from here can be charged.
   const summarySurcharges =
     state.surcharges.type === "loaded" ? state.surcharges.result : (state.buyerCurrencyRemint?.surcharges ?? null);
+  // No quote is requested until the buyer picks a country the cart ships to, and an item that ships
+  // nowhere blocks paying with the country still set (only its quote is refused), so both cases show
+  // the instruction instead of amounts nobody can be charged.
+  const unshippableProductCount = getUnshippableProducts(state).length;
+  const awaitingBuyerAction =
+    unshippableProductCount > 0 || (state.country === "" && getShippingCountryCodes(state).size > 0);
   // Only while a replacement is actually in flight. An errored fetch keeps the snapshot on screen
   // (it is the quote the buyer was returned to) but nothing is coming, so the summary must stop
   // saying it is working.
-  const quoteInFlight = state.surcharges.type === "pending" || state.surcharges.type === "loading";
+  const quoteInFlight =
+    !awaitingBuyerAction && (state.surcharges.type === "pending" || state.surcharges.type === "loading");
   const isRequoting = quoteInFlight && summarySurcharges !== null;
   // The first quote fills the Subtotal and Total rows. Holding their space while it loads keeps the
   // payment form below from jumping when it lands, which on phones is mid-tap on the email field.
@@ -619,7 +626,13 @@ export const Checkout = ({
                   data-checkout-price-rows="true"
                   aria-busy={isRequoting || awaitingFirstQuote}
                 >
-                  {summarySurcharges ? (
+                  {awaitingBuyerAction ? (
+                    <p className="text-sm sm:text-base">
+                      {unshippableProductCount > 0
+                        ? `Remove ${unshippableProductCount === 1 ? "the item" : "the items"} that can't be shipped to see your total.`
+                        : "Choose a delivery country to see shipping and your total."}
+                    </p>
+                  ) : summarySurcharges ? (
                     <>
                       <CartPriceItem
                         title="Subtotal"
@@ -694,20 +707,26 @@ export const Checkout = ({
                             </Pill>
                           </WithTooltip>
                         ) : null}
-                        {visibleDiscounts.map((code) => (
-                          <Pill
-                            size="small"
-                            className="cursor-pointer"
-                            onClick={() =>
-                              updateCart({ discountCodes: cart.discountCodes.filter((item) => item !== code) })
-                            }
-                            key={code.code}
-                            aria-label="Discount code"
-                          >
-                            {code.code}
-                            <X className="ml-2 size-5" />
-                          </Pill>
-                        ))}
+                        {visibleDiscounts.map((code) =>
+                          code.automatic ? (
+                            <Pill size="small" key={code.code} aria-label="Discount code">
+                              {code.code}
+                            </Pill>
+                          ) : (
+                            <Pill
+                              size="small"
+                              className="cursor-pointer"
+                              onClick={() =>
+                                updateCart({ discountCodes: cart.discountCodes.filter((item) => item !== code) })
+                              }
+                              key={code.code}
+                              aria-label="Discount code"
+                            >
+                              {code.code}
+                              <X className="ml-2 size-5" />
+                            </Pill>
+                          ),
+                        )}
                       </h4>
                       {discount > 0 ? (
                         <div>
@@ -743,7 +762,7 @@ export const Checkout = ({
                     </form>
                   ) : null}
                 </div>
-                {total != null ? (
+                {awaitingBuyerAction ? null : total != null ? (
                   <>
                     <footer className="grid gap-4 border-t border-border p-4 sm:px-5" aria-busy={isRequoting}>
                       <CartPriceItem
@@ -1219,6 +1238,12 @@ const CartItemComponent = ({
               Remove
             </Button>
           </CartItemActions>
+          {item.recurrence && !isGift && !isSingleChargeDuration(item.recurrence, item.product.duration_in_months)
+            ? (() => {
+                const notice = renewalReminderNotice(item.product.recurrences, item.recurrence);
+                return notice ? <span className="text-sm">{notice}</span> : null;
+              })()
+            : null}
         </CartItemFooter>
       </CartItemMain>
       {/* Cap this column at half the row so a long price string (e.g.

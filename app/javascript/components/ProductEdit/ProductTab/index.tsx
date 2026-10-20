@@ -401,6 +401,10 @@ export const ProductTab = () => {
                 <ShippingDestinationsEditor
                   shippingDestinations={product.shipping_destinations}
                   onChange={(shipping_destinations) => updateProduct({ shipping_destinations })}
+                  excludedCountryCodes={product.shipping_excluded_country_codes}
+                  onExcludedCountryCodesChange={(shipping_excluded_country_codes) =>
+                    updateProduct({ shipping_excluded_country_codes })
+                  }
                 />
               ) : null}
               <section className="grid gap-8 border-t border-border p-4 md:p-8">

@@ -252,6 +252,110 @@ const state = (overrides: Partial<State> = {}): State => ({
   ...overrides,
 });
 
+describe("a shipping country the physical cart doesn't cover", () => {
+  const physical = (shippableCountryCodes: string[]) =>
+    product({ permalink: "lamp", name: "Lamp", requireShipping: true, nativeType: "physical", shippableCountryCodes });
+  const digitalWithAddress = product({
+    permalink: "zine",
+    name: "Zine",
+    requireShipping: true,
+    shippableCountryCodes: [],
+  });
+  const arrive = (products: Product[], country = "US") =>
+    reduceCheckoutState(state({ country, products: [] }), { type: "update-products", products });
+
+  it("leaves the country unchosen, remembering the one it can't ship to, until the buyer picks one", () => {
+    const checkout = arrive([physical(["CA", "DE"])]);
+
+    expect(checkout.country).toBe("");
+    expect(checkout.unshippableCountry).toBe("US");
+    expect(isSubmitDisabled(checkout)).toBe(true);
+    for (const type of ["offer", "validate"] as const) {
+      expect(reduceCheckoutState(checkout, { type }).status.type).toBe("input");
+    }
+    expect(reduceCheckoutState({ ...checkout, surcharges: state().surcharges }, { type: "validate" }).status).toEqual({
+      type: "input",
+      errors: new Set(["country"]),
+    });
+
+    const chosen = reduceCheckoutState(checkout, { type: "set-value", country: "CA" });
+    expect(chosen.country).toBe("CA");
+    expect(chosen.unshippableCountry).toBeNull();
+    expect(chosen.surcharges.type).toBe("pending");
+
+    // Only a country the physical items can't reach is cleared.
+    expect(arrive([physical(["US", "CA"])]).country).toBe("US");
+    expect(arrive([digitalWithAddress]).country).toBe("US");
+    expect(arrive([product({ ...physical([]), shipsNowhere: true })]).country).toBe("US");
+  });
+
+  it("brings back the buyer's own country once the cart can ship there, and never picks another", () => {
+    const unchosen = arrive([physical(["CA", "DE"])]);
+
+    expect(reduceCheckoutState(unchosen, { type: "update-products", products: [physical(["CA", "FR"])] }).country).toBe(
+      "",
+    );
+    expect(reduceCheckoutState(unchosen, { type: "update-products", products: [physical(["US"])] }).country).toBe("US");
+    expect(reduceCheckoutState(unchosen, { type: "update-products", products: [digitalWithAddress] }).country).toBe(
+      "US",
+    );
+  });
+});
+
+describe("a physical product that ships nowhere", () => {
+  const unshippable = product({
+    permalink: "poster",
+    name: "Poster",
+    requireShipping: true,
+    nativeType: "physical",
+    shippableCountryCodes: [],
+    shipsNowhere: true,
+  });
+  const shippable = product({
+    permalink: "shirt",
+    name: "Shirt",
+    requireShipping: true,
+    nativeType: "physical",
+    shippableCountryCodes: ["US", "CA"],
+  });
+  const digital = product({ permalink: "ebook", name: "Ebook", shippableCountryCodes: [] });
+  // Digital products that collect a shipping address send the same empty list, meaning any country.
+  const digitalWithAddress = product({
+    permalink: "zine",
+    name: "Zine",
+    requireShipping: true,
+    shippableCountryCodes: [],
+  });
+
+  it.each([
+    ["on its own", [unshippable]],
+    ["next to a shippable physical product", [shippable, unshippable]],
+    ["next to a digital product", [digital, unshippable]],
+  ])("refuses every submit path %s", (_, products) => {
+    const checkout = state({ products });
+
+    expect(isSubmitDisabled(checkout)).toBe(true);
+    for (const type of ["offer", "validate"] as const) {
+      expect(reduceCheckoutState(checkout, { type }).status).toEqual({
+        type: "input",
+        errors: new Set(["shippingUnavailable"]),
+      });
+    }
+  });
+
+  it.each([
+    ["a physical product with coverage", [shippable]],
+    ["a digital product", [digital]],
+    ["a digital product that collects a shipping address", [digitalWithAddress]],
+    ["a mixed cart whose physical product ships somewhere", [shippable, digital]],
+  ])("leaves %s purchasable", (_, products) => {
+    const checkout = state({ products });
+
+    expect(isSubmitDisabled(checkout)).toBe(false);
+    expect(reduceCheckoutState(checkout, { type: "validate" }).status.type).toBe("validating");
+  });
+});
+
 describe("pay label while a confirmation holds the submit open", () => {
   const charging = state({ status: { type: "finished", paymentMethod: { type: "saved" } } as const });
 

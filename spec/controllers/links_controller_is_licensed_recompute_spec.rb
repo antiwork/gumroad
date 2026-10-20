@@ -10,7 +10,11 @@ describe LinksController, type: :controller do
   let(:variant_category) { create(:variant_category, link: product, title: "Version") }
   let!(:variant) { create(:variant, variant_category: variant_category, name: "Pro") }
 
-  before { sign_in seller }
+  # Devise builds its mappings when routes are drawn; this spec also runs alone in test-confidence.
+  before do
+    Rails.application.reload_routes!
+    sign_in seller
+  end
 
   def license_page
     [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "License" }] },
@@ -67,6 +71,29 @@ describe LinksController, type: :controller do
     product.reload
     expect(product.has_embedded_license_key?).to eq(true)
     expect(product.is_licensed).to eq(true)
+  end
+
+  it "queues the license backfill when a version gains a license key block after the product is already licensed" do
+    product.update!(has_same_rich_content_for_all_variants: false, is_licensed: true)
+    purchase = create(:purchase, link: product, variant_attributes: [variant])
+    page = create(:rich_content, entity: variant, title: "Version content", description: plain_page("Pro"), position: 0)
+    CreateLicensesForExistingCustomersWorker.jobs.clear
+
+    post :update, params: editor_save_params(
+      has_same_rich_content_for_all_variants: false,
+      variants: variant_params(
+        [{ id: page.external_id, title: "Version content", description: { type: "doc", content: license_page } }]
+      )
+    ), as: :json
+
+    expect(response).to be_successful
+    expect(product.reload.is_licensed).to eq(true)
+    expect(CreateLicensesForExistingCustomersWorker).to have_enqueued_sidekiq_job(product.id)
+    expect(purchase.reload.license).to be_nil
+
+    CreateLicensesForExistingCustomersWorker.new.perform(product.id)
+
+    expect(purchase.reload.license).to be_present
   end
 
   it "clears is_licensed and is_multiseat_license when the last license key block is removed" do

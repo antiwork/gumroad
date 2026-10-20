@@ -55,6 +55,7 @@ export type Product = {
   exchange_rate: number;
   rental: Rental | null;
   shippable_country_codes: string[];
+  ships_nowhere?: boolean;
   ppp_details: PurchasingPowerParityDetails | null;
   upsell: Upsell | null;
   cross_sells: CrossSell[];
@@ -78,7 +79,13 @@ export type Upsell = {
   description: string;
 };
 
-export type DiscountCode = { code: string; products: Record<string, Discount>; fromUrl: boolean };
+export type DiscountCode = {
+  code: string;
+  products: Record<string, Discount>;
+  fromUrl: boolean;
+  // A seller's default the server weighs on every save, so removing it would only bring it back.
+  automatic?: boolean;
+};
 
 export type CartItem = {
   product: Product;

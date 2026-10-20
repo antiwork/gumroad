@@ -54,7 +54,7 @@ class Api::V2::FilesController < Api::V2::BaseController
     return error_400("invalid key") unless key.start_with?(s3_key_prefix)
 
     raw_parts = Array(params[:parts])
-    unless raw_parts.all? { |p| p.is_a?(ActionController::Parameters) && !p[:part_number].is_a?(Array) && !p[:etag].is_a?(Array) }
+    unless raw_parts.all? { |p| p.is_a?(ActionController::Parameters) && scalar_part?(p[:part_number]) && scalar_part?(p[:etag]) }
       return error_400("each part must have scalar part_number and etag values")
     end
 
@@ -90,6 +90,12 @@ class Api::V2::FilesController < Api::V2::BaseController
   end
 
   private
+    # A nested part value (`part_number[0]=1`) arrives as Parameters, not an Array, so accept
+    # only scalars rather than enumerating the shapes that are not.
+    def scalar_part?(value)
+      value.is_a?(String) || value.is_a?(Numeric) || value == true || value == false
+    end
+
     def s3_key_prefix
       "attachments/#{current_resource_owner.external_id}/"
     end

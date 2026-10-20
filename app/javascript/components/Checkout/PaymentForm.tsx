@@ -52,7 +52,9 @@ import {
   getStripePaymentElementAmount,
   getStripePaymentElementMountCurrency,
   getChargeTodayPrice,
+  getShippingCountryCodes,
   getTotalPrice,
+  getUnshippableProducts,
   hasShipping,
   isCardReadyToPay,
   isProcessing,
@@ -81,7 +83,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { Checkbox } from "$app/components/ui/Checkbox";
-import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 import { LinkButton } from "$app/components/ui/LinkButton";
@@ -103,28 +105,25 @@ import { Product } from "./cartState";
 const CountryInput = () => {
   const [state, dispatch] = useState();
   const uid = React.useId();
-  const shippingCountryCodes = React.useMemo(
-    () =>
-      new Set<string>(
-        state.products.filter((product) => product.requireShipping).flatMap((product) => product.shippableCountryCodes),
-      ),
-    [state.products],
-  );
+  const errors = getErrors(state);
+  const shippingCountryCodes = React.useMemo(() => getShippingCountryCodes(state), [state.products]);
+  const unshippableProducts = getUnshippableProducts(state);
 
-  React.useEffect(() => {
-    if (!shippingCountryCodes.has(state.country)) {
-      const result = shippingCountryCodes.values().next();
-      if (!result.done) dispatch({ type: "set-value", country: result.value });
-    }
-  }, [state.country, shippingCountryCodes]);
+  // UnshippableProductsAlert explains this at the top of the shipping card.
+  if (unshippableProducts.length > 0) return null;
+
+  const unshippableCountryName =
+    state.country === "" && state.unshippableCountry ? state.countries[state.unshippableCountry] : undefined;
 
   return (
-    <Fieldset>
+    <Fieldset state={errors.has("country") ? "danger" : undefined}>
       <FieldsetTitle>
         <Label htmlFor={`${uid}country`}>Country</Label>
       </FieldsetTitle>
       <Select
         id={`${uid}country`}
+        aria-invalid={errors.has("country")}
+        aria-describedby={unshippableCountryName ? `${uid}country-unshippable` : undefined}
         value={state.country}
         onChange={(e) =>
           dispatch({
@@ -135,6 +134,11 @@ const CountryInput = () => {
         }
         disabled={isProcessing(state)}
       >
+        {state.country === "" ? (
+          <option value="" disabled>
+            Choose a country
+          </option>
+        ) : null}
         {(shippingCountryCodes.size > 0 ? [...shippingCountryCodes] : Object.keys(state.countries)).map(
           (countryCode) => (
             <option key={state.countries[countryCode]} value={countryCode}>
@@ -143,7 +147,32 @@ const CountryInput = () => {
           ),
         )}
       </Select>
+      {unshippableCountryName ? (
+        // Muted text is below 4.5:1 and this is the only explanation of why the country was cleared.
+        // Conditional because classNames merges, so it would also override the danger color.
+        <FieldsetDescription
+          id={`${uid}country-unshippable`}
+          className={errors.has("country") ? undefined : "text-inherit"}
+        >
+          This order can't be shipped to your country ({unshippableCountryName}). Choose the country you're shipping to.
+        </FieldsetDescription>
+      ) : null}
     </Fieldset>
+  );
+};
+
+const UnshippableProductsAlert = () => {
+  const [state] = useState();
+  const unshippableProducts = getUnshippableProducts(state);
+  if (unshippableProducts.length === 0) return null;
+
+  return (
+    <Alert variant="danger">
+      {unshippableProducts.map((product) => product.name).join(", ")} can't be shipped to any country right now.
+      {unshippableProducts.length < state.products.length
+        ? ` Remove ${unshippableProducts.length === 1 ? "it" : "them"} from your cart to buy the rest.`
+        : null}
+    </Alert>
   );
 };
 
@@ -522,6 +551,7 @@ const CustomerDetails = ({ className }: { className?: string }) => {
           <div className={className}>
             <div className="flex grow flex-col gap-4">
               <h4 className="text-base sm:text-lg">Shipping information</h4>
+              <UnshippableProductsAlert />
               <Fieldset state={errors.has("fullName") ? "danger" : undefined}>
                 <FieldsetTitle>
                   <Label htmlFor={`${uid}fullName`}>Full name</Label>

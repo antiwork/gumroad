@@ -118,6 +118,7 @@ const makePageProps = (id: string): Record<string, unknown> => ({
     is_adult: false,
     discover_fee_per_thousand: 0,
     shipping_destinations: [],
+    shipping_excluded_country_codes: [],
     custom_domain: "",
     collaborating_user: null,
     native_type: "digital",

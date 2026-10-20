@@ -52,6 +52,7 @@ class ProductDuplicatorService
         duplicate_preorder_link
         duplicate_third_party_analytics
         duplicate_shipping_destinations
+        duplicate_shipping_exclusions
         duplicate_refund_policy
         duplicate_profile_sections
       end
@@ -316,6 +317,12 @@ class ProductDuplicatorService
         new_shipping_destination = shipping_destination.dup
         new_shipping_destination.link = duplicated_product
         new_shipping_destination.save!
+      end
+    end
+
+    def duplicate_shipping_exclusions
+      product.shipping_exclusions.each do |shipping_exclusion|
+        duplicated_product.shipping_exclusions.create!(country_code: shipping_exclusion.country_code)
       end
     end
 

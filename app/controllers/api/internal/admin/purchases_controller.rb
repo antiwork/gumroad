@@ -284,7 +284,14 @@ class Api::Internal::Admin::PurchasesController < Api::Internal::Admin::BaseCont
       end
 
       by_seller = ActiveModel::Type::Boolean.new.cast(params[:by_seller]) == true
-      subscription.cancel!(by_seller: by_seller, by_admin: true)
+      begin
+        subscription.cancel!(by_seller: by_seller, by_admin: true)
+      rescue ActiveRecord::RecordInvalid => e
+        # `cancel!` saves inside a lock, so a model rejection (installment plans cannot be
+        # buyer-cancelled) rolls back the write and used to surface as an empty 422.
+        message = subscription.errors.full_messages.presence&.to_sentence || e.message
+        return render json: { success: false, message: }, status: :unprocessable_entity
+      end
 
       render json: {
         success: true,

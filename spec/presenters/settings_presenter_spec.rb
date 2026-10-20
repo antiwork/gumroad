@@ -92,6 +92,7 @@ describe SettingsPresenter do
           enable_free_downloads_email: true,
           enable_free_downloads_push_notification: true,
           announcement_notification_enabled: true,
+          feature_announcements: { subscribed: false, version: 0 },
           disable_comments_email: false,
           disable_reviews_email: false,
           disable_review_reminders: false,

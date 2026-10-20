@@ -51,6 +51,16 @@ describe Api::Internal::Installments::RemainingSendsController do
       Feature.deactivate(:auto_resume_stalled_post_blasts)
     end
 
+    it "neither resumes nor restarts a send a retired newsletter stopped" do
+      blast.update!(expired_at: 1.hour.ago, expiry_reason: PostEmailBlast::EXPIRY_NEWSLETTER_RETIRED)
+
+      expect { post :create, params: { id: installment.external_id } }.not_to change { installment.blasts.count }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body["error"]).to eq("This email is not waiting on any recipients.")
+      expect(SendPostBlastEmailsJob.jobs.size).to eq(0)
+    end
+
     it "refuses when the latest send is not incomplete" do
       blast.update!(completed_at: 1.day.ago)
 

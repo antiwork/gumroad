@@ -25,6 +25,7 @@ import {
 } from "@boxicons/react";
 import { type Editor, findChildren, generateJSON, Node as TiptapNode } from "@tiptap/core";
 import { DOMSerializer } from "@tiptap/pm/model";
+import { NodeSelection } from "@tiptap/pm/state";
 import { EditorContent } from "@tiptap/react";
 import { parseISO } from "date-fns";
 import { partition } from "lodash-es";
@@ -80,6 +81,7 @@ import {
   lastContentResetFailed,
   PopoverMenuItem,
   RichTextEditorToolbar,
+  selectionAfterInsertedNode,
   useImageUploadSettings,
   useRichTextEditor,
   validateUrl,
@@ -325,17 +327,27 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
 
   const onSelectFiles = (ids: string[]) => {
     if (!editor) return;
+    const insertAt = getInsertAtFromSelection(editor.state.selection);
     if (ids.length > 1) {
       const fileEmbedSchema = assertDefined(editor.view.state.schema.nodes[FileEmbed.name]);
       editor.commands.insertFileEmbedGroup({
         content: ids.map((id) => fileEmbedSchema.create({ id, uid: GuidGenerator.generate() })),
-        pos: getInsertAtFromSelection(editor.state.selection),
+        pos: insertAt,
       });
     } else if (ids[0]) {
-      editor.commands.insertContentAt(getInsertAtFromSelection(editor.state.selection), {
+      editor.commands.insertContentAt(insertAt, {
         type: FileEmbed.name,
         attrs: { id: ids[0], uid: GuidGenerator.generate() },
       });
+      // insertContentAt parks the selection on the node it inserted, and the next pick would
+      // then insert above it.
+      const { selection } = editor.state;
+      if (selection instanceof NodeSelection)
+        editor.view.dispatch(
+          editor.state.tr.setSelection(
+            selectionAfterInsertedNode(editor.state.doc, selection.from + selection.node.nodeSize),
+          ),
+        );
     }
   };
   const uploader = assertDefined(useEvaporateUploader());

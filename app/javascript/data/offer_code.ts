@@ -1,10 +1,12 @@
 import { Discount } from "$app/parsers/checkout";
 import { cast } from "$app/utils/cast";
 import { CurrencyCode } from "$app/utils/currency";
+import type { RecurrenceId } from "$app/utils/recurringPricing";
 import { request, ResponseError, readJson } from "$app/utils/request";
 
 import { OfferCode, SortKey, Duration } from "$app/components/CheckoutDashboard/DiscountsPage";
 import { PaginationProps } from "$app/components/Pagination";
+import type { SelectionDiscounts } from "$app/components/Product/selectionDiscounts";
 import { Sort } from "$app/components/useSortingTableDriver";
 
 type Uid = string;
@@ -31,6 +33,26 @@ export const computeOfferDiscount = async (payload: ComputeDiscountRequestData):
     }
   } catch {}
   return { error_code: "invalid_offer", error_message: "Something went wrong.", valid: false };
+};
+
+export type SelectionDiscountsRequest = {
+  permalink: string;
+  code: string | null;
+  quantity: number;
+  recurrence: RecurrenceId | null;
+  option_id: string | null;
+  price_cents: number | null;
+};
+
+export const getSelectionDiscounts = (params: SelectionDiscountsRequest) => {
+  const abort = new AbortController();
+  const response = request({
+    method: "GET",
+    accept: "json",
+    url: Routes.selection_discounts_offer_codes_path(params),
+    abortSignal: abort.signal,
+  }).then((res) => readJson<SelectionDiscounts>(res));
+  return { response, cancel: () => abort.abort() };
 };
 
 export type OfferCodeResponseData =

@@ -827,6 +827,16 @@ const ProductEditPage = (props: Props) => {
   const runSave = (): Promise<boolean> => {
     // Callers other than the buttons, such as a file download, also reach this: refuse the same way.
     if (reloadRequired !== null) return Promise.resolve(false);
+    // The server drops blank exclusions, so an unchosen row would look saved until the next reload.
+    // Only while the row is on screen: the exclusions card hides once the last destination goes.
+    if (
+      props.is_physical &&
+      product.shipping_destinations.length > 0 &&
+      product.shipping_excluded_country_codes?.includes("")
+    ) {
+      showAlert("Choose a country to exclude, or remove the empty row.", "error");
+      return Promise.resolve(false);
+    }
     const { confirmed, unexpected } = findPendingDeletions(product, lastSavedProductRef.current);
     // Content missing without recorded intent means the session lost state:
     // fail closed and ask for a reload instead of offering it as a deletion.

@@ -472,6 +472,8 @@ class User < ApplicationRecord
   after_update :update_audience_members_affiliates
   after_update :update_product_search_index!
   after_update :update_alive_cart_email, if: :saved_change_to_email?
+  # Inside the save, so an account change that moves a newsletter follow's outcome is ordered against retire!.
+  after_save :fence_newsletter_cutover, if: :newsletter_eligibility_changed?
   after_commit :move_purchases_to_new_email, on: :update, if: :email_previously_changed?
   after_commit :make_affiliate_of_the_matching_approved_affiliate_requests, on: [:create, :update], if: ->(user) { user.confirmed_at_previously_changed? && user.confirmed? }
   after_commit :generate_subscribe_preview, on: [:create, :update], if: :should_subscribe_preview_be_regenerated?
@@ -1680,6 +1682,20 @@ class User < ApplicationRecord
     end
 
   private
+    # What the newsletter migration reads from an account: its address, confirmation, status and the old
+    # announcement setting. A new account only counts there once confirmed.
+    def newsletter_eligibility_changed?
+      return confirmed_at.present? if previously_new_record?
+
+      announcement_bit = self.class.flag_mapping["flags"][:announcement_notification_enabled]
+      saved_change_to_email? || saved_change_to_confirmed_at? || saved_change_to_deleted_at? || saved_change_to_user_risk_state? ||
+        (saved_change_to_flags? && (flags_before_last_save.to_i ^ flags.to_i) & announcement_bit != 0)
+    end
+
+    def fence_newsletter_cutover
+      FeatureAnnouncementNewsletterCutover.fence_account_change([email_before_last_save, email])
+    end
+
     # Cache-key version suffix abandons old URLs without a backfill.
     # "_v3" dropped entries written before we checked the variant file still
     # exists — those 403'd forever.

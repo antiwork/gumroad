@@ -237,6 +237,7 @@ Rails.application.routes.draw do
     purchases_invoice_routes
 
     get "/offer_codes/compute_discount", to: "offer_codes#compute_discount"
+    get "/offer_codes/selection_discounts", to: "offer_codes#selection_discounts"
     get "/products/search", to: "links#search"
 
     if named_routes
@@ -512,6 +513,14 @@ Rails.application.routes.draw do
               get "files/:file_id/download_url", action: :file_download, as: :file_download
             end
           end
+
+          # Per-buyer download grants for a file whose seller-facing download flag is off.
+          resources :url_redirects, only: [:show] do
+            member do
+              post :grant_download
+              delete :revoke_download
+            end
+          end
         end
 
         namespace :grmc do
@@ -531,13 +540,14 @@ Rails.application.routes.draw do
     %w[muse claude].each do |client|
       get "/#{client}", to: "mcp_connectors#show", defaults: { client: }, as: client
     end
+    get "/mcp", to: "mcp_connectors#index", as: :mcp
     %w[muse claude chatgpt].each do |client|
       get "/#{client}/v1/status" => "api/v2/muse#status"
       get "/#{client}/v1/oauth2/authorize/:code(.:format)" => "oauth/authorizations#show"
       get "/#{client}/v1/oauth2/authorize(.:format)" => "oauth/authorizations#new"
       post "/#{client}/v1/oauth2/token(.:format)" => "oauth/tokens#create"
       post "/#{client}/v1/oauth2/register" => "api/v2/muse#register"
-      match "/#{client}/v1/mcp" => "api/v2/muse#mcp", via: [:get, :post]
+      match "/#{client}/v1/mcp" => "api/v2/muse#mcp", via: [:get, :post], defaults: { client: }
     end
     get "/.well-known/mcp.json" => "api/v2/muse#mcp_discovery"
     get "/.well-known/openai-apps-challenge" => "api/v2/muse#openai_apps_challenge"
@@ -637,6 +647,8 @@ Rails.application.routes.draw do
           # Token-carrying variants for links in review reminder emails; these work without a session.
           get "subscribe_review_reminders/:id", to: "review_reminders#subscribe_by_token", as: :user_subscribe_review_reminders_by_token
           get "unsubscribe_review_reminders/:id", to: "review_reminders#unsubscribe_by_token", as: :user_unsubscribe_review_reminders_by_token
+          get "unsubscribe_feature_announcements/:token", to: "feature_announcements#confirm_unsubscribe", as: :user_unsubscribe_feature_announcements
+          post "unsubscribe_feature_announcements/:token", to: "feature_announcements#unsubscribe"
         end
       end
     end
@@ -918,6 +930,7 @@ Rails.application.routes.draw do
 
     resource :offer_codes, only: [] do
       get :compute_discount
+      get :selection_discounts
     end
 
     resources :bundles, only: [:show] do

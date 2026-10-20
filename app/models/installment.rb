@@ -1224,8 +1224,16 @@ class Installment < ApplicationRecord
     def send_email(recipient)
       cache_key = "post_sendgrid_api:post:#{id}-#{updated_at}-#{REVISION}"
       cache = Rails.cache.read(cache_key) || {}
-      PostEmailApi.process(post: self, recipients: [recipient], cache:)
+      args = { post: self, recipients: [recipient], cache: }
+      admission = FeatureAnnouncementNewsletterCutover.handoff_admission_for(self)
+      args[:handoff_admission] = admission if admission
+      PostEmailApi.process(**args)
       Rails.cache.write(cache_key, cache)
+    rescue FeatureAnnouncementNewsletterCutover::Retired, FeatureAnnouncementNewsletterCutover::AdmissionTimeout
+      # Refused or timed out before the provider saw it, so the claim SentPostEmail.ensure_uniqueness committed
+      # isn't a send.
+      SentPostEmail.where(post_id: id, email: recipient[:email]).delete_all
+      raise
     end
 
     def content_moderation_check

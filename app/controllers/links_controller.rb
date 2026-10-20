@@ -165,7 +165,8 @@ class LinksController < ApplicationController
           product: @product,
           url_code: params[:offer_code] || params[:code],
           quantity: (params[:quantity] || 1).to_i,
-          buyer: logged_in_user
+          buyer: logged_in_user,
+          comparison_price_cents: cart_item[:price]
         ).result
         code = discount_result&.dig(:code) if discount_result&.dig(:valid)
         redirect_params = params.permit!.except(:code, :offer_code)
@@ -548,6 +549,7 @@ class LinksController < ApplicationController
           :files,
           :public_files,
           :shipping_destinations,
+          :shipping_excluded_country_codes,
           :call_limitation_info,
           :installment_plan,
           :community_chat_enabled,
@@ -583,6 +585,9 @@ class LinksController < ApplicationController
         end
         @product.show_in_sections!(product_permitted_params[:section_ids] || [])
         @product.save_shipping_destinations!(product_permitted_params[:shipping_destinations] || []) if @product.is_physical
+        if @product.is_physical && product_permitted_params.key?(:shipping_excluded_country_codes)
+          @product.save_shipping_exclusions!(product_permitted_params[:shipping_excluded_country_codes])
+        end
 
         if Feature.active?(:cancellation_discounts, @product.user) && (product_permitted_params[:cancellation_discount].present? || @product.cancellation_discount_offer_code.present?)
           begin

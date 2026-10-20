@@ -178,6 +178,9 @@ export type Product = {
   is_adult: boolean;
   discover_fee_per_thousand: number;
   shipping_destinations: ShippingDestination[];
+  // Countries this product must not ship to even though a destination covers them. Absent in
+  // editor props rendered before exclusions existed; an untouched save keeps it absent.
+  shipping_excluded_country_codes?: string[];
   custom_domain: string;
   collaborating_user: Seller | null;
   rich_content: Page[];

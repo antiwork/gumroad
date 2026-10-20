@@ -168,6 +168,7 @@ class Link < ApplicationRecord
   has_many :workflows
   has_many :dropbox_files
   has_many :shipping_destinations
+  has_many :shipping_exclusions, foreign_key: :product_id
   has_many :product_affiliates
   has_many :affiliates, through: :product_affiliates
   has_many :direct_affiliates, -> { direct_affiliates }, through: :product_affiliates, source: :affiliate
@@ -303,10 +304,14 @@ class Link < ApplicationRecord
   enum :subscription_duration, %i[monthly yearly quarterly biannually every_two_years]
   enum :purchase_type, %i[buy_only rent_only buy_and_rent] # Indicates whether this product can be bought or rented or both.
 
+  # Enum assignment raises on an unknown value. Keep the product's current mode instead of
+  # coercing to buy_only: the coercion converts the product and delete_unused_prices then
+  # drops its rental price, silently and with no editor control to undo it.
   def purchase_type=(value)
+    current = purchase_type
     super(value)
   rescue ArgumentError
-    super(:buy_only)
+    super(current || :buy_only)
   end
 
   def price_currency_type=(value)
@@ -899,7 +904,8 @@ class Link < ApplicationRecord
     return nil unless is_recurring_billing
 
     enabled_prices = prices.alive.is_buy.select { |price| BasePrice::Recurrence.number_of_months_in_recurrence(price.recurrence) }
-    enabled = enabled_prices.sort_by { |price| BasePrice::Recurrence.number_of_months_in_recurrence(price.recurrence) }.map { |price| { recurrence: price.recurrence, price_cents: price.price_cents, id: price.external_id } }
+    reminders_on = Feature.active?(:membership_renewal_reminders, user)
+    enabled = enabled_prices.sort_by { |price| BasePrice::Recurrence.number_of_months_in_recurrence(price.recurrence) }.map { |price| { recurrence: price.recurrence, price_cents: price.price_cents, id: price.external_id, renewal_reminder_days: reminders_on ? BasePrice::Recurrence.renewal_reminder_lead_days(price.recurrence) : [] } }
     default = default_price_recurrence&.recurrence || enabled.first&.fetch(:recurrence, nil)
     return nil if default.nil?
 
@@ -1084,6 +1090,54 @@ class Link < ApplicationRecord
     end
   end
 
+  # Full replacement of the exception list, like `save_shipping_destinations!`: the editor sends
+  # the whole list, so anything absent is dropped.
+  def save_shipping_exclusions!(country_codes)
+    country_codes = Array(country_codes).map { _1.to_s.strip }.reject(&:blank?).uniq
+    unexcludable = country_codes - ShippingExclusion.excludable_country_codes
+
+    if unexcludable.present?
+      message = "Sorry, #{unexcludable.to_sentence} cannot be excluded from shipping."
+      errors.add(:base, message)
+      raise LinkInvalid, message
+    end
+
+    # Checkout reads an empty coverage list as "no shipping restriction" and offers every
+    # country, so a product that excludes everything it ships to would show a normal checkout
+    # where every purchase then fails. Refuse that state rather than persisting it.
+    covered = shipping_destinations.alive.flat_map { |shipping_destination| shipping_destination.country_or_countries.keys }.uniq
+    if country_codes.present? && covered.present? && (covered - country_codes).empty?
+      message = "You've excluded every country this product ships to. Remove an excluded country or add a shipping destination."
+      errors.add(:base, message)
+      raise LinkInvalid, message
+    end
+
+    shipping_exclusions.where.not(country_code: country_codes).delete_all
+    (country_codes - shipping_exclusions.pluck(:country_code)).each do |country_code|
+      shipping_exclusions.create!(country_code:)
+    end
+    shipping_exclusions.reset
+  end
+
+  def shipping_excluded_country_codes
+    shipping_exclusions.order(:country_code).pluck(:country_code)
+  end
+
+  def excludes_shipping_to?(country_code)
+    return false if country_code.blank?
+
+    shipping_exclusions.exists?(country_code:)
+  end
+
+  # Country codes a physical product can actually ship to: the union of its destinations,
+  # minus its exclusions. Digital products have no shipping surface.
+  def shippable_country_codes
+    return [] unless is_physical
+
+    included = shipping_destinations.alive.flat_map { |shipping_destination| shipping_destination.country_or_countries.keys }
+    included.uniq - shipping_excluded_country_codes
+  end
+
   def save_default_sku!(sku_id, custom_sku)
     sku = skus.find_by_external_id(sku_id)
     sku.update!(custom_sku:) unless sku.nil?
@@ -1146,7 +1200,7 @@ class Link < ApplicationRecord
     # In-memory checks only: scope detachment (default_offer_code_detached?) costs a query per
     # product on card pages, and OfferCode#repair_detached_default_discounts clears those defaults.
     # An existing-customers-only default cannot price the page for an unknown buyer, so the sale
-    # takes over here; BestOfferCodeService still tries it first for a buyer who qualifies.
+    # takes over here; BestOfferCodeService still weighs it against the sale for a buyer who qualifies.
     redeemable = !explicit.deleted? && explicit.code.present? && !explicit.inactive? && !explicit.existing_customers_only? &&
                  explicit.is_currency_valid?(self) && default_offer_code_uses_left?(explicit)
     redeemable ? explicit : auto_code
@@ -1496,10 +1550,12 @@ class Link < ApplicationRecord
     not_purchasing_power_parity_disabled? && user.purchasing_power_parity_enabled?
   end
 
-  def cart_item(params)
+  # prebuilt_options lets a caller pricing several options pass the list it already built. It is
+  # positional because callers pass params as bare keywords.
+  def cart_item(params, prebuilt_options = nil)
     attrs = {}
     attrs[:rental] = !!params[:rent] && purchase_type != "buy_only"
-    attrs[:options] = options
+    attrs[:options] = prebuilt_options || options
     requested = attrs[:options].find { |o| o[:id] == params[:option] }
     # A closed tier reports quantity 0. Selecting it here makes checkout add a zero-quantity item.
     requested = nil if requested && Variant.find_by_external_id(requested[:id])&.closed_to_new_buyers?
@@ -1894,7 +1950,8 @@ class Link < ApplicationRecord
 
     def enforce_shipping_destinations_presence!
       return unless is_physical
-      return if shipping_destinations.alive.present?
+      # Not just destinations: a destination the product excludes still leaves nothing to ship to.
+      return if shippable_country_codes.present?
 
       errors.add(:base, "The product needs to be shippable to at least one destination.")
       raise LinkInvalid, "The product needs to be shippable to at least one destination."

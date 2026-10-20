@@ -10,6 +10,8 @@ class Follower < ApplicationRecord
 
   has_paper_trail
 
+  RETIRED_NEWSLETTER_MESSAGE = "Gumroad's newsletter is now Feature announcements. Turn them on in Settings, under Notifications."
+
   belongs_to :user, foreign_key: "followed_id", optional: true
   belongs_to :source_product, class_name: "Link", optional: true
 
@@ -21,6 +23,12 @@ class Follower < ApplicationRecord
   validate :not_confirmed_and_deleted
   validate :follower_user_id_exists, unless: :being_marked_as_deleted?
   validate :double_follow_validation, on: :create
+  validate :newsletter_not_retired, if: -> { new_record? || becoming_active? }
+
+  # Inside the save transaction, not after commit: a migrated newsletter subscriber who leaves the old
+  # newsletter (cancel link, spam report, buyer unsubscribe, seller removal) is opted out of Feature
+  # announcements in the same commit, so no window exists where the old opt-out is lost.
+  after_save :record_feature_announcements_opt_out, if: :left_newsletter?
 
   scope :confirmed, -> { where.not(confirmed_at: nil) }
   scope :active, -> { alive.confirmed }
@@ -48,6 +56,11 @@ class Follower < ApplicationRecord
 
   def confirmed?
     confirmed_at.present?
+  end
+
+  # A retired newsletter takes no new or revived follows, whichever link or service is used.
+  def newsletter_retired?
+    FeatureAnnouncementNewsletterCutover.retired_for?(followed_id)
   end
 
   def unconfirmed?
@@ -126,5 +139,25 @@ class Follower < ApplicationRecord
       if confirmed_at.present? && deleted_at.present?
         errors.add(:base, "Can't be both confirmed and deleted")
       end
+    end
+
+    def becoming_active?
+      (will_save_change_to_confirmed_at? && confirmed_at.present?) || (will_save_change_to_deleted_at? && deleted_at.nil?)
+    end
+
+    def newsletter_not_retired
+      errors.add(:base, RETIRED_NEWSLETTER_MESSAGE) if FeatureAnnouncementNewsletterCutover.retired_for_follow?(followed_id)
+    end
+
+    # Only a follow that was active and confirmed before this save left the newsletter; cancelling a request
+    # nobody confirmed isn't an opt-out. mark_deleted! clears confirmed_at in the same save.
+    def left_newsletter?
+      deleted_at_before_last_save.nil? && confirmed_at_before_last_save.present? && (deleted_at.present? || confirmed_at.nil?) &&
+        FeatureAnnouncementNewsletterCutover.tracks_opt_outs_for?(followed_id)
+    end
+
+    def record_feature_announcements_opt_out
+      user = FeatureAnnouncementNewsletterCutover.subscriber_for(self)
+      FeatureAnnouncementSubscription.unsubscribe!(user, source: "newsletter_opt_out") if user
     end
 end

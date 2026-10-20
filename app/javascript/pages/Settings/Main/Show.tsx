@@ -64,6 +64,7 @@ type MainPageProps = {
     enable_free_downloads_email: boolean;
     enable_free_downloads_push_notification: boolean;
     announcement_notification_enabled: boolean;
+    feature_announcements: { subscribed: boolean; version: number };
     disable_comments_email: boolean;
     disable_reviews_email: boolean;
     disable_review_reminders: boolean;
@@ -98,6 +99,13 @@ export default function MainPage() {
     },
   });
 
+  // Kept outside the form so a save that finds a newer server version (an unsubscribe link used
+  // after this page loaded) shows the server's value instead of resubmitting the stale one.
+  const [featureAnnouncements, setFeatureAnnouncements] = React.useState(props.user.feature_announcements);
+  if (featureAnnouncements.version !== props.user.feature_announcements.version) {
+    setFeatureAnnouncements(props.user.feature_announcements);
+  }
+
   const isFormDisabled = props.is_form_disabled || form.processing;
   const canUpdateUsername = Boolean(loggedInUser?.policies.settings_main_user.update_username) && !isFormDisabled;
 
@@ -123,6 +131,13 @@ export default function MainPage() {
     if (props.is_form_disabled) return;
     if (!formRef.current?.reportValidity()) return;
 
+    form.transform(({ user: { feature_announcements: _, ...user } }) => ({
+      user: {
+        ...user,
+        feature_announcements_subscribed: featureAnnouncements.subscribed,
+        feature_announcements_version: featureAnnouncements.version,
+      },
+    }));
     form.put(Routes.settings_main_path(), {
       preserveScroll: true,
     });
@@ -280,7 +295,21 @@ export default function MainPage() {
                       disabled={isFormDisabled}
                     />
                   </TableCell>
-                  <TableCell></TableCell>
+                  <EmailOnlyCell />
+                </TableRow>
+                <TableRow>
+                  <TableHead scope="row">Gumroad feature announcements</TableHead>
+                  <TableCell>
+                    <Switch
+                      checked={featureAnnouncements.subscribed}
+                      onChange={(e) =>
+                        setFeatureAnnouncements({ ...featureAnnouncements, subscribed: e.target.checked })
+                      }
+                      disabled={isFormDisabled}
+                      aria-label="Gumroad feature announcements"
+                    />
+                  </TableCell>
+                  <EmailOnlyCell />
                 </TableRow>
                 <TableRow>
                   <TableHead scope="row">Comments</TableHead>
@@ -291,7 +320,7 @@ export default function MainPage() {
                       disabled={isFormDisabled}
                     />
                   </TableCell>
-                  <TableCell></TableCell>
+                  <EmailOnlyCell />
                 </TableRow>
                 <TableRow>
                   <TableHead scope="row">Reviews</TableHead>
@@ -303,7 +332,7 @@ export default function MainPage() {
                       aria-label="Reviews"
                     />
                   </TableCell>
-                  <TableCell></TableCell>
+                  <EmailOnlyCell />
                 </TableRow>
               </TableBody>
             </Table>
@@ -593,6 +622,9 @@ export default function MainPage() {
     </Layout>
   );
 }
+
+// Keeps the Mobile column aligned on wide screens; a phone card drops it rather than show an empty Mobile section.
+const EmailOnlyCell = () => <TableCell className="hidden lg:table-cell" />;
 
 const InvalidateActiveSessionsSection = () => {
   const [isConfirmationDialogOpen, setIsConfirmationDialogOpen] = React.useState(false);

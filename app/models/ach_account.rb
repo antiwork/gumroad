@@ -6,7 +6,10 @@ class AchAccount < BankAccount
 
   before_validation :set_default_account_type, on: :create, if: ->(ach_account) { ach_account.account_type.nil? }
 
-  validate :validate_bank_name
+  # Create-only: a directory update can name an already-attached account's provider after the fact,
+  # and re-validating that row aborts the mark_deleted! a payout-method switch performs, so the
+  # seller can no longer change or remove it. Seller routing numbers only ever build new records.
+  validate :validate_bank_name, on: :create
   validate :validate_routing_number
   validate :validate_account_number
   validates :account_type, inclusion: { in: AccountType.all }

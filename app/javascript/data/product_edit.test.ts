@@ -26,6 +26,7 @@ import {
   UnconfirmedSaveError,
   UnmarkedInstallmentPlanClearConflictError,
 } from "$app/data/product_edit";
+import { cast } from "$app/utils/cast";
 import { ResponseError } from "$app/utils/request";
 
 vi.mock("@tiptap/core", () => ({
@@ -208,6 +209,42 @@ describe("saveProduct with membership tiers", () => {
         }),
       }),
     );
+  });
+});
+
+describe("saveProduct with shipping exclusions", () => {
+  const save = async (exclusions: Record<string, string[]>) => {
+    Object.assign(globalThis, { Routes: { link_path: () => "/p/demo" } });
+    requestMock.mockReset().mockResolvedValue({ ok: true, status: 204 });
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- fixture only carries the fields the save reads
+    const product = {
+      files: [],
+      public_files: [],
+      rich_content: [],
+      variants: [],
+      has_same_rich_content_for_all_variants: true,
+      covers: [],
+      availabilities: [],
+      confirmed_removed_variant_ids: [],
+      confirmed_removed_rich_content_ids: [],
+      preserved_rich_content_ids: [],
+      editor_revision: null,
+      allow_installment_plan: false,
+      ...exclusions,
+    } as unknown as Parameters<typeof saveProduct>[2];
+
+    await saveProduct("demo", "product-id", product, "usd");
+
+    const [[{ data }]] = cast<[[{ data: Record<string, unknown> }]]>(requestMock.mock.calls);
+    return data;
+  };
+
+  it("leaves the list out when the loaded product never had one, so the server keeps its own", async () => {
+    expect(await save({})).not.toHaveProperty("shipping_excluded_country_codes");
+  });
+
+  it("sends an emptied list so the server clears it", async () => {
+    expect(await save({ shipping_excluded_country_codes: [] })).toHaveProperty("shipping_excluded_country_codes", []);
   });
 });
 

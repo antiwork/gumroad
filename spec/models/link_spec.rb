@@ -522,4 +522,20 @@ describe Link do
       expect(description_for("<p><br></p>")).to eq("")
     end
   end
+
+  describe "#recurrences renewal_reminder_days" do
+    let(:product) { create(:membership_product) }
+
+    it "lists reminder lead times when the seller has renewal reminders" do
+      Feature.activate_user(:membership_renewal_reminders, product.user)
+
+      expect(product.recurrences[:enabled].map { _1[:renewal_reminder_days] }.flatten).not_to be_empty
+    end
+
+    it "lists none when renewal reminders are off for the seller" do
+      Feature.deactivate_user(:membership_renewal_reminders, product.user)
+
+      expect(product.recurrences[:enabled].map { _1[:renewal_reminder_days] }).to all(eq([]))
+    end
+  end
 end

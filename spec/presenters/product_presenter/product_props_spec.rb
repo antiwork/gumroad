@@ -122,7 +122,7 @@ describe ProductPresenter::ProductProps do
               rental: nil,
               recurrences: {
                 default: "monthly",
-                enabled: [{ id: product.prices.alive.first.external_id, recurrence: "monthly", price_cents: 0 }]
+                enabled: [{ id: product.prices.alive.first.external_id, recurrence: "monthly", price_cents: 0, renewal_reminder_days: [] }]
               },
               rental_price_cents: nil,
               sales_count: nil,
@@ -154,6 +154,27 @@ describe ProductPresenter::ProductProps do
               },
             },
             sale_label: nil,
+            selection_discounts: {
+              url_code: "sxsw", quantity: 1, recurrence: "monthly", option_id: nil, price_cents: nil, rent_options: nil,
+              options: {
+                product.alive_variants.first.external_id => {
+                  discount_code: {
+                    valid: true,
+                    code: "sxsw",
+                    discount: {
+                      type: "fixed",
+                      cents: 100,
+                      product_ids: [product.external_id],
+                      expires_at: offer_code.expires_at,
+                      minimum_quantity: 1,
+                      duration_in_billing_cycles: 1,
+                      minimum_amount_cents: nil,
+                    },
+                  },
+                  sale_label: nil,
+                },
+              },
+            },
             purchase: {
               content_url: nil,
               created_at: purchase.created_at,
@@ -400,6 +421,7 @@ describe ProductPresenter::ProductProps do
             },
             sale_label: nil,
             discount_code: nil,
+            selection_discounts: { url_code: nil, quantity: 1, recurrence: nil, option_id: nil, price_cents: nil, options: {}, rent_options: nil },
             purchase: {
               content_url: nil,
               id: purchase.external_id,
@@ -471,6 +493,16 @@ describe ProductPresenter::ProductProps do
         result = props(discount_code: "bf30")
 
         expect(result[:discount_code]).to include(valid: true, code: "bf30")
+        expect(result[:sale_label]).to eq("Black Friday")
+      end
+
+      it "falls back to the sale for a visitor an existing-customers-only default rejects" do
+        renewal = seller.offer_codes.create!(code: "RENEW10", amount_percentage: 10, products: [product],
+                                             existing_customers_only: true, ownership_products: [product])
+        product.update!(default_offer_code: renewal)
+        result = props
+
+        expect(result[:discount_code]).to include(valid: true, code: "BF30")
         expect(result[:sale_label]).to eq("Black Friday")
       end
 
@@ -978,6 +1010,114 @@ describe ProductPresenter::ProductProps do
 
       expect(props[:purchase][:id]).to eq(purchase.external_id)
       expect(props[:purchase][:review_account_name]).to eq("yacobyte")
+    end
+  end
+
+  describe "#selection_discounts" do
+    let(:seller) { create(:compliant_user) }
+    let(:buyer) { create(:user) }
+    let(:owned_product) { create(:product, user: seller, price_cents: 2000) }
+
+    before { create(:purchase, purchaser: buyer, link: owned_product, seller:, price_cents: 0) }
+
+    def loyalty_default(product, **attributes)
+      renewal = seller.offer_codes.create!(code: "RENEW20", amount_percentage: 20, products: [product],
+                                           existing_customers_only: true, ownership_products: [owned_product], **attributes)
+      product.update!(default_offer_code: renewal)
+    end
+
+    def codes(result) = result[:options].transform_values { _1[:discount_code]&.dig(:code) }
+
+    it "weighs each tier on its own price, so the higher tier gets the larger loyalty discount" do
+      membership = create(:membership_product_with_preset_tiered_pricing, user: seller,
+                                                                          recurrence_price_values: [
+                                                                            { "monthly" => { enabled: true, price: 10 } },
+                                                                            { "monthly" => { enabled: true, price: 100 } },
+                                                                          ])
+      loyalty_default(membership)
+      seller.offer_codes.create!(code: "SHOP5", amount_cents: 500, currency_type: "usd", universal: true, products: [], auto_apply: true, sale_label: "Spring sale")
+      first_tier, second_tier = membership.alive_variants.in_order.map(&:external_id)
+
+      result = described_class.new(product: membership).selection_discounts(url_code: nil, quantity: 1, recurrence: "monthly", buyer:)
+
+      expect(codes(result)).to eq(first_tier => "SHOP5", second_tier => "RENEW20")
+      expect(result[:options][first_tier][:sale_label]).to eq("Spring sale")
+      expect(result[:options][second_tier][:sale_label]).to be_nil
+      expect(result).to include(url_code: nil, quantity: 1, recurrence: "monthly", option_id: nil, price_cents: nil, rent_options: nil)
+
+      guest = described_class.new(product: membership).selection_discounts(url_code: nil, quantity: 1, recurrence: "monthly", buyer: nil)
+      expect(codes(guest)).to eq(first_tier => "SHOP5", second_tier => "SHOP5")
+    end
+
+    it "weighs a once-per-cart sale against a per-unit loyalty discount at the chosen quantity" do
+      product = create(:product, user: seller, price_cents: 1000, quantity_enabled: true)
+      loyalty_default(product)
+      seller.offer_codes.create!(code: "ONCE5", amount_cents: 500, currency_type: "usd", universal: true, products: [], auto_apply: true, once_per_cart: true)
+
+      expect(codes(described_class.new(product:).selection_discounts(url_code: nil, quantity: 1, recurrence: nil, buyer:))).to eq("" => "ONCE5")
+      expect(codes(described_class.new(product:).selection_discounts(url_code: nil, quantity: 3, recurrence: nil, buyer:))).to eq("" => "RENEW20")
+    end
+
+    it "weighs the defaults on the pay-what-you-want amount the buyer entered" do
+      product = create(:product, user: seller, price_cents: 500, customizable_price: true)
+      loyalty_default(product)
+      seller.offer_codes.create!(code: "SHOP3", amount_cents: 300, currency_type: "usd", universal: true, products: [], auto_apply: true)
+
+      expect(codes(described_class.new(product:).selection_discounts(url_code: nil, quantity: 1, recurrence: nil, buyer:, price_cents: 1000))).to eq("" => "SHOP3")
+      expect(codes(described_class.new(product:).selection_discounts(url_code: nil, quantity: 1, recurrence: nil, buyer:, price_cents: 3000))).to eq("" => "RENEW20")
+    end
+
+    it "weighs the defaults on the rental price for renting, beside the purchase price for buying" do
+      product = create(:product, user: seller, price_cents: 10_000, purchase_type: :buy_and_rent, rental_price_cents: 1000)
+      loyalty_default(product)
+      seller.offer_codes.create!(code: "SHOP5", amount_cents: 500, currency_type: "usd", universal: true, products: [], auto_apply: true)
+
+      result = described_class.new(product:).selection_discounts(url_code: nil, quantity: 1, recurrence: nil, buyer:)
+
+      expect(codes(result)).to eq("" => "RENEW20")
+      expect(result[:rent_options].transform_values { _1[:discount_code][:code] }).to eq("" => "SHOP5")
+    end
+
+    it "weighs a rent-only product on its rental price" do
+      product = create(:product, user: seller, price_cents: 10_000, purchase_type: :rent_only, rental_price_cents: 1000)
+      loyalty_default(product)
+      seller.offer_codes.create!(code: "SHOP5", amount_cents: 500, currency_type: "usd", universal: true, products: [], auto_apply: true)
+
+      result = described_class.new(product:).selection_discounts(url_code: nil, quantity: 1, recurrence: nil, buyer:)
+
+      expect(codes(result)).to eq("" => "SHOP5")
+      expect(result[:rent_options]).to be_nil
+    end
+
+    it "keeps the sale over a larger URL code until the selection meets the URL code's minimum quantity" do
+      product = create(:product, user: seller, price_cents: 1000, quantity_enabled: true)
+      seller.offer_codes.create!(code: "AUTO20", amount_percentage: 20, universal: true, products: [], auto_apply: true)
+      seller.offer_codes.create!(code: "URL50", amount_percentage: 50, products: [product], minimum_quantity: 2)
+      quote = ->(quantity) { codes(described_class.new(product:).selection_discounts(url_code: "URL50", quantity:, recurrence: nil, buyer: nil)) }
+
+      expect(quote.(1)).to eq("" => "AUTO20")
+      expect(quote.(2)).to eq("" => "URL50")
+    end
+
+    it "computes each code once per scope across options, and keeps a code scoped to one tier off the others" do
+      membership = create(:membership_product_with_preset_tiered_pricing, user: seller,
+                                                                          recurrence_price_values: Array.new(10) { |i| { "monthly" => { enabled: true, price: 10 * (i + 1) } } })
+      tiers = membership.alive_variants.in_order.to_a
+      seller.offer_codes.create!(code: "SHOP5", amount_cents: 500, currency_type: "usd", universal: true, products: [], auto_apply: true)
+      seller.offer_codes.create!(code: "TOP50", amount_percentage: 50, products: [membership], variants: [tiers.last])
+      allow(OfferCodeDiscountComputingService).to receive(:new).and_call_original
+
+      result = described_class.new(product: membership).selection_discounts(url_code: "TOP50", quantity: 1, recurrence: "monthly", buyer:)
+
+      expect(codes(result)).to eq(tiers[0..-2].to_h { [_1.external_id, "SHOP5"] }.merge(tiers.last.external_id => "TOP50"))
+      # SHOP5 once, TOP50 once for the tier it covers and once for the rest.
+      expect(OfferCodeDiscountComputingService).to have_received(:new).exactly(3).times
+    end
+
+    it "quotes nothing when the product has no default and no code was given" do
+      product = create(:product, user: seller)
+
+      expect(described_class.new(product:).selection_discounts(url_code: nil, quantity: 1, recurrence: nil, buyer:)[:options]).to eq({})
     end
   end
 end

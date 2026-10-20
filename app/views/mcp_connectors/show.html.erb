@@ -130,8 +130,10 @@
         <% McpConnectorsController::CLIENTS.except(@client_key).each do |key, client| %>
           <%= link_to "Gumroad MCP for #{client[:label]}", "/#{key}", class: "inline-flex min-h-11 items-center underline underline-offset-4" %>
         <% end %>
+        <%= link_to "All connectors", mcp_path, class: "inline-flex min-h-11 items-center underline underline-offset-4" %>
       </nav>
       <nav aria-label="Developer resources" class="flex flex-wrap items-center gap-6">
+        <%= link_to "Setup guide", McpConnectorsController::SETUP_GUIDE_URL, class: "inline-flex min-h-11 items-center underline underline-offset-4" %>
         <%= link_to "API docs", "/api", class: "inline-flex min-h-11 items-center underline underline-offset-4" %>
         <%= link_to "MCP discovery", "/.well-known/mcp.json", class: "inline-flex min-h-11 items-center underline underline-offset-4" %>
       </nav>

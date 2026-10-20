@@ -181,6 +181,7 @@ export type SearchParams = {
   creators: string[];
   bundles: string[];
   show_archived_only: boolean;
+  subscriptions_only: boolean;
 };
 
 type Props = {
@@ -246,6 +247,7 @@ export default function LibraryPage() {
     if (next.creators.length > 0) data.creators = next.creators.join(",");
     if (next.bundles.length > 0) data.bundles = next.bundles.join(",");
     if (next.show_archived_only) data.show_archived_only = "true";
+    if (next.subscriptions_only) data.subscriptions_only = "true";
     if (page !== undefined && page > 1) data.page = page.toString();
     inFlightNavigations.current += 1;
     router.get(Routes.library_path(), data, {
@@ -273,8 +275,10 @@ export default function LibraryPage() {
   const isDesktop = useIsAboveBreakpoint("lg");
   const [mobileFiltersExpanded, setMobileFiltersExpanded] = React.useState(false);
   const [showingAllCreators, setShowingAllCreators] = React.useState(false);
+  // On the Subscriptions tab the server counts only active subscriptions, so these follow the tab.
   const isLibraryEmpty = archivedCount + unarchivedCount === 0;
   const showArchivedNotice = !isLibraryEmpty && !search.show_archived_only && unarchivedCount === 0;
+  const archivedNoun = search.subscriptions_only ? "subscription" : "purchase";
   const hasParams =
     activeSearch.show_archived_only ||
     activeSearch.query !== "" ||
@@ -346,22 +350,34 @@ export default function LibraryPage() {
     !showArchivedNotice && (hasParams || archivedCount > 0 || archivedCount + unarchivedCount > 9);
 
   return (
-    <Layout selectedTab="purchases">
+    <Layout selectedTab={activeSearch.subscriptions_only ? "subscriptions" : "purchases"}>
       <section className="space-y-4 p-4 md:p-8">
         {isLibraryEmpty || showArchivedNotice ? (
           <Placeholder>
             {isLibraryEmpty ? (
-              <>
-                <PlaceholderImage src={placeholder} />
-                <h2 className="library-header">You haven't bought anything... yet!</h2>
-                Once you do, it'll show up here so you can download, watch, read, or listen to all your purchases.
-                <Button asChild color="accent">
-                  <a href={discoverUrl}>Discover products</a>
-                </Button>
-              </>
+              search.subscriptions_only ? (
+                <>
+                  <PlaceholderImage src={placeholder} />
+                  <h2 className="library-header">You don't have any active subscriptions.</h2>
+                  Subscriptions you buy will show up here.
+                </>
+              ) : (
+                <>
+                  <PlaceholderImage src={placeholder} />
+                  <h2 className="library-header">You haven't bought anything... yet!</h2>
+                  Once you do, it'll show up here so you can download, watch, read, or listen to all your purchases.
+                  <Button asChild color="accent">
+                    <a href={discoverUrl}>Discover products</a>
+                  </Button>
+                </>
+              )
             ) : (
               <>
-                <h2 className="library-header">You've archived all your products.</h2>
+                <h2 className="library-header">
+                  {search.subscriptions_only
+                    ? "You've archived all your subscriptions."
+                    : "You've archived all your products."}
+                </h2>
                 <Button
                   color="accent"
                   onClick={(e) => {
@@ -377,7 +393,8 @@ export default function LibraryPage() {
         ) : null}
         {archivedCount > 0 && !activeSearch.show_archived_only && !showArchivedNotice ? (
           <Alert role="status" variant="info" className="mb-5">
-            You have {archivedCount} archived purchase{archivedCount === 1 ? "" : "s"}.{" "}
+            You have {archivedCount} archived {archivedNoun}
+            {archivedCount === 1 ? "" : "s"}.{" "}
             <LinkButton onClick={() => navigate({ show_archived_only: true })}>Click here to view</LinkButton>
           </Alert>
         ) : null}
