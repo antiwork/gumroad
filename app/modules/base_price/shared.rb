@@ -65,15 +65,30 @@ module BasePrice::Shared
     min_price = currency_config["min_price"]
 
     prices_to_validate.compact.each do |price_cents_to_validate|
-      next if price_cents_to_validate == 0
-
-      if price_cents_to_validate > MAX_PRICE_CENTS
+      case price_range_violation(price_cents_to_validate)
+      when :too_large
         errors.add(:base, "Sorry, the price entered is too large.")
-      elsif price_cents_to_validate < min_price
+      when :below_minimum
         errors.add(:base, "Sorry, a product must be at least #{MoneyFormatter.format(min_price, price_currency_type.to_sym, no_cents_if_whole: true, symbol: true)}.")
-      elsif user.max_product_price && get_usd_cents(price_currency_type, price_cents_to_validate) > user.max_product_price
+      when :above_unverified_maximum
         errors.add(:base, "Sorry, we don't support pricing products above $5,000.")
       end
+    end
+  end
+
+  # Why price_must_be_within_range would reject this amount in the current currency, or nil.
+  def price_range_violation(price_cents)
+    return if price_cents == 0
+
+    min_price = CURRENCY_CHOICES.dig(price_currency_type, "min_price")
+    return if min_price.nil?
+
+    if price_cents > MAX_PRICE_CENTS
+      :too_large
+    elsif price_cents < min_price
+      :below_minimum
+    elsif user.max_product_price && get_usd_cents(price_currency_type, price_cents) > user.max_product_price
+      :above_unverified_maximum
     end
   end
 

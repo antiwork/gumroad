@@ -565,6 +565,11 @@ class LinksController < ApplicationController
         # current rental price into the new currency, as API v2 does. A rent-only product's
         # rental price is the submitted price_cents.
         if @product.price_currency_type_changed? && rental_price_cents_before_save.present?
+          # The seller can't edit the rental price here, so name it instead of failing on a price they can't see.
+          if (violation = @product.price_range_violation(rental_price_cents_before_save))
+            @product.errors.add(:base, rental_price_currency_error(rental_price_cents_before_save, violation))
+            raise Link::LinkInvalid
+          end
           @product.rental_price_cents = rental_price_cents_before_save
         end
         if product_permitted_params.key?(:description)
@@ -1008,6 +1013,20 @@ class LinksController < ApplicationController
       permitted.delete(:description) if permitted[:description].blank? && !description_clear_requested?
       permitted.delete(:customizable_price) if permitted[:customizable_price].nil?
       permitted.delete(:installment_plan) if permitted[:installment_plan].blank? && !installment_plan_clear_requested?
+    end
+
+    # The editor renders save errors as HTML, so every interpolated value is escaped.
+    def rental_price_currency_error(rental_price_cents, violation)
+      currency_type = @product.price_currency_type
+      rental_price = MoneyFormatter.format(rental_price_cents, currency_type.to_sym, no_cents_if_whole: true, symbol: true)
+      limit = case violation
+              when :below_minimum then "below the #{@product.min_price_formatted} minimum"
+              when :above_unverified_maximum then "above the $5,000 maximum"
+              else "too large"
+      end
+      "This product's rental price (#{ERB::Util.html_escape(rental_price)}) is #{ERB::Util.html_escape(limit)} " \
+        "in #{ERB::Util.html_escape(@product.currency["display_format"])}, so the currency can't be changed. " \
+        "Keep the current currency, or contact support for help changing the rental price."
     end
 
     def custom_permalink_clear_requested?
