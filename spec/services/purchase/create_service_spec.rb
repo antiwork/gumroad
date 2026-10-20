@@ -4132,32 +4132,72 @@ describe Purchase::CreateService, :vcr do
 
       purchase, error = Purchase::CreateService.new(product:, params: free_params, buyer:).perform
 
-      expect(error).to eq "Sorry, this discount code is only for new customers."
+      expect(error).to eq "Sorry, this discount code is only for new customers. Remove it to complete your purchase."
       expect(purchase.purchase_state).to eq "failed"
       expect(purchase.error_code).to eq "offer_code_invalid"
       expect(purchase.offer_code).to be_nil
       expect(purchase.purchase_offer_code_discount).to be_nil
     end
 
-    it "rejects a new-customers-only discount for an unidentified guest" do
-      offer_code = create(:offer_code,
-                          products: [product],
-                          new_customers_only: true,
-                          amount_cents: nil,
-                          amount_percentage: 100)
+    context "when the buyer checks out as a guest" do
+      let(:email) { "first.time@example.com" }
+      let(:offer_code) { create(:offer_code, :for_new_customers, products: [product], amount_cents: nil, amount_percentage: 100) }
+      let(:free_params) do
+        base_params.deep_dup.tap { _1[:purchase].merge!(discount_code: offer_code.code, perceived_price_cents: 0) }
+      end
+
+      it "applies a new-customers-only discount for an email that has never bought from the seller" do
+        purchase, error = Purchase::CreateService.new(product:, params: free_params).perform
+
+        expect(error).to be_nil
+        expect(purchase).to be_successful
+        expect(purchase.offer_code).to eq offer_code
+        expect(purchase.price_cents).to eq 0
+      end
+
+      it "rejects an email that bought another product from the seller, whatever its case" do
+        create(:purchase, link: create(:product, user:), purchaser: nil, email: "First.Time@Example.com")
+
+        purchase, error = Purchase::CreateService.new(product:, params: free_params).perform
+
+        expect(error).to eq "Sorry, this discount code is only for new customers. Remove it to complete your purchase."
+        expect(purchase.purchase_state).to eq "failed"
+        expect(purchase.error_code).to eq "offer_code_invalid"
+      end
+
+      it "does not count the seller's other customers or other sellers' sales" do
+        create(:purchase, link: create(:product, user:), purchaser: nil, email: "someone.else@example.com")
+        create(:purchase, link: create(:product), purchaser: nil, email:)
+
+        purchase, error = Purchase::CreateService.new(product:, params: free_params).perform
+
+        expect(error).to be_nil
+        expect(purchase).to be_successful
+      end
+    end
+
+    it "rejects a signed-in buyer whose account already bought from the seller under another checkout email" do
+      signed_in_buyer = create(:user, email: "account.holder@example.com")
+      create(:purchase, link: create(:product, user:), purchaser: signed_in_buyer, email: "old.inbox@example.com")
+      offer_code = create(:offer_code, :for_new_customers, products: [product], amount_cents: nil, amount_percentage: 100)
       free_params = base_params.deep_dup
+      free_params[:purchase].merge!(email: "fresh.inbox@example.com", discount_code: offer_code.code, perceived_price_cents: 0)
 
-      free_params[:purchase].merge!(
-        discount_code: offer_code.code,
-        perceived_price_cents: 0,
-      )
+      _purchase, error = Purchase::CreateService.new(product:, params: free_params, buyer: signed_in_buyer).perform
 
-      purchase, error = Purchase::CreateService.new(product:, params: free_params).perform
+      expect(error).to eq "Sorry, this discount code is only for new customers. Remove it to complete your purchase."
+    end
 
-      expect(error).to eq "Sorry, this discount code is only for new customers."
-      expect(purchase.purchase_state).to eq "failed"
-      expect(purchase.error_code).to eq "offer_code_invalid"
-      expect(purchase.offer_code).to be_nil
+    it "rejects a signed-in buyer whose checkout email already bought from the seller as a guest" do
+      signed_in_buyer = create(:user, email: "account.holder@example.com")
+      create(:purchase, link: create(:product, user:), purchaser: nil, email: "Guest.Inbox@Example.com")
+      offer_code = create(:offer_code, :for_new_customers, products: [product], amount_cents: nil, amount_percentage: 100)
+      free_params = base_params.deep_dup
+      free_params[:purchase].merge!(email: "guest.inbox@example.com", discount_code: offer_code.code, perceived_price_cents: 0)
+
+      _purchase, error = Purchase::CreateService.new(product:, params: free_params, buyer: signed_in_buyer).perform
+
+      expect(error).to eq "Sorry, this discount code is only for new customers. Remove it to complete your purchase."
     end
 
     it "allows purchases with offer codes in different currencies" do

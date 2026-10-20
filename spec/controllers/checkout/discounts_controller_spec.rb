@@ -946,6 +946,30 @@ describe Checkout::DiscountsController do
       expect(offer_code.amount_percentage).to eq(25)
     end
 
+    it "switches an existing-customer code to new customers only" do
+      owned_product = create(:product, user: seller)
+      subject_product = create(:product, user: seller, price_cents: 2_00)
+      offer_code.update!(products: [subject_product], ownership_products: [owned_product], existing_customers_only: true, duration_in_billing_cycles: nil)
+
+      put :update, params: {
+        id: offer_code.external_id,
+        name: "Discount 1",
+        amount_percentage: 10,
+        currency_type: nil,
+        universal: false,
+        selected_product_ids: [subject_product.external_id],
+        existing_customers_only: false,
+        new_customers_only: true,
+        ownership_product_ids: [],
+      }, as: :json
+
+      expect(response.parsed_body["success"]).to eq(true)
+      offer_code.reload
+      expect(offer_code.new_customers_only?).to eq(true)
+      expect(offer_code.existing_customers_only?).to eq(false)
+      expect(offer_code.ownership_products).to eq([])
+    end
+
     context "when the offer code has several products" do
       before do
         @product1 = create(:product, user: seller, price_cents: 1000)

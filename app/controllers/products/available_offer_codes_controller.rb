@@ -11,7 +11,8 @@ class Products::AvailableOfferCodesController < Sellers::BaseController
     authorize @product, :edit?
 
     limit = params[:query].present? ? MAX_OFFER_CODES_LIMIT : INITIAL_OFFER_CODES_LIMIT
-    offer_codes = @product.product_and_universal_offer_codes(params[:query], limit, true)
+    # New-customer codes cannot be a product's default (see Link#default_offer_code_must_be_valid).
+    offer_codes = @product.product_and_universal_offer_codes(params[:query], limit, true, exclude_new_customers_only: true)
 
     presenter = Products::AvailableOfferCodesPresenter.new(offer_codes:)
     render json: presenter.offer_codes_props

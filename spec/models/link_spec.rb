@@ -109,6 +109,14 @@ describe Link do
       expect(product.errors.full_messages).to include("Default offer code must belong to your offer codes")
       expect(product.reload.default_offer_code_id).to be_nil
     end
+
+    it "disallows a discount limited to new customers" do
+      offer_code = create(:offer_code, :for_new_customers, user: seller, products: [product])
+
+      expect(product.update(default_offer_code_id: offer_code.id)).to eq(false)
+      expect(product.errors.full_messages).to include("Default offer code cannot be limited to new customers")
+      expect(product.reload.default_offer_code_id).to be_nil
+    end
   end
 
   describe "#effective_default_offer_code" do

@@ -46,7 +46,7 @@ import {
   CartItemTitle,
 } from "$app/components/CartItemList";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
-import { useAppDomain, useDomains } from "$app/components/DomainSettings";
+import { useDomains } from "$app/components/DomainSettings";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
 import { PaginationProps } from "$app/components/Pagination";
@@ -355,9 +355,6 @@ export const Product = ({
   }, [maxQuantity, selection.quantity]);
 
   const addThirdPartyAnalytics = useAddThirdPartyAnalytics();
-
-  const loggedInUser = useLoggedInUser();
-  const appDomain = useAppDomain();
 
   const { searchParams } = new URL(useOriginalLocation());
   useRunOnce(() => {
@@ -725,27 +722,15 @@ export const Product = ({
               ) : null
             ) : (
               <Alert role="status" variant="danger">
-                {discountCode.error_code === "sold_out" ? (
-                  "Sorry, the discount code you wish to use has reached its usage limit."
-                ) : discountCode.error_code === "invalid_offer" ? (
-                  "Sorry, the discount code you wish to use is invalid."
-                ) : discountCode.error_code === "not_existing_customer" ? (
-                  "Sorry, this discount code is only for existing customers."
-                ) : discountCode.error_code === "not_new_customer" ? (
-                  // An unidentified visitor may be a first-time buyer, so only someone we matched against a
-                  // purchase reads the flat refusal; everyone else is told how to find out.
-                  loggedInUser ? (
-                    "Sorry, this discount code is only for new customers."
-                  ) : (
-                    <>
-                      Sorry, this discount code is only for new customers.{" "}
-                      <a href={Routes.login_url({ host: appDomain, next: product.long_url })}>Log in</a> to check if you
-                      qualify.
-                    </>
-                  )
-                ) : (
-                  "Sorry, the discount code you wish to use is inactive."
-                )}
+                {discountCode.error_code === "sold_out"
+                  ? "Sorry, the discount code you wish to use has reached its usage limit."
+                  : discountCode.error_code === "invalid_offer"
+                    ? "Sorry, the discount code you wish to use is invalid."
+                    : discountCode.error_code === "not_existing_customer"
+                      ? "Sorry, this discount code is only for existing customers."
+                      : discountCode.error_code === "not_new_customer"
+                        ? "Sorry, this discount code is only for new customers."
+                        : "Sorry, the discount code you wish to use is inactive."}
               </Alert>
             )
           ) : null}

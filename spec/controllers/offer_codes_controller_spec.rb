@@ -157,6 +157,17 @@ describe OfferCodesController do
 
       expect(response.parsed_body).to eq({ "error_message" => "Sorry, the discount code you wish to use is invalid.", "error_code" => "invalid_offer", "valid" => false })
     end
+
+    it "tells a signed-in returning customer that a new-customer code is not for them" do
+      offer_code.update!(new_customers_only: true)
+      buyer = create(:user)
+      create(:purchase, link: create(:product, user: product.user), purchaser: buyer, email: buyer.email)
+      sign_in buyer
+
+      get :compute_discount, params: offer_code_params
+
+      expect(response.parsed_body).to eq({ "error_message" => "Sorry, this discount code is only for new customers.", "error_code" => "not_new_customer", "valid" => false })
+    end
   end
 
   describe "#selection_discounts" do

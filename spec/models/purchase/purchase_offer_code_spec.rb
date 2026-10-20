@@ -241,6 +241,85 @@ describe Purchase, "offer-code capacity" do
   end
 end
 
+describe Purchase, "new-customer offer codes" do
+  let(:membership_purchase) { create(:membership_purchase, email: "member@example.com") }
+  let(:membership) { membership_purchase.link }
+  let(:subscription) { membership_purchase.subscription }
+  let(:offer_code) { create(:offer_code, :for_new_customers, user: membership.user, products: [membership], amount_cents: nil, amount_percentage: 100) }
+  let(:rejection) { "Sorry, this discount code is only for new customers. Remove it to complete your purchase." }
+
+  before { membership_purchase.update!(offer_code:) }
+
+  it "keeps the code on a renewal of the subscription it was redeemed on" do
+    renewal = create(:purchase, link: membership, subscription:, is_original_subscription_purchase: false, email: membership_purchase.email, variant_attributes: membership_purchase.variant_attributes, offer_code:)
+
+    expect(renewal.errors.full_messages).to be_empty
+  end
+
+  it "keeps the code when a plan change re-prices that subscription" do
+    plan_change = build(:purchase, link: membership, subscription:, is_original_subscription_purchase: true, email: membership_purchase.email, variant_attributes: membership_purchase.variant_attributes, offer_code:)
+    plan_change.is_updated_original_subscription_purchase = true
+    plan_change.save!
+
+    expect(plan_change.errors.full_messages).to be_empty
+  end
+
+  it "keeps a commission deposit's code on its completion purchase" do
+    commission_product = create(:commission_product, user: create(:user, created_at: 2.months.ago))
+    commission_code = create(:offer_code, :for_new_customers, user: commission_product.user, products: [commission_product], code: "firstcommission", amount_cents: nil, amount_percentage: 100)
+    create(:purchase, link: commission_product, email: "client@example.com", offer_code: commission_code)
+
+    completion = create(:purchase, link: commission_product, email: "client@example.com", offer_code: commission_code, is_commission_completion_purchase: true)
+
+    expect(completion.errors.full_messages).to be_empty
+  end
+
+  it "rejects a new-customer code first applied during a plan change" do
+    other_code = create(:offer_code, :for_new_customers, user: membership.user, products: [membership], code: "welcome", amount_cents: nil, amount_percentage: 100)
+    plan_change = build(:purchase, link: membership, subscription:, is_original_subscription_purchase: true, email: membership_purchase.email, variant_attributes: membership_purchase.variant_attributes, offer_code: other_code)
+    plan_change.is_updated_original_subscription_purchase = true
+    plan_change.save!
+
+    expect(plan_change.errors.full_messages).to eq([rejection])
+  end
+end
+
+describe Purchase, "renewing a membership bought with a new-customer code" do
+  let(:buyer) { create(:user, email: "member.renewal@example.com") }
+  let(:membership) { create(:membership_product, price_cents: 1000) }
+  let(:offer_code) { create(:offer_code, :for_new_customers, user: membership.user, products: [membership], amount_cents: nil, amount_percentage: 100) }
+  let(:original) do
+    create(:membership_purchase, link: membership, purchaser: buyer, email: buyer.email, price_cents: 0, offer_code:).tap do
+      _1.subscription.update!(user: buyer)
+    end
+  end
+
+  def renew!
+    subscription = original.subscription.reload
+    travel_to(subscription.end_time_of_subscription + 1.hour) { subscription.charge! }
+    subscription.purchases.where.not(id: original.id).order(:id).last
+  end
+
+  it "keeps the discount the buyer got on their first purchase" do
+    original.create_purchase_offer_code_discount!(offer_code:, offer_code_amount: 100, offer_code_is_percent: true,
+                                                  pre_discount_minimum_price_cents: 1000)
+
+    renewal = renew!
+
+    expect(renewal.errors.full_messages).to be_empty
+    expect(renewal.offer_code).to eq(offer_code)
+    expect(renewal.price_cents).to eq(0)
+  end
+
+  it "keeps the discount when the original purchase has no cached discount to reuse" do
+    renewal = renew!
+
+    expect(renewal.errors.full_messages).to be_empty
+    expect(renewal.offer_code).to eq(offer_code)
+    expect(renewal.price_cents).to eq(0)
+  end
+end
+
 describe Purchase, "new-customers-only codes on a later charge" do
   let(:seller) { create(:named_seller) }
   let(:buyer) { create(:user) }
@@ -249,6 +328,7 @@ describe Purchase, "new-customers-only codes on a later charge" do
     create(:offer_code, products: [product], new_customers_only: true, amount_cents: nil, amount_percentage: 20)
   end
   let(:subscription) { create(:subscription, link: product, user: buyer) }
+  let(:rejection) { "Sorry, this discount code is only for new customers. Remove it to complete your purchase." }
 
   before do
     create(:purchase, link: product, seller:, purchaser: buyer, subscription:, offer_code:,
@@ -256,11 +336,18 @@ describe Purchase, "new-customers-only codes on a later charge" do
                       price_cents: product.price_cents)
   end
 
+  # Pricing keeps the discount; checkout's validation is where a returning buyer would be refused.
+  def checkout_errors(purchase)
+    purchase.send(:validate_offer_code)
+    purchase.errors.full_messages
+  end
+
   it "keeps the discount on the buyer's renewal instead of refusing the code that priced their plan" do
     renewal = build(:purchase, link: product, seller:, purchaser: buyer, subscription:,
                                is_original_subscription_purchase: false, offer_code:)
 
     expect(renewal.send(:resolved_offer_code_discount_for_buyer)).to eq({ type: "percent", percents: 20 })
+    expect(checkout_errors(renewal)).to be_empty
   end
 
   it "keeps the discount on a later installment of the same plan" do
@@ -268,6 +355,7 @@ describe Purchase, "new-customers-only codes on a later charge" do
                                    is_installment_payment: true, is_original_subscription_purchase: false)
 
     expect(installment.send(:resolved_offer_code_discount_for_buyer)).to eq({ type: "percent", percents: 20 })
+    expect(checkout_errors(installment)).to be_empty
   end
 
   it "keeps the discount on the release charge of a preorder the buyer already authorized" do
@@ -276,24 +364,23 @@ describe Purchase, "new-customers-only codes on a later charge" do
                       purchase_state: "preorder_authorization_successful", price_cents: 1_000)
     charge = build(:purchase, link: product, seller:, purchaser: buyer, offer_code:, preorder:)
 
-    expect(charge.send(:continues_earlier_purchase?)).to be(true)
     expect(charge.send(:resolved_offer_code_discount_for_buyer)).to eq({ type: "percent", percents: 20 })
+    expect(checkout_errors(charge)).to be_empty
   end
 
-  it "still decides the gate on the preorder authorization itself" do
+  it "still decides the code on the preorder authorization itself" do
     preorder = create(:preorder, preorder_link: create(:preorder_link, link: product), purchaser: buyer)
     authorization = build(:purchase, link: product, seller:, purchaser: buyer, offer_code:, preorder:,
                                      is_preorder_authorization: true)
 
-    expect(authorization.send(:continues_earlier_purchase?)).to be(false)
-    expect(authorization.send(:resolved_offer_code_discount_for_buyer)).to be_nil
+    expect(checkout_errors(authorization)).to eq([rejection])
   end
 
   it "still refuses the code when the same buyer starts something new" do
     other_product = create(:product, user: seller, price_cents: 1_000)
     new_purchase = build(:purchase, link: other_product, seller:, purchaser: buyer, offer_code:)
 
-    expect(new_purchase.send(:resolved_offer_code_discount_for_buyer)).to be_nil
+    expect(checkout_errors(new_purchase)).to eq([rejection])
   end
 
   it "still refuses the code on a first installment" do
@@ -302,6 +389,6 @@ describe Purchase, "new-customers-only codes on a later charge" do
                                          is_installment_payment: true, is_original_subscription_purchase: true,
                                          offer_code:)
 
-    expect(first_installment.send(:resolved_offer_code_discount_for_buyer)).to be_nil
+    expect(checkout_errors(first_installment)).to eq([rejection])
   end
 end

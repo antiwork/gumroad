@@ -1074,6 +1074,16 @@ const Form = ({
 
   const uid = React.useId();
 
+  // These settings can't be combined, so each one is disabled with the reason while a conflicting one
+  // is on, rather than silently switching the other off. A switch that is already on stays enabled, so
+  // a conflicting pair can always be undone. The server enforces the same rules.
+  const newCustomersConflicts = [
+    existingCustomersOnly ? "Limit to existing customers" : null,
+    useTieredDiscounts ? "Tier discount by ownership duration" : null,
+    universal && autoApply ? "Apply automatically on product pages" : null,
+  ].filter((label): label is string => label !== null);
+  const newCustomersOnlyReason = "Can't be combined with Limit to new customers.";
+
   const handleSubmit = () => {
     const isNameInvalid = name.value === "";
     const isCodeInvalid = code.value === "";
@@ -1299,6 +1309,9 @@ const Form = ({
                   setUniversal(evt.target.checked);
                   setSelectedProductIds({ value: [] });
                   setOptionIdsByProduct({});
+                  // Automatic application only exists for all products; left on while hidden, it would
+                  // block the new-customer limit unseen.
+                  if (!evt.target.checked) setAutoApply(false);
                 }}
                 aria-invalid={selectedProductIds.error}
               />
@@ -1333,11 +1346,14 @@ const Form = ({
               <Switch
                 checked={autoApply}
                 onChange={(evt) => setAutoApply(evt.target.checked)}
+                disabled={newCustomersOnly ? !autoApply : false}
+                aria-describedby={`${uid}autoApplyDescription`}
                 label="Apply automatically on product pages"
               />
-              <FieldsetDescription>
-                Buyers see the discounted price on your product pages without a link or code. Use the validity period
-                below to schedule the sale. A discount set on a single product still takes priority.
+              <FieldsetDescription id={`${uid}autoApplyDescription`}>
+                {newCustomersOnly
+                  ? newCustomersOnlyReason
+                  : "Buyers see the discounted price on your product pages without a link or code. Use the validity period below to schedule the sale. A discount set on a single product still takes priority."}
               </FieldsetDescription>
             </Fieldset>
           ) : null}
@@ -1492,10 +1508,9 @@ const Form = ({
               <DetailsToggle chevronPosition="none" className="mb-0">
                 <Switch
                   checked={existingCustomersOnly}
-                  disabled={newCustomersOnly}
-                  onChange={(evt) => {
-                    setExistingCustomersOnly(evt.target.checked);
-                  }}
+                  onChange={(evt) => setExistingCustomersOnly(evt.target.checked)}
+                  disabled={newCustomersOnly ? !existingCustomersOnly : false}
+                  aria-describedby={newCustomersOnly ? `${uid}existingCustomersReason` : undefined}
                   label="Limit to existing customers"
                 />
               </DetailsToggle>
@@ -1521,33 +1536,30 @@ const Form = ({
                 </Fieldset>
               </Dropdown>
             </Details>
-            {newCustomersOnly ? <p className="text-sm">Can't be combined with 'Limit to new customers'.</p> : null}
-            <Details open={newCustomersOnly}>
-              <DetailsToggle chevronPosition="none" className="mb-0">
-                <Switch
-                  checked={newCustomersOnly}
-                  disabled={existingCustomersOnly || useTieredDiscounts}
-                  onChange={(evt) => {
-                    setNewCustomersOnly(evt.target.checked);
-                  }}
-                  label="Limit to new customers"
-                />
-              </DetailsToggle>
-              <p className="text-sm">Only buyers with no previous purchase from your store can use this code.</p>
-            </Details>
-            {existingCustomersOnly || useTieredDiscounts ? (
-              <p className="text-sm">
-                Can't be combined with 'Limit to existing customers' or 'Tier discount by ownership duration'.
-              </p>
+            {newCustomersOnly ? (
+              <FieldsetDescription id={`${uid}existingCustomersReason`}>{newCustomersOnlyReason}</FieldsetDescription>
             ) : null}
+            <Fieldset>
+              <Switch
+                checked={newCustomersOnly}
+                onChange={(evt) => setNewCustomersOnly(evt.target.checked)}
+                disabled={newCustomersConflicts.length > 0 && !newCustomersOnly}
+                aria-describedby={`${uid}newCustomersDescription`}
+                label="Limit to new customers"
+              />
+              <FieldsetDescription id={`${uid}newCustomersDescription`}>
+                {newCustomersConflicts.length > 0
+                  ? `Can't be combined with ${newCustomersConflicts.join(" or ")}.`
+                  : "Only buyers who haven't purchased from your store before can use this code. Buyers are recognized by their Gumroad account or the email they check out with."}
+              </FieldsetDescription>
+            </Fieldset>
             <Details open={useTieredDiscounts}>
               <DetailsToggle chevronPosition="none" className="mb-0">
                 <Switch
                   checked={useTieredDiscounts}
-                  disabled={newCustomersOnly}
-                  onChange={(evt) => {
-                    setUseTieredDiscounts(evt.target.checked);
-                  }}
+                  onChange={(evt) => setUseTieredDiscounts(evt.target.checked)}
+                  disabled={newCustomersOnly ? !useTieredDiscounts : false}
+                  aria-describedby={newCustomersOnly ? `${uid}tiersReason` : undefined}
                   label="Tier discount by ownership duration"
                 />
               </DetailsToggle>
@@ -1629,7 +1641,9 @@ const Form = ({
                 </Fieldset>
               </Dropdown>
             </Details>
-            {newCustomersOnly ? <p className="text-sm">Can't be combined with 'Limit to new customers'.</p> : null}
+            {newCustomersOnly ? (
+              <FieldsetDescription id={`${uid}tiersReason`}>{newCustomersOnlyReason}</FieldsetDescription>
+            ) : null}
             <Details open={hasMinimumAmount}>
               <DetailsToggle chevronPosition="none" className="mb-0">
                 <Switch
