@@ -323,6 +323,29 @@ describe("Library Scenario", type: :system, js: true) do
       expect(page).to have_selector("h2", text: "Transferred membership")
     end
 
+    it "lists an installment plan still billed after its original payment is charged back, without its download" do
+      allow(DisputeEvidence::GenerateReceiptImageService).to receive(:perform)
+        .and_return(File.read(Rails.root.join("spec", "support", "fixtures", "test-small.jpg")))
+      plan = create(:installment_plan_purchase, purchaser: @user, email: @user.email, stripe_transaction_id: "ch_plan_original",
+                                                link: create(:product, :with_installment_plan, name: "Disputed course")).tap(&:create_url_redirect!)
+      create(:membership_purchase, link: plan.link, subscription: plan.subscription, purchaser: @user, is_original_subscription_purchase: false, is_installment_payment: true)
+      Purchase.handle_charge_event(build(:charge_event_dispute_formalized, charge_id: plan.stripe_transaction_id))
+      Link.import(refresh: true, force: true)
+
+      visit "/library"
+      expect(page).to_not have_product_card(plan.link)
+
+      visit "/library?subscriptions_only=true"
+      expect(page).to have_product_card(plan.link)
+      within(find_product_card(plan.link)) do
+        expect(page).to have_text("Installment plan · 2 of 3 paid · Final payment on #{buyer_date(plan.subscription.reload.end_time_of_subscription)}")
+        expect(page).to_not have_selector("a[href*='/d/']")
+      end
+      click_on "Manage Disputed course"
+
+      expect(page).to have_current_path("/subscriptions/#{plan.subscription.external_id}/manage")
+    end
+
     it "keeps every subscription listed when an old URL carries archive or bundle filters" do
       active = owned_membership("Monthly membership")
       archived = owned_membership("Archived membership", is_archived: true)

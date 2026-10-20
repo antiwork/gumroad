@@ -262,7 +262,7 @@ describe LibraryPresenter do
         results(subscriptions_only: true).find { _1[:purchase][:id] == card_purchase.external_id }.dig(:purchase, :subscription, :status_label)
       end
 
-      def manage_url(card_purchase = purchase)
+      def subscription_manage_location(card_purchase = purchase)
         results(subscriptions_only: true).find { _1[:purchase][:id] == card_purchase.external_id }.dig(:purchase, :subscription, :manage_url)
       end
 
@@ -650,12 +650,141 @@ describe LibraryPresenter do
           renewal(installment.subscription, is_installment_payment: true)
 
           expect(status_label(installment)).to eq("Installment plan · 2 of 3 paid · Final payment on #{buyer_date(installment.subscription.end_time_of_subscription)}")
-          expect(manage_url(installment)).to eq("/subscriptions/#{installment.subscription.external_id}/manage")
+          expect(subscription_manage_location(installment)).to eq("/subscriptions/#{installment.subscription.external_id}/manage")
 
           renewal(installment.subscription, is_installment_payment: true)
           expect(status_label(installment)).to eq("Installment plan · Paid in full")
           # SubscriptionsController#manage 404s a paid-off installment plan.
-          expect(manage_url(installment)).to be_nil
+          expect(subscription_manage_location(installment)).to be_nil
+        end
+      end
+
+      describe "charged-back installments" do
+        let(:plan) do
+          create(:installment_plan_purchase, purchaser: buyer, email: buyer.email, stripe_transaction_id: "ch_plan_original",
+                                             link: create(:product, :with_installment_plan, name: "Course", user: creator)).tap(&:create_url_redirect!)
+        end
+        let!(:second_installment) { renewal(plan.subscription, is_installment_payment: true, email: buyer.email, stripe_transaction_id: "ch_plan_second") }
+
+        before do
+          allow(DisputeEvidence::GenerateReceiptImageService).to receive(:perform)
+            .and_return(File.read(Rails.root.join("spec", "support", "fixtures", "test-small.jpg")))
+        end
+
+        def dispute!(charge) = Purchase.handle_charge_event(build(:charge_event_dispute_formalized, charge_id: charge.stripe_transaction_id))
+
+        def plan_card(user = buyer)
+          described_class.new(user).library_props(subscriptions_only: true)[:results].find { _1[:product][:name] == "Course" }
+        end
+
+        it "keeps listing a plan the charge worker still bills after its original payment is charged back" do
+          dispute!(plan)
+
+          expect(plan.reload.chargedback_not_reversed?).to be(true)
+          expect(plan.subscription.reload.all_charges_disputed?).to be(false)
+          expect(plan_card).to include(purchase: include(
+            id: "subscription:#{plan.subscription.external_id}",
+            is_archived: false,
+            download_url: nil,
+            subscription: {
+              status_label: "Installment plan · 2 of 3 paid · Final payment on #{buyer_date(plan.subscription.end_time_of_subscription)}",
+              manage_url: "/subscriptions/#{plan.subscription.external_id}/manage",
+            },
+          ))
+          expect(plan_card.to_json).not_to include(plan.url_redirect.token)
+          expect(results.map { _1[:purchase][:id] }).not_to include(plan.external_id)
+        end
+
+        it "keeps the billing card with the payer, and gives the new holder none, after the purchases move away" do
+          dispute!(plan)
+          holder = create(:user, email: "plan-holder@example.com")
+
+          buyer.transfer_purchases!(new_email: holder.email)
+
+          expect(plan.reload.purchaser).to eq(holder)
+          expect(plan_card).to include(purchase: include(id: "subscription:#{plan.subscription.external_id}", download_url: nil))
+          expect(plan_card(holder)).to be_nil
+          expect(described_class.new(holder).library_props[:results]).to be_empty
+        end
+
+        it "lists a claimed guest checkout's plan from the buyer's own charge rows" do
+          plan.subscription.update!(user: nil)
+          dispute!(plan)
+
+          expect(plan_card).to include(purchase: include(id: "subscription:#{plan.subscription.external_id}", download_url: nil))
+        end
+
+        it "leaves out a plan with every installment charged back, which the charge worker no longer bills" do
+          dispute!(plan)
+          dispute!(second_installment)
+
+          expect(plan.subscription.reload.all_charges_disputed?).to be(true)
+          expect(plan_card).to be_nil
+        end
+      end
+
+      describe "label facts" do
+        def mixed_subscriptions(group)
+          renewing = owned_membership("Renewing #{group}")
+          cancelled = owned_membership("Cancelled #{group}").tap { _1.subscription.cancel!(by_seller: false) }
+          installments = create(:installment_plan_purchase, purchaser: buyer, link: create(:product, :with_installment_plan, name: "Installments #{group}", user: creator))
+          paid_off = create(:installment_plan_purchase, purchaser: buyer, link: create(:product, :with_installment_plan, name: "Paid off #{group}", user: creator))
+          2.times { renewal(paid_off.subscription, is_installment_payment: true) }
+          trial = create(:free_trial_membership_purchase, purchaser: buyer, link: create(:membership_product, :with_free_trial_enabled, name: "Trial #{group}", user: creator))
+          trial.subscription.update!(user: buyer)
+          failing = owned_membership("Failing #{group}")
+          travel(1.minute) { renewal(failing.subscription, purchase_state: "failed") }
+          gift_subscription = gifted_subscription("Gift #{group}")
+          [renewing, cancelled, installments, paid_off, trial, failing].map(&:subscription) + [gift_subscription]
+        end
+
+        def gifted_subscription(name)
+          gift_product = create(:membership_product, name:, user: creator)
+          subscription = create(:subscription, link: gift_product, user: buyer)
+          gift = create(:gift, link: gift_product, giftee_email: buyer.email, gifter_email: "payer@example.com")
+          create(:membership_purchase, link: gift_product, subscription:, email: "payer@example.com", is_gift_sender_purchase: true, gift_given: gift)
+          gift.update!(giftee_purchase: create(:membership_purchase, :gift_receiver, link: gift_product, subscription:, purchaser: buyer, email: buyer.email))
+          subscription
+        end
+
+        def queries_for_subscriptions_tab
+          count = 0
+          counter = ->(*, payload) { count += 1 unless payload[:cached] || %w[SCHEMA TRANSACTION].include?(payload[:name]) }
+          ActiveSupport::Notifications.subscribed(counter, "sql.active_record") { results(subscriptions_only: true) }
+          count
+        end
+
+        it "keeps the Subscriptions tab at a fixed number of queries as cards are added" do
+          mixed_subscriptions(1)
+          seven_more = queries_for_subscriptions_tab
+          mixed_subscriptions(2)
+
+          expect(results(subscriptions_only: true).size).to eq(15)
+          expect(queries_for_subscriptions_tab - seven_more).to be <= 2
+        end
+
+        it "match the Subscription methods they stand in for across subscription states" do
+          subscriptions = mixed_subscriptions(1)
+          refunded = owned_membership("Refunded renewal").subscription
+          renewal(refunded, succeeded_at: 1.minute.from_now, stripe_refunded: true)
+          reversed = owned_membership("Reversed chargeback").subscription
+          renewal(reversed, succeeded_at: 1.minute.from_now, chargeback_date: Time.current, chargeback_reversed: true)
+          disputed = create(:installment_plan_purchase, purchaser: buyer, link: create(:product, :with_installment_plan, name: "Disputed original", user: creator))
+          disputed.update!(chargeback_date: Time.current)
+          renewal(disputed.subscription, is_installment_payment: true)
+          unsettled = owned_membership("Unsettled renewal").subscription
+          renewal(unsettled, succeeded_at: nil)
+          test_subscription = owned_membership("Test", purchase_state: "test_successful").subscription.tap { _1.update!(is_test_subscription: true) }
+          facts_class = described_class.const_get(:LabelFacts)
+
+          freeze_time do
+            (subscriptions + [refunded, reversed, disputed.subscription, unsettled, test_subscription]).each do |subscription|
+              subscription.reload
+              facts = facts_class.new(subscription, subscription.purchases.sort_by(&:id))
+              expect([facts.charges_completed?, facts.remaining_charges_count, facts.end_time_of_subscription])
+                .to eq([subscription.charges_completed?, subscription.remaining_charges_count, subscription.end_time_of_subscription]), subscription.link.name
+            end
+          end
         end
       end
     end

@@ -5,6 +5,9 @@ import * as React from "react";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Tabs, Tab } from "$app/components/ui/Tabs";
 
+// Scroll positions can land a fraction of a pixel short of an edge (zoom, device pixel ratio).
+const SCROLL_EDGE_TOLERANCE_PX = 1;
+
 // On phones the tab row can end exactly between two tabs and look complete, so mark each edge that
 // still has tabs past it. The marks sit in the header's side padding, clear of the tabs and their taps.
 const useOverflowEdges = () => {
@@ -15,8 +18,8 @@ const useOverflowEdges = () => {
     const list = listRef.current;
     if (!list) return;
     const update = () => {
-      const start = list.scrollLeft > 1;
-      const end = list.scrollLeft < list.scrollWidth - list.clientWidth - 1;
+      const start = list.scrollLeft > SCROLL_EDGE_TOLERANCE_PX;
+      const end = list.scrollLeft < list.scrollWidth - list.clientWidth - SCROLL_EDGE_TOLERANCE_PX;
       setEdges((edges) => (edges.start === start && edges.end === end ? edges : { start, end }));
     };
     update();
