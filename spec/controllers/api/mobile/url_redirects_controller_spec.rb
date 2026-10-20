@@ -493,6 +493,41 @@ describe Api::Mobile::UrlRedirectsController do
       expect(response).to have_http_status(:not_found)
     end
 
+    context "when this buyer was granted a stream-only file" do
+      let(:granted_file) { @product.product_files.first }
+      let(:purchase) { create(:purchase, link: @product) }
+      let(:granted_url_redirect) { create(:url_redirect, link: @product, purchase:) }
+
+      before do
+        granted_file.update!(stream_only: true)
+        create(:product_file_download_grant, url_redirect: granted_url_redirect, product_file: granted_file)
+        allow_any_instance_of(Aws::S3::Object).to receive(:content_length).and_return(100)
+      end
+
+      it "downloads the file for this buyer only" do
+        get :download, params: { token: granted_url_redirect.token, product_file_id: granted_file.external_id, mobile_token: Api::Mobile::BaseController::MOBILE_TOKEN }
+        expect(response).to have_http_status(:redirect)
+
+        other_url_redirect = create(:url_redirect, link: @product, purchase: create(:purchase, link: @product))
+        get :download, params: { token: other_url_redirect.token, product_file_id: granted_file.external_id, mobile_token: Api::Mobile::BaseController::MOBILE_TOKEN }
+        expect(response).to have_http_status(:not_found)
+      end
+
+      it "does not download the file for a terminated purchase" do
+        [
+          [:refunded, -> { purchase.update!(stripe_refunded: true) }],
+          [:charged_back, -> { purchase.update!(stripe_refunded: false, chargeback_date: Time.current) }],
+          [:access_revoked, -> { purchase.update!(chargeback_date: nil, is_access_revoked: true) }],
+        ].each do |label, terminate_purchase|
+          terminate_purchase.call
+
+          get :download, params: { token: granted_url_redirect.token, product_file_id: granted_file.external_id, mobile_token: Api::Mobile::BaseController::MOBILE_TOKEN }
+
+          expect(response).to have_http_status(:not_found), "#{label} was not blocked"
+        end
+      end
+    end
+
     it "does not download content for an expired rental" do
       @url_redirect.purchase = create(:purchase, is_rental: true)
       @url_redirect.purchase.save!

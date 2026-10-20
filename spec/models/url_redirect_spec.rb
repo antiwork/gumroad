@@ -183,10 +183,23 @@ describe UrlRedirect do
       expect(url_redirect.is_file_downloadable?(product_file)).to eq(true)
     end
 
+    # The mobile purchases list maps every file of every purchase through this check.
+    it "does not look up grants for a file whose downloads are on" do
+      product_file = create(:readable_document, link: product)
+      queries = []
+      record_query = ->(*, payload) { queries << payload[:sql] }
+
+      ActiveSupport::Notifications.subscribed(record_query, "sql.active_record") do
+        url_redirect.is_file_downloadable?(product_file)
+      end
+
+      expect(queries.grep(/product_file_download_grants/)).to be_empty
+    end
+
     context "when this buyer was granted the file" do
       let(:product_file) { create(:streamable_video, stream_only: true, link: product) }
 
-      before { ProductFileDownloadGrant.create!(url_redirect:, product_file:) }
+      before { create(:product_file_download_grant, url_redirect:, product_file:) }
 
       it "returns true for a file the seller made stream-only" do
         expect(url_redirect.is_file_downloadable?(product_file)).to eq(true)
@@ -204,6 +217,13 @@ describe UrlRedirect do
         expect(url_redirect.is_file_downloadable?(product_file)).to eq(false)
       end
 
+      it "lists a download url in this buyer's mobile file data only" do
+        other_redirect = create(:url_redirect, purchase: create(:purchase, link: product))
+
+        expect(url_redirect.mobile_product_file_json_data(product_file)[:download_url]).to include("/#{url_redirect.token}/")
+        expect(other_redirect.mobile_product_file_json_data(product_file)).not_to have_key(:download_url)
+      end
+
       it "returns false once the grant is revoked" do
         url_redirect.product_file_download_grants.destroy_all
 
@@ -213,7 +233,7 @@ describe UrlRedirect do
 
     it "returns false for an external link even when granted" do
       product_file = create(:external_link, link: product)
-      ProductFileDownloadGrant.create!(url_redirect:, product_file:)
+      create(:product_file_download_grant, url_redirect:, product_file:)
 
       expect(url_redirect.reload.is_file_downloadable?(product_file)).to eq(false)
     end

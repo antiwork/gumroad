@@ -55,6 +55,11 @@ class Api::Internal::Admin::UrlRedirectsController < Api::Internal::Admin::BaseC
       nil
     end
 
+    # The path carries the buyer's access token.
+    def admin_audit_route
+      request.path.sub("/#{params[:id]}/", "/[REDACTED]/")
+    end
+
     def serialize_url_redirect(url_redirect)
       purchase = url_redirect.purchase
       product = url_redirect.referenced_link

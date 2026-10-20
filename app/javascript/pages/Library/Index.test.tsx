@@ -68,6 +68,7 @@ const defaultProps = (): {
     label: string;
     download_url: string | null;
     zip_unavailable_reason: "too_large" | "failed" | null;
+    omits_granted_files: boolean;
   }[];
   archived_count: number;
   unarchived_count: number;
@@ -315,7 +316,13 @@ describe("LibraryPage", () => {
   it("renders a bundle Download all link when the selected bundle archive is ready", () => {
     const props = defaultProps();
     props.bundle_downloads = [
-      { id: "b1", label: "Bundle One", download_url: "/d/bundle-token/download_archive", zip_unavailable_reason: null },
+      {
+        id: "b1",
+        label: "Bundle One",
+        download_url: "/d/bundle-token/download_archive",
+        zip_unavailable_reason: null,
+        omits_granted_files: false,
+      },
     ];
     renderPage(props);
 
@@ -328,7 +335,9 @@ describe("LibraryPage", () => {
 
   it("shows the bundle ZIP preparation state while the archive is being generated", () => {
     const props = defaultProps();
-    props.bundle_downloads = [{ id: "b1", label: "Bundle One", download_url: null, zip_unavailable_reason: null }];
+    props.bundle_downloads = [
+      { id: "b1", label: "Bundle One", download_url: null, zip_unavailable_reason: null, omits_granted_files: false },
+    ];
     renderPage(props);
 
     const button = screen.getByRole("button", { name: /Preparing ZIP/u });
@@ -339,7 +348,13 @@ describe("LibraryPage", () => {
   it("explains a ZIP that is too large instead of dropping the block or promising a ZIP", () => {
     const props = defaultProps();
     props.bundle_downloads = [
-      { id: "b1", label: "Bundle One", download_url: null, zip_unavailable_reason: "too_large" },
+      {
+        id: "b1",
+        label: "Bundle One",
+        download_url: null,
+        zip_unavailable_reason: "too_large",
+        omits_granted_files: false,
+      },
     ];
     renderPage(props);
 
@@ -350,11 +365,39 @@ describe("LibraryPage", () => {
 
   it("explains a ZIP that could not be prepared", () => {
     const props = defaultProps();
-    props.bundle_downloads = [{ id: "b1", label: "Bundle One", download_url: null, zip_unavailable_reason: "failed" }];
+    props.bundle_downloads = [
+      {
+        id: "b1",
+        label: "Bundle One",
+        download_url: null,
+        zip_unavailable_reason: "failed",
+        omits_granted_files: false,
+      },
+    ];
     renderPage(props);
 
     expect(screen.getByText(/We could not prepare a ZIP file for/u)).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Preparing ZIP/u })).toBeNull();
+  });
+
+  it("keeps the Download all link and says some files are only on the products", () => {
+    const props = defaultProps();
+    props.bundle_downloads = [
+      {
+        id: "b1",
+        label: "Bundle One",
+        download_url: "/d/bundle-token/download_archive",
+        zip_unavailable_reason: null,
+        omits_granted_files: true,
+      },
+    ];
+    renderPage(props);
+
+    expect(screen.getByText(/Some files are only available from the products below/u)).toBeTruthy();
+    expect(screen.queryByText(/Download everything included in/u)).toBeNull();
+    expect(screen.getByRole("link", { name: /Download all/u }).getAttribute("href")).toBe(
+      "/d/bundle-token/download_archive",
+    );
   });
 });
 

@@ -216,6 +216,7 @@ type Props = {
     label: string;
     download_url: string | null;
     zip_unavailable_reason: "too_large" | "failed" | null;
+    omits_granted_files: boolean;
   }[];
   archived_count: number;
   unarchived_count: number;
@@ -426,6 +427,11 @@ export default function LibraryPage() {
                 <>
                   We could not prepare a ZIP file for <strong>{bundleDownload.label}</strong>. Download the products
                   below individually.
+                </>
+              ) : bundleDownload.omits_granted_files ? (
+                <>
+                  Download <strong>{bundleDownload.label}</strong> as one ZIP file. Some files are only available from
+                  the products below.
                 </>
               ) : (
                 <>

@@ -456,6 +456,8 @@ class LibraryPresenter
           label: link.name,
           download_url: archive.present? ? url_redirect_download_archive_path(redirect.token) : nil,
           zip_unavailable_reason:,
+          # The ZIP stays on offer because it is the only Library route to the bundle's own files.
+          omits_granted_files: redirect.bundle_archive_omits_granted_files?,
         }
       end
     end

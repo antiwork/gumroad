@@ -36,6 +36,7 @@ describe UrlRedirectPresenter do
                                                                      duration: nil,
                                                                      subtitle_files: [],
                                                                      download_url: url_redirect_download_product_files_path(url_redirect.token, { product_file_ids: [folder_file.external_id] }),
+                                                                     archivable: true,
                                                                      view_url: nil,
                                                                      stream_url: nil,
                                                                      kindle_data: { email: user.kindle_email, icon_url: ActionController::Base.helpers.image_path("white-15.png") },
@@ -71,6 +72,7 @@ describe UrlRedirectPresenter do
                                                                      vtt_url: url_redirect_subtitle_file_vtt_path(url_redirect.token, file.external_id, subtitle_file.external_id),
                                                                    ],
                                                                    download_url: url_redirect_download_product_files_path(url_redirect.token, { product_file_ids: [file.external_id] }),
+                                                                   archivable: true,
                                                                    view_url: nil,
                                                                    stream_url: url_redirect_stream_page_for_product_file_path(url_redirect.token, file.external_id),
                                                                    kindle_data: nil,
@@ -111,6 +113,20 @@ describe UrlRedirectPresenter do
       expect(file_item[:download_url]).to be_nil
       expect(file_item[:kindle_data]).to be_nil
       expect(file_item[:read_url]).to eq(url_redirect_read_for_product_file_path(url_redirect.token, file.external_id))
+    end
+
+    it "gives a granted buyer the download link and marks the file as left out of the folder ZIP" do
+      product = create(:product)
+      file = create(:readable_document, link: product, stream_only: true)
+      url_redirect = create(:url_redirect, purchase: create(:purchase, link: product))
+      other_redirect = create(:url_redirect, purchase: create(:purchase, link: product))
+      create(:product_file_download_grant, url_redirect:, product_file: file)
+
+      granted_item = described_class.new(url_redirect:, logged_in_user: nil).download_attributes[:content_items].sole
+      other_item = described_class.new(url_redirect: other_redirect, logged_in_user: nil).download_attributes[:content_items].sole
+
+      expect(granted_item).to include(download_url: url_redirect_download_product_files_path(url_redirect.token, { product_file_ids: [file.external_id] }), archivable: false)
+      expect(other_item).to include(download_url: nil, archivable: false)
     end
 
     it "omits empty folders" do

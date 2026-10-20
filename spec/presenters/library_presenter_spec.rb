@@ -1238,7 +1238,7 @@ describe LibraryPresenter do
       it "prepares and returns a combined ZIP for the selected bundle purchase" do
         props = library_props(bundle_ids: [purchase1.link.external_id])
 
-        expected_download = { id: purchase1.link.external_id, label: "Bundle", download_url: nil, zip_unavailable_reason: nil }
+        expected_download = { id: purchase1.link.external_id, label: "Bundle", download_url: nil, zip_unavailable_reason: nil, omits_granted_files: false }
         expect(props[:bundle_downloads]).to eq([expected_download])
         archive = purchase1.link.product_files_archives.alive.entity_archives.sole
         expect(archive.product_files.map(&:link_id).sort).to eq(purchase1.product_purchases.map(&:link_id).sort)
@@ -1256,7 +1256,7 @@ describe LibraryPresenter do
 
         props = library_props(bundle_ids: [purchase1.link.external_id])
 
-        expect(props[:bundle_downloads]).to eq([{ id: purchase1.link.external_id, label: "Bundle", download_url: nil, zip_unavailable_reason: nil }])
+        expect(props[:bundle_downloads]).to eq([{ id: purchase1.link.external_id, label: "Bundle", download_url: nil, zip_unavailable_reason: nil, omits_granted_files: false }])
         archive = purchase1.link.product_files_archives.alive.entity_archives.sole
         expect(archive.product_files.map(&:id)).to include(own_file.id)
         expect(archive.product_files.map(&:link_id)).to include(*purchase1.product_purchases.map(&:link_id))
@@ -1294,7 +1294,7 @@ describe LibraryPresenter do
 
         props = library_props(bundle_ids: [purchase1.link.external_id])
 
-        expected_download = { id: purchase1.link.external_id, label: "Bundle", download_url: nil, zip_unavailable_reason: nil }
+        expected_download = { id: purchase1.link.external_id, label: "Bundle", download_url: nil, zip_unavailable_reason: nil, omits_granted_files: false }
         expect(props[:bundle_downloads]).to eq([expected_download])
         archives = purchase1.link.product_files_archives.alive.entity_archives.order(:id)
         expect(archives.map(&:product_files_archive_state)).to contain_exactly("failed", "queueing")
@@ -1310,7 +1310,7 @@ describe LibraryPresenter do
 
         props = library_props(bundle_ids: [purchase1.link.external_id])
 
-        expected_download = { id: purchase1.link.external_id, label: "Bundle", download_url: nil, zip_unavailable_reason: "failed" }
+        expected_download = { id: purchase1.link.external_id, label: "Bundle", download_url: nil, zip_unavailable_reason: "failed", omits_granted_files: false }
         expect(props[:bundle_downloads]).to eq([expected_download])
         archives = purchase1.link.product_files_archives.alive.entity_archives.order(:id)
         expect(archives.map(&:product_files_archive_state)).to eq(["failed", "failed"])
@@ -1323,7 +1323,7 @@ describe LibraryPresenter do
 
         props = library_props(bundle_ids: [purchase1.link.external_id])
 
-        expected_download = { id: purchase1.link.external_id, label: "Bundle", download_url: nil, zip_unavailable_reason: "too_large" }
+        expected_download = { id: purchase1.link.external_id, label: "Bundle", download_url: nil, zip_unavailable_reason: "too_large", omits_granted_files: false }
         expect(props[:bundle_downloads]).to eq([expected_download])
         expect(purchase1.link.product_files_archives.alive.entity_archives.map(&:product_files_archive_state)).to eq(["too_large"])
       end
@@ -1338,7 +1338,7 @@ describe LibraryPresenter do
 
         props = library_props(bundle_ids: [purchase1.link.external_id])
 
-        expected_download = { id: purchase1.link.external_id, label: "Bundle", download_url: nil, zip_unavailable_reason: "failed" }
+        expected_download = { id: purchase1.link.external_id, label: "Bundle", download_url: nil, zip_unavailable_reason: "failed", omits_granted_files: false }
         expect(props[:bundle_downloads]).to eq([expected_download])
       end
 
@@ -1353,7 +1353,7 @@ describe LibraryPresenter do
 
         props = library_props(bundle_ids: [purchase1.link.external_id])
 
-        expected_download = { id: purchase1.link.external_id, label: "Bundle", download_url: nil, zip_unavailable_reason: nil }
+        expected_download = { id: purchase1.link.external_id, label: "Bundle", download_url: nil, zip_unavailable_reason: nil, omits_granted_files: false }
         expect(props[:bundle_downloads]).to eq([expected_download])
         archives = purchase1.link.product_files_archives.alive.entity_archives.order(:id)
         expect(archives.map(&:product_files_archive_state)).to eq(["failed", "failed", "queueing"])
@@ -1374,7 +1374,7 @@ describe LibraryPresenter do
 
         props = library_props(bundle_ids: [purchase1.link.external_id])
 
-        expected_download = { id: purchase1.link.external_id, label: "Bundle", download_url: nil, zip_unavailable_reason: "failed" }
+        expected_download = { id: purchase1.link.external_id, label: "Bundle", download_url: nil, zip_unavailable_reason: "failed", omits_granted_files: false }
         expect(props[:bundle_downloads]).to eq([expected_download])
         archives = purchase1.link.product_files_archives.alive.entity_archives.order(:id)
         expect(archives.map(&:product_files_archive_state)).to eq(["failed", "failed", "failed"])
@@ -1390,7 +1390,7 @@ describe LibraryPresenter do
 
         props = library_props(bundle_ids: [purchase1.link.external_id])
 
-        expected_download = { id: purchase1.link.external_id, label: "Bundle", download_url: nil, zip_unavailable_reason: nil }
+        expected_download = { id: purchase1.link.external_id, label: "Bundle", download_url: nil, zip_unavailable_reason: nil, omits_granted_files: false }
         expect(props[:bundle_downloads]).to eq([expected_download])
         archives = purchase1.link.product_files_archives.alive.entity_archives.order(:id)
         expect(archives.map(&:product_files_archive_state)).to eq(["ready", "queueing"])
@@ -1405,7 +1405,7 @@ describe LibraryPresenter do
 
         props = library_props(bundle_ids: [purchase1.link.external_id])
 
-        expected_download = { id: purchase1.link.external_id, label: "Bundle", download_url: nil, zip_unavailable_reason: nil }
+        expected_download = { id: purchase1.link.external_id, label: "Bundle", download_url: nil, zip_unavailable_reason: nil, omits_granted_files: false }
         expect(props[:bundle_downloads]).to eq([expected_download])
         archives = purchase1.link.product_files_archives.alive.entity_archives.order(:id)
         expect(archives.map(&:product_files_archive_state)).to eq(["ready", "queueing"])
@@ -1446,6 +1446,58 @@ describe LibraryPresenter do
 
           # Nothing filters to it, so it must not offer itself as a bundle filter option.
           expect(props[:bundles].map { _1[:id] }).to_not include(memberless_bundle.external_id)
+        end
+      end
+
+      # The shared bundle ZIP leaves out stream-only files, including one support granted to this buyer.
+      context "when this buyer was granted a stream-only member file" do
+        let(:member) { purchase1.product_purchases.first }
+        let(:granted_file) { create(:readable_document, link: member.link, stream_only: true) }
+        let(:ready_download) { { id: purchase1.link.external_id, label: "Bundle", download_url: url_redirect_download_archive_path(purchase1.url_redirect.token), zip_unavailable_reason: nil, omits_granted_files: false } }
+
+        before do
+          granted_file
+          library_props(bundle_ids: [purchase1.link.external_id])
+          archive = purchase1.link.product_files_archives.alive.entity_archives.sole
+          archive.mark_in_progress!
+          archive.mark_ready!
+        end
+
+        it "keeps the bundle ZIP and flags the file it leaves out" do
+          create(:product_file_download_grant, url_redirect: member.url_redirect, product_file: granted_file)
+
+          expect(library_props(bundle_ids: [purchase1.link.external_id])[:bundle_downloads]).to eq(
+            [ready_download.merge(omits_granted_files: true)]
+          )
+        end
+
+        it "flags the granted file when its member product has no other files" do
+          member.link.product_files.alive.where.not(id: granted_file.id).each(&:mark_deleted!)
+          create(:product_file_download_grant, url_redirect: member.url_redirect, product_file: granted_file)
+
+          expect(library_props(bundle_ids: [purchase1.link.external_id])[:bundle_downloads].sole).to include(
+            zip_unavailable_reason: nil, omits_granted_files: true
+          )
+        end
+
+        it "keeps the ZIP when the stream-only file was not granted" do
+          expect(library_props(bundle_ids: [purchase1.link.external_id])[:bundle_downloads]).to eq([ready_download])
+        end
+
+        it "keeps the ZIP when another buyer of the same bundle was granted the file" do
+          other_purchase = create(:purchase, purchaser: create(:user), link: purchase1.link)
+          other_purchase.create_artifacts_and_send_receipt!
+          other_member = other_purchase.product_purchases.find_by!(link: member.link)
+          create(:product_file_download_grant, url_redirect: other_member.url_redirect, product_file: granted_file)
+
+          expect(library_props(bundle_ids: [purchase1.link.external_id])[:bundle_downloads]).to eq([ready_download])
+        end
+
+        it "keeps the ZIP once the granted file is deleted" do
+          create(:product_file_download_grant, url_redirect: member.url_redirect, product_file: granted_file)
+          granted_file.mark_deleted!
+
+          expect(library_props(bundle_ids: [purchase1.link.external_id])[:bundle_downloads]).to eq([ready_download])
         end
       end
 
