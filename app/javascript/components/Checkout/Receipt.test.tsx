@@ -4,9 +4,18 @@ import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ErrorLineItemResult } from "$app/data/purchase";
+import { cast } from "$app/utils/cast";
 
-import { LineItemResultEntry } from "$app/components/Checkout/Receipt";
+import type { CartItem } from "$app/components/Checkout/cartState";
+import { LineItemResultEntry, Receipt } from "$app/components/Checkout/Receipt";
 import { DomainSettingsProvider } from "$app/components/DomainSettings";
+
+vi.mock("$app/components/Checkout/payment", () => ({
+  useState: () => [
+    { status: { type: "finished", paymentMethod: { type: "not-applicable" } }, email: "repeat.buyer@example.com" },
+  ],
+}));
+vi.mock("$app/components/LoggedInUser", () => ({ useLoggedInUser: () => null }));
 
 const domains = {
   scheme: "https",
@@ -32,10 +41,10 @@ const failedResult = (overrides: Partial<Extract<ErrorLineItemResult, { error_co
     ...overrides,
   }) satisfies ErrorLineItemResult;
 
-const renderEntry = (result: ErrorLineItemResult, { cartRetained = false }: { cartRetained?: boolean } = {}) =>
+const renderEntry = (result: ErrorLineItemResult) =>
   render(
     <DomainSettingsProvider value={domains}>
-      <LineItemResultEntry name="Free download" result={result} cartRetained={cartRetained} />
+      <LineItemResultEntry name="Free download" result={result} />
     </DomainSettingsProvider>,
   );
 
@@ -97,11 +106,16 @@ describe("LineItemResultEntry for a failed line item", () => {
   describe("refused new-customer code", () => {
     const refusal =
       "This code is only for new customers of this store. The account or email used for this order has a previous purchase.";
-    const refused = () =>
-      failedResult({ error_message: refusal, error_code: "offer_code_invalid", new_customer_offer_code_refused: true });
+    const refused = (overrides: Partial<Extract<ErrorLineItemResult, { error_code: string | null }>> = {}) =>
+      failedResult({
+        error_message: refusal,
+        error_code: "offer_code_invalid",
+        new_customer_offer_code_refused: true,
+        ...overrides,
+      });
 
-    it("sends the buyer back to the cart they kept, where the code can be removed", () => {
-      renderEntry(refused(), { cartRetained: true });
+    it("sends the buyer back to the cart the server kept, where the code can be removed", () => {
+      renderEntry(refused({ cart_retained: true }));
 
       expect(screen.getByText(refusal)).toBeTruthy();
       expect(screen.getByText("Go back to checkout to continue without this code.")).toBeTruthy();
@@ -110,8 +124,8 @@ describe("LineItemResultEntry for a failed line item", () => {
       );
     });
 
-    it("explains the refusal without a way back when the order went through for other items", () => {
-      renderEntry(refused(), { cartRetained: false });
+    it("explains the refusal without a way back when the server did not keep the cart", () => {
+      renderEntry(refused());
 
       expect(screen.getByText(refusal)).toBeTruthy();
       expect(screen.queryByText(/Go back to checkout/u)).toBeNull();
@@ -119,8 +133,34 @@ describe("LineItemResultEntry for a failed line item", () => {
     });
 
     it("leaves every other failure without the way back", () => {
-      renderEntry(failedResult({ error_code: "offer_code_invalid" }), { cartRetained: true });
+      renderEntry(failedResult({ error_code: "offer_code_invalid", cart_retained: true }));
 
+      expect(screen.queryByRole("link", { name: "Back to checkout" })).toBeNull();
+    });
+
+    // A paid line is still being charged when the server decides the cart, so a later decline
+    // leaves every line failed after the cart is already gone.
+    it("offers no way back when every line failed but the server did not keep the cart", () => {
+      const item = (name: string) => cast<CartItem>({ product: { name, is_preorder: false, free_trial: null } });
+      render(
+        <DomainSettingsProvider value={domains}>
+          <Receipt
+            results={[
+              { item: item("Pro Course"), result: refused() },
+              {
+                item: item("Starter Pack"),
+                result: failedResult({ error_message: "Your card was declined.", error_code: "card_declined" }),
+              },
+            ]}
+            discoverUrl="https://discover.example.com"
+            canBuyerSignUp={false}
+          />
+        </DomainSettingsProvider>,
+      );
+
+      expect(screen.getByText(refusal)).toBeTruthy();
+      expect(screen.getByText("Your card was declined.")).toBeTruthy();
+      expect(screen.queryByText(/Go back to checkout/u)).toBeNull();
       expect(screen.queryByRole("link", { name: "Back to checkout" })).toBeNull();
     });
   });

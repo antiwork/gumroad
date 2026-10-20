@@ -77,6 +77,18 @@ describe("New-customer-only offer codes from product page", type: :system, js: t
       create(:offer_code, :for_new_customers, user: seller, products: [product], amount_cents: nil, amount_percentage: 100, code: "firstorder")
     end
 
+    it "says who qualifies when the code is entered at checkout" do
+      seller.update!(display_offer_code_field: true)
+      visit product.long_url
+      add_to_cart(product)
+      fill_in "Discount code", with: "firstorder"
+      click_on "Apply"
+
+      expect(page).to have_selector("[aria-label='Discount code']", text: "firstorder")
+      expect(page).to have_text("Total US$0", normalize_ws: true)
+      expect(page).to have_text("FIRSTORDER is for new customers of this store. We check previous purchases when you pay.")
+    end
+
     it "completes a first purchase from the store with the code" do
       visit "#{product.long_url}/firstorder"
       add_to_cart(product, offer_code: free_code)

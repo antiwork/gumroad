@@ -741,6 +741,15 @@ export const Checkout = ({
                       ) : null}
                     </div>
                   ) : null}
+                  {/* The discount is shown before the server knows who the buyer is, so say who it is for. */}
+                  {visibleDiscounts
+                    .filter((code) => Object.values(code.products).some((discount) => discount.new_customers_only))
+                    .map((code) => (
+                      <p key={code.code}>
+                        {code.code.toUpperCase()} is for new customers of this store. We check previous purchases when
+                        you pay.
+                      </p>
+                    ))}
                   {cart.items.some((item) => item.product.has_offer_codes) ? (
                     <form
                       className="flex! gap-2"

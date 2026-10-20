@@ -1326,9 +1326,31 @@ describe Order::CreateService, :vcr do
         success: false,
         error_message: "This code is only for new customers of this store. The account or email used for this order has a previous purchase.",
         new_customer_offer_code_refused: true,
-        formatted_price: nil
+        formatted_price: nil,
+        cart_retained: true
       )
       expect(cart.reload).to be_alive
+    end
+
+    # The paid line is still being charged when the cart is decided, so the cart goes even if that
+    # charge later fails and every line ends up refused or declined.
+    it "offers no way back to the cart when a paid line in the same order is still being charged" do
+      create(:offer_code, :for_new_customers, user: seller_1, products: [product_1], code: "firstorder", amount_cents: nil, amount_percentage: 100)
+      create(:purchase, link: product_2, purchaser: nil, email: "repeat.buyer@example.com")
+      cart = create(:cart, user: nil, browser_guid:)
+      guest_params = {
+        line_items: [
+          { uid: "unique-id-0", permalink: product_1.unique_permalink, perceived_price_cents: 0, quantity: 1, discount_code: "firstorder" },
+          { uid: "unique-id-1", permalink: product_3.unique_permalink, perceived_price_cents: product_3.price_cents, quantity: 1 },
+        ]
+      }.merge(common_order_params_without_payment).merge(email: "repeat.buyer@example.com")
+
+      order, purchase_responses, _ = Order::CreateService.new(params: guest_params).perform
+
+      expect(order.purchases.map(&:purchase_state)).to contain_exactly("failed", "in_progress")
+      expect(purchase_responses["unique-id-0"]).to include(success: false, new_customer_offer_code_refused: true)
+      expect(purchase_responses["unique-id-0"]).not_to have_key(:cart_retained)
+      expect(cart.reload).to be_deleted
     end
 
     it "creates an order along with the associated purchases in progress when merchant account is a Brazilian Stripe Connect account" do

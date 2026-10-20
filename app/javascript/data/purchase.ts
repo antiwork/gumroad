@@ -50,6 +50,8 @@ type LineItemPaymentErrorFull = {
   owner_sign_in_remedy?: boolean;
   // Present only when a new-customers-only code was refused for this order's account or email.
   new_customer_offer_code_refused?: boolean;
+  // Sent with that refusal only when the server kept the buyer's cart, so checkout can remove the code.
+  cart_retained?: boolean;
 };
 export type ErrorLineItemResult = LineItemPaymentErrorFull | LineItemPaymentErrorShort;
 

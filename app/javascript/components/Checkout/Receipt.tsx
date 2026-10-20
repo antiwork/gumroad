@@ -44,19 +44,11 @@ export const LineItem = ({
   </>
 );
 
-export const LineItemResultEntry = ({
-  name,
-  result,
-  cartRetained = false,
-}: {
-  name: string;
-  result: LineItemResult;
-  cartRetained?: boolean;
-}) =>
+export const LineItemResultEntry = ({ name, result }: { name: string; result: LineItemResult }) =>
   result.success ? (
     <SuccessfulLineItemResultEntry name={name} result={result} />
   ) : (
-    <FailedLineItemResultEntry name={name} result={result} cartRetained={cartRetained} />
+    <FailedLineItemResultEntry name={name} result={result} />
   );
 
 const OwnerSignInRemedy = () => {
@@ -74,19 +66,12 @@ const OwnerSignInRemedy = () => {
   );
 };
 
-const FailedLineItemResultEntry = ({
-  name,
-  result,
-  cartRetained,
-}: {
-  name: string;
-  result: ErrorLineItemResult;
-  cartRetained: boolean;
-}) => {
+const FailedLineItemResultEntry = ({ name, result }: { name: string; result: ErrorLineItemResult }) => {
   const { appDomain } = useDomains();
   const message = result.error_message ?? "Sorry, something went wrong.";
+  // Only the server knows whether the cart survived; every line can fail after a paid one cleared it.
   const backToCheckout =
-    cartRetained && "new_customer_offer_code_refused" in result && !!result.new_customer_offer_code_refused;
+    "new_customer_offer_code_refused" in result && !!result.new_customer_offer_code_refused && !!result.cart_retained;
   return (
     <CardContent asChild details>
       <section className="space-y-3">
@@ -327,9 +312,6 @@ export const Receipt = ({
   const user = useLoggedInUser();
   const [state] = useState();
   if (state.status.type !== "finished") return null;
-  // Order::CreateService keeps the cart only when nothing in the order went through; otherwise there is
-  // no cart to go back to.
-  const cartRetained = results.every(({ result }) => !result.success);
   return (
     <Card className="mx-auto my-8 max-w-2xl">
       <CardContent asChild>
@@ -362,7 +344,7 @@ export const Receipt = ({
         </header>
       </CardContent>
       {results.map(({ result, item }, key) => (
-        <LineItemResultEntry key={key} result={result} name={item.product.name} cartRetained={cartRetained} />
+        <LineItemResultEntry key={key} result={result} name={item.product.name} />
       ))}
       {!user && canBuyerSignUp ? (
         <CardContent details>
