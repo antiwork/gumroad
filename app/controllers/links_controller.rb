@@ -526,6 +526,8 @@ class LinksController < ApplicationController
 
         omit_unspecified_product_scalars!
 
+        rental_price_cents_before_save = @product.rental_price_cents if @product.rentable?
+
         @product.assign_attributes(product_permitted_params.except(
           :products,
           :description,
@@ -559,6 +561,11 @@ class LinksController < ApplicationController
           :preserved_rich_content_ids,
           :rich_content_provenance_version
         ))
+        # Prices are stored per currency and the editor has no rental price field, so a
+        # currency change would leave the rental price behind and drop the rental offer.
+        if @product.price_currency_type_changed? && rental_price_cents_before_save.present? && @product.rental_price_cents.nil?
+          @product.rental_price_cents = rental_price_cents_before_save
+        end
         if product_permitted_params.key?(:description)
           @product.description = SaveContentUpsellsService.new(seller: @product.user, content: product_permitted_params[:description], old_content: @product.description_was).from_html
         end
