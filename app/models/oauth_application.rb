@@ -34,17 +34,25 @@ class OauthApplication < Doorkeeper::Application
   LOCK_RETRY_BASE_DELAY_SECONDS = 0.25
   LOCK_RETRY_JITTER_SECONDS = 0.25
 
+  # Raised once the bounded wait is spent, whether the row or a credential row inside the block
+  # was contended. Callers that can answer with a retry rescue this, not every LockWaitTimeout.
+  class LockUnavailable < ActiveRecord::LockWaitTimeout; end
+
   # Bounds each wait on the application row and retries, so a contended row costs seconds
   # instead of InnoDB's 50s. Retries only when this call owns the transaction: a
   # LockWaitTimeout aborts it, so an enclosing caller's transaction cannot be resumed.
-  def with_application_lock(&block)
+  #
+  # Whole-application sweeps (scope migrations, mark_deleted!, the device flow) take the row
+  # exclusively. Issuing or revoking one user's credentials only has to wait for those, so it
+  # takes the row `shared:` and never queues behind another shared holder.
+  def with_application_lock(shared: false, &block)
     attempts = 0
     begin
       attempts += 1
       owns_transaction = !self.class.connection.current_transaction.joinable?
-      with_bounded_lock_wait { with_lock(&block) }
-    rescue ActiveRecord::LockWaitTimeout
-      raise unless owns_transaction && attempts < LOCK_ATTEMPTS
+      with_bounded_lock_wait { with_lock(shared ? "LOCK IN SHARE MODE" : true, &block) }
+    rescue ActiveRecord::LockWaitTimeout => e
+      raise LockUnavailable, e.message unless owns_transaction && attempts < LOCK_ATTEMPTS
 
       sleep(attempts * LOCK_RETRY_BASE_DELAY_SECONDS + rand * LOCK_RETRY_JITTER_SECONDS)
       retry
@@ -100,7 +108,7 @@ class OauthApplication < Doorkeeper::Application
   def revoke_access_for(user)
     revoked_at = Time.current
 
-    with_application_lock do
+    with_application_lock(shared: true) do
       # Coordinate with device token polling on this application row before revoking tokens.
       # Pending codes have no owner yet; approve! rejects codes created before this revocation.
       deny_approved_device_authorizations_for(user, denied_at: revoked_at)
@@ -112,7 +120,7 @@ class OauthApplication < Doorkeeper::Application
   def revoke_access_tokens_for(user)
     revoked_at = Time.current
 
-    with_application_lock do
+    with_application_lock(shared: true) do
       deny_approved_device_authorizations_for(user, denied_at: revoked_at)
       Doorkeeper::AccessToken.revoke_all_for(id, user)
     end

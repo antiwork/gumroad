@@ -64,6 +64,23 @@ describe Oauth::AuthorizationsController, type: :controller do
     end
   end
 
+  describe "GET new while the application row is held" do
+    before { stub_const("OauthApplication::MOBILE_API_OAUTH_APPLICATION_UID", application.uid) }
+
+    it "renders a retry page instead of a server error once the bounded lock wait is spent" do
+      allow_any_instance_of(OauthApplication).to receive(:with_application_lock).and_raise(OauthApplication::LockUnavailable)
+      expect(ErrorNotifier).to receive(:notify).with(an_instance_of(OauthApplication::LockUnavailable), client_id: application.uid)
+
+      expect do
+        get :new, params: oauth_params
+      end.not_to change(Doorkeeper::AccessGrant, :count)
+
+      expect(response).to have_http_status(:service_unavailable)
+      expect(response.headers["Retry-After"]).to eq(Oauth::AuthorizationsController::LOCK_RETRY_AFTER_SECONDS.to_s)
+      expect(Nokogiri::HTML(response.body).text).to include(Oauth::AuthorizationsController::LOCK_BUSY_MESSAGE)
+    end
+  end
+
   describe "POST create" do
     it "revalidates scopes under the application lock before creating a grant" do
       application.update!(scopes: "edit_products edit_profile")

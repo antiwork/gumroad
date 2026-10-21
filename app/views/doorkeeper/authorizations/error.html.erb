@@ -3,7 +3,7 @@
     <h2>An error has occurred</h2>
   </header>
   <div class="flex flex-col gap-4 p-4">
-    <%= @pre_auth.error_response.body[:error_description] %>
+    <%= local_assigns.fetch(:error_description) { @pre_auth.error_response.body[:error_description] } %>
   </div>
 </main>
 

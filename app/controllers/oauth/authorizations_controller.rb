@@ -3,6 +3,10 @@
 class Oauth::AuthorizationsController < Doorkeeper::AuthorizationsController
   ADMIN_SCOPE_OPTIONAL = "optional"
   ADMIN_AUTHORIZATION_PARAM = "authorize_admin_operations"
+  LOCK_RETRY_AFTER_SECONDS = 5
+  LOCK_BUSY_MESSAGE = "Gumroad is busy finishing another change to this application. Please wait a few seconds, then try again."
+
+  rescue_from OauthApplication::LockUnavailable, with: :render_authorization_busy
 
   before_action :hide_layouts
   before_action :default_to_authorization_code
@@ -46,11 +50,18 @@ class Oauth::AuthorizationsController < Doorkeeper::AuthorizationsController
       oauth_application = OauthApplication.alive.find_by(uid: params[:client_id])
       return super if oauth_application.nil?
 
-      oauth_application.with_application_lock do
+      oauth_application.with_application_lock(shared: true) do
         @pre_auth = nil
         @strategy = nil
         super
       end
+    end
+
+    # Nothing was written; the sweep that held the row commits within seconds.
+    def render_authorization_busy(exception)
+      ErrorNotifier.notify(exception, client_id: params[:client_id])
+      response.set_header("Retry-After", LOCK_RETRY_AFTER_SECONDS.to_s)
+      render :error, locals: { error_description: LOCK_BUSY_MESSAGE }, status: :service_unavailable
     end
 
     def redirect_or_render(auth)
