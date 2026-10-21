@@ -38,6 +38,18 @@ describe Balance::RefundEligibilityUnderwriter do
         end
       end
 
+      context "when balance increases, refunds are enabled and the user is on probation" do
+        before do
+          user.enable_refunds!
+          user.put_on_probation!(author_name: "LowBalanceFraudCheck", content: "probated")
+        end
+
+        it "enqueues the job" do
+          expect { balance.update!(amount_cents: 2000) }
+            .to enqueue_sidekiq_job(UpdateSellerRefundEligibilityJob).with(user.id)
+        end
+      end
+
       context "when balance decreases and refunds are disabled" do
         before { user.disable_refunds! }
 

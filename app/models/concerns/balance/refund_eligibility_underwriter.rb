@@ -24,7 +24,7 @@ module Balance::RefundEligibilityUnderwriter
       balance_increased = before < after
       balance_decreased = before > after
 
-      return true if balance_increased && user.refunds_disabled?
+      return true if balance_increased && (user.refunds_disabled? || user.on_probation?)
       return true if balance_decreased && !user.refunds_disabled?
 
       false
