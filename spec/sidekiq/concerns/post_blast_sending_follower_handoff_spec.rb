@@ -6,12 +6,17 @@ require "spec_helper"
 # and the provider call are minutes apart. These run the real senders down to the SDK entry points, taking the
 # provider branch, so the assertion is on what the provider would have been handed.
 describe PostBlastSending, "handing a post to the provider only while the follow lasts" do
+  include Rails.application.routes.url_helpers
+  _routes.default_url_options = Rails.application.config.action_mailer.default_url_options
+
   before do
     @seller = create(:named_user)
     @requests = []
     endpoint = double("SendGrid mail send")
     allow(endpoint).to receive(:post) do |request_body:|
-      @requests << { provider: "sendgrid", to: request_body["personalizations"].map { _1["to"][0]["email"] }, custom_args: request_body["personalizations"].map { _1["custom_args"] } }
+      personalizations = request_body["personalizations"]
+      @requests << { provider: "sendgrid", to: personalizations.map { _1["to"][0]["email"] }, custom_args: personalizations.map { _1["custom_args"] },
+                     unsubscribe_urls: personalizations.map { _1["substitutions"]["{{unsubscribe_url}}"] } }
       double(status_code: 202, body: "")
     end
     allow(SendGrid::API).to receive(:new).and_return(double(client: double(mail: double(_: endpoint))))
@@ -207,6 +212,134 @@ describe PostBlastSending, "handing a post to the provider only while the follow
 
     expect(requested_addresses).to eq(["buyer@example.com"])
     expect(@requests.sole[:custom_args].sole).to have_key("purchase_id")
+  end
+
+  # The audience filter loads only the roles that qualify for this post: a date filter, or the blast's own
+  # started_at cutoff, can leave an affiliation on the member's row unloaded. Once the follow it was loaded for ends,
+  # such a member has no role left to send them in.
+  describe "an audience-post member whose only loaded role was the follow that ended" do
+    before do
+      @product = create(:product, user: @seller)
+      @stayer = create(:active_follower, user: @seller, email: "stayer@example.com")
+      @settled = []
+      allow_any_instance_of(SendPostBlastEmailsJob).to receive(:settle_pending_recipients).and_wrap_original do |original, skipped, owed|
+        @settled << [skipped.map(&:email).sort, owed]
+        original.call(skipped, owed)
+      end
+    end
+
+    def old_affiliation_for(email)
+      affiliate_user = create(:affiliate_user, email:)
+      create(:direct_affiliate, seller: @seller, affiliate_user:, send_posts: true, created_at: 30.days.ago).tap { _1.products << @product }
+    end
+
+    def dated_audience_post = create(:audience_post, :published, seller: @seller, created_after: 7.days.ago.to_date.iso8601)
+
+    def expect_only_the_stayer_sent(post, member_email)
+      expect(@requests.flat_map { _1[:to] }).to eq(["stayer@example.com"])
+      expect(@requests.flat_map { _1[:unsubscribe_urls] }).not_to include("#")
+      expect(SentPostEmail.where(post:).pluck(:email)).to eq(["stayer@example.com"])
+      expect(@settled).to eq([[[member_email], 2]])
+    end
+
+    it "is not sent once the follow ends before the slice, though an affiliation outside the date filter remains" do
+      follow = create(:active_follower, user: @seller, email: "dated-member@example.com")
+      old_affiliation_for(follow.email)
+      post = dated_audience_post
+      unfollow_before_the_provider_slice(follow)
+
+      blast = send_blast(post)
+
+      expect_only_the_stayer_sent(post, follow.email)
+      expect(blast.delivery_count).to eq(1)
+      expect(blast.completed_at).to be_present
+    end
+
+    it "is not sent again once the follow ends while the request is built, though an affiliation outside the date filter remains" do
+      follow = create(:active_follower, user: @seller, email: "dated-member@example.com")
+      old_affiliation_for(follow.email)
+      post = dated_audience_post
+      built = 0
+      allow_any_instance_of(PostSendgridApi).to receive(:build_mail).and_wrap_original do |original|
+        request_body = original.call
+        follow.mark_deleted! if (built += 1) == 1
+        request_body
+      end
+
+      blast = send_blast(post)
+
+      expect(built).to eq(1)
+      expect_only_the_stayer_sent(post, follow.email)
+      expect(blast.delivery_count).to eq(1)
+    end
+
+    it "is not sent through an affiliation added after the audience was loaded" do
+      follow = create(:active_follower, user: @seller, email: "late-affiliate@example.com")
+      post = create(:audience_post, :published, seller: @seller)
+      allow_any_instance_of(SendPostBlastEmailsJob).to receive(:send_provider_slice).and_wrap_original do |original, **kwargs|
+        unless follow.reload.deleted?
+          create(:direct_affiliate, seller: @seller, affiliate_user: create(:affiliate_user, email: follow.email), send_posts: true).products << @product
+          follow.mark_deleted!
+        end
+        original.call(**kwargs)
+      end
+
+      send_blast(post)
+
+      expect_only_the_stayer_sent(post, follow.email)
+    end
+
+    it "is not sent as a purchase that opted out with the follow, though an affiliation outside the date filter remains" do
+      follow = create(:active_follower, user: @seller, email: "buyer-member@example.com")
+      purchase = create(:purchase, :from_seller, seller: @seller, link: @product, email: follow.email)
+      old_affiliation_for(follow.email)
+      post = dated_audience_post
+      allow_any_instance_of(SendPostBlastEmailsJob).to receive(:send_provider_slice).and_wrap_original do |original, **kwargs|
+        purchase.unsubscribe_buyer if purchase.reload.can_contact?
+        original.call(**kwargs)
+      end
+
+      send_blast(post)
+
+      expect(follow.reload).to be_deleted
+      expect_only_the_stayer_sent(post, follow.email)
+    end
+
+    it "is sent as the affiliate it still is when the purchase and the follow opt out but a qualifying affiliation remains" do
+      follow = create(:active_follower, user: @seller, email: "affiliate-member@example.com")
+      purchase = create(:purchase, :from_seller, seller: @seller, link: @product, email: follow.email)
+      affiliate = create(:direct_affiliate, seller: @seller, affiliate_user: create(:affiliate_user, email: follow.email), send_posts: true)
+      affiliate.products << @product
+      post = dated_audience_post
+      allow_any_instance_of(SendPostBlastEmailsJob).to receive(:send_provider_slice).and_wrap_original do |original, **kwargs|
+        purchase.unsubscribe_buyer if purchase.reload.can_contact?
+        original.call(**kwargs)
+      end
+
+      send_blast(post)
+
+      member = @requests.flat_map { |request| request[:to].zip(request[:custom_args], request[:unsubscribe_urls]) }.find { _1[0] == follow.email }
+      expect(member[1]).to include("affiliate_id" => affiliate.id.to_s)
+      expect(member[1].keys).not_to include("purchase_id", "follower_id")
+      expect(member[2]).to eq(unsubscribe_posts_affiliate_url(affiliate.external_id))
+      expect(SentPostEmail.where(post:).order(:email).pluck(:email)).to eq([follow.email, "stayer@example.com"])
+      expect(@settled).to eq([[[], 2]])
+    end
+
+    it "is sent as the buyer it still is when only the follow ends before the slice, under the date filter" do
+      follow = create(:active_follower, user: @seller, email: "dated-buyer@example.com")
+      purchase = create(:purchase, :from_seller, seller: @seller, link: @product, email: follow.email)
+      post = dated_audience_post
+      unfollow_before_the_provider_slice(follow)
+
+      send_blast(post)
+
+      member = @requests.flat_map { |request| request[:to].zip(request[:custom_args], request[:unsubscribe_urls]) }.find { _1[0] == follow.email }
+      expect(member[1]).to include("purchase_id" => purchase.id.to_s)
+      expect(member[1].keys).not_to include("follower_id", "affiliate_id")
+      expect(member[2]).to match(%r{/purchases/[^/]+/unsubscribe\z})
+      expect(@settled).to eq([[[], 2]])
+    end
   end
 
   describe "a follower workflow post" do

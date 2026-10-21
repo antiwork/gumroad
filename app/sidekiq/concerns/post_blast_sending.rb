@@ -355,15 +355,13 @@ module PostBlastSending
 
     kept, dropped = members.partition do |member|
       details = details_by_member_id[member.id]&.details || {}
-      # Rendered as a follower only while the follow still backs the row: the handoff withholds a follower
-      # recipient whose follow ended, and this member may still be reachable as a buyer or affiliate.
+      # A member is sent only in a role the audience load qualified them for and their row still holds, or as a
+      # purchase that qualifies now. Other details on the row (an affiliation outside a date filter or added after
+      # the load, a purchase that opted out) are no permission, and a member left with no role isn't sent.
       member.follower_id = nil if member.follower_id && details.dig("follower", "id") != member.follower_id
-      if (purchase_id = qualifying_purchase_ids[member.id])
-        member.purchase_id = purchase_id
-        true
-      else
-        allow_non_purchase_recipients && (details["follower"].present? || details["affiliates"].present?)
-      end
+      member.affiliate_id = nil if member.affiliate_id && Array.wrap(details["affiliates"]).none? { _1["id"] == member.affiliate_id }
+      member.purchase_id = qualifying_purchase_ids[member.id]
+      member.purchase_id.present? || (allow_non_purchase_recipients && (member.follower_id || member.affiliate_id).present?)
     end
     Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} dropped #{dropped.size} recipients who left the audience") if dropped.any?
     [kept, dropped]
