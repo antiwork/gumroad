@@ -1534,7 +1534,7 @@ describe("Checkout renewal reminder notice", () => {
     expect(view.queryByText(/^If this purchase starts your free trial, /u)).not.toBeNull();
   });
 
-  it("groups the notice with the item details, above Edit and Remove", () => {
+  it("renders the notice across the line below the row, after Edit and Remove", () => {
     const tier: CartProduct["options"][number] = {
       id: "studio",
       name: "Studio",
@@ -1551,11 +1551,16 @@ describe("Checkout renewal reminder notice", () => {
     // Source order, not compareDocumentPosition: happy-dom does not report it reliably.
     const nodes = Array.from(view.container.querySelectorAll("*"));
     const tierLine = nodes.findIndex((node) => node.tagName === "SPAN" && node.textContent === "Tier: Studio");
-    const notice = nodes.findIndex((node) => node.tagName === "SPAN" && node.textContent === yearlyNotice);
     const actions = nodes.findIndex((node) => node.tagName === "BUTTON" && node.textContent === "Remove");
+    const notice = nodes.findIndex((node) => node.tagName === "SPAN" && node.textContent === yearlyNotice);
     expect(tierLine).toBeGreaterThan(-1);
-    expect(notice).toBeGreaterThan(tierLine);
-    expect(actions).toBeGreaterThan(notice);
+    expect(actions).toBeGreaterThan(tierLine);
+    expect(notice).toBeGreaterThan(actions);
+    // The notice sits in its own section under the row, so it is not squeezed into the details column.
+    const row = nodes[actions]?.closest("section");
+    expect(row?.contains(nodes[tierLine] ?? null)).toBe(true);
+    expect(row?.contains(nodes[notice] ?? null)).toBe(false);
+    expect(nodes[notice]?.closest("[role=listitem]")).toBe(nodes[actions]?.closest("[role=listitem]"));
   });
 
   it("shows nothing for a gift", () => {

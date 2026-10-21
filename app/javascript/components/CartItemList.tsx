@@ -41,7 +41,7 @@ export const CartItem = ({
         <>
           <section className={classNames("flex flex-row", rowGapClasses, paddingClasses)}>{children}</section>
           {extra ? (
-            <section className="flex flex-col gap-4 border-border p-4 pt-0 sm:p-6 sm:pt-0">{extra}</section>
+            <section className="flex flex-col gap-4 border-border p-4 pt-0 sm:p-5 sm:pt-0">{extra}</section>
           ) : null}
         </>
       </Comp>
