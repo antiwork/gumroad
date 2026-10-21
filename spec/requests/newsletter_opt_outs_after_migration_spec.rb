@@ -138,11 +138,13 @@ describe "Old Gumroad newsletter opt-outs after the Feature announcements migrat
     expect(follower.reload.deleted_at).to be_nil
   end
 
-  it "fails the old unsubscribe rather than losing the opt-out when the new row can't be written" do
+  it "fails the old unsubscribe as retryable rather than losing the opt-out when the new row can't be written" do
     allow(FeatureAnnouncementSubscription).to receive(:unsubscribe!).and_raise(ActiveRecord::LockWaitTimeout)
 
-    expect { get cancel_follow_path(follower.external_id) }.to raise_error(ActiveRecord::LockWaitTimeout)
+    get cancel_follow_path(follower.external_id)
 
+    expect(response).to have_http_status(:service_unavailable)
+    expect(response.headers["Retry-After"]).to eq("60")
     expect(follower.reload.deleted_at).to be_nil
     expect(preference).to eq([[true, "newsletter_migration"]])
   end
