@@ -1197,8 +1197,9 @@ const CartItemComponent = ({
             isPWYW ? (
               <Popover open={editPopoverOpen} onOpenChange={setEditPopoverOpen}>
                 <PopoverAnchor>
+                  {/* PopoverTrigger merges all-unset into the button, which drops box-sizing to content-box. */}
                   <PopoverTrigger asChild>
-                    <Button className="h-8 w-15 !p-0 !text-xs">Edit</Button>
+                    <Button className="box-border h-8 w-15 !p-0 !text-xs">Edit</Button>
                   </PopoverTrigger>
                 </PopoverAnchor>
                 <PopoverContent className="max-h-[var(--radix-popover-content-available-height,80vh)] overflow-auto">

@@ -102,6 +102,30 @@ describe "Checkout cart", :js, type: :system do
       check_out(@membership_product)
     end
 
+    def edit_and_remove_boxes
+      %w[Edit Remove].map do |label|
+        find_button(label).evaluate_script("(({ top, width, height }) => ({ top, width, height }))(this.getBoundingClientRect())")
+      end
+    end
+
+    it "renders Edit at the same size as Remove, on the same line" do
+      visit @membership_product.long_url
+      add_to_cart(@membership_product, recurrence: "Yearly", option: @membership_product.variant_categories.first.variants.first.name)
+      within_cart_item(@membership_product.name) do
+        edit, remove = edit_and_remove_boxes
+        expect(edit).to eq(remove)
+      end
+    end
+
+    it "renders Edit at the same size as Remove on a phone", :mobile_view do
+      visit @membership_product.long_url
+      add_to_cart(@membership_product, recurrence: "Yearly", option: @membership_product.variant_categories.first.variants.first.name)
+      within_cart_item(@membership_product.name) do
+        edit, remove = edit_and_remove_boxes
+        expect(edit).to eq(remove)
+      end
+    end
+
     it "updates the quantity" do
       visit @product.long_url
       add_to_cart(@product)
