@@ -33,6 +33,16 @@ module PostFollowerHandoff
     admitted
   end
 
+  # Of these follower_id => address pairs, the follows live at this seller and address right now, for choosing a
+  # recipient's role before anything is rendered. It's a locking read, so neither the query cache nor an older snapshot
+  # answers it; outside a transaction the locks go with the statement. The handoff still rechecks under its own lock.
+  def self.live_follower_ids(seller_id, emails_by_follower_id)
+    return Set.new if emails_by_follower_id.empty?
+
+    live_emails = ApplicationRecord.connected_to(role: :writing) { Follower.uncached { lock_live_follows(seller_id, emails_by_follower_id.keys) } }
+    emails_by_follower_id.filter_map { |id, email| id if still_at_address?(live_emails[id], email) }.to_set
+  end
+
   # Follows keep the address as it was typed, while audience rows (a blast's recipients) store it stripped and
   # lowercased. A follow with no live row never matches.
   def self.still_at_address?(live_email, recipient_email)

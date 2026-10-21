@@ -6,6 +6,7 @@ class FollowersController < ApplicationController
   include Pagy::Backend
   include PageMeta::Post
   include ValidateRecaptcha
+  include OptOutRetry
 
   PUBLIC_ACTIONS = %i[new create from_embed_form confirm cancel].freeze
   before_action :authenticate_user!, except: PUBLIC_ACTIONS
@@ -179,7 +180,7 @@ class FollowersController < ApplicationController
       end
     end
   rescue ActiveRecord::LockWaitTimeout
-    retry_opt_out_later
+    retry_opt_out_later(retry_page: true)
   end
 
   private
@@ -248,12 +249,6 @@ class FollowersController < ApplicationController
         logged_in_user:,
         source:
       )
-    end
-
-    # Nothing was written, so the person can simply try again.
-    def retry_opt_out_later
-      response.headers["Retry-After"] = Follower::OPT_OUT_RETRY_AFTER_SECONDS.to_s
-      head :service_unavailable
     end
 
     def fetch_follower

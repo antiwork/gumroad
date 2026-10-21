@@ -352,13 +352,16 @@ module PostBlastSending
         .pluck(:id, :purchase_id).to_h
     end
     allow_non_purchase_recipients = !buyer_post && !purchase_targeted?
+    # The row can still list a follow that has ended: an unfollow that times out updating it leaves it to
+    # RefreshAudienceMemberJob. So the follow itself decides whether a member is sent as a follower.
+    live_follower_ids = buyer_post ? Set.new : PostFollowerHandoff.live_follower_ids(@post.seller_id, members.select(&:follower_id).to_h { [_1.follower_id, _1.email] })
 
     kept, dropped = members.partition do |member|
       details = details_by_member_id[member.id]&.details || {}
       # A member is sent only in a role the audience load qualified them for and their row still holds, or as a
       # purchase that qualifies now. Other details on the row (an affiliation outside a date filter or added after
       # the load, a purchase that opted out) are no permission, and a member left with no role isn't sent.
-      member.follower_id = nil if member.follower_id && details.dig("follower", "id") != member.follower_id
+      member.follower_id = nil if member.follower_id && (details.dig("follower", "id") != member.follower_id || !live_follower_ids.include?(member.follower_id))
       member.affiliate_id = nil if member.affiliate_id && Array.wrap(details["affiliates"]).none? { _1["id"] == member.affiliate_id }
       member.purchase_id = qualifying_purchase_ids[member.id]
       member.purchase_id.present? || (allow_non_purchase_recipients && (member.follower_id || member.affiliate_id).present?)

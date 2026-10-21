@@ -63,6 +63,17 @@ describe "Opting out while a post is being handed to the provider", type: :reque
     end
   end
 
+  # The page a person who clicked an unsubscribe link sees: what happened, and a link that repeats the same request.
+  def expect_retry_page_for(path)
+    page = Nokogiri::HTML(response.body)
+    expect(response.media_type).to eq("text/html")
+    expect(page.at_css("h2")&.text).to eq("We couldn't finish unsubscribing you.")
+    expect(page.text).not_to match(/you have been unsubscribed|no longer receive/i)
+    retry_link = page.css("a").find { _1.text.strip == "Try again" }
+    expect(retry_link&.[]("href")).to eq(path)
+    retry_link["href"]
+  end
+
   def requested_addresses
     addresses = []
     addresses.concat(@requests.pop) until @requests.empty?
@@ -76,6 +87,7 @@ describe "Opting out while a post is being handed to the provider", type: :reque
     expect { get cancel_follow_path(@follower.external_id, format: :json) }.not_to raise_error
     expect(response).to have_http_status(:service_unavailable)
     expect(response.headers["Retry-After"]).to eq("60")
+    expect(response.body).to be_empty
     expect(Follower.find(@follower.id)).to be_alive
 
     @release_provider << true
@@ -93,6 +105,28 @@ describe "Opting out while a post is being handed to the provider", type: :reque
     sender&.join(10)
   end
 
+  it "shows a person who clicked the unfollow link a page to try again while the follow is held, and unfollows when they do" do
+    sender = start_blast(hold_provider: true)
+    Timeout.timeout(10) { @in_provider.pop }
+    path = cancel_follow_path(@follower.external_id)
+
+    expect { get path }.not_to raise_error
+    expect(response).to have_http_status(:service_unavailable)
+    expect(response.headers["Retry-After"]).to eq("60")
+    expect(Follower.find(@follower.id)).to be_alive
+    retry_path = expect_retry_page_for(path)
+
+    @release_provider << true
+    sender.value
+    get retry_path
+
+    expect(response).to have_http_status(:ok)
+    expect(Follower.find(@follower.id)).to be_deleted
+  ensure
+    @release_provider << true
+    sender&.join(10)
+  end
+
   it "answers the seller's removal of a follower with a retryable 503 while the follow is held, and removes it on retry" do
     # `protect_from_forgery` null-sessions an unverified DELETE, which would sign the seller out first.
     ActionController::Base.allow_forgery_protection = false
@@ -103,6 +137,7 @@ describe "Opting out while a post is being handed to the provider", type: :reque
     expect { delete follower_path(@follower.external_id) }.not_to raise_error
     expect(response).to have_http_status(:service_unavailable)
     expect(response.headers["Retry-After"]).to eq("60")
+    expect(response.body).to be_empty
     expect(Follower.find(@follower.id)).to be_alive
 
     @release_provider << true
@@ -127,10 +162,11 @@ describe "Opting out while a post is being handed to the provider", type: :reque
     expect(response).to have_http_status(:service_unavailable)
     expect(response.headers["Retry-After"]).to eq("60")
     expect(Follower.find(@follower.id)).to be_alive
+    retry_path = expect_retry_page_for(path)
 
     @release_provider << true
     sender.value
-    get path
+    get retry_path
 
     expect(response).to have_http_status(:ok)
     expect(Follower.find(@follower.id)).to be_deleted
