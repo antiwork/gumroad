@@ -4737,8 +4737,20 @@ describe User, :vcr do
         expect(user.eligible_to_send_emails?).to eq(false)
       end
 
-      context "with email_sending_override" do
-        before { user.update!(email_sending_override: true) }
+      it "returns false for a raw email_sending_override with no parent account" do
+        user.update!(email_sending_override: true)
+        expect(user.eligible_to_send_emails?).to eq(false)
+      end
+
+      context "with a granted email sending override" do
+        let(:admin_user) { create(:admin_user) }
+        let(:parent) { create(:user, verified: true) }
+        let!(:membership) { create(:team_membership, user: parent, seller: user, role: TeamMembership::ROLE_ADMIN) }
+
+        before do
+          create(:payment_completed, user: parent)
+          user.grant_email_sending_override!(parent:, author: admin_user)
+        end
 
         it "returns true without sales or a completed payment" do
           expect(user.sales_cents_total).to eq(0)
@@ -4746,15 +4758,69 @@ describe User, :vcr do
         end
 
         it "returns false when the user is suspended" do
-          admin_user = create(:admin_user)
           user.flag_for_fraud(author_id: admin_user.id)
           user.suspend_for_fraud(author_id: admin_user.id)
           expect(user.eligible_to_send_emails?).to eq(false)
+          expect(user.email_sending_override_active?).to eq(false)
         end
 
-        it "returns false when the user is flagged" do
-          user.flag_for_fraud(author_id: create(:admin_user).id)
+        it "returns false when the user is flagged for fraud" do
+          user.flag_for_fraud(author_id: admin_user.id)
           expect(user.eligible_to_send_emails?).to eq(false)
+          expect(user.email_sending_override_active?).to eq(false)
+        end
+
+        it "returns false when the user is flagged for a terms-of-service violation" do
+          user.flag_for_tos_violation(author_id: admin_user.id, product_id: create(:product, user:).id)
+          expect(user.reload).to be_flagged_for_tos_violation
+          expect(user.eligible_to_send_emails?).to eq(false)
+          expect(user.email_sending_override_active?).to eq(false)
+        end
+
+        it "returns false once the parent's admin membership is removed" do
+          membership.update_as_deleted!
+          expect(user.eligible_to_send_emails?).to eq(false)
+        end
+
+        it "returns false once the parent is no longer verified" do
+          parent.update!(verified: false)
+          expect(user.eligible_to_send_emails?).to eq(false)
+        end
+
+        it "returns false once the parent is flagged" do
+          # The state machine refuses to flag a verified user, so flag first and re-verify.
+          parent.update!(verified: false)
+          parent.flag_for_fraud(author_id: admin_user.id)
+          parent.update!(verified: true)
+          expect(parent.reload).to be_flagged_for_fraud
+          expect(user.eligible_to_send_emails?).to eq(false)
+        end
+
+        it "returns false once the parent is suspended" do
+          parent.update!(verified: false)
+          parent.flag_for_fraud(author_id: admin_user.id)
+          parent.suspend_for_fraud(author_id: admin_user.id)
+          parent.update!(verified: true)
+          expect(parent.reload).to be_suspended
+          expect(user.eligible_to_send_emails?).to eq(false)
+        end
+
+        it "returns false once the parent account is deleted" do
+          parent.mark_deleted!
+          expect(user.eligible_to_send_emails?).to eq(false)
+        end
+
+        it "returns false when the override is switched off with a string or integer" do
+          ["false", "0", 0].each do |value|
+            user.update!(email_sending_override: value)
+            expect(user.reload.eligible_to_send_emails?).to eq(false)
+            user.update!(email_sending_override: true)
+          end
+        end
+
+        it "returns false after the override is revoked" do
+          user.revoke_email_sending_override!(author: admin_user)
+          expect(user.reload.eligible_to_send_emails?).to eq(false)
         end
       end
 
@@ -4798,6 +4864,212 @@ describe User, :vcr do
         allow(user).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE - 1)
         expect(user.eligible_to_send_emails?).to eq(false)
       end
+    end
+  end
+
+  describe "#grant_email_sending_override!" do
+    let(:brand) { create(:user) }
+    let(:parent) { create(:user, verified: true) }
+    let(:admin_user) { create(:admin_user) }
+    let!(:membership) { create(:team_membership, user: parent, seller: brand, role: TeamMembership::ROLE_ADMIN) }
+
+    before { create(:payment_completed, user: parent) }
+
+    def expect_grant_refused(message, author: admin_user, parent: self.parent)
+      expect do
+        expect { brand.grant_email_sending_override!(parent:, author:) }.to raise_error(ArgumentError, message)
+      end.not_to change { brand.comments.count }
+      expect(brand.reload.email_sending_override?).to eq(false)
+      expect(brand.email_sending_override_parent_id).to be_nil
+    end
+
+    it "turns the override on and records the grantor and parent account" do
+      expect do
+        brand.grant_email_sending_override!(parent:, author: admin_user)
+      end.to change { brand.comments.count }.by(1)
+
+      brand.reload
+      expect(brand.email_sending_override?).to eq(true)
+      expect(brand.email_sending_override_parent_id).to eq(parent.id)
+      expect(brand.email_sending_override_active?).to eq(true)
+      comment = brand.comments.last
+      expect(comment.author_id).to eq(admin_user.id)
+      expect(comment.comment_type).to eq(Comment::COMMENT_TYPE_NOTE)
+      expect(comment.content).to eq("Email sending override granted by #{admin_user.email} on the strength of parent account #{parent.id}.")
+    end
+
+    it "refuses an author who is not a Gumroad team member" do
+      expect_grant_refused("author must be a Gumroad team member", author: create(:user))
+      expect_grant_refused("author must be a Gumroad team member", author: nil)
+    end
+
+    it "refuses a parent that is not a user" do
+      expect_grant_refused("parent must be a User", parent: parent.id)
+    end
+
+    it "refuses a parent with no admin membership on the account" do
+      expect_grant_refused("parent must be an admin of this account", parent: create(:user, verified: true))
+    end
+
+    it "refuses a parent whose membership has a non-admin role" do
+      membership.update!(role: TeamMembership::ROLE_MARKETING)
+      expect_grant_refused("parent must be an admin of this account")
+    end
+
+    it "refuses a parent whose admin membership was removed" do
+      membership.update_as_deleted!
+      expect_grant_refused("parent must be an admin of this account")
+    end
+
+    it "refuses a parent that is not verified" do
+      parent.update!(verified: false)
+      expect_grant_refused(/parent must be verified/)
+    end
+
+    it "refuses a deleted parent" do
+      parent.mark_deleted!
+      expect_grant_refused(/parent must be verified/)
+    end
+
+    it "refuses a parent without a completed payout" do
+      parent.payments.update_all(state: "failed")
+      expect_grant_refused(/parent must be verified, have a completed payout/)
+    end
+
+    it "refuses a flagged parent" do
+      parent.update!(verified: false)
+      parent.flag_for_fraud(author_id: admin_user.id)
+      parent.update!(verified: true)
+      expect_grant_refused(/not be flagged or suspended/)
+    end
+
+    it "refuses a suspended parent" do
+      parent.update!(verified: false)
+      parent.flag_for_fraud(author_id: admin_user.id)
+      parent.suspend_for_fraud(author_id: admin_user.id)
+      parent.update!(verified: true)
+      expect_grant_refused(/not be flagged or suspended/)
+    end
+
+    it "refuses a flagged or suspended account" do
+      brand.flag_for_fraud(author_id: admin_user.id)
+      expect_grant_refused("account must not be flagged or suspended")
+      brand.suspend_for_fraud(author_id: admin_user.id)
+      expect_grant_refused("account must not be flagged or suspended")
+    end
+
+    it "leaves the override off when the audit comment cannot be saved" do
+      allow_any_instance_of(Comment).to receive(:save!).and_raise(ActiveRecord::RecordInvalid)
+
+      expect { brand.grant_email_sending_override!(parent:, author: admin_user) }.to raise_error(ActiveRecord::RecordInvalid)
+      expect(brand.reload.email_sending_override?).to eq(false)
+      expect(brand.email_sending_override_parent_id).to be_nil
+    end
+
+    it "grants on the current row when called on a stale instance" do
+      brand.grant_email_sending_override!(parent:, author: admin_user)
+      stale = User.find(brand.id)
+      User.find(brand.id).revoke_email_sending_override!(author: admin_user)
+
+      stale.grant_email_sending_override!(parent:, author: admin_user)
+
+      brand.reload
+      expect(brand.email_sending_override_parent_id).to eq(parent.id)
+      expect(brand.email_sending_override_active?).to eq(true)
+      expect(brand.comments.order(:id).last.content).to start_with("Email sending override granted")
+    end
+
+    it "checks the account's current risk state rather than a stale instance's" do
+      stale = User.find(brand.id)
+      User.find(brand.id).flag_for_fraud(author_id: admin_user.id)
+
+      expect do
+        expect { stale.grant_email_sending_override!(parent:, author: admin_user) }.to raise_error(ArgumentError, "account must not be flagged or suspended")
+      end.not_to change { brand.comments.count }
+      expect(brand.reload.email_sending_override?).to eq(false)
+    end
+
+    it "refuses an instance with unsaved changes without writing anything" do
+      brand.name = "Unsaved name"
+
+      expect do
+        expect { brand.grant_email_sending_override!(parent:, author: admin_user) }.to raise_error(RuntimeError, /unpersisted changes/)
+      end.not_to change { brand.comments.count }
+      expect(User.find(brand.id).email_sending_override?).to eq(false)
+    end
+  end
+
+  describe "#revoke_email_sending_override!" do
+    let(:brand) { create(:user) }
+    let(:parent) { create(:user, verified: true) }
+    let(:admin_user) { create(:admin_user) }
+
+    before do
+      create(:team_membership, user: parent, seller: brand, role: TeamMembership::ROLE_ADMIN)
+      create(:payment_completed, user: parent)
+      brand.grant_email_sending_override!(parent:, author: admin_user)
+    end
+
+    it "turns the override off, clears the parent and records who revoked it" do
+      revoker = create(:admin_user)
+      expect do
+        brand.revoke_email_sending_override!(author: revoker)
+      end.to change { brand.comments.count }.by(1)
+
+      brand.reload
+      expect(brand.email_sending_override?).to eq(false)
+      expect(brand.email_sending_override_parent_id).to be_nil
+      expect(brand.email_sending_override_active?).to eq(false)
+      comment = brand.comments.last
+      expect(comment.author_id).to eq(revoker.id)
+      expect(comment.comment_type).to eq(Comment::COMMENT_TYPE_NOTE)
+      expect(comment.content).to eq("Email sending override revoked by #{revoker.email} (parent account #{parent.id}).")
+    end
+
+    it "refuses an author who is not a Gumroad team member" do
+      expect do
+        expect { brand.revoke_email_sending_override!(author: create(:user)) }.to raise_error(ArgumentError, "author must be a Gumroad team member")
+      end.not_to change { brand.comments.count }
+      expect(brand.reload.email_sending_override_active?).to eq(true)
+    end
+
+    it "keeps the override when the audit comment cannot be saved" do
+      allow_any_instance_of(Comment).to receive(:save!).and_raise(ActiveRecord::RecordInvalid)
+
+      expect { brand.revoke_email_sending_override!(author: admin_user) }.to raise_error(ActiveRecord::RecordInvalid)
+      expect(brand.reload.email_sending_override_active?).to eq(true)
+    end
+
+    it "revokes the current row when called on a stale instance" do
+      brand.revoke_email_sending_override!(author: admin_user)
+      stale = User.find(brand.id)
+      User.find(brand.id).grant_email_sending_override!(parent:, author: admin_user)
+
+      stale.revoke_email_sending_override!(author: admin_user)
+
+      brand.reload
+      expect(brand.email_sending_override?).to eq(false)
+      expect(brand.email_sending_override_active?).to eq(false)
+      expect(brand.comments.order(:id).last.content).to eq("Email sending override revoked by #{admin_user.email} (parent account #{parent.id}).")
+    end
+  end
+
+  describe "#email_sending_override" do
+    let(:user) { create(:user) }
+
+    it "casts written values to a boolean" do
+      { true => true, "true" => true, "1" => true, 1 => true,
+        false => false, "false" => false, "0" => false, 0 => false, nil => false, "" => false }.each do |value, expected|
+        user.update!(email_sending_override: value)
+        expect(user.reload.email_sending_override).to be(expected), "#{value.inspect} was read back as #{user.email_sending_override.inspect}"
+        expect(user.email_sending_override?).to be(expected)
+        expect(user.json_data["email_sending_override"]).to be(expected)
+      end
+    end
+
+    it "casts a string already stored in json_data" do
+      user.json_data["email_sending_override"] = "false"
+      expect(user.email_sending_override?).to be(false)
     end
   end
 

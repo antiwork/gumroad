@@ -58,9 +58,15 @@ describe "InstallmentValidations" do
         end
       end
 
-      context "when seller has email_sending_override" do
+      context "when seller has an email sending override" do
+        before do
+          parent = create(:user, verified: true)
+          create(:payment_completed, user: parent)
+          create(:team_membership, user: parent, seller: @seller, role: TeamMembership::ROLE_ADMIN)
+          @seller.grant_email_sending_override!(parent:, author: create(:admin_user))
+        end
+
         it "returns true with no errors despite having less than $100 sales" do
-          @seller.update!(email_sending_override: true)
           installment = build(:installment, seller: @seller)
           allow(installment).to receive(:audience_members_count).and_return(Installment::SENDING_LIMIT + 1)
 
@@ -69,7 +75,6 @@ describe "InstallmentValidations" do
         end
 
         it "returns minimum sales error when the seller is flagged" do
-          @seller.update!(email_sending_override: true)
           @seller.flag_for_fraud(author_id: create(:admin_user).id)
           installment = build(:installment, seller: @seller)
           allow(installment).to receive(:audience_members_count).and_return(Installment::SENDING_LIMIT + 1)
@@ -77,6 +82,53 @@ describe "InstallmentValidations" do
           expect(installment.valid?).to eq false
           expect(installment.errors.full_messages.to_sentence).to include("you cannot send out more than 2 emails")
         end
+      end
+    end
+
+    context "with an email sending override and a real audience over the limit" do
+      let(:brand) { create(:user) }
+      let(:parent) { create(:user, verified: true) }
+      let(:admin_user) { create(:admin_user) }
+      let(:sending_limit_error) { "Sorry, you cannot send out more than #{Installment::SENDING_LIMIT} emails" }
+
+      before do
+        stub_const("Installment::SENDING_LIMIT", 100)
+        create(:team_membership, user: parent, seller: brand, role: TeamMembership::ROLE_ADMIN)
+        create(:payment_completed, user: parent)
+        create_list(:audience_member, Installment::SENDING_LIMIT + 1, seller: brand, follower: {})
+        index_model_records(AudienceMember)
+      end
+
+      it "saves a post from a brand whose override is active" do
+        brand.grant_email_sending_override!(parent:, author: admin_user)
+        post = build(:audience_installment, seller: brand)
+
+        expect(post.audience_members_count(Installment::SENDING_LIMIT + 1)).to eq(Installment::SENDING_LIMIT + 1)
+        expect(post.save).to eq(true)
+      end
+
+      it "keeps the limit for a raw override without a qualifying parent" do
+        brand.update!(email_sending_override: true)
+        post = build(:audience_installment, seller: brand)
+
+        expect(post.save).to eq(false)
+        expect(post.errors.full_messages.to_sentence).to include(sending_limit_error)
+      end
+
+      it "keeps the limit once the override is revoked" do
+        brand.grant_email_sending_override!(parent:, author: admin_user)
+        brand.revoke_email_sending_override!(author: admin_user)
+        post = build(:audience_installment, seller: brand.reload)
+
+        expect(post.save).to eq(false)
+        expect(post.errors.full_messages.to_sentence).to include(sending_limit_error)
+      end
+
+      it "keeps the limit for a seller without an override" do
+        post = build(:audience_installment, seller: brand)
+
+        expect(post.save).to eq(false)
+        expect(post.errors.full_messages.to_sentence).to include(sending_limit_error)
       end
     end
   end

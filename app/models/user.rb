@@ -243,8 +243,9 @@ class User < ApplicationRecord
   attr_json_data_accessor :au_backtax_sales_cents, default: 0
   attr_json_data_accessor :au_backtax_owed_cents, default: 0
   attr_json_data_accessor :gumroad_day_timezone
-  # Admin-only, set from the console: skips the email-sending sales/payout bar. Suspension and fraud flags still win.
-  attr_json_data_accessor :email_sending_override, default: false
+  # The admin account whose standing lets this brand account skip the email-sending bar. Set only
+  # through grant_email_sending_override!; see email_sending_override_active?.
+  attr_json_data_accessor :email_sending_override_parent_id
   attr_json_data_accessor :payout_threshold_cents, default: -> { minimum_payout_threshold_cents }
   attr_json_data_accessor :payout_frequency, default: User::PayoutSchedule::WEEKLY
   attr_json_data_accessor :custom_fee_per_thousand
@@ -259,6 +260,15 @@ class User < ApplicationRecord
 
   def disable_buyer_local_currency=(value)
     set_json_data_for_attr("disable_buyer_local_currency", ActiveModel::Type::Boolean.new.cast(value))
+  end
+
+  def email_sending_override
+    ActiveModel::Type::Boolean.new.cast(json_data_for_attr("email_sending_override", default: false)) || false
+  end
+  alias_method :email_sending_override?, :email_sending_override
+
+  def email_sending_override=(value)
+    set_json_data_for_attr("email_sending_override", ActiveModel::Type::Boolean.new.cast(value) || false)
   end
 
   # Opt-out of mirroring the seller's USD price ending into the buyer's currency ($9.99 →
@@ -1479,10 +1489,6 @@ class User < ApplicationRecord
     has_completed_payouts?
   end
 
-  def email_sending_override_active?
-    email_sending_override && !flagged?
-  end
-
   def eligible_to_send_emails?
     return true if is_team_member?
     return false if suspended?
@@ -1496,6 +1502,59 @@ class User < ApplicationRecord
     # flagged for fraud or a terms-of-service violation — an unresolved risk
     # review must be cleared before verification unlocks early email access.
     (verified? && !flagged?) || has_completed_payouts?
+  end
+
+  # The parent is re-checked on every call rather than trusted from grant time, so the override
+  # lapses as soon as the parent loses its standing or its admin membership on this account.
+  def email_sending_override_active?
+    return false unless email_sending_override?
+    return false if suspended? || flagged?
+
+    parent = User.find_by(id: email_sending_override_parent_id)
+    parent.present? && administered_by?(parent) && parent.qualifies_as_email_sending_override_parent?
+  end
+
+  def qualifies_as_email_sending_override_parent?
+    alive? && verified? && !flagged? && !suspended? && has_completed_payouts?
+  end
+
+  # Admin console only. Lets a brand account skip the email-sending sales/payout bar on the
+  # strength of a verified, paid-out account that administers it. with_lock reloads the row first:
+  # json_data saves only keys that differ from what was loaded, so a stale instance would audit a no-op.
+  def grant_email_sending_override!(parent:, author:)
+    ensure_email_sending_override_author!(author)
+    raise ArgumentError, "parent must be a User" unless parent.is_a?(User)
+
+    with_lock do
+      raise ArgumentError, "parent must be an admin of this account" unless administered_by?(parent)
+      raise ArgumentError, "parent must be verified, have a completed payout, and not be flagged or suspended" unless parent.qualifies_as_email_sending_override_parent?
+      raise ArgumentError, "account must not be flagged or suspended" if flagged? || suspended?
+
+      self.email_sending_override = true
+      self.email_sending_override_parent_id = parent.id
+      save!
+      comments.create!(
+        author_id: author.id,
+        comment_type: Comment::COMMENT_TYPE_NOTE,
+        content: "Email sending override granted by #{author.email} on the strength of parent account #{parent.id}."
+      )
+    end
+  end
+
+  def revoke_email_sending_override!(author:)
+    ensure_email_sending_override_author!(author)
+
+    with_lock do
+      parent_id = email_sending_override_parent_id
+      self.email_sending_override = false
+      self.email_sending_override_parent_id = nil
+      save!
+      comments.create!(
+        author_id: author.id,
+        comment_type: Comment::COMMENT_TYPE_NOTE,
+        content: "Email sending override revoked by #{author.email} (parent account #{parent_id || 'none'})."
+      )
+    end
   end
 
   LAST_ALLOWED_TIME_FOR_PRODUCT_LEVEL_REFUND_POLICY = Time.new(2025, 3, 31).end_of_day
@@ -1685,6 +1744,14 @@ class User < ApplicationRecord
     end
 
   private
+    def administered_by?(parent)
+      seller_memberships.not_deleted.role_admin.exists?(user_id: parent.id)
+    end
+
+    def ensure_email_sending_override_author!(author)
+      raise ArgumentError, "author must be a Gumroad team member" unless author.is_a?(User) && author.is_team_member?
+    end
+
     # What the newsletter migration reads from an account: its address, confirmation, status and the old
     # announcement setting. A new account only counts there once confirmed.
     def newsletter_eligibility_changed?
