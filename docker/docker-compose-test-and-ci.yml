@@ -21,10 +21,10 @@ services:
       - "--skip-log-bin"
 
   redis:
-    image: redis:7.0.7
+    image: valkey/valkey:8.1.10
     # 64 databases (default 16) so config/test_redis_isolation.rb can lease a private
     # block of four to each concurrent test run instead of sharing one set.
-    command: [ "redis-server", "--databases", "64" ]
+    command: [ "valkey-server", "--databases", "64" ]
     volumes:
       - redis_data:/data
     ports:

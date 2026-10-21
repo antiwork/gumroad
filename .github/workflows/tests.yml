@@ -442,7 +442,7 @@ jobs:
             -e MYSQL_ROOT_PASSWORD=password -e MYSQL_DATABASE=gumroad_test mysql:8.4.11 \
             --innodb-flush-log-at-trx-commit=0 --innodb-doublewrite=0 --sync-binlog=0 \
             --innodb-flush-method=nosync --skip-log-bin &
-          docker run -d --name redis -p 6379:6379 redis:7 &
+          docker run -d --name redis -p 6379:6379 valkey/valkey:8.1.10 &
           docker run -d --name stripe_mock -p 12111:12111 -p 12112:12112 stripemock/stripe-mock:latest &
           docker run -d --name dynamodb -p 8002:8000 amazon/dynamodb-local:3.3.1 &
           docker run -d --name elasticsearch -p 9200:9200 -e discovery.type=single-node \
