@@ -69,6 +69,11 @@ class Credit < ApplicationRecord
 
     credit.balance = balance_transaction.balance
     credit.save!
+    # Every credit that lands on a seller's balance must email them, whichever surface
+    # created it (admin API, support console, tooling). Notify here rather than in each
+    # caller: the console path previously skipped the mailer entirely, so support-issued
+    # credits arrived silently. Clawbacks and zero-amount corrections stay quiet.
+    credit.notify_user if credit.amount_cents.positive?
     credit
   end
 

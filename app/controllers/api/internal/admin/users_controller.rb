@@ -516,7 +516,6 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
 
     record_admin_write(action: "users.add_credit", target: user) do
       credit = Credit.create_for_credit!(user:, amount_cents:, crediting_user: Current.admin_actor, reason:)
-      credit.notify_user if amount_cents > 0
       render json: internal_admin_user_success_payload(user, credit: serialize_credit(credit))
     rescue ActiveRecord::RecordInvalid => e
       render json: { success: false, message: e.message }, status: :unprocessable_entity
