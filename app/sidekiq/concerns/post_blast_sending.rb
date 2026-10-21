@@ -111,24 +111,41 @@ module PostBlastSending
       return
     end
 
-    recipients = prepare_recipients(kept)
+    withheld = hand_off_members(provider:, members: kept, cache:)
+    return if withheld.nil?
+
+    # The handoff withholds a follower whose follow ended after the audience load. On an audience post that member
+    # can still be a buyer or an affiliate: recheck their row, which the unfollow already updated, and send them
+    # once more as that. Anyone withheld again is settled like everyone else who left the audience.
+    if withheld.any? && @post.audience_type?
+      resend, withheld = partition_members_that_left_the_audience(withheld)
+      if resend.any?
+        withheld_again = hand_off_members(provider:, members: resend, cache:)
+        return if withheld_again.nil?
+
+        withheld += withheld_again
+      end
+    end
+    settle_pending_recipients(dropped + withheld, owed)
+  end
+
+  # Renders these members, hands them to the provider and records the ones it took, before any further call.
+  # Returns the members the handoff withheld, or nil once the newsletter retired.
+  def hand_off_members(provider:, members:, cache:)
     withheld_emails = Set.new
     begin
-      deliver_provider_slice(provider: provider, recipients: recipients, cache: cache, on_withheld: ->(withheld) { withheld_emails.merge(withheld.pluck(:email)) })
+      deliver_provider_slice(provider:, recipients: prepare_recipients(members), cache:, on_withheld: ->(withheld) { withheld_emails.merge(withheld.pluck(:email)) })
     rescue FeatureAnnouncementNewsletterCutover::Retired
       stop_for_retired_newsletter!
       return
     end
-    # A follower whose follow ended after the audience load was withheld at the handoff: no sent row, and
-    # settled like anyone else who left the audience.
-    withheld, kept = kept.partition { withheld_emails.include?(_1.email) }
-    dropped += withheld
+    withheld, delivered = members.partition { withheld_emails.include?(_1.email) }
     if @blast.to_non_openers?
-      mark_members_sent_in_this_blast(kept)
+      mark_members_sent_in_this_blast(delivered)
     else
-      store_recipients_as_sent(kept)
+      store_recipients_as_sent(delivered)
     end
-    settle_pending_recipients(dropped, owed)
+    withheld
   end
 
   def deliver_provider_slice(provider:, recipients:, cache:, on_withheld:)

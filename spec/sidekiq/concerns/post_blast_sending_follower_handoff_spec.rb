@@ -123,6 +123,81 @@ describe PostBlastSending, "handing a post to the provider only while the follow
     expect(blast.delivery_count).to eq(2)
   end
 
+  describe "a follower whose stored address has capitals" do
+    # Follows keep the address as typed; audience rows, and so the blast's recipients, are lowercased.
+    before do
+      @follower = create(:active_follower, user: @seller, email: "Mixed.Case@Example.com")
+      create(:active_follower, user: @seller, email: "stayer@example.com")
+      @post = create(:follower_post, :published, seller: @seller)
+    end
+
+    it "is still handed to SendGrid" do
+      blast = send_blast(@post)
+
+      expect(requested_addresses).to eq(["mixed.case@example.com", "stayer@example.com"])
+      expect(SentPostEmail.where(post: @post).order(:email).pluck(:email)).to eq(["mixed.case@example.com", "stayer@example.com"])
+      expect(blast.delivery_count).to eq(2)
+    end
+
+    it "is still handed to Resend" do
+      Feature.activate(:use_resend_for_post_emails)
+      Feature.activate_user(:force_resend_for_post_emails, @seller)
+
+      send_blast(@post)
+
+      expect(@requests.map { _1[:provider] }.uniq).to eq(["resend"])
+      expect(requested_addresses).to eq(["mixed.case@example.com", "stayer@example.com"])
+    ensure
+      Feature.deactivate(:use_resend_for_post_emails)
+    end
+
+    it "is withheld once the follow moved to another address" do
+      allow_any_instance_of(SendPostBlastEmailsJob).to receive(:send_provider_slice).and_wrap_original do |original, **kwargs|
+        @follower.update!(email: "Moved.On@Example.com") if @follower.reload.email == "Mixed.Case@Example.com"
+        original.call(**kwargs)
+      end
+
+      send_blast(@post)
+
+      expect(requested_addresses).to eq(["stayer@example.com"])
+      expect(SentPostEmail.where(post: @post).pluck(:email)).to eq(["stayer@example.com"])
+    end
+  end
+
+  it "sends an audience post as the buyer or affiliate a member still is when their follow ends while the request is built" do
+    product = create(:product, user: @seller)
+    buyer = create(:active_follower, user: @seller, email: "buyer-follower@example.com")
+    purchase = create(:purchase, :from_seller, seller: @seller, link: product, email: buyer.email)
+    affiliate = create(:direct_affiliate, seller: @seller, send_posts: true)
+    affiliate.products << product
+    affiliate_follow = create(:active_follower, user: @seller, email: affiliate.affiliate_user.email)
+    create(:active_follower, user: @seller, email: "stayer@example.com")
+    post = create(:audience_post, :published, seller: @seller)
+    built = 0
+    allow_any_instance_of(PostSendgridApi).to receive(:build_mail).and_wrap_original do |original|
+      request_body = original.call
+      [buyer, affiliate_follow].each(&:mark_deleted!) if (built += 1) == 1
+      request_body
+    end
+    settled = []
+    allow_any_instance_of(SendPostBlastEmailsJob).to receive(:settle_pending_recipients).and_wrap_original do |original, skipped, owed|
+      settled << [skipped.map(&:email), owed]
+      original.call(skipped, owed)
+    end
+
+    blast = send_blast(post)
+
+    expect(@requests.map { _1[:to].sort }).to eq([["stayer@example.com"], [affiliate_follow.email, buyer.email].sort])
+    args_by_email = @requests.last[:to].zip(@requests.last[:custom_args]).to_h
+    expect(args_by_email[buyer.email]).to include("purchase_id" => purchase.id.to_s)
+    expect(args_by_email[affiliate_follow.email]).to include("affiliate_id" => affiliate.id.to_s)
+    expect(args_by_email.values).to all(satisfy { !_1.key?("follower_id") })
+    expect(SentPostEmail.where(post:).order(:email).pluck(:email)).to eq([affiliate_follow.email, buyer.email, "stayer@example.com"].sort)
+    expect(settled).to eq([[[], 3]])
+    expect(blast.delivery_count).to eq(3)
+    expect(blast.completed_at).to be_present
+  end
+
   it "sends a customer post to its buyers unchanged" do
     create(:purchase, :from_seller, seller: @seller, email: "buyer@example.com")
     create(:active_follower, user: @seller, email: "buyer@example.com").mark_deleted!

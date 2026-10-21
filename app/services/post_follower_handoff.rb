@@ -22,7 +22,7 @@ module PostFollowerHandoff
     admitted = ApplicationRecord.connected_to(role: :writing) do
       ApplicationRecord.transaction do
         live_emails = lock_live_follows(post.seller_id, follower_ids)
-        kept, withheld = recipients.partition { (follower = _1[:follower]).nil? || live_emails[follower.id] == _1[:email] }
+        kept, withheld = recipients.partition { (follower = _1[:follower]).nil? || still_at_address?(live_emails[follower.id], _1[:email]) }
         kept.empty? ? kept : admit(kept, admission, &handoff)
       end
     end
@@ -32,6 +32,13 @@ module PostFollowerHandoff
     end
     admitted
   end
+
+  # Follows keep the address as it was typed, while audience rows (a blast's recipients) store it stripped and
+  # lowercased. A follow with no live row never matches.
+  def self.still_at_address?(live_email, recipient_email)
+    live_email.present? && live_email.strip.downcase == recipient_email.to_s.strip.downcase
+  end
+  private_class_method :still_at_address?
 
   def self.admit(recipients, admission, &handoff)
     admission ? admission.call { handoff.call(recipients) } : handoff.call(recipients)

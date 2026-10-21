@@ -72,7 +72,14 @@ class PurchasesController < ApplicationController
     end
 
     if @purchase.present?
-      @purchase.unsubscribe_buyer
+      begin
+        Follower.with_opt_out_lock_wait { @purchase.unsubscribe_buyer }
+      rescue ActiveRecord::LockWaitTimeout
+        # A post handoff is holding their follow, which is unchanged; the purchases may already be opted out, and a
+        # retry finishes the unsubscribe.
+        response.headers["Retry-After"] = Follower::OPT_OUT_RETRY_AFTER_SECONDS.to_s
+        head :service_unavailable
+      end
       return
     end
 

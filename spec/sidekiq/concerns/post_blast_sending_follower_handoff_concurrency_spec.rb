@@ -32,7 +32,9 @@ describe PostBlastSending, "ordering a follower's handoff against an unfollow on
     PostEmailBlast.where(post_id: post_ids).delete_all
     Installment.where(id: post_ids).delete_all
     AudienceMember.where(seller_id: @seller.id).delete_all
-    Follower.where(followed_id: @seller.id).delete_all
+    follower_ids = Follower.where(followed_id: @seller.id).pluck(:id)
+    PaperTrail::Version.where(item_type: "Follower", item_id: follower_ids).delete_all
+    Follower.where(id: follower_ids).delete_all
     FeatureAnnouncementNewsletterCutover.where(seller_id: @seller.id).delete_all
     @seller.destroy!
     delete_leftovers(user_ids: [@seller.id], installment_ids: post_ids)
@@ -42,11 +44,22 @@ describe PostBlastSending, "ordering a follower's handoff against an unfollow on
     Thread.new { ActiveRecord::Base.connection_pool.with_connection(&block) }
   end
 
-  # True once some transaction is blocked on a row lock. information_schema.innodb_trx is refreshed at most
-  # every 0.1s, so poll slower than that.
-  def lock_wait_observed?(connection, within: 5)
+  def connection_id(connection = ActiveRecord::Base.connection) = connection.select_value("SELECT CONNECTION_ID()").to_i
+
+  # True once connection `waiter` is blocked by connection `holder` on this follow's row. performance_schema's lock
+  # waits are live, so a wait elsewhere on the server, or one that already ended, doesn't count.
+  def row_lock_wait_observed?(waiter:, holder:, follower_id:, via: ActiveRecord::Base.connection, within: 5)
+    sql = <<~SQL
+      SELECT COUNT(*) FROM performance_schema.data_lock_waits waits
+      JOIN performance_schema.threads requesting ON requesting.THREAD_ID = waits.REQUESTING_THREAD_ID
+      JOIN performance_schema.threads blocking ON blocking.THREAD_ID = waits.BLOCKING_THREAD_ID
+      JOIN performance_schema.data_locks requested ON requested.ENGINE_LOCK_ID = waits.REQUESTING_ENGINE_LOCK_ID
+      WHERE requesting.PROCESSLIST_ID = #{waiter.to_i} AND blocking.PROCESSLIST_ID = #{holder.to_i}
+        AND requested.OBJECT_SCHEMA = DATABASE() AND requested.OBJECT_NAME = 'followers'
+        AND requested.INDEX_NAME = 'PRIMARY' AND requested.LOCK_DATA = '#{follower_id.to_i}'
+    SQL
     Timeout.timeout(within) do
-      sleep 0.25 until connection.select_value("SELECT COUNT(*) FROM information_schema.innodb_trx WHERE trx_state = 'LOCK WAIT'").to_i > 0
+      sleep 0.05 until via.select_value(sql).to_i > 0
       true
     end
   rescue Timeout::Error
@@ -64,11 +77,12 @@ describe PostBlastSending, "ordering a follower's handoff against an unfollow on
   it "withholds a follower whose unfollow commits while the handoff waits for the follow's lock" do
     unfollowing = Queue.new
     waited = nil
+    sender_id = connection_id
     unfollow = in_thread do |connection|
       connection.transaction do
         Follower.find(@leaver.id).mark_deleted!
         unfollowing << true
-        waited = lock_wait_observed?(connection)
+        waited = row_lock_wait_observed?(waiter: sender_id, holder: connection_id(connection), follower_id: @leaver.id, via: connection)
       end
     end
     Timeout.timeout(10) { unfollowing.pop }
@@ -86,14 +100,21 @@ describe PostBlastSending, "ordering a follower's handoff against an unfollow on
   it "makes an unfollow that arrives during the provider call wait until the provider has the post" do
     @release_provider = Queue.new
     events = Queue.new
-    sender = in_thread { send_blast }
+    connection_ids = Queue.new
+    sender = in_thread do |connection|
+      connection_ids << connection_id(connection)
+      send_blast
+    end
+    sender_id = Timeout.timeout(10) { connection_ids.pop }
     Timeout.timeout(10) { @in_provider.pop }
 
-    unfollow = in_thread do
+    unfollow = in_thread do |connection|
+      connection_ids << connection_id(connection)
       Follower.find(@leaver.id).mark_deleted!
       events << :unfollow_committed
     end
-    waited = lock_wait_observed?(ActiveRecord::Base.connection)
+    unfollow_id = Timeout.timeout(10) { connection_ids.pop }
+    waited = row_lock_wait_observed?(waiter: unfollow_id, holder: sender_id, follower_id: @leaver.id)
     still_following = Follower.find(@leaver.id).alive?
     events << :provider_released
     @release_provider << true
@@ -149,11 +170,12 @@ describe PostBlastSending, "ordering a follower's handoff against an unfollow on
     FeatureAnnouncementNewsletterCutover.create!(seller: @seller, state: "migrated", cutoff_at: 1.day.ago)
     follow_locked = Queue.new
     waited = nil
+    sender_id = connection_id
     writer = in_thread do |connection|
       connection.transaction do
         Follower.lock("FOR UPDATE").find(@leaver.id)
         follow_locked << true
-        waited = lock_wait_observed?(connection)
+        waited = row_lock_wait_observed?(waiter: sender_id, holder: connection_id(connection), follower_id: @leaver.id, via: connection)
         FeatureAnnouncementNewsletterCutover.where(seller_id: @seller.id).lock.pick(:id)
       end
       :committed

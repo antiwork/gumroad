@@ -11,6 +11,8 @@ class Follower < ApplicationRecord
   has_paper_trail
 
   RETIRED_NEWSLETTER_MESSAGE = "Gumroad's newsletter is now Feature announcements. Turn them on in Settings, under Notifications."
+  OPT_OUT_LOCK_WAIT_SECONDS = 10
+  OPT_OUT_RETRY_AFTER_SECONDS = 60
 
   belongs_to :user, foreign_key: "followed_id", optional: true
   belongs_to :source_product, class_name: "Link", optional: true
@@ -109,6 +111,17 @@ class Follower < ApplicationRecord
   def self.unsubscribe(creator_id, email)
     follower = where(email:, followed_id: creator_id).last
     follower&.mark_deleted!
+  end
+
+  # For a request that opts someone out of a follow. A post handoff holds each follow it sends to until the
+  # provider answers (PostFollowerHandoff), so the request waits at most this long, then raises LockWaitTimeout
+  # with the follow unchanged and the caller asks for a retry.
+  def self.with_opt_out_lock_wait
+    previous = connection.select_value("SELECT @@SESSION.innodb_lock_wait_timeout")
+    connection.execute("SET SESSION innodb_lock_wait_timeout = #{OPT_OUT_LOCK_WAIT_SECONDS}")
+    yield
+  ensure
+    connection.execute("SET SESSION innodb_lock_wait_timeout = #{previous.to_i}") if previous.present?
   end
 
   def send_confirmation_email

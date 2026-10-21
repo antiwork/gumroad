@@ -159,14 +159,16 @@ class FollowersController < ApplicationController
   def destroy
     authorize [:audience, @follower]
 
-    @follower.mark_deleted!
+    Follower.with_opt_out_lock_wait { @follower.mark_deleted! }
 
     redirect_to followers_path, notice: "Follower removed!", status: :see_other
+  rescue ActiveRecord::LockWaitTimeout
+    retry_opt_out_later
   end
 
   def cancel
     follower_id = @follower.external_id
-    @follower.mark_deleted!
+    Follower.with_opt_out_lock_wait { @follower.mark_deleted! }
     respond_to do |format|
       format.html { render inertia: "Followers/Cancel" }
       format.json do
@@ -176,6 +178,8 @@ class FollowersController < ApplicationController
         }
       end
     end
+  rescue ActiveRecord::LockWaitTimeout
+    retry_opt_out_later
   end
 
   private
@@ -244,6 +248,12 @@ class FollowersController < ApplicationController
         logged_in_user:,
         source:
       )
+    end
+
+    # Nothing was written, so the person can simply try again.
+    def retry_opt_out_later
+      response.headers["Retry-After"] = Follower::OPT_OUT_RETRY_AFTER_SECONDS.to_s
+      head :service_unavailable
     end
 
     def fetch_follower
