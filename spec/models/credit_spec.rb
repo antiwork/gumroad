@@ -61,7 +61,8 @@ describe Credit do
     end
 
     it "emails the seller for a positive credit, whichever surface created it" do
-      mailer = double(deliver_later: true)
+      mailer = double
+      expect(mailer).to receive(:deliver_later).with(queue: "critical").once
       expect(ContactingCreatorMailer).to receive(:credit_notification)
         .with(user.id, 1000, "Goodwill for reported checkout bug")
         .and_return(mailer).once
@@ -82,7 +83,8 @@ describe Credit do
 
     it "sends the credit notification including the reason" do
       credit = Credit.create_for_credit!(user:, amount_cents: 1000, crediting_user: User.first, reason: "Goodwill for reported checkout bug")
-      mailer = double(deliver_later: true)
+      mailer = double
+      expect(mailer).to receive(:deliver_later).with(queue: "critical").once
       expect(ContactingCreatorMailer).to receive(:credit_notification).with(user.id, 1000, "Goodwill for reported checkout bug").and_return(mailer)
       credit.notify_user
     end
