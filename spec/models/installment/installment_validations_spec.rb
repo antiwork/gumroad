@@ -57,6 +57,27 @@ describe "InstallmentValidations" do
           expect(@installment.errors.full_messages).to eq []
         end
       end
+
+      context "when seller has email_sending_override" do
+        it "returns true with no errors despite having less than $100 sales" do
+          @seller.update!(email_sending_override: true)
+          installment = build(:installment, seller: @seller)
+          allow(installment).to receive(:audience_members_count).and_return(Installment::SENDING_LIMIT + 1)
+
+          expect(installment).to be_valid
+          expect(installment.errors.full_messages).to eq []
+        end
+
+        it "returns minimum sales error when the seller is flagged" do
+          @seller.update!(email_sending_override: true)
+          @seller.flag_for_fraud(author_id: create(:admin_user).id)
+          installment = build(:installment, seller: @seller)
+          allow(installment).to receive(:audience_members_count).and_return(Installment::SENDING_LIMIT + 1)
+
+          expect(installment.valid?).to eq false
+          expect(installment.errors.full_messages.to_sentence).to include("you cannot send out more than 2 emails")
+        end
+      end
     end
   end
 

@@ -1479,10 +1479,14 @@ class User < ApplicationRecord
     has_completed_payouts?
   end
 
+  def email_sending_override_active?
+    email_sending_override && !flagged?
+  end
+
   def eligible_to_send_emails?
     return true if is_team_member?
     return false if suspended?
-    return true if email_sending_override && !flagged?
+    return true if email_sending_override_active?
     return false if sales_cents_total < Installment::MINIMUM_SALES_CENTS_VALUE
 
     # Verified creators are trusted enough to email their audience even before
