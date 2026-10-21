@@ -33,7 +33,7 @@ describe SentPostEmail do
     # production's table either runs past max_execution_time. Only the address's own entries may be read.
     it "reads only the address's entries in the email index" do
       subject_rows = create_list(:sent_post_email, 2, email: "buyer@example.com")
-      described_class.insert_all!((1..50).map { attributes_for(:sent_post_email, post_id: _1) })
+      described_class.insert_all!((1..50).map { attributes_for(:sent_post_email, post_id: _1, email: "recipient#{_1}@example.com") })
       handler_reads = -> { described_class.connection.select_rows("SHOW SESSION STATUS LIKE 'Handler_read%'").sum { _2.to_i } }
       sql = nil
       capture = ->(*, payload) { sql = payload[:sql] if payload[:sql].include?("sent_post_emails") }
