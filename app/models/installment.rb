@@ -1227,9 +1227,11 @@ class Installment < ApplicationRecord
       args = { post: self, recipients: [recipient], cache: }
       admission = FeatureAnnouncementNewsletterCutover.handoff_admission_for(self)
       args[:handoff_admission] = admission if admission
+      # A follow that ended after the worker checked it is withheld at the handoff, which isn't a send either.
+      args[:on_withheld] = ->(_) { SentPostEmail.where(post_id: id, email: recipient[:email]).delete_all } if recipient[:follower]
       PostEmailApi.process(**args)
       Rails.cache.write(cache_key, cache)
-    rescue FeatureAnnouncementNewsletterCutover::Retired, FeatureAnnouncementNewsletterCutover::AdmissionTimeout
+    rescue FeatureAnnouncementNewsletterCutover::Retired, FeatureAnnouncementNewsletterCutover::AdmissionTimeout, PostFollowerHandoff::LockUnavailable
       # Refused or timed out before the provider saw it, so the claim SentPostEmail.ensure_uniqueness committed
       # isn't a send.
       SentPostEmail.where(post_id: id, email: recipient[:email]).delete_all

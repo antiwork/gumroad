@@ -9,7 +9,7 @@ class PostResendApi
 
   def self.process(**args) = new(**args).send_emails
 
-  def initialize(post:, recipients:, cache: {}, blast: nil, preview: false, after_provider_delivery: nil, handoff_admission: nil)
+  def initialize(post:, recipients:, cache: {}, blast: nil, preview: false, after_provider_delivery: nil, handoff_admission: nil, on_withheld: nil)
     @post = post
     @recipients = recipients
     @cache = cache
@@ -17,6 +17,7 @@ class PostResendApi
     @preview = preview
     @after_provider_delivery = after_provider_delivery
     @handoff_admission = handoff_admission
+    @on_withheld = on_withheld
 
     @cache[@post] ||= {}
   end
@@ -27,9 +28,13 @@ class PostResendApi
     validate_recipients!
     fetch_rendered_template
 
-    emails = build_emails
-    # Only the provider call runs inside the admission; the records below commit apart from it.
-    admit_handoff do
+    built_emails = build_emails
+    email_by_recipient = {}.compare_by_identity
+    @recipients.each_with_index { email_by_recipient[_1] = built_emails[_2] }
+    # Only the provider call runs inside the handoff; the records below commit apart from it and count only
+    # the recipients it handed over.
+    @recipients = PostFollowerHandoff.hold(post: @post, recipients: @recipients, admission: @handoff_admission, on_withheld: @on_withheld) do |recipients|
+      emails = recipients.map { email_by_recipient.fetch(_1) }
       if Rails.application.config.action_mailer.perform_deliveries != false && !Rails.env.test?
         Resend.api_key = GlobalConfig.get("RESEND_CREATORS_API_KEY")
         duration = Benchmark.realtime do
@@ -46,14 +51,15 @@ class PostResendApi
         end
 
         Rails.logger.info(
-          "[#{self.class.name}] Sent post #{@post.id} to #{@recipients.size} recipients" \
+          "[#{self.class.name}] Sent post #{@post.id} to #{recipients.size} recipients" \
           " (duration: #{duration.round(3)}s)")
       else
         Rails.logger.info(
-          "[#{self.class.name}] Would have sent post #{@post.id} to #{@recipients.size} recipients" \
+          "[#{self.class.name}] Would have sent post #{@post.id} to #{recipients.size} recipients" \
           " (perform_deliveries = false)")
       end
     end
+    return true if @recipients.empty?
 
     @after_provider_delivery&.call
 
@@ -74,8 +80,6 @@ class PostResendApi
   end
 
   private
-    def admit_handoff(&) = @handoff_admission ? @handoff_admission.call(&) : yield
-
     def build_emails
       @recipients.map do |recipient|
         email = build_email_for_recipient(recipient)

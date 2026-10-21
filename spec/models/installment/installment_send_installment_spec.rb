@@ -450,7 +450,8 @@ describe "InstallmentSendInstallment"  do
       expect(PostSendgridApi).to have_received(:process).with(
         post: @installment,
         recipients: [{ email: @follower.email, follower: @follower, url_redirect: UrlRedirect.last! }],
-        cache: {}
+        cache: {},
+        on_withheld: anything
       )
     end
 

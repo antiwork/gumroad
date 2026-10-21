@@ -112,12 +112,17 @@ module PostBlastSending
     end
 
     recipients = prepare_recipients(kept)
+    withheld_emails = Set.new
     begin
-      deliver_provider_slice(provider: provider, recipients: recipients, cache: cache)
+      deliver_provider_slice(provider: provider, recipients: recipients, cache: cache, on_withheld: ->(withheld) { withheld_emails.merge(withheld.pluck(:email)) })
     rescue FeatureAnnouncementNewsletterCutover::Retired
       stop_for_retired_newsletter!
       return
     end
+    # A follower whose follow ended after the audience load was withheld at the handoff: no sent row, and
+    # settled like anyone else who left the audience.
+    withheld, kept = kept.partition { withheld_emails.include?(_1.email) }
+    dropped += withheld
     if @blast.to_non_openers?
       mark_members_sent_in_this_blast(kept)
     else
@@ -126,8 +131,8 @@ module PostBlastSending
     settle_pending_recipients(dropped, owed)
   end
 
-  def deliver_provider_slice(provider:, recipients:, cache:)
-    args = { post: @post, recipients:, cache:, blast: @blast }
+  def deliver_provider_slice(provider:, recipients:, cache:, on_withheld:)
+    args = { post: @post, recipients:, cache:, blast: @blast, on_withheld: }
     admission = FeatureAnnouncementNewsletterCutover.handoff_admission_for(@post)
     args[:handoff_admission] = admission if admission
     case provider
@@ -333,6 +338,9 @@ module PostBlastSending
 
     kept, dropped = members.partition do |member|
       details = details_by_member_id[member.id]&.details || {}
+      # Rendered as a follower only while the follow still backs the row: the handoff withholds a follower
+      # recipient whose follow ended, and this member may still be reachable as a buyer or affiliate.
+      member.follower_id = nil if member.follower_id && details.dig("follower", "id") != member.follower_id
       if (purchase_id = qualifying_purchase_ids[member.id])
         member.purchase_id = purchase_id
         true
