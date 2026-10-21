@@ -270,10 +270,11 @@ describe Purchase::Risk do
     describe "risk_block log" do
       let(:log) { StringIO.new }
 
-      # Captures every line at production's default :info level, so a raw value logged at any
-      # level shows up; debug-level SQL, which carries the raw values, stays out.
+      # Captures info and above, production's default level, so a raw value logged there shows up;
+      # debug-level SQL, which carries the raw values, stays out. The severity prefix pins WARN.
       around do |example|
         capture = ActiveSupport::Logger.new(log, level: :info)
+        capture.formatter = ->(severity, _time, _progname, message) { "#{severity} #{message}\n" }
         Rails.logger.broadcast_to(capture)
         example.run
       ensure
@@ -283,7 +284,7 @@ describe Purchase::Risk do
       def risk_block_lines = log.string.lines.grep(/risk_block/).map(&:chomp)
 
       def risk_block_line(object_type, value)
-        "risk_block object_type=#{object_type} sha=#{Digest::SHA256.hexdigest(value)[0, 12]} seller_id=#{@product.user_id}"
+        "WARN risk_block object_type=#{object_type} sha=#{Digest::SHA256.hexdigest(value)[0, 12]} seller_id=#{@product.user_id}"
       end
 
       it "logs one hashed line when a browser_guid block refuses the purchase" do
