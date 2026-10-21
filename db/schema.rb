@@ -1473,6 +1473,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_19_000001) do
     t.string "code_challenge"
     t.string "code_challenge_method"
     t.string "resource"
+    t.index ["application_id", "revoked_at"], name: "index_oauth_access_grants_on_application_id_and_revoked_at"
     t.index ["created_at"], name: "index_oauth_access_grants_on_created_at"
     t.index ["resource_owner_id", "application_id"], name: "idx_on_resource_owner_id_application_id_1b7397c458"
     t.index ["token"], name: "index_oauth_access_grants_on_token", unique: true
@@ -1488,6 +1489,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_19_000001) do
     t.datetime "created_at", precision: nil, null: false
     t.string "scopes"
     t.string "resource"
+    t.index ["application_id", "revoked_at"], name: "index_oauth_access_tokens_on_application_id_and_revoked_at"
     t.index ["refresh_token"], name: "index_oauth_access_tokens_on_refresh_token", unique: true
     t.index ["resource_owner_id"], name: "index_oauth_access_tokens_on_resource_owner_id"
     t.index ["token"], name: "index_oauth_access_tokens_on_token", unique: true

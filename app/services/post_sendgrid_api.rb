@@ -15,7 +15,7 @@ class PostSendgridApi
   # `recipients` keys:
   # required => :email (string)
   # optional => :purchase, :subscription, :follower, :affiliate, :url_redirect (records)
-  def initialize(post:, recipients:, cache: {}, blast: nil, preview: false, after_provider_delivery: nil, handoff_admission: nil)
+  def initialize(post:, recipients:, cache: {}, blast: nil, preview: false, after_provider_delivery: nil, handoff_admission: nil, on_withheld: nil)
     @post = post
     @recipients = recipients
     @cache = cache
@@ -23,15 +23,21 @@ class PostSendgridApi
     @preview = preview
     @after_provider_delivery = after_provider_delivery
     @handoff_admission = handoff_admission
+    @on_withheld = on_withheld
 
     @cache[@post] ||= {}
   end
 
   def send_emails
-    mail_json = build_mail
+    built_mail_json = build_mail
+    # build_mail adds one personalization per recipient, in order.
+    personalization_by_recipient = {}.compare_by_identity
+    @recipients.each_with_index { personalization_by_recipient[_1] = built_mail_json["personalizations"][_2] }
 
-    # Only the provider call runs inside the admission; the records below commit apart from it.
-    admit_handoff do
+    # Only the provider call runs inside the handoff; the records below commit apart from it and count only
+    # the recipients it handed over.
+    @recipients = PostFollowerHandoff.hold(post: @post, recipients: @recipients, admission: @handoff_admission, on_withheld: @on_withheld) do |recipients|
+      mail_json = built_mail_json.merge("personalizations" => recipients.map { personalization_by_recipient.fetch(_1) })
       if Rails.application.config.action_mailer.perform_deliveries != false && !Rails.env.test?
         sendgrid = SendGrid::API.new(api_key: GlobalConfig.get("SENDGRID_GR_CREATORS_API_KEY"))
         result = nil
@@ -41,15 +47,16 @@ class PostSendgridApi
           end
         end
         Rails.logger.info(
-          "[#{self.class.name}] Sent post #{@post.id} to #{@recipients.size} recipients" \
+          "[#{self.class.name}] Sent post #{@post.id} to #{recipients.size} recipients" \
           " (duration: #{duration.round(3)}s, status: #{result.status_code})")
         raise SendGridApiResponseError.new(result.body) unless (200..299).include?(result.status_code.to_i)
       else
         Rails.logger.info(
-          "[#{self.class.name}] Would have sent post #{@post.id} to #{@recipients.size} recipients" \
+          "[#{self.class.name}] Would have sent post #{@post.id} to #{recipients.size} recipients" \
           " (perform_deliveries = false)")
       end
     end
+    return true if @recipients.empty?
 
     @after_provider_delivery&.call
 
@@ -100,8 +107,6 @@ class PostSendgridApi
   end
 
   private
-    def admit_handoff(&) = @handoff_admission ? @handoff_admission.call(&) : yield
-
     def fetch_rendered_template
       @cache[@post][:assigns] ||= {
         has_post_url: @post.shown_on_profile?,

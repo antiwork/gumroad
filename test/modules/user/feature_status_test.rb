@@ -41,6 +41,52 @@ class User::FeatureStatusTest < ActiveSupport::TestCase
     assert_equal true, creator.merchant_migration_enabled?
   end
 
+  test "#merchant_migration_enabled? routes a business by its legal entity country once the flag is on for the seller" do
+    seller = create_user
+    create_user_compliance_info(user: seller, is_business: true, country: "French Polynesia", business_country: "United States")
+    create_merchant_account_stripe_connect(user: seller)
+    Feature.activate_user(:merchant_migration, seller)
+
+    assert_equal false, seller.merchant_migration_enabled?
+    assert_equal false, seller.has_stripe_account_connected?
+
+    Feature.activate_user(User::FeatureStatus::LEGAL_ENTITY_COUNTRY_ROUTING_FEATURE, seller)
+    assert_equal true, seller.merchant_migration_enabled?
+    assert_equal true, seller.has_stripe_account_connected?
+  end
+
+  test "#merchant_migration_enabled? stops routing a business whose legal entity country is unsupported once the flag is on" do
+    seller = create_user
+    create_user_compliance_info(user: seller, is_business: true, country: "France", business_country: "India")
+    Feature.activate_user(:merchant_migration, seller)
+
+    assert_equal true, seller.merchant_migration_enabled?
+
+    Feature.activate_user(User::FeatureStatus::LEGAL_ENTITY_COUNTRY_ROUTING_FEATURE, seller)
+    assert_equal false, seller.merchant_migration_enabled?
+  end
+
+  test "#merchant_migration_enabled? applies the flag per seller and keeps the residence rule for an individual" do
+    individual = create_user
+    create_user_compliance_info(user: individual, country: "French Polynesia")
+    Feature.activate_user(:merchant_migration, individual)
+    Feature.activate_user(User::FeatureStatus::LEGAL_ENTITY_COUNTRY_ROUTING_FEATURE, individual)
+
+    assert_equal false, individual.merchant_migration_enabled?
+
+    flagged_business = create_user
+    create_user_compliance_info(user: flagged_business, is_business: true, country: "French Polynesia", business_country: "United States")
+    Feature.activate_user(:merchant_migration, flagged_business)
+    Feature.activate_user(User::FeatureStatus::LEGAL_ENTITY_COUNTRY_ROUTING_FEATURE, flagged_business)
+
+    unflagged_business = create_user
+    create_user_compliance_info(user: unflagged_business, is_business: true, country: "French Polynesia", business_country: "United States")
+    Feature.activate_user(:merchant_migration, unflagged_business)
+
+    assert_equal true, flagged_business.merchant_migration_enabled?
+    assert_equal false, unflagged_business.merchant_migration_enabled?
+  end
+
   # --- #charge_paypal_payout_fee? ---------------------------------------------
 
   test "#charge_paypal_payout_fee? is true when the feature is on, the user is not from Brazil or India, and the fee applies" do
@@ -116,6 +162,41 @@ class User::FeatureStatusTest < ActiveSupport::TestCase
     assert_equal true, creator.reload.merchant_migration_enabled?
     assert_nil creator.stripe_connect_account
     assert_equal false, creator.has_stripe_account_connected?
+  end
+
+  # --- #stripe_connect_blocks_managed_account? --------------------------------
+
+  test "#stripe_connect_blocks_managed_account? is false without a Connect row" do
+    creator = create_user
+    create_user_compliance_info(user: creator)
+
+    assert_equal false, creator.stripe_connect_blocks_managed_account?
+  end
+
+  test "#stripe_connect_blocks_managed_account? is true for a Connect row that routes charges, with or without the flag" do
+    creator = create_user(check_merchant_account_is_linked: true)
+    create_user_compliance_info(user: creator)
+    create_merchant_account_stripe_connect(user: creator)
+
+    assert_equal true, creator.reload.stripe_connect_blocks_managed_account?
+
+    Feature.activate_user(User::FeatureStatus::MANAGED_ACCOUNT_BESIDE_INACTIVE_CONNECT_FEATURE, creator)
+    assert_equal true, creator.stripe_connect_blocks_managed_account?
+  end
+
+  test "#stripe_connect_blocks_managed_account? is false for a Connect row that does not route charges once the flag is on for the seller" do
+    creator = create_user
+    create_user_compliance_info(user: creator)
+    create_merchant_account_stripe_connect(user: creator)
+
+    assert_equal false, creator.reload.has_stripe_account_connected?
+    assert_equal true, creator.stripe_connect_blocks_managed_account?
+
+    Feature.activate_user(User::FeatureStatus::MANAGED_ACCOUNT_BESIDE_INACTIVE_CONNECT_FEATURE, create_user)
+    assert_equal true, creator.stripe_connect_blocks_managed_account?
+
+    Feature.activate_user(User::FeatureStatus::MANAGED_ACCOUNT_BESIDE_INACTIVE_CONNECT_FEATURE, creator)
+    assert_equal false, creator.stripe_connect_blocks_managed_account?
   end
 
   # --- #has_paypal_account_connected? -----------------------------------------

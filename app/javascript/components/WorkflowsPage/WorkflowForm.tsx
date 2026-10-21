@@ -1,4 +1,4 @@
-import { Link, useForm } from "@inertiajs/react";
+import { Link, useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
 
 import {
@@ -10,10 +10,12 @@ import {
   ProductOption,
   VariantOption,
 } from "$app/types/workflow";
+import { cast } from "$app/utils/cast";
 
 import { Button } from "$app/components/Button";
 import { NumberInput } from "$app/components/NumberInput";
 import { TagInput } from "$app/components/TagInput";
+import { Alert } from "$app/components/ui/Alert";
 import { Checkbox } from "$app/components/ui/Checkbox";
 import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { FormSection } from "$app/components/ui/FormSection";
@@ -131,6 +133,12 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
     };
   });
   const form = useForm({});
+  // The controller answers a failed save with a redirect carrying `inertia: { errors: { base: [...] } }`,
+  // i.e. the message arrives as a *page prop* on the re-rendered form, not as a 422 JSON body. Reading
+  // the prop spells that out rather than depending on `useForm` syncing the flashed errors into
+  // `form.errors`. `base` is a one-element array from this controller; a bare string is accepted too.
+  const baseErrors = cast<{ base?: string | string[] } | undefined>(usePage().props.errors)?.base;
+  const baseError = Array.isArray(baseErrors) ? baseErrors[0] : baseErrors;
   const [invalidFields, setInvalidFields] = React.useState<Set<keyof WorkflowFormState>>(() => new Set());
   const nameInputRef = React.useRef<HTMLInputElement>(null);
   const paidMoreThanInputRef = React.useRef<HTMLInputElement>(null);
@@ -262,7 +270,7 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
 
     if (workflow) {
       form.patch(Routes.workflow_path(workflow.external_id), {
-        only: ["workflow", "flash"],
+        only: ["workflow", "flash", "errors"],
       });
     } else {
       form.post(Routes.workflows_path());
@@ -325,6 +333,13 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
       }
     >
       <form className="space-y-4">
+        {/* FormSection's insets keep the banner off the header and page edges; mb-0 cancels the form's
+            space-y gap so the space below matches the other three sides. */}
+        {baseError ? (
+          <div className="mb-0 p-4! md:p-8!">
+            <Alert variant="danger">{baseError}</Alert>
+          </div>
+        ) : null}
         <FormSection
           header={<>Workflows allow you to send scheduled emails to a subset of your audience based on a trigger.</>}
         >

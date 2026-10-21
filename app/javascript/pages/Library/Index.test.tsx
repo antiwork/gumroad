@@ -68,6 +68,7 @@ const defaultProps = (): {
     label: string;
     download_url: string | null;
     zip_unavailable_reason: "too_large" | "failed" | null;
+    omits_granted_files: boolean;
   }[];
   archived_count: number;
   unarchived_count: number;
@@ -315,7 +316,13 @@ describe("LibraryPage", () => {
   it("renders a bundle Download all link when the selected bundle archive is ready", () => {
     const props = defaultProps();
     props.bundle_downloads = [
-      { id: "b1", label: "Bundle One", download_url: "/d/bundle-token/download_archive", zip_unavailable_reason: null },
+      {
+        id: "b1",
+        label: "Bundle One",
+        download_url: "/d/bundle-token/download_archive",
+        zip_unavailable_reason: null,
+        omits_granted_files: false,
+      },
     ];
     renderPage(props);
 
@@ -328,7 +335,9 @@ describe("LibraryPage", () => {
 
   it("shows the bundle ZIP preparation state while the archive is being generated", () => {
     const props = defaultProps();
-    props.bundle_downloads = [{ id: "b1", label: "Bundle One", download_url: null, zip_unavailable_reason: null }];
+    props.bundle_downloads = [
+      { id: "b1", label: "Bundle One", download_url: null, zip_unavailable_reason: null, omits_granted_files: false },
+    ];
     renderPage(props);
 
     const button = screen.getByRole("button", { name: /Preparing ZIP/u });
@@ -339,7 +348,13 @@ describe("LibraryPage", () => {
   it("explains a ZIP that is too large instead of dropping the block or promising a ZIP", () => {
     const props = defaultProps();
     props.bundle_downloads = [
-      { id: "b1", label: "Bundle One", download_url: null, zip_unavailable_reason: "too_large" },
+      {
+        id: "b1",
+        label: "Bundle One",
+        download_url: null,
+        zip_unavailable_reason: "too_large",
+        omits_granted_files: false,
+      },
     ];
     renderPage(props);
 
@@ -350,11 +365,39 @@ describe("LibraryPage", () => {
 
   it("explains a ZIP that could not be prepared", () => {
     const props = defaultProps();
-    props.bundle_downloads = [{ id: "b1", label: "Bundle One", download_url: null, zip_unavailable_reason: "failed" }];
+    props.bundle_downloads = [
+      {
+        id: "b1",
+        label: "Bundle One",
+        download_url: null,
+        zip_unavailable_reason: "failed",
+        omits_granted_files: false,
+      },
+    ];
     renderPage(props);
 
     expect(screen.getByText(/We could not prepare a ZIP file for/u)).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Preparing ZIP/u })).toBeNull();
+  });
+
+  it("keeps the Download all link and says some files are only on the products", () => {
+    const props = defaultProps();
+    props.bundle_downloads = [
+      {
+        id: "b1",
+        label: "Bundle One",
+        download_url: "/d/bundle-token/download_archive",
+        zip_unavailable_reason: null,
+        omits_granted_files: true,
+      },
+    ];
+    renderPage(props);
+
+    expect(screen.getByText(/Some files are only available from the products below/u)).toBeTruthy();
+    expect(screen.queryByText(/Download everything included in/u)).toBeNull();
+    expect(screen.getByRole("link", { name: /Download all/u }).getAttribute("href")).toBe(
+      "/d/bundle-token/download_archive",
+    );
   });
 });
 
@@ -383,20 +426,6 @@ describe("Subscriptions tab", () => {
     expect(screen.queryByText(/renew/iu)).toBeNull();
   });
 
-  it("says every subscription is archived instead of claiming there are none", () => {
-    const props = subscriptionsProps();
-    props.results = [];
-    props.pagination = emptyPagination;
-    props.archived_count = 2;
-    props.unarchived_count = 0;
-    renderPage(props);
-
-    expect(screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent)).toEqual([
-      "You've archived all your subscriptions.",
-    ]);
-    expect(screen.getByRole("button", { name: "See archive" })).toBeTruthy();
-  });
-
   it("keeps a search with no matches distinct from having no subscriptions", () => {
     const props = subscriptionsProps();
     props.results = [];
@@ -411,32 +440,72 @@ describe("Subscriptions tab", () => {
     expect(screen.queryAllByRole("heading", { level: 2 })).toEqual([]);
   });
 
-  it("counts archived subscriptions, not archived purchases, in the archive banner", () => {
+  const subscriptionResult = (id: string, name: string, status_label: string): Result => {
+    const card = result(id, name);
+    card.purchase.subscription = {
+      status_label,
+      manage_label: "Manage membership",
+      manage_url: `/subscriptions/${id}/manage`,
+    };
+    return card;
+  };
+
+  it("shows each subscription's status and a Manage link instead of the Library archive and remove menu", () => {
     const props = subscriptionsProps();
-    props.archived_count = 1;
+    props.results = [
+      subscriptionResult("p1", "Alpha", "Renews on Nov 20, 2026"),
+      subscriptionResult("p2", "Beta", "Installment plan · 1 of 3 paid · Next payment on Nov 20, 2026"),
+    ];
     renderPage(props);
 
-    expect(screen.getByRole("status").textContent).toContain("You have 1 archived subscription.");
+    expect(screen.getByText("Renews on Nov 20, 2026")).toBeTruthy();
+    expect(screen.getByText("Installment plan · 1 of 3 paid · Next payment on Nov 20, 2026")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Manage membership for Alpha" }).getAttribute("href")).toBe(
+      "/subscriptions/p1/manage",
+    );
+    expect(screen.getByRole("link", { name: "Manage membership for Beta" }).getAttribute("href")).toBe(
+      "/subscriptions/p2/manage",
+    );
+    expect(screen.queryByRole("button", { name: "Open product action menu" })).toBeNull();
   });
 
-  it("returns to the Subscriptions tab after unarchiving its last archived subscription", async () => {
+  it("keeps Manage reachable for a subscription card without a download page", () => {
     const props = subscriptionsProps();
-    const archived = result("p1", "Alpha");
-    archived.purchase.is_archived = true;
-    props.results = [archived];
-    props.pagination = { page: 1, pages: 1, from: 1, to: 1, count: 1 };
-    props.archived_count = 1;
-    props.unarchived_count = 2;
-    props.search.show_archived_only = true;
+    const card = subscriptionResult("p1", "Alpha", "Cancelled · Access until Nov 20, 2026");
+    card.purchase.download_url = null;
+    props.results = [card];
     renderPage(props);
 
-    fireEvent.click(screen.getByRole("button", { name: "Open product action menu" }));
-    await act(async () => {
-      fireEvent.click(screen.getByText("Unarchive"));
-      await Promise.resolve();
-    });
+    expect(screen.queryByRole("link", { name: "Alpha" })).toBeNull();
+    expect(screen.getByRole("link", { name: "Manage membership for Alpha" }).getAttribute("href")).toBe(
+      "/subscriptions/p1/manage",
+    );
+  });
 
-    expect(lastGetParams()).toEqual({ sort: "recently_updated", subscriptions_only: "true" });
+  it("offers no Manage link or Library menu for a subscription that can no longer be managed", () => {
+    const props = subscriptionsProps();
+    const card = subscriptionResult("p1", "Alpha", "Installment plan · Paid in full");
+    card.purchase.subscription = {
+      status_label: "Installment plan · Paid in full",
+      manage_label: "Manage installment plan",
+      manage_url: null,
+    };
+    props.results = [card];
+    renderPage(props);
+
+    expect(screen.getByText("Installment plan · Paid in full")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Alpha" }).getAttribute("href")).toBe("https://example.com/d/p1");
+    expect(screen.queryByText(/^Manage /u)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Open product action menu" })).toBeNull();
+    // No empty, bordered action cell beside the creator byline.
+    expect(screen.getByText("Alpha creator").closest("footer")?.children).toHaveLength(1);
+  });
+
+  it("keeps the archive and remove menu on Purchases cards", () => {
+    renderPage();
+
+    expect(screen.getAllByRole("button", { name: "Open product action menu" })).toHaveLength(2);
+    expect(screen.queryByRole("link", { name: /^Manage (membership|installment plan) for /u })).toBeNull();
   });
 });
 

@@ -548,6 +548,26 @@ describe OrdersController, :vcr do
             expect(Order.last.purchases.count).to eq(2)
             expect(Order.last.purchases.to_a).to eq(Purchase.failed.last(2))
           end
+
+          # The cart is decided while the paid line is still being charged, so a decline afterwards
+          # leaves every line failed with no cart to go back to.
+          it "does not offer a refused new-customer code's way back once a declined sibling cleared the cart" do
+            create(:offer_code, :for_new_customers, user: seller_1, products: [product_1], code: "firstorder", amount_cents: nil, amount_percentage: 100)
+            create(:purchase, link: product_2, purchaser: nil, email: "repeat.buyer@example.com")
+            cart = create(:cart, user: nil, browser_guid: cookies[:_gumroad_guid])
+            line_items = [
+              { uid: "unique-id-0", permalink: product_1.unique_permalink, perceived_price_cents: 0, quantity: 1, discount_code: "firstorder" },
+              { uid: "unique-id-1", permalink: product_2.unique_permalink, perceived_price_cents: product_2.price_cents, quantity: 1 },
+            ]
+
+            post :create, params: { line_items: }.merge(common_purchase_params).merge(email: "repeat.buyer@example.com")
+
+            responses = response.parsed_body["line_items"]
+            expect(responses.values.map { _1["success"] }).to eq([false, false])
+            expect(responses["unique-id-0"]).to include("new_customer_offer_code_refused" => true)
+            expect(responses["unique-id-0"]).not_to have_key("cart_retained")
+            expect(cart.reload).to be_deleted
+          end
         end
 
         context "when some purchases fail and some succeed" do

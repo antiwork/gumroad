@@ -238,7 +238,8 @@ describe SendWorkflowInstallmentWorker do
       expect(PostSendgridApi).to have_received(:process).with(
         post: @installment,
         recipients: [{ email: @follower.email, follower: @follower, url_redirect: UrlRedirect.find_by(installment: @installment) }],
-        cache: {}
+        cache: {},
+        on_withheld: anything
       )
     end
 

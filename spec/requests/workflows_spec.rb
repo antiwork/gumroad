@@ -19,6 +19,22 @@ describe("Workflows", js: true, type: :system) do
     have_selector("[role=listitem] h4", text: name, exact_text: true)
   end
 
+  # Each gap between the form's inline alert and the form edges (top, left, right) or the first
+  # section's border (below), minus that section's own padding: 0 means the alert sits on the same insets.
+  def inline_alert_gaps_beyond_section_padding
+    page.evaluate_script(<<~JS)
+      (() => {
+        const form = document.querySelector("form");
+        const alert = form.querySelector("[role=alert]").getBoundingClientRect();
+        const section = form.querySelector("section");
+        const padding = parseFloat(getComputedStyle(section).paddingLeft);
+        const edges = form.getBoundingClientRect();
+        const gaps = [alert.top - edges.top, alert.left - edges.left, edges.right - alert.right, section.getBoundingClientRect().top - alert.bottom];
+        return gaps.map((gap) => Math.round(gap - padding));
+      })()
+    JS
+  end
+
   let(:seller) { create(:named_seller) }
 
   before do
@@ -759,6 +775,27 @@ describe("Workflows", js: true, type: :system) do
       expect(page).to have_text("Publish your first product")
     end
 
+    it "keeps a rejected create's error on the form and saves on retry" do
+      visit new_workflow_path
+      choose "Abandoned cart"
+      fill_in "Name", with: "Abandoned cart workflow"
+      select_combo_box_option @product.name, from: "Has products in abandoned cart"
+      allow_any_instance_of(User).to receive(:eligible_for_abandoned_cart_workflows?).and_return(false)
+      click_on "Save and continue"
+
+      within("form") { expect(page).to have_alert(text: "You must have at least one completed payout to create an abandoned cart workflow") }
+      expect(inline_alert_gaps_beyond_section_padding).to eq([0, 0, 0, 0])
+      expect(page).to have_field("Name", with: "Abandoned cart workflow")
+      expect(seller.workflows.count).to eq(0)
+
+      allow_any_instance_of(User).to receive(:eligible_for_abandoned_cart_workflows?).and_call_original
+      click_on "Save and continue"
+
+      expect(page).to have_alert(text: "Changes saved!")
+      expect(page).to have_current_path(workflow_emails_path(seller.workflows.sole.external_id))
+      expect(page).not_to have_alert(text: "You must have at least one completed payout to create an abandoned cart workflow")
+    end
+
     context "when the user isn't eligible for abandoned cart workflows" do
       before do
         allow_any_instance_of(User).to receive(:eligible_for_abandoned_cart_workflows?).and_return(false)
@@ -1309,7 +1346,10 @@ describe("Workflows", js: true, type: :system) do
       select_disclosure "Publish" do
         click_on "Publish now"
       end
-      expect(page).to have_alert(text: "You cannot publish a workflow until you have made at least $100 in total earnings and received a payout")
+      within("form") { expect(page).to have_alert(text: "You cannot publish a workflow until you have made at least $100 in total earnings and received a payout") }
+      expect(page).not_to have_button("Publish now")
+      expect(inline_alert_gaps_beyond_section_padding).to eq([0, 0, 0, 0])
+      expect(page).to have_field("Name", with: "My workflow (edited)")
       expect(workflow.reload.published_at).to be_nil
       expect(workflow.name).to eq("Product workflow")
     end

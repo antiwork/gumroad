@@ -19,6 +19,8 @@ module Muse
     TRANSPORT_ERROR_CODES = [HEADER_MISMATCH, UNSUPPORTED_PROTOCOL_VERSION].freeze
     # A caller only ever sees their own store, so no result of ours is shareable between callers.
     TOOLS_LIST_CACHE = { ttlMs: 0, cacheScope: "private" }.freeze
+    # Nothing in it is caller-specific, but its versions follow the flag, so it is never fresh.
+    DISCOVER_CACHE = { ttlMs: 0, cacheScope: "public" }.freeze
     INSTRUCTIONS = "Use these tools for a connected creator's own store: products, sales, and payouts. Confirm with the person before publishing or unpublishing. Buyers still check out on the product URL. This server does not take payment."
     SERVER_INFO = { name: "gumroad", title: "Gumroad", version: "1.0.0" }.freeze
 
@@ -34,6 +36,17 @@ module Muse
 
     class ToolError < StandardError; end
 
+    # A tool's scope check failed. `scope` is what the client should re-authorize with: the
+    # scopes the token already holds plus the missing one, so the step-up keeps the old grant.
+    class InsufficientScope < Error
+      attr_reader :scope
+
+      def initialize(message, scope:)
+        super(message)
+        @scope = scope
+      end
+    end
+
     def initialize(user:, token:, connector: nil, protocol_version_header: nil, method_header: nil, name_header: nil)
       @user = user
       @token = token
@@ -47,12 +60,18 @@ module Muse
     # The era the request resolved to, for callers that must pick a transport-level status.
     # A batch stays modern once any message in it declared that revision.
     attr_reader :era
+    # The scope failure of this request, if any, for the controller's RFC 6750 challenge. The
+    # JSON-RPC body keeps the plain -32000 error that legacy clients already handle.
+    attr_reader :insufficient_scope
 
     def handle(body)
       @protocol_counts = Hash.new(0)
       if body.is_a?(Array)
         return rpc_error(nil, "Invalid Request", code: -32600) if body.empty?
 
+        # A client retries the whole request after a step-up, which would repeat any message in
+        # the batch that already ran. A batch keeps its per-message errors and gets no challenge.
+        @batch = true
         return body.filter_map { |message| handle_message(message) }.presence
       end
 
@@ -139,15 +158,25 @@ module Muse
       end
 
       # Era is per request: an undeclared request is legacy and keeps its exact current path.
-      # `_meta` is the declaration and the header is checked against it. A legacy client sends no
-      # `_meta`, so a header alone stays legacy rather than becoming an era error.
+      # The 2026-07-28 schema declares the version in `params._meta`; a top-level `_meta`, which this
+      # endpoint read first, is still honoured. The header is checked against the declaration. A
+      # legacy client sends neither, so a header alone stays legacy rather than becoming an era error.
       def resolve_era!(body)
-        meta = body["_meta"]
-        declared = meta.is_a?(Hash) ? meta[VERSION_META_KEY].presence : nil
+        nested = declared_version(body["params"])
+        top_level = declared_version(body)
+        declared = nested || top_level
         # Counted before the checks below, so a client that has already moved to a revision we do
         # not serve yet still shows up in the mix.
         @protocol_counts[ProtocolTelemetry.bucket(declared, body["method"])] += 1
         return if declared.nil?
+
+        if nested && top_level && nested.to_s != top_level.to_s
+          raise Error.new(
+            "_meta #{VERSION_META_KEY} must not differ between params and the request",
+            code: HEADER_MISMATCH,
+            data: { declared: nested, top_level: top_level }
+          )
+        end
 
         header = @protocol_version_header.presence
         if header.nil? || declared.to_s != header.to_s
@@ -168,6 +197,11 @@ module Muse
         end
 
         @era = :modern if declared.to_s == MODERN_PROTOCOL_VERSION
+      end
+
+      def declared_version(container)
+        meta = container.is_a?(Hash) ? container["_meta"] : nil
+        meta.is_a?(Hash) ? meta[VERSION_META_KEY].presence : nil
       end
 
       # The modern lane ships behind a flag: with it off, 2026-07-28 is not supported yet.
@@ -230,7 +264,8 @@ module Muse
           supportedVersions: supported_versions,
           capabilities: { tools: { listChanged: false } },
           _meta: { SERVER_INFO_META_KEY => SERVER_INFO },
-          instructions: INSTRUCTIONS
+          instructions: INSTRUCTIONS,
+          **DISCOVER_CACHE
         }
       end
 
@@ -460,7 +495,21 @@ module Muse
         token_scopes = token.scopes
         return if scopes.any? { |scope| token_scopes.include?(scope.to_s) }
 
-        raise Error.new("This tool requires the #{scopes.to_sentence(last_word_connector: ' or ')} scope.")
+        message = "This tool requires the #{scopes.to_sentence(two_words_connector: ' or ', last_word_connector: ' or ')} scope."
+        missing = obtainable_scope(scopes)
+        # No challenge for a batch, or when the client registered none of the accepted scopes:
+        # either step-up would fail, and a plain error stops the client from retrying.
+        raise Error.new(message) if @batch || missing.nil?
+
+        @insufficient_scope = InsufficientScope.new(message, scope: (token_scopes.to_a + [missing]).join(" "))
+        raise @insufficient_scope
+      end
+
+      # A dynamic client may have registered only some of the scopes a tool accepts; naming one
+      # it never registered sends it into an invalid_scope error on re-authorization.
+      def obtainable_scope(scopes)
+        registered = token.application&.scopes.presence
+        scopes.map(&:to_s).find { |scope| registered.nil? || registered.include?(scope) }
       end
 
       def rpc_error(id, message, code:, data: nil)

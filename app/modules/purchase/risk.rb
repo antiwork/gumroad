@@ -5,6 +5,7 @@ module Purchase::Risk
   CHECK_FOR_FRAUD_TIMEOUT_SECONDS = 4
   CHARGEBACK_GRACE_PERIOD = 1.year
   CHARGEBACK_GRACE_LIMIT = 1
+  RISK_BLOCK_LOG_HASH_LENGTH = 12
 
   # The buyer-account columns #check_for_past_fraudulent_ips matches. Reporting paths read the same
   # list (Purchase.checkout_account_ips_by_email) so they cannot miss a column checkout enforces.
@@ -71,6 +72,7 @@ module Purchase::Risk
     def check_for_past_blocked_guids
       return unless past_blocked_object(browser_guid)
 
+      log_risk_block(:browser_guid, browser_guid)
       self.error_code = PurchaseErrorCode::BLOCKED_BROWSER_GUID
       # A browser block is usually written alongside a block on the buyer's email address
       # (#block_buyer! does both), so switching browser, network or payment method changes nothing.
@@ -159,13 +161,20 @@ module Purchase::Risk
       # The previous carve-out short-circuited on "any seller IP is blocked" and was gated on
       # compliant?, so it both skipped the buyer check outright and excluded every never-reviewed
       # seller — not_reviewed being the initial risk state (gumroad-private#1755).
-      return if (blocked_ip_addresses & buyer_side_ip_addresses).empty?
+      matched_ip_addresses = blocked_ip_addresses & buyer_side_ip_addresses
+      return if matched_ip_addresses.empty?
 
+      matched_ip_addresses.each { log_risk_block(:ip_address, _1) }
       self.error_code = PurchaseErrorCode::BLOCKED_IP_ADDRESS
       # The blocked address may be the buyer's account IP rather than the one this request came
       # from, and a browser switch never moves an IP at all, so the old "different browser and/or
       # internet connection" wording was advice that frequently could not work.
       errors.add :base, BLOCKED_IDENTIFIER_ERROR
+    end
+
+    # Hashed so a support lookup can match a value without raw identifiers landing in logs.
+    def log_risk_block(object_type, value)
+      Rails.logger.warn("risk_block object_type=#{object_type} sha=#{Digest::SHA256.hexdigest(value.to_s)[0, RISK_BLOCK_LOG_HASH_LENGTH]} seller_id=#{seller_id}")
     end
 
     def past_blocked_object(object)

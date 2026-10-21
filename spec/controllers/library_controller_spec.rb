@@ -43,7 +43,7 @@ describe LibraryController, :vcr, type: :controller, inertia: true do
           query: "Visible",
           creators: ["abc", "def"],
           bundles: [],
-          show_archived_only: true,
+          show_archived_only: false,
           subscriptions_only: true
         )
       end

@@ -13,7 +13,7 @@ class Checkout::OfferCodePolicy < ApplicationPolicy
   end
 
   def statistics?
-    index?
+    index? && record.user == seller
   end
 
   def create?

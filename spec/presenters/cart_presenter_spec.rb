@@ -167,6 +167,37 @@ describe CartPresenter do
       end
     end
 
+    context "when the seller's automatic code is a legacy new-customers-only code" do
+      let(:user) { nil }
+      let(:seller) { create(:user) }
+      let(:product) { create(:product, user: seller, price_cents: 3000) }
+      # Carts store only the code and fromUrl, so this is the row a cart saved while the code was automatic holds.
+      let(:cart) { create(:cart, user: nil, browser_guid:, discount_codes: [{ code: "WELCOME", fromUrl: true }]) }
+
+      before do
+        create(:universal_offer_code, user: seller, code: "WELCOME", amount_cents: nil, amount_percentage: 100, currency_type: nil, auto_apply: true)
+          .update_columns(new_customers_only: true)
+        Current.auto_apply_offer_codes = nil
+        create(:cart_product, cart:, product:)
+      end
+
+      it "returns a saved code as one the buyer can remove" do
+        expect(presenter.cart_props[:discountCodes].map { _1.slice(:code, :fromUrl, :automatic) }).to eq([{ code: "WELCOME", fromUrl: true }])
+      end
+
+      it "returns it as removable from a saved cart that also stored it as automatic" do
+        cart.update_column(:discount_codes, [{ code: "WELCOME", fromUrl: true, automatic: true }])
+
+        expect(presenter.cart_props[:discountCodes].map { _1.slice(:code, :fromUrl, :automatic) }).to eq([{ code: "WELCOME", fromUrl: true }])
+      end
+
+      it "doesn't add it to a cart that never had it" do
+        cart.update!(discount_codes: [])
+
+        expect(presenter.cart_props[:discountCodes]).to be_empty
+      end
+    end
+
     context "when the buyer can redeem a product's defaults" do
       let(:seller) { create(:user) }
       let(:product) { create(:product, user: seller, price_cents: 1000) }

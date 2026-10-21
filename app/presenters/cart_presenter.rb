@@ -81,7 +81,8 @@ class CartPresenter
       existing_customer_names = offer_codes.filter_map { OfferCode.normalize_code(_1.code) if _1.existing_customers_only? }
       defaults = offer_codes.filter_map { _1.code.presence }.uniq { OfferCode.normalize_code(_1) }
         .partition { !existing_customer_names.include?(OfferCode.normalize_code(_1)) }.flatten
-      stored = cart.discount_codes.index_by { OfferCode.normalize_code(_1["code"]) }
+      # Only a current default is automatic: a flag a saved row carries would pin a code the buyer can't remove.
+      stored = cart.discount_codes.map { _1.except("automatic") }.index_by { OfferCode.normalize_code(_1["code"]) }
 
       # A code the buyer typed stays theirs to remove, even when it is also a default.
       stored.except(*defaults.map { OfferCode.normalize_code(_1) }).values + defaults.map do |code|

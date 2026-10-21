@@ -342,6 +342,7 @@ class Link < ApplicationRecord
           SELECT 1 FROM offer_codes oc
           WHERE oc.id = links.default_offer_code_id
             AND oc.deleted_at IS NULL AND oc.code IS NOT NULL AND oc.code != ''
+            AND oc.new_customers_only = FALSE
         )
         OR EXISTS (
           SELECT 1 FROM offer_codes oc
@@ -1192,17 +1193,18 @@ class Link < ApplicationRecord
   # the seller's shop-wide auto-apply code only while buyers can still redeem it; a lapsed one
   # would otherwise hold this product at full price through the shop-wide sale.
   def effective_default_offer_code
-    explicit = default_offer_code
+    # Checkout pins a default where the buyer can't remove it, so a new-customer default would
+    # block every returning buyer; the repairs clear these, and nothing prices with one meanwhile.
+    explicit = default_offer_code unless default_offer_code&.new_customers_only?
     auto_code = user.auto_apply_offer_code_for(self)
     return explicit if auto_code.nil?
     return auto_code if explicit.nil?
 
     # In-memory checks only: scope detachment (default_offer_code_detached?) costs a query per
     # product on card pages, and OfferCode#repair_detached_default_discounts clears those defaults.
-    # An existing-customers-only or new-customers-only default cannot price the page for an unknown
-    # buyer, so the sale takes over here; BestOfferCodeService still weighs it against the sale for a
-    # buyer who qualifies.
-    redeemable = !explicit.deleted? && explicit.code.present? && !explicit.inactive? && !explicit.existing_customers_only? && !explicit.new_customers_only? &&
+    # An existing-customers-only default cannot price the page for an unknown buyer, so the sale
+    # takes over here; BestOfferCodeService still weighs it against the sale for a buyer who qualifies.
+    redeemable = !explicit.deleted? && explicit.code.present? && !explicit.inactive? && !explicit.existing_customers_only? &&
                  explicit.is_currency_valid?(self) && default_offer_code_uses_left?(explicit)
     redeemable ? explicit : auto_code
   end
@@ -1218,11 +1220,13 @@ class Link < ApplicationRecord
   # A default discount buyers can no longer redeem: the code was deleted,
   # carries no code (checkout resolves defaults by code, and legacy rows could
   # point at codeless upsell discounts), or stopped applying to this product.
-  # Checkout refuses such a discount while card surfaces still quote it.
+  # Checkout refuses such a discount while card surfaces still quote it. A new-customer code
+  # counts too: as a default it can't be removed at checkout, so returning buyers couldn't pay.
   def default_offer_code_detached?
     return false if default_offer_code_id.nil?
 
-    default_offer_code.nil? || default_offer_code.deleted? || default_offer_code.code.blank? || !default_offer_code.applicable?(self)
+    default_offer_code.nil? || default_offer_code.deleted? || default_offer_code.code.blank? || default_offer_code.new_customers_only? ||
+      !default_offer_code.applicable?(self)
   end
 
   def find_offer_code_by_external_id(external_id)
@@ -1238,9 +1242,14 @@ class Link < ApplicationRecord
   # Public: Find all alive offer codes associated with product and user in order of created at.
   #
   # Returns list of offer codes.
-  def product_and_universal_offer_codes(query = nil, limit = nil, reverse = false)
+  # Pass exclude_new_customers_only to drop those codes before the search and limit apply.
+  def product_and_universal_offer_codes(query = nil, limit = nil, reverse = false, exclude_new_customers_only: false)
     product_codes = offer_codes.alive
     universal_codes = universal_offer_codes
+    if exclude_new_customers_only
+      product_codes = product_codes.where(new_customers_only: false)
+      universal_codes = universal_codes.where(new_customers_only: false)
+    end
 
     if query.present?
       product_codes = product_codes.search_by_name(query, reverse:)
@@ -1932,6 +1941,9 @@ class Link < ApplicationRecord
         errors.add(:default_offer_code, "cannot be expired")
       elsif !default_offer_code.applicable?(self)
         errors.add(:default_offer_code, "must apply to this product")
+      elsif default_offer_code.new_customers_only?
+        # Checkout keeps a default on the cart with no way to remove it, so a returning buyer could not pay.
+        errors.add(:default_offer_code, "cannot be limited to new customers")
       end
     end
 

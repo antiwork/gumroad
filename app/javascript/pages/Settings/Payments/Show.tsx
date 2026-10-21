@@ -1651,7 +1651,7 @@ export default function PaymentsPage() {
                 bankAccountDetails={props.bank_account_details}
                 bankAccount={form.data.bank_account}
                 updateBankAccount={updateBankAccount}
-                hasConnectedStripe={props.stripe_connect.has_connected_stripe}
+                isBlockedByStripeConnect={props.stripe_connect.blocks_managed_account}
                 user={props.user}
                 isFormDisabled={props.is_form_disabled}
                 feeInfo={props.fee_info.merchant_account_fee_info}
@@ -1662,7 +1662,7 @@ export default function PaymentsPage() {
             ) : selectedPayoutMethod === "card" ? (
               <DebitCardSection
                 isFormDisabled={props.is_form_disabled}
-                hasConnectedStripe={props.stripe_connect.has_connected_stripe}
+                isBlockedByStripeConnect={props.stripe_connect.blocks_managed_account}
                 feeInfo={props.fee_info.merchant_account_fee_info}
                 savedCard={props.bank_account_details.card}
                 setDebitCard={setDebitCard}

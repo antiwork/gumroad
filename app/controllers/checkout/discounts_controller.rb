@@ -32,7 +32,7 @@ class Checkout::DiscountsController < Sellers::BaseController
   end
 
   def statistics
-    offer_code = OfferCode.find_by_external_id!(params[:id])
+    offer_code = current_seller.offer_codes.find_by_external_id!(params[:id])
     authorize [:checkout, offer_code]
 
     purchases = offer_code.purchases.offer_code_statistics

@@ -6,6 +6,7 @@ class FollowersController < ApplicationController
   include Pagy::Backend
   include PageMeta::Post
   include ValidateRecaptcha
+  include OptOutRetry
 
   PUBLIC_ACTIONS = %i[new create from_embed_form confirm cancel].freeze
   before_action :authenticate_user!, except: PUBLIC_ACTIONS
@@ -159,14 +160,16 @@ class FollowersController < ApplicationController
   def destroy
     authorize [:audience, @follower]
 
-    @follower.mark_deleted!
+    Follower.with_opt_out_lock_wait { @follower.mark_deleted! }
 
     redirect_to followers_path, notice: "Follower removed!", status: :see_other
+  rescue ActiveRecord::LockWaitTimeout
+    retry_opt_out_later
   end
 
   def cancel
     follower_id = @follower.external_id
-    @follower.mark_deleted!
+    Follower.with_opt_out_lock_wait { @follower.mark_deleted! }
     respond_to do |format|
       format.html { render inertia: "Followers/Cancel" }
       format.json do
@@ -176,6 +179,8 @@ class FollowersController < ApplicationController
         }
       end
     end
+  rescue ActiveRecord::LockWaitTimeout
+    retry_opt_out_later(retry_page: true)
   end
 
   private

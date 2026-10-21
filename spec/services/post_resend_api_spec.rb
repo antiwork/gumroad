@@ -510,4 +510,65 @@ describe PostResendApi, :freeze_time do
         ], cache:)
     end
   end
+
+  describe "follower recipients at the provider handoff" do
+    # Takes the provider branch and captures the payload where it enters the Resend SDK.
+    def capture_provider_requests
+      requests = []
+      [Resend::Batch, Resend::Emails].each do |sdk|
+        allow(sdk).to receive(:send) do |payload|
+          requests << Array.wrap(payload)
+          double(success?: true, body: "")
+        end
+      end
+      allow(Rails.env).to receive(:test?).and_return(false)
+      requests
+    end
+
+    def requested_addresses(request) = request.flat_map { _1[:to] }
+
+    it "hands over only the follows still live at the seller and address, and every buyer and affiliate" do
+      following = create(:active_follower, user: @seller, email: "following@example.com")
+      unfollowed = create(:active_follower, user: @seller, email: "unfollowed@example.com")
+      unconfirmed = create(:follower, user: @seller, email: "unconfirmed@example.com")
+      moved = create(:active_follower, user: @seller, email: "moved@example.com")
+      elsewhere = create(:active_follower, email: "elsewhere@example.com")
+      removed = create(:active_follower, user: @seller, email: "removed@example.com")
+      purchase = create(:purchase, email: "buyer@example.com")
+      affiliate = create(:direct_affiliate, seller: @seller)
+      blast = create(:post_email_blast, post: @post, delivery_count: 0)
+      recipients = [
+        { email: following.email, follower: Follower.new(id: following.id) },
+        { email: unfollowed.email, follower: Follower.new(id: unfollowed.id) },
+        { email: unconfirmed.email, follower: unconfirmed },
+        { email: "moved@example.com", follower: moved },
+        { email: elsewhere.email, follower: elsewhere },
+        { email: removed.email, follower: Follower.new(id: removed.id) },
+        { email: purchase.email, purchase: },
+        { email: "affiliate@example.com", affiliate: },
+      ]
+      unfollowed.mark_deleted!
+      moved.update!(email: "moved-on@example.com")
+      Follower.where(id: removed.id).delete_all
+      requests = capture_provider_requests
+
+      send_emails(recipients:, blast:)
+      Installment.flush_delivered_deltas!
+
+      expect(requests.size).to eq(1)
+      expect(requested_addresses(requests.first)).to eq(["following@example.com", "buyer@example.com", "affiliate@example.com"])
+      expect(blast.reload.delivery_count).to eq(3)
+      expect(@post.reload.customer_count).to eq(3)
+    end
+
+    it "calls the provider for nobody when every recipient's follow has ended" do
+      unfollowed = create(:active_follower, user: @seller, email: "unfollowed@example.com")
+      unfollowed.mark_deleted!
+      requests = capture_provider_requests
+
+      send_emails(recipients: [{ email: unfollowed.email, follower: Follower.new(id: unfollowed.id) }])
+
+      expect(requests).to be_empty
+    end
+  end
 end

@@ -706,7 +706,7 @@ describe("Checkout discounts page", type: :system, js: true) do
         expect(offer_code.existing_customers_only?).to eq(false)
       end
 
-      it "disables the customer-history limits that cannot be combined and rehydrates the new-customers toggle" do
+      it "rehydrates a new-customer code and blocks the settings it can't be combined with" do
         create(:offer_code,
                user: seller,
                products: [product1],
@@ -721,16 +721,111 @@ describe("Checkout discounts page", type: :system, js: true) do
         within(find(:table_row, { "Discount" => "Welcome offer" })) { click_on "Edit" }
 
         expect(page).to have_checked_field("Limit to new customers")
-        expect(page).to have_field("Limit to existing customers", disabled: true)
-        expect(page).to have_text("Can't be combined with 'Limit to new customers'.")
-        expect(page).to have_field("Tier discount by ownership duration", disabled: true)
+        expect(page).to have_field("Limit to existing customers", checked: false, disabled: true)
+        expect(page).to have_field("Tier discount by ownership duration", checked: false, disabled: true)
+        expect(page).to have_text("Turn off “Limit to new customers” to use this setting.", count: 2)
 
         uncheck "Limit to new customers"
-        expect(page).to have_field("Limit to existing customers", disabled: false)
-
         check "Limit to existing customers"
-        expect(page).to have_checked_field("Limit to existing customers")
-        expect(page).to have_field("Limit to new customers", disabled: true)
+        expect(page).to have_field("Limit to new customers", checked: false, disabled: true)
+        expect(page).to have_text("To use this setting, turn off “Limit to existing customers”.")
+        select_combo_box_option "Product 2", from: "Must have purchased"
+        page.scroll_to find_button("Save changes"), align: :center
+        click_on "Save changes"
+        expect(page).to have_alert(text: "Successfully updated discount!")
+
+        offer_code = OfferCode.find_by!(code: "welcome")
+        expect(offer_code.new_customers_only?).to eq(false)
+        expect(offer_code.existing_customers_only?).to eq(true)
+        expect(offer_code.ownership_products).to eq([product2])
+      end
+
+      it "keeps existing customers and ownership tiers combinable while new customers stays blocked" do
+        visit checkout_discounts_path
+        click_on "New discount"
+
+        check "Tier discount by ownership duration"
+        expect(page).to have_field("Limit to new customers", checked: false, disabled: true)
+        expect(page).to have_text("To use this setting, turn off “Tier discount by ownership duration”.")
+        check "Limit to existing customers"
+        expect(page).to have_checked_field("Tier discount by ownership duration")
+        expect(page).to have_text("To use this setting, turn off “Limit to existing customers” and “Tier discount by ownership duration”.")
+      end
+
+      it "drops a hidden automatic application so it can't lock the new-customer limit across an All products roundtrip" do
+        visit checkout_discounts_path
+        click_on "New discount"
+        fill_in "Name", with: "Roundtrip"
+        fill_in "Percentage", with: "10"
+
+        check "All products"
+        check "Apply automatically on product pages"
+        uncheck "All products"
+        check "Limit to new customers"
+        check "All products"
+
+        expect(page).to have_field("Apply automatically on product pages", checked: false, disabled: true)
+        expect(page).to have_field("Limit to new customers", checked: true, disabled: false)
+
+        page.scroll_to find_button("Add discount"), align: :center
+        click_on "Add discount"
+        expect(page).to have_alert(text: "Successfully created discount!")
+
+        offer_code = OfferCode.find_by!(name: "Roundtrip")
+        expect(offer_code).to have_attributes(universal: true, new_customers_only: true, auto_apply: false)
+      end
+
+      it "lets the seller undo a stored pair of limits that can't be combined" do
+        offer_code = create(:offer_code, user: seller, products: [product2], ownership_products: [product1], existing_customers_only: true,
+                                         amount_cents: nil, amount_percentage: 20, currency_type: nil, code: "conflicted", name: "Conflicted")
+        # Written around validation, as only legacy or out-of-band data could be.
+        offer_code.update_columns(new_customers_only: true)
+
+        visit checkout_discounts_path
+        within(find(:table_row, { "Discount" => "Conflicted" })) { click_on "Edit" }
+
+        expect(page).to have_field("Limit to existing customers", checked: true, disabled: false)
+        expect(page).to have_field("Limit to new customers", checked: true, disabled: false)
+        uncheck "Limit to new customers"
+        page.scroll_to find_button("Save changes"), align: :center
+        click_on "Save changes"
+        expect(page).to have_alert(text: "Successfully updated discount!")
+
+        expect(offer_code.reload).to have_attributes(existing_customers_only: true, new_customers_only: false)
+      end
+
+      it "names every setting the seller has to turn off before limiting to new customers" do
+        visit checkout_discounts_path
+        click_on "New discount"
+        check "All products"
+        check "Apply automatically on product pages"
+        check "Limit to existing customers"
+        check "Tier discount by ownership duration"
+
+        expect(page).to have_field("Limit to new customers", checked: false, disabled: true)
+        expect(page).to have_text("To use this setting, turn off “Limit to existing customers”, “Tier discount by ownership duration”, and “Apply automatically on product pages”.")
+
+        uncheck "Limit to existing customers"
+        uncheck "Tier discount by ownership duration"
+        expect(page).to have_text("To use this setting, turn off “Apply automatically on product pages”.")
+        uncheck "Apply automatically on product pages"
+        expect(page).to have_field("Limit to new customers", checked: false, disabled: false)
+        expect(page).to have_text("Only buyers who haven't purchased from your store before can use this code.")
+      end
+
+      it "blocks automatic application and new customers from being combined in either order" do
+        visit checkout_discounts_path
+        click_on "New discount"
+        check "All products"
+
+        check "Limit to new customers"
+        expect(page).to have_field("Apply automatically on product pages", checked: false, disabled: true)
+        expect(page).to have_text("Turn off “Limit to new customers” to use this setting.")
+
+        uncheck "Limit to new customers"
+        check "Apply automatically on product pages"
+        expect(page).to have_field("Limit to new customers", checked: false, disabled: true)
+        expect(page).to have_text("To use this setting, turn off “Apply automatically on product pages”.")
       end
     end
   end

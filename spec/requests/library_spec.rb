@@ -209,48 +209,253 @@ describe("Library Scenario", type: :system, js: true) do
     expect(page).to have_product_card(purchase.link)
   end
 
-  it "lists only active subscriptions on the Subscriptions tab and keeps archiving on that tab" do
-    active_purchase = create(:membership_purchase, link: create(:membership_product, name: "Monthly membership"), purchaser: @user)
-    active_purchase.create_url_redirect!
-    ended_purchase = create(:membership_purchase, link: create(:membership_product, name: "Ended membership"), purchaser: @user)
-    ended_purchase.create_url_redirect!
-    ended_purchase.subscription.update!(ended_at: 1.day.ago)
-    one_off_purchase = create(:purchase, purchaser: @user, link: create(:product, name: "One-off product"))
-    Link.import(refresh: true, force: true)
-
-    visit "/library"
-    expect(page).to have_product_card(one_off_purchase.link)
-    click_on "Subscriptions"
-
-    expect(page).to have_selector("[role='tab'][aria-selected='true']", text: "Subscriptions")
-    expect(page).to have_product_card(active_purchase.link)
-    expect(page).to_not have_product_card(one_off_purchase.link)
-    expect(page).to_not have_product_card(ended_purchase.link)
-
-    find_product_card(active_purchase.link).hover
-    within find_product_card(active_purchase.link) do
-      find_and_click('[aria-label="Open product action menu"]')
+  describe "Subscriptions tab" do
+    # Checkout makes the purchaser the subscription's owner; the membership_purchase factory doesn't.
+    def owned_membership(name, **attributes)
+      product = create(:membership_product, name:)
+      create(:membership_purchase, link: product, purchaser: @user, subscription: create(:subscription, link: product, user: @user), **attributes)
+        .tap(&:create_url_redirect!)
     end
-    click_on "Archive"
 
-    # The one-off purchase stays unarchived, but this tab only counts subscriptions.
-    expect(page).to have_text("You've archived all your subscriptions.")
-    expect(page).to_not have_text("You don't have any active subscriptions.")
-    click_on "See archive"
-
-    expect(page).to have_selector("[role='tab'][aria-selected='true']", text: "Subscriptions")
-    expect(page).to have_product_card(active_purchase.link)
-    expect(page).to_not have_product_card(one_off_purchase.link)
-
-    find_product_card(active_purchase.link).hover
-    within find_product_card(active_purchase.link) do
-      find_and_click('[aria-label="Open product action menu"]')
+    def buyer_date(time)
+      time.in_time_zone(@user.timezone).to_fs(:formatted_date_abbrev_month)
     end
-    click_on "Unarchive"
 
-    expect(page).to have_current_path("/library?sort=recently_updated&subscriptions_only=true")
-    expect(page).to have_product_card(active_purchase.link)
-    expect(page).to_not have_product_card(one_off_purchase.link)
+    it "lists every ongoing subscription, including archived and removed ones, with its status and a Manage link" do
+      active = owned_membership("Monthly membership")
+      archived = owned_membership("Archived membership", is_archived: true)
+      removed = owned_membership("Removed membership", is_deleted_by_buyer: true)
+      ended = owned_membership("Ended membership").tap { _1.subscription.update!(ended_at: 1.day.ago) }
+      installment = create(:installment_plan_purchase, purchaser: @user, link: create(:product, :with_installment_plan, name: "Course installments")).tap(&:create_url_redirect!)
+      one_off = create(:purchase, purchaser: @user, link: create(:product, name: "One-off product"))
+      Link.import(refresh: true, force: true)
+
+      visit "/library"
+      expect(page).to have_product_card(active.link)
+      expect(page).to have_product_card(one_off.link)
+      expect(page).to_not have_product_card(archived.link)
+      expect(page).to_not have_product_card(removed.link)
+
+      click_on "Subscriptions"
+
+      expect(page).to have_selector("[role='tab'][aria-selected='true']", text: "Subscriptions")
+      expect(page).to have_product_card(count: 4)
+      [active, archived, removed, installment].each { expect(page).to have_product_card(_1.link) }
+      expect(page).to_not have_product_card(one_off.link)
+      expect(page).to_not have_product_card(ended.link)
+      expect(page).to_not have_text("archived purchase")
+      expect(page).to_not have_selector("[aria-label='Open product action menu']")
+      within(find_product_card(active.link)) { expect(page).to have_text("Renews on #{buyer_date(active.subscription.end_time_of_subscription)}") }
+      within(find_product_card(installment.link)) do
+        expect(page).to have_text("Installment plan · 1 of 3 paid · Next payment on #{buyer_date(installment.subscription.end_time_of_subscription)}")
+      end
+
+      click_on "Manage membership for Removed membership"
+
+      expect(page).to have_current_path("/subscriptions/#{removed.subscription.external_id}/manage")
+      expect(page).to have_selector("h2", text: "Removed membership")
+      expect(page).to have_button("Cancel membership")
+    end
+
+    it "keeps a paid-off installment plan listed without a Manage link, while an unfinished one opens its manage page" do
+      unfinished = create(:installment_plan_purchase, purchaser: @user, link: create(:product, :with_installment_plan, name: "Unfinished course")).tap(&:create_url_redirect!)
+      completed = create(:installment_plan_purchase, purchaser: @user, link: create(:product, :with_installment_plan, name: "Completed course")).tap(&:create_url_redirect!)
+      2.times do
+        create(:membership_purchase, link: completed.link, subscription: completed.subscription, purchaser: @user, is_original_subscription_purchase: false, is_installment_payment: true)
+      end
+      Link.import(refresh: true, force: true)
+
+      visit "/library?subscriptions_only=true"
+
+      within(find_product_card(completed.link)) do
+        expect(page).to have_text("Installment plan · Paid in full")
+        expect(page).to have_link("Completed course", href: completed.url_redirect.download_page_url)
+        expect(page).to have_no_link(text: /\AManage /)
+        expect(page).to_not have_selector("[aria-label='Open product action menu']")
+      end
+
+      click_on "Manage installment plan for Unfinished course"
+
+      expect(page).to have_current_path("/subscriptions/#{unfinished.subscription.external_id}/manage")
+      expect(page).to have_selector("h2", text: "Unfinished course")
+    end
+
+    it "gives Manage a target at least 24px tall, so a click just above or below its text manages instead of downloading" do
+      min_target_size = 24 # WCAG 2.2 SC 2.5.8, CSS px
+      membership = owned_membership("Held membership")
+      Link.import(refresh: true, force: true)
+
+      [:above, :below].each do |side|
+        visit "/library?subscriptions_only=true"
+        within(find_product_card(membership.link)) { expect(page).to have_link("Held membership", href: membership.url_redirect.download_page_url) }
+        manage = find_link("Manage membership for Held membership")
+        page.scroll_to(manage, align: :center)
+        box = manage.evaluate_script("(({ left, top, width, height }) => ({ left, top, width, height }))(this.getBoundingClientRect())")
+        line_height = manage.evaluate_script("parseFloat(getComputedStyle(this).lineHeight)")
+        expect(box["height"]).to be >= min_target_size
+        expect(box["width"]).to be >= min_target_size
+
+        # Inside the 24px target but outside the text line, where the card's download link sits behind.
+        # Rounding away from the centre keeps the point at least 1px off the text despite subpixel layout.
+        offset = min_target_size / 2 - 1
+        expect(offset).to be > line_height / 2
+        center_y = box["top"] + box["height"] / 2
+        y = side == :above ? (center_y - offset).floor : (center_y + offset).ceil
+        page.driver.browser.action.move_to_location((box["left"] + box["width"] / 2).round, y).click.perform
+
+        expect(page).to have_current_path("/subscriptions/#{membership.subscription.external_id}/manage")
+      end
+    end
+
+    it "lists a guest checkout once claimed with its purchase email, and sends Manage through the emailed sign-in link" do
+      product = create(:membership_product, name: "Guest membership")
+      guest = create(:membership_purchase, link: product, purchaser: nil, email: "guest-checkout@example.com", subscription: create(:subscription, link: product, user: nil))
+      guest.create_url_redirect!
+      Link.import(refresh: true, force: true)
+
+      visit "/library?subscriptions_only=true"
+      expect(page).to have_text("You don't have any active subscriptions.")
+
+      visit "/r/#{guest.url_redirect.token}/check_purchaser"
+      fill_in "Email address used to purchase this product:", with: "guest-checkout@example.com"
+      click_on "Change purchase"
+      expect(page).to_not have_current_path(%r{/check_purchaser})
+      expect(guest.reload.purchaser).to eq(@user)
+
+      visit "/library?subscriptions_only=true"
+      within(find_product_card(product)) { expect(page).to have_text("Renews on #{buyer_date(guest.subscription.end_time_of_subscription)}") }
+      click_on "Manage membership for Guest membership"
+
+      # No account owns this subscription yet, so the manage page asks for the emailed link instead of opening.
+      expect(page).to have_current_path("/subscriptions/#{guest.subscription.external_id}/magic_link/new")
+    end
+
+    it "keeps a subscription the buyer still pays for on the tab after its purchases move to another account" do
+      paid = owned_membership("Transferred membership")
+      paid.update!(email: @user.email)
+      @user.transfer_purchases!(new_email: create(:user, email: "new-holder@example.com").email)
+      Link.import(refresh: true, force: true)
+
+      visit "/library"
+      expect(page).to_not have_product_card(paid.link)
+
+      visit "/library?subscriptions_only=true"
+      within(find_product_card(paid.link)) do
+        expect(page).to have_text("Renews on #{buyer_date(paid.subscription.end_time_of_subscription)}")
+        expect(page).to_not have_selector("a[href*='/d/']")
+      end
+      click_on "Manage membership for Transferred membership - Untitled"
+
+      expect(page).to have_current_path("/subscriptions/#{paid.subscription.external_id}/manage")
+      expect(page).to have_selector("h2", text: "Transferred membership")
+    end
+
+    it "lists an installment plan still billed after its original payment is charged back, without its download" do
+      allow(DisputeEvidence::GenerateReceiptImageService).to receive(:perform)
+        .and_return(File.read(Rails.root.join("spec", "support", "fixtures", "test-small.jpg")))
+      plan = create(:installment_plan_purchase, purchaser: @user, email: @user.email, stripe_transaction_id: "ch_plan_original",
+                                                link: create(:product, :with_installment_plan, name: "Disputed course")).tap(&:create_url_redirect!)
+      create(:membership_purchase, link: plan.link, subscription: plan.subscription, purchaser: @user, is_original_subscription_purchase: false, is_installment_payment: true)
+      Purchase.handle_charge_event(build(:charge_event_dispute_formalized, charge_id: plan.stripe_transaction_id))
+      Link.import(refresh: true, force: true)
+
+      visit "/library"
+      expect(page).to_not have_product_card(plan.link)
+
+      visit "/library?subscriptions_only=true"
+      expect(page).to have_product_card(plan.link)
+      within(find_product_card(plan.link)) do
+        expect(page).to have_text("Installment plan · 1 payment remaining · Final payment on #{buyer_date(plan.subscription.reload.end_time_of_subscription)}")
+        expect(page).to_not have_selector("a[href*='/d/']")
+      end
+      click_on "Manage installment plan for Disputed course"
+
+      expect(page).to have_current_path("/subscriptions/#{plan.subscription.external_id}/manage")
+    end
+
+    it "keeps every subscription listed when an old URL carries archive or bundle filters" do
+      active = owned_membership("Monthly membership")
+      archived = owned_membership("Archived membership", is_archived: true)
+      Link.import(refresh: true, force: true)
+
+      visit "/library?subscriptions_only=true&show_archived_only=true&bundles=stale-bundle"
+
+      expect(page).to have_product_card(count: 2)
+      [active, archived].each { expect(page).to have_product_card(_1.link) }
+      expect(page).to_not have_text("Download everything included in")
+      expect(page).to_not have_text("No products found")
+    end
+  end
+
+  describe "tab strip overflow" do
+    # Which edges carry a mark, whether a tap on each mark reaches what is under it, and which tabs
+    # are fully inside the strip.
+    def strip_state
+      page.evaluate_script(<<~JS)
+        (() => {
+          const list = document.querySelector('header [role="tablist"]');
+          const listRect = list.getBoundingClientRect();
+          return {
+            marks: Array.from(list.parentElement.querySelectorAll(":scope > svg")).map((mark) => {
+              const rect = mark.getBoundingClientRect();
+              const tapped = document.elementFromPoint((rect.left + rect.right) / 2, (rect.top + rect.bottom) / 2);
+              const side = rect.left >= listRect.right ? "end" : rect.right <= listRect.left ? "start" : "over the tabs";
+              return { side, onScreen: rect.width > 0 && rect.left >= 0 && rect.right <= innerWidth, tapsThrough: !mark.contains(tapped) };
+            }),
+            shown: Array.from(list.querySelectorAll('[role="tab"]'))
+              .filter((tab) => {
+                const rect = tab.getBoundingClientRect();
+                return rect.left >= listRect.left - 1 && rect.right <= listRect.right + 1;
+              })
+              .map((tab) => tab.textContent),
+          };
+        })()
+      JS
+    end
+
+    def expect_edge_marks(*sides)
+      page.document.synchronize do
+        marks = strip_state["marks"]
+        raise Capybara::ExpectationNotMet, "edge marks #{marks.inspect}, expected #{sides.inspect}" unless marks.map { _1["side"] } == sides
+      end
+      expect(strip_state["marks"]).to all(include("onScreen" => true, "tapsThrough" => true))
+    end
+
+    it "marks the edge that still has tabs past it as a phone scrolls through to Following and Reviews", :mobile_view do
+      # The headless mobile driver has no device emulation, only an 800px window.
+      page.current_window.resize_to(375, 812)
+      visit library_path(subscriptions_only: true)
+
+      expect(strip_state["shown"]).to eq(["Purchases", "Subscriptions", "Saved"])
+      expect_edge_marks("end")
+
+      find("[role=tab]", text: "Saved").send_keys(:tab, :tab)
+      expect(page.active_element.text).to eq("Reviews")
+      expect(strip_state["shown"]).to include("Reviews")
+      expect_edge_marks("start")
+
+      page.active_element.send_keys(:enter)
+      expect(page).to have_current_path(reviews_path)
+      expect(page).to have_selector("[role='tab'][aria-selected='true']", text: "Reviews")
+      expect_edge_marks("start")
+
+      click_on "Following"
+      expect(page).to have_current_path(wishlists_following_index_path)
+      expect(page).to have_selector("[role='tab'][aria-selected='true']", text: "Following")
+      expect_edge_marks("start", "end")
+    end
+
+    it "shows no marks when every tab fits and adds one when the window narrows" do
+      visit library_path(subscriptions_only: true)
+
+      expect(strip_state["shown"]).to eq(["Purchases", "Subscriptions", "Saved", "Following", "Reviews"])
+      expect_edge_marks
+
+      page.driver.browser.execute_cdp("Emulation.setDeviceMetricsOverride", width: 375, height: 812, deviceScaleFactor: 1, mobile: false)
+      expect_edge_marks("end")
+    ensure
+      page.driver.browser.execute_cdp("Emulation.clearDeviceMetricsOverride")
+    end
   end
 
   it "manages archived purchases banner and interactions" do

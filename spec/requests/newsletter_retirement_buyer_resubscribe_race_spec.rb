@@ -166,7 +166,13 @@ describe "Resubscribing as a buyer while the old Gumroad newsletter retires", ty
       expect { retirement.value }.to raise_error(migration::CoverageIncomplete)
       expect(cutover.state).to eq("migrated")
       expect(cutover.retirement_coverage["unresolved"]).to include("eligible" => 2)
-      expect(cutover.retirement_coverage["changed_during_scan"]).to include("eligible" => 2)
+      # A resubscribe during the alias read commits before the full scan, which then counts it; its stamp can
+      # fall in the second before scan_started_at, so only a resubscribe after the full scan needs the recheck.
+      if stage == :aliases
+        expect(cutover.retirement_coverage["counts"]).to include("eligible" => 2)
+      else
+        expect(cutover.retirement_coverage["changed_during_scan"]).to include("eligible" => 2)
+      end
     ensure
       finish(retirement)
     end

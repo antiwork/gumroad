@@ -39,7 +39,7 @@ class OfferCodeDiscountComputingService
 
       entries = key_by_input ? eligible_entries : [[link.unique_permalink, aggregate_products(eligible_entries.map(&:last))]]
       purchase_quantity = entries.sum { |_input_key, product| product[:quantity].to_i }
-      resolved_discount = offer_code.evaluate_for_buyer(buyer, product: link)
+      resolved_discount = offer_code.evaluate_for_buyer(buyer, product: link) unless returning_customer?(offer_code)
 
       # Keep later covered lines in the response and carry any amount the first line could not
       # absorb. Checkout uses zero allocations to keep the code visible after it is fully spent.
@@ -263,6 +263,17 @@ class OfferCodeDiscountComputingService
       @remaining_times_of_use[offer_code.id] ||= offer_code.quantity_left(excluding_order:, excluding_purchases:)
     end
 
+    # Only a signed-in buyer can be recognized here. A guest is checked against their checkout email
+    # when the purchase is created (Purchase#validate_offer_code).
+    def returning_customer?(offer_code)
+      return false unless buyer && offer_code.new_customers_only?
+
+      @returning_customer ||= {}
+      @returning_customer.fetch(offer_code.id) do
+        @returning_customer[offer_code.id] = offer_code.returning_customer?(purchaser_ids: [buyer.id], emails: [buyer.email])
+      end
+    end
+
     def track_applicable_offer_code(offer_code)
       @applicable_offer_codes ||= []
       @applicable_offer_codes << offer_code
@@ -356,6 +367,7 @@ class OfferCodeDiscountComputingService
         offer_code = find_applicable_offer_code_for(cross_sell.product)
         next unless offer_code
 
+        next if returning_customer?(offer_code)
         resolved_discount = offer_code.evaluate_for_buyer(buyer, product: cross_sell.product)
         next unless resolved_discount
 

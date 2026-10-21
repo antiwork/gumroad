@@ -3,6 +3,7 @@
 class PurchasesController < ApplicationController
   include CurrencyHelper, PreorderHelper, RecommendationType, ValidateRecaptcha, ProcessRefund
   include Order::ResponseHelpers
+  include OptOutRetry
   SEARCH_RESULTS_PER_PAGE = 100
   # ES rejects from + size past index.max_result_window, and a negative from outright.
   MAX_RESULT_WINDOW = 10_000
@@ -72,7 +73,13 @@ class PurchasesController < ApplicationController
     end
 
     if @purchase.present?
-      @purchase.unsubscribe_buyer
+      begin
+        Follower.with_opt_out_lock_wait { @purchase.unsubscribe_buyer }
+      rescue ActiveRecord::LockWaitTimeout
+        # A post handoff is holding their follow, which is unchanged; the purchases may already be opted out, and a
+        # retry finishes the unsubscribe.
+        retry_opt_out_later(retry_page: true)
+      end
       return
     end
 

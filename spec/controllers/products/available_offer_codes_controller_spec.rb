@@ -59,6 +59,26 @@ describe Products::AvailableOfferCodesController do
         end
       end
 
+      context "with new-customer offer codes" do
+        it "finds an older eligible match behind more than a page of matching new-customer codes" do
+          eligible = create(:offer_code, user: seller, name: "Summer early", code: "SUMMEREARLY", products: [product], created_at: 2.days.ago)
+          21.times { |i| create(:offer_code, :for_new_customers, user: seller, name: "Summer first #{i}", code: "SUMMERFIRST#{i}", products: [product], created_at: (30 - i).minutes.ago) }
+
+          get :index, format: :json, params: { product_id: product.unique_permalink, query: "Summer" }
+
+          expect(response.parsed_body.map { _1["code"] }).to eq([eligible.code])
+        end
+
+        it "leaves them out before applying the limit, since they cannot be a product's default" do
+          regular_codes = Array.new(5) { |i| create(:offer_code, user: seller, code: "REGULAR#{i}", products: [product], created_at: (10 - i).minutes.ago) }
+          create(:offer_code, :for_new_customers, user: seller, code: "FIRSTORDER", products: [product])
+
+          get :index, format: :json, params: { product_id: product.unique_permalink }
+
+          expect(response.parsed_body.map { _1["code"] }).to match_array(regular_codes.map(&:code))
+        end
+      end
+
       context "with search query" do
         let!(:matching_offer_code) { create(:offer_code, user: seller, name: "Summer Sale", code: "SUMMERCODE", products: [product]) }
         let!(:non_matching_offer_code) { create(:offer_code, user: seller, name: "Winter Discount", code: "WINTERCODE", products: [product]) }

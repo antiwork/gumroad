@@ -7,6 +7,50 @@ class LibraryPresenter
   PER_PAGE = 15
   private_constant :PER_PAGE
 
+  # In-memory twins of the Subscription methods of the same names, over the subscription's purchases
+  # sorted by id. "label facts" in library_presenter_spec pins each one to its Subscription original.
+  LabelFacts = Struct.new(:subscription, :purchases) do
+    def charges_completed?
+      subscription.has_fixed_length? && successful.size == subscription.charge_occurrence_count
+    end
+
+    def remaining_charges_count
+      subscription.has_fixed_length? ? subscription.charge_occurrence_count - successful.size : 0
+    end
+
+    # A standing chargeback or full refund still counts toward the installments charged, but the buyer
+    # didn't keep that payment, so labels must not call it paid.
+    def adjusted_payment_history?
+      successful.any?(&:chargedback_not_reversed_or_refunded?)
+    end
+
+    def end_time_of_subscription
+      last_purchase = successful.last || purchases.select(&:is_free_trial_purchase?).last
+      return subscription.free_trial_ends_at if subscription.free_trial_ends_at.present? && last_purchase&.is_free_trial_purchase?
+
+      paid_through = end_time_of_last_paid_period
+      return paid_through if paid_through.present? && paid_through > Time.current
+
+      last_purchase_at = last_purchase&.succeeded_at || last_purchase&.created_at
+      return Time.current if purchases.last.chargedback_not_reversed_or_refunded? || last_purchase_at.nil?
+
+      last_purchase_at + subscription.period
+    end
+
+    private
+      def successful
+        state = subscription.is_test_subscription ? "test_successful" : "successful"
+        @successful ||= purchases.select { _1.purchase_state == state }
+      end
+
+      # MySQL sorts NULL succeeded_at last under DESC, so the model's first row is the latest non-NULL one.
+      def end_time_of_last_paid_period
+        paid_at = successful.reject { _1.stripe_refunded? || (_1.chargeback_date.present? && !_1.chargeback_reversed?) }.filter_map(&:succeeded_at).max
+        paid_at.present? ? paid_at + subscription.period : subscription.free_trial_ends_at
+      end
+  end
+  private_constant :LabelFacts
+
   attr_reader :logged_in_user
 
   def initialize(logged_in_user)
@@ -15,30 +59,36 @@ class LibraryPresenter
 
   def library_props(page: nil, sort: nil, query: nil, creator_ids: [], bundle_ids: [], show_archived_only: false, subscriptions_only: false)
     sort = sort == "purchase_date" ? "purchase_date" : "recently_updated"
-    # A membership can't be a bundle member, so a bundle filter (even a stale URL) would only empty this tab.
-    bundle_ids = [] if subscriptions_only
-
-    base = logged_in_user.purchases.visible_in_library
-    denied_ids = no_access_membership_purchase_ids(base)
-    visible = base.where.not(id: denied_ids)
-    replaced_ids = replaced_bundle_purchase_ids(base)
-    cards = visible.where.not(id: replaced_ids)
-    counted = visible
     if subscriptions_only
-      cards = cards.has_active_subscription
-      counted = visible.has_active_subscription
+      # A membership can't be a bundle member, and archiving or removing a card only tidies the
+      # Library without stopping billing, so neither filter applies (even from a stale URL).
+      bundle_ids = []
+      show_archived_only = false
     end
 
-    pagination, page_purchases = paged_purchases(filtered(cards, query:, creator_ids:, bundle_ids:, show_archived_only:), sort:, page:)
+    base = logged_in_user.purchases.visible_in_library
+    replaced_ids = replaced_bundle_purchase_ids(base)
+    if subscriptions_only
+      cards = ongoing_subscription_purchases
+      archived_count = 0
+      unarchived_count = cards.count
+    else
+      visible = base.where.not(id: no_access_membership_purchase_ids(base))
+      cards = visible.where.not(id: replaced_ids)
+      archived_count = visible.is_archived.count
+      unarchived_count = visible.not_is_archived.count
+    end
+
+    pagination, page_purchases = paged_purchases(filtered(cards, query:, creator_ids:, bundle_ids:, show_archived_only:, subscriptions_only:), sort:, page:)
 
     {
-      results: build_cards(page_purchases),
+      results: build_cards(page_purchases, subscriptions_only:),
       pagination:,
-      creators: creators_for_tab(cards, show_archived_only:),
+      creators: creators_for_tab(cards, show_archived_only:, subscriptions_only:),
       bundles: subscriptions_only ? [] : bundle_filter_options(base, replaced_ids),
       bundle_downloads: bundle_downloads(base, bundle_ids),
-      archived_count: counted.is_archived.count,
-      unarchived_count: counted.not_is_archived.count,
+      archived_count:,
+      unarchived_count:,
       search: {
         sort:,
         query: query.to_s,
@@ -73,8 +123,8 @@ class LibraryPresenter
   end
 
   private
-    def filtered(cards, query:, creator_ids:, bundle_ids:, show_archived_only:)
-      scope = show_archived_only ? cards.is_archived : cards.not_is_archived
+    def filtered(cards, query:, creator_ids:, bundle_ids:, show_archived_only:, subscriptions_only:)
+      scope = archive_partition(cards, show_archived_only:, subscriptions_only:)
 
       # Filtering by links.user_id (not a users join keyed on external_id) keeps MySQL's plan
       # anchored on the cheap purchaser_id index; joining users on external_id sometimes made it
@@ -129,11 +179,17 @@ class LibraryPresenter
       [pagination, page_ids.map { records[_1] }]
     end
 
-    def build_cards(purchases)
+    def build_cards(purchases, subscriptions_only: false)
       replacement_redirects = replacement_redirects_for(purchases)
       product_seller_data = {}
 
+      label_facts = subscriptions_only ? subscription_label_facts(purchases.map(&:subscription)) : {}
+
       purchases.map do |purchase|
+        # A subscription this account pays for through a row that isn't its own Library purchase (held
+        # by another account, or a charge row): show the billing card without that row's purchase id,
+        # download link or archive state.
+        billing_only = subscriptions_only && !@content_card_ids.include?(purchase.id)
         product = purchase.link
         product_seller_data[product.user.id] ||= product.user.username && {
           name: product.user.name || product.user.username,
@@ -148,13 +204,163 @@ class LibraryPresenter
             native_type: product.native_type,
           },
           purchase: {
-            id: purchase.external_id,
-            is_archived: purchase.is_archived,
-            download_url: library_download_location(purchase, replacement_redirects),
+            # Subscription and Purchase external ids share one encoding, so the bare id could equal a held card's.
+            id: billing_only ? "subscription:#{purchase.subscription.external_id}" : purchase.external_id,
+            is_archived: !billing_only && purchase.is_archived,
+            download_url: billing_only ? nil : library_download_location(purchase, replacement_redirects),
             variants: purchase.variant_attributes&.map(&:name)&.join(", "),
-          }
+          }.merge(subscriptions_only ? { subscription: subscription_details(purchase.subscription, label_facts[purchase.subscription_id]) } : {})
         }
       end
+    end
+
+    # Archived and removed cards stay listed: those actions never stop billing. A subscription
+    # owned by another account (reassignment, gift conversion) stays out; an unowned one is a guest
+    # checkout this buyer claimed, and its manage link falls back to the emailed magic link.
+    def ongoing_subscription_purchases
+      held = logged_in_user.purchases.for_library
+        .has_active_subscription
+        .where(subscriptions: { user_id: [logged_in_user.id, nil] })
+      held_ids = one_card_per_subscription(held)
+      # User#transfer_purchases! moves purchases to another account but leaves Subscription#user, so
+      # this account can still be billed for (and manage) a subscription whose purchase it no longer holds.
+      # Only a held row that survived the filters may veto: a converted gift's receiver row moved here
+      # must not hide the payer leg.
+      billed_elsewhere = Purchase.for_library
+        .has_active_subscription
+        .where(subscriptions: { user_id: logged_in_user.id })
+        .where.not(subscription_id: Purchase.where(id: held_ids).select(:subscription_id))
+      card_ids = held_ids + one_card_per_subscription(billed_elsewhere)
+      @content_card_ids = held_ids.to_set
+      Purchase.where(id: card_ids + billed_without_content_card_ids(card_ids))
+    end
+
+    # for_library drops a charged-back original and every installment after it, yet RecurringChargeWorker
+    # keeps billing an installment plan until all of its charges are disputed. Such a plan gets a card
+    # from its charge rows, which never carries download access.
+    def billed_without_content_card_ids(card_ids)
+      listed = Purchase.where(id: card_ids).select(:subscription_id)
+      charges = Purchase.all_success_states.not_is_additional_contribution.not_is_gift_sender_purchase.has_active_subscription
+      owned = charges.where(subscriptions: { user_id: logged_in_user.id }).where.not(subscription_id: listed)
+      claimed = charges.where(subscriptions: { user_id: nil }, purchaser_id: logged_in_user.id).where.not(subscription_id: listed)
+      ids = one_card_per_subscription(owned) + one_card_per_subscription(claimed)
+      paused = paused_installment_plan_ids(Purchase.where(id: ids).select(:subscription_id))
+      Purchase.where(id: ids).where.not(subscription_id: paused).ids
+    end
+
+    # Subscription#all_charges_disputed? (which pauses RecurringChargeWorker) for every candidate plan in
+    # three queries: each of the plan's successful charges (test_successful on a test subscription) has
+    # a chargeback that wasn't reversed. The label facts spec pins it to the model method.
+    def paused_installment_plan_ids(subscription_ids)
+      plans = Subscription.where(id: subscription_ids).select(&:is_installment_plan?)
+      return [] if plans.empty?
+
+      charges = Purchase.where(subscription_id: plans.map(&:id), purchase_state: %w[successful test_successful])
+      totals = charges.group(:subscription_id, :purchase_state).count
+      standing = totals.merge(charges.not_chargedback_or_chargedback_reversed.group(:subscription_id, :purchase_state).count) { |_, total, kept| total - kept }
+      plans.filter_map do |plan|
+        key = [plan.id, plan.is_test_subscription? ? "test_successful" : "successful"]
+        plan.id if totals.fetch(key, 0).positive? && standing.fetch(key) == totals.fetch(key)
+      end
+    end
+
+    def one_card_per_subscription(scope)
+      scope = scope.where.not(id: no_access_membership_purchase_ids(scope) + converted_gift_receiver_ids(scope))
+      scope.group(:subscription_id).pluck(Arel.sql("MAX(purchases.id)"))
+    end
+
+    # Gift::ConvertToNonGiftService leaves the recipient's receiver row for access but makes the
+    # subscription the payer's, owned by no account when the payer checked out as a guest.
+    def converted_gift_receiver_ids(owned)
+      owned.is_gift_receiver_purchase.includes(:subscription).reject { _1.subscription.gift? }.map(&:id)
+    end
+
+    def archive_partition(cards, show_archived_only:, subscriptions_only:)
+      return cards if subscriptions_only
+
+      show_archived_only ? cards.is_archived : cards.not_is_archived
+    end
+
+    # Status labels need the same few purchase facts for every card; preloading them for the page
+    # keeps the tab at a fixed number of queries instead of several per card. `status` reads the
+    # preloaded purchases itself (Subscription#pending_failure?), and `gift?` the preloaded original.
+    def subscription_label_facts(subscriptions)
+      subscriptions = subscriptions.compact.uniq
+      ActiveRecord::Associations::Preloader.new(
+        records: subscriptions,
+        associations: [:link, :purchases, :true_original_purchase, { last_payment_option: [:price, :installment_plan, :installment_plan_snapshot] }],
+      ).call
+      subscriptions.to_h { [_1.id, LabelFacts.new(_1, _1.purchases.sort_by(&:id))] }
+    end
+
+    def subscription_details(subscription, facts)
+      # SubscriptionsController#manage 404s a paid-off installment plan, which stays active until
+      # its last period ends.
+      manageable = !(subscription.is_installment_plan? && facts.charges_completed?)
+      {
+        status_label: subscription_status_label(subscription, facts),
+        manage_label: subscription.is_installment_plan? ? "Manage installment plan" : "Manage membership",
+        manage_url: manageable ? manage_subscription_path(subscription.external_id) : nil,
+      }
+    end
+
+    # Never promises a charge the subscription won't make: completed fixed-length plans, pending
+    # cancellations and card-less gifts (whose receipt says they won't renew) show an end date.
+    def subscription_status_label(subscription, facts)
+      kind = subscription.is_installment_plan? ? "Installment plan" : nil
+      label =
+        case subscription.status
+        when "pending_failure" then "Payment failed"
+        when "payment_method_update_required" then "Payment method update required"
+        when "pending_cancellation" then cancellation_label(subscription)
+        else ongoing_subscription_label(subscription, facts)
+        end
+      [kind, label].compact.join(" · ")
+    end
+
+    # Subscription#grant_access_to_product? ends a cancelled installment plan's access at once, and a
+    # membership's only when the product blocks access after cancellation.
+    def cancellation_label(subscription)
+      if subscription.is_installment_plan?
+        "Cancelled · No further payments"
+      elsif subscription.link.block_access_after_membership_cancellation
+        dated("Cancelled · Access until", subscription.cancelled_at, fallback: "Cancelled")
+      else
+        dated("Cancelled · Subscription ends on", subscription.cancelled_at, fallback: "Cancelled")
+      end
+    end
+
+    def ongoing_subscription_label(subscription, facts)
+      next_charge_at = facts.end_time_of_subscription
+      remaining = facts.remaining_charges_count
+      if facts.charges_completed?
+        return dated("Ends on", next_charge_at, fallback: "Ending") unless subscription.is_installment_plan?
+
+        facts.adjusted_payment_history? ? "No payments remaining" : "Paid in full"
+      elsif subscription.is_installment_plan?
+        progress =
+          if facts.adjusted_payment_history?
+            "#{remaining} #{"payment".pluralize(remaining)} remaining"
+          else
+            "#{subscription.charge_occurrence_count - remaining} of #{subscription.charge_occurrence_count} paid"
+          end
+        next_payment = remaining == 1 ? "Final payment on" : "Next payment on"
+        "#{progress} · #{dated(next_payment, next_charge_at, fallback: "Payment due")}"
+      elsif subscription.gift? && subscription.credit_card_id.blank?
+        dated("Gift · Paid through", next_charge_at, fallback: "Gift")
+      elsif subscription.in_free_trial?
+        dated("Free trial · First charge on", subscription.free_trial_ends_at, fallback: "Free trial")
+      elsif remaining == 1
+        dated("Final charge on", next_charge_at, fallback: "Renewal due")
+      else
+        dated("Renews on", next_charge_at, fallback: "Renewal due")
+      end
+    end
+
+    def dated(prefix, time, fallback:)
+      return fallback unless time&.future?
+
+      "#{prefix} #{time.in_time_zone(logged_in_user.timezone).to_fs(:formatted_date_abbrev_month)}"
     end
 
     # A purchase whose subscription row is missing stays visible: wrongly hiding a purchase is
@@ -187,8 +393,8 @@ class LibraryPresenter
     # Counts ignore the search query and creator/bundle selections (matching the
     # pre-pagination page, which derived them from the unfiltered result set), so a
     # buyer's other creators stay selectable while one is filtered.
-    def creators_for_tab(cards, show_archived_only:)
-      scope = show_archived_only ? cards.is_archived : cards.not_is_archived
+    def creators_for_tab(cards, show_archived_only:, subscriptions_only:)
+      scope = archive_partition(cards, show_archived_only:, subscriptions_only:)
       counts_by_user_id = scope.joins(:link).group("links.user_id").count
       User.where(id: counts_by_user_id.keys).map do |creator|
         {
@@ -250,6 +456,8 @@ class LibraryPresenter
           label: link.name,
           download_url: archive.present? ? url_redirect_download_archive_path(redirect.token) : nil,
           zip_unavailable_reason:,
+          # The ZIP stays on offer because it is the only Library route to the bundle's own files.
+          omits_granted_files: redirect.bundle_archive_omits_granted_files?,
         }
       end
     end

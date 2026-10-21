@@ -59,7 +59,7 @@ const renderForCountry = (
           onUpdate(next);
           setBankAccount((prev) => ({ ...prev, ...next }));
         }}
-        hasConnectedStripe={false}
+        isBlockedByStripeConnect={false}
         user={makeUser(countryCode, supportsIban)}
         isFormDisabled={false}
         feeInfo={{ summary: "", items: [] }}
@@ -268,7 +268,7 @@ describe("BankAccountSection Bolivia bank picker", () => {
         bankAccountDetails={{ ...bankAccountDetails, routing_number: "040", account_number_visual: "******6789" }}
         bankAccount={null}
         updateBankAccount={() => {}}
-        hasConnectedStripe={false}
+        isBlockedByStripeConnect={false}
         user={makeUser("BO")}
         isFormDisabled={false}
         feeInfo={{ summary: "", items: [] }}

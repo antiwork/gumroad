@@ -67,7 +67,11 @@ const OwnerSignInRemedy = () => {
 };
 
 const FailedLineItemResultEntry = ({ name, result }: { name: string; result: ErrorLineItemResult }) => {
+  const { appDomain } = useDomains();
   const message = result.error_message ?? "Sorry, something went wrong.";
+  // Only the server knows whether the cart survived; every line can fail after a paid one cleared it.
+  const backToCheckout =
+    "new_customer_offer_code_refused" in result && !!result.new_customer_offer_code_refused && !!result.cart_retained;
   return (
     <CardContent asChild details>
       <section className="space-y-3">
@@ -81,7 +85,11 @@ const FailedLineItemResultEntry = ({ name, result }: { name: string; result: Err
         <Alert variant="warning">
           <div dangerouslySetInnerHTML={{ __html: message }} />
           {"owner_sign_in_remedy" in result && result.owner_sign_in_remedy ? <OwnerSignInRemedy /> : null}
+          {backToCheckout ? <p>Go back to checkout to continue without this code.</p> : null}
         </Alert>
+        {backToCheckout ? (
+          <NavigationButton href={Routes.checkout_url({ host: appDomain })}>Back to checkout</NavigationButton>
+        ) : null}
       </section>
     </CardContent>
   );

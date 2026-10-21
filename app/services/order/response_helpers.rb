@@ -22,13 +22,15 @@ module Order::ResponseHelpers
     def error_response(error_message, purchase: nil, guest: false)
       card_country = purchase&.card_country
       card_country = "CN" if card_country == "C2" # PayPal (wrongly) returns CN2 for China users transacting with USD
+      # That line was priced with the discount it was refused, so its total is not what the buyer would pay.
+      new_customer_offer_code_refused = purchase&.new_customer_offer_code_refused?
 
       response = {
         success: false,
         error_message:,
         permalink: purchase&.link&.unique_permalink,
         name: purchase&.link&.name,
-        formatted_price: formatted_price(Currency::USD, purchase&.total_transaction_cents_usd),
+        formatted_price: (formatted_price(Currency::USD, purchase&.total_transaction_cents_usd) unless new_customer_offer_code_refused),
         error_code: purchase&.error_code,
         is_tax_mismatch: purchase&.error_code == PurchaseErrorCode::TAX_VALIDATION_FAILED,
         card_country: (ISO3166::Country[card_country]&.common_name if card_country.present?),
@@ -39,6 +41,7 @@ module Order::ResponseHelpers
       # lacking a purchaser. Only sent when it applies, so every other failure keeps its response
       # shape byte for byte.
       response[:owner_sign_in_remedy] = true if guest && purchase&.owner_sign_in_lifts_product_block?
+      response[:new_customer_offer_code_refused] = true if new_customer_offer_code_refused
       response
     end
 

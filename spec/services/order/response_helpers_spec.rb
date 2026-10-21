@@ -134,6 +134,31 @@ describe Order::ResponseHelpers do
       end
     end
 
+    describe "new_customer_offer_code_refused" do
+      let(:offer_code) { create(:offer_code, :for_new_customers, user: seller, products: [usd_product], code: "firstorder", amount_cents: nil, amount_percentage: 100) }
+
+      def refused_purchase
+        create(:purchase, link: create(:product, user: seller), purchaser: nil, email: "repeat.buyer@example.com")
+        build(:purchase, link: usd_product, purchaser: nil, email: "Repeat.Buyer@example.com", offer_code:).tap { _1.send(:validate_offer_code) }
+      end
+
+      it "flags the refusal and leaves out the price the buyer was refused" do
+        response = test_instance.send(:error_response, "Refused", purchase: refused_purchase, guest: true)
+
+        expect(response[:new_customer_offer_code_refused]).to be(true)
+        expect(response[:formatted_price]).to be_nil
+      end
+
+      it "is left out of every other failure, which keeps its price" do
+        purchase = create(:failed_purchase, link: usd_product, total_transaction_cents: 15_00, error_code: PurchaseErrorCode::OFFER_CODE_INVALID)
+
+        response = test_instance.send(:error_response, "Payment declined", purchase:, guest: true)
+
+        expect(response).not_to have_key(:new_customer_offer_code_refused)
+        expect(response[:formatted_price]).to eq("$15")
+      end
+    end
+
     it "handles nil purchase gracefully" do
       response = test_instance.send(:error_response, "Generic error", purchase: nil)
 

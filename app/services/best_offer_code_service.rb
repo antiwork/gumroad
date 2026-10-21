@@ -39,15 +39,14 @@ class BestOfferCodeService
     comparison_amount(url_code_result[:discount]) > comparison_amount(default_code_result[:discount]) ? url_code_result : default_code_result
   end
 
-  # The buyer's own existing- or new-customer default goes first, then the effective default (the
-  # shop-wide sale, if one runs) — a gated code is not what effective_default_offer_code returns for
-  # an unknown buyer. evaluate_code does not check currency, so a fixed default left behind by a
+  # The buyer's own existing-customer default goes first, then the effective default (the shop-wide
+  # sale, if one runs). evaluate_code does not check currency, so a fixed default left behind by a
   # product currency change is skipped here, including when no sale replaces it.
   def default_offer_codes
     @default_offer_codes ||= begin
       explicit = @product.default_offer_code
       codes = [@product.effective_default_offer_code]
-      codes.unshift(explicit) if explicit&.existing_customers_only? || explicit&.new_customers_only?
+      codes.unshift(explicit) if explicit&.existing_customers_only?
       codes.compact.uniq.select { _1.is_currency_valid?(@product) }
     end
   end

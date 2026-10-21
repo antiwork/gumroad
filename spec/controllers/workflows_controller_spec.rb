@@ -84,6 +84,8 @@ describe WorkflowsController, type: :controller, inertia: true do
 
         expect(response).to redirect_to(new_workflow_path)
         expect(response.status).to eq(302)
+        expect(flash[:alert]).to eq("Name can't be blank")
+        expect(session[:inertia_errors]).to eq(base: ["Name can't be blank"])
       end
 
       it "handles validation errors from the service" do
@@ -106,6 +108,7 @@ describe WorkflowsController, type: :controller, inertia: true do
         post :create, params: { workflow: { name: "Cart Workflow", workflow_type: "abandoned_cart" } }
 
         expect(response).to redirect_to(new_workflow_path)
+        expect(session[:inertia_errors]).to eq(base: ["You must have at least one completed payout to create an abandoned cart workflow"])
       end
     end
   end
@@ -155,6 +158,7 @@ describe WorkflowsController, type: :controller, inertia: true do
 
         expect(response).to redirect_to(edit_workflow_path(workflow.external_id))
         expect(flash[:alert]).to eq("Name can't be blank")
+        expect(session[:inertia_errors]).to eq(base: ["Name can't be blank"])
       end
 
       it "handles validation errors from the service" do

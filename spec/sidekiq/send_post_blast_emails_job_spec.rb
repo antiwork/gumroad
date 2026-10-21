@@ -591,7 +591,7 @@ describe SendPostBlastEmailsJob, :freeze_time do
         stub_const("PostSendgridApi::MAX_RECIPIENTS", 10)
         @blast = create(:blast, :just_requested, post: basic_post_with_audience)
         create_list(:active_follower, 10, user: @seller) # there are now 11 followers
-        @expected_base_args = { post: @blast.post, blast: @blast, cache: anything }
+        @expected_base_args = { post: @blast.post, blast: @blast, cache: anything, on_withheld: anything }
       end
 
       it "is equal to PostSendgridApi::MAX_RECIPIENTS by default" do

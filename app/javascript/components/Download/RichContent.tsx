@@ -446,6 +446,8 @@ const FileGroupDownloadAllButton = ({ folderId, files }: { folderId: string; fil
   const [isDownloading, setIsDownloading] = React.useState(false);
 
   const firstDownloadableFile = files[0];
+  const contentFiles = useContentFiles();
+  const zipHasEveryFile = files.every((f) => contentFiles.find((c) => c.id === f.id)?.archivable !== false);
 
   return (
     <Popover>
@@ -474,7 +476,7 @@ const FileGroupDownloadAllButton = ({ folderId, files }: { folderId: string; fil
             >
               Download file
             </NavigationButton>
-          ) : (
+          ) : zipHasEveryFile ? (
             <Button
               contentEditable={false}
               disabled={isDownloading}
@@ -493,7 +495,7 @@ const FileGroupDownloadAllButton = ({ folderId, files }: { folderId: string; fil
             >
               Download as ZIP
             </Button>
-          )}
+          ) : null}
           <Button
             contentEditable={false}
             disabled={isDownloading}

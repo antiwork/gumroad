@@ -398,6 +398,8 @@ class OfferCode < ApplicationRecord
     )
     json[:excluded_product_ids] = excluded_products.map(&:external_id) if universal? && excluded_products.present?
     json[:option_ids_by_product] = option_ids_by_product if variants.any?
+    # Display only, so the product page can state the condition; checkout still decides eligibility.
+    json[:new_customers_only] = true if new_customers_only?
     if is_cents? && once_per_cart?
       json[:once_per_cart] = true
       json[:once_per_cart_id] = external_id
@@ -408,7 +410,7 @@ class OfferCode < ApplicationRecord
   end
 
   def discount_for_display(buyer: nil, product: nil, fallback_purchase: nil)
-    return nil if (existing_customers_only? || new_customers_only?) && buyer.nil?
+    return nil if existing_customers_only? && buyer.nil?
     return evaluate_for_buyer(buyer, product:, fallback_purchase:) if buyer.present? || (tiered? && fallback_purchase.present?)
 
     configured_discount_for_display
@@ -441,12 +443,7 @@ class OfferCode < ApplicationRecord
     end.sort_by { it["months"] }
   end
 
-  # `continues_purchase` marks a charge that pays for a plan the buyer already started (a renewal, a
-  # later installment, an upgrade): the new-customer gate settled that plan already and must not
-  # settle it again, or the buyer loses the discount they were granted when they started.
-  def evaluate_for_buyer(buyer, product: nil, fallback_purchase: nil, continues_purchase: false)
-    return nil if new_customers_only? && !continues_purchase && !new_customer?(buyer)
-
+  def evaluate_for_buyer(buyer, product: nil, fallback_purchase: nil)
     reference = ownership_reference_products(product)
     months = ownership_months_for(buyer, reference) if existing_customers_only? || tiered?
     return nil if existing_customers_only? && months.nil?
@@ -485,14 +482,7 @@ class OfferCode < ApplicationRecord
       ["purchases.purchaser_id = ?", buyer.id]
     end
 
-    oldest = Purchase
-      .all_success_states
-      .not_is_additional_contribution
-      .not_recurring_charge
-      .not_is_gift_sender_purchase
-      .not_fully_refunded
-      .not_chargedback_or_chargedback_reversed
-      .not_is_access_revoked
+    oldest = qualifying_ownership_purchases
       .where(link_id: products.map(&:id))
       .where(*ownership_condition)
       .order(:created_at)
@@ -500,30 +490,20 @@ class OfferCode < ApplicationRecord
     months_since(oldest)
   end
 
-  # New means this seller has no prior successful purchase from the buyer, matched by account id or
-  # confirmed account email like the ownership lookup, but across the whole store. An unidentified
-  # buyer counts as existing: a code we cannot clear for someone is one we refuse, so the price
-  # checkout quotes and the price it charges cannot disagree.
-  def new_customer?(buyer)
-    return false if buyer.nil?
+  # Whether any of these accounts or emails already holds a purchase from this seller, in any
+  # product, by the same rules ownership_months_for counts. Eligibility for a new-customers-only
+  # code is decided here, not in evaluate_for_buyer, which also prices renewals and the manage page
+  # for people who are customers by then. Unlike the ownership lookup an email needs no
+  # confirmation: it can only withhold a discount, and the checkout email is what the buyer typed.
+  # Two lookups so each stays on its own index.
+  def returning_customer?(purchaser_ids: [], emails: [], excluding_purchase: nil)
+    purchases = qualifying_ownership_purchases.where(seller_id: user_id)
+    purchases = purchases.where.not(id: excluding_purchase.id) if excluding_purchase&.persisted?
 
-    buyer_condition = if buyer.email.present? && buyer.confirmed?
-      ["purchases.purchaser_id = ? OR purchases.email = ?", buyer.id, buyer.email]
-    else
-      ["purchases.purchaser_id = ?", buyer.id]
-    end
-
-    !Purchase
-      .all_success_states
-      .not_is_additional_contribution
-      .not_recurring_charge
-      .not_is_gift_sender_purchase
-      .not_fully_refunded
-      .not_chargedback_or_chargedback_reversed
-      .not_is_access_revoked
-      .where(seller_id: user_id)
-      .where(*buyer_condition)
-      .exists?
+    purchaser_ids = purchaser_ids.compact.uniq
+    emails = emails.compact_blank.uniq
+    (purchaser_ids.any? && purchases.where(purchaser_id: purchaser_ids).exists?) ||
+      (emails.any? && purchases.where(email: emails).exists?)
   end
 
   def months_since(timestamp)
@@ -556,6 +536,17 @@ class OfferCode < ApplicationRecord
   end
 
   private
+    def qualifying_ownership_purchases
+      Purchase
+        .all_success_states
+        .not_is_additional_contribution
+        .not_recurring_charge
+        .not_is_gift_sender_purchase
+        .not_fully_refunded
+        .not_chargedback_or_chargedback_reversed
+        .not_is_access_revoked
+    end
+
     def ownership_reference_products(product = nil)
       return ownership_products if ownership_products.present?
       return [product] if product
@@ -651,7 +642,7 @@ class OfferCode < ApplicationRecord
     def note_column_applicability_changes
       return if previously_new_record?
 
-      @applicability_changed ||= saved_changes.keys.intersect?(%w[universal currency_type deleted_at code])
+      @applicability_changed ||= saved_changes.keys.intersect?(%w[universal currency_type deleted_at code new_customers_only])
     end
 
     def forget_applicability_changes
@@ -771,6 +762,8 @@ class OfferCode < ApplicationRecord
 
       errors.add(:base, "Only a discount that applies to all products can be applied automatically.") unless universal?
       errors.add(:base, "A cancellation or upsell discount cannot be applied automatically.") if is_cancellation_discount? || upsell.present?
+      # Checkout keeps automatic codes on the cart with no way to remove them, so a returning buyer could not pay.
+      errors.add(:base, "A discount limited to new customers cannot be applied automatically.") if new_customers_only?
       return if user_id.blank?
 
       # `update` assigns associations before the seller lock, fixing the REPEATABLE READ snapshot,
@@ -809,6 +802,14 @@ class OfferCode < ApplicationRecord
 
       errors.add(:base, "A discount code can't be limited to new customers and existing customers at the same time.") if existing_customers_only?
       errors.add(:base, "Tiering by ownership duration requires the buyer to already own the product.") if tiered?
+      return unless persisted? && new_customers_only_changed?
+
+      # A product default applies itself at checkout, where the buyer cannot remove it.
+      blocked = Link.visible.where(default_offer_code_id: id)
+      names = blocked.order(:id).limit(NAMED_DEFAULT_DISCOUNT_PRODUCTS).pluck(:name)
+      return if names.empty?
+
+      errors.add(:base, "This code is applied automatically on #{to_product_sentence(names, blocked.count)}. Turn off “Automatically apply discount code” in #{names.one? ? "that product’s editor" : "those products’ editors"} (under Pricing, or Tiers for memberships), then try again.")
     end
 
     def validate_excluded_products

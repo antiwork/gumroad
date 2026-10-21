@@ -334,6 +334,15 @@ describe Api::V2::OfferCodesController do
         expect(@offer_code.reload.auto_apply).to eq(true)
       end
 
+      it "does not let a code limited to new customers auto apply" do
+        @offer_code.update!(universal: true, products: [], new_customers_only: true)
+
+        put @action, params: @params.merge(auto_apply: true), as: :json
+
+        expect(response.parsed_body).to include("success" => false, "message" => "A discount limited to new customers cannot be applied automatically.")
+        expect(@offer_code.reload.auto_apply).to eq(false)
+      end
+
       it "enables auto apply on a universal code from the string true" do
         @offer_code.update!(universal: true, products: [])
 

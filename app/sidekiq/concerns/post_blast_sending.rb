@@ -111,23 +111,45 @@ module PostBlastSending
       return
     end
 
-    recipients = prepare_recipients(kept)
+    withheld = hand_off_members(provider:, members: kept, cache:)
+    return if withheld.nil?
+
+    # The handoff withholds a follower whose follow ended after the audience load. On an audience post that member
+    # can still be a buyer or an affiliate: recheck their row, which the unfollow already updated, and send them
+    # once more as that. Anyone withheld again is settled like everyone else who left the audience.
+    if withheld.any? && @post.audience_type?
+      resend, withheld = partition_members_that_left_the_audience(withheld)
+      if resend.any?
+        withheld_again = hand_off_members(provider:, members: resend, cache:)
+        return if withheld_again.nil?
+
+        withheld += withheld_again
+      end
+    end
+    settle_pending_recipients(dropped + withheld, owed)
+  end
+
+  # Renders these members, hands them to the provider and records the ones it took, before any further call.
+  # Returns the members the handoff withheld, or nil once the newsletter retired.
+  def hand_off_members(provider:, members:, cache:)
+    withheld_emails = Set.new
     begin
-      deliver_provider_slice(provider: provider, recipients: recipients, cache: cache)
+      deliver_provider_slice(provider:, recipients: prepare_recipients(members), cache:, on_withheld: ->(withheld) { withheld_emails.merge(withheld.pluck(:email)) })
     rescue FeatureAnnouncementNewsletterCutover::Retired
       stop_for_retired_newsletter!
       return
     end
+    withheld, delivered = members.partition { withheld_emails.include?(_1.email) }
     if @blast.to_non_openers?
-      mark_members_sent_in_this_blast(kept)
+      mark_members_sent_in_this_blast(delivered)
     else
-      store_recipients_as_sent(kept)
+      store_recipients_as_sent(delivered)
     end
-    settle_pending_recipients(dropped, owed)
+    withheld
   end
 
-  def deliver_provider_slice(provider:, recipients:, cache:)
-    args = { post: @post, recipients:, cache:, blast: @blast }
+  def deliver_provider_slice(provider:, recipients:, cache:, on_withheld:)
+    args = { post: @post, recipients:, cache:, blast: @blast, on_withheld: }
     admission = FeatureAnnouncementNewsletterCutover.handoff_admission_for(@post)
     args[:handoff_admission] = admission if admission
     case provider
@@ -330,15 +352,19 @@ module PostBlastSending
         .pluck(:id, :purchase_id).to_h
     end
     allow_non_purchase_recipients = !buyer_post && !purchase_targeted?
+    # The row can still list a follow that has ended: an unfollow that times out updating it leaves it to
+    # RefreshAudienceMemberJob. So the follow itself decides whether a member is sent as a follower.
+    live_follower_ids = buyer_post ? Set.new : PostFollowerHandoff.live_follower_ids(@post.seller_id, members.select(&:follower_id).to_h { [_1.follower_id, _1.email] })
 
     kept, dropped = members.partition do |member|
       details = details_by_member_id[member.id]&.details || {}
-      if (purchase_id = qualifying_purchase_ids[member.id])
-        member.purchase_id = purchase_id
-        true
-      else
-        allow_non_purchase_recipients && (details["follower"].present? || details["affiliates"].present?)
-      end
+      # A member is sent only in a role the audience load qualified them for and their row still holds, or as a
+      # purchase that qualifies now. Other details on the row (an affiliation outside a date filter or added after
+      # the load, a purchase that opted out) are no permission, and a member left with no role isn't sent.
+      member.follower_id = nil if member.follower_id && (details.dig("follower", "id") != member.follower_id || !live_follower_ids.include?(member.follower_id))
+      member.affiliate_id = nil if member.affiliate_id && Array.wrap(details["affiliates"]).none? { _1["id"] == member.affiliate_id }
+      member.purchase_id = qualifying_purchase_ids[member.id]
+      member.purchase_id.present? || (allow_non_purchase_recipients && (member.follower_id || member.affiliate_id).present?)
     end
     Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} dropped #{dropped.size} recipients who left the audience") if dropped.any?
     [kept, dropped]

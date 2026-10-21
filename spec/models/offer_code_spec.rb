@@ -1308,6 +1308,20 @@ describe OfferCode do
         )
       end
     end
+
+    context "when the discount is limited to new customers" do
+      let(:offer_code) { create(:offer_code, :for_new_customers, products: [product], amount_cents: 100) }
+
+      it "marks the condition so the product page can state it" do
+        expect(offer_code.discount).to include(type: "fixed", cents: 100, new_customers_only: true)
+      end
+
+      it "leaves the marker out of every other discount" do
+        offer_code.update!(new_customers_only: false)
+
+        expect(offer_code.discount).not_to have_key(:new_customers_only)
+      end
+    end
   end
 
   describe "#is_amount_valid?" do
@@ -2159,63 +2173,75 @@ describe OfferCode do
       end
     end
 
+    # Eligibility is decided per buyer by #returning_customer? (computing service and checkout), not
+    # here: this funnel also prices renewals and the subscription manage page for buyers who are,
+    # by then, customers.
     context "with a new-customers-only code" do
       let(:new_customers_code) do
         create(:offer_code, :for_new_customers, user: seller, products: [@product], amount_cents: nil, amount_percentage: 30, currency_type: nil)
       end
+      let(:other_product) { create(:product, user: seller, price_cents: 5_00) }
 
-      it "returns the standard discount for a buyer with no purchase history" do
-        expect(new_customers_code.evaluate_for_buyer(buyer)).to include(type: "percent", percents: 30)
+      def returning?(buyer, emails: [buyer.email])
+        new_customers_code.returning_customer?(purchaser_ids: [buyer.id], emails:)
       end
 
-      it "returns nil for a buyer who already bought another of the seller's products" do
-        other_product = create(:product, user: seller, price_cents: 5_00)
+      it "returns the standard discount, so renewals and the manage page keep a subscriber's discount" do
+        original = create(:purchase, purchaser: buyer, link: @product, seller:, price_cents: @product.price_cents)
+
+        expect(new_customers_code.evaluate_for_buyer(buyer)).to include(type: "percent", percents: 30)
+        expect(new_customers_code.discount_for_display(buyer:, product: @product, fallback_purchase: original)).to include(type: "percent", percents: 30)
+      end
+
+      it "shows the configured discount before the buyer is identified" do
+        expect(new_customers_code.discount_for_display).to include(type: "percent", percents: 30)
+      end
+
+      it "treats a buyer with no purchase history as new" do
+        expect(returning?(buyer)).to eq(false)
+      end
+
+      it "treats a buyer who already bought another of the seller's products as returning" do
         create(:purchase, purchaser: buyer, link: other_product, seller:, price_cents: other_product.price_cents)
 
-        expect(new_customers_code.evaluate_for_buyer(buyer)).to be_nil
+        expect(returning?(buyer)).to eq(true)
       end
 
-      it "returns nil when the buyer's prior purchase was a guest checkout under their email" do
-        other_product = create(:product, user: seller, price_cents: 5_00)
+      it "treats a guest checkout under the buyer's email as a prior purchase" do
         create(:purchase, purchaser: nil, email: buyer.email, link: other_product, seller:, price_cents: other_product.price_cents)
 
-        expect(new_customers_code.evaluate_for_buyer(buyer)).to be_nil
-      end
-
-      it "returns nil for an unidentified buyer, and for unauthenticated display" do
-        expect(new_customers_code.evaluate_for_buyer(nil)).to be_nil
-        expect(new_customers_code.discount_for_display).to be_nil
+        expect(returning?(buyer)).to eq(true)
       end
 
       it "ignores another seller's purchases" do
         other_seller = create(:user)
-        other_product = create(:product, user: other_seller, price_cents: 5_00)
-        create(:purchase, purchaser: buyer, link: other_product, seller: other_seller, price_cents: other_product.price_cents)
+        elsewhere = create(:product, user: other_seller, price_cents: 5_00)
+        create(:purchase, purchaser: buyer, link: elsewhere, seller: other_seller, price_cents: elsewhere.price_cents)
 
-        expect(new_customers_code.evaluate_for_buyer(buyer)).to include(type: "percent", percents: 30)
+        expect(returning?(buyer)).to eq(false)
       end
 
       it "treats a refunded prior purchase as no purchase at all" do
-        other_product = create(:product, user: seller, price_cents: 5_00)
         create(:purchase, purchaser: buyer, link: other_product, seller:, price_cents: other_product.price_cents, stripe_refunded: true)
 
-        expect(new_customers_code.evaluate_for_buyer(buyer)).to include(type: "percent", percents: 30)
+        expect(returning?(buyer)).to eq(false)
       end
 
       it "still matches an account-linked purchase when the buyer's email is unconfirmed" do
         unconfirmed_buyer = create(:unconfirmed_user)
-        other_product = create(:product, user: seller, price_cents: 5_00)
         create(:purchase, purchaser: unconfirmed_buyer, link: other_product, seller:, price_cents: other_product.price_cents)
 
-        expect(new_customers_code.evaluate_for_buyer(unconfirmed_buyer)).to be_nil
+        expect(returning?(unconfirmed_buyer)).to eq(true)
       end
 
-      it "ignores a guest purchase matching an unconfirmed account email" do
+      # Withholding may use an email the buyer hasn't confirmed: a signed-in buyer checks out under
+      # their account email, so checkout would refuse the code anyway. Granting never does (see the
+      # existing-customer examples above).
+      it "withholds the code when a guest purchase matches an unconfirmed account email" do
         unconfirmed_buyer = create(:unconfirmed_user)
-        other_product = create(:product, user: seller, price_cents: 5_00)
         create(:purchase, purchaser: nil, email: unconfirmed_buyer.email, link: other_product, seller:, price_cents: other_product.price_cents)
 
-        expect(new_customers_code.evaluate_for_buyer(unconfirmed_buyer)).to include(type: "percent", percents: 30)
+        expect(returning?(unconfirmed_buyer)).to eq(true)
       end
     end
   end

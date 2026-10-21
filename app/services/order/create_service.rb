@@ -245,6 +245,12 @@ class Order::CreateService
       end
     end
 
+    # Removing a refused new-customer code happens at checkout, so the way back is offered only when
+    # the cart survived the decision above; later charge or confirm failures never bring it back.
+    if cart&.alive?
+      purchase_responses.each_value { _1[:cart_retained] = true if _1[:new_customer_offer_code_refused] }
+    end
+
     offer_codes = offer_codes.map do |offer_code, products|
       service = OfferCodeDiscountComputingService.new(
         normalize_discount_code(offer_code),

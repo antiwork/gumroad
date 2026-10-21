@@ -45,6 +45,30 @@ describe Checkout::OfferCodePolicy do
     end
   end
 
+  permissions :statistics? do
+    context "when the offer code belongs to seller" do
+      let(:offer_code) { create(:offer_code, user: seller) }
+
+      %i[seller accountant_for_seller admin_for_seller marketing_for_seller support_for_seller].each do |role|
+        it "grants access to #{role}" do
+          seller_context = SellerContext.new(user: public_send(role), seller:)
+          expect(subject).to permit(seller_context, offer_code)
+        end
+      end
+    end
+
+    context "when the offer code belongs to other user" do
+      let(:offer_code) { create(:offer_code) }
+
+      %i[seller accountant_for_seller admin_for_seller marketing_for_seller support_for_seller].each do |role|
+        it "denies access to #{role}" do
+          seller_context = SellerContext.new(user: public_send(role), seller:)
+          expect(subject).to_not permit(seller_context, offer_code)
+        end
+      end
+    end
+  end
+
   permissions :create? do
     it "grants access to owner" do
       seller_context = SellerContext.new(user: seller, seller:)

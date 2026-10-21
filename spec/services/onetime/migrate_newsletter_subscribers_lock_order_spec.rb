@@ -111,12 +111,12 @@ describe Onetime::MigrateNewsletterSubscribersToFeatureAnnouncements, "lock orde
     migration.prepare!(cutoff_at: 1.hour.ago)
     reached = Queue.new
     go = Queue.new
-    allow_any_instance_of(migration).to receive(:migrate).and_wrap_original do |original, seller, plan, follower|
+    allow_any_instance_of(migration).to receive(:migrate).and_wrap_original do |original, seller, plan, follower, **kwargs|
       if follower.id == @current_follow.id
         reached << true
         Timeout.timeout(20) { go.pop }
       end
-      original.call(seller, plan, follower)
+      original.call(seller, plan, follower, **kwargs)
     end
     copy = in_thread { migration.apply!(confirmed_eligible_count: cutover.eligible_count) }
     Timeout.timeout(10) { reached.pop }

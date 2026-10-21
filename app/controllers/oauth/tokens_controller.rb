@@ -35,7 +35,7 @@ class Oauth::TokensController < Doorkeeper::TokensController
       oauth_application = refresh_token_application
       return super if oauth_application.nil?
 
-      oauth_application.with_application_lock do
+      oauth_application.with_application_lock(shared: true) do
         @strategy = nil
         super
       end

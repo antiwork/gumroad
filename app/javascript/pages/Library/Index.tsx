@@ -54,6 +54,7 @@ export type Result = {
     is_archived: boolean;
     download_url: string | null;
     variants: string | null;
+    subscription?: { status_label: string; manage_label: string; manage_url: string | null };
   };
 };
 
@@ -97,6 +98,25 @@ export const Card = ({
         ) : (
           <h3 itemProp="name">{name}</h3>
         )}
+        {purchase.subscription ? (
+          // Archive and Remove only tidy the Library; this card stays here while it bills, so the
+          // useful action is managing the subscription itself, when it can still be managed. It
+          // sits under the status it acts on, which leaves the footer to the creator byline.
+          <div className="flex flex-col gap-1 text-sm">
+            <p className="text-muted">{purchase.subscription.status_label}</p>
+            {purchase.subscription.manage_url ? (
+              // The rest of the card is the download link, so the padding/negative-margin pair makes this
+              // target 24px tall without moving its text.
+              <a
+                href={purchase.subscription.manage_url}
+                className="relative -my-0.5 self-start py-0.5"
+                aria-label={`${purchase.subscription.manage_label} for ${name}`}
+              >
+                {purchase.subscription.manage_label}
+              </a>
+            ) : null}
+          </div>
+        ) : null}
       </ProductCardHeader>
       <ProductCardFooter>
         <div className="flex-1 p-4">
@@ -108,25 +128,27 @@ export const Card = ({
             />
           ) : null}
         </div>
-        <div className="p-4">
-          <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
-            <PopoverTrigger aria-label="Open product action menu" className="relative">
-              <DotsHorizontalRounded className="size-5" />
-            </PopoverTrigger>
-            <PopoverContent className="border-0 p-0 shadow-none" usePortal>
-              <Menu>
-                <MenuItem onClick={toggleArchived}>
-                  <Archive className="size-5" />
-                  {purchase.is_archived ? "Unarchive" : "Archive"}
-                </MenuItem>
-                <MenuItem variant="danger" onClick={() => onDelete()}>
-                  <Trash className="size-5" />
-                  Remove from library
-                </MenuItem>
-              </Menu>
-            </PopoverContent>
-          </Popover>
-        </div>
+        {purchase.subscription ? null : (
+          <div className="p-4">
+            <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
+              <PopoverTrigger aria-label="Open product action menu" className="relative">
+                <DotsHorizontalRounded className="size-5" />
+              </PopoverTrigger>
+              <PopoverContent className="border-0 p-0 shadow-none" usePortal>
+                <Menu>
+                  <MenuItem onClick={toggleArchived}>
+                    <Archive className="size-5" />
+                    {purchase.is_archived ? "Unarchive" : "Archive"}
+                  </MenuItem>
+                  <MenuItem variant="danger" onClick={() => onDelete()}>
+                    <Trash className="size-5" />
+                    Remove from library
+                  </MenuItem>
+                </Menu>
+              </PopoverContent>
+            </Popover>
+          </div>
+        )}
       </ProductCardFooter>
     </ProductCard>
   );
@@ -194,6 +216,7 @@ type Props = {
     label: string;
     download_url: string | null;
     zip_unavailable_reason: "too_large" | "failed" | null;
+    omits_granted_files: boolean;
   }[];
   archived_count: number;
   unarchived_count: number;
@@ -275,10 +298,9 @@ export default function LibraryPage() {
   const isDesktop = useIsAboveBreakpoint("lg");
   const [mobileFiltersExpanded, setMobileFiltersExpanded] = React.useState(false);
   const [showingAllCreators, setShowingAllCreators] = React.useState(false);
-  // On the Subscriptions tab the server counts only active subscriptions, so these follow the tab.
+  // On the Subscriptions tab the server counts every ongoing subscription as unarchived.
   const isLibraryEmpty = archivedCount + unarchivedCount === 0;
   const showArchivedNotice = !isLibraryEmpty && !search.show_archived_only && unarchivedCount === 0;
-  const archivedNoun = search.subscriptions_only ? "subscription" : "purchase";
   const hasParams =
     activeSearch.show_archived_only ||
     activeSearch.query !== "" ||
@@ -373,11 +395,7 @@ export default function LibraryPage() {
               )
             ) : (
               <>
-                <h2 className="library-header">
-                  {search.subscriptions_only
-                    ? "You've archived all your subscriptions."
-                    : "You've archived all your products."}
-                </h2>
+                <h2 className="library-header">You've archived all your products.</h2>
                 <Button
                   color="accent"
                   onClick={(e) => {
@@ -393,8 +411,7 @@ export default function LibraryPage() {
         ) : null}
         {archivedCount > 0 && !activeSearch.show_archived_only && !showArchivedNotice ? (
           <Alert role="status" variant="info" className="mb-5">
-            You have {archivedCount} archived {archivedNoun}
-            {archivedCount === 1 ? "" : "s"}.{" "}
+            You have {archivedCount} archived purchase{archivedCount === 1 ? "" : "s"}.{" "}
             <LinkButton onClick={() => navigate({ show_archived_only: true })}>Click here to view</LinkButton>
           </Alert>
         ) : null}
@@ -410,6 +427,11 @@ export default function LibraryPage() {
                 <>
                   We could not prepare a ZIP file for <strong>{bundleDownload.label}</strong>. Download the products
                   below individually.
+                </>
+              ) : bundleDownload.omits_granted_files ? (
+                <>
+                  Download <strong>{bundleDownload.label}</strong> as one ZIP file. Some files are only available from
+                  the products below.
                 </>
               ) : (
                 <>

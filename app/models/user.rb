@@ -134,7 +134,7 @@ class User < ApplicationRecord
   has_many :offer_codes
   # Card listings preload this (see ProductPresenter::Card::ASSOCIATIONS); read it through
   # #auto_apply_offer_code, which falls back to a per-request memo when it is not loaded.
-  has_one :auto_apply_offer_code, -> { alive.universal.where(auto_apply: true).order(:id) }, class_name: "OfferCode"
+  has_one :auto_apply_offer_code, -> { alive.universal.where(auto_apply: true, new_customers_only: false).order(:id) }, class_name: "OfferCode"
   has_many :user_compliance_infos
   has_many :guardians
   has_many :user_compliance_info_requests
@@ -706,7 +706,9 @@ class User < ApplicationRecord
   # with its exclusions loaded, so pricing a page of products adds no per-product query.
   def auto_apply_offer_code_for(product)
     code = auto_apply_offer_code
-    return if code.nil? || code.deleted? || code.code.blank? || !code.universal?
+    # Checkout pins automatic codes where the buyer can't remove them, so a returning buyer could
+    # never pay. Validations refuse auto_apply on new-customer codes, but legacy rows hold both.
+    return if code.nil? || code.deleted? || code.code.blank? || !code.universal? || code.new_customers_only?
 
     code if code.applicable?(product)
   end
@@ -717,7 +719,7 @@ class User < ApplicationRecord
     cache = (Current.auto_apply_offer_codes ||= {})
     return cache[id] if cache.key?(id)
 
-    cache[id] = offer_codes.alive.universal.where(auto_apply: true).includes(:excluded_products, :variants).first
+    cache[id] = offer_codes.alive.universal.where(auto_apply: true, new_customers_only: false).includes(:excluded_products, :variants).first
   end
 
   def purchasing_power_parity_excluded_product_external_ids

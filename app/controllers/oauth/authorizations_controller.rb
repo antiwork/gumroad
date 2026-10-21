@@ -3,6 +3,10 @@
 class Oauth::AuthorizationsController < Doorkeeper::AuthorizationsController
   ADMIN_SCOPE_OPTIONAL = "optional"
   ADMIN_AUTHORIZATION_PARAM = "authorize_admin_operations"
+  LOCK_RETRY_AFTER_SECONDS = 5
+  LOCK_BUSY_MESSAGE = "Gumroad is busy finishing another change to this application. Please wait a few seconds, then try again."
+
+  rescue_from OauthApplication::LockUnavailable, with: :render_authorization_busy
 
   before_action :hide_layouts
   before_action :default_to_authorization_code
@@ -18,15 +22,25 @@ class Oauth::AuthorizationsController < Doorkeeper::AuthorizationsController
     end
 
     # Only dynamic clients bind grants to a resource; other applications never persist one.
+    # A dynamic client that omits `scope` gets the scopes it registered, not Doorkeeper's default
+    # (view_public only): the consent page grants only what the request names, so the default
+    # would leave the token unable to reach the tools the client registered for.
     def pre_auth_params
       fields = super
-      dynamic_client_request? ? fields : fields.except(:resource)
+      return fields.except(:resource) unless dynamic_client_request?
+
+      fields[:scope] = dynamic_client_application.scopes.to_s if fields[:scope].blank?
+      fields
+    end
+
+    def dynamic_client_application
+      return @dynamic_client_application if defined?(@dynamic_client_application)
+
+      @dynamic_client_application = OauthApplication.alive.where(mcp_dynamic_client: true).find_by(uid: params[:client_id].to_s)
     end
 
     def dynamic_client_request?
-      return @dynamic_client_request if defined?(@dynamic_client_request)
-
-      @dynamic_client_request = OauthApplication.alive.where(mcp_dynamic_client: true).exists?(uid: params[:client_id].to_s)
+      dynamic_client_application.present?
     end
 
     # Doorkeeper refuses its matching-token consent skip whenever any custom access token attribute
@@ -46,11 +60,18 @@ class Oauth::AuthorizationsController < Doorkeeper::AuthorizationsController
       oauth_application = OauthApplication.alive.find_by(uid: params[:client_id])
       return super if oauth_application.nil?
 
-      oauth_application.with_application_lock do
+      oauth_application.with_application_lock(shared: true) do
         @pre_auth = nil
         @strategy = nil
         super
       end
+    end
+
+    # Nothing was written; the sweep that held the row commits within seconds.
+    def render_authorization_busy(exception)
+      ErrorNotifier.notify(exception, client_id: params[:client_id])
+      response.set_header("Retry-After", LOCK_RETRY_AFTER_SECONDS.to_s)
+      render :error, locals: { error_description: LOCK_BUSY_MESSAGE }, status: :service_unavailable
     end
 
     def redirect_or_render(auth)

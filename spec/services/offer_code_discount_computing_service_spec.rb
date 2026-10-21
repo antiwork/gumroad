@@ -966,10 +966,40 @@ describe OfferCodeDiscountComputingService do
       expect(result[:products_data]).to be_empty
     end
 
-    it "rejects redemption with :not_new_customer when the buyer is unidentified" do
+    # Checkout decides on the email the buyer enters; before that the discount is only tentative.
+    it "applies the discount while the buyer is anonymous" do
+      create(:purchase, link: create(:product, user: seller), purchaser: nil, email: "repeat.buyer@example.com")
+
       result = OfferCodeDiscountComputingService.new(new_customers_code.code, single_product_data, buyer: nil).process
 
+      expect(result[:error_code]).to be_nil
+      expect(result[:products_data][product.unique_permalink][:discount]).to include(type: "percent", percents: 25)
+    end
+
+    it "rejects a buyer whose unconfirmed account email matches an earlier guest purchase" do
+      unconfirmed_buyer = create(:unconfirmed_user, email: "guest.buyer@example.com")
+      create(:purchase, link: create(:product, user: seller), purchaser: nil, email: "Guest.Buyer@Example.com")
+
+      result = OfferCodeDiscountComputingService.new(new_customers_code.code, single_product_data, buyer: unconfirmed_buyer).process
+
       expect(result[:error_code]).to eq(:not_new_customer)
+    end
+
+    it "ignores the buyer's purchases from other sellers" do
+      create(:purchase, link: create(:product), purchaser: buyer, email: buyer.email)
+
+      result = OfferCodeDiscountComputingService.new(new_customers_code.code, single_product_data, buyer:).process
+
+      expect(result[:error_code]).to be_nil
+    end
+
+    it "discounts every line of a first order from the seller" do
+      new_customers_code.update!(products: [product, product2])
+      cart = single_product_data.merge(product2.unique_permalink => { quantity: "2", permalink: product2.unique_permalink })
+
+      result = OfferCodeDiscountComputingService.new(new_customers_code.code, cart, buyer:).process
+
+      expect(result[:products_data].keys).to contain_exactly(product.unique_permalink, product2.unique_permalink)
     end
   end
 
