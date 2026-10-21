@@ -136,7 +136,10 @@ class SitemapService
 
       SitemapGenerator::Sitemap.create do
         Link.alive.where(created_at: period).preload(*SITEMAP_PRELOADS).find_each do |product|
-          relative_url = Rails.application.routes.url_helpers.short_link_path(product)
+          # short_link_path keys off to_param (unique_permalink), which 301s to the seller's
+          # custom permalink whenever one is set. A redirecting sitemap entry is non-canonical,
+          # so list the permalink that redirect points at instead.
+          relative_url = Rails.application.routes.url_helpers.short_link_path(product.general_permalink)
           add relative_url, changefreq: "daily", priority: 1, lastmod: product.updated_at, images: [{ loc: product.preview_url }],
                             host: product.user.subdomain_with_protocol
         end

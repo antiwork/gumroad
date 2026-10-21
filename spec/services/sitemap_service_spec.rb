@@ -84,6 +84,33 @@ describe SitemapService do
       expect(xml).to include(seller.subdomain_with_protocol)
       expect(xml).to include(product.reload.preview_url)
     end
+
+    # /l/<unique_permalink> 301s to /l/<custom_permalink> once the seller sets one, and a
+    # redirecting entry is non-canonical — so the entry has to be the redirect's target.
+    it "lists the seller's custom permalink instead of the short link that redirects to it" do
+      seller = create(:user, username: "sluggedseller")
+      product = create(:product, user: seller, created_at: Time.current, custom_permalink: "my-ebook")
+
+      date = product.created_at
+      path = "#{Rails.public_path}/sitemap/products/monthly/#{date.year}/#{date.month}/sitemap.xml.gz"
+      service.generate(date)
+
+      locs = Zlib::GzipReader.open(path, &:read).scan(%r{<loc>([^<]+)</loc>}).flatten
+      expect(locs).to include("#{seller.subdomain_with_protocol}/l/my-ebook")
+      expect(locs.grep(%r{/l/#{product.unique_permalink}\z})).to be_empty
+    end
+
+    it "keeps the unique permalink for a product with no custom permalink" do
+      seller = create(:user, username: "tokenseller")
+      product = create(:product, user: seller, created_at: Time.current)
+
+      date = product.created_at
+      path = "#{Rails.public_path}/sitemap/products/monthly/#{date.year}/#{date.month}/sitemap.xml.gz"
+      service.generate(date)
+
+      locs = Zlib::GzipReader.open(path, &:read).scan(%r{<loc>([^<]+)</loc>}).flatten
+      expect(locs).to include("#{seller.subdomain_with_protocol}/l/#{product.unique_permalink}")
+    end
   end
 
   describe "#generate_categories" do
