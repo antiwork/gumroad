@@ -286,13 +286,114 @@ describe "Muse MCP" do
     issued = Doorkeeper::AccessToken.by_token(token_response.fetch("access_token"))
     expect(issued.scopes.to_a).to match_array(scopes)
     expect(issued.resource).to eq(resource)
+
+    headers = { "CONTENT_TYPE" => "application/json", "Authorization" => "Bearer #{issued.token}" }
+    post "/claude/v1/mcp", params: { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "create_draft_product", arguments: { name: "Six scopes", price_cents: 500 } } }.to_json, headers: headers
+    expect(response).to have_http_status(:ok)
+    expect(response.headers["WWW-Authenticate"]).to be_nil
+    expect(response.parsed_body.dig("result", "structuredContent", "product", "name")).to eq("Six scopes")
+
+    post "/claude/v1/mcp", params: { jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "list_payouts", arguments: {} } }.to_json, headers: headers
+    expect(response).to have_http_status(:ok)
+    expect(response.headers["WWW-Authenticate"]).to be_nil
+    expect(response.parsed_body.dig("result", "structuredContent")).to eq("payouts" => [])
   end
 
-  it "returns 401 without a token" do
+  it "grants a dynamic client its registered scopes when it omits scope, and steps a narrower token up" do
+    host! DOMAIN
+    stub_vite_layout_helpers
+    Rails.application.reload_routes!
+    sign_in @seller
+
+    resource = "#{PROTOCOL}://#{DOMAIN}/claude/v1/mcp"
+    redirect_uri = "https://example.com/callback"
+    post "/claude/v1/oauth2/register",
+         params: { client_name: "Muse", redirect_uris: [redirect_uri], token_endpoint_auth_method: "none" }.to_json,
+         headers: { "CONTENT_TYPE" => "application/json" }
+    expect(response).to have_http_status(:created)
+    client_id = response.parsed_body.fetch("client_id")
+    expect(response.parsed_body.fetch("scope").split).to match_array(Muse::OauthClientRegistration::MCP_SCOPES)
+
+    authorize = lambda do |scope|
+      code_verifier = SecureRandom.urlsafe_base64(48)
+      code_challenge = Base64.urlsafe_encode64(Digest::SHA256.digest(code_verifier), padding: false)
+      params = { response_type: "code", client_id:, redirect_uri:, state: "step-up", code_challenge:, code_challenge_method: "S256", resource:, scope: }.compact
+      get "/claude/v1/oauth2/authorize", params: params
+      expect(response).to have_http_status(:ok)
+      post "/oauth/authorize", params: params.merge(authenticity_token: authenticity_token(Nokogiri::HTML(response.body)))
+      expect(response).to have_http_status(:found)
+      code = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("code")
+      post "/claude/v1/oauth2/token", params: { grant_type: "authorization_code", code:, redirect_uri:, client_id:, code_verifier:, resource: }
+      expect(response).to have_http_status(:ok)
+      response.parsed_body
+    end
+    call_tool = lambda do |access_token, name|
+      headers = { "CONTENT_TYPE" => "application/json", "Authorization" => "Bearer #{access_token}" }
+      arguments = name == "create_draft_product" ? { name: "Stepped up", price_cents: 500 } : {}
+      post "/claude/v1/mcp", params: { jsonrpc: "2.0", id: name, method: "tools/call", params: { name:, arguments: } }.to_json, headers: headers
+    end
+
+    # Omitting scope would leave the client on Doorkeeper's default (view_public only); a dynamic
+    # client gets everything it registered instead.
+    full_token = authorize.call(nil)
+    expect(full_token.fetch("scope").split).to match_array(Muse::OauthClientRegistration::MCP_SCOPES)
+    expect { call_tool.call(full_token.fetch("access_token"), "create_draft_product") }.to change(Link, :count).by(1)
+    expect(response).to have_http_status(:ok)
+    expect(response.headers["WWW-Authenticate"]).to be_nil
+
+    narrow_token = authorize.call("view_public view_sales")
+    expect(narrow_token.fetch("scope").split).to match_array(%w[view_public view_sales])
+
+    expect { call_tool.call(narrow_token.fetch("access_token"), "create_draft_product") }.not_to change(Link, :count)
+    expect(response).to have_http_status(:forbidden)
+    expect(response.headers["WWW-Authenticate"]).to eq(
+      %(Bearer realm="Gumroad", error="insufficient_scope", scope="view_public view_sales edit_products", ) +
+      %(resource_metadata="#{resource.sub('/claude/v1/mcp', '/.well-known/oauth-protected-resource/claude/v1/mcp')}", ) +
+      %(error_description="This tool requires the edit_products or account scope.")
+    )
+    expect(response.parsed_body["error"]).to eq("code" => -32000, "message" => "This tool requires the edit_products or account scope.")
+
+    # The client re-authorizes with the scope the challenge named and keeps what it had.
+    stepped_up = authorize.call("view_public view_sales edit_products")
+    expect(stepped_up.fetch("scope").split).to match_array(%w[view_public view_sales edit_products])
+
+    expect { call_tool.call(stepped_up.fetch("access_token"), "create_draft_product") }.to change(Link, :count).by(1)
+    expect(response).to have_http_status(:ok)
+    expect(response.headers["WWW-Authenticate"]).to be_nil
+
+    call_tool.call(stepped_up.fetch("access_token"), "list_payouts")
+    expect(response).to have_http_status(:forbidden)
+    expect(response.headers["WWW-Authenticate"]).to include(%(error="insufficient_scope", scope="view_public view_sales edit_products view_payouts"))
+  end
+
+  it "keeps Doorkeeper's default scope for a manually created application that omits scope" do
+    host! DOMAIN
+    stub_vite_layout_helpers
+    Rails.application.reload_routes!
+    sign_in @seller
+
+    redirect_uri = "https://example.com/callback"
+    legacy_app = create(:oauth_application, owner: create(:user), confidential: false, redirect_uri:, scopes: "view_public view_sales")
+    params = { response_type: "code", client_id: legacy_app.uid, redirect_uri:, state: "legacy-default" }
+
+    get "/oauth/authorize", params: params
+    expect(response).to have_http_status(:ok)
+    doc = Nokogiri::HTML(response.body)
+    expect(doc.at_css("input[name='scope']")["value"]).to eq("view_public")
+
+    post "/oauth/authorize", params: params.merge(authenticity_token: authenticity_token(doc))
+    expect(response).to have_http_status(:found)
+    expect(legacy_app.access_grants.last.scopes.to_a).to eq(["view_public"])
+  end
+
+  it "returns 401 without a token and names every MCP scope in the challenge" do
     post_mcp({ jsonrpc: "2.0", id: 1, method: "ping" }, token: nil)
 
     expect(response).to have_http_status(:unauthorized)
-    expect(response.headers["WWW-Authenticate"]).to include("resource_metadata=\"#{PROTOCOL}://#{DOMAIN}/.well-known/oauth-protected-resource/muse/v1/mcp\"")
+    expect(response.headers["WWW-Authenticate"]).to eq(
+      %(Bearer realm="Gumroad", scope="view_public view_profile view_sales edit_products view_payouts account", ) +
+      %(resource_metadata="#{PROTOCOL}://#{DOMAIN}/.well-known/oauth-protected-resource/muse/v1/mcp")
+    )
   end
 
   context "when the token owner closes their account" do
@@ -458,13 +559,29 @@ describe "Muse MCP" do
     it "creates a draft and does not publish it" do
       post_mcp({ jsonrpc: "2.0", id: 4, method: "tools/call", params: { name: "create_draft_product", arguments: { name: "Muse draft", price_cents: 1900, description: "A note." } } })
 
-      expect(response).to be_successful
+      expect(response).to have_http_status(:ok)
+      expect(response.headers["WWW-Authenticate"]).to be_nil
       payload = response.parsed_body.dig("result", "structuredContent", "product")
       expect(payload["name"]).to eq("Muse draft")
       expect(payload["published"]).to eq(false)
       product = @seller.links.find_by_external_id(payload["id"])
       expect(product).to be_draft
       expect(product.purchase_disabled_at).to be_present
+    end
+
+    it "answers a batch with per-message errors and no challenge, so a retry cannot repeat the write" do
+      batch = [
+        { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "create_draft_product", arguments: { name: "Once", price_cents: 500 } } },
+        { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "list_payouts", arguments: {} } }
+      ]
+
+      expect { post_mcp(batch) }.to change(Link, :count).by(1)
+
+      expect(response).to have_http_status(:ok)
+      expect(response.headers["WWW-Authenticate"]).to be_nil
+      results = response.parsed_body.index_by { |message| message["id"] }
+      expect(results.dig(1, "result", "structuredContent", "product", "name")).to eq("Once")
+      expect(results.dig(2, "error")).to eq("code" => -32000, "message" => "This tool requires the view_payouts or account scope.")
     end
 
     it "publishes an existing product the seller owns" do
@@ -489,14 +606,38 @@ describe "Muse MCP" do
 
       post_mcp({ jsonrpc: "2.0", id: 7, method: "tools/call", params: { name: "list_products", arguments: {} } })
       expect(response).to be_successful
+      expect(response.headers["WWW-Authenticate"]).to be_nil
       names = response.parsed_body.dig("result", "structuredContent", "products").map { |product| product["name"] }
       expect(names).to include("Field notes")
     end
 
-    it "refuses a write tool" do
+    it "refuses a write tool with a 403 step-up challenge that keeps the token's scopes" do
       expect { post_mcp({ jsonrpc: "2.0", id: 8, method: "tools/call", params: { name: "create_draft_product", arguments: { name: "Nope", price_cents: 500 } } }) }.not_to change(Link, :count)
 
-      expect(response.parsed_body.dig("error", "message")).to include("edit_products")
+      expect(response).to have_http_status(:forbidden)
+      expect(response.headers["WWW-Authenticate"]).to eq(
+        %(Bearer realm="Gumroad", error="insufficient_scope", scope="view_public edit_products", ) +
+        %(resource_metadata="#{PROTOCOL}://#{DOMAIN}/.well-known/oauth-protected-resource/muse/v1/mcp", ) +
+        %(error_description="This tool requires the edit_products or account scope.")
+      )
+      expect(response.parsed_body["error"]).to eq("code" => -32000, "message" => "This tool requires the edit_products or account scope.")
+    end
+
+    it "names a required scope the client registered when the first one is unregistered" do
+      @app.update!(scopes: "view_public account")
+
+      post_mcp({ jsonrpc: "2.0", id: 10, method: "tools/call", params: { name: "create_draft_product", arguments: { name: "Nope", price_cents: 500 } } })
+
+      expect(response).to have_http_status(:forbidden)
+      expect(response.headers["WWW-Authenticate"]).to include(%(error="insufficient_scope", scope="view_public account"))
+    end
+
+    it "names the payouts scope when list_payouts is refused" do
+      post_mcp({ jsonrpc: "2.0", id: 9, method: "tools/call", params: { name: "list_payouts", arguments: {} } })
+
+      expect(response).to have_http_status(:forbidden)
+      expect(response.headers["WWW-Authenticate"]).to include(%(error="insufficient_scope", scope="view_public view_payouts"))
+      expect(response.parsed_body.dig("error", "message")).to eq("This tool requires the view_payouts or account scope.")
     end
   end
 
@@ -808,6 +949,8 @@ describe "Muse MCP" do
 
         expect { post_mcp(tool_call(tool, { id: @product.external_id })) }.not_to change { @product.reload.attributes }
 
+        expect(response).to have_http_status(:forbidden)
+        expect(response.headers["WWW-Authenticate"]).to include(%(error="insufficient_scope", scope="view_public edit_products"))
         expect(response.parsed_body.dig("error", "message")).to include("edit_products")
       end
     end

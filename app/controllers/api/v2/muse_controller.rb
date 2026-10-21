@@ -62,6 +62,14 @@ class Api::V2::MuseController < Api::V2::BaseController
     result = mcp.handle(@rpc_body)
     return head :accepted if result.nil?
 
+    if mcp.insufficient_scope
+      # MCP scope challenge: the header names the scopes to step up to; the body keeps the text.
+      response.set_header("WWW-Authenticate", bearer_challenge(
+        error: "insufficient_scope", scope: mcp.insufficient_scope.scope, error_description: mcp.insufficient_scope.message
+      ))
+      return render json: result, status: :forbidden
+    end
+
     render json: result, status: rpc_http_status(result, era: mcp.era)
   end
 
@@ -72,11 +80,15 @@ class Api::V2::MuseController < Api::V2::BaseController
     end
 
     def doorkeeper_unauthorized_render_options(*)
-      response.set_header(
-        "WWW-Authenticate",
-        %(Bearer realm="Gumroad", resource_metadata="#{base_url}/.well-known/oauth-protected-resource#{request.path}")
-      )
+      response.set_header("WWW-Authenticate", bearer_challenge(scope: Muse::OauthClientRegistration::MCP_SCOPES.join(" ")))
       nil
+    end
+
+    # `scope` tells a client which scopes to request before it authorizes (401) or re-authorizes
+    # (403). Every value is ours, so none needs quoting.
+    def bearer_challenge(error_description: nil, **params)
+      params = { realm: "Gumroad", **params, resource_metadata: "#{base_url}/.well-known/oauth-protected-resource#{request.path}", error_description: }.compact
+      "Bearer #{params.map { |name, value| %(#{name}="#{value}") }.join(', ')}"
     end
 
     def parse_rpc_body

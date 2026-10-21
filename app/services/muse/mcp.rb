@@ -36,6 +36,17 @@ module Muse
 
     class ToolError < StandardError; end
 
+    # A tool's scope check failed. `scope` is what the client should re-authorize with: the
+    # scopes the token already holds plus the missing one, so the step-up keeps the old grant.
+    class InsufficientScope < Error
+      attr_reader :scope
+
+      def initialize(message, scope:)
+        super(message)
+        @scope = scope
+      end
+    end
+
     def initialize(user:, token:, connector: nil, protocol_version_header: nil, method_header: nil, name_header: nil)
       @user = user
       @token = token
@@ -49,12 +60,18 @@ module Muse
     # The era the request resolved to, for callers that must pick a transport-level status.
     # A batch stays modern once any message in it declared that revision.
     attr_reader :era
+    # The scope failure of this request, if any, for the controller's RFC 6750 challenge. The
+    # JSON-RPC body keeps the plain -32000 error that legacy clients already handle.
+    attr_reader :insufficient_scope
 
     def handle(body)
       @protocol_counts = Hash.new(0)
       if body.is_a?(Array)
         return rpc_error(nil, "Invalid Request", code: -32600) if body.empty?
 
+        # A client retries the whole request after a step-up, which would repeat any message in
+        # the batch that already ran. A batch keeps its per-message errors and gets no challenge.
+        @batch = true
         return body.filter_map { |message| handle_message(message) }.presence
       end
 
@@ -478,7 +495,19 @@ module Muse
         token_scopes = token.scopes
         return if scopes.any? { |scope| token_scopes.include?(scope.to_s) }
 
-        raise Error.new("This tool requires the #{scopes.to_sentence(last_word_connector: ' or ')} scope.")
+        error = InsufficientScope.new(
+          "This tool requires the #{scopes.to_sentence(two_words_connector: ' or ', last_word_connector: ' or ')} scope.",
+          scope: (token_scopes.to_a + [obtainable_scope(scopes)]).join(" ")
+        )
+        @insufficient_scope = error unless @batch
+        raise error
+      end
+
+      # A dynamic client may have registered only some of the scopes a tool accepts; naming one
+      # it never registered sends it into an invalid_scope error on re-authorization.
+      def obtainable_scope(scopes)
+        registered = token.application&.scopes.presence
+        scopes.map(&:to_s).find { |scope| registered.nil? || registered.include?(scope) } || scopes.first.to_s
       end
 
       def rpc_error(id, message, code:, data: nil)

@@ -18,15 +18,25 @@ class Oauth::AuthorizationsController < Doorkeeper::AuthorizationsController
     end
 
     # Only dynamic clients bind grants to a resource; other applications never persist one.
+    # A dynamic client that omits `scope` gets the scopes it registered, not Doorkeeper's default
+    # (view_public only): the consent page grants only what the request names, so the default
+    # would leave the token unable to reach the tools the client registered for.
     def pre_auth_params
       fields = super
-      dynamic_client_request? ? fields : fields.except(:resource)
+      return fields.except(:resource) unless dynamic_client_request?
+
+      fields[:scope] = dynamic_client_application.scopes.to_s if fields[:scope].blank?
+      fields
+    end
+
+    def dynamic_client_application
+      return @dynamic_client_application if defined?(@dynamic_client_application)
+
+      @dynamic_client_application = OauthApplication.alive.where(mcp_dynamic_client: true).find_by(uid: params[:client_id].to_s)
     end
 
     def dynamic_client_request?
-      return @dynamic_client_request if defined?(@dynamic_client_request)
-
-      @dynamic_client_request = OauthApplication.alive.where(mcp_dynamic_client: true).exists?(uid: params[:client_id].to_s)
+      dynamic_client_application.present?
     end
 
     # Doorkeeper refuses its matching-token consent skip whenever any custom access token attribute
