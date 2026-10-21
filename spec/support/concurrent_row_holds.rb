@@ -26,7 +26,11 @@ module ConcurrentRowHolds
     yield
   ensure
     release << true
-    holder&.join(HOLD_TIMEOUT_SECONDS)
+    # A holder still blocked here keeps its connection and open transaction into later examples.
+    if holder && holder.join(HOLD_TIMEOUT_SECONDS).nil?
+      holder.kill
+      raise "Row holder thread did not stop within #{HOLD_TIMEOUT_SECONDS}s" if holder.join(HOLD_TIMEOUT_SECONDS).nil?
+    end
   end
 end
 
