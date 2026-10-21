@@ -495,19 +495,21 @@ module Muse
         token_scopes = token.scopes
         return if scopes.any? { |scope| token_scopes.include?(scope.to_s) }
 
-        error = InsufficientScope.new(
-          "This tool requires the #{scopes.to_sentence(two_words_connector: ' or ', last_word_connector: ' or ')} scope.",
-          scope: (token_scopes.to_a + [obtainable_scope(scopes)]).join(" ")
-        )
-        @insufficient_scope = error unless @batch
-        raise error
+        message = "This tool requires the #{scopes.to_sentence(two_words_connector: ' or ', last_word_connector: ' or ')} scope."
+        missing = obtainable_scope(scopes)
+        # No challenge for a batch, or when the client registered none of the accepted scopes:
+        # either step-up would fail, and a plain error stops the client from retrying.
+        raise Error.new(message) if @batch || missing.nil?
+
+        @insufficient_scope = InsufficientScope.new(message, scope: (token_scopes.to_a + [missing]).join(" "))
+        raise @insufficient_scope
       end
 
       # A dynamic client may have registered only some of the scopes a tool accepts; naming one
       # it never registered sends it into an invalid_scope error on re-authorization.
       def obtainable_scope(scopes)
         registered = token.application&.scopes.presence
-        scopes.map(&:to_s).find { |scope| registered.nil? || registered.include?(scope) } || scopes.first.to_s
+        scopes.map(&:to_s).find { |scope| registered.nil? || registered.include?(scope) }
       end
 
       def rpc_error(id, message, code:, data: nil)

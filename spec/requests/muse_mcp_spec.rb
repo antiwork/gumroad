@@ -632,6 +632,16 @@ describe "Muse MCP" do
       expect(response.headers["WWW-Authenticate"]).to include(%(error="insufficient_scope", scope="view_public account"))
     end
 
+    it "gives no step-up when the client registered none of the accepted scopes" do
+      @app.update!(scopes: "view_public view_sales")
+
+      expect { post_mcp({ jsonrpc: "2.0", id: 11, method: "tools/call", params: { name: "create_draft_product", arguments: { name: "Nope", price_cents: 500 } } }) }.not_to change(Link, :count)
+
+      expect(response).to have_http_status(:ok)
+      expect(response.headers["WWW-Authenticate"]).to be_nil
+      expect(response.parsed_body["error"]).to eq("code" => -32000, "message" => "This tool requires the edit_products or account scope.")
+    end
+
     it "names the payouts scope when list_payouts is refused" do
       post_mcp({ jsonrpc: "2.0", id: 9, method: "tools/call", params: { name: "list_payouts", arguments: {} } })
 
