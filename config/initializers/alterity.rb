@@ -3,6 +3,10 @@
 Alterity.configure do |config|
   config.command = -> (altered_table, alter_argument) {
     password_argument = "--password='#{config.password}'" if config.password.present?
+    # pt-osc 3.7.1 re-reads the DSN table on every lag check and leaks a replica connection each
+    # time (PT-2531, unreleased upstream), so long copies die at the fd limit. A --check-replica-lag
+    # replica is never re-read; the DSN table is kept for the multi-replica case it can't cover.
+    replica_lag_argument = "--check-replica-lag '#{config.replicas_dsns.first}'" if config.replicas_dsns.one?
     <<~SHELL.squish
     pt-online-schema-change
       -h #{config.host}
@@ -15,6 +19,7 @@ Alterity.configure do |config|
       --set-vars lock_wait_timeout=1
       --preserve-triggers
       --recursion-method 'dsn=D=#{config.replicas_dsns_database},t=#{config.replicas_dsns_table}'
+      #{replica_lag_argument}
       --execute
       --no-check-alter
       D=#{config.database},t=#{altered_table}
