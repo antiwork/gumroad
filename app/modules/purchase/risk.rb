@@ -5,6 +5,7 @@ module Purchase::Risk
   CHECK_FOR_FRAUD_TIMEOUT_SECONDS = 4
   CHARGEBACK_GRACE_PERIOD = 1.year
   CHARGEBACK_GRACE_LIMIT = 1
+  RISK_BLOCK_LOG_HASH_LENGTH = 12
 
   # The buyer-account columns #check_for_past_fraudulent_ips matches. Reporting paths read the same
   # list (Purchase.checkout_account_ips_by_email) so they cannot miss a column checkout enforces.
@@ -14,7 +15,6 @@ module Purchase::Risk
   # payer can change themselves: we cannot see from here which identifiers are blocked, and every
   # self-service suggestion we have tried sent people around a loop that could not end
   # (gumroad-private#1480, gumroad-private#1755). Support is the only route that always works.
-  RISK_BLOCK_LOG_HASH_LENGTH = 12
   BLOCKED_IDENTIFIER_ERROR = "Your card was not charged. This payment could not be completed — please contact support@gumroad.com for help."
 
   def check_for_fraud

@@ -267,22 +267,64 @@ describe Purchase::Risk do
       expect(bad_purchase.errors.full_messages).to eq [Purchase::Risk::BLOCKED_IDENTIFIER_ERROR]
     end
 
-    it "logs a hashed identifier when a browser_guid block refuses the purchase" do
-      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: "abc123", expires_in: 1.hour)
-      bad_purchase = build(:purchase, link: @product, browser_guid: "abc123")
+    describe "risk_block log" do
+      let(:log) { StringIO.new }
 
-      expect(Rails.logger).to receive(:warn).with(/risk_block object_type=browser_guid sha=#{Digest::SHA256.hexdigest("abc123")[0, 12]} seller_id=#{@product.user_id}/)
-      expect(Rails.logger).not_to receive(:warn).with(/abc123/)
-      bad_purchase.send(:check_for_fraud)
-    end
+      # Captures every line at production's default :info level, so a raw value logged at any
+      # level shows up; debug-level SQL, which carries the raw values, stays out.
+      around do |example|
+        capture = ActiveSupport::Logger.new(log, level: :info)
+        Rails.logger.broadcast_to(capture)
+        example.run
+      ensure
+        Rails.logger.stop_broadcasting_to(capture)
+      end
 
-    it "logs a hashed identifier for each blocked ip_address that refuses the purchase" do
-      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:ip_address], object_value: "192.378.12.1", expires_in: 1.hour)
-      bad_purchase = build(:purchase, link: @product, ip_address: "192.378.12.1")
+      def risk_block_lines = log.string.lines.grep(/risk_block/).map(&:chomp)
 
-      expect(Rails.logger).to receive(:warn).with(/risk_block object_type=ip_address sha=#{Digest::SHA256.hexdigest("192.378.12.1")[0, 12]} seller_id=#{@product.user_id}/)
-      expect(Rails.logger).not_to receive(:warn).with(/192\.378\.12\.1/)
-      bad_purchase.send(:check_for_fraud)
+      def risk_block_line(object_type, value)
+        "risk_block object_type=#{object_type} sha=#{Digest::SHA256.hexdigest(value)[0, 12]} seller_id=#{@product.user_id}"
+      end
+
+      it "logs one hashed line when a browser_guid block refuses the purchase" do
+        PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: "abc123", expires_in: 1.hour)
+        purchase = build(:purchase, link: @product, browser_guid: "abc123")
+        purchase.send(:check_for_fraud)
+
+        expect(purchase.errors.full_messages).to eq [Purchase::Risk::BLOCKED_IDENTIFIER_ERROR]
+        expect(risk_block_lines).to eq [risk_block_line(:browser_guid, "abc123")]
+        expect(log.string).not_to include("abc123")
+      end
+
+      it "logs one hashed line for each blocked buyer-side IP, request and account alike" do
+        create(:user, email: "blocked-buyer@example.com", current_sign_in_ip: "198.51.100.21")
+        %w[198.51.100.20 198.51.100.21].each do |ip_address|
+          PlatformBlock.add!(object_type: PlatformBlock::TYPES[:ip_address], object_value: ip_address, expires_in: 1.hour)
+        end
+        purchase = build(:purchase, link: @product, email: "blocked-buyer@example.com", ip_address: "198.51.100.20")
+        purchase.send(:check_for_fraud)
+
+        expect(purchase.errors.full_messages).to eq [Purchase::Risk::BLOCKED_IDENTIFIER_ERROR]
+        expect(risk_block_lines).to contain_exactly(risk_block_line(:ip_address, "198.51.100.20"), risk_block_line(:ip_address, "198.51.100.21"))
+        expect(log.string).not_to include("198.51.100.2")
+      end
+
+      it "logs nothing when the browser_guid is not blocked" do
+        purchase = build(:purchase, link: @product, browser_guid: "unblocked-guid", ip_address: "198.51.100.40")
+        purchase.send(:check_for_fraud)
+
+        expect(purchase.errors).to be_empty
+        expect(risk_block_lines).to be_empty
+      end
+
+      it "logs nothing when only the seller's IP is blocked" do
+        PlatformBlock.add!(object_type: PlatformBlock::TYPES[:ip_address], object_value: "123.121.11.1", expires_in: 1.hour)
+        purchase = build(:purchase, link: @product, seller: @user, ip_address: "198.51.100.30")
+        purchase.send(:check_for_fraud)
+
+        expect(purchase.errors).to be_empty
+        expect(risk_block_lines).to be_empty
+      end
     end
 
     it "does not return errors if only the seller's account_created_ip has been blocked" do
