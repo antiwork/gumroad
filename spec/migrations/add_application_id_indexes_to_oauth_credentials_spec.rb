@@ -54,4 +54,26 @@ describe AddApplicationIdIndexesToOauthCredentials do
 
     expect(tables.flat_map { |table| indexed_columns(table) }).not_to include(columns)
   end
+
+  # Rollback has to survive the same partial state `up` does: a run that added one index and then
+  # failed leaves the other one absent, so an unguarded remove_index would raise there.
+  it "removes only the index a partial run left behind on the way down" do
+    connection.remove_index(:oauth_access_grants, columns)
+
+    expect { migration.migrate(:down) }.not_to raise_error
+    expect(tables.flat_map { |table| indexed_columns(table) }).not_to include(columns)
+  end
+
+  it "is a no-op on the way down when neither index is present" do
+    drop_indexes
+
+    expect { migration.migrate(:down) }.not_to raise_error
+    expect(tables.flat_map { |table| indexed_columns(table) }).not_to include(columns)
+  end
+
+  it "can be rolled back twice" do
+    migration.migrate(:down)
+
+    expect { migration.migrate(:down) }.not_to raise_error
+  end
 end
