@@ -197,10 +197,8 @@ class GdprBuyerErasureService
       counts[:imported_customers] = audience_records.anonymize_imported_customers!
     end
 
-    # No index leads with email, so any other query filtered on it alone reaches max_execution_time.
-    # Conflicts are checked per post on the (post_id, email) index; that needs no second skip scan.
     def anonymize_sent_post_emails!
-      counts[:sent_post_emails] = SentPostEmail.ids_for_email(email).each_slice(SENT_POST_EMAIL_BATCH_SIZE).sum do |ids|
+      counts[:sent_post_emails] = SentPostEmail.ids_for_email(email, rewritten_to: @anonymized_email).each_slice(SENT_POST_EMAIL_BATCH_SIZE).sum do |ids|
         rows = SentPostEmail.where(id: ids, email:).pluck(:id, :post_id)
         taken_post_ids = SentPostEmail.where(post_id: rows.map(&:second), email: @anonymized_email).pluck(:post_id).to_set
         conflicting_rows, kept_rows = rows.partition { taken_post_ids.include?(_2) }

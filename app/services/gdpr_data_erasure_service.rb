@@ -35,7 +35,7 @@ class GdprDataErasureService
     # Read before the transaction so the erasure's row locks are not held while it scans. A timeout
     # here fails the run before anything is changed.
     erase_sent_post_emails = email_keyed_erasure?(original_email:, anonymized_email: anonymized_account_email)
-    sent_post_email_ids = erase_sent_post_emails ? SentPostEmail.ids_for_email(original_email) : []
+    sent_post_email_ids = erase_sent_post_emails ? sent_post_email_ids_for(original_email) : []
     # Read before the transaction so the Stripe deletion below has the accounts to hand. The values
     # would survive the transaction unchanged, but resolving them up front keeps the deletion
     # independent of what erasure does to the account in between.
@@ -583,8 +583,7 @@ class GdprDataErasureService
     def erase_email_keyed_records!(anonymized_email:, original_email:, sent_post_email_ids:)
       return unless email_keyed_erasure?(original_email:, anonymized_email:)
 
-      # Marketing-send dedupe rows, across every seller's posts. Nothing requires keeping them, so
-      # they are deleted rather than rewritten.
+      # Marketing-send dedupe rows. Nothing requires keeping them, so they are deleted rather than rewritten.
       @counts[:sent_post_emails] = delete_sent_post_emails!(sent_post_email_ids)
       # Commits with the anonymize, so a run that dies before the post-commit pass still leaves it set.
       @sent_post_email_recheck_generation = SecureRandom.hex(8)
@@ -611,7 +610,7 @@ class GdprDataErasureService
     def delete_late_sent_post_emails!(original_email)
       rechecked = false
       ApplicationRecord.connected_to(role: :writing) do
-        @counts[:sent_post_emails] += delete_sent_post_emails!(SentPostEmail.ids_for_email(original_email))
+        @counts[:sent_post_emails] += delete_sent_post_emails!(sent_post_email_ids_for(original_email))
         rechecked = true
         unless clear_sent_post_email_recheck_pending!
           @sent_post_email_error = "Erasure incomplete: a later run of this erasure has not finished rechecking " \
@@ -663,6 +662,10 @@ class GdprDataErasureService
         end
         pending.nil?
       end
+    end
+
+    def sent_post_email_ids_for(original_email)
+      SentPostEmail.ids_for_email(original_email, rewritten_to: anonymized_account_email)
     end
 
     def delete_sent_post_emails!(ids)

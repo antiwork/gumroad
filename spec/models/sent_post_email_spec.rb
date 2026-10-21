@@ -21,25 +21,48 @@ describe SentPostEmail do
   end
 
   describe ".ids_for_email" do
-    it "returns the address's rows across every post" do
-      first_row = create(:sent_post_email, email: "buyer@example.com")
-      second_row = create(:sent_post_email, email: "buyer@example.com")
-      create(:sent_post_email, email: "other@example.com")
+    let(:email) { "buyer@example.com" }
+    let(:anonymized_email) { "deleted-1@deleted.gumroad.com" }
 
-      expect(described_class.ids_for_email("buyer@example.com")).to match_array([first_row.id, second_row.id])
+    it "returns the address's rows on the posts of every seller it bought from, follows, affiliates for or is an audience member of" do
+      bought_from = create(:purchase, email:).seller
+      followed = create(:deleted_follower, email:).user
+      affiliated = create(:direct_affiliate, affiliate_user: create(:user, email:), deleted_at: Time.current).seller
+      audience_seller = create(:audience_member, email:).seller
+      rows = [bought_from, followed, affiliated, audience_seller].map do |seller|
+        create(:sent_post_email, post: create(:installment, seller:, deleted_at: Time.current), email:)
+      end
+      create(:sent_post_email, post: rows.first.post, email: "other@example.com")
+
+      stub_const("#{described_class}::LOOKUP_BATCH_SIZE", 1)
+
+      expect(described_class.ids_for_email(email, rewritten_to: anonymized_email)).to match_array(rows.map(&:id))
     end
 
-    it "reads the (post_id, email) index with a skip scan" do
-      create(:sent_post_email, email: "buyer@example.com")
-      sql = nil
-      capture = ->(*, payload) { sql = payload[:sql] if payload[:sql].include?("sent_post_emails") }
+    it "finds the sellers through the address their links were rewritten to" do
+      purchase = create(:purchase, email: anonymized_email)
+      row = create(:sent_post_email, post: create(:installment, seller: purchase.seller), email:)
+
+      expect(described_class.ids_for_email(email, rewritten_to: anonymized_email)).to eq([row.id])
+    end
+
+    it "reads sent post emails through the (post_id, email) index" do
+      seller = create(:purchase, email:).seller
+      create_list(:installment, 2, seller:).each { create(:sent_post_email, post: _1, email:) }
+      statements = []
+      capture = ->(*, payload) { statements << payload[:sql] if payload[:sql].include?("`sent_post_emails`") }
+
       ActiveSupport::Notifications.subscribed(capture, "sql.active_record") do
-        described_class.ids_for_email("buyer@example.com")
+        described_class.ids_for_email(email, rewritten_to: anonymized_email)
       end
 
-      plan = described_class.connection.select_all("EXPLAIN #{sql}").first
-      expect(plan["key"]).to eq("index_sent_post_emails_on_post_id_and_email")
-      expect(plan["Extra"]).to include("Using index for skip scan")
+      expect(statements).to be_present
+      # On a table this small the optimizer may scan even when it could seek, so the chosen key proves nothing.
+      statements.each do |sql|
+        plan = described_class.connection.select_all("EXPLAIN #{sql}").first
+        expect(plan["possible_keys"]).to include("index_sent_post_emails_on_post_id_and_email")
+        expect(plan["Extra"].to_s).not_to include("skip scan")
+      end
     end
   end
 

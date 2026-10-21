@@ -201,7 +201,8 @@ describe GdprDataErasureService do
       it "keeps the recheck pending and still deletes the guardian's person when the marker cannot be cleared" do
         guardian = create(:guardian, user:, stripe_person_id: "person_erase_me")
         create(:user_compliance_info, user:, birthday: 15.years.ago.to_date, guardian:)
-        create(:sent_post_email, email: user.email)
+        # A deleted follow has no audience member, whose search index bookkeeping would also lock the account.
+        create(:sent_post_email, post: create(:installment, seller: create(:deleted_follower, email: user.email).user), email: user.email)
         # The clear is the only row lock taken on an account that already holds a marker.
         allow_any_instance_of(User).to receive(:with_lock).and_wrap_original do |original, *args, &block|
           raise ActiveRecord::LockWaitTimeout, "Lock wait timeout exceeded" if original.receiver.gdpr_sent_post_emails_recheck_pending.present?
@@ -897,9 +898,9 @@ describe GdprDataErasureService do
       expect(result[:summary][:versions_redacted]).to be >= 4
     end
 
-    it "deletes the address's sent post email rows on every seller's posts and keeps everyone else's" do
-      first_post = create(:installment)
-      second_post = create(:installment)
+    it "deletes the address's sent post email rows on the posts of every seller it bought from or follows, and keeps everyone else's" do
+      first_post = create(:installment, seller: create(:purchase, email: user.email).seller)
+      second_post = create(:installment, seller: create(:active_follower, email: user.email).user, deleted_at: Time.current)
       create(:sent_post_email, post: first_post, email: user.email)
       create(:sent_post_email, post: second_post, email: user.email)
       other_recipient_row = create(:sent_post_email, post: first_post, email: "someone@example.com")
@@ -912,12 +913,12 @@ describe GdprDataErasureService do
     end
 
     it "deletes a sent post email row a send inserts after the first lookup, then clears the pending recheck" do
-      post = create(:installment)
+      post = create(:installment, seller: create(:active_follower, email: user.email).user)
       lookups = 0
       pending_during_recheck = nil
-      allow(SentPostEmail).to receive(:ids_for_email).and_wrap_original do |original, email|
+      allow(SentPostEmail).to receive(:ids_for_email).and_wrap_original do |original, email, **options|
         pending_during_recheck = User.find(user.id).gdpr_sent_post_emails_recheck_pending if lookups == 1
-        original.call(email).tap do
+        original.call(email, **options).tap do
           lookups += 1
           create(:sent_post_email, post:, email:) if lookups == 1
         end
@@ -934,10 +935,10 @@ describe GdprDataErasureService do
 
     it "keeps the erasure incomplete across reruns until someone clears the pending sent post email recheck" do
       lookups = 0
-      allow(SentPostEmail).to receive(:ids_for_email).and_wrap_original do |original, email|
+      allow(SentPostEmail).to receive(:ids_for_email).and_wrap_original do |original, email, **options|
         lookups += 1
         raise ActiveRecord::StatementTimeout, "timed out" if lookups == 2
-        original.call(email)
+        original.call(email, **options)
       end
       notes = -> { user.comments.where(comment_type: Comment::COMMENT_TYPE_PAYOUT_NOTE).order(:id).pluck(:content) }
 
@@ -967,14 +968,14 @@ describe GdprDataErasureService do
     end
 
     it "does not let a run's finished recheck clear the pending recheck of a run that committed after it" do
-      allow(SentPostEmail).to receive(:ids_for_email).and_wrap_original do |original, email|
+      allow(SentPostEmail).to receive(:ids_for_email).and_wrap_original do |original, email, **options|
         if User.find(user.id).gdpr_sent_post_emails_recheck_pending.present?
           # Another run read the address before this one committed, then committed its own generation.
           later_run = User.find(user.id)
           later_run.gdpr_sent_post_emails_recheck_pending = "later-run-generation"
           later_run.save!(validate: false)
         end
-        original.call(email)
+        original.call(email, **options)
       end
 
       result = described_class.new(user, performed_by: admin).perform!
@@ -986,7 +987,7 @@ describe GdprDataErasureService do
     end
 
     it "leaves no pending sent post email recheck when the erasure rolls back" do
-      create(:sent_post_email, email: user.email)
+      create(:sent_post_email, post: create(:installment, seller: create(:active_follower, email: user.email).user), email: user.email)
       allow_any_instance_of(described_class).to receive(:log_erasure!).and_raise(StandardError, "failed late")
 
       result = described_class.new(user, performed_by: admin).perform!
@@ -1045,7 +1046,7 @@ describe GdprDataErasureService do
 
     it "keeps the rows a previous run anonymized when the erasure is run again" do
       follower = create(:active_follower, email: user.email)
-      create(:sent_post_email, email: user.email)
+      create(:sent_post_email, post: create(:installment, seller: follower.user), email: user.email)
       guest_cart = create(:cart, :guest, email: user.email)
       described_class.new(user, performed_by: admin).perform!
 
@@ -1178,8 +1179,8 @@ describe GdprDataErasureService do
 
     it "rolls back the residual cleanup with the rest of the erasure when a step fails" do
       guest_cart = create(:cart, :guest, email: user.email)
-      sent_post_email = create(:sent_post_email, email: user.email)
       follower = create(:active_follower, email: user.email)
+      sent_post_email = create(:sent_post_email, post: create(:installment, seller: follower.user), email: user.email)
       create(:audience_member, seller: follower.user, email: "deleted-#{user.id}@deleted.gumroad.com")
       allow_any_instance_of(GdprAudienceRecordsAnonymizer).to receive(:anonymize_imported_customers!).and_raise(StandardError, "boom")
       allow(EsClient).to receive(:index).and_call_original
@@ -1200,8 +1201,8 @@ describe GdprDataErasureService do
 
     it "finishes the erasure when the same service is retried after a late failure" do
       guest_cart = create(:cart, :guest, email: user.email)
-      create(:sent_post_email, email: user.email)
       follower = create(:active_follower, email: user.email)
+      create(:sent_post_email, post: create(:installment, seller: follower.user), email: user.email)
       create(:product, user:)
       service = described_class.new(user, performed_by: admin)
       log_attempts = 0

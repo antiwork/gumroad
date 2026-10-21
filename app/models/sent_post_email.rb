@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class SentPostEmail < ApplicationRecord
+  LOOKUP_BATCH_SIZE = 1_000
+
   belongs_to :post, class_name: "Installment", optional: true
   before_validation :downcase_email
   validates_presence_of :email
@@ -10,13 +12,19 @@ class SentPostEmail < ApplicationRecord
     self.email = email.downcase
   end
 
-  # No index leads with email, so this skip-scans (post_id, email). Its work grows with the number of
-  # distinct post_ids, not with this address's rows, and the session max_execution_time bounds it.
-  # Without the hint the optimizer reads the whole index instead.
-  def self.ids_for_email(email)
-    optimizer_hints("SKIP_SCAN(sent_post_emails index_sent_post_emails_on_post_id_and_email)")
-      .where(email:)
-      .pluck(:id)
+  # No index leads with email, so rows are reached through the posts of every seller the address is
+  # linked to: each row is written for that seller's buyer, follower, affiliate or audience member.
+  # `rewritten_to` is where an erasure moves those links, so their sellers are still found afterwards.
+  def self.ids_for_email(email, rewritten_to:)
+    addresses = [email, rewritten_to]
+    seller_ids = [
+      Purchase.where(email: addresses).distinct.pluck(:seller_id),
+      Follower.where(email: addresses).distinct.pluck(:followed_id),
+      AudienceMember.where(email: addresses).distinct.pluck(:seller_id),
+      Affiliate.where(affiliate_user_id: User.where(email: addresses).ids).distinct.pluck(:seller_id),
+    ].flatten.compact.uniq
+    post_ids = seller_ids.each_slice(LOOKUP_BATCH_SIZE).flat_map { Installment.where(seller_id: _1).ids }
+    post_ids.each_slice(LOOKUP_BATCH_SIZE).flat_map { where(post_id: _1, email:).ids }
   end
 
   # A locking read, so a retry inside a transaction sees rows committed after its snapshot. A plain read
