@@ -50,6 +50,26 @@ describe Balance::RefundEligibilityUnderwriter do
         end
       end
 
+      context "when a LowBalanceFraudCheck probation outlives refunds being re-enabled below $100", versioning: true do
+        before do
+          user.send(:disable_refunds_and_put_on_probation!)
+          balance.update!(amount_cents: 50_00)
+          UpdateSellerRefundEligibilityJob.drain
+        end
+
+        it "lifts the probation once later increases bring the balance to $100" do
+          expect(user.reload.refunds_disabled?).to be(false)
+
+          balance.update!(amount_cents: 99_99)
+          UpdateSellerRefundEligibilityJob.drain
+          expect(user.reload).to be_on_probation
+
+          balance.update!(amount_cents: 100_00)
+          UpdateSellerRefundEligibilityJob.drain
+          expect(user.reload.user_risk_state).to eq("not_reviewed")
+        end
+      end
+
       context "when balance decreases and refunds are disabled" do
         before { user.disable_refunds! }
 
