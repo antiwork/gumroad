@@ -28,10 +28,19 @@ class ReplicaLagWatcher
       return if REPLICAS_HOSTS.empty?
 
       options = options.nil? ? DEFAULT_OPTIONS : DEFAULT_OPTIONS.merge(options)
+      # The deadline bounds polling and sleeps; connection and query timeouts remain separate.
+      deadline = options[:deadline]
+      return if deadline && Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
+
       connect_to_replicas
 
-      while lagging?(options)
+      while (!deadline || Process.clock_gettime(Process::CLOCK_MONOTONIC) < deadline) && lagging?(options)
         sleep_duration = options.fetch(:sleep)
+        if deadline
+          remaining = deadline - Process.clock_gettime(Process::CLOCK_MONOTONIC)
+          break if remaining <= 0
+          sleep_duration = [sleep_duration, remaining].min
+        end
         puts("sleeping #{sleep_duration} #{"second".pluralize(sleep_duration)}") unless options[:silence]
         sleep sleep_duration
       end

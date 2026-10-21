@@ -124,6 +124,31 @@ describe Onetime::BackfillLegacyFeatureAnnouncementPreferences do
       .to include(scanned: 1, attempted: 1, cursor: last.id, exhausted: true)
   end
 
+  it "does not scan or advance when replica lag consumes the runtime budget" do
+    user = account
+    now = 0.0
+    sleeps = []
+    stub_const("REPLICAS_HOSTS", [double])
+    allow_any_instance_of(described_class).to receive(:monotonic_time) { now }
+    allow(Process).to receive(:clock_gettime).and_call_original
+    allow(Process).to receive(:clock_gettime).with(Process::CLOCK_MONOTONIC) { now }
+    allow(ReplicaLagWatcher).to receive(:watch).and_call_original
+    allow(ReplicaLagWatcher).to receive(:connect_to_replicas)
+    allow(ReplicaLagWatcher).to receive(:lagging?).and_return(true, true, false)
+    allow(ReplicaLagWatcher).to receive(:sleep) { |seconds| sleeps << seconds; now += seconds }
+    statements = []
+    observer = ActiveSupport::Notifications.subscribe("sql.active_record") { |event| statements << event.payload[:sql] }
+
+    report = process(dry_run: false, max_run_seconds: 1.25)
+
+    expect(sleeps).to eq([1, 0.25])
+    expect(report).to include(scanned: 0, attempted: 0, batches: 0, cursor: user.id - 1, exhausted: false)
+    expect(statements.grep(/\b(?:INSERT|UPDATE|DELETE|FOR SHARE|FOR UPDATE)\b/i)).to be_empty
+    expect(preference(user)).to be_nil
+  ensure
+    ActiveSupport::Notifications.unsubscribe(observer) if observer
+  end
+
   it "rechecks a legacy flag changed after the raw page read" do
     user = account
     allow_any_instance_of(ActiveRecord::Relation).to receive(:lock).and_wrap_original do |original, *arguments|

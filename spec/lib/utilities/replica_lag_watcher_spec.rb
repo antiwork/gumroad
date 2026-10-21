@@ -25,6 +25,33 @@ describe ReplicaLagWatcher do
       described_class.watch
       expect(described_class.last_checked_at).to eq(nil)
     end
+
+    it "caps the final sleep and stops checking lag at the deadline" do
+      stub_const("REPLICAS_HOSTS", [double])
+      now = 0.0
+      sleeps = []
+      allow(Process).to receive(:clock_gettime).and_call_original
+      allow(Process).to receive(:clock_gettime).with(Process::CLOCK_MONOTONIC) { now }
+      allow(described_class).to receive(:connect_to_replicas)
+      allow(described_class).to receive(:lagging?).and_return(true, true, false)
+      allow(described_class).to receive(:sleep) { |seconds| sleeps << seconds; now += seconds }
+
+      described_class.watch(deadline: 1.25, silence: true)
+
+      expect(sleeps).to eq([1, 0.25])
+      expect(described_class).to have_received(:lagging?).exactly(2).times
+      expect(now).to eq(1.25)
+    end
+
+    it "does not connect or check lag after the deadline" do
+      stub_const("REPLICAS_HOSTS", [double])
+      allow(Process).to receive(:clock_gettime).and_call_original
+      allow(Process).to receive(:clock_gettime).with(Process::CLOCK_MONOTONIC).and_return(5)
+      expect(described_class).not_to receive(:connect_to_replicas)
+      expect(described_class).not_to receive(:lagging?)
+
+      described_class.watch(deadline: 5)
+    end
   end
 
   describe ".lagging?" do

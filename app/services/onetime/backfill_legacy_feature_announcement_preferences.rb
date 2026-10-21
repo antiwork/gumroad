@@ -31,7 +31,7 @@ class Onetime::BackfillLegacyFeatureAnnouncementPreferences
         raise ArgumentError, "Apply requires no ambient transaction" if !dry_run && ApplicationRecord.connection.transaction_open?
 
         while !result[:exhausted] && result[:batches] < max_batches && monotonic_time < deadline
-          ReplicaLagWatcher.watch unless dry_run
+          ReplicaLagWatcher.watch(deadline:) unless dry_run
           break if monotonic_time >= deadline
 
           # Page raw primary keys before inspecting the flag, including rows whose flag is off.
