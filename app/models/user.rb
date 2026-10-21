@@ -1514,8 +1514,9 @@ class User < ApplicationRecord
     parent.present? && administered_by?(parent) && parent.qualifies_as_email_sending_override_parent?
   end
 
+  # A completed payout, not has_completed_payouts?: that also counts a Stripe or PayPal Connect sale.
   def qualifies_as_email_sending_override_parent?
-    alive? && verified? && !flagged? && !suspended? && has_completed_payouts?
+    alive? && verified? && !flagged? && !suspended? && payments.completed.exists?
   end
 
   # Admin console only. Lets a brand account skip the email-sending sales/payout bar on the

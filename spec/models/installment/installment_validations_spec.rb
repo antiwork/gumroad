@@ -107,6 +107,28 @@ describe "InstallmentValidations" do
         expect(post.save).to eq(true)
       end
 
+      it "skips the audience and sales searches for a brand whose override is active" do
+        brand.grant_email_sending_override!(parent:, author: admin_user)
+        post = build(:audience_installment, seller: brand)
+        allow(AudienceMember).to receive(:filter_count).and_call_original
+        allow(post.user).to receive(:sales_cents_total).and_call_original
+
+        expect(post).to be_valid
+        expect(AudienceMember).not_to have_received(:filter_count)
+        expect(post.user).not_to have_received(:sales_cents_total)
+      end
+
+      it "still runs the audience and sales searches for a raw override without a qualifying parent" do
+        brand.update!(email_sending_override: true)
+        post = build(:audience_installment, seller: brand)
+        allow(AudienceMember).to receive(:filter_count).and_call_original
+        allow(post.user).to receive(:sales_cents_total).and_call_original
+
+        expect(post).not_to be_valid
+        expect(AudienceMember).to have_received(:filter_count)
+        expect(post.user).to have_received(:sales_cents_total)
+      end
+
       it "keeps the limit for a raw override without a qualifying parent" do
         brand.update!(email_sending_override: true)
         post = build(:audience_installment, seller: brand)

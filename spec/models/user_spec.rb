@@ -4810,6 +4810,19 @@ describe User, :vcr do
           expect(user.eligible_to_send_emails?).to eq(false)
         end
 
+        %i[merchant_account_stripe_connect merchant_account_paypal].each do |merchant_account_factory|
+          it "returns false once the parent has no completed payout, despite a successful sale through #{merchant_account_factory}" do
+            merchant_account = create(merchant_account_factory, user: parent)
+            create(:purchase, seller: parent, link: create(:product, user: parent), merchant_account:)
+            parent.payments.update_all(state: "failed")
+
+            expect(parent.send(:has_completed_payouts?)).to eq(true)
+            expect(parent.payments.completed.exists?).to eq(false)
+            expect(user.email_sending_override_active?).to eq(false)
+            expect(user.eligible_to_send_emails?).to eq(false)
+          end
+        end
+
         it "returns false when the override is switched off with a string or integer" do
           ["false", "0", 0].each do |value|
             user.update!(email_sending_override: value)
@@ -4934,6 +4947,19 @@ describe User, :vcr do
     it "refuses a parent without a completed payout" do
       parent.payments.update_all(state: "failed")
       expect_grant_refused(/parent must be verified, have a completed payout/)
+    end
+
+    %i[merchant_account_stripe_connect merchant_account_paypal].each do |merchant_account_factory|
+      it "refuses a parent whose only payout signal is a successful sale through #{merchant_account_factory}" do
+        parent.payments.update_all(state: "failed")
+        merchant_account = create(merchant_account_factory, user: parent)
+        create(:purchase, seller: parent, link: create(:product, user: parent), merchant_account:)
+
+        # The ordinary seller check still counts that sale; the override requires a completed payout.
+        expect(parent.send(:has_completed_payouts?)).to eq(true)
+        expect(parent.payments.completed.exists?).to eq(false)
+        expect_grant_refused(/parent must be verified, have a completed payout/)
+      end
     end
 
     it "refuses a flagged parent" do
