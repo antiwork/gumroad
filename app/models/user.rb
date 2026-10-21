@@ -243,6 +243,8 @@ class User < ApplicationRecord
   attr_json_data_accessor :au_backtax_sales_cents, default: 0
   attr_json_data_accessor :au_backtax_owed_cents, default: 0
   attr_json_data_accessor :gumroad_day_timezone
+  # Admin-only, set from the console: skips the email-sending sales/payout bar. Suspension and fraud flags still win.
+  attr_json_data_accessor :email_sending_override, default: false
   attr_json_data_accessor :payout_threshold_cents, default: -> { minimum_payout_threshold_cents }
   attr_json_data_accessor :payout_frequency, default: User::PayoutSchedule::WEEKLY
   attr_json_data_accessor :custom_fee_per_thousand
@@ -1480,6 +1482,7 @@ class User < ApplicationRecord
   def eligible_to_send_emails?
     return true if is_team_member?
     return false if suspended?
+    return true if email_sending_override && !flagged?
     return false if sales_cents_total < Installment::MINIMUM_SALES_CENTS_VALUE
 
     # Verified creators are trusted enough to email their audience even before

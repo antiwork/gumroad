@@ -4737,6 +4737,27 @@ describe User, :vcr do
         expect(user.eligible_to_send_emails?).to eq(false)
       end
 
+      context "with email_sending_override" do
+        before { user.update!(email_sending_override: true) }
+
+        it "returns true without sales or a completed payment" do
+          expect(user.sales_cents_total).to eq(0)
+          expect(user.eligible_to_send_emails?).to eq(true)
+        end
+
+        it "returns false when the user is suspended" do
+          admin_user = create(:admin_user)
+          user.flag_for_fraud(author_id: admin_user.id)
+          user.suspend_for_fraud(author_id: admin_user.id)
+          expect(user.eligible_to_send_emails?).to eq(false)
+        end
+
+        it "returns false when the user is flagged" do
+          user.flag_for_fraud(author_id: create(:admin_user).id)
+          expect(user.eligible_to_send_emails?).to eq(false)
+        end
+      end
+
       it "returns false when user has no completed payment" do
         allow(user).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE)
         expect(user.eligible_to_send_emails?).to eq(false)
