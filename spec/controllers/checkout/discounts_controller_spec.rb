@@ -165,6 +165,14 @@ describe Checkout::DiscountsController do
       let(:record) { offer_code }
     end
 
+    it "raises RecordNotFound for another seller's offer code" do
+      other_code = create(:offer_code)
+
+      expect do
+        get :statistics, params: { id: other_code.external_id }, as: :json
+      end.to raise_error(ActiveRecord::RecordNotFound)
+    end
+
     it "returns the offer code's statistics" do
       get :statistics, params: { id: offer_code.external_id }, as: :json
 
