@@ -74,6 +74,27 @@ class ProductShippingSupportedCountriesTest < ActiveSupport::TestCase
     assert_equal false, props[:ships_nowhere]
   end
 
+  test "with the flag on, a plan change on an existing subscription keeps shipping where it was sold" do
+    Feature.activate(Product::Shipping::SUPPORTED_COUNTRIES_FEATURE)
+    purchase = build_purchase(link: @product, country: "Germany", price_cents: 15_00, quantity: 1)
+    purchase.is_updated_original_subscription_purchase = true
+
+    purchase.send(:validate_shipping)
+
+    assert_nil purchase.error_code
+  end
+
+  test "with the flag on, a later installment payment keeps shipping where it was sold" do
+    Feature.activate(Product::Shipping::SUPPORTED_COUNTRIES_FEATURE)
+    purchase = build_purchase(link: @product, country: "Germany", price_cents: 15_00, quantity: 1)
+    purchase.define_singleton_method(:is_installment_payment) { true }
+    purchase.define_singleton_method(:is_original_subscription_purchase) { false }
+
+    purchase.send(:validate_shipping)
+
+    assert_nil purchase.error_code
+  end
+
   test "with the flag on, publishing a product that only ships outside the supported countries explains why" do
     Feature.activate(Product::Shipping::SUPPORTED_COUNTRIES_FEATURE)
     product = create_product(price_cents: 10_00, is_physical: true, require_shipping: true, purchase_disabled_at: Time.current)
