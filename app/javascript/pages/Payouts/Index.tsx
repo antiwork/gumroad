@@ -259,7 +259,7 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
               <h4 className="font-bold">Waiting for a later payout</h4>
               {payoutPeriodData.payout_cents === 0 ? (
                 <small className="block text-muted">
-                  Below your{" "}
+                  Not enough fits under the reserve to reach your{" "}
                   {formatPriceCentsWithCurrencySymbol("usd", payoutPeriodData.minimum_payout_amount_cents, {
                     symbolFormat: "short",
                     noCentsIfWhole: false,

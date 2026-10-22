@@ -572,7 +572,7 @@ describe "Balance Pages Scenario", js: true, type: :system do
             expect(get_label_value.call("Held back by chargeback reserve")).to eq("- $32.50 USD")
             expect(page).to have_content("Waiting for a later payout")
             expect(page).to have_content("- $97.50 USD")
-            expect(page).to have_content("Below your $100.00 minimum payout")
+            expect(page).to have_content("Not enough fits under the reserve to reach your $100.00 minimum payout")
           end
         end
 
