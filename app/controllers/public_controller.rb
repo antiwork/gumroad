@@ -26,8 +26,9 @@ class PublicController < ApplicationController
   end
 
   def charge_data
-    purchases = Purchase.successful_gift_or_nongift.where("email = ?", params[:email])
-    purchases = purchases.where("card_visual like ?", "%#{params[:last_4]}%") if params[:last_4].present? && params[:last_4].length == 4
+    purchases = Purchase.successful_gift_or_nongift.where("email = ?", scalar_param(:email))
+    last_4 = scalar_param(:last_4)
+    purchases = purchases.where("card_visual like ?", "%#{last_4}%") if last_4.present? && last_4.length == 4
     purchases = scope_by_year_and_month(purchases, params[:year], params[:month])
     if purchases.none?
       render json: { success: false }
@@ -38,12 +39,13 @@ class PublicController < ApplicationController
   end
 
   def license_key_lookup_data
-    all_purchases = Purchase.successful_gift_or_nongift.where("email = ?", params[:email])
+    all_purchases = Purchase.successful_gift_or_nongift.where("email = ?", scalar_param(:email))
     all_purchases = scope_by_year_and_month(all_purchases, params[:year], params[:month])
     purchases = all_purchases
     recommendations = true
-    if params[:product_query].present?
-      query = extract_permalink_from_query(params[:product_query].strip)
+    product_query = scalar_param(:product_query)
+    if product_query.present?
+      query = extract_permalink_from_query(product_query.strip)
       scoped = all_purchases.joins(:link).where(
         "links.name LIKE ? OR links.unique_permalink = ? OR links.custom_permalink = ?",
         "%#{Purchase.sanitize_sql_like(query)}%", query, query
@@ -104,6 +106,14 @@ class PublicController < ApplicationController
   private
     def set_on_public_page
       @body_class = "public"
+    end
+
+    # An array-shaped param (`?email[]=a`) arrives as a list: as a bind value it produces
+    # `email = 'a','b'` and MySQL rejects it (1241), and Array#strip raises. These public
+    # lookups are only ever sent scalars, so anything else reads as absent.
+    def scalar_param(key)
+      value = params[key]
+      value.is_a?(String) ? value : nil
     end
 
     # A buyer may paste the product's URL (any /l/:permalink form, with or without host)

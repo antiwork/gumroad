@@ -136,6 +136,13 @@ describe PublicController, type: :controller, inertia: true do
       get :charge_data, params: { last_4: "4242", email: "edgar@gumroad.com", month: "3" }
       expect(response.parsed_body["success"]).to be(true)
     end
+
+    it "does not 500 on array-valued email and last_4 params" do
+      get :charge_data, params: { email: ["a", "b"], last_4: ["4242"] }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["success"]).to be(false)
+    end
   end
 
   describe "GET license_key_lookup_data" do
@@ -217,6 +224,13 @@ describe PublicController, type: :controller, inertia: true do
 
       get :license_key_lookup_data, params: { email:, year: ["2024"], month: ["3"] }
       expect(response).to have_http_status(:ok)
+    end
+
+    it "does not 500 on array-valued email and product_query params" do
+      get :license_key_lookup_data, params: { email: ["a", "b"], product_query: ["Photo"] }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["success"]).to be(false)
     end
 
     it "does not treat LIKE wildcards in the query as wildcards, falling back to all purchases" do
