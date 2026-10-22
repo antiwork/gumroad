@@ -6,10 +6,13 @@ import { Product, SortKey } from "$app/data/products";
 import { classNames } from "$app/utils/classNames";
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 
+import { Button } from "$app/components/Button";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
 import { Tab } from "$app/components/ProductsLayout";
 import ActionsPopover from "$app/components/ProductsPage/ActionsPopover";
+import { BulkPriceModal } from "$app/components/ProductsPage/BulkPriceModal";
 import { ProductIconCell } from "$app/components/ProductsPage/ProductIconCell";
+import { Checkbox } from "$app/components/ui/Checkbox";
 import { StretchedLink } from "$app/components/ui/StretchedLink";
 import {
   Table,
@@ -56,6 +59,8 @@ export const ProductsPageProductsTable = (props: {
   setEnableArchiveTab: ((enable: boolean) => void) | undefined;
 }) => {
   const [isLoading, setIsLoading] = React.useState(false);
+  const [selected, setSelected] = React.useState<string[]>([]);
+  const [editingPrices, setEditingPrices] = React.useState(false);
   const tableRef = React.useRef<HTMLTableElement>(null);
   const { locale } = useUserAgentInfo();
   const [sort, setSort] = React.useState<Sort<SortKey> | null>(props.sort ?? null);
@@ -97,14 +102,45 @@ export const ProductsPageProductsTable = (props: {
 
   const reloadProducts = () => loadProducts(pagination.page);
 
+  const editable = products.filter((product) => product.can_edit);
+  const selectedHere = editable.filter((product) => selected.includes(product.permalink));
+  const toggle = (permalink: string, on: boolean) =>
+    setSelected((current) => (on ? [...current, permalink] : current.filter((id) => id !== permalink)));
+
   if (!products.length) return null;
 
   return (
     <div className="flex flex-col gap-4">
+      {selectedHere.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <span>{selectedHere.length} selected</span>
+          <Button onClick={() => setEditingPrices(true)}>Edit price</Button>
+          <Button onClick={() => setSelected([])}>Clear</Button>
+        </div>
+      ) : null}
+      {editingPrices ? (
+        <BulkPriceModal
+          permalinks={selectedHere.map((product) => product.permalink)}
+          onClose={() => setEditingPrices(false)}
+          onDone={() => {
+            setSelected([]);
+            reloadProducts();
+          }}
+        />
+      ) : null}
       <Table ref={tableRef} aria-live="polite" className={classNames(isLoading && "pointer-events-none opacity-50")}>
         <TableCaption>Products</TableCaption>
         <TableHeader>
           <TableRow>
+            <TableHead>
+              {editable.length > 0 ? (
+                <Checkbox
+                  aria-label="Select all products on this page"
+                  checked={selectedHere.length === editable.length}
+                  onChange={(e) => setSelected(e.target.checked ? editable.map((product) => product.permalink) : [])}
+                />
+              ) : null}
+            </TableHead>
             <TableHead />
             <TableHead {...thProps("name")} title="Sort by Name" className="lg:relative lg:-left-20">
               Name
@@ -128,6 +164,15 @@ export const ProductsPageProductsTable = (props: {
         <TableBody>
           {products.map((product) => (
             <TableRow key={product.id}>
+              <TableCell hideLabel>
+                {product.can_edit ? (
+                  <Checkbox
+                    aria-label={`Select ${product.name}`}
+                    checked={selected.includes(product.permalink)}
+                    onChange={(e) => toggle(product.permalink, e.target.checked)}
+                  />
+                ) : null}
+              </TableCell>
               <ProductIconCell
                 href={product.can_edit ? product.edit_url : product.url}
                 thumbnail={product.thumbnail?.url ?? null}
@@ -222,7 +267,7 @@ export const ProductsPageProductsTable = (props: {
 
         <TableFooter>
           <TableRow>
-            <TableCell colSpan={2}>Totals</TableCell>
+            <TableCell colSpan={3}>Totals</TableCell>
             <TableCell label="Sales" className="whitespace-nowrap">
               {products.reduce((sum, product) => sum + product.successful_sales_count, 0).toLocaleString(locale)}
             </TableCell>

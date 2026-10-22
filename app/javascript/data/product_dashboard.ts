@@ -71,3 +71,20 @@ async function pollForProductDuplication(permalink: string, productName: string)
   await new Promise((resolve) => setTimeout(resolve, 2000));
   return pollForProductDuplication(permalink, productName);
 }
+
+export type BulkPriceResult = { id: string; updated: boolean; name?: string; error?: string };
+
+export async function bulkUpdatePrices(ids: string[], price: string) {
+  const response = await request({
+    url: Routes.products_bulk_prices_path(),
+    method: "POST",
+    accept: "json",
+    data: { ids, price },
+  });
+
+  const json = cast<{ success: true; updated: number; results: BulkPriceResult[] } | { success: false; error: string }>(
+    await response.json(),
+  );
+  if (!json.success) throw new ResponseError(json.error);
+  return json;
+}

@@ -1007,6 +1007,7 @@ Rails.application.routes.draw do
       resources :affiliated, only: %i[index destroy]
       resources :collabs, only: [:index]
       resources :archived, only: %i[index create destroy]
+      resource :bulk_prices, only: :create
     end
 
     resources :products, only: [:new], controller: "links" do
