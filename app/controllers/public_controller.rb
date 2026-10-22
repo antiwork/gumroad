@@ -27,8 +27,7 @@ class PublicController < ApplicationController
 
   def charge_data
     purchases = Purchase.successful_gift_or_nongift.where("email = ?", scalar_param(:email))
-    last_4 = scalar_param(:last_4)
-    purchases = purchases.where("card_visual like ?", "%#{last_4}%") if last_4.present? && last_4.length == 4
+    purchases = purchases.where("card_visual like ?", "%#{params[:last_4]}%") if params[:last_4].present? && params[:last_4].length == 4
     purchases = scope_by_year_and_month(purchases, params[:year], params[:month])
     if purchases.none?
       render json: { success: false }
