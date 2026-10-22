@@ -1132,14 +1132,17 @@ class Link < ApplicationRecord
     shipping_exclusions.exists?(country_code:)
   end
 
-  # Country codes a physical product can actually ship to: the union of its destinations,
-  # minus its exclusions. Digital products have no shipping surface.
-  def shippable_country_codes
+  # Country codes a physical product can actually ship to: the union of its destinations, minus
+  # its exclusions. Digital products have no shipping surface. `restrict_to_supported_countries:
+  # false` keeps an existing subscriber's country on the manage page, where they update their card.
+  def shippable_country_codes(restrict_to_supported_countries: true)
     return [] unless is_physical
 
     included = shipping_destinations.alive.flat_map { |shipping_destination| shipping_destination.country_or_countries.keys }
     shippable = included.uniq - shipping_excluded_country_codes
-    shippable &= Product::Shipping::SUPPORTED_COUNTRY_CODES if Product::Shipping.restricted_to_supported_countries?
+    if restrict_to_supported_countries && Product::Shipping.restricted_to_supported_countries?
+      shippable &= Product::Shipping::SUPPORTED_COUNTRY_CODES
+    end
     shippable
   end
 

@@ -265,7 +265,9 @@ class CheckoutPresenter
     {
       **checkout_common,
       product: {
-        **product_common(product, recommended_by: nil),
+        # An existing subscriber keeps the country they were sold: this page is where a declined
+        # renewal updates its card, so the new-sale country restriction must not apply here.
+        **product_common(product, recommended_by: nil, restrict_shipping_countries: false),
         id: product.external_id,
         native_type: product.native_type,
         require_shipping: product.require_shipping?,
@@ -435,9 +437,9 @@ class CheckoutPresenter
       }
     end
 
-    def product_common(product, recommended_by:)
+    def product_common(product, recommended_by:, restrict_shipping_countries: true)
       buyer_currency_display = buyer_currency_display_props(product:, price_cents: product.price_cents, ip:)
-      shippable_country_codes = product.shippable_country_codes
+      shippable_country_codes = product.shippable_country_codes(restrict_to_supported_countries: restrict_shipping_countries)
 
       {
         permalink: product.unique_permalink,
