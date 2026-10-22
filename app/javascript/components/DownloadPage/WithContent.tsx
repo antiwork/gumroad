@@ -42,6 +42,7 @@ import { useReactNativeMessage } from "$app/components/useReactNativeMessage";
 import { useRunOnce } from "$app/components/useRunOnce";
 import { WithTooltip } from "$app/components/WithTooltip";
 
+import { initialContentPageIndex, scrollWithinScrollableAncestor, urlWithContentPage } from "./contentPageNavigation";
 import { Layout, LayoutProps, PurchaseCustomField } from "./Layout";
 
 export type { PurchaseCustomField };
@@ -158,19 +159,40 @@ export const WithContent = ({
   });
   const isDesktop = useIsAboveBreakpoint("lg");
   const pages = content.rich_content_pages ?? [];
-  const getInitialPageIndex = () => {
-    if (!content.last_content_page_id) return 0;
-    const index = pages.findIndex((page) => page.page_id === content.last_content_page_id);
-    return index >= 0 ? index : 0;
-  };
-  const [activePageIndex, setActivePageIndex] = React.useState(getInitialPageIndex());
+  const [activePageIndex, setActivePageIndex] = React.useState(() =>
+    initialContentPageIndex(pages, url, content.last_content_page_id),
+  );
   const activePage = pages[activePageIndex];
+  const activePageId = activePage?.page_id ?? null;
+
+  // On a long course the active page sits far down the list, so a buyer who refreshes would
+  // otherwise see the list (and its highlight) starting from the first page and have to scroll to
+  // find where they are.
+  const scrollActivePageIntoView = React.useCallback(() => {
+    if (!activePageId) return;
+    const activePageElement = Array.from(document.querySelectorAll<HTMLElement>("[data-content-page-id]")).find(
+      (element) => element.dataset.contentPageId === activePageId,
+    );
+    if (activePageElement) scrollWithinScrollableAncestor(activePageElement);
+  }, [activePageId]);
+
+  React.useEffect(() => {
+    scrollActivePageIntoView();
+  }, [scrollActivePageIntoView, isDesktop]);
 
   const handlePageChange = React.useCallback(
     (newIndex: number) => {
       setActivePageIndex(newIndex);
       const newPage = pages[newIndex];
-      if (newPage && props.purchase) {
+      if (!newPage) return;
+      // Keep the URL on the page being read even when there is no purchase to save it to, and
+      // before the save below is known to have succeeded.
+      window.history.replaceState(
+        window.history.state,
+        "",
+        urlWithContentPage(new URL(window.location.href), newPage.page_id),
+      );
+      if (props.purchase) {
         void saveLastContentPage(props.token, newPage.page_id);
       }
     },
@@ -274,6 +296,7 @@ export const WithContent = ({
                 isSelected={index === activePageIndex}
                 onClick={() => handlePageChange(index)}
                 role="tab"
+                data-content-page-id={page.page_id}
               >
                 <PageIcon iconKey={pageIcons[index] ?? "text-only"} />
                 <span className="flex-1">{page.title ?? "Untitled"}</span>
@@ -341,7 +364,7 @@ export const WithContent = ({
       (!props.is_mobile_app_web_view || (typeof window !== "undefined" && !window.ReactNativeWebView)) ? (
         <div role="navigation" className="mt-auto flex gap-4 border-t border-border pt-4 lg:justify-end lg:pb-4">
           {isDesktop ? null : (
-            <Popover>
+            <Popover onOpenChange={(open) => open && window.requestAnimationFrame(scrollActivePageIntoView)}>
               <PopoverAnchor>
                 <PopoverTrigger aria-label="Table of Contents" asChild>
                   <Button size="icon">
@@ -361,6 +384,7 @@ export const WithContent = ({
                         onClick={() => {
                           handlePageChange(index);
                         }}
+                        data-content-page-id={page.page_id}
                       >
                         <PageIcon iconKey={pageIcons[index] ?? "text-only"} />
                         {page.title ?? "Untitled"}
