@@ -18,6 +18,24 @@ describe "Calls Edit", type: :system, js: true do
 
   before { Feature.activate_user(:product_edit_react, seller) }
 
+  it "adds and saves an hour from the previous interval's exact minute" do
+    zone = ActiveSupport::TimeZone[seller.timezone]
+    create(:call_availability, call:, start_time: zone.parse("2026-10-22 09:00"), end_time: zone.parse("2026-10-22 10:30"))
+    visit edit_link_path(call.unique_permalink)
+    click_on "Add hours"
+
+    within "[aria-label='Availability 2']" do
+      expect(page).to have_field("From", with: "10:30")
+      expect(page).to have_field("To", with: "11:30")
+    end
+    click_on "Save changes"
+    expect(page).to have_alert(text: "Changes saved!")
+    intervals = call.call_availabilities.reload.order(:start_time).to_a
+    expect(intervals.length).to eq(2)
+    expect(intervals.last.start_time).to eq(intervals.first.end_time)
+    expect(intervals.last.end_time).to eq(zone.parse("2026-10-22 11:30"))
+  end
+
   it "supports attaching covers on calls without durations" do
     call = create(:call_product, user: seller, durations: [])
     visit edit_link_path(call.unique_permalink)

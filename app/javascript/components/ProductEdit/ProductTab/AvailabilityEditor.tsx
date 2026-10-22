@@ -74,7 +74,7 @@ export const AvailabilityEditor = ({
 
   const addAvailability = (date: Date, intervalInHours = 1) => {
     const parts = zonedParts(date);
-    const startTime = new Date(`${parts.date}T${parts.time.slice(0, 2)}:00:00Z`);
+    const startTime = new Date(`${parts.date}T${parts.time}:00Z`);
     const endTime = addHours(startTime, intervalInHours);
 
     onChange([

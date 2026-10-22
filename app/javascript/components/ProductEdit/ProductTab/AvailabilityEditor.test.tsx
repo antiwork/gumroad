@@ -35,6 +35,27 @@ const renderEditor = (initial: Availability[]) => {
 };
 
 describe("AvailabilityEditor day changes", () => {
+  it.each([
+    ["UTC", "2026-10-22T10:30:00Z", "2026-10-22T11:30:00.000Z"],
+    ["UTC", "2026-10-22T10:15:00Z", "2026-10-22T11:15:00.000Z"],
+    ["UTC", "2026-10-22T23:45:00Z", "2026-10-23T00:45:00.000Z"],
+    ["America/Los_Angeles", "2026-10-22T17:45:00Z", "2026-10-22T18:45:00.000Z"],
+    ["Asia/Kolkata", "2026-10-22T04:45:00Z", "2026-10-22T05:45:00.000Z"],
+  ])("adds hours at the exact endpoint in %s (%s)", (timeZone, end, newEnd) => {
+    seller.timeZone.name = timeZone;
+    const existing = {
+      id: "morning",
+      start_time: new Date(new Date(end).getTime() - 90 * 60 * 1000).toISOString(),
+      end_time: end,
+    };
+    const changed = renderEditor([existing]);
+    fireEvent.click(screen.getByRole("button", { name: "Add hours" }));
+    expect(changed).toHaveBeenLastCalledWith([
+      existing,
+      expect.objectContaining({ start_time: new Date(end).toISOString(), end_time: newEnd, newlyAdded: true }),
+    ]);
+  });
+
   it("moves every disjoint interval under one Date control and leaves another day unchanged", () => {
     const neighbor = { id: "neighbor", start_time: "2026-10-18T12:00:00Z", end_time: "2026-10-18T13:00:00Z" };
     const changed = renderEditor([
