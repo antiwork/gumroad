@@ -1066,6 +1066,23 @@ describe UpdateUserComplianceInfo do
       end
     end
 
+    context "with a Pakistani individual" do
+      let!(:user) do
+        create(:user).tap do |u|
+          create(:user_compliance_info, user: u, country: "Pakistan", state: nil, city: "Karachi", zip_code: "74000", individual_tax_id: "1234512345671")
+        end
+      end
+
+      it "stores a dashed CNIC as its 13 digits" do
+        expect(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info)
+
+        params = ActionController::Parameters.new(is_business: false, individual_tax_id: "42101-1234567-1")
+        expect(described_class.new(compliance_params: params, user:).process[:success]).to be true
+
+        expect(user.reload.alive_user_compliance_info.individual_tax_id.decrypt("1234")).to eq("4210112345671")
+      end
+    end
+
     context "with a Guatemalan individual" do
       let!(:user) do
         create(:user).tap do |u|

@@ -153,9 +153,10 @@ export const getIndividualTaxIdConfig = (complianceInfo: ComplianceInfo, user: U
     PE: { label: "DNI number", placeholder: "12345678-9", minLength: 10, maxLength: 10, idSuffix: "peru-id-number" },
     PK: {
       label: "National Identity Card Number (SNIC or CNIC)",
-      placeholder: "•••••••••",
+      placeholder: "1234567890123",
       minLength: 13,
-      maxLength: 13,
+      // CNICs are printed 5-7-1 with dashes (15 characters); the server strips them.
+      maxLength: 15,
       idSuffix: "snic",
     },
     CR: {

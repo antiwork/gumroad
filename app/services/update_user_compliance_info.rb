@@ -379,6 +379,8 @@ class UpdateUserComplianceInfo
       # longer string than the guard measured, so strip them and keep the two in agreement.
       return Compliance::ColombiaIdNumber.normalize(stripped) if country_code == Compliance::Countries::COL.alpha2
       return Compliance::GuatemalaNit.normalize(stripped) if country_code == Compliance::Countries::GTM.alpha2
+      # Pakistan CNICs are printed 5-7-1 with dashes, but Stripe's id_number wants the 13 digits.
+      return stripped.delete("-") if country_code == Compliance::Countries::PAK.alpha2
       stripped
     end
 

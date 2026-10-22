@@ -197,7 +197,7 @@ const TAX_ID_CONFIGS: Record<string, TaxIdConfig> = {
   PE: { label: "DNI number", placeholder: "12345678-9", minLength: 10, maxLength: 10, idSuffix: "peru-id-number" },
   PK: {
     label: "National Identity Card Number (SNIC or CNIC)",
-    placeholder: "•••••••••",
+    placeholder: "1234567890123",
     minLength: 13,
     maxLength: 13,
     idSuffix: "snic",
