@@ -1713,11 +1713,13 @@ class User < ApplicationRecord
   end
 
   # Not memoized and checked cheapest-first: sales_cents_total is an Elasticsearch aggregation.
-  # Sellers who already list physical goods (every seller the old manual flag ever enabled, plus
-  # pre-flag physical sellers) keep the ability so the new bar never strands a live catalog.
+  # Sellers a human approved under the old manual flag keep the ability explicitly (only three
+  # accounts ever held it, and none lists a physical product today), and so does any seller
+  # already listing live physical goods, so the new bar never strands an existing catalog.
   def can_create_physical_products?
     return true if Rails.env.development?
     return false if !confirmed? || suspended?
+    return true if DEPRECATED_can_create_physical_products?
     return true if sells_physical_products?
     return false if created_at > MIN_ACCOUNT_AGE_FOR_PHYSICAL_PRODUCTS.ago
     return false unless has_completed_payouts?

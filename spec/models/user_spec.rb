@@ -5439,6 +5439,25 @@ describe User, :vcr do
       user.can_create_physical_products?
     end
 
+    context "when the seller was approved under the old manual flag" do
+      let(:user) { create(:user, created_at: 1.day.ago) }
+
+      before do
+        user.payments.delete_all
+        allow(user).to receive(:sales_cents_total).and_return(0)
+        user.update!(DEPRECATED_can_create_physical_products: true)
+      end
+
+      it "keeps the ability without meeting the bar" do
+        expect(user.can_create_physical_products?).to eq(true)
+      end
+
+      it "still loses it on suspension" do
+        user.update!(user_risk_state: :suspended_for_fraud)
+        expect(user.can_create_physical_products?).to eq(false)
+      end
+    end
+
     context "when the seller already lists a physical product" do
       let(:user) { create(:user, created_at: 1.day.ago) }
 
