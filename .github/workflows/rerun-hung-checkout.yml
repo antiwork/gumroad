@@ -1,13 +1,22 @@
 name: Rerun hung checkout
 
-# Re-runs the failed jobs of a `Tests` attempt when the only thing that went
-# wrong was a timeout before the tests started: actions/checkout at its 5-minute
-# limit, or the test image pull timing out three times (Docker Hub). Those
-# failures are unrelated to the commit and land on shards at random.
+# Re-runs a `Tests` attempt when the only thing that went wrong was a timeout
+# before the tests started: actions/checkout at its 5-minute limit, the test
+# image pull timing out three times (Docker Hub), or a job that burned its own
+# `timeout-minutes` budget. Those failures are unrelated to the commit and land
+# on shards at random.
+#
+# The job timeout is the one that arrives as `cancelled` rather than `failure`,
+# because GitHub cancels a job that exceeds its own budget. That shape is worth
+# recovering unattended: ci-green.yml deliberately does not report on a
+# cancelled run, so the PR's required `ci/green` is never published and its
+# auto-merge waits forever with nothing else to unblock it.
 #
 # Scoped hard on purpose: the classifier refuses unless every red job on the
 # triggering attempt is one of those timeouts or a sibling fail-fast cancelled
-# behind one, so a spec failure is never re-run into a pass.
+# behind one, so a spec failure is never re-run into a pass -- and a `cancelled`
+# attempt is only re-run when a job-timeout annotation proves GitHub cancelled
+# it, never when a human or a cancel-in-progress threw it away.
 
 on:
   workflow_run:
@@ -26,12 +35,17 @@ jobs:
     # this stops. A hang that survives one re-run is not a flake worth chasing
     # unattended.
     #
-    # `failure` only: fail-fast cancelling siblings behind a hang still leaves
-    # the run itself `failure`, while a manual cancel or a concurrency
-    # cancel-in-progress leaves it `cancelled` -- and that run was thrown away
-    # on purpose, so re-running its failed jobs is wasted CI.
+    # `failure` covers fail-fast cancelling siblings behind a hang. `cancelled`
+    # is admitted only because GitHub cancels a job that exceeds its own
+    # `timeout-minutes`, which turns the run's conclusion into `cancelled` -- and
+    # nothing else recovers that: ci-green.yml does not report on a cancelled
+    # run, so the required ci/green stays pending and the PR's auto-merge waits
+    # forever. The classifier still refuses every cancelled attempt without a
+    # job-timeout annotation, so a run thrown away by a human or by a
+    # cancel-in-progress is left alone.
     if: >-
-      github.event.workflow_run.conclusion == 'failure' &&
+      (github.event.workflow_run.conclusion == 'failure' ||
+       github.event.workflow_run.conclusion == 'cancelled') &&
       github.event.workflow_run.run_attempt < 2
     steps:
       - uses: actions/checkout@v4
@@ -85,9 +99,19 @@ jobs:
             *) echo "rerun=false" >> "$GITHUB_OUTPUT" ;;
           esac
 
-      - name: Re-run the failed jobs
+      - name: Re-run the attempt
         if: steps.classify.outputs.rerun == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_ID: ${{ github.event.workflow_run.id }}
-        run: gh run rerun "$RUN_ID" --failed -R "$GITHUB_REPOSITORY"
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+        run: |
+          # `--failed` is only meaningful for a `failure` attempt: a cancelled job
+          # is not a failed job, and the point of re-running a job-timeout
+          # attempt is to give the run a conclusion of its own so ci-green.yml
+          # publishes the required ci/green. Re-run that whole attempt instead.
+          if [ "$CONCLUSION" = "cancelled" ]; then
+            gh run rerun "$RUN_ID" -R "$GITHUB_REPOSITORY"
+          else
+            gh run rerun "$RUN_ID" --failed -R "$GITHUB_REPOSITORY"
+          fi
