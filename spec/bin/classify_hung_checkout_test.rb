@@ -293,6 +293,24 @@ check(
   expect: :rerun
 )
 
+# Minitest runs its suite under `Run Minitest`, in a job with its own 15-minute
+# budget -- a timeout that lands there is the suite's, not the setup's.
+minitest_timeout = job("Test Minitest 0", "cancelled", [["Prepare test database and assets", "success", 3], ["Run Minitest", "cancelled", 890]])
+check(
+  "a job timeout inside Run Minitest",
+  { "jobs" => [minitest_timeout], "annotations" => { minitest_timeout["id"].to_s => [JOB_TIMEOUT_MESSAGE] }, "conclusion" => "cancelled" },
+  expect: :skip
+)
+
+# The same job burning its budget before `Run Minitest` is a setup timeout and
+# still recovers: the suite never got the chance to run.
+minitest_setup = job("Test Minitest 0", "cancelled", [["Prepare test database and assets", "cancelled", 890], ["Run Minitest", "skipped", 0]])
+check(
+  "a Minitest job that burned its budget before Run Minitest",
+  { "jobs" => [minitest_setup], "annotations" => { minitest_setup["id"].to_s => [JOB_TIMEOUT_MESSAGE] }, "conclusion" => "cancelled" },
+  expect: :rerun
+)
+
 # A checkout hang on a run GitHub cancelled for a job timeout is still collateral
 # rather than evidence -- and the timeout is what licenses the re-run.
 hang_beside_timeout = job("Slow 3", "failure", HUNG_CHECKOUT)

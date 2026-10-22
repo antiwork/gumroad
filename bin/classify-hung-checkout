@@ -94,12 +94,18 @@ rescue ArgumentError
   nil
 end
 
-# Jobs with no `Run tests` step at all (Build images, Compute relevant specs)
-# satisfy this too -- what matters is that no specs got the chance to run, so a
+# The steps that run a suite, in the jobs that carry their own `timeout-minutes`
+# budget: `test_minitest` runs its suite under `Run Minitest`, the rest under
+# `Run tests`. A job-timeout cancellation inside either is the suite's own
+# timeout, not the setup's.
+SUITE_STEPS = ["Run tests", "Run Minitest"].freeze
+
+# Jobs with no suite step at all (Build images, Compute relevant specs) satisfy
+# this too -- what matters is that no specs got the chance to run, so a
 # re-run cannot be laundering a spec failure.
-def run_tests_started?(job)
+def suite_started?(job)
   steps_of(job).any? do |step|
-    next false unless step["name"] == "Run tests"
+    next false unless SUITE_STEPS.include?(step["name"])
     step["status"] == "in_progress" || BAD.include?(step["conclusion"]) || step["conclusion"] == "success"
   end
 end
@@ -128,7 +134,7 @@ def job_timed_out?(job, annotations)
 end
 
 def hung?(job, annotations)
-  return false if run_tests_started?(job)
+  return false if suite_started?(job)
 
   # The step-name classes first, each proved by its own annotation: a job that
   # happens to carry both must keep the verdict its step already earned.
@@ -182,11 +188,11 @@ def verdict(jobs, annotations, conclusion = nil)
   offender = collateral.find { |job| job["conclusion"] != "cancelled" }
   return [EXIT_SKIP, "skip: #{job_label(offender)} concluded #{offender['conclusion']}"] if offender
 
-  # A sibling that burned its own budget inside `Run tests` timed out on the
+  # A sibling that burned its own budget inside the suite timed out on the
   # specs, not on the setup in front of them. Re-running the attempt whole would
   # re-execute them, which is the one thing a spec timeout must never get.
-  specs_timeout = collateral.find { |job| run_tests_started?(job) && job_timed_out?(job, annotations) }
-  return [EXIT_SKIP, "skip: #{job_label(specs_timeout)} timed out inside Run tests"] if specs_timeout
+  specs_timeout = collateral.find { |job| suite_started?(job) && job_timed_out?(job, annotations) }
+  return [EXIT_SKIP, "skip: #{job_label(specs_timeout)} timed out inside #{first_bad_step(specs_timeout)['name']}"] if specs_timeout
 
   [0, "rerun: timed out on #{hangs.map { |job| "#{job_label(job)} (#{first_bad_step(job)['name']})" }.join(', ')}"]
 end
