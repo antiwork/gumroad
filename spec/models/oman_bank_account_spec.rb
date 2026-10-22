@@ -34,6 +34,20 @@ describe OmanBankAccount do
     end
   end
 
+  describe "legacy bank codes" do
+    it "allows unrelated saves of an existing account but rejects changing to an invalid code" do
+      account = create(:oman_bank_account)
+      account.update_column(:bank_number, "AAAAOMOMX")
+      account.reload
+
+      expect { account.mark_deleted! }.not_to raise_error
+
+      account = create(:oman_bank_account)
+      account.bank_code = "AAAAOMOMXX"
+      expect(account).not_to be_valid
+    end
+  end
+
   describe "#account_number_visual" do
     it "returns the visual account number" do
       expect(create(:oman_bank_account, account_number_last_four: "6789").account_number_visual).to eq("******6789")

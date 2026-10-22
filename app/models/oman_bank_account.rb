@@ -11,7 +11,7 @@ class OmanBankAccount < BankAccount
 
   alias_attribute :bank_code, :bank_number
 
-  validate :validate_bank_code
+  validate :validate_bank_code, if: -> { new_record? || will_save_change_to_bank_number? }
   validate :validate_account_number, if: -> { Rails.env.production? }
 
   def routing_number
