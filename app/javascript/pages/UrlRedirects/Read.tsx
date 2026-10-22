@@ -188,6 +188,10 @@ const getMediaLocationFromCookies = (readId: string): StoredMediaLocation => {
   return {};
 };
 
+// `pagesinit` normally needs only the first ranges of the file, so a minute is generous; the
+// deadline surfaces the error state rather than rejecting the document.
+const PDF_STALL_DEADLINE_MS = 60_000;
+
 const Read = () => {
   const props = cast<Props>(usePage().props);
   return props.file_type === "epub" ? <EpubReader {...props} /> : <PdfReader {...props} />;
@@ -242,18 +246,28 @@ const PdfReader = ({
     let teardown: (() => void) | undefined;
     let releaseHeightSync: (() => void) | undefined;
 
+    const showReaderError = () => {
+      setIsLoading(false);
+      setReaderError(true);
+    };
+
+    // A stalled fetch never rejects (pdf.js reports no byte progress on a range-capable stream), so
+    // without a deadline the overlay stays up for the life of the page. Armed before the imports
+    // below, which are themselves a network window on a first visit.
+    const stallTimer = window.setTimeout(showReaderError, PDF_STALL_DEADLINE_MS);
+
     // Every await below can reject — an expired or rejected signed URL, a failed worker or chunk
     // fetch, a parse failure, an out-of-memory load — and getDocument's rejection used to be
     // unhandled, which left isLoading true and the loading overlay up for good.
     const handleLoadError = () => {
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- set by the effect's cleanup closure, which the compiler cannot see from here
       if (isCancelled) return;
+      window.clearTimeout(stallTimer);
       const release = teardown;
       teardown = undefined;
       release?.();
       pdfViewerRef.current = null;
-      setIsLoading(false);
-      setReaderError(true);
+      showReaderError();
     };
 
     const resumeFromLastLocation = (pageCount: number) => {
@@ -319,8 +333,10 @@ const PdfReader = ({
         )}`;
       };
       const onPagesInit = () => {
+        window.clearTimeout(stallTimer);
         pdfSinglePageViewer.currentScaleValue = "page-fit";
         setIsLoading(false);
+        setReaderError(false);
         const previousPage = pdfSinglePageViewer.currentPageNumber;
         resumeFromLastLocation(pdfViewerRef.current?.pdfDocument?.numPages ?? 1);
         // Setting the current page to itself does not emit pagechanging.
@@ -381,6 +397,7 @@ const PdfReader = ({
 
     return () => {
       isCancelled = true;
+      window.clearTimeout(stallTimer);
       releaseHeightSync?.();
       teardown?.();
       pdfViewerRef.current = null;

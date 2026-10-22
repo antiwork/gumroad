@@ -429,6 +429,11 @@ describe("PDF reader failure state", () => {
     };
   };
 
+  // The lazy pdf.js imports resolve over several microtask ticks, which fake timers do not advance.
+  const flushMicrotasks = async () => {
+    for (let i = 0; i < 10; i += 1) await Promise.resolve();
+  };
+
   let pdf: ReturnType<typeof buildPdfDocument>;
 
   beforeEach(() => {
@@ -471,6 +476,51 @@ describe("PDF reader failure state", () => {
 
     expect((await screen.findByRole("alert")).textContent).toContain("We couldn't open this PDF");
     expect(pdf.destroy).toHaveBeenCalled();
+  });
+
+  it("surfaces the failure when the document never arrives", async () => {
+    vi.useFakeTimers();
+    try {
+      render(<Read />);
+      await act(async () => {
+        await flushMicrotasks();
+      });
+      expect(screen.queryByText("We couldn't open this PDF")).toBeNull();
+
+      await act(async () => {
+        vi.advanceTimersByTime(60_000);
+      });
+
+      expect(screen.getByText("We couldn't open this PDF")).toBeTruthy();
+      expect(screen.queryByText("One moment while we prepare your reading experience")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("clears the deadline message when a slow document does arrive", async () => {
+    vi.useFakeTimers();
+    try {
+      render(<Read />);
+      await act(async () => {
+        await flushMicrotasks();
+      });
+      await act(async () => {
+        vi.advanceTimersByTime(60_000);
+      });
+      expect(screen.getByText("We couldn't open this PDF")).toBeTruthy();
+
+      await act(async () => {
+        pdf.resolve();
+        await flushMicrotasks();
+      });
+      act(() => mocks.emitPdf("pagesinit"));
+
+      expect(screen.queryByText("We couldn't open this PDF")).toBeNull();
+      expect(screen.queryByText("One moment while we prepare your reading experience")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
