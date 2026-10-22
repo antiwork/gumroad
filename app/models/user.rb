@@ -77,6 +77,11 @@ class User < ApplicationRecord
 
   MIN_SALES_CENTS_VALUE_FOR_STORE_AGENT = 10_000
 
+  # Physical goods are earned, not granted by hand (gp#3730): physical-goods fraud on Gumroad has
+  # come from accounts weeks old with a first small payout, so the bar is age + paid + $1k sold.
+  MIN_ACCOUNT_AGE_FOR_PHYSICAL_PRODUCTS = 90.days
+  MIN_SALES_CENTS_VALUE_FOR_PHYSICAL_PRODUCTS = 100_000
+
   # 5% once month-to-date GMV reaches $20k; resets each calendar month (gp#2177).
   # Eligibility is cached so purchase fee calc does not SUM the seller's sales (closed #4283).
   HIGH_VOLUME_FEE_PER_THOUSAND = 50
@@ -453,7 +458,7 @@ class User < ApplicationRecord
             46 => :refund_policy_enabled, # DO NOT use directly, use User#account_level_refund_policy_enabled? instead
             47 => :can_connect_stripe,
             48 => :upcoming_refund_policy_change_email_sent,
-            49 => :can_create_physical_products,
+            49 => :DEPRECATED_can_create_physical_products,
             50 => :paypal_payout_fee_waived,
             51 => :dismissed_create_products_with_ai_promo_alert,
             52 => :disable_affiliate_requests,
@@ -1349,6 +1354,10 @@ class User < ApplicationRecord
     update!(gumroad_day_timezone: timezone)
   end
 
+  def sells_physical_products?
+    links.where(deleted_at: nil, banned_at: nil).where("links.flags & ? > 0", Link.flag_mapping["flags"][:is_physical]).exists?
+  end
+
   def eligible_for_service_products?
     Time.current - created_at > MIN_AGE_FOR_SERVICE_PRODUCTS
   end
@@ -1701,6 +1710,19 @@ class User < ApplicationRecord
     return false if !confirmed? || suspended? || !has_completed_payouts?
 
     sales_cents_total >= MIN_SALES_CENTS_VALUE_FOR_STORE_AGENT
+  end
+
+  # Not memoized and checked cheapest-first: sales_cents_total is an Elasticsearch aggregation.
+  # Sellers who already list physical goods (every seller the old manual flag ever enabled, plus
+  # pre-flag physical sellers) keep the ability so the new bar never strands a live catalog.
+  def can_create_physical_products?
+    return true if Rails.env.development?
+    return false if !confirmed? || suspended?
+    return true if sells_physical_products?
+    return false if created_at > MIN_ACCOUNT_AGE_FOR_PHYSICAL_PRODUCTS.ago
+    return false unless has_completed_payouts?
+
+    sales_cents_total >= MIN_SALES_CENTS_VALUE_FOR_PHYSICAL_PRODUCTS
   end
 
   # All confirmation *resends* land here. Clear SendGrid bounce/block

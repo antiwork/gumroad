@@ -111,7 +111,7 @@ describe "Product creation", type: :system, js: true do
     end
 
     context "physical products are enabled" do
-      before { seller.update!(can_create_physical_products: true) }
+      before { allow_any_instance_of(User).to receive(:can_create_physical_products?).and_return(true) }
 
       it "creates an physical product" do
         visit new_product_path
@@ -341,9 +341,7 @@ describe "Product creation", type: :system, js: true do
       expect(seller.links.count).to eq(0)
     end
 
-    it "prevents creating physical products when feature is disabled" do
-      seller.update!(can_create_physical_products: false)
-
+    it "prevents creating physical products when the seller does not meet the bar" do
       visit new_product_path
       expect(page).not_to have_radio_button("Physical good")
     end

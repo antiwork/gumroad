@@ -68,7 +68,7 @@ describe ProductPresenter do
     end
 
     context "physical products are enabled" do
-      before { existing_seller.update!(can_create_physical_products: true) }
+      before { allow(existing_seller).to receive(:can_create_physical_products?).and_return(true) }
 
       it "includes physical in the native product types" do
         expect(described_class.new_page_props(current_seller: existing_seller)[:native_product_types]).to include("physical")

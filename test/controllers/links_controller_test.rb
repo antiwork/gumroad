@@ -762,9 +762,9 @@ class LinksControllerSellerAreaTest < ActionController::TestCase
     assert_equal "yearly", Link.last.subscription_duration
   end
 
-  test "POST create allows users to create physical products when physical products are enabled" do
+  test "POST create allows users to create physical products when they meet the bar" do
     Rails.cache.clear
-    @seller.update!(can_create_physical_products: true)
+    User.any_instance.stubs(:can_create_physical_products?).returns(true)
     post :create, params: { link: { price_cents: 100, name: "test physical link", is_physical: true } }
     assert_redirected_to edit_link_path(Link.last)
     product = Link.last
@@ -772,7 +772,7 @@ class LinksControllerSellerAreaTest < ActionController::TestCase
     assert_equal false, product.skus_enabled
   end
 
-  test "POST create returns forbidden when physical products are disabled" do
+  test "POST create returns forbidden when the seller does not meet the physical bar" do
     Rails.cache.clear
     post :create, params: { link: { price_cents: 100, name: "test physical link", is_physical: true } }
     assert_response :forbidden

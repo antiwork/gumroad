@@ -5395,6 +5395,75 @@ describe User, :vcr do
     end
   end
 
+  describe "#can_create_physical_products?" do
+    let(:user) { create(:user, created_at: 91.days.ago) }
+
+    before do
+      user.confirm
+      allow(user).to receive(:sales_cents_total).and_return(100_000)
+      create(:payment_completed, user:)
+    end
+
+    it "returns true for a 90+ day old, paid seller with $1,000+ in sales" do
+      expect(user.can_create_physical_products?).to eq(true)
+    end
+
+    it "returns false under $1,000 in sales" do
+      allow(user).to receive(:sales_cents_total).and_return(99_999)
+      expect(user.can_create_physical_products?).to eq(false)
+    end
+
+    it "returns false for an account younger than 90 days" do
+      user.update!(created_at: 89.days.ago)
+      expect(user.can_create_physical_products?).to eq(false)
+    end
+
+    it "returns false without a completed payout" do
+      user.payments.delete_all
+      expect(user.can_create_physical_products?).to eq(false)
+    end
+
+    it "returns false when not confirmed" do
+      user.update!(confirmed_at: nil)
+      expect(user.can_create_physical_products?).to eq(false)
+    end
+
+    it "returns false when suspended" do
+      user.update!(user_risk_state: :suspended_for_fraud)
+      expect(user.can_create_physical_products?).to eq(false)
+    end
+
+    it "does not query sales for a new account" do
+      user.update!(created_at: 1.day.ago)
+      expect(user).not_to receive(:sales_cents_total)
+      user.can_create_physical_products?
+    end
+
+    context "when the seller already lists a physical product" do
+      let(:user) { create(:user, created_at: 1.day.ago) }
+
+      before do
+        user.payments.delete_all
+        allow(user).to receive(:sales_cents_total).and_return(0)
+        create(:physical_product, user:)
+      end
+
+      it "keeps the ability regardless of the bar" do
+        expect(user.can_create_physical_products?).to eq(true)
+      end
+
+      it "still loses it on suspension" do
+        user.update!(user_risk_state: :suspended_for_fraud)
+        expect(user.can_create_physical_products?).to eq(false)
+      end
+
+      it "ignores deleted physical products" do
+        user.links.each { |l| l.update!(deleted_at: Time.current) }
+        expect(user.can_create_physical_products?).to eq(false)
+      end
+    end
+  end
+
   describe "#eligible_for_store_agent?" do
     let(:user) { create(:user) }
 
