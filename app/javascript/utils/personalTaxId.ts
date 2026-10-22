@@ -56,8 +56,6 @@ export const usesPakistanCnic = (complianceInfo: ComplianceInfo): boolean => {
 
 export const personalTaxIdError = (complianceInfo: ComplianceInfo, user: User, value: string): string | null => {
   if (!value) return null;
-  // Checked in the browser as well as on save, because the failure it prevents is otherwise silent:
-  // Stripe rejects a CNIC that is not 13 digits only at the processor, with no seller-visible error.
   if (usesPakistanCnic(complianceInfo)) return isValidPakistanCnic(value) ? null : PAKISTAN_CNIC_ERROR_MESSAGE;
   if (!usesUsTaxId(complianceInfo, user)) return null;
   const lastFourAllowed =
@@ -172,9 +170,6 @@ export const getIndividualTaxIdConfig = (complianceInfo: ComplianceInfo, user: U
     PE: { label: "DNI number", placeholder: "12345678-9", minLength: 10, maxLength: 10, idSuffix: "peru-id-number" },
     PK: {
       label: "National Identity Card Number (SNIC or CNIC)",
-      // A CNIC is 13 digits. The placeholder shows that count because the old 9-bullet one read as
-      // "9 digits" next to a 13-character requirement, and the cap leaves room for the dashes the
-      // card is printed with so a pasted "12345-1234567-1" is not truncated mid-number.
       placeholder: "1234567890123",
       minLength: PAKISTAN_CNIC_DIGITS,
       maxLength: PAKISTAN_CNIC_MAX_INPUT_LENGTH,

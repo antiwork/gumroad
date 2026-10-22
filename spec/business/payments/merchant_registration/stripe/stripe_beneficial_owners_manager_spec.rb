@@ -315,6 +315,18 @@ describe StripeBeneficialOwnersManager do
         expect(Stripe::Account).to receive(:create_person).and_return(other_owner_person)
         expect { described_class.create(user, valid) }.not_to raise_error
       end
+
+      it "leaves a foreign owner's document number untouched" do
+        foreign = pakistan_params.deep_dup.tap do |p|
+          p[:id_number] = "AB1234567"
+          p[:address][:country] = "US"
+        end
+        expect(Stripe::Account).to receive(:create_person) do |_account_id, attrs|
+          expect(attrs[:id_number]).to eq("AB1234567")
+          other_owner_person
+        end
+        described_class.create(user, foreign)
+      end
     end
 
     it "raises NotEligibleError for ineligible users" do

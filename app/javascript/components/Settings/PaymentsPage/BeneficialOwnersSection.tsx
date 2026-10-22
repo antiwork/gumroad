@@ -565,6 +565,7 @@ const BeneficialOwnersSection = ({
 
   const validatePakistanCnic = (): string | null => {
     if (defaultCountry !== "PK") return null;
+    if (formState.address_country !== "" && formState.address_country !== "PK") return null;
     if (editState?.mode === "edit" && editState.owner.relationship.representative) return null;
     if (!formState.id_number.trim()) return null;
     return isValidPakistanCnic(formState.id_number) ? null : PAKISTAN_CNIC_ERROR_MESSAGE;

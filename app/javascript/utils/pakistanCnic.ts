@@ -1,13 +1,7 @@
-// A Pakistani CNIC is 13 digits, printed 5-7-1 with dashes ("42101-1234567-1"). Stripe takes the
-// digits only in individual.id_number, and the server strips the dashes before sending — see
-// lib/utilities/compliance/pakistan_cnic.rb. Changing these constants also means editing that
-// module and the message it returns.
+// Keep in step with lib/utilities/compliance/pakistan_cnic.rb, including the message.
 export const PAKISTAN_CNIC_DIGITS = 13;
 
-// The input's maxLength counts characters, so it has to leave room for the two dashes the card is
-// printed with: a cap of 13 silently truncates a pasted "42101-1234567-1" mid-number, which is how
-// a seller ends up sending Stripe a value with the last digit missing. The digit count below is
-// the real bound.
+// maxLength counts characters, so leave room for the two dashes.
 export const PAKISTAN_CNIC_MAX_INPUT_LENGTH = PAKISTAN_CNIC_DIGITS + 2;
 
 // Sellers paste the number as printed; the dashes are cosmetic here.
