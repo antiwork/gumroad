@@ -397,6 +397,20 @@ else
   $failures << "workflow gate: #{gate.inspect}"
 end
 
+# Re-running an attempt a newer push already superseded joins this PR's
+# concurrency group and can cancel the run on the current head -- which then
+# publishes no ci/green either, so the guard compares the two heads first.
+$count += 1
+classify_step = YAML.load_file(WORKFLOW).fetch("jobs").fetch("rerun").fetch("steps").find { |step| step["id"] == "classify" }
+classify_run = classify_step ? classify_step.fetch("run").to_s : ""
+if classify_run.include?('gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq .head.sha') &&
+   classify_run.include?('!= "${HEAD_SHA}"')
+  puts "  ok    the classifier refuses an attempt a newer push superseded"
+else
+  puts "  FAIL  the classifier refuses an attempt a newer push superseded"
+  $failures << "supersession guard: #{classify_run.inspect}"
+end
+
 # A cancelled job is not a failed job, so `--failed` cannot re-run the shape this
 # gate now admits; the cancelled attempt has to be re-run whole.
 $count += 1

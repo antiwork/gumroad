@@ -16,7 +16,8 @@ name: Rerun hung checkout
 # triggering attempt is one of those timeouts or a sibling fail-fast cancelled
 # behind one, so a spec failure is never re-run into a pass -- and a `cancelled`
 # attempt is only re-run when a job-timeout annotation proves GitHub cancelled
-# it, never when a human or a cancel-in-progress threw it away.
+# it, never when a human or a cancel-in-progress threw it away, and never when a
+# newer push has already superseded the attempt.
 
 on:
   workflow_run:
@@ -27,6 +28,7 @@ permissions:
   actions: write # rerun-failed-jobs; the default token cannot re-run without it
   checks: read # the timeout text lives in the job's check-run annotations
   contents: read
+  pull-requests: read # is this attempt still the head of its PR
 
 jobs:
   rerun:
@@ -56,8 +58,23 @@ jobs:
           RUN_ID: ${{ github.event.workflow_run.id }}
           ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
           CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
         run: |
           set -euo pipefail
+
+          # A re-run joins this PR's concurrency group, so re-running an attempt a
+          # newer push has already superseded can cancel the run on the current
+          # head -- and a cancelled run publishes no ci/green either.
+          if [ -n "${PR_NUMBER}" ]; then
+            current=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq .head.sha || true)
+            if [ -n "$current" ] && [ "$current" != "${HEAD_SHA}" ]; then
+              echo "skip: superseded by ${current:0:8}"
+              echo "rerun=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+
           # --paginate --jq emits one job object per line (gh forbids --slurp
           # together with --jq). jq -s rebuilds the jobs array the classifier
           # reads. Use the triggering attempt, not the run's latest jobs.
