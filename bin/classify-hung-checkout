@@ -50,15 +50,12 @@ HANG_STEPS = HANGS.keys.freeze
 # this annotation, and that cancellation is what turns the whole run's conclusion
 # into `cancelled` -- which neither this workflow's gate nor ci-green.yml acts on,
 # so the PR's required `ci/green` never lands and auto-merge waits forever.
-#
-# Keyed on the JOB, not a step name: the step it was inside when the budget ran
-# out is arbitrary (the observed one was `Prepare the runner`), and that step's
-# duration is the remainder of the job's budget, not a signature of its own.
 JOB_TIMEOUT_MESSAGE = "has exceeded the maximum execution time of"
 
-# Cheap prefilter for the ids whose annotations are worth fetching. A job that
+# Cheap prefilter for the ids whose annotations are worth fetching: a job that
 # burned a real budget was cancelled deep into it, so a short cancellation is
-# never a timeout; the annotation is still what decides.
+# never a timeout. Measured on the job's own wall clock, the budget GitHub
+# cancels against -- the step the cancel landed in is only the remainder.
 JOB_TIMEOUT_MIN_SECONDS = 600.0
 
 # `timed_out` is a failure, not a cancellation: a job that ran out of its own
@@ -115,14 +112,9 @@ def candidate?(job)
 end
 
 # A job cancelled deep into its own budget. Only the annotation can confirm it,
-# and the annotation is only fetched for ids `--candidates` names, so this names
-# the id and `job_timed_out?` does the deciding. Naming a job here costs one API
-# call, never a re-run.
-#
-# Measured on the job's own wall clock, because that is the budget GitHub
-# cancels against: a job that spent its budget in earlier steps and was cancelled
-# inside a short one is still a timeout. A payload without job timestamps falls
-# back to the cancelled step, which is the remainder of the same budget.
+# and annotations are fetched only for the ids `--candidates` names, so this
+# names the id and `job_timed_out?` decides. The step is the fallback for a
+# payload without job timestamps.
 def job_timeout_candidate?(job)
   return false unless job["conclusion"] == "cancelled"
   step = first_bad_step(job)
@@ -155,11 +147,9 @@ def job_label(job)
 end
 
 def verdict(jobs, annotations, conclusion = nil)
-  # Fail-fast behind a hang still leaves the run `failure`. `cancelled` covers two
-  # shapes that job-level `cancelled` cannot tell apart: a run a human or a
-  # cancel-in-progress threw away, and a run GitHub cancelled itself because a job
-  # burned its own timeout-minutes budget. Only the second is re-runnable, and the
-  # job's timeout annotation is the tell -- enforced after `hangs` below.
+  # `failure` is admitted because fail-fast behind a hang still leaves the run
+  # `failure`; `cancelled` only for the job-timeout shape, enforced by the
+  # annotation check after `hangs`.
   if !conclusion.nil? && conclusion != "" && !%w[failure cancelled].include?(conclusion)
     return [EXIT_SKIP, "skip: the attempt concluded #{conclusion}"]
   end
@@ -191,6 +181,12 @@ def verdict(jobs, annotations, conclusion = nil)
   collateral = failing - hangs
   offender = collateral.find { |job| job["conclusion"] != "cancelled" }
   return [EXIT_SKIP, "skip: #{job_label(offender)} concluded #{offender['conclusion']}"] if offender
+
+  # A sibling that burned its own budget inside `Run tests` timed out on the
+  # specs, not on the setup in front of them. Re-running the attempt whole would
+  # re-execute them, which is the one thing a spec timeout must never get.
+  specs_timeout = collateral.find { |job| run_tests_started?(job) && job_timed_out?(job, annotations) }
+  return [EXIT_SKIP, "skip: #{job_label(specs_timeout)} timed out inside Run tests"] if specs_timeout
 
   [0, "rerun: timed out on #{hangs.map { |job| "#{job_label(job)} (#{first_bad_step(job)['name']})" }.join(', ')}"]
 end

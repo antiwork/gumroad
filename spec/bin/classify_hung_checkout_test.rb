@@ -267,6 +267,32 @@ check(
   expect: :skip
 )
 
+# A sibling that burned its own budget inside `Run tests` timed out on the specs,
+# not on the setup in front of them: re-running the attempt whole would
+# re-execute them, which is the one thing a spec timeout must never get.
+setup_timeout = job("Test Relevant 10", "cancelled", JOB_TIMEOUT)
+specs_timeout = job("Test Relevant 11", "cancelled", [["Set up job", "success", 3], ["Run tests", "cancelled", 1799]])
+check(
+  "a setup timeout beside a sibling that timed out inside Run tests",
+  { "jobs" => [setup_timeout, specs_timeout],
+    "annotations" => { setup_timeout["id"].to_s => [JOB_TIMEOUT_MESSAGE], specs_timeout["id"].to_s => [JOB_TIMEOUT_MESSAGE] },
+    "conclusion" => "cancelled" },
+  expect: :skip
+)
+
+# The same shape without an annotation on the sibling: fail-fast cancelled it
+# mid-specs, which is collateral rather than evidence, so the setup timeout still
+# recovers the attempt.
+setup_timeout_2 = job("Test Relevant 10", "cancelled", JOB_TIMEOUT)
+failfast_sibling = job("Test Relevant 11", "cancelled", [["Check out repository", "success", 10], ["Run tests", "cancelled", 400]])
+check(
+  "a setup timeout beside a sibling fail-fast cancelled inside Run tests",
+  { "jobs" => [setup_timeout_2, failfast_sibling],
+    "annotations" => { setup_timeout_2["id"].to_s => [JOB_TIMEOUT_MESSAGE] },
+    "conclusion" => "cancelled" },
+  expect: :rerun
+)
+
 # A checkout hang on a run GitHub cancelled for a job timeout is still collateral
 # rather than evidence -- and the timeout is what licenses the re-run.
 hang_beside_timeout = job("Slow 3", "failure", HUNG_CHECKOUT)

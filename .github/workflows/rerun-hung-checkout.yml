@@ -34,15 +34,6 @@ jobs:
     # run_attempt < 2 is the cap: attempt 1 may be re-run, attempt 2 is where
     # this stops. A hang that survives one re-run is not a flake worth chasing
     # unattended.
-    #
-    # `failure` covers fail-fast cancelling siblings behind a hang. `cancelled`
-    # is admitted only because GitHub cancels a job that exceeds its own
-    # `timeout-minutes`, which turns the run's conclusion into `cancelled` -- and
-    # nothing else recovers that: ci-green.yml does not report on a cancelled
-    # run, so the required ci/green stays pending and the PR's auto-merge waits
-    # forever. The classifier still refuses every cancelled attempt without a
-    # job-timeout annotation, so a run thrown away by a human or by a
-    # cancel-in-progress is left alone.
     if: >-
       (github.event.workflow_run.conclusion == 'failure' ||
        github.event.workflow_run.conclusion == 'cancelled') &&
