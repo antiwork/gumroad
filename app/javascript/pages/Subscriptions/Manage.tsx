@@ -475,8 +475,8 @@ export default function SubscriptionsManage() {
       {used_paypal ? (
         <CardContent>
           <Alert variant="info" className="grow">
-            Your saved payment method is PayPal{used_paypal.visual ? ` (${used_paypal.visual})` : ""}. Entering
-            a card below will replace it.
+            Your saved payment method is PayPal{used_paypal.visual ? ` (${used_paypal.visual})` : ""}. Entering a card
+            below will replace it.
           </Alert>
         </CardContent>
       ) : null}
