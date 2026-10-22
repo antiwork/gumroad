@@ -1,11 +1,19 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "tmpdir"
+
+# docker_browser_args gives every browser /tmp/chrome, and the default driver's browser stays open after a switch.
+# A new-headless Chrome can't start on a profile another Chrome holds, so each of these drivers gets its own, as the
+# WebAuthn drivers do.
+def reviews_layout_docker_browser_args
+  docker_browser_args.reject { |arg| arg.start_with?("--user-data-dir=") } << "--user-data-dir=#{Dir.mktmpdir}"
+end
 
 # The narrowest desktop width, where a maximum-length title wraps onto the most lines beside the sidebar.
 Capybara.register_driver :reviews_layout_lg_chrome do |app|
   options = Selenium::WebDriver::Chrome::Options.new
-  docker_browser_args.each { |arg| options.args << arg } if ENV["IN_DOCKER"] == "true"
+  reviews_layout_docker_browser_args.each { |arg| options.args << arg } if ENV["IN_DOCKER"] == "true"
   options.add_emulation(device_metrics: { width: 1024, height: 900, pixelRatio: 1, touch: false })
   options.add_preference("intl.accept_languages", "en-US")
   test_host_resolver_args.each { |arg| options.args << arg }
@@ -16,10 +24,15 @@ Capybara.register_driver :reviews_layout_lg_chrome do |app|
   Capybara::Selenium::Driver.new(app, browser: :chrome, http_client:, options:)
 end
 
-# Headed Chrome under automation leaves fullscreen within a moment for any element, so fullscreen runs headless.
+# Headed Chrome under automation leaves fullscreen within a moment for any element, and the legacy --headless
+# never enters it, so fullscreen runs in the new headless mode.
 Capybara.register_driver :reviews_layout_lg_headless_chrome do |app|
   options = Selenium::WebDriver::Chrome::Options.new
-  (ENV["IN_DOCKER"] == "true" ? docker_browser_args : ["--headless=new"]).each { |arg| options.args << arg }
+  if ENV["IN_DOCKER"] == "true"
+    reviews_layout_docker_browser_args.each { |arg| options.args << (arg == "--headless" ? "--headless=new" : arg) }
+  else
+    options.args << "--headless=new"
+  end
   options.add_emulation(device_metrics: { width: 1024, height: 900, pixelRatio: 1, touch: false })
   options.add_preference("intl.accept_languages", "en-US")
   test_host_resolver_args.each { |arg| options.args << arg }
@@ -32,7 +45,7 @@ end
 # A real window resize (no device emulation) hides the old reviews slot before the resize event, as browsers do.
 Capybara.register_driver :reviews_layout_window_chrome do |app|
   options = Selenium::WebDriver::Chrome::Options.new
-  (ENV["IN_DOCKER"] == "true" ? docker_browser_args : ["--headless=new"]).each { |arg| options.args << arg }
+  (ENV["IN_DOCKER"] == "true" ? reviews_layout_docker_browser_args : ["--headless=new"]).each { |arg| options.args << arg }
   options.args << "--window-size=1280,900"
   options.add_preference("intl.accept_languages", "en-US")
   test_host_resolver_args.each { |arg| options.args << arg }
