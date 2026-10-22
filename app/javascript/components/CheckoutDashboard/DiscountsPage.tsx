@@ -1091,7 +1091,7 @@ const Form = ({
     const isCodeInvalid = code.value === "";
     const isDiscountInvalid = !useTieredDiscounts && discount.value === null;
     const isMaxQuantityInvalid = limitQuantity && maxQuantity.value === null;
-    const isExpiresAtInvalid = !hasNoEndDate && validAt > expiresAt.value;
+    const isExpiresAtInvalid = limitValidity && !hasNoEndDate && validAt > expiresAt.value;
     const isSelectedProductsInvalid = !universal && selectedProductIds.value.length === 0;
     const isMinimumQuantityInvalid = hasMinimumQuantity && minimumQuantity.value === null;
     const isMinimumAmountInvalid = hasMinimumAmount && minimumAmount.value === null;
