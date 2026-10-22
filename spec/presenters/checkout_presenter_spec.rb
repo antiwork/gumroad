@@ -1170,6 +1170,7 @@ describe CheckoutPresenter do
                                us_states: STATES,
                                ca_provinces: Compliance::Countries.subdivisions_for_select(Compliance::Countries::CAN.alpha2).map(&:first),
                                used_card: { expiration_date: "12/24", number: "**** **** **** 4242", type: "visa", requires_mandate: false },
+                               used_paypal: nil,
                                recaptcha_key: GlobalConfig.get("RECAPTCHA_MONEY_SITE_KEY"),
                                paypal_client_id: PAYPAL_PARTNER_CLIENT_ID,
                                request_apple_pay_merchant_tokens: false,
@@ -1231,13 +1232,13 @@ describe CheckoutPresenter do
 
       it "exposes a PayPal payment method as used_paypal and not as used_card",
          vcr: { cassette_name: "CheckoutPresenter/_subscription_manager_props/tiered_membership_product/returns_subscription_data_object_for_the_subscription_manage_page" } do
-        paypal_card = CreditCard.new(card_type: "paypal", visual: "buyer@example.com")
+        paypal_card = build(:credit_card, chargeable: build(:native_paypal_chargeable))
         allow_any_instance_of(Subscription).to receive(:credit_card_to_charge).and_return(paypal_card)
 
         result = described_class.new(logged_in_user: nil, ip: "127.0.0.1").subscription_manager_props(subscription: @subscription.reload)
 
         expect(result[:used_card]).to be_nil
-        expect(result[:used_paypal]).to eq(visual: "buyer@example.com")
+        expect(result[:used_paypal]).to eq(visual: paypal_card.visual)
       end
 
       it "requests Apple Pay merchant tokens when the seller is in the rollout",
