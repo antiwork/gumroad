@@ -52,8 +52,9 @@ def run_scope(stub, env)
       case "#{stub}" in
         labels) printf 'working\\nrun-all-specs\\n' ;;
         no-label) printf 'working\\n' ;;
-        # The shape observed on gumroad#8579: the API answered with an empty
-        # body, so `gh` exited non-zero with jq's parse error on stderr.
+        # Fails the first call only, so the retry can be seen to recover.
+        flaky) [ "$(wc -l < "#{calls}")" -gt 1 ] || { echo "empty body" >&2; exit 1; }; printf 'working\\n' ;;
+        # An empty body from the API: `gh` exits non-zero on jq's parse error.
         fail) echo "unexpected end of JSON input" >&2; exit 1 ;;
       esac
     SH
@@ -81,6 +82,11 @@ check("a labelled lookup is not retried", calls, 1)
 out, = run_scope("no-label", {})
 check("a PR without the label takes the trimmed set", out["full"], "false")
 
+out, status, _, calls = run_scope("flaky", {})
+check("a lookup that succeeds on retry is used", out["full"], "false")
+check("a recovered lookup ends the step green", status.success?, true)
+check("a recovered lookup stops retrying", calls, 2)
+
 out, status, log, calls = run_scope("fail", {})
 check("a failed label lookup runs the FULL suite, not the trimmed set", out["full"], "true")
 check("a failed lookup still ends the step green", status.success?, true)
@@ -89,8 +95,9 @@ check("a failed lookup warns in the job log", log.include?("::warning::"), true)
 
 # A push to main is the full suite by definition — it must not depend on the
 # API at all, so it is checked with the failing stub.
-out, = run_scope("fail", "GITHUB_EVENT_NAME" => "push", "GITHUB_REF" => "refs/heads/main")
-check("a push to main runs the full suite without reading any labels", out["full"], "true")
+out, _, _, calls = run_scope("fail", "GITHUB_EVENT_NAME" => "push", "GITHUB_REF" => "refs/heads/main")
+check("a push to main runs the full suite", out["full"], "true")
+check("a push to main reads no labels", calls, 0)
 
 puts
 if $failures.empty?

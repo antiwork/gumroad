@@ -44,13 +44,9 @@ jobs:
             echo "full=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          # A failed read of the PR labels must never be reported as "this diff
-          # maps to a spec subset": that silently takes the trimmed run, and an
-          # unattributable diff then ESCALATES — 12 red Test Relevant shards
-          # telling you to add a `run-all-specs` label the PR already carries,
-          # which every rerun repeats (gumroad#8579, 2026-10-22: the push-event
-          # lookup came back with an empty body, `unexpected end of JSON
-          # input`, and the old `|| true` swallowed it). Retry, then fail SAFE.
+          # Never read a failed label lookup as "no label": that takes the
+          # trimmed set, and a diff it cannot attribute then escalates asking
+          # for a label the PR already carries. Retry, then fail SAFE.
           read_labels() {
             local attempt
             for attempt in 1 2 3; do
@@ -66,7 +62,7 @@ jobs:
           if [ "$GITHUB_EVENT_NAME" = "pull_request_target" ]; then
             LABELS=$(gh api "repos/$GITHUB_REPOSITORY/pulls/${{ github.event.pull_request.number }}" --jq '[.labels[].name] | join("\n")')
           elif ! read_labels; then
-            echo "::warning::label lookup for $SHA never succeeded; running the full suite rather than the trimmed set"
+            echo "::warning::label lookup for $SHA never succeeded; running the full suite"
             echo "full=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
