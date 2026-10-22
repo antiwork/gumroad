@@ -170,7 +170,7 @@ export const getIndividualTaxIdConfig = (complianceInfo: ComplianceInfo, user: U
     PE: { label: "DNI number", placeholder: "12345678-9", minLength: 10, maxLength: 10, idSuffix: "peru-id-number" },
     PK: {
       label: "National Identity Card Number (SNIC or CNIC)",
-      placeholder: "1234567890123",
+      placeholder: "12345-1234567-1",
       minLength: PAKISTAN_CNIC_DIGITS,
       maxLength: PAKISTAN_CNIC_MAX_INPUT_LENGTH,
       idSuffix: "snic",

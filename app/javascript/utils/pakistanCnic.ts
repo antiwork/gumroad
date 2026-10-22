@@ -9,4 +9,6 @@ const digitsOnly = (value: string) => value.replace(/\D/gu, "");
 
 export const isValidPakistanCnic = (value: string) => digitsOnly(value).length === PAKISTAN_CNIC_DIGITS;
 
+export const PAKISTAN_CNIC_HELP_TEXT = `${PAKISTAN_CNIC_DIGITS} digits, dashes optional`;
+
 export const PAKISTAN_CNIC_ERROR_MESSAGE = `Your CNIC must be ${PAKISTAN_CNIC_DIGITS} digits (for example, 12345-1234567-1). Enter it exactly as it appears on your card — the dashes are optional.`;

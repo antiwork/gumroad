@@ -4,6 +4,7 @@ import * as React from "react";
 
 import type { ComplianceInfo, FormFieldName, User } from "$app/types/payments";
 import { cast } from "$app/utils/cast";
+import { PAKISTAN_CNIC_HELP_TEXT } from "$app/utils/pakistanCnic";
 import {
   getIndividualTaxIdConfig,
   PERSONAL_ID_NUMBER_CONFIG,
@@ -1310,6 +1311,8 @@ const AccountDetailsSection = ({
                   <FieldsetDescription id={`${uid}-tax-id-error`} role="alert">
                     {individualTaxIdValidationError}
                   </FieldsetDescription>
+                ) : individualTaxIdConfig.idSuffix === "snic" ? (
+                  <FieldsetDescription>{PAKISTAN_CNIC_HELP_TEXT}</FieldsetDescription>
                 ) : null}
                 {mustReenterFullSsn ? (
                   <div className="small">

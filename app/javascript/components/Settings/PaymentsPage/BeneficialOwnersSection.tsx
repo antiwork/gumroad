@@ -12,6 +12,7 @@ import {
   isValidPakistanCnic,
   PAKISTAN_CNIC_DIGITS,
   PAKISTAN_CNIC_ERROR_MESSAGE,
+  PAKISTAN_CNIC_HELP_TEXT,
   PAKISTAN_CNIC_MAX_INPUT_LENGTH,
 } from "$app/utils/pakistanCnic";
 import {
@@ -203,9 +204,8 @@ const TAX_ID_CONFIGS: Record<string, TaxIdConfig> = {
   PE: { label: "DNI number", placeholder: "12345678-9", minLength: 10, maxLength: 10, idSuffix: "peru-id-number" },
   PK: {
     label: "National Identity Card Number (SNIC or CNIC)",
-    // 13 digits, the count printed on the card; the cap leaves room for the two dashes so a pasted
-    // "12345-1234567-1" is not truncated mid-number.
-    placeholder: "1234567890123",
+    // The cap leaves room for the two dashes so a pasted "12345-1234567-1" is not truncated.
+    placeholder: "12345-1234567-1",
     minLength: PAKISTAN_CNIC_DIGITS,
     maxLength: PAKISTAN_CNIC_MAX_INPUT_LENGTH,
     idSuffix: "snic",
@@ -1279,6 +1279,9 @@ const BeneficialOwnersSection = ({
                               value={formState.id_number}
                               onChange={(event) => updateForm({ id_number: event.target.value })}
                             />
+                            {taxIdConfig.idSuffix === "snic" ? (
+                              <FieldsetDescription>{PAKISTAN_CNIC_HELP_TEXT}</FieldsetDescription>
+                            ) : null}
                             {isUs ? (
                               <LinkButton
                                 className="self-start text-sm"

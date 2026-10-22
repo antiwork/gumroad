@@ -4,6 +4,7 @@ import {
   isValidPakistanCnic,
   PAKISTAN_CNIC_DIGITS,
   PAKISTAN_CNIC_ERROR_MESSAGE,
+  PAKISTAN_CNIC_HELP_TEXT,
   PAKISTAN_CNIC_MAX_INPUT_LENGTH,
 } from "$app/utils/pakistanCnic";
 
@@ -46,5 +47,9 @@ describe("isValidPakistanCnic", () => {
     expect(PAKISTAN_CNIC_ERROR_MESSAGE).toContain(`${PAKISTAN_CNIC_DIGITS} digits`);
     expect(PAKISTAN_CNIC_ERROR_MESSAGE).toContain("12345-1234567-1");
     expect(PAKISTAN_CNIC_ERROR_MESSAGE).toContain("dashes are optional");
+  });
+
+  it("keeps the persistent help text in step with the digit count and the placeholder shape", () => {
+    expect(PAKISTAN_CNIC_HELP_TEXT).toBe(`${PAKISTAN_CNIC_DIGITS} digits, dashes optional`);
   });
 });
