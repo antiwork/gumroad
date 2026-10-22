@@ -1,5 +1,11 @@
 import type { ComplianceInfo, User } from "$app/types/payments";
 import { COLOMBIA_ID_MAX_INPUT_LENGTH, COLOMBIA_ID_MIN_DIGITS } from "$app/utils/colombiaIdNumbers";
+import {
+  isValidPakistanCnic,
+  PAKISTAN_CNIC_DIGITS,
+  PAKISTAN_CNIC_ERROR_MESSAGE,
+  PAKISTAN_CNIC_MAX_INPUT_LENGTH,
+} from "$app/utils/pakistanCnic";
 
 export type TaxIdConfig = {
   label: string;
@@ -39,8 +45,19 @@ export const usesUsTaxId = (complianceInfo: ComplianceInfo, user: User): boolean
 
 export const normalizeUsTaxId = (value: string): string => value.replace(/[\s-]/gu, "");
 
+// Mirrors UpdateUserComplianceInfo#individual_id_country_matches? for Pakistan: the number belongs
+// to the representative, so the country guard only governs an account whose legal entity is in
+// Pakistan too. A foreign representative of a Pakistani business enters their own country's
+// document instead, and must not be held to a CNIC.
+export const usesPakistanCnic = (complianceInfo: ComplianceInfo): boolean => {
+  const accountCountry = complianceInfo.is_business ? complianceInfo.business_country : complianceInfo.country;
+  return accountCountry === "PK" && complianceInfo.country === "PK";
+};
+
 export const personalTaxIdError = (complianceInfo: ComplianceInfo, user: User, value: string): string | null => {
-  if (!usesUsTaxId(complianceInfo, user) || !value) return null;
+  if (!value) return null;
+  if (usesPakistanCnic(complianceInfo)) return isValidPakistanCnic(value) ? null : PAKISTAN_CNIC_ERROR_MESSAGE;
+  if (!usesUsTaxId(complianceInfo, user)) return null;
   const lastFourAllowed =
     complianceInfo.country === "US" && !user.need_full_ssn && !user.has_outstanding_full_ssn_requirement;
   const digits = normalizeUsTaxId(value);
@@ -153,9 +170,9 @@ export const getIndividualTaxIdConfig = (complianceInfo: ComplianceInfo, user: U
     PE: { label: "DNI number", placeholder: "12345678-9", minLength: 10, maxLength: 10, idSuffix: "peru-id-number" },
     PK: {
       label: "National Identity Card Number (SNIC or CNIC)",
-      placeholder: "•••••••••",
-      minLength: 13,
-      maxLength: 13,
+      placeholder: "12345-1234567-1",
+      minLength: PAKISTAN_CNIC_DIGITS,
+      maxLength: PAKISTAN_CNIC_MAX_INPUT_LENGTH,
       idSuffix: "snic",
     },
     CR: {

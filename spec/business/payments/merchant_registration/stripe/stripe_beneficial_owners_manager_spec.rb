@@ -269,6 +269,66 @@ describe StripeBeneficialOwnersManager do
       end
     end
 
+    context "when the seller's legal entity is in Pakistan" do
+      # Pakistan is one of the countries Stripe requires a nationality for, and the required-field
+      # check runs before the CNIC guard, so the fixture has to carry one.
+      let(:pakistan_params) do
+        params.deep_dup.tap do |p|
+          p[:nationality] = "PK"
+          p[:address] = { line1: "12 Clifton Road", city: "Karachi", state: "Sindh", postal_code: "74000", country: "PK" }
+        end
+      end
+
+      before do
+        user.alive_user_compliance_info.mark_deleted!
+        create(:user_compliance_info_business, user:, business_country: "Pakistan", country: "Pakistan")
+      end
+
+      it "rejects a CNIC that fits the input's character cap but is not 13 digits" do
+        # "42101-1234567" is 13 characters, the value a dashed CNIC used to be truncated to, and
+        # carries only 12 digits.
+        truncated = pakistan_params.deep_dup.tap { |p| p[:id_number] = "42101-1234567" }
+        expect(Stripe::Account).not_to receive(:create_person)
+        expect { described_class.create(user, truncated) }
+          .to raise_error(StripeBeneficialOwnersManager::InvalidFieldError, Compliance::PakistanCnic::ERROR_MESSAGE)
+      end
+
+      it "rejects a CNIC with too few or too many digits" do
+        %w[421011234567 42101123456712].each do |value|
+          out_of_range = pakistan_params.deep_dup.tap { |p| p[:id_number] = value }
+          expect { described_class.create(user, out_of_range) }
+            .to raise_error(StripeBeneficialOwnersManager::InvalidFieldError, Compliance::PakistanCnic::ERROR_MESSAGE)
+        end
+      end
+
+      it "sends Stripe the 13 digits of a dashed CNIC" do
+        pasted = pakistan_params.deep_dup.tap { |p| p[:id_number] = "42101-1234567-1" }
+        expect(Stripe::Account).to receive(:create_person) do |_account_id, attrs|
+          expect(attrs[:id_number]).to eq("4210112345671")
+          other_owner_person
+        end
+        described_class.create(user, pasted)
+      end
+
+      it "accepts a CNIC entered as 13 digits with no dashes" do
+        valid = pakistan_params.deep_dup.tap { |p| p[:id_number] = "4210112345671" }
+        expect(Stripe::Account).to receive(:create_person).and_return(other_owner_person)
+        expect { described_class.create(user, valid) }.not_to raise_error
+      end
+
+      it "leaves a foreign owner's document number untouched" do
+        foreign = pakistan_params.deep_dup.tap do |p|
+          p[:id_number] = "AB1234567"
+          p[:address][:country] = "US"
+        end
+        expect(Stripe::Account).to receive(:create_person) do |_account_id, attrs|
+          expect(attrs[:id_number]).to eq("AB1234567")
+          other_owner_person
+        end
+        described_class.create(user, foreign)
+      end
+    end
+
     it "raises NotEligibleError for ineligible users" do
       allow(user).to receive(:stripe_account).and_return(nil)
       expect { described_class.create(user, params) }.to raise_error(StripeBeneficialOwnersManager::NotEligibleError)

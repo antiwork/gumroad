@@ -323,6 +323,16 @@ describe UrlRedirectsController, inertia: true do
           expect(response).to redirect_to(library_url({ bundles: purchase.link.external_id, host: DOMAIN, protocol: PROTOCOL }))
         end
 
+        it "returns 401 for a rejected mobile app token instead of redirecting over it" do
+          get :download_page, params: {
+            id: purchase.url_redirect.token,
+            access_token: "invalid_token",
+            mobile_token: Api::Mobile::BaseController::MOBILE_TOKEN,
+          }
+
+          expect(response).to have_http_status(:unauthorized)
+        end
+
         context "when the url_redirect doesn't belong to a product" do
           before do
             # This seems to be the case for (some) purchases that have is_bundle_purchase set to true
@@ -1253,12 +1263,28 @@ describe UrlRedirectsController, inertia: true do
 
           expect(response).to have_http_status(:unauthorized)
         end
+
+        it "returns 401 when the url redirect has already been seen" do
+          @url_redirect.update!(has_been_seen: true)
+
+          get :download_page, params: { id: @token, access_token: "invalid_token", mobile_token: Api::Mobile::BaseController::MOBILE_TOKEN }
+
+          expect(response).to have_http_status(:unauthorized)
+        end
       end
 
       context "with token that has wrong scope" do
         let(:access_token) { create("doorkeeper/access_token", application: oauth_app, resource_owner_id: purchaser.id, scopes: "creator_api") }
 
         it "returns 403" do
+          get :download_page, params: { id: @token, access_token: access_token.token, mobile_token: Api::Mobile::BaseController::MOBILE_TOKEN }
+
+          expect(response).to have_http_status(:forbidden)
+        end
+
+        it "returns 403 when the url redirect has already been seen" do
+          @url_redirect.update!(has_been_seen: true)
+
           get :download_page, params: { id: @token, access_token: access_token.token, mobile_token: Api::Mobile::BaseController::MOBILE_TOKEN }
 
           expect(response).to have_http_status(:forbidden)

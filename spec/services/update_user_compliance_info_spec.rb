@@ -1066,6 +1066,111 @@ describe UpdateUserComplianceInfo do
       end
     end
 
+    context "with a Pakistani individual" do
+      def create_pakistani_individual_user(individual_tax_id:)
+        create(:user).tap do |u|
+          create(
+            :user_compliance_info,
+            user: u,
+            country: "Pakistan",
+            state: nil,
+            city: "Karachi",
+            zip_code: "74000",
+            individual_tax_id:,
+          )
+        end
+      end
+
+      def process_with(user, individual_tax_id)
+        params = ActionController::Parameters.new(is_business: false, individual_tax_id:)
+        described_class.new(compliance_params: params, user:).process
+      end
+
+      it "stores a dashed CNIC as its 13 digits, so Stripe receives what the guard counted" do
+        user = create_pakistani_individual_user(individual_tax_id: "1234512345671")
+
+        expect(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info)
+
+        result = process_with(user, "42101-1234567-1")
+
+        expect(result[:success]).to be true
+        expect(user.reload.alive_user_compliance_info.individual_tax_id.decrypt("1234")).to eq("4210112345671")
+      end
+
+      it "accepts a CNIC entered as 13 digits with no dashes" do
+        user = create_pakistani_individual_user(individual_tax_id: "1234512345671")
+
+        expect(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info)
+
+        expect(process_with(user, "4210112345671")[:success]).to be true
+        expect(user.reload.alive_user_compliance_info.individual_tax_id.decrypt("1234")).to eq("4210112345671")
+      end
+
+      it "rejects the 13-character value a dashed CNIC used to be truncated to" do
+        user = create_pakistani_individual_user(individual_tax_id: "1234512345671")
+        original = user.alive_user_compliance_info
+
+        # "42101-1234567" fits the old 13-character cap, so it used to save and reach Stripe with the
+        # last digit missing — refused at the processor, with nothing shown to the seller.
+        expect(StripeMerchantAccountManager).not_to receive(:handle_new_user_compliance_info)
+
+        result = nil
+        expect { result = process_with(user, "42101-1234567") }.not_to change { UserComplianceInfo.count }
+
+        expect(result[:success]).to be false
+        expect(result[:error_message]).to eq(Compliance::PakistanCnic::ERROR_MESSAGE)
+        expect(user.reload.alive_user_compliance_info.id).to eq(original.id)
+      end
+
+      it "rejects a CNIC with too few or too many digits" do
+        user = create_pakistani_individual_user(individual_tax_id: "1234512345671")
+
+        %w[421011234567 42101123456712].each do |value|
+          expect(StripeMerchantAccountManager).not_to receive(:handle_new_user_compliance_info)
+          expect(process_with(user, value)[:success]).to be false
+        end
+      end
+
+      it "keeps the browser's bounds and message identical to this guard's" do
+        # The same rule is enforced in the browser so the seller gets the error before a round trip.
+        # Two copies can drift silently: the form would accept a value this service then refuses, or
+        # refuse one it would accept.
+        helper = Rails.root.join("app/javascript/utils/pakistanCnic.ts").read
+
+        expect(helper).to include("PAKISTAN_CNIC_DIGITS = #{Compliance::PakistanCnic::DIGIT_COUNT}")
+        # The cap has to fit the two dashes the card is printed with, or a pasted CNIC is truncated
+        # before this service ever sees it.
+        expect(helper).to include("PAKISTAN_CNIC_MAX_INPUT_LENGTH = PAKISTAN_CNIC_DIGITS + 2")
+        expect(helper).to include("must be ${PAKISTAN_CNIC_DIGITS} digits")
+        expect(helper).to include("Enter it exactly as it appears on your card")
+      end
+
+      it "accepts a representative's own document for a Pakistani business whose representative lives outside Pakistan" do
+        user = create(:user).tap do |u|
+          create(
+            :user_compliance_info_business,
+            user: u,
+            country: "Vietnam",
+            business_country: "Pakistan",
+            business_type: UserComplianceInfo::BusinessTypes::CORPORATION,
+            individual_tax_id: "1234512345671",
+          )
+        end
+
+        params = ActionController::Parameters.new(
+          is_business: true,
+          individual_tax_id: "B123456789",
+        )
+
+        expect(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info)
+
+        result = described_class.new(compliance_params: params, user:).process
+
+        expect(result[:success]).to be true
+        expect(user.reload.alive_user_compliance_info.individual_tax_id.decrypt("1234")).to eq("B123456789")
+      end
+    end
+
     context "with a Guatemalan individual" do
       let!(:user) do
         create(:user).tap do |u|

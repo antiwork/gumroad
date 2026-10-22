@@ -72,6 +72,7 @@ module StripeBeneficialOwnersManager
     validate_jp_kana_address_format!(params, user)
     validate_colombia_id_number!(params, user)
     validate_dominican_republic_cie!(params, user)
+    validate_pakistan_cnic!(params, user)
     person_params = build_person_params(params, user, action: :create)
     person = Stripe::Account.create_person(stripe_account.charge_processor_merchant_id, person_params)
     serialize(person)
@@ -88,6 +89,7 @@ module StripeBeneficialOwnersManager
       validate_jp_kana_address_format!(params, user)
       validate_colombia_id_number!(params, user)
       validate_dominican_republic_cie!(params, user)
+      validate_pakistan_cnic!(params, user)
       person_params = build_person_params(params, user, action: :update)
     end
 
@@ -247,6 +249,25 @@ module StripeBeneficialOwnersManager
   end
   private_class_method :validate_dominican_republic_cie!
 
+  # The input's maxLength counts characters, so a value can pass it with the wrong digit count.
+  def self.validate_pakistan_cnic!(params, user)
+    return unless cnic_owner?(params, user)
+    id_number = params[:id_number].to_s
+    return if id_number.strip.blank?
+    return if Compliance::PakistanCnic.valid?(id_number)
+    raise InvalidFieldError, Compliance::PakistanCnic::ERROR_MESSAGE
+  end
+  private_class_method :validate_pakistan_cnic!
+
+  # A foreign owner of a PK business supplies their own document, not a CNIC.
+  def self.cnic_owner?(params, user)
+    return false unless user.alive_user_compliance_info&.legal_entity_country_code == Compliance::Countries::PAK.alpha2
+    address = params[:address]
+    owner_country = (address[:country].to_s.strip.presence if address.is_a?(Hash) || address.is_a?(ActionController::Parameters))
+    owner_country.nil? || owner_country == Compliance::Countries::PAK.alpha2
+  end
+  private_class_method :cnic_owner?
+
   def self.representative?(person)
     relationship = person.is_a?(Hash) ? person[:relationship] || person["relationship"] : person[:relationship]
     !!(relationship && (relationship[:representative] || relationship["representative"]))
@@ -390,9 +411,9 @@ module StripeBeneficialOwnersManager
     end
 
     id_number = params[:id_number].to_s.strip
-    # Send the digits the guard counted, not the separators the seller typed — Stripe refuses a CO
-    # id_number that is not digits-only.
+    # Send the digits the guard counted; Stripe refuses a CO id_number that is not digits-only.
     id_number = Compliance::ColombiaIdNumber.normalize(id_number) if country_code == Compliance::Countries::COL.alpha2
+    id_number = Compliance::PakistanCnic.normalize(id_number) if cnic_owner?(params, user)
     if id_number.present?
       if country_code == Compliance::Countries::USA.alpha2 && id_number.length == 4
         hash[:ssn_last_4] = id_number

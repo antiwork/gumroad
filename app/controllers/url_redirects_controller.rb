@@ -431,6 +431,7 @@ class UrlRedirectsController < ApplicationController
 
       # The app's purchase WebView has no cookies; /library only sees the session this request starts.
       sign_in_mobile_app_viewer
+      return if performed?
 
       # Build the library URL on the main app domain explicitly. This request can arrive on
       # the seller's subdomain (or custom domain), and /library requires authentication. A
@@ -449,6 +450,10 @@ class UrlRedirectsController < ApplicationController
       return unless params[:access_token].present? && params[:mobile_token] == Api::Mobile::BaseController::MOBILE_TOKEN
 
       doorkeeper_authorize! :mobile_api
+      # doorkeeper writes the 401/403 itself and does not stop the action; a rejected token must
+      # not open a session, and the caller must return before the redirect it makes next.
+      return if performed?
+
       sign_in current_api_user if current_api_user.present?
     end
 
@@ -556,6 +561,7 @@ class UrlRedirectsController < ApplicationController
 
       if params[:access_token].present? && params[:mobile_token] == Api::Mobile::BaseController::MOBILE_TOKEN
         sign_in_mobile_app_viewer
+        return if performed?
         return if purchase && purchase.purchaser && purchase.purchaser == logged_in_user
       end
 
