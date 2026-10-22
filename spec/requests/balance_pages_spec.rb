@@ -529,6 +529,51 @@ describe "Balance Pages Scenario", js: true, type: :system do
             expect(page).to have_content("Sales")
             expect(page).to have_content("Fees")
           end
+
+          it "shows only the 25% reserve on a cycle that pays nothing, with the rest waiting for a later payout" do
+            data = {
+              should_be_shown_currencies_always: true,
+              displayable_payout_period_range: "Activity up to May 6th, 2022",
+              payout_date_formatted: "May 14th, 2022",
+              payout_currency: "USD",
+              payout_cents: 0,
+              payout_displayed_amount: "$0.00 USD",
+              arrival_date: nil,
+              status: "paused",
+              is_current_period: true,
+              minimum_payout_amount_cents: 100_00,
+              sales_cents: 130_00,
+              refunds_cents: 0,
+              chargebacks_cents: 0,
+              credits_cents: 0,
+              loan_repayment_cents: 0,
+              fees_cents: 0,
+              taxes_cents: 0,
+              discover_fees_cents: 0,
+              direct_fees_cents: 0,
+              discover_sales_count: 0,
+              direct_sales_count: 0,
+              affiliate_credits_cents: 0,
+              affiliate_fees_cents: 0,
+              paypal_payout_cents: 0,
+              stripe_connect_payout_cents: 0,
+              payout_reserve_cents: 32_50,
+              payout_reserve_percent: 25,
+              payout_waiting_cents: 97_50,
+              payout_method_type: "none",
+              payout_note: nil,
+              type: Payouts::PAYOUT_TYPE_STANDARD,
+              stripe_connect_routing_active: false
+            }
+            allow_any_instance_of(UserBalanceStatsService).to receive(:payout_period_data).and_return(data)
+
+            visit balance_path
+
+            expect(get_label_value.call("Held back by chargeback reserve")).to eq("- $32.50 USD")
+            expect(page).to have_content("Waiting for a later payout")
+            expect(page).to have_content("- $97.50 USD")
+            expect(page).to have_content("Below your $100.00 minimum payout")
+          end
         end
 
         context "when payouts have been paused by Stripe" do

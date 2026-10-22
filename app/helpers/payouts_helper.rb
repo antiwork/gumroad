@@ -78,9 +78,11 @@ module PayoutsHelper
         payout_period_data[:payout_cents] = Payouts.payable_cents_after_chargeback_rate_reserve(
           user, unpaid_balances, minimum_cents: user.minimum_payout_amount_cents
         )
-        # Dollars not going out this cycle under the reserve (25% policy + whole-row leftovers).
-        # unpaid - payable so the breakdown reconciles with the amount shown as the payout.
-        payout_period_data[:payout_reserve_cents] = unpaid_cents - payout_period_data[:payout_cents]
+        # Only the 25% policy reserve belongs under the reserve label. The rest of the unpaid
+        # balance waits for a later payout (whole-row selection stops under the cap; a prefix
+        # below the minimum pays nothing). unpaid - payable made it the whole balance on a $0 cycle.
+        payout_period_data[:payout_reserve_cents] = Payouts.chargeback_rate_reserve_cents_for_run(user, unpaid_cents)
+        payout_period_data[:payout_waiting_cents] = unpaid_cents - payout_period_data[:payout_reserve_cents] - payout_period_data[:payout_cents]
         payout_period_data[:payout_reserve_percent] = User::CHARGEBACK_RATE_PAYOUT_RESERVE_PERCENT
       else
         payout_period_data[:payout_cents] = user.unpaid_balance_cents_up_to_date(payout_period_end_date)

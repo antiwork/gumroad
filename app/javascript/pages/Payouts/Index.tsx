@@ -251,6 +251,26 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
             <div>{formatNegativeDollarAmount(payoutPeriodData.payout_reserve_cents)}</div>
           </CardContent>
         ) : null}
+        {"payout_waiting_cents" in payoutPeriodData &&
+        payoutPeriodData.payout_waiting_cents != null &&
+        payoutPeriodData.payout_waiting_cents > 0 ? (
+          <CardContent>
+            <div className="grow">
+              <h4 className="font-bold">Waiting for a later payout</h4>
+              {payoutPeriodData.payout_cents === 0 ? (
+                <small className="block text-muted">
+                  Below your{" "}
+                  {formatPriceCentsWithCurrencySymbol("usd", payoutPeriodData.minimum_payout_amount_cents, {
+                    symbolFormat: "short",
+                    noCentsIfWhole: false,
+                  })}{" "}
+                  minimum payout
+                </small>
+              ) : null}
+            </div>
+            <div>{formatNegativeDollarAmount(payoutPeriodData.payout_waiting_cents)}</div>
+          </CardContent>
+        ) : null}
         {payoutPeriodData.taxes_cents !== 0 ? (
           <CardContent>
             <h4 className="grow font-bold">

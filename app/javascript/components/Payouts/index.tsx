@@ -196,6 +196,8 @@ type CurrentPeriodPayoutData = (
   loan_repayment_cents: number;
   payout_reserve_cents?: number | null;
   payout_reserve_percent?: number | null;
+  payout_waiting_cents?: number | null;
+  minimum_payout_amount_cents: number;
   payout_note?: string | null;
 };
 
