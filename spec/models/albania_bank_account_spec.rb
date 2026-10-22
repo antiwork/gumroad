@@ -45,6 +45,12 @@ describe AlbaniaBankAccount do
       account.update_column(:bank_number, "AAAAALTXX")
       expect(account.reload.update(deleted_at: Time.current)).to be(true)
     end
+
+    it "rejects changing a saved account to a 9-character code" do
+      account = create(:albania_bank_account)
+      account.bank_code = "AAAAALTXX"
+      expect(account.save).to be(false)
+    end
   end
 
   describe "#account_number_visual" do
