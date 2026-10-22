@@ -7,6 +7,7 @@ import { Button } from "$app/components/Button";
 import { Modal } from "$app/components/Modal";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Input } from "$app/components/ui/Input";
+import { Label } from "$app/components/ui/Label";
 
 export const BulkPriceModal = ({
   permalinks,
@@ -43,7 +44,10 @@ export const BulkPriceModal = ({
   return (
     <Modal
       open
-      onClose={onClose}
+      onClose={() => {
+        if (!isSaving) onClose();
+      }}
+      allowClose={!isSaving}
       title={`Edit price of ${permalinks.length} ${permalinks.length === 1 ? "product" : "products"}`}
       footer={
         failures ? (
@@ -75,7 +79,7 @@ export const BulkPriceModal = ({
         </>
       ) : (
         <>
-          <label htmlFor="bulk-price">New price (in each product's currency)</label>
+          <Label htmlFor="bulk-price">New price (in each product's currency)</Label>
           <Input
             id="bulk-price"
             type="text"

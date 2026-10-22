@@ -176,6 +176,7 @@ class DashboardProductsPagePresenter
         "url_without_protocol" => product.long_url(include_protocol: false),
         "has_duration" => product.duration_in_months.present?,
         "can_edit" => Pundit.policy!(pundit_user, product).edit?,
+        "can_edit_price" => Pundit.policy!(pundit_user, product).update? && Pundit.policy!(pundit_user, Link).new?,
         "can_destroy" => Pundit.policy!(pundit_user, product).destroy?,
         "can_duplicate" => Pundit.policy!(pundit_user, [:product_duplicates, product]).create?,
         "can_archive" => Pundit.policy!(pundit_user, [:products, :archived, product]).create?,

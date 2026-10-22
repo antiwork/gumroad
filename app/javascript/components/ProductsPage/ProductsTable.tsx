@@ -60,7 +60,7 @@ export const ProductsPageProductsTable = (props: {
 }) => {
   const [isLoading, setIsLoading] = React.useState(false);
   const [selected, setSelected] = React.useState<string[]>([]);
-  const [editingPrices, setEditingPrices] = React.useState(false);
+  const [editingPrices, setEditingPrices] = React.useState<string[] | null>(null);
   const tableRef = React.useRef<HTMLTableElement>(null);
   const { locale } = useUserAgentInfo();
   const [sort, setSort] = React.useState<Sort<SortKey> | null>(props.sort ?? null);
@@ -102,7 +102,7 @@ export const ProductsPageProductsTable = (props: {
 
   const reloadProducts = () => loadProducts(pagination.page);
 
-  const editable = products.filter((product) => product.can_edit);
+  const editable = products.filter((product) => product.can_edit_price);
   const selectedHere = editable.filter((product) => selected.includes(product.permalink));
   const toggle = (permalink: string, on: boolean) =>
     setSelected((current) => (on ? [...current, permalink] : current.filter((id) => id !== permalink)));
@@ -114,14 +114,14 @@ export const ProductsPageProductsTable = (props: {
       {selectedHere.length > 0 ? (
         <div className="flex flex-wrap items-center gap-3">
           <span>{selectedHere.length} selected</span>
-          <Button onClick={() => setEditingPrices(true)}>Edit price</Button>
+          <Button onClick={() => setEditingPrices(selectedHere.map((product) => product.permalink))}>Edit price</Button>
           <Button onClick={() => setSelected([])}>Clear</Button>
         </div>
       ) : null}
       {editingPrices ? (
         <BulkPriceModal
-          permalinks={selectedHere.map((product) => product.permalink)}
-          onClose={() => setEditingPrices(false)}
+          permalinks={editingPrices}
+          onClose={() => setEditingPrices(null)}
           onDone={() => {
             setSelected([]);
             reloadProducts();
@@ -165,7 +165,7 @@ export const ProductsPageProductsTable = (props: {
           {products.map((product) => (
             <TableRow key={product.id}>
               <TableCell hideLabel>
-                {product.can_edit ? (
+                {product.can_edit_price ? (
                   <Checkbox
                     aria-label={`Select ${product.name}`}
                     checked={selected.includes(product.permalink)}

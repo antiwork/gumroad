@@ -46,6 +46,7 @@ export type Product = {
   url: string;
   url_without_protocol: string;
   can_edit: boolean;
+  can_edit_price: boolean;
   can_duplicate: boolean;
   can_destroy: boolean;
   can_archive: boolean;
