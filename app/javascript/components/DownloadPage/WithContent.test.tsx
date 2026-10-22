@@ -1,11 +1,12 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { saveLastContentPage } from "$app/data/products";
 
 import { DomainSettingsProvider } from "$app/components/DomainSettings";
+import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 
 import { scrollWithinScrollableAncestor } from "./contentPageNavigation";
 import { ContentProps, WithContent } from "./WithContent";
@@ -34,7 +35,7 @@ vi.mock("$app/components/DownloadPage/Layout", () => ({
   ),
 }));
 
-vi.mock("$app/components/useIsAboveBreakpoint", () => ({ useIsAboveBreakpoint: () => true }));
+vi.mock("$app/components/useIsAboveBreakpoint", () => ({ useIsAboveBreakpoint: vi.fn(() => true) }));
 
 vi.mock("$app/components/useAddThirdPartyAnalytics", () => ({ useAddThirdPartyAnalytics: () => vi.fn() }));
 vi.mock("$app/components/useReactNativeMessage", () => ({ useReactNativeMessage: () => {} }));
@@ -127,6 +128,7 @@ const selectedTitle = () =>
 describe("DownloadPage content navigation", () => {
   beforeEach(() => {
     window.history.replaceState(null, "", "/d/token");
+    vi.mocked(useIsAboveBreakpoint).mockReturnValue(true);
     mocks.saveLastContentPage.mockClear();
     vi.mocked(scrollWithinScrollableAncestor).mockClear();
   });
@@ -181,6 +183,27 @@ describe("DownloadPage content navigation", () => {
 
     renderPage(content(null));
 
+    const firstCall = vi.mocked(scrollWithinScrollableAncestor).mock.calls[0];
+    expect(firstCall?.[0].dataset.contentPageId).toBe("page-c");
+  });
+
+  // On mobile the list lives in a popover that mounts closed, so opening it is the moment the buyer
+  // needs the checked page in view.
+  it("opens the mobile table of contents on the page it opened on", async () => {
+    window.history.replaceState(null, "", "/d/token?page=page-c");
+    vi.mocked(useIsAboveBreakpoint).mockReturnValue(false);
+
+    renderPage(content(null));
+    vi.mocked(scrollWithinScrollableAncestor).mockClear();
+
+    fireEvent.click(screen.getByLabelText("Table of Contents"));
+
+    await waitFor(() => {
+      const items = Array.from(document.querySelectorAll<HTMLElement>("[role=menuitemradio]"));
+      expect(items.map((item) => item.getAttribute("aria-checked"))).toEqual(["false", "false", "true"]);
+    });
+
+    await waitFor(() => expect(scrollWithinScrollableAncestor).toHaveBeenCalled());
     const firstCall = vi.mocked(scrollWithinScrollableAncestor).mock.calls[0];
     expect(firstCall?.[0].dataset.contentPageId).toBe("page-c");
   });

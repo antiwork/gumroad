@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import {
   CONTENT_PAGE_QUERY_PARAM,
@@ -54,6 +54,10 @@ describe("urlWithContentPage", () => {
 });
 
 describe("scrollWithinScrollableAncestor", () => {
+  afterEach(() => {
+    document.body.innerHTML = "";
+  });
+
   const rect = (top: number, height: number): DOMRect => ({
     x: 0,
     y: top,

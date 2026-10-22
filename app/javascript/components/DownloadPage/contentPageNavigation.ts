@@ -1,8 +1,5 @@
-// A buyer reading a multi-page product (a course) keeps their place in two places: the URL
-// (`?page=<page_id>`) and the purchase. The URL is what a refresh, a bookmark, a shared link or a
-// back/forward jump reads first, because it is both the most recent thing the buyer did and the
-// only copy that survives the save request failing on the way to the server. The saved value stays
-// as the fallback for a buyer arriving from a receipt or library link that carries no page.
+// The URL is read before the saved page because it is the only copy that survives the save request
+// failing, and the only one a bookmark or a shared link carries.
 export const CONTENT_PAGE_QUERY_PARAM = "page";
 
 type ContentPageLike = { page_id: string };
@@ -12,8 +9,8 @@ export const indexOfPageId = (pages: ContentPageLike[], pageId: string | null) =
   return pages.findIndex((page) => page.page_id === pageId);
 };
 
-// An id that no longer belongs to a page (the seller deleted or replaced it) falls through to the
-// saved page instead of dropping the buyer on the first page of the course.
+// A page id that no longer exists (the seller deleted or replaced it) falls through to the saved
+// page rather than dropping the buyer on the first page of the course.
 export const initialContentPageIndex = (pages: ContentPageLike[], url: URL, lastPageId: string | null) => {
   const fromUrl = indexOfPageId(pages, url.searchParams.get(CONTENT_PAGE_QUERY_PARAM));
   if (fromUrl >= 0) return fromUrl;
@@ -29,6 +26,9 @@ export const urlWithContentPage = (url: URL, pageId: string) => {
 };
 
 const SCROLL_MARGIN_PX = 24;
+// Rounding in layout can leave scrollHeight a fraction above clientHeight on a list that does not
+// actually scroll.
+const SCROLLABLE_OVERFLOW_TOLERANCE_PX = 1;
 
 // Scrolls the page list itself, never the window: the list is independently scrollable beside the
 // reading pane, so `Element#scrollIntoView` would drag the lesson the buyer is reading along with
@@ -39,7 +39,7 @@ export const scrollWithinScrollableAncestor = (element: HTMLElement) => {
     const style = window.getComputedStyle(container);
     const scrolls =
       (style.overflowY === "auto" || style.overflowY === "scroll") &&
-      container.scrollHeight > container.clientHeight + 1;
+      container.scrollHeight > container.clientHeight + SCROLLABLE_OVERFLOW_TOLERANCE_PX;
     if (scrolls) break;
     container = container.parentElement;
   }
