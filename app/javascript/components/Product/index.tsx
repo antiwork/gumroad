@@ -1,6 +1,7 @@
 import { Discount as DiscountIcon, Star } from "@boxicons/react";
 import { differenceInYears, parseISO } from "date-fns";
 import * as React from "react";
+import { createPortal } from "react-dom";
 
 import { getReviews, type Review } from "$app/data/product_reviews";
 import { trackUserProductAction } from "$app/data/user_action_event";
@@ -496,6 +497,62 @@ export const Product = ({
 
   // A returning buyer's access card lives in the details, so it stays ahead of "Purchase again" for them.
   const showsExistingPurchase = !!purchase?.should_show_receipt;
+  // Below lg the reviews follow the description. At lg they stay inside the controls item: as a grid item of their
+  // own, a title taller than the price and controls would push them away from the controls. One instance renders
+  // into a host that moves, before paint, to whichever slot the stylesheet shows, so it is never remounted.
+  const [reviewsHost] = React.useState(() => document.createElement("div"));
+  const desktopReviewsSlot = React.useRef<HTMLDivElement>(null);
+  const narrowReviewsSlot = React.useRef<HTMLElement>(null);
+  const showsReviews = !!product.ratings || !!product.seller_reputation;
+  React.useLayoutEffect(() => {
+    if (!showsReviews) return;
+    // A real window resize hides the old slot, and the browser blurs focus inside it, before resize reaches adopt.
+    let blurredByHiding: HTMLElement | null = null;
+    const noteBlur = (event: FocusEvent) => {
+      if (event.target instanceof HTMLElement && event.target.getClientRects().length === 0) {
+        blurredByHiding = event.target;
+      }
+    };
+    const forgetBlur = () => {
+      blurredByHiding = null;
+    };
+    const adopt = () => {
+      const current = reviewsHost.parentElement;
+      // Moving the host would end a review video's fullscreen, and its slot hiding would blank it. Hold both until
+      // fullscreenchange reports the exit.
+      if (current && document.fullscreenElement && reviewsHost.contains(document.fullscreenElement)) {
+        current.style.display = "block";
+        return;
+      }
+      current?.style.removeProperty("display");
+      const slot = [desktopReviewsSlot.current, narrowReviewsSlot.current].find(
+        (candidate) => candidate && getComputedStyle(candidate).display !== "none",
+      );
+      if (!slot || current === slot) return;
+      // Moving a connected node blurs whatever inside it has focus, such as "Load more", so put focus back.
+      const focused = document.activeElement;
+      const refocus =
+        focused instanceof HTMLElement && reviewsHost.contains(focused)
+          ? focused
+          : focused === document.body && blurredByHiding && reviewsHost.contains(blurredByHiding)
+            ? blurredByHiding
+            : null;
+      slot.append(reviewsHost);
+      refocus?.focus({ preventScroll: true });
+      forgetBlur();
+    };
+    adopt();
+    reviewsHost.addEventListener("focusout", noteBlur);
+    document.addEventListener("focusin", forgetBlur);
+    window.addEventListener("resize", adopt);
+    document.addEventListener("fullscreenchange", adopt);
+    return () => {
+      reviewsHost.removeEventListener("focusout", noteBlur);
+      document.removeEventListener("focusin", forgetBlur);
+      window.removeEventListener("resize", adopt);
+      document.removeEventListener("fullscreenchange", adopt);
+    };
+  }, [showsReviews, reviewsHost]);
   const details = (
     <div className="[grid-area:details] lg:border-r">
       {sellerByline || hasRatings ? (
@@ -619,11 +676,9 @@ export const Product = ({
           : "[grid-template-areas:'covers'_'title'_'price'_'controls'_'details'_'social']",
         // The title spans two rows, so a tall title stretches the controls' row instead of the price row.
         // In one shared row, the controls would start below the title and leave a gap under the price.
-        // The 1fr row has to sit inside the controls' span but outside the title's, or the controls'
-        // height is shared into the title's row and the title grows a gap of its own.
         saleBanner || priceTag
-          ? "lg:grid-rows-[auto_auto_auto_1fr_auto] lg:[grid-template-areas:'covers_covers'_'title_price'_'title_controls'_'details_controls'_'details_social']"
-          : "lg:grid-rows-[auto_auto_1fr_auto] lg:[grid-template-areas:'covers_covers'_'title_controls'_'details_controls'_'details_social']",
+          ? "lg:grid-rows-[auto_auto_auto_1fr] lg:[grid-template-areas:'covers_covers'_'title_price'_'title_controls'_'details_controls']"
+          : "lg:grid-rows-[auto_auto_1fr] lg:[grid-template-areas:'covers_covers'_'title_controls'_'details_controls']",
       )}
     >
       <Covers covers={product.covers} mainCoverId={product.main_cover_id} productName={product.name} />
@@ -866,22 +921,27 @@ export const Product = ({
             <RefundPolicyInfo refundPolicy={product.refund_policy} permalink={product.permalink} />
           ) : null}
         </section>
+        {showsReviews ? <div ref={desktopReviewsSlot} className="max-lg:hidden" /> : null}
       </section>
       {showsExistingPurchase ? null : details}
-      {product.ratings || product.seller_reputation ? (
-        <section className="border-t [grid-area:social]">
-          {product.ratings ? (
-            <Reviews ratings={product.ratings} productId={product.id} seller={product.seller} />
-          ) : null}
-          {product.seller_reputation ? (
-            <SellerReputationSection
-              reputation={product.seller_reputation}
-              hasOwnReviews={product.ratings != null && product.ratings.count > 0}
-              seller={product.seller}
-            />
-          ) : null}
-        </section>
-      ) : null}
+      {showsReviews ? <section ref={narrowReviewsSlot} className="[grid-area:social] lg:hidden" /> : null}
+      {showsReviews
+        ? createPortal(
+            <>
+              {product.ratings ? (
+                <Reviews ratings={product.ratings} productId={product.id} seller={product.seller} />
+              ) : null}
+              {product.seller_reputation ? (
+                <SellerReputationSection
+                  reputation={product.seller_reputation}
+                  hasOwnReviews={product.ratings != null && product.ratings.count > 0}
+                  seller={product.seller}
+                />
+              ) : null}
+            </>,
+            reviewsHost,
+          )
+        : null}
     </article>
   );
 };
@@ -1098,7 +1158,7 @@ const Reviews = ({
   if (ratings.count === 0) return null;
 
   return (
-    <section className="grid gap-4 p-6 not-first:border-t">
+    <section className="grid gap-4 border-t p-6">
       <header className="flex items-center justify-between">
         <h3>Ratings</h3>
         <div className="flex shrink-0 items-center gap-1">
@@ -1168,7 +1228,7 @@ const SellerReputationSection = ({
   hasOwnReviews: boolean;
   seller: Seller | null;
 }) => (
-  <section className="grid gap-2 p-6 not-first:border-t" aria-label="Creator rating">
+  <section className="grid gap-2 border-t p-6" aria-label="Creator rating">
     {!hasOwnReviews ? <div>This product has no reviews yet.</div> : null}
     <div className="flex flex-wrap items-center gap-1">
       <RatingStars rating={reputation.average} />

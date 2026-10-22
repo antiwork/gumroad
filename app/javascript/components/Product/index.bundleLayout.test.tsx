@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import * as React from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { trackUserProductAction } from "$app/data/user_action_event";
 
@@ -43,7 +43,8 @@ vi.mock("$app/components/DomainSettings", () => ({
   useAppDomain: () => "example.com",
   useDomains: () => ({ scheme: "https", rootDomain: "example.com" }),
 }));
-vi.mock("$app/components/useIsAboveBreakpoint", () => ({ useIsAboveBreakpoint: () => false }));
+const guessedBreakpoint = vi.hoisted(() => ({ above: false }));
+vi.mock("$app/components/useIsAboveBreakpoint", () => ({ useIsAboveBreakpoint: () => guessedBreakpoint.above }));
 vi.mock("$app/components/Product/ConfigurationSelector", () => {
   const ConfigurationSelector = React.forwardRef(() => null);
   ConfigurationSelector.displayName = "ConfigurationSelector";
@@ -75,6 +76,7 @@ vi.mock("$app/components/Product/ShareSection", () => ({ ShareSection: () => nul
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  guessedBreakpoint.above = false;
 });
 
 const selection: PriceSelection = {
@@ -527,6 +529,170 @@ describe("product page reading order below lg", () => {
     );
   });
 
+  const reviewed: ProductData = {
+    ...product,
+    bundle_products: [],
+    description_html: "<p>Everything this product teaches</p>",
+    ratings: { average: 4.8, count: 12, percentages: [2, 3, 5, 20, 70] },
+    seller_reputation: { average: 4.6, count: 40, products_count: 3 },
+  };
+  // Stands in for the lg utilities: the page hides the reviews slot that does not apply to the viewport.
+  const viewport = document.createElement("style");
+  const showLayout = (layout: "narrow" | "desktop") => {
+    viewport.textContent = `[class~="${layout === "narrow" ? "max-lg:hidden" : "lg:hidden"}"] { display: none; }`;
+    document.head.append(viewport);
+    window.dispatchEvent(new Event("resize"));
+  };
+  beforeEach(() => showLayout("narrow"));
+  afterEach(() => viewport.remove());
+  const description = () => screen.getByText("Everything this product teaches");
+  const ratingsHeading = () => screen.getByRole("heading", { name: "Ratings" });
+  const creatorRating = () => screen.getByRole("region", { name: "Creator rating" });
+
+  it("draws and focuses the description before the reviews for a new buyer", () => {
+    const { drawn, inDom } = areaOrder(renderArticle(reviewed, null));
+
+    expect(inDom).toEqual(drawn);
+    expect(inDom).toEqual(["title", "price", "controls", "details", "social"]);
+    expect(position(screen.getByRole("link", { name: "I want this!" }))).toBeLessThan(position(description()));
+    expect(position(description())).toBeLessThan(position(ratingsHeading()));
+    expect(position(ratingsHeading())).toBeLessThan(position(creatorRating()));
+  });
+
+  it("keeps the reviews after Purchase again for a returning buyer", () => {
+    const { drawn, inDom } = areaOrder(renderArticle(reviewed, receipt));
+
+    expect(inDom).toEqual(drawn);
+    expect(inDom).toEqual(["title", "price", "details", "controls", "social"]);
+    expect(position(screen.getByRole("link", { name: "Purchase again" }))).toBeLessThan(position(ratingsHeading()));
+  });
+
+  it("puts the creator rating after the description when the product has no reviews of its own", () => {
+    const { drawn, inDom } = areaOrder(renderArticle({ ...reviewed, ratings: null }, null));
+
+    expect(inDom).toEqual(drawn);
+    expect(inDom.at(-1)).toBe("social");
+    expect(within(creatorRating()).getByText("This product has no reviews yet.")).toBeTruthy();
+    expect(position(description())).toBeLessThan(position(creatorRating()));
+  });
+
+  it("leaves out the reviews area when there is no rating to show", () => {
+    const { drawn, inDom } = areaOrder(renderArticle({ ...reviewed, ratings: null, seller_reputation: null }, null));
+
+    expect(inDom).toEqual(drawn);
+    expect(inDom).not.toContain("social");
+  });
+
+  it("keeps the reviews inside the controls on desktop", () => {
+    showLayout("desktop");
+    const article = renderArticle(reviewed, null);
+    const controls = article.querySelector('[class*="grid-area:controls"]');
+
+    expect(controls?.contains(ratingsHeading())).toBe(true);
+    expect(controls?.contains(creatorRating())).toBe(true);
+    expect(position(screen.getByRole("link", { name: "I want this!" }))).toBeLessThan(position(ratingsHeading()));
+  });
+
+  // An iPad sends a desktop user agent, so the breakpoint hook guesses desktop until it measures the window.
+  it("places the reviews by the stylesheet on the first render, not by a guessed breakpoint", () => {
+    guessedBreakpoint.above = true;
+    const article = renderArticle(reviewed, null);
+
+    expect(article.querySelector('[class*="grid-area:controls"]')?.contains(ratingsHeading())).toBe(false);
+    expect(article.querySelector('[class~="lg:hidden"]')?.contains(ratingsHeading())).toBe(true);
+    expect(position(description())).toBeLessThan(position(ratingsHeading()));
+  });
+
+  it("moves the same reviews between the layouts when the window crosses lg", () => {
+    const article = renderArticle(reviewed, null);
+    const heading = ratingsHeading();
+    const controls = article.querySelector('[class*="grid-area:controls"]');
+
+    showLayout("desktop");
+    expect(ratingsHeading()).toBe(heading);
+    expect(controls?.contains(heading)).toBe(true);
+
+    showLayout("narrow");
+    expect(ratingsHeading()).toBe(heading);
+    expect(controls?.contains(heading)).toBe(false);
+    expect(position(description())).toBeLessThan(position(heading));
+  });
+
+  it("keeps keyboard focus inside the reviews when the window crosses lg", () => {
+    renderArticle(reviewed, null);
+    const sellerReviews = within(creatorRating()).getByRole("link", { name: "40 verified reviews" });
+    sellerReviews.focus();
+
+    showLayout("desktop");
+    expect(document.activeElement).toBe(sellerReviews);
+
+    showLayout("narrow");
+    expect(document.activeElement).toBe(sellerReviews);
+  });
+
+  // A real window resize hides the old slot first, so the browser has already blurred "Load more" when resize fires.
+  // happy-dom gives every element one zero-size box, so the mock models what Chrome reports once the slot is hidden.
+  it("puts focus back when hiding the old slot blurred it before the window crossed lg", () => {
+    renderArticle(reviewed, null);
+    const sellerReviews = within(creatorRating()).getByRole("link", { name: "40 verified reviews" });
+    sellerReviews.focus();
+    const noBoxes = Object.assign(sellerReviews.getClientRects(), { length: 0 });
+    const rects = vi.spyOn(sellerReviews, "getClientRects").mockReturnValue(noBoxes);
+    sellerReviews.blur();
+    rects.mockRestore();
+    expect(document.activeElement).toBe(document.body);
+
+    showLayout("desktop");
+    expect(document.activeElement).toBe(sellerReviews);
+  });
+
+  it("does not pull focus back into the reviews once it has moved elsewhere", () => {
+    renderArticle(reviewed, null);
+    const sellerReviews = within(creatorRating()).getByRole("link", { name: "40 verified reviews" });
+    const cta = screen.getByRole("link", { name: "I want this!" });
+    sellerReviews.focus();
+    const noBoxes = Object.assign(sellerReviews.getClientRects(), { length: 0 });
+    const rects = vi.spyOn(sellerReviews, "getClientRects").mockReturnValue(noBoxes);
+    sellerReviews.blur();
+    rects.mockRestore();
+    cta.focus();
+    cta.blur();
+
+    showLayout("desktop");
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  it("leaves focus outside the reviews alone when the window crosses lg", () => {
+    renderArticle(reviewed, null);
+    expect(document.activeElement).toBe(document.body);
+    const cta = screen.getByRole("link", { name: "I want this!" });
+    cta.focus();
+
+    showLayout("desktop");
+    expect(document.activeElement).toBe(cta);
+  });
+
+  it("waits for a review video to leave fullscreen before moving the reviews", () => {
+    const article = renderArticle(reviewed, null);
+    const narrowSlot = article.querySelector('[class~="lg:hidden"]');
+    if (!(narrowSlot instanceof HTMLElement)) throw new Error("expected the narrow reviews slot");
+    let fullscreen: Element | null = creatorRating();
+    Object.defineProperty(document, "fullscreenElement", { configurable: true, get: () => fullscreen });
+
+    try {
+      showLayout("desktop");
+      expect(narrowSlot.contains(ratingsHeading())).toBe(true);
+      expect(narrowSlot.style.display).toBe("block");
+
+      fullscreen = null;
+      document.dispatchEvent(new Event("fullscreenchange"));
+      expect(article.querySelector('[class*="grid-area:controls"]')?.contains(ratingsHeading())).toBe(true);
+      expect(narrowSlot.style.display).toBe("");
+    } finally {
+      Reflect.deleteProperty(document, "fullscreenElement");
+    }
+  });
+
   it("uses the same desktop grid for new and returning buyers", () => {
     const desktopClasses = (article: HTMLElement) =>
       article.className.split(" ").filter((name) => name.startsWith("lg:"));
@@ -561,9 +727,10 @@ describe("product page reading order below lg", () => {
     });
 
     it("puts the ratings in the right column under the controls on lg", () => {
-      const classes = renderArticle(rated, null).className;
+      showLayout("desktop");
+      const controls = renderArticle(rated, null).querySelector('[class*="grid-area:controls"]');
 
-      expect(classes).toContain("'details_controls'_'details_social'");
+      expect(controls?.contains(screen.getByRole("heading", { name: "Ratings" }))).toBe(true);
     });
   });
 });

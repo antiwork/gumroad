@@ -12,7 +12,8 @@ describe "Profile settings on product pages", type: :system, js: true do
     Link.import(refresh: true, force: true)
 
     create(:seller_profile_products_section, seller:)
-    section1 = create(:seller_profile_products_section, seller:, product:, header: "Section 1", shown_products: products.map(&:id))
+    # Off, or the featured product created below would also join this section (Link#add_to_profile_sections).
+    section1 = create(:seller_profile_products_section, seller:, product:, header: "Section 1", shown_products: products.map(&:id), add_new_products: false)
 
     create(:published_installment, seller:, shown_on_profile: true)
     posts = create_list(:audience_installment, 2, published_at: Date.yesterday, seller:, shown_on_profile: true)
