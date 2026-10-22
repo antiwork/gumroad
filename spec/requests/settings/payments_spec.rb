@@ -4753,6 +4753,86 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       end
     end
 
+    describe "Pakistan creator" do
+      let(:cnic_label) { "National Identity Card Number (SNIC or CNIC)" }
+      let(:padded_pastes) { ["12345-1234567-1", " 12345-1234567-1", "12345-1234567-1\u00a0", "\u00a012345-1234567-1 "] }
+
+      def paste_each_into(field)
+        padded_pastes.each do |pasted|
+          field.set("")
+          field.click
+          page.execute_script("document.execCommand('insertText', false, arguments[0])", pasted)
+          expect(field.value).to eq(pasted)
+        end
+      end
+
+      before do
+        old_user_compliance_info = @user.alive_user_compliance_info
+        new_user_compliance_info = old_user_compliance_info.dup
+        new_user_compliance_info.country = "Pakistan"
+        ActiveRecord::Base.transaction do
+          old_user_compliance_info.mark_deleted!
+          new_user_compliance_info.save!
+        end
+      end
+
+      it "saves a CNIC typed with the dashes printed on the card" do
+        visit settings_payments_path
+
+        fill_in("First name", with: "Pakistan")
+        fill_in("Last name", with: "Creator")
+        fill_in("Address", with: "address_full_match")
+        fill_in("City", with: "Lahore")
+        fill_in("Phone number", with: "3001234567")
+        fill_in("Postal code", with: "54000")
+
+        select("1", from: "Day")
+        select("January", from: "Month")
+        select("1980", from: "Year")
+        select("Pakistan", from: "Nationality")
+
+        fill_in("Pay to the order of", with: "Pakistan Creator")
+        fill_in("SWIFT / BIC Code", with: "AAAAPKKAXXX")
+        fill_in("IBAN", with: "PK36SCBL0000001123456702")
+        fill_in("Confirm IBAN", with: "PK36SCBL0000001123456702")
+        fill_in(cnic_label, with: "12345-1234567-1")
+
+        expect(page).to have_field(cnic_label, with: "12345-1234567-1")
+
+        click_on("Update settings")
+
+        expect(page).to have_alert(text: "Thanks! You're all set.")
+        expect(@user.alive_user_compliance_info.individual_tax_id.decrypt("1234")).to eq("1234512345671")
+        expect(Stripe::Account).to have_received(:create)
+          .with(hash_including(country: "PK", individual: hash_including(id_number: "1234512345671")), anything)
+      end
+
+      it "keeps a pasted CNIC whole, spaces included, and rejects a malformed one" do
+        visit settings_payments_path
+
+        cnic = find_field(cnic_label)
+        paste_each_into(cnic)
+
+        cnic.set("P1234512345671")
+        click_on("Update settings")
+
+        expect(page).to have_status(text: "Your CNIC must be 13 digits")
+        expect(cnic["aria-invalid"]).to eq("true")
+      end
+
+      it "keeps a CNIC pasted into the beneficial owner form whole" do
+        @user.alive_user_compliance_info.mark_deleted!
+        create(:user_compliance_info_business, user: @user, business_country: "Pakistan", country: "Pakistan")
+        create(:merchant_account, user: @user)
+        allow(Stripe::Account).to receive(:list_persons).and_return({ "data" => [] })
+
+        visit settings_payments_path
+        click_on("Add beneficial owner")
+
+        within("[role=dialog]") { paste_each_into(find_field(cnic_label)) }
+      end
+    end
+
     describe "Uzbekistan creator" do
       before do
         old_user_compliance_info = @user.alive_user_compliance_info

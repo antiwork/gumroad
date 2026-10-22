@@ -279,8 +279,15 @@ const AccountDetailsSection = ({
   const getMaskedValue = (placeholder: string, lastFour: string | null, showLastFour: boolean): string => {
     const fullyMasked = placeholder.replace(/[a-zA-Z0-9]/gu, "\u2022");
     if (!showLastFour || !lastFour) return fullyMasked;
-    const maskPrefix = fullyMasked.slice(0, -lastFour.length);
-    return maskPrefix + lastFour;
+    // Fill the rightmost digit slots so separators, like the CNIC's 5-7-1 dashes, stay in place.
+    // A saved last four can carry its own dash ("78-9"); the mask already has it.
+    const shown = lastFour.replace(/[^a-zA-Z0-9]/gu, "");
+    const chars = [...fullyMasked];
+    let remaining = shown.length;
+    for (let i = chars.length - 1; i >= 0 && remaining > 0; i--) {
+      if (chars[i] === "\u2022") chars[i] = shown[--remaining] ?? "";
+    }
+    return chars.join("");
   };
 
   const businessTypes = getBusinessTypes(complianceInfo.business_country, {

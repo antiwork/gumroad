@@ -249,7 +249,6 @@ module StripeBeneficialOwnersManager
   end
   private_class_method :validate_dominican_republic_cie!
 
-  # The input's maxLength counts characters, so a value can pass it with the wrong digit count.
   def self.validate_pakistan_cnic!(params, user)
     return unless cnic_owner?(params, user)
     id_number = params[:id_number].to_s

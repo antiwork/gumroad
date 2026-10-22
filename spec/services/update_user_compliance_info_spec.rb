@@ -1131,6 +1131,65 @@ describe UpdateUserComplianceInfo do
         end
       end
 
+      [" 12345-1234567-1\u00a0", "12345 1234567 1", "\uFEFF12345-1234567-1\u0085"].each do |value|
+        it "accepts the pasted CNIC #{value.inspect} and sends Stripe its 13 digits" do
+          user = create_pakistani_individual_user(individual_tax_id: nil)
+
+          expect(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info) do |info|
+            expect(StripeMerchantAccountManager.send(:person_hash, info, "1234")).to include(id_number: "1234512345671")
+          end
+
+          expect(process_with(user, value)[:success]).to be true
+          expect(user.reload.alive_user_compliance_info.individual_tax_id.decrypt("1234")).to eq("1234512345671")
+        end
+      end
+
+      %w[P1234512345671 AB12345-1234567-1 12345_1234567_1 12345.1234567.1 1234-51234567-1 12345--1234567-1 n/a]
+        .push("\uFEFFP1234512345671", "12345\u200B-1234567-1").each do |value|
+        it "rejects #{value.inspect} rather than keeping only its digits" do
+          user = create_pakistani_individual_user(individual_tax_id: nil)
+          original = user.alive_user_compliance_info
+
+          expect(StripeMerchantAccountManager).not_to receive(:handle_new_user_compliance_info)
+
+          result = nil
+          expect { result = process_with(user, value) }.not_to change { UserComplianceInfo.count }
+
+          expect(result[:error_message]).to eq(Compliance::PakistanCnic::ERROR_MESSAGE)
+          expect(user.reload.alive_user_compliance_info.id).to eq(original.id)
+        end
+      end
+
+      it "checks a CNIC submitted as ssn_last_four, which is stored in the same field" do
+        user = create_pakistani_individual_user(individual_tax_id: "1234512345671")
+
+        expect(StripeMerchantAccountManager).not_to receive(:handle_new_user_compliance_info)
+
+        params = ActionController::Parameters.new(is_business: false, ssn_last_four: "P1234512345671")
+        result = described_class.new(compliance_params: params, user:).process
+
+        expect(result[:error_message]).to eq(Compliance::PakistanCnic::ERROR_MESSAGE)
+        expect(user.reload.alive_user_compliance_info.individual_tax_id.decrypt("1234")).to eq("1234512345671")
+      end
+
+      it "stores a valid CNIC submitted as ssn_last_four as its 13 digits" do
+        user = create_pakistani_individual_user(individual_tax_id: nil)
+
+        expect(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info)
+
+        params = ActionController::Parameters.new(is_business: false, ssn_last_four: "12345-1234567-1")
+        expect(described_class.new(compliance_params: params, user:).process[:success]).to be true
+        expect(user.reload.alive_user_compliance_info.individual_tax_id.decrypt("1234")).to eq("1234512345671")
+      end
+
+      it "treats the dashed form of the stored CNIC as unchanged" do
+        user = create_pakistani_individual_user(individual_tax_id: "1234512345671")
+        original = user.alive_user_compliance_info
+
+        expect(process_with(user, "12345-1234567-1")[:success]).to be true
+        expect(user.reload.alive_user_compliance_info.id).to eq(original.id)
+      end
+
       it "keeps the browser's bounds and message identical to this guard's" do
         # The same rule is enforced in the browser so the seller gets the error before a round trip.
         # Two copies can drift silently: the form would accept a value this service then refuses, or
@@ -1138,9 +1197,11 @@ describe UpdateUserComplianceInfo do
         helper = Rails.root.join("app/javascript/utils/pakistanCnic.ts").read
 
         expect(helper).to include("PAKISTAN_CNIC_DIGITS = #{Compliance::PakistanCnic::DIGIT_COUNT}")
-        # The cap has to fit the two dashes the card is printed with, or a pasted CNIC is truncated
-        # before this service ever sees it.
-        expect(helper).to include("PAKISTAN_CNIC_MAX_INPUT_LENGTH = PAKISTAN_CNIC_DIGITS + 2")
+        browser_pattern = helper[%r{PAKISTAN_CNIC_PATTERN = /(.+)/u;}, 1]
+        expect(browser_pattern).to eq(Compliance::PakistanCnic::PATTERN.source.sub('\A', "^").sub('\z', "$"))
+        # JS \s lacks U+0085 and Ruby [[:space:]] lacks U+FEFF; each side adds the other's.
+        expect(helper).to include('PAKISTAN_CNIC_WHITESPACE = /[\s\u0085]/gu;')
+        expect(Compliance::PakistanCnic::WHITESPACE.source).to eq('[[:space:]\uFEFF]')
         expect(helper).to include("must be ${PAKISTAN_CNIC_DIGITS} digits")
         expect(helper).to include("Enter it exactly as it appears on your card")
       end

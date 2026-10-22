@@ -5,7 +5,6 @@ import {
   PAKISTAN_CNIC_DIGITS,
   PAKISTAN_CNIC_ERROR_MESSAGE,
   PAKISTAN_CNIC_HELP_TEXT,
-  PAKISTAN_CNIC_MAX_INPUT_LENGTH,
 } from "$app/utils/pakistanCnic";
 
 describe("isValidPakistanCnic", () => {
@@ -17,8 +16,33 @@ describe("isValidPakistanCnic", () => {
     expect(isValidPakistanCnic("12345-1234567-1")).toBe(true);
   });
 
-  it("accepts a CNIC pasted with spaces or other separators", () => {
-    expect(isValidPakistanCnic("12345 1234567 1")).toBe(true);
+  it("accepts a CNIC pasted with spaces, including non-breaking spaces, a BOM and NEL", () => {
+    for (const value of [
+      "12345 1234567 1",
+      " 12345-1234567-1",
+      "12345-1234567-1\u00a0",
+      "\u00a01234512345671 ",
+      "\ufeff12345-1234567-1",
+      "12345-1234567-1\u0085",
+    ]) {
+      expect(isValidPakistanCnic(value)).toBe(true);
+    }
+  });
+
+  it("rejects letters or separators other than the printed dashes, even around 13 digits", () => {
+    for (const value of [
+      "P1234512345671",
+      "AB12345-1234567-1",
+      "12345_1234567_1",
+      "12345.1234567.1",
+      "1234-51234567-1",
+      "12345--1234567-1",
+      "1-2-3-4-5-1-2-3-4-5-6-7-1",
+      "\ufeffP1234512345671",
+      "12345\u200b-1234567-1",
+    ]) {
+      expect(isValidPakistanCnic(value)).toBe(false);
+    }
   });
 
   it("rejects the 13-character value a dashed CNIC was truncated to", () => {
@@ -36,11 +60,6 @@ describe("isValidPakistanCnic", () => {
   it("rejects an empty value rather than treating it as valid", () => {
     expect(isValidPakistanCnic("")).toBe(false);
     expect(isValidPakistanCnic("---")).toBe(false);
-  });
-
-  it("leaves room in the input for the dashes the card is printed with", () => {
-    expect(PAKISTAN_CNIC_MAX_INPUT_LENGTH).toBe(PAKISTAN_CNIC_DIGITS + 2);
-    expect("12345-1234567-1").toHaveLength(PAKISTAN_CNIC_MAX_INPUT_LENGTH);
   });
 
   it("states the digit count and the dashed example in the error message", () => {

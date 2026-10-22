@@ -1,11 +1,6 @@
 import type { ComplianceInfo, User } from "$app/types/payments";
 import { COLOMBIA_ID_MAX_INPUT_LENGTH, COLOMBIA_ID_MIN_DIGITS } from "$app/utils/colombiaIdNumbers";
-import {
-  isValidPakistanCnic,
-  PAKISTAN_CNIC_DIGITS,
-  PAKISTAN_CNIC_ERROR_MESSAGE,
-  PAKISTAN_CNIC_MAX_INPUT_LENGTH,
-} from "$app/utils/pakistanCnic";
+import { isValidPakistanCnic, PAKISTAN_CNIC_DIGITS, PAKISTAN_CNIC_ERROR_MESSAGE } from "$app/utils/pakistanCnic";
 
 export type TaxIdConfig = {
   label: string;
@@ -172,7 +167,8 @@ export const getIndividualTaxIdConfig = (complianceInfo: ComplianceInfo, user: U
       label: "National Identity Card Number (SNIC or CNIC)",
       placeholder: "12345-1234567-1",
       minLength: PAKISTAN_CNIC_DIGITS,
-      maxLength: PAKISTAN_CNIC_MAX_INPUT_LENGTH,
+      // No maxLength: a cap cuts a CNIC pasted with its dashes and a stray space. isValidPakistanCnic
+      // and the server check the actual shape.
       idSuffix: "snic",
     },
     CR: {

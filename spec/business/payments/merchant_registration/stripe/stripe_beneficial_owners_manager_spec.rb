@@ -316,6 +316,26 @@ describe StripeBeneficialOwnersManager do
         expect { described_class.create(user, valid) }.not_to raise_error
       end
 
+      %w[P1234512345671 12345_1234567_1 1234-51234567-1].push("\uFEFF12345_1234567_1").each do |value|
+        it "rejects #{value.inspect} rather than sending Stripe only its digits" do
+          malformed = pakistan_params.deep_dup.tap { |p| p[:id_number] = value }
+          expect(Stripe::Account).not_to receive(:create_person)
+          expect { described_class.create(user, malformed) }
+            .to raise_error(StripeBeneficialOwnersManager::InvalidFieldError, Compliance::PakistanCnic::ERROR_MESSAGE)
+        end
+      end
+
+      ["\u00a012345-1234567-1 ", "\uFEFF12345-1234567-1\u0085"].each do |value|
+        it "sends Stripe the 13 digits of the CNIC pasted as #{value.inspect}" do
+          pasted = pakistan_params.deep_dup.tap { |p| p[:id_number] = value }
+          expect(Stripe::Account).to receive(:create_person) do |_account_id, attrs|
+            expect(attrs[:id_number]).to eq("1234512345671")
+            other_owner_person
+          end
+          described_class.create(user, pasted)
+        end
+      end
+
       it "leaves a foreign owner's document number untouched" do
         foreign = pakistan_params.deep_dup.tap do |p|
           p[:id_number] = "AB1234567"
@@ -724,6 +744,42 @@ describe StripeBeneficialOwnersManager do
           representative_person
         end
         described_class.update(user, "person_rep", params.merge(id_number: "00112345678"))
+      end
+    end
+
+    context "when the seller's legal entity is in Pakistan" do
+      let(:pakistan_params) do
+        params.merge(address: { line1: "12 Main Road", city: "Lahore", state: "Punjab", postal_code: "54000", country: "PK" })
+      end
+
+      before do
+        user.alive_user_compliance_info.mark_deleted!
+        create(:user_compliance_info_business, user:, business_country: "Pakistan", country: "Pakistan")
+        allow(Stripe::Account).to receive(:retrieve_person).with(stripe_account_id, "person_phil").and_return(other_owner_person)
+      end
+
+      it "rejects a malformed CNIC before it reaches Stripe" do
+        expect(Stripe::Account).not_to receive(:update_person)
+        expect { described_class.update(user, "person_phil", pakistan_params.merge(id_number: "P1234512345671")) }
+          .to raise_error(StripeBeneficialOwnersManager::InvalidFieldError, Compliance::PakistanCnic::ERROR_MESSAGE)
+      end
+
+      it "sends Stripe the 13 digits of a dashed CNIC" do
+        expect(Stripe::Account).to receive(:update_person) do |_account_id, _person_id, attrs|
+          expect(attrs[:id_number]).to eq("1234512345671")
+          other_owner_person
+        end
+        described_class.update(user, "person_phil", pakistan_params.merge(id_number: " 12345-1234567-1"))
+      end
+
+      it "leaves a foreign owner's document number untouched" do
+        foreign = pakistan_params.merge(id_number: "AB1234567")
+        foreign[:address] = foreign[:address].merge(country: "GB", state: "London", postal_code: "EC2")
+        expect(Stripe::Account).to receive(:update_person) do |_account_id, _person_id, attrs|
+          expect(attrs[:id_number]).to eq("AB1234567")
+          other_owner_person
+        end
+        described_class.update(user, "person_phil", foreign)
       end
     end
 

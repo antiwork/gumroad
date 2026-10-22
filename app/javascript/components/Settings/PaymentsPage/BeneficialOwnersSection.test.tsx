@@ -68,7 +68,13 @@ const renderSection = (owners: unknown[], defaultCountry = "GB") => {
   );
   return render(
     <BeneficialOwnersSection
-      countries={{ GB: "United Kingdom", AE: "United Arab Emirates", HK: "Hong Kong", DO: "Dominican Republic" }}
+      countries={{
+        GB: "United Kingdom",
+        AE: "United Arab Emirates",
+        HK: "Hong Kong",
+        DO: "Dominican Republic",
+        PK: "Pakistan",
+      }}
       states={{ us: [], ca: [], au: [], mx: [], ae: [], ir: [], br: [], jp: [] }}
       defaultCountry={defaultCountry}
       minDobYear={1900}
@@ -321,4 +327,43 @@ describe("BeneficialOwnersSection Dominican Republic CIE", () => {
     await waitFor(() => expect(submittedWrites()).toHaveLength(1));
     expect(screen.queryByText(formatError)).toBeNull();
   });
+});
+
+describe("BeneficialOwnersSection Pakistan CNIC", () => {
+  const cnicLabel = "National Identity Card Number (SNIC or CNIC)";
+  const formatError = /Your CNIC must be 13 digits/u;
+
+  const submittedWrites = () =>
+    vi.mocked(fetch).mock.calls.filter(([, init]) => init?.method === "POST" || init?.method === "PUT");
+
+  const openAddFormAndSubmit = async (value: string) => {
+    renderSection([], "PK");
+    fireEvent.click(await screen.findByRole("button", { name: "Add beneficial owner" }));
+    const input = await screen.findByLabelText<HTMLInputElement>(cnicLabel);
+    fireEvent.change(input, { target: { value } });
+    const form = input.closest("form");
+    if (!form) throw new Error("The ID number input is not inside a form");
+    fireEvent.submit(form);
+    return input;
+  };
+
+  it("does not cap the field, so a CNIC pasted with spaces is not cut short", async () => {
+    const input = await openAddFormAndSubmit(" 12345-1234567-1\u00a0");
+
+    expect(input.hasAttribute("maxlength")).toBe(false);
+    expect(input.placeholder).toBe("12345-1234567-1");
+    await waitFor(() => expect(submittedWrites()).toHaveLength(1));
+    expect(screen.queryByText(formatError)).toBeNull();
+  });
+
+  it.each(["P1234512345671", "12345_1234567_1", "12345-1234567"])(
+    "refuses to add an owner with the malformed CNIC %j",
+    async (value) => {
+      await openAddFormAndSubmit(value);
+
+      expect(await screen.findByText(formatError)).toBeTruthy();
+      expect(screen.getByText("13 digits, dashes optional")).toBeTruthy();
+      expect(submittedWrites()).toHaveLength(0);
+    },
+  );
 });

@@ -1,13 +1,13 @@
 // Keep in step with lib/utilities/compliance/pakistan_cnic.rb, including the message.
 export const PAKISTAN_CNIC_DIGITS = 13;
 
-// maxLength counts characters, so leave room for the two dashes.
-export const PAKISTAN_CNIC_MAX_INPUT_LENGTH = PAKISTAN_CNIC_DIGITS + 2;
+// 13 digits, or the 5-7-1 grouping printed on the card. Whitespace from a paste is ignored.
+const PAKISTAN_CNIC_PATTERN = /^(?:\d{13}|\d{5}-\d{7}-\d)$/u;
+// \s plus U+0085, the same set as the server's [[:space:]\uFEFF].
+const PAKISTAN_CNIC_WHITESPACE = /[\s\u0085]/gu;
 
-// Sellers paste the number as printed; the dashes are cosmetic here.
-const digitsOnly = (value: string) => value.replace(/\D/gu, "");
-
-export const isValidPakistanCnic = (value: string) => digitsOnly(value).length === PAKISTAN_CNIC_DIGITS;
+export const isValidPakistanCnic = (value: string) =>
+  PAKISTAN_CNIC_PATTERN.test(value.replace(PAKISTAN_CNIC_WHITESPACE, ""));
 
 export const PAKISTAN_CNIC_HELP_TEXT = `${PAKISTAN_CNIC_DIGITS} digits, dashes optional`;
 

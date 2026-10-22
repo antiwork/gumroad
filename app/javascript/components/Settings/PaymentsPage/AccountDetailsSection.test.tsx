@@ -225,7 +225,99 @@ describe("AccountDetailsSection Hong Kong passport", () => {
   });
 });
 
+describe("AccountDetailsSection Pakistan CNIC field", () => {
+  const pakistanSeller = () =>
+    makeUser({ country_code: "PK", individual_tax_id_needed_countries: ["PK"], individual_tax_id_entered: false });
+
+  it("does not cap the field, so a CNIC pasted with spaces is not cut short", () => {
+    renderSection(pakistanSeller(), { country: "PK" });
+
+    const input = screen.getByLabelText<HTMLInputElement>("National Identity Card Number (SNIC or CNIC)");
+    expect(input.hasAttribute("maxlength")).toBe(false);
+    expect(input.placeholder).toBe("12345-1234567-1");
+    expect(screen.getByText("13 digits, dashes optional")).toBeTruthy();
+    fireEvent.change(input, { target: { value: " 12345-1234567-1\u00a0" } });
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("reveals only the saved last four in the CNIC's 5-7-1 grouping", () => {
+    renderSection(
+      makeUser({
+        country_code: "PK",
+        individual_tax_id_needed_countries: ["PK"],
+        individual_tax_id_entered: true,
+        individual_tax_id_last_four: "5671",
+      }),
+      { country: "PK" },
+    );
+
+    const saved = screen.getByLabelText<HTMLInputElement>("National Identity Card Number (SNIC or CNIC)");
+    expect(saved.value).toBe("•••••-•••••••-•");
+    fireEvent.click(screen.getByRole("button", { name: "Show last 4 digits" }));
+    expect(saved.value).toBe("•••••-••••567-1");
+    expect(saved.value.replace(/\D/gu, "")).toBe("5671");
+    fireEvent.click(screen.getByRole("button", { name: "Hide tax ID" }));
+    expect(saved.value).toBe("•••••-•••••••-•");
+  });
+
+  it("does not repeat the dash of a CNIC saved with its dashes before digits-only storage", () => {
+    renderSection(
+      makeUser({
+        country_code: "PK",
+        individual_tax_id_needed_countries: ["PK"],
+        individual_tax_id_entered: true,
+        individual_tax_id_last_four: "67-1",
+      }),
+      { country: "PK" },
+    );
+
+    const saved = screen.getByLabelText<HTMLInputElement>("National Identity Card Number (SNIC or CNIC)");
+    fireEvent.click(screen.getByRole("button", { name: "Show last 4 digits" }));
+    expect(saved.value).toBe("•••••-•••••67-1");
+    fireEvent.click(screen.getByRole("button", { name: "Hide tax ID" }));
+    expect(saved.value).toBe("•••••-•••••••-•");
+  });
+
+  it("flags a value with letters even though it holds 13 digits", () => {
+    renderSection(pakistanSeller(), { country: "PK" });
+
+    const input = screen.getByLabelText("National Identity Card Number (SNIC or CNIC)");
+    fireEvent.change(input, { target: { value: "P1234512345671" } });
+    expect(screen.getByRole("alert").textContent).toMatch(/Your CNIC must be 13 digits/u);
+  });
+});
+
 describe("AccountDetailsSection SSN field", () => {
+  it("reveals a saved SSN's last four in the same place as before", () => {
+    renderSection(makeUser());
+
+    const saved = screen.getByLabelText<HTMLInputElement>("Last 4 digits of SSN");
+    expect(saved.value).toBe("•••-••-••••");
+    fireEvent.click(screen.getByRole("button", { name: "Show last 4 digits" }));
+    expect(saved.value).toBe("•••-••-6789");
+    fireEvent.click(screen.getByRole("button", { name: "Hide tax ID" }));
+    expect(saved.value).toBe("•••-••-••••");
+  });
+
+  it("reveals a Peru DNI saved with its dash without repeating the dash", () => {
+    renderSection(
+      makeUser({
+        country_code: "PE",
+        individual_tax_id_needed_countries: ["PE"],
+        individual_tax_id_entered: true,
+        individual_tax_id_last_four: "78-9",
+      }),
+      { country: "PE" },
+    );
+
+    const saved = screen.getByLabelText<HTMLInputElement>("DNI number");
+    expect(saved.value).toBe("••••••••-•");
+    fireEvent.click(screen.getByRole("button", { name: "Show last 4 digits" }));
+    expect(saved.value).toBe("••••••78-9");
+    fireEvent.click(screen.getByRole("button", { name: "Hide tax ID" }));
+    expect(saved.value).toBe("••••••••-•");
+  });
+
   it("accepts only four digits on the permitted US-resident last-four path", () => {
     renderSection(makeUser({ individual_tax_id_entered: false }));
     const input = screen.getByLabelText("Last 4 digits of SSN");
