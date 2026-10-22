@@ -107,6 +107,7 @@ type Props = {
   us_states: string[];
   ca_provinces: string[];
   used_card: SavedCreditCard | null;
+  used_paypal: { visual: string } | null;
   recaptcha_key: string | null;
   paypal_client_id: string;
   request_apple_pay_merchant_tokens: boolean;
@@ -123,6 +124,7 @@ export default function SubscriptionsManage() {
     us_states,
     ca_provinces,
     used_card,
+    used_paypal,
     request_apple_pay_merchant_tokens,
   } = cast<Props>(usePage().props);
 
@@ -466,6 +468,15 @@ export default function SubscriptionsManage() {
           <Alert variant="warning" className="grow">
             Your {subscriptionEntity} is paid up until {formattedSubscriptionEndDate}. Add your own payment method below
             to ensure that your {subscriptionEntity} renews.
+          </Alert>
+        </CardContent>
+      ) : null}
+
+      {used_paypal ? (
+        <CardContent>
+          <Alert variant="info" className="grow">
+            Your {subscriptionEntity} renews with PayPal{used_paypal.visual ? ` (${used_paypal.visual})` : ""}. Entering
+            a card below will replace it.
           </Alert>
         </CardContent>
       ) : null}

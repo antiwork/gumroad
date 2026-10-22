@@ -288,6 +288,7 @@ class CheckoutPresenter
         )&.alpha2 || "",
       },
       used_card: CheckoutPresenter.saved_card(subscription.credit_card_to_charge),
+      used_paypal: CheckoutPresenter.saved_paypal(subscription.credit_card_to_charge),
       # When the seller is in the Apple Pay merchant-token rollout (antiwork/gumroad#5727), a
       # payment-method update via Apple Pay declares the subscription's recurring agreement so
       # Apple issues a durable merchant token. This page is where buyers land after a renewal
@@ -330,6 +331,10 @@ class CheckoutPresenter
 
   def self.saved_card(card)
     card.present? && card.card_type != "paypal" ? { type: card.card_type, number: card.visual, expiration_date: card.expiry_visual, requires_mandate: card.requires_mandate? } : nil
+  end
+
+  def self.saved_paypal(card)
+    card.present? && card.card_type == "paypal" ? { visual: card.visual } : nil
   end
 
   private

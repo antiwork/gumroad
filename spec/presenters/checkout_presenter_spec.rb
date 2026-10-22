@@ -1229,6 +1229,17 @@ describe CheckoutPresenter do
         expect(result[:product][:recurrences].map { _1[:recurrence] }).to include(@subscription.recurrence)
       end
 
+      it "exposes a PayPal payment method as used_paypal and not as used_card",
+         vcr: { cassette_name: "CheckoutPresenter/_subscription_manager_props/tiered_membership_product/returns_subscription_data_object_for_the_subscription_manage_page" } do
+        paypal_card = CreditCard.new(card_type: "paypal", visual: "buyer@example.com")
+        allow_any_instance_of(Subscription).to receive(:credit_card_to_charge).and_return(paypal_card)
+
+        result = described_class.new(logged_in_user: nil, ip: "127.0.0.1").subscription_manager_props(subscription: @subscription.reload)
+
+        expect(result[:used_card]).to be_nil
+        expect(result[:used_paypal]).to eq(visual: "buyer@example.com")
+      end
+
       it "requests Apple Pay merchant tokens when the seller is in the rollout",
          vcr: { cassette_name: "CheckoutPresenter/_subscription_manager_props/tiered_membership_product/returns_subscription_data_object_for_the_subscription_manage_page" } do
         Feature.activate_user(Checkout::StripePaymentPresenter::APPLE_PAY_MERCHANT_TOKENS_FEATURE_NAME, @subscription.seller)
