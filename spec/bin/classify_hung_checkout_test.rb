@@ -404,7 +404,8 @@ $count += 1
 classify_step = YAML.load_file(WORKFLOW).fetch("jobs").fetch("rerun").fetch("steps").find { |step| step["id"] == "classify" }
 classify_run = classify_step ? classify_step.fetch("run").to_s : ""
 if classify_run.include?('gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq .head.sha') &&
-   classify_run.include?('!= "${HEAD_SHA}"')
+   classify_run.include?("pulls?state=open&head=${HEAD_REPO}:${HEAD_BRANCH}") &&
+   classify_run.include?('if [ "${current}" != "${HEAD_SHA}" ]')
   puts "  ok    the classifier refuses an attempt a newer push superseded"
 else
   puts "  FAIL  the classifier refuses an attempt a newer push superseded"

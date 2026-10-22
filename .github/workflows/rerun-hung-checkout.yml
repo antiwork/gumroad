@@ -59,20 +59,39 @@ jobs:
           ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
           CONCLUSION: ${{ github.event.workflow_run.conclusion }}
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          EVENT: ${{ github.event.workflow_run.event }}
           PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
+          HEAD_REPO: ${{ github.event.workflow_run.head_repository.full_name }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
         run: |
           set -euo pipefail
 
-          # A re-run joins this PR's concurrency group, so re-running an attempt a
-          # newer push has already superseded can cancel the run on the current
-          # head -- and a cancelled run publishes no ci/green either.
-          if [ -n "${PR_NUMBER}" ]; then
-            current=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq .head.sha || true)
-            if [ -n "$current" ] && [ "$current" != "${HEAD_SHA}" ]; then
-              echo "skip: superseded by ${current:0:8}"
-              echo "rerun=false" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
+          # A re-run joins the concurrency group of what it ran for, so re-running
+          # an attempt a newer push has already superseded can cancel the run on
+          # the current head -- and a cancelled run publishes no ci/green either.
+          # Resolve that head live; `pull_requests` is empty for some fork PRs.
+          # Unresolvable means skip: recovering a stale attempt is worth less than
+          # cancelling the head's run.
+          case "${EVENT}" in
+            pull_request_target)
+              if [ -n "${PR_NUMBER}" ]; then
+                current=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq .head.sha || true)
+              else
+                current=$(gh api "repos/${GITHUB_REPOSITORY}/pulls?state=open&head=${HEAD_REPO}:${HEAD_BRANCH}" \
+                            --jq '.[0].head.sha // ""' || true)
+              fi
+              ;;
+            push)
+              # main's group is per commit and never cancels a run in progress.
+              current="${HEAD_SHA}"
+              [ "${HEAD_BRANCH}" = "main" ] || current=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${HEAD_BRANCH}" --jq .sha || true)
+              ;;
+            *) current="${HEAD_SHA}" ;;
+          esac
+          if [ "${current}" != "${HEAD_SHA}" ]; then
+            echo "skip: not the current head of its ref (${current:-unresolved})"
+            echo "rerun=false" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
 
           # --paginate --jq emits one job object per line (gh forbids --slurp
