@@ -61,7 +61,7 @@ jobs:
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
           EVENT: ${{ github.event.workflow_run.event }}
           PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
-          HEAD_REPO: ${{ github.event.workflow_run.head_repository.full_name }}
+          HEAD_OWNER: ${{ github.event.workflow_run.head_repository.owner.login }}
           HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
         run: |
           set -euo pipefail
@@ -77,7 +77,10 @@ jobs:
               if [ -n "${PR_NUMBER}" ]; then
                 current=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq .head.sha || true)
               else
-                current=$(gh api "repos/${GITHUB_REPOSITORY}/pulls?state=open&head=${HEAD_REPO}:${HEAD_BRANCH}" \
+                # `head` wants the owner login, not `owner/repo`, and `-f` lets
+                # gh encode a branch name that carries a slash.
+                current=$(gh api -X GET "repos/${GITHUB_REPOSITORY}/pulls" \
+                            -f state=open -f "head=${HEAD_OWNER}:${HEAD_BRANCH}" \
                             --jq '.[0].head.sha // ""' || true)
               fi
               ;;

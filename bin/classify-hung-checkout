@@ -48,8 +48,8 @@ HANG_STEPS = HANGS.keys.freeze
 
 # A job that burned its own `timeout-minutes` budget is cancelled by GitHub with
 # this annotation, and that cancellation is what turns the whole run's conclusion
-# into `cancelled` -- which neither this workflow's gate nor ci-green.yml acts on,
-# so the PR's required `ci/green` never lands and auto-merge waits forever.
+# into `cancelled` -- which no gate reports on, so the required `ci/green` never
+# lands.
 JOB_TIMEOUT_MESSAGE = "has exceeded the maximum execution time of"
 
 # Cheap prefilter for the ids whose annotations are worth fetching: a job that
