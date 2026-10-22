@@ -11,6 +11,7 @@ import Read, {
   downloadEpubArchive,
   ensureDefiniteReaderHeight,
   syncPinnedReaderHeight,
+  PDF_STALL_TIMEOUT_MS,
 } from "./Read";
 
 const mocks = vi.hoisted(() => {
@@ -409,6 +410,96 @@ describe("PDF reader teardown", () => {
 
     expect(document.querySelector(".pagination")?.textContent).toBe("2 of 3");
     expect(mocks.trackMediaLocationChanged).not.toHaveBeenCalled();
+  });
+});
+
+describe("PDF reader failure state", () => {
+  // #3851: the PDF path had no failure state at all. isLoading was only ever cleared from
+  // pagesinit, so a rejected getDocument — or a document that simply never arrives — left the buyer
+  // on "One moment while we prepare your reading experience" with no way forward.
+  const buildPendingPdfDocument = () => {
+    let resolveDocument: ((value: { numPages: number; destroy: () => Promise<void> }) => void) | undefined;
+    const promise = new Promise<{ numPages: number; destroy: () => Promise<void> }>((resolve) => {
+      resolveDocument = resolve;
+    });
+    return {
+      getDocument: vi.fn(() => ({ promise })),
+      resolve: () => resolveDocument?.({ numPages: 3, destroy: vi.fn(() => Promise.resolve()) }),
+    };
+  };
+
+  beforeEach(() => {
+    mocks.usePage.mockReturnValue({ props: readerProps({ file_type: "pdf", latest_media_location: null }) });
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  it("shows a retryable error when the document rejects", async () => {
+    mocks.getDocument.mockImplementation(() => ({ promise: Promise.reject(new Error("Failed to fetch")) }));
+
+    render(<Read />);
+
+    expect((await screen.findByRole("alert")).textContent).toContain("We couldn't open this PDF");
+    expect(screen.queryByText("One moment while we prepare your reading experience")).toBeNull();
+  });
+
+  it("stops pretending to load when the document never arrives", async () => {
+    vi.useFakeTimers();
+    try {
+      const pdf = buildPendingPdfDocument();
+      mocks.getDocument.mockImplementation(pdf.getDocument);
+
+      render(<Read />);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(PDF_STALL_TIMEOUT_MS - 1);
+      });
+      expect(screen.queryByRole("alert")).toBeNull();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1);
+      });
+
+      expect(screen.getByRole("alert").textContent).toContain("We couldn't open this PDF");
+      expect(screen.queryByText("One moment while we prepare your reading experience")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("clears the stalled message when the document arrives late, and does not come back", async () => {
+    vi.useFakeTimers();
+    try {
+      const pdf = buildPendingPdfDocument();
+      mocks.getDocument.mockImplementation(pdf.getDocument);
+
+      render(<Read />);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(PDF_STALL_TIMEOUT_MS);
+      });
+      expect(screen.getByRole("alert")).toBeTruthy();
+
+      await act(async () => {
+        pdf.resolve();
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      act(() => mocks.emitPdf("pagesinit"));
+
+      expect(screen.queryByRole("alert")).toBeNull();
+      expect(screen.queryByText("One moment while we prepare your reading experience")).toBeNull();
+
+      // A successful load must cancel the deadline: firing it afterwards would strand a reader who
+      // is already reading.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(PDF_STALL_TIMEOUT_MS * 2);
+      });
+      expect(screen.queryByRole("alert")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

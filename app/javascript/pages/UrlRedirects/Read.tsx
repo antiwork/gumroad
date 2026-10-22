@@ -44,6 +44,12 @@ type Props = {
   file_type: "pdf" | "epub";
 };
 
+// How long the PDF reader waits for pdf.js to report a first page before it stops pretending to
+// load. A large book on a slow connection can legitimately take minutes, so this is a deadline for
+// the silent hang, not a rejection of big files: a document that arrives afterwards clears the
+// message again.
+export const PDF_STALL_TIMEOUT_MS = 60_000;
+
 export const MAX_EPUB_ARCHIVE_BYTES = 32 * 1024 * 1024;
 
 export const downloadEpubArchive = async (
@@ -205,6 +211,7 @@ const PdfReader = ({
   const [pageNumber, setPageNumber] = React.useState(1);
   const [pageCount, setPageCount] = React.useState(0);
   const [isLoading, setIsLoading] = React.useState(true);
+  const [readerError, setReaderError] = React.useState(false);
   const [pageTooltip, setPageTooltip] = React.useState<{ left: number; pageNumber: number } | null>(null);
   const contentRef = React.useRef<HTMLDivElement>(null);
   const pdfViewerRef = React.useRef<PDFSinglePageViewer | null>(null);
@@ -239,6 +246,24 @@ const PdfReader = ({
     let isCancelled = false;
     let teardown: (() => void) | undefined;
     let releaseHeightSync: (() => void) | undefined;
+    let stallTimer: ReturnType<typeof setTimeout> | undefined;
+
+    const clearStallTimer = () => {
+      if (stallTimer === undefined) return;
+      clearTimeout(stallTimer);
+      stallTimer = undefined;
+    };
+
+    // A signed-URL fetch that stalls, a document pdf.js cannot parse, or a failed chunk load all
+    // leave this reader on the loading overlay forever: the promise either rejects with nobody
+    // listening or never settles at all, and isLoading is only ever cleared from onPagesInit. Every
+    // exit that is not a successful pagesinit has to land here so the buyer gets a way out.
+    const showLoadError = () => {
+      if (isCancelled) return;
+      clearStallTimer();
+      setIsLoading(false);
+      setReaderError(true);
+    };
 
     const resumeFromLastLocation = (pageCount: number) => {
       const storedCookieLocation = getMediaLocationFromCookies(read_id);
@@ -261,6 +286,10 @@ const PdfReader = ({
 
     const showDocument = async () => {
       if (!contentRef.current) return;
+
+      // Started before the dynamic imports below, which are themselves a real network window on a
+      // first visit — a reader that never gets past them is the same dead end for the buyer.
+      stallTimer = setTimeout(showLoadError, PDF_STALL_TIMEOUT_MS);
 
       const container = contentRef.current;
       ensureDefiniteReaderHeight(container);
@@ -303,6 +332,10 @@ const PdfReader = ({
         )}`;
       };
       const onPagesInit = () => {
+        clearStallTimer();
+        // A document that arrives after the deadline passed is still perfectly readable, so a late
+        // success replaces the message instead of stranding the buyer on it.
+        setReaderError(false);
         pdfSinglePageViewer.currentScaleValue = "page-fit";
         setIsLoading(false);
         const previousPage = pdfSinglePageViewer.currentPageNumber;
@@ -361,10 +394,13 @@ const PdfReader = ({
       pdfSinglePageViewer.setDocument(pdf);
       pdfLinkService.setDocument(pdf, null);
     };
-    void showDocument();
+    // Without the catch a rejected getDocument (or a failed dynamic import above) is an unhandled
+    // rejection and the buyer keeps staring at the loading overlay.
+    void showDocument().catch(showLoadError);
 
     return () => {
       isCancelled = true;
+      clearStallTimer();
       releaseHeightSync?.();
       teardown?.();
       pdfViewerRef.current = null;
@@ -388,7 +424,14 @@ const PdfReader = ({
 
   return (
     <div style={{ display: "contents" }}>
-      {isLoading ? <ReaderLoadingOverlay /> : null}
+      {readerError ? (
+        <ReaderErrorOverlay
+          title="We couldn't open this PDF"
+          description="It may still be downloading, or we couldn't read the file. You can try again or go back to your files."
+        />
+      ) : isLoading ? (
+        <ReaderLoadingOverlay />
+      ) : null}
       <div role="application" className="scoped-tailwind-preflight flex h-dvh flex-col">
         <div role="menubar" className="flex text-sm md:text-base">
           <div className="border-r">
@@ -794,7 +837,14 @@ const EpubReader = ({
 
   return (
     <div style={{ display: "contents" }}>
-      {readerError ? <ReaderErrorOverlay /> : isLoading ? <ReaderLoadingOverlay /> : null}
+      {readerError ? (
+        <ReaderErrorOverlay
+          title="We couldn't open this EPUB"
+          description="You can try loading it again or go back to your files."
+        />
+      ) : isLoading ? (
+        <ReaderLoadingOverlay />
+      ) : null}
       <div role="application" className="scoped-tailwind-preflight flex h-dvh flex-col">
         <div role="menubar" className="flex text-sm md:text-base">
           <div className="border-r">
@@ -924,14 +974,14 @@ const ReaderLoadingOverlay = () => (
   </div>
 );
 
-const ReaderErrorOverlay = () => (
+const ReaderErrorOverlay = ({ title, description }: { title: string; description: string }) => (
   <div
     role="alert"
     className="scoped-tailwind-preflight absolute flex size-full flex-col items-center justify-center gap-4 bg-background p-6 text-center"
     style={{ zIndex: "var(--z-index-tooltip)" }}
   >
-    <h3>We couldn&apos;t open this EPUB</h3>
-    <p>You can try loading it again or go back to your files.</p>
+    <h3>{title}</h3>
+    <p>{description}</p>
     <div className="flex gap-3">
       <Button onClick={() => history.back()}>Back</Button>
       <Button color="primary" onClick={() => location.reload()}>
