@@ -2,6 +2,7 @@ import * as React from "react";
 
 import { Input } from "$app/components/ui/Input";
 import { InputGroup } from "$app/components/ui/InputGroup";
+import { LinkButton } from "$app/components/ui/LinkButton";
 
 type PasswordInputProps = Omit<React.ComponentPropsWithoutRef<"input">, "type"> & {
   value: string;
@@ -55,18 +56,16 @@ export const PasswordInput = React.forwardRef<HTMLInputElement, PasswordInputPro
   return (
     <InputGroup>
       <Input ref={ref} type={showPassword ? "text" : "password"} className={className} {...props} />
-      <IconComponent
+      <LinkButton
         onClick={togglePasswordVisibility}
-        role="button"
-        className="cursor-pointer select-none"
+        className="select-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indicator"
+        disabled={props.disabled}
+        tabIndex={props.tabIndex}
         aria-label={showPassword ? "Hide password" : "Show password"}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            togglePasswordVisibility();
-          }
-        }}
-      />
+        aria-pressed={showPassword}
+      >
+        <IconComponent aria-hidden="true" />
+      </LinkButton>
     </InputGroup>
   );
 });
