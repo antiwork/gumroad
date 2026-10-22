@@ -9,6 +9,12 @@ import {
 } from "$app/utils/colombiaIdNumbers";
 import { DOMINICAN_REPUBLIC_CIE_ERROR_MESSAGE, isValidDominicanRepublicCie } from "$app/utils/dominicanRepublicCie";
 import {
+  isValidPakistanCnic,
+  PAKISTAN_CNIC_DIGITS,
+  PAKISTAN_CNIC_ERROR_MESSAGE,
+  PAKISTAN_CNIC_MAX_INPUT_LENGTH,
+} from "$app/utils/pakistanCnic";
+import {
   HONG_KONG_PASSPORT_ID_CONFIG,
   PERSONAL_ID_NUMBER_CONFIG,
   stripeRequirementLabel,
@@ -197,9 +203,11 @@ const TAX_ID_CONFIGS: Record<string, TaxIdConfig> = {
   PE: { label: "DNI number", placeholder: "12345678-9", minLength: 10, maxLength: 10, idSuffix: "peru-id-number" },
   PK: {
     label: "National Identity Card Number (SNIC or CNIC)",
+    // 13 digits, the count printed on the card; the cap leaves room for the two dashes so a pasted
+    // "12345-1234567-1" is not truncated mid-number.
     placeholder: "1234567890123",
-    minLength: 13,
-    maxLength: 13,
+    minLength: PAKISTAN_CNIC_DIGITS,
+    maxLength: PAKISTAN_CNIC_MAX_INPUT_LENGTH,
     idSuffix: "snic",
   },
   CR: {
@@ -555,6 +563,13 @@ const BeneficialOwnersSection = ({
     return isValidDominicanRepublicCie(formState.id_number) ? null : DOMINICAN_REPUBLIC_CIE_ERROR_MESSAGE;
   };
 
+  const validatePakistanCnic = (): string | null => {
+    if (defaultCountry !== "PK") return null;
+    if (editState?.mode === "edit" && editState.owner.relationship.representative) return null;
+    if (!formState.id_number.trim()) return null;
+    return isValidPakistanCnic(formState.id_number) ? null : PAKISTAN_CNIC_ERROR_MESSAGE;
+  };
+
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!editState) return;
@@ -563,7 +578,7 @@ const BeneficialOwnersSection = ({
       setFormError(kanaError);
       return;
     }
-    const idNumberError = validateColombiaIdNumber() ?? validateDominicanRepublicCie();
+    const idNumberError = validateColombiaIdNumber() ?? validateDominicanRepublicCie() ?? validatePakistanCnic();
     if (idNumberError) {
       setFormError(idNumberError);
       return;

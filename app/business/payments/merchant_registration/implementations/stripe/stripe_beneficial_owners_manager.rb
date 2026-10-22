@@ -72,6 +72,7 @@ module StripeBeneficialOwnersManager
     validate_jp_kana_address_format!(params, user)
     validate_colombia_id_number!(params, user)
     validate_dominican_republic_cie!(params, user)
+    validate_pakistan_cnic!(params, user)
     person_params = build_person_params(params, user, action: :create)
     person = Stripe::Account.create_person(stripe_account.charge_processor_merchant_id, person_params)
     serialize(person)
@@ -88,6 +89,7 @@ module StripeBeneficialOwnersManager
       validate_jp_kana_address_format!(params, user)
       validate_colombia_id_number!(params, user)
       validate_dominican_republic_cie!(params, user)
+      validate_pakistan_cnic!(params, user)
       person_params = build_person_params(params, user, action: :update)
     end
 
@@ -247,6 +249,17 @@ module StripeBeneficialOwnersManager
   end
   private_class_method :validate_dominican_republic_cie!
 
+  # Same hazard as Colombia: the PK input's maxLength counts characters (15, to fit a dashed CNIC),
+  # so a value can satisfy the input while carrying the wrong number of digits.
+  def self.validate_pakistan_cnic!(params, user)
+    return unless user.alive_user_compliance_info&.legal_entity_country_code == Compliance::Countries::PAK.alpha2
+    id_number = params[:id_number].to_s
+    return if id_number.strip.blank?
+    return if Compliance::PakistanCnic.valid?(id_number)
+    raise InvalidFieldError, Compliance::PakistanCnic::ERROR_MESSAGE
+  end
+  private_class_method :validate_pakistan_cnic!
+
   def self.representative?(person)
     relationship = person.is_a?(Hash) ? person[:relationship] || person["relationship"] : person[:relationship]
     !!(relationship && (relationship[:representative] || relationship["representative"]))
@@ -393,6 +406,8 @@ module StripeBeneficialOwnersManager
     # Send the digits the guard counted, not the separators the seller typed — Stripe refuses a CO
     # id_number that is not digits-only.
     id_number = Compliance::ColombiaIdNumber.normalize(id_number) if country_code == Compliance::Countries::COL.alpha2
+    # A CNIC is printed with dashes and Stripe takes the 13 digits, so the same treatment applies.
+    id_number = Compliance::PakistanCnic.normalize(id_number) if country_code == Compliance::Countries::PAK.alpha2
     if id_number.present?
       if country_code == Compliance::Countries::USA.alpha2 && id_number.length == 4
         hash[:ssn_last_4] = id_number
