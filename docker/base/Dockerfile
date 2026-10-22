@@ -19,6 +19,9 @@ ARG DEBIAN_FRONTEND="noninteractive"
 ARG DUMB_INIT_VERSION=1.2.0
 ARG GOSU_VERSION=1.10
 ARG S6_OVERLAY_VERSION=v1.19.1.1
+# Keep in step with .node-version. Unpinned, the image ships whichever 22.x
+# NodeSource served when this layer last rebuilt.
+ARG NODE_VERSION=22.23.4
 # Debian bookworm ships 3.2.1, whose pt-online-schema-change checks replica lag with
 # SHOW SLAVE STATUS and dies against MySQL 8.4. 3.7.0 is the first release that picks
 # SLAVE or REPLICA syntax per server version, so it works on 8.0 and 8.4.
@@ -93,7 +96,7 @@ RUN cd /tmp \
   && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --batch --yes --dearmor -o /etc/apt/keyrings/nodesource.gpg \
   && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_22.x nodistro main" | tee /etc/apt/sources.list.d/nodesource.list \
   && apt-get update \
-  && apt-get install -y nodejs \
+  && apt-get install -y nodejs=${NODE_VERSION}-1nodesource1 \
   && corepack enable \
   # percona-toolkit (pt-online-schema-change, run by Alterity migrations)
   && curl -fsSL -o /tmp/percona-toolkit.deb "https://repo.percona.com/pt/apt/pool/main/p/percona-toolkit/percona-toolkit_${PERCONA_TOOLKIT_VERSION}_amd64.deb" \

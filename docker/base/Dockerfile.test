@@ -1,6 +1,8 @@
 ARG WEB_BASE_DOCKERFILE_FROM
 FROM ${WEB_BASE_DOCKERFILE_FROM}
 
+# Keep in step with .node-version and docker/base/Dockerfile.
+ARG NODE_VERSION=22.23.4
 
 # Customizations copied from:
 # https://github.com/circleci/circleci-images/blob/master/shared/images/Dockerfile-basic.template
@@ -41,7 +43,7 @@ RUN apt-get update -y -qq \
   && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --batch --yes --dearmor -o /etc/apt/keyrings/nodesource.gpg \
   && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_22.x nodistro main" | tee /etc/apt/sources.list.d/nodesource.list \
   && apt-get update \
-  && apt-get install -y nodejs \
+  && apt-get install -y nodejs=${NODE_VERSION}-1nodesource1 \
   && corepack enable \
 # git
   && apt-get install -y git \
