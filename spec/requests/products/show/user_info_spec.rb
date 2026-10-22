@@ -6,6 +6,9 @@ describe("ProductUserInfoScenario", type: :system, js: true) do
   it("it fills the logged in user's information in the form") do
     user = create(:user, name: "amir", street_address: "1640 17th st", zip_code: "94103", country: "United States", city: "San Francisco", state: "CA")
     link = create(:product, unique_permalink: "somelink", require_shipping: true)
+    # Devise configures Warden only once routes are drawn, and the login applies on the first request, before
+    # lazily loaded routes would be drawn.
+    Rails.application.routes_reloader.execute_unless_loaded
     login_as(user)
 
     visit "#{link.user.subdomain_with_protocol}/l/#{link.unique_permalink}"

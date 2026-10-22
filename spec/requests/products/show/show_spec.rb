@@ -544,7 +544,7 @@ describe("ProductShowScenario", type: :system, js: true) do
           pwyw_field.fill_in with: "0.1"
           find(:label, "Name a fair price:").click
           expect(pwyw_field["aria-invalid"]).to eq("true")
-          expect(pwyw_field.value).to eq("0.99")
+          expect(page).to have_field("Name a fair price", with: "0.99")
         end
 
         context "product is free" do
@@ -556,7 +556,7 @@ describe("ProductShowScenario", type: :system, js: true) do
             pwyw_field.fill_in with: "0.1"
             find(:label, "Name a fair price:").click
             expect(pwyw_field["aria-invalid"]).to eq("false")
-            expect(pwyw_field.value).to eq("0.99")
+            expect(page).to have_field("Name a fair price", with: "0.99")
 
             add_to_cart(product, pwyw_price: 0.99)
 
