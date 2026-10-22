@@ -88,6 +88,15 @@ rescue ArgumentError
   nil
 end
 
+def job_seconds(job)
+  started = job["started_at"]
+  completed = job["completed_at"]
+  return nil if started.nil? || completed.nil?
+  Time.iso8601(completed) - Time.iso8601(started)
+rescue ArgumentError
+  nil
+end
+
 # Jobs with no `Run tests` step at all (Build images, Compute relevant specs)
 # satisfy this too -- what matters is that no specs got the chance to run, so a
 # re-run cannot be laundering a spec failure.
@@ -109,12 +118,17 @@ end
 # and the annotation is only fetched for ids `--candidates` names, so this names
 # the id and `job_timed_out?` does the deciding. Naming a job here costs one API
 # call, never a re-run.
+#
+# Measured on the job's own wall clock, because that is the budget GitHub
+# cancels against: a job that spent its budget in earlier steps and was cancelled
+# inside a short one is still a timeout. A payload without job timestamps falls
+# back to the cancelled step, which is the remainder of the same budget.
 def job_timeout_candidate?(job)
   return false unless job["conclusion"] == "cancelled"
   step = first_bad_step(job)
   return false unless step && step["conclusion"] == "cancelled"
-  seconds = step_seconds(step)
-  !seconds.nil? && seconds >= JOB_TIMEOUT_MIN_SECONDS
+  burned = [job_seconds(job), step_seconds(step)].compact.max
+  !burned.nil? && burned >= JOB_TIMEOUT_MIN_SECONDS
 end
 
 def job_timed_out?(job, annotations)
@@ -124,13 +138,16 @@ end
 def hung?(job, annotations)
   return false if run_tests_started?(job)
 
+  # The step-name classes first, each proved by its own annotation: a job that
+  # happens to carry both must keep the verdict its step already earned.
+  if candidate?(job)
+    wanted = HANGS.fetch(first_bad_step(job)["name"]).last
+    return true if Array(annotations[job["id"].to_s]).any? { |message| message.to_s.include?(wanted) }
+  end
+
   # A job timeout is a cancellation, not a failure, so the annotation is what
   # separates it from a sibling a fail-fast or a cancel-in-progress threw away.
-  return job_timeout_candidate?(job) if job_timed_out?(job, annotations)
-
-  return false unless candidate?(job)
-  wanted = HANGS.fetch(first_bad_step(job)["name"]).last
-  Array(annotations[job["id"].to_s]).any? { |message| message.to_s.include?(wanted) }
+  job_timed_out?(job, annotations) && job_timeout_candidate?(job)
 end
 
 def job_label(job)

@@ -21,7 +21,7 @@ $count = 0
 
 # Steps arrive as [name, conclusion, seconds]; timestamps are synthesised in
 # order because the classifier reads step durations, not wall-clock positions.
-def job(name, conclusion, steps)
+def job(name, conclusion, steps, job_seconds: nil)
   clock = Time.utc(2026, 8, 20, 12, 0, 0)
   @next_id = (@next_id || 100) + 1
   built = steps.each_with_index.map do |(step_name, step_conclusion, seconds), index|
@@ -36,7 +36,14 @@ def job(name, conclusion, steps)
       "completed_at" => clock.iso8601
     }
   end
-  { "id" => @next_id, "name" => name, "conclusion" => conclusion, "steps" => built }
+  built_job = { "id" => @next_id, "name" => name, "conclusion" => conclusion, "steps" => built }
+  # GitHub reports the job's own span as well; the job-timeout prefilter reads it
+  # because that is the budget the cancellation is measured against.
+  if job_seconds
+    built_job["started_at"] = Time.utc(2026, 8, 20, 12, 0, 0).iso8601
+    built_job["completed_at"] = (Time.utc(2026, 8, 20, 12, 0, 0) + job_seconds).iso8601
+  end
+  built_job
 end
 
 def hang_annotations(job, step_name = "Check out repository")
@@ -269,6 +276,33 @@ check(
   { "jobs" => [timeout_plus_hang, hang_beside_timeout],
     "annotations" => hang_annotations(hang_beside_timeout).merge(timeout_plus_hang["id"].to_s => [JOB_TIMEOUT_MESSAGE]),
     "conclusion" => "cancelled" },
+  expect: :rerun
+)
+
+# The budget is the job's own wall clock, not the step the cancel happened to land
+# in: a job that spent its budget in earlier steps and was cancelled inside a
+# short one is still a timeout. Missing it here means its annotation is never
+# fetched, so the shape has no recovery path at all.
+long_job = job(
+  "Test Relevant 10", "cancelled",
+  [["Set up job", "success", 3], ["Start services and pull test image", "success", 1700],
+   ["Prepare the runner", "cancelled", 100], ["Run tests", "skipped", 0]],
+  job_seconds: 1803
+)
+check(
+  "a job timeout whose cancel landed in a short step",
+  { "jobs" => [long_job], "annotations" => { long_job["id"].to_s => [JOB_TIMEOUT_MESSAGE] }, "conclusion" => "cancelled" },
+  expect: :rerun
+)
+
+# Both signatures on one job: the step-name verdict stands. A checkout hang is
+# provable on its own and must not be shadowed by a timeout annotation.
+both_hang = job("Slow 3", "failure", HUNG_CHECKOUT)
+check(
+  "a checkout hang on a job that also carries a timeout annotation",
+  { "jobs" => [both_hang],
+    "annotations" => { both_hang["id"].to_s => ["The action 'Check out repository' has timed out after 5 minutes", JOB_TIMEOUT_MESSAGE] },
+    "conclusion" => "failure" },
   expect: :rerun
 )
 
