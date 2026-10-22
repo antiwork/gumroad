@@ -144,10 +144,19 @@ describe PublicController, type: :controller, inertia: true do
       expect(response.parsed_body["success"]).to be(false)
     end
 
-    it "keeps the card filter for an array-valued last_4, matching nothing" do
-      create(:purchase, price_cents: 100, fee_cents: 30, card_visual: "**** 4242", email: "edgar@gumroad.com")
+    it "does not 500 on, and matches nothing for, a nested last_4" do
+      create(:purchase, price_cents: 100, fee_cents: 30, card_visual: "**** 4242", email: "edgar@example.com")
 
-      get :charge_data, params: { last_4: ["4", "2", "4", "2"], email: "edgar@gumroad.com" }
+      get :charge_data, params: { last_4: { a: "4242" }, email: "edgar@example.com" }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["success"]).to be(false)
+    end
+
+    it "matches nothing for an array-valued last_4 instead of widening to the whole email" do
+      create(:purchase, price_cents: 100, fee_cents: 30, card_visual: "**** 4242", email: "edgar@example.com")
+
+      get :charge_data, params: { last_4: ["4", "2", "4", "2"], email: "edgar@example.com" }
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body["success"]).to be(false)

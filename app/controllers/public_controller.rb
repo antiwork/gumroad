@@ -26,8 +26,13 @@ class PublicController < ApplicationController
   end
 
   def charge_data
+    last_4 = params[:last_4]
+    # A non-scalar last_4 is not a card suffix and must not reach `length`; matching nothing keeps
+    # a malformed request from widening to every purchase on the email.
+    return render json: { success: false } if last_4.present? && !last_4.is_a?(String)
+
     purchases = Purchase.successful_gift_or_nongift.where("email = ?", scalar_param(:email))
-    purchases = purchases.where("card_visual like ?", "%#{params[:last_4]}%") if params[:last_4].present? && params[:last_4].length == 4
+    purchases = purchases.where("card_visual like ?", "%#{last_4}%") if last_4.present? && last_4.length == 4
     purchases = scope_by_year_and_month(purchases, params[:year], params[:month])
     if purchases.none?
       render json: { success: false }
