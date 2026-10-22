@@ -1138,7 +1138,9 @@ class Link < ApplicationRecord
     return [] unless is_physical
 
     included = shipping_destinations.alive.flat_map { |shipping_destination| shipping_destination.country_or_countries.keys }
-    included.uniq - shipping_excluded_country_codes
+    shippable = included.uniq - shipping_excluded_country_codes
+    shippable &= Product::Shipping::SUPPORTED_COUNTRY_CODES if Product::Shipping.restricted_to_supported_countries?
+    shippable
   end
 
   def save_default_sku!(sku_id, custom_sku)
@@ -1968,8 +1970,13 @@ class Link < ApplicationRecord
       # Not just destinations: a destination the product excludes still leaves nothing to ship to.
       return if shippable_country_codes.present?
 
-      errors.add(:base, "The product needs to be shippable to at least one destination.")
-      raise LinkInvalid, "The product needs to be shippable to at least one destination."
+      message = if Product::Shipping.restricted_to_supported_countries? && shipping_destinations.alive.exists?
+        "Physical products can only ship to the United States, Canada, and the United Kingdom. Add one of those as a shipping destination."
+      else
+        "The product needs to be shippable to at least one destination."
+      end
+      errors.add(:base, message)
+      raise LinkInvalid, message
     end
 
     def enforce_merchant_account_exits_for_new_users!
