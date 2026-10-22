@@ -3,7 +3,7 @@
 class OmanBankAccount < BankAccount
   BANK_ACCOUNT_TYPE = "OM"
 
-  BANK_CODE_FORMAT_REGEX = /^[A-Z]{4}OM[A-Z0-9]{2,5}\z/
+  BANK_CODE_FORMAT_REGEX = /\A[A-Z]{4}OM([A-Z0-9]{2}|[A-Z0-9]{5})\z/
   private_constant :BANK_CODE_FORMAT_REGEX
 
   ACCOUNT_NUMBER_FORMAT_REGEX = /^[0-9]{6,16}$/

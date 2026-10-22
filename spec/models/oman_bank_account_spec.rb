@@ -20,11 +20,17 @@ describe OmanBankAccount do
   end
 
   describe "#routing_number" do
-    it "returns valid for 8 to 11 characters" do
-      expect(create(:oman_bank_account, bank_code: "AAAAOMOM")).to be_valid
-      expect(create(:oman_bank_account, bank_code: "AAAAOMOMX")).to be_valid
-      expect(create(:oman_bank_account, bank_code: "AAAAOMOMXX")).to be_valid
-      expect(create(:oman_bank_account, bank_code: "AAAAOMOMXXX")).to be_valid
+    it "accepts the 8-character BIC and the 11-character padded form" do
+      expect(build(:oman_bank_account, bank_code: "AAAAOMOM")).to be_valid
+      expect(build(:oman_bank_account, bank_code: "AAAAOMOMXXX")).to be_valid
+    end
+
+    it "rejects 9- and 10-character values and a trailing newline" do
+      ["AAAAOMOMX", "AAAAOMOMXX", "AAAAOMOM\n"].each do |code|
+        account = build(:oman_bank_account, bank_code: code)
+        expect(account).not_to be_valid
+        expect(account.errors.full_messages).to include("The bank code is invalid.")
+      end
     end
   end
 
