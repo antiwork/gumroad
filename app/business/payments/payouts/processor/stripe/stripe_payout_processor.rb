@@ -751,6 +751,24 @@ class StripePayoutProcessor
     # ACH records can report USD even for non-USD accounts; compare the merchant currency.
     foreign_currency = payment.currency.to_s != merchant_account.currency.to_s
     payment.bank_account = nil if foreign_currency
+    # A foreign payout names no destination, so a bank replaced since preparation would still be
+    # paid. Ask again; this narrows that window but cannot close it. A drain keeps its own rule.
+    # The cached probe predates that replacement and would miss a new bank, so probe afresh.
+    recheck_currency = foreign_currency && merchant_account.active?
+    pay_out_currencies_cache.delete(merchant_account.charge_processor_merchant_id) if recheck_currency
+    if recheck_currency && !pay_out_currency?(merchant_account, payment.currency)
+      failed = true
+      # A failed probe proves nothing about the bank, and nothing was sent, so it stays requeueable.
+      failure_reason, message = if pay_out_currencies_unknown?(merchant_account)
+        [Payment::FailureReason::PROCESSOR_UNAVAILABLE,
+         "Cannot process payout: could not confirm #{payment.currency} is payable on #{merchant_account.charge_processor_merchant_id}."]
+      else
+        [Payment::FailureReason::DESTINATION_CURRENCY_MISMATCH,
+         "Cannot process payout: the seller's active bank account on #{merchant_account.charge_processor_merchant_id} does not receive #{payment.currency}."]
+      end
+      payment.error_message = message
+      return [message]
+    end
     bank_account = payment.bank_account
     params = {
       amount: amount_cents,

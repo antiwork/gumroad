@@ -241,6 +241,8 @@ describe StripePayoutProcessor do
                        stripe_connect_account_id: "acct_destination", currency: Currency::EUR, state: "processing")
     end
 
+    before { allow(described_class).to receive(:pay_out_currencies).and_return([Currency::EUR]) }
+
     def payout_response(destination)
       Stripe::Payout.construct_from(id: "po_destination", arrival_date: 1.day.from_now.to_i, destination:)
     end
@@ -349,6 +351,157 @@ describe StripePayoutProcessor do
     end
   end
 
+  describe ".perform_payment after the seller replaces a foreign-currency bank" do
+    let(:seller) { create(:named_user) }
+    let!(:merchant_account) { create(:merchant_account, user: seller, currency: Currency::HUF, charge_processor_merchant_id: "acct_recheck") }
+    let!(:eur_bank) { create(:ach_account, user: seller, stripe_connect_account_id: "acct_recheck", stripe_bank_account_id: "ba_eur_recheck") }
+    let!(:eur_credit) do
+      create(:balance, user: seller, merchant_account:, date: 2.days.ago.to_date, amount_cents: 33_12,
+                       holding_currency: Currency::EUR, holding_amount_cents: 30_00)
+    end
+    let(:external_accounts) { [["ba_eur_recheck", "eur"]] }
+
+    before do
+      described_class.pay_out_currencies_cache.delete("acct_recheck")
+      # Replacing it with a bank in another currency leaves the EUR bank attached at Stripe.
+      allow(Stripe::Account).to receive(:list_external_accounts).with("acct_recheck", { limit: 100 }) do
+        external_accounts.map { |id, currency| Stripe::BankAccount.construct_from(id:, currency:) }
+      end
+      allow(Stripe::Balance).to receive(:retrieve).with({}, { stripe_account: "acct_recheck" })
+        .and_return(Stripe::Balance.construct_from(available: [{ currency: "eur", amount: 30_00 }], pending: []))
+    end
+
+    after { described_class.pay_out_currencies_cache.delete("acct_recheck") }
+
+    def prepare_eur_payout
+      payment, errors = Payouts.create_payments(Date.yesterday.to_s, PayoutProcessorType::STRIPE, seller).sole
+      expect(errors).to eq([])
+      expect(payment).to be_processing
+      expect(payment.currency).to eq(Currency::EUR)
+      expect(payment.balances).to eq([eur_credit])
+      payment
+    end
+
+    def replace_bank
+      params = ActionController::Parameters.new(
+        bank_account: {
+          type: AchAccount.name,
+          account_holder_full_name: seller.name,
+          account_number: "123456789",
+          account_number_confirmation: "123456789",
+          routing_number: "110000000",
+        }
+      )
+      expect(UpdatePayoutMethod.new(user_params: params, seller:).process).to eq(success: true)
+      expect(seller.reload.active_bank_account).not_to eq(eur_bank)
+    end
+
+    def payout_response(id)
+      Stripe::Payout.construct_from(id:, arrival_date: 1.day.from_now.to_i, destination: "ba_eur_recheck")
+    end
+
+    it "sends no payout once the bank is replaced after preparation and returns the balance to unpaid" do
+      payment = prepare_eur_payout
+      replace_bank
+      expect(Stripe::Payout).not_to receive(:create)
+
+      described_class.process_payments([payment])
+
+      expect(payment.reload).to be_failed
+      expect(payment.failure_reason).to eq(Payment::FailureReason::DESTINATION_CURRENCY_MISMATCH)
+      expect(payment.error_message).to include("acct_recheck", "does not receive eur")
+      expect(payment.stripe_transfer_id).to be_nil
+      expect(eur_credit.reload).to be_unpaid
+      expect(seller.reload.payouts_paused?).to be(false)
+    end
+
+    it "pays the foreign currency when the seller's EUR bank is unchanged" do
+      payment = prepare_eur_payout
+      expect(Stripe::Payout).to receive(:create) do |params, options|
+        expect(options).to eq(stripe_account: "acct_recheck")
+        expect(params[:currency]).to eq(Currency::EUR)
+        expect(params).not_to have_key(:destination)
+        payout_response("po_recheck")
+      end
+
+      described_class.process_payments([payment])
+
+      expect(payment.reload).to be_processing
+      expect(payment.stripe_transfer_id).to eq("po_recheck")
+      expect(eur_credit.reload).to be_processing
+    end
+
+    it "pays a new EUR bank that replaced the old one after preparation, without waiting for the probe cache" do
+      payment = prepare_eur_payout
+      replace_bank
+      # Stripe links the new EUR bank and deletes the old one, which had the same currency.
+      seller.active_bank_account.update!(stripe_connect_account_id: "acct_recheck", stripe_bank_account_id: "ba_eur_new")
+      external_accounts.replace([["ba_eur_new", "eur"]])
+      expect(Stripe::Payout).to receive(:create) do |params, _options|
+        expect(params[:currency]).to eq(Currency::EUR)
+        expect(params).not_to have_key(:destination)
+        payout_response("po_same_currency")
+      end
+
+      described_class.process_payments([payment])
+
+      expect(payment.reload).to be_processing
+      expect(payment.stripe_transfer_id).to eq("po_same_currency")
+      expect(eur_credit.reload).to be_processing
+    end
+
+    it "pays the refused balance in a later run once the seller's active bank receives EUR again" do
+      payment = prepare_eur_payout
+      replace_bank
+      described_class.process_payments([payment])
+      expect(Payment::FailureReason::REQUEUEABLE_REASONS).not_to include(payment.reload.failure_reason)
+
+      # The seller adds an EUR bank again, which Stripe links as a new external account.
+      replace_bank
+      seller.active_bank_account.update!(stripe_connect_account_id: "acct_recheck", stripe_bank_account_id: "ba_eur_again")
+      external_accounts << ["ba_eur_again", "eur"]
+      expect(Stripe::Payout).to receive(:create).and_return(payout_response("po_after_restore"))
+
+      travel_to(described_class::PAY_OUT_CURRENCIES_CACHE_TTL.from_now + 1.minute) do
+        retry_payment = prepare_eur_payout
+        described_class.process_payments([retry_payment])
+
+        expect(retry_payment.reload.stripe_transfer_id).to eq("po_after_restore")
+      end
+      expect(eur_credit.reload).to be_processing
+    end
+
+    it "keeps the payout requeueable when Stripe cannot confirm the currency at perform time" do
+      payment = prepare_eur_payout
+      described_class.pay_out_currencies_cache.delete("acct_recheck")
+      allow(Stripe::Account).to receive(:list_external_accounts).and_raise(Stripe::APIConnectionError, "probe unavailable")
+      expect(Stripe::Payout).not_to receive(:create)
+
+      described_class.process_payments([payment])
+
+      expect(payment.reload).to be_failed
+      expect(payment.failure_reason).to eq(Payment::FailureReason::PROCESSOR_UNAVAILABLE)
+      expect(Payment::FailureReason::REQUEUEABLE_REASONS).to include(payment.failure_reason)
+      expect(eur_credit.reload).to be_unpaid
+    end
+
+    it "does not recheck a payout in the account's own currency" do
+      merchant_account.update!(currency: Currency::EUR)
+      payment = prepare_eur_payout
+      expect(payment.bank_account).to eq(eur_bank)
+      replace_bank
+      expect(described_class).not_to receive(:pay_out_currency?)
+      expect(Stripe::Payout).to receive(:create) do |params, _options|
+        expect(params[:destination]).to eq("ba_eur_recheck")
+        payout_response("po_own_currency")
+      end
+
+      described_class.process_payments([payment])
+
+      expect(payment.reload.stripe_transfer_id).to eq("po_own_currency")
+    end
+  end
+
   describe ".perform_payment for a drained retired account" do
     let(:seller) { create(:user) }
     let!(:retired_account) do
@@ -431,6 +584,27 @@ describe StripePayoutProcessor do
       payment.reload
       expect(payment.stripe_payout_destination_id).to eq("ba_drained")
       expect(payment.bank_account).to eq(retired_bank)
+    end
+
+    it "drains a foreign currency without the active-bank check" do
+      eur_credit = create(:balance, user: seller, merchant_account: retired_account, state: "processing", date: 2.days.ago.to_date,
+                                    amount_cents: 300_00, holding_currency: Currency::EUR, holding_amount_cents: 270_00)
+      payment = create(:payment, user: seller, processor: PayoutProcessorType::STRIPE, state: "processing",
+                                 stripe_connect_account_id: "acct_drained_aud", currency: Currency::EUR, amount_cents: 270_00,
+                                 balances: [eur_credit])
+      expect(described_class).not_to receive(:pay_out_currency?)
+      expect(Stripe::Payout).to receive(:create) do |params, options|
+        expect(options).to eq(stripe_account: "acct_drained_aud")
+        expect(params[:currency]).to eq(Currency::EUR)
+        expect(params).not_to have_key(:destination)
+        Stripe::Payout.construct_from(id: "po_drained_eur", arrival_date: 1.day.from_now.to_i, destination: "ba_drained_eur")
+      end
+
+      expect(described_class.perform_payment(payment)).to eq([])
+
+      payment.reload
+      expect(payment.stripe_transfer_id).to eq("po_drained_eur")
+      expect(payment.retired_account_drain).to be(true)
     end
   end
 

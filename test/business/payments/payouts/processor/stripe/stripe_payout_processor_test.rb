@@ -3874,6 +3874,7 @@ class StripePayoutProcessorTest < ActiveSupport::TestCase
   test ".perform_payment omits the payout destination when the payout currency is not the bank account's currency, so Stripe pays the account's own bank account for that currency" do
     setup_perform_payment_error_case
     @payment.update!(currency: Currency::EUR, amount_cents: 460_207)
+    StripePayoutProcessor.stubs(:pay_out_currencies).returns([Currency::EUR])
     Stripe::Payout.expects(:create).with do |params, _opts|
       # No destination: Stripe pays the account's own bank account for the payout's currency.
       params[:currency] == Currency::EUR && !params.key?(:destination)
