@@ -1034,6 +1034,21 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_19_000003) do
     t.index ["state", "notification_sent_at"], name: "idx_failed_refund_exceptions_pending_notification"
   end
 
+  create_table "feature_announcement_campaigns", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.string "key", limit: 64, null: false
+    t.string "subject", null: false
+    t.text "body", null: false
+    t.string "reply_to", null: false
+    t.string "audience", limit: 64, null: false
+    t.string "state", limit: 16, null: false
+    t.string "content_digest", limit: 64
+    t.bigint "approved_by_id"
+    t.datetime "approved_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["key"], name: "index_feature_announcement_campaigns_on_key", unique: true
+  end
+
   create_table "feature_announcement_deliveries", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "campaign", limit: 64, null: false
     t.bigint "user_id", null: false

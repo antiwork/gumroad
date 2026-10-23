@@ -10,11 +10,13 @@ describe FeatureAnnouncementDelivery, "ordering the handoff against concurrent w
     # The audience reads are unlocked and covered in the mailer spec; this file is about the locks.
     allow(FeatureAnnouncementMailer).to receive(:in_audience?).and_return(true)
     ActionMailer::Base.deliveries.clear
+    @campaign = create(:feature_announcement_campaign, :piracy_reports)
     @user = create(:user, email: "concurrent-creator@example.com")
     FeatureAnnouncementSubscription.update_from_settings!(@user, subscribed: true, rendered_version: 0)
   end
 
   after do
+    @campaign&.destroy!
     FeatureAnnouncementDelivery.where(user_id: @user.id).delete_all
     FeatureAnnouncementSubscription.where(user_id: @user.id).delete_all
     @user.destroy!
@@ -29,10 +31,14 @@ describe FeatureAnnouncementDelivery, "ordering the handoff against concurrent w
     Thread.new { ActiveRecord::Base.connection_pool.with_connection(&block) }
   end
 
-  # information_schema.innodb_trx is refreshed at most every 0.1s, so poll slower than that.
+  # Counts only waits on this test database: the MySQL server can be shared with other test runs.
   def wait_for_lock_wait(connection)
     Timeout.timeout(10) do
-      sleep 0.25 until connection.select_value("SELECT COUNT(*) FROM information_schema.innodb_trx WHERE trx_state = 'LOCK WAIT'").to_i > 0
+      sleep 0.1 until connection.select_value(<<~SQL).to_i > 0
+        SELECT COUNT(*) FROM performance_schema.data_lock_waits w
+        JOIN performance_schema.data_locks l ON l.ENGINE_LOCK_ID = w.REQUESTING_ENGINE_LOCK_ID
+        WHERE l.OBJECT_SCHEMA = DATABASE()
+      SQL
     end
   end
 
@@ -49,6 +55,7 @@ describe FeatureAnnouncementDelivery, "ordering the handoff against concurrent w
     "an opt-out" => ->(user) { FeatureAnnouncementSubscription.unsubscribe!(user, source: "unsubscribe_link") },
     "a suspension" => ->(user) { User.find(user.id).update!(user_risk_state: "suspended_for_tos_violation") },
     "an email change" => ->(user) { User.where(id: user.id).update_all(email: "changed@example.com") },
+    "a campaign cancellation" => ->(_user) { FeatureAnnouncementCampaign.find_by!(key: "piracy_reports").update!(state: "cancelled") },
   }.each do |writer_name, writer|
     it "makes #{writer_name} that arrives during the handoff wait until the provider has the message" do
       in_smtp = Queue.new
@@ -93,6 +100,25 @@ describe FeatureAnnouncementDelivery, "ordering the handoff against concurrent w
     expect(ActionMailer::Base.deliveries).to be_empty
     expect(FeatureAnnouncementDelivery.find_by!(user_id: @user.id).attributes.slice("state", "reason"))
       .to eq("state" => "skipped", "reason" => "not_subscribed")
+  end
+
+  it "does not send when a campaign cancellation commits while the handoff waits for its lock" do
+    locked = Queue.new
+    holder = in_thread do |connection|
+      connection.transaction do
+        FeatureAnnouncementCampaign.find_by!(key: "piracy_reports").update!(state: "cancelled")
+        locked << true
+        wait_for_lock_wait(connection)
+      end
+    end
+    Timeout.timeout(10) { locked.pop }
+
+    announcement.deliver_now
+    holder.value
+
+    expect(ActionMailer::Base.deliveries).to be_empty
+    expect(FeatureAnnouncementDelivery.find_by!(user_id: @user.id).attributes.slice("state", "reason"))
+      .to eq("state" => "skipped", "reason" => "campaign_not_deliverable")
   end
 
   it "stops waiting for a locked account after the bound and releases the claim for a retry" do

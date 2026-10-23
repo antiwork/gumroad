@@ -9,6 +9,7 @@ describe FeatureAnnouncementDelivery, "audience changes while the handoff waits"
   self.use_transactional_tests = false
 
   before do
+    @campaign = create(:feature_announcement_campaign, :piracy_reports)
     @seller, @product = create_piracy_seller_with_product
     @seller.update_columns(email: "audience-race-seller@example.com")
     FeatureAnnouncementSubscription.update_from_settings!(@seller, subscribed: true, rendered_version: 0)
@@ -16,6 +17,7 @@ describe FeatureAnnouncementDelivery, "audience changes while the handoff waits"
   end
 
   after do
+    @campaign&.destroy!
     FeatureAnnouncementDelivery.where(user_id: @seller.id).delete_all
     FeatureAnnouncementSubscription.where(user_id: @seller.id).delete_all
     Purchase.where(link_id: @product.id).delete_all

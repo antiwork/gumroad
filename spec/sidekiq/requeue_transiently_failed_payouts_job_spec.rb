@@ -194,10 +194,7 @@ describe RequeueTransientlyFailedPayoutsJob do
 
     context "with sibling payout groups" do
       before do
-        allow(Stripe::Account).to receive(:list_external_accounts).and_return(
-          ["usd", "eur", "gbp"].map { |currency| Stripe::BankAccount.construct_from(currency:) }
-        )
-        StripePayoutProcessor.pay_out_currencies_cache.clear
+        allow(StripePayoutProcessor).to receive(:pay_out_currencies).and_return(["usd", "eur", "gbp"])
         allow(Stripe::Balance).to receive(:retrieve).and_return(
           Stripe::Balance.construct_from(object: "balance", available: ["usd", "eur", "gbp"].map { |currency| { currency:, amount: 500_00 } }, pending: [])
         )

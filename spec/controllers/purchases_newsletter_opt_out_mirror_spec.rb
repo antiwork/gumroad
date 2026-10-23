@@ -13,6 +13,7 @@ describe PurchasesController, "turning contact off for a buyer after the old Gum
   let!(:purchase) { create(:purchase, link: newsletter_product, email: buyer.email) }
 
   before do
+    create(:feature_announcement_campaign, :piracy_reports)
     stub_const("#{migration}::VERIFIED_SOURCES", { Follower::From::EMBED_FORM => "synthetic test evidence" }.freeze)
     create(:follower, user: newsletter, email: buyer.email, follower_user_id: buyer.id, source: Follower::From::EMBED_FORM,
                       confirmed_at: 2.hours.ago, created_at: 2.hours.ago)

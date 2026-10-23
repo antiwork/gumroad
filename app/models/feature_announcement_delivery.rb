@@ -63,9 +63,9 @@ class FeatureAnnouncementDelivery < ApplicationRecord
     email.to_s.strip.downcase
   end
 
-  # Account status, address and consent are read under share locks, so a writer either commits
-  # before the check or waits for the handoff. The audience is read after those waits, uncached and as
-  # this transaction's first plain read, so a product, sale or payout change made meanwhile counts.
+  # The campaign, account status, address and consent are read under share locks, so a writer either
+  # commits before the check or waits for the handoff. The audience is read after those waits, uncached
+  # and as this transaction's first plain read, so a product, sale or payout change made meanwhile counts.
   def send_if_eligible(message, &block)
     handing_off = false
     with_bounded_lock_wait do
@@ -73,6 +73,7 @@ class FeatureAnnouncementDelivery < ApplicationRecord
         lock!
         user = User.lock("FOR SHARE").find_by(id: user_id)
         subscription = FeatureAnnouncementSubscription.lock("FOR SHARE").find_by(user_id:)
+        @content = FeatureAnnouncementCampaign.lock("FOR SHARE").find_by(key: campaign)
         reason = ineligibility_reason(message, user, subscription) || ("not_in_audience" unless self.class.uncached { in_audience?(user) })
         if reason
           update!(state: "skipped", reason:)
@@ -103,14 +104,14 @@ class FeatureAnnouncementDelivery < ApplicationRecord
 
   private
     def in_audience?(user)
-      FeatureAnnouncementMailer.in_audience?(campaign, user)
-    rescue KeyError
-      false
+      FeatureAnnouncementMailer.in_audience?(content, user)
     end
 
+    attr_reader :content
+
     def ineligibility_reason(message, user, subscription)
-      content = FeatureAnnouncementMailer::CAMPAIGNS[campaign]
       return "unknown_campaign" if content.nil?
+      return "campaign_not_deliverable" unless content.deliverable?
       return "user_missing" if user.nil?
       return "account_inactive" unless user.account_active?
       return "email_unconfirmed" unless user.confirmed?
@@ -119,9 +120,10 @@ class FeatureAnnouncementDelivery < ApplicationRecord
       return "recipient_mismatch" unless message.destinations.map { self.class.canonical_email(_1) } == [email] &&
                                          self.class.canonical_email(user.email) == email
       return "not_subscribed" unless subscription&.subscribed?
-      return "content_mismatch" unless message.subject == content[:subject] &&
+      return "content_mismatch" unless message.feature_announcement_target[:content_digest] == content.content_digest &&
+                                       message.subject == content.subject &&
                                        message[:from].to_s == FeatureAnnouncementMailer::FROM &&
-                                       message.reply_to == [content[:reply_to]]
+                                       message.reply_to == [content.reply_to]
       "unsubscribe_link_mismatch" unless unsubscribe_link_matches?(message)
     end
 

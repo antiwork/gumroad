@@ -13,7 +13,7 @@ class Onetime::PlanFeatureAnnouncementReplacement
 
   def initialize(campaign:, ledger_key:, scheduled_at:, page_size:)
     @campaign = campaign
-    @content = FeatureAnnouncementMailer::CAMPAIGNS.fetch(campaign)
+    @content = FeatureAnnouncementCampaign.find_by!(key: campaign)
     @ledger_key = ledger_key
     @score = scheduled_at.to_f
     @page_size = page_size
@@ -68,7 +68,7 @@ class Onetime::PlanFeatureAnnouncementReplacement
 
       mailer, method, delivery, params = ActiveJob::Arguments.deserialize(wrapped["arguments"])
       args = params.is_a?(Hash) ? Array(params[:args]).first : nil
-      return unless args.is_a?(Hash) && args[:subject] == @content[:subject]
+      return unless args.is_a?(Hash) && args[:subject] == @content.subject
 
       { job_id: wrapped["job_id"], jid: payload["jid"], mailer:, method:, delivery:, args: args.symbolize_keys }
     rescue JSON::ParserError, ActiveJob::DeserializationError
@@ -94,9 +94,9 @@ class Onetime::PlanFeatureAnnouncementReplacement
     # text cannot.
     def same_content?(args)
       args[:from] == FeatureAnnouncementMailer::FROM &&
-        args[:reply_to] == @content[:reply_to] &&
+        args[:reply_to] == @content.reply_to &&
         args[:sender_domain].to_s == FeatureAnnouncementMailer::SENDER_DOMAIN.to_s &&
-        body_fingerprint(args[:body]) == body_fingerprint(@content[:body])
+        body_fingerprint(args[:body]) == body_fingerprint(@content.body)
     end
 
     def body_fingerprint(html)
