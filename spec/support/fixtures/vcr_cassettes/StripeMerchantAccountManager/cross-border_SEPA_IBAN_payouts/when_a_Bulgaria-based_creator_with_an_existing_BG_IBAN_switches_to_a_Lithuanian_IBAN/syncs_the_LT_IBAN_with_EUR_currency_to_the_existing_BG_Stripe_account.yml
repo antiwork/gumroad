@@ -5,7 +5,7 @@ http_interactions:
     uri: https://api.stripe.com/v1/accounts
     body:
       encoding: UTF-8
-      string: type=custom&requested_capabilities[0]=card_payments&requested_capabilities[1]=transfers&country=BG&default_currency=eur&metadata[user_id]=3202313146383&metadata[tos_agreement_id]=z-k7JlXJ1MqGvSWSEYzgVQ%3D%3D&metadata[user_compliance_info_id]=qNDOQZuxI0P3WTbxbAl6DA%3D%3D&metadata[bank_account_id]=cL9eWoQzVs2QT63DNYkZZg%3D%3D&tos_acceptance[date]=1427846400&tos_acceptance[ip]=54.234.242.13&business_type=individual&business_profile[name]=Chuck+Bartowski&business_profile[url]=https%3A%2F%2Fvipul.gumroad.com%2F&business_profile[product_description]=Chuck+Bartowski&individual[first_name]=Chuck&individual[last_name]=Bartowski&individual[email]=edgar_3%40gumroad.com&individual[phone]=0000000000&individual[dob][day]=1&individual[dob][month]=1&individual[dob][year]=1901&individual[address][line1]=address_full_match&individual[address][city]=Sofia&individual[address][postal_code]=1000&individual[address][country]=BG&individual[id_number]=000000000&bank_account[country]=BG&bank_account[currency]=eur&bank_account[account_number]=BG80BNBG96611020345678&settings[payouts][schedule][interval]=manual&settings[payouts][debit_negative_balances]=true
+      string: type=custom&requested_capabilities[0]=card_payments&requested_capabilities[1]=transfers&country=BG&default_currency=eur&metadata[user_id]=8336079900873&metadata[tos_agreement_id]=bmb2BJmZLcpDGxFQ4cxFDQ%3D%3D&metadata[user_compliance_info_id]=0yQgV_q59N0XeESVPPgLlw%3D%3D&metadata[bank_account_id]=Mi0_2L7YyurpLl33-3GRzA%3D%3D&tos_acceptance[date]=1427846400&tos_acceptance[ip]=54.234.242.13&business_type=individual&business_profile[name]=Chuck+Bartowski&business_profile[url]=https%3A%2F%2Fvipul.gumroad.com%2F&business_profile[product_description]=Chuck+Bartowski&individual[first_name]=Chuck&individual[last_name]=Bartowski&individual[email]=edgar_1%40gumroad.com&individual[phone]=0000000000&individual[dob][day]=1&individual[dob][month]=1&individual[dob][year]=1901&individual[address][line1]=address_full_match&individual[address][city]=Sofia&individual[address][postal_code]=1000&individual[address][country]=BG&individual[id_number]=000000000&bank_account[country]=BG&bank_account[currency]=eur&bank_account[account_number]=BG80BNBG96611020345678&settings[payouts][schedule][interval]=manual&settings[payouts][debit_negative_balances]=true
     headers:
       User-Agent:
       - Stripe/v1 RubyBindings/12.5.0
@@ -14,15 +14,13 @@ http_interactions:
       Content-Type:
       - application/x-www-form-urlencoded
       X-Stripe-Client-Telemetry:
-      - '{"last_request_metrics":{"request_id":"req_6D8ctPQHowxQ0V","request_duration_ms":5602}}'
+      - '{"last_request_metrics":{"request_id":"req_oNIokx45YZBpY2","request_duration_ms":807}}'
       Idempotency-Key:
-      - 6aaef539-76ed-4f63-9f00-733c56d7df6b
+      - baf9c8f5-28c3-4204-ae30-46d7cbfdba62
       Stripe-Version:
       - '2023-10-16'
       X-Stripe-Client-User-Agent:
-      - '{"bindings_version":"12.5.0","lang":"ruby","lang_version":"3.4.3 p32 (2025-04-14)","platform":"arm64-darwin24","engine":"ruby","publisher":"stripe","uname":"Darwin
-        Is-MacBook-Air.local 25.1.0 Darwin Kernel Version 25.1.0: Mon Oct 20 19:32:56
-        PDT 2025; root:xnu-12377.41.6~2/RELEASE_ARM64_T8132 arm64","hostname":"Is-MacBook-Air.local"}'
+      - "<STRIPE_CLIENT_USER_AGENT>"
       Accept-Encoding:
       - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
       Accept:
@@ -35,11 +33,11 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Mon, 04 May 2026 09:05:45 GMT
+      - Fri, 23 Oct 2026 15:46:40 GMT
       Content-Type:
       - application/json
       Content-Length:
-      - '6411'
+      - '6903'
       Connection:
       - keep-alive
       Access-Control-Allow-Credentials:
@@ -57,19 +55,24 @@ http_interactions:
       - no-cache, no-store
       Content-Security-Policy:
       - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
-        img-src 'self'; script-src 'self' 'report-<RPUSH_CONSUMER_FCM_FIREBASE_PROJECT_ID>';
-        style-src 'self'; worker-src 'none'; upgrade-insecure-requests; report-uri
-        https://q.stripe.com/csp-violation?q=XjacyA1lBPBfyXMbNXZuTW5hInUjdinmlKw8BLHGkFuaushe22IVRVpSmvCjyh_fRZGKtVhg4gdp9BoM
+        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
+        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=4HrgXaSN5Vgdypvhj_-mYxlQI-zt3JFX9fmY1tQRn4d4kZt5XVrTU5EB4nI7qyvlTVGigSBM3bzf4UgO;
+        report-to csp
       Idempotency-Key:
-      - 6aaef539-76ed-4f63-9f00-733c56d7df6b
+      - baf9c8f5-28c3-4204-ae30-46d7cbfdba62
       Original-Request:
-      - req_8E6hl1N3EqXAd2
+      - req_mUkGdGXX051V3O
       Report-To:
-      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=XjacyA1lBPBfyXMbNXZuTW5hInUjdinmlKw8BLHGkFuaushe22IVRVpSmvCjyh_fRZGKtVhg4gdp9BoM&t=1"}],"include_subdomains":true}'
+      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=4HrgXaSN5Vgdypvhj_-mYxlQI-zt3JFX9fmY1tQRn4d4kZt5XVrTU5EB4nI7qyvlTVGigSBM3bzf4UgO&t=1"}],"include_subdomains":true}'
       Reporting-Endpoints:
-      - csp="https://q.stripe.com/csp-report-v2?q=XjacyA1lBPBfyXMbNXZuTW5hInUjdinmlKw8BLHGkFuaushe22IVRVpSmvCjyh_fRZGKtVhg4gdp9BoM&t=1"
+      - csp="https://q.stripe.com/csp-report-v2?q=4HrgXaSN5Vgdypvhj_-mYxlQI-zt3JFX9fmY1tQRn4d4kZt5XVrTU5EB4nI7qyvlTVGigSBM3bzf4UgO&t=1"
       Request-Id:
-      - req_8E6hl1N3EqXAd2
+      - req_mUkGdGXX051V3O
+      Stripe-Notice:
+      - '2 notices for this request: (1) We recommend building your integration using
+        Accounts v2. See https://docs.stripe.com/api/v2/core/accounts (2) You are
+        using an outdated API version (2023-10-16). We recommend upgrading to the
+        latest API version, 2026-09-30.endive. See https://docs.stripe.com/upgrades'
       Stripe-Should-Retry:
       - 'false'
       Stripe-Version:
@@ -88,7 +91,7 @@ http_interactions:
       encoding: UTF-8
       string: |-
         {
-          "id": "acct_1TTIRcRJ54bAZgCS",
+          "id": "acct_1UTkfxRHxU231oS9",
           "object": "account",
           "business_profile": {
             "annual_revenue": null,
@@ -107,7 +110,7 @@ http_interactions:
           "business_type": "individual",
           "capabilities": {
             "card_payments": "inactive",
-            "transfers": "active"
+            "transfers": "pending"
           },
           "charges_enabled": false,
           "company": {
@@ -149,7 +152,7 @@ http_interactions:
             "type": "application"
           },
           "country": "BG",
-          "created": 1777885542,
+          "created": 1792770398,
           "default_currency": "eur",
           "details_submitted": false,
           "email": null,
@@ -157,9 +160,9 @@ http_interactions:
             "object": "list",
             "data": [
               {
-                "id": "ba_1TTIRcRJ54bAZgCSJ5vwgVci",
+                "id": "ba_1UTkfxRHxU231oS9VdvAwG1K",
                 "object": "bank_account",
-                "account": "acct_1TTIRcRJ54bAZgCS",
+                "account": "acct_1UTkfxRHxU231oS9",
                 "account_holder_name": null,
                 "account_holder_type": null,
                 "account_type": null,
@@ -191,7 +194,7 @@ http_interactions:
             ],
             "has_more": false,
             "total_count": 1,
-            "url": "/v1/accounts/acct_1TTIRcRJ54bAZgCS/external_accounts"
+            "url": "/v1/accounts/acct_1UTkfxRHxU231oS9/external_accounts"
           },
           "future_requirements": {
             "alternatives": [],
@@ -204,9 +207,9 @@ http_interactions:
             "pending_verification": []
           },
           "individual": {
-            "id": "person_1TTIRdRJ54bAZgCSdlS59hBB",
+            "id": "person_1UTkfxRHxU231oS9u49tfMtq",
             "object": "person",
-            "account": "acct_1TTIRcRJ54bAZgCS",
+            "account": "acct_1UTkfxRHxU231oS9",
             "address": {
               "city": "Sofia",
               "country": "BG",
@@ -215,13 +218,13 @@ http_interactions:
               "postal_code": "1000",
               "state": null
             },
-            "created": 1777885541,
+            "created": 1792770397,
             "dob": {
               "day": 1,
               "month": 1,
               "year": 1901
             },
-            "email": "edgar_3@gumroad.com",
+            "email": "edgar_1@gumroad.com",
             "first_name": "Chuck",
             "future_requirements": {
               "alternatives": [],
@@ -251,7 +254,17 @@ http_interactions:
               "errors": [],
               "eventually_due": [],
               "past_due": [],
-              "pending_verification": []
+              "pending_verification": [
+                "address.city",
+                "address.line1",
+                "address.postal_code",
+                "dob.day",
+                "dob.month",
+                "dob.year",
+                "first_name",
+                "last_name",
+                "phone"
+              ]
             },
             "ssn_last_4_provided": true,
             "verification": {
@@ -273,10 +286,10 @@ http_interactions:
             }
           },
           "metadata": {
-            "bank_account_id": "cL9eWoQzVs2QT63DNYkZZg==",
-            "tos_agreement_id": "z-k7JlXJ1MqGvSWSEYzgVQ==",
-            "user_compliance_info_id": "qNDOQZuxI0P3WTbxbAl6DA==",
-            "user_id": "3202313146383"
+            "bank_account_id": "Mi0_2L7YyurpLl33-3GRzA==",
+            "tos_agreement_id": "bmb2BJmZLcpDGxFQ4cxFDQ==",
+            "user_compliance_info_id": "0yQgV_q59N0XeESVPPgLlw==",
+            "user_id": "8336079900873"
           },
           "payouts_enabled": false,
           "requirements": {
@@ -293,7 +306,17 @@ http_interactions:
             "past_due": [
               "business_profile.mcc"
             ],
-            "pending_verification": []
+            "pending_verification": [
+              "individual.address.city",
+              "individual.address.line1",
+              "individual.address.postal_code",
+              "individual.dob.day",
+              "individual.dob.month",
+              "individual.dob.year",
+              "individual.first_name",
+              "individual.last_name",
+              "individual.phone"
+            ]
           },
           "settings": {
             "bacs_debit_payments": {
@@ -351,10 +374,10 @@ http_interactions:
           },
           "type": "custom"
         }
-  recorded_at: Mon, 04 May 2026 09:05:45 GMT
+  recorded_at: Fri, 23 Oct 2026 15:46:40 GMT
 - request:
     method: get
-    uri: https://api.stripe.com/v1/accounts/acct_1TTIRcRJ54bAZgCS
+    uri: https://api.stripe.com/v1/accounts/acct_1UTkfxRHxU231oS9
     body:
       encoding: US-ASCII
       string: ''
@@ -366,13 +389,11 @@ http_interactions:
       Content-Type:
       - application/x-www-form-urlencoded
       X-Stripe-Client-Telemetry:
-      - '{"last_request_metrics":{"request_id":"req_8E6hl1N3EqXAd2","request_duration_ms":5253}}'
+      - '{"last_request_metrics":{"request_id":"req_mUkGdGXX051V3O","request_duration_ms":3571}}'
       Stripe-Version:
       - '2023-10-16'
       X-Stripe-Client-User-Agent:
-      - '{"bindings_version":"12.5.0","lang":"ruby","lang_version":"3.4.3 p32 (2025-04-14)","platform":"arm64-darwin24","engine":"ruby","publisher":"stripe","uname":"Darwin
-        Is-MacBook-Air.local 25.1.0 Darwin Kernel Version 25.1.0: Mon Oct 20 19:32:56
-        PDT 2025; root:xnu-12377.41.6~2/RELEASE_ARM64_T8132 arm64","hostname":"Is-MacBook-Air.local"}'
+      - "<STRIPE_CLIENT_USER_AGENT>"
       Accept-Encoding:
       - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
       Accept:
@@ -385,11 +406,11 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Mon, 04 May 2026 09:05:46 GMT
+      - Fri, 23 Oct 2026 15:46:41 GMT
       Content-Type:
       - application/json
       Content-Length:
-      - '6411'
+      - '6903'
       Connection:
       - keep-alive
       Access-Control-Allow-Credentials:
@@ -407,17 +428,20 @@ http_interactions:
       - no-cache, no-store
       Content-Security-Policy:
       - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
-        img-src 'self'; script-src 'self' 'report-<RPUSH_CONSUMER_FCM_FIREBASE_PROJECT_ID>';
-        style-src 'self'; worker-src 'none'; upgrade-insecure-requests; report-uri
-        https://q.stripe.com/csp-violation?q=XjacyA1lBPBfyXMbNXZuTW5hInUjdinmlKw8BLHGkFuaushe22IVRVpSmvCjyh_fRZGKtVhg4gdp9BoM
+        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
+        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=4HrgXaSN5Vgdypvhj_-mYxlQI-zt3JFX9fmY1tQRn4d4kZt5XVrTU5EB4nI7qyvlTVGigSBM3bzf4UgO;
+        report-to csp
       Report-To:
-      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=XjacyA1lBPBfyXMbNXZuTW5hInUjdinmlKw8BLHGkFuaushe22IVRVpSmvCjyh_fRZGKtVhg4gdp9BoM&t=1"}],"include_subdomains":true}'
+      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=4HrgXaSN5Vgdypvhj_-mYxlQI-zt3JFX9fmY1tQRn4d4kZt5XVrTU5EB4nI7qyvlTVGigSBM3bzf4UgO&t=1"}],"include_subdomains":true}'
       Reporting-Endpoints:
-      - csp="https://q.stripe.com/csp-report-v2?q=XjacyA1lBPBfyXMbNXZuTW5hInUjdinmlKw8BLHGkFuaushe22IVRVpSmvCjyh_fRZGKtVhg4gdp9BoM&t=1"
+      - csp="https://q.stripe.com/csp-report-v2?q=4HrgXaSN5Vgdypvhj_-mYxlQI-zt3JFX9fmY1tQRn4d4kZt5XVrTU5EB4nI7qyvlTVGigSBM3bzf4UgO&t=1"
       Request-Id:
-      - req_M7HVuD8tb4deTw
+      - req_HviSwzu5uOytR8
       Stripe-Account:
-      - acct_1TTIRcRJ54bAZgCS
+      - acct_1UTkfxRHxU231oS9
+      Stripe-Notice:
+      - You are using an outdated API version (2023-10-16). We recommend upgrading
+        to the latest API version, 2026-09-30.endive. See https://docs.stripe.com/upgrades
       Stripe-Version:
       - '2023-10-16'
       Vary:
@@ -434,7 +458,7 @@ http_interactions:
       encoding: UTF-8
       string: |-
         {
-          "id": "acct_1TTIRcRJ54bAZgCS",
+          "id": "acct_1UTkfxRHxU231oS9",
           "object": "account",
           "business_profile": {
             "annual_revenue": null,
@@ -453,7 +477,7 @@ http_interactions:
           "business_type": "individual",
           "capabilities": {
             "card_payments": "inactive",
-            "transfers": "active"
+            "transfers": "pending"
           },
           "charges_enabled": false,
           "company": {
@@ -495,7 +519,7 @@ http_interactions:
             "type": "application"
           },
           "country": "BG",
-          "created": 1777885542,
+          "created": 1792770398,
           "default_currency": "eur",
           "details_submitted": false,
           "email": null,
@@ -503,9 +527,9 @@ http_interactions:
             "object": "list",
             "data": [
               {
-                "id": "ba_1TTIRcRJ54bAZgCSJ5vwgVci",
+                "id": "ba_1UTkfxRHxU231oS9VdvAwG1K",
                 "object": "bank_account",
-                "account": "acct_1TTIRcRJ54bAZgCS",
+                "account": "acct_1UTkfxRHxU231oS9",
                 "account_holder_name": null,
                 "account_holder_type": null,
                 "account_type": null,
@@ -537,7 +561,7 @@ http_interactions:
             ],
             "has_more": false,
             "total_count": 1,
-            "url": "/v1/accounts/acct_1TTIRcRJ54bAZgCS/external_accounts"
+            "url": "/v1/accounts/acct_1UTkfxRHxU231oS9/external_accounts"
           },
           "future_requirements": {
             "alternatives": [],
@@ -550,9 +574,9 @@ http_interactions:
             "pending_verification": []
           },
           "individual": {
-            "id": "person_1TTIRdRJ54bAZgCSdlS59hBB",
+            "id": "person_1UTkfxRHxU231oS9u49tfMtq",
             "object": "person",
-            "account": "acct_1TTIRcRJ54bAZgCS",
+            "account": "acct_1UTkfxRHxU231oS9",
             "address": {
               "city": "Sofia",
               "country": "BG",
@@ -561,13 +585,13 @@ http_interactions:
               "postal_code": "1000",
               "state": null
             },
-            "created": 1777885541,
+            "created": 1792770397,
             "dob": {
               "day": 1,
               "month": 1,
               "year": 1901
             },
-            "email": "edgar_3@gumroad.com",
+            "email": "edgar_1@gumroad.com",
             "first_name": "Chuck",
             "future_requirements": {
               "alternatives": [],
@@ -597,7 +621,17 @@ http_interactions:
               "errors": [],
               "eventually_due": [],
               "past_due": [],
-              "pending_verification": []
+              "pending_verification": [
+                "address.city",
+                "address.line1",
+                "address.postal_code",
+                "dob.day",
+                "dob.month",
+                "dob.year",
+                "first_name",
+                "last_name",
+                "phone"
+              ]
             },
             "ssn_last_4_provided": true,
             "verification": {
@@ -619,10 +653,10 @@ http_interactions:
             }
           },
           "metadata": {
-            "bank_account_id": "cL9eWoQzVs2QT63DNYkZZg==",
-            "tos_agreement_id": "z-k7JlXJ1MqGvSWSEYzgVQ==",
-            "user_compliance_info_id": "qNDOQZuxI0P3WTbxbAl6DA==",
-            "user_id": "3202313146383"
+            "bank_account_id": "Mi0_2L7YyurpLl33-3GRzA==",
+            "tos_agreement_id": "bmb2BJmZLcpDGxFQ4cxFDQ==",
+            "user_compliance_info_id": "0yQgV_q59N0XeESVPPgLlw==",
+            "user_id": "8336079900873"
           },
           "payouts_enabled": false,
           "requirements": {
@@ -639,7 +673,17 @@ http_interactions:
             "past_due": [
               "business_profile.mcc"
             ],
-            "pending_verification": []
+            "pending_verification": [
+              "individual.address.city",
+              "individual.address.line1",
+              "individual.address.postal_code",
+              "individual.dob.day",
+              "individual.dob.month",
+              "individual.dob.year",
+              "individual.first_name",
+              "individual.last_name",
+              "individual.phone"
+            ]
           },
           "settings": {
             "bacs_debit_payments": {
@@ -697,13 +741,13 @@ http_interactions:
           },
           "type": "custom"
         }
-  recorded_at: Mon, 04 May 2026 09:05:45 GMT
+  recorded_at: Fri, 23 Oct 2026 15:46:41 GMT
 - request:
     method: post
-    uri: https://api.stripe.com/v1/accounts/acct_1TTIRcRJ54bAZgCS
+    uri: https://api.stripe.com/v1/accounts/acct_1UTkfxRHxU231oS9
     body:
       encoding: UTF-8
-      string: metadata[bank_account_id]=a__qznzY0iDNXCcjYG3LLg%3D%3D&metadata[tos_agreement_id]=z-k7JlXJ1MqGvSWSEYzgVQ%3D%3D&metadata[user_compliance_info_id]=qNDOQZuxI0P3WTbxbAl6DA%3D%3D&metadata[user_id]=3202313146383&bank_account[country]=LT&bank_account[currency]=eur&bank_account[account_number]=LT121000011101001000&settings[payouts][schedule][interval]=manual&settings[payouts][debit_negative_balances]=true
+      string: metadata[bank_account_id]=ZquxYl06r2LDCW1AjM6OMg%3D%3D&metadata[tos_agreement_id]=bmb2BJmZLcpDGxFQ4cxFDQ%3D%3D&metadata[user_compliance_info_id]=0yQgV_q59N0XeESVPPgLlw%3D%3D&metadata[user_id]=8336079900873&bank_account[country]=LT&bank_account[currency]=eur&bank_account[account_number]=LT121000011101001000&settings[payouts][schedule][interval]=manual&settings[payouts][debit_negative_balances]=true
     headers:
       User-Agent:
       - Stripe/v1 RubyBindings/12.5.0
@@ -712,15 +756,13 @@ http_interactions:
       Content-Type:
       - application/x-www-form-urlencoded
       X-Stripe-Client-Telemetry:
-      - '{"last_request_metrics":{"request_id":"req_M7HVuD8tb4deTw","request_duration_ms":809}}'
+      - '{"last_request_metrics":{"request_id":"req_HviSwzu5uOytR8","request_duration_ms":533}}'
       Idempotency-Key:
-      - 335838a0-abcf-44b4-8693-ffd7f212af84
+      - c5302eaf-c86b-47d6-b295-20104a96f8c5
       Stripe-Version:
       - '2023-10-16'
       X-Stripe-Client-User-Agent:
-      - '{"bindings_version":"12.5.0","lang":"ruby","lang_version":"3.4.3 p32 (2025-04-14)","platform":"arm64-darwin24","engine":"ruby","publisher":"stripe","uname":"Darwin
-        Is-MacBook-Air.local 25.1.0 Darwin Kernel Version 25.1.0: Mon Oct 20 19:32:56
-        PDT 2025; root:xnu-12377.41.6~2/RELEASE_ARM64_T8132 arm64","hostname":"Is-MacBook-Air.local"}'
+      - "<STRIPE_CLIENT_USER_AGENT>"
       Accept-Encoding:
       - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
       Accept:
@@ -733,11 +775,11 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Mon, 04 May 2026 09:05:48 GMT
+      - Fri, 23 Oct 2026 15:46:43 GMT
       Content-Type:
       - application/json
       Content-Length:
-      - '6411'
+      - '6911'
       Connection:
       - keep-alive
       Access-Control-Allow-Credentials:
@@ -755,21 +797,24 @@ http_interactions:
       - no-cache, no-store
       Content-Security-Policy:
       - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
-        img-src 'self'; script-src 'self' 'report-<RPUSH_CONSUMER_FCM_FIREBASE_PROJECT_ID>';
-        style-src 'self'; worker-src 'none'; upgrade-insecure-requests; report-uri
-        https://q.stripe.com/csp-violation?q=XjacyA1lBPBfyXMbNXZuTW5hInUjdinmlKw8BLHGkFuaushe22IVRVpSmvCjyh_fRZGKtVhg4gdp9BoM
+        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
+        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=4HrgXaSN5Vgdypvhj_-mYxlQI-zt3JFX9fmY1tQRn4d4kZt5XVrTU5EB4nI7qyvlTVGigSBM3bzf4UgO;
+        report-to csp
       Idempotency-Key:
-      - 335838a0-abcf-44b4-8693-ffd7f212af84
+      - c5302eaf-c86b-47d6-b295-20104a96f8c5
       Original-Request:
-      - req_1VJLcx2uyclY6K
+      - req_FDDcnicjWpLI08
       Report-To:
-      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=XjacyA1lBPBfyXMbNXZuTW5hInUjdinmlKw8BLHGkFuaushe22IVRVpSmvCjyh_fRZGKtVhg4gdp9BoM&t=1"}],"include_subdomains":true}'
+      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=4HrgXaSN5Vgdypvhj_-mYxlQI-zt3JFX9fmY1tQRn4d4kZt5XVrTU5EB4nI7qyvlTVGigSBM3bzf4UgO&t=1"}],"include_subdomains":true}'
       Reporting-Endpoints:
-      - csp="https://q.stripe.com/csp-report-v2?q=XjacyA1lBPBfyXMbNXZuTW5hInUjdinmlKw8BLHGkFuaushe22IVRVpSmvCjyh_fRZGKtVhg4gdp9BoM&t=1"
+      - csp="https://q.stripe.com/csp-report-v2?q=4HrgXaSN5Vgdypvhj_-mYxlQI-zt3JFX9fmY1tQRn4d4kZt5XVrTU5EB4nI7qyvlTVGigSBM3bzf4UgO&t=1"
       Request-Id:
-      - req_1VJLcx2uyclY6K
+      - req_FDDcnicjWpLI08
       Stripe-Account:
-      - acct_1TTIRcRJ54bAZgCS
+      - acct_1UTkfxRHxU231oS9
+      Stripe-Notice:
+      - You are using an outdated API version (2023-10-16). We recommend upgrading
+        to the latest API version, 2026-09-30.endive. See https://docs.stripe.com/upgrades
       Stripe-Should-Retry:
       - 'false'
       Stripe-Version:
@@ -788,7 +833,7 @@ http_interactions:
       encoding: UTF-8
       string: |-
         {
-          "id": "acct_1TTIRcRJ54bAZgCS",
+          "id": "acct_1UTkfxRHxU231oS9",
           "object": "account",
           "business_profile": {
             "annual_revenue": null,
@@ -807,7 +852,7 @@ http_interactions:
           "business_type": "individual",
           "capabilities": {
             "card_payments": "inactive",
-            "transfers": "active"
+            "transfers": "pending"
           },
           "charges_enabled": false,
           "company": {
@@ -849,7 +894,7 @@ http_interactions:
             "type": "application"
           },
           "country": "BG",
-          "created": 1777885542,
+          "created": 1792770398,
           "default_currency": "eur",
           "details_submitted": false,
           "email": null,
@@ -857,9 +902,9 @@ http_interactions:
             "object": "list",
             "data": [
               {
-                "id": "ba_1TTIRiRJ54bAZgCSuAAtpxnQ",
+                "id": "ba_1UTkg1RHxU231oS90UO49k3S",
                 "object": "bank_account",
-                "account": "acct_1TTIRcRJ54bAZgCS",
+                "account": "acct_1UTkfxRHxU231oS9",
                 "account_holder_name": null,
                 "account_holder_type": null,
                 "account_type": null,
@@ -891,7 +936,7 @@ http_interactions:
             ],
             "has_more": false,
             "total_count": 1,
-            "url": "/v1/accounts/acct_1TTIRcRJ54bAZgCS/external_accounts"
+            "url": "/v1/accounts/acct_1UTkfxRHxU231oS9/external_accounts"
           },
           "future_requirements": {
             "alternatives": [],
@@ -904,9 +949,9 @@ http_interactions:
             "pending_verification": []
           },
           "individual": {
-            "id": "person_1TTIRdRJ54bAZgCSdlS59hBB",
+            "id": "person_1UTkfxRHxU231oS9u49tfMtq",
             "object": "person",
-            "account": "acct_1TTIRcRJ54bAZgCS",
+            "account": "acct_1UTkfxRHxU231oS9",
             "address": {
               "city": "Sofia",
               "country": "BG",
@@ -915,13 +960,13 @@ http_interactions:
               "postal_code": "1000",
               "state": null
             },
-            "created": 1777885541,
+            "created": 1792770397,
             "dob": {
               "day": 1,
               "month": 1,
               "year": 1901
             },
-            "email": "edgar_3@gumroad.com",
+            "email": "edgar_1@gumroad.com",
             "first_name": "Chuck",
             "future_requirements": {
               "alternatives": [],
@@ -951,7 +996,17 @@ http_interactions:
               "errors": [],
               "eventually_due": [],
               "past_due": [],
-              "pending_verification": []
+              "pending_verification": [
+                "address.city",
+                "address.line1",
+                "address.postal_code",
+                "dob.day",
+                "dob.month",
+                "dob.year",
+                "first_name",
+                "last_name",
+                "phone"
+              ]
             },
             "ssn_last_4_provided": true,
             "verification": {
@@ -973,10 +1028,10 @@ http_interactions:
             }
           },
           "metadata": {
-            "bank_account_id": "a__qznzY0iDNXCcjYG3LLg==",
-            "tos_agreement_id": "z-k7JlXJ1MqGvSWSEYzgVQ==",
-            "user_compliance_info_id": "qNDOQZuxI0P3WTbxbAl6DA==",
-            "user_id": "3202313146383"
+            "bank_account_id": "ZquxYl06r2LDCW1AjM6OMg==",
+            "tos_agreement_id": "bmb2BJmZLcpDGxFQ4cxFDQ==",
+            "user_compliance_info_id": "0yQgV_q59N0XeESVPPgLlw==",
+            "user_id": "8336079900873"
           },
           "payouts_enabled": false,
           "requirements": {
@@ -993,12 +1048,22 @@ http_interactions:
             "past_due": [
               "business_profile.mcc"
             ],
-            "pending_verification": []
+            "pending_verification": [
+              "individual.address.city",
+              "individual.address.line1",
+              "individual.address.postal_code",
+              "individual.dob.day",
+              "individual.dob.month",
+              "individual.dob.year",
+              "individual.first_name",
+              "individual.last_name",
+              "individual.phone"
+            ]
           },
           "settings": {
             "bacs_debit_payments": {
-              "display_name": null,
-              "service_user_number": null
+              "display_name": "Stripe",
+              "service_user_number": "449900"
             },
             "branding": {
               "icon": null,
@@ -1051,10 +1116,10 @@ http_interactions:
           },
           "type": "custom"
         }
-  recorded_at: Mon, 04 May 2026 09:05:48 GMT
+  recorded_at: Fri, 23 Oct 2026 15:46:43 GMT
 - request:
     method: get
-    uri: https://api.stripe.com/v1/accounts/acct_1TTIRcRJ54bAZgCS
+    uri: https://api.stripe.com/v1/accounts/acct_1UTkfxRHxU231oS9
     body:
       encoding: US-ASCII
       string: ''
@@ -1066,13 +1131,11 @@ http_interactions:
       Content-Type:
       - application/x-www-form-urlencoded
       X-Stripe-Client-Telemetry:
-      - '{"last_request_metrics":{"request_id":"req_1VJLcx2uyclY6K","request_duration_ms":2453}}'
+      - '{"last_request_metrics":{"request_id":"req_FDDcnicjWpLI08","request_duration_ms":2515}}'
       Stripe-Version:
       - '2023-10-16'
       X-Stripe-Client-User-Agent:
-      - '{"bindings_version":"12.5.0","lang":"ruby","lang_version":"3.4.3 p32 (2025-04-14)","platform":"arm64-darwin24","engine":"ruby","publisher":"stripe","uname":"Darwin
-        Is-MacBook-Air.local 25.1.0 Darwin Kernel Version 25.1.0: Mon Oct 20 19:32:56
-        PDT 2025; root:xnu-12377.41.6~2/RELEASE_ARM64_T8132 arm64","hostname":"Is-MacBook-Air.local"}'
+      - "<STRIPE_CLIENT_USER_AGENT>"
       Accept-Encoding:
       - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
       Accept:
@@ -1085,11 +1148,11 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Mon, 04 May 2026 09:05:49 GMT
+      - Fri, 23 Oct 2026 15:46:44 GMT
       Content-Type:
       - application/json
       Content-Length:
-      - '6411'
+      - '6911'
       Connection:
       - keep-alive
       Access-Control-Allow-Credentials:
@@ -1107,17 +1170,20 @@ http_interactions:
       - no-cache, no-store
       Content-Security-Policy:
       - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
-        img-src 'self'; script-src 'self' 'report-<RPUSH_CONSUMER_FCM_FIREBASE_PROJECT_ID>';
-        style-src 'self'; worker-src 'none'; upgrade-insecure-requests; report-uri
-        https://q.stripe.com/csp-violation?q=XjacyA1lBPBfyXMbNXZuTW5hInUjdinmlKw8BLHGkFuaushe22IVRVpSmvCjyh_fRZGKtVhg4gdp9BoM
+        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
+        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=4HrgXaSN5Vgdypvhj_-mYxlQI-zt3JFX9fmY1tQRn4d4kZt5XVrTU5EB4nI7qyvlTVGigSBM3bzf4UgO;
+        report-to csp
       Report-To:
-      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=XjacyA1lBPBfyXMbNXZuTW5hInUjdinmlKw8BLHGkFuaushe22IVRVpSmvCjyh_fRZGKtVhg4gdp9BoM&t=1"}],"include_subdomains":true}'
+      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=4HrgXaSN5Vgdypvhj_-mYxlQI-zt3JFX9fmY1tQRn4d4kZt5XVrTU5EB4nI7qyvlTVGigSBM3bzf4UgO&t=1"}],"include_subdomains":true}'
       Reporting-Endpoints:
-      - csp="https://q.stripe.com/csp-report-v2?q=XjacyA1lBPBfyXMbNXZuTW5hInUjdinmlKw8BLHGkFuaushe22IVRVpSmvCjyh_fRZGKtVhg4gdp9BoM&t=1"
+      - csp="https://q.stripe.com/csp-report-v2?q=4HrgXaSN5Vgdypvhj_-mYxlQI-zt3JFX9fmY1tQRn4d4kZt5XVrTU5EB4nI7qyvlTVGigSBM3bzf4UgO&t=1"
       Request-Id:
-      - req_OyMJCSBY1kRX1U
+      - req_HJFC9Hr6ue9Pwc
       Stripe-Account:
-      - acct_1TTIRcRJ54bAZgCS
+      - acct_1UTkfxRHxU231oS9
+      Stripe-Notice:
+      - You are using an outdated API version (2023-10-16). We recommend upgrading
+        to the latest API version, 2026-09-30.endive. See https://docs.stripe.com/upgrades
       Stripe-Version:
       - '2023-10-16'
       Vary:
@@ -1134,7 +1200,7 @@ http_interactions:
       encoding: UTF-8
       string: |-
         {
-          "id": "acct_1TTIRcRJ54bAZgCS",
+          "id": "acct_1UTkfxRHxU231oS9",
           "object": "account",
           "business_profile": {
             "annual_revenue": null,
@@ -1153,7 +1219,7 @@ http_interactions:
           "business_type": "individual",
           "capabilities": {
             "card_payments": "inactive",
-            "transfers": "active"
+            "transfers": "pending"
           },
           "charges_enabled": false,
           "company": {
@@ -1195,7 +1261,7 @@ http_interactions:
             "type": "application"
           },
           "country": "BG",
-          "created": 1777885542,
+          "created": 1792770398,
           "default_currency": "eur",
           "details_submitted": false,
           "email": null,
@@ -1203,9 +1269,9 @@ http_interactions:
             "object": "list",
             "data": [
               {
-                "id": "ba_1TTIRiRJ54bAZgCSuAAtpxnQ",
+                "id": "ba_1UTkg1RHxU231oS90UO49k3S",
                 "object": "bank_account",
-                "account": "acct_1TTIRcRJ54bAZgCS",
+                "account": "acct_1UTkfxRHxU231oS9",
                 "account_holder_name": null,
                 "account_holder_type": null,
                 "account_type": null,
@@ -1237,7 +1303,7 @@ http_interactions:
             ],
             "has_more": false,
             "total_count": 1,
-            "url": "/v1/accounts/acct_1TTIRcRJ54bAZgCS/external_accounts"
+            "url": "/v1/accounts/acct_1UTkfxRHxU231oS9/external_accounts"
           },
           "future_requirements": {
             "alternatives": [],
@@ -1250,9 +1316,9 @@ http_interactions:
             "pending_verification": []
           },
           "individual": {
-            "id": "person_1TTIRdRJ54bAZgCSdlS59hBB",
+            "id": "person_1UTkfxRHxU231oS9u49tfMtq",
             "object": "person",
-            "account": "acct_1TTIRcRJ54bAZgCS",
+            "account": "acct_1UTkfxRHxU231oS9",
             "address": {
               "city": "Sofia",
               "country": "BG",
@@ -1261,13 +1327,13 @@ http_interactions:
               "postal_code": "1000",
               "state": null
             },
-            "created": 1777885541,
+            "created": 1792770397,
             "dob": {
               "day": 1,
               "month": 1,
               "year": 1901
             },
-            "email": "edgar_3@gumroad.com",
+            "email": "edgar_1@gumroad.com",
             "first_name": "Chuck",
             "future_requirements": {
               "alternatives": [],
@@ -1297,7 +1363,17 @@ http_interactions:
               "errors": [],
               "eventually_due": [],
               "past_due": [],
-              "pending_verification": []
+              "pending_verification": [
+                "address.city",
+                "address.line1",
+                "address.postal_code",
+                "dob.day",
+                "dob.month",
+                "dob.year",
+                "first_name",
+                "last_name",
+                "phone"
+              ]
             },
             "ssn_last_4_provided": true,
             "verification": {
@@ -1319,10 +1395,10 @@ http_interactions:
             }
           },
           "metadata": {
-            "bank_account_id": "a__qznzY0iDNXCcjYG3LLg==",
-            "tos_agreement_id": "z-k7JlXJ1MqGvSWSEYzgVQ==",
-            "user_compliance_info_id": "qNDOQZuxI0P3WTbxbAl6DA==",
-            "user_id": "3202313146383"
+            "bank_account_id": "ZquxYl06r2LDCW1AjM6OMg==",
+            "tos_agreement_id": "bmb2BJmZLcpDGxFQ4cxFDQ==",
+            "user_compliance_info_id": "0yQgV_q59N0XeESVPPgLlw==",
+            "user_id": "8336079900873"
           },
           "payouts_enabled": false,
           "requirements": {
@@ -1339,12 +1415,22 @@ http_interactions:
             "past_due": [
               "business_profile.mcc"
             ],
-            "pending_verification": []
+            "pending_verification": [
+              "individual.address.city",
+              "individual.address.line1",
+              "individual.address.postal_code",
+              "individual.dob.day",
+              "individual.dob.month",
+              "individual.dob.year",
+              "individual.first_name",
+              "individual.last_name",
+              "individual.phone"
+            ]
           },
           "settings": {
             "bacs_debit_payments": {
-              "display_name": null,
-              "service_user_number": null
+              "display_name": "Stripe",
+              "service_user_number": "449900"
             },
             "branding": {
               "icon": null,
@@ -1397,5 +1483,127 @@ http_interactions:
           },
           "type": "custom"
         }
-  recorded_at: Mon, 04 May 2026 09:05:49 GMT
+  recorded_at: Fri, 23 Oct 2026 15:46:44 GMT
+- request:
+    method: get
+    uri: https://api.stripe.com/v1/accounts/acct_1UTkfxRHxU231oS9/external_accounts?limit=100
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/12.5.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_HJFC9Hr6ue9Pwc","request_duration_ms":520}}'
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - "<STRIPE_CLIENT_USER_AGENT>"
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Fri, 23 Oct 2026 15:46:44 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '977'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET, HEAD, PUT, PATCH, POST, DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy:
+      - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
+        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=4HrgXaSN5Vgdypvhj_-mYxlQI-zt3JFX9fmY1tQRn4d4kZt5XVrTU5EB4nI7qyvlTVGigSBM3bzf4UgO;
+        report-to csp
+      Report-To:
+      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=4HrgXaSN5Vgdypvhj_-mYxlQI-zt3JFX9fmY1tQRn4d4kZt5XVrTU5EB4nI7qyvlTVGigSBM3bzf4UgO&t=1"}],"include_subdomains":true}'
+      Reporting-Endpoints:
+      - csp="https://q.stripe.com/csp-report-v2?q=4HrgXaSN5Vgdypvhj_-mYxlQI-zt3JFX9fmY1tQRn4d4kZt5XVrTU5EB4nI7qyvlTVGigSBM3bzf4UgO&t=1"
+      Request-Id:
+      - req_6X9PhWqrw6ztnu
+      Stripe-Account:
+      - acct_1UTkfxRHxU231oS9
+      Stripe-Notice:
+      - You are using an outdated API version (2023-10-16). We recommend upgrading
+        to the latest API version, 2026-09-30.endive. See https://docs.stripe.com/upgrades
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Priority-Routing-Enabled:
+      - 'true'
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      X-Wc:
+      - 3c3
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "object": "list",
+          "data": [
+            {
+              "id": "ba_1UTkg1RHxU231oS90UO49k3S",
+              "object": "bank_account",
+              "account": "acct_1UTkfxRHxU231oS9",
+              "account_holder_name": null,
+              "account_holder_type": null,
+              "account_type": null,
+              "available_payout_methods": [
+                "standard"
+              ],
+              "bank_name": "STRIPE TEST BANK",
+              "country": "LT",
+              "currency": "eur",
+              "default_for_currency": true,
+              "fingerprint": "IFXjz7SwQO4Jz8mz",
+              "future_requirements": {
+                "currently_due": [],
+                "errors": [],
+                "past_due": [],
+                "pending_verification": []
+              },
+              "last4": "1000",
+              "metadata": {},
+              "requirements": {
+                "currently_due": [],
+                "errors": [],
+                "past_due": [],
+                "pending_verification": []
+              },
+              "routing_number": "110000000",
+              "status": "new"
+            }
+          ],
+          "has_more": false,
+          "url": "/v1/accounts/acct_1UTkfxRHxU231oS9/external_accounts"
+        }
+  recorded_at: Fri, 23 Oct 2026 15:46:44 GMT
 recorded_with: VCR 6.2.0

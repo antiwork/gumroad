@@ -5,25 +5,22 @@ http_interactions:
     uri: https://api.stripe.com/v1/accounts
     body:
       encoding: UTF-8
-      string: type=custom&requested_capabilities[0]=card_payments&requested_capabilities[1]=transfers&country=US&default_currency=usd&metadata[user_id]=5871412304037&metadata[tos_agreement_id]=c-XP9hGy5rHZLPM1tA5xnw%3D%3D&metadata[user_compliance_info_id]=ZNAihetfsujAVlG3Ia7KPw%3D%3D&metadata[bank_account_id]=c-XP9hGy5rHZLPM1tA5xnw%3D%3D&tos_acceptance[date]=1710146066&tos_acceptance[ip]=54.234.242.13&business_type=individual&business_profile[name]=Chuck+Bartowski&business_profile[url]=https%3A%2F%2Fvipul.gumroad.com%2F&business_profile[product_description]=Chuck+Bartowski&individual[first_name]=Chuck&individual[last_name]=Bartowski&individual[email]=chuck%40gum.com&individual[phone]=0000000000&individual[address][line1]=address_full_match&individual[address][city]=San+Francisco&individual[address][state]=California&individual[address][postal_code]=94107&individual[address][country]=US&individual[dob][day]=1&individual[dob][month]=1&individual[dob][year]=1901&individual[id_number]=000000000&bank_account[country]=US&bank_account[currency]=usd&bank_account[account_number]=000123456789&bank_account[routing_number]=110000000&settings[payouts][schedule][interval]=manual&settings[payouts][debit_negative_balances]=true
+      string: type=custom&requested_capabilities[0]=card_payments&requested_capabilities[1]=transfers&country=US&default_currency=usd&metadata[user_id]=5871412304037&metadata[tos_agreement_id]=c-XP9hGy5rHZLPM1tA5xnw%3D%3D&metadata[user_compliance_info_id]=ZNAihetfsujAVlG3Ia7KPw%3D%3D&metadata[bank_account_id]=IJzWHbepesOCe9f6k7QlJQ%3D%3D&tos_acceptance[date]=1792769296&tos_acceptance[ip]=54.234.242.13&business_type=individual&business_profile[name]=Chuck+Bartowski&business_profile[url]=https%3A%2F%2Fvipul.gumroad.com%2F&business_profile[product_description]=Chuck+Bartowski&individual[first_name]=Chuck&individual[last_name]=Bartowski&individual[email]=chuck%40gum.com&individual[phone]=0000000000&individual[dob][day]=1&individual[dob][month]=1&individual[dob][year]=1901&individual[address][line1]=address_full_match&individual[address][city]=San+Francisco&individual[address][state]=California&individual[address][postal_code]=94107&individual[address][country]=US&individual[id_number]=000000000&bank_account[country]=US&bank_account[currency]=usd&bank_account[account_number]=000<STRONGBOX_GENERAL_PASSWORD>56789&bank_account[routing_number]=110000000&settings[payouts][schedule][interval]=manual&settings[payouts][debit_negative_balances]=true
     headers:
       User-Agent:
-      - Stripe/v1 RubyBindings/10.11.0
+      - Stripe/v1 RubyBindings/12.5.0
       Authorization:
       - Bearer <STRIPE_API_KEY>
       Content-Type:
       - application/x-www-form-urlencoded
       X-Stripe-Client-Telemetry:
-      - '{"last_request_metrics":{"request_id":"req_FX4E6R5coTuSrM","request_duration_ms":9832}}'
+      - '{"last_request_metrics":{"request_id":"req_hkdyUYzoGxKqly","request_duration_ms":0}}'
       Idempotency-Key:
-      - b8213d3c-8cac-49da-aa54-cc27eec51021
+      - 21cc8971-6a40-48b6-8f8a-c3302dacea87
       Stripe-Version:
       - '2023-10-16'
       X-Stripe-Client-User-Agent:
-      - '{"bindings_version":"10.11.0","lang":"ruby","lang_version":"3.2.2 p53 (2023-03-30)","platform":"x86_64-linux","engine":"ruby","publisher":"stripe","uname":"Linux
-        version 6.5.0-25-generic (buildd@lcy02-amd64-054) (x86_64-linux-gnu-gcc-13
-        (Ubuntu 13.2.0-4ubuntu3) 13.2.0, GNU ld (GNU Binutils for Ubuntu) 2.41) #25-Ubuntu
-        SMP PREEMPT_DYNAMIC Wed Feb  7 14:58:39 UTC 2024","hostname":"dell"}'
+      - "<STRIPE_CLIENT_USER_AGENT>"
       Accept-Encoding:
       - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
       Accept:
@@ -36,17 +33,17 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Mon, 11 Mar 2024 08:34:30 GMT
+      - Fri, 23 Oct 2026 15:28:19 GMT
       Content-Type:
       - application/json
       Content-Length:
-      - '7375'
+      - '6841'
       Connection:
       - keep-alive
       Access-Control-Allow-Credentials:
       - 'true'
       Access-Control-Allow-Methods:
-      - GET,HEAD,PUT,PATCH,POST,DELETE
+      - GET, HEAD, PUT, PATCH, POST, DELETE
       Access-Control-Allow-Origin:
       - "*"
       Access-Control-Expose-Headers:
@@ -57,39 +54,53 @@ http_interactions:
       Cache-Control:
       - no-cache, no-store
       Content-Security-Policy:
-      - report-uri https://q.stripe.com/csp-report?p=v1%2Faccounts; block-all-mixed-content;
-        default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';
-        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'
-      Cross-Origin-Opener-Policy-Report-Only:
-      - same-origin; report-to=https://q.stripe.com/coop-report
+      - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
+        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=ws6m9swPk-AB5WXa79Kr6TZ1rrT-n1zbCtXYue_U32h3t7jtRGsB51dJX82NKfoT9ioWknZBwYckU4YN;
+        report-to csp
       Idempotency-Key:
-      - b8213d3c-8cac-49da-aa54-cc27eec51021
+      - 21cc8971-6a40-48b6-8f8a-c3302dacea87
       Original-Request:
-      - req_8f3UMOZjxyGa17
+      - req_A1pxKawfERLifa
+      Report-To:
+      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=ws6m9swPk-AB5WXa79Kr6TZ1rrT-n1zbCtXYue_U32h3t7jtRGsB51dJX82NKfoT9ioWknZBwYckU4YN&t=1"}],"include_subdomains":true}'
+      Reporting-Endpoints:
+      - csp="https://q.stripe.com/csp-report-v2?q=ws6m9swPk-AB5WXa79Kr6TZ1rrT-n1zbCtXYue_U32h3t7jtRGsB51dJX82NKfoT9ioWknZBwYckU4YN&t=1"
       Request-Id:
-      - req_8f3UMOZjxyGa17
+      - req_A1pxKawfERLifa
+      Stripe-Notice:
+      - '2 notices for this request: (1) We recommend building your integration using
+        Accounts v2. See https://docs.stripe.com/api/v2/core/accounts (2) You are
+        using an outdated API version (2023-10-16). We recommend upgrading to the
+        latest API version, 2026-09-30.endive. See https://docs.stripe.com/upgrades'
       Stripe-Should-Retry:
       - 'false'
       Stripe-Version:
       - '2023-10-16'
       Vary:
       - Origin
+      X-Stripe-Priority-Routing-Enabled:
+      - 'true'
       X-Stripe-Routing-Context-Priority-Tier:
       - api-testmode
+      X-Wc:
+      - 3c3
       Strict-Transport-Security:
       - max-age=63072000; includeSubDomains; preload
     body:
       encoding: UTF-8
       string: |-
         {
-          "id": "acct_1Ot4JSS89LolKnc0",
+          "id": "acct_1UTkODEdoiNUaaDA",
           "object": "account",
           "business_profile": {
             "annual_revenue": null,
             "estimated_worker_count": null,
-            "mcc": "5192",
+            "mcc": null,
+            "minority_owned_business_designation": null,
             "name": "Chuck Bartowski",
             "product_description": "Chuck Bartowski",
+            "specified_commercial_transactions_act_url": null,
             "support_address": null,
             "support_email": null,
             "support_phone": null,
@@ -98,8 +109,8 @@ http_interactions:
           },
           "business_type": "individual",
           "capabilities": {
-            "card_payments": "pending",
-            "transfers": "pending"
+            "card_payments": "inactive",
+            "transfers": "active"
           },
           "charges_enabled": false,
           "company": {
@@ -126,8 +137,22 @@ http_interactions:
               }
             }
           },
+          "controller": {
+            "fees": {
+              "payer": "application_custom"
+            },
+            "is_controller": true,
+            "losses": {
+              "payments": "application"
+            },
+            "requirement_collection": "application",
+            "stripe_dashboard": {
+              "type": "none"
+            },
+            "type": "application"
+          },
           "country": "US",
-          "created": 1710146068,
+          "created": 1792769298,
           "default_currency": "usd",
           "details_submitted": true,
           "email": null,
@@ -135,9 +160,9 @@ http_interactions:
             "object": "list",
             "data": [
               {
-                "id": "ba_1Ot4JSS89LolKnc0m9s6EqVx",
+                "id": "ba_1UTkODEdoiNUaaDAy7edrfaE",
                 "object": "bank_account",
-                "account": "acct_1Ot4JSS89LolKnc0",
+                "account": "acct_1UTkODEdoiNUaaDA",
                 "account_holder_name": null,
                 "account_holder_type": null,
                 "account_type": null,
@@ -149,7 +174,7 @@ http_interactions:
                 "country": "US",
                 "currency": "usd",
                 "default_for_currency": true,
-                "fingerprint": "dx7dqwoGHEQDKLLK",
+                "fingerprint": "l0OxwqZbI4t8wVSU",
                 "future_requirements": {
                   "currently_due": [],
                   "errors": [],
@@ -170,40 +195,22 @@ http_interactions:
             ],
             "has_more": false,
             "total_count": 1,
-            "url": "/v1/accounts/acct_1Ot4JSS89LolKnc0/external_accounts"
+            "url": "/v1/accounts/acct_1UTkODEdoiNUaaDA/external_accounts"
           },
           "future_requirements": {
             "alternatives": [],
-            "current_deadline": 1713294000,
-            "currently_due": [
-              "individual.phone"
-            ],
+            "current_deadline": null,
+            "currently_due": [],
             "disabled_reason": null,
-            "errors": [
-              {
-                "code": "invalid_phone_number",
-                "reason": "This field must contain a valid phone number for your country, or it has too many repeating or sequential numbers. +10000000000 is not a valid phone number.",
-                "requirement": "individual.phone"
-              }
-            ],
-            "eventually_due": [
-              "individual.phone"
-            ],
+            "errors": [],
+            "eventually_due": [],
             "past_due": [],
-            "pending_verification": [
-              "business_profile.url",
-              "individual.address.city",
-              "individual.address.line1",
-              "individual.address.postal_code",
-              "individual.address.state",
-              "individual.id_number",
-              "individual.verification.document"
-            ]
+            "pending_verification": []
           },
           "individual": {
-            "id": "person_1Ot4JTS89LolKnc01jSmiUjr",
+            "id": "person_1UTkODEdoiNUaaDAJ2SQpkAJ",
             "object": "person",
-            "account": "acct_1Ot4JSS89LolKnc0",
+            "account": "acct_1UTkODEdoiNUaaDA",
             "address": {
               "city": "San Francisco",
               "country": "US",
@@ -212,7 +219,7 @@ http_interactions:
               "postal_code": "94107",
               "state": "California"
             },
-            "created": 1710146068,
+            "created": 1792769297,
             "dob": {
               "day": 1,
               "month": 1,
@@ -222,34 +229,18 @@ http_interactions:
             "first_name": "Chuck",
             "future_requirements": {
               "alternatives": [],
-              "currently_due": [
-                "phone"
-              ],
-              "errors": [
-                {
-                  "code": "invalid_phone_number",
-                  "reason": "This field must contain a valid phone number for your country, or it has too many repeating or sequential numbers. +10000000000 is not a valid phone number.",
-                  "requirement": "phone"
-                }
-              ],
-              "eventually_due": [
-                "phone"
-              ],
+              "currently_due": [],
+              "errors": [],
+              "eventually_due": [],
               "past_due": [],
-              "pending_verification": [
-                "address.city",
-                "address.line1",
-                "address.postal_code",
-                "address.state",
-                "id_number",
-                "verification.document"
-              ]
+              "pending_verification": []
             },
             "id_number_provided": true,
             "last_name": "Bartowski",
             "metadata": {},
             "phone": "+10000000000",
             "relationship": {
+              "authorizer": false,
               "director": false,
               "executive": false,
               "legal_guardian": false,
@@ -293,7 +284,7 @@ http_interactions:
             }
           },
           "metadata": {
-            "bank_account_id": "c-XP9hGy5rHZLPM1tA5xnw==",
+            "bank_account_id": "IJzWHbepesOCe9f6k7QlJQ==",
             "tos_agreement_id": "c-XP9hGy5rHZLPM1tA5xnw==",
             "user_compliance_info_id": "ZNAihetfsujAVlG3Ia7KPw==",
             "user_id": "5871412304037"
@@ -302,11 +293,17 @@ http_interactions:
           "requirements": {
             "alternatives": [],
             "current_deadline": null,
-            "currently_due": [],
-            "disabled_reason": "requirements.pending_verification",
+            "currently_due": [
+              "business_profile.mcc"
+            ],
+            "disabled_reason": "requirements.past_due",
             "errors": [],
-            "eventually_due": [],
-            "past_due": [],
+            "eventually_due": [
+              "business_profile.mcc"
+            ],
+            "past_due": [
+              "business_profile.mcc"
+            ],
             "pending_verification": [
               "individual.address.city",
               "individual.address.line1",
@@ -343,11 +340,12 @@ http_interactions:
               "statement_descriptor_prefix_kanji": null
             },
             "dashboard": {
-              "display_name": "vipul.gumroad",
+              "display_name": "Chuck Bartowski",
               "timezone": "Etc/UTC"
             },
             "invoices": {
-              "default_account_tax_ids": null
+              "default_account_tax_ids": null,
+              "hosted_payment_method_save": "offer"
             },
             "payments": {
               "statement_descriptor": "CHUCK BARTOWSKI",
@@ -357,7 +355,7 @@ http_interactions:
             "payouts": {
               "debit_negative_balances": true,
               "schedule": {
-                "delay_days": 1,
+                "delay_days": 2,
                 "interval": "manual"
               },
               "statement_descriptor": null
@@ -365,35 +363,32 @@ http_interactions:
             "sepa_debit_payments": {}
           },
           "tos_acceptance": {
-            "date": 1710146066,
+            "date": 1792769296,
             "ip": "54.234.242.13",
             "user_agent": null
           },
           "type": "custom"
         }
-  recorded_at: Mon, 11 Mar 2024 08:34:30 GMT
+  recorded_at: Fri, 23 Oct 2026 15:28:19 GMT
 - request:
     method: get
-    uri: https://api.stripe.com/v1/accounts/acct_1Ot4JSS89LolKnc0
+    uri: https://api.stripe.com/v1/accounts/acct_1UTkODEdoiNUaaDA
     body:
       encoding: US-ASCII
       string: ''
     headers:
       User-Agent:
-      - Stripe/v1 RubyBindings/10.11.0
+      - Stripe/v1 RubyBindings/12.5.0
       Authorization:
       - Bearer <STRIPE_API_KEY>
       Content-Type:
       - application/x-www-form-urlencoded
       X-Stripe-Client-Telemetry:
-      - '{"last_request_metrics":{"request_id":"req_8f3UMOZjxyGa17","request_duration_ms":4076}}'
+      - '{"last_request_metrics":{"request_id":"req_A1pxKawfERLifa","request_duration_ms":2989}}'
       Stripe-Version:
       - '2023-10-16'
       X-Stripe-Client-User-Agent:
-      - '{"bindings_version":"10.11.0","lang":"ruby","lang_version":"3.2.2 p53 (2023-03-30)","platform":"x86_64-linux","engine":"ruby","publisher":"stripe","uname":"Linux
-        version 6.5.0-25-generic (buildd@lcy02-amd64-054) (x86_64-linux-gnu-gcc-13
-        (Ubuntu 13.2.0-4ubuntu3) 13.2.0, GNU ld (GNU Binutils for Ubuntu) 2.41) #25-Ubuntu
-        SMP PREEMPT_DYNAMIC Wed Feb  7 14:58:39 UTC 2024","hostname":"dell"}'
+      - "<STRIPE_CLIENT_USER_AGENT>"
       Accept-Encoding:
       - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
       Accept:
@@ -406,17 +401,17 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Mon, 11 Mar 2024 08:34:31 GMT
+      - Fri, 23 Oct 2026 15:28:20 GMT
       Content-Type:
       - application/json
       Content-Length:
-      - '7375'
+      - '6841'
       Connection:
       - keep-alive
       Access-Control-Allow-Credentials:
       - 'true'
       Access-Control-Allow-Methods:
-      - GET,HEAD,PUT,PATCH,POST,DELETE
+      - GET, HEAD, PUT, PATCH, POST, DELETE
       Access-Control-Allow-Origin:
       - "*"
       Access-Control-Expose-Headers:
@@ -427,35 +422,47 @@ http_interactions:
       Cache-Control:
       - no-cache, no-store
       Content-Security-Policy:
-      - report-uri https://q.stripe.com/csp-report?p=v1%2Faccounts%2F%3Aaccount; block-all-mixed-content;
-        default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';
-        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'
-      Cross-Origin-Opener-Policy-Report-Only:
-      - same-origin; report-to=https://q.stripe.com/coop-report
+      - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
+        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=ws6m9swPk-AB5WXa79Kr6TZ1rrT-n1zbCtXYue_U32h3t7jtRGsB51dJX82NKfoT9ioWknZBwYckU4YN;
+        report-to csp
+      Report-To:
+      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=ws6m9swPk-AB5WXa79Kr6TZ1rrT-n1zbCtXYue_U32h3t7jtRGsB51dJX82NKfoT9ioWknZBwYckU4YN&t=1"}],"include_subdomains":true}'
+      Reporting-Endpoints:
+      - csp="https://q.stripe.com/csp-report-v2?q=ws6m9swPk-AB5WXa79Kr6TZ1rrT-n1zbCtXYue_U32h3t7jtRGsB51dJX82NKfoT9ioWknZBwYckU4YN&t=1"
       Request-Id:
-      - req_v1hX8aiMkveGJX
+      - req_KjZFFXJpyPBF49
       Stripe-Account:
-      - acct_1Ot4JSS89LolKnc0
+      - acct_1UTkODEdoiNUaaDA
+      Stripe-Notice:
+      - You are using an outdated API version (2023-10-16). We recommend upgrading
+        to the latest API version, 2026-09-30.endive. See https://docs.stripe.com/upgrades
       Stripe-Version:
       - '2023-10-16'
       Vary:
       - Origin
+      X-Stripe-Priority-Routing-Enabled:
+      - 'true'
       X-Stripe-Routing-Context-Priority-Tier:
       - api-testmode
+      X-Wc:
+      - 3c3
       Strict-Transport-Security:
       - max-age=63072000; includeSubDomains; preload
     body:
       encoding: UTF-8
       string: |-
         {
-          "id": "acct_1Ot4JSS89LolKnc0",
+          "id": "acct_1UTkODEdoiNUaaDA",
           "object": "account",
           "business_profile": {
             "annual_revenue": null,
             "estimated_worker_count": null,
-            "mcc": "5192",
+            "mcc": null,
+            "minority_owned_business_designation": null,
             "name": "Chuck Bartowski",
             "product_description": "Chuck Bartowski",
+            "specified_commercial_transactions_act_url": null,
             "support_address": null,
             "support_email": null,
             "support_phone": null,
@@ -464,8 +471,8 @@ http_interactions:
           },
           "business_type": "individual",
           "capabilities": {
-            "card_payments": "pending",
-            "transfers": "pending"
+            "card_payments": "inactive",
+            "transfers": "active"
           },
           "charges_enabled": false,
           "company": {
@@ -492,8 +499,22 @@ http_interactions:
               }
             }
           },
+          "controller": {
+            "fees": {
+              "payer": "application_custom"
+            },
+            "is_controller": true,
+            "losses": {
+              "payments": "application"
+            },
+            "requirement_collection": "application",
+            "stripe_dashboard": {
+              "type": "none"
+            },
+            "type": "application"
+          },
           "country": "US",
-          "created": 1710146068,
+          "created": 1792769298,
           "default_currency": "usd",
           "details_submitted": true,
           "email": null,
@@ -501,9 +522,9 @@ http_interactions:
             "object": "list",
             "data": [
               {
-                "id": "ba_1Ot4JSS89LolKnc0m9s6EqVx",
+                "id": "ba_1UTkODEdoiNUaaDAy7edrfaE",
                 "object": "bank_account",
-                "account": "acct_1Ot4JSS89LolKnc0",
+                "account": "acct_1UTkODEdoiNUaaDA",
                 "account_holder_name": null,
                 "account_holder_type": null,
                 "account_type": null,
@@ -515,7 +536,7 @@ http_interactions:
                 "country": "US",
                 "currency": "usd",
                 "default_for_currency": true,
-                "fingerprint": "dx7dqwoGHEQDKLLK",
+                "fingerprint": "l0OxwqZbI4t8wVSU",
                 "future_requirements": {
                   "currently_due": [],
                   "errors": [],
@@ -536,40 +557,22 @@ http_interactions:
             ],
             "has_more": false,
             "total_count": 1,
-            "url": "/v1/accounts/acct_1Ot4JSS89LolKnc0/external_accounts"
+            "url": "/v1/accounts/acct_1UTkODEdoiNUaaDA/external_accounts"
           },
           "future_requirements": {
             "alternatives": [],
-            "current_deadline": 1713294000,
-            "currently_due": [
-              "individual.phone"
-            ],
+            "current_deadline": null,
+            "currently_due": [],
             "disabled_reason": null,
-            "errors": [
-              {
-                "code": "invalid_phone_number",
-                "reason": "This field must contain a valid phone number for your country, or it has too many repeating or sequential numbers. +10000000000 is not a valid phone number.",
-                "requirement": "individual.phone"
-              }
-            ],
-            "eventually_due": [
-              "individual.phone"
-            ],
+            "errors": [],
+            "eventually_due": [],
             "past_due": [],
-            "pending_verification": [
-              "business_profile.url",
-              "individual.address.city",
-              "individual.address.line1",
-              "individual.address.postal_code",
-              "individual.address.state",
-              "individual.id_number",
-              "individual.verification.document"
-            ]
+            "pending_verification": []
           },
           "individual": {
-            "id": "person_1Ot4JTS89LolKnc01jSmiUjr",
+            "id": "person_1UTkODEdoiNUaaDAJ2SQpkAJ",
             "object": "person",
-            "account": "acct_1Ot4JSS89LolKnc0",
+            "account": "acct_1UTkODEdoiNUaaDA",
             "address": {
               "city": "San Francisco",
               "country": "US",
@@ -578,7 +581,7 @@ http_interactions:
               "postal_code": "94107",
               "state": "California"
             },
-            "created": 1710146068,
+            "created": 1792769297,
             "dob": {
               "day": 1,
               "month": 1,
@@ -588,34 +591,18 @@ http_interactions:
             "first_name": "Chuck",
             "future_requirements": {
               "alternatives": [],
-              "currently_due": [
-                "phone"
-              ],
-              "errors": [
-                {
-                  "code": "invalid_phone_number",
-                  "reason": "This field must contain a valid phone number for your country, or it has too many repeating or sequential numbers. +10000000000 is not a valid phone number.",
-                  "requirement": "phone"
-                }
-              ],
-              "eventually_due": [
-                "phone"
-              ],
+              "currently_due": [],
+              "errors": [],
+              "eventually_due": [],
               "past_due": [],
-              "pending_verification": [
-                "address.city",
-                "address.line1",
-                "address.postal_code",
-                "address.state",
-                "id_number",
-                "verification.document"
-              ]
+              "pending_verification": []
             },
             "id_number_provided": true,
             "last_name": "Bartowski",
             "metadata": {},
             "phone": "+10000000000",
             "relationship": {
+              "authorizer": false,
               "director": false,
               "executive": false,
               "legal_guardian": false,
@@ -659,7 +646,7 @@ http_interactions:
             }
           },
           "metadata": {
-            "bank_account_id": "c-XP9hGy5rHZLPM1tA5xnw==",
+            "bank_account_id": "IJzWHbepesOCe9f6k7QlJQ==",
             "tos_agreement_id": "c-XP9hGy5rHZLPM1tA5xnw==",
             "user_compliance_info_id": "ZNAihetfsujAVlG3Ia7KPw==",
             "user_id": "5871412304037"
@@ -668,11 +655,17 @@ http_interactions:
           "requirements": {
             "alternatives": [],
             "current_deadline": null,
-            "currently_due": [],
-            "disabled_reason": "requirements.pending_verification",
+            "currently_due": [
+              "business_profile.mcc"
+            ],
+            "disabled_reason": "requirements.past_due",
             "errors": [],
-            "eventually_due": [],
-            "past_due": [],
+            "eventually_due": [
+              "business_profile.mcc"
+            ],
+            "past_due": [
+              "business_profile.mcc"
+            ],
             "pending_verification": [
               "individual.address.city",
               "individual.address.line1",
@@ -709,11 +702,12 @@ http_interactions:
               "statement_descriptor_prefix_kanji": null
             },
             "dashboard": {
-              "display_name": "vipul.gumroad",
+              "display_name": "Chuck Bartowski",
               "timezone": "Etc/UTC"
             },
             "invoices": {
-              "default_account_tax_ids": null
+              "default_account_tax_ids": null,
+              "hosted_payment_method_save": "offer"
             },
             "payments": {
               "statement_descriptor": "CHUCK BARTOWSKI",
@@ -723,7 +717,7 @@ http_interactions:
             "payouts": {
               "debit_negative_balances": true,
               "schedule": {
-                "delay_days": 1,
+                "delay_days": 2,
                 "interval": "manual"
               },
               "statement_descriptor": null
@@ -731,37 +725,34 @@ http_interactions:
             "sepa_debit_payments": {}
           },
           "tos_acceptance": {
-            "date": 1710146066,
+            "date": 1792769296,
             "ip": "54.234.242.13",
             "user_agent": null
           },
           "type": "custom"
         }
-  recorded_at: Mon, 11 Mar 2024 08:34:31 GMT
+  recorded_at: Fri, 23 Oct 2026 15:28:20 GMT
 - request:
     method: post
-    uri: https://api.stripe.com/v1/accounts/acct_1Ot4JSS89LolKnc0
+    uri: https://api.stripe.com/v1/accounts/acct_1UTkODEdoiNUaaDA
     body:
       encoding: UTF-8
-      string: metadata[bank_account_id]=-PURysMRznHezLyPac567A%3D%3D&metadata[tos_agreement_id]=c-XP9hGy5rHZLPM1tA5xnw%3D%3D&metadata[user_compliance_info_id]=ZNAihetfsujAVlG3Ia7KPw%3D%3D&metadata[user_id]=5871412304037&bank_account[country]=US&bank_account[currency]=usd&bank_account[account_number]=000123456789&bank_account[routing_number]=110000000&settings[payouts][schedule][interval]=manual&settings[payouts][debit_negative_balances]=true
+      string: metadata[bank_account_id]=-PURysMRznHezLyPac567A%3D%3D&metadata[tos_agreement_id]=c-XP9hGy5rHZLPM1tA5xnw%3D%3D&metadata[user_compliance_info_id]=ZNAihetfsujAVlG3Ia7KPw%3D%3D&metadata[user_id]=5871412304037&bank_account[country]=US&bank_account[currency]=usd&bank_account[account_number]=000<STRONGBOX_GENERAL_PASSWORD>56789&bank_account[routing_number]=110000000&settings[payouts][schedule][interval]=manual&settings[payouts][debit_negative_balances]=true
     headers:
       User-Agent:
-      - Stripe/v1 RubyBindings/10.11.0
+      - Stripe/v1 RubyBindings/12.5.0
       Authorization:
       - Bearer <STRIPE_API_KEY>
       Content-Type:
       - application/x-www-form-urlencoded
       X-Stripe-Client-Telemetry:
-      - '{"last_request_metrics":{"request_id":"req_v1hX8aiMkveGJX","request_duration_ms":786}}'
+      - '{"last_request_metrics":{"request_id":"req_KjZFFXJpyPBF49","request_duration_ms":522}}'
       Idempotency-Key:
-      - 4a877da9-710e-47b5-953b-7f7244d8e05a
+      - 53ea6aac-9145-4f28-8da3-ca33680eebca
       Stripe-Version:
       - '2023-10-16'
       X-Stripe-Client-User-Agent:
-      - '{"bindings_version":"10.11.0","lang":"ruby","lang_version":"3.2.2 p53 (2023-03-30)","platform":"x86_64-linux","engine":"ruby","publisher":"stripe","uname":"Linux
-        version 6.5.0-25-generic (buildd@lcy02-amd64-054) (x86_64-linux-gnu-gcc-13
-        (Ubuntu 13.2.0-4ubuntu3) 13.2.0, GNU ld (GNU Binutils for Ubuntu) 2.41) #25-Ubuntu
-        SMP PREEMPT_DYNAMIC Wed Feb  7 14:58:39 UTC 2024","hostname":"dell"}'
+      - "<STRIPE_CLIENT_USER_AGENT>"
       Accept-Encoding:
       - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
       Accept:
@@ -774,17 +765,17 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Mon, 11 Mar 2024 08:34:34 GMT
+      - Fri, 23 Oct 2026 15:28:22 GMT
       Content-Type:
       - application/json
       Content-Length:
-      - '6883'
+      - '6849'
       Connection:
       - keep-alive
       Access-Control-Allow-Credentials:
       - 'true'
       Access-Control-Allow-Methods:
-      - GET,HEAD,PUT,PATCH,POST,DELETE
+      - GET, HEAD, PUT, PATCH, POST, DELETE
       Access-Control-Allow-Origin:
       - "*"
       Access-Control-Expose-Headers:
@@ -795,41 +786,53 @@ http_interactions:
       Cache-Control:
       - no-cache, no-store
       Content-Security-Policy:
-      - report-uri https://q.stripe.com/csp-report?p=v1%2Faccounts%2F%3Aaccount; block-all-mixed-content;
-        default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';
-        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'
-      Cross-Origin-Opener-Policy-Report-Only:
-      - same-origin; report-to=https://q.stripe.com/coop-report
+      - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
+        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=ws6m9swPk-AB5WXa79Kr6TZ1rrT-n1zbCtXYue_U32h3t7jtRGsB51dJX82NKfoT9ioWknZBwYckU4YN;
+        report-to csp
       Idempotency-Key:
-      - 4a877da9-710e-47b5-953b-7f7244d8e05a
+      - 53ea6aac-9145-4f28-8da3-ca33680eebca
       Original-Request:
-      - req_phgl2Ba3AVEobz
+      - req_EJtaKU1uSFlMrl
+      Report-To:
+      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=ws6m9swPk-AB5WXa79Kr6TZ1rrT-n1zbCtXYue_U32h3t7jtRGsB51dJX82NKfoT9ioWknZBwYckU4YN&t=1"}],"include_subdomains":true}'
+      Reporting-Endpoints:
+      - csp="https://q.stripe.com/csp-report-v2?q=ws6m9swPk-AB5WXa79Kr6TZ1rrT-n1zbCtXYue_U32h3t7jtRGsB51dJX82NKfoT9ioWknZBwYckU4YN&t=1"
       Request-Id:
-      - req_phgl2Ba3AVEobz
+      - req_EJtaKU1uSFlMrl
       Stripe-Account:
-      - acct_1Ot4JSS89LolKnc0
+      - acct_1UTkODEdoiNUaaDA
+      Stripe-Notice:
+      - You are using an outdated API version (2023-10-16). We recommend upgrading
+        to the latest API version, 2026-09-30.endive. See https://docs.stripe.com/upgrades
       Stripe-Should-Retry:
       - 'false'
       Stripe-Version:
       - '2023-10-16'
       Vary:
       - Origin
+      X-Stripe-Priority-Routing-Enabled:
+      - 'true'
       X-Stripe-Routing-Context-Priority-Tier:
       - api-testmode
+      X-Wc:
+      - 3c3
       Strict-Transport-Security:
       - max-age=63072000; includeSubDomains; preload
     body:
       encoding: UTF-8
       string: |-
         {
-          "id": "acct_1Ot4JSS89LolKnc0",
+          "id": "acct_1UTkODEdoiNUaaDA",
           "object": "account",
           "business_profile": {
             "annual_revenue": null,
             "estimated_worker_count": null,
-            "mcc": "5192",
+            "mcc": null,
+            "minority_owned_business_designation": null,
             "name": "Chuck Bartowski",
             "product_description": "Chuck Bartowski",
+            "specified_commercial_transactions_act_url": null,
             "support_address": null,
             "support_email": null,
             "support_phone": null,
@@ -838,8 +841,8 @@ http_interactions:
           },
           "business_type": "individual",
           "capabilities": {
-            "card_payments": "pending",
-            "transfers": "pending"
+            "card_payments": "inactive",
+            "transfers": "active"
           },
           "charges_enabled": false,
           "company": {
@@ -866,8 +869,22 @@ http_interactions:
               }
             }
           },
+          "controller": {
+            "fees": {
+              "payer": "application_custom"
+            },
+            "is_controller": true,
+            "losses": {
+              "payments": "application"
+            },
+            "requirement_collection": "application",
+            "stripe_dashboard": {
+              "type": "none"
+            },
+            "type": "application"
+          },
           "country": "US",
-          "created": 1710146068,
+          "created": 1792769298,
           "default_currency": "usd",
           "details_submitted": true,
           "email": null,
@@ -875,9 +892,9 @@ http_interactions:
             "object": "list",
             "data": [
               {
-                "id": "ba_1Ot4JYS89LolKnc0BNLGWVh9",
+                "id": "ba_1UTkOHEdoiNUaaDA5TZmfwSV",
                 "object": "bank_account",
-                "account": "acct_1Ot4JSS89LolKnc0",
+                "account": "acct_1UTkODEdoiNUaaDA",
                 "account_holder_name": null,
                 "account_holder_type": null,
                 "account_type": null,
@@ -889,7 +906,7 @@ http_interactions:
                 "country": "US",
                 "currency": "usd",
                 "default_for_currency": true,
-                "fingerprint": "dx7dqwoGHEQDKLLK",
+                "fingerprint": "l0OxwqZbI4t8wVSU",
                 "future_requirements": {
                   "currently_due": [],
                   "errors": [],
@@ -910,36 +927,22 @@ http_interactions:
             ],
             "has_more": false,
             "total_count": 1,
-            "url": "/v1/accounts/acct_1Ot4JSS89LolKnc0/external_accounts"
+            "url": "/v1/accounts/acct_1UTkODEdoiNUaaDA/external_accounts"
           },
           "future_requirements": {
             "alternatives": [],
-            "current_deadline": 1713294000,
-            "currently_due": [
-              "individual.phone"
-            ],
+            "current_deadline": null,
+            "currently_due": [],
             "disabled_reason": null,
-            "errors": [
-              {
-                "code": "invalid_phone_number",
-                "reason": "This field must contain a valid phone number for your country, or it has too many repeating or sequential numbers. +10000000000 is not a valid phone number.",
-                "requirement": "individual.phone"
-              }
-            ],
-            "eventually_due": [
-              "individual.phone"
-            ],
+            "errors": [],
+            "eventually_due": [],
             "past_due": [],
-            "pending_verification": [
-              "business_profile.url",
-              "individual.id_number",
-              "individual.verification.document"
-            ]
+            "pending_verification": []
           },
           "individual": {
-            "id": "person_1Ot4JTS89LolKnc01jSmiUjr",
+            "id": "person_1UTkODEdoiNUaaDAJ2SQpkAJ",
             "object": "person",
-            "account": "acct_1Ot4JSS89LolKnc0",
+            "account": "acct_1UTkODEdoiNUaaDA",
             "address": {
               "city": "San Francisco",
               "country": "US",
@@ -948,7 +951,7 @@ http_interactions:
               "postal_code": "94107",
               "state": "California"
             },
-            "created": 1710146068,
+            "created": 1792769297,
             "dob": {
               "day": 1,
               "month": 1,
@@ -958,30 +961,18 @@ http_interactions:
             "first_name": "Chuck",
             "future_requirements": {
               "alternatives": [],
-              "currently_due": [
-                "phone"
-              ],
-              "errors": [
-                {
-                  "code": "invalid_phone_number",
-                  "reason": "This field must contain a valid phone number for your country, or it has too many repeating or sequential numbers. +10000000000 is not a valid phone number.",
-                  "requirement": "phone"
-                }
-              ],
-              "eventually_due": [
-                "phone"
-              ],
+              "currently_due": [],
+              "errors": [],
+              "eventually_due": [],
               "past_due": [],
-              "pending_verification": [
-                "id_number",
-                "verification.document"
-              ]
+              "pending_verification": []
             },
             "id_number_provided": true,
             "last_name": "Bartowski",
             "metadata": {},
             "phone": "+10000000000",
             "relationship": {
+              "authorizer": false,
               "director": false,
               "executive": false,
               "legal_guardian": false,
@@ -997,6 +988,10 @@ http_interactions:
               "eventually_due": [],
               "past_due": [],
               "pending_verification": [
+                "address.city",
+                "address.line1",
+                "address.postal_code",
+                "address.state",
                 "id_number",
                 "verification.document"
               ]
@@ -1030,20 +1025,30 @@ http_interactions:
           "requirements": {
             "alternatives": [],
             "current_deadline": null,
-            "currently_due": [],
-            "disabled_reason": "requirements.pending_verification",
+            "currently_due": [
+              "business_profile.mcc"
+            ],
+            "disabled_reason": "requirements.past_due",
             "errors": [],
-            "eventually_due": [],
-            "past_due": [],
+            "eventually_due": [
+              "business_profile.mcc"
+            ],
+            "past_due": [
+              "business_profile.mcc"
+            ],
             "pending_verification": [
+              "individual.address.city",
+              "individual.address.line1",
+              "individual.address.postal_code",
+              "individual.address.state",
               "individual.id_number",
               "individual.verification.document"
             ]
           },
           "settings": {
             "bacs_debit_payments": {
-              "display_name": null,
-              "service_user_number": null
+              "display_name": "Stripe",
+              "service_user_number": "449900"
             },
             "branding": {
               "icon": null,
@@ -1067,11 +1072,12 @@ http_interactions:
               "statement_descriptor_prefix_kanji": null
             },
             "dashboard": {
-              "display_name": "vipul.gumroad",
+              "display_name": "Chuck Bartowski",
               "timezone": "Etc/UTC"
             },
             "invoices": {
-              "default_account_tax_ids": null
+              "default_account_tax_ids": null,
+              "hosted_payment_method_save": "offer"
             },
             "payments": {
               "statement_descriptor": "CHUCK BARTOWSKI",
@@ -1081,7 +1087,7 @@ http_interactions:
             "payouts": {
               "debit_negative_balances": true,
               "schedule": {
-                "delay_days": 1,
+                "delay_days": 2,
                 "interval": "manual"
               },
               "statement_descriptor": null
@@ -1089,35 +1095,32 @@ http_interactions:
             "sepa_debit_payments": {}
           },
           "tos_acceptance": {
-            "date": 1710146066,
+            "date": 1792769296,
             "ip": "54.234.242.13",
             "user_agent": null
           },
           "type": "custom"
         }
-  recorded_at: Mon, 11 Mar 2024 08:34:34 GMT
+  recorded_at: Fri, 23 Oct 2026 15:28:22 GMT
 - request:
     method: get
-    uri: https://api.stripe.com/v1/accounts/acct_1Ot4JSS89LolKnc0
+    uri: https://api.stripe.com/v1/accounts/acct_1UTkODEdoiNUaaDA
     body:
       encoding: US-ASCII
       string: ''
     headers:
       User-Agent:
-      - Stripe/v1 RubyBindings/10.11.0
+      - Stripe/v1 RubyBindings/12.5.0
       Authorization:
       - Bearer <STRIPE_API_KEY>
       Content-Type:
       - application/x-www-form-urlencoded
       X-Stripe-Client-Telemetry:
-      - '{"last_request_metrics":{"request_id":"req_phgl2Ba3AVEobz","request_duration_ms":3038}}'
+      - '{"last_request_metrics":{"request_id":"req_EJtaKU1uSFlMrl","request_duration_ms":1661}}'
       Stripe-Version:
       - '2023-10-16'
       X-Stripe-Client-User-Agent:
-      - '{"bindings_version":"10.11.0","lang":"ruby","lang_version":"3.2.2 p53 (2023-03-30)","platform":"x86_64-linux","engine":"ruby","publisher":"stripe","uname":"Linux
-        version 6.5.0-25-generic (buildd@lcy02-amd64-054) (x86_64-linux-gnu-gcc-13
-        (Ubuntu 13.2.0-4ubuntu3) 13.2.0, GNU ld (GNU Binutils for Ubuntu) 2.41) #25-Ubuntu
-        SMP PREEMPT_DYNAMIC Wed Feb  7 14:58:39 UTC 2024","hostname":"dell"}'
+      - "<STRIPE_CLIENT_USER_AGENT>"
       Accept-Encoding:
       - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
       Accept:
@@ -1130,17 +1133,17 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Mon, 11 Mar 2024 08:34:34 GMT
+      - Fri, 23 Oct 2026 15:28:22 GMT
       Content-Type:
       - application/json
       Content-Length:
-      - '6883'
+      - '6849'
       Connection:
       - keep-alive
       Access-Control-Allow-Credentials:
       - 'true'
       Access-Control-Allow-Methods:
-      - GET,HEAD,PUT,PATCH,POST,DELETE
+      - GET, HEAD, PUT, PATCH, POST, DELETE
       Access-Control-Allow-Origin:
       - "*"
       Access-Control-Expose-Headers:
@@ -1151,35 +1154,47 @@ http_interactions:
       Cache-Control:
       - no-cache, no-store
       Content-Security-Policy:
-      - report-uri https://q.stripe.com/csp-report?p=v1%2Faccounts%2F%3Aaccount; block-all-mixed-content;
-        default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';
-        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'
-      Cross-Origin-Opener-Policy-Report-Only:
-      - same-origin; report-to=https://q.stripe.com/coop-report
+      - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
+        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=ws6m9swPk-AB5WXa79Kr6TZ1rrT-n1zbCtXYue_U32h3t7jtRGsB51dJX82NKfoT9ioWknZBwYckU4YN;
+        report-to csp
+      Report-To:
+      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=ws6m9swPk-AB5WXa79Kr6TZ1rrT-n1zbCtXYue_U32h3t7jtRGsB51dJX82NKfoT9ioWknZBwYckU4YN&t=1"}],"include_subdomains":true}'
+      Reporting-Endpoints:
+      - csp="https://q.stripe.com/csp-report-v2?q=ws6m9swPk-AB5WXa79Kr6TZ1rrT-n1zbCtXYue_U32h3t7jtRGsB51dJX82NKfoT9ioWknZBwYckU4YN&t=1"
       Request-Id:
-      - req_Vo8E6NccpZT2Ax
+      - req_sIjOYortwt4RLI
       Stripe-Account:
-      - acct_1Ot4JSS89LolKnc0
+      - acct_1UTkODEdoiNUaaDA
+      Stripe-Notice:
+      - You are using an outdated API version (2023-10-16). We recommend upgrading
+        to the latest API version, 2026-09-30.endive. See https://docs.stripe.com/upgrades
       Stripe-Version:
       - '2023-10-16'
       Vary:
       - Origin
+      X-Stripe-Priority-Routing-Enabled:
+      - 'true'
       X-Stripe-Routing-Context-Priority-Tier:
       - api-testmode
+      X-Wc:
+      - 3c3
       Strict-Transport-Security:
       - max-age=63072000; includeSubDomains; preload
     body:
       encoding: UTF-8
       string: |-
         {
-          "id": "acct_1Ot4JSS89LolKnc0",
+          "id": "acct_1UTkODEdoiNUaaDA",
           "object": "account",
           "business_profile": {
             "annual_revenue": null,
             "estimated_worker_count": null,
-            "mcc": "5192",
+            "mcc": null,
+            "minority_owned_business_designation": null,
             "name": "Chuck Bartowski",
             "product_description": "Chuck Bartowski",
+            "specified_commercial_transactions_act_url": null,
             "support_address": null,
             "support_email": null,
             "support_phone": null,
@@ -1188,8 +1203,8 @@ http_interactions:
           },
           "business_type": "individual",
           "capabilities": {
-            "card_payments": "pending",
-            "transfers": "pending"
+            "card_payments": "inactive",
+            "transfers": "active"
           },
           "charges_enabled": false,
           "company": {
@@ -1216,8 +1231,22 @@ http_interactions:
               }
             }
           },
+          "controller": {
+            "fees": {
+              "payer": "application_custom"
+            },
+            "is_controller": true,
+            "losses": {
+              "payments": "application"
+            },
+            "requirement_collection": "application",
+            "stripe_dashboard": {
+              "type": "none"
+            },
+            "type": "application"
+          },
           "country": "US",
-          "created": 1710146068,
+          "created": 1792769298,
           "default_currency": "usd",
           "details_submitted": true,
           "email": null,
@@ -1225,9 +1254,9 @@ http_interactions:
             "object": "list",
             "data": [
               {
-                "id": "ba_1Ot4JYS89LolKnc0BNLGWVh9",
+                "id": "ba_1UTkOHEdoiNUaaDA5TZmfwSV",
                 "object": "bank_account",
-                "account": "acct_1Ot4JSS89LolKnc0",
+                "account": "acct_1UTkODEdoiNUaaDA",
                 "account_holder_name": null,
                 "account_holder_type": null,
                 "account_type": null,
@@ -1239,7 +1268,7 @@ http_interactions:
                 "country": "US",
                 "currency": "usd",
                 "default_for_currency": true,
-                "fingerprint": "dx7dqwoGHEQDKLLK",
+                "fingerprint": "l0OxwqZbI4t8wVSU",
                 "future_requirements": {
                   "currently_due": [],
                   "errors": [],
@@ -1260,36 +1289,22 @@ http_interactions:
             ],
             "has_more": false,
             "total_count": 1,
-            "url": "/v1/accounts/acct_1Ot4JSS89LolKnc0/external_accounts"
+            "url": "/v1/accounts/acct_1UTkODEdoiNUaaDA/external_accounts"
           },
           "future_requirements": {
             "alternatives": [],
-            "current_deadline": 1713294000,
-            "currently_due": [
-              "individual.phone"
-            ],
+            "current_deadline": null,
+            "currently_due": [],
             "disabled_reason": null,
-            "errors": [
-              {
-                "code": "invalid_phone_number",
-                "reason": "This field must contain a valid phone number for your country, or it has too many repeating or sequential numbers. +10000000000 is not a valid phone number.",
-                "requirement": "individual.phone"
-              }
-            ],
-            "eventually_due": [
-              "individual.phone"
-            ],
+            "errors": [],
+            "eventually_due": [],
             "past_due": [],
-            "pending_verification": [
-              "business_profile.url",
-              "individual.id_number",
-              "individual.verification.document"
-            ]
+            "pending_verification": []
           },
           "individual": {
-            "id": "person_1Ot4JTS89LolKnc01jSmiUjr",
+            "id": "person_1UTkODEdoiNUaaDAJ2SQpkAJ",
             "object": "person",
-            "account": "acct_1Ot4JSS89LolKnc0",
+            "account": "acct_1UTkODEdoiNUaaDA",
             "address": {
               "city": "San Francisco",
               "country": "US",
@@ -1298,7 +1313,7 @@ http_interactions:
               "postal_code": "94107",
               "state": "California"
             },
-            "created": 1710146068,
+            "created": 1792769297,
             "dob": {
               "day": 1,
               "month": 1,
@@ -1308,30 +1323,18 @@ http_interactions:
             "first_name": "Chuck",
             "future_requirements": {
               "alternatives": [],
-              "currently_due": [
-                "phone"
-              ],
-              "errors": [
-                {
-                  "code": "invalid_phone_number",
-                  "reason": "This field must contain a valid phone number for your country, or it has too many repeating or sequential numbers. +10000000000 is not a valid phone number.",
-                  "requirement": "phone"
-                }
-              ],
-              "eventually_due": [
-                "phone"
-              ],
+              "currently_due": [],
+              "errors": [],
+              "eventually_due": [],
               "past_due": [],
-              "pending_verification": [
-                "id_number",
-                "verification.document"
-              ]
+              "pending_verification": []
             },
             "id_number_provided": true,
             "last_name": "Bartowski",
             "metadata": {},
             "phone": "+10000000000",
             "relationship": {
+              "authorizer": false,
               "director": false,
               "executive": false,
               "legal_guardian": false,
@@ -1347,6 +1350,10 @@ http_interactions:
               "eventually_due": [],
               "past_due": [],
               "pending_verification": [
+                "address.city",
+                "address.line1",
+                "address.postal_code",
+                "address.state",
                 "id_number",
                 "verification.document"
               ]
@@ -1380,20 +1387,30 @@ http_interactions:
           "requirements": {
             "alternatives": [],
             "current_deadline": null,
-            "currently_due": [],
-            "disabled_reason": "requirements.pending_verification",
+            "currently_due": [
+              "business_profile.mcc"
+            ],
+            "disabled_reason": "requirements.past_due",
             "errors": [],
-            "eventually_due": [],
-            "past_due": [],
+            "eventually_due": [
+              "business_profile.mcc"
+            ],
+            "past_due": [
+              "business_profile.mcc"
+            ],
             "pending_verification": [
+              "individual.address.city",
+              "individual.address.line1",
+              "individual.address.postal_code",
+              "individual.address.state",
               "individual.id_number",
               "individual.verification.document"
             ]
           },
           "settings": {
             "bacs_debit_payments": {
-              "display_name": null,
-              "service_user_number": null
+              "display_name": "Stripe",
+              "service_user_number": "449900"
             },
             "branding": {
               "icon": null,
@@ -1417,11 +1434,12 @@ http_interactions:
               "statement_descriptor_prefix_kanji": null
             },
             "dashboard": {
-              "display_name": "vipul.gumroad",
+              "display_name": "Chuck Bartowski",
               "timezone": "Etc/UTC"
             },
             "invoices": {
-              "default_account_tax_ids": null
+              "default_account_tax_ids": null,
+              "hosted_payment_method_save": "offer"
             },
             "payments": {
               "statement_descriptor": "CHUCK BARTOWSKI",
@@ -1431,7 +1449,7 @@ http_interactions:
             "payouts": {
               "debit_negative_balances": true,
               "schedule": {
-                "delay_days": 1,
+                "delay_days": 2,
                 "interval": "manual"
               },
               "statement_descriptor": null
@@ -1439,35 +1457,32 @@ http_interactions:
             "sepa_debit_payments": {}
           },
           "tos_acceptance": {
-            "date": 1710146066,
+            "date": 1792769296,
             "ip": "54.234.242.13",
             "user_agent": null
           },
           "type": "custom"
         }
-  recorded_at: Mon, 11 Mar 2024 08:34:35 GMT
+  recorded_at: Fri, 23 Oct 2026 15:28:22 GMT
 - request:
     method: get
-    uri: https://api.stripe.com/v1/accounts/acct_1Ot4JSS89LolKnc0
+    uri: https://api.stripe.com/v1/accounts/acct_1UTkODEdoiNUaaDA/external_accounts?limit=100
     body:
       encoding: US-ASCII
       string: ''
     headers:
       User-Agent:
-      - Stripe/v1 RubyBindings/10.11.0
+      - Stripe/v1 RubyBindings/12.5.0
       Authorization:
       - Bearer <STRIPE_API_KEY>
       Content-Type:
       - application/x-www-form-urlencoded
       X-Stripe-Client-Telemetry:
-      - '{"last_request_metrics":{"request_id":"req_Vo8E6NccpZT2Ax","request_duration_ms":604}}'
+      - '{"last_request_metrics":{"request_id":"req_sIjOYortwt4RLI","request_duration_ms":471}}'
       Stripe-Version:
       - '2023-10-16'
       X-Stripe-Client-User-Agent:
-      - '{"bindings_version":"10.11.0","lang":"ruby","lang_version":"3.2.2 p53 (2023-03-30)","platform":"x86_64-linux","engine":"ruby","publisher":"stripe","uname":"Linux
-        version 6.5.0-25-generic (buildd@lcy02-amd64-054) (x86_64-linux-gnu-gcc-13
-        (Ubuntu 13.2.0-4ubuntu3) 13.2.0, GNU ld (GNU Binutils for Ubuntu) 2.41) #25-Ubuntu
-        SMP PREEMPT_DYNAMIC Wed Feb  7 14:58:39 UTC 2024","hostname":"dell"}'
+      - "<STRIPE_CLIENT_USER_AGENT>"
       Accept-Encoding:
       - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
       Accept:
@@ -1480,17 +1495,17 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Mon, 11 Mar 2024 08:34:35 GMT
+      - Fri, 23 Oct 2026 15:28:22 GMT
       Content-Type:
       - application/json
       Content-Length:
-      - '6883'
+      - '996'
       Connection:
       - keep-alive
       Access-Control-Allow-Credentials:
       - 'true'
       Access-Control-Allow-Methods:
-      - GET,HEAD,PUT,PATCH,POST,DELETE
+      - GET, HEAD, PUT, PATCH, POST, DELETE
       Access-Control-Allow-Origin:
       - "*"
       Access-Control-Expose-Headers:
@@ -1501,35 +1516,170 @@ http_interactions:
       Cache-Control:
       - no-cache, no-store
       Content-Security-Policy:
-      - report-uri https://q.stripe.com/csp-report?p=v1%2Faccounts%2F%3Aaccount; block-all-mixed-content;
-        default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';
-        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'
-      Cross-Origin-Opener-Policy-Report-Only:
-      - same-origin; report-to=https://q.stripe.com/coop-report
+      - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
+        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=ws6m9swPk-AB5WXa79Kr6TZ1rrT-n1zbCtXYue_U32h3t7jtRGsB51dJX82NKfoT9ioWknZBwYckU4YN;
+        report-to csp
+      Report-To:
+      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=ws6m9swPk-AB5WXa79Kr6TZ1rrT-n1zbCtXYue_U32h3t7jtRGsB51dJX82NKfoT9ioWknZBwYckU4YN&t=1"}],"include_subdomains":true}'
+      Reporting-Endpoints:
+      - csp="https://q.stripe.com/csp-report-v2?q=ws6m9swPk-AB5WXa79Kr6TZ1rrT-n1zbCtXYue_U32h3t7jtRGsB51dJX82NKfoT9ioWknZBwYckU4YN&t=1"
       Request-Id:
-      - req_eTgbDxxzhVHfWY
+      - req_6m7FqNNetfkmv5
       Stripe-Account:
-      - acct_1Ot4JSS89LolKnc0
+      - acct_1UTkODEdoiNUaaDA
+      Stripe-Notice:
+      - You are using an outdated API version (2023-10-16). We recommend upgrading
+        to the latest API version, 2026-09-30.endive. See https://docs.stripe.com/upgrades
       Stripe-Version:
       - '2023-10-16'
       Vary:
       - Origin
+      X-Stripe-Priority-Routing-Enabled:
+      - 'true'
       X-Stripe-Routing-Context-Priority-Tier:
       - api-testmode
+      X-Wc:
+      - 3c3
       Strict-Transport-Security:
       - max-age=63072000; includeSubDomains; preload
     body:
       encoding: UTF-8
       string: |-
         {
-          "id": "acct_1Ot4JSS89LolKnc0",
+          "object": "list",
+          "data": [
+            {
+              "id": "ba_1UTkOHEdoiNUaaDA5TZmfwSV",
+              "object": "bank_account",
+              "account": "acct_1UTkODEdoiNUaaDA",
+              "account_holder_name": null,
+              "account_holder_type": null,
+              "account_type": null,
+              "available_payout_methods": [
+                "standard",
+                "instant"
+              ],
+              "bank_name": "STRIPE TEST BANK",
+              "country": "US",
+              "currency": "usd",
+              "default_for_currency": true,
+              "fingerprint": "l0OxwqZbI4t8wVSU",
+              "future_requirements": {
+                "currently_due": [],
+                "errors": [],
+                "past_due": [],
+                "pending_verification": []
+              },
+              "last4": "6789",
+              "metadata": {},
+              "requirements": {
+                "currently_due": [],
+                "errors": [],
+                "past_due": [],
+                "pending_verification": []
+              },
+              "routing_number": "110000000",
+              "status": "new"
+            }
+          ],
+          "has_more": false,
+          "url": "/v1/accounts/acct_1UTkODEdoiNUaaDA/external_accounts"
+        }
+  recorded_at: Fri, 23 Oct 2026 15:28:22 GMT
+- request:
+    method: get
+    uri: https://api.stripe.com/v1/accounts/acct_1UTkODEdoiNUaaDA
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/12.5.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_6m7FqNNetfkmv5","request_duration_ms":244}}'
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - "<STRIPE_CLIENT_USER_AGENT>"
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Fri, 23 Oct 2026 15:28:23 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '6849'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET, HEAD, PUT, PATCH, POST, DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy:
+      - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
+        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=ws6m9swPk-AB5WXa79Kr6TZ1rrT-n1zbCtXYue_U32h3t7jtRGsB51dJX82NKfoT9ioWknZBwYckU4YN;
+        report-to csp
+      Report-To:
+      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=ws6m9swPk-AB5WXa79Kr6TZ1rrT-n1zbCtXYue_U32h3t7jtRGsB51dJX82NKfoT9ioWknZBwYckU4YN&t=1"}],"include_subdomains":true}'
+      Reporting-Endpoints:
+      - csp="https://q.stripe.com/csp-report-v2?q=ws6m9swPk-AB5WXa79Kr6TZ1rrT-n1zbCtXYue_U32h3t7jtRGsB51dJX82NKfoT9ioWknZBwYckU4YN&t=1"
+      Request-Id:
+      - req_5MDsoh1hHS5Y7z
+      Stripe-Account:
+      - acct_1UTkODEdoiNUaaDA
+      Stripe-Notice:
+      - You are using an outdated API version (2023-10-16). We recommend upgrading
+        to the latest API version, 2026-09-30.endive. See https://docs.stripe.com/upgrades
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Priority-Routing-Enabled:
+      - 'true'
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      X-Wc:
+      - 3c3
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "id": "acct_1UTkODEdoiNUaaDA",
           "object": "account",
           "business_profile": {
             "annual_revenue": null,
             "estimated_worker_count": null,
-            "mcc": "5192",
+            "mcc": null,
+            "minority_owned_business_designation": null,
             "name": "Chuck Bartowski",
             "product_description": "Chuck Bartowski",
+            "specified_commercial_transactions_act_url": null,
             "support_address": null,
             "support_email": null,
             "support_phone": null,
@@ -1538,8 +1688,8 @@ http_interactions:
           },
           "business_type": "individual",
           "capabilities": {
-            "card_payments": "pending",
-            "transfers": "pending"
+            "card_payments": "inactive",
+            "transfers": "active"
           },
           "charges_enabled": false,
           "company": {
@@ -1566,8 +1716,22 @@ http_interactions:
               }
             }
           },
+          "controller": {
+            "fees": {
+              "payer": "application_custom"
+            },
+            "is_controller": true,
+            "losses": {
+              "payments": "application"
+            },
+            "requirement_collection": "application",
+            "stripe_dashboard": {
+              "type": "none"
+            },
+            "type": "application"
+          },
           "country": "US",
-          "created": 1710146068,
+          "created": 1792769298,
           "default_currency": "usd",
           "details_submitted": true,
           "email": null,
@@ -1575,9 +1739,9 @@ http_interactions:
             "object": "list",
             "data": [
               {
-                "id": "ba_1Ot4JYS89LolKnc0BNLGWVh9",
+                "id": "ba_1UTkOHEdoiNUaaDA5TZmfwSV",
                 "object": "bank_account",
-                "account": "acct_1Ot4JSS89LolKnc0",
+                "account": "acct_1UTkODEdoiNUaaDA",
                 "account_holder_name": null,
                 "account_holder_type": null,
                 "account_type": null,
@@ -1589,7 +1753,7 @@ http_interactions:
                 "country": "US",
                 "currency": "usd",
                 "default_for_currency": true,
-                "fingerprint": "dx7dqwoGHEQDKLLK",
+                "fingerprint": "l0OxwqZbI4t8wVSU",
                 "future_requirements": {
                   "currently_due": [],
                   "errors": [],
@@ -1610,36 +1774,22 @@ http_interactions:
             ],
             "has_more": false,
             "total_count": 1,
-            "url": "/v1/accounts/acct_1Ot4JSS89LolKnc0/external_accounts"
+            "url": "/v1/accounts/acct_1UTkODEdoiNUaaDA/external_accounts"
           },
           "future_requirements": {
             "alternatives": [],
-            "current_deadline": 1713294000,
-            "currently_due": [
-              "individual.phone"
-            ],
+            "current_deadline": null,
+            "currently_due": [],
             "disabled_reason": null,
-            "errors": [
-              {
-                "code": "invalid_phone_number",
-                "reason": "This field must contain a valid phone number for your country, or it has too many repeating or sequential numbers. +10000000000 is not a valid phone number.",
-                "requirement": "individual.phone"
-              }
-            ],
-            "eventually_due": [
-              "individual.phone"
-            ],
+            "errors": [],
+            "eventually_due": [],
             "past_due": [],
-            "pending_verification": [
-              "business_profile.url",
-              "individual.id_number",
-              "individual.verification.document"
-            ]
+            "pending_verification": []
           },
           "individual": {
-            "id": "person_1Ot4JTS89LolKnc01jSmiUjr",
+            "id": "person_1UTkODEdoiNUaaDAJ2SQpkAJ",
             "object": "person",
-            "account": "acct_1Ot4JSS89LolKnc0",
+            "account": "acct_1UTkODEdoiNUaaDA",
             "address": {
               "city": "San Francisco",
               "country": "US",
@@ -1648,7 +1798,7 @@ http_interactions:
               "postal_code": "94107",
               "state": "California"
             },
-            "created": 1710146068,
+            "created": 1792769297,
             "dob": {
               "day": 1,
               "month": 1,
@@ -1658,30 +1808,18 @@ http_interactions:
             "first_name": "Chuck",
             "future_requirements": {
               "alternatives": [],
-              "currently_due": [
-                "phone"
-              ],
-              "errors": [
-                {
-                  "code": "invalid_phone_number",
-                  "reason": "This field must contain a valid phone number for your country, or it has too many repeating or sequential numbers. +10000000000 is not a valid phone number.",
-                  "requirement": "phone"
-                }
-              ],
-              "eventually_due": [
-                "phone"
-              ],
+              "currently_due": [],
+              "errors": [],
+              "eventually_due": [],
               "past_due": [],
-              "pending_verification": [
-                "id_number",
-                "verification.document"
-              ]
+              "pending_verification": []
             },
             "id_number_provided": true,
             "last_name": "Bartowski",
             "metadata": {},
             "phone": "+10000000000",
             "relationship": {
+              "authorizer": false,
               "director": false,
               "executive": false,
               "legal_guardian": false,
@@ -1697,6 +1835,10 @@ http_interactions:
               "eventually_due": [],
               "past_due": [],
               "pending_verification": [
+                "address.city",
+                "address.line1",
+                "address.postal_code",
+                "address.state",
                 "id_number",
                 "verification.document"
               ]
@@ -1730,20 +1872,30 @@ http_interactions:
           "requirements": {
             "alternatives": [],
             "current_deadline": null,
-            "currently_due": [],
-            "disabled_reason": "requirements.pending_verification",
+            "currently_due": [
+              "business_profile.mcc"
+            ],
+            "disabled_reason": "requirements.past_due",
             "errors": [],
-            "eventually_due": [],
-            "past_due": [],
+            "eventually_due": [
+              "business_profile.mcc"
+            ],
+            "past_due": [
+              "business_profile.mcc"
+            ],
             "pending_verification": [
+              "individual.address.city",
+              "individual.address.line1",
+              "individual.address.postal_code",
+              "individual.address.state",
               "individual.id_number",
               "individual.verification.document"
             ]
           },
           "settings": {
             "bacs_debit_payments": {
-              "display_name": null,
-              "service_user_number": null
+              "display_name": "Stripe",
+              "service_user_number": "449900"
             },
             "branding": {
               "icon": null,
@@ -1767,11 +1919,12 @@ http_interactions:
               "statement_descriptor_prefix_kanji": null
             },
             "dashboard": {
-              "display_name": "vipul.gumroad",
+              "display_name": "Chuck Bartowski",
               "timezone": "Etc/UTC"
             },
             "invoices": {
-              "default_account_tax_ids": null
+              "default_account_tax_ids": null,
+              "hosted_payment_method_save": "offer"
             },
             "payments": {
               "statement_descriptor": "CHUCK BARTOWSKI",
@@ -1781,7 +1934,7 @@ http_interactions:
             "payouts": {
               "debit_negative_balances": true,
               "schedule": {
-                "delay_days": 1,
+                "delay_days": 2,
                 "interval": "manual"
               },
               "statement_descriptor": null
@@ -1789,11 +1942,11 @@ http_interactions:
             "sepa_debit_payments": {}
           },
           "tos_acceptance": {
-            "date": 1710146066,
+            "date": 1792769296,
             "ip": "54.234.242.13",
             "user_agent": null
           },
           "type": "custom"
         }
-  recorded_at: Mon, 11 Mar 2024 08:34:35 GMT
+  recorded_at: Fri, 23 Oct 2026 15:28:23 GMT
 recorded_with: VCR 6.2.0

@@ -1556,6 +1556,7 @@ module StripeMerchantAccountManager
     Stripe::Account.update(stripe_account.id, force_utf8_encoding(attributes))
 
     save_stripe_bank_account_info(bank_account, stripe_account.refresh)
+    delete_replaced_external_accounts(bank_account, stripe_account.id)
     clear_stale_bank_sync_failure_notes(user)
     :synced
   rescue Stripe::InvalidRequestError => e
@@ -2574,6 +2575,30 @@ module StripeMerchantAccountManager
     stripe_account.deleted_at = stripe_account.charge_processor_deleted_at = nil
     stripe_account.charge_processor_alive_at = Time.current
     stripe_account.save!
+  end
+
+  private_class_method
+  # Attaching a bank makes Stripe delete only the old bank in the same currency. One in another
+  # currency stays attached and keeps that currency's payouts, so remove the banks this seller
+  # replaced. Only ids on deleted rows and on no alive row qualify: a concurrent sync's newer bank
+  # has an alive row, and a refresh can copy its id onto a deleted one. The new bank is already
+  # synced, so a failure here only notifies.
+  def self.delete_replaced_external_accounts(bank_account, stripe_account_id)
+    rows = bank_account.user.bank_accounts.where(stripe_connect_account_id: stripe_account_id).where.not(stripe_bank_account_id: nil)
+    replaced_ids = rows.where.not(deleted_at: nil).pluck(:stripe_bank_account_id) -
+      rows.where(deleted_at: nil).pluck(:stripe_bank_account_id) - [bank_account.stripe_external_account_id]
+    return if replaced_ids.empty?
+
+    replaced = Stripe::Account.list_external_accounts(stripe_account_id, { limit: 100 }).select { replaced_ids.include?(_1.id) }
+    # Stripe refuses to delete a currency's default while another account shares that currency.
+    replaced.sort_by { _1["default_for_currency"] ? 1 : 0 }.each do |external_account|
+      Stripe::Account.delete_external_account(stripe_account_id, external_account.id)
+    rescue Stripe::InvalidRequestError => e
+      # Stripe keeps the default for the account's own currency; those payouts name the active bank.
+      raise unless e.message.to_s.match?(/default external account/i)
+    end
+  rescue Stripe::StripeError => e
+    ErrorNotifier.notify(e, stripe_account_id:)
   end
 
   private_class_method
