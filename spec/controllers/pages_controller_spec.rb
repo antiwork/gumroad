@@ -104,6 +104,26 @@ describe PagesController, type: :controller, inertia: true do
       expect(inertia.props[:is_profile]).to eq(true)
     end
 
+    it "passes the page's search fields and what a blank field falls back to" do
+      page.update!(seo_description: "Who I am.")
+
+      get :edit, params: { slug: "about" }
+
+      expect(inertia.props[:page]).to include(seo_title: "", seo_description: "Who I am.",
+                                              default_seo_title: "About — #{seller.name_or_username}", default_seo_description: nil)
+      expect(inertia.props[:seo_max_lengths]).to eq(title: Page::MAX_SEO_TITLE_LENGTH, description: Page::MAX_SEO_DESCRIPTION_LENGTH)
+    end
+
+    it "passes the home page's search fields from the seller profile" do
+      seller.update!(bio: "I make prints.")
+      seller.seller_profile.update!(seo_title: "Prints by Jane")
+
+      get :edit, params: { slug: "profile" }
+
+      expect(inertia.props[:page]).to include(seo_title: "Prints by Jane", seo_description: "",
+                                              default_seo_title: seller.name_or_username, default_seo_description: "I make prints.")
+    end
+
     it "redirects to the list for an unknown slug" do
       get :edit, params: { slug: "nope" }
 
@@ -140,6 +160,21 @@ describe PagesController, type: :controller, inertia: true do
       expect(page.reload.content).to eq("<p>Old</p>")
     end
 
+    it "updates the search fields of a rich text page" do
+      patch :update, params: { slug: "about", title: "About", content: "<p>Old</p>", seo_title: "About Jane", seo_description: "Who I am." }
+
+      expect(page.reload).to have_attributes(seo_title: "About Jane", seo_description: "Who I am.")
+    end
+
+    it "updates only the search fields of a custom HTML page" do
+      page.update!(content: nil, custom_html: "<h1>Agent-built</h1>")
+
+      patch :update, params: { slug: "about", title: "Renamed", seo_title: "Agent-built page" }
+
+      expect(page.reload).to have_attributes(title: "About", seo_title: "Agent-built page")
+      expect(page.custom_html).to include("<h1>Agent-built</h1>")
+    end
+
     it "cannot update another seller's page" do
       other = create(:user_page, slug: "mine", title: "Not yours")
 
@@ -153,6 +188,20 @@ describe PagesController, type: :controller, inertia: true do
       patch :update, params: { slug: "profile", title: "Nope", content: "" }
 
       expect(response).to redirect_to(pages_path)
+    end
+
+    it "saves the home page's search fields to the seller profile" do
+      patch :update, params: { slug: "profile", seo_title: "Prints by Jane", seo_description: "Hand-lettered prints." }
+
+      expect(seller.seller_profile.reload).to have_attributes(seo_title: "Prints by Jane", seo_description: "Hand-lettered prints.")
+      expect(response).to redirect_to(edit_page_path("profile"))
+    end
+
+    it "rejects a home page search title over the limit" do
+      patch :update, params: { slug: "profile", seo_title: "a" * (Page::MAX_SEO_TITLE_LENGTH + 1) }
+
+      expect(SellerProfile.where(seller:).pluck(:seo_title)).to all(be_nil)
+      expect(response).to redirect_to(edit_page_path("profile"))
     end
 
     it "removes the profile's custom HTML takeover, restoring the default template" do

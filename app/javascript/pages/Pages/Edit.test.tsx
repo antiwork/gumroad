@@ -65,12 +65,23 @@ vi.mock("$app/components/PreviewSidebar", () => ({
 const renderEditor = (readOnly = false) => {
   canEdit.current = !readOnly;
   props.current = {
-    page: { slug: "about", title: "About", content: "<p>Hello</p>", custom_html: false },
+    page: {
+      slug: "about",
+      title: "About",
+      content: "<p>Hello</p>",
+      custom_html: false,
+      seo_title: "",
+      seo_description: "",
+      default_seo_title: "About — Seller",
+      default_seo_description: null,
+    },
     is_profile: false,
     is_new: false,
     username: "seller",
     profile_url: "https://seller.gumroad.com/",
     products_page_limit: 4,
+    seo_max_lengths: { title: 70, description: 320 },
+    seller_name: "Seller",
   };
 
   return render(<PagesEdit />);

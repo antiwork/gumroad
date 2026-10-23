@@ -8,6 +8,7 @@ import { Button, NavigationButton } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { CustomHtmlPreview } from "$app/components/Pages/CustomHtmlPreview";
+import { SearchListingFields, type SeoMaxLengths } from "$app/components/Pages/SearchListingFields";
 import { PreviewChrome, PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
 import { useSectionImageUploadSettings } from "$app/components/Profile/EditSections";
 import { ImageUploadSettingsContext, RichTextEditor } from "$app/components/RichTextEditor";
@@ -28,6 +29,11 @@ type PageProps = {
     // Built by an agent/CLI as full HTML. The in-app editor doesn't attempt a
     // lossy HTML -> rich text conversion; it shows the agent/CLI path instead.
     custom_html: boolean;
+    seo_title: string;
+    seo_description: string;
+    // What the public page shows when the seller leaves a field blank.
+    default_seo_title: string;
+    default_seo_description: string | null;
   };
   is_profile: boolean;
   is_new: boolean;
@@ -36,6 +42,8 @@ type PageProps = {
   // MAX_ITEMS, so the preview's products responder defaults an omitted limit the same way the
   // live wrapper does.
   products_page_limit: number;
+  seo_max_lengths: SeoMaxLengths;
+  seller_name: string;
 };
 
 // The copy-paste prompt for building a page with an agent. The CLI commands it
@@ -50,8 +58,18 @@ const agentPrompt = (username: string, slug: string | null, isProfile: boolean) 
     ? `Build and publish a custom landing page for my Gumroad profile (@${username}). Design a unique, on-brand page — fully responsive, with light and dark mode. Preview it with \`gumroad pages preview\`, then publish with \`gumroad pages push profile\`. The page replaces my entire profile, so link visitors to my product pages instead of adding checkout elements. ${followFormHint}`
     : `Build and publish a custom page for my Gumroad store (@${username})${slug ? ` at /${slug}` : ""}. Design a unique, on-brand page — fully responsive, with light and dark mode. Preview it with \`gumroad pages preview\`, then publish with \`gumroad pages push ${slug ?? "<slug>"}\`. ${followFormHint}`;
 
+// Mirrors Pages::DocumentTitle, so the listing preview follows the title the
+// seller is typing instead of the last saved one.
+const documentTitle = (pageTitle: string, sellerName: string) => {
+  const seller = sellerName.trim();
+  if (seller === "" || pageTitle.trim().toLowerCase().endsWith(seller.toLowerCase())) return pageTitle;
+  if (pageTitle.trim() === "") return seller;
+  return `${pageTitle} — ${seller}`;
+};
+
 export default function PagesEdit() {
-  const { page, is_profile, is_new, username, profile_url, products_page_limit } = cast<PageProps>(usePage().props);
+  const { page, is_profile, is_new, username, profile_url, products_page_limit, seo_max_lengths, seller_name } =
+    cast<PageProps>(usePage().props);
   const loggedInUser = useLoggedInUser();
   // Mirrors PagePolicy: create? also gates update? and destroy?, so one flag
   // covers everything the editor can change. Viewers without it get a
@@ -65,6 +83,10 @@ export default function PagesEdit() {
   // on every keystroke.
   const [savedTitle, setSavedTitle] = React.useState(page.title);
   const [savedContent, setSavedContent] = React.useState(page.content);
+  const [seoTitle, setSeoTitle] = React.useState(page.seo_title);
+  const [seoDescription, setSeoDescription] = React.useState(page.seo_description);
+  const [savedSeoTitle, setSavedSeoTitle] = React.useState(page.seo_title);
+  const [savedSeoDescription, setSavedSeoDescription] = React.useState(page.seo_description);
   const [previewVersion, setPreviewVersion] = React.useState(0);
   const [isSaving, setIsSaving] = React.useState(false);
   // The toolbar's Insert image item and the paste/drop handlers both read this context and no-op
@@ -72,10 +94,15 @@ export default function PagesEdit() {
   // upload started there could never be saved.
   const imageUploadSettings = useSectionImageUploadSettings();
 
-  // Only rich-text pages are editable in place; the profile and custom HTML
-  // pages change through profile settings or the agent/CLI.
-  const isEditable = canEdit && !is_profile && !page.custom_html;
-  const isDirty = isEditable && (title !== savedTitle || content !== savedContent);
+  // Only rich-text pages have their title and content edited in place; the
+  // profile and custom HTML pages change through profile settings or the
+  // agent/CLI. Every page has its search fields edited here.
+  const isContentEditable = canEdit && !is_profile && !page.custom_html;
+  const isDirty =
+    canEdit &&
+    (seoTitle !== savedSeoTitle ||
+      seoDescription !== savedSeoDescription ||
+      (isContentEditable && (title !== savedTitle || content !== savedContent)));
 
   // Warn before navigating away with unsaved edits. `beforeunload` covers full
   // navigations (close tab, hard link); the Inertia "before" listener covers
@@ -138,11 +165,14 @@ export default function PagesEdit() {
       return;
     }
     setIsSaving(true);
-    const params = { title, content };
+    const seoParams = { seo_title: seoTitle, seo_description: seoDescription };
+    const params = isContentEditable ? { title, content, ...seoParams } : seoParams;
     const options = {
       onSuccess: () => {
         setSavedTitle(title);
         setSavedContent(content);
+        setSavedSeoTitle(seoTitle);
+        setSavedSeoDescription(seoDescription);
         // Bump the preview frame's cache-busting param so it reloads and shows
         // the page as just saved.
         setPreviewVersion((version) => version + 1);
@@ -181,7 +211,7 @@ export default function PagesEdit() {
   const agentPanelIntro = is_profile
     ? "Your profile page is built to be updated by an AI agent — use your own agent with the prompt below, or Gumroad's built-in Agent tab. Either way, the agent replaces the default template with full HTML: custom layout, animations, anything."
     : page.custom_html
-      ? "This page is custom HTML built by your agent, so it can't be edited here — hand your agent this prompt to change it."
+      ? "This page is custom HTML built by your agent, so its content can't be edited here — hand your agent this prompt to change it."
       : "Want more than rich text? Your agent can redesign this page as full HTML and publish it for you.";
 
   // Matches the product Share tab's landing-page pattern: one-sentence pitch,
@@ -209,6 +239,31 @@ export default function PagesEdit() {
         Or use the CLI: <code>gumroad pages list / create / push / preview</code>.
       </p>
       <AgentSupportFallbackNote subject={is_profile ? "Help with my profile page" : "Help with one of my pages"} />
+    </div>
+  );
+
+  const searchListing = (
+    <SearchListingFields
+      url={publicUrl}
+      title={seoTitle}
+      description={seoDescription}
+      defaultTitle={isContentEditable ? documentTitle(title, seller_name) : page.default_seo_title}
+      defaultDescription={page.default_seo_description}
+      maxLengths={seo_max_lengths}
+      disabled={!canEdit}
+      onTitleChange={setSeoTitle}
+      onDescriptionChange={setSeoDescription}
+    />
+  );
+
+  const saveActions = (
+    <div className="flex items-center gap-2">
+      <Button disabled={isSaving} onClick={backToList}>
+        Cancel
+      </Button>
+      <Button color="accent" disabled={isSaving || (isContentEditable && title.trim() === "")} onClick={save}>
+        {isSaving ? "Saving..." : is_new ? "Create page" : "Save changes"}
+      </Button>
     </div>
   );
 
@@ -300,7 +355,7 @@ export default function PagesEdit() {
                   />,
                 )
               : null}
-      {isEditable ? <p className="text-xs text-muted">The preview refreshes when you save.</p> : null}
+      {isContentEditable ? <p className="text-xs text-muted">The preview refreshes when you save.</p> : null}
     </PreviewSidebar>
   );
 
@@ -312,7 +367,16 @@ export default function PagesEdit() {
           // "Home" matches the pinned entry in the Pages list — the same page
           // shouldn't change names between the list and its editor.
           title="Home"
-          actions={<NavigationButton href={Routes.settings_profile_path()}>Open profile settings</NavigationButton>}
+          actions={
+            <div className="flex items-center gap-2">
+              <NavigationButton href={Routes.settings_profile_path()}>Open profile settings</NavigationButton>
+              {canEdit ? (
+                <Button color="accent" disabled={isSaving} onClick={save}>
+                  {isSaving ? "Saving..." : "Save changes"}
+                </Button>
+              ) : null}
+            </div>
+          }
         />
         <WithPreviewSidebar className="flex-1">
           <section className="grid content-start gap-8 p-4! md:p-8!">
@@ -331,6 +395,7 @@ export default function PagesEdit() {
                 </div>
               </Alert>
             ) : null}
+            {searchListing}
             {canEdit ? agentPanel : null}
           </section>
           {previewSidebar}
@@ -345,20 +410,8 @@ export default function PagesEdit() {
         className="sticky-top"
         title={is_new ? "New page" : page.title}
         actions={
-          // Custom HTML pages can't be edited here, so a save button would be
-          // a dead control; read-only roles get no buttons for the same reason.
-          isEditable ? (
-            <div className="flex items-center gap-2">
-              <Button disabled={isSaving} onClick={backToList}>
-                Cancel
-              </Button>
-              <Button color="accent" disabled={isSaving || title.trim() === ""} onClick={save}>
-                {isSaving ? "Saving..." : is_new ? "Create page" : "Save changes"}
-              </Button>
-            </div>
-          ) : (
-            <NavigationButton href={Routes.pages_path()}>Back to Pages</NavigationButton>
-          )
+          // Read-only roles get no save button: its request would fail.
+          canEdit ? saveActions : <NavigationButton href={Routes.pages_path()}>Back to Pages</NavigationButton>
         }
       />
       <WithPreviewSidebar className="flex-1">
@@ -369,11 +422,12 @@ export default function PagesEdit() {
             </Alert>
           ) : null}
           {page.custom_html ? (
-            // The agent panel's intro already explains why there's no editor
-            // here ("custom HTML, can't be edited here"), so no separate alert.
-            canEdit ? (
-              agentPanel
-            ) : null
+            // The agent panel's intro already explains why there's no content
+            // editor here ("custom HTML, can't be edited here"), so no separate alert.
+            <>
+              {searchListing}
+              {canEdit ? agentPanel : null}
+            </>
           ) : (
             <>
               <Fieldset>
@@ -403,6 +457,7 @@ export default function PagesEdit() {
                   />
                 </ImageUploadSettingsContext.Provider>
               </Fieldset>
+              {searchListing}
               {canEdit ? agentPanel : null}
             </>
           )}

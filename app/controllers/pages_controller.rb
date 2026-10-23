@@ -10,8 +10,11 @@
 class PagesController < Sellers::BaseController
   include RendersCustomHtmlPages
   include CurrencyHelper
+  include PageMeta::User
 
   layout "inertia"
+
+  SEO_MAX_LENGTHS = { title: Page::MAX_SEO_TITLE_LENGTH, description: Page::MAX_SEO_DESCRIPTION_LENGTH }.freeze
 
   before_action :set_page, only: [:edit, :update, :destroy, :preview, :products]
   # The seller reaches the preview straight off a save, so a replica read can serve a slice
@@ -40,19 +43,22 @@ class PagesController < Sellers::BaseController
     authorize :page
 
     render inertia: "Pages/Edit", props: {
-      page: { slug: nil, title: "", content: "", custom_html: false },
+      page: { slug: nil, title: "", content: "", custom_html: false, seo_title: "", seo_description: "",
+              default_seo_title: current_seller.name_or_username, default_seo_description: nil },
       is_profile: false,
       is_new: true,
       username: current_seller.username.to_s,
       profile_url: current_seller.profile_url,
       products_page_limit: Pages::ProfileData::MAX_ITEMS,
+      seo_max_lengths: SEO_MAX_LENGTHS,
+      seller_name: current_seller.name_or_username,
     }
   end
 
   def create
     authorize :page
 
-    page = current_seller.pages.build(title: params[:title].to_s.strip, content: params[:content].to_s)
+    page = current_seller.pages.build(title: params[:title].to_s.strip, content: params[:content].to_s, **seo_params)
     page.slug = generate_slug(page.title)
 
     if page.save
@@ -75,12 +81,23 @@ class PagesController < Sellers::BaseController
       # shouldn't change names between the list, the editor header, and the
       # preview pane.
       render inertia: "Pages/Edit", props: {
-        page: { slug: "profile", title: "Home", content: "", custom_html: current_seller.custom_html.present? },
+        page: {
+          slug: "profile",
+          title: "Home",
+          content: "",
+          custom_html: current_seller.custom_html.present?,
+          seo_title: current_seller.seller_profile.seo_title.to_s,
+          seo_description: current_seller.seller_profile.seo_description.to_s,
+          default_seo_title: current_seller.name_or_username,
+          default_seo_description: profile_meta_description(current_seller),
+        },
         is_profile: true,
         is_new: false,
         username: current_seller.username.to_s,
         profile_url: current_seller.profile_url,
         products_page_limit: Pages::ProfileData::MAX_ITEMS,
+        seo_max_lengths: SEO_MAX_LENGTHS,
+        seller_name: current_seller.name_or_username,
       }
       return
     end
@@ -92,6 +109,8 @@ class PagesController < Sellers::BaseController
       username: current_seller.username.to_s,
       profile_url: current_seller.profile_url,
       products_page_limit: Pages::ProfileData::MAX_ITEMS,
+      seo_max_lengths: SEO_MAX_LENGTHS,
+      seller_name: current_seller.name_or_username,
     }
   end
 
@@ -99,23 +118,34 @@ class PagesController < Sellers::BaseController
     authorize :page
 
     if @profile_page
-      # The only edit the profile entry supports here is removing a custom HTML
-      # takeover, which restores the default storefront template. Everything
-      # else about the profile is edited in profile settings.
+      # The profile entry supports two edits here: removing a custom HTML
+      # takeover, which restores the default storefront template, and its
+      # search fields. Everything else about the profile is edited in profile
+      # settings.
       if params[:remove_custom_html]
         current_seller.custom_html = nil
         current_seller.save!
         return redirect_to edit_page_path("profile"), notice: "Custom page removed — your profile is back on the default template.", status: :see_other
       end
-      return redirect_to pages_path
+      return redirect_to pages_path if seo_params.empty?
+
+      # Same lock as profile settings, so a first profile save can't create a
+      # second row for the seller.
+      seller_profile = nil
+      saved = current_seller.with_locked_seller_profile do |profile|
+        seller_profile = profile
+        profile.update(seo_params)
+      end
+      return redirect_to edit_page_path("profile"), notice: "Changes saved!", status: :see_other if saved
+
+      return redirect_to edit_page_path("profile"), inertia: { errors: page_errors(seller_profile) }
     end
 
     # A custom HTML page is authored by the seller's agent/CLI; the in-app
-    # editor never writes over it (the UI doesn't offer to, this is the
-    # server-side backstop).
-    return redirect_to edit_page_path(@page.slug) if @page.custom_html.present?
-
-    if @page.update(title: params[:title].to_s.strip, content: params[:content].to_s)
+    # editor never writes over its title or content (the UI doesn't offer to,
+    # this is the server-side backstop). Its SEO fields are editable here.
+    attributes = @page.custom_html.present? ? {} : { title: params[:title].to_s.strip, content: params[:content].to_s }
+    if @page.update(attributes.merge(seo_params))
       redirect_to edit_page_path(@page.slug), notice: "Changes saved!", status: :see_other
     else
       redirect_to edit_page_path(@page.slug), inertia: { errors: page_errors(@page) }
@@ -232,7 +262,17 @@ class PagesController < Sellers::BaseController
         title: page.title.to_s,
         content: page.content.to_s,
         custom_html: page.custom_html.present?,
+        seo_title: page.seo_title.to_s,
+        seo_description: page.seo_description.to_s,
+        # What the page shows when the seller leaves a field blank. The editor
+        # recomputes the title default from seller_name while the title changes.
+        default_seo_title: Pages::DocumentTitle.for(page_title: page.title, seller_name: current_seller.name_or_username),
+        default_seo_description: nil,
       }
+    end
+
+    def seo_params
+      params.permit(:seo_title, :seo_description).to_h.symbolize_keys
     end
 
     def page_errors(page)
