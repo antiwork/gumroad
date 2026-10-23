@@ -32,6 +32,22 @@ describe "Muse MCP product details" do
     expect(products[fixed.external_id]).to include("price_cents" => 1500, "pay_what_you_want" => false, "suggested_price_cents" => nil)
   end
 
+  it "lists a membership's pricing per tier and billing period" do
+    membership = create(:membership_product, user: @seller, name: "Club")
+    tier = membership.tiers.sole
+    tier.update!(name: "Supporter", customizable_price: true)
+    tier.save_recurring_prices!("monthly" => { enabled: true, price: "3", suggested_price: "5" }, "yearly" => { enabled: true, price: "30" })
+
+    product = call_tool("get_product", { id: membership.unique_permalink }, scopes: "edit_products")["product"]
+
+    expect(product).to include("pay_what_you_want" => true, "suggested_price_cents" => nil)
+    expect(product["tiers"]).to eq([{
+                                     "name" => "Supporter", "pay_what_you_want" => true,
+                                     "prices" => { "monthly" => { "price_cents" => 300, "suggested_price_cents" => 500 },
+                                                   "yearly" => { "price_cents" => 3000, "suggested_price_cents" => nil } }
+                                   }])
+  end
+
   it "returns the description, and the sales count and revenue with a sales scope" do
     create(:purchase, link: @product, seller: @seller, price_cents: 900)
     create(:purchase, link: @product, seller: @seller, price_cents: 1200)

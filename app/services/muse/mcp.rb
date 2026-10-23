@@ -473,13 +473,24 @@ module Muse
           name: product.name,
           price_cents: product.price_cents,
           currency: product.price_currency_type,
-          # With pay what you want, price_cents is the minimum and buyers can pay more.
-          pay_what_you_want: product.customizable_price?,
-          suggested_price_cents: product.customizable_price? ? product.suggested_price_cents : nil,
+          **pricing_payload(product),
           published: product.published?,
           url: product.long_url,
           permalink: product.unique_permalink
         }
+      end
+
+      # With pay what you want, a price is the minimum and buyers can pay more. A membership keeps
+      # this on each tier, priced per billing period, and its product-level flag is not kept in sync.
+      def pricing_payload(product)
+        unless product.is_tiered_membership
+          return { pay_what_you_want: !!product.customizable_price, suggested_price_cents: product.customizable_price? ? product.suggested_price_cents : nil }
+        end
+
+        tiers = product.tiers.alive.in_order.map do |tier|
+          { name: tier.name, pay_what_you_want: !!tier.customizable_price, prices: tier.recurrence_price_values }
+        end
+        { pay_what_you_want: tiers.any? { _1[:pay_what_you_want] }, suggested_price_cents: nil, tiers: }
       end
 
       def find_product!(id)
