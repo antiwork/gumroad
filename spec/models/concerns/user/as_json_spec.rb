@@ -55,6 +55,17 @@ describe User::AsJson do
       end
     end
 
+    context "for a profile scope" do
+      it "returns the home page's SEO fields" do
+        user.seller_profile.update!(seo_title: "Hand-lettered posters", seo_description: "Posters and prints.")
+
+        %w[view_profile edit_profile].each do |api_scope|
+          expect(user.as_json(api_scopes: [api_scope])).to include("seo_title" => "Hand-lettered posters", "seo_description" => "Posters and prints.")
+        end
+        expect(user.as_json(api_scopes: ["edit_products"])).not_to have_key("seo_title")
+      end
+    end
+
     describe "returned keys" do
       subject(:returned_keys) { as_json.keys.collect(&:to_s) }
 
@@ -99,7 +110,7 @@ describe User::AsJson do
             let(:options) { { api_scopes: [api_scope], internal_use: true } }
 
             if api_scope == "view_profile"
-              it { expect(returned_keys).to contain_exactly(*(common_keys + (api_scope_keys + %w[display_name]) + internal_use_keys)) }
+              it { expect(returned_keys).to contain_exactly(*(common_keys + (api_scope_keys + %w[display_name seo_title seo_description]) + internal_use_keys)) }
             else
               it { expect(returned_keys).to contain_exactly(*(common_keys + api_scope_keys + internal_use_keys)) }
             end
@@ -109,7 +120,7 @@ describe User::AsJson do
             let(:options) { { api_scopes: [api_scope] } }
 
             if api_scope == "view_profile"
-              it { expect(returned_keys).to contain_exactly(*(common_keys + (api_scope_keys + %w[display_name]))) }
+              it { expect(returned_keys).to contain_exactly(*(common_keys + (api_scope_keys + %w[display_name seo_title seo_description]))) }
             else
               it { expect(returned_keys).to contain_exactly(*(common_keys + api_scope_keys)) }
             end
