@@ -121,7 +121,7 @@ describe Api::Internal::Admin::FeatureAnnouncementCampaignsController do
     end
 
     it "shows delivery counts" do
-      FeatureAnnouncementDelivery.create!(campaign: "new_feature", user_id: 1, email: "a@example.com", state: "skipped", reason: "not_in_audience")
+      create(:feature_announcement_delivery, campaign: "new_feature", state: "skipped", reason: "not_in_audience")
 
       get :show, params: { id: "new_feature" }
 

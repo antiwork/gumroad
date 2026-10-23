@@ -2,13 +2,14 @@
 
 class Api::Internal::Admin::FeatureAnnouncementCampaignsController < Api::Internal::Admin::BaseController
   CONTENT_PARAMS = %i[subject body reply_to].freeze
+  MAX_LIST_RESULTS = 100
 
   # Approving or sending an email to every opted-in creator needs an attributable actor.
   before_action :require_per_actor_token!
   before_action :find_campaign_or_render, except: %i[index create]
 
   def index
-    campaigns = FeatureAnnouncementCampaign.order(id: :desc).limit(100)
+    campaigns = FeatureAnnouncementCampaign.order(id: :desc).limit(MAX_LIST_RESULTS)
     render json: { success: true, campaigns: campaigns.map { campaign_json(_1) } }
   end
 
@@ -71,7 +72,7 @@ class Api::Internal::Admin::FeatureAnnouncementCampaignsController < Api::Intern
     end
 
     def content_params
-      CONTENT_PARAMS.select { params.key?(_1) }.to_h { [_1, params[_1].to_s] }
+      CONTENT_PARAMS.select { params.key?(_1) }.index_with { params[_1].to_s }
     end
 
     def transition(name)
