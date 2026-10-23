@@ -453,6 +453,51 @@ describe("PaymentElementInput", () => {
     expect(elementsMounts.unmounts).toBe(2);
   });
 
+  it("remounts Elements without Klarna when the amount leaves its window, and with it when the amount returns", () => {
+    // Klarna's window is bounded at both ends; a mount that keeps Klarna below the floor or above
+    // the cap makes Stripe reject the whole session, card included. The list assertions in
+    // payment.test.ts cannot see the remount, so pin the creation calls here.
+    const windowedOptions: PaymentElementClientConfirmConfig = {
+      ...methodForcedElementsOptions,
+      currency: "usd",
+      presentment_amount_cents: 5_000,
+      listed_currency_display: null,
+      payment_method_types: ["card", "link", "klarna"],
+      payment_method_max_amount_cents: { klarna: 4_000_00 },
+      payment_method_min_amount_cents: { klarna: 1_00 },
+    };
+    const { rerender } = render(
+      <PaymentElementInput {...props} elementsOptions={windowedOptions} amount={5_000} mountCurrency="usd" />,
+    );
+
+    expect(elementsMounts.paymentMethodTypes).toEqual([["card", "link", "klarna"]]);
+
+    rerender(<PaymentElementInput {...props} elementsOptions={windowedOptions} amount={99} mountCurrency="usd" />);
+
+    expect(elementsMounts.paymentMethodTypes).toEqual([
+      ["card", "link", "klarna"],
+      ["card", "link"],
+    ]);
+
+    // Still outside the window at the other end: no second remount, but the amount reaches the
+    // live element so the buyer cannot confirm a charge the mounted session no longer matches.
+    rerender(
+      <PaymentElementInput {...props} elementsOptions={windowedOptions} amount={4_000_01} mountCurrency="usd" />,
+    );
+
+    expect(elementsMounts.unmounts).toBe(1);
+
+    rerender(<PaymentElementInput {...props} elementsOptions={windowedOptions} amount={5_000} mountCurrency="usd" />);
+
+    expect(elementsMounts.paymentMethodTypes).toEqual([
+      ["card", "link", "klarna"],
+      ["card", "link"],
+      ["card", "link", "klarna"],
+    ]);
+    expect(elementsMounts.amounts).toEqual([5_000, 99, 5_000]);
+    expect(elementsMounts.unmounts).toBe(2);
+  });
+
   it("updates a USD mount's method list in place when Klarna enters or leaves at the same currency", () => {
     const usdOptions: PaymentElementClientConfirmConfig = {
       ...methodForcedElementsOptions,
