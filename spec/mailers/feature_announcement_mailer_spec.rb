@@ -7,7 +7,7 @@ describe FeatureAnnouncementMailer do
 
   # A seller in the approved audience: can file a piracy report for their product.
   let(:user) { create_piracy_seller_with_product.first.tap { _1.update_columns(email: "creator@example.com") } }
-  let(:content) { described_class::CAMPAIGNS.fetch("piracy_reports") }
+  let!(:content) { create(:feature_announcement_campaign, :piracy_reports) }
 
   def announcement(to: user.email)
     described_class.announcement(campaign: "piracy_reports", user_id: user.id, email: to)
@@ -45,8 +45,8 @@ describe FeatureAnnouncementMailer do
 
     it "renders the same message body OneOffMailer would, adding only the unsubscribe footer" do
       mail = announcement
-      one_off = OneOffMailer.email(email: user.email, from: described_class::FROM, subject: content[:subject], body: content[:body],
-                                   reply_to: content[:reply_to], sender_domain: :creators)
+      one_off = OneOffMailer.email(email: user.email, from: described_class::FROM, subject: content.subject, body: content.body,
+                                   reply_to: content.reply_to, sender_domain: :creators)
 
       announcement_html = Nokogiri::HTML(mail.body.encoded)
       one_off_html = Nokogiri::HTML(one_off.body.encoded)
@@ -68,7 +68,7 @@ describe FeatureAnnouncementMailer do
     end
 
     it "refuses an unknown campaign" do
-      expect { described_class.announcement(campaign: "other", user_id: user.id, email: user.email).message }.to raise_error(KeyError)
+      expect { described_class.announcement(campaign: "other", user_id: user.id, email: user.email).message }.to raise_error(ActiveRecord::RecordNotFound)
     end
   end
 
@@ -224,6 +224,54 @@ describe FeatureAnnouncementMailer do
       expect(ActionMailer::Base.deliveries).to be_empty
       expect(delivery.reason).to eq("content_mismatch")
       expect(FeatureAnnouncementDelivery.find_by(user_id: other.id).reason).to eq("unsubscribe_link_mismatch")
+    end
+
+    %w[draft approved cancelled].each do |state|
+      it "skips a campaign in the #{state} state" do
+        subscribe!
+        content.update_columns(state:)
+
+        announcement.deliver_now
+
+        expect(ActionMailer::Base.deliveries).to be_empty
+        expect(delivery.attributes.slice("state", "reason")).to eq("state" => "skipped", "reason" => "campaign_not_deliverable")
+      end
+    end
+
+    it "skips a campaign whose copy changed after approval" do
+      subscribe!
+      content.update_columns(body: "<p>Unapproved copy</p>")
+
+      announcement.deliver_now
+
+      expect(ActionMailer::Base.deliveries).to be_empty
+      expect(delivery.reason).to eq("campaign_not_deliverable")
+    end
+
+    it "refuses a message rendered from copy that was later replaced and approved" do
+      subscribe!
+      content.update_columns(state: "draft", content_digest: nil)
+      mail = announcement
+      mail.message
+      content.update!(body: "<p>The approved copy</p>")
+      content.update_columns(state: "sending", content_digest: content.current_digest)
+
+      mail.deliver_now
+
+      expect(ActionMailer::Base.deliveries).to be_empty
+      expect(delivery.reason).to eq("content_mismatch")
+    end
+
+    it "skips a message whose campaign was removed after rendering" do
+      subscribe!
+      mail = announcement
+      mail.message
+      content.destroy!
+
+      mail.deliver_now
+
+      expect(ActionMailer::Base.deliveries).to be_empty
+      expect(delivery.reason).to eq("unknown_campaign")
     end
 
     it "sends a campaign to a user at most once" do

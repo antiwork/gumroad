@@ -10,11 +10,13 @@ describe FeatureAnnouncementDelivery, "ordering the handoff against concurrent w
     # The audience reads are unlocked and covered in the mailer spec; this file is about the locks.
     allow(FeatureAnnouncementMailer).to receive(:in_audience?).and_return(true)
     ActionMailer::Base.deliveries.clear
+    @campaign = create(:feature_announcement_campaign, :piracy_reports)
     @user = create(:user, email: "concurrent-creator@example.com")
     FeatureAnnouncementSubscription.update_from_settings!(@user, subscribed: true, rendered_version: 0)
   end
 
   after do
+    @campaign&.destroy!
     FeatureAnnouncementDelivery.where(user_id: @user.id).delete_all
     FeatureAnnouncementSubscription.where(user_id: @user.id).delete_all
     @user.destroy!

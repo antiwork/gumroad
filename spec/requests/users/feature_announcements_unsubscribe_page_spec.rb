@@ -5,7 +5,10 @@ require "spec_helper"
 describe "Unsubscribing from feature announcements by email link", type: :system, js: true do
   let(:user) { create(:user, email: "creator@example.com") }
 
-  before { FeatureAnnouncementSubscription.update_from_settings!(user, subscribed: true, rendered_version: 0) }
+  before do
+    create(:feature_announcement_campaign, :piracy_reports)
+    FeatureAnnouncementSubscription.update_from_settings!(user, subscribed: true, rendered_version: 0)
+  end
 
   it "asks for confirmation, then unsubscribes without a session" do
     mail = FeatureAnnouncementMailer.announcement(campaign: "piracy_reports", user_id: user.id, email: user.email)

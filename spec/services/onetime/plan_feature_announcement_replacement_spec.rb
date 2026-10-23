@@ -7,9 +7,9 @@ describe Onetime::PlanFeatureAnnouncementReplacement do
   # calendar time would silently enqueue immediately once it has passed.
   let(:send_at) { 1.hour.from_now.change(usec: 0) }
   let(:ledger_key) { "gp3664:ledger" }
-  let(:content) { FeatureAnnouncementMailer::CAMPAIGNS.fetch("piracy_reports") }
+  let!(:content) { create(:feature_announcement_campaign, :piracy_reports) }
   # The queued jobs were built separately, so their markup differs from the mailer's.
-  let(:queued_body) { content[:body].delete("\n").gsub("<strong>", "<b>").gsub("</strong>", "</b>") }
+  let(:queued_body) { content.body.delete("\n").gsub("<strong>", "<b>").gsub("</strong>", "</b>") }
 
   around do |example|
     previous = MailDeliveryJob.queue_adapter
@@ -21,8 +21,8 @@ describe Onetime::PlanFeatureAnnouncementReplacement do
 
   # Enqueues the same way the existing campaign did: one OneOffMailer job per address.
   def queue_one_off(email:, at: send_at, **overrides)
-    args = { email:, from: FeatureAnnouncementMailer::FROM, sender_domain: "creators", reply_to: content[:reply_to],
-             subject: content[:subject], body: queued_body }.merge(overrides)
+    args = { email:, from: FeatureAnnouncementMailer::FROM, sender_domain: "creators", reply_to: content.reply_to,
+             subject: content.subject, body: queued_body }.merge(overrides)
     OneOffMailer.email(**args).deliver_later(queue: "low", wait_until: at).job_id
   end
 

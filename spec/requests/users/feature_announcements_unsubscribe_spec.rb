@@ -10,6 +10,7 @@ describe "Feature announcement unsubscribe links", type: :request, inertia: true
 
   before do
     host! DOMAIN
+    create(:feature_announcement_campaign, :piracy_reports)
     FeatureAnnouncementSubscription.update_from_settings!(user, subscribed: true, rendered_version: 0)
   end
 
