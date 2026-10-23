@@ -2581,6 +2581,20 @@ describe Api::V2::LinksController do
         expect(response.parsed_body["success"]).to be(true)
         expect(response.parsed_body["product"]).to eq(@product.reload.as_json(api_scopes: ["edit_products"]))
       end
+
+      context "when a variant category has no alive variants" do
+        before do
+          category = create(:variant_category, link: @product)
+          create(:variant, variant_category: category).update!(deleted_at: Time.current)
+        end
+
+        it "disables the product instead of raising" do
+          put @action, params: @params
+
+          expect(response.parsed_body["success"]).to be(true)
+          expect(@product.reload.purchase_disabled_at).to_not be(nil)
+        end
+      end
     end
   end
 
