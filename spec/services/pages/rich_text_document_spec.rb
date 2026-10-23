@@ -4,7 +4,7 @@ require "spec_helper"
 
 describe Pages::RichTextDocument do
   describe ".render" do
-    let(:page) { Struct.new(:title, :content).new("About", "<p>Hello</p>") }
+    let(:page) { build(:user_page, title: "About", content: "<p>Hello</p>") }
 
     it "styles TipTap insert-button links so they publish as buttons, not plain text" do
       html = described_class.render(page:, seller_name: "Jane")
@@ -24,11 +24,20 @@ describe Pages::RichTextDocument do
     end
 
     it "does not append the seller name when the page title already ends with it" do
-      titled_page = Struct.new(:title, :content).new("About | Jane", "<p>Hello</p>")
+      titled_page = build(:user_page, title: "About | Jane", content: "<p>Hello</p>")
 
       html = described_class.render(page: titled_page, seller_name: "Jane")
 
       expect(html).to include("<title>About | Jane</title>")
+    end
+
+    it "uses the seller's SEO title as written" do
+      page.seo_title = "Hand-lettered posters"
+
+      html = described_class.render(page:, seller_name: "Jane")
+
+      expect(html).to include("<title>Hand-lettered posters</title>")
+      expect(html).to include(%(<h1 class="page-title">About</h1>))
     end
   end
 end
