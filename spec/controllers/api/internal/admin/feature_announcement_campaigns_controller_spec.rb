@@ -54,6 +54,9 @@ describe Api::Internal::Admin::FeatureAnnouncementCampaignsController do
       expect(response).to have_http_status(:ok)
       expect(json["email"]).to include("subject" => "Try the new feature", "reply_to" => ["support@gumroad.com"], "from" => FeatureAnnouncementMailer::FROM)
       expect(json["email"]["html_body"]).to include("https://gumroad.com/help")
+      html = Nokogiri::HTML(json["email"]["html_body"])
+      expect(html.css("link[rel=stylesheet]")).to be_empty
+      expect(html.at_css(".main")["style"]).to be_present
       expect(FeatureAnnouncementDelivery.count).to eq(0)
       digest = json["campaign"]["content_digest"]
 
