@@ -28,6 +28,24 @@ class FeatureAnnouncementMailer < ApplicationMailer
         <p>The Gumroad team</p>
       HTML
     },
+    # gumroad-private#3773
+    "mcp_connector" => {
+      subject: "Sell from the AI assistant you already use",
+      reply_to: "support@gumroad.com",
+      audience: :mcp_connector_audience?,
+      body: <<~HTML,
+        <p>Hi creator,</p>
+        <p>Your Gumroad store now works inside Claude. Connect it once, and you can check your sales, draft a product, publish it, and see your payouts without leaving the chat.</p>
+        <p>What that looks like:</p>
+        <p>• "Show my recent sales." See which products sold and what buyers paid.<br>
+        • "Draft my next product." Get a name, price, and description written for you. Add the files in Gumroad, then publish.<br>
+        • "Check my latest payouts." See amounts and status.</p>
+        <p>Set it up in about a minute at <a href="https://gumroad.com/mcp">gumroad.com/mcp</a>. Add the connector in Claude, approve the permissions you want to grant, and you are done. Custom-connector access depends on your Claude plan and organization settings. Step-by-step guide: <a href="https://gumroad.com/help/article/355-connect-ai-assistants-to-gumroad">Connecting AI assistants to your Gumroad store</a>. You can revoke access at any time from Settings.</p>
+        <p>Your prices, your earnings, your payout schedule, and your product setup all stay exactly as they are today. Nothing about your money changes.</p>
+        <p>The slow part of selling is usually the gap between having an idea and having it live. This shortens that gap from an afternoon of setup to a sentence in a chat.</p>
+        <p>The Gumroad Team</p>
+      HTML
+    },
   }.freeze
 
   # Mail#deliver and Mail#deliver! (deliver_now!/deliver_later!) both end in
@@ -74,6 +92,12 @@ class FeatureAnnouncementMailer < ApplicationMailer
       .select(1).offset(PiracyReport::MIN_SUCCESSFUL_SALES - 1).limit(1)
     user.products.where(deleted_at: nil, purchase_disabled_at: nil, draft: false)
       .where.not(id: collaborated).where("EXISTS (#{sold.to_sql})").order(:id)
+  end
+
+  # Creator accounts: any account that has made a product, the line User#is_buyer? draws.
+  # Buyers, followers and signups without a product are left out even if they opted in.
+  def self.mcp_connector_audience?(user)
+    user.products.exists?
   end
 
   def announcement(campaign:, user_id:, email:)
