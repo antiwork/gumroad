@@ -21,6 +21,56 @@ describe StripePayoutProcessor do
     end
   end
 
+  describe ".pay_out_currency?" do
+    let(:seller) { create(:user) }
+    let(:merchant_account) { create(:merchant_account, user: seller, currency: Currency::GBP, charge_processor_merchant_id: "acct_replaced_bank") }
+
+    def stub_stripe_account(external_accounts:, held:)
+      allow(Stripe::Account).to receive(:list_external_accounts).with("acct_replaced_bank", { limit: 100 })
+        .and_return(external_accounts.map { |id, currency| Stripe::BankAccount.construct_from(id:, currency:) })
+      allow(Stripe::Balance).to receive(:retrieve).with({}, { stripe_account: "acct_replaced_bank" })
+        .and_return(Stripe::Balance.construct_from(available: held.map { |currency| { currency:, amount: 100_00 } }))
+    end
+
+    before { described_class.pay_out_currencies_cache.delete("acct_replaced_bank") }
+    after { described_class.pay_out_currencies_cache.delete("acct_replaced_bank") }
+
+    it "does not pay a held currency whose only bank at Stripe is one the seller replaced" do
+      create(:ach_account, user: seller, stripe_connect_account_id: "acct_replaced_bank", stripe_bank_account_id: "ba_gbp_active")
+      stub_stripe_account(external_accounts: [["ba_gbp_active", "gbp"], ["ba_eur_replaced", "eur"]], held: ["gbp", "eur"])
+
+      expect(described_class.pay_out_currency?(merchant_account, Currency::EUR)).to be(false)
+      expect(described_class.pay_out_currency?(merchant_account, Currency::GBP)).to be(true)
+    end
+
+    it "pays a held foreign currency when the seller's active bank is the one in that currency" do
+      create(:ach_account, user: seller, stripe_connect_account_id: "acct_replaced_bank", stripe_bank_account_id: "ba_eur_active")
+      stub_stripe_account(external_accounts: [["ba_eur_active", "eur"]], held: ["eur"])
+
+      expect(described_class.pay_out_currency?(merchant_account, Currency::EUR)).to be(true)
+    end
+
+    it "stops paying a currency as soon as its bank is replaced, even while the Stripe probe is cached" do
+      eur_bank = create(:ach_account, user: seller, stripe_connect_account_id: "acct_replaced_bank", stripe_bank_account_id: "ba_eur_active")
+      stub_stripe_account(external_accounts: [["ba_eur_active", "eur"], ["ba_gbp_new", "gbp"]], held: ["eur", "gbp"])
+      expect(described_class.pay_out_currency?(merchant_account, Currency::EUR)).to be(true)
+
+      eur_bank.mark_deleted!
+      create(:ach_account, user: seller, stripe_connect_account_id: "acct_replaced_bank", stripe_bank_account_id: "ba_gbp_new")
+
+      expect(described_class.pay_out_currency?(merchant_account, Currency::EUR)).to be(false)
+      expect(Stripe::Account).to have_received(:list_external_accounts).once
+    end
+
+    it "keeps paying a retired account's held currency to the bank that account kept" do
+      merchant_account.delete_charge_processor_account!
+      create(:ach_account, user: seller, stripe_connect_account_id: "acct_other_rail", stripe_bank_account_id: "ba_new_rail")
+      stub_stripe_account(external_accounts: [["ba_eur_kept", "eur"]], held: ["eur"])
+
+      expect(described_class.pay_out_currency?(merchant_account, Currency::EUR)).to be(true)
+    end
+  end
+
   describe ".unpayable_currency_group?" do
     let(:seller) { create(:user) }
     let(:merchant_account) { create(:merchant_account, user: seller, currency: Currency::PLN, charge_processor_merchant_id: "acct_unpayable_pln") }

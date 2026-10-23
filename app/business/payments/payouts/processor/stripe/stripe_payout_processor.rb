@@ -159,31 +159,42 @@ class StripePayoutProcessor
     return [] if stripe_account_id.blank?
 
     cached = pay_out_currencies_cache[stripe_account_id]
-    return cached[:currencies] if cached.present? && cached[:fetched_at] > PAY_OUT_CURRENCIES_CACHE_TTL.ago
-
-    probe_failed = false
-    currencies = begin
-      receivable = Stripe::Account.list_external_accounts(stripe_account_id, { limit: 100 })
-        .map { |external_account| external_account.currency.to_s }
-      held = Stripe::Balance.retrieve({}, { stripe_account: stripe_account_id }).available
-        .filter_map { |balance| balance.currency.to_s if balance.amount.positive? }
-      receivable & held
-    rescue Stripe::StripeError
-      # A currency we cannot prove is payable stays unpaid and rolls into the next run, rather than
-      # producing a payout Stripe will reject and a failure email for the seller.
-      probe_failed = true
-      []
-    rescue StandardError => e
-      # Anything else reaching the client (bad credentials, an unmocked HTTP layer in specs, a bug in
-      # the probe itself) must not fail the whole payout run for the seller: same safe direction as
-      # above, but logged loudly because this class of error is not expected.
-      Rails.logger.warn("StripePayoutProcessor: payable-currency probe failed for #{stripe_account_id}: #{e.class}: #{e.message}")
-      probe_failed = true
-      []
+    unless cached.present? && cached[:fetched_at] > PAY_OUT_CURRENCIES_CACHE_TTL.ago
+      probe_failed = false
+      external_accounts, held = begin
+        [
+          Stripe::Account.list_external_accounts(stripe_account_id, { limit: 100 })
+            .map { |external_account| [external_account.id, external_account.currency.to_s] },
+          Stripe::Balance.retrieve({}, { stripe_account: stripe_account_id }).available
+            .filter_map { |balance| balance.currency.to_s if balance.amount.positive? }
+        ]
+      rescue Stripe::StripeError
+        # A currency we cannot prove is payable stays unpaid and rolls into the next run, rather than
+        # producing a payout Stripe will reject and a failure email for the seller.
+        probe_failed = true
+        [[], []]
+      rescue StandardError => e
+        # Anything else reaching the client (bad credentials, an unmocked HTTP layer in specs, a bug in
+        # the probe itself) must not fail the whole payout run for the seller: same safe direction as
+        # above, but logged loudly because this class of error is not expected.
+        Rails.logger.warn("StripePayoutProcessor: payable-currency probe failed for #{stripe_account_id}: #{e.class}: #{e.message}")
+        probe_failed = true
+        [[], []]
+      end
+      cached = pay_out_currencies_cache[stripe_account_id] = { external_accounts:, held:, fetched_at: Time.current, probe_failed: }
     end
 
-    pay_out_currencies_cache[stripe_account_id] = { currencies:, fetched_at: Time.current, probe_failed: }
-    currencies
+    external_accounts = cached[:external_accounts]
+    # A foreign-currency payout names no destination, so Stripe pays the account's default bank for
+    # that currency. Replacing a payout method leaves a bank in another currency attached at Stripe,
+    # so on the seller's live account only their active bank counts. A retired account's drain keeps
+    # paying the bank that account kept. Filtered on every read, since the bank can change mid-cache.
+    if merchant_account.active? && merchant_account.is_a_gumroad_managed_stripe_account?
+      active_bank_account = merchant_account.user.active_bank_account
+      active_bank_id = active_bank_account.stripe_external_account_id if active_bank_account&.stripe_connect_account_id == stripe_account_id
+      external_accounts = external_accounts.select { |id, _currency| id == active_bank_id }
+    end
+    external_accounts.map(&:last) & cached[:held]
   end
 
   # Public: True when the last probe for this account failed, so an empty `pay_out_currencies` does
