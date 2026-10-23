@@ -9,7 +9,9 @@ class ReceiptPresenter::MailSubject
 
   def initialize(chargeable)
     @chargeable = chargeable
-    @purchases = chargeable.unbundled_purchases
+    # The receipt body expands a bundle into its member lines; the subject names the bundle itself
+    # instead of whichever member happens to render first.
+    @purchases = chargeable.successful_purchases
   end
 
   def build

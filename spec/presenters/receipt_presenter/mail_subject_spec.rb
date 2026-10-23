@@ -27,6 +27,44 @@ describe ReceiptPresenter::MailSubject, :vcr do
       end
     end
 
+    describe "with a bundle purchase that has member products" do
+      let(:bundle) { create(:product, :bundle, name: "Mega Bundle") }
+      let(:purchase_one) { create(:purchase, link: bundle) }
+      let(:chargeable) { purchase_one }
+
+      before do
+        purchase_one.create_artifacts_and_send_receipt!
+      end
+
+      it "names the bundle instead of its first member product" do
+        expect(purchase_one.product_purchases.size).to eq(2)
+        expect(mail_subject).to eq("You bought Mega Bundle!")
+      end
+
+      context "when the bundle is free" do
+        let(:purchase_one) { create(:purchase, link: bundle, price_cents: 0) }
+
+        it "returns the free bundle subject" do
+          expect(mail_subject).to eq("You got Mega Bundle!")
+        end
+      end
+
+      context "when the bundle is charged together with another product" do
+        let(:product_two) { create(:product, name: "Product Two") }
+        let(:purchase_two) { create(:purchase, link: product_two) }
+        let(:charge) { create(:charge, purchases: [purchase_one]) }
+        let(:chargeable) { charge }
+
+        before do
+          charge.purchases << purchase_two
+        end
+
+        it "names the bundle rather than its members" do
+          expect(mail_subject).to eq("You bought Mega Bundle and Product Two")
+        end
+      end
+    end
+
     describe "with one purchase" do
       RSpec.shared_examples "one purchase mail subject" do
         it "returns expected subject" do
