@@ -15,6 +15,8 @@ describe FeatureAnnouncementDelivery, "mcp_connector races", :aggregate_failures
   end
 
   after do
+    next if @user.nil?
+
     product_ids = Link.where(user_id: @user.id).ids
     FeatureAnnouncementDelivery.where(user_id: @user.id).delete_all
     FeatureAnnouncementSubscription.where(user_id: @user.id).delete_all

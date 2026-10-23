@@ -42,7 +42,8 @@ describe FeatureAnnouncementMailer, "mcp_connector campaign" do
         "and you are done. Custom-connector access depends on your Claude plan and organization settings. " \
         "Step-by-step guide: Connecting AI assistants to your Gumroad store. You can revoke access at any time from Settings. " \
         "Your prices, your earnings, your payout schedule, and your product setup all stay exactly as they are today. " \
-        "Nothing about your money changes."
+        "Nothing about your money changes. The slow part of selling is usually the gap between having an idea and having it live. " \
+        "This shortens that gap from an afternoon of setup to a sentence in a chat. The Gumroad Team"
       )
       expect(body.css("a").map { _1["href"] }).to eq(["https://gumroad.com/mcp", "https://gumroad.com/help/article/355-connect-ai-assistants-to-gumroad"])
       expect(body.text).not_to match(/ChatGPT|Muse/)
@@ -112,7 +113,7 @@ describe FeatureAnnouncementMailer, "mcp_connector campaign" do
   end
 
   describe "consent" do
-    it "does not treat the legacy announcement preference as an opt-in" do
+    it "does not create consent from the legacy announcement preference" do
       expect(seller.announcement_notification_enabled).to be(true)
 
       announcement(seller).deliver_now
