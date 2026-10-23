@@ -10358,6 +10358,15 @@ describe StripeMerchantAccountManager, :vcr do
       expect { described_class.send(:delete_replaced_external_accounts, active_bank, stripe_account) }.not_to raise_error
     end
 
+    it "notifies when the external accounts cannot be listed" do
+      stripe_account.external_accounts.has_more = true
+      allow(Stripe::Account).to receive(:list_external_accounts).and_raise(Stripe::APIConnectionError, "connection reset")
+      expect(Stripe::Account).not_to receive(:delete_external_account)
+      expect(ErrorNotifier).to receive(:notify).with(/could not be listed/, stripe_account_id:)
+
+      described_class.send(:delete_replaced_external_accounts, active_bank, stripe_account)
+    end
+
     it "skips the default for the account's own currency that Stripe refuses to delete" do
       allow(Stripe::Account).to receive(:delete_external_account)
       allow(Stripe::Account).to receive(:delete_external_account).with(stripe_account_id, "ba_replaced_default").and_raise(

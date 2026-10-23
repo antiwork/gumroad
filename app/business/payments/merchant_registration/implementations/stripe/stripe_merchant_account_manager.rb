@@ -2591,7 +2591,13 @@ module StripeMerchantAccountManager
       rows.where(deleted_at: nil).pluck(:stripe_bank_account_id) - [bank_account.stripe_external_account_id]
     return if replaced_ids.empty?
 
-    replaced = Array(external_accounts_for_link_match(stripe_account)).select { replaced_ids.include?(_1["id"]) }
+    external_accounts = external_accounts_for_link_match(stripe_account)
+    if external_accounts.nil?
+      ErrorNotifier.notify("Replaced Stripe banks were not cleaned up: external accounts could not be listed", stripe_account_id: stripe_account.id)
+      return
+    end
+
+    replaced = external_accounts.select { replaced_ids.include?(_1["id"]) }
     # Stripe refuses to delete a currency's default while another account shares that currency.
     replaced.sort_by { _1["default_for_currency"] ? 1 : 0 }.each do |external_account|
       Stripe::Account.delete_external_account(stripe_account.id, external_account["id"])
