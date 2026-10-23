@@ -35,9 +35,11 @@ describe "mysql2 proxy feature announcement routing" do
 
     recipient_reads = reads.select { |sql, _| sql.match?(/`(feature_announcement_subscriptions|users)`/) }
     expect(recipient_reads.map(&:last).uniq).to eq(["primary"])
-    # The test adapter keeps jobs from earlier specs in the process, so read only the mail deliveries.
-    mail_jobs = ActiveJob::Base.queue_adapter.enqueued_jobs.select { _1["job_class"] == ActionMailer::Base.delivery_job.name }
-    expect(mail_jobs.map { _1["arguments"].last["args"].first["user_id"] }).to include(user.id)
+    # The test adapter keeps jobs from earlier specs in the process, so read only this mailer's deliveries.
+    announcement_jobs = ActiveJob::Base.queue_adapter.enqueued_jobs.select do
+      _1["job_class"] == ActionMailer::Base.delivery_job.name && _1["arguments"].first == FeatureAnnouncementMailer.name
+    end
+    expect(announcement_jobs.map { _1["arguments"].last["args"].first["user_id"] }).to include(user.id)
     expect(primary_setup { campaign.reload.state }).to eq("sent")
   end
 end
