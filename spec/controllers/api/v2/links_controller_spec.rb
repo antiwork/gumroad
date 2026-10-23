@@ -2591,6 +2591,7 @@ describe Api::V2::LinksController do
         it "disables the product instead of raising" do
           put @action, params: @params
 
+          expect(response).to be_successful
           expect(response.parsed_body["success"]).to be(true)
           expect(@product.reload.purchase_disabled_at).to_not be(nil)
         end
