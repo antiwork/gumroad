@@ -47,7 +47,7 @@ git config --system core.longpaths true
 
 ### Ruby
 
-Install the version specified in `.ruby-version` (e.g., 3.4.3) using `rbenv`:
+Install the version specified in `.ruby-version` (e.g., 3.4.12) using `rbenv`:
 
 ```bash
 # Base toolchain + rbenv
@@ -62,8 +62,8 @@ export PATH="$HOME/.rbenv/bin:$PATH"
 eval "$(rbenv init -)"
 
 # Install Ruby
-rbenv install 3.4.3
-rbenv global 3.4.3
+rbenv install 3.4.12
+rbenv global 3.4.12
 ```
 
 ### Node.js
