@@ -1183,7 +1183,7 @@ describe UpdateUserComplianceInfo do
         described_class.new(compliance_params: params, user:).process
       end
 
-      %w[4829137K 4829137-K 48291374K 48291374 482913749].each do |value|
+      %w[805813K 805813-K 4829137 4829137K 4829137-K 48291374K 48291374 482913749].each do |value|
         it "accepts #{value}, which Stripe accepts" do
           expect(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info)
 
@@ -1200,14 +1200,14 @@ describe UpdateUserComplianceInfo do
       it "validates an ID submitted as ssn_last_four" do
         expect(StripeMerchantAccountManager).not_to receive(:handle_new_user_compliance_info)
 
-        params = ActionController::Parameters.new(is_business: false, ssn_last_four: "4829137")
+        params = ActionController::Parameters.new(is_business: false, ssn_last_four: "80581")
         result = described_class.new(compliance_params: params, user:).process
 
         expect(result[:success]).to be false
         expect(result[:error_message]).to eq(Compliance::GuatemalaNit::ERROR_MESSAGE)
       end
 
-      %w[4829137 482913K 482913-4 482913749K 4829137490].each do |value|
+      %w[80581 80581K 4829-13 482913749K 4829137490].each do |value|
         it "rejects #{value}, which Stripe refuses" do
           expect(StripeMerchantAccountManager).not_to receive(:handle_new_user_compliance_info)
 
