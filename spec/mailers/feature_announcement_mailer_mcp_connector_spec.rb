@@ -5,7 +5,7 @@ require "spec_helper"
 describe FeatureAnnouncementMailer, "mcp_connector campaign" do
   include ActiveJob::TestHelper
 
-  let(:creator) { create(:product, user: create(:user, email: "mcp-creator@example.com")).user }
+  let(:seller) { create(:product, user: create(:user, email: "mcp-creator@example.com")).user }
 
   def announcement(user, to: user.email)
     described_class.announcement(campaign: "mcp_connector", user_id: user.id, email: to)
@@ -23,7 +23,7 @@ describe FeatureAnnouncementMailer, "mcp_connector campaign" do
 
   describe "rendering" do
     it "sends the campaign copy from the shared feature announcement sender" do
-      mail = announcement(creator)
+      mail = announcement(seller)
 
       expect(mail.subject).to eq("Sell from the AI assistant you already use")
       expect(mail[:from].to_s).to eq(described_class::FROM)
@@ -49,36 +49,36 @@ describe FeatureAnnouncementMailer, "mcp_connector campaign" do
     end
 
     it "links the footer and one-click headers to this recipient's unsubscribe token" do
-      mail = announcement(creator)
+      mail = announcement(seller)
       footer_link = Nokogiri::HTML(mail.body.encoded).at_css(".footer a[href*='unsubscribe_feature_announcements']")["href"]
 
       expect(mail["List-Unsubscribe"].value).to eq("<#{footer_link}>")
       expect(mail["List-Unsubscribe-Post"].value).to eq("List-Unsubscribe=One-Click")
       token = URI.parse(footer_link).path.split("/").last
       expect(FeatureAnnouncementSubscription.decode_unsubscribe_token(token))
-        .to eq([creator.id, FeatureAnnouncementSubscription.address_digest("mcp-creator@example.com")])
+        .to eq([seller.id, FeatureAnnouncementSubscription.address_digest("mcp-creator@example.com")])
     end
   end
 
   describe "audience" do
     it "delivers to an opted-in creator at their confirmed address" do
-      subscribe!(creator)
+      subscribe!(seller)
 
-      perform_enqueued_jobs { announcement(creator).deliver_later(queue: "low") }
+      perform_enqueued_jobs { announcement(seller).deliver_later(queue: "low") }
 
       expect(ActionMailer::Base.deliveries.map(&:to)).to eq([["mcp-creator@example.com"]])
-      expect(delivery(creator).attributes.slice("state", "email", "reason")).to eq("state" => "delivered", "email" => "mcp-creator@example.com", "reason" => nil)
+      expect(delivery(seller).attributes.slice("state", "email", "reason")).to eq("state" => "delivered", "email" => "mcp-creator@example.com", "reason" => nil)
     end
 
     it "keeps a creator whose products are all deleted, as User#is_buyer? does" do
-      creator.products.each(&:mark_deleted!)
-      create(:purchase, purchaser: creator, email: creator.email)
-      subscribe!(creator)
-      expect(creator.is_buyer?).to be(false)
+      seller.products.each(&:mark_deleted!)
+      create(:purchase, purchaser: seller, email: seller.email)
+      subscribe!(seller)
+      expect(seller.is_buyer?).to be(false)
 
-      announcement(creator).deliver_now
+      announcement(seller).deliver_now
 
-      expect(delivery(creator).state).to eq("delivered")
+      expect(delivery(seller).state).to eq("delivered")
     end
 
     {
@@ -113,35 +113,35 @@ describe FeatureAnnouncementMailer, "mcp_connector campaign" do
 
   describe "consent" do
     it "does not treat the legacy announcement preference as an opt-in" do
-      expect(creator.announcement_notification_enabled).to be(true)
+      expect(seller.announcement_notification_enabled).to be(true)
 
-      announcement(creator).deliver_now
+      announcement(seller).deliver_now
 
       expect(ActionMailer::Base.deliveries).to be_empty
-      expect(delivery(creator).reason).to eq("not_subscribed")
-      expect(FeatureAnnouncementSubscription.where(user_id: creator.id)).to be_empty
+      expect(delivery(seller).reason).to eq("not_subscribed")
+      expect(FeatureAnnouncementSubscription.where(user_id: seller.id)).to be_empty
     end
 
     it "skips a creator who opted out earlier" do
-      subscribe!(creator)
-      FeatureAnnouncementSubscription.unsubscribe!(creator, source: "settings")
+      subscribe!(seller)
+      FeatureAnnouncementSubscription.unsubscribe!(seller, source: "settings")
 
-      announcement(creator).deliver_now
+      announcement(seller).deliver_now
 
       expect(ActionMailer::Base.deliveries).to be_empty
-      expect(delivery(creator).reason).to eq("not_subscribed")
+      expect(delivery(seller).reason).to eq("not_subscribed")
     end
 
     it "honors an opt-out made after the message was rendered" do
-      subscribe!(creator)
-      mail = announcement(creator)
+      subscribe!(seller)
+      mail = announcement(seller)
       mail.message
 
-      FeatureAnnouncementSubscription.unsubscribe!(creator, source: "unsubscribe_link")
+      FeatureAnnouncementSubscription.unsubscribe!(seller, source: "unsubscribe_link")
       mail.deliver_now
 
       expect(ActionMailer::Base.deliveries).to be_empty
-      expect(delivery(creator).reason).to eq("not_subscribed")
+      expect(delivery(seller).reason).to eq("not_subscribed")
     end
 
     {
@@ -152,49 +152,49 @@ describe FeatureAnnouncementMailer, "mcp_connector campaign" do
       "changed its address" => [->(user) { user.update_columns(email: "mcp-new@example.com") }, "recipient_mismatch"],
     }.each do |name, (change, reason)|
       it "skips an account that #{name} after the message was rendered" do
-        subscribe!(creator)
-        mail = announcement(creator)
+        subscribe!(seller)
+        mail = announcement(seller)
         mail.message
 
-        change.call(creator)
+        change.call(seller)
         mail.deliver_now
 
         expect(ActionMailer::Base.deliveries).to be_empty
-        expect(delivery(creator).attributes.slice("state", "reason")).to eq("state" => "skipped", "reason" => reason)
+        expect(delivery(seller).attributes.slice("state", "reason")).to eq("state" => "skipped", "reason" => reason)
       end
     end
   end
 
   describe "deduplication" do
     it "sends the campaign to an account and to an address at most once" do
-      subscribe!(creator)
-      2.times { announcement(creator).deliver_now }
+      subscribe!(seller)
+      2.times { announcement(seller).deliver_now }
       other = create(:product, user: create(:user, email: "mcp-other@example.com")).user
       subscribe!(other)
 
       announcement(other, to: "MCP-Creator@example.com").deliver_now
 
       expect(ActionMailer::Base.deliveries.size).to eq(1)
-      expect(FeatureAnnouncementDelivery.where(campaign: "mcp_connector").pluck(:user_id)).to eq([creator.id])
+      expect(FeatureAnnouncementDelivery.where(campaign: "mcp_connector").pluck(:user_id)).to eq([seller.id])
     end
 
     it "counts deliveries per campaign" do
-      subscribe!(creator)
-      FeatureAnnouncementDelivery.create!(campaign: "piracy_reports", user_id: creator.id, email: creator.email, state: "delivered")
+      subscribe!(seller)
+      FeatureAnnouncementDelivery.create!(campaign: "piracy_reports", user_id: seller.id, email: seller.email, state: "delivered")
 
-      announcement(creator).deliver_now
+      announcement(seller).deliver_now
 
-      expect(delivery(creator).state).to eq("delivered")
+      expect(delivery(seller).state).to eq("delivered")
     end
 
     it "keeps an uncertain earlier attempt quarantined" do
-      subscribe!(creator)
-      FeatureAnnouncementDelivery.create!(campaign: "mcp_connector", user_id: creator.id, email: creator.email, state: "unknown")
+      subscribe!(seller)
+      FeatureAnnouncementDelivery.create!(campaign: "mcp_connector", user_id: seller.id, email: seller.email, state: "unknown")
 
-      announcement(creator).deliver_now
+      announcement(seller).deliver_now
 
       expect(ActionMailer::Base.deliveries).to be_empty
-      expect(delivery(creator).state).to eq("unknown")
+      expect(delivery(seller).state).to eq("unknown")
     end
   end
 end
