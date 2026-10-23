@@ -3727,11 +3727,13 @@ class StripePayoutProcessorTest < ActiveSupport::TestCase
 
   test "pay_out_currencies requires both a held balance and a bank account to receive it, and reuses the answer" do
     merchant_account = create_merchant_account(currency: Currency::HUF)
+    create_european_bank_account(user: merchant_account.user, stripe_connect_account_id: merchant_account.charge_processor_merchant_id,
+                                 stripe_bank_account_id: "ba_eur")
     StripePayoutProcessor.pay_out_currencies_cache.clear
     Stripe::Account.expects(:list_external_accounts).once.returns([
-                                                                    Stripe::BankAccount.construct_from(object: "bank_account", currency: "eur"),
-                                                                    Stripe::BankAccount.construct_from(object: "bank_account", currency: "usd"),
-                                                                    Stripe::BankAccount.construct_from(object: "bank_account", currency: "huf")
+                                                                    Stripe::BankAccount.construct_from(object: "bank_account", id: "ba_eur", currency: "eur"),
+                                                                    Stripe::BankAccount.construct_from(object: "bank_account", id: "ba_usd", currency: "usd"),
+                                                                    Stripe::BankAccount.construct_from(object: "bank_account", id: "ba_huf", currency: "huf")
                                                                   ])
     Stripe::Balance.expects(:retrieve).once.returns(
       Stripe::Balance.construct_from(object: "balance",
