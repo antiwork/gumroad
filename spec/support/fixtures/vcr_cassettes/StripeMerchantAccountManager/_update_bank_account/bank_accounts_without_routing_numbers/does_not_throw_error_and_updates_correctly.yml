@@ -5,7 +5,7 @@ http_interactions:
     uri: https://api.stripe.com/v1/accounts
     body:
       encoding: UTF-8
-      string: type=custom&requested_capabilities[0]=card_payments&requested_capabilities[1]=transfers&country=PL&default_currency=pln&metadata[user_id]=6917358379052&metadata[tos_agreement_id]=GlHfiwxZxgH4_FgNEBVxpw%3D%3D&metadata[user_compliance_info_id]=S_Ro4f2q2OFgJcG74s2pdw%3D%3D&metadata[bank_account_id]=OSQgyLNj7Qq05VGlms_l8Q%3D%3D&tos_acceptance[date]=1792770389&tos_acceptance[ip]=54.234.242.13&business_type=individual&business_profile[name]=Chuck+Bartowski&business_profile[url]=https%3A%2F%2Fvipul.gumroad.com%2F&business_profile[product_description]=Chuck+Bartowski&individual[first_name]=Chuck&individual[last_name]=Bartowski&individual[email]=chuck%40gum.com&individual[phone]=0000000000&individual[dob][day]=1&individual[dob][month]=1&individual[dob][year]=1901&individual[address][line1]=address_full_match&individual[address][city]=Warsaw&individual[address][postal_code]=60-900&individual[address][country]=PL&individual[id_number]=000000000&bank_account[country]=US&bank_account[currency]=usd&bank_account[account_number]=000<STRONGBOX_GENERAL_PASSWORD>56789&bank_account[routing_number]=110000000&settings[payouts][schedule][interval]=manual&settings[payouts][debit_negative_balances]=true
+      string: type=custom&requested_capabilities[0]=card_payments&requested_capabilities[1]=transfers&country=PL&default_currency=pln&metadata[user_id]=7907795751525&metadata[tos_agreement_id]=B8GdFi0PPQqos0xH_M1MRg%3D%3D&metadata[user_compliance_info_id]=qWC-xUDLipwvOQOf5se9JA%3D%3D&metadata[bank_account_id]=37XkHe9q-vDD0PJ5vPZYvQ%3D%3D&tos_acceptance[date]=1792782657&tos_acceptance[ip]=54.234.242.13&business_type=individual&business_profile[name]=Chuck+Bartowski&business_profile[url]=https%3A%2F%2Fvipul.gumroad.com%2F&business_profile[product_description]=Chuck+Bartowski&individual[first_name]=Chuck&individual[last_name]=Bartowski&individual[email]=chuck%40gum.com&individual[phone]=0000000000&individual[dob][day]=1&individual[dob][month]=1&individual[dob][year]=1901&individual[address][line1]=address_full_match&individual[address][city]=Warsaw&individual[address][postal_code]=60-900&individual[address][country]=PL&individual[id_number]=000000000&bank_account[country]=US&bank_account[currency]=usd&bank_account[account_number]=000<STRONGBOX_GENERAL_PASSWORD>56789&bank_account[routing_number]=110000000&settings[payouts][schedule][interval]=manual&settings[payouts][debit_negative_balances]=true
     headers:
       User-Agent:
       - Stripe/v1 RubyBindings/12.5.0
@@ -13,10 +13,8 @@ http_interactions:
       - Bearer <STRIPE_API_KEY>
       Content-Type:
       - application/x-www-form-urlencoded
-      X-Stripe-Client-Telemetry:
-      - '{"last_request_metrics":{"request_id":"req_VAck8NVNEgrKyM","request_duration_ms":500}}'
       Idempotency-Key:
-      - b02d207b-295e-47f2-a13b-1acc803b7511
+      - 5d87ab2e-7dfa-4eb2-8eab-e1c78b0263f3
       Stripe-Version:
       - '2023-10-16'
       X-Stripe-Client-User-Agent:
@@ -33,7 +31,7 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Fri, 23 Oct 2026 15:46:32 GMT
+      - Fri, 23 Oct 2026 19:11:01 GMT
       Content-Type:
       - application/json
       Content-Length:
@@ -56,18 +54,18 @@ http_interactions:
       Content-Security-Policy:
       - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
         img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
-        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=4HrgXaSN5Vgdypvhj_-mYxlQI-zt3JFX9fmY1tQRn4d4kZt5XVrTU5EB4nI7qyvlTVGigSBM3bzf4UgO;
+        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=lVXQ5-pwUxNKFHub8VS6VdS5nRINBDIYAGEODKgCMUsVzFSAIMrYwkbDsnm-gWqmc0AiwJJGpAvkIysr;
         report-to csp
       Idempotency-Key:
-      - b02d207b-295e-47f2-a13b-1acc803b7511
+      - 5d87ab2e-7dfa-4eb2-8eab-e1c78b0263f3
       Original-Request:
-      - req_6W5EbXpOwivjab
+      - req_JE6wrICEKygRqE
       Report-To:
-      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=4HrgXaSN5Vgdypvhj_-mYxlQI-zt3JFX9fmY1tQRn4d4kZt5XVrTU5EB4nI7qyvlTVGigSBM3bzf4UgO&t=1"}],"include_subdomains":true}'
+      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=lVXQ5-pwUxNKFHub8VS6VdS5nRINBDIYAGEODKgCMUsVzFSAIMrYwkbDsnm-gWqmc0AiwJJGpAvkIysr&t=1"}],"include_subdomains":true}'
       Reporting-Endpoints:
-      - csp="https://q.stripe.com/csp-report-v2?q=4HrgXaSN5Vgdypvhj_-mYxlQI-zt3JFX9fmY1tQRn4d4kZt5XVrTU5EB4nI7qyvlTVGigSBM3bzf4UgO&t=1"
+      - csp="https://q.stripe.com/csp-report-v2?q=lVXQ5-pwUxNKFHub8VS6VdS5nRINBDIYAGEODKgCMUsVzFSAIMrYwkbDsnm-gWqmc0AiwJJGpAvkIysr&t=1"
       Request-Id:
-      - req_6W5EbXpOwivjab
+      - req_JE6wrICEKygRqE
       Stripe-Notice:
       - '2 notices for this request: (1) We recommend building your integration using
         Accounts v2. See https://docs.stripe.com/api/v2/core/accounts (2) You are
@@ -91,7 +89,7 @@ http_interactions:
       encoding: UTF-8
       string: |-
         {
-          "id": "acct_1UTkfpIhaeWmV7Dp",
+          "id": "acct_1UTnrhEs3QxulLiL",
           "object": "account",
           "business_profile": {
             "annual_revenue": null,
@@ -152,7 +150,7 @@ http_interactions:
             "type": "application"
           },
           "country": "PL",
-          "created": 1792770390,
+          "created": 1792782659,
           "default_currency": "pln",
           "details_submitted": false,
           "email": null,
@@ -160,9 +158,9 @@ http_interactions:
             "object": "list",
             "data": [
               {
-                "id": "ba_1UTkfpIhaeWmV7Dp6Q3qjOUv",
+                "id": "ba_1UTnrhEs3QxulLiL9uQVTJT5",
                 "object": "bank_account",
-                "account": "acct_1UTkfpIhaeWmV7Dp",
+                "account": "acct_1UTnrhEs3QxulLiL",
                 "account_holder_name": null,
                 "account_holder_type": null,
                 "account_type": null,
@@ -194,7 +192,7 @@ http_interactions:
             ],
             "has_more": false,
             "total_count": 1,
-            "url": "/v1/accounts/acct_1UTkfpIhaeWmV7Dp/external_accounts"
+            "url": "/v1/accounts/acct_1UTnrhEs3QxulLiL/external_accounts"
           },
           "future_requirements": {
             "alternatives": [],
@@ -207,9 +205,9 @@ http_interactions:
             "pending_verification": []
           },
           "individual": {
-            "id": "person_1UTkfpIhaeWmV7DptN7fY4Pl",
+            "id": "person_1UTnriEs3QxulLiLO8EPMhdo",
             "object": "person",
-            "account": "acct_1UTkfpIhaeWmV7Dp",
+            "account": "acct_1UTnrhEs3QxulLiL",
             "address": {
               "city": "Warsaw",
               "country": "PL",
@@ -218,7 +216,7 @@ http_interactions:
               "postal_code": "60-900",
               "state": null
             },
-            "created": 1792770390,
+            "created": 1792782658,
             "dob": {
               "day": 1,
               "month": 1,
@@ -287,10 +285,10 @@ http_interactions:
             }
           },
           "metadata": {
-            "bank_account_id": "OSQgyLNj7Qq05VGlms_l8Q==",
-            "tos_agreement_id": "GlHfiwxZxgH4_FgNEBVxpw==",
-            "user_compliance_info_id": "S_Ro4f2q2OFgJcG74s2pdw==",
-            "user_id": "6917358379052"
+            "bank_account_id": "37XkHe9q-vDD0PJ5vPZYvQ==",
+            "tos_agreement_id": "B8GdFi0PPQqos0xH_M1MRg==",
+            "user_compliance_info_id": "qWC-xUDLipwvOQOf5se9JA==",
+            "user_id": "7907795751525"
           },
           "payouts_enabled": false,
           "requirements": {
@@ -370,16 +368,16 @@ http_interactions:
             "sepa_debit_payments": {}
           },
           "tos_acceptance": {
-            "date": 1792770389,
+            "date": 1792782657,
             "ip": "54.234.242.13",
             "user_agent": null
           },
           "type": "custom"
         }
-  recorded_at: Fri, 23 Oct 2026 15:46:32 GMT
+  recorded_at: Fri, 23 Oct 2026 19:11:01 GMT
 - request:
     method: get
-    uri: https://api.stripe.com/v1/accounts/acct_1UTkfpIhaeWmV7Dp
+    uri: https://api.stripe.com/v1/accounts/acct_1UTnrhEs3QxulLiL
     body:
       encoding: US-ASCII
       string: ''
@@ -391,7 +389,7 @@ http_interactions:
       Content-Type:
       - application/x-www-form-urlencoded
       X-Stripe-Client-Telemetry:
-      - '{"last_request_metrics":{"request_id":"req_6W5EbXpOwivjab","request_duration_ms":3518}}'
+      - '{"last_request_metrics":{"request_id":"req_JE6wrICEKygRqE","request_duration_ms":3953}}'
       Stripe-Version:
       - '2023-10-16'
       X-Stripe-Client-User-Agent:
@@ -408,7 +406,7 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Fri, 23 Oct 2026 15:46:33 GMT
+      - Fri, 23 Oct 2026 19:11:02 GMT
       Content-Type:
       - application/json
       Content-Length:
@@ -431,16 +429,16 @@ http_interactions:
       Content-Security-Policy:
       - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
         img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
-        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=4HrgXaSN5Vgdypvhj_-mYxlQI-zt3JFX9fmY1tQRn4d4kZt5XVrTU5EB4nI7qyvlTVGigSBM3bzf4UgO;
+        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=8cCmHMBa_jOCH_TCS5o-xB-NvIeEdqW0swqnCv8Njlx10J2Mmbw5d3gPHIg7Pt0G8-yR6fNT1gCo0gL3;
         report-to csp
       Report-To:
-      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=4HrgXaSN5Vgdypvhj_-mYxlQI-zt3JFX9fmY1tQRn4d4kZt5XVrTU5EB4nI7qyvlTVGigSBM3bzf4UgO&t=1"}],"include_subdomains":true}'
+      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=8cCmHMBa_jOCH_TCS5o-xB-NvIeEdqW0swqnCv8Njlx10J2Mmbw5d3gPHIg7Pt0G8-yR6fNT1gCo0gL3&t=1"}],"include_subdomains":true}'
       Reporting-Endpoints:
-      - csp="https://q.stripe.com/csp-report-v2?q=4HrgXaSN5Vgdypvhj_-mYxlQI-zt3JFX9fmY1tQRn4d4kZt5XVrTU5EB4nI7qyvlTVGigSBM3bzf4UgO&t=1"
+      - csp="https://q.stripe.com/csp-report-v2?q=8cCmHMBa_jOCH_TCS5o-xB-NvIeEdqW0swqnCv8Njlx10J2Mmbw5d3gPHIg7Pt0G8-yR6fNT1gCo0gL3&t=1"
       Request-Id:
-      - req_CdwCcFlFz3OMlr
+      - req_KqlomE4urXmWCF
       Stripe-Account:
-      - acct_1UTkfpIhaeWmV7Dp
+      - acct_1UTnrhEs3QxulLiL
       Stripe-Notice:
       - You are using an outdated API version (2023-10-16). We recommend upgrading
         to the latest API version, 2026-09-30.endive. See https://docs.stripe.com/upgrades
@@ -460,7 +458,7 @@ http_interactions:
       encoding: UTF-8
       string: |-
         {
-          "id": "acct_1UTkfpIhaeWmV7Dp",
+          "id": "acct_1UTnrhEs3QxulLiL",
           "object": "account",
           "business_profile": {
             "annual_revenue": null,
@@ -521,7 +519,7 @@ http_interactions:
             "type": "application"
           },
           "country": "PL",
-          "created": 1792770390,
+          "created": 1792782659,
           "default_currency": "pln",
           "details_submitted": false,
           "email": null,
@@ -529,9 +527,9 @@ http_interactions:
             "object": "list",
             "data": [
               {
-                "id": "ba_1UTkfpIhaeWmV7Dp6Q3qjOUv",
+                "id": "ba_1UTnrhEs3QxulLiL9uQVTJT5",
                 "object": "bank_account",
-                "account": "acct_1UTkfpIhaeWmV7Dp",
+                "account": "acct_1UTnrhEs3QxulLiL",
                 "account_holder_name": null,
                 "account_holder_type": null,
                 "account_type": null,
@@ -563,7 +561,7 @@ http_interactions:
             ],
             "has_more": false,
             "total_count": 1,
-            "url": "/v1/accounts/acct_1UTkfpIhaeWmV7Dp/external_accounts"
+            "url": "/v1/accounts/acct_1UTnrhEs3QxulLiL/external_accounts"
           },
           "future_requirements": {
             "alternatives": [],
@@ -576,9 +574,9 @@ http_interactions:
             "pending_verification": []
           },
           "individual": {
-            "id": "person_1UTkfpIhaeWmV7DptN7fY4Pl",
+            "id": "person_1UTnriEs3QxulLiLO8EPMhdo",
             "object": "person",
-            "account": "acct_1UTkfpIhaeWmV7Dp",
+            "account": "acct_1UTnrhEs3QxulLiL",
             "address": {
               "city": "Warsaw",
               "country": "PL",
@@ -587,7 +585,7 @@ http_interactions:
               "postal_code": "60-900",
               "state": null
             },
-            "created": 1792770390,
+            "created": 1792782658,
             "dob": {
               "day": 1,
               "month": 1,
@@ -656,10 +654,10 @@ http_interactions:
             }
           },
           "metadata": {
-            "bank_account_id": "OSQgyLNj7Qq05VGlms_l8Q==",
-            "tos_agreement_id": "GlHfiwxZxgH4_FgNEBVxpw==",
-            "user_compliance_info_id": "S_Ro4f2q2OFgJcG74s2pdw==",
-            "user_id": "6917358379052"
+            "bank_account_id": "37XkHe9q-vDD0PJ5vPZYvQ==",
+            "tos_agreement_id": "B8GdFi0PPQqos0xH_M1MRg==",
+            "user_compliance_info_id": "qWC-xUDLipwvOQOf5se9JA==",
+            "user_id": "7907795751525"
           },
           "payouts_enabled": false,
           "requirements": {
@@ -739,19 +737,19 @@ http_interactions:
             "sepa_debit_payments": {}
           },
           "tos_acceptance": {
-            "date": 1792770389,
+            "date": 1792782657,
             "ip": "54.234.242.13",
             "user_agent": null
           },
           "type": "custom"
         }
-  recorded_at: Fri, 23 Oct 2026 15:46:33 GMT
+  recorded_at: Fri, 23 Oct 2026 19:11:02 GMT
 - request:
     method: post
-    uri: https://api.stripe.com/v1/accounts/acct_1UTkfpIhaeWmV7Dp
+    uri: https://api.stripe.com/v1/accounts/acct_1UTnrhEs3QxulLiL
     body:
       encoding: UTF-8
-      string: metadata[bank_account_id]=-IZjwTv1bgdmAByLuSFa1Q%3D%3D&metadata[tos_agreement_id]=GlHfiwxZxgH4_FgNEBVxpw%3D%3D&metadata[user_compliance_info_id]=S_Ro4f2q2OFgJcG74s2pdw%3D%3D&metadata[user_id]=6917358379052&bank_account[country]=PL&bank_account[currency]=pln&bank_account[account_number]=PL61109010140000071219812874&settings[payouts][schedule][interval]=manual&settings[payouts][debit_negative_balances]=true
+      string: metadata[bank_account_id]=M1_pteXfjx5KxPSs-_FN2w%3D%3D&metadata[tos_agreement_id]=B8GdFi0PPQqos0xH_M1MRg%3D%3D&metadata[user_compliance_info_id]=qWC-xUDLipwvOQOf5se9JA%3D%3D&metadata[user_id]=7907795751525&bank_account[country]=PL&bank_account[currency]=pln&bank_account[account_number]=PL61109010140000071219812874&settings[payouts][schedule][interval]=manual&settings[payouts][debit_negative_balances]=true
     headers:
       User-Agent:
       - Stripe/v1 RubyBindings/12.5.0
@@ -760,9 +758,9 @@ http_interactions:
       Content-Type:
       - application/x-www-form-urlencoded
       X-Stripe-Client-Telemetry:
-      - '{"last_request_metrics":{"request_id":"req_CdwCcFlFz3OMlr","request_duration_ms":457}}'
+      - '{"last_request_metrics":{"request_id":"req_KqlomE4urXmWCF","request_duration_ms":491}}'
       Idempotency-Key:
-      - f6a076ff-4ad7-4f4e-9a0b-ede3f8b9e345
+      - 478f37d6-8d18-49eb-90b0-d65705a04dba
       Stripe-Version:
       - '2023-10-16'
       X-Stripe-Client-User-Agent:
@@ -779,7 +777,7 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Fri, 23 Oct 2026 15:46:35 GMT
+      - Fri, 23 Oct 2026 19:11:04 GMT
       Content-Type:
       - application/json
       Content-Length:
@@ -802,20 +800,20 @@ http_interactions:
       Content-Security-Policy:
       - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
         img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
-        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=4HrgXaSN5Vgdypvhj_-mYxlQI-zt3JFX9fmY1tQRn4d4kZt5XVrTU5EB4nI7qyvlTVGigSBM3bzf4UgO;
+        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=8cCmHMBa_jOCH_TCS5o-xB-NvIeEdqW0swqnCv8Njlx10J2Mmbw5d3gPHIg7Pt0G8-yR6fNT1gCo0gL3;
         report-to csp
       Idempotency-Key:
-      - f6a076ff-4ad7-4f4e-9a0b-ede3f8b9e345
+      - 478f37d6-8d18-49eb-90b0-d65705a04dba
       Original-Request:
-      - req_0CeVQ5BDvMe6sx
+      - req_Gz725mnaYCaEDa
       Report-To:
-      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=4HrgXaSN5Vgdypvhj_-mYxlQI-zt3JFX9fmY1tQRn4d4kZt5XVrTU5EB4nI7qyvlTVGigSBM3bzf4UgO&t=1"}],"include_subdomains":true}'
+      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=8cCmHMBa_jOCH_TCS5o-xB-NvIeEdqW0swqnCv8Njlx10J2Mmbw5d3gPHIg7Pt0G8-yR6fNT1gCo0gL3&t=1"}],"include_subdomains":true}'
       Reporting-Endpoints:
-      - csp="https://q.stripe.com/csp-report-v2?q=4HrgXaSN5Vgdypvhj_-mYxlQI-zt3JFX9fmY1tQRn4d4kZt5XVrTU5EB4nI7qyvlTVGigSBM3bzf4UgO&t=1"
+      - csp="https://q.stripe.com/csp-report-v2?q=8cCmHMBa_jOCH_TCS5o-xB-NvIeEdqW0swqnCv8Njlx10J2Mmbw5d3gPHIg7Pt0G8-yR6fNT1gCo0gL3&t=1"
       Request-Id:
-      - req_0CeVQ5BDvMe6sx
+      - req_Gz725mnaYCaEDa
       Stripe-Account:
-      - acct_1UTkfpIhaeWmV7Dp
+      - acct_1UTnrhEs3QxulLiL
       Stripe-Notice:
       - You are using an outdated API version (2023-10-16). We recommend upgrading
         to the latest API version, 2026-09-30.endive. See https://docs.stripe.com/upgrades
@@ -837,7 +835,7 @@ http_interactions:
       encoding: UTF-8
       string: |-
         {
-          "id": "acct_1UTkfpIhaeWmV7Dp",
+          "id": "acct_1UTnrhEs3QxulLiL",
           "object": "account",
           "business_profile": {
             "annual_revenue": null,
@@ -898,7 +896,7 @@ http_interactions:
             "type": "application"
           },
           "country": "PL",
-          "created": 1792770390,
+          "created": 1792782659,
           "default_currency": "pln",
           "details_submitted": false,
           "email": null,
@@ -906,9 +904,9 @@ http_interactions:
             "object": "list",
             "data": [
               {
-                "id": "ba_1UTkftIhaeWmV7DpeZ9DAjg4",
+                "id": "ba_1UTnrmEs3QxulLiLekgNFc1C",
                 "object": "bank_account",
-                "account": "acct_1UTkfpIhaeWmV7Dp",
+                "account": "acct_1UTnrhEs3QxulLiL",
                 "account_holder_name": null,
                 "account_holder_type": null,
                 "account_type": null,
@@ -938,9 +936,9 @@ http_interactions:
                 "status": "new"
               },
               {
-                "id": "ba_1UTkfpIhaeWmV7Dp6Q3qjOUv",
+                "id": "ba_1UTnrhEs3QxulLiL9uQVTJT5",
                 "object": "bank_account",
-                "account": "acct_1UTkfpIhaeWmV7Dp",
+                "account": "acct_1UTnrhEs3QxulLiL",
                 "account_holder_name": null,
                 "account_holder_type": null,
                 "account_type": null,
@@ -972,7 +970,7 @@ http_interactions:
             ],
             "has_more": false,
             "total_count": 2,
-            "url": "/v1/accounts/acct_1UTkfpIhaeWmV7Dp/external_accounts"
+            "url": "/v1/accounts/acct_1UTnrhEs3QxulLiL/external_accounts"
           },
           "future_requirements": {
             "alternatives": [],
@@ -985,9 +983,9 @@ http_interactions:
             "pending_verification": []
           },
           "individual": {
-            "id": "person_1UTkfpIhaeWmV7DptN7fY4Pl",
+            "id": "person_1UTnriEs3QxulLiLO8EPMhdo",
             "object": "person",
-            "account": "acct_1UTkfpIhaeWmV7Dp",
+            "account": "acct_1UTnrhEs3QxulLiL",
             "address": {
               "city": "Warsaw",
               "country": "PL",
@@ -996,7 +994,7 @@ http_interactions:
               "postal_code": "60-900",
               "state": null
             },
-            "created": 1792770390,
+            "created": 1792782658,
             "dob": {
               "day": 1,
               "month": 1,
@@ -1065,10 +1063,10 @@ http_interactions:
             }
           },
           "metadata": {
-            "bank_account_id": "-IZjwTv1bgdmAByLuSFa1Q==",
-            "tos_agreement_id": "GlHfiwxZxgH4_FgNEBVxpw==",
-            "user_compliance_info_id": "S_Ro4f2q2OFgJcG74s2pdw==",
-            "user_id": "6917358379052"
+            "bank_account_id": "M1_pteXfjx5KxPSs-_FN2w==",
+            "tos_agreement_id": "B8GdFi0PPQqos0xH_M1MRg==",
+            "user_compliance_info_id": "qWC-xUDLipwvOQOf5se9JA==",
+            "user_id": "7907795751525"
           },
           "payouts_enabled": false,
           "requirements": {
@@ -1148,16 +1146,16 @@ http_interactions:
             "sepa_debit_payments": {}
           },
           "tos_acceptance": {
-            "date": 1792770389,
+            "date": 1792782657,
             "ip": "54.234.242.13",
             "user_agent": null
           },
           "type": "custom"
         }
-  recorded_at: Fri, 23 Oct 2026 15:46:35 GMT
+  recorded_at: Fri, 23 Oct 2026 19:11:04 GMT
 - request:
     method: get
-    uri: https://api.stripe.com/v1/accounts/acct_1UTkfpIhaeWmV7Dp
+    uri: https://api.stripe.com/v1/accounts/acct_1UTnrhEs3QxulLiL
     body:
       encoding: US-ASCII
       string: ''
@@ -1169,7 +1167,7 @@ http_interactions:
       Content-Type:
       - application/x-www-form-urlencoded
       X-Stripe-Client-Telemetry:
-      - '{"last_request_metrics":{"request_id":"req_0CeVQ5BDvMe6sx","request_duration_ms":1857}}'
+      - '{"last_request_metrics":{"request_id":"req_Gz725mnaYCaEDa","request_duration_ms":2456}}'
       Stripe-Version:
       - '2023-10-16'
       X-Stripe-Client-User-Agent:
@@ -1186,7 +1184,7 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Fri, 23 Oct 2026 15:46:35 GMT
+      - Fri, 23 Oct 2026 19:11:05 GMT
       Content-Type:
       - application/json
       Content-Length:
@@ -1209,16 +1207,16 @@ http_interactions:
       Content-Security-Policy:
       - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
         img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
-        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=4HrgXaSN5Vgdypvhj_-mYxlQI-zt3JFX9fmY1tQRn4d4kZt5XVrTU5EB4nI7qyvlTVGigSBM3bzf4UgO;
+        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=8cCmHMBa_jOCH_TCS5o-xB-NvIeEdqW0swqnCv8Njlx10J2Mmbw5d3gPHIg7Pt0G8-yR6fNT1gCo0gL3;
         report-to csp
       Report-To:
-      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=4HrgXaSN5Vgdypvhj_-mYxlQI-zt3JFX9fmY1tQRn4d4kZt5XVrTU5EB4nI7qyvlTVGigSBM3bzf4UgO&t=1"}],"include_subdomains":true}'
+      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=8cCmHMBa_jOCH_TCS5o-xB-NvIeEdqW0swqnCv8Njlx10J2Mmbw5d3gPHIg7Pt0G8-yR6fNT1gCo0gL3&t=1"}],"include_subdomains":true}'
       Reporting-Endpoints:
-      - csp="https://q.stripe.com/csp-report-v2?q=4HrgXaSN5Vgdypvhj_-mYxlQI-zt3JFX9fmY1tQRn4d4kZt5XVrTU5EB4nI7qyvlTVGigSBM3bzf4UgO&t=1"
+      - csp="https://q.stripe.com/csp-report-v2?q=8cCmHMBa_jOCH_TCS5o-xB-NvIeEdqW0swqnCv8Njlx10J2Mmbw5d3gPHIg7Pt0G8-yR6fNT1gCo0gL3&t=1"
       Request-Id:
-      - req_mU3iyTz78vtEZ5
+      - req_7h8oT1rWOgvZII
       Stripe-Account:
-      - acct_1UTkfpIhaeWmV7Dp
+      - acct_1UTnrhEs3QxulLiL
       Stripe-Notice:
       - You are using an outdated API version (2023-10-16). We recommend upgrading
         to the latest API version, 2026-09-30.endive. See https://docs.stripe.com/upgrades
@@ -1238,7 +1236,7 @@ http_interactions:
       encoding: UTF-8
       string: |-
         {
-          "id": "acct_1UTkfpIhaeWmV7Dp",
+          "id": "acct_1UTnrhEs3QxulLiL",
           "object": "account",
           "business_profile": {
             "annual_revenue": null,
@@ -1299,7 +1297,7 @@ http_interactions:
             "type": "application"
           },
           "country": "PL",
-          "created": 1792770390,
+          "created": 1792782659,
           "default_currency": "pln",
           "details_submitted": false,
           "email": null,
@@ -1307,9 +1305,9 @@ http_interactions:
             "object": "list",
             "data": [
               {
-                "id": "ba_1UTkftIhaeWmV7DpeZ9DAjg4",
+                "id": "ba_1UTnrmEs3QxulLiLekgNFc1C",
                 "object": "bank_account",
-                "account": "acct_1UTkfpIhaeWmV7Dp",
+                "account": "acct_1UTnrhEs3QxulLiL",
                 "account_holder_name": null,
                 "account_holder_type": null,
                 "account_type": null,
@@ -1339,9 +1337,9 @@ http_interactions:
                 "status": "new"
               },
               {
-                "id": "ba_1UTkfpIhaeWmV7Dp6Q3qjOUv",
+                "id": "ba_1UTnrhEs3QxulLiL9uQVTJT5",
                 "object": "bank_account",
-                "account": "acct_1UTkfpIhaeWmV7Dp",
+                "account": "acct_1UTnrhEs3QxulLiL",
                 "account_holder_name": null,
                 "account_holder_type": null,
                 "account_type": null,
@@ -1373,7 +1371,7 @@ http_interactions:
             ],
             "has_more": false,
             "total_count": 2,
-            "url": "/v1/accounts/acct_1UTkfpIhaeWmV7Dp/external_accounts"
+            "url": "/v1/accounts/acct_1UTnrhEs3QxulLiL/external_accounts"
           },
           "future_requirements": {
             "alternatives": [],
@@ -1386,9 +1384,9 @@ http_interactions:
             "pending_verification": []
           },
           "individual": {
-            "id": "person_1UTkfpIhaeWmV7DptN7fY4Pl",
+            "id": "person_1UTnriEs3QxulLiLO8EPMhdo",
             "object": "person",
-            "account": "acct_1UTkfpIhaeWmV7Dp",
+            "account": "acct_1UTnrhEs3QxulLiL",
             "address": {
               "city": "Warsaw",
               "country": "PL",
@@ -1397,7 +1395,7 @@ http_interactions:
               "postal_code": "60-900",
               "state": null
             },
-            "created": 1792770390,
+            "created": 1792782658,
             "dob": {
               "day": 1,
               "month": 1,
@@ -1466,10 +1464,10 @@ http_interactions:
             }
           },
           "metadata": {
-            "bank_account_id": "-IZjwTv1bgdmAByLuSFa1Q==",
-            "tos_agreement_id": "GlHfiwxZxgH4_FgNEBVxpw==",
-            "user_compliance_info_id": "S_Ro4f2q2OFgJcG74s2pdw==",
-            "user_id": "6917358379052"
+            "bank_account_id": "M1_pteXfjx5KxPSs-_FN2w==",
+            "tos_agreement_id": "B8GdFi0PPQqos0xH_M1MRg==",
+            "user_compliance_info_id": "qWC-xUDLipwvOQOf5se9JA==",
+            "user_id": "7907795751525"
           },
           "payouts_enabled": false,
           "requirements": {
@@ -1549,170 +1547,16 @@ http_interactions:
             "sepa_debit_payments": {}
           },
           "tos_acceptance": {
-            "date": 1792770389,
+            "date": 1792782657,
             "ip": "54.234.242.13",
             "user_agent": null
           },
           "type": "custom"
         }
-  recorded_at: Fri, 23 Oct 2026 15:46:35 GMT
-- request:
-    method: get
-    uri: https://api.stripe.com/v1/accounts/acct_1UTkfpIhaeWmV7Dp/external_accounts?limit=100
-    body:
-      encoding: US-ASCII
-      string: ''
-    headers:
-      User-Agent:
-      - Stripe/v1 RubyBindings/12.5.0
-      Authorization:
-      - Bearer <STRIPE_API_KEY>
-      Content-Type:
-      - application/x-www-form-urlencoded
-      X-Stripe-Client-Telemetry:
-      - '{"last_request_metrics":{"request_id":"req_mU3iyTz78vtEZ5","request_duration_ms":656}}'
-      Stripe-Version:
-      - '2023-10-16'
-      X-Stripe-Client-User-Agent:
-      - "<STRIPE_CLIENT_USER_AGENT>"
-      Accept-Encoding:
-      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
-      Accept:
-      - "*/*"
-  response:
-    status:
-      code: 200
-      message: OK
-    headers:
-      Server:
-      - nginx
-      Date:
-      - Fri, 23 Oct 2026 15:46:36 GMT
-      Content-Type:
-      - application/json
-      Content-Length:
-      - '1830'
-      Connection:
-      - keep-alive
-      Access-Control-Allow-Credentials:
-      - 'true'
-      Access-Control-Allow-Methods:
-      - GET, HEAD, PUT, PATCH, POST, DELETE
-      Access-Control-Allow-Origin:
-      - "*"
-      Access-Control-Expose-Headers:
-      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
-        X-Stripe-Privileged-Session-Required
-      Access-Control-Max-Age:
-      - '300'
-      Cache-Control:
-      - no-cache, no-store
-      Content-Security-Policy:
-      - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
-        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
-        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=4HrgXaSN5Vgdypvhj_-mYxlQI-zt3JFX9fmY1tQRn4d4kZt5XVrTU5EB4nI7qyvlTVGigSBM3bzf4UgO;
-        report-to csp
-      Report-To:
-      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=4HrgXaSN5Vgdypvhj_-mYxlQI-zt3JFX9fmY1tQRn4d4kZt5XVrTU5EB4nI7qyvlTVGigSBM3bzf4UgO&t=1"}],"include_subdomains":true}'
-      Reporting-Endpoints:
-      - csp="https://q.stripe.com/csp-report-v2?q=4HrgXaSN5Vgdypvhj_-mYxlQI-zt3JFX9fmY1tQRn4d4kZt5XVrTU5EB4nI7qyvlTVGigSBM3bzf4UgO&t=1"
-      Request-Id:
-      - req_vim9PRjXNFwzz0
-      Stripe-Account:
-      - acct_1UTkfpIhaeWmV7Dp
-      Stripe-Notice:
-      - You are using an outdated API version (2023-10-16). We recommend upgrading
-        to the latest API version, 2026-09-30.endive. See https://docs.stripe.com/upgrades
-      Stripe-Version:
-      - '2023-10-16'
-      Vary:
-      - Origin
-      X-Stripe-Priority-Routing-Enabled:
-      - 'true'
-      X-Stripe-Routing-Context-Priority-Tier:
-      - api-testmode
-      X-Wc:
-      - 3c3
-      Strict-Transport-Security:
-      - max-age=63072000; includeSubDomains; preload
-    body:
-      encoding: UTF-8
-      string: |-
-        {
-          "object": "list",
-          "data": [
-            {
-              "id": "ba_1UTkftIhaeWmV7DpeZ9DAjg4",
-              "object": "bank_account",
-              "account": "acct_1UTkfpIhaeWmV7Dp",
-              "account_holder_name": null,
-              "account_holder_type": null,
-              "account_type": null,
-              "available_payout_methods": [
-                "standard"
-              ],
-              "bank_name": "STRIPE TEST BANK",
-              "country": "PL",
-              "currency": "pln",
-              "default_for_currency": true,
-              "fingerprint": "bY6nE1on19AlNvKe",
-              "future_requirements": {
-                "currently_due": [],
-                "errors": [],
-                "past_due": [],
-                "pending_verification": []
-              },
-              "last4": "2874",
-              "metadata": {},
-              "requirements": {
-                "currently_due": [],
-                "errors": [],
-                "past_due": [],
-                "pending_verification": []
-              },
-              "routing_number": "110000000",
-              "status": "new"
-            },
-            {
-              "id": "ba_1UTkfpIhaeWmV7Dp6Q3qjOUv",
-              "object": "bank_account",
-              "account": "acct_1UTkfpIhaeWmV7Dp",
-              "account_holder_name": null,
-              "account_holder_type": null,
-              "account_type": null,
-              "available_payout_methods": [
-                "standard"
-              ],
-              "bank_name": "STRIPE TEST BANK",
-              "country": "US",
-              "currency": "usd",
-              "default_for_currency": true,
-              "fingerprint": "l0OxwqZbI4t8wVSU",
-              "future_requirements": {
-                "currently_due": [],
-                "errors": [],
-                "past_due": [],
-                "pending_verification": []
-              },
-              "last4": "6789",
-              "metadata": {},
-              "requirements": {
-                "currently_due": [],
-                "errors": [],
-                "past_due": [],
-                "pending_verification": []
-              },
-              "routing_number": "110000000",
-              "status": "new"
-            }
-          ],
-          "has_more": false,
-          "url": "/v1/accounts/acct_1UTkfpIhaeWmV7Dp/external_accounts"
-        }
-  recorded_at: Fri, 23 Oct 2026 15:46:36 GMT
+  recorded_at: Fri, 23 Oct 2026 19:11:05 GMT
 - request:
     method: delete
-    uri: https://api.stripe.com/v1/accounts/acct_1UTkfpIhaeWmV7Dp/external_accounts/ba_1UTkfpIhaeWmV7Dp6Q3qjOUv
+    uri: https://api.stripe.com/v1/accounts/acct_1UTnrhEs3QxulLiL/external_accounts/ba_1UTnrhEs3QxulLiL9uQVTJT5
     body:
       encoding: US-ASCII
       string: ''
@@ -1724,9 +1568,9 @@ http_interactions:
       Content-Type:
       - application/x-www-form-urlencoded
       X-Stripe-Client-Telemetry:
-      - '{"last_request_metrics":{"request_id":"req_vim9PRjXNFwzz0","request_duration_ms":248}}'
+      - '{"last_request_metrics":{"request_id":"req_7h8oT1rWOgvZII","request_duration_ms":544}}'
       Idempotency-Key:
-      - 41dda50e-0e73-43cb-a8cf-6bd8e8547333
+      - dcb86499-16f4-4b96-9d4e-93e62a438472
       Stripe-Version:
       - '2023-10-16'
       X-Stripe-Client-User-Agent:
@@ -1743,7 +1587,7 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Fri, 23 Oct 2026 15:46:36 GMT
+      - Fri, 23 Oct 2026 19:11:05 GMT
       Content-Type:
       - application/json
       Content-Length:
@@ -1766,18 +1610,18 @@ http_interactions:
       Content-Security-Policy:
       - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
         img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
-        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=4HrgXaSN5Vgdypvhj_-mYxlQI-zt3JFX9fmY1tQRn4d4kZt5XVrTU5EB4nI7qyvlTVGigSBM3bzf4UgO;
+        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=8cCmHMBa_jOCH_TCS5o-xB-NvIeEdqW0swqnCv8Njlx10J2Mmbw5d3gPHIg7Pt0G8-yR6fNT1gCo0gL3;
         report-to csp
       Idempotency-Key:
-      - 41dda50e-0e73-43cb-a8cf-6bd8e8547333
+      - dcb86499-16f4-4b96-9d4e-93e62a438472
       Report-To:
-      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=4HrgXaSN5Vgdypvhj_-mYxlQI-zt3JFX9fmY1tQRn4d4kZt5XVrTU5EB4nI7qyvlTVGigSBM3bzf4UgO&t=1"}],"include_subdomains":true}'
+      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=8cCmHMBa_jOCH_TCS5o-xB-NvIeEdqW0swqnCv8Njlx10J2Mmbw5d3gPHIg7Pt0G8-yR6fNT1gCo0gL3&t=1"}],"include_subdomains":true}'
       Reporting-Endpoints:
-      - csp="https://q.stripe.com/csp-report-v2?q=4HrgXaSN5Vgdypvhj_-mYxlQI-zt3JFX9fmY1tQRn4d4kZt5XVrTU5EB4nI7qyvlTVGigSBM3bzf4UgO&t=1"
+      - csp="https://q.stripe.com/csp-report-v2?q=8cCmHMBa_jOCH_TCS5o-xB-NvIeEdqW0swqnCv8Njlx10J2Mmbw5d3gPHIg7Pt0G8-yR6fNT1gCo0gL3&t=1"
       Request-Id:
-      - req_oNIokx45YZBpY2
+      - req_TSGTLnWDDcH1GC
       Stripe-Account:
-      - acct_1UTkfpIhaeWmV7Dp
+      - acct_1UTnrhEs3QxulLiL
       Stripe-Notice:
       - You are using an outdated API version (2023-10-16). We recommend upgrading
         to the latest API version, 2026-09-30.endive. See https://docs.stripe.com/upgrades
@@ -1797,10 +1641,10 @@ http_interactions:
       encoding: UTF-8
       string: |-
         {
-          "id": "ba_1UTkfpIhaeWmV7Dp6Q3qjOUv",
+          "id": "ba_1UTnrhEs3QxulLiL9uQVTJT5",
           "object": "bank_account",
           "currency": "usd",
           "deleted": true
         }
-  recorded_at: Fri, 23 Oct 2026 15:46:36 GMT
+  recorded_at: Fri, 23 Oct 2026 19:11:05 GMT
 recorded_with: VCR 6.2.0

@@ -10316,6 +10316,61 @@ describe StripeMerchantAccountManager, :vcr do
     end
   end
 
+  describe ".delete_replaced_external_accounts" do
+    let(:stripe_account_id) { "acct_replaced_banks" }
+    let(:active_bank) { create(:ach_account, user:, stripe_connect_account_id: stripe_account_id, stripe_bank_account_id: "ba_active") }
+    let(:stripe_account) do
+      Stripe::Account.construct_from(
+        id: stripe_account_id,
+        external_accounts: {
+          object: "list", has_more: false,
+          data: [
+            { id: "ba_active", object: "bank_account", default_for_currency: true },
+            { id: "ba_replaced_default", object: "bank_account", default_for_currency: true },
+            { id: "ba_newer_sync", object: "bank_account", default_for_currency: false },
+            { id: "ba_replaced", object: "bank_account", default_for_currency: false }
+          ]
+        }
+      )
+    end
+
+    before do
+      create(:ach_account, user:, deleted_at: 1.day.ago, stripe_connect_account_id: stripe_account_id, stripe_bank_account_id: "ba_replaced_default")
+      create(:ach_account, user:, deleted_at: 1.day.ago, stripe_connect_account_id: stripe_account_id, stripe_bank_account_id: "ba_replaced")
+      # A refresh can copy a live bank's id onto a deleted row.
+      create(:ach_account, user:, deleted_at: 1.day.ago, stripe_connect_account_id: stripe_account_id, stripe_bank_account_id: "ba_newer_sync")
+      create(:ach_account, user:, stripe_connect_account_id: stripe_account_id, stripe_bank_account_id: "ba_newer_sync")
+    end
+
+    it "deletes only replaced banks, a currency's default last, and never a bank an alive row references" do
+      deleted = []
+      allow(Stripe::Account).to receive(:delete_external_account) { |_account_id, id| deleted << id }
+
+      described_class.send(:delete_replaced_external_accounts, active_bank, stripe_account)
+
+      expect(deleted).to eq(["ba_replaced", "ba_replaced_default"])
+    end
+
+    it "notifies and stops when Stripe fails a delete" do
+      allow(Stripe::Account).to receive(:delete_external_account).and_raise(Stripe::APIConnectionError, "connection reset")
+      expect(ErrorNotifier).to receive(:notify).with(an_instance_of(Stripe::APIConnectionError), stripe_account_id:)
+
+      expect { described_class.send(:delete_replaced_external_accounts, active_bank, stripe_account) }.not_to raise_error
+    end
+
+    it "skips the default for the account's own currency that Stripe refuses to delete" do
+      allow(Stripe::Account).to receive(:delete_external_account)
+      allow(Stripe::Account).to receive(:delete_external_account).with(stripe_account_id, "ba_replaced_default").and_raise(
+        Stripe::InvalidRequestError.new("You cannot delete the default external account for your default currency.", nil)
+      )
+      expect(ErrorNotifier).not_to receive(:notify)
+
+      described_class.send(:delete_replaced_external_accounts, active_bank, stripe_account)
+
+      expect(Stripe::Account).to have_received(:delete_external_account).with(stripe_account_id, "ba_replaced")
+    end
+  end
+
   describe "#update_bank_account" do
     let(:user_compliance_info) { create(:user_compliance_info, user:) }
     let(:tos_agreement) { create(:tos_agreement, user:) }
@@ -10340,32 +10395,25 @@ describe StripeMerchantAccountManager, :vcr do
       let(:bank_account_1_stripe_id) { bank_account_1.stripe_bank_account_id }
       let(:bank_account_1_stripe_fingerprint) { bank_account_1.stripe_fingerprint }
 
-      context "with external ids pinned before the account is created" do
-        # The recorded metadata comes from account creation, so the ids are pinned before it.
-        let(:merchant_account) do
-          allow_any_instance_of(User).to receive(:external_id).and_return("5871412304037")
-          allow_any_instance_of(UserComplianceInfo).to receive(:external_id).and_return("ZNAihetfsujAVlG3Ia7KPw==")
-          allow_any_instance_of(TosAgreement).to receive(:external_id).and_return("c-XP9hGy5rHZLPM1tA5xnw==")
-          subject.create_account(user, passphrase: "1234")
-        end
-
-        it "updates an account at stripe with all the params" do
-          expect(Stripe::Account).to receive(:retrieve).with(merchant_account.charge_processor_merchant_id).twice.and_call_original
-          allow_any_instance_of(AchAccount).to receive(:external_id).and_return("-PURysMRznHezLyPac567A==")
-          expect(Stripe::Account).to receive(:update).with(user.stripe_account.charge_processor_merchant_id, hash_including(
-            bank_account: {
-              country: "US",
-              currency: "usd",
-              routing_number: "110000000",
-              account_number: "000123456789"
-            })).and_call_original
-          subject.update_bank_account(user, passphrase: "1234")
-          stripe_account = Stripe::Account.retrieve(merchant_account.charge_processor_merchant_id)
-          expect(stripe_account["metadata"]["user_id"]).to eq("5871412304037")
-          expect(stripe_account["metadata"]["user_compliance_info_id"]).to eq("ZNAihetfsujAVlG3Ia7KPw==")
-          expect(stripe_account["metadata"]["tos_agreement_id"]).to eq("c-XP9hGy5rHZLPM1tA5xnw==")
-          expect(stripe_account["metadata"]["bank_account_id"]).to eq("-PURysMRznHezLyPac567A==")
-        end
+      it "updates an account at stripe with all the params" do
+        expect(Stripe::Account).to receive(:retrieve).with(merchant_account.charge_processor_merchant_id).twice.and_call_original
+        allow(user).to receive(:external_id).and_return("5871412304037")
+        allow(user_compliance_info).to receive(:external_id).and_return("ZNAihetfsujAVlG3Ia7KPw==")
+        allow(tos_agreement).to receive(:external_id).and_return("c-XP9hGy5rHZLPM1tA5xnw==")
+        allow(bank_account_2).to receive(:external_id).and_return("-PURysMRznHezLyPac567A==")
+        expect(Stripe::Account).to receive(:update).with(user.stripe_account.charge_processor_merchant_id, hash_including(
+          bank_account: {
+            country: "US",
+            currency: "usd",
+            routing_number: "110000000",
+            account_number: "000123456789"
+          })).and_call_original
+        subject.update_bank_account(user, passphrase: "1234")
+        stripe_account = Stripe::Account.retrieve(merchant_account.charge_processor_merchant_id)
+        expect(stripe_account["metadata"]["user_id"]).to eq(user.external_id)
+        expect(stripe_account["metadata"]["user_compliance_info_id"]).to eq(user_compliance_info.external_id)
+        expect(stripe_account["metadata"]["tos_agreement_id"]).to eq(tos_agreement.external_id)
+        expect(stripe_account["metadata"]["bank_account_id"]).to eq(bank_account_2.external_id)
       end
 
       it "deletes a replaced bank that Stripe left attached" do
@@ -10375,49 +10423,13 @@ describe StripeMerchantAccountManager, :vcr do
                                                              routing_number: "110000000", account_number: "000111111116"
                                                            })
         create(:ach_account, user:, deleted_at: 1.day.ago, stripe_connect_account_id: stripe_account_id, stripe_bank_account_id: leftover.id)
+        # On replay the final list is recorded, so the delete request itself is asserted too.
+        expect(Stripe::Account).to receive(:delete_external_account).with(stripe_account_id, leftover.id).and_call_original
 
         expect(subject.update_bank_account(user, passphrase: "1234")).to eq(:synced)
 
-        remaining_ids = Stripe::Account.list_external_accounts(stripe_account_id, { limit: 100 }).map(&:id)
+        remaining_ids = Stripe::Account.list_external_accounts(stripe_account_id).map(&:id)
         expect(remaining_ids).to eq([bank_account_2.reload.stripe_bank_account_id])
-      end
-
-      context "with replaced banks still attached at Stripe" do
-        let(:stripe_account_id) { merchant_account.charge_processor_merchant_id }
-        let(:attached) do
-          [
-            Stripe::BankAccount.construct_from(id: "ba_replaced_default", default_for_currency: true),
-            Stripe::BankAccount.construct_from(id: "ba_newer_sync", default_for_currency: false),
-            Stripe::BankAccount.construct_from(id: "ba_replaced", default_for_currency: false)
-          ]
-        end
-
-        before do
-          create(:ach_account, user:, deleted_at: 1.day.ago, stripe_connect_account_id: stripe_account_id, stripe_bank_account_id: "ba_replaced_default")
-          create(:ach_account, user:, deleted_at: 1.day.ago, stripe_connect_account_id: stripe_account_id, stripe_bank_account_id: "ba_replaced")
-          # A refresh can copy a live bank's id onto a deleted row.
-          create(:ach_account, user:, deleted_at: 1.day.ago, stripe_connect_account_id: stripe_account_id, stripe_bank_account_id: "ba_newer_sync")
-          create(:ach_account, user:, stripe_connect_account_id: stripe_account_id, stripe_bank_account_id: "ba_newer_sync")
-          allow(Stripe::Account).to receive(:list_external_accounts).with(stripe_account_id, { limit: 100 }).and_return(attached)
-        end
-
-        it "deletes only replaced banks, a currency's default last, and never a bank a newer sync attached" do
-          deleted = []
-          allow(Stripe::Account).to receive(:delete_external_account) { |_account_id, id| deleted << id }
-
-          expect(subject.update_bank_account(user, passphrase: "1234")).to eq(:synced)
-          expect(deleted).to eq(["ba_replaced", "ba_replaced_default"])
-        end
-      end
-
-      it "keeps the synced bank and notifies when Stripe refuses to delete a replaced account" do
-        create(:ach_account, user:, deleted_at: 1.day.ago, stripe_connect_account_id: merchant_account.charge_processor_merchant_id, stripe_bank_account_id: "ba_replaced")
-        allow(Stripe::Account).to receive(:list_external_accounts).and_return([Stripe::BankAccount.construct_from(id: "ba_replaced")])
-        allow(Stripe::Account).to receive(:delete_external_account).and_raise(Stripe::APIConnectionError, "connection reset")
-        expect(ErrorNotifier).to receive(:notify).with(an_instance_of(Stripe::APIConnectionError), stripe_account_id: merchant_account.charge_processor_merchant_id)
-
-        expect(subject.update_bank_account(user, passphrase: "1234")).to eq(:synced)
-        expect(bank_account_2.reload.stripe_bank_account_id).to match(/ba_[a-zA-Z0-9]+/)
       end
 
       it "saves the stripe bank account id on our bank account record" do
@@ -10904,7 +10916,8 @@ describe StripeMerchantAccountManager, :vcr do
       allow(Stripe::Account).to receive(:retrieve).with("acct_ec").and_return(stripe_account)
       allow(Stripe::Account).to receive(:retrieve_external_account).with("acct_ec", "ba_ec").and_return(retrieved_external_account)
       allow(Stripe::Account).to receive(:update)
-      allow(Stripe::Account).to receive(:update_external_account)    end
+      allow(Stripe::Account).to receive(:update_external_account)
+    end
 
     it "updates only account_holder_name on the existing external account when Stripe has none" do
       expect(subject).not_to receive(:clear_stale_bank_sync_failure_notes)

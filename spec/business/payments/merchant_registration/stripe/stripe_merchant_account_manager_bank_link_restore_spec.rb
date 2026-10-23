@@ -82,6 +82,17 @@ describe StripeMerchantAccountManager do
       expect(bank_account.stripe_connect_account_id).to eq(merchant_id)
     end
 
+    it "deletes a replaced bank that Stripe left attached once the link is restored" do
+      create(:ach_account, user:, deleted_at: 1.day.ago, stripe_connect_account_id: merchant_id, stripe_bank_account_id: "ba_replaced_eur")
+      stub_stripe_account_with([stripe_bank_account_payload, stripe_bank_account_payload(id: "ba_replaced_eur", currency: "eur", last4: "3000")])
+      allow(Stripe::Account).to receive(:delete_external_account)
+
+      expect(described_class.update_bank_account(user, passphrase:)).to eq(:synced)
+
+      expect(Stripe::Account).to have_received(:delete_external_account).with(merchant_id, "ba_replaced_eur").once
+      expect(bank_account.reload.stripe_bank_account_id).to eq("ba_recovered_from_stripe")
+    end
+
     it "makes the seller payable again" do
       stub_stripe_account_with([stripe_bank_account_payload])
       expect(StripePayoutProcessor.has_valid_payout_info?(user)).to be(false)
