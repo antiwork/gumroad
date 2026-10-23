@@ -2185,6 +2185,10 @@ class Link < ApplicationRecord
     def alive_category_variants_presence
       return if deleted_at.present?
       return if archived?
+      # Mirrors valid_tier_version_structure: taking a product off sale must not be
+      # blocked by the structure it is taking off sale, or a broken product can never
+      # be unpublished (and admin takedowns that unpublish every product roll back).
+      return if purchase_disabled_at.present? && purchase_disabled_at_changed?
 
       has_alive_categories_without_variants = variant_categories.alive.left_joins(:alive_variants).where(base_variants: { id: nil }).exists?
 

@@ -3740,6 +3740,23 @@ class LinkTest < ActiveSupport::TestCase
     assert_equal "Memberships should only have one Tier version category.", error.message
   end
 
+  test "unpublish! is allowed even when a version category has no alive options" do
+    product = create_product
+    category = create_variant_category(link: product)
+    create_variant(variant_category: category).update!(deleted_at: Time.current)
+
+    assert_nothing_raised { product.unpublish! }
+    assert product.reload.purchase_disabled_at.present?
+  end
+
+  test "an empty version category still fails on non-unpublish updates" do
+    product = create_product
+    category = create_variant_category(link: product)
+    create_variant(variant_category: category).update!(deleted_at: Time.current)
+
+    assert_raises(ActiveRecord::RecordInvalid) { product.update!(name: "New Name") }
+  end
+
   # --- #alive? / #published? -------------------------------------------------
 
   test "alive? reflects purchasable state" do
