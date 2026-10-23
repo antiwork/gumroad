@@ -38,12 +38,14 @@ class Api::Internal::Admin::FeatureAnnouncementCampaignsController < Api::Intern
     end
   end
 
-  # Renders the email as the actor would get it. Nothing is sent or recorded.
+  # Renders the email as the actor would get it. Nothing is sent or recorded. The digest is the one
+  # stamped on the rendered message, so approving it approves the copy shown here.
   def preview
     mail = FeatureAnnouncementMailer.announcement(campaign: @campaign.key, user_id: Current.admin_actor.id, email: Current.admin_actor.email)
+    rendered_digest = mail.message.feature_announcement_target[:content_digest]
     render json: {
       success: true,
-      campaign: campaign_json(@campaign),
+      campaign: campaign_json(@campaign).merge(content_digest: rendered_digest),
       subscribed_count: FeatureAnnouncementSubscription.where(subscribed: true).count,
       email: { from: mail[:from].to_s, reply_to: mail.reply_to, subject: mail.subject, html_body: (mail.html_part || mail).body.decoded },
     }

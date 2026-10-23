@@ -69,6 +69,17 @@ describe Api::Internal::Admin::FeatureAnnouncementCampaignsController do
       expect(AdminApiAuditLog.pluck(:action)).to eq(%w[feature_announcement_campaigns.approve feature_announcement_campaigns.deliver])
     end
 
+    it "previews the digest of the copy it rendered when the draft changes after the lookup" do
+      allow(FeatureAnnouncementCampaign).to receive(:find_by).and_wrap_original do |original, *args, **kwargs|
+        original.call(*args, **kwargs).tap { FeatureAnnouncementCampaign.find(_1.id).update!(subject: "Edited meanwhile") }
+      end
+
+      get :preview, params: { id: "new_feature" }
+
+      expect(json["email"]["subject"]).to eq("Edited meanwhile")
+      expect(json["campaign"]["content_digest"]).to eq(campaign.reload.current_digest)
+    end
+
     it "edits a draft" do
       patch :update, params: { id: "new_feature", subject: "Changed" }
 
