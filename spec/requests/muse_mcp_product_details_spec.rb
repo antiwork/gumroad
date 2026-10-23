@@ -48,6 +48,23 @@ describe "Muse MCP product details" do
                                    }])
   end
 
+  it "lists memberships without a query per tier or billing period" do
+    3.times do |i|
+      create(:membership_product, user: @seller, name: "Club #{i}").tiers.sole
+        .save_recurring_prices!("monthly" => { enabled: true, price: "3" }, "yearly" => { enabled: true, price: "30" })
+    end
+    call_tool("list_products", { limit: 1 }, scopes: "edit_products")
+    queries = []
+    callback = ->(*, payload) { queries << payload[:sql] if payload[:sql].match?(/\ASELECT/i) && payload[:name] != "SCHEMA" }
+
+    products = ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+      call_tool("list_products", {}, scopes: "edit_products")["products"]
+    end
+
+    expect(products.count { _1["tiers"] }).to eq(3)
+    expect(queries.count { _1.include?("`prices`") }).to be <= 2
+  end
+
   it "returns the description, and the sales count and revenue with a sales scope" do
     create(:purchase, link: @product, seller: @seller, price_cents: 900)
     create(:purchase, link: @product, seller: @seller, price_cents: 1200)

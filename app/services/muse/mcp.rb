@@ -380,6 +380,7 @@ module Muse
       def tool_list_products(args)
         require_scopes!(:view_profile, :view_public, :edit_products, :account)
         products = user.products.visible.order(created_at: :desc, id: :desc).limit(limit_for(args, default: 25))
+          .includes(:alive_prices, tier_categories: { alive_variants: :alive_prices })
         { products: products.map { |product| product_payload(product) } }
       end
 
@@ -487,8 +488,12 @@ module Muse
           return { pay_what_you_want: !!product.customizable_price, suggested_price_cents: product.customizable_price? ? product.suggested_price_cents : nil }
         end
 
-        tiers = product.tiers.alive.in_order.map do |tier|
-          { name: tier.name, pay_what_you_want: !!tier.customizable_price, prices: tier.recurrence_price_values }
+        # Built from the loaded associations, so list_products preloads them instead of querying per tier.
+        recurrences = product.alive_prices.filter_map { _1.recurrence if _1.is_buy? }
+        tiers = product.tier_categories.flat_map(&:alive_variants).sort_by { [_1.position_in_category.to_i, _1.created_at] }.map do |tier|
+          prices = tier.alive_prices.select { _1.is_buy? && recurrences.include?(_1.recurrence) }
+            .to_h { [_1.recurrence, { price_cents: _1.price_cents, suggested_price_cents: _1.suggested_price_cents }] }
+          { name: tier.name, pay_what_you_want: !!tier.customizable_price, prices: }
         end
         { pay_what_you_want: tiers.any? { _1[:pay_what_you_want] }, suggested_price_cents: nil, tiers: }
       end
