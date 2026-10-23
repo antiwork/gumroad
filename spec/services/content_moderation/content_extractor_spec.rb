@@ -149,6 +149,16 @@ RSpec.describe ContentModeration::ContentExtractor do
       Page.new(pageable:, slug: "about", title:, custom_html:, content:)
     end
 
+    it "includes the SEO title and description in the moderated text" do
+      page = page_for(content: "<p>Body</p>")
+      page.seo_title = "Search title"
+      page.seo_description = "Search description"
+
+      result = extractor.extract_from_page(page)
+
+      expect(result.text).to include("Search title", "Search description")
+    end
+
     it "moderates a video's poster image without sending the video file to the image endpoint" do
       page = page_for(custom_html: <<~HTML)
         <p>Watch the process</p>

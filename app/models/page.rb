@@ -23,6 +23,9 @@ class Page < ApplicationRecord
   MAX_CONTENT_LENGTH = 500_000
   MAX_TITLE_LENGTH = 255
   MAX_SLUG_LENGTH = 100
+  # Roughly what a search result shows before it cuts the text off.
+  MAX_SEO_TITLE_LENGTH = 70
+  MAX_SEO_DESCRIPTION_LENGTH = 320
 
   # Slugs serve at the root of the username subdomain and custom domains, so
   # they must never shadow a path those domains already route. Keep this list
@@ -45,6 +48,10 @@ class Page < ApplicationRecord
   validates :custom_html, length: { maximum: MAX_CUSTOM_HTML_LENGTH }
   validates :content, length: { maximum: MAX_CONTENT_LENGTH }
 
+  normalizes :seo_title, :seo_description, with: -> { _1.squish.presence }
+  validates :seo_title, length: { maximum: MAX_SEO_TITLE_LENGTH }
+  validates :seo_description, length: { maximum: MAX_SEO_DESCRIPTION_LENGTH }
+
   with_options if: :slugged? do
     validates :title, presence: true, length: { maximum: MAX_TITLE_LENGTH }
     validates :slug, length: { maximum: MAX_SLUG_LENGTH },
@@ -66,7 +73,7 @@ class Page < ApplicationRecord
   # Only on a content change: a page is touched by unrelated saves (a slug
   # rename, a `touch` from its owner) and re-moderating those would spend a
   # model call to re-read text that already passed.
-  validate :content_moderation_check, if: -> { custom_html_changed? || content_changed? || title_changed? }
+  validate :content_moderation_check, if: -> { custom_html_changed? || content_changed? || title_changed? || seo_title_changed? || seo_description_changed? }
 
   scope :roots, -> { where(slug: nil) }
   scope :slugged, -> { where.not(slug: nil) }

@@ -14,7 +14,7 @@ class Pages::RichTextDocument
   def self.render(page:, seller_name:, profile_href: "/", head_extra: "")
     title = ERB::Util.h(page.title.to_s)
     seller = ERB::Util.h(seller_name.to_s)
-    document_title = ERB::Util.h(Pages::DocumentTitle.for(page_title: page.title, seller_name:))
+    document_title = ERB::Util.h(Pages::DocumentTitle.for(page_title: page.title, seller_name:, seo_title: page.seo_title))
     href = ERB::Util.h(profile_href)
     <<~HTML.html_safe
       <!doctype html>

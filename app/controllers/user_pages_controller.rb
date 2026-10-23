@@ -82,9 +82,15 @@ class UserPagesController < ApplicationController
     end
 
     def page_meta_head
-      title = ERB::Util.h(@page.title.to_s)
+      title = ERB::Util.h(@page.seo_title || @page.title.to_s)
       canonical = ERB::Util.h(page_url)
       favicon_url = ERB::Util.h(@user.avatar_url)
+      description_tags = if @page.seo_description.present?
+        description = ERB::Util.h(@page.seo_description)
+        %(<meta name="description" content="#{description}">\n<meta property="og:description" content="#{description}">)
+      else
+        ""
+      end
       <<~HTML
         <link rel="canonical" href="#{canonical}">
         <link rel="shortcut icon" href="#{favicon_url}">
@@ -92,6 +98,7 @@ class UserPagesController < ApplicationController
         <meta property="og:title" content="#{title}">
         <meta property="og:type" content="website">
         <meta property="og:url" content="#{canonical}">
+        #{description_tags}
         #{page_share_image_tags}
       HTML
     end
@@ -117,7 +124,7 @@ class UserPagesController < ApplicationController
     def page_custom_html_wrapper_document
       iframe_src = ERB::Util.h("/#{@page.slug}/landing/embed")
       title = ERB::Util.h(@page.title.to_s)
-      document_title = ERB::Util.h(Pages::DocumentTitle.for(page_title: @page.title, seller_name: @user.name_or_username))
+      document_title = ERB::Util.h(Pages::DocumentTitle.for(page_title: @page.title, seller_name: @user.name_or_username, seo_title: @page.seo_title))
       store_hostnames_json = ERB::Util.json_escape(page_store_hostnames.to_json)
       nonce = SecureHeaders.content_security_policy_script_nonce(request)
       live_reload = if current_seller.present? && current_seller == @user

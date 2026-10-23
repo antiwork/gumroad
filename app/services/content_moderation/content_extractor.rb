@@ -73,7 +73,7 @@ class ContentModeration::ContentExtractor
     document = page_document(page)
 
     links = strip_seller_first_party_urls(link_targets(document).join(" "), page.seller)
-    prose = strip_seller_first_party_urls("Title: #{page.title} #{document.text}".squish, page.seller)
+    prose = strip_seller_first_party_urls("Title: #{page.title} #{page.seo_title} #{page.seo_description} #{document.text}".squish, page.seller)
 
     # Every image the RENDERED page displays, not a subset: the service rejects a
     # page carrying more than MAX_PAGE_IMAGE_URLS rather than narrowing here, so

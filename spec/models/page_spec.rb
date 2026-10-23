@@ -92,6 +92,15 @@ describe Page do
       expect(described_class.new(pageable: user, slug: "about", title: "About", content: "<p>Anything</p>")).not_to be_valid
     end
 
+    it "moderates a save that changes only the SEO description" do
+      page = described_class.create!(pageable: user, slug: "about", title: "About", content: "<p>Hi</p>")
+      stub_strategies(blocklist: "flagged", reasons: ["Blocklist match"])
+
+      page.seo_description = "Anything"
+
+      expect(page).not_to be_valid
+    end
+
     it "does not re-moderate a save that leaves the content alone" do
       page = described_class.create!(pageable: user, slug: "about", title: "About", content: "<p>Hi</p>")
       expect(ContentModeration::ContentExtractor).not_to receive(:new)
@@ -147,6 +156,26 @@ describe Page do
       page.custom_html = nil
 
       expect(page).to be_valid
+    end
+  end
+
+  describe "SEO fields" do
+    it "squishes whitespace and stores a blank value as nil" do
+      page = described_class.create!(pageable: user, slug: "about", title: "About", content: "<p>Hi</p>",
+                                     seo_title: "  Hand-lettered   posters ", seo_description: " \n ")
+
+      expect(page.seo_title).to eq("Hand-lettered posters")
+      expect(page.seo_description).to be_nil
+    end
+
+    it "limits the SEO title and description to what a search result shows" do
+      page = described_class.new(pageable: user, slug: "about", title: "About", content: "<p>Hi</p>",
+                                 seo_title: "a" * (described_class::MAX_SEO_TITLE_LENGTH + 1),
+                                 seo_description: "a" * (described_class::MAX_SEO_DESCRIPTION_LENGTH + 1))
+
+      expect(page).not_to be_valid
+      expect(page.errors[:seo_title]).to be_present
+      expect(page.errors[:seo_description]).to be_present
     end
   end
 

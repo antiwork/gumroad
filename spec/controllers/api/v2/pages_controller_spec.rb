@@ -98,6 +98,14 @@ describe Api::V2::PagesController do
       expect(@user.pages.last.slug).to eq("questions")
     end
 
+    it "creates a page with an SEO title and description" do
+      post :create, params: { format: :json, access_token: @token.token, title: "FAQ", seo_title: "Questions about Jane's prints", seo_description: "Shipping, sizes and returns." }
+
+      page = @user.pages.last
+      expect(page.seo_title).to eq("Questions about Jane's prints")
+      expect(page.seo_description).to eq("Shipping, sizes and returns.")
+    end
+
     it "rejects an invalid explicit slug" do
       post :create, params: { format: :json, access_token: @token.token, title: "FAQ", slug: "Bad Slug!" }
 
@@ -181,6 +189,37 @@ describe Api::V2::PagesController do
 
       expect(page.reload.custom_html).to be_nil
       expect(page.content).to be_nil
+    end
+
+    it "sets the SEO title and description" do
+      put :update, params: { format: :json, access_token: @token.token, id: "about", seo_title: "About Jane", seo_description: "Who I am." }
+
+      expect(response.parsed_body["page"]).to include("seo_title" => "About Jane", "seo_description" => "Who I am.")
+      expect(page.reload.seo_title).to eq("About Jane")
+      expect(page.seo_description).to eq("Who I am.")
+    end
+
+    it "clears an SEO field sent blank and leaves an omitted one alone" do
+      page.update!(seo_title: "About Jane", seo_description: "Who I am.")
+
+      put :update, params: { format: :json, access_token: @token.token, id: "about", seo_title: "" }
+
+      expect(page.reload.seo_title).to be_nil
+      expect(page.seo_description).to eq("Who I am.")
+    end
+
+    it "rejects an SEO field that is not a string" do
+      put :update, params: { format: :json, access_token: @token.token, id: "about", seo_description: { text: "x" } }
+
+      expect(response.parsed_body).to include("success" => false, "message" => "seo_description must be a string.")
+      expect(page.reload.seo_description).to be_nil
+    end
+
+    it "reports an SEO title over the limit" do
+      put :update, params: { format: :json, access_token: @token.token, id: "about", seo_title: "a" * (Page::MAX_SEO_TITLE_LENGTH + 1) }
+
+      expect(response.parsed_body["success"]).to eq(false)
+      expect(page.reload.seo_title).to be_nil
     end
 
     it "cannot touch another seller's page" do

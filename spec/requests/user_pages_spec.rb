@@ -47,6 +47,19 @@ describe "Public serving of seller pages", type: :request do
 
       expect(response.body).to include(%(property="og:title" content="About"))
       expect(response.body).to include(%(rel="canonical"))
+      expect(response.body).not_to include(%(name="description"))
+    end
+
+    it "uses the seller's SEO title and description" do
+      page.update!(seo_title: "About Jane's studio", seo_description: "Hand-lettered posters & prints.")
+
+      get "http://#{seller.subdomain}/about"
+
+      expect(response.body).to include("<title>About Jane&#39;s studio</title>")
+      expect(response.body).to include(%(property="og:title" content="About Jane&#39;s studio"))
+      expect(response.body).to include(%(name="description" content="Hand-lettered posters &amp; prints."))
+      expect(response.body).to include(%(property="og:description" content="Hand-lettered posters &amp; prints."))
+      expect(response.body).to include(%(<h1 class="page-title">About</h1>))
     end
 
     it "404s an unknown slug" do
@@ -88,6 +101,17 @@ describe "Public serving of seller pages", type: :request do
       get "http://seller.example.com/studio"
 
       expect(response.body).to include("<title>Free Art Teacher Vault | Jane Doe</title>")
+    end
+
+    it "puts the seller's SEO title and description on the wrapper document" do
+      page.update!(seo_title: "Studio sessions", seo_description: "Book a studio session.")
+
+      get "http://seller.example.com/studio"
+
+      expect(response.body).to include("<title>Studio sessions</title>")
+      expect(response.body).to include(%(property="og:title" content="Studio sessions"))
+      expect(response.body).to include(%(name="description" content="Book a studio session."))
+      expect(response.body).to include(%(property="og:description" content="Book a studio session."))
     end
 
     it "serves the embed with the strict CSP" do

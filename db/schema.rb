@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_19_000002) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_19_000003) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -1643,6 +1643,8 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_19_000002) do
     t.string "slug"
     t.string "title"
     t.text "content", size: :long
+    t.string "seo_title"
+    t.text "seo_description"
     t.index ["pageable_type", "pageable_id", "slug"], name: "index_pages_on_pageable_and_slug", unique: true
   end
 

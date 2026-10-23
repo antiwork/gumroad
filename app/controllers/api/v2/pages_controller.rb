@@ -10,6 +10,8 @@
 # page is NOT addressable here; it keeps its dedicated /user/custom_html
 # endpoints.
 class Api::V2::PagesController < Api::V2::BaseController
+  SEO_PARAMS = %i[seo_title seo_description].freeze
+
   before_action -> { doorkeeper_authorize!(*Doorkeeper.configuration.public_api_read_scopes.concat([:view_public])) }, only: [:index, :show]
   before_action(only: [:create, :update, :destroy]) { doorkeeper_authorize! :edit_profile }
   # The base controller adds the broad legacy `account` scope as a fallback to every
@@ -48,6 +50,7 @@ class Api::V2::PagesController < Api::V2::BaseController
     page = current_resource_owner.pages.build(title: params[:title].strip)
     page.slug = requested_slug || generate_slug(page.title)
     assign_content(page)
+    assign_seo(page)
 
     if page.save
       render_response(true, page: page_json(page))
@@ -63,6 +66,7 @@ class Api::V2::PagesController < Api::V2::BaseController
 
     @page.title = params[:title].strip if params[:title].is_a?(String) && params[:title].strip.present?
     assign_content(@page)
+    assign_seo(@page)
 
     if @page.save
       render_response(true, page: page_json(@page))
@@ -98,6 +102,9 @@ class Api::V2::PagesController < Api::V2::BaseController
       if params.key?(:content) && !params[:content].nil? && !params[:content].is_a?(String)
         return "content must be a string."
       end
+      SEO_PARAMS.each do |key|
+        return "#{key} must be a string." if params.key?(key) && !params[key].nil? && !params[key].is_a?(String)
+      end
       if params.key?(:custom_html)
         return "custom_html must be a string." if !params[:custom_html].nil? && !params[:custom_html].is_a?(String)
         unless Feature.active?(:custom_html_pages, current_resource_owner)
@@ -123,6 +130,12 @@ class Api::V2::PagesController < Api::V2::BaseController
         page.content = params[:content].presence
         page.custom_html = nil
       end
+    end
+
+    # A key that is sent but blank clears the field, so the page goes back to
+    # its default title and no description.
+    def assign_seo(page)
+      SEO_PARAMS.each { |key| page.public_send(:"#{key}=", params[key]) if params.key?(key) }
     end
 
     def requested_slug
@@ -151,6 +164,8 @@ class Api::V2::PagesController < Api::V2::BaseController
       page_metadata_json(page).merge(
         content: page.content,
         custom_html: page.custom_html,
+        seo_title: page.seo_title,
+        seo_description: page.seo_description,
       )
     end
 
