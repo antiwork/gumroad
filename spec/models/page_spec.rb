@@ -93,7 +93,7 @@ describe Page do
     end
 
     it "moderates a save that changes only the SEO description" do
-      page = described_class.create!(pageable: user, slug: "about", title: "About", content: "<p>Hi</p>")
+      page = create(:user_page, pageable: user)
       stub_strategies(blocklist: "flagged", reasons: ["Blocklist match"])
 
       page.seo_description = "Anything"
@@ -161,17 +161,16 @@ describe Page do
 
   describe "SEO fields" do
     it "squishes whitespace and stores a blank value as nil" do
-      page = described_class.create!(pageable: user, slug: "about", title: "About", content: "<p>Hi</p>",
-                                     seo_title: "  Hand-lettered   posters ", seo_description: " \n ")
+      page = create(:user_page, pageable: user, seo_title: "  Hand-lettered   posters ", seo_description: " \n ")
 
       expect(page.seo_title).to eq("Hand-lettered posters")
       expect(page.seo_description).to be_nil
     end
 
     it "limits the SEO title and description to what a search result shows" do
-      page = described_class.new(pageable: user, slug: "about", title: "About", content: "<p>Hi</p>",
-                                 seo_title: "a" * (described_class::MAX_SEO_TITLE_LENGTH + 1),
-                                 seo_description: "a" * (described_class::MAX_SEO_DESCRIPTION_LENGTH + 1))
+      page = build(:user_page, pageable: user,
+                               seo_title: "a" * (described_class::MAX_SEO_TITLE_LENGTH + 1),
+                               seo_description: "a" * (described_class::MAX_SEO_DESCRIPTION_LENGTH + 1))
 
       expect(page).not_to be_valid
       expect(page.errors[:seo_title]).to be_present
