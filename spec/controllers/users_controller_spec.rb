@@ -112,6 +112,19 @@ describe UsersController do
         expect(html.at_css('meta[name="description"]')["content"]).to eq("Get the latest products and updates from creator on Gumroad.")
         expect(html.at_css('meta[property="og:description"]')["content"]).to eq("Get the latest products and updates from creator on Gumroad.")
       end
+
+      it "uses the seller's SEO title and description over the name and bio" do
+        creator.update!(name: "Jane Doe", bio: "My bio")
+        creator.seller_profile.update!(seo_title: "Hand-lettered posters", seo_description: "Posters and prints by Jane Doe.")
+
+        get :show, params: { username: creator.username }
+
+        html = Nokogiri::HTML.parse(response.body)
+        expect(html.at_css("title").text).to eq("Hand-lettered posters")
+        expect(html.at_css('meta[property="og:title"]')["content"]).to eq("Hand-lettered posters")
+        expect(html.at_css('meta[name="description"]')["content"]).to eq("Posters and prints by Jane Doe.")
+        expect(html.at_css('meta[property="og:description"]')["content"]).to eq("Posters and prints by Jane Doe.")
+      end
     end
 
     context "when the user is deleted" do

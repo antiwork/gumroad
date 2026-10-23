@@ -3,6 +3,26 @@
 require "spec_helper"
 
 describe SellerProfile do
+  describe "SEO fields" do
+    let(:seller_profile) { create(:user).seller_profile }
+
+    it "squishes whitespace and stores a blank value as nil" do
+      seller_profile.update!(seo_title: "  Hand-lettered   posters ", seo_description: " ")
+
+      expect(seller_profile.seo_title).to eq("Hand-lettered posters")
+      expect(seller_profile.seo_description).to be_nil
+    end
+
+    it "limits the SEO title and description to what a search result shows" do
+      seller_profile.assign_attributes(seo_title: "a" * (Page::MAX_SEO_TITLE_LENGTH + 1),
+                                       seo_description: "a" * (Page::MAX_SEO_DESCRIPTION_LENGTH + 1))
+
+      expect(seller_profile).not_to be_valid
+      expect(seller_profile.errors[:seo_title]).to be_present
+      expect(seller_profile.errors[:seo_description]).to be_present
+    end
+  end
+
   describe "#custom_styles" do
     subject { create(:seller_profile, highlight_color: "#009a49", font: "Roboto Mono", background_color: "#000000") }
 

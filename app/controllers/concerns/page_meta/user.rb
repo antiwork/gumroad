@@ -14,6 +14,28 @@ module PageMeta::User
       "Get the latest products and updates from #{user.name_or_username} on Gumroad."
     end
 
+    # Only the home page reads the seller's SEO fields; /subscribe and /coffee
+    # keep the defaults.
+    def profile_home_title(user)
+      user.seller_profile.seo_title || user.name_or_username
+    end
+
+    def profile_home_meta_description(user)
+      user.seller_profile.seo_description || profile_meta_description(user)
+    end
+
+    def set_profile_home_seo_meta(user)
+      seller_profile = user.seller_profile
+      if seller_profile.seo_title
+        set_meta_tag(title: seller_profile.seo_title)
+        set_meta_tag(property: "og:title", content: seller_profile.seo_title)
+      end
+      if seller_profile.seo_description
+        set_meta_tag(name: "description", content: seller_profile.seo_description)
+        set_meta_tag(property: "og:description", content: seller_profile.seo_description)
+      end
+    end
+
     def set_user_page_meta(user)
       set_meta_tag(property: "og:site_name", content: "Gumroad")
       set_meta_tag(property: "og:type", content: "website")

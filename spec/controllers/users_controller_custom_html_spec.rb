@@ -46,6 +46,18 @@ describe UsersController, :vcr, type: :controller do
         expect(response.body).to include(%(property="og:description" content="Maker of things">))
       end
 
+      it "uses the seller's SEO title and description over the name and bio" do
+        seller.seller_profile.update!(seo_title: "Jane's studio", seo_description: "Posters & prints.")
+
+        get :show
+
+        expect(response.body).to include("<title>Jane&#39;s studio</title>")
+        expect(response.body).to include(%(property="og:title" content="Jane&#39;s studio"))
+        expect(response.body).to include(%(<meta name="description" content="Posters &amp; prints.">))
+        expect(response.body).to include(%(property="og:description" content="Posters &amp; prints.">))
+        expect(response.body).to include(%(title="Jane Doe"))
+      end
+
       it "names the creator when the seller has no bio" do
         seller.update!(bio: nil)
 

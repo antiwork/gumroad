@@ -2524,6 +2524,8 @@ create_table "ping_deliveries", charset: "utf8mb4", collation: "utf8mb4_unicode_
     t.json "json_data"
     t.string "border_radius"
     t.string "button_hover"
+    t.string "seo_title"
+    t.text "seo_description"
     t.index ["seller_id"], name: "index_seller_profiles_on_seller_id"
   end
 

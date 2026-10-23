@@ -32,6 +32,7 @@ class UsersController < ApplicationController
     respond_to do |format|
       format.html do
         set_user_page_meta(@user)
+        set_profile_home_seo_meta(@user)
         set_favicon_meta_tags(@user)
         render inertia: "Users/Show", props: ProfilePresenter.new(pundit_user:, seller: @user).profile_props(seller_custom_domain_url:, request:)
       end
@@ -292,8 +293,9 @@ class UsersController < ApplicationController
     def profile_custom_html_wrapper_document(user)
       iframe_src = ERB::Util.h(profile_landing_src(user, "embed"))
       title = ERB::Util.h(user.name_or_username.to_s)
+      document_title = ERB::Util.h(profile_home_title(user))
       canonical = ERB::Util.h(user.profile_url(custom_domain_url: seller_custom_domain_url).to_s)
-      description = ERB::Util.h(profile_meta_description(user))
+      description = ERB::Util.h(profile_home_meta_description(user))
       store_hostnames_json = ERB::Util.json_escape(profile_store_hostnames(user).to_json)
       nonce = SecureHeaders.content_security_policy_script_nonce(request)
       # This <head> is hand-built (bypasses PageMeta::Favicon). user.avatar_url
@@ -331,10 +333,10 @@ class UsersController < ApplicationController
           <head>
             <meta charset="utf-8">
             <meta name="viewport" content="width=device-width, initial-scale=1">
-            <title>#{title}</title>
+            <title>#{document_title}</title>
             <link rel="canonical" href="#{canonical}">
             #{favicon_tags}
-            <meta property="og:title" content="#{title}">
+            <meta property="og:title" content="#{document_title}">
             <meta property="og:type" content="profile">
             <meta property="og:url" content="#{canonical}">
             <meta name="description" content="#{description}">

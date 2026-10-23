@@ -38,6 +38,9 @@ class Api::V2::UsersController < Api::V2::BaseController
 
     return render_response(false, message: "You have to confirm your email address before you can do that.") unless user.confirmed?
 
+    seo_params = params.permit(:seo_title, :seo_description)
+    return update_with_seo_fields(user, seo_params) if seo_params.present?
+
     if user.update(permitted_update_params)
       success_with_object(:user, user)
     else
@@ -271,6 +274,21 @@ class Api::V2::UsersController < Api::V2::BaseController
   private
     def permitted_update_params
       params.permit(:name, :bio)
+    end
+
+    # The home page's SEO fields live on the seller profile. The lock serializes
+    # a first profile save with the profile settings save, and the profile is
+    # validated first so a rejected value leaves the name and bio unsaved.
+    def update_with_seo_fields(user, seo_params)
+      failed = nil
+      user.with_locked_seller_profile do |seller_profile|
+        seller_profile.assign_attributes(seo_params)
+        next failed = seller_profile unless seller_profile.valid?
+        next failed = user unless user.update(permitted_update_params)
+
+        seller_profile.save!
+      end
+      failed ? error_with_object(:user, failed) : success_with_object(:user, user)
     end
 
     def ensure_custom_html_pages_enabled

@@ -19,6 +19,11 @@ module User::AsJson
       result[:display_name] = display_name
     end
 
+    if (api_scopes_options(options) & %w[view_profile edit_profile account]).present?
+      result[:seo_title] = seller_profile.seo_title
+      result[:seo_description] = seller_profile.seo_description
+    end
+
     if options[:internal_use]
       result.merge!(internal_use_fields_for_as_json)
     end

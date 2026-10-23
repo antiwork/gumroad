@@ -126,6 +126,32 @@ describe Api::V2::UsersController do
         expect(@user.bio).to eq("Updated bio")
       end
 
+      it "sets the home page SEO title and description" do
+        put @action, params: { access_token: @token.token, seo_title: "Hand-lettered posters", seo_description: "Posters and prints." }
+
+        expect(response.parsed_body["success"]).to eq(true)
+        expect(response.parsed_body["user"]).to include("seo_title" => "Hand-lettered posters", "seo_description" => "Posters and prints.")
+        expect(@user.seller_profile.reload.seo_title).to eq("Hand-lettered posters")
+        expect(@user.seller_profile.seo_description).to eq("Posters and prints.")
+      end
+
+      it "clears an SEO field sent blank and leaves an omitted one alone" do
+        @user.seller_profile.update!(seo_title: "Old title", seo_description: "Old description")
+
+        put @action, params: { access_token: @token.token, seo_title: "" }
+
+        expect(@user.seller_profile.reload.seo_title).to be_nil
+        expect(@user.seller_profile.seo_description).to eq("Old description")
+      end
+
+      it "saves nothing when an SEO field is over the limit" do
+        put @action, params: @params.merge(seo_title: "a" * (Page::MAX_SEO_TITLE_LENGTH + 1))
+
+        expect(response.parsed_body["success"]).to eq(false)
+        expect(@user.reload.name).not_to eq("Jane Seller")
+        expect(SellerProfile.where(seller: @user).pluck(:seo_title)).to all(be_nil)
+      end
+
       it "returns the updated user in the response" do
         put @action, params: @params
 

@@ -26,6 +26,11 @@ class SellerProfile < ApplicationRecord
   validates :button_hover, inclusion: { in: BUTTON_HOVER_OFFSETS.keys }
   validate :validate_json_data, if: -> { self[:json_data].present? }
 
+  # The home page's search listing. Same limits as a storefront page's.
+  normalizes :seo_title, :seo_description, with: -> { _1.squish.presence }
+  validates :seo_title, length: { maximum: Page::MAX_SEO_TITLE_LENGTH }
+  validates :seo_description, length: { maximum: Page::MAX_SEO_DESCRIPTION_LENGTH }
+
   before_validation :normalize_colors
   after_commit :clear_custom_style_cache, if: -> { %w[highlight_color background_color font border_radius button_hover].any? { |prop| send(:"saved_change_to_#{prop}?") } }
 
