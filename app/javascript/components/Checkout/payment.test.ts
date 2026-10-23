@@ -3958,6 +3958,22 @@ describe("counting submits refused by client-side validation", () => {
 });
 
 describe("paymentMethodTypesForMountCurrency", () => {
+  describe("with Klarna's amount window", () => {
+    const klarna = {
+      payment_method_types: ["card", "link", "klarna"],
+      payment_method_max_amount_cents: { klarna: 4_000_00 },
+      payment_method_min_amount_cents: { klarna: 1_00 },
+    };
+
+    it("drops Klarna outside the window and keeps it inside or while the amount is unknown", () => {
+      expect(paymentMethodTypesForMountCurrency(klarna, "usd", 99)).toEqual(["card", "link"]);
+      expect(paymentMethodTypesForMountCurrency(klarna, "usd", 4_000_01)).toEqual(["card", "link"]);
+      expect(paymentMethodTypesForMountCurrency(klarna, "usd", 1_00)).toEqual(["card", "link", "klarna"]);
+      expect(paymentMethodTypesForMountCurrency(klarna, "usd", 4_000_00)).toEqual(["card", "link", "klarna"]);
+      expect(paymentMethodTypesForMountCurrency(klarna, "usd", null)).toEqual(["card", "link", "klarna"]);
+    });
+  });
+
   const listedEur = {
     payment_method_types: ["card", "link", "ideal", "bancontact"],
     inr_local_methods: ["upi"],

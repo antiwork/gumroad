@@ -310,9 +310,14 @@ class Checkout::StripePaymentPresenter
         } : nil,
         payment_method_types:,
         inr_local_methods: inr_local_method_types,
-        # In the method's forced-currency minor units; the browser drops a method its amount exceeds.
+        # In the method's currency minor units; the browser drops a method whose cap the amount
+        # exceeds or whose floor it falls under, matching prepare's final-amount Klarna strip.
         payment_method_max_amount_cents: {
           Checkout::PaymentMethodResolver::UPI_PAYMENT_METHOD_TYPE => Checkout::PaymentMethodResolver::UPI_MAX_INR_CENTS,
+          Checkout::PaymentMethodResolver::KLARNA_PAYMENT_METHOD_TYPE => Checkout::PaymentMethodResolver::KLARNA_MAX_USD_CHARGE_CENTS,
+        },
+        payment_method_min_amount_cents: {
+          Checkout::PaymentMethodResolver::KLARNA_PAYMENT_METHOD_TYPE => Checkout::PaymentMethodResolver::KLARNA_MIN_USD_CHARGE_CENTS,
         },
         payment_method_list_token: issued_payment_method_list_token(
           payment_method_types,

@@ -93,6 +93,8 @@ export type PaymentElementClientConfirmConfig = {
   // Server-owned per-method caps in the method's forced-currency minor units. Stripe rejects the
   // whole session, card included, when a listed method's cap is below the element amount.
   payment_method_max_amount_cents?: Record<string, number>;
+  // Floor counterpart of the cap above; the deferred intent drops the method under it too.
+  payment_method_min_amount_cents?: Record<string, number>;
   // Signed server copy of payment_method_types above, echoed back at /orders/prepare so the
   // deferred intent is built from the list this page actually mounted rather than a second
   // server-side resolution (gumroad-private#1528). Opaque to the browser.
@@ -117,6 +119,7 @@ export function paymentMethodTypesForMountCurrency(
   elementsOptions: Pick<PaymentElementConfig | PaymentElementClientConfirmConfig, "payment_method_types"> & {
     inr_local_methods?: string[];
     payment_method_max_amount_cents?: Record<string, number>;
+    payment_method_min_amount_cents?: Record<string, number>;
   },
   currency: string,
   amount: number | null,
@@ -136,9 +139,12 @@ export function paymentMethodTypesForMountCurrency(
     }
   }
   const maxAmounts = elementsOptions.payment_method_max_amount_cents ?? {};
+  const minAmounts = elementsOptions.payment_method_min_amount_cents ?? {};
   return types.filter((method) => {
+    if (amount === null) return true;
     const max = maxAmounts[method];
-    return max === undefined || amount === null || amount <= max;
+    const min = minAmounts[method];
+    return (max === undefined || amount <= max) && (min === undefined || amount >= min);
   });
 }
 // request_apple_pay_merchant_tokens: subscription carts ask Apple for an MPAN (survives a
