@@ -22,4 +22,20 @@ describe "mysql2 proxy feature announcement routing" do
     expect(message.subject).to eq("Primary copy")
     expect(serving_pool).to eq("replica")
   end
+
+  it "starts a send the replica has not seen yet" do
+    campaign = primary_setup { create(:feature_announcement_campaign, key: "routing_send", state: "sending") }
+    user = primary_setup do
+      create(:user, email: "routing-subscriber@example.com").tap do
+        FeatureAnnouncementSubscription.update_from_settings!(_1, subscribed: true, rendered_version: 0)
+      end
+    end
+
+    reads = record_serving_reads { SendFeatureAnnouncementCampaignJob.new.perform(campaign.id) }
+
+    recipient_reads = reads.select { |sql, _| sql.match?(/`(feature_announcement_subscriptions|users)`/) }
+    expect(recipient_reads.map(&:last).uniq).to eq(["primary"])
+    expect(ActiveJob::Base.queue_adapter.enqueued_jobs.map { _1["arguments"].last["args"].first["user_id"] }).to include(user.id)
+    expect(primary_setup { campaign.reload.state }).to eq("sent")
+  end
 end

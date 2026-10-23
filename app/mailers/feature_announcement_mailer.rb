@@ -40,6 +40,12 @@ class FeatureAnnouncementMailer < ApplicationMailer
     send(:"#{campaign.audience}_audience?", user)
   end
 
+  # Any account that has made a product, the line User#is_buyer? draws. Buyers, followers and
+  # signups without a product are left out even when they opted in.
+  def self.creators_audience?(user)
+    user.products.exists?
+  end
+
   # Sellers who can file a piracy report for at least one of their products. The query keeps
   # only products that already pass Eligibility's product checks, so whichever one it returns
   # decides the seller-level checks too; a later product can't qualify where it failed.

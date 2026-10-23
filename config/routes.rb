@@ -462,6 +462,15 @@ Rails.application.routes.draw do
           # (gumroad-private#3598).
           resources :stripe_restraint_notices, only: [:create]
 
+          resources :feature_announcement_campaigns, only: [:index, :show, :create, :update] do
+            member do
+              get :preview
+              post :approve
+              post :deliver
+              post :cancel
+            end
+          end
+
           resources :users, only: [] do
             collection do
               get :info

@@ -7,8 +7,10 @@ class FeatureAnnouncementCampaign < ApplicationRecord
   STATES = %w[draft approved sending sent cancelled].freeze
   DELIVERABLE_STATES = %w[sending sent].freeze
   # Each audience names a FeatureAnnouncementMailer.<audience>_audience? predicate.
-  AUDIENCES = %w[piracy_reports].freeze
+  AUDIENCES = %w[creators piracy_reports].freeze
   CONTENT_ATTRIBUTES = %w[subject body reply_to].freeze
+
+  class InvalidTransition < StandardError; end
 
   belongs_to :approved_by, class_name: "User", optional: true
 
@@ -18,6 +20,7 @@ class FeatureAnnouncementCampaign < ApplicationRecord
   validates :reply_to, email_format: true, format: { with: /@gumroad\.com\z/ }
   validates :audience, inclusion: { in: AUDIENCES }
   validates :state, inclusion: { in: STATES }
+  validate :links_use_https
   validate :content_frozen_after_draft, on: :update
 
   def self.digest_for(subject, body, reply_to)
@@ -32,7 +35,43 @@ class FeatureAnnouncementCampaign < ApplicationRecord
     self.class.digest_for(subject, body, reply_to)
   end
 
+  # The caller passes the digest of the copy it showed for approval, so a draft edited after
+  # that preview is not approved.
+  def approve!(by:, digest:)
+    with_lock do
+      raise InvalidTransition, "only a draft can be approved" unless state == "draft"
+      raise InvalidTransition, "the copy changed since the preview" unless digest == current_digest
+
+      update!(state: "approved", content_digest: digest, approved_by: by, approved_at: Time.current)
+    end
+  end
+
+  # A campaign already sending can be sent again, which recovers from an enqueue that failed after
+  # the state changed. The gate's claims stop a second email to anyone.
+  def start_sending!
+    with_lock do
+      raise InvalidTransition, "only an approved campaign can be sent" unless %w[approved sending].include?(state)
+
+      update!(state: "sending")
+    end
+    SendFeatureAnnouncementCampaignJob.perform_async(id)
+  end
+
+  # A sent campaign can still have emails in the queue, so it can be cancelled too.
+  def cancel!
+    with_lock do
+      raise InvalidTransition, "the campaign is already cancelled" if state == "cancelled"
+
+      update!(state: "cancelled")
+    end
+  end
+
   private
+    def links_use_https
+      hrefs = Nokogiri::HTML.fragment(body.to_s).css("a").map { _1["href"].to_s }
+      errors.add(:body, "links must use https") unless hrefs.all? { _1.start_with?("https://") }
+    end
+
     def content_frozen_after_draft
       return if state_was == "draft"
 

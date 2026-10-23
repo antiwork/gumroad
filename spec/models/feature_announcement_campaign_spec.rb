@@ -51,4 +51,55 @@ describe FeatureAnnouncementCampaign do
       expect(build(:feature_announcement_campaign).tap { _1.subject = "Changed" }).not_to be_deliverable
     end
   end
+
+  describe "transitions" do
+    let(:approver) { create(:admin_user) }
+    let(:campaign) { create(:feature_announcement_campaign, :draft) }
+
+    it "approves a draft with the digest of its current copy" do
+      campaign.approve!(by: approver, digest: campaign.current_digest)
+
+      expect(campaign.reload).to have_attributes(state: "approved", approved_by: approver, content_digest: campaign.current_digest)
+    end
+
+    it "refuses an approval for older copy or a second approval" do
+      expect { campaign.approve!(by: approver, digest: "stale") }.to raise_error(described_class::InvalidTransition)
+
+      campaign.approve!(by: approver, digest: campaign.current_digest)
+      expect { campaign.approve!(by: approver, digest: campaign.current_digest) }.to raise_error(described_class::InvalidTransition)
+    end
+
+    it "starts sending only an approved campaign" do
+      expect { campaign.start_sending! }.to raise_error(described_class::InvalidTransition)
+
+      campaign.approve!(by: approver, digest: campaign.current_digest)
+      campaign.start_sending!
+
+      expect(campaign.reload.state).to eq("sending")
+      expect(SendFeatureAnnouncementCampaignJob.jobs.map { _1["args"] }).to eq([[campaign.id]])
+    end
+
+    it "sends a campaign that is already sending again" do
+      sending = create(:feature_announcement_campaign, state: "sending")
+
+      sending.start_sending!
+
+      expect(SendFeatureAnnouncementCampaignJob.jobs.map { _1["args"] }).to eq([[sending.id]])
+    end
+
+    it "cancels a campaign in any state but cancelled" do
+      campaign.cancel!
+      expect(campaign.reload.state).to eq("cancelled")
+      expect { campaign.cancel! }.to raise_error(described_class::InvalidTransition)
+
+      sent = create(:feature_announcement_campaign, state: "sent")
+      sent.cancel!
+      expect(sent.reload.state).to eq("cancelled")
+    end
+  end
+
+  it "refuses a link that is not https" do
+    expect(build(:feature_announcement_campaign, body: '<a href="http://example.com">x</a>')).not_to be_valid
+    expect(build(:feature_announcement_campaign, body: '<a href="https://example.com">x</a>')).to be_valid
+  end
 end
