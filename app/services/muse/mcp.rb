@@ -385,7 +385,11 @@ module Muse
 
       def tool_get_product(args)
         require_scopes!(:view_profile, :view_public, :edit_products, :account)
-        { product: product_payload(find_product!(args["id"])) }
+        product = find_product!(args["id"])
+        details = { description: product.description }
+        # The same rule as the public API: sales figures need a sales scope.
+        details.merge!(sales_count: product.successful_sales_count, sales_usd_cents: product.total_usd_cents) if (token.scopes.to_a & %w[view_sales account]).any?
+        { product: product_payload(product).merge(details) }
       end
 
       def tool_create_draft_product(args)
@@ -469,6 +473,9 @@ module Muse
           name: product.name,
           price_cents: product.price_cents,
           currency: product.price_currency_type,
+          # With pay what you want, price_cents is the minimum and buyers can pay more.
+          pay_what_you_want: product.customizable_price?,
+          suggested_price_cents: product.customizable_price? ? product.suggested_price_cents : nil,
           published: product.published?,
           url: product.long_url,
           permalink: product.unique_permalink
