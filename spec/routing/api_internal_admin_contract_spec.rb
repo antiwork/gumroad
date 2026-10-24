@@ -60,6 +60,17 @@ describe "internal admin API routing" do
     )
   end
 
+  it "routes the low-balance probation recovery endpoints" do
+    expect(route_for("/internal/admin/low_balance_probation_recoveries/preview", :post)).to include(
+      controller: "api/internal/admin/low_balance_probation_recoveries",
+      action: "preview"
+    )
+    expect(route_for("/internal/admin/low_balance_probation_recoveries/execute", :post)).to include(
+      controller: "api/internal/admin/low_balance_probation_recoveries",
+      action: "execute"
+    )
+  end
+
   it "routes the scheduled payout write endpoints" do
     expect(route_for("/internal/admin/scheduled_payouts", :post)).to include(
       controller: "api/internal/admin/scheduled_payouts",
