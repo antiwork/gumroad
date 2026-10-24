@@ -2,16 +2,27 @@
 //
 // Pins how the form renders the page's `errors` prop. The real redirect is covered by
 // spec/requests/workflows_spec.rb.
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { type WorkflowFormContext } from "$app/types/workflow";
+import { type Workflow, type WorkflowFormContext } from "$app/types/workflow";
 
 import WorkflowForm from "$app/components/WorkflowsPage/WorkflowForm";
 
 vi.stubGlobal("SSR", false);
 vi.stubGlobal("Routes", new Proxy({}, { get: (_target, name: string) => () => `/${name}` }));
+vi.mock(
+  "@boxicons/react",
+  () =>
+    new Proxy(
+      {},
+      {
+        has: () => true,
+        get: (_target, name) => (name === "then" ? undefined : () => null),
+      },
+    ),
+);
 
 let flashedErrors: { base?: string | string[] } | undefined;
 
@@ -70,4 +81,40 @@ describe("WorkflowForm base error", () => {
     expect(screen.queryByText(MESSAGE)).not.toBeNull();
     expect(screen.queryByText("N")).toBeNull();
   });
+});
+
+describe("WorkflowForm exclusions", () => {
+  const workflow: Workflow = {
+    external_id: "workflow-1",
+    name: "Follow-up",
+    workflow_type: "audience",
+    workflow_trigger: null,
+    published: false,
+    first_published_at: null,
+    send_to_past_customers: false,
+    installments: [],
+    not_bought_products: ["product-1"],
+    not_bought_variants: ["variant-1"],
+  };
+  const options: WorkflowFormContext["products_and_variant_options"] = [
+    { id: "product-1", label: "Design guide", archived: false, product_permalink: "product-1", type: "product" },
+    { id: "variant-1", label: "Studio edition", archived: false, product_permalink: "product-2", type: "variant" },
+  ];
+
+  it.each([{ products: ["product-1"] }, { products: [] }])(
+    "retains version exclusions alongside $products",
+    ({ products }) => {
+      render(
+        <WorkflowForm
+          context={{ ...context, products_and_variant_options: options }}
+          workflow={{ ...workflow, not_bought_products: products }}
+        />,
+      );
+
+      const exclusions = screen.getByLabelText("Has not yet bought").closest("fieldset");
+      if (!exclusions) throw new Error("Exclusion fieldset missing");
+      expect(within(exclusions).queryByRole("button", { name: "Studio edition" })).not.toBeNull();
+      expect(within(exclusions).queryByRole("button", { name: "Design guide" }) !== null).toBe(products.length > 0);
+    },
+  );
 });
