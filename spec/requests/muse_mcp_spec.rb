@@ -511,8 +511,7 @@ describe "Muse MCP" do
         "get_account", "list_products", "get_product", "create_draft_product",
         "publish_product", "unpublish_product", "list_sales", "list_payouts"
       )
-      # The storefront is an external, publicly reachable system, so every tool is
-      # open-world; claiming otherwise fails the ChatGPT connector review.
+      # Every tool reaches the storefront, an external publicly reachable system.
       expect(annotations.values).to all(include("openWorldHint" => true))
       %w[get_account list_products get_product list_sales list_payouts].each do |name|
         expect(annotations[name]).to include("readOnlyHint" => true, "destructiveHint" => false)

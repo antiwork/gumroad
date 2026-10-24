@@ -321,12 +321,9 @@ module Muse
         ]
       end
 
-      # Every tool here talks to a creator's Gumroad storefront: an independently
-      # controlled system that is publicly reachable and moves real money. MCP hosts
-      # (ChatGPT's connector review, in particular) read that as an open world, and a
-      # tool that claims openWorldHint: false is rejected as a mismatch — publish_product
-      # failed review on exactly that. Keep the flag true unless a future tool truly
-      # only touches closed, local state.
+      # Every tool here reaches a creator's storefront: an independently controlled,
+      # publicly reachable system, so it is open-world by default. Pass
+      # open_world: false only for a tool that touches nothing but closed local state.
       def tool(name, description, properties, required: [], read_only: false, destructive: false, open_world: true)
         schema = { type: "object", properties:, additionalProperties: false }
         schema[:required] = required if required.any?
