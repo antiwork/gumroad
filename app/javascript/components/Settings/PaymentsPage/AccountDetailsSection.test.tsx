@@ -235,7 +235,10 @@ describe("AccountDetailsSection Pakistan CNIC field", () => {
     const input = screen.getByLabelText<HTMLInputElement>("National Identity Card Number (SNIC or CNIC)");
     expect(input.hasAttribute("maxlength")).toBe(false);
     expect(input.placeholder).toBe("12345-1234567-1");
-    expect(screen.getByText("13 digits, dashes optional")).toBeTruthy();
+    const help = screen.getByText("13 digits, dashes optional");
+    // The muted description color is under 4.5:1 contrast; this guidance uses the foreground color.
+    expect(help.classList.contains("text-foreground")).toBe(true);
+    expect(help.classList.contains("text-muted")).toBe(false);
     fireEvent.change(input, { target: { value: " 12345-1234567-1\u00a0" } });
     expect(screen.queryByRole("alert")).toBeNull();
   });

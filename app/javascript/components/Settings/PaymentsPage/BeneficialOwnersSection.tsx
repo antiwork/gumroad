@@ -1282,7 +1282,10 @@ const BeneficialOwnersSection = ({
                               onChange={(event) => updateForm({ id_number: event.target.value })}
                             />
                             {taxIdConfig.idSuffix === "snic" ? (
-                              <FieldsetDescription>{PAKISTAN_CNIC_HELP_TEXT}</FieldsetDescription>
+                              // The muted default measures under 4.5:1 here; this line is the only format guidance.
+                              <FieldsetDescription className="text-foreground">
+                                {PAKISTAN_CNIC_HELP_TEXT}
+                              </FieldsetDescription>
                             ) : null}
                             {isUs ? (
                               <LinkButton

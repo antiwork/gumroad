@@ -362,7 +362,10 @@ describe("BeneficialOwnersSection Pakistan CNIC", () => {
       await openAddFormAndSubmit(value);
 
       expect(await screen.findByText(formatError)).toBeTruthy();
-      expect(screen.getByText("13 digits, dashes optional")).toBeTruthy();
+      const help = screen.getByText("13 digits, dashes optional");
+      // The muted description color is under 4.5:1 contrast; this guidance uses the foreground color.
+      expect(help.classList.contains("text-foreground")).toBe(true);
+      expect(help.classList.contains("text-muted")).toBe(false);
       expect(submittedWrites()).toHaveLength(0);
     },
   );
