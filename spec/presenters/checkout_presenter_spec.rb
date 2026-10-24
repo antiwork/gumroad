@@ -1238,7 +1238,60 @@ describe CheckoutPresenter do
         result = described_class.new(logged_in_user: nil, ip: "127.0.0.1").subscription_manager_props(subscription: @subscription.reload)
 
         expect(result[:used_card]).to be_nil
-        expect(result[:used_paypal]).to eq(visual: paypal_card.visual)
+        expect(result[:used_paypal]).to eq(visual: paypal_card.visual, usable: false)
+      end
+
+      context "when the card to charge is a PayPal account",
+              vcr: { cassette_name: "CheckoutPresenter/_subscription_manager_props/tiered_membership_product/returns_subscription_data_object_for_the_subscription_manage_page" } do
+        let(:native_paypal_card) { create(:credit_card, chargeable: build(:native_paypal_chargeable)) }
+        let(:braintree_paypal_card) do
+          native_paypal_card.tap { _1.update!(charge_processor_id: BraintreeChargeProcessor.charge_processor_id, braintree_customer_id: "braintree-customer-id") }
+        end
+
+        def used_payment_method
+          described_class.new(logged_in_user: nil, ip: "127.0.0.1").subscription_manager_props(subscription: @subscription.reload).slice(:used_card, :used_paypal)
+        end
+
+        it "returns the subscription's own PayPal account as usable while the seller can charge it" do
+          create(:merchant_account_paypal, user: @product.user)
+          @subscription.update!(credit_card: native_paypal_card)
+
+          expect(used_payment_method).to eq(used_card: nil, used_paypal: { visual: native_paypal_card.visual, usable: true })
+        end
+
+        it "falls back to the subscriber's own PayPal account when the subscription has no card" do
+          create(:merchant_account_paypal, user: @product.user)
+          @subscription.update!(credit_card: nil)
+          @subscription.user.update!(credit_card: native_paypal_card)
+
+          expect(used_payment_method).to eq(used_card: nil, used_paypal: { visual: native_paypal_card.visual, usable: true })
+        end
+
+        it "marks a native PayPal account unusable once the seller has no PayPal account to charge it through" do
+          @subscription.update!(credit_card: native_paypal_card)
+
+          expect(used_payment_method[:used_paypal]).to eq(visual: native_paypal_card.visual, usable: false)
+        end
+
+        it "keeps a Braintree PayPal account usable for renewals after the seller connects native PayPal" do
+          create(:merchant_account_paypal, user: @product.user)
+          @subscription.update!(credit_card: braintree_paypal_card, cancelled_at: nil)
+
+          expect(used_payment_method[:used_paypal]).to eq(visual: braintree_paypal_card.visual, usable: true)
+        end
+
+        it "marks a Braintree PayPal account unusable for a restart once the seller connects native PayPal" do
+          create(:merchant_account_paypal, user: @product.user)
+          @subscription.update!(credit_card: braintree_paypal_card)
+
+          expect(used_payment_method[:used_paypal]).to eq(visual: braintree_paypal_card.visual, usable: false)
+        end
+
+        it "keeps a Braintree PayPal account usable for a restart while the seller has no native PayPal" do
+          @subscription.update!(credit_card: braintree_paypal_card)
+
+          expect(used_payment_method[:used_paypal]).to eq(visual: braintree_paypal_card.visual, usable: true)
+        end
       end
 
       it "requests Apple Pay merchant tokens when the seller is in the rollout",
@@ -1673,6 +1726,25 @@ describe CheckoutPresenter do
         expect(result[:subscription][:is_gift]).to eq true
         expect(result[:subscription][:end_time_of_subscription]).to eq subscription.end_time_of_subscription.iso8601
         expect(result[:subscription][:successful_purchases_count]).to eq 1
+      end
+
+      it "never shows the gift sender's PayPal account to the recipient" do
+        original_purchase.update!(credit_card: create(:credit_card, chargeable: build(:native_paypal_chargeable)))
+        create(:merchant_account_paypal, user: subscription.link.user)
+
+        result = described_class.new(logged_in_user: nil, ip: "127.0.0.1").subscription_manager_props(subscription: subscription.reload)
+
+        expect(result).to include(used_card: nil, used_paypal: nil)
+      end
+
+      it "shows the recipient's own PayPal account" do
+        recipient_paypal_card = create(:credit_card, chargeable: build(:native_paypal_chargeable))
+        subscription.update!(user: create(:user, credit_card: recipient_paypal_card))
+        create(:merchant_account_paypal, user: subscription.link.user)
+
+        result = described_class.new(logged_in_user: nil, ip: "127.0.0.1").subscription_manager_props(subscription: subscription.reload)
+
+        expect(result).to include(used_card: nil, used_paypal: { visual: recipient_paypal_card.visual, usable: true })
       end
     end
   end

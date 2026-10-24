@@ -5,7 +5,7 @@ import * as React from "react";
 import { getSurcharges, SurchargesResponse } from "$app/data/customer_surcharge";
 import { paymentElementRequiresBillingName } from "$app/data/payment_element_methods";
 import { PurchasePaymentMethod } from "$app/data/purchase";
-import { SavedCreditCard } from "$app/parsers/card";
+import { SavedCreditCard, SavedPayPal } from "$app/parsers/card";
 import { CustomFieldDescriptor, ProductNativeType } from "$app/parsers/product";
 import { assert } from "$app/utils/assert";
 import { readBuyerCurrencyPreference, writeBuyerCurrencyPreference } from "$app/utils/buyerCurrencyPreference";
@@ -418,6 +418,8 @@ export type State = {
   // display/charge mismatch we are fixing (gumroad-private#1371).
   usingSavedCard: boolean;
   savedCreditCard: SavedCreditCard | null;
+  // The PayPal account a managed subscription renews on. Checkout never sets it.
+  savedPayPal?: SavedPayPal | null;
   checkoutPayment: CheckoutPaymentConfig;
   // True while the cart has been edited but the server has not yet returned the payment
   // configuration for the edited cart. The configuration decides which element is mounted and in
@@ -1944,6 +1946,7 @@ export function createReducer(initial: {
   state: string | null;
   address: { street: string | null; city: string | null; zip: string | null } | null;
   savedCreditCard: SavedCreditCard | null;
+  savedPayPal?: SavedPayPal | null;
   products: Product[];
   fullName?: string;
   payLabel?: string;
@@ -1995,7 +1998,7 @@ export function createReducer(initial: {
         stripe_link_enabled: true,
         elements_options: null,
       },
-      paymentMethod: "card",
+      paymentMethod: initial.savedPayPal ? "paypal" : "card",
       paymentElementType: "card",
       checkoutPaymentStale: false,
       awaitingBuyerConfirmation: false,

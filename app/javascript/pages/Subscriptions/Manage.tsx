@@ -107,7 +107,8 @@ type Props = {
   us_states: string[];
   ca_provinces: string[];
   used_card: SavedCreditCard | null;
-  used_paypal: { visual: string } | null;
+  // `usable` is false when the seller can no longer charge this account for the subscription.
+  used_paypal: { visual: string; usable: boolean } | null;
   recaptcha_key: string | null;
   paypal_client_id: string;
   request_apple_pay_merchant_tokens: boolean;
@@ -320,6 +321,7 @@ export default function SubscriptionsManage() {
     tipOptions: [],
     defaultTipOption: 0,
     savedCreditCard: used_card,
+    savedPayPal: used_paypal?.usable ? { visual: used_paypal.visual } : null,
     state: contact_info.state,
     products: [paymentProduct],
     payLabel,
@@ -357,6 +359,11 @@ export default function SubscriptionsManage() {
   const totalPrice = getTotalPrice(state) ?? 0;
   const vat = state.surcharges.type === "loaded" ? state.surcharges.result.tax_cents : 0;
 
+  // router.reload always preserves component state, so the reducer would keep the payment method
+  // the page opened with after an update replaced it. A same-URL visit remounts with fresh props.
+  const reloadPage = () =>
+    router.visit(window.location.href, { preserveScroll: true, headers: { "Cache-Control": "no-cache" } });
+
   async function pay() {
     if (state.status.type !== "finished") return;
     const result = await updateSubscription({
@@ -392,7 +399,7 @@ export default function SubscriptionsManage() {
       if (result.next != null) {
         router.get(result.next);
       } else {
-        router.reload();
+        reloadPage();
       }
     } else if (result.type === "requires_card_action") {
       await confirmLineItem({
@@ -403,7 +410,7 @@ export default function SubscriptionsManage() {
       }).then((itemResult) => {
         if (itemResult.success) {
           showAlert(`Your ${subscriptionEntity} has been updated.`, "success");
-          router.reload();
+          reloadPage();
         } else {
           showAlert(
             itemResult.error_message ??
@@ -441,7 +448,7 @@ export default function SubscriptionsManage() {
     });
   };
 
-  const hasSavedCard = state.savedCreditCard != null;
+  const hasSavedPaymentMethod = used_card != null || !!used_paypal?.usable;
   const isPendingFirstGifteePayment = subscription.is_gift && subscription.successful_purchases_count === 1;
   const formattedSubscriptionEndDate = parseISO(subscription.end_time_of_subscription).toLocaleDateString(undefined, {
     day: "numeric",
@@ -463,7 +470,7 @@ export default function SubscriptionsManage() {
         </header>
       </CardContent>
 
-      {!hasSavedCard && subscription.is_gift ? (
+      {!hasSavedPaymentMethod && subscription.is_gift ? (
         <CardContent>
           <Alert variant="warning" className="grow">
             Your {subscriptionEntity} is paid up until {formattedSubscriptionEndDate}. Add your own payment method below
@@ -472,11 +479,11 @@ export default function SubscriptionsManage() {
         </CardContent>
       ) : null}
 
-      {used_paypal ? (
+      {used_paypal && !used_paypal.usable ? (
         <CardContent>
-          <Alert variant="info" className="grow">
-            Your saved payment method is PayPal{used_paypal.visual ? ` (${used_paypal.visual})` : ""}. Entering a card
-            below will replace it.
+          <Alert variant="warning" className="grow">
+            Your saved payment method is PayPal{used_paypal.visual ? ` (${used_paypal.visual})` : ""}. It can't be used
+            for this {subscriptionEntity} anymore, so choose a new payment method below.
           </Alert>
         </CardContent>
       ) : null}

@@ -816,3 +816,26 @@ describe("createReducer surcharge refetches", () => {
     expect(requests[1]?.payload).toMatchObject({ buyer_currency: "gbp" });
   });
 });
+
+describe("createReducer initial payment method", () => {
+  // Keeps the debounced surcharge fetch from firing after the hook unmounts.
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+  });
+
+  it("starts a subscription that renews on PayPal on the PayPal lane", () => {
+    const { result } = renderHook(() =>
+      createReducer({ ...initialArgs, savedPayPal: { visual: "paypal-buyer@example.com" } }),
+    );
+
+    expect(result.current[0].paymentMethod).toBe("paypal");
+  });
+
+  it("starts on the card lane without a saved PayPal account", () => {
+    const { result } = renderHook(() => createReducer(initialArgs));
+
+    expect(result.current[0].paymentMethod).toBe("card");
+  });
+});

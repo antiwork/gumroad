@@ -16,3 +16,5 @@ export type SavedCreditCard = {
   expiration_date: string | null;
   requires_mandate: boolean;
 };
+
+export type SavedPayPal = { visual: string };

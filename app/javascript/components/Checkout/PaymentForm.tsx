@@ -532,7 +532,7 @@ const PaymentMethodRadioRow = ({
         disabled={disabled}
       />
       {icon}
-      <span className="font-medium">{label}</span>
+      <span className="min-w-0 font-medium [overflow-wrap:anywhere]">{label}</span>
     </Label>
   );
 };
@@ -663,8 +663,8 @@ const PayButton = ({
   const [state, dispatch] = useState();
   const payLabel = usePayLabel();
 
-  if (state.paymentMethod === "paypal" || state.paymentMethod === "stripePaymentRequest") return null;
-
+  // Only the free layout renders this and it shows no payment methods, so the selected lane must
+  // not hide its one submit button (a saved-PayPal membership opens on the PayPal lane).
   const content = (
     <div className={`${className} flex-col !items-stretch gap-4`}>
       <Button
@@ -1833,6 +1833,19 @@ const FlatPayPalRow = () => {
   );
 };
 
+// Keeping the saved account submits no new payment method, so the subscription goes on charging
+// its existing billing agreement — the same path a saved card takes.
+const SavedPayPalPayButtonContent = ({ isTestPurchase }: { isTestPurchase: boolean }) => {
+  const [state, dispatch] = useState();
+
+  React.useEffect(() => {
+    if (state.status.type === "starting" && state.paymentMethod === "paypal")
+      dispatch({ type: "set-payment-method", paymentMethod: { type: "saved" } });
+  }, [state.status.type]);
+
+  return <CreditCardPayButtonContent isTestPurchase={isTestPurchase} />;
+};
+
 const PaymentMethodsSection = ({
   isPayPalAvailable,
   isTestPurchase,
@@ -1859,7 +1872,12 @@ const PaymentMethodsSection = ({
   const walletClickSubmitRef = React.useRef<(() => void) | null>(null);
   const handleCardPayClick = React.useCallback(() => walletClickSubmitRef.current?.(), []);
 
-  const hasMultiplePaymentMethods = isPayPalAvailable || canPay;
+  const [useSavedPayPal, setUseSavedPayPal] = React.useState(true);
+  // The saved account needs no PayPal SDK, so it stays selectable while the SDK loads or is
+  // unavailable; only switching to a different account needs PayPal's button.
+  const showPayPal = isPayPalAvailable || !!state.savedPayPal;
+  const payWithSavedPayPal = !!state.savedPayPal && (useSavedPayPal || !isPayPalAvailable);
+  const hasMultiplePaymentMethods = showPayPal || canPay;
   const usesPaymentElement = canUseStripePaymentElement(state) || canUseStripePaymentElementClientConfirm(state);
   const cardPayDisabled = usesPaymentElement && !paymentElementReady;
 
@@ -1930,18 +1948,31 @@ const PaymentMethodsSection = ({
             />
           </div>
         ) : null}
-        {isPayPalAvailable ? (
+        {showPayPal ? (
           <div className="border-t border-border">
             <PaymentMethodRadioRow
               paymentMethod="paypal"
-              label="PayPal"
+              label={state.savedPayPal ? `PayPal · ${state.savedPayPal.visual || "saved account"}` : "PayPal"}
               icon={<Paypal pack="brands" className="size-5" />}
             />
+            {state.paymentMethod === "paypal" && state.savedPayPal && isPayPalAvailable ? (
+              <div className="bg-body px-4 pb-4">
+                <LinkButton disabled={isProcessing(state)} onClick={() => setUseSavedPayPal(!useSavedPayPal)}>
+                  {useSavedPayPal ? "Use a different PayPal account" : "Keep the saved PayPal account"}
+                </LinkButton>
+              </div>
+            ) : null}
           </div>
         ) : null}
         <StripePaymentRequestRadioOption canPay={canPay} isGooglePay={isGooglePay} />
       </div>
-      {state.paymentMethod === "paypal" ? <PayPalContent /> : null}
+      {state.paymentMethod === "paypal" ? (
+        payWithSavedPayPal ? (
+          <SavedPayPalPayButtonContent isTestPurchase={isTestPurchase} />
+        ) : (
+          <PayPalContent />
+        )
+      ) : null}
       {state.paymentMethod === "card" ? (
         <CreditCardPayButtonContent
           disabled={cardPayDisabled}

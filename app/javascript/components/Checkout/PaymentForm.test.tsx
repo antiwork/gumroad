@@ -1240,3 +1240,114 @@ describe("PaymentForm shipping country", () => {
     expect(payButton().hasAttribute("disabled")).toBe(false);
   });
 });
+
+describe("PaymentForm saved PayPal account", () => {
+  beforeEach(() => {
+    paypalMock.buttonsConfig = null;
+    paypalMock.createBillingAgreement.mockReset();
+    paypalMock.getPaymentMethodResult.mockReset();
+    paypalMock.loadScript.mockReset();
+    paypalMock.render.mockReset();
+    paypalMock.loadScript.mockResolvedValue({
+      Buttons: (config: PayPalButtonsConfig) => {
+        paypalMock.buttonsConfig = config;
+        return { render: paypalMock.render };
+      },
+    });
+  });
+  afterEach(cleanup);
+
+  const managedPayPalState = (overrides: Partial<State> = {}) =>
+    state({
+      paymentMethod: "paypal",
+      savedPayPal: { visual: "paypal-buyer@example.com" },
+      paypalClientId: "paypal-client-id",
+      payLabel: "Update membership",
+      zipCode: "10001",
+      customFieldValues: { "field-1": "Nick" },
+      products: state().products.map((product) => ({
+        ...product,
+        price: 1_000,
+        requirePayment: true,
+        supportsPaypal: "native" as const,
+      })),
+      ...overrides,
+    });
+  const harness = (): CheckoutHarness => ({ dispatch: () => undefined, actions: [] });
+
+  it("keeps the saved account without asking PayPal for a new agreement", async () => {
+    const checkout = harness();
+    render(<StatefulPaymentForm initial={managedPayPalState()} harness={checkout} />);
+
+    expect(screen.getByRole("radio", { name: "PayPal · paypal-buyer@example.com" })).toHaveProperty("checked", true);
+    fireEvent.click(screen.getByRole("button", { name: "Update membership" }));
+    // The host page moves an accepted offer on to validation.
+    act(() => checkout.dispatch({ type: "validate" }));
+
+    await waitFor(() =>
+      expect(checkout.actions).toContainEqual({ type: "set-payment-method", paymentMethod: { type: "saved" } }),
+    );
+    expect(paypalMock.render).not.toHaveBeenCalled();
+    expect(paypalMock.createBillingAgreement).not.toHaveBeenCalled();
+  });
+
+  it("keeps the saved account selectable without offering another one while the PayPal SDK is unavailable", () => {
+    render(<StatefulPaymentForm initial={managedPayPalState({ paypalClientId: "" })} harness={harness()} />);
+
+    expect(screen.getByRole("radio", { name: "PayPal · paypal-buyer@example.com" })).toHaveProperty("checked", true);
+    expect(screen.queryByRole("button", { name: "Use a different PayPal account" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Update membership" })).toBeTruthy();
+  });
+
+  it("offers PayPal's own button only once the buyer asks for a different account", async () => {
+    render(<StatefulPaymentForm initial={managedPayPalState()} harness={harness()} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Use a different PayPal account" }));
+
+    expect(screen.queryByRole("button", { name: "Update membership" })).toBeNull();
+    await waitFor(() => expect(paypalMock.render).toHaveBeenCalled());
+    expect(screen.getByRole("button", { name: "Keep the saved PayPal account" })).toBeTruthy();
+  });
+
+  it("lets the buyer switch from the saved account to the card fields", () => {
+    const checkout = harness();
+    render(<StatefulPaymentForm initial={managedPayPalState()} harness={checkout} />);
+
+    fireEvent.click(screen.getByRole("radio", { name: "Card" }));
+
+    expect(checkout.actions).toContainEqual({ type: "set-value", paymentMethod: "card" });
+    expect(screen.queryByRole("button", { name: "Use a different PayPal account" })).toBeNull();
+  });
+
+  it("keeps the submit button when the buyer picks a free plan from the saved PayPal lane", async () => {
+    const checkout = harness();
+    const freePlan = managedPayPalState();
+    render(
+      <StatefulPaymentForm
+        initial={{
+          ...freePlan,
+          products: freePlan.products.map((product) => ({ ...product, price: 0, requirePayment: false })),
+        }}
+        harness={checkout}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Update membership" }));
+    act(() => checkout.dispatch({ type: "validate" }));
+
+    await waitFor(() =>
+      expect(checkout.actions).toContainEqual({
+        type: "set-payment-method",
+        paymentMethod: { type: "not-applicable" },
+      }),
+    );
+  });
+
+  it("leaves checkout without a saved account on PayPal's own button", async () => {
+    render(<StatefulPaymentForm initial={managedPayPalState({ savedPayPal: null })} harness={harness()} />);
+
+    await waitFor(() => expect(paypalMock.render).toHaveBeenCalled());
+    expect(screen.getByRole("radio", { name: "PayPal" })).toHaveProperty("checked", true);
+    expect(screen.queryByRole("button", { name: "Update membership" })).toBeNull();
+  });
+});

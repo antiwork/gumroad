@@ -261,6 +261,8 @@ class CheckoutPresenter
     if !prices.any? { |price| price.recurrence == subscription.recurrence }
       prices << product.prices.is_buy.where(recurrence: subscription.recurrence).order(deleted_at: :desc).take
     end
+    card_to_charge = subscription.credit_card_to_charge
+    used_paypal = CheckoutPresenter.saved_paypal(card_to_charge)
 
     {
       **checkout_common,
@@ -287,8 +289,8 @@ class CheckoutPresenter
           subscription.original_purchase.country.presence || subscription.original_purchase.ip_country
         )&.alpha2 || "",
       },
-      used_card: CheckoutPresenter.saved_card(subscription.credit_card_to_charge),
-      used_paypal: CheckoutPresenter.saved_paypal(subscription.credit_card_to_charge),
+      used_card: CheckoutPresenter.saved_card(card_to_charge),
+      used_paypal: used_paypal && { **used_paypal, usable: saved_paypal_usable?(subscription, card_to_charge) },
       # When the seller is in the Apple Pay merchant-token rollout (antiwork/gumroad#5727), a
       # payment-method update via Apple Pay declares the subscription's recurring agreement so
       # Apple issues a durable merchant token. This page is where buyers land after a renewal
@@ -338,6 +340,16 @@ class CheckoutPresenter
   end
 
   private
+    # Matches what the server does with the account. Native PayPal only charges through the seller's
+    # own PayPal merchant account (renewal, user-card fallback and restart alike). Braintree PayPal
+    # keeps renewing, but a restart also has to pass User#supports_card?.
+    def saved_paypal_usable?(subscription, card)
+      seller = subscription.link.user
+      return seller.native_paypal_payment_enabled? if card.paypal_charge_processor?
+
+      subscription.alive?(include_pending_cancellation: false) || seller.supports_card?(card.as_json)
+    end
+
     # The items this request's params add to the page's cart, and whether they replace it. Shared
     # by checkout_props (which renders them) and checkout_payment_props (which needs the same set
     # to decide the payment lane), so the two can never disagree about what the cart holds.
