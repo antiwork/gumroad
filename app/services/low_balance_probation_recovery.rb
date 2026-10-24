@@ -262,6 +262,9 @@ class LowBalanceProbationRecovery
     def bind_comment(version, probation_comment, comments, user_versions)
       other_decisions = comments.select { _1.id != probation_comment.id && DECISION_COMMENT_TYPES.include?(_1.comment_type) }
       comment_version = PaperTrail::Version.where(item_type: "Comment", item_id: probation_comment.id, event: "create").order(:id).first
+      # comments.created_at has one-second precision, so a decision written in the same second
+      # as the version cannot be ordered against it.
+      version_second = version.created_at.change(usec: 0)
 
       if comment_version
         return [:probation_transition_not_bound] unless comment_version.id > version.id
@@ -270,18 +273,25 @@ class LowBalanceProbationRecovery
                                                       .where(id: (version.id + 1)...comment_version.id).exists?
           return [:probation_transition_not_bound]
         end
+        return [:probation_history_ambiguous] if unversioned_decision_since?(version_second, probation_comment, other_decisions)
         return [:probation_history_ambiguous] if comment_version.created_at - version.created_at > MAX_TRANSITION_GAP
 
         [nil, :comment_version]
       else
-        # comments.created_at has one-second precision, so a decision written in the same second
-        # as the version cannot be ordered against it.
-        version_second = version.created_at.change(usec: 0)
         return [:probation_history_ambiguous] unless probation_comment.created_at.between?(version_second, version.created_at + MAX_TRANSITION_GAP)
         return [:probation_history_ambiguous] if other_decisions.any? { _1.id < probation_comment.id && _1.created_at >= version_second }
 
         [nil, :timestamp]
       end
+    end
+
+    # A decision without its own create version is invisible to the version-id ordering above; unless
+    # it predates the state change's second it may be that change's real comment.
+    def unversioned_decision_since?(version_second, probation_comment, other_decisions)
+      candidates = other_decisions.select { _1.id < probation_comment.id && _1.created_at >= version_second }.map(&:id)
+      return false if candidates.empty?
+
+      (candidates - PaperTrail::Version.where(item_type: "Comment", item_id: candidates, event: "create").distinct.pluck(:item_id)).any?
     end
 
     def risk_state_change(version)

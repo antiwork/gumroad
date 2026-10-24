@@ -169,6 +169,51 @@ describe LowBalanceProbationRecovery, versioning: true do
         expect(evaluate.reason).to eq(:probation_transition_not_bound)
       end
 
+      def drop_create_version!(comment)
+        PaperTrail::Version.where(item_type: "Comment", item_id: comment.id, event: "create").delete_all
+      end
+
+      it "does not bind across a manual probation whose comment lost its own version" do
+        seller.mark_compliant!(author_name: "admin")
+        seller.disable_refunds!
+        seller.put_on_probation!(author_name: "admin", content: "manual probation")
+        drop_create_version!(seller.comments.find_by!(author_name: "admin", comment_type: Comment::COMMENT_TYPE_ON_PROBATION))
+        travel 1.minute
+        probate!
+        fund!
+
+        expect(evaluate.reason).to eq(:probation_history_ambiguous)
+        described_class.new(seller.reload).recover_automatically!
+        expect(seller.reload).to be_on_probation
+        expect(seller.refunds_disabled?).to be(true)
+      end
+
+      it "does not bind across an unversioned manual probation written in the same second" do
+        freeze_time do
+          seller.mark_compliant!(author_name: "admin")
+          seller.disable_refunds!
+          seller.put_on_probation!(author_name: "admin", content: "manual probation")
+          probate!
+        end
+        drop_create_version!(seller.comments.find_by!(author_name: "admin", comment_type: Comment::COMMENT_TYPE_ON_PROBATION))
+        fund!
+
+        expect(evaluate.reason).to eq(:probation_history_ambiguous)
+      end
+
+      it "still binds when an unversioned decision predates the transition's second" do
+        seller.mark_compliant!(author_name: "admin")
+        drop_create_version!(seller.comments.find_by!(author_name: "admin", comment_type: Comment::COMMENT_TYPE_COMPLIANT))
+        travel 1.minute
+        probate!
+        fund!
+
+        evaluation = evaluate
+        expect(evaluation).to be_eligible
+        expect(evaluation.provenance).to eq(:comment_version)
+        expect(evaluation.target_state).to eq("compliant")
+      end
+
       it "does not bind a probation recorded without its own comment" do
         seller.put_on_probation!(author_name: "admin", content: "manual probation")
         seller.comments.where(comment_type: Comment::COMMENT_TYPE_ON_PROBATION).delete_all
