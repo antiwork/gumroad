@@ -1319,8 +1319,12 @@ const AccountDetailsSection = ({
                     {individualTaxIdValidationError}
                   </FieldsetDescription>
                 ) : individualTaxIdConfig.idSuffix === "snic" ? (
-                  // The muted default measures under 4.5:1 here; this line is the only format guidance.
-                  <FieldsetDescription className="text-foreground">{PAKISTAN_CNIC_HELP_TEXT}</FieldsetDescription>
+                  // The muted default measures under 4.5:1 here; a server-flagged field keeps its danger color.
+                  <FieldsetDescription
+                    className={errorFieldNames.has("individual_tax_id") ? undefined : "text-foreground"}
+                  >
+                    {PAKISTAN_CNIC_HELP_TEXT}
+                  </FieldsetDescription>
                 ) : null}
                 {mustReenterFullSsn ? (
                   <div className="small">

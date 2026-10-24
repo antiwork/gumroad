@@ -281,6 +281,18 @@ describe("AccountDetailsSection Pakistan CNIC field", () => {
     expect(saved.value).toBe("•••••-•••••••-•");
   });
 
+  it("keeps the hint in the danger color when the server flags the CNIC", () => {
+    renderSection(
+      makeUser({ country_code: "PK", individual_tax_id_needed_countries: ["PK"], individual_tax_id_entered: false }),
+      { country: "PK" },
+      { errorFieldNames: new Set<FormFieldName>(["individual_tax_id"]) },
+    );
+
+    const help = screen.getByText("13 digits, dashes optional");
+    expect(help.classList.contains("text-danger")).toBe(true);
+    expect(help.classList.contains("text-foreground")).toBe(false);
+  });
+
   it("flags a value with letters even though it holds 13 digits", () => {
     renderSection(pakistanSeller(), { country: "PK" });
 
