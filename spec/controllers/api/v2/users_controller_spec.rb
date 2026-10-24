@@ -152,6 +152,32 @@ describe Api::V2::UsersController do
         expect(SellerProfile.where(seller: @user).pluck(:seo_title)).to all(be_nil)
       end
 
+      it "clears an SEO field sent as null" do
+        @user.seller_profile.update!(seo_title: "Old title", seo_description: "Old description")
+
+        put @action, params: { access_token: @token.token, seo_description: nil }, as: :json
+
+        expect(response.parsed_body["success"]).to eq(true)
+        expect(@user.seller_profile.reload.seo_description).to be_nil
+        expect(@user.seller_profile.seo_title).to eq("Old title")
+      end
+
+      %w[seo_title seo_description].each do |key|
+        { "a hash" => { "text" => "x" }, "an array" => ["x"], "a number" => 1, "a boolean" => true }.each do |kind, value|
+          it "rejects #{kind} as #{key} without saving the name, bio, or SEO fields" do
+            @user.seller_profile.update!(seo_title: "Old title", seo_description: "Old description")
+
+            put @action, params: @params.merge(key => value), as: :json
+
+            expect(response.parsed_body).to eq("success" => false, "message" => "#{key} must be a string.")
+            expect(@user.reload.name).not_to eq("Jane Seller")
+            expect(@user.bio).not_to eq("I make great things.")
+            expect(@user.seller_profile.reload.seo_title).to eq("Old title")
+            expect(@user.seller_profile.seo_description).to eq("Old description")
+          end
+        end
+      end
+
       it "returns the updated user in the response" do
         put @action, params: @params
 

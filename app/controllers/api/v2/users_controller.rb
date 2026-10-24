@@ -17,6 +17,8 @@ class Api::V2::UsersController < Api::V2::BaseController
     "the emails a seller sends to their audience",
   ].freeze
 
+  SEO_PARAMS = %i[seo_title seo_description].freeze
+
   before_action -> { doorkeeper_authorize!(*Doorkeeper.configuration.public_api_read_scopes.concat([:view_public])) }, only: [:show, :ifttt_sale_trigger, :custom_html, :theme]
   before_action(only: [:profile_layout]) { doorkeeper_authorize! :view_profile }
   before_action(only: [:profile_layout]) { require_oauth_scope! :view_profile }
@@ -38,7 +40,12 @@ class Api::V2::UsersController < Api::V2::BaseController
 
     return render_response(false, message: "You have to confirm your email address before you can do that.") unless user.confirmed?
 
-    seo_params = params.permit(:seo_title, :seo_description)
+    # Strong params would silently drop a hash or array.
+    SEO_PARAMS.each do |key|
+      return render_response(false, message: "#{key} must be a string.") if params.key?(key) && !params[key].nil? && !params[key].is_a?(String)
+    end
+
+    seo_params = params.permit(*SEO_PARAMS)
     return update_with_seo_fields(user, seo_params) if seo_params.present?
 
     if user.update(permitted_update_params)
