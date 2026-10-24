@@ -1007,7 +1007,7 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
 
             expect(response).to redirect_to(settings_payments_path)
             expect(response).to have_http_status :found
-            expect(session[:inertia_errors][:base]).to eq([Settings::PaymentsController::PAYOUT_SETUP_ALREADY_UNDERWAY_MESSAGE])
+            expect(session[:inertia_errors][:base]).to eq(["We're already setting up payouts for your account. Refresh this page in a moment to see its status."])
           end
         end
       end
