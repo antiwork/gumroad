@@ -106,6 +106,7 @@ def configure_vcr
     config.filter_sensitive_data("<VATSTACK_API_KEY>") { GlobalConfig.get("VATSTACK_API_KEY") }
     config.filter_sensitive_data("<IRAS_API_ID>") { GlobalConfig.get("IRAS_API_ID") }
     config.filter_sensitive_data("<IRAS_API_SECRET>") { GlobalConfig.get("IRAS_API_SECRET") }
+    config.filter_sensitive_data("<IRAS_APEX_API_KEY>") { GlobalConfig.get("IRAS_APEX_API_KEY") }
     config.filter_sensitive_data("<TAXJAR_API_KEY>") { GlobalConfig.get("TAXJAR_API_KEY") }
     config.filter_sensitive_data("<TAX_ID_PRO_API_KEY>") { GlobalConfig.get("TAX_ID_PRO_API_KEY") }
     config.filter_sensitive_data("<CIRCLE_API_KEY>") { GlobalConfig.get("CIRCLE_API_KEY") }
