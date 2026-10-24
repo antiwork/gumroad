@@ -1953,7 +1953,7 @@ const PaymentMethodsSection = ({
             <PaymentMethodRadioRow
               paymentMethod="paypal"
               label={state.savedPayPal ? `PayPal · ${state.savedPayPal.visual || "saved account"}` : "PayPal"}
-              icon={<Paypal pack="brands" className="size-5" />}
+              icon={<Paypal pack="brands" className="size-5 shrink-0" />}
             />
             {state.paymentMethod === "paypal" && state.savedPayPal && isPayPalAvailable ? (
               <div className="bg-body px-4 pb-4">

@@ -70,6 +70,20 @@ describe "Managing a membership saved on PayPal", type: :system, js: true do
       expect(@subscription.reload.credit_card).to eq(@paypal_account)
     end
 
+    it "wraps a long payer email on a phone without squeezing the PayPal icon", :mobile_view do
+      @paypal_account.update!(visual: "subscriptions.billing.department-team@long-company-name-example.com")
+      # The headless mobile driver has no device emulation, only an 800px window.
+      page.current_window.resize_to(375, 812)
+      visit_manage_page
+
+      label = find("label", text: "PayPal · subscriptions.billing.department-team@long-company-name-example.com")
+      icon_width, label_right = page.evaluate_script(<<~JS, label)
+        [arguments[0].querySelector("svg").getBoundingClientRect().width, arguments[0].getBoundingClientRect().right]
+      JS
+      expect(icon_width).to eq(20)
+      expect(label_right).to be <= 375
+    end
+
     it "keeps the saved PayPal label for a membership pending cancellation" do
       @subscription.update!(cancelled_at: @subscription.end_time_of_subscription, cancelled_by_buyer: true)
       visit_manage_page
