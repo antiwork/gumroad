@@ -11015,6 +11015,16 @@ describe StripeMerchantAccountManager, :vcr do
         expect(Stripe::Account).not_to have_received(:update)
         expect(subject).to have_received(:clear_stale_bank_sync_failure_notes).with(user)
       end
+
+      it "deletes a replaced bank Stripe left attached on a full sync" do
+        create(:ach_account, user:, deleted_at: 1.day.ago, stripe_connect_account_id: "acct_ec", stripe_bank_account_id: "ba_other")
+        allow(Stripe::Account).to receive(:delete_external_account)
+
+        expect(subject.update_bank_account(user, passphrase: "1234")).to eq(:noop_metadata_match)
+
+        expect(Stripe::Account).to have_received(:delete_external_account).with("acct_ec", "ba_other").once
+        expect(Stripe::Account).not_to have_received(:update)
+      end
     end
 
     context "when Stripe's metadata is stale but the local external account exists" do
@@ -11081,6 +11091,17 @@ describe StripeMerchantAccountManager, :vcr do
         it "restores the local link and updates the holder name without replacing bank details" do
           expect(subject.update_bank_account(user, passphrase: "1234")).to eq(:synced)
           expect(bank_account.reload.stripe_external_account_id).to eq("ba_ec")
+          expect(Stripe::Account).to have_received(:update_external_account).with("acct_ec", "ba_ec", { account_holder_name: "Personal Name" })
+          expect(Stripe::Account).not_to have_received(:update)
+        end
+
+        it "deletes a replaced bank Stripe left attached once the link is restored" do
+          create(:ach_account, user:, deleted_at: 1.day.ago, stripe_connect_account_id: "acct_ec", stripe_bank_account_id: "ba_other")
+          allow(Stripe::Account).to receive(:delete_external_account)
+
+          expect(subject.update_bank_account(user, passphrase: "1234")).to eq(:synced)
+
+          expect(Stripe::Account).to have_received(:delete_external_account).with("acct_ec", "ba_other").once
           expect(Stripe::Account).to have_received(:update_external_account).with("acct_ec", "ba_ec", { account_holder_name: "Personal Name" })
           expect(Stripe::Account).not_to have_received(:update)
         end
