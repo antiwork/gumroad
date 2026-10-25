@@ -1347,6 +1347,37 @@ describe CustomerMailer do
         end
       end
 
+      context "when the recipient already got this installment from an earlier cart" do
+        before do
+          earlier_cart = create(:cart, user: nil, email: cart.user.email)
+          create(:cart_product, cart: earlier_cart, product: seller1.products.first)
+          SentAbandonedCartEmail.create!(cart_id: earlier_cart.id, installment_id: seller1_workflow_installment.id)
+        end
+
+        it "does not send the same reminder again from the new cart" do
+          expect do
+            mail = CustomerMailer.abandoned_cart(cart.id, { seller1_workflow.id => [seller1.products.first.id] }.stringify_keys)
+            expect(mail.message).to be_a(ActionMailer::Base::NullMail)
+          end.not_to change { SentAbandonedCartEmail.count }
+        end
+
+        it "still sends another workflow's reminder" do
+          mail = CustomerMailer.abandoned_cart(cart.id, { seller2_workflow.id => [seller2.products.first.id] }.stringify_keys)
+          expect(mail.to).to eq [cart.user.email]
+        end
+
+        it "matches a logged-in cart on its account when the address is not on the cart" do
+          # A second alive cart per user is refused by validation, so the earlier one is written
+          # directly: the point is that the row exists, not that it is still the account's cart.
+          account_cart = Cart.new(user: cart.user, browser_guid: SecureRandom.uuid, discount_codes: [])
+          account_cart.save!(validate: false)
+          SentAbandonedCartEmail.create!(cart_id: account_cart.id, installment_id: seller1_workflow_installment.id)
+
+          mail = CustomerMailer.abandoned_cart(cart.id, { seller1_workflow.id => [seller1.products.first.id] }.stringify_keys)
+          expect(mail.message).to be_a(ActionMailer::Base::NullMail)
+        end
+      end
+
       context "when the recipient already bought a matched product" do
         it "does not send an email when every matched product is already owned" do
           create(:purchase, link: seller1.products.first, email: cart.user.email, purchaser: cart.user)

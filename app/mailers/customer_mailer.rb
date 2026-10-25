@@ -344,6 +344,13 @@ class CustomerMailer < ApplicationMailer
     return if @installments.empty?
 
     unless is_preview
+      # The unique index below only sees one cart, so a new guest cart for the same address restarts
+      # the chain: the checkout link in the mail lands the visitor on a fresh cart, which is
+      # abandoned the next day (gumroad-private#3941 — 12 sends in 21 days to a non-buyer).
+      already_sent_installment_ids = previously_sent_installment_ids(cart, @installments.map { _1[:id] })
+      @installments = @installments.reject { |installment| already_sent_installment_ids.include?(installment[:id]) }
+      return if @installments.empty?
+
       # Concurrent deliveries for the same cart can both pass the `cart.abandoned?` check
       # above, so the unique-indexed insert is the arbiter: an installment whose row lost
       # the race must not be mailed again (gumroad-private#1576).
@@ -466,5 +473,23 @@ class CustomerMailer < ApplicationMailer
       chargeable.orderable.receipt_for_gift_receiver?
     rescue NotImplementedError
       false
+    end
+
+    # Installment ids this recipient has already been sent, across every cart they have ever had.
+    # Matched on the identity the `to:` line uses — the account when the cart has one, otherwise the
+    # address — because a logged-in cart can carry a stale guest address that belongs to someone else.
+    def previously_sent_installment_ids(cart, installment_ids)
+      sent_scope = ->(carts) do
+        carts.joins(:sent_abandoned_cart_emails)
+          .where(sent_abandoned_cart_emails: { installment_id: installment_ids })
+          .distinct
+          .pluck("sent_abandoned_cart_emails.installment_id")
+      end
+
+      ids = Set.new
+      emails = Cart.recipient_emails_for(cart)
+      ids.merge(sent_scope.call(Cart.where(email: emails))) if emails.any?
+      ids.merge(sent_scope.call(Cart.where(user_id: cart.user_id))) if cart.user_id.present?
+      ids
     end
 end
