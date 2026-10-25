@@ -65,12 +65,24 @@ export const AnalyticsCountriesTable = ({
     for (const [productId, productTotals] of Object.entries(totals)) {
       if (!selectedProducts.includes(productId)) continue;
 
-      for (const [country, total] of Object.entries(productTotals)) {
-        const totalsVal = prepareValue(total);
-        const salesVal = prepareValue(sales[productId]?.[country]);
-        const viewsVal = prepareValue(views[productId]?.[country]);
+      const productSales = sales[productId] ?? {};
+      const productViews = views[productId] ?? {};
+      // totals only carries countries with a sale; a country with page views and no
+      // purchase exists in views alone, so the row set is the union of all three.
+      const countryNames = new Set([
+        ...Object.keys(productTotals),
+        ...Object.keys(productSales),
+        ...Object.keys(productViews),
+      ]);
 
-        updateTableRow(tableData, country, totalsVal, salesVal, viewsVal);
+      for (const country of countryNames) {
+        updateTableRow(
+          tableData,
+          country,
+          prepareValue(productTotals[country]),
+          prepareValue(productSales[country]),
+          prepareValue(productViews[country]),
+        );
       }
     }
 
