@@ -28,14 +28,12 @@ export const startOauthRedirectChecker = ({
       const code = searchParams.get("code");
       const error = searchParams.get("error");
       if (code || error) {
+        stopOauthRedirectChecker();
         oauthPopup.close();
         if (code) {
-          void onSuccess(code).then(() => {
-            stopOauthRedirectChecker();
-          });
+          void onSuccess(code).catch(onError);
         } else {
           onError();
-          stopOauthRedirectChecker();
         }
       } else if (currentUrl.includes("oauth_redirect")) {
         onError();
