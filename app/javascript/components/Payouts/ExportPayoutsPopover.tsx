@@ -9,6 +9,7 @@ import { Button } from "$app/components/Button";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Popover, PopoverAnchor, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Alert } from "$app/components/ui/Alert";
 import { Checkbox } from "$app/components/ui/Checkbox";
 import { Label } from "$app/components/ui/Label";
 import { Select } from "$app/components/ui/Select";
@@ -23,16 +24,25 @@ const ExportPayoutsPopoverContent = () => {
   const [selectedPayouts, setSelectedPayouts] = React.useState<Set<string>>(new Set());
 
   const [isLoading, setIsLoading] = React.useState(true);
+  const [loadError, setLoadError] = React.useState(false);
   const [isDownloading, setIsDownloading] = React.useState(false);
 
   const loadExportablePayouts = async (year: number) => {
     setIsLoading(true);
-    const { selected_year, years_with_payouts, payouts_in_selected_year } = await getExportablePayouts(year);
-    setSelectedYear(selected_year);
-    setYearsWithPayouts(years_with_payouts);
-    setPayouts(payouts_in_selected_year);
+    setLoadError(false);
+    setPayouts([]);
     setSelectedPayouts(new Set());
-    setIsLoading(false);
+    try {
+      const { selected_year, years_with_payouts, payouts_in_selected_year } = await getExportablePayouts(year);
+      setSelectedYear(selected_year);
+      setYearsWithPayouts(years_with_payouts);
+      setPayouts(payouts_in_selected_year);
+    } catch (error) {
+      assertResponseError(error);
+      setLoadError(true);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   useRunOnce(() => void loadExportablePayouts(currentYear));
@@ -109,7 +119,14 @@ const ExportPayoutsPopoverContent = () => {
           </div>
         ) : null}
         <div className="space-y-2">
-          {payouts.length === 0 ? (
+          {loadError ? (
+            <Alert variant="danger">
+              <p>Unable to load payouts. Try again.</p>
+              <Button className="mt-2" onClick={() => void loadExportablePayouts(selectedYear)}>
+                Try again
+              </Button>
+            </Alert>
+          ) : payouts.length === 0 ? (
             <p>No payouts found for this year.</p>
           ) : (
             payouts.map((payout) => (
