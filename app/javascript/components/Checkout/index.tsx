@@ -403,6 +403,7 @@ export const Checkout = ({
     serverChargeTotal: summarySurcharges?.charge_canonical_total_cents,
     commissionCompletionTotal,
     futureInstallmentsTotal: futureInstallmentsWithoutTipsTotal,
+    hasPreorder: state.products.some((item) => item.isPreorder),
   });
 
   const displayTipSelector = isTippingEnabled(state);

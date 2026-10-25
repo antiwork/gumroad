@@ -4025,6 +4025,7 @@ describe("getPaymentSplit", () => {
         serverChargeTotal: 9_600,
         commissionCompletionTotal: 8_000,
         futureInstallmentsTotal: 0,
+        hasPreorder: false,
       }),
     ).toEqual({ today: 9_600, completion: 9_600 });
   });
@@ -4036,7 +4037,20 @@ describe("getPaymentSplit", () => {
         serverChargeTotal: null,
         commissionCompletionTotal: 8_000,
         futureInstallmentsTotal: 0,
+        hasPreorder: false,
       }),
     ).toEqual({ today: 11_200, completion: 8_000 });
+  });
+
+  it("keeps the untaxed split when the cart also holds a preorder", () => {
+    expect(
+      getPaymentSplit({
+        total: 20_000,
+        serverChargeTotal: 8_000,
+        commissionCompletionTotal: 8_000,
+        futureInstallmentsTotal: 0,
+        hasPreorder: true,
+      }),
+    ).toEqual({ today: 12_000, completion: 8_000 });
   });
 });

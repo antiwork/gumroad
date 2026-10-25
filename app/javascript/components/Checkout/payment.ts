@@ -1147,13 +1147,15 @@ export function getPaymentSplit({
   serverChargeTotal,
   commissionCompletionTotal,
   futureInstallmentsTotal,
+  hasPreorder,
 }: {
   total: number;
   serverChargeTotal: number | null | undefined;
   commissionCompletionTotal: number;
   futureInstallmentsTotal: number;
+  hasPreorder: boolean;
 }) {
-  if (serverChargeTotal != null && commissionCompletionTotal > 0 && futureInstallmentsTotal === 0)
+  if (serverChargeTotal != null && commissionCompletionTotal > 0 && futureInstallmentsTotal === 0 && !hasPreorder)
     return { today: serverChargeTotal, completion: total - serverChargeTotal };
   return { today: total - commissionCompletionTotal - futureInstallmentsTotal, completion: commissionCompletionTotal };
 }
