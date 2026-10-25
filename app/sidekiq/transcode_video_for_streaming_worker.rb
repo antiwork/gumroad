@@ -166,7 +166,7 @@ class TranscodeVideoForStreamingWorker
           # TODO(kyle): Verify that it's safe to use global ID here.
           id: streamable.id.to_s,
           s3_video_uri: "s3://#{S3_BUCKET}/#{original_video_key}",
-          video_url: (grmc_video_url(original_video_key) if Feature.active?(:grmc_cloudfront_source)),
+          video_url: (grmc_source_video_link(original_video_key) if Feature.active?(:grmc_cloudfront_source)),
           s3_hls_dir_uri: "s3://#{S3_BUCKET}/#{output_key_prefix}",
           presets:,
           callback_url: api_internal_grmc_webhook_url(host: API_DOMAIN)
@@ -209,7 +209,7 @@ class TranscodeVideoForStreamingWorker
 
     # GRMC runs outside AWS, so reading S3 directly is billed as internet egress; S3 to CloudFront is free.
     # This distribution skips Cloudflare, so source videos stay out of its cache.
-    def grmc_video_url(original_video_key)
+    def grmc_source_video_link(original_video_key)
       signed_cloudfront_url(
         "#{CLOUDFRONT_DOWNLOAD_DISTRIBUTION_URL}#{Seahorse::Util.uri_path_escape(original_video_key)}",
         expires_in: GRMC_VIDEO_URL_VALID_FOR
