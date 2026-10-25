@@ -1348,6 +1348,7 @@ describe CustomerMailer do
         context "when the earlier reminder is older than the lookback window" do
           before do
             earlier_send.update!(created_at: (CustomerMailer::ABANDONED_CART_REMINDER_LOOKBACK + 1.day).ago)
+            earlier_cart.cart_products.each { |cart_product| cart_product.update!(created_at: (CustomerMailer::ABANDONED_CART_REMINDER_LOOKBACK + 2.days).ago) }
             earlier_cart.update!(updated_at: 1.hour.ago)
           end
 
