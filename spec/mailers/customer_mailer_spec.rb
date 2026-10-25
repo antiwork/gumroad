@@ -1304,6 +1304,23 @@ describe CustomerMailer do
           end.not_to change { SentAbandonedCartEmail.count }
         end
 
+        context "when the earlier reminder was about a different product" do
+          before do
+            CartProduct.where(cart_id: earlier_cart.id).delete_all
+            create(:cart_product, cart: earlier_cart, product: seller1.products.second, created_at: 1.day.ago)
+          end
+
+          # The send rows for the address, not the contents of the new cart, decide — one reminder
+          # per installment however the recipient got back in. Whether a different product should
+          # re-arm it is gumroad-private#3946.
+          it "does not send the reminder again" do
+            expect do
+              mail = CustomerMailer.abandoned_cart(cart.id, { seller1_workflow.id => [seller1.products.first.id] }.stringify_keys)
+              expect(mail.message).to be_a(ActionMailer::Base::NullMail)
+            end.not_to change { SentAbandonedCartEmail.count }
+          end
+        end
+
         context "when the earlier reminder is recent but the cart it came from is old" do
           before do
             earlier_cart.update!(updated_at: 2.years.ago)
