@@ -115,6 +115,44 @@ describe CustomerSurchargeController, :vcr do
     )
   end
 
+  it "returns the commission balance with the tax its own charge collects" do
+    @user.update!(created_at: User::MIN_AGE_FOR_SERVICE_PRODUCTS.ago - 1.day)
+    commission = create(:commission_product, user: @user, price_cents: 16_00)
+    create(:zip_tax_rate, combined_rate: 0.2, country: "DE", state: nil, zip_code: nil, is_seller_responsible: false)
+
+    post "calculate_all", params: {
+      products: [{ permalink: commission.unique_permalink, price: 16_00, quantity: 1 }],
+      postal_code: 10115,
+      country: "DE",
+    }, as: :json
+
+    expect(response.parsed_body).to include(
+      "subtotal" => 16_00,
+      "tax_cents" => 3_20,
+      "charge_canonical_total_cents" => 9_60,
+      "commission_completion_canonical_total_cents" => 9_60
+    )
+  end
+
+  it "leaves a preorder balance out of the commission completion total" do
+    @user.update!(created_at: User::MIN_AGE_FOR_SERVICE_PRODUCTS.ago - 1.day)
+    commission = create(:commission_product, user: @user, price_cents: 16_00)
+    @product.update!(is_in_preorder_state: true)
+
+    post "calculate_all", params: {
+      products: [
+        { permalink: commission.unique_permalink, price: 16_00, quantity: 1 },
+        { permalink: @product.unique_permalink, price: 10_00, quantity: 1 },
+      ],
+    }, as: :json
+
+    expect(response.parsed_body).to include(
+      "subtotal" => 26_00,
+      "charge_canonical_total_cents" => 8_00,
+      "commission_completion_canonical_total_cents" => 8_00
+    )
+  end
+
   context "when the checkout is eligible for a buyer-currency quote" do
     before do
       Feature.activate_user(:buyer_local_currency, @user)

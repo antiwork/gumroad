@@ -4018,11 +4018,12 @@ describe("paymentMethodTypesForMountCurrency", () => {
 });
 
 describe("getPaymentSplit", () => {
-  it("gives the commission balance the tax the server did not charge today", () => {
+  it("renders the server's charge-today and commission balance", () => {
     expect(
       getPaymentSplit({
         total: 19_200,
         serverChargeTotal: 9_600,
+        serverCommissionCompletionTotal: 9_600,
         commissionCompletionTotal: 8_000,
         futureInstallmentsTotal: 0,
         hasPreorder: false,
@@ -4030,11 +4031,12 @@ describe("getPaymentSplit", () => {
     ).toEqual({ today: 9_600, completion: 9_600 });
   });
 
-  it("falls back to the untaxed split without a server charge total", () => {
+  it("falls back to the untaxed split without the server amounts", () => {
     expect(
       getPaymentSplit({
         total: 19_200,
         serverChargeTotal: null,
+        serverCommissionCompletionTotal: null,
         commissionCompletionTotal: 8_000,
         futureInstallmentsTotal: 0,
         hasPreorder: false,
@@ -4047,6 +4049,7 @@ describe("getPaymentSplit", () => {
       getPaymentSplit({
         total: 20_000,
         serverChargeTotal: 8_000,
+        serverCommissionCompletionTotal: 8_000,
         commissionCompletionTotal: 8_000,
         futureInstallmentsTotal: 0,
         hasPreorder: true,

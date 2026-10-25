@@ -401,6 +401,7 @@ export const Checkout = ({
   const paymentSplit = getPaymentSplit({
     total: total ?? 0,
     serverChargeTotal: summarySurcharges?.charge_canonical_total_cents,
+    serverCommissionCompletionTotal: summarySurcharges?.commission_completion_canonical_total_cents,
     commissionCompletionTotal,
     futureInstallmentsTotal: futureInstallmentsWithoutTipsTotal,
     hasPreorder: state.products.some((item) => item.isPreorder),

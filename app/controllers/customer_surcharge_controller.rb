@@ -162,6 +162,9 @@ class CustomerSurchargeController < ApplicationController
       # Unlike the agreement total above, this includes only the tax due on an installment's
       # first payment. Payment surfaces must use the amount the charge path will create now.
       charge_canonical_total_cents: all_lines_quotable ? quote_line_items.sum(&:charge_canonical_total_cents) : nil,
+      # The commission balance, carrying the tax its own charge will collect. Other deferred
+      # amounts (a preorder balance, future installments) are not part of this row.
+      commission_completion_canonical_total_cents: all_lines_quotable ? commission_completion_cents(quote_line_items) : nil,
       direct_listed_line_allocations:,
       direct_listed_amount_token:,
       direct_listed_amount_token_expires_at:,
@@ -264,6 +267,16 @@ class CustomerSurchargeController < ApplicationController
 
       allocations.zip(line_items).filter_map do |allocation, line_item|
         allocation if line_item.charge_canonical_total_cents.positive?
+      end
+    end
+
+    # Each line already carries the split the charge path makes (deposit now, balance later), so
+    # the balance's total is the line's full canonical money minus what today's charge takes.
+    def commission_completion_cents(line_items)
+      line_items.sum do |line_item|
+        next 0 unless line_item.later_charge_kind == "commission"
+
+        line_item.canonical_total_cents - line_item.charge_canonical_total_cents
       end
     end
 

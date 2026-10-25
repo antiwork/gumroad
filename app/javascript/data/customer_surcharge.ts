@@ -53,6 +53,9 @@ export type SurchargesResponse = {
   subtotal: number;
   // The canonical-currency amount charged now. Optional for rolling deploy compatibility.
   charge_canonical_total_cents?: number | null | undefined;
+  // The commission balance charged after completion, including the tax its own charge collects.
+  // Optional for rolling deploy compatibility.
+  commission_completion_canonical_total_cents?: number | null | undefined;
   // Server-owned listed-currency split for direct-listed Payment Elements. The browser
   // sums this instead of converting aggregate USD tax/shipping, because charge time
   // converts each purchase separately and then sums the rounded components.
