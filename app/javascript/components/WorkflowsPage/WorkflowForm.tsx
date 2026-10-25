@@ -124,7 +124,7 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
       sendToPastCustomers: workflow.send_to_past_customers,
       affiliatedProducts: workflow.affiliate_products ?? [],
       bought,
-      notBought: workflow.not_bought_products || workflow.not_bought_variants || [],
+      notBought: [...(workflow.not_bought_products ?? []), ...(workflow.not_bought_variants ?? [])],
       paidMoreThan: workflow.paid_more_than ? parseInt(workflow.paid_more_than.replaceAll(",", ""), 10) : null,
       paidLessThan: workflow.paid_less_than ? parseInt(workflow.paid_less_than.replaceAll(",", ""), 10) : null,
       afterDate: workflow.created_after ?? "",

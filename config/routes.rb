@@ -502,6 +502,14 @@ Rails.application.routes.draw do
             end
           end
 
+          # Explicit account lists only: preview signs a snapshot, execute re-checks each account.
+          resources :low_balance_probation_recoveries, only: [] do
+            collection do
+              post :preview
+              post :execute
+            end
+          end
+
           resources :payouts, only: [:index] do
             collection do
               post :pause

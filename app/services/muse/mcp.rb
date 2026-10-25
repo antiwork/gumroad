@@ -493,12 +493,16 @@ module Muse
 
         # Built from the loaded associations, so list_products preloads them instead of querying per tier.
         recurrences = product.alive_prices.filter_map { _1.recurrence if _1.is_buy? }
-        tiers = product.tier_categories.flat_map(&:alive_variants).sort_by { [_1.position_in_category.to_i, _1.created_at] }.map do |tier|
+        tier_records = product.tier_categories.flat_map(&:alive_variants).sort_by { [_1.position_in_category.to_i, _1.created_at] }
+        tiers = tier_records.map do |tier|
           prices = tier.alive_prices.select { _1.is_buy? && recurrences.include?(_1.recurrence) }
-            .to_h { [_1.recurrence, { price_cents: _1.price_cents, suggested_price_cents: _1.suggested_price_cents }] }
+            .to_h { [_1.recurrence, { price_cents: _1.price_cents, suggested_price_cents: tier.customizable_price? ? _1.suggested_price_cents : nil }] }
           { name: tier.name, pay_what_you_want: !!tier.customizable_price, prices: }
         end
-        { pay_what_you_want: tiers.any? { _1[:pay_what_you_want] }, suggested_price_cents: nil, tiers: }
+        # As on the storefront (Link#has_customizable_price_option?), a closed tier counts only when all are closed.
+        offered = tier_records.reject(&:closed_to_new_buyers?).presence || tier_records
+        # The product-level price is a $0 placeholder that would read as free.
+        { price_cents: nil, pay_what_you_want: offered.any?(&:customizable_price?), suggested_price_cents: nil, tiers: }
       end
 
       def find_product!(id)

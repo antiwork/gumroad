@@ -248,21 +248,39 @@ export const SectionLayout = ({
   </section>
 );
 
-export const Section = ({ section, creator_profile, currency_code }: { section: Section } & PageProps) => (
-  <SectionLayout id={section.id}>
-    {section.header ? <h2>{section.header}</h2> : null}
-    {section.type === "SellerProfileProductsSection" ? (
-      <ProductsSectionView section={section} creatorProfile={creator_profile} currencyCode={currency_code} />
-    ) : section.type === "SellerProfilePostsSection" ? (
-      <PostsSectionView section={section} />
-    ) : section.type === "SellerProfileRichTextSection" ? (
-      <RichTextSectionView section={section} />
-    ) : section.type === "SellerProfileSubscribeSection" ? (
-      <SubscribeSectionView key={section.id} section={section} creatorProfile={creator_profile} />
-    ) : section.type === "SellerProfileFeaturedProductSection" ? (
-      <FeaturedProductSectionView key={section.id} section={section} />
-    ) : (
-      <WishlistsSectionView key={section.id} section={section} />
-    )}
-  </SectionLayout>
-);
+export const Section = ({
+  section,
+  creator_profile,
+  currency_code,
+  hideEmptyProductsSection = false,
+}: { section: Section; hideEmptyProductsSection?: boolean } & PageProps) => {
+  // On a product page the products section drops the product being viewed, so a one-product
+  // storefront has nothing left to list: the empty state would sit under the buy button reading as
+  // a publishing fault. Profiles keep it — there an empty section is actionable.
+  if (
+    hideEmptyProductsSection &&
+    section.type === "SellerProfileProductsSection" &&
+    section.search_results.total === 0
+  ) {
+    return null;
+  }
+
+  return (
+    <SectionLayout id={section.id}>
+      {section.header ? <h2>{section.header}</h2> : null}
+      {section.type === "SellerProfileProductsSection" ? (
+        <ProductsSectionView section={section} creatorProfile={creator_profile} currencyCode={currency_code} />
+      ) : section.type === "SellerProfilePostsSection" ? (
+        <PostsSectionView section={section} />
+      ) : section.type === "SellerProfileRichTextSection" ? (
+        <RichTextSectionView section={section} />
+      ) : section.type === "SellerProfileSubscribeSection" ? (
+        <SubscribeSectionView key={section.id} section={section} creatorProfile={creator_profile} />
+      ) : section.type === "SellerProfileFeaturedProductSection" ? (
+        <FeaturedProductSectionView key={section.id} section={section} />
+      ) : (
+        <WishlistsSectionView key={section.id} section={section} />
+      )}
+    </SectionLayout>
+  );
+};

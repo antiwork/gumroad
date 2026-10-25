@@ -93,6 +93,47 @@ describe StripeMerchantAccountManager do
       expect(bank_account.reload.stripe_bank_account_id).to eq("ba_recovered_from_stripe")
     end
 
+    context "when two replaced banks are still attached" do
+      let(:deleted_ids) { [] }
+
+      before do
+        create(:ach_account, user:, deleted_at: 1.day.ago, stripe_connect_account_id: merchant_id, stripe_bank_account_id: "ba_replaced_eur")
+        create(:ach_account, user:, deleted_at: 1.day.ago, stripe_connect_account_id: merchant_id, stripe_bank_account_id: "ba_replaced_gbp")
+        stub_stripe_account_with([
+                                   stripe_bank_account_payload,
+                                   stripe_bank_account_payload(id: "ba_replaced_eur", currency: "eur", last4: "3000", default_for_currency: true),
+                                   stripe_bank_account_payload(id: "ba_replaced_gbp", currency: "gbp", last4: "4000", default_for_currency: false)
+                                 ])
+      end
+
+      def reject_gbp_delete_with(error)
+        allow(Stripe::Account).to receive(:delete_external_account) do |_account_id, id|
+          raise error if id == "ba_replaced_gbp"
+
+          deleted_ids << id
+        end
+      end
+
+      it "keeps deleting when an overlapping cleanup already removed one of them" do
+        reject_gbp_delete_with(Stripe::InvalidRequestError.new("No such external account: 'ba_replaced_gbp'", "id", code: "resource_missing", http_status: 404))
+        expect(ErrorNotifier).not_to receive(:notify)
+
+        expect(described_class.update_bank_account(user, passphrase:)).to eq(:synced)
+
+        expect(deleted_ids).to eq(["ba_replaced_eur"])
+      end
+
+      it "still reports any other rejected delete" do
+        error = Stripe::InvalidRequestError.new("Invalid external account", "id", code: "parameter_invalid", http_status: 400)
+        reject_gbp_delete_with(error)
+        expect(ErrorNotifier).to receive(:notify).with(error, stripe_account_id: merchant_id)
+
+        expect(described_class.update_bank_account(user, passphrase:)).to eq(:synced)
+
+        expect(deleted_ids).to eq([])
+      end
+    end
+
     it "makes the seller payable again" do
       stub_stripe_account_with([stripe_bank_account_payload])
       expect(StripePayoutProcessor.has_valid_payout_info?(user)).to be(false)

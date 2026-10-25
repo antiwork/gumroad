@@ -128,7 +128,7 @@ export const Layout = (
         props.sections.map((section, i) => (
           <React.Fragment key={section.id}>
             {i === main_section_index ? mainSection : null}
-            <Section section={section} {...props} />
+            <Section section={section} {...props} hideEmptyProductsSection />
             {main_section_index >= props.sections.length && i === props.sections.length - 1 ? mainSection : null}
           </React.Fragment>
         ))

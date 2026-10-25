@@ -1657,13 +1657,18 @@ module StripeMerchantAccountManager
 
   private_class_method
   def self.update_identified_ecuador_holder_name(bank_account, stripe_account, stripe_external_account, notify:)
+    # Both callers return here without reaching the generic restore's cleanup.
     if stripe_external_account["account_holder_name"] == bank_account.account_holder_full_name
+      delete_replaced_external_accounts(bank_account, stripe_account)
       clear_stale_bank_sync_failure_notes(bank_account.user)
       return :noop_metadata_match
     end
 
     result = update_external_account_holder_name(bank_account, stripe_account, stripe_external_account)
-    clear_stale_bank_sync_failure_notes(bank_account.user) if result == :synced
+    if result == :synced
+      delete_replaced_external_accounts(bank_account, stripe_account)
+      clear_stale_bank_sync_failure_notes(bank_account.user)
+    end
     result
   rescue Stripe::InvalidRequestError => e
     if e.code == "incorrect_account_holder_name"
@@ -2602,8 +2607,9 @@ module StripeMerchantAccountManager
     replaced.sort_by { _1["default_for_currency"] ? 1 : 0 }.each do |external_account|
       Stripe::Account.delete_external_account(stripe_account.id, external_account["id"])
     rescue Stripe::InvalidRequestError => e
-      # Stripe keeps the default for the account's own currency; those payouts name the active bank.
-      raise unless e.message.to_s.match?(/default external account/i)
+      # An overlapping cleanup may have deleted it first. Stripe keeps the default for the account's
+      # own currency; those payouts name the active bank.
+      raise unless e.code == "resource_missing" || e.message.to_s.match?(/default external account/i)
     end
   rescue Stripe::StripeError => e
     ErrorNotifier.notify(e, stripe_account_id: stripe_account.id)

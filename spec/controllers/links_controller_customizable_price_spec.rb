@@ -38,13 +38,27 @@ describe LinksController, type: :controller do
 
     post :update, params: editor_save_params(
       variants: [
-        { id: nil, client_id: "new-version", name: "Free checklist", price_difference_cents: 99, rich_content: [] }
+        { id: nil, client_id: "new-version", name: "Paid checklist", price_difference_cents: 99, rich_content: [] }
       ]
     ), as: :json
 
     expect(response).to be_successful
     expect(product.alive_variants.map(&:price_difference_cents)).to eq([99])
     expect(product.reload.customizable_price).to be(false)
+  end
+
+  it "keeps the stored switch when a save that adds the first paid version omits it" do
+    expect(product.reload.customizable_price).to be(true)
+
+    post :update, params: editor_save_params(
+      variants: [
+        { id: nil, client_id: "new-version", name: "Paid checklist", price_difference_cents: 99, rich_content: [] }
+      ]
+    ).except(:customizable_price), as: :json
+
+    expect(response).to be_successful
+    expect(product.alive_variants.map(&:price_difference_cents)).to eq([99])
+    expect(product.reload.customizable_price).to be(true)
   end
 
   it "still forces pay-what-you-want on when the save adds no paid version" do

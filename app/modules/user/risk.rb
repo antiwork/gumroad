@@ -397,7 +397,8 @@ module User::Risk
       content: params[:content] || content,
       author_id: params[:author_id],
       author_name: params[:author_name],
-      comment_type:
+      comment_type:,
+      idempotency_key: params[:idempotency_key]
     )
   end
 

@@ -3,6 +3,8 @@ import * as React from "react";
 import { assertDefined } from "$app/utils/assert";
 import { classNames } from "$app/utils/classNames";
 
+import { LinkButton } from "$app/components/ui/LinkButton";
+
 const TableContext = React.createContext<{
   headerLabels?: React.ReactNode[];
   setHeaderLabels: (headerLabels: React.ReactNode[]) => void;
@@ -126,6 +128,7 @@ export const TableHead = ({
   onSort?: () => void;
 }) => {
   const rowGroup = React.useContext(RowGroupContext);
+  const SortLabel = sortDirection && (onSort || props.onClick) ? LinkButton : "span";
   return (
     <th
       aria-sort={sortDirection}
@@ -141,12 +144,14 @@ export const TableHead = ({
       )}
       {...props}
     >
-      <span className="inline-flex items-center gap-1">
+      <SortLabel className="inline-flex items-center gap-1 no-underline! focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent">
         {children}
         {sortDirection && sortDirection !== "none" ? (
-          <span className="inline-block">{sortDirection === "ascending" ? "↑" : "↓"}</span>
+          <span className="inline-block" aria-hidden="true">
+            {sortDirection === "ascending" ? "↑" : "↓"}
+          </span>
         ) : null}
-      </span>
+      </SortLabel>
     </th>
   );
 };

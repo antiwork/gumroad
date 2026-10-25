@@ -138,6 +138,36 @@ describe Integrations::DiscordController do
       expect(response.status).to eq(400)
     end
 
+    it "fails if state is not valid JSON" do
+      get :oauth_redirect, format: :json, params: { state: "test" }
+
+      expect(response.status).to eq(400)
+    end
+
+    it "fails if state is not a JSON object" do
+      get :oauth_redirect, format: :json, params: { state: "123" }
+
+      expect(response.status).to eq(400)
+    end
+
+    it "fails if state has no seller id" do
+      get :oauth_redirect, format: :json, params: { state: { is_custom_domain: false }.to_json }
+
+      expect(response.status).to eq(400)
+    end
+
+    it "fails if state is an array param" do
+      get :oauth_redirect, format: :json, params: { state: ["test"] }
+
+      expect(response.status).to eq(400)
+    end
+
+    it "fails if state is a nested hash param" do
+      get :oauth_redirect, format: :json, params: { state: { seller_id: "test" } }
+
+      expect(response.status).to eq(400)
+    end
+
     it "redirects to subdomain if specified in state" do
       user = create(:user, username: "test")
 

@@ -65,6 +65,54 @@ describe "Muse MCP product details" do
     expect(queries.count { _1.include?("`prices`") }).to be <= 2
   end
 
+  describe "a membership with a fixed-price tier and a pay-what-you-want tier" do
+    before do
+      @membership = create(:membership_product, user: @seller, name: "Field club")
+      @reader = @membership.tiers.sole
+      @reader.update!(name: "Reader")
+      @supporter = create(:variant, variant_category: @reader.variant_category, name: "Supporter", customizable_price: true)
+      @reader.save_recurring_prices!("monthly" => { enabled: true, price: "5" }, "yearly" => { enabled: true, price: "50" })
+      @supporter.save_recurring_prices!("monthly" => { enabled: true, price: "10", suggested_price: "15" },
+                                        "yearly" => { enabled: true, price: "100", suggested_price: "150" })
+    end
+
+    it "leaves out the product-level $0 price, and leaves regular products as they were" do
+      products = call_tool("list_products", {}, scopes: "edit_products")["products"].index_by { _1["id"] }
+
+      expect(products[@membership.external_id]).to include("price_cents" => nil, "pay_what_you_want" => true, "suggested_price_cents" => nil)
+      expected_tiers = [
+        { "name" => "Reader", "pay_what_you_want" => false,
+          "prices" => { "monthly" => { "price_cents" => 500, "suggested_price_cents" => nil },
+                        "yearly" => { "price_cents" => 5000, "suggested_price_cents" => nil } } },
+        { "name" => "Supporter", "pay_what_you_want" => true,
+          "prices" => { "monthly" => { "price_cents" => 1000, "suggested_price_cents" => 1500 },
+                        "yearly" => { "price_cents" => 10000, "suggested_price_cents" => 15000 } } },
+      ]
+      expect(products[@membership.external_id]["tiers"]).to eq(expected_tiers)
+      expect(products[@product.external_id]).to include("price_cents" => 0, "pay_what_you_want" => true, "suggested_price_cents" => 900)
+      expect(products[@product.external_id]).not_to have_key("tiers")
+    end
+
+    it "leaves out a suggested price kept from when a tier was pay what you want" do
+      @supporter.update!(customizable_price: false)
+
+      product = call_tool("get_product", { id: @membership.external_id }, scopes: "edit_products")["product"]
+
+      expect(product["tiers"].last["prices"].values.pluck("suggested_price_cents")).to eq([nil, nil])
+      expect(product).to include("price_cents" => nil, "pay_what_you_want" => false, "suggested_price_cents" => nil)
+    end
+
+    it "does not call the membership pay what you want when only a tier closed to new buyers is" do
+      Feature.activate_user(:close_membership_tier_to_new_buyers, @seller)
+      @supporter.update!(closed_to_new_purchases: true)
+
+      product = call_tool("get_product", { id: @membership.external_id }, scopes: "edit_products")["product"]
+
+      expect(product).to include("pay_what_you_want" => false)
+      expect(product["tiers"].pluck("pay_what_you_want")).to eq([false, true])
+    end
+  end
+
   it "returns the description, and the sales count and revenue with a sales scope" do
     create(:purchase, link: @product, seller: @seller, price_cents: 900)
     create(:purchase, link: @product, seller: @seller, price_cents: 1200)

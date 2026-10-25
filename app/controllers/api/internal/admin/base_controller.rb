@@ -11,7 +11,9 @@ class Api::Internal::Admin::BaseController < Api::Internal::BaseController
     "piracy_reports.counter_notice" => %w[body],
     # The id is the buyer's access token; target_external_id already names the redirect.
     "url_redirects.grant_download" => %w[id],
-    "url_redirects.revoke_download" => %w[id]
+    "url_redirects.revoke_download" => %w[id],
+    # A signed authorization; the audit row keeps the snapshot's request id instead.
+    "low_balance_probation_recoveries.execute" => %w[snapshot]
   }.freeze
   # Some params match the redaction pattern above but are the very thing the
   # audit row exists to record. For SendGrid suppression removal the email
@@ -25,6 +27,8 @@ class Api::Internal::Admin::BaseController < Api::Internal::BaseController
     "stripe_restraint_notices.create" => %w[firm_email]
   }.freeze
   ADMIN_AUDIT_ACTIONS_ALLOWING_NULL_TARGET = %w[
+    low_balance_probation_recoveries.execute
+    low_balance_probation_recoveries.preview
     products.file_download_url
     purchases.reassign
     purchases.resend_all_receipts
