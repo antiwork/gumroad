@@ -986,6 +986,7 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
             expect(response).to redirect_to(settings_payments_path)
             expect(response).to have_http_status :found
             expect(session[:inertia_errors][:base]).to eq(["Bank payouts are not supported in your country yet. Please use PayPal instead."])
+            expect(session[:inertia_errors]).not_to have_key(:status)
           end
 
           it "handles MerchantRegistrationUserAlreadyHasAccountError gracefully instead of raising a 500" do
@@ -1008,6 +1009,7 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
             expect(response).to redirect_to(settings_payments_path)
             expect(response).to have_http_status :found
             expect(session[:inertia_errors][:base]).to eq(["We're already setting up payouts for your account. Refresh this page in a moment to see its status."])
+            expect(session[:inertia_errors][:status]).to eq("info")
           end
 
           it "reports payout setup as underway when a concurrent request creates the merchant account first", vcr: { record: :none } do
@@ -1041,6 +1043,7 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
             expect(response).to redirect_to(settings_payments_path)
             expect(response).to have_http_status :found
             expect(session[:inertia_errors][:base]).to eq(["We're already setting up payouts for your account. Refresh this page in a moment to see its status."])
+            expect(session[:inertia_errors][:status]).to eq("info")
           end
         end
       end

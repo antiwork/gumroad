@@ -245,6 +245,7 @@ type PaymentsPageProps = {
   errors?: {
     base?: string[];
     field?: string;
+    status?: "info";
   };
 };
 
@@ -258,7 +259,7 @@ const isFormFieldName = (value: string): value is FormFieldName => value in FIEL
 export default function PaymentsPage() {
   const page = usePage();
   const props = cast<PaymentsPageProps>(page.props);
-  const errors = cast<{ base?: string[]; field?: string } | undefined>(page.props.errors);
+  const errors = cast<{ base?: string[]; field?: string; status?: "info" } | undefined>(page.props.errors);
 
   const [clientErrorMessage, setClientErrorMessage] = React.useState<ErrorMessageInfo | null>(null);
   const formRef = React.useRef<HTMLDivElement & HTMLFormElement>(null);
@@ -1430,7 +1431,7 @@ export default function PaymentsPage() {
             inset further than the content on mobile. */}
         {(errors?.base && errors.base.length > 0) || clientErrorMessage ? (
           <div className="p-4! md:p-8!">
-            <Alert variant="danger" role="status">
+            <Alert variant={errors?.status === "info" ? "info" : "danger"} role="status">
               {errors?.base?.[0] ?? clientErrorMessage?.message}
             </Alert>
           </div>

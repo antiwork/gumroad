@@ -650,6 +650,37 @@ describe("server error naming a field", () => {
   });
 });
 
+describe("server banner status", () => {
+  const underwayMessage =
+    "We're already setting up payouts for your account. Refresh this page in a moment to see its status.";
+
+  const renderBanner = (message: string, status?: string) => {
+    mocks.usePage.mockReturnValue({ props: { ...pageProps(), errors: { base: [message], status } } });
+    render(<PaymentsPage />);
+    const banner = screen.getByText(message).closest('[role="status"]');
+    if (!banner) throw new Error("banner not rendered");
+    return banner;
+  };
+
+  it("shows payout setup already underway as information above the payout schedule", () => {
+    const banner = renderBanner(underwayMessage, "info");
+
+    expect(banner.className).toContain("border-info");
+    expect(banner.className).not.toContain("border-danger");
+    expect(
+      banner.compareDocumentPosition(screen.getByRole("heading", { name: "Payout schedule" })) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("keeps a server error without a status in the danger style", () => {
+    const banner = renderBanner("Bank payouts are not supported in your country yet. Please use PayPal instead.");
+
+    expect(banner.className).toContain("border-danger");
+    expect(banner.className).not.toContain("border-info");
+  });
+});
+
 describe("Bolivia bank validation", () => {
   it("flags the bank picker, not the branch code, when no bank is chosen", () => {
     mocks.usePage.mockReturnValue({
