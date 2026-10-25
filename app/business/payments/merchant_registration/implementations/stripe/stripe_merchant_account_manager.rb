@@ -405,7 +405,8 @@ module StripeMerchantAccountManager
   def self.payout_setup_rejection_seller_message(error, user)
     return unless undiagnosed_stripe_rejection?(error)
 
-    field = PAYOUT_SETUP_REJECTED_FIELD_LABELS[stripe_rejected_field(error)]
+    # Stripe's JP address rejection carries no `param`, only the message.
+    field = jp_address_invalid_error?(error) ? "address" : PAYOUT_SETUP_REJECTED_FIELD_LABELS[stripe_rejected_field(error)]
     [
       field ? "Our payment partner couldn't accept the #{field} you entered." : "Our payment partner couldn't accept the details you entered.",
       us_individual_phone_rule_note(error, user),
@@ -448,6 +449,9 @@ module StripeMerchantAccountManager
   # Address sub-hash keys whose values carry a postal code Stripe validates.
   ADDRESS_SUBHASH_KEYS = %i[address address_kanji address_kana].freeze
   private_constant :ADDRESS_SUBHASH_KEYS
+
+  JP_ADDRESS_SUBHASH_KEYS = %w[address_kanji address_kana].freeze
+  private_constant :JP_ADDRESS_SUBHASH_KEYS
 
   def self.update_account(user, passphrase:, notify: true, force_address_resync: false, on_provider_mutation: nil)
     validate_for_update(user)
@@ -598,6 +602,10 @@ module StripeMerchantAccountManager
       force_address_into_diff!(diff_attributes, current_attributes, entity_key)
     end
 
+    # Same gap on a seller's own save: a JP town Stripe never accepted is unchanged in our record, so
+    # a city correction alone leaves it unsent and the account stays disabled on it.
+    forced_jp_address_leaves = force_due_jp_address_fields_into_diff!(diff_attributes, current_attributes, entity_key, stripe_account, user)
+
     # Same problem, different field — see force_identity_into_diff!. Deliberately NOT scoped to the
     # mismatch: the cohort's natural resolution is the seller correcting their legal-entity country,
     # and on that save the identifier must go back on the payload for the note to ever be retired.
@@ -616,7 +624,19 @@ module StripeMerchantAccountManager
 
     # Mark before sending: a failed response can hide a successful Stripe update.
     on_provider_mutation&.call
-    account_update = update_account_attributes(user, stripe_account, diff_attributes, notify:, legal_entity_country: country_code)
+    jp_address_rejection = nil
+    account_update = begin
+      update_account_attributes(user, stripe_account, diff_attributes, notify:, legal_entity_country: country_code)
+    rescue Stripe::InvalidRequestError => e
+      # A stored town Stripe rejects outright is the seller's to fix, and must not take down a save
+      # that never touched it. Only the forced leaves come out; everything else this save sends stays.
+      raise unless forced_jp_address_leaves.present? && jp_address_invalid_error?(e)
+
+      jp_address_rejection = e
+      Rails.logger.warn "Stripe rejected the re-sent JP address for user #{user&.id}; retrying without it: #{e.message}"
+      update_account_attributes(user, stripe_account, without_jp_address_leaves(diff_attributes, entity_key, forced_jp_address_leaves),
+                                notify:, legal_entity_country: country_code)
+    end
     updated_stripe_account = account_update.stripe_account
 
     person_address_submitted = false
@@ -655,6 +675,8 @@ module StripeMerchantAccountManager
     # clearing on any success reverts to a seller-visible note vanishing for a still-unfixed
     # rejection (Greptile finding on this PR).
     clear_stale_payout_setup_rejection_notes(user, resolved_fields: submitted_field_names(account_update.sent_attributes))
+    # After the clear above, or the seller-visible half of the note would be retired by this same save.
+    record_account_rejection_note(user, jp_address_rejection) if notify && jp_address_rejection
   rescue Stripe::InvalidRequestError => e
     record_postal_code_failure_note(user, e) if notify && postal_code_invalid_error?(e)
     raise
@@ -1398,6 +1420,45 @@ module StripeMerchantAccountManager
       target[address_key] = address if address.present?
     end
     diff_attributes
+  end
+
+  # Re-adds only the `<entity>.address_kanji|address_kana.<field>` leaves Stripe still lists as due and
+  # our record holds; a blank would erase what Stripe has. A rejected postal code is left to
+  # `force_address_resync`, since an accepted town here would clear that note unverified.
+  # Returns the `[address_key, leaf]` pairs it added.
+  private_class_method
+  def self.force_due_jp_address_fields_into_diff!(diff_attributes, current_attributes, entity_key, stripe_account, user)
+    return [] unless stripe_account_country(stripe_account) == Compliance::Countries::JPN.alpha2
+
+    # `to_hash`, not `to_h`: only the former converts nested StripeObjects.
+    requirements = stripe_account.to_hash[:requirements]
+    return [] unless requirements.is_a?(Hash)
+
+    due = (Array(requirements[:currently_due]) + Array(requirements[:past_due])).filter_map do |field|
+      entity, address_key, leaf, *rest = field.to_s.split(".")
+      next unless entity == entity_key.to_s && JP_ADDRESS_SUBHASH_KEYS.include?(address_key) && leaf.present? && rest.empty?
+
+      value = current_attributes.dig(entity_key, address_key.to_sym, leaf.to_sym)
+      next if value.blank? || diff_attributes.dig(entity_key, address_key.to_sym, leaf.to_sym) == value
+
+      [address_key.to_sym, leaf.to_sym, value]
+    end.uniq
+    return [] if due.empty? || postal_code_failure_note_outstanding?(user)
+
+    due.map do |address_key, leaf, value|
+      ((diff_attributes[entity_key] ||= {})[address_key] ||= {})[leaf] = value
+      [address_key, leaf]
+    end
+  end
+
+  private_class_method
+  def self.without_jp_address_leaves(diff_attributes, entity_key, leaves)
+    diff = diff_attributes.deep_dup
+    leaves.each do |address_key, leaf|
+      diff[entity_key][address_key].delete(leaf)
+      diff[entity_key].delete(address_key) if diff[entity_key][address_key].empty?
+    end
+    diff
   end
 
   # Put the current identity fields back into the diff when an unresolved rejection note says Stripe

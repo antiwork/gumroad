@@ -81,6 +81,16 @@ describe StripeMerchantAccountManager, ".payout_setup_rejection_seller_message" 
     expect(message).to include("couldn't accept the details you entered")
   end
 
+  it "names the address for a Japanese address Stripe cannot find, which carries no param" do
+    create(:user_compliance_info, user:, country: "Japan")
+
+    message = described_class.payout_setup_rejection_seller_message(
+      rejection("Invalid address for Japan. We cannot find an address with town of 梅田 for postal_code 530-0001.", nil), user
+    )
+
+    expect(message).to include("couldn't accept the address you entered")
+  end
+
   # These two already have dedicated seller-facing copy and their own retry loops; a second message
   # here would compete with the branch the controller checks first.
   it "returns nothing for a postal-code rejection" do
