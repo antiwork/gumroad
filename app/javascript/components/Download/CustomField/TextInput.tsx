@@ -1,7 +1,7 @@
 import * as React from "react";
 
 import { asyncVoid } from "$app/utils/promise";
-import { request } from "$app/utils/request";
+import { request, ResponseError } from "$app/utils/request";
 
 import { usePurchaseCustomFields, usePurchaseInfo } from "$app/components/DownloadPage/WithContent";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -41,20 +41,26 @@ export const TextInput = ({
       const newValue = evt.target.value;
       if (newValue === savedValue) return;
       setIsLoading(true);
-      await request({
-        method: "POST",
-        accept: "json",
-        url: Routes.purchase_custom_fields_path(),
-        data: {
-          purchase_id: purchaseInfo.purchaseId,
-          custom_field_id: customFieldId,
-          value: newValue,
-          token: purchaseInfo.token,
-        },
-      });
-      setIsLoading(false);
-      setSavedValue(newValue);
-      showAlert("Response saved!", "success");
+      try {
+        const response = await request({
+          method: "POST",
+          accept: "json",
+          url: Routes.purchase_custom_fields_path(),
+          data: {
+            purchase_id: purchaseInfo.purchaseId,
+            custom_field_id: customFieldId,
+            value: newValue,
+            token: purchaseInfo.token,
+          },
+        });
+        if (!response.ok) throw new ResponseError();
+        setSavedValue(newValue);
+        showAlert("Response saved!", "success");
+      } catch {
+        showAlert("Your response could not be saved. Please try again.", "error");
+      } finally {
+        setIsLoading(false);
+      }
     }),
     disabled: isLoading,
   };
