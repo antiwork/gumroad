@@ -136,7 +136,8 @@ describe "Tiered Membership Offer code Spec", type: :system, js: true, retry: 2 
 
         expect(page).to have_field("Name a fair price", with: "7.50")
 
-        fill_in "Name a fair price", with: "9.50"
+        # The field already holds 7.50; headed Chrome drops Capybara's select() on focus and appends.
+        fill_in "Name a fair price", with: "9.50", fill_options: { clear: :backspace }
         wait_for_ajax
         expect(page).to have_text "You'll be charged US$4.55"
 
@@ -152,7 +153,7 @@ describe "Tiered Membership Offer code Spec", type: :system, js: true, retry: 2 
       it "applies the code correctly when decreasing the PWYW amount" do
         visit "/subscriptions/#{@subscription.external_id}/manage?token=#{@subscription.token}"
 
-        fill_in "Name a fair price", with: "5.50"
+        fill_in "Name a fair price", with: "5.50", fill_options: { clear: :backspace }
         wait_for_ajax
         expect(page).not_to have_text "You'll be charged"
 
