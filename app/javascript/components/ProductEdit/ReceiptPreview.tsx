@@ -3,9 +3,8 @@ import * as React from "react";
 import { request, assertResponseError } from "$app/utils/request";
 
 import { useProductEditContext } from "$app/components/ProductEdit/state";
-import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
-import { useOnChange } from "$app/components/useOnChange";
-import { useRunOnce } from "$app/components/useRunOnce";
+
+const PREVIEW_DEBOUNCE_MS = 300;
 
 // The receipt preview endpoint renders the REAL mailer template server-side and returns the
 // subject alongside the body HTML. Both come from the same Rails response so the email-style
@@ -22,45 +21,58 @@ export const useReceiptPreview = () => {
     html: "",
   });
 
-  const fetchReceiptPreview = React.useCallback(async () => {
-    try {
-      const url = Routes.internal_product_receipt_preview_path(uniquePermalink, {
-        params: {
-          custom_receipt_text,
-          custom_view_content_button_text,
-        },
-      });
+  const hasRequestedPreview = React.useRef(false);
+  React.useEffect(() => {
+    let active = true;
+    const fetchReceiptPreview = async () => {
+      try {
+        const url = Routes.internal_product_receipt_preview_path(uniquePermalink, {
+          params: {
+            custom_receipt_text,
+            custom_view_content_button_text,
+          },
+        });
 
-      const response = await request({
-        method: "GET",
-        url,
-        accept: "json",
-      });
+        const response = await request({
+          method: "GET",
+          url,
+          accept: "json",
+        });
 
-      const data: unknown = await response.json();
-      if (
-        response.ok &&
-        typeof data === "object" &&
-        data !== null &&
-        "subject" in data &&
-        typeof data.subject === "string" &&
-        "html" in data &&
-        typeof data.html === "string"
-      ) {
-        setPreview({ subject: data.subject, html: data.html });
-      } else {
+        const data: unknown = await response.json();
+        if (!active) return;
+        if (
+          response.ok &&
+          typeof data === "object" &&
+          data !== null &&
+          "subject" in data &&
+          typeof data.subject === "string" &&
+          "html" in data &&
+          typeof data.html === "string"
+        ) {
+          setPreview({ subject: data.subject, html: data.html });
+        } else {
+          setPreview({ subject: null, html: "Error loading receipt preview" });
+        }
+      } catch (error) {
+        if (!active) return;
+        assertResponseError(error);
         setPreview({ subject: null, html: "Error loading receipt preview" });
       }
-    } catch (error) {
-      assertResponseError(error);
-      setPreview({ subject: null, html: "Error loading receipt preview" });
+    };
+    const timeout = hasRequestedPreview.current
+      ? setTimeout(() => void fetchReceiptPreview(), PREVIEW_DEBOUNCE_MS)
+      : null;
+    if (!hasRequestedPreview.current) {
+      hasRequestedPreview.current = true;
+      void fetchReceiptPreview();
     }
+    return () => {
+      // Invalidate immediately when inputs change, including the debounce window.
+      active = false;
+      if (timeout !== null) clearTimeout(timeout);
+    };
   }, [uniquePermalink, custom_receipt_text, custom_view_content_button_text]);
-
-  const debouncedFetchReceiptPreview = useDebouncedCallback(() => void fetchReceiptPreview(), 300);
-
-  useRunOnce(() => void fetchReceiptPreview());
-  useOnChange(debouncedFetchReceiptPreview, [uniquePermalink, custom_receipt_text, custom_view_content_button_text]);
 
   return preview;
 };

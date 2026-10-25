@@ -43,6 +43,31 @@ describe("Product Edit Receipt Tab", type: :system, js: true) do
   end
 
   describe "Receipt preview" do
+    it "keeps the latest unsaved message when an older preview finishes last" do
+      script = page.driver.browser.execute_cdp("Page.addScriptToEvaluateOnNewDocument", source: <<~JS)
+        const originalFetch = window.fetch;
+        let previewCount = 0;
+        window.fetch = (...args) => {
+          if (!String(args[0]).includes("receipt_preview") || previewCount++ > 0) return originalFetch(...args);
+          return originalFetch(...args).then(response => new Promise(resolve => {
+            window.releaseOldReceiptPreview = () => resolve(response);
+          }));
+        };
+      JS
+      page.visit "#{edit_link_path(product.unique_permalink)}/receipt"
+      Selenium::WebDriver::Wait.new(timeout: 10).until do
+        page.evaluate_script("typeof window.releaseOldReceiptPreview === 'function'")
+      end
+      fill_in "Custom message", with: "The newest receipt message"
+      in_preview { expect(page).to have_text("The newest receipt message") }
+      page.execute_script("window.releaseOldReceiptPreview()")
+      wait_for_ajax
+      in_preview { expect(page).to have_text("The newest receipt message") }
+      expect(product.reload.custom_receipt_text).to be_nil
+    ensure
+      page.driver.browser.execute_cdp("Page.removeScriptToEvaluateOnNewDocument", identifier: script.fetch("identifier")) if script
+    end
+
     it "shows live preview when the user makes changes", :js do
       visit "#{edit_link_path(product.unique_permalink)}/receipt"
 
