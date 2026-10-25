@@ -1365,15 +1365,38 @@ describe CustomerMailer do
           mail = CustomerMailer.abandoned_cart(cart.id, { seller2_workflow.id => [seller2.products.first.id] }.stringify_keys)
           expect(mail.to).to eq [cart.user.email]
         end
+      end
 
-        it "matches a logged-in cart on its account when the address is not on the cart" do
-          # A second alive cart per user is refused by validation, so the earlier one is written
-          # directly: the point is that the row exists, not that it is still the account's cart.
-          account_cart = Cart.new(user: cart.user, browser_guid: SecureRandom.uuid, discount_codes: [])
-          account_cart.save!(validate: false)
-          SentAbandonedCartEmail.create!(cart_id: account_cart.id, installment_id: seller1_workflow_installment.id)
+      context "when an earlier send went to the account that owns the address on someone else's cart" do
+        it "does not count it against the address" do
+          # The address history is counted by where the earlier mail actually went (the account),
+          # not by the stale guest address stored on that cart.
+          other_account = create(:user)
+          earlier_cart = create(:cart, user: other_account, email: cart.user.email)
+          SentAbandonedCartEmail.create!(cart_id: earlier_cart.id, installment_id: seller1_workflow_installment.id)
 
           mail = CustomerMailer.abandoned_cart(cart.id, { seller1_workflow.id => [seller1.products.first.id] }.stringify_keys)
+
+          expect(mail.to).to eq [cart.user.email]
+          expect(SentAbandonedCartEmail.where(cart_id: cart.id, installment_id: seller1_workflow_installment.id)).to exist
+        end
+      end
+
+      context "when two carts of the same recipient race for the same installment" do
+        it "claims the send for the recipient so only one of them delivers" do
+          CustomerMailer.abandoned_cart(cart.id, { seller1_workflow.id => [seller1.products.first.id] }.stringify_keys).message
+          expect($redis.get(RedisKey.abandoned_cart_reminder_claim(seller1_workflow_installment.id, cart.user.email))).to be_present
+
+          competing_cart = create(:cart, user: nil, email: cart.user.email)
+          create(:cart_product, cart: competing_cart, product: seller1.products.first)
+          competing_cart.update!(updated_at: 25.hours.ago)
+          allow(Cart).to receive(:find).and_call_original
+          allow(Cart).to receive(:find).with(competing_cart.id).and_return(competing_cart)
+          # The loser of the race read the ledger before the winner's row landed, so the claim —
+          # not the ledger — is what stops the second render.
+          SentAbandonedCartEmail.delete_all
+
+          mail = CustomerMailer.abandoned_cart(competing_cart.id, { seller1_workflow.id => [seller1.products.first.id] }.stringify_keys)
           expect(mail.message).to be_a(ActionMailer::Base::NullMail)
         end
       end

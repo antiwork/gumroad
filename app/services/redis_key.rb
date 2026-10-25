@@ -40,6 +40,7 @@ class RedisKey
     def recommended_products_associated_product_ids_limit = "recommended_products_associated_product_ids_limit"
     def blast_recipients_slice_size = "blast:recipients_slice_size"
     def grouped_receipt_send_claim(email, digest) = "grouped_receipt_send_claim:#{Digest::SHA256.hexdigest(email.to_s.downcase)}:#{digest}"
+    def abandoned_cart_reminder_claim(installment_id, email) = "abandoned_cart_reminder_claim:#{installment_id}:#{Digest::SHA256.hexdigest(email.to_s.downcase)}"
     def blast_sent_emails(blast_id) = "blast:#{blast_id}:sent_emails"
     def blast_skipped_emails(blast_id) = "blast:#{blast_id}:skipped_emails"
     def blast_audience_snapshot(blast_id) = "blast:#{blast_id}:audience_snapshot"

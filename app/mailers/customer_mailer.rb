@@ -28,6 +28,11 @@ class CustomerMailer < ApplicationMailer
   # because every caller of this mailer is a self-serve flow the buyer can re-trigger.
   GROUPED_RECEIPT_SEND_CLAIM_TTL = 24.hours
 
+  # Window in which two carts of the same recipient cannot both send the same reminder. Longer than
+  # any race (the loser reads the ledger seconds before the winner writes it), short enough that a
+  # render dying before hand-off does not silence the reminder for the rest of the day.
+  ABANDONED_CART_SEND_CLAIM_TTL = 1.hour
+
   def grouped_receipt(purchase_ids, recommendations: true)
     @recommendations = recommendations
     # Callers pass ids in any state; the email-reassignment flow includes failed purchases.
@@ -316,7 +321,8 @@ class CustomerMailer < ApplicationMailer
   def abandoned_cart(cart_id, workflow_ids_with_product_ids, is_preview = false)
     cart = Cart.find(cart_id)
     return if !cart.abandoned?
-    return if cart.email.blank? && cart.user&.email.blank?
+    recipient_email = cart.user&.email.presence || cart.email
+    return if recipient_email.blank?
 
     workflows = Workflow.where(id: workflow_ids_with_product_ids.keys).abandoned_cart_type.published.includes(:alive_installments)
 
@@ -351,6 +357,11 @@ class CustomerMailer < ApplicationMailer
       @installments = @installments.reject { |installment| already_sent_installment_ids.include?(installment[:id]) }
       return if @installments.empty?
 
+      # The ledger above is one insert per cart, so two carts of the same recipient can both read it
+      # before either writes; the claim serialises them. It expires, so a failed render retries.
+      @installments = @installments.select { |installment| claim_abandoned_cart_send(installment[:id], recipient_email) }
+      return if @installments.empty?
+
       # Concurrent deliveries for the same cart can both pass the `cart.abandoned?` check
       # above, so the unique-indexed insert is the arbiter: an installment whose row lost
       # the race must not be mailed again (gumroad-private#1576).
@@ -365,10 +376,10 @@ class CustomerMailer < ApplicationMailer
 
     subject = @installments.one? ? @installments.first[:subject] : "You left something in your cart"
     mail(
-      to: cart.user&.email.presence || cart.email,
+      to: recipient_email,
       subject:,
       from: "Gumroad <noreply@#{CUSTOMERS_MAIL_DOMAIN}>",
-      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, to: (cart.user&.email.presence || cart.email))
+      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, to: recipient_email)
     )
   end
 
@@ -475,21 +486,30 @@ class CustomerMailer < ApplicationMailer
       false
     end
 
-    # Installment ids this recipient has already been sent, across every cart they have ever had.
-    # Matched on the identity the `to:` line uses — the account when the cart has one, otherwise the
-    # address — because a logged-in cart can carry a stale guest address that belongs to someone else.
+    # Installment ids this recipient has already been sent, over every cart they have ever had.
+    # Counted by the address the mail would go to — the account's when the cart has one — so a cart
+    # holding someone else's stale guest address does not suppress that person's reminder.
     def previously_sent_installment_ids(cart, installment_ids)
-      sent_scope = ->(carts) do
-        carts.joins(:sent_abandoned_cart_emails)
-          .where(sent_abandoned_cart_emails: { installment_id: installment_ids })
-          .distinct
-          .pluck("sent_abandoned_cart_emails.installment_id")
-      end
+      recipient_emails = Cart.recipient_emails_for(cart)
+      return Set.new if recipient_emails.empty?
 
-      ids = Set.new
-      emails = Cart.recipient_emails_for(cart)
-      ids.merge(sent_scope.call(Cart.where(email: emails))) if emails.any?
-      ids.merge(sent_scope.call(Cart.where(user_id: cart.user_id))) if cart.user_id.present?
-      ids
+      Cart.left_joins(:user)
+        .where("COALESCE(users.email, carts.email) IN (?)", recipient_emails)
+        .joins(:sent_abandoned_cart_emails)
+        .where(sent_abandoned_cart_emails: { installment_id: installment_ids })
+        .distinct
+        .pluck("sent_abandoned_cart_emails.installment_id")
+        .to_set
+    end
+
+    # True when this render owns the send for this recipient + installment. NX, so the losing side of
+    # a race between two carts of the same recipient sends nothing; it expires, so a render that dies
+    # before the mail is handed off leaves the reminder deliverable. Fails open — a Redis blip must
+    # not silence a seller's reminder.
+    def claim_abandoned_cart_send(installment_id, email)
+      $redis.set(RedisKey.abandoned_cart_reminder_claim(installment_id, email), Time.current.to_i, nx: true, ex: ABANDONED_CART_SEND_CLAIM_TTL.to_i) ? true : false
+    rescue => e
+      ErrorNotifier.notify(e)
+      true
     end
 end
